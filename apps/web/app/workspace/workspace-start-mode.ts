@@ -3,5 +3,5 @@ import type { WorkspaceRightPanelView } from "../../features/workspace/workspace
 export function resolveInitialWorkspaceRightPanelView(
   startMode: string | undefined
 ): WorkspaceRightPanelView | undefined {
-  return startMode === "delivery" ? "delivery" : undefined;
+  return startMode === "delivery" ? "deployment" : undefined;
 }

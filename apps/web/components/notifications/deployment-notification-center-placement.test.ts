@@ -38,7 +38,10 @@ test("the root notification provider renders one shared surface in the route-spe
     /<DeploymentNotificationCenter>\{children\}<\/DeploymentNotificationCenter>/
   );
   assert.equal(rootLayoutSource.match(/<DeploymentNotificationCenter>/g)?.length, 1);
-  assert.match(centerSource, /import \{ usePathname \} from "next\/navigation";/);
+  assert.match(
+    centerSource,
+    /import \{ usePathname, useRouter \} from "next\/navigation";/
+  );
   assert.match(
     centerSource,
     /import \{ getDeploymentNotificationCenterPlacement \} from "\.\/notification-center-placement";/

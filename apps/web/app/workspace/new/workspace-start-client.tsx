@@ -84,11 +84,13 @@ const boardTemplates = listBoardTemplates();
 export function WorkspaceStartClient({
   initialFreshStart = false,
   initialStartKind,
-  initialTemplateId
+  initialTemplateId,
+  initialTemplateVersion
 }: {
   readonly initialFreshStart?: boolean | undefined;
   readonly initialStartKind?: WorkspaceStartKind | undefined;
   readonly initialTemplateId?: string | undefined;
+  readonly initialTemplateVersion?: string | undefined;
 } = {}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -96,7 +98,7 @@ export function WorkspaceStartClient({
   const [title, setTitle] = useState("");
   const initialTemplate = resolveWorkspaceStartTemplate(boardTemplates, {
     templateId: initialTemplateId ?? null,
-    templateVersion: null
+    templateVersion: initialTemplateVersion ?? null
   });
   const initialTemplateSelection = createWorkspaceStartTemplateSelection(initialTemplate);
   const projectNameInputRef = useRef<HTMLInputElement>(null);

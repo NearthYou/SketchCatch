@@ -528,6 +528,7 @@ check(
 for (const sid of [
   "AllowProjectArtifacts",
   "AllowDeploymentArtifacts",
+  "ListProjectArtifactVersions",
   "AllowAwsConnectionCloudFormationTemplates",
   "AllowSketchCatchAwsConnectionAssumeRole",
   "RunWorkerTask",
@@ -541,6 +542,24 @@ for (const sid of [
     `runtime ecs_task policy must retain ${sid}`
   );
 }
+check(
+  /sid\s*=\s*"AllowProjectArtifacts"[\s\S]*?s3:DeleteObjectVersion[\s\S]*?resources\s*=\s*\["arn:aws:s3:::\$\{var\.artifact_bucket_name\}\/projects\/\*"\]/.test(
+    runtimeIam
+  ),
+  "API task role must delete every version of project artifacts"
+);
+check(
+  /sid\s*=\s*"AllowDeploymentArtifacts"[\s\S]*?s3:DeleteObjectVersion[\s\S]*?resources\s*=\s*\["arn:aws:s3:::\$\{var\.artifact_bucket_name\}\/deployments\/\*"\]/.test(
+    runtimeIam
+  ),
+  "API task role must delete every version of deployment artifacts"
+);
+check(
+  /sid\s*=\s*"ListProjectArtifactVersions"[\s\S]*?s3:ListBucketVersions[\s\S]*?projects\/\*[\s\S]*?deployments\/\*/.test(
+    runtimeIam
+  ),
+  "API task role must list project and deployment artifact versions by prefix"
+);
 for (const policyName of ["ecs_task", "ecs_worker_task"]) {
   const policyBody =
     runtimeIam.match(

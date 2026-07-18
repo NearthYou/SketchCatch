@@ -1785,6 +1785,65 @@ test("POST /api/projects/:projectId/deployments/prepare rejects a stale draft", 
   await app.close();
 });
 
+test("POST /api/projects/:projectId/deployments/prepare blocks Terraform matching an analysis-excluded resource", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.projectDraft = {
+    revision: 7,
+    diagramJson: {
+      nodes: [
+        {
+          id: "legacy-lambda",
+          type: "aws_lambda_function",
+          kind: "resource",
+          label: "Legacy Lambda",
+          position: { x: 0, y: 0 },
+          size: { width: 120, height: 80 },
+          locked: false,
+          zIndex: 1,
+          parameters: {
+            resourceType: "aws_lambda_function",
+            resourceName: "legacy_lambda",
+            fileName: "compute.tf",
+            values: { analysisExcluded: true }
+          }
+        }
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    terraformFiles: [
+      {
+        fileName: "compute.tf",
+        terraformCode: `resource /* provider type */
+"aws_lambda_function"
+// logical name
+"legacy_lambda"
+{}`
+      }
+    ]
+  };
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/deployments/prepare`,
+    headers: await authHeaders(),
+    payload: {
+      architectureId,
+      terraformArtifactId,
+      awsConnectionId,
+      draftRevision: 7,
+      scope: "auto"
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.json().message, /analysis-excluded resource/i);
+  assert.equal(repository.calls.some((call) => call.name === "createDeployment"), false);
+
+  await app.close();
+});
+
 test("POST /api/projects/:projectId/deployments prunes stale deployment storage after creation", async () => {
   const repository = new FakeDeploymentRepository();
   const pruneCalls: Array<{ projectId: string }> = [];
@@ -3249,6 +3308,65 @@ test("POST /api/deployments/:deploymentId/destroy starts approved destroy in the
       userId
     }
   });
+
+  await app.close();
+});
+test("POST /api/deployments/:deploymentId/destroy starts approved cleanup after an AWS connection failure", async () => {
+  const repository = new FakeDeploymentRepository();
+  const destroyCalls: RunDeploymentDestroyInput[] = [];
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "FAILED",
+    failureStage: "aws_connection",
+    errorSummary: "AWS Role connection test failed",
+    currentPlanArtifactId: planArtifactId,
+    stateObjectKey,
+    planSummary: {
+      createCount: 0,
+      updateCount: 0,
+      deleteCount: 1,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    },
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null,
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: "c".repeat(64),
+    approvedTfplanHash: "a".repeat(64),
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2"
+  });
+  repository.planArtifact = createDeploymentPlanArtifactRecord({ operation: "destroy" });
+  repository.deployments = [repository.deployment];
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentDestroy: async (input) => {
+      destroyCalls.push(input);
+      return {
+        deployment: createDeploymentRecord(input.deploymentId, {
+          status: "DESTROYED",
+          currentPlanArtifactId: null,
+          stateObjectKey: null
+        }),
+        terraform: { init: null, destroy: null }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/destroy`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 202);
+  assert.equal(destroyCalls.length, 1);
+  assert.equal(destroyCalls[0]?.startedFromStatus, "FAILED");
+  assert.equal(destroyCalls[0]?.startedFromFailureStage, "aws_connection");
 
   await app.close();
 });

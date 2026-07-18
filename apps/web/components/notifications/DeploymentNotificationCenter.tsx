@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell, CheckCheck, X } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -32,6 +32,7 @@ import {
   type NotificationCenterState
 } from "./notification-center-state";
 import { getDeploymentNotificationCenterPlacement } from "./notification-center-placement";
+import { openDeploymentNotification } from "./notification-open";
 import styles from "./deployment-notification-center.module.css";
 
 type PushState = "idle" | "enabling" | "enabled" | "denied" | "unsupported" | "unavailable" | "error";
@@ -52,6 +53,7 @@ const NotificationCenterContext = createContext<NotificationCenterContextValue |
 
 export function DeploymentNotificationCenter({ children }: { readonly children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { status } = useAuth();
   const [state, setState] = useState(createNotificationCenterState);
   const [open, setOpen] = useState(false);
@@ -123,10 +125,16 @@ export function DeploymentNotificationCenter({ children }: { readonly children: 
     }
   }, []);
 
-  const openNotification = useCallback(async (notificationId: string, actionUrl: string): Promise<void> => {
-    await readNotification(notificationId);
-    window.location.assign(actionUrl);
-  }, [readNotification]);
+  const openNotification = useCallback(
+    (notificationId: string, actionUrl: string): Promise<void> =>
+      openDeploymentNotification({
+        actionUrl,
+        close: () => setOpen(false),
+        markRead: () => readNotification(notificationId),
+        navigate: (href) => router.push(href)
+      }),
+    [readNotification, router]
+  );
 
   const readAll = useCallback(async (): Promise<void> => {
     const readAt = new Date().toISOString();

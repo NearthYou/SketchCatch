@@ -3,7 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectDeliveryProfile } from "@sketchcatch/types";
-import { ExternalLink, GitBranch, RefreshCw } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ExternalLink,
+  GitBranch,
+  RefreshCw,
+  Settings2,
+  Workflow
+} from "lucide-react";
 import { ProjectCicdMonitoringSettingsClient } from "../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { getProjectDeliveryProfile } from "./api";
@@ -18,11 +26,13 @@ type LoadState = "loading" | "idle" | "error";
 export function DeliveryCenterPanel({
   onOpenDirectDeployment,
   onOpenLiveObservation,
-  projectId
+  projectId,
+  readinessRefreshRequestId = 0
 }: {
   readonly onOpenDirectDeployment?: (scope: "application" | "full_stack" | null) => void;
   readonly onOpenLiveObservation?: (selection?: LiveObservationSelection) => void;
   readonly projectId: string;
+  readonly readinessRefreshRequestId?: number | undefined;
 }) {
   const [profile, setProfile] = useState<ProjectDeliveryProfile | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -85,18 +95,39 @@ export function DeliveryCenterPanel({
   return (
     <div className={styles.root}>
       <header className={styles.header}>
-        <div>
-          <p>Project Delivery</p>
-          <h2>Delivery</h2>
+        <div className={styles.titleBlock}>
+          <span className={styles.titleIcon} aria-hidden="true">
+            <Workflow size={18} />
+          </span>
+          <div>
+            <p>Project Delivery</p>
+            <h2>CI/CD Delivery</h2>
+            <span>Repository 연결부터 배포 준비와 Pipeline 실행까지 한곳에서 관리합니다.</span>
+          </div>
         </div>
-        <button aria-label="Delivery 정보 새로고침" onClick={reload} type="button">
-          <RefreshCw aria-hidden="true" size={16} />
-        </button>
+        <div className={styles.headerActions}>
+          <strong className={styles.overallStatus} data-ready={profile.readiness.ready}>
+            {profile.readiness.ready ? (
+              <CheckCircle2 aria-hidden="true" size={15} />
+            ) : (
+              <AlertCircle aria-hidden="true" size={15} />
+            )}
+            {profile.readiness.ready
+              ? "배포 준비 완료"
+              : `${profile.readiness.requiredActionCount}개 확인 필요`}
+          </strong>
+          <button aria-label="Delivery 정보 새로고침" onClick={reload} type="button">
+            <RefreshCw aria-hidden="true" size={16} />
+          </button>
+        </div>
       </header>
-      <p className={styles.intro}>
-        Repository 연결, 감시 경로, 배포 타깃과 CI/CD 실행 상태를 이 프로젝트에서 관리합니다. 설정을
-        저장해도 PR 생성이나 배포가 자동 실행되지는 않습니다.
-      </p>
+
+      <nav className={styles.sectionNavigation} aria-label="CI/CD Delivery 섹션">
+        <a href="#delivery-connections">연결</a>
+        <a href="#delivery-configuration">Pipeline 설정</a>
+        <a href="#delivery-readiness">준비 상태</a>
+        <a href="#delivery-execution">실행 기록</a>
+      </nav>
 
       {loadState === "error" ? (
         <p className={styles.error} role="alert">
@@ -104,115 +135,139 @@ export function DeliveryCenterPanel({
         </p>
       ) : null}
 
-      <section className={styles.card} aria-labelledby="delivery-github-title">
-        <div className={styles.cardHeading}>
+      <section
+        className={styles.sectionGroup}
+        id="delivery-connections"
+        aria-labelledby="delivery-connections-title"
+      >
+        <div className={styles.groupHeading}>
           <div>
-            <span>1</span>
-            <h3 id="delivery-github-title">GitHub 연결</h3>
+            <p>연결</p>
+            <h3 id="delivery-connections-title">코드와 계정을 연결하세요</h3>
           </div>
-          <strong>{profile.githubInstallations.length > 0 ? "연결됨" : "연결 필요"}</strong>
+          <span>PR과 Pipeline이 사용할 정확한 Repository를 확인합니다.</span>
         </div>
-        {profile.githubInstallations.length > 0 ? (
-          <ul className={styles.accountList}>
-            {profile.githubInstallations.map((installation) => (
-              <li key={installation.installationId}>
-                <span>{installation.accountLogin}</span>
-                {installation.htmlUrl ? (
-                  <a href={installation.htmlUrl} rel="noreferrer" target="_blank">
-                    Repository 권한 추가 <ExternalLink aria-hidden="true" size={13} />
-                  </a>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <Link
-            className={styles.actionLink}
-            href="/dashboard/settings#github-account-settings-title"
-          >
-            GitHub 연결하기
-          </Link>
-        )}
+
+        <div className={styles.connectionGrid}>
+          <article className={styles.card} aria-labelledby="delivery-github-title">
+            <div className={styles.cardHeading}>
+              <h4 id="delivery-github-title">GitHub 계정</h4>
+              <strong data-ready={profile.githubInstallations.length > 0}>
+                {profile.githubInstallations.length > 0 ? "연결됨" : "연결 필요"}
+              </strong>
+            </div>
+            <p>Repository 권한과 CI/CD Pull Request 생성에 사용합니다.</p>
+            {profile.githubInstallations.length > 0 ? (
+              <ul className={styles.accountList}>
+                {profile.githubInstallations.map((installation) => (
+                  <li key={installation.installationId}>
+                    <span>{installation.accountLogin}</span>
+                    {installation.htmlUrl ? (
+                      <a href={installation.htmlUrl} rel="noreferrer" target="_blank">
+                        권한 관리 <ExternalLink aria-hidden="true" size={13} />
+                      </a>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <Link
+                className={styles.actionLink}
+                href="/dashboard/settings#github-account-settings-title"
+              >
+                GitHub 연결하기
+              </Link>
+            )}
+          </article>
+
+          <article className={styles.card} aria-labelledby="delivery-repository-title">
+            <div className={styles.cardHeading}>
+              <h4 id="delivery-repository-title">Source Repository</h4>
+              <strong data-ready={Boolean(profile.sourceRepository)}>
+                {profile.sourceRepository ? "연결됨" : "선택 필요"}
+              </strong>
+            </div>
+            {profile.repositoryAnalysisTarget ? (
+              <dl className={styles.definitionList}>
+                <div>
+                  <dt>분석 출처</dt>
+                  <dd>
+                    {profile.repositoryAnalysisTarget.owner}/{profile.repositoryAnalysisTarget.name}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Branch · SHA</dt>
+                  <dd>
+                    {profile.repositoryAnalysisTarget.branch} ·{" "}
+                    {shortSha(profile.repositoryAnalysisTarget.repositoryRevision)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>배포 Repository</dt>
+                  <dd>
+                    {profile.sourceRepository
+                      ? `${profile.sourceRepository.owner}/${profile.sourceRepository.name}`
+                      : "아직 연결되지 않음"}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p>이 Board에 저장된 Repository 분석 출처가 없습니다.</p>
+            )}
+            {freshness.status === "changed" ? (
+              <div className={styles.warning} role="status">
+                <strong>최근 인증 분석과 Board의 분석 SHA가 다릅니다.</strong>
+                <p>
+                  최근 인증 분석 SHA는 {shortSha(freshness.currentRevision)}입니다. Board는 자동으로
+                  변경되지 않습니다.
+                </p>
+              </div>
+            ) : null}
+            <Link className={styles.actionLink} href={repositoryHref}>
+              <GitBranch aria-hidden="true" size={15} />
+              {profile.sourceRepository ? "Repository 다시 분석" : "Repository 연결"}
+            </Link>
+          </article>
+        </div>
       </section>
 
-      <section className={styles.card} aria-labelledby="delivery-repository-title">
-        <div className={styles.cardHeading}>
+      <section
+        className={styles.sectionGroup}
+        id="delivery-configuration"
+        aria-labelledby="delivery-configuration-title"
+      >
+        <div className={styles.groupHeading}>
           <div>
-            <span>2</span>
-            <h3 id="delivery-repository-title">Source Repository</h3>
+            <p>Pipeline 설정</p>
+            <h3 id="delivery-configuration-title">변경 감시와 배포 위치를 정하세요</h3>
           </div>
-          <strong>{profile.sourceRepository ? "연결됨" : "선택 필요"}</strong>
+          <span>저장만으로 PR 생성이나 배포가 실행되지는 않습니다.</span>
         </div>
-        {profile.repositoryAnalysisTarget ? (
-          <dl className={styles.definitionList}>
-            <div>
-              <dt>Board 분석 출처</dt>
-              <dd>
-                {profile.repositoryAnalysisTarget.owner}/{profile.repositoryAnalysisTarget.name}
-              </dd>
-            </div>
-            <div>
-              <dt>Branch</dt>
-              <dd>{profile.repositoryAnalysisTarget.branch}</dd>
-            </div>
-            <div>
-              <dt>분석 SHA</dt>
-              <dd>{shortSha(profile.repositoryAnalysisTarget.repositoryRevision)}</dd>
-            </div>
-            <div>
-              <dt>연결 Repository</dt>
-              <dd>
-                {profile.sourceRepository
-                  ? `${profile.sourceRepository.owner}/${profile.sourceRepository.name}`
-                  : "아직 연결되지 않음"}
-              </dd>
-            </div>
-          </dl>
-        ) : (
-          <p>이 Board에 저장된 Repository 분석 출처가 없습니다.</p>
-        )}
-        {freshness.status === "changed" ? (
-          <div className={styles.warning} role="status">
-            <strong>최근 인증 분석이 Board 생성 때의 분석과 다릅니다.</strong>
-            <p>
-              최근 인증 분석 SHA는 {shortSha(freshness.currentRevision)}입니다. 현재 GitHub head를
-              자동 조회한 결과는 아니며, Board도 자동 변경하지 않습니다.
-            </p>
+        <div className={styles.settingsStack}>
+          <div className={styles.editorSection}>
+            <ProjectCicdMonitoringSettingsClient projectId={projectId} onSaved={reload} />
           </div>
-        ) : null}
-        <Link className={styles.actionLink} href={repositoryHref}>
-          <GitBranch aria-hidden="true" size={15} />
-          {profile.sourceRepository ? "Repository 다시 분석" : "Repository 연결"}
-        </Link>
-      </section>
-
-      <section className={styles.editorSection} aria-labelledby="delivery-monitoring-title">
-        <div className={styles.sectionLabel}>
-          <span>3</span>
-          <h3 id="delivery-monitoring-title">감시 설정</h3>
+          <div className={styles.editorSection}>
+            <ProjectDeploymentTargetEditor
+              initialProfile={profile}
+              onSaved={reload}
+              projectId={projectId}
+            />
+          </div>
         </div>
-        <ProjectCicdMonitoringSettingsClient projectId={projectId} onSaved={reload} />
       </section>
 
-      <section className={styles.editorSection} aria-labelledby="delivery-target-title">
-        <div className={styles.sectionLabel}>
-          <span>4</span>
-          <h3 id="delivery-target-title">배포 설정</h3>
-        </div>
-        <ProjectDeploymentTargetEditor
-          initialProfile={profile}
-          onSaved={reload}
-          projectId={projectId}
-        />
-      </section>
-
-      <section className={styles.card} aria-labelledby="delivery-readiness-title">
-        <div className={styles.cardHeading}>
+      <section
+        className={`${styles.sectionGroup} ${styles.readinessSection}`}
+        id="delivery-readiness"
+        aria-labelledby="delivery-readiness-title"
+      >
+        <div className={styles.groupHeading}>
           <div>
-            <span>5</span>
-            <h3 id="delivery-readiness-title">Readiness</h3>
+            <p>준비 상태</p>
+            <h3 id="delivery-readiness-title">실행 전 필수 항목을 확인하세요</h3>
           </div>
-          <strong>
+          <strong className={styles.readinessSummary} data-ready={profile.readiness.ready}>
             {profile.readiness.ready
               ? "준비됨"
               : `${profile.readiness.requiredActionCount}개 확인 필요`}
@@ -221,6 +276,11 @@ export function DeliveryCenterPanel({
         <ul className={styles.readinessList}>
           {profile.readiness.items.map((item) => (
             <li key={item.key} data-ready={item.status === "ready"}>
+              {item.status === "ready" ? (
+                <CheckCircle2 aria-hidden="true" size={18} />
+              ) : (
+                <AlertCircle aria-hidden="true" size={18} />
+              )}
               <span>{item.label}</span>
               <strong>{item.status === "ready" ? "완료" : "확인 필요"}</strong>
             </li>
@@ -233,16 +293,26 @@ export function DeliveryCenterPanel({
         ) : null}
       </section>
 
-      <section className={styles.execution} aria-labelledby="delivery-execution-title">
-        <div className={styles.sectionLabel}>
-          <span>6</span>
-          <h3 id="delivery-execution-title">CI/CD 실행과 기록</h3>
+      <section
+        className={`${styles.sectionGroup} ${styles.execution}`}
+        id="delivery-execution"
+        aria-labelledby="delivery-execution-title"
+      >
+        <div className={styles.groupHeading}>
+          <div>
+            <p>실행 기록</p>
+            <h3 id="delivery-execution-title">Pull Request와 Pipeline을 관리하세요</h3>
+          </div>
+          <span className={styles.executionHint}>
+            <Settings2 aria-hidden="true" size={15} /> 설정 변경은 위에서 저장합니다.
+          </span>
         </div>
         <CicdConsoleScreen
           isVisible
           onOpenDirectDeployment={onOpenDirectDeployment}
           onOpenLiveObservation={onOpenLiveObservation}
           projectId={projectId}
+          readinessRefreshRequestId={readinessRefreshRequestId + reloadKey}
         />
       </section>
     </div>

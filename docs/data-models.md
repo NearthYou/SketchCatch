@@ -620,7 +620,7 @@ type DeleteProjectResponse = {
 };
 ```
 
-프로젝트 삭제 시 RDS의 프로젝트 관련 기록은 삭제한다. S3 object 삭제는 best-effort로 처리하며, 일부 실패해도 프로젝트 삭제는 완료하고 `cleanup`으로 경고를 전달한다.
+프로젝트 삭제 시 `projects/{projectId}/`와 연결된 모든 `deployments/{deploymentId}/` prefix에서 현재 object, 이전 version, delete marker를 먼저 삭제한다. 내부 S3 산출물을 하나라도 모두 삭제하지 못하면 `managed_cleanup_failed`로 중단하고 RDS의 프로젝트·배포 기록을 유지해 재시도할 수 있게 한다. 모든 prefix 정리가 성공한 뒤에만 RDS 기록을 삭제하며, `cleanup` 필드는 기존 응답 호환성을 위해 유지한다.
 
 ## ArchitectureSnapshot
 
@@ -2135,6 +2135,18 @@ type ReverseEngineeringScanResult = {
 Reverse Engineering의 `원본`은 `architectureJson`에 담긴 Resource, 관계, 설정을 그대로 유지한다. Cloud provider에는
 Architecture Board 좌표가 없으므로 화면에 처음 보여주기 위한 결정론적 기본 위치만 계산한다. 이때 Resource 의미를
 추가·삭제·변경하지 않으며, Board Auto Arrange나 의미 변경을 허용한 Compiler 제안과 구분한다.
+
+화면의 `supported`/`review_only` 표시는 저장하는 상태가 아니라 읽기 시점의 presentation 값이다.
+`DiscoveredResource.resourceType`, `analysisExcluded`, 관계 유무를 바탕으로 계산하므로, 과거
+`ReverseEngineeringScanResult` JSONB의 pre-draft 저장 형태도 이 표시 계산에 필요한 기존 필드를 그대로 제공한다.
+따라서 파생 presentation 계층에는 새 표시 필드나 DB migration이 필요 없으며, 이는 과거 JSONB와의 표시 계산
+호환성 근거다. 이 범위는 별도 API 응답 또는 저장 결과 읽기 경로 전반을 보장한다는 뜻은 아니다. 원본
+`providerResourceId`는 기술 원본 정보로 보존하고, 기본 화면 이름은 읽기 시점에 짧고 사람이 읽을 수 있는 이름으로
+유도한다.
+
+`AwsConnection`의 readiness 표시는 UI가 계산하지만, 스캔 권한은 API가 연결을 `verified` 상태로 확인한 경우에만 부여한다.
+
+ALB, CloudFront, ECS의 `supported` 표시는 provider type, 안정적인 import ID, Terraform fixture 검증 계약을 만족한 reader/adapter에만 부여한다. 이 계약을 만족하지 않는 다른 AWS Resource는 `review_only`다.
 
 스캔 중에 보여줄 진행 상황은 `ReverseEngineeringScanLogLine`으로 저장한다.
 

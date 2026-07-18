@@ -4,19 +4,24 @@ import test from "node:test";
 
 const clientSourceUrl = new URL("../../app/workspace/new/workspace-start-client.tsx", import.meta.url);
 const dashboardSourceUrl = new URL("../../components/dashboard/built-in-template-library.tsx", import.meta.url);
+const templatesSourceUrl = new URL("../../app/templates/templates-client.tsx", import.meta.url);
+const pageSourceUrl = new URL("../../app/workspace/new/page.tsx", import.meta.url);
 const cssSourceUrl = new URL("../../app/workspace/new/workspace-start.module.css", import.meta.url);
 
 test("Dashboard Template entry opens the selected detail with naming beside its start action", async () => {
-  const [clientSource, dashboardSource, cssSource] = await Promise.all([
+  const [clientSource, dashboardSource, templatesSource, pageSource, cssSource] = await Promise.all([
     readFile(clientSourceUrl, "utf8"),
     readFile(dashboardSourceUrl, "utf8"),
+    readFile(templatesSourceUrl, "utf8"),
+    readFile(pageSourceUrl, "utf8"),
     readFile(cssSourceUrl, "utf8")
   ]);
 
-  assert.match(
-    dashboardSource,
-    /\/workspace\/new\?mode=template&templateId=\$\{encodeURIComponent\(template\.id\)\}/
-  );
+  assert.match(dashboardSource, /createWorkspaceStartTemplateHref/);
+  assert.match(templatesSource, /import Link from "next\/link";/);
+  assert.match(templatesSource, /createWorkspaceStartTemplateHref/);
+  assert.match(pageSource, /initialTemplateVersion=\{params\.templateVersion\}/);
+  assert.match(clientSource, /templateVersion: initialTemplateVersion \?\? null/);
   assert.match(
     clientSource,
     /resolveWorkspaceStartTemplateView\(initialStartKind, initialTemplate\)/

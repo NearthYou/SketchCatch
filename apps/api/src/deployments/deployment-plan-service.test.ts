@@ -22,6 +22,7 @@ import {
 import { runDeploymentPlan } from "./deployment-plan-service.js";
 import { analyzePreDeploymentCheck } from "../services/aiPreDeploymentCheck.js";
 import { createCachedTerraformSecurityScanner } from "../services/terraform/trivy-terraform-scan.js";
+import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
 import type {
   DeploymentPlanArtifactStorage,
   UploadDeploymentPlanArtifactInput,
@@ -1332,6 +1333,243 @@ test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credential
     /data source "aws_region" is not allowed/
   );
   assert.equal(planArtifactStorage.uploads.length, 0);
+});
+
+test("Terraform module validation blocks dangling output references across the prepared bundle", () => {
+  const diagnostics = createTerraformValidationDiagnostics({
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: `output "cloudfront_url" {
+  value = aws_cloudfront_distribution.distribution.domain_name
+}`
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.code === "terraform.undefined_reference"),
+    [
+      {
+        code: "terraform.undefined_reference",
+        line: 2,
+        message:
+          "aws_cloudfront_distribution.distribution reference가 현재 Terraform 코드에 선언되어 있지 않습니다.",
+        resourceAddress: "aws_cloudfront_distribution.distribution",
+        severity: "error",
+        sourceFileName: "main.tf"
+      }
+    ]
+  );
+});
+
+test("Terraform module validation resolves resource references declared in another file", () => {
+  const diagnostics = createTerraformValidationDiagnostics({
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "resources.tf",
+        terraformCode: `resource "aws_s3_bucket" "site" {
+  bucket = "example-site"
+}`
+      },
+      {
+        fileName: "outputs.tf",
+        terraformCode: `output "bucket_name" {
+  value = aws_s3_bucket.site.bucket
+}`
+      }
+    ]
+  });
+
+  assert.equal(
+    diagnostics.some((diagnostic) => diagnostic.code === "terraform.undefined_reference"),
+    false
+  );
+});
+
+test("runDeploymentPlan rejects dangling output references before preparing AWS credentials", async () => {
+  const repository = new FakeDeploymentRepository();
+  let cleanupCalled = false;
+  let credentialsPrepared = false;
+  let terraformRan = false;
+
+  await assert.rejects(
+    () =>
+      runDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          readTerraformArtifactFile: async () => `output "cloudfront_url" {
+  value = aws_cloudfront_distribution.distribution.domain_name
+}`,
+          analyzePreDeployment: () => createAnalysis(),
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-terraform-dangling-output-plan",
+            mainFilePath: "C:/tmp/sketchcatch-terraform-dangling-output-plan/main.tf",
+            terraformFiles: [],
+            cleanup: async () => {
+              cleanupCalled = true;
+            }
+          }),
+          prepareTerraformAwsCredentialEnv: async () => {
+            credentialsPrepared = true;
+            throw new Error("AWS credentials should not be prepared");
+          },
+          runTerraformInit: async () => {
+            terraformRan = true;
+            throw new Error("Terraform init should not run");
+          }
+        }
+      ),
+    /undeclared resource reference.*aws_cloudfront_distribution\.distribution/i
+  );
+
+  assert.equal(cleanupCalled, true);
+  assert.equal(credentialsPrepared, false);
+  assert.equal(terraformRan, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "plan");
+});
+
+test("runDeploymentPlan blocks an uploaded Terraform bundle matching an analysis-excluded Architecture resource before init", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.architecture = createArchitectureRecord({
+    nodes: [
+      {
+        id: "legacy-lambda",
+        type: "LAMBDA",
+        label: "Legacy Lambda",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          analysisExcluded: true,
+          terraformResourceType: "aws_lambda_function",
+          terraformResourceName: "legacy_lambda"
+        }
+      },
+      {
+        id: "supported-vpc",
+        type: "VPC",
+        label: "VPC",
+        positionX: 120,
+        positionY: 0,
+        config: {}
+      }
+    ],
+    edges: []
+  });
+  const artifactContent = `resource "aws_vpc" "main" {}
+resource "aws_lambda_function" "legacy_lambda" {}`;
+  let terraformInitRan = false;
+  let terraformPlanRan = false;
+
+  await assert.rejects(
+    () =>
+      runDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          planArtifactStorage: new FakePlanArtifactStorage(),
+          readTerraformArtifactFile: async () => artifactContent,
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-analysis-excluded-plan",
+            mainFilePath: "C:/tmp/sketchcatch-analysis-excluded-plan/main.tf",
+            terraformFiles: [
+              { fileName: "network.tf", terraformCode: 'resource "aws_vpc" "main" {}' },
+              {
+                fileName: "compute.tf",
+                terraformCode: `resource /* provider type */
+"aws_lambda_function"
+// logical name
+"legacy_lambda"
+{}`
+              }
+            ],
+            cleanup: async () => undefined
+          }),
+          prepareTerraformAwsCredentialEnv: async () => {
+            throw new Error("AWS credentials must not be prepared for an excluded resource");
+          },
+          runTerraformInit: async () => {
+            terraformInitRan = true;
+            return createRunnerResult("init");
+          },
+          runTerraformPlan: async () => {
+            terraformPlanRan = true;
+            return createRunnerResult("plan");
+          }
+        }
+      ),
+    /analysis-excluded resource/i
+  );
+
+  assert.equal(terraformInitRan, false);
+  assert.equal(terraformPlanRan, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "plan");
+});
+
+test("runDeploymentPlan keeps a supported VPC eligible when no excluded identity matches", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.architecture = createArchitectureRecord({
+    nodes: [
+      {
+        id: "supported-vpc",
+        type: "VPC",
+        label: "VPC",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          terraformResourceType: "aws_vpc",
+          terraformResourceName: "main"
+        }
+      }
+    ],
+    edges: []
+  });
+  const vpcTerraform = 'resource "aws_vpc" "main" {}';
+  let terraformPlanRan = false;
+
+  const result = await runDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      planArtifactStorage: new FakePlanArtifactStorage(),
+      readTerraformArtifactFile: async () => vpcTerraform,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-supported-vpc-plan",
+        mainFilePath: "C:/tmp/sketchcatch-supported-vpc-plan/main.tf",
+        terraformFiles: [{ fileName: "main.tf", terraformCode: vpcTerraform }],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () =>
+        createRunnerResult("init", {
+          exitCode: 1,
+          stderr: "provider install intentionally stopped after exclusion guard"
+        }),
+      runTerraformPlan: async () => {
+        terraformPlanRan = true;
+        return createRunnerResult("plan");
+      }
+    }
+  );
+
+  assert.equal(result.terraform.init?.exitCode, 1);
+  assert.equal(terraformPlanRan, false);
+  assert.equal(result.deployment.failureStage, "init");
+  assert.doesNotMatch(result.deployment.errorSummary ?? "", /analysis-excluded resource/i);
 });
 
 test("runDeploymentPlan reuses a verified pending plan without rerunning Plan or PreDeployment", async () => {

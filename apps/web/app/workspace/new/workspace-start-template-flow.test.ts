@@ -3,6 +3,7 @@ import test from "node:test";
 import { isBoardTemplateAvailable, listBoardTemplates } from "../../../features/resource-settings/template-library";
 import {
   createTemplateProjectDraft,
+  createWorkspaceStartTemplateHref,
   createWorkspaceStartTemplateSelection,
   resolveWorkspaceStartTemplateView,
   resolveWorkspaceStartTemplate
@@ -43,6 +44,17 @@ test("선택한 Template으로 시작하면 상세 화면을 바로 연다", () 
   assert.equal(resolveWorkspaceStartTemplateView("template", template), "detail");
   assert.equal(resolveWorkspaceStartTemplateView("template", null), "catalog");
   assert.equal(resolveWorkspaceStartTemplateView("ai", template), null);
+});
+
+test("Dashboard Template links carry the exact selected revision", () => {
+  const template = getAvailableTemplate("brainboard-aws-asg-lb-vpc-subnets");
+  const selection = createWorkspaceStartTemplateSelection(template);
+  const url = new URL(createWorkspaceStartTemplateHref(template), "https://sketchcatch.local");
+
+  assert.equal(url.pathname, "/workspace/new");
+  assert.equal(url.searchParams.get("mode"), "template");
+  assert.equal(url.searchParams.get("templateId"), selection.templateId);
+  assert.equal(url.searchParams.get("templateVersion"), selection.templateVersion);
 });
 
 function getAvailableTemplate(templateId: string) {
