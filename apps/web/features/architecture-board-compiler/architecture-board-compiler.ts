@@ -1225,13 +1225,17 @@ function getPolylineHalfwayPoint(points: readonly { readonly x: number; readonly
   return structuredClone(points[0]!);
 }
 
+// Preserve presentation roles so summary links do not distort main-flow layout quality.
 function evaluateDiagram(diagram: DiagramJson): AutomaticDiagramLayoutQuality {
   return evaluateAutomaticDiagramLayout({
     edges: diagram.edges.map((edge) => ({
       id: edge.id,
       sourceId: edge.sourceNodeId,
       targetId: edge.targetNodeId,
-      ...(edge.label === undefined ? {} : { label: edge.label })
+      ...(edge.label === undefined ? {} : { label: edge.label }),
+      ...(edge.metadata?.presentationRole === undefined
+        ? {}
+        : { metadata: { presentationRole: edge.metadata.presentationRole } })
     })),
     nodes: diagram.nodes
   });

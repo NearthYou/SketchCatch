@@ -136,7 +136,7 @@ export function FinalArchitecturePreview({
         <SelectedOptionTrail compact selections={selections} />
 
         <div className={styles.previewActions}>
-          <a className={styles.backToConversation} href="#conversation-heading">
+          <a className={styles.backToConversation} href="#conversation">
             <ArrowUp aria-hidden="true" size={15} /> 대화로 돌아가기
           </a>
           <span className={styles.previewApprovalBoundary}>

@@ -17,7 +17,7 @@
 | ECS Fargate Container App | `image-1.png` | VPC 안 network + cluster workload, 오른쪽 Definition / Ops rail |
 | EKS Container App | `image-5.png` | VPC 안 EKS Cluster → Namespace workload, 오른쪽 Support rail |
 
-원본: [AWS Template Patterns](./007_AWS템플릿패턴_gg.md)
+원본: [AWS Template Patterns](../old/feat-infrastructure-template/007_AWS템플릿패턴_gg.md)
 
 ## 공통 불변조건
 

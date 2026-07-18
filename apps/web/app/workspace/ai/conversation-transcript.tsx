@@ -48,6 +48,7 @@ export function ConversationTranscript({
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const shouldFollowRef = useRef(true);
+  const forcedFollowTargetMessageCountRef = useRef<number | null>(null);
   const candidateActions = useMemo(
     () => getProgressCandidateActions(progressSnapshot),
     [progressSnapshot]
@@ -56,13 +57,24 @@ export function ConversationTranscript({
 
   useEffect(() => {
     const scrollElement = scrollRef.current;
-    if (!scrollElement || !shouldFollowRef.current) return;
+    const forcedFollowTargetMessageCount = forcedFollowTargetMessageCountRef.current;
+    const isForcedFollow = forcedFollowTargetMessageCount !== null;
+    if (!scrollElement || (!isForcedFollow && !shouldFollowRef.current)) return;
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     scrollElement.scrollTo({
-      behavior: reduceMotion ? "auto" : "smooth",
+      behavior: reduceMotion || isForcedFollow ? "auto" : "smooth",
       top: scrollElement.scrollHeight
     });
+
+    if (
+      isForcedFollow &&
+      (requestState === "error" ||
+        requestState === "cancelled" ||
+        (requestState === "idle" && messages.length >= forcedFollowTargetMessageCount))
+    ) {
+      forcedFollowTargetMessageCountRef.current = null;
+    }
   }, [candidateActions.length, hasFinalPreview, messages, requestState, selections.length]);
 
   function handleScroll(): void {
@@ -72,8 +84,17 @@ export function ConversationTranscript({
     shouldFollowRef.current = shouldAutoFollowTranscript({
       clientHeight: scrollElement.clientHeight,
       scrollHeight: scrollElement.scrollHeight,
-      scrollTop: scrollElement.scrollTop
+      scrollTop: scrollElement.scrollTop,
+      source: "scroll"
     });
+  }
+
+  function handleSuggestionSelect(message: AiStartMessage, suggestion: string): void {
+    forcedFollowTargetMessageCountRef.current = messages.length + 2;
+    shouldFollowRef.current = shouldAutoFollowTranscript({
+      source: "assistant-option-selection"
+    });
+    onSuggestionSelect(message, suggestion);
   }
 
   return (
@@ -118,7 +139,7 @@ export function ConversationTranscript({
                           isSuggestionInputBlocked
                         )}
                         key={suggestion}
-                        onClick={() => onSuggestionSelect(message, suggestion)}
+                        onClick={() => handleSuggestionSelect(message, suggestion)}
                         type="button"
                       >
                         <span>{suggestion}</span>

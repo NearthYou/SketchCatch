@@ -12,7 +12,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     capturedAt: "2026-07-14"
   },
   captureStatus: "captured",
-  title: "[Training] AWS onboarding",
+  title: "AWS onboarding",
   description: null,
   provider: "aws",
   viewport: {

@@ -6,36 +6,28 @@ import { getWorkspaceHref } from "../../components/dashboard/api-project-card";
 // Dashboard 자료를 기다리는 동안 최종 배치와 같은 크기의 뼈대를 유지합니다.
 export function DashboardOverviewLoading() {
   return (
-    <div className="dashboardOverview" aria-label="Dashboard 로딩">
-      <div className="dashboardSkeleton dashboardSkeletonTitle" />
+    <>
       <div className="dashboardMetricStrip dashboardMetricStripLoading">
         {Array.from({ length: 4 }, (_, index) => (
           <div className="dashboardSkeleton dashboardSkeletonMetric" key={index} />
         ))}
       </div>
-    </div>
+    </>
   );
 }
 
 // 첫 프로젝트가 없는 사용자에게 다음 행동을 바로 제공합니다.
 export function DashboardOverviewEmpty() {
   return (
-    <div className="dashboardOverview">
-      <header className="dashboardPageHeader">
-        <div>
-          <h1>첫 프로젝트를 시작하세요</h1>
-        </div>
-      </header>
-      <section className="dashboardEmptyState">
-        <Plus aria-hidden="true" size={24} />
-        <h2>아직 프로젝트가 없습니다.</h2>
-        <p>시작 방식을 고르고 첫 Architecture Board를 만들어보세요.</p>
-        <Link className="dashboardPrimaryAction" href="/workspace/new">
-          <Plus aria-hidden="true" size={16} />
-          새 프로젝트
-        </Link>
-      </section>
-    </div>
+    <section className="dashboardEmptyState">
+      <Plus aria-hidden="true" size={24} />
+      <h2>아직 프로젝트가 없습니다.</h2>
+      <p>시작 방식을 고르고 첫 Architecture Board를 만들어보세요.</p>
+      <Link className="dashboardPrimaryAction" href="/workspace/new">
+        <Plus aria-hidden="true" size={16} />
+        새 프로젝트
+      </Link>
+    </section>
   );
 }
 

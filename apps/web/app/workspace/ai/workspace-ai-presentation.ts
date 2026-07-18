@@ -64,15 +64,21 @@ export function getComposerEnterAction({
   return shiftKey ? "newline" : "submit";
 }
 
-export function shouldAutoFollowTranscript({
-  clientHeight,
-  scrollHeight,
-  scrollTop
-}: {
-  readonly clientHeight: number;
-  readonly scrollHeight: number;
-  readonly scrollTop: number;
-}): boolean {
+export function shouldAutoFollowTranscript(
+  input:
+    | {
+        readonly source: "assistant-option-selection";
+      }
+    | {
+        readonly clientHeight: number;
+        readonly scrollHeight: number;
+        readonly scrollTop: number;
+        readonly source: "scroll";
+      }
+): boolean {
+  if (input.source === "assistant-option-selection") return true;
+
+  const { clientHeight, scrollHeight, scrollTop } = input;
   return scrollHeight - scrollTop - clientHeight <= 48;
 }
 

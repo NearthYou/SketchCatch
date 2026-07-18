@@ -163,6 +163,10 @@
   min-width: 0;
 }
 
+.dashboardPrimaryRouteMenuButton {
+  display: none;
+}
+
 .dashboardTopbar {
   position: sticky;
   z-index: 20;
@@ -331,6 +335,16 @@
     display: inline-grid;
   }
 
+  .dashboardPrimaryRouteMenuButton {
+    position: fixed;
+    z-index: 24;
+    top: 16px;
+    left: 16px;
+    border-color: #dcdee0;
+    background: #ffffff;
+    box-shadow: var(--shadow-ring);
+  }
+
   .dashboardSidebarBackdrop {
     position: fixed;
     z-index: 25;
@@ -350,6 +364,10 @@
 
   .dashboardContent {
     padding: 32px 24px 64px;
+  }
+
+  .dashboardMainColumnPrimaryRoute .dashboardContent {
+    padding-top: 72px;
   }
 }
 

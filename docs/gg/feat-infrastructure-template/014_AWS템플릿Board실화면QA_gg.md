@@ -4,7 +4,7 @@
 
 ## 목적
 
-`007_AWS템플릿패턴_gg.md`의 여섯 PNG 패턴과 `013_AWS템플릿보드배치매핑_gg.md`의 배치 계약이 실제 Architecture Board에서도 같은 구조로 보이는지 확인한 기록이다.
+`../old/feat-infrastructure-template/007_AWS템플릿패턴_gg.md`의 여섯 PNG 패턴과 `013_AWS템플릿보드배치매핑_gg.md`의 배치 계약이 실제 Architecture Board에서도 같은 구조로 보이는지 확인한 기록이다.
 
 검증 대상은 화면 표현뿐이다. Resource ID·종류·수·Terraform value·relationship ID/source/target/label·API·배포 동작은 바꾸지 않는다.
 
