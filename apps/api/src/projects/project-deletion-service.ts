@@ -94,11 +94,7 @@ export type ProjectDeletionGuard = {
     userId: string;
     now: Date;
   }): Promise<ProjectDeletionClaim | undefined>;
-  release(input: {
-    projectId: string;
-    userId: string;
-    claim: ProjectDeletionClaim;
-  }): Promise<void>;
+  release(input: { projectId: string; userId: string; claim: ProjectDeletionClaim }): Promise<void>;
   markCleanupFailed?(input: {
     projectId: string;
     userId: string;
@@ -130,8 +126,8 @@ export class ProjectDeletionManagedCleanupError extends Error {
   readonly errorCode = "managed_cleanup_failed";
   readonly exposeMessage = true;
 
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = "ProjectDeletionManagedCleanupError";
   }
 }
@@ -237,48 +233,48 @@ export function createPostgresProjectDeletionGuard(db: Database): ProjectDeletio
 
         const [activeLease, runningDeployment, activeDeploymentJob, preparingBuildEnvironment] =
           await Promise.all([
-          transaction
-            .select({ projectId: projectExecutionLeases.projectId })
-            .from(projectExecutionLeases)
-            .where(
-              and(
-                eq(projectExecutionLeases.projectId, input.projectId),
-                eq(projectExecutionLeases.status, "active")
+            transaction
+              .select({ projectId: projectExecutionLeases.projectId })
+              .from(projectExecutionLeases)
+              .where(
+                and(
+                  eq(projectExecutionLeases.projectId, input.projectId),
+                  eq(projectExecutionLeases.status, "active")
+                )
               )
-            )
-            .limit(1),
-          transaction
-            .select({ id: deployments.id })
-            .from(deployments)
-            .where(
-              and(
-                eq(deployments.projectId, input.projectId),
-                or(eq(deployments.status, "RUNNING"), isNotNull(deployments.activeStage))
+              .limit(1),
+            transaction
+              .select({ id: deployments.id })
+              .from(deployments)
+              .where(
+                and(
+                  eq(deployments.projectId, input.projectId),
+                  or(eq(deployments.status, "RUNNING"), isNotNull(deployments.activeStage))
+                )
               )
-            )
-            .limit(1),
-          transaction
-            .select({ id: deploymentJobs.id })
-            .from(deploymentJobs)
-            .innerJoin(deployments, eq(deployments.id, deploymentJobs.deploymentId))
-            .where(
-              and(
-                eq(deployments.projectId, input.projectId),
-                inArray(deploymentJobs.status, ["QUEUED", "DISPATCHING", "RUNNING"])
+              .limit(1),
+            transaction
+              .select({ id: deploymentJobs.id })
+              .from(deploymentJobs)
+              .innerJoin(deployments, eq(deployments.id, deploymentJobs.deploymentId))
+              .where(
+                and(
+                  eq(deployments.projectId, input.projectId),
+                  inArray(deploymentJobs.status, ["QUEUED", "DISPATCHING", "RUNNING"])
+                )
               )
-            )
-            .limit(1),
-          transaction
-            .select({ id: projectBuildEnvironments.id })
-            .from(projectBuildEnvironments)
-            .where(
-              and(
-                eq(projectBuildEnvironments.projectId, input.projectId),
-                eq(projectBuildEnvironments.status, "preparing")
+              .limit(1),
+            transaction
+              .select({ id: projectBuildEnvironments.id })
+              .from(projectBuildEnvironments)
+              .where(
+                and(
+                  eq(projectBuildEnvironments.projectId, input.projectId),
+                  eq(projectBuildEnvironments.status, "preparing")
+                )
               )
-            )
-            .limit(1)
-        ]);
+              .limit(1)
+          ]);
         if (
           activeLease.length > 0 ||
           runningDeployment.length > 0 ||
@@ -364,7 +360,8 @@ export function createProjectDeletePreview(snapshot: ProjectDeleteSnapshot): Pro
       hasDeploymentHistory,
       hasPlanHistory,
       latestDeploymentStatus: latestDeployment?.status ?? null,
-      message: "현재 앱 릴리즈 또는 CI/CD 배포가 진행 중입니다. 완료되거나 취소된 뒤 프로젝트를 삭제할 수 있습니다.",
+      message:
+        "현재 앱 릴리즈 또는 CI/CD 배포가 진행 중입니다. 완료되거나 취소된 뒤 프로젝트를 삭제할 수 있습니다.",
       mode: "blocked_running_deployment",
       projectId: snapshot.projectId
     });
@@ -379,7 +376,8 @@ export function createProjectDeletePreview(snapshot: ProjectDeleteSnapshot): Pro
       hasDeploymentHistory,
       hasPlanHistory,
       latestDeploymentStatus: latestDeployment?.status ?? null,
-      message: "현재 배포 작업이 진행 중입니다. 작업이 완료되거나 취소된 뒤 프로젝트를 삭제할 수 있습니다.",
+      message:
+        "현재 배포 작업이 진행 중입니다. 작업이 완료되거나 취소된 뒤 프로젝트를 삭제할 수 있습니다.",
       mode: "blocked_running_deployment",
       projectId: snapshot.projectId
     });
@@ -448,7 +446,8 @@ export function createProjectDeletePreview(snapshot: ProjectDeleteSnapshot): Pro
       hasDeploymentHistory,
       hasPlanHistory,
       latestDeploymentStatus: latestDeployment?.status ?? null,
-      message: "배포된 기록이 있는 프로젝트입니다. 현재 추적 중인 AWS 리소스는 없습니다. 정말 삭제하시겠습니까?",
+      message:
+        "배포된 기록이 있는 프로젝트입니다. 현재 추적 중인 AWS 리소스는 없습니다. 정말 삭제하시겠습니까?",
       mode: "deployment_history",
       projectId: snapshot.projectId
     });
@@ -478,7 +477,8 @@ export function createProjectDeletePreview(snapshot: ProjectDeleteSnapshot): Pro
       hasDeploymentHistory,
       hasPlanHistory,
       latestDeploymentStatus: latestDeployment?.status ?? null,
-      message: "배포 준비 또는 실패 기록이 있는 프로젝트입니다. 프로젝트를 삭제하면 관련 기록도 함께 삭제됩니다.",
+      message:
+        "배포 준비 또는 실패 기록이 있는 프로젝트입니다. 프로젝트를 삭제하면 관련 기록도 함께 삭제됩니다.",
       mode: "deployment_history",
       projectId: snapshot.projectId
     });
@@ -648,7 +648,9 @@ async function cleanupCandidateObjectVersions(
   objects: ReadonlyArray<{ objectKey: string; versionId: string }>
 ): Promise<void> {
   const uniqueObjects = [
-    ...new Map(objects.map((object) => [`${object.objectKey}\0${object.versionId}`, object])).values()
+    ...new Map(
+      objects.map((object) => [`${object.objectKey}\0${object.versionId}`, object])
+    ).values()
   ];
   const results = await Promise.allSettled(
     uniqueObjects.map((object) =>
@@ -657,9 +659,11 @@ async function cleanupCandidateObjectVersions(
         : storage.deleteObject(object.objectKey)
     )
   );
-  if (results.some((result) => result.status === "rejected")) {
+  const firstFailure = results.find((result) => result.status === "rejected");
+  if (firstFailure?.status === "rejected") {
     throw new ProjectDeletionManagedCleanupError(
-      "검증된 앱 산출물 정리에 실패했습니다. 내부 S3 상태를 확인한 뒤 다시 삭제해 주세요."
+      "검증된 앱 산출물 정리에 실패했습니다. 내부 S3 상태를 확인한 뒤 다시 삭제해 주세요.",
+      { cause: firstFailure.reason }
     );
   }
 }
@@ -689,9 +693,10 @@ async function cleanupProjectManagedBuildEnvironment(
         codeConnectionArn: null
       }
     });
-  } catch {
+  } catch (error) {
     throw new ProjectDeletionManagedCleanupError(
-      "프로젝트 CodeBuild와 전용 IAM Role 정리에 실패했습니다. AWS 권한을 확인한 뒤 다시 삭제해 주세요."
+      "프로젝트 CodeBuild와 전용 IAM Role 정리에 실패했습니다. AWS 권한을 확인한 뒤 다시 삭제해 주세요.",
+      { cause: error }
     );
   }
 }
@@ -739,7 +744,9 @@ function requireAllowedDeleteAction(
     );
   }
 
-  throw new ProjectDeletionConflictError("현재 프로젝트 상태에서는 선택한 삭제 방식을 사용할 수 없습니다.");
+  throw new ProjectDeletionConflictError(
+    "현재 프로젝트 상태에서는 선택한 삭제 방식을 사용할 수 없습니다."
+  );
 }
 
 function collectProjectDeletionObjectKeys(snapshot: ProjectDeleteSnapshot): string[] {
@@ -830,9 +837,10 @@ async function cleanupProjectArtifactPrefixes(
     for (const prefix of prefixes) {
       await storage.deletePrefix({ prefix });
     }
-  } catch {
+  } catch (error) {
     throw new ProjectDeletionManagedCleanupError(
-      "SketchCatch 내부 S3 산출물을 모두 삭제하지 못했습니다. 프로젝트 기록은 유지되었으므로 S3 권한을 확인한 뒤 다시 삭제해 주세요."
+      "SketchCatch 내부 S3 산출물을 모두 삭제하지 못했습니다. 프로젝트 기록은 유지되었으므로 S3 권한을 확인한 뒤 다시 삭제해 주세요.",
+      { cause: error }
     );
   }
 }
@@ -849,13 +857,12 @@ async function deleteObjectsOrThrow(
     })
   );
 
-  const failedObjectKeys = results.flatMap((result, index) =>
-    result.status === "rejected" ? [uniqueObjectKeys[index] as string] : []
-  );
+  const firstFailure = results.find((result) => result.status === "rejected");
 
-  if (failedObjectKeys.length > 0) {
+  if (firstFailure?.status === "rejected") {
     throw new ProjectDeletionManagedCleanupError(
-      "SketchCatch 내부 산출물을 모두 삭제하지 못했습니다. 프로젝트 기록은 유지되었으므로 저장소 권한을 확인한 뒤 다시 삭제해 주세요."
+      "SketchCatch 내부 산출물을 모두 삭제하지 못했습니다. 프로젝트 기록은 유지되었으므로 저장소 권한을 확인한 뒤 다시 삭제해 주세요.",
+      { cause: firstFailure.reason }
     );
   }
 }

@@ -91,7 +91,7 @@ test("one confirmation continues from Destroy Plan through project deletion", ()
     "await approveDestroyAndDelete({",
     "await approveDeploymentPlan(",
     "await runDeploymentDestroy(",
-    "await deleteProject(project.id, \"delete_project\")"
+    'await deleteProject(project.id, "delete_project")'
   ];
 
   assert.deepEqual(
@@ -102,10 +102,21 @@ test("one confirmation continues from Destroy Plan through project deletion", ()
   );
   assert.match(projectsClientSource, /role="progressbar"/);
   assert.match(projectsClientSource, /리소스를 포함해 정말 삭제할까요\?/);
-  assert.doesNotMatch(
+  assert.doesNotMatch(projectsClientSource, /onClick=\{\(\) => void approveDestroyAndDelete\(\)\}/);
+});
+
+test("project cleanup failure after destroy refreshes the delete preview before retry", () => {
+  const workflowSource = getSourceBetween(
     projectsClientSource,
-    /onClick=\{\(\) => void approveDestroyAndDelete\(\)\}/
+    "async function approveDestroyAndDelete(input:",
+    "function closeDeleteDialog(): void {"
   );
+
+  assert.match(workflowSource, /let destroyCompleted = false;/);
+  assert.match(workflowSource, /destroyCompleted = true;/);
+  assert.match(workflowSource, /await getProjectDeletePreview\(project\.id\)/);
+  assert.match(workflowSource, /preview: recoveryPreview/);
+  assert.match(workflowSource, /if \(destroyCompleted\)/);
 });
 
 test("project-only fallback stays hidden without a destroy failure", () => {

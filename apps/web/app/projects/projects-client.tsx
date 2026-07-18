@@ -207,7 +207,9 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     }
   }
 
-  async function confirmProjectDelete(action: "delete_project" | "delete_project_only"): Promise<void> {
+  async function confirmProjectDelete(
+    action: "delete_project" | "delete_project_only"
+  ): Promise<void> {
     if (deleteDialog.status === "closed" || deleteDialog.status === "loading") {
       return;
     }
@@ -321,6 +323,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     readonly selectedAction?: ProjectDeleteAction | undefined;
   }): Promise<void> {
     const { deployment, preview, project, selectedAction } = input;
+    let destroyCompleted = false;
     setDeleteDialog({
       deployment,
       preview,
@@ -351,6 +354,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         projectId: project.id,
         timeoutMessage: "Destroy 완료 대기 시간이 초과되었습니다."
       });
+      destroyCompleted = true;
 
       if (!isMountedRef.current) {
         return;
@@ -383,6 +387,32 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         return;
       }
 
+      const errorMessage = getApiErrorMessage(
+        error,
+        "\uB9AC\uC18C\uC2A4 \uD3EC\uD568 \uC0AD\uC81C\uB97C \uC644\uB8CC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4."
+      );
+
+      if (destroyCompleted) {
+        try {
+          const recoveryPreview = await getProjectDeletePreview(project.id);
+
+          if (!isMountedRef.current) {
+            return;
+          }
+
+          setDeleteDialog({
+            errorMessage,
+            preview: recoveryPreview,
+            project,
+            status: "ready"
+          });
+          return;
+        } catch {
+          setDeleteDialog({ status: "closed" });
+          setDeleteErrorMessage(errorMessage);
+          return;
+        }
+      }
       setDeleteDialog({
         deployment,
         errorMessage: getApiErrorMessage(error, "리소스 포함 삭제를 완료하지 못했습니다."),
@@ -440,7 +470,6 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     const progress =
       deleteDialog.status !== "loading" ? getProjectDeleteProgress(deleteDialog.status) : null;
 
-
     return (
       <div
         aria-labelledby="project-delete-dialog-title"
@@ -471,8 +500,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
             <>
               <p className="projectDeleteDialogText">{deleteDialog.preview.message}</p>
 
-              {deleteDialog.status === "ready" &&
-              shouldShowDeleteAction("destroy_then_delete") ? (
+              {deleteDialog.status === "ready" && shouldShowDeleteAction("destroy_then_delete") ? (
                 <div className="projectDeleteDialogConfirmation" role="note">
                   <strong>리소스를 포함해 정말 삭제할까요?</strong>
                   <p>
@@ -545,8 +573,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
               취소
             </button>
 
-            {deleteDialog.status === "ready" &&
-            shouldShowDeleteAction("delete_project") ? (
+            {deleteDialog.status === "ready" && shouldShowDeleteAction("delete_project") ? (
               <button
                 className="dashboardDangerButton"
                 disabled={isBusy}
@@ -558,8 +585,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
               </button>
             ) : null}
 
-            {deleteDialog.status === "ready" &&
-            shouldShowDeleteAction("delete_project_only") ? (
+            {deleteDialog.status === "ready" && shouldShowDeleteAction("delete_project_only") ? (
               <button
                 className="dashboardDangerButton"
                 disabled={isBusy}
@@ -583,8 +609,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
               </button>
             ) : null}
 
-            {deleteDialog.status === "ready" &&
-            shouldShowDeleteAction("destroy_then_delete") ? (
+            {deleteDialog.status === "ready" && shouldShowDeleteAction("destroy_then_delete") ? (
               <button
                 className="dashboardDangerButton"
                 disabled={isBusy}
@@ -794,30 +819,30 @@ function ProjectCardActionMenu({
             <ProjectActionMenuStatus text={menuState.errorMessage} />
           ) : null}
 
-          {menuState.status === "ready"
-            ? getProjectActionMenuItems(menuState.preview).map((item) => {
-                if (!isProjectDeleteAction(item.kind)) {
-                  return (
-                    <ProjectActionMenuEditItem key={item.kind} onClose={onClose} project={project} />
-                  );
-                }
-
-                const deleteAction = item.kind;
-
+          {menuState.status === "ready" ? (
+            getProjectActionMenuItems(menuState.preview).map((item) => {
+              if (!isProjectDeleteAction(item.kind)) {
                 return (
-                  <ProjectActionMenuDeleteItem
-                    disabled={isDeleting || item.disabled}
-                    itemKind={deleteAction}
-                    key={deleteAction}
-                    label={item.label}
-                    onClick={() => onDeleteAction(menuState.preview, deleteAction)}
-                    title={item.disabled ? menuState.preview.message : undefined}
-                  />
+                  <ProjectActionMenuEditItem key={item.kind} onClose={onClose} project={project} />
                 );
-              })
-            : (
-                <ProjectActionMenuEditItem onClose={onClose} project={project} />
-              )}
+              }
+
+              const deleteAction = item.kind;
+
+              return (
+                <ProjectActionMenuDeleteItem
+                  disabled={isDeleting || item.disabled}
+                  itemKind={deleteAction}
+                  key={deleteAction}
+                  label={item.label}
+                  onClick={() => onDeleteAction(menuState.preview, deleteAction)}
+                  title={item.disabled ? menuState.preview.message : undefined}
+                />
+              );
+            })
+          ) : (
+            <ProjectActionMenuEditItem onClose={onClose} project={project} />
+          )}
         </div>
       ) : null}
     </div>

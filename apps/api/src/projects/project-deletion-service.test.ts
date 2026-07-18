@@ -21,6 +21,7 @@ import {
 import {
   createProjectDeletePreview,
   deleteProjectRecords,
+  ProjectDeletionManagedCleanupError,
   type ProjectDeleteSnapshot
 } from "./project-deletion-service.js";
 
@@ -106,9 +107,7 @@ test("createProjectDeletePreview blocks deletion while a deployment is running",
 });
 
 test("createProjectDeletePreview blocks deletion while a project release lease is active", () => {
-  const preview = createProjectDeletePreview(
-    createSnapshot({ hasActiveExecutionLease: true })
-  );
+  const preview = createProjectDeletePreview(createSnapshot({ hasActiveExecutionLease: true }));
 
   assert.equal(preview.mode, "blocked_running_deployment");
   assert.deepEqual(preview.availableActions, []);
@@ -116,9 +115,7 @@ test("createProjectDeletePreview blocks deletion while a project release lease i
 });
 
 test("createProjectDeletePreview blocks deletion while a deployment worker job is active", () => {
-  const preview = createProjectDeletePreview(
-    createSnapshot({ hasActiveDeploymentJob: true })
-  );
+  const preview = createProjectDeletePreview(createSnapshot({ hasActiveDeploymentJob: true }));
 
   assert.equal(preview.mode, "blocked_running_deployment");
   assert.deepEqual(preview.availableActions, []);
@@ -344,6 +341,39 @@ test("deleteProjectRecords preserves database rows when artifact prefix cleanup 
   assert.equal(fakeDb.operations.includes("mark-cleanup-failed:projects"), true);
 });
 
+test("deleteProjectRecords preserves the storage error that caused managed cleanup to fail", async () => {
+  const fakeDb = new FakeProjectDeletionDb({
+    deployments: [
+      createDeploymentSummary({
+        id: "deployment-1",
+        status: "DESTROYED"
+      })
+    ]
+  });
+  const storageError = new Error("AccessDenied");
+  storageError.name = "AccessDenied";
+
+  await assert.rejects(
+    deleteProjectRecords({
+      action: "delete_project",
+      db: fakeDb.db,
+      deletionGuard: fakeDb.deletionGuard,
+      projectId,
+      storage: {
+        async deleteObject() {},
+        async deletePrefix() {
+          throw storageError;
+        }
+      },
+      userId
+    }),
+    (error: unknown) => {
+      assert(error instanceof ProjectDeletionManagedCleanupError);
+      assert.equal(error.cause, storageError);
+      return true;
+    }
+  );
+});
 test("deleteProjectRecords cleans the project CodeBuild environment before deleting database records", async () => {
   const fakeDb = new FakeProjectDeletionDb({
     awsConnections: [
@@ -360,8 +390,7 @@ test("deleteProjectRecords cleans the project CodeBuild environment before delet
         projectId,
         awsConnectionId: "connection-1",
         codeBuildProjectName: "sketchcatch-project-build",
-        codeBuildServiceRoleArn:
-          "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-project"
+        codeBuildServiceRoleArn: "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-project"
       }
     ]
   });
@@ -383,10 +412,10 @@ test("deleteProjectRecords cleans the project CodeBuild environment before delet
   assert(
     fakeDb.operations.indexOf("claim:projects") !== -1 &&
       fakeDb.operations.indexOf("claim:projects") <
-      fakeDb.operations.indexOf("cleanup:managed-build-environment") &&
+        fakeDb.operations.indexOf("cleanup:managed-build-environment") &&
       fakeDb.operations.indexOf("cleanup:managed-build-environment") !== -1 &&
       fakeDb.operations.indexOf("cleanup:managed-build-environment") <
-      fakeDb.operations.indexOf("delete:projects")
+        fakeDb.operations.indexOf("delete:projects")
   );
 });
 
@@ -406,8 +435,7 @@ test("deleteProjectRecords preserves project records when managed AWS cleanup fa
         projectId,
         awsConnectionId: "connection-1",
         codeBuildProjectName: "sketchcatch-project-build",
-        codeBuildServiceRoleArn:
-          "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-project"
+        codeBuildServiceRoleArn: "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-project"
       }
     ]
   });
@@ -456,8 +484,7 @@ test("deleteProjectRecords deletes immutable ReleaseCandidate object versions", 
         frontendManifestObjectKey:
           "deployments/deployment-1/release-candidates/candidate-1/frontend-manifest.json",
         frontendManifestObjectVersionId: "frontend-manifest-v1",
-        manifestObjectKey:
-          "deployments/deployment-1/release-candidates/candidate-1/candidate.json",
+        manifestObjectKey: "deployments/deployment-1/release-candidates/candidate-1/candidate.json",
         manifestObjectVersionId: "candidate-v1"
       }
     ]
@@ -485,9 +512,7 @@ test("deleteProjectRecords deletes immutable ReleaseCandidate object versions", 
   ]);
 });
 
-function createSnapshot(
-  overrides: Partial<ProjectDeleteSnapshot> = {}
-): ProjectDeleteSnapshot {
+function createSnapshot(overrides: Partial<ProjectDeleteSnapshot> = {}): ProjectDeleteSnapshot {
   return {
     candidateObjectVersions: [],
     deployments: [],

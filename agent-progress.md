@@ -181,3 +181,11 @@ Short English-only working log for the current agent context. Older records are 
 - Unified terminal Destroy eligibility so approved FAILED/aws_connection deployments with Terraform state are not rejected between approval and execution.
 - Exact route and service regressions pass (55/55 and 7/7); approval and destroy-plan services pass (18/18 and 7/7); focused Web flow tests pass (11/11).
 - Workspace lint and typecheck pass. API, types, and UI builds pass; the Web production build compiles successfully, then this Windows sandbox blocks the Next.js child process with spawn EPERM.
+
+### 2026-07-18 - Expand project destroy recovery and AWS connection permissions
+
+- Refreshed the project deletion preview after a successful Terraform Destroy when final SketchCatch cleanup fails, preventing retries from starting a stale Destroy Plan.
+- Preserved managed-cleanup causes and logged masked AWS cause metadata for request-correlated diagnosis.
+- Expanded generated AWS Connection policies and CloudFormation templates to cover every currently deployable AWS service family and required IAM lifecycle operations.
+- Updated the live `chaekang` execution-role inline policy successfully. The other verified DB connection points to a role that no longer exists; pending connections have no role yet and will receive the new template when created.
+- Focused Web tests pass 12/12 and focused API tests pass 31/31. Workspace lint and typecheck pass. The root build was stopped at the user's request after running without output for over two minutes.

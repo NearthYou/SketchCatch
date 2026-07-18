@@ -50,15 +50,17 @@ test("listAwsConnections separates active connections from cleanup retries", asy
     ])
   );
 
-  assert.deepEqual(result.awsConnections.map((connection) => connection.id), ["verified"]);
+  assert.deepEqual(
+    result.awsConnections.map((connection) => connection.id),
+    ["verified"]
+  );
   assert.deepEqual(result.cleanupRetries, [
     {
       awsConnection: {
         id: "cleanup-retry",
         userId: "user-1",
         accountId: "123456789012",
-        roleArn:
-          "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-cleanup",
+        roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-cleanup",
         externalId: "sc_conn_connection_example",
         region: "ap-northeast-2",
         status: "verified",
@@ -168,8 +170,7 @@ test("verifyAwsConnection rejects an already active AWS account with a conflict"
       }
     ),
     (error: unknown) =>
-      error instanceof AwsConnectionConflictError &&
-      error.message === "이미 연결된 AWS 계정입니다."
+      error instanceof AwsConnectionConflictError && error.message === "이미 연결된 AWS 계정입니다."
   );
   assert.equal(testerCalls, 0);
   assert.equal(verificationUpdates, 0);
@@ -211,8 +212,7 @@ test("verifyAwsConnection converts a concurrent verified-account unique violatio
       }
     ),
     (error: unknown) =>
-      error instanceof AwsConnectionConflictError &&
-      error.message === "이미 연결된 AWS 계정입니다."
+      error instanceof AwsConnectionConflictError && error.message === "이미 연결된 AWS 계정입니다."
   );
 });
 
@@ -249,7 +249,10 @@ test("AWS connection templates trust every configured runtime caller role", asyn
     repository
   );
 
-  assert.match(template.templateBody, /AWS:\n\s+- "arn:aws:iam::555980271919:role\/sketchcatch-production-ecs-task"/);
+  assert.match(
+    template.templateBody,
+    /AWS:\n\s+- "arn:aws:iam::555980271919:role\/sketchcatch-production-ecs-task"/
+  );
   assert.match(
     template.templateBody,
     /- "arn:aws:iam::555980271919:role\/sketchcatch-production-ecs-worker-task"/
@@ -342,12 +345,73 @@ test("AWS connection policy authorizes only SketchCatch-managed CodeBuild names"
   assert.match(template.templateBody, /ecr:UploadLayerPart/);
   assert.match(template.templateBody, /ecr:CompleteLayerUpload/);
   assert.match(template.templateBody, /ecr:PutImage/);
-  assert.match(
-    template.templateBody,
-    /repository\/sketchcatch-\*-build-cache/
-  );
+  assert.match(template.templateBody, /repository\/sketchcatch-\*-build-cache/);
 });
 
+test("AWS connection policy supports apply and destroy for every deployable AWS service family", async () => {
+  const repository = createInMemoryAwsConnectionRepository();
+  const result = await createAwsConnection(
+    {
+      accessContext,
+      region: "ap-northeast-2",
+      callerPrincipalArns: [apiCallerPrincipalArn, workerCallerPrincipalArn]
+    },
+    repository,
+    {
+      generateId: () => "a11f00d0-1111-4222-8333-444444444444",
+      generateExternalId: () => "test-external-id"
+    }
+  );
+  const requiredServiceActions = [
+    "acm:*",
+    "amplify:*",
+    "autoscaling:*",
+    "cloudtrail:*",
+    "cloudwatch:*",
+    "cognito-idp:*",
+    "config:*",
+    "dynamodb:*",
+    "elasticache:*",
+    "elasticfilesystem:*",
+    "events:*",
+    "guardduty:*",
+    "kms:*",
+    "lambda:*",
+    "apigateway:*",
+    "rds:*",
+    "route53:*",
+    "scheduler:*",
+    "secretsmanager:*",
+    "shield:*",
+    "sns:*",
+    "sqs:*",
+    "states:*",
+    "waf:*",
+    "wafv2:*",
+    "xray:*"
+  ];
+  const policy = result.roleSetup.permissionSetup.terraformPolicyDocument as {
+    Statement: Array<{ Action: string | readonly string[] }>;
+  };
+  const policyActions = policy.Statement.flatMap((statement) => toStringArray(statement.Action));
+
+  for (const action of requiredServiceActions) {
+    assert.equal(policyActions.includes(action), true, `${action} must be in the Terraform policy`);
+  }
+
+  const template = await getAwsConnectionCloudFormationTemplate(
+    {
+      connectionId: result.awsConnection.id,
+      accessContext,
+      callerPrincipalArns: [apiCallerPrincipalArn, workerCallerPrincipalArn]
+    },
+    repository
+  );
+
+  for (const action of requiredServiceActions) {
+    assert.match(template.templateBody, new RegExp(action.replace("*", "\\*")));
+  }
+});
 test("AWS connection Terraform permissions scope PassRole to runtime services", async () => {
   const repository = createInMemoryAwsConnectionRepository();
   const result = await createAwsConnection(
@@ -480,12 +544,7 @@ test("AWS connection deletion ignores failed history without cloud state", () =>
 });
 
 test("AWS connection deletion blocks active, successful, partial, or unresolved cloud state", () => {
-  for (const status of [
-    "RUNNING",
-    "SUCCESS",
-    "PARTIALLY_FAILED",
-    "PARTIALLY_CANCELED"
-  ] as const) {
+  for (const status of ["RUNNING", "SUCCESS", "PARTIALLY_FAILED", "PARTIALLY_CANCELED"] as const) {
     assert.equal(
       shouldBlockAwsConnectionDeletion({ status, stateObjectKey: null, hasResources: false }),
       true
@@ -828,9 +887,7 @@ function createListRepository(rows: AwsConnectionRecord[]): AwsConnectionReposit
 }
 
 // 확인 완료 상태만 목록에 노출되는지를 위한 고정 연결 레코드를 만듭니다.
-function createAwsConnectionRecord(
-  overrides: Partial<AwsConnectionRecord>
-): AwsConnectionRecord {
+function createAwsConnectionRecord(overrides: Partial<AwsConnectionRecord>): AwsConnectionRecord {
   const now = new Date("2026-07-15T00:00:00.000Z");
 
   return {
