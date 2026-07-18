@@ -2613,8 +2613,8 @@ function DiagramEditorInner({
   );
 
   const handleFitView = useCallback(() => {
-    fitVisibleDiagram(!isPreviewActive);
-  }, [fitVisibleDiagram, isPreviewActive]);
+    fitVisibleDiagram(false);
+  }, [fitVisibleDiagram]);
 
   useEffect(() => {
     if (

@@ -952,7 +952,7 @@
           "pnpm build",
           "git diff --check"
         ],
-        "notes": "All 26 planned implementation commits were verified before commit. The follow-up removes the two redundant top-bar panel toggles while preserving the accessible edge handles and panel preference behavior. The focused Diagram Editor layout suite passes 52/52; harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 785/789, with four unrelated existing generated Architecture Board knowledge and contract failures. Browser QA previously confirmed both edge handles are visible and the left handle closes and restores the panel; signed-in visual recheck of this follow-up was unavailable because the controllable browser had no session."
+        "notes": "All 26 planned implementation commits were verified before commit. Follow-ups remove the redundant top-bar panel toggles and keep manual Fit View's automatic viewport move out of ProjectDraft dirty state while preserving accessible edge handles, panel preferences, and direct user viewport persistence. The focused dirty and cost regressions pass 77/77; harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 786/790, with four unrelated existing generated Architecture Board artifact line-ending and Resource catalog contract failures. Signed-in localhost QA confirmed cost tab, period, users, usage range, connection, direct URL entry, and browser history restoration."
       },
       "notes": "No DB schema, Drizzle migration, cloud mutation, deployment, or Git/CI/CD handoff was performed."
     }

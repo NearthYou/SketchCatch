@@ -398,6 +398,17 @@ test("fit view uses the unobscured board frame and complete diagram visual bound
   assert.doesNotMatch(diagramEditorSource, /const fitViewWidth = editorBounds/);
 });
 
+test("manual Fit View does not mark the editable draft dirty", () => {
+  assert.match(
+    diagramEditorSource,
+    /const handleFitView = useCallback\(\(\) => \{[\s\S]*?fitVisibleDiagram\(false\);/
+  );
+  assert.doesNotMatch(
+    diagramEditorSource,
+    /const handleFitView = useCallback\(\(\) => \{[\s\S]*?fitVisibleDiagram\(!isPreviewActive\);/
+  );
+});
+
 test("automatic organization preview stays at the lower-left of the board workspace", () => {
   assert.match(diagramEditorStyles, /\.workspace\s*\{[\s\S]*?position:\s*relative;/);
   assert.match(

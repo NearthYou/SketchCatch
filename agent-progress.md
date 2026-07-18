@@ -206,3 +206,9 @@ Short English-only working log for the current agent context. Older records are 
 - Removed the legacy left and right panel toggle buttons and their divider from the Workspace project bar; the accessible edge handles remain the single panel toggle surface.
 - The focused Diagram Editor layout suite passes 52/52, and harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 785/789 with four unrelated existing generated Architecture Board knowledge and contract failures.
 - The controllable local browser had no authenticated session and Chrome control was unavailable, so signed-in visual confirmation remains manual. No DB migration, deployment, Terraform, AWS, or Git handoff action was performed.
+
+### 2026-07-18 - Keep Fit View out of ProjectDraft changes
+
+- Fixed the editable Architecture Board Fit View action so its automatic viewport move no longer marks the ProjectDraft dirty; direct user viewport movement remains persistent.
+- Signed-in localhost checks confirmed cost tab, period, user count, usage range, connection, direct URL entry, and browser history restoration already work, so the cost URL implementation was left unchanged.
+- Focused dirty and cost regressions pass 77/77. The full Web suite passes 786/790; the four failures are unchanged generated Architecture Board artifact line-ending and Resource catalog contract failures.
