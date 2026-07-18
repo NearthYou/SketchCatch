@@ -1,4 +1,5 @@
 import { LoaderCircle, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import React from "react";
 import type { AwsConnection, Project, ReverseEngineeringResourceSelection } from "@sketchcatch/types";
 import {
@@ -105,7 +106,9 @@ export function ReverseEngineeringScanCriteriaForm({
           <div className={styles.connectionRecovery} role="status">
             <strong>{awsConnectionRecovery.title}</strong>
             <p>{awsConnectionRecovery.description}</p>
-            <a href={awsConnectionRecovery.settingsHref}>{awsConnectionRecovery.actionLabel}</a>
+            <Link href={awsConnectionRecovery.settingsHref}>
+              {awsConnectionRecovery.actionLabel}
+            </Link>
           </div>
         ) : null}
         {isScanning && !createProjectOnApply ? (

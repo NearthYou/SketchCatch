@@ -22,6 +22,7 @@ import {
   analyzePreDeploymentCheck as defaultAnalyzePreDeployment,
   type AnalyzePreDeploymentCheckInput
 } from "../services/aiPreDeploymentCheck.js";
+import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
 import {
   appendTerraformDurationLog,
   runLoggedDeploymentOperation
@@ -210,15 +211,11 @@ async function runDeploymentPlanOnce(
         options.awsStsGateway ?? createAwsSdkStsGateway()
       ));
   const analyzePreDeployment = options.analyzePreDeployment ?? defaultAnalyzePreDeployment;
-  const planArtifactStorage =
-    options.planArtifactStorage ?? createS3DeploymentPlanArtifactStorage();
   const generatePlanArtifactId = options.generatePlanArtifactId ?? randomUUID;
   const readTerraformArtifactFile = options.readTerraformArtifactFile ?? readFile;
   const prepareApplicationArtifact =
     options.prepareApplicationArtifact ?? defaultPrepareApplicationArtifact;
   const writeApplicationPlanFile = options.writeApplicationPlanFile ?? writeFile;
-  const rollbackStateStorage =
-    options.rollbackStateStorage ?? createS3DeploymentApplyArtifactStorage();
   const readTerraformLockFile = options.readTerraformLockFile ?? readFile;
   const readTerraformStateFile = options.readTerraformStateFile ?? readFile;
   const writeTerraformStateFile = options.writeTerraformStateFile ?? writeFile;
@@ -361,13 +358,15 @@ async function runDeploymentPlanOnce(
       ]);
     workspace = preparedWorkspace;
 
-    await restoreInfrastructureRollbackState({
-      deployment,
-      repository,
-      storage: rollbackStateStorage,
-      workspace: preparedWorkspace,
-      writeStateFile: writeTerraformStateFile
-    });
+    if (deployment.rollbackOfDeploymentId || deployment.rollbackTargetDeploymentId) {
+      await restoreInfrastructureRollbackState({
+        deployment,
+        repository,
+        storage: options.rollbackStateStorage ?? createS3DeploymentApplyArtifactStorage(),
+        workspace: preparedWorkspace,
+        writeStateFile: writeTerraformStateFile
+      });
+    }
 
     if (!architecture) {
       throw new DeploymentNotFoundError("Architecture not found for deployment");
@@ -411,7 +410,8 @@ async function runDeploymentPlanOnce(
         ...(input.startedFromStatus ? { startedFromStatus: input.startedFromStatus } : {}),
         workspace,
         accessContext: input.accessContext,
-        planArtifactStorage,
+        getPlanArtifactStorage: () =>
+          options.planArtifactStorage ?? createS3DeploymentPlanArtifactStorage(),
         generatePlanArtifactId,
         writeApplicationPlanFile,
         assertCurrentLease: assertCurrentPlanLease,
@@ -419,6 +419,19 @@ async function runDeploymentPlanOnce(
         terraform
       });
     }
+
+    const undefinedReferenceDiagnostic = createTerraformValidationDiagnostics({
+      terraformCode: preDeploymentTerraformFiles[0]?.terraformCode ?? "",
+      terraformFiles: preDeploymentTerraformFiles
+    }).find((diagnostic) => diagnostic.code === "terraform.undefined_reference");
+
+    if (undefinedReferenceDiagnostic) {
+      throw new DeploymentConflictError(
+        `Terraform artifact contains an undeclared resource reference: ${undefinedReferenceDiagnostic.resourceAddress ?? "unknown resource"}`
+      );
+    }
+    const planArtifactStorage =
+      options.planArtifactStorage ?? createS3DeploymentPlanArtifactStorage();
 
     const [awsCredentials, lockFileRestored, stateFileRestored] = await Promise.all([
       prepareAwsCredentialsForPlan({
@@ -902,7 +915,7 @@ async function saveApplicationOnlyPlan(input: {
   startedFromStatus?: DeploymentStatus;
   workspace: PreparedTerraformWorkspace;
   accessContext: ProjectAccessContext;
-  planArtifactStorage: DeploymentPlanArtifactStorage;
+  getPlanArtifactStorage: () => DeploymentPlanArtifactStorage;
   generatePlanArtifactId: () => string;
   writeApplicationPlanFile: (filePath: string, content: string) => Promise<void>;
   assertCurrentLease: () => Promise<void>;
@@ -949,9 +962,11 @@ async function saveApplicationOnlyPlan(input: {
   let uploadedPlanArtifact: Awaited<
     ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>
   > | null = null;
+  let planArtifactStorage: DeploymentPlanArtifactStorage | undefined;
   try {
     let sequence = await input.repository.getNextDeploymentLogSequence(input.deployment.id);
     await input.assertCurrentLease();
+    planArtifactStorage = input.getPlanArtifactStorage();
     const upload = await runLoggedDeploymentOperation({
       deploymentId: input.deployment.id,
       accessContext: input.accessContext,
@@ -960,7 +975,7 @@ async function saveApplicationOnlyPlan(input: {
       label: "application release plan artifact upload",
       repository: input.repository,
       operation: () =>
-        input.planArtifactStorage.uploadDeploymentPlanArtifact({
+        planArtifactStorage!.uploadDeploymentPlanArtifact({
           deploymentId: input.deployment.id,
           planArtifactId,
           planFilePath
@@ -1006,12 +1021,12 @@ async function saveApplicationOnlyPlan(input: {
       terraform: input.terraform
     };
   } catch (error) {
-    if (uploadedPlanArtifact) {
+    if (uploadedPlanArtifact && planArtifactStorage) {
       await cleanupUploadedPlanArtifact({
         deploymentId: input.deployment.id,
         accessContext: input.accessContext,
         objectKey: uploadedPlanArtifact.objectKey,
-        planArtifactStorage: input.planArtifactStorage,
+        planArtifactStorage,
         repository: input.repository
       }).catch(() => undefined);
     }

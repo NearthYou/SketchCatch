@@ -59,7 +59,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | Requirement Input | 텍스트와 Voice Requirement Input을 Requirement Prompt로 정규화한다. |
 | AI Architecture Recommendation | Requirement Prompt를 Architecture Draft로 변환하고 수락 전 설명을 제공한다. |
 | 다이어그램 편집 | Architecture Board에서 Resource와 관계를 직접 수정한다. |
-| Board 자동 정리 | Architecture Board Compiler가 Resource·관계·설정·소속·배치를 함께 재구성한 제안을 비교·승인·되돌릴 수 있게 한다. |
+| Board 자동 정리 | Resource·관계·설정은 유지하고 위치·영역 배치·연결선 모양만 정리한 미리보기를 사용자가 비교하고 선택하게 한다. |
 | Terraform 생성 | 다이어그램 기반 설계를 IaC Preview로 변환한다. |
 | Pre-Deployment Check | 비용, 보안, 설정 위험을 설명하고 수정 방향을 제안한다. |
 | Direct Deployment Path | sandbox/practice 실행에서 Plan, 승인, Apply, 로그, Outputs, Auto Cleanup까지 연결한다. |

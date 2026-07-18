@@ -81,6 +81,8 @@ test("Repository draft defers CI/CD connection until Delivery", () => {
   assert.doesNotMatch(source, /CI\/CD 인계 사용/);
   assert.doesNotMatch(source, /환경설정에서 권한 관리/);
   assert.doesNotMatch(source, /추천 결과를 아키텍처에 맞게 조정합니다\./);
+  assert.doesNotMatch(source, /title="Delivery용 Repository 연결"/);
+  assert.doesNotMatch(source, /Delivery용 Repository 연결 확인/);
 });
 
 test("GitHub connection preserves and restores public analysis without reanalysis", () => {
@@ -94,4 +96,37 @@ test("GitHub connection preserves and restores public analysis without reanalysi
   assert.match(source, /resumeKey/);
   assert.match(source, /if \(initialResumeKey\) return/);
   assert.match(source, /setPublicAnalysis\(resume\.publicAnalysis\)/);
+});
+
+test("GitHub connection checks server availability before configured-only repository calls", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+  const loadCandidatesBody = source.slice(
+    source.indexOf("async function loadCandidates"),
+    source.indexOf("async function openGitHubConnection")
+  );
+  const openConnectionBody = source.slice(
+    source.indexOf("async function openGitHubConnection"),
+    source.indexOf("async function analyzeRepositoryUrl")
+  );
+
+  assert.match(source, /GitHub App 서버 설정이 필요합니다/);
+  const listAccountInstallationsIndex = loadCandidatesBody.indexOf(
+    "listGitHubAccountInstallations"
+  );
+  const listInstalledRepositoriesIndex = loadCandidatesBody.indexOf(
+    "listGitHubInstalledRepositories"
+  );
+  assert.ok(listAccountInstallationsIndex >= 0);
+  assert.ok(
+    listInstalledRepositoriesIndex >= 0 &&
+      listAccountInstallationsIndex < listInstalledRepositoriesIndex
+  );
+  const createInstallUrlIndex = openConnectionBody.indexOf(
+    "createGitHubSourceRepositoryInstallUrl"
+  );
+  const connectionSetupIndex = openConnectionBody.indexOf("connectionSetup");
+  const installationReadIndex = openConnectionBody.indexOf("installationRead");
+  assert.ok(createInstallUrlIndex >= 0);
+  assert.ok(connectionSetupIndex >= 0 && connectionSetupIndex < createInstallUrlIndex);
+  assert.ok(installationReadIndex >= 0 && installationReadIndex < createInstallUrlIndex);
 });

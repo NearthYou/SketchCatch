@@ -120,12 +120,32 @@ export function requireDeploymentWorkerJobId(env: NodeJS.ProcessEnv): string {
 export async function runDeploymentWorkerJob(
   input: { jobId: string },
   jobRepository: DeploymentJobRepository,
-  runOperation: RunDeploymentWorkerOperation
+  runOperation: RunDeploymentWorkerOperation,
+  options: {
+    wait?: (milliseconds: number) => Promise<void>;
+    dispatchWaitAttempts?: number;
+  } = {}
 ): Promise<DeploymentJobRecord> {
-  const job = await jobRepository.findDeploymentJobById(input.jobId);
+  const wait =
+    options.wait ??
+    ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  const dispatchWaitAttempts = options.dispatchWaitAttempts ?? 50;
+  let job = await jobRepository.findDeploymentJobById(input.jobId);
 
   if (!job) {
     throw new DeploymentJobNotFoundError("Deployment worker job not found");
+  }
+
+  for (
+    let attempt = 1;
+    job.status === "DISPATCHING" && attempt < dispatchWaitAttempts;
+    attempt += 1
+  ) {
+    await wait(100);
+    job = await jobRepository.findDeploymentJobById(input.jobId);
+    if (!job) {
+      throw new DeploymentJobNotFoundError("Deployment worker job not found");
+    }
   }
 
   if (job.status !== "RUNNING") {

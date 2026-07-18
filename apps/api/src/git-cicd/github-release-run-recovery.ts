@@ -69,7 +69,9 @@ type RecoveryConnection = {
 export type GitHubReleaseRunRecoveryOptions = {
   readonly db: Database;
   readonly leaseRepository: ProjectExecutionLeaseRepository;
-  readonly createCodeBuildClient?: ((configuration: CodeBuildClientConfig) => CodeBuildCommandClient) | undefined;
+  readonly createCodeBuildClient?:
+    | ((configuration: CodeBuildClientConfig) => CodeBuildCommandClient)
+    | undefined;
   readonly assumeRole?: AssumeRecoveryRole | undefined;
   readonly wait?: RecoveryWait | undefined;
   readonly now?: (() => Date) | undefined;
@@ -80,10 +82,9 @@ export function createGitHubReleaseRunRecoveryController(
   options: GitHubReleaseRunRecoveryOptions
 ): GitHubReleaseRecoveryController {
   const now = options.now ?? (() => new Date());
-  const wait = options.wait ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
-  const assumeRole =
-    options.assumeRole ??
-    ((input) => createAwsSdkStsGateway().assumeRole(input));
+  const wait =
+    options.wait ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  const assumeRole = options.assumeRole ?? ((input) => createAwsSdkStsGateway().assumeRole(input));
   const createCodeBuildClient =
     options.createCodeBuildClient ??
     ((configuration) => new CodeBuildClient(configuration) as unknown as CodeBuildCommandClient);
@@ -149,25 +150,31 @@ export function createGitHubReleaseRunRecoveryController(
         : interruptedLease?.status === "active" &&
             interruptedLease.expiresAt > now() &&
             input.cancellationRequested
-          ? await recoverVerifiedTerminalProjectExecutionLease({
-              projectId: data.projectId,
-              expectedHolderId: interruptedLease.holderId,
-              expectedFencingVersion: interruptedLease.fencingVersion,
-              expectedActiveCodeBuildId: interruptedLease.activeCodeBuildId,
-              expectedActiveWorkerTaskArn: interruptedLease.activeWorkerTaskArn,
-              holderId: recoveryHolderId,
-              source: "gitops"
-            }, options.leaseRepository, { now })
+          ? await recoverVerifiedTerminalProjectExecutionLease(
+              {
+                projectId: data.projectId,
+                expectedHolderId: interruptedLease.holderId,
+                expectedFencingVersion: interruptedLease.fencingVersion,
+                expectedActiveCodeBuildId: interruptedLease.activeCodeBuildId,
+                expectedActiveWorkerTaskArn: interruptedLease.activeWorkerTaskArn,
+                holderId: recoveryHolderId,
+                source: "gitops"
+              },
+              options.leaseRepository,
+              { now }
+            )
           : undefined;
-      const lease = recoveredActiveLease ?? await acquireProjectExecutionLease(
-        { projectId: data.projectId, holderId: recoveryHolderId, source: "gitops" },
-        options.leaseRepository,
-        {
-          now,
-          inspectExpiredExecution: async (candidate) =>
-            candidate.activeWorkerTaskArn ? "unknown" : "terminal"
-        }
-      );
+      const lease =
+        recoveredActiveLease ??
+        (await acquireProjectExecutionLease(
+          { projectId: data.projectId, holderId: recoveryHolderId, source: "gitops" },
+          options.leaseRepository,
+          {
+            now,
+            inspectExpiredExecution: async (candidate) =>
+              candidate.activeWorkerTaskArn ? "unknown" : "terminal"
+          }
+        ));
       const fence = {
         projectId: lease.projectId,
         holderId: lease.holderId,
@@ -242,7 +249,10 @@ export function createGitHubReleaseRunRecoveryController(
           );
         }
 
-        const baselineTaskDefinitionArn = resolveBaselineTaskDefinitionArn(data);
+        const baselineTaskDefinitionArn = resolveBaselineTaskDefinitionArn(
+          data,
+          isRecoveryBaselineForDeploymentTarget(data.release, data.baselineRelease)
+        );
         if (!baselineTaskDefinitionArn) {
           throw new Error("Interrupted ECS release baseline could not be proven");
         }
@@ -258,18 +268,19 @@ export function createGitHubReleaseRunRecoveryController(
           projectId: fence.projectId,
           holderId: fence.holderId
         });
-        const rollbackEvidence = runtime.currentTaskDefinitionArn === baselineTaskDefinitionArn
-          ? ({
-              state: "already_restored",
-              taskDefinitionArn: baselineTaskDefinitionArn
-            } as JsonValue)
-          : await gateway.rollbackEcs({
-              context,
-              taskDefinitionArn: baselineTaskDefinitionArn,
-              beforeMutation: async () => {
-                await assertCurrentProjectExecutionLease(fence, options.leaseRepository, now());
-              }
-            });
+        const rollbackEvidence =
+          runtime.currentTaskDefinitionArn === baselineTaskDefinitionArn
+            ? ({
+                state: "already_restored",
+                taskDefinitionArn: baselineTaskDefinitionArn
+              } as JsonValue)
+            : await gateway.rollbackEcs({
+                context,
+                taskDefinitionArn: baselineTaskDefinitionArn,
+                beforeMutation: async () => {
+                  await assertCurrentProjectExecutionLease(fence, options.leaseRepository, now());
+                }
+              });
         await trustedRepository.recordStep({
           releaseId: data.release.id,
           sequence: 200,
@@ -313,12 +324,14 @@ export function createGitHubReleaseRunRecoveryController(
 }
 
 export function createGitHubInterruptedCodeBuildController(
-  options: Pick<GitHubReleaseRunRecoveryOptions, "db" | "createCodeBuildClient" | "assumeRole" | "wait" | "now">
+  options: Pick<
+    GitHubReleaseRunRecoveryOptions,
+    "db" | "createCodeBuildClient" | "assumeRole" | "wait" | "now"
+  >
 ): GitHubInterruptedCodeBuildController {
-  const wait = options.wait ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
-  const assumeRole =
-    options.assumeRole ??
-    ((input) => createAwsSdkStsGateway().assumeRole(input));
+  const wait =
+    options.wait ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  const assumeRole = options.assumeRole ?? ((input) => createAwsSdkStsGateway().assumeRole(input));
   const createCodeBuildClient =
     options.createCodeBuildClient ??
     ((configuration) => new CodeBuildClient(configuration) as unknown as CodeBuildCommandClient);
@@ -389,8 +402,7 @@ export function classifyInterruptedReleaseSteps(
     );
   const publicHealthStarted = started("public_health");
   const invalidationStarted = started("cloudfront_invalidation") || publicHealthStarted;
-  const frontendActivationStarted =
-    started("frontend_activation") || invalidationStarted;
+  const frontendActivationStarted = started("frontend_activation") || invalidationStarted;
   return {
     ecsActivationStarted: started("ecs_activation") || frontendActivationStarted,
     frontendActivationStarted,
@@ -425,12 +437,7 @@ async function loadRecoveryData(db: Database, runId: string) {
       eq(projectBuildEnvironments.projectId, gitCicdPipelineRuns.projectId)
     )
     .innerJoin(awsConnections, eq(awsConnections.id, projectDeploymentTargets.connectionId))
-    .where(
-      and(
-        eq(gitCicdPipelineRuns.id, runId),
-        eq(gitCicdPipelineRuns.status, "running")
-      )
-    );
+    .where(and(eq(gitCicdPipelineRuns.id, runId), eq(gitCicdPipelineRuns.status, "running")));
   if (
     !run ||
     !run.accountId ||
@@ -438,7 +445,8 @@ async function loadRecoveryData(db: Database, runId: string) {
     !run.confirmedBuildConfig ||
     !run.runtimeConfig ||
     !run.buildEnvironmentFingerprint
-  ) return null;
+  )
+    return null;
   const [release] = await db
     .select()
     .from(applicationReleases)
@@ -511,8 +519,14 @@ function createTrustedRecoveryContext(
   ) {
     throw new Error("Interrupted GitHub ECS release coordinates are incomplete");
   }
-  const baselineTaskDefinitionArn = resolveBaselineTaskDefinitionArn(data);
-  const baselineImageDigest = readProviderMetadata(data.baselineRelease?.providerRevision, "imageDigest");
+  const baselineMatchesTarget = isRecoveryBaselineForDeploymentTarget(
+    release,
+    data.baselineRelease
+  );
+  const baselineTaskDefinitionArn = resolveBaselineTaskDefinitionArn(data, baselineMatchesTarget);
+  const baselineImageDigest = baselineMatchesTarget
+    ? readProviderMetadata(data.baselineRelease?.providerRevision, "imageDigest")
+    : null;
   return {
     projectId: data.projectId,
     deploymentId: null,
@@ -543,7 +557,10 @@ function createTrustedRecoveryContext(
       expiresAt: candidate.expiresAt.toISOString()
     },
     baseline:
-      data.baselineRelease && baselineTaskDefinitionArn && baselineImageDigest
+      data.baselineRelease &&
+      baselineMatchesTarget &&
+      baselineTaskDefinitionArn &&
+      baselineImageDigest
         ? {
             releaseId: data.baselineRelease.id,
             taskDefinitionArn: baselineTaskDefinitionArn,
@@ -575,20 +592,37 @@ function createTrustedRecoveryContext(
   };
 }
 
-function resolveBaselineTaskDefinitionArn(data: RecoveryData): string | null {
+function resolveBaselineTaskDefinitionArn(
+  data: RecoveryData,
+  baselineMatchesTarget = true
+): string | null {
   for (const stepName of ["runtime_verification", "ecs_activation"] as const) {
     const step = data.steps
       .filter((candidate) => candidate.step === stepName && candidate.status === "succeeded")
       .sort((left, right) => right.attempt - left.attempt)[0];
-    const key = stepName === "runtime_verification"
-      ? "currentTaskDefinitionArn"
-      : "previousTaskDefinitionArn";
+    const key =
+      stepName === "runtime_verification"
+        ? "currentTaskDefinitionArn"
+        : "previousTaskDefinitionArn";
     const value = readJsonString(step?.evidence, key);
     if (value) return value;
   }
-  return readProviderMetadata(data.baselineRelease?.providerRevision, "taskDefinitionArn") ??
+  if (!baselineMatchesTarget) return null;
+  return (
+    readProviderMetadata(data.baselineRelease?.providerRevision, "taskDefinitionArn") ??
     data.baselineRelease?.providerRevision?.revisionId ??
-    null;
+    null
+  );
+}
+
+export function isRecoveryBaselineForDeploymentTarget(
+  release: { deploymentTargetFingerprint: string | null },
+  baseline: { deploymentTargetFingerprint: string | null } | undefined
+): boolean {
+  return Boolean(
+    release.deploymentTargetFingerprint &&
+    baseline?.deploymentTargetFingerprint === release.deploymentTargetFingerprint
+  );
 }
 
 function createProviderRevision(
@@ -611,7 +645,9 @@ function createProviderRevision(
   };
 }
 
-function readFrontendEvidence(value: FrontendReleaseEvidence | null): FrontendReleaseEvidence | null {
+function readFrontendEvidence(
+  value: FrontendReleaseEvidence | null
+): FrontendReleaseEvidence | null {
   return value ?? null;
 }
 
@@ -669,9 +705,8 @@ async function readCodeBuildStatus(
   const response = await client.send(new BatchGetBuildsCommand({ ids: [buildId] }));
   const builds = response["builds"];
   const build = Array.isArray(builds) ? builds[0] : null;
-  const status = build && typeof build === "object"
-    ? (build as Record<string, unknown>)["buildStatus"]
-    : null;
+  const status =
+    build && typeof build === "object" ? (build as Record<string, unknown>)["buildStatus"] : null;
   if (typeof status !== "string") {
     throw new Error("Interrupted CodeBuild status could not be verified");
   }

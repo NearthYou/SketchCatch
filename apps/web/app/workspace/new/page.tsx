@@ -10,6 +10,7 @@ export default async function NewWorkspacePage({
     readonly fresh?: string;
     readonly mode?: string;
     readonly templateId?: string;
+    readonly templateVersion?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -20,6 +21,7 @@ export default async function NewWorkspacePage({
         initialFreshStart={params.fresh === "1"}
         initialStartKind={parseInitialStartKind(params.mode)}
         initialTemplateId={params.templateId}
+        initialTemplateVersion={params.templateVersion}
       />
     </WorkspaceAuthGate>
   );

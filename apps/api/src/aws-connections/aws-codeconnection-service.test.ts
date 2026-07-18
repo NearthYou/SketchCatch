@@ -554,7 +554,7 @@ test("disconnect removes the confirmed managed build resources and metadata", as
   repository.record = createAvailableRecord();
   const cleanupCalls: unknown[] = [];
 
-  await disconnectAwsCodeConnection(
+  const result = await disconnectAwsCodeConnection(
     {
       connectionId,
       userId,
@@ -569,6 +569,7 @@ test("disconnect removes the confirmed managed build resources and metadata", as
     }
   );
 
+  assert.equal(result.managedCleanupCompleted, true);
   assert.equal(cleanupCalls.length, 1);
   assert.equal(repository.record, undefined);
   assert.equal(repository.disconnectedBuildEnvironmentCount, 1);
@@ -594,41 +595,52 @@ test("disconnect is blocked while a project build or deployment is active", asyn
   );
 });
 
-test("disconnect keeps retryable metadata when AWS cleanup fails", async () => {
+test("disconnect removes local metadata even when AWS cleanup fails", async () => {
   const repository = new InMemoryRepository();
   repository.record = createAvailableRecord();
 
-  await assert.rejects(
-    disconnectAwsCodeConnection(
-      {
-        connectionId,
-        userId,
-        confirmedManagedCleanup: true
-      },
-      repository,
-      {
-        now: () => fixedNow,
-        cleanupManagedResources: async () => {
-          throw new Error("secret AWS cleanup detail");
-        }
-      }
-    ),
-    (error: unknown) =>
-      error instanceof AwsCodeConnectionError &&
-      error.code === "CODECONNECTION_DELETE_FAILED"
-  );
-
-  assert.equal(repository.record?.status, "ERROR");
-  assert.match(repository.record?.statusReason ?? "", /관리 리소스 정리에 실패/u);
-  assert.doesNotMatch(repository.record?.statusReason ?? "", /secret/u);
-
-  const refreshed = await refreshAwsCodeConnection(
-    { connectionId, userId },
+  const result = await disconnectAwsCodeConnection(
+    {
+      connectionId,
+      userId,
+      confirmedManagedCleanup: true
+    },
     repository,
-    new FakeGateway()
+    {
+      now: () => fixedNow,
+      cleanupManagedResources: async () => {
+        throw new Error("secret AWS cleanup detail");
+      }
+    }
   );
-  assert.equal(refreshed.codeConnection?.status, "ERROR");
-  assert.equal(refreshed.codeConnection?.cleanupRetryRequired, true);
+
+  assert.equal(result.managedCleanupCompleted, false);
+  assert.equal(repository.record, undefined);
+  assert.equal(repository.disconnectedBuildEnvironmentCount, 1);
+});
+
+test("disconnect removes local metadata when managed resource discovery fails", async () => {
+  const repository = new InMemoryRepository();
+  repository.record = createAvailableRecord();
+  repository.findManagedResources = async () => {
+    throw new Error("managed resource inventory failed");
+  };
+
+  const result = await disconnectAwsCodeConnection(
+    {
+      connectionId,
+      userId,
+      confirmedManagedCleanup: true
+    },
+    repository,
+    {
+      now: () => fixedNow,
+      cleanupManagedResources: async () => undefined
+    }
+  );
+
+  assert.equal(result.managedCleanupCompleted, false);
+  assert.equal(repository.record, undefined);
 });
 
 test("disconnect retries an expired deletion claim", async () => {

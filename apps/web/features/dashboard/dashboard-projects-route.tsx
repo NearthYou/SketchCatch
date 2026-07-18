@@ -1,30 +1,22 @@
 "use client";
 
-import { Search } from "lucide-react";
-import { useState } from "react";
+import Link from "next/link";
+import { Plus } from "lucide-react";
 import { ProjectsClient } from "../../app/projects/projects-client";
 
 export function DashboardProjectsRoute() {
-  const [searchQuery, setSearchQuery] = useState("");
-
   return (
     <div className="dashboardRouteStack">
-      <header className="dashboardPageHeader dashboardPageHeaderWithControl dashboardPageHeaderCompact">
+      <header className="dashboardPageHeader dashboardPageHeaderCompact">
         <div>
           <h1>내 프로젝트</h1>
         </div>
-        <label className="dashboardSearchField">
-          <Search aria-hidden="true" size={17} />
-          <span className="dashboardVisuallyHidden">프로젝트 검색</span>
-          <input
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="프로젝트 검색"
-            type="search"
-            value={searchQuery}
-          />
-        </label>
+        <Link className="dashboardPrimaryAction" href="/workspace/new?fresh=1">
+          <Plus aria-hidden="true" size={17} />
+          <span>새 프로젝트</span>
+        </Link>
       </header>
-      <ProjectsClient searchQuery={searchQuery} />
+      <ProjectsClient />
     </div>
   );
 }

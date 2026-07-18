@@ -272,7 +272,7 @@ test("DELETE /api/projects/:id clears deployment plan pointers before deleting p
   await app.close();
 });
 
-test("DELETE /api/projects/:id reports S3 cleanup failures but still deletes records", async () => {
+test("DELETE /api/projects/:id deletes records when internal artifact cleanup fails", async () => {
   const deletedObjectKeys: string[] = [];
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
@@ -310,7 +310,8 @@ test("DELETE /api/projects/:id reports S3 cleanup failures but still deletes rec
     deleted: true,
     cleanup: {
       failedObjectCount: 1,
-      message: "일부 SketchCatch 산출물 정리에 실패했습니다.",
+      message:
+        "프로젝트 기록은 삭제됐지만 일부 SketchCatch 내부 S3 산출물 정리에 실패했습니다. 이 경고는 클라우드 리소스가 남았다는 의미가 아닙니다.",
       s3Status: "failed"
     }
   });
@@ -324,8 +325,8 @@ test("DELETE /api/projects/:id reports S3 cleanup failures but still deletes rec
   await app.close();
 });
 
-test("DELETE /api/projects/:id reuses the injected Project asset storage by default", async () => {
-  const deletedObjectKeys: string[] = [];
+test("DELETE /api/projects/:id delegates prefix cleanup to Project asset storage", async () => {
+  const deletedPrefixes: string[] = [];
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
     requestedProjectId: ACTIVE_PROJECT_ID,
@@ -341,8 +342,11 @@ test("DELETE /api/projects/:id reuses the injected Project asset storage by defa
   const app = buildApp({
     getDatabaseClient: () => fakeDb.client,
     projectAssetStorage: createProjectAssetStorageStub({
-      async deleteObject(input) {
-        deletedObjectKeys.push(input.objectKey);
+      async deleteObject() {
+        throw new Error("exact object deletion should not run");
+      },
+      async deletePrefix(input) {
+        deletedPrefixes.push(input.prefix);
       }
     })
   });
@@ -355,7 +359,7 @@ test("DELETE /api/projects/:id reuses the injected Project asset storage by defa
   });
 
   assert.equal(response.statusCode, 200);
-  assert.deepEqual(deletedObjectKeys, ["projects/project-id/thumbnail.webp"]);
+  assert.deepEqual(deletedPrefixes, [`projects/${ACTIVE_PROJECT_ID}/`]);
 
   await app.close();
 });

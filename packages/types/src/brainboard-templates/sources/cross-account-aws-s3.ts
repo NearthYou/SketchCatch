@@ -43,7 +43,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "abd36fbe-31bb-4fe3-b43e-9e77644f51b5",
       domOrder: 1,
-      label: "",
+      label: "Prod account",
       position: {
         x: -10,
         y: -260
@@ -61,7 +61,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6e055294-83c2-4d44-beac-e292b11dcb50",
       domOrder: 2,
-      label: "",
+      label: "Test account",
       position: {
         x: -10,
         y: 30
@@ -93,24 +93,6 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
       rawTransform: "translate(90, -160), rotate(0 30 30)",
       rotation: 0,
       rawResourceType: "aws_s3_bucket"
-    },
-    {
-      sourceNodeId: "d1f9a61d-3dd0-4c39-bcca-83356b94db6c",
-      domOrder: 4,
-      label: "",
-      position: {
-        x: 10,
-        y: -240
-      },
-      size: {
-        width: 155,
-        height: 60
-      },
-      parentSourceNodeId: "abd36fbe-31bb-4fe3-b43e-9e77644f51b5",
-      zIndex: 4,
-      rawTransform: "translate(10, -240), rotate(0 77.5 30)",
-      rotation: 0,
-      rawResourceType: "text"
     },
     {
       sourceNodeId: "0ff5c7a0-b03e-4e19-acc7-8c089bb7f92e",
@@ -147,24 +129,6 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
       rawTransform: "translate(360, -160), rotate(0 30 30)",
       rotation: 0,
       rawResourceType: "aws_s3_bucket_object"
-    },
-    {
-      sourceNodeId: "9b321598-8cb3-4d4f-9305-39e31c71f1e7",
-      domOrder: 7,
-      label: "",
-      position: {
-        x: 340,
-        y: 40
-      },
-      size: {
-        width: 135,
-        height: 60
-      },
-      parentSourceNodeId: "6e055294-83c2-4d44-beac-e292b11dcb50",
-      zIndex: 7,
-      rawTransform: "translate(340, 40), rotate(0 67.5 30)",
-      rotation: 0,
-      rawResourceType: "text"
     }
   ],
   edges: [
@@ -308,13 +272,13 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
     },
     "abd36fbe-31bb-4fe3-b43e-9e77644f51b5": {
       kind: "presentation",
-      catalogId: "design-aws-account",
+      catalogId: "design-group",
       aliasOf: null,
       style: null
     },
     "6e055294-83c2-4d44-beac-e292b11dcb50": {
       kind: "presentation",
-      catalogId: "design-aws-account",
+      catalogId: "design-group",
       aliasOf: null,
       style: null
     },
@@ -323,12 +287,6 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
       address: "aws_s3_bucket.bucket_prod",
       fileName: "main.tf",
       addressMapping: "single-residual"
-    },
-    "d1f9a61d-3dd0-4c39-bcca-83356b94db6c": {
-      kind: "presentation",
-      catalogId: null,
-      aliasOf: null,
-      style: null
     },
     "0ff5c7a0-b03e-4e19-acc7-8c089bb7f92e": {
       kind: "resource",
@@ -341,12 +299,6 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
       address: "aws_s3_bucket_object.s3_object_prod",
       fileName: "main.tf",
       addressMapping: "reviewed-override"
-    },
-    "9b321598-8cb3-4d4f-9305-39e31c71f1e7": {
-      kind: "presentation",
-      catalogId: null,
-      aliasOf: null,
-      style: null
     }
   }
 });

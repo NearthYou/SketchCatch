@@ -20,7 +20,7 @@ export type ApiErrorCode =
   | "unauthorized"
   | "not_found"
   | "conflict"
-  | "github_oauth_required"
+  | "github_app_permission_required"
   | "too_many_requests"
   | "unprocessable_entity"
   | "bad_gateway"
@@ -31,6 +31,7 @@ export type ApiErrorCode =
   | "PUBLIC_REPOSITORY_BRANCH_UNAVAILABLE"
   | "PUBLIC_REPOSITORY_RATE_LIMITED"
   | "PUBLIC_REPOSITORY_PROVIDER_UNAVAILABLE"
+  | "CODECONNECTION_REPOSITORY_ACCESS_REQUIRED"
   | "REPOSITORY_ACCESS_VERIFICATION_REQUIRED"
   | "LIVE_OBSERVATION_DISABLED"
   | "LIVE_OBSERVATION_CACHE_UNAVAILABLE"
@@ -640,7 +641,15 @@ export type GitHubInstallationConnection = {
   htmlUrl: string | null;
 };
 
+export type GitHubAppCapabilityAvailability = "ready" | "not_configured";
+
+export type GitHubAppAvailability = {
+  connectionSetup: GitHubAppCapabilityAvailability;
+  installationRead: GitHubAppCapabilityAvailability;
+};
+
 export type ListGitHubInstallationsResponse = {
+  availability: GitHubAppAvailability;
   installations: GitHubInstallationConnection[];
 };
 
@@ -1152,7 +1161,6 @@ export type GitCicdHandoff = {
   apiBaseUrl: string | null;
   repositorySettingsPreview: GitCicdRepositorySettingsPreview | null;
   awsRoleDiff: GitCicdAwsRoleDiff | null;
-  githubOAuthRequired: boolean;
   status: GitCicdHandoffStatus;
   statusMessage: string | null;
   userAcceptedChangeId: string;
@@ -1875,18 +1883,12 @@ export type WebPushSubscriptionResponse = {
   expiresAt: IsoDateTimeString | null;
 };
 
-export type GitCicdGitHubOAuthStartResponse = {
-  authorizationUrl: string;
-  expiresAt: IsoDateTimeString;
-};
-
 export type GitCicdRepositorySettingsApplyResponse = {
   applied: boolean;
   environmentName: string;
   variables: string[];
   secrets: string[];
   workflowFiles: string[];
-  githubOAuthRequired: boolean;
 };
 
 export type GitCicdAwsRoleDiffApplyResponse = {
@@ -2147,6 +2149,9 @@ export type AwsConnectionDeletionPreviewResponse = {
     codeConnection: boolean;
   };
   preservedResources: ["CloudFormation Stack", "Terraform Execution Role"];
+  preservedRecords: {
+    reverseEngineeringScans: number;
+  };
   confirmationToken: string;
 };
 
@@ -2269,7 +2274,7 @@ export type ReverseEngineeringScanLogLevel = "INFO" | "WARN" | "ERROR";
 export type ReverseEngineeringScan = {
   id: string;
   projectId: string;
-  awsConnectionId: string;
+  awsConnectionId: string | null;
   provider: CloudProvider;
   region: string;
   resourceTypes: ReverseEngineeringResourceSelection[];

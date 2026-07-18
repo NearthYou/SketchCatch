@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, getTableColumns, isNotNull, isNull, or } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, isNotNull } from "drizzle-orm";
 import {
   APPLICATION_ARTIFACT_CONTRACT_VERSION
 } from "@sketchcatch/types";
@@ -15,6 +15,7 @@ import type {
   GitCicdMonitoredPath,
   ProjectDeploymentRuntimeConfig,
   RuntimeTargetKind,
+  SourceRepositoryAnalysisResult,
   SourceRepositoryProvider
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
@@ -46,12 +47,14 @@ import {
   createAwsRoleDiffPreview,
   createGitCicdAutomationFiles,
   createRepositorySettingsPreview,
-  defaultGitCicdEnvironmentName
+  defaultGitCicdEnvironmentName,
+  normalizeGitCicdReleaseApiUrl
 } from "./git-cicd-workflows.js";
 import {
   DeploymentTargetFingerprintMismatchError,
   resolveAwsDeploymentTargetIdentity
 } from "../runtime-convergence/deployment-target-identity.js";
+import { resolveCurrentRepositoryAnalysis } from "../source-repositories/current-repository-analysis.js";
 import {
   createS3DeploymentPlanArtifactStorage,
   type DeploymentPlanArtifactStorage
@@ -89,7 +92,10 @@ export type GitCicdHandoffSourceRepositoryRecord = Pick<
   | "analysisResult"
   | "analysisRevision"
   | "analyzedAt"
->;
+> & {
+  repositoryAnalysisRevision?: string | null;
+  repositoryAnalysisResult?: SourceRepositoryAnalysisResult | null;
+};
 export type GitCicdHandoffDeploymentTargetRecord =
   typeof projectDeploymentTargets.$inferSelect & {
     awsRoleArn: string | null;
@@ -192,7 +198,7 @@ export type CreateGitCicdHandoffRecordInput = {
   apiBaseUrl: string | null;
   repositorySettingsPreview: GitCicdRepositorySettingsPreview | null;
   awsRoleDiff: GitCicdAwsRoleDiff | null;
-  githubOAuthRequired: boolean;
+  githubAppPermissionRequired: boolean;
   status: GitCicdHandoffStatus;
   statusMessage: string | null;
   userAcceptedChangeId: string;
@@ -252,6 +258,7 @@ export type GitCicdProviderCreateInput = {
   releaseBucket: string | null;
   staticSiteUrl: string | null;
   apiBaseUrl: string | null;
+  sketchCatchPublicBaseUrl: string;
   runtimeTargetKind: RuntimeTargetKind;
   confirmedBuildConfig: ConfirmedBuildConfig;
   runtimeConfig: ProjectDeploymentRuntimeConfig;
@@ -394,7 +401,6 @@ export type GitCicdHandoffRepository = {
     input: {
       repositorySettingsPreview?: GitCicdRepositorySettingsPreview | null | undefined;
       awsRoleDiff?: GitCicdAwsRoleDiff | null | undefined;
-      githubOAuthRequired?: boolean | undefined;
     }
   ): Promise<GitCicdHandoffRecord | undefined>;
 };
@@ -439,6 +445,19 @@ export class GitCicdHandoffProviderConflictError extends Error {
   constructor(message: string, readonly code: string | null = null) {
     super(message);
     this.name = "GitCicdHandoffProviderConflictError";
+  }
+}
+
+export async function assertReachableGitCicdReleaseApiUrl(
+  origin: string,
+  probeHealth: (url: string) => Promise<boolean>
+): Promise<void> {
+  const healthUrl = new URL("/health", origin).toString();
+  if (!(await probeHealth(healthUrl))) {
+    throw new GitCicdHandoffProviderConflictError(
+      "GIT_CICD_RELEASE_API_UNREACHABLE: Git/CI/CD handoff requires a reachable public release API health endpoint",
+      "GIT_CICD_RELEASE_API_UNREACHABLE"
+    );
   }
 }
 
@@ -825,7 +844,7 @@ export function createGitHubGitCicdHandoffProvider(
               rdsEnabled: input.rdsEnabled,
               staticSiteUrl: input.staticSiteUrl,
               apiBaseUrl: input.apiBaseUrl,
-              sketchCatchPublicBaseUrl: process.env.SKETCHCATCH_PUBLIC_BASE_URL ?? null,
+              sketchCatchPublicBaseUrl: input.sketchCatchPublicBaseUrl,
               runtimeTargetKind: input.runtimeTargetKind,
               confirmedBuildConfig: input.confirmedBuildConfig,
               runtimeConfig: input.runtimeConfig,
@@ -1063,22 +1082,23 @@ export function createPostgresGitCicdHandoffRepository(
           repositoryUrl: sourceRepositories.repositoryUrl,
           analysisResult: sourceRepositories.analysisResult,
           analysisRevision: sourceRepositories.analysisRevision,
-          analyzedAt: sourceRepositories.analyzedAt
+          analyzedAt: sourceRepositories.analyzedAt,
+          repositoryAnalysisRevision: repositoryAnalysisRecords.repositoryRevision,
+          repositoryAnalysisResult: repositoryAnalysisRecords.analysisResult
         })
         .from(sourceRepositories)
         .leftJoin(
           repositoryAnalysisRecords,
-          eq(repositoryAnalysisRecords.projectId, sourceRepositories.projectId)
+          and(
+            eq(repositoryAnalysisRecords.projectId, sourceRepositories.projectId),
+            eq(repositoryAnalysisRecords.sourceRepositoryId, sourceRepositories.id)
+          )
         )
         .where(
           and(
             eq(sourceRepositories.id, sourceRepositoryId),
             eq(sourceRepositories.projectId, projectId),
-            eq(sourceRepositories.status, "active"),
-            or(
-              isNull(repositoryAnalysisRecords.id),
-              eq(repositoryAnalysisRecords.sourceRepositoryId, sourceRepositories.id)
-            )
+            eq(sourceRepositories.status, "active")
           )
         );
 
@@ -1344,10 +1364,6 @@ export function createPostgresGitCicdHandoffRepository(
         Object.assign(values, { awsRoleDiff: input.awsRoleDiff });
       }
 
-      if (input.githubOAuthRequired !== undefined) {
-        Object.assign(values, { githubOAuthRequired: input.githubOAuthRequired });
-      }
-
       const [handoff] = await db
         .update(gitCicdHandoffs)
         .set(values)
@@ -1499,7 +1515,17 @@ export async function createGitCicdHandoff(
   const releaseBucket = input.releaseBucket ?? null;
   const staticSiteUrl = input.staticSiteUrl ?? null;
   const apiBaseUrl = input.apiBaseUrl ?? null;
+  const sketchCatchPublicBaseUrl = normalizeGitCicdReleaseApiUrl(
+    process.env.SKETCHCATCH_PUBLIC_BASE_URL
+  );
+  if (!sketchCatchPublicBaseUrl) {
+    throw new GitCicdHandoffProviderConflictError(
+      "Git/CI/CD handoff requires SKETCHCATCH_PUBLIC_BASE_URL to be a public HTTPS origin reachable by GitHub Actions",
+      "GIT_CICD_RELEASE_API_URL_REQUIRED"
+    );
+  }
   const repositorySettingsPreview = createRepositorySettingsPreview({
+    projectId: input.projectId,
     projectSlug,
     repositoryOwner: sourceRepository.owner,
     repositoryName: sourceRepository.name,
@@ -1515,6 +1541,7 @@ export async function createGitCicdHandoff(
     rdsEnabled,
     staticSiteUrl,
     apiBaseUrl,
+    sketchCatchPublicBaseUrl,
     runtimeTargetKind: deploymentTarget.runtimeTargetKind,
     confirmedBuildConfig: deploymentTarget.confirmedBuildConfig,
     runtimeConfig: deploymentTarget.runtimeConfig
@@ -1590,6 +1617,7 @@ export async function createGitCicdHandoff(
         releaseBucket,
         staticSiteUrl,
         apiBaseUrl,
+        sketchCatchPublicBaseUrl,
         runtimeTargetKind: deploymentTarget.runtimeTargetKind,
         confirmedBuildConfig: deploymentTarget.confirmedBuildConfig,
         runtimeConfig: deploymentTarget.runtimeConfig,
@@ -1661,7 +1689,7 @@ export async function createGitCicdHandoff(
     apiBaseUrl,
     repositorySettingsPreview,
     awsRoleDiff,
-    githubOAuthRequired: sourceRepository.provider === "github",
+    githubAppPermissionRequired: false,
     status: providerResult.status,
     statusMessage: providerResult.statusMessage,
     userAcceptedChangeId: input.userAcceptedChangeId,
@@ -1707,14 +1735,20 @@ export function assertGitOpsTarget(
   }
 
   const build = target.confirmedBuildConfig;
-  const revision = sourceRepository.analysisRevision;
+  const currentAnalysis = resolveCurrentRepositoryAnalysis({
+    legacyAnalysisRevision: sourceRepository.analysisRevision,
+    legacyAnalysisResult: sourceRepository.analysisResult,
+    repositoryAnalysisRevision: sourceRepository.repositoryAnalysisRevision,
+    repositoryAnalysisResult: sourceRepository.repositoryAnalysisResult
+  });
+  const revision = currentAnalysis.analysisRevision;
   const hasCurrentRevision =
     Boolean(revision) &&
     /^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(revision ?? "") &&
     build.confirmedCommitSha.toLowerCase() === revision?.toLowerCase() &&
     appPath.path === build.sourceRoot;
   if (target.runtimeTargetKind === "ecs_fargate") {
-    const dockerfiles = sourceRepository.analysisResult?.evidence.filter(
+    const dockerfiles = currentAnalysis.analysisResult?.evidence.filter(
       (item) => item.kind === "dockerfile"
     ) ?? [];
     if (
@@ -1732,7 +1766,7 @@ export function assertGitOpsTarget(
     return;
   }
   if (target.runtimeTargetKind === "lambda") {
-    const samTemplates = sourceRepository.analysisResult?.evidence.filter(
+    const samTemplates = currentAnalysis.analysisResult?.evidence.filter(
       (item) =>
         item.kind === "framework_config" &&
         /(?:^|\/)template\.ya?ml$/i.test(item.path)
@@ -1752,7 +1786,7 @@ export function assertGitOpsTarget(
     return;
   }
   if (target.runtimeTargetKind === "ec2_asg") {
-    const appSpecs = sourceRepository.analysisResult?.evidence.filter(
+    const appSpecs = currentAnalysis.analysisResult?.evidence.filter(
       (item) =>
         item.kind === "framework_config" &&
         /(?:^|\/)appspec\.ya?ml$/i.test(item.path)
@@ -1772,7 +1806,7 @@ export function assertGitOpsTarget(
     return;
   }
   if (target.runtimeTargetKind === "static_site") {
-    const staticOutputs = sourceRepository.analysisResult?.evidence.filter(
+    const staticOutputs = currentAnalysis.analysisResult?.evidence.filter(
       (item) => item.kind === "static_output"
     ) ?? [];
     if (

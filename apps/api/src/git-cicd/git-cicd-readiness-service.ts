@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   type ApplicationReleaseStatus,
   type CompositeReleaseDigest,
@@ -50,7 +50,11 @@ import {
   type SaveProjectDeploymentTargetInput
 } from "../releases/project-release-ledger-service.js";
 import { renderPreflightBuildspec } from "../releases/preflight-buildspec.js";
-import { createDeploymentTargetIdentity } from "../runtime-convergence/deployment-target-identity.js";
+import {
+  createDeploymentTargetIdentity,
+  resolveAwsDeploymentTargetIdentity
+} from "../runtime-convergence/deployment-target-identity.js";
+import { resolveCurrentRepositoryAnalysis } from "../source-repositories/current-repository-analysis.js";
 
 export type GitCicdReadinessDeploymentRecord = {
   id: string;
@@ -299,7 +303,8 @@ export function createGitCicdReadinessService(options: {
         input,
         repository,
         planVerifier,
-        preferredConnection
+        preferredConnection,
+        !reconcileTarget
       );
       let targetReconciled = false;
       const checkedAt = now();
@@ -337,6 +342,7 @@ export function createGitCicdReadinessService(options: {
         target,
         targetConnection,
         targetReconciled,
+        acceptPersistedTargetIdentity: !reconcileTarget,
         initialApplicationReleaseApplicable:
           !target || target.runtimeTargetKind === "ecs_fargate",
         initialApplicationReleaseReady
@@ -635,6 +641,8 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
           name: sourceRepositories.name,
           analysisRevision: sourceRepositories.analysisRevision,
           analysisResult: sourceRepositories.analysisResult,
+          repositoryAnalysisRevision: repositoryAnalysisRecords.repositoryRevision,
+          repositoryAnalysisResult: repositoryAnalysisRecords.analysisResult,
           defaultBranch: sourceRepositories.defaultBranch,
           monitorBranch: gitCicdMonitoringConfigs.monitorBranch,
           enabled: gitCicdMonitoringConfigs.enabled,
@@ -647,20 +655,36 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
         )
         .leftJoin(
           repositoryAnalysisRecords,
-          eq(repositoryAnalysisRecords.projectId, sourceRepositories.projectId)
+          and(
+            eq(repositoryAnalysisRecords.projectId, sourceRepositories.projectId),
+            eq(repositoryAnalysisRecords.sourceRepositoryId, sourceRepositories.id)
+          )
         )
         .where(
           and(
             eq(sourceRepositories.projectId, projectId),
             eq(sourceRepositories.status, "active"),
-            eq(sourceRepositories.provider, "github"),
-            or(
-              isNull(repositoryAnalysisRecords.id),
-              eq(repositoryAnalysisRecords.sourceRepositoryId, sourceRepositories.id)
-            )
+            eq(sourceRepositories.provider, "github")
           )
         );
-      return record;
+      if (!record) return undefined;
+      const currentAnalysis = resolveCurrentRepositoryAnalysis({
+        legacyAnalysisRevision: record.analysisRevision,
+        legacyAnalysisResult: record.analysisResult,
+        repositoryAnalysisRevision: record.repositoryAnalysisRevision,
+        repositoryAnalysisResult: record.repositoryAnalysisResult
+      });
+      return {
+        id: record.id,
+        owner: record.owner,
+        name: record.name,
+        analysisRevision: currentAnalysis.analysisRevision,
+        analysisResult: currentAnalysis.analysisResult,
+        defaultBranch: record.defaultBranch,
+        monitorBranch: record.monitorBranch,
+        enabled: record.enabled,
+        validationStatus: record.validationStatus
+      };
     },
     async findProjectDeploymentTarget(projectId) {
       const [target] = await db
@@ -758,7 +782,8 @@ async function inspectLatestSuccessfulDeployment(
   input: { projectId: string; userId: string },
   repository: GitCicdReadinessRepository,
   planVerifier: GitCicdReadinessPlanVerifier,
-  preferredConnection?: VerifiedConnectionRecord | undefined
+  preferredConnection: VerifiedConnectionRecord | undefined,
+  toleratePlanArtifactFailure: boolean
 ): Promise<DeploymentEvidence> {
   const deployment = await repository.findLatestSuccessfulDirectInfrastructureDeployment(
     input.projectId
@@ -785,8 +810,18 @@ async function inspectLatestSuccessfulDeployment(
     deployment.approvedPlanArtifactId
   );
   for (const plan of orderedPlans) {
-    if (await planVerifier.verify({ deployment, plan, connection })) {
-      return { deployment, connection, plan };
+    try {
+      if (await planVerifier.verify({ deployment, plan, connection })) {
+        return { deployment, connection, plan };
+      }
+    } catch (error) {
+      if (
+        !toleratePlanArtifactFailure ||
+        !(error instanceof GitCicdReadinessRefreshError)
+      ) {
+        throw error;
+      }
+      return { deployment, connection, plan: null };
     }
   }
   return { deployment, connection, plan: null };
@@ -868,13 +903,16 @@ async function requireReconciledDeploymentTarget(input: {
     );
   }
 
-  const confirmedBuildConfig = input.currentTarget
+  const selectedBuildConfig = input.currentTarget
     ? input.currentTarget.confirmedBuildConfig
     : createDeterministicBuildConfig({
         sourceRepository: input.sourceRepository,
         outputs,
         checkedAt: input.checkedAt
       });
+  const confirmedBuildConfig = selectedBuildConfig
+    ? normalizeLegacyEcsWebBuildEvidence(selectedBuildConfig)
+    : null;
   if (!confirmedBuildConfig) {
     throw new GitCicdReadinessValidationError(
       "Post-Apply synchronization requires deterministic build configuration evidence"
@@ -1170,12 +1208,36 @@ function assertCompleteEcsWebBuildConfig(config: ConfirmedBuildConfig): void {
   }
 }
 
+function normalizeLegacyEcsWebBuildEvidence(
+  config: ConfirmedBuildConfig
+): ConfirmedBuildConfig {
+  const ecsWeb = config.ecsWeb;
+  if (!ecsWeb) return config;
+  const requiredEvidence: ConfirmedBuildConfig["evidence"] = [
+    { kind: "dockerfile", path: ecsWeb.api.dockerfilePath },
+    { kind: "package_manifest", path: ecsWeb.frontend.packageManifestPath },
+    { kind: "static_output", path: ecsWeb.frontend.outputPath }
+  ];
+  const evidence = [...config.evidence];
+  for (const required of requiredEvidence) {
+    if (
+      !evidence.some(
+        (candidate) =>
+          candidate.kind === required.kind && candidate.path === required.path
+      )
+    ) {
+      evidence.push(required);
+    }
+  }
+  return evidence.length === config.evidence.length ? config : { ...config, evidence };
+}
+
 function hasValidEcsFargateBuildConfig(
   config: ConfirmedBuildConfig | null | undefined
 ): config is ConfirmedBuildConfig {
   if (!config) return false;
   try {
-    requireValidEcsFargateBuildConfig(config);
+    requireValidEcsFargateBuildConfig(normalizeLegacyEcsWebBuildEvidence(config));
     return true;
   } catch {
     return false;
@@ -1211,12 +1273,20 @@ function createReadinessItems(input: {
   target: ProjectDeploymentTargetRecord | undefined;
   targetConnection: VerifiedConnectionRecord | undefined;
   targetReconciled: boolean;
+  acceptPersistedTargetIdentity: boolean;
   initialApplicationReleaseApplicable: boolean;
   initialApplicationReleaseReady: boolean;
 }): GitCicdReadinessItem[] {
   const monitoringReady = hasValidMonitoringConfig(input.sourceRepository);
   const targetMissingKeys: GitCicdReadinessItem["missingKeys"] = [];
   const deploymentConnection = input.deploymentEvidence.connection;
+  const persistedTargetIdentityReady = hasValidPersistedDeploymentTargetIdentity(
+    input.target,
+    input.targetConnection
+  );
+  const runtimeTargetReady =
+    persistedTargetIdentityReady &&
+    (input.targetReconciled || input.acceptPersistedTargetIdentity);
   const targetConnectionReady = !input.target
     ? true
     : Boolean(
@@ -1242,16 +1312,12 @@ function createReadinessItems(input: {
     targetMissingKeys.push("build_config");
   }
   if (
-    !input.targetReconciled ||
-    input.target?.runtimeTargetKind !== "ecs_fargate" ||
-    input.target.runtimeConfig?.runtimeTargetKind !== "ecs_fargate" ||
-    input.target.runtimeTarget?.adapterKind !== "ecs_service_fargate" ||
-    !isSha256(input.target.deploymentTargetFingerprint)
+    !runtimeTargetReady
   ) {
     targetMissingKeys.push("runtime_config");
   }
   if (
-    !input.targetReconciled ||
+    !runtimeTargetReady ||
     !hasSafeOutputUrl(input.target?.runtimeConfig?.outputUrl)
   ) {
     targetMissingKeys.push("output_url");
@@ -1304,6 +1370,39 @@ function createReadinessItems(input: {
   ];
 
   return items;
+}
+
+function hasValidPersistedDeploymentTargetIdentity(
+  target: ProjectDeploymentTargetRecord | undefined,
+  connection: VerifiedConnectionRecord | undefined
+): boolean {
+  if (
+    !target ||
+    !connection ||
+    target.provider !== "aws" ||
+    target.connectionId !== connection.id ||
+    target.region !== connection.region ||
+    target.runtimeTargetKind !== "ecs_fargate" ||
+    target.runtimeConfig?.runtimeTargetKind !== "ecs_fargate" ||
+    target.runtimeTarget?.adapterKind !== "ecs_service_fargate" ||
+    !isSha256(target.deploymentTargetFingerprint)
+  ) {
+    return false;
+  }
+  try {
+    resolveAwsDeploymentTargetIdentity({
+      projectId: target.projectId,
+      accountId: connection.accountId,
+      region: connection.region,
+      runtimeConfig: target.runtimeConfig,
+      runtimeTarget: target.runtimeTarget,
+      healthCheckPath: target.confirmedBuildConfig?.healthCheckPath,
+      persistedDeploymentTargetFingerprint: target.deploymentTargetFingerprint
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function hasCurrentRepositoryAccessVerification(
@@ -1524,11 +1623,23 @@ export function isEligibleInitialApplicationRelease(input: {
       hasValidCompositeDigest(release.compositeDigest) &&
       health?.["state"] === "healthy" &&
       frontend &&
-      frontend.commitMarker === release.commitSha &&
+      hasMatchingFrontendCommitMarker(
+        frontend.commitMarker,
+        release.commitSha,
+        release.releaseCandidateId
+      ) &&
       hasNonEmptyString(frontend.manifestVersionId) &&
       hasNonEmptyString(frontend.indexVersionId) &&
       hasNonEmptyString(frontend.invalidationId)
   );
+}
+
+function hasMatchingFrontendCommitMarker(
+  marker: string,
+  commitSha: string,
+  releaseCandidateId: string
+): boolean {
+  return marker === `${commitSha}:${releaseCandidateId}`;
 }
 
 function hasValidCompositeDigest(value: CompositeReleaseDigest | null): boolean {

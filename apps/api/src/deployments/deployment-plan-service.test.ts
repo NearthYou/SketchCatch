@@ -22,6 +22,7 @@ import {
 import { runDeploymentPlan } from "./deployment-plan-service.js";
 import { analyzePreDeploymentCheck } from "../services/aiPreDeploymentCheck.js";
 import { createCachedTerraformSecurityScanner } from "../services/terraform/trivy-terraform-scan.js";
+import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
 import type {
   DeploymentPlanArtifactStorage,
   UploadDeploymentPlanArtifactInput,
@@ -38,6 +39,8 @@ import {
   createTerraformDesiredStateIdentity,
   type DeploymentPlanOptimizationEvidence
 } from "./deployment-optimization.js";
+
+delete process.env.S3_BUCKET_NAME;
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -1332,6 +1335,107 @@ test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credential
     /data source "aws_region" is not allowed/
   );
   assert.equal(planArtifactStorage.uploads.length, 0);
+});
+
+test("Terraform module validation blocks dangling output references across the prepared bundle", () => {
+  const diagnostics = createTerraformValidationDiagnostics({
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: `output "cloudfront_url" {
+  value = aws_cloudfront_distribution.distribution.domain_name
+}`
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.code === "terraform.undefined_reference"),
+    [
+      {
+        code: "terraform.undefined_reference",
+        line: 2,
+        message:
+          "aws_cloudfront_distribution.distribution reference가 현재 Terraform 코드에 선언되어 있지 않습니다.",
+        resourceAddress: "aws_cloudfront_distribution.distribution",
+        severity: "error",
+        sourceFileName: "main.tf"
+      }
+    ]
+  );
+});
+
+test("Terraform module validation resolves resource references declared in another file", () => {
+  const diagnostics = createTerraformValidationDiagnostics({
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "resources.tf",
+        terraformCode: `resource "aws_s3_bucket" "site" {
+  bucket = "example-site"
+}`
+      },
+      {
+        fileName: "outputs.tf",
+        terraformCode: `output "bucket_name" {
+  value = aws_s3_bucket.site.bucket
+}`
+      }
+    ]
+  });
+
+  assert.equal(
+    diagnostics.some((diagnostic) => diagnostic.code === "terraform.undefined_reference"),
+    false
+  );
+});
+
+test("runDeploymentPlan rejects dangling output references before preparing AWS credentials", async () => {
+  const repository = new FakeDeploymentRepository();
+  let cleanupCalled = false;
+  let credentialsPrepared = false;
+  let terraformRan = false;
+
+  await assert.rejects(
+    () =>
+      runDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          readTerraformArtifactFile: async () => `output "cloudfront_url" {
+  value = aws_cloudfront_distribution.distribution.domain_name
+}`,
+          analyzePreDeployment: () => createAnalysis(),
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-terraform-dangling-output-plan",
+            mainFilePath: "C:/tmp/sketchcatch-terraform-dangling-output-plan/main.tf",
+            terraformFiles: [],
+            cleanup: async () => {
+              cleanupCalled = true;
+            }
+          }),
+          prepareTerraformAwsCredentialEnv: async () => {
+            credentialsPrepared = true;
+            throw new Error("AWS credentials should not be prepared");
+          },
+          runTerraformInit: async () => {
+            terraformRan = true;
+            throw new Error("Terraform init should not run");
+          }
+        }
+      ),
+    /undeclared resource reference.*aws_cloudfront_distribution\.distribution/i
+  );
+
+  assert.equal(cleanupCalled, true);
+  assert.equal(credentialsPrepared, false);
+  assert.equal(terraformRan, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "plan");
 });
 
 test("runDeploymentPlan blocks an uploaded Terraform bundle matching an analysis-excluded Architecture resource before init", async () => {

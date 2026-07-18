@@ -243,7 +243,7 @@ export async function registerAwsConnectionRoutes(
       createPostgresAwsCodeConnectionRepository(client.db);
 
     try {
-      await disconnectAwsCodeConnection(
+      const result = await disconnectAwsCodeConnection(
         {
           connectionId: params.connectionId,
           userId: currentUserId,
@@ -256,6 +256,12 @@ export async function registerAwsConnectionRoutes(
           ...(options?.now ? { now: options.now } : {})
         }
       );
+      if (!result.managedCleanupCompleted) {
+        request.log.warn(
+          { connectionId: params.connectionId },
+          "AWS managed cleanup was incomplete; local GitHub build connection was detached"
+        );
+      }
       return reply.status(204).send();
     } catch (error) {
       return handleAwsConnectionError(error, reply);

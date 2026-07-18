@@ -67,7 +67,6 @@ import type {
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
   GitCicdHandoffResponse,
-  GitCicdGitHubOAuthStartResponse,
   GitCicdMonitoringConfig,
   GitCicdMonitoringConfigResponse,
   GitCicdPipelineLogListResponse,
@@ -83,7 +82,6 @@ import type {
   GitCicdAwsRoleDiffApplyResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
-  GitHubInstallationConnection,
   GitHubInstallationUserAuthorizationUrlResponse,
   ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationsResponse,
@@ -155,7 +153,7 @@ const API_ERROR_CODES = [
   "unauthorized",
   "not_found",
   "conflict",
-  "github_oauth_required",
+  "github_app_permission_required",
   "too_many_requests",
   "unprocessable_entity",
   "bad_gateway",
@@ -304,7 +302,10 @@ class ProjectThumbnailFetchError extends Error {
 }
 
 // 인증된 Project의 최신 실제 Board 캡처를 raster Blob으로 읽습니다.
-export async function fetchProjectThumbnail(projectId: string): Promise<Blob | null> {
+export async function fetchProjectThumbnail(
+  projectId: string,
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<Blob | null> {
   const headers = new Headers({ Accept: "image/webp,image/png" });
   const session = readStoredAuthSession();
 
@@ -317,7 +318,8 @@ export async function fetchProjectThumbnail(projectId: string): Promise<Blob | n
     {
       cache: "no-store",
       credentials: "include",
-      headers
+      headers,
+      ...(options.signal ? { signal: options.signal } : {})
     }
   );
 
@@ -1259,12 +1261,20 @@ export async function listAwsConnections(
   } = {}
 ): Promise<AwsConnection[]> {
   const query = options.includeUnverified ? "?includeUnverified=true" : "";
-  const response = await apiFetch<AwsConnectionListResponse>(`/aws/connections${query}`, {
+  const response = await apiFetch<unknown>(`/aws/connections${query}`, {
     auth: true,
     ...(options.signal ? { signal: options.signal } : {})
   });
 
-  return response.awsConnections;
+  if (Array.isArray(response)) {
+    return response as AwsConnection[];
+  }
+  if (!response || typeof response !== "object") {
+    return [];
+  }
+
+  const { awsConnections } = response as Partial<AwsConnectionListResponse>;
+  return Array.isArray(awsConnections) ? awsConnections : [];
 }
 
 export async function listAwsConnectionSettings(
@@ -1957,34 +1967,6 @@ export async function applyGitCicdRepositorySettings(
   );
 }
 
-export async function createGitCicdGitHubOAuthStartUrl(
-  handoffId: string
-): Promise<GitCicdGitHubOAuthStartResponse> {
-  return apiFetch<GitCicdGitHubOAuthStartResponse>(
-    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/github-oauth/start`,
-    {
-      auth: true,
-      method: "POST",
-      body: {}
-    }
-  );
-}
-
-export async function applyGitCicdRepositorySettingsWithGitHubOAuth(
-  handoffId: string
-): Promise<GitCicdRepositorySettingsApplyResponse> {
-  return apiFetch<GitCicdRepositorySettingsApplyResponse>(
-    `/git-cicd-handoffs/${encodeURIComponent(
-      handoffId
-    )}/repository-settings/apply-with-github-oauth`,
-    {
-      auth: true,
-      method: "POST",
-      body: {}
-    }
-  );
-}
-
 export async function applyGitCicdAwsRoleDiff(
   handoffId: string
 ): Promise<GitCicdAwsRoleDiffApplyResponse> {
@@ -2064,13 +2046,11 @@ export async function createGitHubAccountInstallUrl(): Promise<GitHubAppInstallU
   });
 }
 
-export async function listGitHubAccountInstallations(): Promise<GitHubInstallationConnection[]> {
-  const response = await apiFetch<ListGitHubInstallationsResponse>(
+export async function listGitHubAccountInstallations(): Promise<ListGitHubInstallationsResponse> {
+  return apiFetch<ListGitHubInstallationsResponse>(
     "/source-repositories/github/installations",
     { auth: true }
   );
-
-  return response.installations;
 }
 
 export async function createGitHubExistingInstallationCallbackUrl(

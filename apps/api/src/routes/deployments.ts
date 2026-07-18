@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { getDeploymentWorkerMode, requireS3BucketName } from "../config/env.js";
+import {
+  getDeploymentWorkerMode,
+  requireS3BucketName,
+  type DeploymentWorkerMode
+} from "../config/env.js";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient } from "../db/client.js";
 import type {
@@ -43,6 +47,7 @@ import {
   type RunDeploymentDestroyInput,
   type RunDeploymentDestroyResult
 } from "../deployments/deployment-destroy-service.js";
+import { isDeploymentDestroySourceStatus } from "../deployments/deployment-destroy-eligibility.js";
 import {
   approveDeploymentPlan as defaultApproveDeploymentPlan,
   revokeDeploymentApproval as defaultRevokeDeploymentApproval,
@@ -89,6 +94,7 @@ import {
   markDeploymentJobRunning,
   recordDeploymentJobTaskArn,
   type DeploymentJobRecord,
+  type DeploymentJobOperation,
   type DeploymentJobRepository
 } from "../deployments/deployment-job-service.js";
 import {
@@ -184,7 +190,7 @@ type DeploymentRouteOptions = {
   createDeploymentRepository?: (db: DatabaseClient["db"]) => DeploymentRepository;
   createDeploymentJobRepository?: (db: DatabaseClient["db"]) => DeploymentJobRepository;
   workerDispatcher?: DeploymentWorkerDispatcher;
-  workerDispatchMode?: "in_process" | "ecs";
+  workerDispatchMode?: DeploymentWorkerMode;
   pruneProjectDeploymentStorage?: (input: {
     db: DatabaseClient["db"];
     projectId: string;
@@ -333,7 +339,7 @@ function createDeploymentWorkerDispatch(
 } {
   const mode = options?.workerDispatchMode ?? getDeploymentWorkerMode();
 
-  if (mode !== "ecs") {
+  if (mode === "in_process") {
     return {
       dispatcher: createLocalDeploymentWorkerDispatcher(),
       enabled: false
@@ -341,9 +347,31 @@ function createDeploymentWorkerDispatch(
   }
 
   return {
-    dispatcher: options?.workerDispatcher ?? createConfiguredDeploymentWorkerDispatcher(),
+    dispatcher:
+      options?.workerDispatcher ??
+      (mode === "ecs"
+        ? createConfiguredDeploymentWorkerDispatcher()
+        : createLocalDeploymentWorkerDispatcher()),
     enabled: true
   };
+}
+
+async function isMatchingActiveDeploymentOperation(input: {
+  deployment: DeploymentRecord;
+  operation: DeploymentJobOperation;
+  jobRepository: DeploymentJobRepository;
+}): Promise<boolean> {
+  const activeJob = await input.jobRepository.findActiveDeploymentJob(input.deployment.id);
+
+  if (!activeJob) {
+    return false;
+  }
+
+  if (activeJob.operation === input.operation) {
+    return true;
+  }
+
+  throw new DeploymentConflictError(`Deployment ${activeJob.operation} is already running`);
 }
 
 async function dispatchDeploymentWorkerJob(
@@ -973,6 +1001,19 @@ export async function registerDeploymentRoutes(
       await requireDeploymentInitArtifact(deployment, repository);
 
       if (deployment.status === "RUNNING") {
+        if (
+          workerDispatch.enabled &&
+          (await isMatchingActiveDeploymentOperation({
+            deployment,
+            operation: "init",
+            jobRepository
+          }))
+        ) {
+          return reply.status(202).send({
+            deployment: await toDeployment(deployment, repository)
+          });
+        }
+
         throw new DeploymentConflictError("Deployment init is already running");
       }
 
@@ -1058,13 +1099,21 @@ export async function registerDeploymentRoutes(
       await requireDeploymentInitArtifact(deployment, repository);
 
       if (deployment.status === "RUNNING") {
-        if (deployment.activeStage === "plan") {
+        const isSamePlanExecution =
+          workerDispatch.enabled &&
+          (await isMatchingActiveDeploymentOperation({
+            deployment,
+            operation: "plan",
+            jobRepository
+          }));
+
+        if (isSamePlanExecution || deployment.activeStage === "plan") {
           return reply.status(202).send({
             deployment: await toDeployment(deployment, repository)
           });
         }
 
-        throw new DeploymentConflictError("Deployment plan is already running");
+        throw new DeploymentConflictError("Another deployment operation is already running");
       }
 
       if (deployment.status === "SUCCESS" || deployment.status === "DESTROYED") {
@@ -1183,6 +1232,19 @@ export async function registerDeploymentRoutes(
           { deploymentId: params.deploymentId, accessContext },
           repository
         );
+        if (
+          !options?.retryApplicationFrontendRelease &&
+          workerDispatch.enabled &&
+          (await isMatchingActiveDeploymentOperation({
+            deployment,
+            operation: "retry_application_frontend",
+            jobRepository
+          }))
+        ) {
+          return reply.status(202).send({
+            deployment: await toDeployment(deployment, repository)
+          });
+        }
         const release = await repository.findRelease?.(deployment.id);
         if (repository.findRelease && !release) {
           throw new DeploymentConflictError("재시도할 앱 릴리즈를 찾을 수 없습니다.");
@@ -1317,6 +1379,19 @@ export async function registerDeploymentRoutes(
         repository
       );
       await requireDeploymentInitArtifact(deployment, repository);
+      if (
+        deployment.status === "RUNNING" &&
+        workerDispatch.enabled &&
+        (await isMatchingActiveDeploymentOperation({
+          deployment,
+          operation: "apply",
+          jobRepository
+        }))
+      ) {
+        return reply.status(202).send({
+          deployment: await toDeployment(deployment, repository)
+        });
+      }
       requireDeploymentCanStartApply(deployment);
       await requireNoRunningDeploymentInProject(deployment, repository);
       reservedLease = await reserveRouteExecutionLease(deployment, deployment.id, repository);
@@ -1407,6 +1482,19 @@ export async function registerDeploymentRoutes(
         repository
       );
       await requireDeploymentInitArtifact(deployment, repository);
+      if (
+        deployment.status === "RUNNING" &&
+        workerDispatch.enabled &&
+        (await isMatchingActiveDeploymentOperation({
+          deployment,
+          operation: "destroy_plan",
+          jobRepository
+        }))
+      ) {
+        return reply.status(202).send({
+          deployment: await toDeployment(deployment, repository)
+        });
+      }
       requireDeploymentCanStartDestroyPlan(deployment);
       await requireNoRunningDeploymentInProject(deployment, repository);
 
@@ -1494,6 +1582,19 @@ export async function registerDeploymentRoutes(
         repository
       );
       await requireDeploymentInitArtifact(deployment, repository);
+      if (
+        deployment.status === "RUNNING" &&
+        workerDispatch.enabled &&
+        (await isMatchingActiveDeploymentOperation({
+          deployment,
+          operation: "destroy",
+          jobRepository
+        }))
+      ) {
+        return reply.status(202).send({
+          deployment: await toDeployment(deployment, repository)
+        });
+      }
       await requireDeploymentCanStartDestroy(deployment, repository);
       await requireNoRunningDeploymentInProject(deployment, repository);
       const destroyHolderId =
@@ -2036,16 +2137,7 @@ function requireDeploymentCanStartDestroyPlan(deployment: DeploymentRecord): voi
     throw new DeploymentConflictError("Terraform state is required before destroy");
   }
 
-  if (deployment.status === "SUCCESS") {
-    return;
-  }
-
-  if (
-    deployment.status === "FAILED" &&
-    (deployment.failureStage === "plan" ||
-      deployment.failureStage === "apply" ||
-      deployment.failureStage === "destroy")
-  ) {
+  if (isDeploymentDestroySourceStatus(deployment.status)) {
     return;
   }
 

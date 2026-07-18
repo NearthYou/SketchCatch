@@ -19,6 +19,11 @@ export type AutomaticDiagramLayoutEdge = {
   readonly sourceId: string;
   readonly targetId: string;
   readonly label?: string | undefined;
+  readonly metadata?:
+    | {
+        readonly presentationRole?: "primary" | "detail" | "summary" | undefined;
+      }
+    | undefined;
 };
 
 export type AutomaticDiagramLayoutInput = {
@@ -987,6 +992,7 @@ function getRouteObstacleCount(
   ).length;
 }
 
+// Security Group scope is a visual overlay, so it must not count as a sibling layout collision.
 export function evaluateAutomaticDiagramLayout(
   input: Pick<AutomaticDiagramLayoutInput, "edges" | "nodes">
 ): AutomaticDiagramLayoutQuality {
@@ -1014,6 +1020,8 @@ export function evaluateAutomaticDiagramLayout(
       } else if (
         isAreaNode(left) &&
         isAreaNode(right) &&
+        !isSecurityGroupScopeNode(left) &&
+        !isSecurityGroupScopeNode(right) &&
         left.metadata?.parentAreaNodeId === right.metadata?.parentAreaNodeId
       ) {
         siblingAreaOverlapCount += 1;
@@ -1156,6 +1164,7 @@ export function evaluateAutomaticDiagramLayout(
   };
 }
 
+// Main-flow quality ignores configuration and summary edges that do not express user traffic.
 function isPrimaryLayoutEdge(
   edge: AutomaticDiagramLayoutEdge,
   roleByNodeId: ReadonlyMap<string, SemanticRole>
@@ -1163,9 +1172,10 @@ function isPrimaryLayoutEdge(
   const label = edge.label?.toLowerCase() ?? "";
 
   return (
+    edge.metadata?.presentationRole !== "summary" &&
     isPrimaryFlowRole(roleByNodeId.get(edge.sourceId)) &&
     isPrimaryFlowRole(roleByNodeId.get(edge.targetId)) &&
-    !/(deploy|pipeline|monitor|metric|alarm|log|policy|role|permission|encrypt|depend)/u.test(label)
+    !/(deploy|pipeline|monitor|metric|alarm|log|policy|role|permission|encrypt|depend|launch)/u.test(label)
   );
 }
 

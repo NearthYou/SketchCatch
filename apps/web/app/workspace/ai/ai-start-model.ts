@@ -154,14 +154,14 @@ export function createDraftFromPatch(
 
 export function createPatchSummary(preview: ArchitecturePatchPreview): string {
   if (preview.changes.length === 0) {
-    return "변경 없이 현재 PREVIEW를 유지합니다.";
+    return "변경 없이 현재 초안을 유지합니다.";
   }
 
   if (preview.changes.length === 1) {
-    return preview.changes[0]?.summary ?? "수정 PREVIEW를 만들었습니다.";
+    return preview.changes[0]?.summary ?? "수정한 초안을 만들었습니다.";
   }
 
-  return `${preview.changes.length}개 변경 사항을 PREVIEW에 반영했습니다.`;
+  return `${preview.changes.length}개 변경 사항을 초안에 반영했습니다.`;
 }
 
 function isAiStartProjectDraft(value: unknown): value is AiStartProjectDraft {

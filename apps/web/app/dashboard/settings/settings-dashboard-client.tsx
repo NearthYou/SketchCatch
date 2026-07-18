@@ -53,6 +53,7 @@ import {
   type AwsConnectionCleanupRetryDisplay
 } from "../../../features/dashboard/aws-connection-settings-state";
 import {
+  deriveAwsCodeConnectionRepositoryAccessState,
   deriveGitHubCodeBuildAuthorizationTarget,
   type GitHubCodeBuildAuthorizationTarget
 } from "../../../features/dashboard/github-codebuild-authorization-state";
@@ -84,7 +85,10 @@ export function SettingsDashboardClient() {
   const connectionsQuery = useAwsConnectionSettingsQuery();
   const githubInstallationsQuery = useGitHubInstallationsQuery();
   const githubAuthorizationTarget = useMemo(
-    () => deriveGitHubCodeBuildAuthorizationTarget(githubInstallationsQuery.data ?? []),
+    () => deriveGitHubCodeBuildAuthorizationTarget(
+      githubInstallationsQuery.data?.installations ?? [],
+      githubInstallationsQuery.data?.availability
+    ),
     [githubInstallationsQuery.data]
   );
   const connectionSettings = useMemo(
@@ -131,6 +135,7 @@ export function SettingsDashboardClient() {
   const [accountId, setAccountId] = useState("");
   const [deletionPreview, setDeletionPreview] =
     useState<AwsConnectionDeletionPreviewResponse | null>(null);
+  const [deletionErrorMessage, setDeletionErrorMessage] = useState("");
   const [showCodeConnectionDisconnectModal, setShowCodeConnectionDisconnectModal] =
     useState(false);
   const [codeConnections, setCodeConnections] = useState<
@@ -264,6 +269,7 @@ export function SettingsDashboardClient() {
   async function removeConnection(connectionId: string): Promise<void> {
     setActionPending(true);
     setErrorMessage("");
+    setDeletionErrorMessage("");
     try {
       setDeletionPreview(await getAwsConnectionDeletionPreview(connectionId));
     } catch (error) {
@@ -278,6 +284,7 @@ export function SettingsDashboardClient() {
     if (!deletionPreview?.canDelete) return;
     setActionPending(true);
     setErrorMessage("");
+    setDeletionErrorMessage("");
     try {
       await deleteAwsConnection(deletionPreview.connectionId, {
         confirmedManagedCleanup: true,
@@ -286,11 +293,15 @@ export function SettingsDashboardClient() {
       setDeletionPreview(null);
       await invalidateConnections();
     } catch (error) {
-      setDeletionPreview(null);
-      setErrorMessage(getApiErrorMessage(error, "AWS 연결을 삭제하지 못했습니다."));
+      setDeletionErrorMessage(getApiErrorMessage(error, "AWS 연결을 삭제하지 못했습니다."));
     } finally {
       setActionPending(false);
     }
+  }
+
+  function closeDeletionPreview(): void {
+    setDeletionPreview(null);
+    setDeletionErrorMessage("");
   }
 
   async function connectGitHubBuild(): Promise<void> {
@@ -300,6 +311,13 @@ export function SettingsDashboardClient() {
     }
     if (githubInstallationsQuery.isError) {
       setErrorMessage("GitHub App 연결 정보를 확인한 뒤 다시 시도해 주세요.");
+      return;
+    }
+    if (githubAuthorizationTarget.status === "github_app_not_configured") {
+      document.getElementById("github-account-connection")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
       return;
     }
     if (githubAuthorizationTarget.status === "github_installation_required") {
@@ -504,6 +522,7 @@ export function SettingsDashboardClient() {
               <GitHubBuildConnectionAction
                 actionPending={actionPending}
                 connection={codeConnections[selectedBuildAwsConnectionId]}
+                disabled={githubAuthorizationTarget.status === "github_app_not_configured"}
                 onConnect={() => void connectGitHubBuild()}
                 onDisconnect={openGitHubBuildDisconnect}
                 onRefresh={() => void refreshGitHubBuildConnection()}
@@ -669,7 +688,7 @@ export function SettingsDashboardClient() {
               }
               className={styles.modalClose}
               disabled={actionPending}
-              onClick={() => setDeletionPreview(null)}
+              onClick={closeDeletionPreview}
               ref={modalCloseButtonRef}
               type="button"
             >
@@ -694,12 +713,28 @@ export function SettingsDashboardClient() {
               </ul>
               <strong>삭제하지 않는 리소스</strong>
               <p>{deletionPreview.preservedResources.join(", ")}</p>
+              <strong>보존하는 기록</strong>
+              <p>
+                Reverse Engineering 결과{" "}
+                {deletionPreview.preservedRecords?.reverseEngineeringScans ?? 0}개 · 연결 삭제 후
+                연결 삭제됨으로 표시
+              </p>
             </div>
             {deletionPreview.blockerMessage ? (
               <p className={styles.cleanupBlocker}>{deletionPreview.blockerMessage}</p>
             ) : null}
+            {deletionErrorMessage ? (
+              <div className={styles.cleanupError} role="alert">
+                <strong>삭제가 완료되지 않았습니다. 연결은 유지되었습니다.</strong>
+                <p>오류를 확인한 뒤 다시 시도해 주세요.</p>
+                <details>
+                  <summary>오류 상세</summary>
+                  <p>{deletionErrorMessage}</p>
+                </details>
+              </div>
+            ) : null}
             <div className={styles.modalActions}>
-              <button disabled={actionPending} onClick={() => setDeletionPreview(null)} type="button">취소</button>
+              <button disabled={actionPending} onClick={closeDeletionPreview} type="button">취소</button>
               {deletionPreview.canDelete ? (
                 <button
                   className={styles.dangerAction}
@@ -707,9 +742,11 @@ export function SettingsDashboardClient() {
                   onClick={() => void confirmRemoveConnection()}
                   type="button"
                 >
-                  {deletionPreview.cleanupRetry
-                    ? "관리 리소스 정리 재시도"
-                    : "관리 리소스 정리 후 연결 삭제"}
+                  {actionPending
+                    ? "삭제 중…"
+                    : deletionPreview.cleanupRetry
+                      ? "관리 리소스 정리 재시도"
+                      : "관리 리소스 정리 후 연결 삭제"}
                 </button>
               ) : null}
             </div>
@@ -787,6 +824,13 @@ function GitHubAuthorizationTargetNotice({
       </p>
     );
   }
+  if (target.status === "github_app_not_configured") {
+    return (
+      <p className={styles.githubSettingsMessage} role="status">
+        GitHub App 서버 설정이 완료된 뒤 AWS 승인을 시작할 수 있습니다.
+      </p>
+    );
+  }
   if (target.status === "github_installation_required") {
     return (
       <div className={styles.githubSettingsError} role="alert">
@@ -843,19 +887,21 @@ function formatGitHubRepositorySelection(
 function GitHubBuildConnectionAction({
   actionPending,
   connection,
+  disabled,
   onConnect,
   onDisconnect,
   onRefresh
 }: {
   readonly actionPending: boolean;
   readonly connection: AwsCodeConnectionResponse | undefined;
+  readonly disabled: boolean;
   readonly onConnect: () => void;
   readonly onDisconnect: () => void;
   readonly onRefresh: () => void;
 }) {
   if (!connection?.codeConnection) {
     return (
-      <button className={styles.primaryAction} disabled={actionPending} onClick={onConnect} type="button">
+      <button className={styles.primaryAction} disabled={actionPending || disabled} onClick={onConnect} type="button">
         AWS GitHub 권한 승인 시작
       </button>
     );
@@ -895,11 +941,21 @@ function GitHubBuildConnectionAction({
       </div>
     );
   }
-  if (connection.codeConnection.status === "AVAILABLE") {
+  const repositoryAccessState = deriveAwsCodeConnectionRepositoryAccessState(
+    connection.codeConnection.status
+  );
+  if (repositoryAccessState) {
     return (
-      <div className={styles.buildConnectionReady} role="status">
-        <CheckCircle2 size={16} />
-        <span>AWS GitHub 승인 완료 · Repository 접근은 프로젝트별 검증</span>
+      <div className={styles.buildConnectionUnverified} role="status">
+        <AlertTriangle size={16} />
+        <span>{repositoryAccessState.title} · {repositoryAccessState.description}</span>
+        <a
+          href={repositoryAccessState.actionHref}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {repositoryAccessState.actionLabel} <ExternalLink size={14} />
+        </a>
         <button disabled={actionPending} onClick={onRefresh} type="button">상태 확인</button>
         <button data-danger="true" disabled={actionPending} onClick={onDisconnect} type="button">연결 해제</button>
       </div>

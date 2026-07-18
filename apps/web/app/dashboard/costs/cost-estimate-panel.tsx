@@ -31,10 +31,21 @@ const COST_ESTIMATE_PERIOD_OPTIONS: readonly SelectMenuOption[] = [
   { label: "한 달", value: "month" }
 ];
 
-export function CostEstimatePanel() {
-  const [period, setPeriod] = useState<CostEstimatePeriod>("month");
-  const [expectedUserCount, setExpectedUserCount] = useState(1000);
-  const [expectedUserCountInput, setExpectedUserCountInput] = useState("1000");
+export function CostEstimatePanel({
+  expectedUserCount,
+  expectedUserCountInput,
+  onExpectedUserCountChange,
+  onExpectedUserCountInputChange,
+  onPeriodChange,
+  period
+}: {
+  readonly expectedUserCount: number;
+  readonly expectedUserCountInput: string;
+  readonly onExpectedUserCountChange: (value: number) => void;
+  readonly onExpectedUserCountInputChange: (value: string) => void;
+  readonly onPeriodChange: (period: CostEstimatePeriod) => void;
+  readonly period: CostEstimatePeriod;
+}) {
   const [expectedUserCountError, setExpectedUserCountError] = useState("");
   const estimateQuery = useCostEstimateQuery({ expectedUserCount, period });
   const data: CostProjectEstimateListResponse | null = estimateQuery.data ?? null;
@@ -61,8 +72,8 @@ export function CostEstimatePanel() {
     }
 
     setExpectedUserCountError("");
-    setExpectedUserCount(normalized);
-    setExpectedUserCountInput(String(normalized));
+    onExpectedUserCountChange(normalized);
+    onExpectedUserCountInputChange(String(normalized));
   }
 
   if (estimateQuery.isPending && !data) {
@@ -87,7 +98,7 @@ export function CostEstimatePanel() {
               min={MIN_EXPECTED_USER_COUNT}
               onBlur={applyExpectedUserCount}
               onChange={(event) => {
-                setExpectedUserCountInput(event.target.value);
+                onExpectedUserCountInputChange(event.target.value);
                 setExpectedUserCountError("");
               }}
               onKeyDown={(event) => {
@@ -110,7 +121,7 @@ export function CostEstimatePanel() {
               emptyLabel="표시 기간 선택"
               onChange={(value) => {
                 const nextPeriod = value as CostEstimatePeriod;
-                setPeriod(nextPeriod);
+                onPeriodChange(nextPeriod);
               }}
               options={COST_ESTIMATE_PERIOD_OPTIONS}
               size="large"

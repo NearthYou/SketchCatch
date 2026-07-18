@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import type {
   ConfirmedBuildConfig,
   ProjectDeploymentRuntimeConfig,
@@ -5,6 +6,7 @@ import type {
   GitCicdRepositorySettingsPreview,
   RuntimeTargetKind
 } from "@sketchcatch/types";
+import { isPublicAddress } from "../network/public-address.js";
 
 export const defaultGitCicdEnvironmentName = "sketchcatch-production";
 
@@ -38,6 +40,11 @@ export type GitCicdWorkflowRenderInput = {
   deploymentTargetFingerprint?: string | null | undefined;
 };
 
+type GitCicdDeliveryWorkflowRenderInput = GitCicdWorkflowRenderInput & {
+  projectId: string;
+  sketchCatchPublicBaseUrl: string;
+};
+
 export type GitCicdGeneratedFile = {
   path: string;
   content: string;
@@ -45,7 +52,7 @@ export type GitCicdGeneratedFile = {
 };
 
 export function createGitCicdAutomationFiles(
-  input: GitCicdWorkflowRenderInput
+  input: GitCicdDeliveryWorkflowRenderInput
 ): GitCicdGeneratedFile[] {
   const settingsPreview = createRepositorySettingsPreview(input);
   const ecsFargate = getEcsFargateWorkflowInput(input);
@@ -110,10 +117,14 @@ function createHandoffManifest(input: GitCicdWorkflowRenderInput) {
 }
 
 export function createRepositorySettingsPreview(
-  input: GitCicdWorkflowRenderInput
+  input: GitCicdDeliveryWorkflowRenderInput
 ): GitCicdRepositorySettingsPreview {
   const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
   const runtimeOutputUrl = getRuntimeOutputUrl(input.runtimeConfig);
+  const releaseApiUrl = normalizeGitCicdReleaseApiUrl(input.sketchCatchPublicBaseUrl);
+  if (!releaseApiUrl) {
+    throw new Error("GIT_CICD_RELEASE_API_URL_REQUIRED");
+  }
 
   return {
     environmentName,
@@ -126,8 +137,8 @@ export function createRepositorySettingsPreview(
       SKETCHCATCH_RDS_ENABLED: String(input.rdsEnabled === true),
       SKETCHCATCH_STATIC_SITE_URL: input.staticSiteUrl ?? "",
       SKETCHCATCH_API_BASE_URL: input.apiBaseUrl ?? "",
-      SKETCHCATCH_RELEASE_API_URL: input.sketchCatchPublicBaseUrl ?? "",
-      SKETCHCATCH_PROJECT_ID: input.projectId ?? "",
+      SKETCHCATCH_RELEASE_API_URL: releaseApiUrl,
+      SKETCHCATCH_PROJECT_ID: input.projectId,
       SKETCHCATCH_ASG_NAME:
         input.runtimeConfig?.runtimeTargetKind === "ec2_asg"
           ? input.runtimeConfig.autoScalingGroupName
@@ -192,6 +203,47 @@ export function createRepositorySettingsPreview(
       ".github/workflows/sketchcatch-destroy.yml"
     ]
   };
+}
+
+export function normalizeGitCicdReleaseApiUrl(value: string | null | undefined): string | null {
+  const candidate = value?.trim();
+  if (!candidate || candidate.length > 2_048) return null;
+
+  let url: URL;
+  try {
+    url = new URL(candidate);
+  } catch {
+    return null;
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  const family = isIP(hostname);
+  const labels = hostname.split(".");
+  const hasPublicHostname =
+    family === 4 || family === 6
+      ? isPublicAddress(hostname, family)
+      : labels.length >= 2 &&
+        !labels.some((label) =>
+          ["localhost", "metadata", "instance-data", "internal"].includes(label)
+        ) &&
+        !["local", "localhost", "internal", "invalid", "test"].includes(
+          labels.at(-1) ?? ""
+        );
+
+  if (
+    url.protocol !== "https:" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.search !== "" ||
+    url.hash !== "" ||
+    (url.port !== "" && url.port !== "443") ||
+    url.pathname !== "/" ||
+    !hasPublicHostname
+  ) {
+    return null;
+  }
+
+  return url.origin;
 }
 
 type EcsFargateWorkflowInput = {

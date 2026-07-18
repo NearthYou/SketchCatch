@@ -33,6 +33,17 @@ export function createWorkspaceStartTemplateSelection(
     : { templateId: null, templateVersion: null };
 }
 
+export function createWorkspaceStartTemplateHref(template: AvailableBoardTemplate): string {
+  const selection = createWorkspaceStartTemplateSelection(template);
+  const params = new URLSearchParams({
+    mode: "template",
+    templateId: selection.templateId ?? "",
+    templateVersion: selection.templateVersion ?? ""
+  });
+
+  return `/workspace/new?${params.toString()}`;
+}
+
 /** A persisted selection must match the current immutable template revision before it is reused. */
 export function resolveWorkspaceStartTemplate(
   templates: readonly BoardTemplate[],

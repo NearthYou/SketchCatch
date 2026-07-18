@@ -22,6 +22,7 @@ import {
   type ProjectAccessContext,
   type ReleaseCandidateRecord
 } from "./deployment-service.js";
+import { isDeploymentDestroySourceStatus } from "./deployment-destroy-eligibility.js";
 import { createPreparedReleaseSnapshotHash } from "./deployment-preparation-service.js";
 
 export type ApproveDeploymentPlanInput = {
@@ -325,15 +326,7 @@ export function assertDeploymentDestroyPreconditions(
     throw new DeploymentConflictError("Terraform destroy plan is required before destroy");
   }
 
-  if (
-    input.sourceStatus !== "SUCCESS" &&
-    !(
-      input.sourceStatus === "FAILED" &&
-      (input.sourceFailureStage === "plan" ||
-        input.sourceFailureStage === "apply" ||
-        input.sourceFailureStage === "destroy")
-    )
-  ) {
+  if (!isDeploymentDestroySourceStatus(input.sourceStatus)) {
     throw new DeploymentConflictError("Deployment cannot be destroyed in this state");
   }
 

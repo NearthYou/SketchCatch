@@ -1,4 +1,5 @@
 import type { Deployment } from "@sketchcatch/types";
+import { getDeploymentDurationMs } from "./deployment-duration";
 
 export type DeploymentStatusTone = "error" | "neutral" | "running" | "success";
 
@@ -14,6 +15,13 @@ export type DeploymentHistoryEntry<T extends DeploymentHistorySummary = Deployme
     readonly deployment: T;
     readonly versionLabel: string;
   };
+
+export type DeploymentHistoryFilter = "all" | "complete" | "unchanged";
+
+type DeploymentHistoryMetricSource = Pick<
+  Deployment,
+  "cancelledAt" | "completedAt" | "failedAt" | "planSummary" | "startedAt" | "status" | "updatedAt"
+>;
 
 const DEPLOYMENT_STATUS_PRESENTATIONS: Readonly<
   Record<Deployment["status"], DeploymentStatusPresentation>
@@ -49,6 +57,58 @@ export function getDeploymentHistoryEntries<T extends DeploymentHistorySummary>(
     .reverse();
 }
 
+export function filterDeploymentHistoryEntries<
+  T extends DeploymentHistorySummary & Pick<Deployment, "planSummary">
+>(
+  entries: readonly DeploymentHistoryEntry<T>[],
+  filter: DeploymentHistoryFilter
+): DeploymentHistoryEntry<T>[] {
+  if (filter === "all" || filter === "complete") {
+    return [...entries];
+  }
+
+  return entries.filter(
+    ({ deployment }) =>
+      deployment.planSummary !== null && getDeploymentPlanChangeCount(deployment.planSummary) === 0
+  );
+}
+
+export function getDeploymentHistoryMetrics<
+  T extends DeploymentHistorySummary & DeploymentHistoryMetricSource
+>(
+  entries: readonly DeploymentHistoryEntry<T>[]
+): {
+  readonly averageDurationMs: number | null;
+  readonly completedCount: number;
+  readonly totalChangeCount: number;
+  readonly totalCount: number;
+} {
+  const durations = entries
+    .map(({ deployment }) => getDeploymentDurationMs(deployment))
+    .filter((duration): duration is number => duration !== null);
+
+  return {
+    averageDurationMs:
+      durations.length === 0
+        ? null
+        : Math.round(durations.reduce((total, duration) => total + duration, 0) / durations.length),
+    completedCount: entries.length,
+    totalChangeCount: entries.reduce(
+      (total, { deployment }) => total + getDeploymentPlanChangeCount(deployment.planSummary),
+      0
+    ),
+    totalCount: entries.length
+  };
+}
+
+function getDeploymentPlanChangeCount(summary: Deployment["planSummary"]): number {
+  if (!summary) {
+    return 0;
+  }
+
+  return summary.createCount + summary.updateCount + summary.deleteCount + summary.replaceCount;
+}
+
 export function resolveDeploymentHistorySelection<T extends DeploymentHistorySummary>(input: {
   readonly currentSelectionId: string;
   readonly deployments: readonly T[];
@@ -59,8 +119,7 @@ export function resolveDeploymentHistorySelection<T extends DeploymentHistorySum
   const currentSelectionIsAvailable = entries.some(
     ({ deployment }) => deployment.id === input.currentSelectionId
   );
-  const hasNewSuccessfulDeployment =
-    latestDeploymentId !== input.previousLatestDeploymentId;
+  const hasNewSuccessfulDeployment = latestDeploymentId !== input.previousLatestDeploymentId;
 
   return {
     latestDeploymentId,
@@ -142,12 +201,9 @@ const DEPLOYMENT_FAILURE_DEVELOPER_CHECKS: Readonly<
     "CodeBuild project와 service role, Permissions Boundary, CodeConnections 상태 및 runtime fingerprint를 확인하세요.",
   destroy:
     "worker의 Terraform destroy stderr와 state, 삭제 차단 Resource 및 AWS 권한을 확인하세요.",
-  init:
-    "Terraform backend 설정, state S3 접근 권한, provider 초기화 로그와 lockfile을 확인하세요.",
-  mock_run:
-    "실행 점검 로그와 승인 snapshot, 대상 AWS 연결 및 worker 실행 환경을 확인하세요.",
-  plan:
-    "Terraform plan stderr, 변수 snapshot, state refresh 결과와 AWS 읽기 권한을 확인하세요.",
+  init: "Terraform backend 설정, state S3 접근 권한, provider 초기화 로그와 lockfile을 확인하세요.",
+  mock_run: "실행 점검 로그와 승인 snapshot, 대상 AWS 연결 및 worker 실행 환경을 확인하세요.",
+  plan: "Terraform plan stderr, 변수 snapshot, state refresh 결과와 AWS 읽기 권한을 확인하세요.",
   preflight:
     "사전 검증 CodeBuild 로그와 checkout commit SHA, Dockerfile·frontend build 명령 및 생성 Artifact manifest를 확인하세요.",
   rollback:
@@ -158,8 +214,19 @@ const DEPLOYMENT_FAILURE_DEVELOPER_CHECKS: Readonly<
 
 export function getDeploymentFailureDeveloperCheck(
   failureStage: Deployment["failureStage"],
-  nodeEnv: string | undefined = process.env.NODE_ENV
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+  errorSummary?: string | null | undefined
 ): string | null {
   if (nodeEnv !== "development" || !failureStage) return null;
+  if (
+    /Application output reconciliation failed|DEPLOYMENT_OUTPUT_URL_CONFLICT/iu.test(
+      errorSummary ?? ""
+    )
+  ) {
+    return "준비된 runtimeConfig의 ecrRepositoryName, clusterName, serviceName, containerName, containerPort와 Terraform Output을 비교하고, 새 관리 Resource가 승인된 Terraform state inventory에 포함됐는지 확인하세요.";
+  }
+  if (/deployment target fingerprint/iu.test(errorSummary ?? "")) {
+    return "project_deployment_targets의 runtimeConfig, runtimeTarget, deploymentTargetFingerprint를 AWS account·region 기준으로 다시 계산하고 같은 트랜잭션에서 저장했는지 확인하세요.";
+  }
   return DEPLOYMENT_FAILURE_DEVELOPER_CHECKS[failureStage];
 }

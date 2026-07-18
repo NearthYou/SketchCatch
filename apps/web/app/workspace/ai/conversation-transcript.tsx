@@ -1,18 +1,14 @@
 "use client";
 
-import { RotateCcw, Undo2, X } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
-import type {
-  ArchitectureDraftCandidateExclusion,
-  ArchitectureDraftProgressSnapshot
-} from "@sketchcatch/types";
+import { RotateCcw, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import type { AiStartMessage } from "./ai-start-model";
 import type { SelectedAssistantOption } from "./selected-option-model";
 import {
-  getProgressCandidateActions,
   getRetryRequestLabel,
   isSuggestionDisabled,
   shouldAutoFollowTranscript,
+  shouldReleaseForcedTranscriptFollow,
   type WorkspaceAiRequestState
 } from "./workspace-ai-presentation";
 import styles from "./workspace-ai.module.css";
@@ -21,59 +17,77 @@ export function ConversationTranscript({
   hasFinalPreview,
   isInteractionLocked,
   isSuggestionInputBlocked,
-  lastExclusion,
   messages,
   onCancelRequest,
-  onExcludeCandidate,
+  onOpenPreview,
   onRetry,
   onSuggestionSelect,
-  onUndoExclusion,
-  progressSnapshot,
   requestState,
   selections
 }: {
   readonly hasFinalPreview: boolean;
   readonly isInteractionLocked: boolean;
   readonly isSuggestionInputBlocked: boolean;
-  readonly lastExclusion: ArchitectureDraftCandidateExclusion | null;
   readonly messages: readonly AiStartMessage[];
   readonly onCancelRequest: () => void;
-  readonly onExcludeCandidate: (candidateId: string) => void;
+  readonly onOpenPreview: () => void;
   readonly onRetry: () => Promise<void>;
   readonly onSuggestionSelect: (message: AiStartMessage, suggestion: string) => void;
-  readonly onUndoExclusion: () => void;
-  readonly progressSnapshot: ArchitectureDraftProgressSnapshot | null;
   readonly requestState: WorkspaceAiRequestState;
   readonly selections: readonly SelectedAssistantOption[];
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const shouldFollowRef = useRef(true);
-  const candidateActions = useMemo(
-    () => getProgressCandidateActions(progressSnapshot),
-    [progressSnapshot]
-  );
+  const forcedFollowTargetMessageCountRef = useRef<number | null>(null);
   const retryRequestLabel = getRetryRequestLabel(requestState);
 
   useEffect(() => {
     const scrollElement = scrollRef.current;
-    if (!scrollElement || !shouldFollowRef.current) return;
+    const forcedFollowTargetMessageCount = forcedFollowTargetMessageCountRef.current;
+    const isForcedFollow = forcedFollowTargetMessageCount !== null;
+    if (!scrollElement || (!isForcedFollow && !shouldFollowRef.current)) return;
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     scrollElement.scrollTo({
-      behavior: reduceMotion ? "auto" : "smooth",
+      behavior: reduceMotion || isForcedFollow ? "auto" : "smooth",
       top: scrollElement.scrollHeight
     });
-  }, [candidateActions.length, hasFinalPreview, messages, requestState, selections.length]);
+
+    if (
+      isForcedFollow &&
+      (requestState === "error" ||
+        requestState === "cancelled" ||
+        (requestState === "idle" && messages.length >= forcedFollowTargetMessageCount))
+    ) {
+      forcedFollowTargetMessageCountRef.current = null;
+    }
+  }, [hasFinalPreview, messages, requestState, selections.length]);
 
   function handleScroll(): void {
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
 
-    shouldFollowRef.current = shouldAutoFollowTranscript({
+    const scrollPosition = {
       clientHeight: scrollElement.clientHeight,
       scrollHeight: scrollElement.scrollHeight,
       scrollTop: scrollElement.scrollTop
+    };
+    shouldFollowRef.current = shouldAutoFollowTranscript({
+      ...scrollPosition,
+      source: "scroll"
     });
+
+    if (shouldReleaseForcedTranscriptFollow(scrollPosition)) {
+      forcedFollowTargetMessageCountRef.current = null;
+    }
+  }
+
+  function handleSuggestionSelect(message: AiStartMessage, suggestion: string): void {
+    forcedFollowTargetMessageCountRef.current = messages.length + 2;
+    shouldFollowRef.current = shouldAutoFollowTranscript({
+      source: "assistant-option-selection"
+    });
+    onSuggestionSelect(message, suggestion);
   }
 
   return (
@@ -104,7 +118,7 @@ export function ConversationTranscript({
               </div>
 
               {message.role === "assistant" && message.suggestions?.length ? (
-                <div aria-label="Assistant 선택지" className={styles.suggestionList} role="group">
+                <div aria-label="답변 선택지" className={styles.suggestionList} role="group">
                   {message.suggestions.map((suggestion) => {
                     const selected = selectedForQuestion?.label === suggestion;
                     return (
@@ -118,7 +132,7 @@ export function ConversationTranscript({
                           isSuggestionInputBlocked
                         )}
                         key={suggestion}
-                        onClick={() => onSuggestionSelect(message, suggestion)}
+                        onClick={() => handleSuggestionSelect(message, suggestion)}
                         type="button"
                       >
                         <span>{suggestion}</span>
@@ -133,40 +147,6 @@ export function ConversationTranscript({
             </article>
           );
         })}
-
-        {candidateActions.length > 0 ? (
-          <section aria-labelledby="candidate-action-heading" className={styles.candidateActions}>
-            <div>
-              <h3 id="candidate-action-heading">추천 후보 제외</h3>
-            </div>
-            <ul>
-              {candidateActions.map((candidate) => (
-                <li key={candidate.candidateId}>
-                  <span>
-                    <strong>{candidate.label}</strong>
-                    <small>{candidate.resourceType}</small>
-                  </span>
-                  <button
-                    disabled={isInteractionLocked}
-                    onClick={() => onExcludeCandidate(candidate.candidateId)}
-                    type="button"
-                  >
-                    제외
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {lastExclusion ? (
-          <div className={styles.exclusionUndo} role="status">
-            <span>{lastExclusion.label} 제외됨</span>
-            <button disabled={isInteractionLocked} onClick={onUndoExclusion} type="button">
-              <Undo2 aria-hidden="true" size={14} /> 되돌리기
-            </button>
-          </div>
-        ) : null}
 
         {requestState === "loading" ? (
           <div className={styles.requestStatus} role="status">
@@ -191,8 +171,10 @@ export function ConversationTranscript({
 
         {hasFinalPreview ? (
           <div className={styles.previewArrival} role="status">
-            <span>최종 Preview 준비됨</span>
-            <a href="#final-architecture-preview">Preview로 이동</a>
+            <span>초안이 준비됐어요</span>
+            <button onClick={onOpenPreview} type="button">
+              미리보기 보기
+            </button>
           </div>
         ) : null}
       </div>

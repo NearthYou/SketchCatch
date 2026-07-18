@@ -130,6 +130,6 @@ test("repository selection waits for the server repository load before deciding 
   );
   assert.match(
     repositoryClientSource,
-    /hasGitHubAccountConnection &&\s*loadState === "idle" &&\s*\(!activeRepository/
+    /githubInstallationAccess\?\.status === "connected" &&\s*loadState === "idle" &&\s*\(!activeRepository/
   );
 });

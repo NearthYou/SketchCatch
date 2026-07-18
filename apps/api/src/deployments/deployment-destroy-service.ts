@@ -11,6 +11,7 @@ import {
   type AwsConnectionStsGateway
 } from "../aws-connections/aws-connection-test-service.js";
 import { assertDeploymentDestroyPreconditions } from "./deployment-approval-service.js";
+import { isDeploymentDestroySourceStatus } from "./deployment-destroy-eligibility.js";
 import { createAwsCodeBuildDirectApplicationReleaseGateway } from "./aws-codebuild-direct-application-release-gateway.js";
 import {
   rollbackDirectApplicationRelease,
@@ -148,7 +149,7 @@ export async function runDeploymentDestroy(
     const sourceStatus = input.startedFromStatus ?? deployment.status;
     const sourceFailureStage = input.startedFromFailureStage ?? deployment.failureStage;
 
-    if (!isDestroyRunnableStatus(sourceStatus, sourceFailureStage)) {
+    if (!isDeploymentDestroySourceStatus(sourceStatus)) {
       throw new DeploymentConflictError("Deployment cannot be destroyed in this state");
     }
 
@@ -709,19 +710,6 @@ function requireDirectApplicationReleaseRepository(
     saveCancelledRelease: repository.saveCancelledRelease.bind(repository),
     resetReleaseForRetry: repository.resetReleaseForRetry.bind(repository)
   };
-}
-
-function isDestroyRunnableStatus(
-  sourceStatus: DeploymentStatus,
-  sourceFailureStage: DeploymentFailureStage | null
-): boolean {
-  return (
-    sourceStatus === "SUCCESS" ||
-    (sourceStatus === "FAILED" &&
-      (sourceFailureStage === "plan" ||
-        sourceFailureStage === "apply" ||
-        sourceFailureStage === "destroy"))
-  );
 }
 
 async function requireDeploymentTerraformArtifact(

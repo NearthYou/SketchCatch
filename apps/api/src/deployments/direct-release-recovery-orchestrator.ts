@@ -24,9 +24,7 @@ import {
 } from "../releases/project-execution-lease-service.js";
 import { createPostgresTrustedReleaseRepository } from "../releases/trusted-release-step-repository.js";
 import type { DirectApplicationReleaseContext } from "./direct-application-release-service.js";
-import {
-  createPostgresDirectApplicationReleaseRepository
-} from "./direct-application-release-service.js";
+import { createPostgresDirectApplicationReleaseRepository } from "./direct-application-release-service.js";
 import {
   recoverInterruptedDirectApplicationRelease,
   type InterruptedDirectApplicationReleaseData
@@ -106,9 +104,7 @@ export async function recoverInterruptedDirectReleaseBatch(
     if (!isApplicationReleaseRecoveryDescriptor(descriptor)) continue;
     try {
       const data = await dependencies.store.load(descriptor);
-      const lease = await dependencies.leaseRepository.find(
-        data.context.deployment.projectId
-      );
+      const lease = await dependencies.leaseRepository.find(data.context.deployment.projectId);
       let codeBuildTerminalConfirmed = false;
       if (lease?.activeCodeBuildId) {
         if (input.stopActiveCodeBuild) {
@@ -155,10 +151,7 @@ export function createPostgresInterruptedDirectReleaseRecoveryStore(
         eq(applicationReleases.source, "direct"),
         eq(applicationReleases.runtimeTargetKind, "ecs_fargate"),
         or(
-          and(
-            eq(applicationReleases.status, "pending"),
-            eq(deployments.status, "RUNNING")
-          ),
+          and(eq(applicationReleases.status, "pending"), eq(deployments.status, "RUNNING")),
           and(
             eq(applicationReleases.status, "retrying"),
             eq(deployments.status, "PARTIALLY_FAILED")
@@ -236,7 +229,8 @@ export function createPostgresInterruptedDirectReleaseRecoveryStore(
       const baselineRelease = resolvePersistedEcsReleaseBaseline({
         baselineReleaseId: releaseRow.baselineReleaseId,
         baseline,
-        projectId: context.deployment.projectId
+        projectId: context.deployment.projectId,
+        deploymentTargetFingerprint: release.deploymentTargetFingerprint
       });
       return {
         context,
@@ -392,19 +386,23 @@ export function createInterruptedDirectApplicationReleaseRecovery(input: {
       inspectCodeBuild: inspectDirectCodeBuildExecution,
       stopCodeBuild: stopDirectCodeBuildExecution,
       recoverRelease: async (data, verification) => {
-        await recoverInterruptedDirectApplicationRelease(data, {
-          leaseRepository,
-          trustedRepository,
-          gateway: createAwsEcsFargateReleaseGateway(),
-          releaseRepository,
-          deploymentRepository,
-          cancellationRequested: recoveryInput.stopActiveCodeBuild === true,
-          ...verification
-        }, {
-          ...(recoveryInput.recoveryWorkerTaskArn !== undefined
-            ? { recoveryWorkerTaskArn: recoveryInput.recoveryWorkerTaskArn }
-            : {})
-        });
+        await recoverInterruptedDirectApplicationRelease(
+          data,
+          {
+            leaseRepository,
+            trustedRepository,
+            gateway: createAwsEcsFargateReleaseGateway(),
+            releaseRepository,
+            deploymentRepository,
+            cancellationRequested: recoveryInput.stopActiveCodeBuild === true,
+            ...verification
+          },
+          {
+            ...(recoveryInput.recoveryWorkerTaskArn !== undefined
+              ? { recoveryWorkerTaskArn: recoveryInput.recoveryWorkerTaskArn }
+              : {})
+          }
+        );
       },
       onRecoveryError: ({ deploymentId, error }) => {
         input.logger?.warn(
@@ -486,27 +484,28 @@ export async function recoverInterruptedDirectPreflightCancellation(input: {
   }
 
   const holderId = `recovery:direct:${input.deploymentId}:${crypto.randomUUID()}`;
-  const lease = interruptedLease?.status === "active"
-    ? await recoverVerifiedTerminalProjectExecutionLease(
-        {
-          projectId: interruptedLease.projectId,
-          expectedHolderId: interruptedLease.holderId,
-          expectedFencingVersion: interruptedLease.fencingVersion,
-          expectedActiveCodeBuildId: interruptedLease.activeCodeBuildId,
-          expectedActiveWorkerTaskArn: interruptedLease.activeWorkerTaskArn,
-          holderId,
-          source: "direct"
-        },
-        leaseRepository
-      )
-    : await acquireProjectExecutionLease(
-        {
-          projectId: context.deployment.projectId,
-          holderId,
-          source: "direct"
-        },
-        leaseRepository
-      );
+  const lease =
+    interruptedLease?.status === "active"
+      ? await recoverVerifiedTerminalProjectExecutionLease(
+          {
+            projectId: interruptedLease.projectId,
+            expectedHolderId: interruptedLease.holderId,
+            expectedFencingVersion: interruptedLease.fencingVersion,
+            expectedActiveCodeBuildId: interruptedLease.activeCodeBuildId,
+            expectedActiveWorkerTaskArn: interruptedLease.activeWorkerTaskArn,
+            holderId,
+            source: "direct"
+          },
+          leaseRepository
+        )
+      : await acquireProjectExecutionLease(
+          {
+            projectId: context.deployment.projectId,
+            holderId,
+            source: "direct"
+          },
+          leaseRepository
+        );
   const fence = {
     projectId: lease.projectId,
     holderId: lease.holderId,

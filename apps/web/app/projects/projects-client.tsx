@@ -15,7 +15,7 @@ import type {
   ProjectDeleteAction,
   ProjectDeletePreview
 } from "@sketchcatch/types";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Search } from "lucide-react";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { ApiProjectCard, getWorkspaceHref } from "../../components/dashboard/api-project-card";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -37,6 +37,9 @@ import {
 } from "../../features/projects/project-action-menu";
 import {
   getDestroyDeleteAcknowledgedWarningIds,
+  getProjectDeleteProgress,
+  type ProjectDeleteWorkflowStatus,
+  isDestroyPlanReadyForApproval,
   shouldShowProjectOnlyDeleteFallback
 } from "../../features/projects/project-delete-flow";
 import { filterProjectsByName } from "../../features/projects/project-search";
@@ -73,7 +76,7 @@ type DeleteDialogState =
       readonly preview: ProjectDeletePreview;
       readonly project: Project;
       readonly selectedAction?: ProjectDeleteAction | undefined;
-      readonly status: "ready" | "planning" | "approval" | "destroying" | "deleting";
+      readonly status: "ready" | "planning" | "approving" | "destroying" | "deleting";
     };
 type ProjectActionMenuState =
   | { readonly status: "closed" }
@@ -81,7 +84,7 @@ type ProjectActionMenuState =
   | { readonly preview: ProjectDeletePreview; readonly project: Project; readonly status: "ready" }
   | { readonly errorMessage: string; readonly project: Project; readonly status: "error" };
 
-export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }) {
+export function ProjectsClient() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const projectsQuery = useProjectsQuery();
@@ -89,9 +92,24 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
   const deploymentStatusByProjectId = projectsQuery.data?.deploymentStatusByProjectId ?? {};
   const [deploymentFilter, setDeploymentFilter] = useState<ProjectDeploymentFilter>("all");
   const [sortMode, setSortMode] = useState<ProjectSortMode>("recent_work");
+  const [searchQuery, setSearchQuery] = useState("");
   const [deleteErrorMessage, setDeleteErrorMessage] = useState("");
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({ status: "closed" });
+  const [deleteProgressClock, setDeleteProgressClock] = useState<{
+    readonly elapsedMs: number;
+    readonly status: ProjectDeleteWorkflowStatus | null;
+  }>({
+    elapsedMs: 0,
+    status: null
+  });
+  const deleteProgressStatus =
+    deleteDialog.status === "planning" ||
+    deleteDialog.status === "approving" ||
+    deleteDialog.status === "destroying" ||
+    deleteDialog.status === "deleting"
+      ? deleteDialog.status
+      : null;
   const [projectActionMenu, setProjectActionMenu] = useState<ProjectActionMenuState>({
     status: "closed"
   });
@@ -121,6 +139,24 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       isMountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (deleteProgressStatus === null) {
+      setDeleteProgressClock({ elapsedMs: 0, status: null });
+      return;
+    }
+
+    const startedAt = Date.now();
+    setDeleteProgressClock({ elapsedMs: 0, status: deleteProgressStatus });
+    const intervalId = window.setInterval(() => {
+      setDeleteProgressClock({
+        elapsedMs: Date.now() - startedAt,
+        status: deleteProgressStatus
+      });
+    }, 500);
+
+    return () => window.clearInterval(intervalId);
+  }, [deleteProgressStatus]);
 
   async function toggleProjectActionMenu(project: Project): Promise<void> {
     if (projectActionMenu.status !== "closed" && projectActionMenu.project.id === project.id) {
@@ -205,7 +241,9 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     }
   }
 
-  async function confirmProjectDelete(action: "delete_project" | "delete_project_only"): Promise<void> {
+  async function confirmProjectDelete(
+    action: "delete_project" | "delete_project_only"
+  ): Promise<void> {
     if (deleteDialog.status === "closed" || deleteDialog.status === "loading") {
       return;
     }
@@ -222,14 +260,11 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     });
 
     try {
-      const result = await deleteProject(project.id, action);
+      await deleteProject(project.id, action);
 
       removeProjectFromList(project.id);
       setDeleteDialog({ status: "closed" });
 
-      if (result.cleanup.failedObjectCount > 0) {
-        setDeleteErrorMessage(result.cleanup.message ?? "일부 SketchCatch 산출물 정리에 실패했습니다.");
-      }
     } catch (error) {
       setDeleteDialog({
         errorMessage: getApiErrorMessage(error, "프로젝트를 삭제하지 못했습니다."),
@@ -287,12 +322,11 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         return;
       }
 
-      setDeleteDialog({
+      await approveDestroyAndDelete({
         deployment,
         preview,
         project,
-        selectedAction,
-        status: "approval"
+        selectedAction
       });
     } catch (error) {
       if (!isMountedRef.current) {
@@ -310,19 +344,20 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     }
   }
 
-  async function approveDestroyAndDelete(): Promise<void> {
-    if (deleteDialog.status !== "approval" || !deleteDialog.deployment) {
-      return;
-    }
-
-    const { deployment, preview, project, selectedAction } = deleteDialog;
-
+  async function approveDestroyAndDelete(input: {
+    readonly deployment: Deployment;
+    readonly preview: ProjectDeletePreview;
+    readonly project: Project;
+    readonly selectedAction?: ProjectDeleteAction | undefined;
+  }): Promise<void> {
+    const { deployment, preview, project, selectedAction } = input;
+    let destroyCompleted = false;
     setDeleteDialog({
       deployment,
       preview,
       project,
       selectedAction,
-      status: "destroying"
+      status: "approving"
     });
 
     try {
@@ -330,6 +365,14 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         deployment.id,
         getDestroyDeleteAcknowledgedWarningIds(deployment)
       );
+      setDeleteDialog({
+        deployment,
+        preview,
+        project,
+        selectedAction,
+        status: "destroying"
+      });
+
       await runDeploymentDestroy(deployment.id);
       await waitForProjectDeployment({
         checkMounted: () => isMountedRef.current,
@@ -339,12 +382,20 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         projectId: project.id,
         timeoutMessage: "Destroy 완료 대기 시간이 초과되었습니다."
       });
+      destroyCompleted = true;
 
       if (!isMountedRef.current) {
         return;
       }
 
-      const result = await deleteProject(project.id, "delete_project");
+      setDeleteDialog({
+        deployment,
+        preview,
+        project,
+        selectedAction,
+        status: "deleting"
+      });
+      await deleteProject(project.id, "delete_project");
 
       if (!isMountedRef.current) {
         return;
@@ -353,21 +404,44 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       removeProjectFromList(project.id);
       setDeleteDialog({ status: "closed" });
 
-      if (result.cleanup.failedObjectCount > 0) {
-        setDeleteErrorMessage(result.cleanup.message ?? "일부 SketchCatch 산출물 정리에 실패했습니다.");
-      }
     } catch (error) {
       if (!isMountedRef.current) {
         return;
       }
 
+      const errorMessage = getApiErrorMessage(
+        error,
+        "\uB9AC\uC18C\uC2A4 \uD3EC\uD568 \uC0AD\uC81C\uB97C \uC644\uB8CC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4."
+      );
+
+      if (destroyCompleted) {
+        try {
+          const recoveryPreview = await getProjectDeletePreview(project.id);
+
+          if (!isMountedRef.current) {
+            return;
+          }
+
+          setDeleteDialog({
+            errorMessage,
+            preview: recoveryPreview,
+            project,
+            status: "ready"
+          });
+          return;
+        } catch {
+          setDeleteDialog({ status: "closed" });
+          setDeleteErrorMessage(errorMessage);
+          return;
+        }
+      }
       setDeleteDialog({
         deployment,
         errorMessage: getApiErrorMessage(error, "리소스 포함 삭제를 완료하지 못했습니다."),
         preview,
         project,
         selectedAction,
-        status: "approval"
+        status: "ready"
       });
     } finally {
       if (isMountedRef.current) {
@@ -379,6 +453,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
   function closeDeleteDialog(): void {
     if (
       deleteDialog.status === "planning" ||
+      deleteDialog.status === "approving" ||
       deleteDialog.status === "destroying" ||
       deleteDialog.status === "deleting"
     ) {
@@ -397,6 +472,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     const isBusy =
       deleteDialog.status === "loading" ||
       deleteDialog.status === "planning" ||
+      deleteDialog.status === "approving" ||
       deleteDialog.status === "destroying" ||
       deleteDialog.status === "deleting";
     const projectName = deleteDialog.project.name;
@@ -413,6 +489,12 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       deleteDialog.status !== "loading" &&
       deleteDialog.preview.availableActions.includes(action) &&
       (!selectedAction || selectedAction === action);
+    const deleteProgressElapsedMs =
+      deleteProgressClock.status === deleteProgressStatus ? deleteProgressClock.elapsedMs : 0;
+
+    const progress = deleteProgressStatus
+      ? getProjectDeleteProgress(deleteProgressStatus, deleteProgressElapsedMs)
+      : null;
 
     return (
       <div
@@ -444,6 +526,16 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
             <>
               <p className="projectDeleteDialogText">{deleteDialog.preview.message}</p>
 
+              {deleteDialog.status === "ready" && shouldShowDeleteAction("destroy_then_delete") ? (
+                <div className="projectDeleteDialogConfirmation" role="note">
+                  <strong>리소스를 포함해 정말 삭제할까요?</strong>
+                  <p>
+                    계속하면 Destroy Plan 생성과 승인, 리소스 Destroy, 프로젝트 정리를 자동으로
+                    진행합니다. 시작 후에는 취소할 수 없습니다.
+                  </p>
+                </div>
+              ) : null}
+
               {deleteDialog.preview.activeResourceCount > 0 ? (
                 <dl className="projectDeleteDialogFacts">
                   <div>
@@ -457,7 +549,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
                 </dl>
               ) : null}
 
-              {deleteDialog.status === "approval" && deleteDialog.deployment?.planSummary ? (
+              {deleteDialog.status === "approving" && deleteDialog.deployment?.planSummary ? (
                 <dl className="projectDeleteDialogFacts">
                   <div>
                     <dt>삭제</dt>
@@ -476,16 +568,23 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
                 </p>
               ) : null}
 
-              {deleteDialog.status === "planning" ? (
-                <p className="projectDeleteDialogText">Destroy Plan을 생성하는 중입니다.</p>
-              ) : null}
-
-              {deleteDialog.status === "destroying" ? (
-                <p className="projectDeleteDialogText">AWS 리소스를 삭제한 뒤 프로젝트 기록을 삭제하는 중입니다.</p>
-              ) : null}
-
-              {deleteDialog.status === "deleting" ? (
-                <p className="projectDeleteDialogText">프로젝트 기록을 삭제하는 중입니다.</p>
+              {progress ? (
+                <section aria-live="polite" className="projectDeleteDialogProgress">
+                  <header className="projectDeleteDialogProgressHeader">
+                    <strong>{progress.label}</strong>
+                    <span>{progress.percent}%</span>
+                  </header>
+                  <div
+                    aria-valuemax={100}
+                    aria-valuemin={0}
+                    aria-valuenow={progress.percent}
+                    className="projectDeleteDialogProgressTrack"
+                    role="progressbar"
+                  >
+                    <span style={{ width: `${progress.percent}%` }} />
+                  </div>
+                  <p>{progress.detail}</p>
+                </section>
               ) : null}
             </>
           )}
@@ -500,8 +599,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
               취소
             </button>
 
-            {deleteDialog.status !== "loading" &&
-            shouldShowDeleteAction("delete_project") ? (
+            {deleteDialog.status === "ready" && shouldShowDeleteAction("delete_project") ? (
               <button
                 className="dashboardDangerButton"
                 disabled={isBusy}
@@ -513,8 +611,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
               </button>
             ) : null}
 
-            {deleteDialog.status !== "loading" &&
-            shouldShowDeleteAction("delete_project_only") ? (
+            {deleteDialog.status === "ready" && shouldShowDeleteAction("delete_project_only") ? (
               <button
                 className="dashboardDangerButton"
                 disabled={isBusy}
@@ -538,9 +635,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
               </button>
             ) : null}
 
-            {deleteDialog.status !== "loading" &&
-            shouldShowDeleteAction("destroy_then_delete") &&
-            deleteDialog.status !== "approval" ? (
+            {deleteDialog.status === "ready" && shouldShowDeleteAction("destroy_then_delete") ? (
               <button
                 className="dashboardDangerButton"
                 disabled={isBusy}
@@ -548,18 +643,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
                 type="button"
               >
                 <DashboardIcon name="cloud" />
-                <span>리소스 포함 삭제</span>
-              </button>
-            ) : null}
-
-            {deleteDialog.status === "approval" ? (
-              <button
-                className="dashboardDangerButton"
-                onClick={() => void approveDestroyAndDelete()}
-                type="button"
-              >
-                <DashboardIcon name="check" />
-                <span>Destroy 승인</span>
+                <span>리소스 포함 삭제 시작</span>
               </button>
             ) : null}
           </footer>
@@ -568,9 +652,49 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     );
   }
 
+  const projectControls = (
+    <div className="projectListControls" aria-label="프로젝트 검색, 배포 여부 및 정렬">
+      <label className="dashboardSearchField">
+        <Search aria-hidden="true" size={17} />
+        <span className="dashboardVisuallyHidden">프로젝트 검색</span>
+        <input
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="프로젝트 검색"
+          type="search"
+          value={searchQuery}
+        />
+      </label>
+      <div className="settingsField projectDeploymentFilterField">
+        <span>배포 여부</span>
+        <SelectMenu
+          ariaLabel="프로젝트 배포 여부 필터 선택"
+          emptyLabel="필터 선택"
+          onChange={(value) => setDeploymentFilter(value as ProjectDeploymentFilter)}
+          options={PROJECT_DEPLOYMENT_FILTER_OPTIONS}
+          size="large"
+          tone="surface"
+          value={deploymentFilter}
+        />
+      </div>
+      <div className="settingsField projectSortField">
+        <span>정렬</span>
+        <SelectMenu
+          ariaLabel="프로젝트 정렬 선택"
+          emptyLabel="정렬 선택"
+          onChange={(value) => setSortMode(value as ProjectSortMode)}
+          options={PROJECT_SORT_OPTIONS}
+          size="large"
+          tone="surface"
+          value={sortMode}
+        />
+      </div>
+    </div>
+  );
+
   if (projectsQuery.isPending) {
     return (
       <section className="dashboardPanel" aria-label="프로젝트 목록 로딩">
+        {projectControls}
         <p className="workspaceStateText">프로젝트 목록을 불러오는 중입니다.</p>
       </section>
     );
@@ -579,6 +703,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
   if (projectsQuery.isError && !projectsQuery.data) {
     return (
       <section className="dashboardPanel" aria-label="프로젝트 목록 오류">
+        {projectControls}
         <p className="dashboardMessage" role="alert">
           {getApiErrorMessage(projectsQuery.error, "프로젝트 목록을 불러오지 못했습니다.")}
         </p>
@@ -591,32 +716,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
 
   return (
     <section className="dashboardPanel" aria-label="프로젝트 목록">
-      <div className="projectListControls" aria-label="프로젝트 정렬 및 필터">
-        <div className="settingsField projectSortField">
-          <span>정렬</span>
-          <SelectMenu
-            ariaLabel="프로젝트 정렬 선택"
-            emptyLabel="정렬 선택"
-            onChange={(value) => setSortMode(value as ProjectSortMode)}
-            options={PROJECT_SORT_OPTIONS}
-            size="large"
-            tone="surface"
-            value={sortMode}
-          />
-        </div>
-        <div className="settingsField projectDeploymentFilterField">
-          <span>배포 여부</span>
-          <SelectMenu
-            ariaLabel="프로젝트 배포 여부 필터 선택"
-            emptyLabel="필터 선택"
-            onChange={(value) => setDeploymentFilter(value as ProjectDeploymentFilter)}
-            options={PROJECT_DEPLOYMENT_FILTER_OPTIONS}
-            size="large"
-            tone="surface"
-            value={deploymentFilter}
-          />
-        </div>
-      </div>
+      {projectControls}
 
       {deleteErrorMessage ? (
         <p className="dashboardMessage" role="alert">
@@ -761,30 +861,30 @@ function ProjectCardActionMenu({
             <ProjectActionMenuStatus text={menuState.errorMessage} />
           ) : null}
 
-          {menuState.status === "ready"
-            ? getProjectActionMenuItems(menuState.preview).map((item) => {
-                if (!isProjectDeleteAction(item.kind)) {
-                  return (
-                    <ProjectActionMenuEditItem key={item.kind} onClose={onClose} project={project} />
-                  );
-                }
-
-                const deleteAction = item.kind;
-
+          {menuState.status === "ready" ? (
+            getProjectActionMenuItems(menuState.preview).map((item) => {
+              if (!isProjectDeleteAction(item.kind)) {
                 return (
-                  <ProjectActionMenuDeleteItem
-                    disabled={isDeleting || item.disabled}
-                    itemKind={deleteAction}
-                    key={deleteAction}
-                    label={item.label}
-                    onClick={() => onDeleteAction(menuState.preview, deleteAction)}
-                    title={item.disabled ? menuState.preview.message : undefined}
-                  />
+                  <ProjectActionMenuEditItem key={item.kind} onClose={onClose} project={project} />
                 );
-              })
-            : (
-                <ProjectActionMenuEditItem onClose={onClose} project={project} />
-              )}
+              }
+
+              const deleteAction = item.kind;
+
+              return (
+                <ProjectActionMenuDeleteItem
+                  disabled={isDeleting || item.disabled}
+                  itemKind={deleteAction}
+                  key={deleteAction}
+                  label={item.label}
+                  onClick={() => onDeleteAction(menuState.preview, deleteAction)}
+                  title={item.disabled ? menuState.preview.message : undefined}
+                />
+              );
+            })
+          ) : (
+            <ProjectActionMenuEditItem onClose={onClose} project={project} />
+          )}
         </div>
       ) : null}
     </div>
@@ -892,15 +992,6 @@ async function waitForProjectDeployment(input: {
   }
 
   throw new Error(input.timeoutMessage);
-}
-
-function isDestroyPlanReadyForApproval(deployment: Deployment): boolean {
-  return (
-    deployment.currentPlanArtifactId !== null &&
-    deployment.currentPlanOperation === "destroy" &&
-    deployment.isBlocked &&
-    deployment.blockedBy === "missing_approval"
-  );
 }
 
 function compareProjectsBySortMode(

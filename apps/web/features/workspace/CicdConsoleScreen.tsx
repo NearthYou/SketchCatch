@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type {
   Deployment,
@@ -13,8 +14,6 @@ import { copyTextToClipboard } from "../../lib/clipboard";
 import {
   applyGitCicdAwsRoleDiff,
   applyGitCicdRepositorySettings,
-  applyGitCicdRepositorySettingsWithGitHubOAuth,
-  createGitCicdGitHubOAuthStartUrl,
   createGitCicdHandoff,
   getProjectDeliveryProfile,
   getGitCicdMonitoringConfig,
@@ -58,6 +57,10 @@ import {
 } from "./cicd-deployment-command";
 import { getSafePipelineRunLinks } from "./deployment-output-links";
 import {
+  deriveGitHubInstallationAccessState,
+  type GitHubInstallationAccessState
+} from "./github-installation-access-state";
+import {
   canOpenGitCicdLiveObservation,
   canRetryGitCicdFrontend,
   getGitCicdLiveObservationSelection
@@ -85,9 +88,8 @@ export function CicdConsoleScreen({
 }) {
   const [activeView, setActiveView] = useState<CicdConsoleView>("activity");
   const [repository, setRepository] = useState<SourceRepository | null>(null);
-  const [hasGitHubAccountConnection, setHasGitHubAccountConnection] = useState<boolean | null>(
-    null
-  );
+  const [githubInstallationAccess, setGitHubInstallationAccess] =
+    useState<GitHubInstallationAccessState | null>(null);
   const [config, setConfig] = useState<GitCicdMonitoringConfig | null>(null);
   const [readiness, setReadiness] = useState<GitCicdReadinessSnapshot | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -307,24 +309,6 @@ export function CicdConsoleScreen({
     [refreshHandoffs]
   );
 
-  const startGitHubOAuth = useCallback(async (): Promise<void> => {
-    if (!currentHandoff) {
-      return;
-    }
-
-    setIsHandoffBusy(true);
-    setHandoffErrorMessage("");
-    try {
-      const result = await createGitCicdGitHubOAuthStartUrl(currentHandoff.id);
-      window.location.assign(result.authorizationUrl);
-    } catch (error) {
-      setHandoffErrorMessage(
-        getApiErrorMessage(error, "GitHub OAuth 승인 화면을 열지 못했습니다.")
-      );
-      setIsHandoffBusy(false);
-    }
-  }, [currentHandoff]);
-
   useEffect(() => {
     if (!isVisible) {
       return;
@@ -348,7 +332,7 @@ export function CicdConsoleScreen({
 
       async function loadConsoleData(): Promise<{
         readonly activeRepository: SourceRepository | null;
-        readonly githubAccountConnected: boolean;
+        readonly githubInstallationAccess: GitHubInstallationAccessState | null;
         readonly initialRuns: Awaited<ReturnType<typeof listGitCicdPipelineRuns>>;
         readonly loadedDeployments: Deployment[];
         readonly loadedHandoffs: GitCicdHandoff[];
@@ -363,9 +347,11 @@ export function CicdConsoleScreen({
         const activeRepository =
           repositories.find((item) => item.provider === "github" && item.status === "active") ??
           null;
-        let githubAccountConnected = true;
+        let githubInstallationAccess: GitHubInstallationAccessState | null = null;
         if (!activeRepository) {
-          githubAccountConnected = (await listGitHubAccountInstallations()).length > 0;
+          githubInstallationAccess = deriveGitHubInstallationAccessState(
+            await listGitHubAccountInstallations()
+          );
         }
         const monitoringConfig = activeRepository
           ? await getGitCicdMonitoringConfig(projectId, activeRepository.id)
@@ -373,7 +359,7 @@ export function CicdConsoleScreen({
 
         return {
           activeRepository,
-          githubAccountConnected,
+          githubInstallationAccess,
           initialRuns,
           loadedDeployments,
           loadedHandoffs,
@@ -406,14 +392,14 @@ export function CicdConsoleScreen({
       if (consoleResult.status === "fulfilled") {
         const {
           activeRepository,
-          githubAccountConnected,
+          githubInstallationAccess,
           initialRuns,
           loadedDeployments,
           loadedHandoffs,
           monitoringConfig
         } = consoleResult.value;
         setRepository(activeRepository);
-        setHasGitHubAccountConnection(githubAccountConnected);
+        setGitHubInstallationAccess(githubInstallationAccess);
         setConfig(monitoringConfig);
         setDeployments(loadedDeployments);
         setHandoffs(loadedHandoffs);
@@ -741,17 +727,17 @@ export function CicdConsoleScreen({
       </div>
 
       {config?.validationStatus === "required" ? (
-        <a className={styles.cicdRequiredState} href={projectSettingsHref}>
+        <Link className={styles.cicdRequiredState} href={projectSettingsHref}>
           프로젝트 설정에서 CI/CD branch와 경로를 확인하세요.
-        </a>
+        </Link>
       ) : null}
       {permissionFailure ? (
         <section className={styles.deploymentStageAlert} role="alert">
           <strong>GitHub 권한을 확인해 주세요.</strong>
           <p>{screenErrorMessage}</p>
-          <a className={styles.deploymentPrimaryButton} href={githubAccountSettingsHref}>
+          <Link className={styles.deploymentPrimaryButton} href={githubAccountSettingsHref}>
             GitHub App 설정 열기
-          </a>
+          </Link>
           <button
             className={styles.deploymentSecondaryButton}
             onClick={requestReadinessReload}
@@ -765,18 +751,27 @@ export function CicdConsoleScreen({
           {screenErrorMessage}
         </p>
       ) : null}
-      {!repository && hasGitHubAccountConnection === false ? (
+      {!repository &&
+      (githubInstallationAccess?.status === "server_not_configured" ||
+        githubInstallationAccess?.status === "connection_setup_not_configured") ? (
+        <section className={handoffStyles.notice} role="status">
+          <span>
+            GitHub App 서버 설정이 필요합니다. 서버 설정이 완료된 뒤 Repository 연결을 다시
+            확인해 주세요.
+          </span>
+        </section>
+      ) : !repository && githubInstallationAccess?.status === "connection_required" ? (
         <section className={handoffStyles.notice} role="status">
           <span>
             GitHub App 연결이 필요합니다. 현재 로그인 방식과 관계없이 GitHub App을 연결한 뒤
             이 프로젝트의 저장소를 선택할 수 있습니다.
           </span>
-          <a href={githubAccountSettingsHref}>GitHub App 설정 열기</a>
+          <Link href={githubAccountSettingsHref}>GitHub App 설정 열기</Link>
         </section>
       ) : !repository ? (
         <section className={handoffStyles.notice} role="status">
           <span>이 프로젝트에서 사용할 Source Repository를 연결해 주세요.</span>
-          <a href={repositoryHref}>Repository 연결</a>
+          <Link href={repositoryHref}>Repository 연결</Link>
         </section>
       ) : null}
 
@@ -795,7 +790,11 @@ export function CicdConsoleScreen({
           설치합니다. PR merge만으로 최초 앱 배포를 시작하지 않습니다.
         </p>
 
-        <div className={handoffStyles.readiness} aria-label="CI/CD PR 준비 상태">
+        <div
+          className={handoffStyles.readiness}
+          id="cicd-pr-readiness"
+          aria-label="CI/CD PR 준비 상태"
+        >
           <div className={handoffStyles.readinessHeader}>
             <div>
               <strong>배포 PR 준비</strong>
@@ -824,6 +823,10 @@ export function CicdConsoleScreen({
                 상태 새로고침
               </button>
             </div>
+          ) : readiness?.ready ? (
+            <p className={handoffStyles.readinessComplete} role="status">
+              모든 필수 항목 완료
+            </p>
           ) : (
             <ul className={handoffStyles.readinessList}>
               {readinessItems.map((item) => (
@@ -857,9 +860,9 @@ export function CicdConsoleScreen({
                       {item.actionLabel}
                     </button>
                   ) : !item.ready && item.href ? (
-                    <a className={styles.deploymentSecondaryButton} href={item.href}>
+                    <Link className={styles.deploymentSecondaryButton} href={item.href}>
                       {item.actionLabel}
-                    </a>
+                    </Link>
                   ) : null}
                 </li>
               ))}
@@ -990,30 +993,6 @@ export function CicdConsoleScreen({
                 >
                   Repository 설정 적용
                 </button>
-              ) : null}
-              {currentHandoff.githubOAuthRequired ? (
-                <>
-                  <button
-                    className={styles.deploymentSecondaryButton}
-                    disabled={isHandoffBusy}
-                    onClick={() => void startGitHubOAuth()}
-                    type="button"
-                  >
-                    GitHub OAuth 승인
-                  </button>
-                  <button
-                    className={styles.deploymentSecondaryButton}
-                    disabled={isHandoffBusy}
-                    onClick={() =>
-                      void runHandoffAction(() =>
-                        applyGitCicdRepositorySettingsWithGitHubOAuth(currentHandoff.id)
-                      )
-                    }
-                    type="button"
-                  >
-                    승인 후 Repository 설정 재적용
-                  </button>
-                </>
               ) : null}
               {currentHandoff.awsRoleDiff && !currentHandoff.awsRoleDiff.applied ? (
                 <button

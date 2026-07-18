@@ -44,10 +44,25 @@ const COST_USAGE_RANGE_OPTIONS: readonly SelectMenuOption[] = [
   { label: "이번 달", value: "month_to_date" }
 ];
 
-export function CostUsagePanel() {
-  const [selectedConnectionId, setSelectedConnectionId] = useState("");
-  const [selectedProjectKey, setSelectedProjectKey] = useState(COST_USAGE_ALL_PROJECTS_KEY);
-  const [range, setRange] = useState<CostUsageAnalysisRange>("30d");
+export function CostUsagePanel({
+  onConnectionChange,
+  onConnectionNormalize,
+  onProjectChange,
+  onProjectNormalize,
+  onRangeChange,
+  range,
+  selectedConnectionId,
+  selectedProjectKey
+}: {
+  readonly onConnectionChange: (connectionId: string) => void;
+  readonly onConnectionNormalize: (connectionId: string) => void;
+  readonly onProjectChange: (projectKey: string) => void;
+  readonly onProjectNormalize: (projectKey: string) => void;
+  readonly onRangeChange: (range: CostUsageAnalysisRange) => void;
+  readonly range: CostUsageAnalysisRange;
+  readonly selectedConnectionId: string;
+  readonly selectedProjectKey: string;
+}) {
   const connectionsQuery = useAwsConnectionsQuery();
   const connections = useMemo(
     () => getVerifiedCostUsageAwsConnections(connectionsQuery.data ?? []),
@@ -161,10 +176,31 @@ export function CostUsagePanel() {
   );
 
   useEffect(() => {
-    if (data) {
-      setSelectedProjectKey((current) => normalizeCostUsageProjectKey(data.projectCosts, current));
+    if (
+      connectionsQuery.isSuccess &&
+      effectiveConnectionId !== selectedConnectionId
+    ) {
+      onConnectionNormalize(effectiveConnectionId);
     }
-  }, [data]);
+  }, [
+    connectionsQuery.isSuccess,
+    effectiveConnectionId,
+    onConnectionNormalize,
+    selectedConnectionId
+  ]);
+
+  useEffect(() => {
+    if (data) {
+      const normalizedProjectKey = normalizeCostUsageProjectKey(
+        data.projectCosts,
+        selectedProjectKey
+      );
+
+      if (normalizedProjectKey !== selectedProjectKey) {
+        onProjectNormalize(normalizedProjectKey);
+      }
+    }
+  }, [data, onProjectNormalize, selectedProjectKey]);
 
   if (queryError && !data) {
     return <ProductState action={<button onClick={() => void refetchUsage()} type="button">다시 시도</button>} description={queryError instanceof Error ? queryError.message : "실제 사용량을 불러오지 못했습니다."} kind="error" title="실제 사용량을 불러오지 못했습니다" />;
@@ -202,7 +238,7 @@ export function CostUsagePanel() {
             <SelectMenu
               ariaLabel="실제 사용량 배포 프로젝트 선택"
               emptyLabel="배포 프로젝트 선택"
-              onChange={setSelectedProjectKey}
+              onChange={onProjectChange}
               options={projectSelectOptions}
               size="large"
               tone="surface"
@@ -215,7 +251,7 @@ export function CostUsagePanel() {
               ariaLabel="실제 사용량 AWS 연결 선택"
               emptyLabel="AWS 연결 선택"
               onChange={(id) => {
-                setSelectedConnectionId(id);
+                onConnectionChange(id);
               }}
               options={connectionSelectOptions}
               size="large"
@@ -230,7 +266,7 @@ export function CostUsagePanel() {
               emptyLabel="기간 선택"
               onChange={(value) => {
                 const nextRange = value as CostUsageAnalysisRange;
-                setRange(nextRange);
+                onRangeChange(nextRange);
               }}
               options={COST_USAGE_RANGE_OPTIONS}
               size="large"

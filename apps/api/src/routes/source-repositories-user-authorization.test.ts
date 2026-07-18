@@ -47,6 +47,9 @@ test("GitHub user authorization callback completes without a bearer token", asyn
 
   let connectedUserId: string | null = null;
   const repository = createRepository({
+    async listActiveGitHubInstallationConnections() {
+      return [];
+    },
     async connectGitHubInstallation(input: {
       userId: string;
       installation: GitHubAppInstallation;

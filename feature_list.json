@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-17",
+  "lastUpdated": "2026-07-18",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -349,16 +349,16 @@
         "Direct Deployment UI가 정확히 세 단계와 summary-first 운영 정보를 표시한다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-15",
+        "lastVerified": "2026-07-18",
         "commands": [
-          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/direct-application-release-output-url.test.ts src/deployments/ecs-fargate-output-reconciliation.test.ts src/deployments/deployment-apply-service.test.ts",
-          "pnpm --filter @sketchcatch/api exec tsx --test src/aws-connections/aws-connection-service.test.ts",
+          "DEPLOYMENT_WORKER_MODE=in_process pnpm --dir apps/api exec tsx --test src/build-environments/project-build-environment-service.test.ts \"src/deployments/**/*.test.ts\" \"src/git-cicd/**/*.test.ts\" src/routes/deployments.test.ts src/routes/git-cicd-handoffs.test.ts src/routes/git-cicd-infrastructure-runs.test.ts src/routes/git-cicd-readiness.test.ts src/routes/git-cicd-release-runs.test.ts",
+          "pnpm --dir apps/web exec node --import ./test-css-register.mjs --import tsx --test features/workspace/deployment-actions.test.ts features/workspace/deployment-preparation-error.test.ts features/workspace/deployment-presentation.test.ts features/workspace/deployment-three-stage-flow.test.ts",
           "pnpm lint",
           "pnpm typecheck",
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "Focused Direct deployment contracts passed 17/17 and AWS connection policy contracts passed 3/3. Full-stack ECS preparation now permits a pending artifact before the URL exists, then saves Terraform results, reconciles a safe api_base_url into the target, releases the application, and only then marks success. The generated connection Role permits the confirmed project and build names within the same account and region instead of requiring a sketchcatch-* prefix. Reconciliation failure preserves Terraform evidence and skips release. Harness, lint, typecheck, and build passed; no cloud mutation was performed."
+        "notes": "The CI deployment matrix passed 589/589 checks: 523 API deployment/GitOps/build-target/route transitions and 66 Web actions/presentation transitions. Direct review now starts one Plan worker instead of racing a separate init prewarm, and repeat Init/Plan/Apply/Destroy/Frontend retry requests join the matching durable job while different operations remain blocked. Terraform-managed Task Definition, IAM role, ALB/Target Group, S3, CloudFront, and derived URL replacements are accepted only after approved state inventory verification; stable prepared ECR, cluster, service, container, and port coordinates remain fail-closed. Full-stack target and pending ApplicationRelease metadata reconcile atomically, including target-only partial-write recovery and legacy metadata upgrade. Direct and GitOps rollback baselines must match the current deployment target fingerprint. Typecheck and focused CI-equivalent checks passed; no cloud mutation was performed."
       },
       "notes": "Implemented in issue #372 on branch feature/sw/372-direct-deploy-three-stage. No cloud mutation was performed."
     },
@@ -874,10 +874,13 @@
         "모든 deployable ResourceDefinition이 runtime convergence 적용 여부를 명시하고 지원 adapter 10종이 누락 없이 coverage test에 고정된다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-17",
+        "lastVerified": "2026-07-18",
         "commands": [
           "pnpm --filter @sketchcatch/types exec tsx --test src/runtime-convergence.test.ts src/resource-runtime-convergence-coverage.test.ts src/resource-definitions.test.ts src/project-release-ledger-contract.test.ts",
           "pnpm --filter @sketchcatch/api exec tsx --test src/runtime-convergence/runtime-convergence-contract.test.ts src/runtime-convergence/runtime-convergence-service.test.ts src/deployments/public-https-health-probe.test.ts src/deployments/aws-direct-runtime-inspector.test.ts src/deployments/direct-runtime-convergence.test.ts src/git-cicd/git-cicd-runtime-convergence-workflows.test.ts src/git-cicd/gitops-runtime-convergence.test.ts src/git-cicd/git-cicd-handoff-runtime-config.test.ts src/git-cicd/github-actions-release-evidence.test.ts src/git-cicd/gitops-release-reconciler.test.ts src/releases/project-release-ledger-runtime-target.test.ts src/db/schema-contract.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/current-repository-analysis.test.ts src/git-cicd/git-cicd-handoff-runtime-config.test.ts src/git-cicd/git-cicd-readiness-service.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test --test-reporter=dot \"src/git-cicd/**/*.test.ts\" src/source-repositories/current-repository-analysis.test.ts src/routes/git-cicd-handoffs.test.ts src/routes/git-cicd-infrastructure-runs.test.ts src/routes/git-cicd-readiness.test.ts src/routes/git-cicd-release-runs.test.ts",
+          "read-only live Project validation through createPostgresGitCicdHandoffRepository and assertGitOpsTarget",
           "createGitCicdAutomationFiles generated workflow syntax validation: Git Bash bash -n (45 scripts) and Python compile (10 heredocs)",
           "pnpm harness:check",
           "pnpm migration:compatibility:check",
@@ -888,7 +891,7 @@
           "pnpm build",
           "git diff --check"
         ],
-        "notes": "Focused runtime/resource/API coverage passes 79/79, including provider/account/region, pre-provider target, ECS capacity/status, Lambda health, rollback, handoff consistency, malformed URL, and provider revision metadata regressions. Generated Bash/Python syntax passes 45/10. Harness, migration compatibility, lint, typecheck, build, and diff checks pass. Root pnpm test remains non-green only on the same three pre-existing three-tier Template assertions (types 40/43); the full API suite passes 710/713 with only the three pre-existing Windows symlink EPERM setup failures."
+        "notes": "Focused runtime/resource/API coverage passes 79/79, including provider/account/region, pre-provider target, ECS capacity/status, Lambda health, rollback, handoff consistency, malformed URL, and provider revision metadata regressions. GitOps handoff and readiness now consume the linked RepositoryAnalysisRecord instead of silently discarding it in favor of nullable legacy SourceRepository analysis fields; canonical record/payload revision drift remains fail-closed. The live project read-only check resolves the current 40-character revision and apps/api/Dockerfile and passes assertGitOpsTarget. Generated Bash/Python syntax passes 45/10. Git/CI/CD focused tests, Direct route tests, Web deployment tests, harness, lint, typecheck, build, and diff checks pass."
       },
       "notes": "Migration 0046_runtime_convergence.sql and apps/api/drizzle/meta/_journal.json are changed after merged migration 0045. No secret, real credential, live AWS/cloud mutation, Terraform apply/destroy, user artifact upload, or Git handoff was executed."
     },
@@ -922,6 +925,39 @@
         "notes": "ProjectDraft focused API tests pass 32/32, focused Workspace tests pass 37/37, and AI/Repository entrypoint revision contract tests pass 2/2. Lint, source typecheck, the initial full build, harness, and diff checks pass. Review follow-up extracted the API save service, blocked legacy IndexedDB auto-save, removed stale Terraform files, preserved conflict status, separated each tab's local recovery key across tabs, refreshes, and duplicated tabs, migrated the legacy shared recovery row, and preserved every dirty local recovery draft behind an accessible local-or-server choice without client/server clock assumptions. Server choice now replaces the mounted Terraform editor without marking the restored server state dirty. A real Chromium three-tab flow passed with first save 200/revision 1, stale save 409 plus conflict dialog, server-latest browser refresh, conflict reload, and stable per-tab recovery keys. The current Webpack build compiles but its generated type check is blocked by pre-existing invalid helper exports in the architecture-draft and architecture-patch-preview Next route files. Full pnpm test was not run outside the sandbox because it includes sandbox E2E and Terraform tests; test:core was stopped after 11 minutes without runner termination and showed only unrelated existing failures in API CORS/error/schema/release-candidate tests."
       },
       "notes": "No DB schema or Drizzle migration changed. No secret, real credential, live cloud mutation, Terraform apply/destroy, deployment, or Git/CI/CD handoff was executed."
+    },
+    {
+      "id": "SITEWIDE-UX-467",
+      "priority": 2,
+      "area": "web-ux",
+      "title": "Site-wide navigation continuity and workspace panel recovery",
+      "user_visible_behavior": "내부 화면 이동과 인증 재검증 중 기존 UI를 유지하고, Workspace와 비용 관리 화면의 사용자 상태를 복원하며, 패널을 화면 가장자리 핸들로 쉽게 닫고 다시 열 수 있다.",
+      "status": "passing",
+      "verification": [
+        "내부 링크와 알림 이동은 전체 문서 새로고침 없이 클라이언트 탐색을 사용한다.",
+        "인증 백그라운드 재검증과 Workspace 로딩 중 기존 레이아웃이 유지된다.",
+        "동일한 Diagram, viewport, Terraform 파일 변경은 dirty 상태를 만들지 않는다.",
+        "프로젝트 썸네일과 비용 관리 URL 상태는 재진입과 뒤로 가기에서 복원된다.",
+        "Workspace 패널 너비와 열림 상태가 저장되고 viewer와 반응형 자동 접힘은 사용자 설정을 덮어쓰지 않는다.",
+        "좌우 패널 가장자리 핸들은 키보드와 스크린리더로 접근 가능하며 패널 너비를 따라 이동한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-18",
+        "commands": [
+          "per-commit focused Web contract and state tests for commits 1-26",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts",
+          "pnpm --filter @sketchcatch/web test",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts features/diagram-editor/diagram-editor-viewer-policy.test.ts features/diagram-editor/workspace-panel-preferences.test.ts",
+          "authenticated in-app Browser smoke check for Workspace panel edge handles",
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "All 26 planned implementation commits were verified before commit. Follow-ups remove the redundant top-bar panel toggles and keep manual Fit View's automatic viewport move out of ProjectDraft dirty state while preserving accessible edge handles, panel preferences, and direct user viewport persistence. The focused dirty and cost regressions pass 77/77; harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 786/790, with four unrelated existing generated Architecture Board artifact line-ending and Resource catalog contract failures. Signed-in localhost QA confirmed cost tab, period, users, usage range, connection, direct URL entry, and browser history restoration."
+      },
+      "notes": "No DB schema, Drizzle migration, cloud mutation, deployment, or Git/CI/CD handoff was performed."
     }
   ]
 }

@@ -24,6 +24,8 @@ export const queryKeys = {
     [...userRoot(userId), "deployments", deploymentId, "live-observation", "outputs"] as const,
   liveObservationArchitecture: (userId: string, deploymentId: string) =>
     [...userRoot(userId), "deployments", deploymentId, "live-observation", "architecture"] as const,
+  projectThumbnail: (userId: string, projectId: string) =>
+    [...userRoot(userId), "projects", projectId, "thumbnail"] as const,
   projects: (userId: string) => [...userRoot(userId), "projects", "list"] as const,
   user: (userId: string) => userRoot(userId)
 } as const;

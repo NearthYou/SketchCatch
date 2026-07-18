@@ -38,6 +38,7 @@ export type { CreateLlmExplanation, LlmExplanationInput } from "./aiLlmExplanati
 
 const DEFAULT_OPENAI_MODEL = "gpt-5.5";
 const DEFAULT_BEDROCK_MODEL_ID = "anthropic.claude-3-5-haiku-20241022-v1:0";
+const DEFAULT_AMAZON_Q_REGION = "ap-southeast-2";
 const OPENAI_TIMEOUT_MS = 10_000;
 const OPENAI_MAX_RETRIES = 0;
 const DEFAULT_AI_DAILY_CALL_LIMIT = 50;
@@ -310,7 +311,7 @@ export function resolveAiProviderRegions(env: NodeJS.ProcessEnv): AiProviderRegi
 
   return {
     bedrockRegion: defaultRegion,
-    amazonQRegion: readRegionEnv(env.AMAZON_Q_REGION) ?? defaultRegion,
+    amazonQRegion: readRegionEnv(env.AMAZON_Q_REGION) ?? DEFAULT_AMAZON_Q_REGION,
     transcribeRegion: defaultRegion
   };
 }
