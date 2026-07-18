@@ -1,5 +1,13 @@
 # Agent Progress
 
+## 2026-07-18 - Lock submitted AI chat choices
+
+- Locked each chat question synchronously after its option is submitted, preventing rapid duplicate clicks before React rerenders.
+- Kept the selected option fully visible with a check-marked selected state while disabling every option for the answered question.
+- Added accepted-answer receipts that distinguish selected answers from natural-language answers and show the exact question-to-requirement mapping.
+- Focused Workspace AI and Workbench contract regressions pass 43/43; workspace lint, typecheck, and build pass.
+- The full Web suite still has unrelated generated knowledge artifact and resource catalog drift failures.
+
 ## 2026-07-18 - Validate natural-language AI clarification answers
 
 - Added structured clarification answers keyed by stable question IDs across both Workspace AI chat surfaces and the API contract.

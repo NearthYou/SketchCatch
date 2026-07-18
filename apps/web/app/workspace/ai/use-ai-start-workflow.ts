@@ -34,6 +34,7 @@ import {
   type ArchitectureDraftFollowUpSession
 } from "../../../features/workspace/workspace-ai-draft-follow-up";
 import {
+  createArchitectureDraftClarificationAnswerReceipt,
   createArchitectureDraftClarificationMessage,
   withArchitectureDraftClarificationAnswer
 } from "../../../features/workspace/workspace-ai-draft-clarification";
@@ -69,6 +70,10 @@ import { getAiStartDraftTransport } from "./ai-start-request-policy";
 type PendingDraftClarification = {
   readonly clarification: ArchitectureDraftClarification;
   readonly request: CreateArchitectureDraftRequest;
+};
+type SubmittedDraftClarificationAnswer = {
+  readonly answer: string;
+  readonly clarification: ArchitectureDraftClarification;
 };
 
 type PendingPatchClarification = {
@@ -236,7 +241,10 @@ export function useAiStartWorkflow({
         prompt
       );
       setDraftClarification(null);
-      await requestDraft(nextRequest);
+      await requestDraft(nextRequest, {
+        answer: prompt,
+        clarification: draftClarification.clarification
+      });
       return;
     }
 
@@ -272,7 +280,10 @@ export function useAiStartWorkflow({
     }
   }
 
-  async function requestDraft(request: CreateArchitectureDraftRequest): Promise<void> {
+  async function requestDraft(
+    request: CreateArchitectureDraftRequest,
+    submittedAnswer?: SubmittedDraftClarificationAnswer
+  ): Promise<void> {
     beginRequest();
 
     if (getAiStartDraftTransport(existingProjectId) === "json") {
@@ -285,6 +296,7 @@ export function useAiStartWorkflow({
         if (!requestRegistryRef.current.isActive("draft", controller)) {
           return;
         }
+        appendDraftClarificationAnswerReceipt(submittedAnswer, response);
         handleDraftResponse(request, response);
       } catch (error) {
         if (
@@ -325,6 +337,7 @@ export function useAiStartWorkflow({
         return;
       }
 
+      appendDraftClarificationAnswerReceipt(submittedAnswer, response);
       handleDraftResponse(progressRequest.request, response);
       draftProgressCoordinatorRef.current.complete(progressRequest);
     } catch (error) {
@@ -335,6 +348,22 @@ export function useAiStartWorkflow({
 
       publishDraftProgressState(interrupted);
       failRequest(getApiErrorMessage(error, "Architecture Draft를 만들지 못했습니다."));
+    }
+  }
+
+  function appendDraftClarificationAnswerReceipt(
+    submittedAnswer: SubmittedDraftClarificationAnswer | undefined,
+    response: CreateArchitectureDraftResponse
+  ): void {
+    if (submittedAnswer === undefined) return;
+
+    const receipt = createArchitectureDraftClarificationAnswerReceipt(
+      submittedAnswer.clarification,
+      submittedAnswer.answer,
+      response
+    );
+    if (receipt !== null) {
+      appendAssistantMessage("status", receipt);
     }
   }
 

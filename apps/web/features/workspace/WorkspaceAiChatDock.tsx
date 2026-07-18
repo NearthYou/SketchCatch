@@ -62,6 +62,7 @@ import {
   type ArchitectureDraftFollowUpSession
 } from "./workspace-ai-draft-follow-up";
 import {
+  createArchitectureDraftClarificationAnswerReceipt,
   createArchitectureDraftClarificationMessage,
   withArchitectureDraftClarificationAnswer
 } from "./workspace-ai-draft-clarification";
@@ -100,6 +101,10 @@ import {
   isWorkspaceAiChatAbortError,
   WorkspaceAiChatRequestRegistry
 } from "./workspace-ai-chat-request";
+import {
+  getWorkspaceAiChatSuggestionPresentation,
+  WorkspaceAiChatSuggestionSubmissionRegistry
+} from "./workspace-ai-chat-suggestion-submission";
 import { createWorkspaceAiChatStorageKey } from "./workspace-ai-chat-storage";
 import { WorkspaceAiChatLauncher } from "./WorkspaceAiChatLauncher";
 import { WorkspaceAiWorkbench } from "./WorkspaceAiWorkbench";
@@ -150,6 +155,10 @@ type WorkspaceAiChatSuggestionSelection = {
 
 type PendingArchitectureDraftClarification = {
   readonly request: CreateArchitectureDraftRequest;
+  readonly clarification: ArchitectureDraftClarification;
+};
+type SubmittedArchitectureDraftClarificationAnswer = {
+  readonly answer: string;
   readonly clarification: ArchitectureDraftClarification;
 };
 
@@ -359,6 +368,7 @@ export function WorkspaceAiChatDock({
   const pendingTerraformFixApplyRef = useRef<PendingTerraformFixApply | null>(null);
   const latestTerraformSafeFixResultRequestIdRef = useRef<number | null>(null);
   const requestRegistryRef = useRef(new WorkspaceAiChatRequestRegistry());
+  const suggestionSubmissionRegistryRef = useRef(new WorkspaceAiChatSuggestionSubmissionRegistry());
   terraformAiContextRef.current = terraformAiContext;
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(context.diagram),
@@ -678,6 +688,7 @@ export function WorkspaceAiChatDock({
 
   useEffect(() => {
     requestRegistryRef.current.cancelAll();
+    suggestionSubmissionRegistryRef.current.clear();
     setMessages(readStoredChatMessages(projectId));
     setActiveChatTab(readStoredActiveChatScope(projectId));
     setComposerStates(createWorkspaceAiChatComposerStates());
@@ -1325,6 +1336,7 @@ export function WorkspaceAiChatDock({
 
   function clearActiveChatHistory(): void {
     requestRegistryRef.current.cancel(activeChatTab);
+    suggestionSubmissionRegistryRef.current.clear();
     const activeMessageIds = new Set(
       messages
         .filter((message) => getChatMessageScope(message) === activeChatTab)
@@ -1384,6 +1396,13 @@ export function WorkspaceAiChatDock({
     const trimmedPrompt = value.trim();
 
     if (!activeScopeDefinition.inputAvailable || trimmedPrompt.length === 0 || isChatBusy) {
+      return;
+    }
+
+    if (
+      suggestionSelection !== undefined &&
+      !suggestionSubmissionRegistryRef.current.claim(suggestionSelection.messageId)
+    ) {
       return;
     }
 
@@ -1562,7 +1581,10 @@ export function WorkspaceAiChatDock({
     );
 
     setDraftClarification(null);
-    await createDraftFromRequest(nextRequest);
+    await createDraftFromRequest(nextRequest, {
+      answer: trimmedPrompt,
+      clarification: draftClarification.clarification
+    });
   }
 
   async function createPatchPreviewFromPrompt(
@@ -1713,7 +1735,8 @@ export function WorkspaceAiChatDock({
   }
 
   async function createDraftFromRequest(
-    draftRequest: CreateArchitectureDraftRequest
+    draftRequest: CreateArchitectureDraftRequest,
+    submittedAnswer?: SubmittedArchitectureDraftClarificationAnswer
   ): Promise<void> {
     const prompt = draftRequest.prompt.trim();
 
@@ -1767,6 +1790,17 @@ export function WorkspaceAiChatDock({
 
       if (!requestRegistryRef.current.isActive("draft", controller)) {
         return;
+      }
+
+      if (submittedAnswer !== undefined) {
+        const receipt = createArchitectureDraftClarificationAnswerReceipt(
+          submittedAnswer.clarification,
+          submittedAnswer.answer,
+          result
+        );
+        if (receipt !== null) {
+          appendAssistantMessage("status", receipt);
+        }
       }
 
       if (isArchitectureDraftClarification(result)) {
@@ -2259,16 +2293,20 @@ export function WorkspaceAiChatDock({
               <div className={styles.choiceGroup} aria-label="추천 답안">
                 {message.suggestions.map((suggestion) => {
                   const isSelected = selectedSuggestions.includes(suggestion);
-                  const isSuggestionDisabled = isChatBusy || hasSubmittedSuggestion;
+                  const suggestionPresentation = getWorkspaceAiChatSuggestionPresentation({
+                    hasSubmittedSuggestion,
+                    isChatBusy,
+                    isSelected
+                  });
                   const suggestionButtonClassName = isSelected
                     ? `${styles.choiceButton} ${styles.choiceButtonSelected}`
                     : styles.choiceButton;
 
                   return (
                     <button
-                      aria-pressed={isMultiSelect ? isSelected : undefined}
+                      aria-pressed={isSelected}
                       className={suggestionButtonClassName}
-                      disabled={isSuggestionDisabled}
+                      disabled={suggestionPresentation.disabled}
                       key={suggestion}
                       onClick={
                         isMultiSelect
@@ -2281,7 +2319,12 @@ export function WorkspaceAiChatDock({
                       }
                       type="button"
                     >
-                      {suggestion}
+                      <span>{suggestion}</span>
+                      {suggestionPresentation.selectionState !== null ? (
+                        <span className={styles.choiceSelectionState}>
+                          {suggestionPresentation.selectionState}
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
