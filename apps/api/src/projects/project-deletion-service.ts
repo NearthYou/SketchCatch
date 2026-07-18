@@ -168,12 +168,21 @@ export async function deleteProjectRecords(
   try {
     await cleanupProjectManagedBuildEnvironment(snapshot, input.cleanupManagedResources);
     const objectKeys = collectProjectDeletionObjectKeys(snapshot);
+    let failedObjectCount = 0;
 
-    if (input.storage.deletePrefix) {
-      await cleanupProjectArtifactPrefixes(input.storage, snapshot);
-    } else {
-      await cleanupCandidateObjectVersions(input.storage, snapshot.candidateObjectVersions);
-      await deleteObjectsOrThrow(input.storage, objectKeys);
+    try {
+      if (input.storage.deletePrefix) {
+        await cleanupProjectArtifactPrefixes(input.storage, snapshot);
+      } else {
+        await cleanupCandidateObjectVersions(input.storage, snapshot.candidateObjectVersions);
+        await deleteObjectsOrThrow(input.storage, objectKeys);
+      }
+    } catch (error) {
+      if (!(error instanceof ProjectDeletionManagedCleanupError)) {
+        throw error;
+      }
+
+      failedObjectCount = Math.max(objectKeys.length, 1);
     }
 
     await deleteProjectDatabaseRows({
@@ -186,7 +195,7 @@ export async function deleteProjectRecords(
 
     return {
       deleted: true,
-      cleanup: createCleanupResult(objectKeys.length, 0)
+      cleanup: createCleanupResult(objectKeys.length, failedObjectCount)
     };
   } catch (error) {
     await deletionGuard.markCleanupFailed?.({

@@ -310,7 +310,7 @@ test("deleteProjectRecords removes every project and deployment artifact prefix 
   );
 });
 
-test("deleteProjectRecords preserves database rows when artifact prefix cleanup fails", async () => {
+test("deleteProjectRecords completes database deletion when artifact prefix cleanup fails", async () => {
   const fakeDb = new FakeProjectDeletionDb({
     deployments: [
       createDeploymentSummary({
@@ -320,59 +320,26 @@ test("deleteProjectRecords preserves database rows when artifact prefix cleanup 
     ]
   });
 
-  await assert.rejects(
-    deleteProjectRecords({
-      action: "delete_project",
-      db: fakeDb.db,
-      deletionGuard: fakeDb.deletionGuard,
-      projectId,
-      storage: {
-        async deleteObject() {},
-        async deletePrefix() {
-          throw new Error("AccessDenied");
-        }
-      },
-      userId
-    }),
-    /S3.*산출물/
-  );
-
-  assert.equal(fakeDb.operations.includes("delete:projects"), false);
-  assert.equal(fakeDb.operations.includes("mark-cleanup-failed:projects"), true);
-});
-
-test("deleteProjectRecords preserves the storage error that caused managed cleanup to fail", async () => {
-  const fakeDb = new FakeProjectDeletionDb({
-    deployments: [
-      createDeploymentSummary({
-        id: "deployment-1",
-        status: "DESTROYED"
-      })
-    ]
+  const result = await deleteProjectRecords({
+    action: "delete_project",
+    db: fakeDb.db,
+    deletionGuard: fakeDb.deletionGuard,
+    projectId,
+    storage: {
+      async deleteObject() {},
+      async deletePrefix() {
+        throw new Error("AccessDenied");
+      }
+    },
+    userId
   });
-  const storageError = new Error("AccessDenied");
-  storageError.name = "AccessDenied";
 
-  await assert.rejects(
-    deleteProjectRecords({
-      action: "delete_project",
-      db: fakeDb.db,
-      deletionGuard: fakeDb.deletionGuard,
-      projectId,
-      storage: {
-        async deleteObject() {},
-        async deletePrefix() {
-          throw storageError;
-        }
-      },
-      userId
-    }),
-    (error: unknown) => {
-      assert(error instanceof ProjectDeletionManagedCleanupError);
-      assert.equal(error.cause, storageError);
-      return true;
-    }
-  );
+  assert.equal(result.deleted, true);
+  assert.equal(result.cleanup.failedObjectCount > 0, true);
+  assert.equal(result.cleanup.s3Status, "failed");
+  assert.match(result.cleanup.message ?? "", /내부 S3 산출물/);
+  assert.equal(fakeDb.operations.includes("delete:projects"), true);
+  assert.equal(fakeDb.operations.includes("mark-cleanup-failed:projects"), false);
 });
 test("deleteProjectRecords cleans the project CodeBuild environment before deleting database records", async () => {
   const fakeDb = new FakeProjectDeletionDb({
