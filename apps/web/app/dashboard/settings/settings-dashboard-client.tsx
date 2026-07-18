@@ -84,7 +84,10 @@ export function SettingsDashboardClient() {
   const connectionsQuery = useAwsConnectionSettingsQuery();
   const githubInstallationsQuery = useGitHubInstallationsQuery();
   const githubAuthorizationTarget = useMemo(
-    () => deriveGitHubCodeBuildAuthorizationTarget(githubInstallationsQuery.data ?? []),
+    () => deriveGitHubCodeBuildAuthorizationTarget(
+      githubInstallationsQuery.data?.installations ?? [],
+      githubInstallationsQuery.data?.availability
+    ),
     [githubInstallationsQuery.data]
   );
   const connectionSettings = useMemo(
@@ -302,6 +305,13 @@ export function SettingsDashboardClient() {
       setErrorMessage("GitHub App 연결 정보를 확인한 뒤 다시 시도해 주세요.");
       return;
     }
+    if (githubAuthorizationTarget.status === "github_app_not_configured") {
+      document.getElementById("github-account-connection")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+      return;
+    }
     if (githubAuthorizationTarget.status === "github_installation_required") {
       document.getElementById("github-account-connection")?.scrollIntoView({
         behavior: "smooth",
@@ -504,6 +514,7 @@ export function SettingsDashboardClient() {
               <GitHubBuildConnectionAction
                 actionPending={actionPending}
                 connection={codeConnections[selectedBuildAwsConnectionId]}
+                disabled={githubAuthorizationTarget.status === "github_app_not_configured"}
                 onConnect={() => void connectGitHubBuild()}
                 onDisconnect={openGitHubBuildDisconnect}
                 onRefresh={() => void refreshGitHubBuildConnection()}
@@ -787,6 +798,13 @@ function GitHubAuthorizationTargetNotice({
       </p>
     );
   }
+  if (target.status === "github_app_not_configured") {
+    return (
+      <p className={styles.githubSettingsMessage} role="status">
+        GitHub App 서버 설정이 완료된 뒤 AWS 승인을 시작할 수 있습니다.
+      </p>
+    );
+  }
   if (target.status === "github_installation_required") {
     return (
       <div className={styles.githubSettingsError} role="alert">
@@ -843,19 +861,21 @@ function formatGitHubRepositorySelection(
 function GitHubBuildConnectionAction({
   actionPending,
   connection,
+  disabled,
   onConnect,
   onDisconnect,
   onRefresh
 }: {
   readonly actionPending: boolean;
   readonly connection: AwsCodeConnectionResponse | undefined;
+  readonly disabled: boolean;
   readonly onConnect: () => void;
   readonly onDisconnect: () => void;
   readonly onRefresh: () => void;
 }) {
   if (!connection?.codeConnection) {
     return (
-      <button className={styles.primaryAction} disabled={actionPending} onClick={onConnect} type="button">
+      <button className={styles.primaryAction} disabled={actionPending || disabled} onClick={onConnect} type="button">
         AWS GitHub 권한 승인 시작
       </button>
     );

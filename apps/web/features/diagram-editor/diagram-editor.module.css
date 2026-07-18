@@ -1372,15 +1372,15 @@ button.rightRailResizeHandle {
   flex-direction: column;
   font-weight: 500;
   left: 16px;
-  max-height: min(560px, calc(100% - 32px));
-  max-width: min(600px, calc(100% - 48px));
+  max-height: min(480px, calc(100% - 32px));
+  max-width: min(480px, calc(100% - 48px));
   overflow-y: auto;
   padding: 14px;
   right: auto;
   text-align: left;
   top: auto;
   transform: none;
-  width: 560px;
+  width: 440px;
 }
 
 .compilerPreviewHeader {
@@ -1409,12 +1409,38 @@ button.rightRailResizeHandle {
   font-weight: 650;
 }
 
-.compilerPreviewHeader p,
-.compilerPreviewEmptyOutcome {
+.compilerPreviewViewToggle {
+  background: var(--board-surface-subtle);
+  border: 1px solid var(--board-border);
+  border-radius: 6px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 2px;
+}
+
+.compilerPreviewViewToggle button {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
   color: var(--board-muted);
+  cursor: pointer;
+  font: inherit;
   font-size: 12px;
-  line-height: 1.45;
-  margin: 0;
+  font-weight: 750;
+  min-height: 28px;
+  padding: 0 10px;
+}
+
+.compilerPreviewViewToggle button[aria-pressed="true"] {
+  background: var(--board-surface);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  color: var(--board-ink);
+}
+
+.compilerPreviewViewToggle button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--board-primary) 32%, transparent);
+  outline-offset: 2px;
 }
 
 .compilerPreviewActions {
@@ -1422,6 +1448,12 @@ button.rightRailResizeHandle {
   display: flex;
   flex: 0 0 auto;
   gap: 5px;
+}
+
+.compilerPreviewNotice > .compilerPreviewActions {
+  border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
+  justify-content: flex-end;
+  padding-top: 10px;
 }
 
 .compilerPreviewActions button {
@@ -1456,53 +1488,15 @@ button.rightRailResizeHandle {
   border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
   display: grid;
   gap: 8px 14px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   padding-top: 10px;
-}
-
-.compilerPreviewOutcomes {
-  display: grid;
-  gap: 7px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.compilerPreviewOutcomes li {
-  background: var(--board-surface);
-  border: 1px solid var(--board-border);
-  border-left: 3px solid var(--board-muted);
-  border-radius: 6px;
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  padding: 9px 10px;
-}
-
-.compilerPreviewOutcomes li[data-tone="improved"] {
-  border-left-color: var(--board-success);
-}
-
-.compilerPreviewOutcomes li[data-tone="regressed"] {
-  border-left-color: var(--board-danger);
-}
-
-.compilerPreviewOutcomes span {
-  color: var(--board-muted);
-  font-size: 11px;
-}
-
-.compilerPreviewOutcomes strong {
-  color: var(--board-ink);
-  font-size: 12px;
 }
 
 .compilerPreviewDetail {
   align-items: baseline;
   display: grid;
   gap: 8px;
-  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-columns: 68px minmax(0, 1fr);
   min-width: 0;
 }
 
@@ -1517,50 +1511,33 @@ button.rightRailResizeHandle {
   font-size: 11px;
   font-weight: 700;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.compilerPreviewTechnical {
-  border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
-  color: var(--board-muted);
-  font-size: 11px;
-}
-
-.compilerPreviewTechnical > summary {
-  cursor: pointer;
-  font-weight: 750;
-  min-height: 34px;
-  padding-top: 9px;
-}
-
-.compilerPreviewTechnical > summary:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--board-primary) 38%, transparent);
-  outline-offset: 2px;
-}
-
-.compilerPreviewTechnicalBody {
-  background: var(--board-surface);
-  border: 1px solid var(--board-border);
-  border-radius: 6px;
-  display: grid;
-  gap: 7px;
-  padding: 10px;
-}
-
-.compilerPreviewTechnicalBody > p {
-  color: var(--board-muted);
-  font-size: 11px;
-  margin: 0;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
-.compilerPreviewDiagnostic {
-  color: var(--board-warning);
+.compilerPreviewReview {
+  align-items: start;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 68px minmax(0, 1fr);
+}
+
+.compilerPreviewReview > span {
+  color: var(--board-muted);
   font-size: 11px;
   font-weight: 700;
+}
+
+.compilerPreviewReview ul {
+  color: var(--board-ink);
+  display: grid;
+  font-size: 11px;
+  font-weight: 650;
+  gap: 3px;
+  line-height: 1.45;
+  list-style-position: inside;
   margin: 0;
+  padding: 0;
 }
 
 .emptyState {
@@ -3054,7 +3031,6 @@ button.rightRailResizeHandle {
     margin-left: auto;
   }
 
-  .compilerPreviewOutcomes,
   .compilerPreviewDetails {
     grid-template-columns: 1fr;
   }

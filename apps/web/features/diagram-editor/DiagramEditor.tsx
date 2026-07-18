@@ -55,8 +55,12 @@ import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages
 import { BOARD_THUMBNAIL_CAPTURE_CONTRACT } from "../../components/architecture-board/board-thumbnail-capture-contract";
 import {
   createBoardAutoOrganizeProposal,
-  createArchitectureBoardCompilationPreview,
-  type ArchitectureBoardCompilationProposal
+  createBoardAutoOrganizePreviewSession,
+  getBoardAutoOrganizeViewportPolicy,
+  resolveBoardAutoOrganizeDecision,
+  selectBoardAutoOrganizePreviewView,
+  type BoardAutoOrganizePreviewSession,
+  type BoardAutoOrganizePreviewView
 } from "../architecture-board-compiler";
 import { ParameterInputPanel } from "../parameter-input";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
@@ -106,6 +110,10 @@ import {
   rebaseBoardViewport
 } from "./board-viewport";
 import type { BoardViewportFrame } from "./board-viewport";
+import {
+  BoardAutoOrganizeFailurePanel,
+  BoardAutoOrganizePreviewPanel
+} from "./BoardAutoOrganizePreviewPanel";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
 import { DiagramEdgeView } from "./DiagramEdgeView";
 import { DiagramNodeView } from "./DiagramNodeView";
@@ -188,10 +196,6 @@ const FIT_VIEW_PADDING = 0.24;
 const SNAP_ANIMATION_MS = 110;
 const SNAP_ANIMATION_CLEAR_MS = SNAP_ANIMATION_MS + 30;
 
-function formatCompilerScore(value: number): string {
-  return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 1 }).format(value);
-}
-
 function areBoardViewportFramesEqual(left: BoardViewportFrame, right: BoardViewportFrame): boolean {
   return (
     left.x === right.x &&
@@ -231,23 +235,6 @@ export function DiagramEditor(props: DiagramEditorProps) {
     <ReactFlowProvider>
       <DiagramEditorInner {...props} />
     </ReactFlowProvider>
-  );
-}
-
-function CompilerPreviewDetail({
-  emptyLabel,
-  items,
-  label
-}: {
-  readonly emptyLabel: string;
-  readonly items: readonly string[];
-  readonly label: string;
-}) {
-  return (
-    <div className={styles.compilerPreviewDetail}>
-      <span>{label}</span>
-      <strong>{items.length > 0 ? items.join(" · ") : emptyLabel}</strong>
-    </div>
   );
 }
 
@@ -304,15 +291,9 @@ function DiagramEditorInner({
   const [previewAnnotations, setPreviewAnnotations] = useState<DiagramPreviewAnnotations | null>(
     () => (initialPreviewDiagram ? (initialPreviewAnnotations ?? null) : null)
   );
-  const [compilerPreview, setCompilerPreview] =
-    useState<ArchitectureBoardCompilationProposal | null>(null);
-  const compilerPreviewSummary = useMemo(
-    () =>
-      compilerPreview === null
-        ? null
-        : createArchitectureBoardCompilationPreview(compilerPreview),
-    [compilerPreview]
-  );
+  const [autoOrganizePreview, setAutoOrganizePreview] =
+    useState<BoardAutoOrganizePreviewSession | null>(null);
+  const [autoOrganizeError, setAutoOrganizeError] = useState(false);
   const [terraformRefreshRequestId, setTerraformRefreshRequestId] = useState(0);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
@@ -351,6 +332,8 @@ function DiagramEditorInner({
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const [isFlowReady, setFlowReady] = useState(false);
   const [boardMinimumZoom, setBoardMinimumZoom] = useState(0.25);
+  const autoOrganizeMinimumZoomRef = useRef<number | null>(null);
+  const shouldAutoFitPreviewDiagramRef = useRef(initialPreviewDiagram != null);
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
@@ -394,6 +377,18 @@ function DiagramEditorInner({
   const getFlowInstance = useCallback(
     () => flowInstanceRef.current ?? fallbackFlowInstanceRef.current,
     []
+  );
+
+  const restoreAutoOrganizeViewport = useCallback(
+    (viewport: DiagramJson["viewport"]): void => {
+      const minimumZoom = autoOrganizeMinimumZoomRef.current ?? 0.25;
+      autoOrganizeMinimumZoomRef.current = null;
+      shouldApplySourceViewportRef.current = false;
+      setFlowMinimumZoom(minimumZoom);
+      setBoardMinimumZoom(minimumZoom);
+      void getFlowInstance().setViewport(viewport, { duration: 0 });
+    },
+    [getFlowInstance, setFlowMinimumZoom]
   );
 
   const updateLeftPanelOpen = useCallback(
@@ -498,8 +493,11 @@ function DiagramEditorInner({
 
   const setPreviewDiagram = useCallback<DiagramEditorPanelContext["setPreviewDiagram"]>(
     (nextPreviewDiagram, nextPreviewAnnotations = null) => {
-      setCompilerPreview(null);
+      autoOrganizeMinimumZoomRef.current = null;
+      setAutoOrganizePreview(null);
+      setAutoOrganizeError(false);
       shouldApplySourceViewportRef.current = true;
+      shouldAutoFitPreviewDiagramRef.current = nextPreviewDiagram !== null;
       setPreviewDiagramState(
         nextPreviewDiagram === null
           ? null
@@ -1015,24 +1013,92 @@ function DiagramEditorInner({
   );
 
   const previewAutomaticOrganization = useCallback(() => {
-    onWorkspacePanelOpen?.();
-    const currentDiagram = diagramRef.current;
-    const proposal = createBoardAutoOrganizeProposal(currentDiagram);
+    try {
+      onWorkspacePanelOpen?.();
+      const currentDiagram = diagramRef.current;
+      const proposal = createBoardAutoOrganizeProposal(currentDiagram);
+      const session = createBoardAutoOrganizePreviewSession(
+        currentDiagram,
+        proposal.diagram,
+        getFlowInstance().getViewport()
+      );
+      const viewportPolicy = getBoardAutoOrganizeViewportPolicy("open");
 
-    setPreviewDiagram(proposal.diagram);
-    setCompilerPreview(proposal);
-  }, [onWorkspacePanelOpen, setPreviewDiagram]);
+      autoOrganizeMinimumZoomRef.current = boardMinimumZoom;
+      shouldApplySourceViewportRef.current = viewportPolicy.applySourceViewport;
+      shouldAutoFitPreviewDiagramRef.current = viewportPolicy.autoFit;
+      setPreviewDiagramState(cloneDiagram(session.visibleDiagram));
+      setPreviewAnnotations(null);
+      setAutoOrganizePreview(session);
+      setAutoOrganizeError(false);
+    } catch (error) {
+      console.error("Board automatic organization failed.", error);
+      autoOrganizeMinimumZoomRef.current = null;
+      setPreviewDiagramState(null);
+      setPreviewAnnotations(null);
+      setAutoOrganizePreview(null);
+      setAutoOrganizeError(true);
+    }
+  }, [boardMinimumZoom, getFlowInstance, onWorkspacePanelOpen]);
+
+  const selectAutomaticOrganizationPreview = useCallback(
+    (view: BoardAutoOrganizePreviewView) => {
+      if (autoOrganizePreview === null) return;
+      const nextSession = selectBoardAutoOrganizePreviewView(autoOrganizePreview, view);
+      const viewportPolicy = getBoardAutoOrganizeViewportPolicy("switch");
+
+      shouldApplySourceViewportRef.current = viewportPolicy.applySourceViewport;
+      shouldAutoFitPreviewDiagramRef.current = viewportPolicy.autoFit;
+      setPreviewDiagramState(cloneDiagram(nextSession.visibleDiagram));
+      setAutoOrganizePreview(nextSession);
+    },
+    [autoOrganizePreview]
+  );
 
   const applyAutomaticOrganization = useCallback(() => {
-    if (compilerPreview === null) return;
-    applyDiagramJson(compilerPreview.diagram);
-    setCompilerPreview(null);
-  }, [applyDiagramJson, compilerPreview]);
+    if (autoOrganizePreview === null) return;
+    const resolution = resolveBoardAutoOrganizeDecision(
+      autoOrganizePreview,
+      "use-organized",
+      diagramRef.current
+    );
+    const diagramToApply = resolution.diagramToApply;
+
+    if (resolution.isStale || diagramToApply === null) {
+      if (resolution.viewportToRestore) {
+        restoreAutoOrganizeViewport(resolution.viewportToRestore);
+      }
+      setPreviewDiagramState(null);
+      setPreviewAnnotations(null);
+      setAutoOrganizePreview(null);
+      setAutoOrganizeError(true);
+      return;
+    }
+
+    autoOrganizeMinimumZoomRef.current = null;
+    shouldApplySourceViewportRef.current = false;
+    commitDiagramUpdate(() => cloneDiagram(diagramToApply));
+    setPreviewDiagramState(null);
+    setPreviewAnnotations(null);
+    setAutoOrganizePreview(null);
+    setAutoOrganizeError(false);
+    setInspectedNodeId(null);
+    setSelectedNodeIds([]);
+    setSelectedEdgeIds([]);
+  }, [autoOrganizePreview, commitDiagramUpdate, restoreAutoOrganizeViewport]);
 
   const cancelAutomaticOrganization = useCallback(() => {
-    setPreviewDiagram(null);
-    setCompilerPreview(null);
-  }, [setPreviewDiagram]);
+    if (autoOrganizePreview === null) return;
+    const resolution = resolveBoardAutoOrganizeDecision(autoOrganizePreview, "keep-original");
+
+    if (resolution.viewportToRestore) {
+      restoreAutoOrganizeViewport(resolution.viewportToRestore);
+    }
+    setPreviewDiagramState(null);
+    setPreviewAnnotations(null);
+    setAutoOrganizePreview(null);
+    setAutoOrganizeError(false);
+  }, [autoOrganizePreview, restoreAutoOrganizeViewport]);
 
   const commitTerraformSourceAuthority = useCallback<
     DiagramEditorPanelContext["commitTerraformSourceAuthority"]
@@ -2725,9 +2791,18 @@ function DiagramEditorInner({
       !isFlowReady ||
       normalizedInitialBoardZoom !== undefined ||
       previewDiagram === null ||
-      hasSourceViewBoxViewport ||
       previewDiagram.nodes.length === 0
     ) {
+      return;
+    }
+
+    if (!shouldAutoFitPreviewDiagramRef.current) {
+      return;
+    }
+
+    shouldAutoFitPreviewDiagramRef.current = false;
+
+    if (hasSourceViewBoxViewport) {
       return;
     }
 
@@ -3223,90 +3298,18 @@ function DiagramEditorInner({
 
         {!viewerPolicy.isViewer ? (
           <>
-            {compilerPreviewSummary ? (
-              <section
-                aria-label="자동 정리 미리보기"
-                className={`${styles.previewNotice} ${styles.compilerPreviewNotice}`}
-              >
-                <div className={styles.compilerPreviewHeader}>
-                  <div>
-                    <span>자동 정리 결과</span>
-                    <strong>{compilerPreviewSummary.outcome.headline}</strong>
-                    <p>{compilerPreviewSummary.outcome.reviewSummary}</p>
-                  </div>
-                  <div className={styles.compilerPreviewActions}>
-                    <button onClick={cancelAutomaticOrganization} type="button">
-                      원래대로
-                    </button>
-                    <button onClick={applyAutomaticOrganization} type="button">
-                      이 배치 적용
-                    </button>
-                  </div>
-                </div>
-
-                {compilerPreviewSummary.outcome.items.length > 0 ? (
-                  <ul className={styles.compilerPreviewOutcomes}>
-                    {compilerPreviewSummary.outcome.items.map((item) => (
-                      <li data-tone={item.tone} key={item.key}>
-                        <span>{item.label}</span>
-                        <strong>{item.summary}</strong>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className={styles.compilerPreviewEmptyOutcome}>
-                    추적 지표에서 표시할 배치 문제가 없습니다.
-                  </p>
-                )}
-
-                <div className={styles.compilerPreviewDetails}>
-                  <CompilerPreviewDetail
-                    emptyLabel="변경 없음"
-                    items={compilerPreviewSummary.changeGroups.map(
-                      ({ count, label }) => `${label} ${count}`
-                    )}
-                    label="변경"
-                  />
-                  <CompilerPreviewDetail
-                    emptyLabel="확인 없음"
-                    items={compilerPreviewSummary.diagnosticGroups.map(
-                      ({ count, label }) => `${label} ${count}`
-                    )}
-                    label="확인"
-                  />
-                </div>
-
-                <details className={styles.compilerPreviewTechnical}>
-                  <summary>기술 세부 정보</summary>
-                  <div className={styles.compilerPreviewTechnicalBody}>
-                    <CompilerPreviewDetail
-                      emptyLabel="계산 없음"
-                      items={[
-                        `내부 cost ${formatCompilerScore(compilerPreviewSummary.quality.beforeScore)} → ${formatCompilerScore(compilerPreviewSummary.quality.afterScore)}`,
-                        `변경 cost ${formatCompilerScore(compilerPreviewSummary.quality.compilationDistance)}`
-                      ]}
-                      label="cost"
-                    />
-                    <CompilerPreviewDetail
-                      emptyLabel="일반 규칙"
-                      items={compilerPreviewSummary.referenceTemplateIds}
-                      label="참고"
-                    />
-                    <p>
-                      후보 {compilerPreviewSummary.candidateId} · Compiler{" "}
-                      {compilerPreviewSummary.compilerVersion}
-                    </p>
-                    {compilerPreviewSummary.diagnosticSummaries.length > 0 ? (
-                      <p className={styles.compilerPreviewDiagnostic}>
-                        {compilerPreviewSummary.diagnosticSummaries.slice(0, 2).join(" · ")}
-                        {compilerPreviewSummary.diagnosticSummaries.length > 2
-                          ? ` 외 ${compilerPreviewSummary.diagnosticSummaries.length - 2}`
-                          : ""}
-                      </p>
-                    ) : null}
-                  </div>
-                </details>
-              </section>
+            {autoOrganizePreview ? (
+              <BoardAutoOrganizePreviewPanel
+                onKeepOriginal={cancelAutomaticOrganization}
+                onSelectView={selectAutomaticOrganizationPreview}
+                onUseOrganized={applyAutomaticOrganization}
+                session={autoOrganizePreview}
+              />
+            ) : autoOrganizeError ? (
+              <BoardAutoOrganizeFailurePanel
+                onClose={() => setAutoOrganizeError(false)}
+                onRetry={previewAutomaticOrganization}
+              />
             ) : isPreviewActive ? (
               <div className={styles.previewNotice} role="status">
                 미리보기입니다. 전용 시작 패널에서 적용 또는 취소를 선택하세요.

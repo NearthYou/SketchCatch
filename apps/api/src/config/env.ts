@@ -318,6 +318,33 @@ export function requireGitHubAppConfig(): {
     throw new Error("GIT_APP_CALLBACK_URL is required");
   }
 
+  const privateKey = decodeGitHubAppPrivateKey(privateKeyBase64);
+
+  return { appId, appSlug, privateKey, callbackUrl };
+}
+
+export function requireGitHubAppClientConfig(): {
+  appId: string;
+  privateKey: string;
+} {
+  const appId = process.env.GIT_APP_ID?.trim();
+  const privateKeyBase64 = process.env.GIT_APP_PRIVATE_KEY_BASE64?.trim();
+
+  if (!appId) {
+    throw new Error("GIT_APP_ID is required");
+  }
+
+  if (!privateKeyBase64) {
+    throw new Error("GIT_APP_PRIVATE_KEY_BASE64 is required");
+  }
+
+  return {
+    appId,
+    privateKey: decodeGitHubAppPrivateKey(privateKeyBase64)
+  };
+}
+
+function decodeGitHubAppPrivateKey(privateKeyBase64: string): string {
   let privateKey: string;
 
   try {
@@ -330,7 +357,7 @@ export function requireGitHubAppConfig(): {
     throw new Error("GIT_APP_PRIVATE_KEY_BASE64 must decode to a PEM private key");
   }
 
-  return { appId, appSlug, privateKey, callbackUrl };
+  return privateKey;
 }
 
 export function requireGitHubAppStateSecret(): string {

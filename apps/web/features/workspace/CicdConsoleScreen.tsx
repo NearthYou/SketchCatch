@@ -59,6 +59,10 @@ import {
 } from "./cicd-deployment-command";
 import { getSafePipelineRunLinks } from "./deployment-output-links";
 import {
+  deriveGitHubInstallationAccessState,
+  type GitHubInstallationAccessState
+} from "./github-installation-access-state";
+import {
   canOpenGitCicdLiveObservation,
   canRetryGitCicdFrontend,
   getGitCicdLiveObservationSelection
@@ -86,9 +90,8 @@ export function CicdConsoleScreen({
 }) {
   const [activeView, setActiveView] = useState<CicdConsoleView>("activity");
   const [repository, setRepository] = useState<SourceRepository | null>(null);
-  const [hasGitHubAccountConnection, setHasGitHubAccountConnection] = useState<boolean | null>(
-    null
-  );
+  const [githubInstallationAccess, setGitHubInstallationAccess] =
+    useState<GitHubInstallationAccessState | null>(null);
   const [config, setConfig] = useState<GitCicdMonitoringConfig | null>(null);
   const [readiness, setReadiness] = useState<GitCicdReadinessSnapshot | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -349,7 +352,7 @@ export function CicdConsoleScreen({
 
       async function loadConsoleData(): Promise<{
         readonly activeRepository: SourceRepository | null;
-        readonly githubAccountConnected: boolean;
+        readonly githubInstallationAccess: GitHubInstallationAccessState | null;
         readonly initialRuns: Awaited<ReturnType<typeof listGitCicdPipelineRuns>>;
         readonly loadedDeployments: Deployment[];
         readonly loadedHandoffs: GitCicdHandoff[];
@@ -364,9 +367,11 @@ export function CicdConsoleScreen({
         const activeRepository =
           repositories.find((item) => item.provider === "github" && item.status === "active") ??
           null;
-        let githubAccountConnected = true;
+        let githubInstallationAccess: GitHubInstallationAccessState | null = null;
         if (!activeRepository) {
-          githubAccountConnected = (await listGitHubAccountInstallations()).length > 0;
+          githubInstallationAccess = deriveGitHubInstallationAccessState(
+            await listGitHubAccountInstallations()
+          );
         }
         const monitoringConfig = activeRepository
           ? await getGitCicdMonitoringConfig(projectId, activeRepository.id)
@@ -374,7 +379,7 @@ export function CicdConsoleScreen({
 
         return {
           activeRepository,
-          githubAccountConnected,
+          githubInstallationAccess,
           initialRuns,
           loadedDeployments,
           loadedHandoffs,
@@ -407,14 +412,14 @@ export function CicdConsoleScreen({
       if (consoleResult.status === "fulfilled") {
         const {
           activeRepository,
-          githubAccountConnected,
+          githubInstallationAccess,
           initialRuns,
           loadedDeployments,
           loadedHandoffs,
           monitoringConfig
         } = consoleResult.value;
         setRepository(activeRepository);
-        setHasGitHubAccountConnection(githubAccountConnected);
+        setGitHubInstallationAccess(githubInstallationAccess);
         setConfig(monitoringConfig);
         setDeployments(loadedDeployments);
         setHandoffs(loadedHandoffs);
@@ -766,7 +771,16 @@ export function CicdConsoleScreen({
           {screenErrorMessage}
         </p>
       ) : null}
-      {!repository && hasGitHubAccountConnection === false ? (
+      {!repository &&
+      (githubInstallationAccess?.status === "server_not_configured" ||
+        githubInstallationAccess?.status === "connection_setup_not_configured") ? (
+        <section className={handoffStyles.notice} role="status">
+          <span>
+            GitHub App 서버 설정이 필요합니다. 서버 설정이 완료된 뒤 Repository 연결을 다시
+            확인해 주세요.
+          </span>
+        </section>
+      ) : !repository && githubInstallationAccess?.status === "connection_required" ? (
         <section className={handoffStyles.notice} role="status">
           <span>
             GitHub App 연결이 필요합니다. 현재 로그인 방식과 관계없이 GitHub App을 연결한 뒤

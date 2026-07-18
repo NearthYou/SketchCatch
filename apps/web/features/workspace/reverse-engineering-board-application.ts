@@ -1,12 +1,12 @@
 import type {
-  ArchitectureBoardCompilationContextSignal,
+  ArchitectureJson,
   DiagramEdge,
   DiagramJson,
   DiagramNode,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
 import {
-  compileArchitectureBoard,
+  createBoardAutoOrganizeProposal,
   type ArchitectureBoardCompilationProposal
 } from "../architecture-board-compiler";
 import {
@@ -46,7 +46,6 @@ const UNKNOWN_RESOURCE_STYLE = {
   borderColor: "#f97316",
   textColor: "#9a3412"
 } as const;
-const UNKNOWN_MANUAL_REVIEW_LABEL_PREFIX = "확인 필요";
 
 export type ReverseEngineeringBoardApplication = {
   readonly compilation: ArchitectureBoardCompilationProposal | null;
@@ -103,10 +102,8 @@ export function createReverseEngineeringBoardApplication(
   }
 
   const compilation = compileReverseEngineeringAppendArchitecture(
-    input.currentDiagram,
     appendDiagram,
-    new Set(comparison.additions.map((item) => item.nodeId)),
-    input.result
+    new Set(comparison.additions.map((item) => item.nodeId))
   );
 
   return {
@@ -127,31 +124,99 @@ export function createReverseEngineeringBoardComparison(
   );
 }
 
+// Board 저장용 Architecture에도 가져온 Resource의 type·label·config·관계를 그대로 되돌립니다.
+export function convertReverseEngineeringBoardToArchitectureJson(
+  diagram: DiagramJson,
+  result: ReverseEngineeringScanResult
+): ArchitectureJson {
+  const converted = convertDiagramJsonToArchitectureJson(diagram);
+  const sourceNodeById = new Map(result.architectureJson.nodes.map((node) => [node.id, node]));
+  const sourceEdgeById = new Map(result.architectureJson.edges.map((edge) => [edge.id, edge]));
+
+  return {
+    nodes: converted.nodes.map((node) => {
+      const sourceNode = sourceNodeById.get(node.id);
+
+      return sourceNode
+        ? {
+            ...node,
+            type: sourceNode.type,
+            label: sourceNode.label,
+            config: structuredClone(sourceNode.config)
+          }
+        : node;
+    }),
+    edges: converted.edges.map((edge) => {
+      const sourceEdge = sourceEdgeById.get(edge.id);
+
+      return sourceEdge ? structuredClone(sourceEdge) : edge;
+    })
+  };
+}
+
 // AWS가 만든 Architecture 좌표와 관계를 Compiler 후보 선택 전에 Board 모델로 옮깁니다.
 function createOriginalReverseEngineeringPreview(result: ReverseEngineeringScanResult): {
   readonly compilation: null;
   readonly diagram: DiagramJson;
 } {
   const materializedDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
-  const sourcePositionByNodeId = new Map(
-    result.architectureJson.nodes.map((node) => [node.id, { x: node.positionX, y: node.positionY }])
-  );
-  const sourcePositionDiagram: DiagramJson = {
-    ...materializedDiagram,
-    nodes: materializedDiagram.nodes.map((node) => {
-      const sourcePosition = sourcePositionByNodeId.get(node.id);
+  const materializedNodeById = new Map(materializedDiagram.nodes.map((node) => [node.id, node]));
+  const materializedEdgeById = new Map(materializedDiagram.edges.map((edge) => [edge.id, edge]));
+  const sourceNodeIds = new Set(result.architectureJson.nodes.map((node) => node.id));
+  const nodes = result.architectureJson.nodes.flatMap((sourceNode) => {
+    const materializedNode = materializedNodeById.get(sourceNode.id);
 
-      return sourcePosition ? { ...node, position: sourcePosition } : node;
-    })
-  };
+    if (!materializedNode) {
+      return [];
+    }
+
+    const parentAreaNodeId = materializedNode.metadata?.parentAreaNodeId;
+    const metadata = parentAreaNodeId && !sourceNodeIds.has(parentAreaNodeId)
+      ? Object.fromEntries(
+          Object.entries(materializedNode.metadata ?? {}).filter(
+            ([key]) => key !== "parentAreaNodeId"
+          )
+        )
+      : materializedNode.metadata;
+
+    return [
+      {
+        ...materializedNode,
+        id: sourceNode.id,
+        type: sourceNode.type,
+        label: sourceNode.label ?? materializedNode.label,
+        position: { x: sourceNode.positionX, y: sourceNode.positionY },
+        ...(metadata && Object.keys(metadata).length > 0 ? { metadata } : { metadata: undefined }),
+        ...(materializedNode.parameters
+          ? {
+              parameters: {
+                ...materializedNode.parameters,
+                values: structuredClone(sourceNode.config)
+              }
+            }
+          : {})
+      }
+    ];
+  });
+  const edges = result.architectureJson.edges.map((sourceEdge) => {
+    const materializedEdge = materializedEdgeById.get(sourceEdge.id);
+
+    return {
+      ...(materializedEdge ?? {}),
+      id: sourceEdge.id,
+      sourceNodeId: sourceEdge.sourceId,
+      targetNodeId: sourceEdge.targetId,
+      ...(sourceEdge.label === undefined ? { label: undefined } : { label: sourceEdge.label })
+    } satisfies DiagramEdge;
+  });
 
   return {
     compilation: null,
-    diagram: markReverseEngineeringDiagram(
-      convertArchitectureJsonToDiagramJson(result.architectureJson, {
-        preserveLayoutFrom: sourcePositionDiagram
-      })
-    )
+    diagram: markReverseEngineeringDiagram({
+      ...materializedDiagram,
+      nodes,
+      edges
+    })
   };
 }
 
@@ -174,17 +239,10 @@ function createCompiledReverseEngineeringPreview(
 // append는 원본 보드와 안전한 scan 추가분을 합친 뒤에만 Compiler에 넘깁니다.
 // 그래야 proposal의 quality/diff와 실제 승인·저장할 Board가 같은 상태를 가리킵니다.
 function compileReverseEngineeringAppendArchitecture(
-  currentDiagram: DiagramJson,
   appendDiagram: DiagramJson,
-  reverseEngineeringNodeIds: ReadonlySet<string>,
-  result: ReverseEngineeringScanResult
+  reverseEngineeringNodeIds: ReadonlySet<string>
 ): ArchitectureBoardCompilationProposal {
-  const compilation = compileArchitectureBoard({
-    architecture: convertDiagramJsonToArchitectureJson(appendDiagram),
-    currentDiagram,
-    semanticContext: { signals: createReverseEngineeringContextSignals(result) },
-    trigger: "reverse-engineering"
-  });
+  const compilation = createBoardAutoOrganizeProposal(appendDiagram);
 
   return {
     ...compilation,
@@ -201,117 +259,10 @@ export function compileReverseEngineeringArchitecture(
 }
 
 function compileReverseEngineeringArchitectureFromRaw(
-  result: ReverseEngineeringScanResult,
+  _result: ReverseEngineeringScanResult,
   rawDiagram: DiagramJson
 ): ArchitectureBoardCompilationProposal {
-  return compileArchitectureBoard({
-    architecture: result.architectureJson,
-    currentDiagram: rawDiagram,
-    semanticContext: { signals: createReverseEngineeringContextSignals(result) },
-    trigger: "reverse-engineering"
-  });
-}
-
-// Scan facts are not hard gates. Passing them through the Compiler keeps the imported
-// diagram, the review summary, and the user-accepted apply boundary on the same proposal.
-function createReverseEngineeringContextSignals(
-  result: ReverseEngineeringScanResult
-): ArchitectureBoardCompilationContextSignal[] {
-  return [
-    ...result.findings.map((finding) => ({
-      id: finding.id,
-      kind: "deployment" as const,
-      level: toFindingDiagnosticLevel(finding.severity),
-      summary: finding.title,
-      message: `${finding.description} ${finding.recommendation}`.trim(),
-      ...(finding.resourceId ? { relatedResourceIds: [finding.resourceId] } : {}),
-      penalty: finding.severity === "high" ? 500 : finding.severity === "medium" ? 200 : 50
-    })),
-    ...result.analysisExclusions.map((exclusion) => ({
-      id: exclusion.id,
-      kind: "provider" as const,
-      level: "warning" as const,
-      summary: `자동 분석 제외: ${formatAnalysisExclusionReason(exclusion.reason)}`,
-      message: formatAnalysisExclusionMessage(exclusion.reason),
-      relatedResourceIds: [exclusion.resourceId],
-      penalty: 150
-    })),
-    ...result.scanErrors.map((error) => ({
-      id: error.id,
-      kind: "provider" as const,
-      level: error.retryable ? ("warning" as const) : ("error" as const),
-      summary: `스캔 실패: ${formatScanStage(error.stage)} · ${formatScanErrorReason(error.reason)}`,
-      message: formatScanErrorMessage(error.stage, error.reason, error.retryable),
-      penalty: error.retryable ? 200 : 500
-    }))
-  ].sort((left, right) => left.id.localeCompare(right.id));
-}
-
-function formatAnalysisExclusionReason(
-  reason: ReverseEngineeringScanResult["analysisExclusions"][number]["reason"]
-): string {
-  return reason === "unsupported_resource_type" ? "자동 분석 범위 밖" : "필수 정보 부족";
-}
-
-function formatAnalysisExclusionMessage(
-  reason: ReverseEngineeringScanResult["analysisExclusions"][number]["reason"]
-): string {
-  return reason === "unsupported_resource_type"
-    ? "이 Resource는 현재 자동 분석 범위에 포함되지 않습니다."
-    : "이 Resource에 필요한 정보가 없어 자동 분석에 포함되지 않습니다.";
-}
-
-function formatScanStage(
-  stage: ReverseEngineeringScanResult["scanErrors"][number]["stage"]
-): string {
-  const labels: Readonly<
-    Record<ReverseEngineeringScanResult["scanErrors"][number]["stage"], string>
-  > = {
-    credential: "AWS 인증 정보 확인",
-    region: "리전 확인",
-    provider_api: "AWS 서비스 조회",
-    normalize: "스캔 결과 정리",
-    draft: "보드 초안 생성",
-    analysis: "자동 분석",
-    import_suggestion: "import 제안 생성"
-  };
-
-  return labels[stage];
-}
-
-function formatScanErrorReason(
-  reason: ReverseEngineeringScanResult["scanErrors"][number]["reason"]
-): string {
-  const labels: Readonly<
-    Record<ReverseEngineeringScanResult["scanErrors"][number]["reason"], string>
-  > = {
-    permission_denied: "권한 부족",
-    invalid_region: "리전을 확인할 수 없음",
-    expired_credential: "인증 정보 만료",
-    throttled: "요청 제한",
-    provider_error: "AWS 서비스 오류",
-    unknown: "알 수 없는 오류"
-  };
-
-  return labels[reason];
-}
-
-function formatScanErrorMessage(
-  stage: ReverseEngineeringScanResult["scanErrors"][number]["stage"],
-  reason: ReverseEngineeringScanResult["scanErrors"][number]["reason"],
-  retryable: boolean
-): string {
-  return `${formatScanStage(stage)} 중 ${formatScanErrorReason(reason)}으로 완료하지 못했습니다. ${
-    retryable ? "잠시 후 다시 시도할 수 있습니다." : "AWS 연결과 권한을 확인하세요."
-  }`;
-}
-
-function toFindingDiagnosticLevel(
-  severity: ReverseEngineeringScanResult["findings"][number]["severity"]
-): ArchitectureBoardCompilationContextSignal["level"] {
-  if (severity === "high") return "error";
-  if (severity === "medium") return "warning";
-  return "info";
+  return createBoardAutoOrganizeProposal(rawDiagram);
 }
 
 // AWS에서 가져온 노드에 보호해야 하는 원본 값 목록을 남깁니다.
@@ -336,7 +287,6 @@ function markReverseEngineeringNode(node: DiagramNode): DiagramNode {
 
   return {
     ...node,
-    label: isUnsupportedUnknown ? createUnknownManualReviewLabel(node.label) : node.label,
     ...(nextStyle ? { style: nextStyle } : {}),
     metadata: {
       ...node.metadata,
@@ -347,13 +297,6 @@ function markReverseEngineeringNode(node: DiagramNode): DiagramNode {
       }
     }
   };
-}
-
-// UNKNOWN 노드는 사용자가 직접 확인해야 하므로 보드 이름표 앞에 확인 표시를 붙입니다.
-function createUnknownManualReviewLabel(label: string): string {
-  return label.startsWith(`${UNKNOWN_MANUAL_REVIEW_LABEL_PREFIX} · `)
-    ? label
-    : `${UNKNOWN_MANUAL_REVIEW_LABEL_PREFIX} · ${label}`;
 }
 
 function isUnsupportedUnknownNode(node: DiagramNode): boolean {

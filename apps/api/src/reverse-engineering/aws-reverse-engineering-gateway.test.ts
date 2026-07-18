@@ -15,6 +15,7 @@ import type { TerraformAwsCredentialEnv } from "../aws-connections/aws-connectio
 import type { AwsDiscoveredResourceRecord, AwsProviderScanInput } from "./aws-provider-adapter.js";
 import {
   createAwsReverseEngineeringReaderPlan,
+  deduplicateReverseEngineeringScanErrors,
   isReverseEngineeringPromotedResourceArn,
   listApplicationLoadBalancers,
   listCloudFrontDistributions,
@@ -70,6 +71,43 @@ test("ALB와 CloudFront reader 선택은 ALL 및 직접 선택에만 한 번씩 
       unknownResources: false
     });
   }
+});
+
+test("같은 AWS 서비스의 반복 실패는 사용자 결과에서 한 번만 남긴다", () => {
+  const errors = deduplicateReverseEngineeringScanErrors([
+    {
+      id: "scan-error-service-ec2",
+      resourceType: "VPC",
+      stage: "provider_api",
+      reason: "permission_denied",
+      message: "VPC denied",
+      retryable: false
+    },
+    {
+      id: "scan-error-service-ec2",
+      resourceType: "SUBNET",
+      stage: "provider_api",
+      reason: "permission_denied",
+      message: "Subnet denied",
+      retryable: false
+    },
+    {
+      id: "scan-error-service-ecs",
+      resourceType: "ECS_SERVICE",
+      stage: "provider_api",
+      reason: "throttled",
+      message: "ECS throttled",
+      retryable: true
+    }
+  ]);
+
+  assert.deepEqual(
+    errors.map(({ id, resourceType }) => ({ id, resourceType })),
+    [
+      { id: "scan-error-service-ec2", resourceType: "VPC" },
+      { id: "scan-error-service-ecs", resourceType: "ECS_SERVICE" }
+    ]
+  );
 });
 
 test("ECS reader는 cluster/service pagination과 공유 Task Definition dedupe를 지키며 환경 값을 제외한다", async () => {
@@ -295,7 +333,9 @@ test("한 Cluster의 service 조회 실패는 다른 ECS 결과를 유지하고 
         }
         if (command instanceof ListServicesCommand) {
           if (command.input.cluster === deniedCluster) {
-            throw new Error("AccessDeniedException: account 123456789012 cannot list services");
+            throw new Error(
+              "AccessDeniedException: arn:aws:iam::123456789012:role/internal cannot call ecs:ListServices RequestId: private-request-id"
+            );
           }
           return { serviceArns: [healthyService] };
         }
@@ -325,6 +365,10 @@ test("한 Cluster의 service 조회 실패는 다른 ECS 결과를 유지하고 
   assert.equal(result.scanErrors[0]?.resourceType, "ECS_SERVICE");
   assert.equal(result.scanErrors[0]?.reason, "permission_denied");
   assert.doesNotMatch(result.scanErrors[0]?.message ?? "", /123456789012/);
+  assert.doesNotMatch(
+    result.scanErrors[0]?.message ?? "",
+    /AccessDenied|arn:aws|ListServices|RequestId|private-request-id/
+  );
 });
 
 test("ALB reader는 pagination을 끝까지 읽고 실제 VPC, Security Group, Subnet 관계만 정규화한다", async () => {
