@@ -45,6 +45,11 @@ type TerraformValidationFile = {
   readonly terraformCode: string;
 };
 
+type TerraformDiagnosticsOptions = {
+  readonly declaredReferenceAddresses?: ReadonlySet<string>;
+  readonly undefinedReferenceSeverity?: "error" | "warning";
+};
+
 type TerraformBlockHeader = {
   readonly address: string;
   readonly blockType: TerraformBlockType;
@@ -69,7 +74,10 @@ type TerraformResourceBlock = TerraformBlockHeader & {
   readonly attributes: readonly TerraformAttribute[];
 };
 
-export function createTerraformDiagnostics(terraformCode: string): TerraformDiagnostic[] {
+export function createTerraformDiagnostics(
+  terraformCode: string,
+  options: TerraformDiagnosticsOptions = {}
+): TerraformDiagnostic[] {
   const trimmedCode = terraformCode.trim();
 
   if (trimmedCode.length === 0) {
@@ -98,7 +106,7 @@ export function createTerraformDiagnostics(terraformCode: string): TerraformDiag
     ...checkUnexpectedTokens(syntaxScannedCode),
     ...checkStandaloneTopLevelTokens(syntaxScannedCode),
     ...checkTrailingAttributeCommas(syntaxScannedCode),
-    ...checkUndefinedReferences(syntaxScannedCode),
+    ...checkUndefinedReferences(syntaxScannedCode, options),
     ...checkQuotedReferences(syntaxScannedCode),
     ...checkFastAwsSchemaDiagnostics(commentStrippedCode)
   ];
@@ -116,10 +124,19 @@ export function createTerraformValidationDiagnostics(
     );
   }
 
-  return nonEmptyFiles.flatMap((file) =>
-    createTerraformDiagnostics(file.terraformCode).map((diagnostic) =>
-      addDiagnosticSource(diagnostic, file.fileName)
+  const declaredReferenceAddresses = new Set(
+    nonEmptyFiles.flatMap((file) =>
+      collectTerraformBlockHeaders(splitTerraformLines(file.terraformCode)).map((header) =>
+        toReferenceAddressFromHeader(header)
+      )
     )
+  );
+
+  return nonEmptyFiles.flatMap((file) =>
+    createTerraformDiagnostics(file.terraformCode, {
+      declaredReferenceAddresses,
+      undefinedReferenceSeverity: "error"
+    }).map((diagnostic) => addDiagnosticSource(diagnostic, file.fileName))
   );
 }
 
@@ -528,12 +545,17 @@ function checkTopLevelBlockBodyLine(
   ];
 }
 
-function checkUndefinedReferences(terraformCode: string): TerraformDiagnostic[] {
+function checkUndefinedReferences(
+  terraformCode: string,
+  options: TerraformDiagnosticsOptions
+): TerraformDiagnostic[] {
   const diagnostics: TerraformDiagnostic[] = [];
   const lines = splitTerraformLines(terraformCode);
-  const declaredAddresses = new Set(
-    collectTerraformBlockHeaders(lines).map((header) => toReferenceAddressFromHeader(header))
-  );
+  const declaredAddresses =
+    options.declaredReferenceAddresses ??
+    new Set(
+      collectTerraformBlockHeaders(lines).map((header) => toReferenceAddressFromHeader(header))
+    );
   const reportedReferences = new Set<string>();
 
   lines.forEach((lineText, index) => {
@@ -552,7 +574,7 @@ function checkUndefinedReferences(terraformCode: string): TerraformDiagnostic[] 
 
       reportedReferences.add(referenceAddress);
       diagnostics.push({
-        severity: "warning",
+        severity: options.undefinedReferenceSeverity ?? "warning",
         code: "terraform.undefined_reference",
         line: index + 1,
         resourceAddress: referenceAddress,
