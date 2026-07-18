@@ -919,11 +919,15 @@ function createAmazonQDraftResult(
   response: AmazonQArchitectureDraftPreview,
   providerMetadata: AiProviderMetadata
 ): AiArchitectureDraftResult {
-  const highlights = [...(response.highlights ?? response.explanations ?? [])].slice(0, 5);
+  const title = createKoreanArchitectureDraftTitle(response.title, response.architectureJson);
+  const highlights = createKoreanArchitectureDraftHighlights(
+    response.highlights ?? response.explanations ?? [],
+    response.architectureJson
+  );
   const nextActions = [...(response.nextActions ?? [])].slice(0, 5);
   const llmExplanation: LlmExplanation = {
     target: ARCHITECTURE_DRAFT_TARGET,
-    summary: response.summary ?? `${response.title} Architecture Draft를 생성했습니다.`,
+    summary: createKoreanArchitectureDraftSummary(response.summary, title),
     highlights,
     nextActions,
     fallbackUsed: false,
@@ -932,7 +936,7 @@ function createAmazonQDraftResult(
 
   return {
     architectureJson: response.architectureJson,
-    title: response.title,
+    title,
     metadata: {
       source: "amazon_q",
       confidence: "medium",
@@ -941,6 +945,83 @@ function createAmazonQDraftResult(
     },
     llmExplanation
   };
+}
+
+function createKoreanArchitectureDraftTitle(
+  title: string,
+  _architectureJson: ArchitectureJson
+): string {
+  const localizedArchitectureDraft = title
+    .trim()
+    .replace(/\bArchitecture\s+Draft\b/giu, "아키텍처 초안");
+
+  return localizedArchitectureDraft || "클라우드 아키텍처 초안";
+}
+
+function createKoreanArchitectureDraftSummary(
+  summary: string | undefined,
+  localizedTitle: string
+): string {
+  const trimmedSummary = summary?.trim();
+  if (
+    trimmedSummary
+    && !/\bArchitecture\s+Draft\b/iu.test(trimmedSummary)
+    && (
+      /[가-힣]/u.test(trimmedSummary)
+      || !/[가-힣]/u.test(localizedTitle)
+    )
+  ) {
+    return trimmedSummary;
+  }
+
+  return `${localizedTitle}을 생성했습니다.`;
+}
+
+function createKoreanArchitectureDraftHighlights(
+  highlights: readonly string[],
+  architectureJson: ArchitectureJson
+): string[] {
+  const localizedHighlights = highlights.flatMap((highlight) => {
+    const trimmedHighlight = highlight.trim();
+    const selectedPattern = trimmedHighlight.match(
+      /^Verified pattern selected:\s*(.+?)\.?$/iu
+    )?.[1];
+
+    if (selectedPattern) {
+      return [`검증된 아키텍처 패턴을 선택했습니다: ${selectedPattern}.`];
+    }
+    if (/^Security guardrail:/iu.test(trimmedHighlight)) {
+      return [
+        "보안 기준: 최소 권한 IAM, 지원되는 리소스의 프라이빗 배치, 저장 데이터 암호화, 비밀 관리형 자격 증명과 제한된 로그 보존 기간을 적용합니다."
+      ];
+    }
+    if (/^Cost guardrail:/iu.test(trimmedHighlight)) {
+      return [
+        "비용 기준: 트래픽, 가용성, 보안 또는 명시적인 요구사항에 필요한 경우에만 이중화와 유료 보안 서비스를 추가합니다."
+      ];
+    }
+    if (/^Terminate public traffic with an ACM-managed TLS certificate/iu.test(trimmedHighlight)) {
+      return [
+        "공개 트래픽은 ACM 관리형 TLS 인증서에서 종료하고 배포 전에 인증서를 검증합니다."
+      ];
+    }
+    if (/[가-힣]/u.test(trimmedHighlight)) {
+      return [trimmedHighlight];
+    }
+
+    return [];
+  });
+
+  if (localizedHighlights.length > 0) {
+    return localizedHighlights.slice(0, 5);
+  }
+
+  const resourceTypes = [...new Set(architectureJson.nodes.map(({ type }) => type))].slice(0, 6);
+  return [
+    resourceTypes.length > 0
+      ? `요구사항을 반영해 ${resourceTypes.join(", ")} 리소스 중심의 아키텍처를 구성했습니다.`
+      : "입력한 요구사항을 반영해 클라우드 아키텍처를 구성했습니다."
+  ];
 }
 
 function createFallbackArchitectureDraftResponse(
@@ -1888,6 +1969,8 @@ function createAmazonQArchitectureDraftInstructions(): string {
   return [
     "You are Amazon Q assisting SketchCatch, an IaC operations service.",
     "Return JSON only. Do not wrap the response in markdown.",
+    "Write every user-facing string in Korean, including title, question, suggestions, summary, highlights, nextActions, assumptions, explanations, and requirementCoverage prose.",
+    "Technical identifiers and AWS service names may remain in English, but explanatory sentences must be Korean.",
     "Choose a cost- and security-conscious Practice Architecture from the provided ArchitectureDecisionSpace.",
     "SketchCatch is provider-neutral, AWS-first for the MVP, and Terraform-first.",
     "Do not perform deployment, apply, update, delete, or destroy actions.",
@@ -4616,10 +4699,11 @@ function createAmazonQPlanDraftResult(
     createDeterministicArchitectureAssumptions(request.prompt)
   );
   const explanations = [...(response.explanations ?? [])];
+  const title = createKoreanArchitectureDraftTitle(response.title, architectureJson);
 
   return {
     architectureJson,
-    title: response.title,
+    title,
     metadata: {
       ...requestDraft.metadata,
       source: "amazon_q",
@@ -4628,8 +4712,8 @@ function createAmazonQPlanDraftResult(
     },
     llmExplanation: {
       target: ARCHITECTURE_DRAFT_TARGET,
-      summary: `${response.title} Architecture Draft를 생성했습니다.`,
-      highlights: explanations.slice(0, 5),
+      summary: `${title}을 생성했습니다.`,
+      highlights: createKoreanArchitectureDraftHighlights(explanations, architectureJson),
       nextActions: ["Terraform IaC Preview에서 생성 가능한 설정과 참조를 검토하세요."],
       fallbackUsed: false,
       providerMetadata

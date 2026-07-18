@@ -175,9 +175,6 @@ export function WorkspaceAiWorkbenchExplanation({
       {explanation.highlights.length > 0 ? (
         <WorkspaceAiWorkbenchTechnicalList items={explanation.highlights} title="핵심" />
       ) : null}
-      {explanation.nextActions.length > 0 ? (
-        <WorkspaceAiWorkbenchTechnicalList items={explanation.nextActions} title="다음 행동" />
-      ) : null}
     </section>
   );
 }

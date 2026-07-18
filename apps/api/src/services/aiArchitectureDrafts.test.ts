@@ -1234,7 +1234,7 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
     requestedPayload = request.payload;
     return JSON.stringify({
       status: "preview",
-      title: "Cost Optimized Static Site",
+      title: "Cost Optimized Static Site Architecture Draft",
       architectureJson: {
         nodes: [
           {
@@ -1271,7 +1271,13 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
       assumptions: ["Korea users and low budget favor Seoul-region AWS services."],
       explanations: ["S3 and CloudFront avoid server management for static content."],
       summary: "Amazon Q recommended a managed static delivery path.",
-      highlights: ["Low operational overhead", "HTTPS-ready CDN"],
+      highlights: [
+        "Verified pattern selected: static-cdn-site.",
+        "Security guardrail: use least-privilege IAM.",
+        "Cost guardrail: add paid services only when justified.",
+        "Terminate public traffic with an ACM-managed TLS certificate.",
+        "Low operational overhead"
+      ],
       nextActions: ["Review domain and SSL certificate requirements."]
     });
   });
@@ -1312,6 +1318,7 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.match(requestedPrompt, /hardConstraints/);
   assert.match(requestedPrompt, /preferredPatterns/);
   assert.match(requestedPrompt, /coverageRequirements/);
+  assert.match(requestedPrompt, /Write every user-facing string in Korean/);
   assert.match(requestedPrompt, /not a fixed skeleton/);
   assert.doesNotMatch(requestedPrompt, /Clarification choice mapping rules/);
   const payload = requestedPayload as {
@@ -1341,7 +1348,14 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.ok(payload.architectureDecisionSpace?.hardConstraints?.some((constraint) => /Database not required/.test(constraint)));
   assert.ok(payload.architectureDecisionSpace?.preferredPatterns?.some((pattern) => pattern.id === "static_cdn_site"));
   assert.equal(response.metadata.source, "amazon_q");
-  assert.equal(response.title, "Cost Optimized Static Site");
+  assert.equal(response.title, "Cost Optimized Static Site 아키텍처 초안");
+  assert.equal(response.llmExplanation?.summary, "Cost Optimized Static Site 아키텍처 초안을 생성했습니다.");
+  assert.deepEqual(response.llmExplanation?.highlights, [
+    "검증된 아키텍처 패턴을 선택했습니다: static-cdn-site.",
+    "보안 기준: 최소 권한 IAM, 지원되는 리소스의 프라이빗 배치, 저장 데이터 암호화, 비밀 관리형 자격 증명과 제한된 로그 보존 기간을 적용합니다.",
+    "비용 기준: 트래픽, 가용성, 보안 또는 명시적인 요구사항에 필요한 경우에만 이중화와 유료 보안 서비스를 추가합니다.",
+    "공개 트래픽은 ACM 관리형 TLS 인증서에서 종료하고 배포 전에 인증서를 검증합니다."
+  ]);
   assert.equal(response.architectureJson.nodes[0]?.type, "S3");
   assert.equal(response.llmExplanation?.fallbackUsed, false);
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
