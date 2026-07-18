@@ -69,9 +69,12 @@ test("settings gates AWS CodeBuild GitHub authorization behind one GitHub App an
   assert.match(source, /AWS 연결이 먼저 필요합니다/);
   assert.match(source, /AWS 연결하러 가기/);
   assert.match(source, /AWS에서 GitHub 권한 승인하기/);
-  assert.match(source, /AWS GitHub 승인 완료/);
   assert.match(source, /승인 세션이 남아 있으면 로그인 화면이 생략될 수 있습니다/);
-  assert.match(source, /Repository 접근은 프로젝트별 검증/);
+  assert.match(source, /deriveAwsCodeConnectionRepositoryAccessState/);
+  assert.match(source, /repositoryAccessState\.actionHref/);
+  assert.match(source, /repositoryAccessState\.actionLabel/);
+  assert.match(source, /buildConnectionUnverified/);
+  assert.doesNotMatch(source, /AWS GitHub 승인 완료/);
   assert.match(source, /승인한 GitHub 계정 이름을 반환하지 않으므로/);
   assert.doesNotMatch(source, /GitHub 빌드 연결 완료/);
   assert.match(source, /createAwsCodeConnection/);
@@ -106,6 +109,11 @@ test("settings previews exact SketchCatch managed cleanup before AWS connection 
   assert.match(source, /confirmedManagedCleanup: true/);
   assert.match(source, /confirmationToken: deletionPreview\.confirmationToken/);
   assert.match(source, /관리 리소스 정리 후 연결 삭제/);
+  assert.match(source, /보존하는 기록/);
+  assert.match(source, /Reverse Engineering 결과/);
+  assert.match(source, /삭제가 완료되지 않았습니다\. 연결은 유지되었습니다\./);
+  assert.match(source, /삭제 중…/);
+  assert.match(source, /deletionErrorMessage/);
   assert.doesNotMatch(source, /한 번 더 눌러 삭제/);
 });
 

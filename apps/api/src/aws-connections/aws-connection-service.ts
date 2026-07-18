@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type {
   AwsConnection,
   AwsConnectionListResponse,
@@ -22,7 +22,8 @@ import {
   deployments,
   projectBuildEnvironments,
   projectDeploymentTargets,
-  projectExecutionLeases
+  projectExecutionLeases,
+  reverseEngineeringScans
 } from "../db/schema.js";
 import type { ProjectAccessContext } from "../deployments/deployment-service.js";
 import {
@@ -211,6 +212,7 @@ export type AwsConnectionRepository = {
   ): Promise<AwsConnectionRecord | undefined>;
   findAwsConnectionById(connectionId: string): Promise<AwsConnectionRecord | undefined>;
   hasDeploymentUsingAwsConnection(connectionId: string): Promise<boolean>;
+  countReverseEngineeringScans(connectionId: string): Promise<number>;
   claimAccessibleAwsConnectionDeletion(
     connectionId: string,
     accessContext: ProjectAccessContext,
@@ -433,6 +435,14 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
 
     async hasDeploymentUsingAwsConnection(connectionId) {
       return hasBlockingDeployment(connectionId);
+    },
+
+    async countReverseEngineeringScans(connectionId) {
+      const [result] = await db
+        .select({ count: count() })
+        .from(reverseEngineeringScans)
+        .where(eq(reverseEngineeringScans.awsConnectionId, connectionId));
+      return result?.count ?? 0;
     },
 
     async claimAccessibleAwsConnectionDeletion(connectionId, accessContext, now) {
@@ -797,9 +807,10 @@ export async function getAwsConnectionDeletionPreview(
     );
   }
 
-  const [resources, hasBlockingDeployment] = await Promise.all([
+  const [resources, hasBlockingDeployment, reverseEngineeringScanCount] = await Promise.all([
     repository.findManagedResources(connection.id),
-    repository.hasDeploymentUsingAwsConnection(connection.id)
+    repository.hasDeploymentUsingAwsConnection(connection.id),
+    repository.countReverseEngineeringScans(connection.id)
   ]);
   const cleanupInProgress = Boolean(
     connection.deletionStartedAt && !connection.deletionErrorSummary
@@ -825,6 +836,9 @@ export async function getAwsConnectionDeletionPreview(
       codeConnection: resources.codeConnectionArn !== null
     },
     preservedResources: ["CloudFormation Stack", "Terraform Execution Role"],
+    preservedRecords: {
+      reverseEngineeringScans: reverseEngineeringScanCount
+    },
     confirmationToken: createAwsConnectionDeletionConfirmationToken(connection.id, resources)
   };
 }

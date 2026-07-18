@@ -409,6 +409,49 @@ test("repository access verification records a safe failure when CodeBuild canno
   assert.equal(result.buildEnvironment?.repositoryVerifiedAt, null);
 });
 
+test("repository checkout reports unavailable CodeConnection access without persisting the provider token error", async () => {
+  const context = createContext();
+  const repository = createRepository(context);
+  await prepareProjectBuildEnvironment(
+    { projectId: context.projectId, userId: "user-1" },
+    repository,
+    createGateway(),
+    { generateId: () => "build-environment-1", now: () => now }
+  );
+  const providerError = new Error("The security token included in the request is invalid.");
+  providerError.name = "OAuthProviderException";
+
+  await assert.rejects(
+    verifyProjectRepositoryAccess(
+      { projectId: context.projectId, userId: "user-1" },
+      repository,
+      createGateway({
+        async verifyRepositoryAccess() {
+          throw providerError;
+        }
+      }),
+      { now: () => now }
+    ),
+    (error) =>
+      error instanceof ProjectBuildEnvironmentError &&
+      error.code === "CODECONNECTION_REPOSITORY_ACCESS_REQUIRED" &&
+      error.statusCode === 409 &&
+      error.message.includes("AWS Connector for GitHub") &&
+      !error.message.includes("security token")
+  );
+
+  const saved = await repository.findByProjectId(context.projectId);
+  assert.equal(saved?.repositoryVerificationStatus, "failed");
+  assert.equal(
+    saved?.repositoryVerificationRequestedCommitSha,
+    context.confirmedBuildConfig?.confirmedCommitSha
+  );
+  assert.equal(saved?.repositoryVerificationResolvedCommitSha, null);
+  assert.equal(saved?.repositoryVerificationBuildArn, null);
+  assert.match(saved?.repositoryVerificationStatusReason ?? "", /AWS Connector for GitHub/);
+  assert.doesNotMatch(saved?.repositoryVerificationStatusReason ?? "", /security token/iu);
+});
+
 test("repository access verification checks the live CodeBuild source before starting checkout", async () => {
   const context = createContext();
   const repository = createRepository(context);
@@ -533,6 +576,45 @@ test("build environment preparation persists a retryable failure when AWS reconc
   const saved = await repository.findByProjectId(context.projectId);
   assert.equal(saved?.status, "verification_failed");
   assert.equal(saved?.lastVerifiedAt, null);
+});
+
+test("build environment preparation reports unavailable GitHub repository access without exposing the provider token error", async () => {
+  const context = createContext();
+  const repository = createRepository(context);
+  const providerError = new Error("The security token included in the request is invalid.");
+  providerError.name = "OAuthProviderException";
+
+  await assert.rejects(
+    prepareProjectBuildEnvironment(
+      { projectId: context.projectId, userId: "user-1" },
+      repository,
+      createGateway({
+        async reconcile() {
+          throw providerError;
+        }
+      }),
+      { generateId: () => "build-environment-1", now: () => now }
+    ),
+    (error) =>
+      error instanceof ProjectBuildEnvironmentError &&
+      error.code === "CODECONNECTION_REPOSITORY_ACCESS_REQUIRED" &&
+      error.statusCode === 409 &&
+      error.message.includes("AWS Connector for GitHub") &&
+      error.message.includes("jh-9999/audience-live-check") &&
+      !error.message.includes("security token")
+  );
+
+  const saved = await repository.findByProjectId(context.projectId);
+  assert.equal(saved?.status, "verification_failed");
+  assert.equal(saved?.repositoryVerificationStatus, "failed");
+  assert.equal(
+    saved?.repositoryVerificationRequestedCommitSha,
+    context.confirmedBuildConfig?.confirmedCommitSha
+  );
+  assert.equal(saved?.repositoryVerificationResolvedCommitSha, null);
+  assert.equal(saved?.repositoryVerificationBuildArn, null);
+  assert.match(saved?.repositoryVerificationStatusReason ?? "", /AWS Connector for GitHub/);
+  assert.doesNotMatch(saved?.repositoryVerificationStatusReason ?? "", /security token/iu);
 });
 
 test("build environment preparation cannot become ready after project deletion starts", async () => {

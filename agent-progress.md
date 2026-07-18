@@ -13,37 +13,21 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-17 - Unify workspace observation and deployment controls
+### 2026-07-18 - Surface CodeConnections repository authorization failures
 
-- Restored Live Observation in both expanded and collapsed right-panel layouts as an accessible icon-only control.
-- Converted the project-bar Deployment action to the shared icon-button treatment and kept its black active state scoped only to the open Deployment console.
-- Focused workspace tests pass 17/17; Web lint and typecheck pass; root lint, typecheck, and build pass. The full test run stops on the unrelated existing `git-cicd-readiness-contract` `null !== 0` failure in `packages/types`.
-- Chrome visual automation was unavailable, so final signed-in visual confirmation remains manual. No Deployment, Terraform, AWS, or database mutation was performed.
+- Mapped CodeBuild `OAuthProviderException` failures during project reconciliation and checkout verification to the safe 409 `CODECONNECTION_REPOSITORY_ACCESS_REQUIRED` contract instead of leaking the upstream invalid-token message as a 502.
+- Persisted failed repository-verification evidence and changed the AWS connection Settings presentation so `AVAILABLE` means OAuth connected but repository access remains unverified, with a direct AWS Connector installation/permission action.
+- Focused API tests pass 20/20 and focused Web tests pass 22/22; lint, typecheck, build, and diff checks pass. Lint retains one unrelated existing unused-import warning in `project-deletion-service.test.ts`.
+- The broad test run still contains unrelated failures in existing artifact, project deletion, and Workspace navigation suites. No AWS mutation, Terraform execution, DB migration, deployment, Git handoff, commit, or push was performed.
 
-### 2026-07-17 - Stabilize workspace overlay notifications
+### 2026-07-18 - Preserve Reverse Engineering history during AWS connection deletion
 
-- Prevented callback identity changes from triggering overlay cleanup notifications during rerenders; reset notifications now run only on unmount and target the latest callbacks.
-- Added a call-recording regression for callback replacement and cleanup behavior.
-- Focused workspace tests pass 20/20; Web lint and typecheck pass.
-
-### 2026-07-17 - Merge issue #448 work with current dev
-
-- Merged `origin/dev` through `f2f0c8ff` and resolved Workspace, Diagram, AI start, ProjectDraft, and GitHub settings conflicts without dropping either branch's behavior.
-- Updated the cached GitHub settings contract and restored the Destroy Plan approval/retry boundary using `failedAt`.
-- Focused Module/Template regressions and full Web tests pass; harness, knowledge check, lint, typecheck, and build pass. Local full API tests remain environment-blocked by missing `DATABASE_URL` and `zstd`; affected API files match `origin/dev`.
-
-### 2026-07-17 - Refocus the repository README
-
-- Reworked the README around the problem, approval flow, and boundary between AI suggestions, deterministic validation, and user-authorized cloud mutation.
-- Kept the AWS/Terraform-first MVP and provider-neutral product direction explicit while removing repeated implementation detail.
-- Verified every relative README link and ran `pnpm harness:check` successfully. This was documentation-only, so runtime builds and product tests were not rerun.
-
-### 2026-07-17 - Preserve dirty local ProjectDraft recovery
-
-- Preserved dirty IndexedDB drafts during Workspace reload regardless of client/server clock skew and added an explicit choice between restoring one and replacing it with the latest server draft.
-- Blocked manual, checkpoint, and page-exit server saves until recovery is decided; server replacement now updates IndexedDB only after explicit selection.
-- Fixed the ProjectDraft save service CI type error by narrowing conditional updates to the observed non-null server revision; API typecheck and focused API tests pass 32/32.
-- Focused ProjectDraft Web tests pass 37/37. Changed-file lint and direct API/Web typechecks pass. The local full Turbo wrapper could not start API/Web tasks because pnpm refused to purge copied temporary-worktree `node_modules` without a TTY. The Webpack build compiled, then the generated Next route check failed on pre-existing helper exports in architecture-draft and architecture-patch-preview routes. No DB migration, cloud mutation, deployment, or Git handoff was performed.
+- Fixed AWS connection deletion for connections referenced by Reverse Engineering scans by making the reference nullable with `ON DELETE SET NULL` in migration `0051`; scan results now remain available with a deleted-connection label.
+- Added the preserved scan count to the deletion preview and kept the deletion modal open on failure with a user summary, retry path, and separate diagnostic disclosure.
+- The original live HTTP reproduction now returns 204 with `connection=0, scan=1, detached=1`; focused API tests pass 26/26 and focused Web tests pass 6/6. Migration compatibility, harness, lint, typecheck, and build pass; lint retains one unrelated existing unused-import warning.
+- Restored the project-deletion modal's 40px close control and visible 18px X icon; the focused deletion-flow suite passes 14/14.
+- GitHub build disconnect now treats remote cleanup as best-effort, detaches local metadata with HTTP 204, and logs incomplete cleanup; focused API tests pass 26/26. The broad API run has unrelated failures (1370 pass, 3 fail, 1 cancelled).
+- Applied migration `0051` only to the local development database. No AWS mutation, Terraform apply/destroy, Deployment, Git handoff, push, or secret output occurred. No continuation handoff is required; the next action is review and commit of the implementation changes.
 
 ### 2026-07-17 - Harden Terraform module validation and palette audit
 
@@ -183,29 +167,3 @@ Short English-only working log for the current agent context. Older records are 
 - Initial release readiness now validates the producer's exact `commitSha:releaseCandidateId` marker, and read-only Delivery inspection recognizes a persisted target only after canonical fingerprint verification.
 - Legacy ECS web targets derive missing duplicate evidence from their confirmed paths; an explicit refresh persists that normalized evidence while GET remains read-only.
 - The focused readiness suite passes 89 checks; API lint, typecheck, and build pass. The live project profile is ready with zero required actions. No database, AWS, deployment, migration, commit, or push mutation was performed.
-
-### 2026-07-18 - Redesign deployment console
-
-- Added the approved executive Direct Deployment layout and real-data Deployment History KPIs, filters, and master-detail view without changing deployment gates or handlers.
-- Focused Web tests pass 47/47; Web lint/typecheck and diff checks pass. Root build and API lint were stopped per user request. No external mutation was performed.
-
-### 2026-07-18 - Use canonical Repository analysis for GitOps handoff
-
-- Reproduced the live 409: the linked RepositoryAnalysisRecord contained the current commit and one `apps/api/Dockerfile`, but handoff and readiness joined that row without selecting it and validated only nullable legacy SourceRepository analysis fields.
-- Added one canonical/legacy analysis resolver, made the linked record authoritative with record/payload revision fail-closed checks, fixed the left join scope, and covered the live record shape. Updated the stale initial-release fixture and isolated Direct route tests from local worker-mode and Postgres job-repository configuration.
-- The live project passes read-only `assertGitOpsTarget`; 97 focused analysis/readiness checks, the full Git/CI/CD focused matrix, 64 Direct route checks, and 69 Web deployment checks pass. Harness, lint, typecheck, root build tasks, and diff checks pass. No database migration, AWS mutation, deployment, GitHub handoff, PR creation, commit, or push was performed.
-
-### 2026-07-18 - Keep Delivery readable during Plan artifact outages
-
-- Read-only Delivery inspection now degrades a classified S3 Apply Plan download failure to unverified Plan readiness instead of returning HTTP 500; explicit refresh and unexpected verifier defects still fail closed.
-- The focused readiness suite passes 91 checks, and a live-project simulated S3 outage returns the profile with only the approved Plan unresolved. Root lint, typecheck, and build pass with one unrelated existing API test warning. No database, S3, AWS, deployment, migration, commit, or push mutation was performed.
-
-### 2026-07-18 - Merge latest dev and prepare the GitHub/deployment PR
-
-- Merged `origin/dev` at `fcee2825`, preserved both workstreams, removed duplicated GitHub App environment entries, and repaired two semantic auto-merge regressions in the Git/CI/CD health check and GitHub authorization fixture.
-- Harness, lint, all package typechecks, Web build, API build, diff checks, and the two affected focused suites pass; broad test suites were skipped at the user's request. No DB migration, cloud mutation, deployment, or GitHub handoff was performed.
-
-### 2026-07-18 - Remove CI-only S3 configuration coupling
-
-- Deployment Plan creates S3-backed plan and rollback storage only when those paths need it, so validation and mocked Plan tests no longer require a local `.env` or CI bucket setting.
-- The no-bucket Plan suite passes 25/25 and the exact CI API transition command passes 536/536; API lint, typecheck, and build pass. No S3 or cloud operation was executed.

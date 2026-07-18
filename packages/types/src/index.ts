@@ -31,6 +31,7 @@ export type ApiErrorCode =
   | "PUBLIC_REPOSITORY_BRANCH_UNAVAILABLE"
   | "PUBLIC_REPOSITORY_RATE_LIMITED"
   | "PUBLIC_REPOSITORY_PROVIDER_UNAVAILABLE"
+  | "CODECONNECTION_REPOSITORY_ACCESS_REQUIRED"
   | "REPOSITORY_ACCESS_VERIFICATION_REQUIRED"
   | "LIVE_OBSERVATION_DISABLED"
   | "LIVE_OBSERVATION_CACHE_UNAVAILABLE"
@@ -2148,6 +2149,9 @@ export type AwsConnectionDeletionPreviewResponse = {
     codeConnection: boolean;
   };
   preservedResources: ["CloudFormation Stack", "Terraform Execution Role"];
+  preservedRecords: {
+    reverseEngineeringScans: number;
+  };
   confirmationToken: string;
 };
 
@@ -2270,7 +2274,7 @@ export type ReverseEngineeringScanLogLevel = "INFO" | "WARN" | "ERROR";
 export type ReverseEngineeringScan = {
   id: string;
   projectId: string;
-  awsConnectionId: string;
+  awsConnectionId: string | null;
   provider: CloudProvider;
   region: string;
   resourceTypes: ReverseEngineeringResourceSelection[];

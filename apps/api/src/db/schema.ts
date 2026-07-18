@@ -557,9 +557,10 @@ export const reverseEngineeringScans = pgTable(
     projectId: varchar("project_id", { length: 36 })
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    awsConnectionId: varchar("aws_connection_id", { length: 36 })
-      .notNull()
-      .references(() => awsConnections.id, { onDelete: "restrict" }),
+    awsConnectionId: varchar("aws_connection_id", { length: 36 }).references(
+      () => awsConnections.id,
+      { onDelete: "set null" }
+    ),
     provider: varchar("provider", { length: 32 }).notNull().default("aws"),
     region: varchar("region", { length: 32 }).notNull(),
     resourceTypes: jsonb("resource_types").$type<ReverseEngineeringResourceSelection[]>().notNull(),

@@ -665,6 +665,7 @@ test("AWS connection deletion cleans managed resources before deleting metadata"
     codeConnectionArn:
       "arn:aws:codeconnections:ap-northeast-2:123456789012:connection/connection-id"
   });
+  repository.countReverseEngineeringScans = async () => 2;
 
   const preview = await getAwsConnectionDeletionPreview(
     { connectionId: created.awsConnection.id, accessContext },
@@ -685,6 +686,7 @@ test("AWS connection deletion cleans managed resources before deleting metadata"
     "CloudFormation Stack",
     "Terraform Execution Role"
   ]);
+  assert.deepEqual(preview.preservedRecords, { reverseEngineeringScans: 2 });
   assert.equal(preview.canDelete, true);
 
   await deleteAwsConnection(
@@ -851,6 +853,9 @@ function createInMemoryAwsConnectionRepository(): AwsConnectionRepository {
     async hasDeploymentUsingAwsConnection() {
       return false;
     },
+    async countReverseEngineeringScans() {
+      return 0;
+    },
     async claimAccessibleAwsConnectionDeletion(connectionId) {
       const record = records.get(connectionId);
       if (!record) return undefined;
@@ -932,6 +937,9 @@ function createListRepository(rows: AwsConnectionRecord[]): AwsConnectionReposit
     },
     async hasDeploymentUsingAwsConnection() {
       return false;
+    },
+    async countReverseEngineeringScans() {
+      return 0;
     },
     async claimAccessibleAwsConnectionDeletion() {
       return undefined;

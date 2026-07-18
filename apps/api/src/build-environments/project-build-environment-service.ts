@@ -153,6 +153,7 @@ export type ProjectBuildEnvironmentErrorCode =
   | "BUILD_ENVIRONMENT_DELETE_BLOCKED"
   | "BUILD_ENVIRONMENT_DELETE_FAILED"
   | "BUILD_ENVIRONMENT_PREPARE_FAILED"
+  | "CODECONNECTION_REPOSITORY_ACCESS_REQUIRED"
   | "REPOSITORY_ACCESS_VERIFICATION_REQUIRED";
 
 export class ProjectBuildEnvironmentError extends Error {
@@ -531,12 +532,33 @@ export async function prepareProjectBuildEnvironment(
     verification = await gateway.reconcile(desired);
     await requirePreparationContext(input, repository);
   } catch (error) {
+    const codeConnectionRepositoryAccessRequired =
+      isCodeConnectionRepositoryAccessError(error);
+    const repositoryAccessStatusReason = codeConnectionRepositoryAccessRequired
+      ? createCodeConnectionRepositoryAccessMessage(context.sourceRepository)
+      : null;
     await repository.save({
       ...preparing,
       status: "verification_failed",
       lastVerifiedAt: null,
+      ...(repositoryAccessStatusReason
+        ? {
+            repositoryVerificationStatus: "failed" as const,
+            repositoryVerificationRequestedCommitSha: confirmedCommitSha,
+            repositoryVerificationResolvedCommitSha: null,
+            repositoryVerificationBuildArn: null,
+            repositoryVerificationStatusReason: repositoryAccessStatusReason,
+            repositoryVerifiedAt: null
+          }
+        : {}),
       updatedAt: now
     });
+    if (repositoryAccessStatusReason) {
+      throw new ProjectBuildEnvironmentError(
+        "CODECONNECTION_REPOSITORY_ACCESS_REQUIRED",
+        repositoryAccessStatusReason
+      );
+    }
     throw new ProjectBuildEnvironmentError(
       "BUILD_ENVIRONMENT_PREPARE_FAILED",
       `AWS 빌드 환경을 준비하지 못했습니다: ${safeAwsPreparationError(error)}`,
@@ -567,6 +589,19 @@ function safeAwsPreparationError(error: unknown): string {
   return maskDeploymentMessage(error.message)
     .replace(/[\r\n\t]+/gu, " ")
     .slice(0, 500);
+}
+
+function isCodeConnectionRepositoryAccessError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { Code?: unknown; code?: unknown; name?: unknown };
+  return [candidate.name, candidate.Code, candidate.code].includes("OAuthProviderException");
+}
+
+function createCodeConnectionRepositoryAccessMessage(
+  sourceRepository: NonNullable<ProjectBuildEnvironmentPreparationContext["sourceRepository"]>
+): string {
+  const repositoryName = sourceRepository.name.replace(/\.git$/iu, "");
+  return `AWS CodeConnections가 GitHub 저장소 ${sourceRepository.owner}/${repositoryName} 접근을 인증하지 못했습니다. GitHub에서 AWS Connector for GitHub 설치 상태와 이 저장소 접근 권한을 확인한 뒤, 계속 실패하면 AWS GitHub 연결을 다시 승인해 주세요.`;
 }
 
 export async function getProjectBuildEnvironment(
@@ -640,6 +675,7 @@ export async function verifyProjectRepositoryAccess(
 
   const requestedCommitSha = context.confirmedBuildConfig.confirmedCommitSha.toLowerCase();
   let verification: ProjectRepositoryAccessVerification;
+  let codeConnectionRepositoryAccessRequired = false;
   try {
     const environmentVerification = await gateway.verify(desired);
     verification = environmentVerification.verified
@@ -654,12 +690,15 @@ export async function verifyProjectRepositoryAccess(
             "The CodeBuild project no longer matches the approved Repository and connection"
         };
   } catch (error) {
+    codeConnectionRepositoryAccessRequired = isCodeConnectionRepositoryAccessError(error);
     verification = {
       verified: false,
       requestedCommitSha,
       resolvedCommitSha: null,
       buildArn: null,
-      statusReason: `CodeBuild repository checkout failed: ${safeAwsPreparationError(error)}`
+      statusReason: codeConnectionRepositoryAccessRequired
+        ? createCodeConnectionRepositoryAccessMessage(context.sourceRepository)
+        : `CodeBuild repository checkout failed: ${safeAwsPreparationError(error)}`
     };
   }
   const resolvedCommitCandidate = verification.resolvedCommitSha?.toLowerCase() ?? null;
@@ -687,6 +726,12 @@ export async function verifyProjectRepositoryAccess(
     repositoryVerifiedAt: exactCommitVerified ? now : null,
     updatedAt: now
   });
+  if (codeConnectionRepositoryAccessRequired) {
+    throw new ProjectBuildEnvironmentError(
+      "CODECONNECTION_REPOSITORY_ACCESS_REQUIRED",
+      createCodeConnectionRepositoryAccessMessage(context.sourceRepository)
+    );
+  }
   return { buildEnvironment: toProjectBuildEnvironment(saved) };
 }
 
