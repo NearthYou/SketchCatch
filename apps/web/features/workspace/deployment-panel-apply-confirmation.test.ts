@@ -22,3 +22,21 @@ test("apply confirmation can be dismissed after it opens for an approved plan", 
     /showApplyConfirmation \|\| shouldShowApplyButton/
   );
 });
+
+test("approved plan actions show deployment before approval revocation", () => {
+  const confirmationStart = deploymentPanelSource.indexOf(
+    "{showApplyConfirmation && selectedDeployment ? ("
+  );
+  const applyAction = deploymentPanelSource.indexOf(
+    "onClick={startTerraformApply}",
+    confirmationStart
+  );
+  const revokeAction = deploymentPanelSource.indexOf(
+    "onClick={() => void revokeCurrentPlanApproval()}",
+    confirmationStart
+  );
+
+  assert.ok(confirmationStart >= 0);
+  assert.ok(applyAction > confirmationStart);
+  assert.ok(revokeAction > applyAction);
+});

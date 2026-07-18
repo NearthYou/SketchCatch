@@ -177,7 +177,7 @@ The review step that evaluates a Practice Architecture for cost, security, permi
 _Avoid_: Validation, review, inspection
 
 **Deployment Safety Gate**:
-The approval boundary that blocks high-risk cloud changes before Deployment while allowing lower-risk Check Findings to proceed only after explicit user acknowledgement.
+The pre-deployment review boundary that records deterministic Check Findings and presents them before approval. In the current implementation, High severity alone does not set the Plan summary to blocked; approval-blocking enforcement by risk severity remains planned. Separate approval and apply boundaries still prevent unapproved execution.
 _Avoid_: Warning popup, AI blocker, safety modal
 
 **Check Finding**:

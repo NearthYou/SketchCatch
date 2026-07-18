@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import type { InfrastructureGraph } from "@sketchcatch/types";
+import type { DiagramJson, InfrastructureGraph } from "@sketchcatch/types";
 import {
   TerraformDiagramValidationError,
   renderTerraformFromInfrastructureGraph
 } from "./diagram-to-terraform.js";
+import { buildInfrastructureGraphFromDiagramJson } from "./infrastructure-graph.js";
 
 test("renders Terraform code from InfrastructureGraph nodes", () => {
   const graph: InfrastructureGraph = {
@@ -1426,3 +1427,416 @@ function createEcsObservationRuntime(
     ]
   };
 }
+
+test("Reverse Engineering ALB와 CloudFront fixture는 AWS snapshot을 최소 Terraform 필드로 정규화한다", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "orders", {
+        accountId: "123456789012",
+        analysisExcluded: false,
+        arn: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
+        availabilityZones: [
+          { availabilityZone: "ap-northeast-2a", subnetId: "subnet-public-a" },
+          { availabilityZone: "ap-northeast-2b", subnetId: "subnet-public-b" }
+        ],
+        dnsName: "orders-123.ap-northeast-2.elb.amazonaws.com",
+        name: "orders",
+        providerParameters: { rawSdkField: "must-not-render" },
+        providerResourceId:
+          "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
+        providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        ipAddressType: "dualstack",
+        scheme: "internet-facing",
+        securityGroupIds: ["sg-web"],
+        subnetIds: ["subnet-public-a", "subnet-public-b"],
+        type: "application",
+        vpcId: "vpc-orders"
+      }),
+      createLiveObservationNode("aws_cloudfront_distribution", "orders", {
+        accountId: "123456789012",
+        arn: "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTION",
+        comment: "orders entry",
+        defaultCacheBehavior: {
+          allowedMethods: ["GET", "HEAD"],
+          cachedMethods: ["GET", "HEAD"],
+          forwardedValues: { queryString: false, cookies: { forward: "none" } },
+          targetOriginId: "orders-alb",
+          viewerProtocolPolicy: "redirect-to-https"
+        },
+        domainName: "d111111abcdef8.cloudfront.net",
+        enabled: true,
+        id: "EDISTRIBUTION",
+        origin: [
+          {
+            customOriginConfig: {
+              httpPort: 80,
+              httpsPort: 443,
+              originProtocolPolicy: "https-only",
+              originSslProtocols: ["TLSv1.2"]
+            },
+            domainName: "orders-123.ap-northeast-2.elb.amazonaws.com",
+            originId: "orders-alb"
+          }
+        ],
+        providerParameters: { rawSdkField: "must-not-render" },
+        providerResourceType: "AWS::CloudFront::Distribution",
+        restrictions: { geoRestriction: { restrictionType: "none" } },
+        status: "Deployed",
+        viewerCertificate: { cloudfrontDefaultCertificate: true }
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /resource "aws_lb" "orders" \{/);
+  assert.match(terraform, /name\s+= "orders"/);
+  assert.match(terraform, /internal\s+= false/);
+  assert.match(terraform, /load_balancer_type\s+= "application"/);
+  assert.match(terraform, /ip_address_type\s+= "dualstack"/);
+  assert.match(terraform, /security_groups = \[[\s\S]*"sg-web"/);
+  assert.match(terraform, /subnets = \[[\s\S]*"subnet-public-a"[\s\S]*"subnet-public-b"/);
+  assert.match(terraform, /resource "aws_cloudfront_distribution" "orders" \{/);
+  assert.match(terraform, /origin \{[\s\S]*origin_id\s+= "orders-alb"/);
+  assert.match(terraform, /default_cache_behavior \{[\s\S]*target_origin_id\s+= "orders-alb"/);
+  assert.match(terraform, /restrictions \{[\s\S]*geo_restriction \{/);
+  assert.match(terraform, /viewer_certificate \{[\s\S]*cloudfront_default_certificate = true/);
+  assert.doesNotMatch(
+    terraform,
+    /^\s*(account_id|analysis_excluded|arn|availability_zones|dns_name|id|provider_parameters|provider_resource_id|provider_resource_type|scheme|status|type|vpc_id)\s*=/m
+  );
+  assert.equal(terraform.match(/^\s*domain_name\s*=/gm)?.length, 1);
+  assert.doesNotMatch(terraform, /must-not-render/);
+});
+
+test("Reverse Engineering ECS fixture는 민감 환경 값 없이 최소 Cluster Service Task Definition을 만든다", () => {
+  const clusterArn = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
+  const serviceArn = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api";
+  const taskDefinitionArn =
+    "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_ecs_cluster", "orders", {
+        arn: clusterArn,
+        name: "orders",
+        status: "ACTIVE",
+        capacityProviders: ["FARGATE", "FARGATE_SPOT"],
+        configuration: {
+          executeCommandConfiguration: {
+            logging: "OVERRIDE",
+            logConfiguration: {
+              s3BucketName: "orders-command-logs",
+              s3EncryptionEnabled: true
+            }
+          }
+        },
+        providerParameters: { rawSdkField: "must-not-render" },
+        providerResourceId: clusterArn,
+        providerResourceType: "AWS::ECS::Cluster"
+      }),
+      createLiveObservationNode("aws_ecs_task_definition", "orders", {
+        arn: taskDefinitionArn,
+        family: "orders",
+        revision: 7,
+        networkMode: "awsvpc",
+        requiresCompatibilities: ["FARGATE"],
+        cpu: "512",
+        memory: "1024",
+        executionRoleArn: "arn:aws:iam::123456789012:role/ecs-execution",
+        taskRoleArn: "arn:aws:iam::123456789012:role/orders-task",
+        containerDefinitions: [
+          {
+            name: "api",
+            image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/orders:stable",
+            essential: true,
+            environment: [{ name: "API_TOKEN", value: "must-not-leak" }],
+            secrets: [
+              {
+                name: "DATABASE_URL",
+                valueFrom: "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:db"
+              }
+            ],
+            portMappings: [{ containerPort: 4000, protocol: "tcp" }],
+            rawSdkField: "must-not-render"
+          }
+        ],
+        providerParameters: { rawSdkField: "must-not-render" },
+        providerResourceId: taskDefinitionArn,
+        providerResourceType: "AWS::ECS::TaskDefinition"
+      }),
+      createLiveObservationNode("aws_ecs_service", "api", {
+        arn: serviceArn,
+        name: "api",
+        clusterArn,
+        clusterName: "orders",
+        taskDefinitionArn,
+        desiredCount: 2,
+        launchType: "FARGATE",
+        networkConfiguration: {
+          awsvpcConfiguration: {
+            subnets: ["subnet-private-a"],
+            securityGroups: ["sg-api"],
+            assignPublicIp: "DISABLED"
+          }
+        },
+        loadBalancers: [
+          {
+            targetGroupArn:
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api/one",
+            containerName: "api",
+            containerPort: 4000
+          }
+        ],
+        providerParameters: { rawSdkField: "must-not-render" },
+        providerResourceId: serviceArn,
+        providerResourceType: "AWS::ECS::Service"
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /resource "aws_ecs_cluster" "orders" \{/);
+  assert.match(terraform, /name\s+= "orders"/);
+  assert.match(
+    terraform,
+    /resource "aws_ecs_cluster_capacity_providers" "orders_capacity_providers" \{/
+  );
+  assert.match(terraform, /cluster_name\s+= aws_ecs_cluster\.orders\.name/);
+  assert.match(terraform, /capacity_providers = \[[\s\S]*"FARGATE"[\s\S]*"FARGATE_SPOT"/);
+  assert.match(
+    terraform,
+    /configuration \{[\s\S]*execute_command_configuration \{[\s\S]*logging\s+= "OVERRIDE"/
+  );
+  assert.match(terraform, /s3_bucket_encryption_enabled\s+= true/);
+  assert.doesNotMatch(terraform, /s3_encryption_enabled\s+=/);
+  assert.match(terraform, /resource "aws_ecs_task_definition" "orders" \{/);
+  assert.match(terraform, /container_definitions\s+= jsonencode\(\[/);
+  assert.match(terraform, /network_mode\s+= "awsvpc"/);
+  assert.match(terraform, /requires_compatibilities = \[[\s\S]*"FARGATE"/);
+  assert.match(terraform, /execution_role_arn\s+= "arn:aws:iam::123456789012:role\/ecs-execution"/);
+  assert.match(terraform, /valueFrom = "arn:aws:secretsmanager:[^"]+:secret:db"/);
+  assert.match(terraform, /resource "aws_ecs_service" "api" \{/);
+  assert.match(terraform, new RegExp(`cluster\\s+= "${clusterArn}"`));
+  assert.match(terraform, new RegExp(`task_definition\\s+= "${taskDefinitionArn}"`));
+  assert.match(terraform, /desired_count\s+= 2/);
+  assert.match(terraform, /launch_type\s+= "FARGATE"/);
+  assert.match(
+    terraform,
+    /network_configuration \{[\s\S]*assign_public_ip\s+= false[\s\S]*security_groups = \[[\s\S]*"sg-api"/
+  );
+  assert.match(
+    terraform,
+    /load_balancer \{[\s\S]*target_group_arn\s+= "arn:aws:elasticloadbalancing:[^"]+:targetgroup\/api\/one"/
+  );
+  assert.doesNotMatch(terraform, /must-not-leak|must-not-render|provider_parameters|raw_sdk_field/);
+  assert.doesNotMatch(terraform, /^\s*environment\s*=/m);
+  assert.doesNotMatch(terraform, /^\s*cluster_name\s+= "orders"/m);
+  assert.doesNotMatch(terraform, /^\s*(arn|cluster_arn|provider_resource_id|provider_resource_type|revision|status|task_definition_arn)\s*=/m);
+});
+
+test("Reverse Engineering ECS managed storage-only configuration은 KMS 값을 Terraform nested block으로 보존한다", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_ecs_cluster", "managed_storage", {
+        name: "managed-storage",
+        configuration: {
+          managedStorageConfiguration: {
+            kmsKeyId: "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555",
+            fargateEphemeralStorageKmsKeyId:
+              "arn:aws:kms:ap-northeast-2:123456789012:key/66666666-7777-8888-9999-000000000000"
+          }
+        },
+        providerResourceId: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/managed-storage",
+        providerResourceType: "AWS::ECS::Cluster"
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /resource "aws_ecs_cluster" "managed_storage" \{/);
+  assert.match(terraform, /configuration \{[\s\S]*managed_storage_configuration \{/);
+  assert.match(
+    terraform,
+    /managed_storage_configuration \{[\s\S]*kms_key_id\s+= "arn:aws:kms:ap-northeast-2:123456789012:key\/11111111-2222-3333-4444-555555555555"/
+  );
+  assert.match(
+    terraform,
+    /managed_storage_configuration \{[\s\S]*fargate_ephemeral_storage_kms_key_id\s+= "arn:aws:kms:ap-northeast-2:123456789012:key\/66666666-7777-8888-9999-000000000000"/
+  );
+  assert.doesNotMatch(terraform, /execute_command_configuration/);
+});
+
+test("Reverse Engineering ECS Service는 classic ELB를 elb_name으로 렌더링하고 불완전한 binding은 생략한다", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_ecs_service", "classic", {
+        name: "classic-api",
+        clusterArn: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders",
+        taskDefinitionArn:
+          "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7",
+        desiredCount: 1,
+        launchType: "EC2",
+        loadBalancers: [
+          {
+            loadBalancerName: "orders-classic-elb",
+            containerName: "api",
+            containerPort: 4000
+          }
+        ],
+        providerResourceType: "AWS::ECS::Service"
+      }),
+      createLiveObservationNode("aws_ecs_service", "incomplete", {
+        name: "incomplete-api",
+        clusterArn: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders",
+        taskDefinitionArn:
+          "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7",
+        desiredCount: 1,
+        launchType: "EC2",
+        loadBalancers: [
+          { targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api/one", containerName: "api" }
+        ],
+        providerResourceType: "AWS::ECS::Service"
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(
+    terraform,
+    /resource "aws_ecs_service" "classic" \{[\s\S]*load_balancer \{[\s\S]*elb_name\s+= "orders-classic-elb"/
+  );
+  assert.match(terraform, /container_name\s+= "api"/);
+  assert.match(terraform, /container_port\s+= 4000/);
+  assert.doesNotMatch(terraform, /load_balancer_name\s+=/);
+  assert.doesNotMatch(
+    terraform,
+    /resource "aws_ecs_service" "incomplete" \{[\s\S]*load_balancer \{/
+  );
+});
+
+test("생성 필수값이 부족한 Reverse Engineering Resource는 Terraform block과 output에서 제외한다", () => {
+  const terraform = renderTerraformFromInfrastructureGraph({
+    nodes: [
+      createLiveObservationNode("aws_lb", "incomplete", {
+        arn: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/incomplete/one",
+        name: "incomplete",
+        sketchcatchReferenceTerraform: true,
+        terraformValidationMissingFields: ["scheme", "subnetIds"]
+      }),
+      createLiveObservationNode("aws_cloudfront_distribution", "incomplete", {
+        enabled: true,
+        id: "EINCOMPLETE",
+        sketchcatchReferenceTerraform: true,
+        terraformValidationMissingFields: ["origin", "defaultCacheBehavior"]
+      })
+    ],
+    edges: []
+  });
+
+  assert.equal(terraform, "");
+});
+
+test("관계가 있는 Lambda와 관계 없는 IAM 검토 전용 marker는 Terraform 및 배포 후보가 되지 않는다", () => {
+  const diagram: DiagramJson = {
+    nodes: [
+      {
+        id: "vpc-task9",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "Orders VPC",
+        position: { x: 0, y: 0 },
+        size: { width: 240, height: 120 },
+        locked: false,
+        zIndex: 1,
+        parameters: {
+          resourceType: "aws_vpc",
+          resourceName: "orders",
+          fileName: "network.tf",
+          values: { cidrBlock: "10.0.0.0/16", analysisExcluded: false }
+        }
+      },
+      {
+        id: "lambda-task9",
+        type: "aws_lambda_function",
+        kind: "resource",
+        label: "확인 필요 · orders-handler",
+        position: { x: 280, y: 0 },
+        size: { width: 240, height: 120 },
+        locked: false,
+        zIndex: 2,
+        parameters: {
+          resourceType: "aws_lambda_function",
+          resourceName: "orders_handler",
+          fileName: "review-only.tf",
+          values: { analysisExcluded: true }
+        }
+      },
+      {
+        id: "iam-role-task9",
+        type: "aws_iam_role",
+        kind: "resource",
+        label: "orders-read-only",
+        position: { x: 560, y: 0 },
+        size: { width: 240, height: 120 },
+        locked: false,
+        zIndex: 3,
+        parameters: {
+          resourceType: "aws_iam_role",
+          resourceName: "orders_read_only",
+          fileName: "review-only.tf",
+          values: { analysisExcluded: true }
+        }
+      }
+    ],
+    edges: [
+      {
+        id: "edge-vpc-lambda-task9",
+        sourceNodeId: "vpc-task9",
+        targetNodeId: "lambda-task9",
+        label: "uses"
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const graph = buildInfrastructureGraphFromDiagramJson(diagram);
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.deepEqual(
+    graph.nodes.map((node) => node.id),
+    ["vpc-task9"]
+  );
+  assert.deepEqual(graph.edges, []);
+  assert.match(terraform, /resource "aws_vpc" "orders"/);
+  assert.doesNotMatch(
+    terraform,
+    /aws_lambda_function|aws_iam_role|orders_handler|orders_read_only/
+  );
+});
+
+test("Reverse Engineering CloudFront VPC origin은 불완전한 Terraform origin block을 만들지 않는다", () => {
+  const terraform = renderTerraformFromInfrastructureGraph({
+    nodes: [
+      createLiveObservationNode("aws_cloudfront_distribution", "private_origin", {
+        providerResourceType: "AWS::CloudFront::Distribution",
+        enabled: true,
+        origin: [
+          {
+            originId: "private-origin",
+            domainName: "internal.example.com",
+            VpcOriginConfig: { VpcOriginId: "vo_0123456789abcdef0" }
+          }
+        ]
+      })
+    ],
+    edges: []
+  });
+
+  assert.equal(terraform, "");
+});

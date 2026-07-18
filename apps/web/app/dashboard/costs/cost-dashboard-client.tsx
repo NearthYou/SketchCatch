@@ -1,15 +1,158 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type { CostEstimatePeriod, CostUsageAnalysisRange } from "@sketchcatch/types";
 import { CostEstimatePanel } from "./cost-estimate-panel";
 import { CostUsagePanel } from "./cost-usage-panel";
+import {
+  normalizeCostDashboardSearchParams,
+  parseCostEstimatePeriod,
+  parseCostDashboardTab,
+  parseCostUsageConnectionId,
+  parseCostUsageProjectKey,
+  parseCostUsageRange,
+  parseExpectedUserCount,
+  writeCostEstimatePeriod,
+  writeCostDashboardTab,
+  writeCostUsageConnectionId,
+  writeCostUsageProjectKey,
+  writeCostUsageRange,
+  writeExpectedUserCount,
+  type CostDashboardTab
+} from "./cost-dashboard-url-state";
 import styles from "../dashboard-tools.module.css";
 
-type CostDashboardTab = "estimate" | "usage";
-
 export function CostDashboardClient() {
-  const [activeTab, setActiveTab] = useState<CostDashboardTab>("estimate");
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<CostDashboardTab>(() =>
+    parseCostDashboardTab(searchParams)
+  );
+  const [estimatePeriod, setEstimatePeriod] = useState<CostEstimatePeriod>(() =>
+    parseCostEstimatePeriod(searchParams)
+  );
+  const [expectedUserCount, setExpectedUserCount] = useState(() =>
+    parseExpectedUserCount(searchParams)
+  );
+  const [expectedUserCountInput, setExpectedUserCountInput] = useState(() =>
+    String(parseExpectedUserCount(searchParams))
+  );
+  const expectedUserCountRef = useRef(expectedUserCount);
+  const [selectedConnectionId, setSelectedConnectionId] = useState(() =>
+    parseCostUsageConnectionId(searchParams)
+  );
+  const [selectedProjectKey, setSelectedProjectKey] = useState(() =>
+    parseCostUsageProjectKey(searchParams)
+  );
+  const [usageRange, setUsageRange] = useState<CostUsageAnalysisRange>(() =>
+    parseCostUsageRange(searchParams)
+  );
   const tabRefs = useRef<Partial<Record<CostDashboardTab, HTMLButtonElement | null>>>({});
+
+  const pushCostSearchParams = useCallback(
+    (nextSearchParams: URLSearchParams): void => {
+      const nextQuery = nextSearchParams.toString();
+      router.push(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    },
+    [pathname, router]
+  );
+
+  const replaceCostSearchParams = useCallback(
+    (nextSearchParams: URLSearchParams): void => {
+      const nextQuery = nextSearchParams.toString();
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    },
+    [pathname, router]
+  );
+
+  useEffect(() => {
+    const normalizedSearchParams = normalizeCostDashboardSearchParams(searchParams);
+
+    if (normalizedSearchParams.toString() !== searchParams.toString()) {
+      replaceCostSearchParams(normalizedSearchParams);
+    }
+
+    setActiveTab(parseCostDashboardTab(normalizedSearchParams));
+    setEstimatePeriod(parseCostEstimatePeriod(normalizedSearchParams));
+    setSelectedConnectionId(parseCostUsageConnectionId(normalizedSearchParams));
+    setSelectedProjectKey(parseCostUsageProjectKey(normalizedSearchParams));
+    setUsageRange(parseCostUsageRange(normalizedSearchParams));
+    const nextExpectedUserCount = parseExpectedUserCount(normalizedSearchParams);
+
+    if (expectedUserCountRef.current !== nextExpectedUserCount) {
+      expectedUserCountRef.current = nextExpectedUserCount;
+      setExpectedUserCount(nextExpectedUserCount);
+      setExpectedUserCountInput(String(nextExpectedUserCount));
+    }
+  }, [replaceCostSearchParams, searchParams]);
+
+  const changeActiveTab = useCallback(
+    (nextTab: CostDashboardTab): void => {
+      setActiveTab(nextTab);
+      const nextSearchParams = writeCostDashboardTab(searchParams, nextTab);
+      pushCostSearchParams(nextSearchParams);
+    },
+    [pushCostSearchParams, searchParams]
+  );
+
+  const changeEstimatePeriod = useCallback(
+    (nextPeriod: CostEstimatePeriod): void => {
+      setEstimatePeriod(nextPeriod);
+      pushCostSearchParams(writeCostEstimatePeriod(searchParams, nextPeriod));
+    },
+    [pushCostSearchParams, searchParams]
+  );
+
+  const changeExpectedUserCount = useCallback(
+    (nextExpectedUserCount: number): void => {
+      expectedUserCountRef.current = nextExpectedUserCount;
+      setExpectedUserCount(nextExpectedUserCount);
+      pushCostSearchParams(writeExpectedUserCount(searchParams, nextExpectedUserCount));
+    },
+    [pushCostSearchParams, searchParams]
+  );
+
+  const changeSelectedConnection = useCallback(
+    (nextConnectionId: string): void => {
+      setSelectedConnectionId(nextConnectionId);
+      pushCostSearchParams(writeCostUsageConnectionId(searchParams, nextConnectionId));
+    },
+    [pushCostSearchParams, searchParams]
+  );
+
+  const normalizeSelectedConnection = useCallback(
+    (nextConnectionId: string): void => {
+      setSelectedConnectionId(nextConnectionId);
+      replaceCostSearchParams(writeCostUsageConnectionId(searchParams, nextConnectionId));
+    },
+    [replaceCostSearchParams, searchParams]
+  );
+
+  const changeSelectedProject = useCallback(
+    (nextProjectKey: string): void => {
+      setSelectedProjectKey(nextProjectKey);
+      pushCostSearchParams(writeCostUsageProjectKey(searchParams, nextProjectKey));
+    },
+    [pushCostSearchParams, searchParams]
+  );
+
+  const normalizeSelectedProject = useCallback(
+    (nextProjectKey: string): void => {
+      setSelectedProjectKey(nextProjectKey);
+      replaceCostSearchParams(writeCostUsageProjectKey(searchParams, nextProjectKey));
+    },
+    [replaceCostSearchParams, searchParams]
+  );
+
+  const changeUsageRange = useCallback(
+    (nextRange: CostUsageAnalysisRange): void => {
+      setUsageRange(nextRange);
+      pushCostSearchParams(writeCostUsageRange(searchParams, nextRange));
+    },
+    [pushCostSearchParams, searchParams]
+  );
 
   function selectTabFromKeyboard(
     event: React.KeyboardEvent<HTMLButtonElement>,
@@ -30,7 +173,7 @@ export function CostDashboardClient() {
 
     if (nextTab === undefined) return;
     event.preventDefault();
-    setActiveTab(nextTab);
+    changeActiveTab(nextTab);
     tabRefs.current[nextTab]?.focus();
   }
 
@@ -49,7 +192,7 @@ export function CostDashboardClient() {
           aria-selected={activeTab === "estimate"}
           className={styles.costTab}
           id="cost-tab-estimate"
-          onClick={() => setActiveTab("estimate")}
+          onClick={() => changeActiveTab("estimate")}
           onKeyDown={(event) => selectTabFromKeyboard(event, "estimate")}
           ref={(element) => {
             tabRefs.current.estimate = element;
@@ -65,7 +208,7 @@ export function CostDashboardClient() {
           aria-selected={activeTab === "usage"}
           className={styles.costTab}
           id="cost-tab-usage"
-          onClick={() => setActiveTab("usage")}
+          onClick={() => changeActiveTab("usage")}
           onKeyDown={(event) => selectTabFromKeyboard(event, "usage")}
           ref={(element) => {
             tabRefs.current.usage = element;
@@ -84,7 +227,27 @@ export function CostDashboardClient() {
           id={`cost-panel-${activeTab}`}
           role="tabpanel"
         >
-          {activeTab === "estimate" ? <CostEstimatePanel /> : <CostUsagePanel />}
+          {activeTab === "estimate" ? (
+            <CostEstimatePanel
+              expectedUserCount={expectedUserCount}
+              expectedUserCountInput={expectedUserCountInput}
+              onExpectedUserCountChange={changeExpectedUserCount}
+              onExpectedUserCountInputChange={setExpectedUserCountInput}
+              onPeriodChange={changeEstimatePeriod}
+              period={estimatePeriod}
+            />
+          ) : (
+            <CostUsagePanel
+              onConnectionChange={changeSelectedConnection}
+              onConnectionNormalize={normalizeSelectedConnection}
+              onProjectChange={changeSelectedProject}
+              onProjectNormalize={normalizeSelectedProject}
+              onRangeChange={changeUsageRange}
+              range={usageRange}
+              selectedConnectionId={selectedConnectionId}
+              selectedProjectKey={selectedProjectKey}
+            />
+          )}
         </section>
       </div>
     </div>

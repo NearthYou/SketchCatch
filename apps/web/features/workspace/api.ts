@@ -304,7 +304,10 @@ class ProjectThumbnailFetchError extends Error {
 }
 
 // 인증된 Project의 최신 실제 Board 캡처를 raster Blob으로 읽습니다.
-export async function fetchProjectThumbnail(projectId: string): Promise<Blob | null> {
+export async function fetchProjectThumbnail(
+  projectId: string,
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<Blob | null> {
   const headers = new Headers({ Accept: "image/webp,image/png" });
   const session = readStoredAuthSession();
 
@@ -317,7 +320,8 @@ export async function fetchProjectThumbnail(projectId: string): Promise<Blob | n
     {
       cache: "no-store",
       credentials: "include",
-      headers
+      headers,
+      ...(options.signal ? { signal: options.signal } : {})
     }
   );
 
@@ -1253,22 +1257,35 @@ export async function createAwsConnectionSetup({
 }
 
 export async function listAwsConnections(
-  options: { readonly signal?: AbortSignal | undefined } = {}
+  options: {
+    readonly includeUnverified?: boolean | undefined;
+    readonly signal?: AbortSignal | undefined;
+  } = {}
 ): Promise<AwsConnection[]> {
-  const response = await listAwsConnectionSettings(options);
+  const query = options.includeUnverified ? "?includeUnverified=true" : "";
+  const response = await apiFetch<unknown>(`/aws/connections${query}`, {
+    auth: true,
+    ...(options.signal ? { signal: options.signal } : {})
+  });
 
-  return response.awsConnections;
+  if (Array.isArray(response)) {
+    return response as AwsConnection[];
+  }
+  if (!response || typeof response !== "object") {
+    return [];
+  }
+
+  const { awsConnections } = response as Partial<AwsConnectionListResponse>;
+  return Array.isArray(awsConnections) ? awsConnections : [];
 }
 
 export async function listAwsConnectionSettings(
   options: { readonly signal?: AbortSignal | undefined } = {}
 ): Promise<AwsConnectionListResponse> {
-  const response = await apiFetch<AwsConnectionListResponse>("/aws/connections", {
+  return apiFetch<AwsConnectionListResponse>("/aws/connections", {
     auth: true,
     ...(options.signal ? { signal: options.signal } : {})
   });
-
-  return response;
 }
 
 export async function testAwsConnection(

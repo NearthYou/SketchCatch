@@ -1,10 +1,24 @@
-/** 자동 화면 맞춤 중에는 viewport 저장을 건너뛰고, 사용자 이동만 저장합니다. */
+export type ViewportPersistenceContext = {
+  readonly automaticMoveRequestId: number;
+  readonly isPreviewActive: boolean;
+  readonly isViewer: boolean;
+};
+
+export function shouldPersistViewportAfterMove({
+  automaticMoveRequestId,
+  isPreviewActive,
+  isViewer
+}: ViewportPersistenceContext): boolean {
+  return automaticMoveRequestId === 0 && !isPreviewActive && !isViewer;
+}
+
+/** 편집 보드에서 사용자가 직접 이동한 viewport만 저장합니다. */
 export function persistViewportAfterMove<TViewport>(
-  automaticMoveRequestId: number,
+  context: ViewportPersistenceContext,
   viewport: TViewport,
   persistViewport: (viewport: TViewport) => void
 ): void {
-  if (automaticMoveRequestId !== 0) {
+  if (!shouldPersistViewportAfterMove(context)) {
     return;
   }
 

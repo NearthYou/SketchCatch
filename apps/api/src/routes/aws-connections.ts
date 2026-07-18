@@ -76,6 +76,10 @@ const createAwsConnectionBodySchema = z.object({
   region: awsRegionSchema
 });
 
+const awsConnectionListQuerySchema = z.object({
+  includeUnverified: z.enum(["true", "false"]).optional()
+});
+
 const testAwsConnectionBodySchema = z.object({
   roleArn: awsRoleArnSchema
 });
@@ -123,6 +127,14 @@ export type AwsConnectionRouteOptions = {
   cleanupManagedAwsResources?: ReturnType<typeof createAwsConnectionManagedCleanup>;
 };
 
+export function parseAwsConnectionListQuery(query: unknown): { includeUnverified: boolean } {
+  const parsed = awsConnectionListQuerySchema.parse(query);
+
+  return {
+    includeUnverified: parsed.includeUnverified === "true"
+  };
+}
+
 const defaultAwsConnectionRateLimiter = createInMemoryRateLimiter({
   limit: 30,
   windowMs: 60_000
@@ -154,6 +166,7 @@ export async function registerAwsConnectionRoutes(
   });
 
   app.get("/aws/connections", async (request, reply) => {
+    const query = parseAwsConnectionListQuery(request.query);
     const client = getAwsConnectionDatabaseClient();
     const currentUserId = await requireActiveUserId(request, () => client);
     const repository =
@@ -165,7 +178,8 @@ export async function registerAwsConnectionRoutes(
         {
           accessContext: createUserProjectAccessContext(currentUserId)
         },
-        repository
+        repository,
+        { includeUnverified: query.includeUnverified }
       );
 
       return reply.status(200).send(awsConnectionSettings);

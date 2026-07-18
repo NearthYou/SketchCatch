@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import type { Deployment, ProjectDeletePreview } from "@sketchcatch/types";
 import {
   getDestroyDeleteAcknowledgedWarningIds,
+  getProjectDeleteProgress,
+  isDestroyPlanReadyForApproval,
   shouldShowProjectOnlyDeleteFallback
 } from "./project-delete-flow";
 
@@ -25,7 +27,7 @@ test("destroy delete polling stops when the projects page unmounts", () => {
   const pollingSource = getSourceBetween(
     projectsClientSource,
     "async function waitForProjectDeployment(input:",
-    "function isDestroyPlanReadyForApproval"
+    "function compareProjectsBySortMode"
   );
 
   assert.match(projectsClientSource, /const isMountedRef = useRef\(true\);/);
@@ -54,10 +56,79 @@ test("destroy delete failures expose a project-only fallback", () => {
       errorMessage: "Terraform destroy failed because the resource no longer exists.",
       preview,
       selectedAction: "destroy_then_delete",
-      status: "approval"
+      status: "approving"
     }),
-    true
+    false
   );
+});
+
+test("resource-inclusive deletion exposes compact progress for every automatic stage", () => {
+  assert.equal(getProjectDeleteProgress("ready"), null);
+  assert.deepEqual(
+    ["planning", "approving", "destroying", "deleting"].map((status) => {
+      const progress = getProjectDeleteProgress(
+        status as "planning" | "approving" | "destroying" | "deleting"
+      );
+      return [progress?.label, progress?.percent];
+    }),
+    [
+      ["Destroy Plan 생성 중", 20],
+      ["Destroy Plan 승인 중", 45],
+      ["클라우드 리소스 삭제 중", 70],
+      ["프로젝트 정리 중", 92]
+    ]
+  );
+});
+
+test("resource-inclusive deletion advances gradually inside each automatic stage", () => {
+  for (const status of ["planning", "approving", "destroying", "deleting"] as const) {
+    const initial = getProjectDeleteProgress(status, 0);
+    const later = getProjectDeleteProgress(status, 5_000);
+
+    assert.ok(initial);
+    assert.ok(later);
+    assert.ok(later.percent > initial.percent, status);
+    assert.ok(later.percent <= later.maxPercent, status);
+  }
+});
+
+test("one confirmation continues from Destroy Plan through project deletion", () => {
+  const workflowSource = getSourceBetween(
+    projectsClientSource,
+    "async function startDestroyThenDelete(): Promise<void> {",
+    "function closeDeleteDialog(): void {"
+  );
+  const orderedSteps = [
+    "await runDeploymentDestroyPlan(",
+    "await approveDestroyAndDelete({",
+    "await approveDeploymentPlan(",
+    "await runDeploymentDestroy(",
+    'await deleteProject(project.id, "delete_project")'
+  ];
+
+  assert.deepEqual(
+    [...orderedSteps].sort(
+      (left, right) => workflowSource.indexOf(left) - workflowSource.indexOf(right)
+    ),
+    orderedSteps
+  );
+  assert.match(projectsClientSource, /role="progressbar"/);
+  assert.match(projectsClientSource, /리소스를 포함해 정말 삭제할까요\?/);
+  assert.doesNotMatch(projectsClientSource, /onClick=\{\(\) => void approveDestroyAndDelete\(\)\}/);
+});
+
+test("project cleanup failure after destroy refreshes the delete preview before retry", () => {
+  const workflowSource = getSourceBetween(
+    projectsClientSource,
+    "async function approveDestroyAndDelete(input:",
+    "function closeDeleteDialog(): void {"
+  );
+
+  assert.match(workflowSource, /let destroyCompleted = false;/);
+  assert.match(workflowSource, /destroyCompleted = true;/);
+  assert.match(workflowSource, /await getProjectDeletePreview\(project\.id\)/);
+  assert.match(workflowSource, /preview: recoveryPreview/);
+  assert.match(workflowSource, /if \(destroyCompleted\)/);
 });
 
 test("project-only fallback stays hidden without a destroy failure", () => {
@@ -130,6 +201,46 @@ test("destroy delete approval has no warning acknowledgements without a plan sum
       }
     } as unknown as Deployment),
     []
+  );
+});
+
+test("project deletion accepts a completed unapproved destroy plan", () => {
+  const deployment = {
+    ...createDeploymentWithWarnings([]),
+    isBlocked: false
+  };
+
+  assert.equal(deployment.isBlocked, false);
+  assert.equal(deployment.blockedBy, null);
+  assert.equal(isDestroyPlanReadyForApproval(deployment), true);
+});
+
+test("project deletion accepts a destroy plan that preserves an apply failure", () => {
+  const deployment = {
+    ...createDeploymentWithWarnings([]),
+    errorSummary: "Apply failed after creating resources.",
+    failureStage: "apply" as const,
+    isBlocked: false,
+    status: "FAILED" as const
+  };
+
+  assert.equal(
+    isDestroyPlanReadyForApproval(deployment),
+    true,
+    "a preserved apply failure must still advance to destroy approval"
+  );
+});
+
+test("project deletion does not accept a stale destroy plan while planning is still running", () => {
+  const deployment = createDeploymentWithWarnings([]);
+
+  assert.equal(
+    isDestroyPlanReadyForApproval({
+      ...deployment,
+      activeStage: "plan",
+      status: "RUNNING"
+    }),
+    false
   );
 });
 

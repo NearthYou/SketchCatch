@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useAuth } from "../auth/auth-provider";
+import { shouldShowAuthenticatedShellFallback } from "../auth/auth-gate-state";
 import { ProductBrand } from "../ui/ProductBrand";
 import { ProductState } from "../ui/ProductState";
 
@@ -29,7 +30,7 @@ const DASHBOARD_NAV_ITEMS = [
 export function DashboardShell({ children }: { readonly children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout, status, user } = useAuth();
+  const { isRefreshing, logout, status, user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pageTitle = getDashboardPageTitle(pathname);
   const shouldRenderTopbar = !DASHBOARD_NAV_ITEMS.some((item) => item.href === pathname);
@@ -51,7 +52,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
     router.replace("/login");
   }
 
-  if (status !== "authenticated") {
+  if (shouldShowAuthenticatedShellFallback(status, user !== null)) {
     return (
       <main className="dashboardSessionState">
         <ProductBrand />
@@ -70,7 +71,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
   }
 
   return (
-    <div className="dashboardShell">
+    <div aria-busy={isRefreshing || undefined} className="dashboardShell">
       <aside
         aria-label="Dashboard navigation"
         className={isMobileMenuOpen ? "dashboardSidebar dashboardSidebarOpen" : "dashboardSidebar"}

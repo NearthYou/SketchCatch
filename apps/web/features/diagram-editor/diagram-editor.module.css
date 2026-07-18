@@ -195,13 +195,6 @@
   color: var(--workspace-surface);
 }
 
-.projectBarDivider {
-  background: var(--workspace-line);
-  height: 24px;
-  margin: 0 2px;
-  width: 1px;
-}
-
 .leftRail,
 .rightRail {
   background: var(--workspace-surface);
@@ -963,6 +956,59 @@ button.rightRailResizeHandle {
   display: none;
 }
 
+.panelEdgeHandle {
+  align-items: center;
+  background: var(--workspace-surface);
+  border: 1px solid var(--workspace-line-strong);
+  color: var(--workspace-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 48px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  top: calc(50% + 32px);
+  transform: translateY(-50%);
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    left 160ms ease,
+    right 160ms ease;
+  width: 24px;
+  z-index: 44;
+}
+
+.panelEdgeHandle:hover,
+.panelEdgeHandle:focus-visible {
+  background: var(--workspace-surface-muted);
+  color: var(--workspace-text);
+  outline: none;
+}
+
+.panelEdgeHandle:focus-visible {
+  box-shadow: 0 0 0 2px var(--board-primary-soft);
+}
+
+.leftPanelEdgeHandle {
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  left: var(--left-panel-width);
+}
+
+.rightPanelEdgeHandle {
+  border-radius: 8px 0 0 8px;
+  border-right: 0;
+  right: var(--right-panel-width);
+}
+
+.editorShellLeftCollapsed .leftPanelEdgeHandle {
+  left: 0;
+}
+
+.editorShellRightCollapsed .rightPanelEdgeHandle {
+  right: 0;
+}
+
 .workspace {
   background: var(--workspace-page);
   grid-column: 2;
@@ -1326,13 +1372,15 @@ button.rightRailResizeHandle {
   flex-direction: column;
   font-weight: 500;
   left: 16px;
-  max-width: min(500px, calc(100% - 48px));
-  padding: 10px 12px;
+  max-height: min(560px, calc(100% - 32px));
+  max-width: min(600px, calc(100% - 48px));
+  overflow-y: auto;
+  padding: 14px;
   right: auto;
   text-align: left;
   top: auto;
   transform: none;
-  width: 460px;
+  width: 560px;
 }
 
 .compilerPreviewHeader {
@@ -1345,20 +1393,28 @@ button.rightRailResizeHandle {
 
 .compilerPreviewHeader > div:first-child {
   display: grid;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
 }
 
 .compilerPreviewHeader strong {
   color: var(--board-ink);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
 }
 
 .compilerPreviewHeader span {
   color: var(--board-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 650;
+}
+
+.compilerPreviewHeader p,
+.compilerPreviewEmptyOutcome {
+  color: var(--board-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
 }
 
 .compilerPreviewActions {
@@ -1378,15 +1434,16 @@ button.rightRailResizeHandle {
   font-size: 12px;
   font-weight: 750;
   line-height: 1;
-  min-height: 28px;
-  padding: 0 9px;
+  min-height: 32px;
+  padding: 0 10px;
 }
 
 .compilerPreviewActions button:hover,
 .compilerPreviewActions button:focus-visible {
   background: var(--board-surface-subtle);
   border-color: var(--board-primary);
-  outline: none;
+  outline: 3px solid color-mix(in srgb, var(--board-primary) 32%, transparent);
+  outline-offset: 2px;
 }
 
 .compilerPreviewActions button:last-child {
@@ -1398,9 +1455,47 @@ button.rightRailResizeHandle {
 .compilerPreviewDetails {
   border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
   display: grid;
-  gap: 5px;
-  margin-top: 8px;
-  padding-top: 8px;
+  gap: 8px 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 10px;
+}
+
+.compilerPreviewOutcomes {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.compilerPreviewOutcomes li {
+  background: var(--board-surface);
+  border: 1px solid var(--board-border);
+  border-left: 3px solid var(--board-muted);
+  border-radius: 6px;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.compilerPreviewOutcomes li[data-tone="improved"] {
+  border-left-color: var(--board-success);
+}
+
+.compilerPreviewOutcomes li[data-tone="regressed"] {
+  border-left-color: var(--board-danger);
+}
+
+.compilerPreviewOutcomes span {
+  color: var(--board-muted);
+  font-size: 11px;
+}
+
+.compilerPreviewOutcomes strong {
+  color: var(--board-ink);
+  font-size: 12px;
 }
 
 .compilerPreviewDetail {
@@ -1427,13 +1522,45 @@ button.rightRailResizeHandle {
   white-space: nowrap;
 }
 
-.compilerPreviewDiagnostic {
+.compilerPreviewTechnical {
   border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
+  color: var(--board-muted);
+  font-size: 11px;
+}
+
+.compilerPreviewTechnical > summary {
+  cursor: pointer;
+  font-weight: 750;
+  min-height: 34px;
+  padding-top: 9px;
+}
+
+.compilerPreviewTechnical > summary:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--board-primary) 38%, transparent);
+  outline-offset: 2px;
+}
+
+.compilerPreviewTechnicalBody {
+  background: var(--board-surface);
+  border: 1px solid var(--board-border);
+  border-radius: 6px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.compilerPreviewTechnicalBody > p {
+  color: var(--board-muted);
+  font-size: 11px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.compilerPreviewDiagnostic {
   color: var(--board-warning);
   font-size: 11px;
   font-weight: 700;
-  margin: 8px 0 0;
-  padding-top: 8px;
+  margin: 0;
 }
 
 .emptyState {
@@ -2843,6 +2970,22 @@ button.rightRailResizeHandle {
     z-index: 42;
   }
 
+  .leftPanelEdgeHandle {
+    left: min(var(--left-panel-width), calc(100vw - 56px));
+  }
+
+  .rightPanelEdgeHandle {
+    right: min(var(--right-panel-width), calc(100vw - 56px));
+  }
+
+  .editorShellLeftCollapsed .leftPanelEdgeHandle {
+    left: 0;
+  }
+
+  .editorShellRightCollapsed .rightPanelEdgeHandle {
+    right: 0;
+  }
+
   .editorShellRightCollapsed .rightRail {
     display: none;
   }
@@ -2880,10 +3023,6 @@ button.rightRailResizeHandle {
     text-overflow: ellipsis;
   }
 
-  .projectBarDivider {
-    display: none;
-  }
-
   .projectBarActions {
     gap: 2px;
   }
@@ -2914,9 +3053,18 @@ button.rightRailResizeHandle {
   .compilerPreviewActions {
     margin-left: auto;
   }
+
+  .compilerPreviewOutcomes,
+  .compilerPreviewDetails {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .panelEdgeHandle {
+    transition: none;
+  }
+
   .canvasPanelSnapAnimating :global(.react-flow__node) {
     transition: none;
   }
