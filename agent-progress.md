@@ -23,19 +23,6 @@
 - Focused API regressions pass 81/81 and focused Web regressions pass 12/12.
 - No cloud mutation, Terraform execution, DB migration, or Git/CI/CD handoff was performed.
 
-## 2026-07-17 - Repair project resource-inclusive deletion
-
-- Updated project deletion polling to recognize the current completed, unapproved Destroy Plan contract without relying on the retired `missing_approval` block state.
-- Preserved the valid recovery path for failed Apply deployments with Terraform state and rejected stale Destroy Plan pointers while planning is still running.
-- Kept Direct Deployment actions sequenced as Destroy Plan -> approval -> Destroy, without showing a second Destroy Plan action while approval is pending.
-- Project deletion now removes every current object, historical version, and delete marker under the project and linked deployment S3 prefixes before deleting RDS records.
-- Internal artifact cleanup is fail-closed: any S3 cleanup failure returns `managed_cleanup_failed`, retains project records, and allows a safe retry.
-- Extended the API task IAM policy and production infrastructure check for prefix-scoped `s3:ListBucketVersions` and `s3:DeleteObjectVersion`.
-- Aligned project deletion preview eligibility with the Destroy Plan contract: infrastructure cleanup now requires a persisted Terraform state pointer, while application cleanup remains state-independent.
-- Added regressions for the missing-state race that previously exposed an impossible resource-inclusive delete action; focused project deletion and Destroy Plan tests pass 23/23.
-- Verification passed: focused API tests 18/18, route contract tests 2/2, focused Web tests 37/37, production infrastructure structure check, workspace lint, typecheck, build, and `git diff --check`.
-- No real cloud mutation, Terraform apply/destroy, project deletion, DB migration, or Git/CI/CD handoff was performed.
-
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
 
 ## Current Verified State
@@ -203,3 +190,8 @@ Short English-only working log for the current agent context. Older records are 
 - Restricted project and deployment artifact deletion prefixes to the explicit identifier character set before issuing any S3 list or delete command.
 - Added regressions for traversal-like, whitespace, dotted, and encoded-separator prefixes; the focused storage suite passes 4/4.
 - API typecheck and harness pass. API lint passes with one unrelated existing unused-import warning in `project-deletion-service.test.ts`. No AWS, Terraform, deployment, project deletion, or database mutation was performed.
+### 2026-07-18 - Validate and display every natural-language clarification answer
+
+- Removed the keyword-only clarification bypass and applied question-specific validation to all 15 required Architecture Draft questions; explanation requests and unrelated answers now repeat the same question.
+- Preserved the originating assistant question in both Workspace chat surfaces so accepted free-form answers select the matching existing option or add a disabled selected custom option.
+- Focused API regressions pass 5/5, focused Web clarification tests pass 6/6, and paired chat selection/locking contracts pass 21/21; direct API and Web typechecks pass. Full suites and builds were intentionally not run per user request. No DB migration, cloud mutation, deployment, Terraform execution, or Git handoff was performed.
