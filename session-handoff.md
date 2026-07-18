@@ -4,9 +4,9 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch `fix/ck/477-ai-chatting-bug-fix` includes committed all-question validation and both-chat selection synchronization.
-- The committed follow-up includes clarification probes, diagram patch probes, and complete resource alias coverage.
-- The current uncommitted fix rejects cross-question clarification answers with explicit user-facing feedback.
+- Branch `fix/ck/477-ai-chatting-bug-fix` includes committed all-question validation, both-chat selection synchronization, clarification probes, diagram patch probes, and complete resource alias coverage.
+- The running Web-to-API path repeats the frontend question for the reported daily-user-count phrase and the region question for the reported Spring Boot phrase, with explicit unrelated-answer feedback.
+- The only current change pins those two exact reported phrases in the focused all-question regression.
 
 ## Changes This Session
 
@@ -18,9 +18,9 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Broken Or Unverified
 
-- Cross-question coverage passes for all 15 required questions; four focused API regressions, focused Web feedback/selection checks, and API/Web typechecks pass. Full suites and builds were not run per user request.
+- The exact focused cross-question regression passes 1/1. Full suites and builds were intentionally not run per user request.
 
 ## Best Next Action
 
-- Commit the focused cross-question clarification fix.
-- No DB migration, cloud mutation, deployment, Terraform execution, or Git handoff is involved.
+- Commit the exact reported-answer regression and verify a clean worktree.
+- No DB migration, cloud mutation, deployment, or Terraform execution is involved.

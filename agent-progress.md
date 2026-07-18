@@ -186,3 +186,10 @@ Short English-only working log for the current agent context. Older records are 
 - `스프링부트 썼어` is accepted for the backend question but rejected for website size and traffic pattern; rejected answers now explain that they are unrelated before repeating the same question in both chat surfaces.
 - Both diagram-generation chats now show a dedicated `반영된 답변` row with the accepted natural-language text while keeping every option for that answered question disabled.
 - Cross-question coverage passes for all 15 required questions, four focused API regressions pass, focused Web feedback/selection checks pass, and API/Web typechecks pass. Full suites and builds were not run per user request.
+
+### 2026-07-18 - Pin reported cross-question clarification regressions
+
+- Reproduced the exact reported answers against the running Web-to-API path: `frontend` with a daily-user-count answer and `region` with a Spring Boot answer both repeat the same question.
+- Confirmed that both live responses include the unrelated-answer validation message; the screenshots predate the committed validation and chat-state fixes.
+- Added both exact user phrases to the all-question regression and ran only that focused test (1/1 pass), per the requested limited verification scope.
+- No DB migration, cloud mutation, deployment, Terraform execution, or Git handoff was performed.
