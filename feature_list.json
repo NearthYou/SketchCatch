@@ -349,8 +349,10 @@
         "Direct Deployment UI가 정확히 세 단계와 summary-first 운영 정보를 표시한다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-18",
+        "lastVerified": "2026-07-19",
         "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/build-environments/aws-project-build-environment-gateway.test.ts src/build-environments/project-build-environment-service.test.ts src/routes/deployments.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-three-stage-flow.test.ts features/workspace/repository-access-recovery.test.ts",
           "DEPLOYMENT_WORKER_MODE=in_process pnpm --dir apps/api exec tsx --test src/build-environments/project-build-environment-service.test.ts \"src/deployments/**/*.test.ts\" \"src/git-cicd/**/*.test.ts\" src/routes/deployments.test.ts src/routes/git-cicd-handoffs.test.ts src/routes/git-cicd-infrastructure-runs.test.ts src/routes/git-cicd-readiness.test.ts src/routes/git-cicd-release-runs.test.ts",
           "pnpm --dir apps/web exec node --import ./test-css-register.mjs --import tsx --test features/workspace/deployment-actions.test.ts features/workspace/deployment-preparation-error.test.ts features/workspace/deployment-presentation.test.ts features/workspace/deployment-three-stage-flow.test.ts",
           "pnpm lint",
@@ -358,7 +360,7 @@
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "The CI deployment matrix passed 589/589 checks: 523 API deployment/GitOps/build-target/route transitions and 66 Web actions/presentation transitions. Direct review now starts one Plan worker instead of racing a separate init prewarm, and repeat Init/Plan/Apply/Destroy/Frontend retry requests join the matching durable job while different operations remain blocked. Terraform-managed Task Definition, IAM role, ALB/Target Group, S3, CloudFront, and derived URL replacements are accepted only after approved state inventory verification; stable prepared ECR, cluster, service, container, and port coordinates remain fail-closed. Full-stack target and pending ApplicationRelease metadata reconcile atomically, including target-only partial-write recovery and legacy metadata upgrade. Direct and GitOps rollback baselines must match the current deployment target fingerprint. Typecheck and focused CI-equivalent checks passed; no cloud mutation was performed."
+        "notes": "CodeBuild project reconciliation now recovers a managed ResourceAlreadyExists race. Preparation start and completion are atomic, so stale starts and late failures cannot replace a successful ready state for the same runtime fingerprint. Direct Deployment delegates build preparation and exact Repository checkout verification to the Plan API, and concurrent requests for the same Deployment join the one RUNNING Plan sequence before Terraform. Focused API and Web regressions, lint, typecheck, and build pass. Full pnpm test retains unrelated baseline failures in artifact heartbeat cleanup, Git/CI/CD schema expectations, resource-catalog expectations, and one external-link source-pattern test."
       },
       "notes": "Implemented in issue #372 on branch feature/sw/372-direct-deploy-three-stage. No cloud mutation was performed."
     },
