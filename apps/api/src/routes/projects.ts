@@ -826,6 +826,8 @@ function sendProjectDraftConflict(
 }
 
 function createProjectDeletionStorage(storage: ProjectAssetStorage): ProjectDeletionStorage {
+  const deletePrefix = storage.deletePrefix?.bind(storage);
+
   return {
     async deleteObject(objectKey) {
       await storage.deleteObject({ objectKey });
@@ -836,7 +838,14 @@ function createProjectDeletionStorage(storage: ProjectAssetStorage): ProjectDele
         return;
       }
       await storage.deleteObject({ objectKey });
-    }
+    },
+    ...(deletePrefix
+      ? {
+          async deletePrefix(input: { prefix: string }) {
+            await deletePrefix(input);
+          }
+        }
+      : {})
   };
 }
 

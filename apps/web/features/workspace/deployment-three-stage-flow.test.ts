@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { mergeGeneratedTerraformFiles } from "./terraform-panel-utils";
 
 const managerSource = read("ProjectWorkspaceDraftManager.tsx");
 const directDeploymentSource = read("DirectDeploymentScreen.tsx");
@@ -10,6 +11,42 @@ const rightPanelSource = read("WorkspaceRightPanel.tsx");
 const projectBarSource = read("../diagram-editor/WorkspaceProjectBar.tsx");
 const diagramEditorStyles = read("../diagram-editor/diagram-editor.module.css");
 const workspaceStyles = read("workspace.module.css");
+
+test("Terraform refresh removes outputs that reference removed managed resources", () => {
+  const result = mergeGeneratedTerraformFiles(
+    [
+      {
+        fileName: "main.tf",
+        code: `output "cloudfront_url" {
+  value = "https://\${aws_cloudfront_distribution.distribution.domain_name}"
+}
+
+output "static_bucket_name" {
+  value = aws_s3_bucket.bucket.bucket
+}
+
+output "operator_note" {
+  value = "keep me"
+}`
+      }
+    ],
+    [
+      {
+        fileName: "main.tf",
+        code: `resource "aws_s3_bucket" "s3_bucket" {
+  force_destroy = false
+}`
+      }
+    ],
+    new Set()
+  );
+  const mainCode = result.find((file) => file.fileName === "main.tf")?.code ?? "";
+
+  assert.doesNotMatch(mainCode, /aws_cloudfront_distribution\.distribution/);
+  assert.doesNotMatch(mainCode, /aws_s3_bucket\.bucket\.bucket/);
+  assert.match(mainCode, /resource "aws_s3_bucket" "s3_bucket"/);
+  assert.match(mainCode, /output "operator_note"/);
+});
 
 test("the main board opens deployment immediately without saving", () => {
   const callbackStart = managerSource.indexOf("const saveAndOpenDeployment");

@@ -272,7 +272,7 @@ test("DELETE /api/projects/:id clears deployment plan pointers before deleting p
   await app.close();
 });
 
-test("DELETE /api/projects/:id reports S3 cleanup failures but still deletes records", async () => {
+test("DELETE /api/projects/:id preserves records when internal artifact cleanup fails", async () => {
   const deletedObjectKeys: string[] = [];
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
@@ -305,27 +305,24 @@ test("DELETE /api/projects/:id reports S3 cleanup failures but still deletes rec
     }
   });
 
-  assert.equal(response.statusCode, 200);
+  assert.equal(response.statusCode, 502);
   assert.deepEqual(response.json(), {
-    deleted: true,
-    cleanup: {
-      failedObjectCount: 1,
-      message: "일부 SketchCatch 산출물 정리에 실패했습니다.",
-      s3Status: "failed"
-    }
+    error: "managed_cleanup_failed",
+    message:
+      "SketchCatch 내부 산출물을 모두 삭제하지 못했습니다. 프로젝트 기록은 유지되었으므로 저장소 권한을 확인한 뒤 다시 삭제해 주세요."
   });
   assert.deepEqual(deletedObjectKeys, ["projects/project-id/diagram.png"]);
   assert.equal(
     fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID),
-    false
+    true
   );
-  assert.equal(fakeDb.projectAssetRows.length, 0);
+  assert.equal(fakeDb.projectAssetRows.length, 1);
 
   await app.close();
 });
 
-test("DELETE /api/projects/:id reuses the injected Project asset storage by default", async () => {
-  const deletedObjectKeys: string[] = [];
+test("DELETE /api/projects/:id delegates prefix cleanup to Project asset storage", async () => {
+  const deletedPrefixes: string[] = [];
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
     requestedProjectId: ACTIVE_PROJECT_ID,
@@ -341,8 +338,11 @@ test("DELETE /api/projects/:id reuses the injected Project asset storage by defa
   const app = buildApp({
     getDatabaseClient: () => fakeDb.client,
     projectAssetStorage: createProjectAssetStorageStub({
-      async deleteObject(input) {
-        deletedObjectKeys.push(input.objectKey);
+      async deleteObject() {
+        throw new Error("exact object deletion should not run");
+      },
+      async deletePrefix(input) {
+        deletedPrefixes.push(input.prefix);
       }
     })
   });
@@ -355,7 +355,7 @@ test("DELETE /api/projects/:id reuses the injected Project asset storage by defa
   });
 
   assert.equal(response.statusCode, 200);
-  assert.deepEqual(deletedObjectKeys, ["projects/project-id/thumbnail.webp"]);
+  assert.deepEqual(deletedPrefixes, [`projects/${ACTIVE_PROJECT_ID}/`]);
 
   await app.close();
 });

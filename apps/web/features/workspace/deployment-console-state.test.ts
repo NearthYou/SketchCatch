@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { AiPreDeploymentAnalysisResult } from "@sketchcatch/types";
 import {
+  createResetPreDeploymentCheckState,
   getDeploymentPlanActionLabel,
   getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
@@ -36,6 +37,21 @@ function createInput(
     ...overrides
   };
 }
+
+test("a new or failed validation request clears the previous analysis", () => {
+  assert.deepEqual(createResetPreDeploymentCheckState("loading"), {
+    analysis: null,
+    errorMessage: "",
+    fingerprint: null,
+    requestState: "loading"
+  });
+  assert.deepEqual(createResetPreDeploymentCheckState("error", "validate failed"), {
+    analysis: null,
+    errorMessage: "validate failed",
+    fingerprint: null,
+    requestState: "error"
+  });
+});
 
 test("Direct Deployment exposes exactly validation, approval, and deployment", () => {
   const flow = getDirectDeploymentFlow(createInput({ hasUnsavedBaseline: true }));

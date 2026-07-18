@@ -618,7 +618,7 @@ type DeleteProjectResponse = {
 };
 ```
 
-프로젝트 삭제 시 RDS의 프로젝트 관련 기록은 삭제한다. S3 object 삭제는 best-effort로 처리하며, 일부 실패해도 프로젝트 삭제는 완료하고 `cleanup`으로 경고를 전달한다.
+프로젝트 삭제 시 `projects/{projectId}/`와 연결된 모든 `deployments/{deploymentId}/` prefix에서 현재 object, 이전 version, delete marker를 먼저 삭제한다. 내부 S3 산출물을 하나라도 모두 삭제하지 못하면 `managed_cleanup_failed`로 중단하고 RDS의 프로젝트·배포 기록을 유지해 재시도할 수 있게 한다. 모든 prefix 정리가 성공한 뒤에만 RDS 기록을 삭제하며, `cleanup` 필드는 기존 응답 호환성을 위해 유지한다.
 
 ## ArchitectureSnapshot
 

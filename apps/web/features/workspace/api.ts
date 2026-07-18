@@ -1263,12 +1263,20 @@ export async function listAwsConnections(
   } = {}
 ): Promise<AwsConnection[]> {
   const query = options.includeUnverified ? "?includeUnverified=true" : "";
-  const response = await apiFetch<AwsConnectionListResponse>(`/aws/connections${query}`, {
+  const response = await apiFetch<unknown>(`/aws/connections${query}`, {
     auth: true,
     ...(options.signal ? { signal: options.signal } : {})
   });
 
-  return response.awsConnections;
+  if (Array.isArray(response)) {
+    return response as AwsConnection[];
+  }
+  if (!response || typeof response !== "object") {
+    return [];
+  }
+
+  const { awsConnections } = response as Partial<AwsConnectionListResponse>;
+  return Array.isArray(awsConnections) ? awsConnections : [];
 }
 
 export async function listAwsConnectionSettings(

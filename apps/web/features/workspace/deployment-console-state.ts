@@ -23,6 +23,18 @@ export type DirectDeploymentPreflightState =
   | "passed"
   | "warning";
 
+export function createResetPreDeploymentCheckState(
+  requestState: "error" | "loading",
+  errorMessage = ""
+) {
+  return {
+    analysis: null,
+    errorMessage,
+    fingerprint: null,
+    requestState
+  } as const;
+}
+
 export type DirectDeploymentActionState = {
   readonly canApply: boolean;
   readonly canApprovePlan: boolean;

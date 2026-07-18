@@ -476,6 +476,7 @@ Deployment log에 warning으로 남기되 이미 성공한 Terraform Apply를 `F
 - Terraform sensitive output은 로그와 응답에 실제 값을 남기지 않습니다.
 - `tfplan`, `terraform.tfstate`, `.terraform.lock.hcl`은 deployment scope object key, server-side encryption, metadata/tag, checksum을 적용해 S3에 저장합니다.
 - `.terraform.lock.hcl`은 성능 최적화용 provider lock artifact이므로 누락되거나 복원에 실패해도 Deployment 실행을 실패시키지 않습니다.
+- 프로젝트 삭제는 versioned artifact bucket의 project/deployment prefix를 `ListObjectVersions`로 반복 조회해 모든 object version과 delete marker를 삭제합니다. API task role에는 해당 prefix로 제한된 `s3:ListBucketVersions`, `s3:DeleteObjectVersion` 권한이 필요하며, 정리가 실패하면 프로젝트 기록을 유지합니다.
 - Destroy 성공 시 Deployment는 `DESTROYED`가 되고 `stateObjectKey`, 현재 Plan pointer, DeployedResource, TerraformOutput을 정리합니다.
 - Destroy 실패 시 Deployment는 `FAILED`와 `failureStage: "destroy"`로 남기며, 재시도하려면 새 destroy plan과 승인이 필요합니다.
 

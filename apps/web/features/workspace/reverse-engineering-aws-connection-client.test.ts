@@ -42,3 +42,26 @@ test("일반 AWS 연결 조회는 기존 기본 경로를 유지한다", async (
   assert.match(requestedUrl, /\/aws\/connections$/);
   assert.doesNotMatch(requestedUrl, /includeUnverified/);
 });
+
+test("AWS connection client never returns undefined across response envelope versions", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  let responseBody: unknown = [{ id: "legacy-connection" }];
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify(responseBody), {
+      headers: { "Content-Type": "application/json" },
+      status: 200
+    });
+
+  const legacyConnections = await listAwsConnections();
+  assert.deepEqual(
+    legacyConnections.map((connection) => connection.id),
+    ["legacy-connection"]
+  );
+
+  responseBody = {};
+  assert.deepEqual(await listAwsConnections(), []);
+});

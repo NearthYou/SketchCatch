@@ -32,6 +32,7 @@ import {
   appendTerraformDurationLog,
   runLoggedDeploymentOperation
 } from "./deployment-duration-logs.js";
+import { isDeploymentDestroySourceStatus } from "./deployment-destroy-eligibility.js";
 import { createDeploymentTerraformLiveLogWriter } from "./deployment-terraform-live-logs.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
@@ -169,7 +170,7 @@ export async function runDeploymentDestroyPlan(
     );
     failureStage = resolveDestroyPlanFailureStage(sourceStatus, sourceFailureStage);
 
-    assertDeploymentCanStartDestroyPlan(deployment, sourceStatus, sourceFailureStage);
+    assertDeploymentCanStartDestroyPlan(deployment, sourceStatus);
 
     if (deployment.scope === "application") {
       return await saveApplicationCleanupPlan({
@@ -686,27 +687,15 @@ function readMetadataRecord(value: unknown): Record<string, unknown> {
 
 function assertDeploymentCanStartDestroyPlan(
   deployment: DeploymentRecord,
-  sourceStatus: DeploymentStatus,
-  sourceFailureStage: DeploymentFailureStage | null
+  sourceStatus: DeploymentStatus
 ): void {
   if (deployment.scope !== "application" && !deployment.stateObjectKey) {
     throw new DeploymentConflictError("Terraform state is required before destroy");
   }
 
-  if (sourceStatus === "SUCCESS") {
-    return;
+  if (!isDeploymentDestroySourceStatus(sourceStatus)) {
+    throw new DeploymentConflictError("Deployment cannot be destroyed in this state");
   }
-
-  if (
-    sourceStatus === "FAILED" &&
-    (sourceFailureStage === "plan" ||
-      sourceFailureStage === "apply" ||
-      sourceFailureStage === "destroy")
-  ) {
-    return;
-  }
-
-  throw new DeploymentConflictError("Deployment cannot be destroyed in this state");
 }
 
 function assertDestroyCleanupArtifactHasNotDrifted(input: {

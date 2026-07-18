@@ -38,7 +38,36 @@ export const recommendedCodeBuildPermissionsBoundaryName = "SketchCatchCodeBuild
 const callerAssumeRolePolicyName = "SketchCatchAssumeTerraformExecutionRole";
 const defaultCloudFormationTemplateTokenTtlMs = 60 * 60 * 1000;
 const awsConnectionRoleNameSuffixLength = 8;
-const terraformFargateServiceActions = [
+const terraformManagedServiceActions = [
+  "acm:*",
+  "amplify:*",
+  "apigateway:*",
+  "autoscaling:*",
+  "cloudtrail:*",
+  "cloudwatch:*",
+  "codepipeline:*",
+  "codedeploy:*",
+  "cognito-idp:*",
+  "config:*",
+  "dynamodb:*",
+  "eks:*",
+  "elasticache:*",
+  "elasticfilesystem:*",
+  "events:*",
+  "guardduty:*",
+  "kms:*",
+  "lambda:*",
+  "rds:*",
+  "route53:*",
+  "scheduler:*",
+  "secretsmanager:*",
+  "shield:*",
+  "sns:*",
+  "sqs:*",
+  "states:*",
+  "waf:*",
+  "wafv2:*",
+  "xray:*",
   "ecs:*",
   "ecr:*",
   "elasticloadbalancing:*",
@@ -67,7 +96,29 @@ const directReleaseCodeBuildResourcePatterns = [
   "arn:aws:codebuild:ap-northeast-2:*:project/sketchcatch-*",
   "arn:aws:codebuild:ap-northeast-2:*:build/sketchcatch-*:*"
 ] as const;
-const terraformFargateIamActions = [
+const terraformManagedIamActions = [
+  "iam:AddRoleToInstanceProfile",
+  "iam:AttachGroupPolicy",
+  "iam:CreateInstanceProfile",
+  "iam:CreatePolicy",
+  "iam:CreatePolicyVersion",
+  "iam:DeleteInstanceProfile",
+  "iam:DeletePolicy",
+  "iam:DeletePolicyVersion",
+  "iam:DetachGroupPolicy",
+  "iam:GetGroup",
+  "iam:GetInstanceProfile",
+  "iam:ListAttachedGroupPolicies",
+  "iam:ListEntitiesForPolicy",
+  "iam:ListInstanceProfileTags",
+  "iam:ListPolicyTags",
+  "iam:ListPolicyVersions",
+  "iam:RemoveRoleFromInstanceProfile",
+  "iam:SetDefaultPolicyVersion",
+  "iam:TagInstanceProfile",
+  "iam:TagPolicy",
+  "iam:UntagInstanceProfile",
+  "iam:UntagPolicy",
   "iam:CreateRole",
   "iam:DeleteRole",
   "iam:GetRole",
@@ -652,43 +703,22 @@ async function hasDeploymentUsingAwsConnection(
   );
 }
 
-export function listAwsConnections(
-  input: {
-    accessContext: ProjectAccessContext;
-  },
-  repository: AwsConnectionRepository
-): Promise<AwsConnectionListResponse>;
-
-export function listAwsConnections(
-  input: {
-    accessContext: ProjectAccessContext;
-  },
-  repository: AwsConnectionRepository,
-  options: ListAwsConnectionsOptions
-): Promise<AwsConnection[]>;
 export async function listAwsConnections(
   input: {
     accessContext: ProjectAccessContext;
   },
   repository: AwsConnectionRepository,
-  options?: ListAwsConnectionsOptions
-): Promise<AwsConnectionListResponse | AwsConnection[]> {
+  options: ListAwsConnectionsOptions = {}
+): Promise<AwsConnectionListResponse> {
   const awsConnectionRows = await repository.listAccessibleAwsConnections(input.accessContext);
-
-  if (options) {
-    return (options.includeUnverified
-      ? awsConnectionRows
-      : awsConnectionRows.filter((awsConnection) => awsConnection.status === "verified")
-    ).map(toAwsConnection);
-  }
+  const visibleConnections = awsConnectionRows.filter(
+    (awsConnection) =>
+      awsConnection.deletionStartedAt === null &&
+      (options.includeUnverified || awsConnection.status === "verified")
+  );
 
   return {
-    awsConnections: awsConnectionRows
-      .filter(
-        (awsConnection) =>
-          awsConnection.status === "verified" && awsConnection.deletionStartedAt === null
-      )
-      .map(toAwsConnection),
+    awsConnections: visibleConnections.map(toAwsConnection),
     cleanupRetries: awsConnectionRows
       .filter(
         (awsConnection) =>
@@ -1309,7 +1339,7 @@ function createInitialPermissionSetup(): AwsRolePermissionSetup {
   };
 }
 
-function createTerraformApplyPolicyDocument(): Record<string, unknown> {
+export function createTerraformApplyPolicyDocument(): Record<string, unknown> {
   return {
     Version: "2012-10-17",
     Statement: [
@@ -1325,7 +1355,7 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
       },
       {
         Effect: "Allow",
-        Action: terraformFargateServiceActions,
+        Action: terraformManagedServiceActions,
         Resource: "*"
       },
       {
@@ -1340,7 +1370,7 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
       },
       {
         Effect: "Allow",
-        Action: terraformFargateIamActions,
+        Action: terraformManagedIamActions,
         Resource: "*"
       },
       {
@@ -1349,8 +1379,7 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
         Resource: "arn:aws:iam::*:role/SketchCatchCodeBuild-*",
         Condition: {
           StringNotLike: {
-            "iam:PermissionsBoundary":
-              "arn:aws:iam::*:policy/SketchCatchCodeBuildBoundary*"
+            "iam:PermissionsBoundary": "arn:aws:iam::*:policy/SketchCatchCodeBuildBoundary*"
           }
         }
       },
@@ -1615,7 +1644,7 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     '            Resource: "*"',
     "          - Effect: Allow",
     "            Action:",
-    ...terraformFargateServiceActions.map((action) => `              - ${action}`),
+    ...terraformManagedServiceActions.map((action) => `              - ${action}`),
     '            Resource: "*"',
     "          - Effect: Allow",
     "            Action:",
@@ -1629,7 +1658,7 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     '            Resource: "*"',
     "          - Effect: Allow",
     "            Action:",
-    ...terraformFargateIamActions.map((action) => `              - ${action}`),
+    ...terraformManagedIamActions.map((action) => `              - ${action}`),
     '            Resource: "*"',
     "          - Effect: Deny",
     "            Action:",
@@ -1684,7 +1713,9 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
   ].join("\n");
 }
 
-function requireCallerPrincipalArns(callerPrincipalArns: readonly string[]): readonly [string, ...string[]] {
+function requireCallerPrincipalArns(
+  callerPrincipalArns: readonly string[]
+): readonly [string, ...string[]] {
   const uniqueCallerPrincipalArns = [...new Set(callerPrincipalArns)];
 
   if (uniqueCallerPrincipalArns.length === 0) {

@@ -22,6 +22,7 @@ import {
   analyzePreDeploymentCheck as defaultAnalyzePreDeployment,
   type AnalyzePreDeploymentCheckInput
 } from "../services/aiPreDeploymentCheck.js";
+import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
 import {
   appendTerraformDurationLog,
   runLoggedDeploymentOperation
@@ -418,6 +419,17 @@ async function runDeploymentPlanOnce(
         repository,
         terraform
       });
+    }
+
+    const undefinedReferenceDiagnostic = createTerraformValidationDiagnostics({
+      terraformCode: preDeploymentTerraformFiles[0]?.terraformCode ?? "",
+      terraformFiles: preDeploymentTerraformFiles
+    }).find((diagnostic) => diagnostic.code === "terraform.undefined_reference");
+
+    if (undefinedReferenceDiagnostic) {
+      throw new DeploymentConflictError(
+        `Terraform artifact contains an undeclared resource reference: ${undefinedReferenceDiagnostic.resourceAddress ?? "unknown resource"}`
+      );
     }
 
     const [awsCredentials, lockFileRestored, stateFileRestored] = await Promise.all([
