@@ -62,6 +62,10 @@ import {
   type ArchitectureDraftFollowUpSession
 } from "./workspace-ai-draft-follow-up";
 import {
+  createArchitectureDraftClarificationMessage,
+  withArchitectureDraftClarificationAnswer
+} from "./workspace-ai-draft-clarification";
+import {
   createLatestUserRequirementPrompt,
   createLatestUserRequirementPromptExcluding
 } from "./workspace-ai-chat-history";
@@ -145,7 +149,7 @@ type WorkspaceAiChatSuggestionSelection = {
 };
 
 type PendingArchitectureDraftClarification = {
-  readonly prompt: string;
+  readonly request: CreateArchitectureDraftRequest;
   readonly clarification: ArchitectureDraftClarification;
 };
 
@@ -1551,13 +1555,14 @@ export function WorkspaceAiChatDock({
       return;
     }
 
-    const previousPrompt = draftClarification.prompt;
-    const question = draftClarification.clarification.question;
+    const nextRequest = withArchitectureDraftClarificationAnswer(
+      draftClarification.request,
+      draftClarification.clarification,
+      trimmedPrompt
+    );
 
     setDraftClarification(null);
-    await createDraftFromRequest({
-      prompt: `${previousPrompt}\n\n${question}\n${trimmedPrompt}`
-    });
+    await createDraftFromRequest(nextRequest);
   }
 
   async function createPatchPreviewFromPrompt(
@@ -1766,11 +1771,15 @@ export function WorkspaceAiChatDock({
 
       if (isArchitectureDraftClarification(result)) {
         setDraftClarification({
-          prompt,
+          request: normalizedDraftRequest,
           clarification: result
         });
         setDraftState("idle");
-        appendAssistantMessage("question", result.question, result.suggestions);
+        appendAssistantMessage(
+          "question",
+          createArchitectureDraftClarificationMessage(result),
+          result.suggestions
+        );
         return;
       }
 

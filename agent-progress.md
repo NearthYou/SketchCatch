@@ -1,5 +1,13 @@
 # Agent Progress
 
+## 2026-07-18 - Validate natural-language AI clarification answers
+
+- Added structured clarification answers keyed by stable question IDs across both Workspace AI chat surfaces and the API contract.
+- Relevant free-form answers advance to the next question; unrelated answers keep the current question and return a Korean validation message.
+- Accepted answers are appended as explicit requirement context and included in the masked Amazon Q payload without mixing assistant question text into the prompt.
+- Focused API regressions pass 81/81 and focused Web regressions pass 12/12.
+- No cloud mutation, Terraform execution, DB migration, or Git/CI/CD handoff was performed.
+
 ## 2026-07-17 - Repair project resource-inclusive deletion
 
 - Updated project deletion polling to recognize the current completed, unapproved Destroy Plan contract without relying on the retired `missing_approval` block state.

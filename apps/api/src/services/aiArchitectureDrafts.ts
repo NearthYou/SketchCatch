@@ -327,7 +327,7 @@ export async function createAmazonQArchitectureDraftResponse(
   input: string | CreateArchitectureDraftRequest,
   options: CreateAmazonQArchitectureDraftResponseOptions = {}
 ): Promise<CreateArchitectureDraftResponse> {
-  const request = authorizeArchitectureDraftRequest(
+  let request = authorizeArchitectureDraftRequest(
     normalizeArchitectureDraftRequest(input)
   );
   const creditPolicy = options.creditPolicy ?? readAiCreditPolicyFromEnv();
@@ -344,16 +344,29 @@ export async function createAmazonQArchitectureDraftResponse(
     return createFallbackArchitectureDraftResponse(request, "provider_not_configured", creditPolicy.billingMode);
   }
 
-  const missingQuestion = findMissingRequiredQuestion(request.prompt);
+  const missingQuestion = findMissingRequiredQuestion(request);
 
   if (missingQuestion !== null) {
-    return createArchitectureDraftClarification(missingQuestion, request, provider, creditPolicy.billingMode);
+    return createArchitectureDraftClarification(
+      missingQuestion.question,
+      request,
+      provider,
+      creditPolicy.billingMode,
+      missingQuestion.invalidAnswer
+    );
   }
 
+  request = withAcceptedArchitectureClarificationAnswers(request);
   const conditionalQuestion = findConditionalArchitectureQuestion(request.prompt);
 
   if (conditionalQuestion !== null) {
-    return createArchitectureDraftClarification(conditionalQuestion, request, provider, creditPolicy.billingMode);
+    return createArchitectureDraftClarification(
+      conditionalQuestion,
+      request,
+      provider,
+      creditPolicy.billingMode,
+      request.clarificationAnswers?.some((answer) => answer.questionId === conditionalQuestion.id) ?? false
+    );
   }
 
   progressReporter.reportCandidates();
@@ -378,6 +391,9 @@ export async function createAmazonQArchitectureDraftResponse(
   const payload = maskSecretsForAi({
     architectureBrief,
     architectureDecisionSpace,
+    ...(request.clarificationAnswers === undefined
+      ? {}
+      : { clarificationAnswers: request.clarificationAnswers }),
     ...(request.candidateExclusions === undefined
       ? {}
       : { candidateExclusions: request.candidateExclusions }),
@@ -493,6 +509,7 @@ export async function createAmazonQArchitectureDraftResponse(
     if (parsedResponse.status === "needs_clarification") {
       return {
         status: "needs_clarification",
+        questionId: createProviderClarificationQuestionId(parsedResponse.question),
         question: parsedResponse.question,
         suggestions: [...(parsedResponse.suggestions ?? [])],
         providerMetadata
@@ -1198,13 +1215,122 @@ function hasPromptTerm(prompt: string, terms: readonly string[]): boolean {
   return terms.some((term) => normalizedPrompt.includes(term.normalize("NFKC").toLowerCase()));
 }
 
-function findMissingRequiredQuestion(prompt: string): RequiredArchitectureQuestion | null {
-  if (hasExplicitArchitectureBrief(prompt)) {
-    return null;
+function createProviderClarificationQuestionId(question: string): string {
+  let hash = 2_166_136_261;
+  for (const character of question.normalize("NFKC")) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16_777_619);
   }
-
-  return REQUIRED_ARCHITECTURE_QUESTIONS.find((question) => !isRequiredArchitectureQuestionAnswered(question, prompt)) ?? null;
+  return `amazon_q_follow_up_${(hash >>> 0).toString(36)}`;
 }
+
+function withAcceptedArchitectureClarificationAnswers(
+  request: CreateArchitectureDraftRequest
+): CreateArchitectureDraftRequest {
+  const answers = request.clarificationAnswers;
+  if (answers === undefined || answers.length === 0) return request;
+  return {
+    ...request,
+    prompt: `${request.prompt}\n\nAccepted architecture clarification answers:\n${answers
+      .map((answer) => `- ${answer.questionId}: ${answer.answer.trim()}`)
+      .join("\n")}`
+  };
+}
+
+type MissingRequiredArchitectureQuestion = {
+  readonly question: RequiredArchitectureQuestion;
+  readonly invalidAnswer: boolean;
+};
+
+function findMissingRequiredQuestion(
+  request: CreateArchitectureDraftRequest
+): MissingRequiredArchitectureQuestion | null {
+  if (hasExplicitArchitectureBrief(request.prompt)) return null;
+  const answersByQuestionId = new Map(
+    (request.clarificationAnswers ?? []).map((answer) => [answer.questionId, answer.answer])
+  );
+  for (const question of REQUIRED_ARCHITECTURE_QUESTIONS) {
+    if (isRequiredArchitectureQuestionAnswered(question, request.prompt)) continue;
+    const answer = answersByQuestionId.get(question.id);
+    if (answer !== undefined && isClarificationAnswerValid(question, answer)) continue;
+    return { question, invalidAnswer: answer !== undefined };
+  }
+  return null;
+}
+
+function isClarificationAnswerValid(
+  question: RequiredArchitectureQuestion,
+  answer: string
+): boolean {
+  const normalizedAnswer = answer.normalize("NFKC").trim().toLowerCase();
+  if (normalizedAnswer.length === 0 || isClearlyUnrelatedClarificationAnswer(normalizedAnswer)) {
+    return false;
+  }
+  if (isRequiredArchitectureQuestionAnswered(question, normalizedAnswer)) return true;
+  switch (question.id) {
+    case "website_type":
+      return hasPromptTerm(normalizedAnswer, [
+        "쇼핑", "커머스", "마켓", "포털", "검색", "커뮤니티", "소셜", "예약",
+        "배달", "교육", "강의", "스트리밍", "대시보드", "관리자", "saas",
+        "네이버", "쿠팡", "당근", "카카오", "유튜브"
+      ]);
+    case "traffic":
+      return /\d/u.test(normalizedAnswer) || hasPromptTerm(normalizedAnswer, [
+        "적게", "적은", "많지", "보통", "많은", "몰릴", "초기", "처음"
+      ]);
+    case "database":
+    case "backend":
+    case "ssl":
+    case "file_upload":
+    case "realtime":
+      return isNaturalBooleanAnswer(normalizedAnswer);
+    case "frontend":
+      return hasPromptTerm(normalizedAnswer, [
+        "리액트", "뷰", "앵귤러", "넥스트", "일반 웹", "순수 자바스크립트"
+      ]) || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "region":
+      return hasPromptTerm(normalizedAnswer, ["국내", "해외", "전 세계", "전세계", "가까운 곳"])
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "budget":
+      return /\d/u.test(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, ["저렴", "싸게", "최소", "넉넉", "보통", "적당"])
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "management_preference":
+      return hasPromptTerm(normalizedAnswer, ["맡기", "신경 쓰", "직접", "운영하기", "관리하기"])
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "page_loading_time":
+      return /\d/u.test(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, ["빠르게", "빨랐", "느려도", "즉시"])
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "website_size":
+      return /\d/u.test(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, ["작은", "크지", "보통", "큰", "사진", "영상", "콘텐츠 많"])
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "traffic_pattern":
+      return hasPromptTerm(normalizedAnswer, ["일정", "낮", "밤", "저녁", "주말", "이벤트", "몰려", "예측"])
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "downtime_tolerance":
+      return /\d/u.test(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, ["중단", "안 돼", "안돼", "잠깐", "몇 시간", "하루", "괜찮"])
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    default:
+      return false;
+  }
+}
+
+function isNaturalBooleanAnswer(answer: string): boolean {
+  return /^(?:네|예|응|맞아|아니|아니요|필요(?:해|해요|합니다|하지 않|없)|안 필요|없어|있어|있음|없음|해줘|해주세요)/u.test(answer)
+    || hasUncertainPreferenceAnswer(answer);
+}
+
+function hasUncertainPreferenceAnswer(answer: string): boolean {
+  return hasPromptTerm(answer, ["모르겠", "추천", "상관없", "아무거나"]);
+}
+
+function isClearlyUnrelatedClarificationAnswer(answer: string): boolean {
+  return hasPromptTerm(answer, ["김치찌개", "된장찌개", "부대찌개", "날씨", "점심 메뉴"]);
+}
+
 
 function findConditionalArchitectureQuestion(prompt: string): RequiredArchitectureQuestion | null {
   if (hasExplicitArchitectureBrief(prompt)) {
@@ -1299,12 +1425,17 @@ function createArchitectureDraftClarification(
   question: RequiredArchitectureQuestion,
   request: CreateArchitectureDraftRequest,
   provider: AiTextProvider,
-  billingMode: AiBillingMode
+  billingMode: AiBillingMode,
+  invalidAnswer = false
 ): ArchitectureDraftClarification {
   return {
     status: "needs_clarification",
     question: question.question,
+    questionId: question.id,
     suggestions: question.suggestions,
+    ...(invalidAnswer
+      ? { validationMessage: "입력하신 답변을 이 질문에 맞는 요구사항으로 이해하지 못했어요. 다시 답해주세요." }
+      : {}),
     providerMetadata: createAiProviderMetadata({
       provider,
       billingMode,

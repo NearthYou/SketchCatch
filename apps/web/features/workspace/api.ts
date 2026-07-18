@@ -929,10 +929,15 @@ function isCreateArchitectureDraftResponse(
   if ("status" in value) {
     return (
       value.status === "needs_clarification" &&
+      "questionId" in value &&
+      typeof value.questionId === "string" &&
       "question" in value &&
       typeof value.question === "string" &&
       "suggestions" in value &&
       isStringArray(value.suggestions) &&
+      (!("validationMessage" in value) ||
+        value.validationMessage === undefined ||
+        typeof value.validationMessage === "string") &&
       "providerMetadata" in value &&
       isAiProviderMetadata(value.providerMetadata)
     );

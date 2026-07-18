@@ -562,9 +562,11 @@
         "Workspace AI는 클릭한 option만 의미 기록으로 누적하고 실제 Resource icon Orbit과 Compiler Diagram 최종 Preview를 분리하며 승인 전 Board를 변경하지 않는다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-17",
+        "lastVerified": "2026-07-18",
         "commands": [
           "pnpm harness:check",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts src/routes/ai-architecture-draft-stream.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-draft-clarification.test.ts features/workspace/workspace-ai-draft-stream.test.ts app/workspace/ai/use-ai-start-workflow.test.ts",
           "pnpm architecture-board-knowledge:check",
           "pnpm architecture-board-evidence:check",
           "pnpm architecture-board-evidence-review:check",
@@ -577,7 +579,7 @@
           "pnpm build",
           "git diff --check"
         ],
-        "notes": "000 Compiler implementation remains complete: the checked-in 29+1 knowledge artifact expands bounded geometry candidates, keeps source/requested-original/presentation/semantic selection explicit, forwards Reverse Engineering diagnostics, and fingerprint-gates visual-only Template variants. `/workspace/ai` was rebuilt from the cleanup baseline with a semantic clicked-option trail, deterministic presentation-only Orbit sourced only from actual `/Resource-Icons_07312025/` catalog entries, and a Compiler-authoritative read-only final Diagram. The deleted progress card, requirement list, history panel, mobile tabs, and unused backend progress features remain absent. Focused Workspace AI/Compiler tests passed 94/94, full Web regression passed 545/545, and harness/lint/typecheck/build/diff checks passed. Browser QA covered desktop, breakpoint, tablet, and 390x844 mobile layouts, continuous Orbit response motion, the independent final reveal, pan/zoom, zero horizontal overflow, and zero new console errors or warnings after the viewer-anchor fix; Board application was not used. The aggregate feature remains in_progress only for the separately owned Compiler evidence and human-review queue."
+        "notes": "000 Compiler implementation remains complete: the checked-in 29+1 knowledge artifact expands bounded geometry candidates, keeps source/requested-original/presentation/semantic selection explicit, forwards Reverse Engineering diagnostics, and fingerprint-gates visual-only Template variants. `/workspace/ai` was rebuilt from the cleanup baseline with a semantic clicked-option trail, deterministic presentation-only Orbit sourced only from actual `/Resource-Icons_07312025/` catalog entries, and a Compiler-authoritative read-only final Diagram. The deleted progress card, requirement list, history panel, mobile tabs, and unused backend progress features remain absent. Focused Workspace AI/Compiler tests passed 94/94, full Web regression passed 545/545, and harness/lint/typecheck/build/diff checks passed. Browser QA covered desktop, breakpoint, tablet, and 390x844 mobile layouts, continuous Orbit response motion, the independent final reveal, pan/zoom, zero horizontal overflow, and zero new console errors or warnings after the viewer-anchor fix; Board application was not used. The aggregate feature remains in_progress only for the separately owned Compiler evidence and human-review queue. Natural-language clarification answers are now validated against their current question, rejected answers repeat that question, and accepted structured answers are forwarded to Amazon Q without question-text contamination; focused API tests passed 81/81 and focused Web tests passed 12/12."
       },
       "notes": "Compiler proposals may diagnose but do not hard-reject requirement, deployment, Provider, or Terraform conflicts; application remains user-accepted and Deployment safety remains unchanged."
     },

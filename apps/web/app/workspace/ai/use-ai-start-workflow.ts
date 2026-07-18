@@ -34,6 +34,10 @@ import {
   type ArchitectureDraftFollowUpSession
 } from "../../../features/workspace/workspace-ai-draft-follow-up";
 import {
+  createArchitectureDraftClarificationMessage,
+  withArchitectureDraftClarificationAnswer
+} from "../../../features/workspace/workspace-ai-draft-clarification";
+import {
   classifyWorkspaceAiChatPrompt,
   createWorkspaceAiPromptGateMessage
 } from "../../../features/workspace/workspace-ai-chat-routing";
@@ -64,7 +68,7 @@ import { getAiStartDraftTransport } from "./ai-start-request-policy";
 
 type PendingDraftClarification = {
   readonly clarification: ArchitectureDraftClarification;
-  readonly prompt: string;
+  readonly request: CreateArchitectureDraftRequest;
 };
 
 type PendingPatchClarification = {
@@ -226,9 +230,13 @@ export function useAiStartWorkflow({
     }
 
     if (draftClarification !== null) {
-      const nextPrompt = `${draftClarification.prompt}\n\n${draftClarification.clarification.question}: ${prompt}`;
+      const nextRequest = withArchitectureDraftClarificationAnswer(
+        draftClarification.request,
+        draftClarification.clarification,
+        prompt
+      );
       setDraftClarification(null);
-      await requestDraft({ prompt: nextPrompt });
+      await requestDraft(nextRequest);
       return;
     }
 
@@ -335,10 +343,14 @@ export function useAiStartWorkflow({
     response: CreateArchitectureDraftResponse
   ): void {
     if (isArchitectureDraftClarification(response)) {
-      setDraftClarification({ clarification: response, prompt: request.prompt });
+      setDraftClarification({ clarification: response, request });
       publishDraftProgressState(draftProgressCoordinatorRef.current.awaitInput());
       finishRequest();
-      appendAssistantMessage("question", response.question, response.suggestions);
+      appendAssistantMessage(
+        "question",
+        createArchitectureDraftClarificationMessage(response),
+        response.suggestions
+      );
       return;
     }
 

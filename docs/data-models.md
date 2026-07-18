@@ -2571,15 +2571,23 @@ type ArchitectureDraftCandidateExclusion = {
   label: string;
 };
 
+type ArchitectureDraftClarificationAnswer = {
+  questionId: string;
+  answer: string;
+};
+
 type CreateArchitectureDraftRequest = {
   prompt: string;
+  clarificationAnswers?: ArchitectureDraftClarificationAnswer[];
   candidateExclusions?: ArchitectureDraftCandidateExclusion[];
 };
 
 type ArchitectureDraftClarification = {
   status: "needs_clarification";
+  questionId: string;
   question: string;
   suggestions: string[];
+  validationMessage?: string;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -2653,6 +2661,10 @@ type ArchitectureIntent = {
   missingQuestions: string[];
 };
 ```
+
+`clarificationAnswers`는 현재 AI 대화에서 사용자가 직접 입력하거나 선택지로 고른 추가 질문 답변을 `questionId`와 분리해 전달하는 요청 계약이다. 서버는 질문 문장 전체가 아니라 해당 `answer`만 질문별 규칙으로 해석한다. 답변이 질문 문맥에 맞지 않으면 `validationMessage`와 같은 `questionId`를 반환해 같은 질문을 다시 하고, 다음 질문이나 Draft 생성으로 넘어가지 않는다.
+
+검증된 답변만 원래 Requirement Prompt 뒤의 구조화된 `Accepted architecture clarification answers` 문맥과 Amazon Q payload에 포함한다. 질문 문장 자체는 Requirement Prompt에 답변처럼 합치지 않으며, 선택지 클릭과 직접 자연어 입력은 같은 계약을 사용한다.
 
 `POST /api/ai/architecture-draft/stream`은 새 프로젝트의 첫 AI Draft 전용 newline-delimited JSON 경계다. Repository 권한을 필요로 하는 `repositoryAnalysis`와 `repositoryEvidence`는 이 경계에서 hijack 전 400으로 거부하고, 기존 JSON endpoint의 active-user·persisted Repository Analysis 해석 경로만 사용한다. `progress` event는 화면 단계나 질문 요약을 전달하지 않고, 후보 제외에 필요한 서버 발급 `provisionalArchitectureJson`과 `excludableCandidateIds`만 증가하는 `sequence`와 함께 전달한다. 해당 snapshot은 현재 요청의 이전 후보 snapshot을 완전히 대체하며, 최종 `CreateArchitectureDraftResponse`는 별도 terminal event로 전달한다. 클라이언트는 대화 원문이나 장식용 AWS icon에서 Resource 후보를 추측하지 않는다.
 

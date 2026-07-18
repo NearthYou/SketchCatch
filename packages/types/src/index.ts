@@ -3334,8 +3334,14 @@ export type ArchitectureDraftCandidateExclusion = {
   label: string;
 };
 
+export type ArchitectureDraftClarificationAnswer = {
+  questionId: string;
+  answer: string;
+};
+
 export type CreateArchitectureDraftRequest = {
   prompt: string;
+  clarificationAnswers?: readonly ArchitectureDraftClarificationAnswer[] | undefined;
   candidateExclusions?: readonly ArchitectureDraftCandidateExclusion[] | undefined;
   templateId?: TemplateId | undefined;
   repositoryEvidence?:
@@ -3369,8 +3375,10 @@ export type AiArchitectureDraftResult = {
 
 export type ArchitectureDraftClarification = {
   status: "needs_clarification";
+  questionId: string;
   question: string;
   suggestions: string[];
+  validationMessage?: string | undefined;
   providerMetadata: AiProviderMetadata;
 };
 

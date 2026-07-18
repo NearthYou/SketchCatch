@@ -650,6 +650,100 @@ test("createAmazonQArchitectureDraftResponse does not classify web app prompts a
   assert.equal(response.question, "어떤 종류의 웹사이트인가요?");
 });
 
+test("createAmazonQArchitectureDraftResponse accepts a relevant natural-language clarification answer", async () => {
+  const provider = createFakeAmazonQProvider(() => "{}");
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: "웹사이트를 만들고 싶어요.",
+      clarificationAnswers: [
+        { questionId: "website_type", answer: "네이버 쇼핑몰 같은 사이트를 만들고 싶어" }
+      ]
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+  if (!("status" in response)) assert.fail("Expected the next clarification response");
+  assert.equal(response.questionId, "traffic");
+  assert.equal(response.question, "예상 트래픽 규모는?");
+  assert.equal(response.validationMessage, undefined);
+});
+
+test("createAmazonQArchitectureDraftResponse rejects an unrelated natural-language clarification answer", async () => {
+  const provider = createFakeAmazonQProvider(() => "{}");
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: "웹사이트를 만들고 싶어요.",
+      clarificationAnswers: [{ questionId: "website_type", answer: "김치찌개" }]
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+  if (!("status" in response)) assert.fail("Expected the same clarification response");
+  assert.equal(response.questionId, "website_type");
+  assert.equal(response.question, "어떤 종류의 웹사이트인가요?");
+  assert.match(response.validationMessage ?? "", /다시 답해/);
+});
+
+test("createAmazonQArchitectureDraftResponse evaluates short natural answers in the current question context", async () => {
+  const provider = createFakeAmazonQProvider(() => "{}");
+  const prompt = [
+    "동적 웹 애플리케이션 쇼핑몰을 만들고 싶어요.",
+    "동시 사용자 50명 정도의 중간 규모 트래픽입니다."
+  ].join("\n");
+  const accepted = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt,
+      clarificationAnswers: [{ questionId: "database", answer: "네, 필요해요" }]
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+  if (!("status" in accepted)) assert.fail("Expected the next clarification response");
+  assert.equal(accepted.questionId, "frontend");
+
+  const rejected = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt,
+      clarificationAnswers: [{ questionId: "database", answer: "김치찌개" }]
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+  if (!("status" in rejected)) assert.fail("Expected the repeated clarification response");
+  assert.equal(rejected.questionId, "database");
+  assert.match(rejected.validationMessage ?? "", /다시 답해/);
+});
+
+test("createAmazonQArchitectureDraftResponse forwards accepted natural-language answers as structured Amazon Q context", async () => {
+  let requestedPrompt = "";
+  let requestedPayload: unknown;
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompt = request.prompt;
+    requestedPayload = request.payload;
+    return JSON.stringify({
+      status: "needs_clarification",
+      question: "추가로 원하는 기능이 있나요?",
+      suggestions: []
+    });
+  });
+  const promptWithoutWebsiteType = createKoreaNoUploadNoRealtimePrompt()
+    .split("\n")
+    .slice(1)
+    .join("\n");
+  await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: promptWithoutWebsiteType,
+      clarificationAnswers: [
+        { questionId: "website_type", answer: "네이버 쇼핑몰 같은 사이트를 만들고 싶어" }
+      ]
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+  assert.match(requestedPrompt, /Accepted architecture clarification answers:/);
+  assert.match(requestedPrompt, /website_type: 네이버 쇼핑몰 같은 사이트/);
+  assert.doesNotMatch(requestedPrompt, /어떤 종류의 웹사이트인가요\?: 네이버/);
+  assert.deepEqual(
+    (requestedPayload as { clarificationAnswers?: unknown }).clarificationAnswers,
+    [{ questionId: "website_type", answer: "네이버 쇼핑몰 같은 사이트를 만들고 싶어" }]
+  );
+});
+
 test("createAmazonQArchitectureDraftResponse treats concurrent user capacity as traffic information", async () => {
   const provider = createFakeAmazonQProvider(() => "{}");
 
