@@ -6912,6 +6912,7 @@
 }
 
 .liveObservationArchitectureHeader p {
+  font-size: calc(6px + var(--presentation-font-size-increase));
   margin: 0;
   max-width: 610px;
   text-align: right;

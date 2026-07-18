@@ -26,6 +26,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Reduce only the Live Observation guidance font size
+
+- Restored the original map header guidance verbatim after clarifying that the wording must not be summarized.
+- Preserved the original 610px width and wrapping behavior, removed the two-line clamp and responsive rewrite, and changed only the guidance paragraph from the shared 12px base to a 6px base (18px to 12px after the presentation increment).
+- Verification passed: focused Live Observation Architecture tests 13/13, workspace lint, typecheck, production build, final harness check, and diff check. Broad test suites were not run; lint retains one unrelated existing API test warning.
+- No DB schema, migration, cloud mutation, deployment, or Git/CI/CD handoff was performed.
+- Next action: refresh the active Live Observation modal and confirm the unchanged wording at the smaller size; no further code change is pending.
+
 ### 2026-07-18 - Simplify AI Workbench mode navigation
 
 - Reduced the desktop AI Workbench mode rail to icon-only tabs and narrowed it from 68px to 48px; retained accessible names and native tooltips while keeping mobile tab labels visible.
@@ -41,21 +49,6 @@ Short English-only working log for the current agent context. Older records are 
 - Focused Diagram Editor layout tests pass 54/54; Web lint/typecheck, root lint/typecheck/build, final harness, and diff checks pass. Broad test suites were not run; root lint retains one unrelated existing API test warning.
 - Archived one older progress entry to restore the harness size limit. No DB schema, migration, cloud mutation, deployment, or Git/CI/CD handoff was performed.
 - Next action: refresh the active Workspace and visually confirm the compact result notice; no further code change is pending.
-
-### 2026-07-18 - Separate Workspace panel and canvas controls
-
-- Offset the vertical canvas toolbar from the shared 24px panel edge handle so the controls keep a 12px desktop gap and a 10px compact-screen gap.
-- Preserved the original toolbar inset in read-only Viewer layouts, where panel edge handles are not rendered.
-- Added a focused layout contract covering both breakpoints and the shared handle-width token.
-- Verification passed: focused Diagram Editor layout tests 54/54, Web lint, Web typecheck, workspace lint, workspace typecheck, production build, final harness check, and diff check.
-- Authenticated browser QA was not repeated; no DB schema, migration, cloud mutation, deployment, or Git/CI/CD handoff was performed.
-- Next action: refresh the authenticated Workspace and visually confirm the separated controls; no further code change is pending.
-
-### 2026-07-18 - Correct Cross-account AWS S3 Template mapping
-
-- Replaced the incorrect AWS Account presentation mapping and empty text primitives with existing Palette Group areas while preserving the three Terraform Resources, containment, and source geometry.
-- Recaptured the committed WebP and bound its manifest hash to the corrected Diagram.
-- Kept the existing Compiler visual baseline by excluding visual Security Group scope, summary links, and launch dependencies from main-flow quality.
 
 ### 2026-07-18 - Standardize presentation typography
 
