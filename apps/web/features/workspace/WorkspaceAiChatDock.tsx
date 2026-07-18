@@ -80,6 +80,17 @@ import {
   type WorkspaceAiChatPromptClassification
 } from "./workspace-ai-chat-routing";
 import {
+  findPatchClarificationCandidate as findSharedPatchClarificationCandidate,
+  findPatchClarificationSuggestion as findSharedPatchClarificationSuggestion,
+  getPatchClarificationSuggestions as getSharedPatchClarificationSuggestions,
+  isAddResourceConnectionClarification as isSharedAddResourceConnectionClarification,
+  isNoResourceAdditionSuggestion as isSharedNoResourceAdditionSuggestion,
+  isServicePurposePatchClarification as isSharedServicePurposePatchClarification,
+  isSkipConnectionSuggestion as isSharedSkipConnectionSuggestion,
+  NO_RESOURCE_ADDITION_MESSAGE,
+  NO_RESOURCE_ADDITION_SUGGESTION
+} from "./workspace-ai-patch-clarification";
+import {
   createWorkspaceAiPatchPreviewModel,
   type WorkspaceAiPatchParameterChange,
   type WorkspaceAiPatchPreviewModel
@@ -221,8 +232,6 @@ type SelectedTerraformFixPlan = {
 };
 
 const MAX_CHAT_MESSAGES = 80;
-const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
-const NO_RESOURCE_ADDITION_MESSAGE = "추가 없이 지금까지의 요청으로 새 초안을 생성합니다.";
 const REQUEST_CANCELLED_MESSAGE = "요청을 중지했습니다.";
 const VOICE_NO_SPEECH_TIMEOUT_MS = 8000;
 const WORKBENCH_SCOPE_DEFINITIONS = workspaceAiChatScopes.map((scope) => ({
@@ -2872,94 +2881,40 @@ function findPatchClarificationCandidate(
   clarification: ArchitecturePatchClarification,
   answer: string
 ): ArchitecturePatchClarificationCandidate | undefined {
-  const normalizedAnswer = answer.trim().toLowerCase();
-
-  return clarification.candidates.find((candidate) => {
-    const suggestionLabel = formatPatchCandidateSuggestion(candidate).toLowerCase();
-
-    return (
-      normalizedAnswer === candidate.resourceId.toLowerCase() ||
-      normalizedAnswer === candidate.label.toLowerCase() ||
-      normalizedAnswer === suggestionLabel ||
-      normalizedAnswer.includes(candidate.resourceId.toLowerCase()) ||
-      normalizedAnswer.includes(candidate.label.toLowerCase())
-    );
-  });
+  return findSharedPatchClarificationCandidate(clarification, answer);
 }
 
 function findPatchClarificationSuggestion(
   clarification: ArchitecturePatchClarification,
   answer: string
 ): string | undefined {
-  const normalizedAnswer = normalizePatchClarificationAnswer(answer);
-
-  return clarification.suggestions?.find((suggestion) => {
-    const normalizedSuggestion = normalizePatchClarificationAnswer(suggestion);
-
-    return (
-      normalizedAnswer === normalizedSuggestion ||
-      normalizedAnswer.includes(normalizedSuggestion) ||
-      (normalizedAnswer.length > 1 && normalizedSuggestion.includes(normalizedAnswer))
-    );
-  });
+  return findSharedPatchClarificationSuggestion(clarification, answer);
 }
 
 function isAddResourceConnectionClarification(
   clarification: ArchitecturePatchClarification
 ): boolean {
-  return (
-    clarification.intent.requestedAction === "add_resource" &&
-    clarification.intent.resourceType !== undefined &&
-    clarification.candidates.length > 0
-  );
+  return isSharedAddResourceConnectionClarification(clarification);
 }
 
 function isServicePurposePatchClarification(
   clarification: ArchitecturePatchClarification
 ): boolean {
-  return (
-    clarification.intent.requestedAction === "manual_review" &&
-    clarification.candidates.length === 0
-  );
+  return isSharedServicePurposePatchClarification(clarification);
 }
 
 function isSkipConnectionSuggestion(suggestion: string): boolean {
-  return (
-    normalizePatchClarificationAnswer(suggestion) ===
-    normalizePatchClarificationAnswer("연결하지 않기")
-  );
+  return isSharedSkipConnectionSuggestion(suggestion);
 }
 
 function isNoResourceAdditionSuggestion(suggestion: string): boolean {
-  return (
-    normalizePatchClarificationAnswer(suggestion) ===
-    normalizePatchClarificationAnswer(NO_RESOURCE_ADDITION_SUGGESTION)
-  );
+  return isSharedNoResourceAdditionSuggestion(suggestion);
 }
 
 function getPatchClarificationSuggestions(
   clarification: ArchitecturePatchClarification
 ): readonly string[] {
-  if (isAddResourceConnectionClarification(clarification)) {
-    return [
-      ...clarification.candidates.map(formatPatchCandidateSuggestion),
-      ...(clarification.suggestions ?? [])
-    ];
-  }
-
-  return clarification.suggestions && clarification.suggestions.length > 0
-    ? clarification.suggestions
-    : clarification.candidates.map(formatPatchCandidateSuggestion);
-}
-
-function normalizePatchClarificationAnswer(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function formatPatchCandidateSuggestion(
-  candidate: ArchitecturePatchClarificationCandidate
-): string {
-  return `${candidate.label} (${candidate.resourceType})`;
+  return getSharedPatchClarificationSuggestions(clarification);
 }
 
 function isArchitectureDraftClarification(

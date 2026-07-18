@@ -92,3 +92,21 @@ test("두 다이어그램 생성 채팅은 같은 자연어 답변 검증과 선
   assert.match(workspaceDockSource, /WorkspaceAiWorkbenchDraftProgress/);
   assert.match(workspaceDockSource, /draftGenerationProgressVisible/);
 });
+
+test("두 다이어그램 생성 채팅은 같은 수정 재질문과 신규 초안 라우팅을 사용한다", () => {
+  const aiStartSource = readFileSync(join(currentDir, "use-ai-start-workflow.ts"), "utf8");
+  const workspaceDockSource = readFileSync(
+    join(currentDir, "../../../features/workspace/WorkspaceAiChatDock.tsx"),
+    "utf8"
+  );
+
+  for (const source of [aiStartSource, workspaceDockSource]) {
+    assert.match(source, /workspace-ai-patch-clarification/);
+    assert.match(source, /shouldStartFreshDraftDuringPatchClarification/);
+    assert.match(source, /resolvePendingPreviewChatAction/);
+  }
+
+  assert.match(aiStartSource, /isNoResourceAdditionSuggestion/);
+  assert.match(aiStartSource, /isServicePurposePatchClarification/);
+  assert.match(aiStartSource, /isSkipConnectionSuggestion/);
+});

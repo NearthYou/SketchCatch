@@ -39,8 +39,22 @@ import {
 } from "../../../features/workspace/workspace-ai-draft-clarification";
 import {
   classifyWorkspaceAiChatPrompt,
-  createWorkspaceAiPromptGateMessage
+  createWorkspaceAiPromptGateMessage,
+  resolvePendingPreviewChatAction,
+  shouldStartFreshDraftDuringPatchClarification
 } from "../../../features/workspace/workspace-ai-chat-routing";
+import { createLatestUserRequirementPromptExcluding } from "../../../features/workspace/workspace-ai-chat-history";
+import {
+  findPatchClarificationCandidate,
+  findPatchClarificationSuggestion,
+  getPatchClarificationSuggestions,
+  isAddResourceConnectionClarification,
+  isNoResourceAdditionSuggestion,
+  isServicePurposePatchClarification,
+  isSkipConnectionSuggestion,
+  NO_RESOURCE_ADDITION_MESSAGE,
+  NO_RESOURCE_ADDITION_SUGGESTION
+} from "../../../features/workspace/workspace-ai-patch-clarification";
 import {
   isWorkspaceAiChatAbortError,
   WorkspaceAiChatRequestRegistry
@@ -50,9 +64,6 @@ import {
   createAiStartMessage,
   createDraftFromPatch,
   createPatchSummary,
-  findPatchClarificationCandidate,
-  findPatchClarificationSuggestion,
-  getPatchClarificationSuggestions,
   isArchitectureDraftClarification,
   isArchitecturePatchClarification,
   readAiStartProjectDraft,
@@ -238,6 +249,11 @@ export function useAiStartWorkflow({
     setVoiceTranscriptNeedsConfirmation(false);
 
     if (patchClarification !== null) {
+      if (shouldStartFreshDraftDuringPatchClarification(prompt)) {
+        setPatchClarification(null);
+        await requestDraft({ prompt });
+        return;
+      }
       await answerPatchClarification(prompt, patchClarification);
       return;
     }
@@ -269,7 +285,16 @@ export function useAiStartWorkflow({
     }
 
     if (draft !== null && previewDiagram !== null) {
-      await requestPatch(prompt, previewDiagram);
+      const chatAction = resolvePendingPreviewChatAction({
+        needsDraftClarification: false,
+        prompt
+      });
+
+      if (chatAction === "patch") {
+        await requestPatch(prompt, previewDiagram);
+      } else {
+        await requestDraft({ prompt });
+      }
       return;
     }
 
@@ -659,9 +684,13 @@ export function useAiStartWorkflow({
     const suggestion = findPatchClarificationSuggestion(pending.clarification, answer);
 
     if (candidate !== undefined) {
+      const useAsConnection = isAddResourceConnectionClarification(pending.clarification);
+      const instruction = useAsConnection
+        ? pending.clarification.intent.instruction
+        : `${pending.clarification.intent.instruction}\n${answer}`;
+
       setPatchClarification(null);
-      const useAsConnection = pending.clarification.intent.requestedAction === "add_resource";
-      await requestPatch(pending.clarification.intent.instruction, pending.baseDiagram, {
+      await requestPatch(instruction, pending.baseDiagram, {
         ...(useAsConnection
           ? { connectionTargetResourceId: candidate.resourceId }
           : { selectedTargetResourceId: candidate.resourceId })
@@ -670,10 +699,31 @@ export function useAiStartWorkflow({
     }
 
     if (suggestion !== undefined) {
+      const originalInstruction = pending.clarification.intent.instruction;
       setPatchClarification(null);
-      await requestPatch(pending.clarification.intent.instruction, pending.baseDiagram, {
-        ...(suggestion === "연결하지 않기" ? { skipConnection: true } : {})
-      });
+
+      if (isNoResourceAdditionSuggestion(suggestion)) {
+        const fallbackPrompt = createLatestUserRequirementPromptExcluding(
+          messagesRef.current,
+          NO_RESOURCE_ADDITION_SUGGESTION
+        );
+
+        appendAssistantMessage("status", NO_RESOURCE_ADDITION_MESSAGE);
+        await requestDraft({ prompt: fallbackPrompt || originalInstruction });
+        return;
+      }
+
+      if (isServicePurposePatchClarification(pending.clarification)) {
+        await requestDraft({ prompt: suggestion });
+        return;
+      }
+
+      const skipConnection = isSkipConnectionSuggestion(suggestion);
+      await requestPatch(
+        skipConnection ? originalInstruction : `${originalInstruction}\n${suggestion}`,
+        pending.baseDiagram,
+        skipConnection ? { skipConnection: true } : {}
+      );
       return;
     }
 
