@@ -168,6 +168,10 @@ export type AwsConnectionRetentionPolicy = {
   maxUnverifiedConnectionsPerUser: number;
 };
 
+export type ListAwsConnectionsOptions = {
+  includeUnverified?: boolean;
+};
+
 export const defaultAwsConnectionRetentionPolicy: AwsConnectionRetentionPolicy = {
   maxUnverifiedConnectionsPerUser: 5
 };
@@ -619,7 +623,7 @@ async function hasDeploymentUsingAwsConnection(
     rows,
     activeLeaseRows,
     activeDeploymentJobRows,
-    creatingCodeConnections,
+    changingCodeConnections,
     preparingBuildEnvironments
   ] = await Promise.all([
     db
@@ -662,7 +666,7 @@ async function hasDeploymentUsingAwsConnection(
       .where(
         and(
           eq(awsCodeConnections.awsConnectionId, connectionId),
-          eq(awsCodeConnections.status, "CREATING")
+          inArray(awsCodeConnections.status, ["CREATING", "DELETING"])
         )
       )
       .limit(1),
@@ -693,19 +697,41 @@ async function hasDeploymentUsingAwsConnection(
   return (
     activeLeaseRows.length > 0 ||
     activeDeploymentJobRows.length > 0 ||
-    creatingCodeConnections.length > 0 ||
+    changingCodeConnections.length > 0 ||
     preparingBuildEnvironments.length > 0 ||
     [...byDeployment.values()].some(shouldBlockAwsConnectionDeletion)
   );
 }
 
-export async function listAwsConnections(
+export function listAwsConnections(
   input: {
     accessContext: ProjectAccessContext;
   },
   repository: AwsConnectionRepository
-): Promise<AwsConnectionListResponse> {
+): Promise<AwsConnectionListResponse>;
+
+export function listAwsConnections(
+  input: {
+    accessContext: ProjectAccessContext;
+  },
+  repository: AwsConnectionRepository,
+  options: ListAwsConnectionsOptions
+): Promise<AwsConnection[]>;
+export async function listAwsConnections(
+  input: {
+    accessContext: ProjectAccessContext;
+  },
+  repository: AwsConnectionRepository,
+  options?: ListAwsConnectionsOptions
+): Promise<AwsConnectionListResponse | AwsConnection[]> {
   const awsConnectionRows = await repository.listAccessibleAwsConnections(input.accessContext);
+
+  if (options) {
+    return (options.includeUnverified
+      ? awsConnectionRows
+      : awsConnectionRows.filter((awsConnection) => awsConnection.status === "verified")
+    ).map(toAwsConnection);
+  }
 
   return {
     awsConnections: awsConnectionRows

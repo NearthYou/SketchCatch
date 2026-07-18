@@ -52,6 +52,17 @@
   width: 100%;
 }
 
+.editorShellViewer {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+}
+
+.editorShellViewer .workspace {
+  grid-column: 1;
+  grid-row: 1;
+}
+
 .editorShellLeftCollapsed {
   grid-template-columns: 0 minmax(0, 1fr) var(--right-panel-width);
 }
@@ -178,38 +189,10 @@
   cursor: not-allowed;
 }
 
-.projectBarPrimaryAction {
-  align-items: center;
+.projectBarDeployButton[data-active="true"] {
   background: var(--workspace-text);
-  border: 1px solid var(--workspace-text);
-  border-radius: 8px;
+  border-color: var(--workspace-text);
   color: var(--workspace-surface);
-  cursor: pointer;
-  display: inline-flex;
-  font-size: 12px;
-  font-weight: 700;
-  gap: 6px;
-  height: 36px;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
-.projectBarPrimaryAction:hover,
-.projectBarPrimaryAction:focus-visible {
-  opacity: 0.86;
-  outline: none;
-}
-
-.projectBarPrimaryAction:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.projectBarDivider {
-  background: var(--workspace-line);
-  height: 24px;
-  margin: 0 2px;
-  width: 1px;
 }
 
 .leftRail,
@@ -803,7 +786,6 @@
   border: 1px solid var(--workspace-line);
   border-radius: 8px;
   color: var(--workspace-text);
-  cursor: pointer;
   display: grid;
   font: inherit;
   gap: 4px;
@@ -812,8 +794,10 @@
   text-align: left;
 }
 
-.leftRail :global(.moduleCatalogCard:hover),
-.leftRail :global(.moduleCatalogCard:focus-visible),
+.leftRail :global(.templateCatalogCard) {
+  cursor: pointer;
+}
+
 .leftRail :global(.templateCatalogCard:hover),
 .leftRail :global(.templateCatalogCard:focus-visible) {
   border-color: var(--workspace-line-strong);
@@ -861,7 +845,7 @@
   gap: 5px;
 }
 
-.leftRail :global(.templateApplyCard) {
+.leftRail :global(.templatePreviewCard) {
   border-left: 3px solid var(--workspace-line-strong);
 }
 
@@ -970,6 +954,59 @@ button.rightRailResizeHandle {
 
 .editorShellRightCollapsed .rightRailResizeHandle {
   display: none;
+}
+
+.panelEdgeHandle {
+  align-items: center;
+  background: var(--workspace-surface);
+  border: 1px solid var(--workspace-line-strong);
+  color: var(--workspace-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 48px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  top: calc(50% + 32px);
+  transform: translateY(-50%);
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    left 160ms ease,
+    right 160ms ease;
+  width: 24px;
+  z-index: 44;
+}
+
+.panelEdgeHandle:hover,
+.panelEdgeHandle:focus-visible {
+  background: var(--workspace-surface-muted);
+  color: var(--workspace-text);
+  outline: none;
+}
+
+.panelEdgeHandle:focus-visible {
+  box-shadow: 0 0 0 2px var(--board-primary-soft);
+}
+
+.leftPanelEdgeHandle {
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  left: var(--left-panel-width);
+}
+
+.rightPanelEdgeHandle {
+  border-radius: 8px 0 0 8px;
+  border-right: 0;
+  right: var(--right-panel-width);
+}
+
+.editorShellLeftCollapsed .leftPanelEdgeHandle {
+  left: 0;
+}
+
+.editorShellRightCollapsed .rightPanelEdgeHandle {
+  right: 0;
 }
 
 .workspace {
@@ -1334,14 +1371,16 @@ button.rightRailResizeHandle {
   color: var(--board-ink);
   flex-direction: column;
   font-weight: 500;
-  left: auto;
-  max-width: min(500px, calc(100% - 48px));
-  padding: 10px 12px;
-  right: 16px;
+  left: 16px;
+  max-height: min(560px, calc(100% - 32px));
+  max-width: min(600px, calc(100% - 48px));
+  overflow-y: auto;
+  padding: 14px;
+  right: auto;
   text-align: left;
   top: auto;
   transform: none;
-  width: 460px;
+  width: 560px;
 }
 
 .compilerPreviewHeader {
@@ -1354,20 +1393,28 @@ button.rightRailResizeHandle {
 
 .compilerPreviewHeader > div:first-child {
   display: grid;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
 }
 
 .compilerPreviewHeader strong {
   color: var(--board-ink);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
 }
 
 .compilerPreviewHeader span {
   color: var(--board-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 650;
+}
+
+.compilerPreviewHeader p,
+.compilerPreviewEmptyOutcome {
+  color: var(--board-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
 }
 
 .compilerPreviewActions {
@@ -1387,15 +1434,16 @@ button.rightRailResizeHandle {
   font-size: 12px;
   font-weight: 750;
   line-height: 1;
-  min-height: 28px;
-  padding: 0 9px;
+  min-height: 32px;
+  padding: 0 10px;
 }
 
 .compilerPreviewActions button:hover,
 .compilerPreviewActions button:focus-visible {
   background: var(--board-surface-subtle);
   border-color: var(--board-primary);
-  outline: none;
+  outline: 3px solid color-mix(in srgb, var(--board-primary) 32%, transparent);
+  outline-offset: 2px;
 }
 
 .compilerPreviewActions button:last-child {
@@ -1407,9 +1455,47 @@ button.rightRailResizeHandle {
 .compilerPreviewDetails {
   border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
   display: grid;
-  gap: 5px;
-  margin-top: 8px;
-  padding-top: 8px;
+  gap: 8px 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 10px;
+}
+
+.compilerPreviewOutcomes {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.compilerPreviewOutcomes li {
+  background: var(--board-surface);
+  border: 1px solid var(--board-border);
+  border-left: 3px solid var(--board-muted);
+  border-radius: 6px;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.compilerPreviewOutcomes li[data-tone="improved"] {
+  border-left-color: var(--board-success);
+}
+
+.compilerPreviewOutcomes li[data-tone="regressed"] {
+  border-left-color: var(--board-danger);
+}
+
+.compilerPreviewOutcomes span {
+  color: var(--board-muted);
+  font-size: 11px;
+}
+
+.compilerPreviewOutcomes strong {
+  color: var(--board-ink);
+  font-size: 12px;
 }
 
 .compilerPreviewDetail {
@@ -1436,13 +1522,45 @@ button.rightRailResizeHandle {
   white-space: nowrap;
 }
 
-.compilerPreviewDiagnostic {
+.compilerPreviewTechnical {
   border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
+  color: var(--board-muted);
+  font-size: 11px;
+}
+
+.compilerPreviewTechnical > summary {
+  cursor: pointer;
+  font-weight: 750;
+  min-height: 34px;
+  padding-top: 9px;
+}
+
+.compilerPreviewTechnical > summary:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--board-primary) 38%, transparent);
+  outline-offset: 2px;
+}
+
+.compilerPreviewTechnicalBody {
+  background: var(--board-surface);
+  border: 1px solid var(--board-border);
+  border-radius: 6px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.compilerPreviewTechnicalBody > p {
+  color: var(--board-muted);
+  font-size: 11px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.compilerPreviewDiagnostic {
   color: var(--board-warning);
   font-size: 11px;
   font-weight: 700;
-  margin: 8px 0 0;
-  padding-top: 8px;
+  margin: 0;
 }
 
 .emptyState {
@@ -1945,6 +2063,7 @@ button.rightRailResizeHandle {
   display: flex;
   height: 100%;
   justify-content: center;
+  padding: 4cqmin;
   pointer-events: none;
   width: 100%;
 }
@@ -1952,8 +2071,6 @@ button.rightRailResizeHandle {
 .resourceNodeIcon {
   display: block;
   height: 100%;
-  max-height: 48px;
-  max-width: 48px;
   object-fit: contain;
   width: 100%;
 }
@@ -2002,7 +2119,7 @@ button.rightRailResizeHandle {
   position: absolute;
   text-align: center;
   text-overflow: ellipsis;
-  top: calc(50% + 28px);
+  top: calc(100% + 4px);
   transform: translateX(-50%);
   transition:
     opacity 120ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -2127,6 +2244,11 @@ button.rightRailResizeHandle {
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
+}
+
+.edgeAnchorHandle {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .connectionHandleSource {
@@ -2817,6 +2939,10 @@ button.rightRailResizeHandle {
     overflow: hidden;
   }
 
+  .editorShellViewer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .leftRail {
     border: 0;
     border-right: 1px solid var(--workspace-line);
@@ -2842,6 +2968,22 @@ button.rightRailResizeHandle {
     top: 64px;
     width: min(var(--right-panel-width), calc(100vw - 56px));
     z-index: 42;
+  }
+
+  .leftPanelEdgeHandle {
+    left: min(var(--left-panel-width), calc(100vw - 56px));
+  }
+
+  .rightPanelEdgeHandle {
+    right: min(var(--right-panel-width), calc(100vw - 56px));
+  }
+
+  .editorShellLeftCollapsed .leftPanelEdgeHandle {
+    left: 0;
+  }
+
+  .editorShellRightCollapsed .rightPanelEdgeHandle {
+    right: 0;
   }
 
   .editorShellRightCollapsed .rightRail {
@@ -2881,10 +3023,6 @@ button.rightRailResizeHandle {
     text-overflow: ellipsis;
   }
 
-  .projectBarDivider {
-    display: none;
-  }
-
   .projectBarActions {
     gap: 2px;
   }
@@ -2915,9 +3053,18 @@ button.rightRailResizeHandle {
   .compilerPreviewActions {
     margin-left: auto;
   }
+
+  .compilerPreviewOutcomes,
+  .compilerPreviewDetails {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .panelEdgeHandle {
+    transition: none;
+  }
+
   .canvasPanelSnapAnimating :global(.react-flow__node) {
     transition: none;
   }

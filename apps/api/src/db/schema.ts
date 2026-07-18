@@ -51,6 +51,8 @@ import type {
   FrontendReleaseEvidence,
   ProjectDeploymentRuntimeConfig,
   RepositoryAnalysisAiHandoff,
+  RepositoryAnalysisTemplateId,
+  SourceRepositoryAnalysisResult,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScanResult,
   RuntimeAdapterKind,
@@ -459,6 +461,37 @@ export const sourceRepositories = pgTable(
   ]
 );
 
+export const repositoryAnalysisRecords = pgTable(
+  "repository_analysis_records",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 32 }).$type<"github">().notNull(),
+    repositoryUrl: text("repository_url").notNull(),
+    owner: varchar("owner", { length: 120 }).notNull(),
+    name: varchar("name", { length: 120 }).notNull(),
+    branch: varchar("branch", { length: 255 }).notNull(),
+    repositoryRevision: varchar("repository_revision", { length: 128 }).notNull(),
+    analysisResult: jsonb("analysis_result").$type<SourceRepositoryAnalysisResult>().notNull(),
+    selectedTemplateId: varchar("selected_template_id", { length: 128 })
+      .$type<RepositoryAnalysisTemplateId>(),
+    sourceRepositoryId: varchar("source_repository_id", { length: 36 }).references(
+      () => sourceRepositories.id,
+      { onDelete: "set null" }
+    ),
+    analyzedAt: timestamp("analyzed_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("repository_analysis_records_project_unique").on(table.projectId),
+    index("repository_analysis_records_source_repository_idx").on(table.sourceRepositoryId),
+    check("repository_analysis_records_provider_check", sql`${table.provider} = 'github'`)
+  ]
+);
+
 export const awsConnections = pgTable(
   "aws_connections",
   {
@@ -655,6 +688,21 @@ export const projectBuildEnvironments = pgTable(
       .notNull()
       .default("preparing"),
     lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+    repositoryVerificationStatus: varchar("repository_verification_status", { length: 32 })
+      .$type<"not_checked" | "verified" | "failed">()
+      .notNull()
+      .default("not_checked"),
+    repositoryVerificationRequestedCommitSha: varchar(
+      "repository_verification_requested_commit_sha",
+      { length: 64 }
+    ),
+    repositoryVerificationResolvedCommitSha: varchar(
+      "repository_verification_resolved_commit_sha",
+      { length: 64 }
+    ),
+    repositoryVerificationBuildArn: text("repository_verification_build_arn"),
+    repositoryVerificationStatusReason: text("repository_verification_status_reason"),
+    repositoryVerifiedAt: timestamp("repository_verified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },
@@ -669,6 +717,31 @@ export const projectBuildEnvironments = pgTable(
     check(
       "project_build_environments_status_check",
       sql`${table.status} in ('preparing', 'ready', 'verification_failed', 'disconnected')`
+    ),
+    check(
+      "project_build_environments_repository_verification_status_check",
+      sql`${table.repositoryVerificationStatus} in ('not_checked', 'verified', 'failed')`
+    ),
+    check(
+      "project_build_environments_repository_verification_requested_sha_check",
+      sql`${table.repositoryVerificationRequestedCommitSha} is null or ${table.repositoryVerificationRequestedCommitSha} ~ '^([0-9a-f]{40}|[0-9a-f]{64})$'`
+    ),
+    check(
+      "project_build_environments_repository_verification_resolved_sha_check",
+      sql`${table.repositoryVerificationResolvedCommitSha} is null or ${table.repositoryVerificationResolvedCommitSha} ~ '^([0-9a-f]{40}|[0-9a-f]{64})$'`
+    ),
+    check(
+      "project_build_environments_repository_verification_evidence_check",
+      sql`(
+        ${table.repositoryVerificationStatus} <> 'verified'
+        or (
+          ${table.repositoryVerificationRequestedCommitSha} is not null
+          and ${table.repositoryVerificationResolvedCommitSha} = ${table.repositoryVerificationRequestedCommitSha}
+          and ${table.repositoryVerificationBuildArn} is not null
+          and ${table.repositoryVerificationStatusReason} is null
+          and ${table.repositoryVerifiedAt} is not null
+        )
+      )`
     )
   ]
 );

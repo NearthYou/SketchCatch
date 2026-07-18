@@ -5,6 +5,7 @@ import type {
   DiagramPoint,
   DiagramVariable
 } from "@sketchcatch/types";
+import { isAreaNode } from "../diagram-editor/area-nodes";
 import {
   ARCHITECTURE_BOARD_MODULE_PATTERN_EXTRACTOR_VERSION,
   type ArchitectureBoardModulePattern,
@@ -407,15 +408,15 @@ function refitSelectedPresentationAncestors(
 ): DiagramNode[] {
   const sourceNodeById = new Map(sourceNodes.map((node) => [node.id, node]));
   const nextNodeById = new Map(selectedNodes.map((node) => [node.id, cloneValue(node)]));
-  const designAreas = selectedNodes
-    .filter(({ kind }) => kind === "design")
+  const areas = selectedNodes
+    .filter(isAreaNode)
     .sort(
       (left, right) =>
         presentationDepth(right, sourceNodeById) - presentationDepth(left, sourceNodeById) ||
         left.id.localeCompare(right.id)
     );
 
-  for (const area of designAreas) {
+  for (const area of areas) {
     const currentArea = nextNodeById.get(area.id);
     const sourceArea = sourceNodeById.get(area.id);
     if (!currentArea || !sourceArea) continue;

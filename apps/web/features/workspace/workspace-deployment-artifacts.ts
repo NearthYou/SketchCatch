@@ -63,14 +63,12 @@ export async function saveWorkspaceTerraformArtifact({
   diagramJson,
   fileName = DEFAULT_TERRAFORM_ARTIFACT_FILE_NAME,
   projectId,
-  skipValidation = false,
   source = "manual",
   terraformCode
 }: {
   readonly diagramJson: DiagramJson;
   readonly fileName?: string;
   readonly projectId: string;
-  readonly skipValidation?: boolean;
   readonly source?: ArchitectureSource | string;
   readonly terraformCode: string;
 }): Promise<SavedWorkspaceTerraformArtifact> {
@@ -81,27 +79,25 @@ export async function saveWorkspaceTerraformArtifact({
     });
   }
 
-  if (!skipValidation) {
-    let validationResult;
+  let validationResult;
 
-    try {
-      validationResult = await validateTerraformCode({
-        terraformCode
-      });
-    } catch (cause) {
-      throw new DeploymentPreparationError({ cause, stage: "terraform_prepare" });
-    }
+  try {
+    validationResult = await validateTerraformCode({
+      terraformCode
+    });
+  } catch (cause) {
+    throw new DeploymentPreparationError({ cause, stage: "terraform_prepare" });
+  }
 
-    const validationError = validationResult.diagnostics.find(
-      (diagnostic) => diagnostic.severity === "error"
-    );
+  const validationError = validationResult.diagnostics.find(
+    (diagnostic) => diagnostic.severity === "error"
+  );
 
-    if (validationError) {
-      throw new DeploymentPreparationError({
-        cause: validationError,
-        stage: "terraform_prepare"
-      });
-    }
+  if (validationError) {
+    throw new DeploymentPreparationError({
+      cause: validationError,
+      stage: "terraform_prepare"
+    });
   }
 
   const { architecture } = await saveWorkspaceArchitectureSnapshot({

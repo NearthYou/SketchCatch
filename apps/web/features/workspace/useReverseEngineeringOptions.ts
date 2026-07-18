@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AwsConnection, Project } from "../../../../packages/types/src";
 import { listAwsConnections, listProjects } from "./api";
+import { getReverseEngineeringAwsConnectionRecovery } from "./reverse-engineering-aws-connection-readiness";
 
 type RequestState = "idle" | "loading" | "error";
 
@@ -9,7 +10,7 @@ export type UseReverseEngineeringOptionsInput = {
   readonly onError: (error: unknown) => void;
 };
 
-// 프로젝트와 검증된 AWS 연결 목록을 관리합니다.
+// 프로젝트와 AWS 연결 목록을 관리하며, 스캔 실행은 검증된 연결로만 제한합니다.
 export function useReverseEngineeringOptions({
   initialProjectId,
   onError
@@ -26,16 +27,14 @@ export function useReverseEngineeringOptions({
 
   // 프로젝트와 AWS 연결 목록을 다시 읽고 선택값을 가능한 한 유지합니다.
   const loadOptions = useCallback(async () => {
+    const recoveryAwsConnectionId = getRecoveryAwsConnectionIdFromCurrentLocation();
     setLoadState("loading");
 
     try {
       const [nextProjects, nextAwsConnections] = await Promise.all([
         listProjects(),
-        listAwsConnections()
+        listAwsConnections({ includeUnverified: true })
       ]);
-      const nextVerifiedAwsConnections = nextAwsConnections.filter(
-        (connection) => connection.status === "verified"
-      );
 
       setProjects(nextProjects);
       setAwsConnections(nextAwsConnections);
@@ -44,13 +43,12 @@ export function useReverseEngineeringOptions({
         return projectStillExists ? currentProjectId : nextProjects[0]?.id ?? initialProjectId;
       });
       setSelectedAwsConnectionId((currentAwsConnectionId) => {
-        const connectionStillExists = nextVerifiedAwsConnections.some(
-          (connection) => connection.id === currentAwsConnectionId
+        return (
+          getReverseEngineeringAwsConnectionRecovery({
+            connections: nextAwsConnections,
+            selectedConnectionId: currentAwsConnectionId || recoveryAwsConnectionId
+          }).selectedConnectionId ?? ""
         );
-
-        return connectionStillExists
-          ? currentAwsConnectionId
-          : nextVerifiedAwsConnections[0]?.id ?? "";
       });
       setLoadState("idle");
     } catch (error) {
@@ -66,6 +64,7 @@ export function useReverseEngineeringOptions({
   return {
     loadOptions,
     loadState,
+    awsConnections,
     projects,
     selectedAwsConnectionId,
     selectedProjectId,
@@ -73,4 +72,25 @@ export function useReverseEngineeringOptions({
     setSelectedProjectId,
     verifiedAwsConnections
   };
+}
+
+export function getReverseEngineeringAwsConnectionIdSearchParam(
+  values: readonly string[]
+): string {
+  if (values.length !== 1) {
+    return "";
+  }
+
+  return values[0]?.trim() ?? "";
+}
+
+function getRecoveryAwsConnectionIdFromCurrentLocation(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  return getReverseEngineeringAwsConnectionIdSearchParam(
+    searchParams.getAll("awsConnectionId")
+  );
 }

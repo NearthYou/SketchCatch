@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
+import { createWorkspaceOverlayNotifications } from "./workspace-overlay-notifications";
 
 const controllerSource = read("WorkspaceAiChatDock.tsx");
 const conversationSource = read("workspace-ai-chat-conversation.ts");
+const diagramEditorSource = read("../diagram-editor/DiagramEditor.tsx");
 const launcherSource = read("WorkspaceAiChatLauncher.tsx");
 const launcherStyles = read("workspace-ai-chat-launcher.module.css");
+const projectManagerSource = read("ProjectWorkspaceDraftManager.tsx");
 const resultSource = read("WorkspaceAiWorkbenchResults.tsx");
+const rightPanelSource = read("WorkspaceRightPanel.tsx");
 const workbenchSource = read("WorkspaceAiWorkbench.tsx");
 const workbenchStyles = read("workspace-ai-workbench.module.css");
+const workspaceManagerSource = read("WorkspaceDraftManager.tsx");
 const workspaceStyles = read("workspace.module.css");
 
 test("AI chat controller delegates its outer surface to the AI Workbench", () => {
@@ -156,7 +161,67 @@ test("legacy AI chat selectors are removed from the shared workspace stylesheet"
 test("closing the Workbench restores focus to its launcher", () => {
   assert.match(
     controllerSource,
-    /const closeChatDock = useCallback\(\(\) => \{[\s\S]*?setOpen\(false\);[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?launcherButtonRef\.current\?\.focus\(\);/
+    /const closeChatDock = useCallback\(\(\) => \{[\s\S]*?onOpenChange\(false\);[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?launcherButtonRef\.current\?\.focus\(\);/
+  );
+});
+
+test("opening another workspace panel closes the controlled AI Workbench", () => {
+  for (const managerSource of [projectManagerSource, workspaceManagerSource]) {
+    assert.match(managerSource, /const \[isAiChatOpen, setAiChatOpen\] = useState\(false\);/);
+    assert.match(
+      managerSource,
+      /<WorkspaceAiChatDock[\s\S]*?isBlockedByWorkspaceOverlay=\{isBlockingPanelOpen\}[\s\S]*?isOpen=\{isAiChatOpen\}[\s\S]*?onOpenChange=\{setAiChatOpen\}/
+    );
+    assert.match(managerSource, /onWorkspacePanelOpen=\{closeAiChat\}/);
+    assert.match(
+      managerSource,
+      /<WorkspaceRightPanel[\s\S]*?onBlockingPanelOpenChange=\{setBlockingPanelOpen\}[\s\S]*?onPanelOpenRequest=\{closeAiChat\}/
+    );
+  }
+
+  assert.match(controllerSource, /if \(isBlockedByWorkspaceOverlay\) \{\s*return null;\s*\}/);
+  assert.match(
+    rightPanelSource,
+    /overlayNotificationsRef\.current\?\.notifyBlockingPanel\(\s*isDeploymentConsoleOpen \|\| isLiveObservationOpen\s*\);/
+  );
+  assert.match(rightPanelSource, /const openLiveObservation[\s\S]*?onPanelOpenRequest\(\);/);
+  assert.match(
+    diagramEditorSource,
+    /const previewAutomaticOrganization = useCallback\(\(\) => \{\s*onWorkspacePanelOpen\?\.\(\);/
+  );
+});
+
+test("workspace overlay notifications do not reset when parent callback identities change", () => {
+  const firstBlockingCalls: boolean[] = [];
+  const firstDeploymentCalls: boolean[] = [];
+  const nextBlockingCalls: boolean[] = [];
+  const nextDeploymentCalls: boolean[] = [];
+  const notifications = createWorkspaceOverlayNotifications(
+    (isOpen) => firstBlockingCalls.push(isOpen),
+    (isOpen) => firstDeploymentCalls.push(isOpen)
+  );
+
+  notifications.notifyBlockingPanel(true);
+  notifications.notifyDeploymentConsole(true);
+  notifications.setCallbacks(
+    (isOpen) => nextBlockingCalls.push(isOpen),
+    (isOpen) => nextDeploymentCalls.push(isOpen)
+  );
+
+  assert.deepEqual(firstBlockingCalls, [true]);
+  assert.deepEqual(firstDeploymentCalls, [true]);
+  assert.deepEqual(nextBlockingCalls, []);
+  assert.deepEqual(nextDeploymentCalls, []);
+
+  notifications.notifyBlockingPanel(true);
+  notifications.notifyDeploymentConsole(true);
+  notifications.reset();
+
+  assert.deepEqual(nextBlockingCalls, [true, false]);
+  assert.deepEqual(nextDeploymentCalls, [true, false]);
+  assert.match(
+    rightPanelSource,
+    /useEffect\(\s*\(\) => \(\) => \{\s*overlayNotificationsRef\.current\?\.reset\(\);\s*\},\s*\[\]\s*\);/
   );
 });
 

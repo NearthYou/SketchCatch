@@ -1,8 +1,12 @@
 const userRoot = (userId: string) => ["user", userId] as const;
+const awsConnectionsRoot = (userId: string) =>
+  [...userRoot(userId), "connections", "aws"] as const;
 
 export const queryKeys = {
   connections: (userId: string) => [...userRoot(userId), "connections"] as const,
-  awsConnections: (userId: string) => [...userRoot(userId), "connections", "aws"] as const,
+  awsConnectionsRoot,
+  awsConnections: (userId: string, includeUnverified = false) =>
+    [...awsConnectionsRoot(userId), includeUnverified ? "all-statuses" : "verified-only"] as const,
   awsConnectionSettings: (userId: string) =>
     [...userRoot(userId), "connections", "aws", "settings"] as const,
   costs: (userId: string) => [...userRoot(userId), "costs"] as const,
@@ -14,6 +18,14 @@ export const queryKeys = {
   dashboardOverview: (userId: string) => [...userRoot(userId), "dashboard", "overview"] as const,
   githubInstallations: (userId: string) =>
     [...userRoot(userId), "connections", "github"] as const,
+  liveObservationReference: (userId: string, projectId: string) =>
+    [...userRoot(userId), "projects", projectId, "live-observation", "reference"] as const,
+  liveObservationOutputs: (userId: string, deploymentId: string) =>
+    [...userRoot(userId), "deployments", deploymentId, "live-observation", "outputs"] as const,
+  liveObservationArchitecture: (userId: string, deploymentId: string) =>
+    [...userRoot(userId), "deployments", deploymentId, "live-observation", "architecture"] as const,
+  projectThumbnail: (userId: string, projectId: string) =>
+    [...userRoot(userId), "projects", projectId, "thumbnail"] as const,
   projects: (userId: string) => [...userRoot(userId), "projects", "list"] as const,
   user: (userId: string) => userRoot(userId)
 } as const;

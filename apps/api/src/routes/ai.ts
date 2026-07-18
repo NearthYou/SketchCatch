@@ -10,8 +10,9 @@ import type {
   AiSafetyExplanation,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
+  ApiErrorCode,
   ApiErrorResponse,
-  ArchitectureDraftProgressStage,
+  ArchitectureDraftProgressSnapshot,
   ArchitectureDraftStreamEvent,
   ArchitecturePatchPreviewResponse,
   ArchitectureJson,
@@ -131,16 +132,15 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 
 const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
   prompt: z.string().trim().min(1),
-  templateId: z.enum(TEMPLATE_IDS).optional(),
-  dynamicQuestionAnswers: z
+  candidateExclusions: z
     .array(z.object({
-      questionId: z.string().trim().min(1).max(160),
-      question: z.string().trim().min(1).max(500),
-      answer: z.string().trim().min(1).max(500)
+      candidateId: z.string().trim().min(1),
+      resourceType: resourceTypeSchema,
+      label: z.string().trim().min(1)
     }))
     .max(32)
     .optional(),
-  templateFallback: z.record(z.string(), z.unknown()).optional(),
+  templateId: z.enum(TEMPLATE_IDS).optional(),
   repositoryEvidence: z
     .object({
       mode: z.literal("strict"),
@@ -158,15 +158,21 @@ const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z
       sourceRepositoryId: z.uuid()
     })
     .optional()
-}).superRefine((body, context) => {
-  if (body.templateFallback !== undefined && body.repositoryAnalysis === undefined) {
-    context.addIssue({
-      code: "custom",
-      message: "Repository Analysis is required for template fallback",
-      path: ["repositoryAnalysis"]
-    });
-  }
 });
+
+const architectureDraftStreamBodySchema = architectureDraftBodySchema.superRefine(
+  (body, context) => {
+    for (const field of ["repositoryAnalysis", "repositoryEvidence"] as const) {
+      if (body[field] !== undefined) {
+        context.addIssue({
+          code: "custom",
+          message: `${field} is not accepted by the new-project draft stream`,
+          path: [field]
+        });
+      }
+    }
+  }
+);
 
 export const repositoryTemplateIdSchema = z.enum(REPOSITORY_ANALYSIS_TEMPLATE_IDS) satisfies
   z.ZodType<RepositoryAnalysisTemplateId>;
@@ -356,7 +362,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   });
 
   app.post("/ai/architecture-draft/stream", async (request, reply) => {
-    const body = architectureDraftBodySchema.parse(request.body);
+    const body = architectureDraftStreamBodySchema.parse(request.body);
 
     reply.hijack();
     for (const [name, value] of Object.entries(reply.getHeaders())) {
@@ -375,8 +381,8 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         reply.raw.write(`${JSON.stringify(event)}\n`);
       }
     };
-    const onProgress = (stage: ArchitectureDraftProgressStage): void => {
-      writeEvent({ type: "progress", stage });
+    const onProgress = (snapshot: ArchitectureDraftProgressSnapshot): void => {
+      writeEvent({ type: "progress", snapshot });
     };
 
     try {
@@ -405,7 +411,15 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   app.post(
     "/ai/source-repository-analysis",
     async (request): Promise<SourceRepositoryAnalysisResult> => {
-      const body = sourceRepositoryAnalysisBodySchema.parse(request.body);
+      const parsedBody = sourceRepositoryAnalysisBodySchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        throw new PublicRepositoryAnalysisError(
+          "지원하는 GitHub Repository URL과 branch를 확인해주세요.",
+          400,
+          "PUBLIC_REPOSITORY_INPUT_INVALID"
+        );
+      }
+      const body = parsedBody.data;
       const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
       const requestedBranch = body.defaultBranch ?? "";
       const cacheKey = createPublicRepositoryAnalysisCacheKey(body.repositoryUrl, requestedBranch);
@@ -429,7 +443,11 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       );
 
       if (!repositoryRevision) {
-        throw new PublicRepositoryRevisionUnavailableError(defaultBranch);
+        throw new PublicRepositoryAnalysisError(
+          `GitHub에서 ${defaultBranch} branch의 commit SHA를 확인할 수 없습니다.`,
+          422,
+          "PUBLIC_REPOSITORY_BRANCH_UNAVAILABLE"
+        );
       }
 
       const availableBranches = orderPublicRepositoryBranches(
@@ -459,7 +477,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
             evidence: aiHandoff.evidence,
             missingEvidence: aiHandoff.missingEvidence,
             deploymentType: aiHandoff.deploymentTypeDefault,
-            usesCiCd: true,
+            usesCiCd: false,
             answers: []
           })
         : aiHandoff.recommendation;
@@ -913,7 +931,7 @@ function readErrorMessageChain(error: unknown): string[] {
   return messages;
 }
 
-type GitHubRepository = {
+export type GitHubRepository = {
   readonly owner: string;
   readonly repo: string;
 };
@@ -975,7 +993,7 @@ function createPublicRepositoryAnalysisCacheKey(repositoryUrl: string, defaultBr
   };
 }
 
-async function fetchPublicRepositoryBranchInventory(
+export async function fetchPublicRepositoryBranchInventory(
   repository: GitHubRepository
 ): Promise<PublicRepositoryBranchInventory> {
   const repositoryPath = `${PUBLIC_GITHUB_API_BASE_URL}/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}`;
@@ -986,37 +1004,38 @@ async function fetchPublicRepositoryBranchInventory(
     },
     signal: AbortSignal.timeout(PUBLIC_GITHUB_REQUEST_TIMEOUT_MS)
   };
-  const metadataPromise = fetch(repositoryPath, requestOptions).catch(() => null);
+  const metadataPromise = fetchPublicGitHubResponse(repositoryPath, requestOptions);
+  const firstBranchPromise = fetchPublicGitHubResponse(
+    `${repositoryPath}/branches?per_page=100&page=1`,
+    requestOptions
+  );
   const branches: PublicRepositoryBranch[] = [];
 
-  for (let page = 1; page <= MAX_PUBLIC_REPOSITORY_BRANCH_PAGES; page += 1) {
-    const response = await fetch(
+  const [metadataResponse, firstBranchResponse] = await Promise.all([
+    metadataPromise,
+    firstBranchPromise
+  ]);
+  requirePublicRepositoryMetadataResponse(metadataResponse);
+  requirePublicRepositoryBranchResponse(firstBranchResponse);
+
+  const firstPageBranches = (await firstBranchResponse.json()) as PublicGitHubBranchResponse;
+  appendPublicRepositoryBranches(branches, firstPageBranches);
+
+  for (let page = 2; page <= MAX_PUBLIC_REPOSITORY_BRANCH_PAGES; page += 1) {
+    if (page === 2 && firstPageBranches.length < 100) break;
+    const response = await fetchPublicGitHubResponse(
       `${repositoryPath}/branches?per_page=100&page=${page}`,
       requestOptions
-    ).catch(() => null);
-
-    if (!response?.ok) break;
+    );
+    requirePublicRepositoryBranchResponse(response);
 
     const pageBranches = (await response.json()) as PublicGitHubBranchResponse;
-    branches.push(...pageBranches.flatMap((branch) => {
-      if (typeof branch.name !== "string" || !branch.name.trim()) return [];
-
-      return [{
-        name: branch.name.trim(),
-        revision:
-          typeof branch.commit?.sha === "string" && branch.commit.sha.trim()
-            ? branch.commit.sha.trim()
-            : null
-      }];
-    }));
+    appendPublicRepositoryBranches(branches, pageBranches);
 
     if (pageBranches.length < 100) break;
   }
 
-  const metadataResponse = await metadataPromise;
-  const metadata = metadataResponse?.ok
-    ? ((await metadataResponse.json()) as PublicGitHubRepositoryResponse)
-    : null;
+  const metadata = (await metadataResponse.json()) as PublicGitHubRepositoryResponse;
 
   return {
     defaultBranch:
@@ -1038,14 +1057,103 @@ export function resolvePublicRepositoryRevision(
     : null;
 }
 
-class PublicRepositoryRevisionUnavailableError extends Error {
-  readonly statusCode = 422;
-  readonly code = "PUBLIC_REPOSITORY_REVISION_UNAVAILABLE";
+export class PublicRepositoryAnalysisError extends Error {
+  readonly exposeMessage = true;
 
-  constructor(branch: string) {
-    super(`GitHub에서 ${branch} branch의 commit SHA를 확인할 수 없습니다.`);
-    this.name = "PublicRepositoryRevisionUnavailableError";
+  constructor(
+    message: string,
+    readonly statusCode: number,
+    readonly errorCode: ApiErrorCode
+  ) {
+    super(message);
+    this.name = "PublicRepositoryAnalysisError";
   }
+}
+
+async function fetchPublicGitHubResponse(
+  url: string,
+  options: RequestInit
+): Promise<Response> {
+  try {
+    return await fetch(url, options);
+  } catch {
+    throw new PublicRepositoryAnalysisError(
+      "GitHub에 일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
+      503,
+      "PUBLIC_REPOSITORY_PROVIDER_UNAVAILABLE"
+    );
+  }
+}
+
+function requirePublicRepositoryMetadataResponse(response: Response): void {
+  if (response.ok) return;
+  if (response.status === 404) {
+    throw new PublicRepositoryAnalysisError(
+      "Repository를 확인할 수 없습니다. URL이 잘못되었거나 비공개 Repository일 수 있습니다.",
+      404,
+      "PUBLIC_REPOSITORY_UNAVAILABLE"
+    );
+  }
+  throwPublicRepositoryProviderResponse(response);
+}
+
+function requirePublicRepositoryBranchResponse(response: Response): void {
+  if (response.ok) return;
+  if (response.status === 404) {
+    throw new PublicRepositoryAnalysisError(
+      "Repository의 branch를 확인할 수 없습니다.",
+      422,
+      "PUBLIC_REPOSITORY_BRANCH_UNAVAILABLE"
+    );
+  }
+  throwPublicRepositoryProviderResponse(response);
+}
+
+function requirePublicRepositoryEvidenceResponse(response: Response): void {
+  if (response.ok) return;
+  if (response.status === 404) {
+    throw new PublicRepositoryAnalysisError(
+      "분석할 branch 또는 Repository 파일을 확인할 수 없습니다.",
+      422,
+      "PUBLIC_REPOSITORY_BRANCH_UNAVAILABLE"
+    );
+  }
+  throwPublicRepositoryProviderResponse(response);
+}
+
+function throwPublicRepositoryProviderResponse(response: Response): never {
+  if (
+    response.status === 429 ||
+    (response.status === 403 && response.headers.get("x-ratelimit-remaining") === "0")
+  ) {
+    throw new PublicRepositoryAnalysisError(
+      "GitHub 공개 조회 한도를 초과했습니다. 잠시 후 다시 시도해주세요.",
+      429,
+      "PUBLIC_REPOSITORY_RATE_LIMITED"
+    );
+  }
+  throw new PublicRepositoryAnalysisError(
+    "GitHub가 Repository 정보를 반환하지 못했습니다. 잠시 후 다시 시도해주세요.",
+    response.status >= 500 ? 503 : 502,
+    "PUBLIC_REPOSITORY_PROVIDER_UNAVAILABLE"
+  );
+}
+
+function appendPublicRepositoryBranches(
+  target: PublicRepositoryBranch[],
+  pageBranches: PublicGitHubBranchResponse
+): void {
+  target.push(...pageBranches.flatMap((branch) => {
+    if (typeof branch.name !== "string" || !branch.name.trim()) return [];
+
+    return [{
+      name: branch.name.trim(),
+      revision:
+        typeof branch.commit?.sha === "string" && branch.commit.sha.trim()
+          ? branch.commit.sha.trim()
+          : null
+    }];
+  }));
 }
 
 function resolvePublicRepositoryAnalysisBranch(
@@ -1082,13 +1190,10 @@ async function fetchRepositoryEvidence(
   const evidence = await Promise.all(
     evidencePaths.map(async (path) => {
       const url = `https://raw.githubusercontent.com/${repository.owner}/${repository.repo}/${encodeURIComponent(defaultBranch)}/${path}`;
-      const response = await fetch(url, {
+      const response = await fetchPublicGitHubResponse(url, {
         signal: AbortSignal.timeout(PUBLIC_GITHUB_REQUEST_TIMEOUT_MS)
-      }).catch(() => null);
-
-      if (!response?.ok) {
-        return null;
-      }
+      });
+      requirePublicRepositoryEvidenceResponse(response);
 
       return { content: await response.text(), path };
     })
@@ -1107,22 +1212,23 @@ async function fetchPublicRepositoryTreePaths(
   const url = `${PUBLIC_GITHUB_API_BASE_URL}/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(
     repository.repo
   )}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`;
-  const response = await fetch(url, {
+  const response = await fetchPublicGitHubResponse(url, {
     headers: {
       Accept: "application/vnd.github+json",
       "User-Agent": "SketchCatch"
     },
     signal: AbortSignal.timeout(PUBLIC_GITHUB_REQUEST_TIMEOUT_MS)
-  }).catch(() => null);
-
-  if (!response?.ok) {
-    return [];
-  }
+  });
+  requirePublicRepositoryEvidenceResponse(response);
 
   const tree = (await response.json()) as PublicGitHubRecursiveTreeResponse;
 
   if (tree.truncated === true) {
-    return [];
+    throw new PublicRepositoryAnalysisError(
+      "GitHub Repository tree가 너무 커서 안전하게 분석할 수 없습니다.",
+      502,
+      "PUBLIC_REPOSITORY_PROVIDER_UNAVAILABLE"
+    );
   }
 
   return (tree.tree ?? [])

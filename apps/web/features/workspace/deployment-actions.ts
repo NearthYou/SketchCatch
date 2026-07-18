@@ -74,6 +74,9 @@ export function getDeploymentActionState(
   const isDestroyable = Boolean(deployment && isCleanupDestroyCandidate(deployment));
   const isDestroyPlan = deployment?.currentPlanOperation === "destroy";
   const isApplyPlan = deployment?.currentPlanOperation === "apply";
+  const isFailedDestroyAttempt = Boolean(
+    deployment && isDestroyPlan && deployment.status === "FAILED" && deployment.failedAt
+  );
   const canStartFreshApplyPlan = Boolean(deployment && !hasCurrentPlan && !isDestroyPlan);
   const canShowApplyPlanAction = Boolean(
     deployment &&
@@ -85,13 +88,17 @@ export function getDeploymentActionState(
     !isPlanApproved
   );
   const canShowApprovePlanAction = Boolean(
-    deployment && hasCurrentPlan && !isPlanApproved && deployment.status !== "RUNNING"
+    deployment &&
+      hasCurrentPlan &&
+      !isPlanApproved &&
+      !isFailedDestroyAttempt &&
+      deployment.status !== "RUNNING"
   );
   const canShowDestroyPlanAction = Boolean(
     deployment &&
       isDestroyable &&
-      deployment.status !== "RUNNING" &&
-      !isDestroyPlan
+      (!isDestroyPlan || isFailedDestroyAttempt) &&
+      deployment.status !== "RUNNING"
   );
 
   const canRunApplyPlan = canShowApplyPlanAction && !isLoading;
@@ -113,6 +120,7 @@ export function getDeploymentActionState(
     isDestroyable &&
     isDestroyPlan &&
     isPlanApproved &&
+    !isFailedDestroyAttempt &&
     deployment.status !== "RUNNING" &&
     deployment.isBlocked === false &&
     hasCompleteApprovalSnapshot &&
@@ -139,7 +147,9 @@ export function getDeploymentActionState(
       deployment.status !== "DESTROYED"
     ),
     shouldShowDestroyPlanButton: canShowDestroyPlanAction,
-    shouldShowDestroyButton: Boolean(deployment && isDestroyPlan && isPlanApproved),
+    shouldShowDestroyButton: Boolean(
+      deployment && isDestroyPlan && isPlanApproved && !isFailedDestroyAttempt
+    ),
     approvePlanLabel: isDestroyPlan ? "삭제 Plan 승인" : "Plan 승인"
   };
 }

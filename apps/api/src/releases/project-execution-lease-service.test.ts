@@ -44,6 +44,21 @@ test("lease acquisition rejects projects or AWS connections being deleted", () =
       error instanceof ProjectExecutionLeaseError &&
       error.code === "PROJECT_RELEASE_UNAVAILABLE"
   );
+
+  assert.throws(
+    () =>
+      assertProjectExecutionAvailable({
+        projectExists: true,
+        projectDeletionStartedAt: null,
+        targetConnectionId: "connection-id",
+        awsConnectionStatus: "verified",
+        awsConnectionDeletionStartedAt: null,
+        awsCodeConnectionStatus: "DELETING"
+      }),
+    (error: unknown) =>
+      error instanceof ProjectExecutionLeaseError &&
+      error.code === "PROJECT_RELEASE_UNAVAILABLE"
+  );
 });
 
 test("a GitOps execution is blocked while a direct deployment holds the project lease", async () => {

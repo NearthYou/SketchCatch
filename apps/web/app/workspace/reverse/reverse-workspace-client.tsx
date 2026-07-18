@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle2, ChevronLeft } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { DiagramNode } from "../../../../../packages/types/src";
 import { useAuth } from "../../../components/auth/auth-provider";
+import { copyTextToClipboard } from "../../../lib/clipboard";
 import { DiagramEditor, type DiagramEditorPanelContext } from "../../../features/diagram-editor";
 import { EMPTY_DIAGRAM } from "../../../features/diagram-editor/constants";
 import {
@@ -12,6 +13,7 @@ import {
   type ReverseEngineeringCandidatePanelState
 } from "../../../features/workspace/ReverseEngineeringPanel";
 import styles from "../../../features/workspace/reverse-engineering.module.css";
+import { getReverseEngineeringServiceLabel } from "../../../features/workspace/reverse-engineering-presentation";
 
 type ReverseWorkspaceClientProps = {
   readonly projectName: string;
@@ -73,7 +75,8 @@ function ReverseBoardCandidateSelectionPanel({
   readonly state: ReverseEngineeringCandidatePanelState;
 }) {
   const hasMultipleCandidates = state.candidates.length > 1;
-  const panelTitle = state.hasScanResult && !hasMultipleCandidates ? "자동 감지된 구조" : "보드 후보 선택";
+  const panelTitle =
+    state.hasScanResult && !hasMultipleCandidates ? "자동 감지된 구조" : "보드 후보 선택";
   const panelDescription =
     state.hasScanResult && !hasMultipleCandidates
       ? "자동으로 묶은 결과입니다. 헷갈릴 때만 여러 후보가 표시됩니다."
@@ -119,7 +122,8 @@ function ReverseBoardCandidateSelectionPanel({
           <strong>{state.candidates[0].title}</strong>
           <span>{state.candidates[0].description}</span>
           <small>
-            Resource {state.candidates[0].resourceCount}개 · 연결선 {state.candidates[0].edgeCount}개
+            Resource {state.candidates[0].resourceCount}개 · 연결선 {state.candidates[0].edgeCount}
+            개
           </small>
         </div>
       ) : (
@@ -150,12 +154,7 @@ function ReverseDockedPanel({
   const inspectedNode = context.nodes.find((node) => node.id === context.inspectedNodeId) ?? null;
 
   if (inspectedNode) {
-    return (
-      <ReverseResourceInspector
-        node={inspectedNode}
-        onBack={context.closeInspectedNode}
-      />
-    );
+    return <ReverseResourceInspector node={inspectedNode} onBack={context.closeInspectedNode} />;
   }
 
   return (
@@ -182,6 +181,27 @@ function ReverseResourceInspector({
   const values = node.parameters?.values ?? {};
   const providerResourceId = formatInspectorValue(values["providerResourceId"]);
   const providerResourceType = formatInspectorValue(values["providerResourceType"]);
+  const isReviewOnly = node.type === "UNKNOWN" || values["analysisExcluded"] === true;
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const coreValues = getInspectorCoreValues(node.type, values);
+  const displayName = getInspectorDisplayName(
+    node.label,
+    providerResourceId,
+    providerResourceType
+  );
+
+  async function copyProviderResourceId(): Promise<void> {
+    if (providerResourceId === "확인되지 않음") {
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(providerResourceId);
+      setCopyMessage("AWS 원본 식별자를 복사했습니다.");
+    } catch {
+      setCopyMessage("복사하지 못했습니다. 원본 식별자를 직접 복사해 주세요.");
+    }
+  }
 
   return (
     <aside className={styles.inspector} aria-label="Reverse Resource 상세">
@@ -198,7 +218,7 @@ function ReverseResourceInspector({
           </button>
           <div className={styles.panelHeaderTitle}>
             <p className={styles.eyebrow}>Resource Inspector</p>
-            <h2>{node.label}</h2>
+            <h2>{displayName}</h2>
           </div>
         </div>
         <p className={styles.hint}>AWS에서 읽은 원본 값입니다. 이 화면에서는 변경하지 않습니다.</p>
@@ -206,29 +226,72 @@ function ReverseResourceInspector({
 
       <div className={styles.inspectorBody}>
         <section className={styles.inspectorSection}>
-          <h3>AWS에서 읽은 원본 값</h3>
+          <h3>Resource 개요</h3>
           <dl className={styles.identityList}>
             <div>
-              <dt>Provider Resource ID</dt>
-              <dd>{providerResourceId}</dd>
+              <dt>이름</dt>
+              <dd>{displayName}</dd>
             </div>
             <div>
-              <dt>Provider Resource Type</dt>
-              <dd>{providerResourceType}</dd>
+              <dt>AWS 서비스</dt>
+              <dd>{getReverseEngineeringServiceLabel(providerResourceType)}</dd>
             </div>
             <div>
-              <dt>Resource Type</dt>
-              <dd>{node.type}</dd>
+              <dt>리전</dt>
+              <dd>{formatInspectorValue(values["region"])}</dd>
+            </div>
+            <div>
+              <dt>상태</dt>
+              <dd>
+                <span className={isReviewOnly ? styles.reviewOnlyBadge : styles.supportedBadge}>
+                  {isReviewOnly ? "확인 필요" : "지원됨"}
+                </span>
+              </dd>
             </div>
           </dl>
+          <p className={styles.inspectorPurpose}>{getInspectorPurpose(node.type, isReviewOnly)}</p>
         </section>
 
-        <section className={styles.inspectorSection}>
-          <h3>전체 파라미터</h3>
-          <pre className={styles.inspectorCode}>
-            <code>{JSON.stringify(values, null, 2)}</code>
-          </pre>
-        </section>
+        {coreValues.length > 0 ? (
+          <section className={styles.inspectorSection}>
+            <h3>핵심 값</h3>
+            <dl className={styles.identityList}>
+              {coreValues.map((value) => (
+                <div key={value.key}>
+                  <dt>{value.label}</dt>
+                  <dd>{value.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ) : null}
+
+        <details className={styles.inspectorDetails}>
+          <summary>AWS 원본 식별자</summary>
+          <div className={styles.inspectorDetailsBody}>
+            <code className={styles.rawValue}>{providerResourceId}</code>
+            <button
+              className={styles.secondaryButton}
+              disabled={providerResourceId === "확인되지 않음"}
+              onClick={() => void copyProviderResourceId()}
+              type="button"
+            >
+              원본 식별자 복사
+            </button>
+            <span aria-live="polite" className={styles.hint}>
+              {copyMessage ?? ""}
+            </span>
+          </div>
+        </details>
+
+        <details className={styles.inspectorDetails}>
+          <summary>고급 원본 값</summary>
+          <div className={styles.inspectorDetailsBody}>
+            <pre className={styles.inspectorCode}>
+              <code>{JSON.stringify(values, null, 2)}</code>
+            </pre>
+          </div>
+        </details>
       </div>
     </aside>
   );
@@ -237,4 +300,129 @@ function ReverseResourceInspector({
 // 값이 없는 provider identity는 화면에서 분명하게 구분합니다.
 function formatInspectorValue(value: unknown): string {
   return typeof value === "string" && value.trim().length > 0 ? value : "확인되지 않음";
+}
+
+function getInspectorDisplayName(
+  label: string,
+  providerResourceId: string,
+  providerResourceType: string
+): string {
+  const displayName = label.replace(/^확인 필요 · /, "").trim();
+
+  return isHumanInspectorDisplayName(displayName, providerResourceId)
+    ? displayName
+    : `이름 미확인 ${getReverseEngineeringServiceLabel(providerResourceType)}`;
+}
+
+function isHumanInspectorDisplayName(displayName: string, providerResourceId: string): boolean {
+  return !(
+    !displayName ||
+    displayName === providerResourceId ||
+    displayName.startsWith("arn:") ||
+    displayName.startsWith("resource-") ||
+    /^(?:vpc|subnet|i|igw|rtb|sg|eni|nat|eipalloc|eipassoc|vol|ami|snap|acl|vpce)-[0-9a-f]{8,}$/i.test(
+      displayName
+    )
+  );
+}
+
+function getInspectorPurpose(resourceType: string, isReviewOnly: boolean): string {
+  if (isReviewOnly) {
+    return "이 Resource는 AWS에서 발견됐지만 현재 자동 분석과 Terraform 처리 범위가 아닙니다.";
+  }
+
+  const purposes: Readonly<Record<string, string>> = {
+    EC2: "애플리케이션을 실행하는 가상 서버입니다.",
+    INTERNET_GATEWAY: "VPC와 인터넷 사이의 통신을 연결합니다.",
+    RDS: "애플리케이션 데이터를 저장하는 관리형 데이터베이스입니다.",
+    ROUTE_TABLE: "네트워크 트래픽의 경로를 정합니다.",
+    S3: "파일과 객체 데이터를 저장합니다.",
+    SECURITY_GROUP: "Resource에 허용할 네트워크 통신을 제어합니다.",
+    SUBNET: "VPC 안에서 Resource를 배치할 네트워크 구역입니다.",
+    VPC: "AWS Resource가 통신하는 사설 네트워크 범위입니다."
+  };
+
+  return purposes[resourceType] ?? "AWS에서 읽은 구성을 보드에서 검토할 수 있습니다.";
+}
+
+type InspectorCoreValue = {
+  readonly key: string;
+  readonly label: string;
+  readonly value: string;
+};
+
+const INSPECTOR_CORE_VALUE_ALLOWLIST: Readonly<Record<string, readonly [string, string][]>> = {
+  EC2: [
+    ["instanceType", "인스턴스 유형"],
+    ["subnetId", "Subnet ID"],
+    ["placementAvailabilityZone", "Availability Zone"],
+    ["privateIpAddress", "사설 IP"]
+  ],
+  INTERNET_GATEWAY: [],
+  RDS: [
+    ["dbInstanceClass", "DB 인스턴스 유형"],
+    ["engine", "DB 엔진"],
+    ["availabilityZone", "Availability Zone"],
+    ["dbName", "DB 이름"]
+  ],
+  ROUTE_TABLE: [["vpcId", "VPC ID"]],
+  S3: [
+    ["bucketRegion", "Bucket 리전"],
+    ["versioningStatus", "버전 관리"],
+    ["websiteIndexDocument", "웹 사이트 문서"]
+  ],
+  SECURITY_GROUP: [
+    ["groupName", "보안 그룹 이름"],
+    ["vpcId", "VPC ID"],
+    ["description", "설명"]
+  ],
+  SUBNET: [
+    ["vpcId", "VPC ID"],
+    ["availabilityZone", "Availability Zone"],
+    ["cidrBlock", "CIDR"],
+    ["availableIpAddressCount", "사용 가능 IP"]
+  ],
+  VPC: [
+    ["cidrBlock", "CIDR"],
+    ["isDefault", "기본 VPC"]
+  ]
+};
+
+function getInspectorCoreValues(
+  resourceType: string,
+  values: Readonly<Record<string, unknown>>
+): InspectorCoreValue[] {
+  return (INSPECTOR_CORE_VALUE_ALLOWLIST[resourceType] ?? [])
+    .map(([key, label]) => ({
+      key,
+      label,
+      value: formatMeaningfulInspectorValue(key, values[key])
+    }))
+    .filter((value): value is InspectorCoreValue => value.value !== null)
+    .slice(0, 4);
+}
+
+function formatMeaningfulInspectorValue(key: string, value: unknown): string | null {
+  if (key === "versioningStatus" && typeof value === "string") {
+    const versioningStatusLabels: Readonly<Record<string, string>> = {
+      Enabled: "사용 중",
+      Suspended: "일시 중지"
+    };
+
+    return versioningStatusLabels[value] ?? "설정 상태 확인 필요";
+  }
+
+  if (key === "isDefault" && typeof value === "boolean") {
+    return value ? "예" : "아니요";
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  return null;
 }

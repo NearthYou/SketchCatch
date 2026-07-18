@@ -20,6 +20,7 @@
 }
 
 .resourceIcon,
+.resourceIconFallback,
 .emptyIcon {
   align-items: center;
   border-radius: 8px;
@@ -38,6 +39,7 @@ img.resourceIcon {
 }
 
 div.resourceIcon,
+.resourceIconFallback,
 .emptyIcon {
   background: var(--workspace-accent-soft, #f0f0f3);
   border: 1px solid var(--workspace-line-strong, #dcdee0);
@@ -508,6 +510,7 @@ div.resourceIcon,
 }
 
 div.resourceIcon,
+.resourceIconFallback,
 .emptyIcon {
   background: var(--workspace-surface-strong, #f0f0f3);
   border-color: var(--workspace-line, #f0f0f3);

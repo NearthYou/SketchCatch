@@ -8,6 +8,162 @@
   padding: 32px;
 }
 
+.workspaceLoadingShell {
+  --loading-left-panel-width: 346px;
+  --loading-right-panel-width: 440px;
+  background: #fff;
+  display: grid;
+  grid-template-columns:
+    var(--loading-left-panel-width)
+    minmax(0, 1fr)
+    var(--loading-right-panel-width);
+  grid-template-rows: 64px minmax(0, 1fr);
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.workspaceLoadingProjectBar {
+  align-items: center;
+  border-bottom: 1px solid #f0f0f3;
+  display: grid;
+  gap: 20px;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  grid-template-columns: 130px minmax(0, 1fr) 180px;
+  padding: 0 18px;
+}
+
+.workspaceLoadingProjectBar strong {
+  color: #60646c;
+  font-size: 13px;
+}
+
+.workspaceLoadingLeftPanel,
+.workspaceLoadingRightPanel {
+  align-content: start;
+  background: #fff;
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+  padding: 18px 16px;
+}
+
+.workspaceLoadingLeftPanel {
+  border-right: 1px solid #f0f0f3;
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.workspaceLoadingRightPanel {
+  border-left: 1px solid #f0f0f3;
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.workspaceLoadingBoard {
+  align-items: center;
+  background-color: #f6f8fc;
+  background-image: radial-gradient(#d8e0ec 1px, transparent 1px);
+  background-size: 20px 20px;
+  display: flex;
+  grid-column: 2;
+  grid-row: 2;
+  justify-content: center;
+  min-height: 0;
+  position: relative;
+}
+
+.workspaceLoadingBrand,
+.workspaceLoadingActions,
+.workspaceLoadingTabs,
+.workspaceLoadingSearch,
+.workspaceLoadingRow,
+.workspaceLoadingCard,
+.workspaceLoadingToolbar,
+.workspaceLoadingNode {
+  animation: workspaceLoadingPulse 1.4s ease-in-out infinite;
+  background: #eef1f5;
+  border-radius: 8px;
+  display: block;
+}
+
+.workspaceLoadingBrand {
+  height: 24px;
+  width: 120px;
+}
+
+.workspaceLoadingActions {
+  height: 32px;
+  justify-self: end;
+  width: 172px;
+}
+
+.workspaceLoadingTabs {
+  height: 38px;
+}
+
+.workspaceLoadingSearch {
+  height: 44px;
+}
+
+.workspaceLoadingRow {
+  height: 44px;
+}
+
+.workspaceLoadingCard {
+  height: 112px;
+}
+
+.workspaceLoadingToolbar {
+  height: 220px;
+  left: 18px;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 42px;
+}
+
+.workspaceLoadingNode {
+  border: 1px solid #d8e0ec;
+  height: 132px;
+  width: 202px;
+}
+
+.workspaceLoadingVisuallyHidden {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@keyframes workspaceLoadingPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspaceLoadingBrand,
+  .workspaceLoadingActions,
+  .workspaceLoadingTabs,
+  .workspaceLoadingSearch,
+  .workspaceLoadingRow,
+  .workspaceLoadingCard,
+  .workspaceLoadingToolbar,
+  .workspaceLoadingNode {
+    animation: none;
+  }
+}
+
 /* Deployment and CI/CD console separation */
 .deploymentConsoleScreenNavigation {
   display: flex;
@@ -5578,6 +5734,41 @@
   font-weight: 650;
 }
 
+.deploymentValidationError {
+  background: var(--color-error-surface, #fff3f2);
+  border: 1px solid #f3b4ae;
+  border-radius: 10px;
+  color: var(--color-error, #b42318);
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+}
+
+.deploymentValidationError p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentValidationError .deploymentValidationActions {
+  flex-wrap: wrap;
+  margin-left: 0;
+}
+
+.deploymentValidationError .deploymentValidationActions > a,
+.deploymentValidationError .deploymentValidationActions > button {
+  align-items: center;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  color: inherit;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  min-height: 38px;
+  padding: 7px 11px;
+  text-decoration: none;
+}
+
 .deploymentStatusBadge {
   align-items: center;
   background: var(--workspace-surface-muted, #fafafa);
@@ -7011,6 +7202,21 @@
 .liveObservationPresentationNode img {
   height: 46px;
   object-fit: contain;
+  width: 46px;
+}
+
+.liveObservationPresentationIconImage {
+  height: 46px;
+  object-fit: contain;
+  width: 46px;
+}
+
+.liveObservationPresentationIconFallback {
+  align-items: center;
+  color: var(--workspace-text, #171717);
+  display: inline-flex;
+  height: 46px;
+  justify-content: center;
   width: 46px;
 }
 

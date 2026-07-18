@@ -17,8 +17,10 @@ import {
 } from "./project-draft-persistence";
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
+import { WorkspaceLoadingSkeleton } from "./WorkspaceLoadingSkeleton";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import type { TerraformFilesReplacementRequest } from "./TerraformCodePanel";
+import { areTerraformSyncFilesEqual } from "./terraform-file-equality";
 import { toTerraformRefreshFingerprint } from "./terraform-panel-utils";
 import { restoreSavedDiagram } from "./workspace-draft-restore";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
@@ -74,6 +76,8 @@ export function WorkspaceDraftManager({
   const [projectName, setProjectName] = useState(initialProjectName ?? LOCAL_PROJECT_NAME);
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [isAiChatOpen, setAiChatOpen] = useState(false);
+  const [isBlockingPanelOpen, setBlockingPanelOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [terraformAiContext, setTerraformAiContext] = useState<WorkspaceTerraformAiContext>(
     EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT
@@ -98,6 +102,9 @@ export function WorkspaceDraftManager({
   const draftChangeVersionRef = useRef(0);
   const workspaceUserName =
     user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
+  const closeAiChat = useCallback((): void => {
+    setAiChatOpen(false);
+  }, []);
 
   const setCurrentLocalDraft = useCallback((draft: LocalProjectDraft | null) => {
     localDraftRef.current = draft;
@@ -259,6 +266,10 @@ export function WorkspaceDraftManager({
     (files: readonly TerraformSyncFileInput[]): void => {
       if (!workspaceId) return;
 
+      if (areTerraformSyncFilesEqual(latestTerraformFilesRef.current, files)) {
+        return;
+      }
+
       latestTerraformFilesRef.current = files.map((file) => ({ ...file }));
       setInitialTerraformFiles(files.map((file) => ({ ...file })));
       draftChangeVersionRef.current += 1;
@@ -322,7 +333,12 @@ export function WorkspaceDraftManager({
   );
 
   if (loadState === "loading") {
-    return <WorkspaceNotice title="Workspace loading" body="로컬 저장 정보를 불러오는 중입니다." />;
+    return (
+      <WorkspaceLoadingSkeleton
+        message="로컬 저장 정보를 불러오는 중입니다."
+        projectName={projectName}
+      />
+    );
   }
 
   if (loadState === "error" || !initialDiagram) {
@@ -339,7 +355,10 @@ export function WorkspaceDraftManager({
       floatingPanel={(context) => (
         <WorkspaceAiChatDock
           context={context}
+          isBlockedByWorkspaceOverlay={isBlockingPanelOpen}
+          isOpen={isAiChatOpen}
           onApplyTerraformIssueFix={requestTerraformSafeFixApply}
+          onOpenChange={setAiChatOpen}
           onSelectTerraformIssue={setSelectedTerraformIssueKey}
           projectId={LOCAL_PROJECT_ID}
           selectedTerraformIssueKey={selectedTerraformIssueKey}
@@ -357,6 +376,7 @@ export function WorkspaceDraftManager({
       initialSelectedNodeIds={initialSelectedNodeIds}
       onDiagramChange={handleDiagramChange}
       onDiagramSaveRequest={saveCurrentDraftLocally}
+      onWorkspacePanelOpen={closeAiChat}
       onTemplateWorkspaceApply={handleTemplateWorkspaceApply}
       projectName={projectName}
       workspaceUserName={workspaceUserName}
@@ -366,6 +386,8 @@ export function WorkspaceDraftManager({
           deploymentAvailability="project_required"
           initialTerraformFiles={initialTerraformFiles}
           initialView={initialRightPanelView}
+          onBlockingPanelOpenChange={setBlockingPanelOpen}
+          onPanelOpenRequest={closeAiChat}
           onSelectTerraformIssue={setSelectedTerraformIssueKey}
           onTerraformAiContextChange={setTerraformAiContext}
           onTerraformAiInteraction={notifyTerraformAiInteraction}

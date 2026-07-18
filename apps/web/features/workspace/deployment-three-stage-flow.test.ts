@@ -6,8 +6,10 @@ import { mergeGeneratedTerraformFiles } from "./terraform-panel-utils";
 const managerSource = read("ProjectWorkspaceDraftManager.tsx");
 const directDeploymentSource = read("DirectDeploymentScreen.tsx");
 const deploymentShellSource = read("DeploymentConsoleShell.tsx");
+const deploymentArtifactsSource = read("workspace-deployment-artifacts.ts");
 const rightPanelSource = read("WorkspaceRightPanel.tsx");
 const projectBarSource = read("../diagram-editor/WorkspaceProjectBar.tsx");
+const diagramEditorStyles = read("../diagram-editor/diagram-editor.module.css");
 const workspaceStyles = read("workspace.module.css");
 
 test("Terraform refresh removes outputs that reference removed managed resources", () => {
@@ -55,7 +57,7 @@ test("the main board opens deployment immediately without saving", () => {
   assert.ok(callbackEnd > callbackStart);
   assert.match(callbackSource, /setDeploymentOpenRequestId/);
   assert.doesNotMatch(callbackSource, /flushDraftToServer|setSaveAndDeployError/);
-  assert.match(projectBarSource, />\s*배포\s*</);
+  assert.match(projectBarSource, /aria-label="배포"/);
 });
 
 test("the deployment entry has no save-dependent pending state", () => {
@@ -63,6 +65,23 @@ test("the deployment entry has no save-dependent pending state", () => {
   assert.doesNotMatch(projectBarSource, /aria-busy=\{isSaveAndDeployPending\}/);
   assert.doesNotMatch(projectBarSource, /disabled=\{isSaving \|\| isSaveAndDeployPending\}/);
   assert.doesNotMatch(projectBarSource, /저장하고 배포|저장·배포 준비 중/);
+});
+
+test("workspace runtime actions use icon-only controls", () => {
+  assert.equal(rightPanelSource.match(/title="Live Observation"/g)?.length, 2);
+  assert.doesNotMatch(rightPanelSource, /<span>Live Observation<\/span>/);
+  assert.match(rightPanelSource, /className=\{styles\.panelModeButton\}[\s\S]*?title="Live Observation"/);
+  assert.match(managerSource, /isDeploymentConsoleOpen=\{isDeploymentConsoleOpen\}/);
+  assert.match(managerSource, /onDeploymentConsoleOpenChange=\{setDeploymentConsoleOpen\}/);
+  assert.match(projectBarSource, /aria-haspopup="dialog"/);
+  assert.match(projectBarSource, /data-active=\{workspace\.isDeploymentConsoleOpen\}/);
+  assert.match(projectBarSource, /className=\{`\$\{styles\.projectBarIconButton\} \$\{styles\.projectBarDeployButton\}`\}/);
+  assert.doesNotMatch(projectBarSource, /<span>배포<\/span>/);
+  assert.doesNotMatch(diagramEditorStyles, /\.projectBarPrimaryAction/);
+  assert.match(
+    diagramEditorStyles,
+    /\.projectBarDeployButton\[data-active="true"\]\s*\{[^}]*background:\s*var\(--workspace-text\);[^}]*color:\s*var\(--workspace-surface\);/s
+  );
 });
 
 test("deployment preparation flushes the synchronized draft before artifact creation", () => {
@@ -74,6 +93,19 @@ test("deployment preparation flushes the synchronized draft before artifact crea
   assert.ok(saveIndex > syncIndex);
   assert.ok(artifactIndex > saveIndex);
   assert.match(rightPanelSource, /requireSavedProjectDraftRevision\(saveResult\)/);
+});
+
+test("deployment preparation validates the exact merged Terraform artifact without a bypass", () => {
+  const validationIndex = deploymentArtifactsSource.indexOf("validateTerraformCode({");
+  const snapshotIndex = deploymentArtifactsSource.indexOf(
+    "saveWorkspaceArchitectureSnapshot({",
+    validationIndex
+  );
+
+  assert.ok(validationIndex > -1);
+  assert.ok(snapshotIndex > validationIndex);
+  assert.doesNotMatch(deploymentArtifactsSource, /skipValidation/);
+  assert.doesNotMatch(rightPanelSource, /skipValidation:\s*true/);
 });
 
 test("Direct Deployment uses prepare, approve, and execute with three external phases", () => {

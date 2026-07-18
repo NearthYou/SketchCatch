@@ -30,6 +30,7 @@ type ProjectBoardThumbnailLifecycleOptions = {
     readonly revision: number;
   }) => Promise<ProjectBoardThumbnailCaptureResult>) | undefined;
   readonly fetchProjectThumbnail?: ((projectId: string) => Promise<Blob | null>) | undefined;
+  readonly onCaptureUploaded?: ((projectId: string) => void) | undefined;
   readonly onStateChange?: ((state: ProjectBoardThumbnailLifecycleState) => void) | undefined;
   readonly projectId: string;
   readonly waitForInitialCaptureStability?: (() => Promise<void>) | undefined;
@@ -51,6 +52,7 @@ export function createProjectBoardThumbnailLifecycle({
   captureAndUpload = ({ element, projectId }) =>
     captureAndUploadProjectBoardThumbnail({ element, projectId }),
   fetchProjectThumbnail = defaultFetchProjectThumbnail,
+  onCaptureUploaded,
   onStateChange,
   projectId,
   waitForInitialCaptureStability: waitForInitialCaptureStabilityFn = waitForInitialCaptureStability
@@ -124,6 +126,12 @@ export function createProjectBoardThumbnailLifecycle({
 
     if (result.status === "skipped") {
       throw CAPTURE_UNAVAILABLE_ERROR;
+    }
+
+    try {
+      onCaptureUploaded?.(projectId);
+    } catch {
+      // Cache refresh failures do not change the successful upload result.
     }
   }
 

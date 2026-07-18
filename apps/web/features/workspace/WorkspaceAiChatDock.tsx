@@ -96,13 +96,17 @@ import {
   isWorkspaceAiChatAbortError,
   WorkspaceAiChatRequestRegistry
 } from "./workspace-ai-chat-request";
+import { createWorkspaceAiChatStorageKey } from "./workspace-ai-chat-storage";
 import { WorkspaceAiChatLauncher } from "./WorkspaceAiChatLauncher";
 import { WorkspaceAiWorkbench } from "./WorkspaceAiWorkbench";
 import styles from "./workspace-ai-workbench.module.css";
 
 export type WorkspaceAiChatDockProps = {
   readonly context: DiagramEditorPanelContext;
+  readonly isBlockedByWorkspaceOverlay: boolean;
+  readonly isOpen: boolean;
   readonly onApplyTerraformIssueFix: (request: TerraformSafeFixApplyRequest) => void;
+  readonly onOpenChange: (isOpen: boolean) => void;
   readonly onSelectTerraformIssue: (diagnosticKey: string | null) => void;
   readonly projectId: string;
   readonly repositoryAnalysisSourceRepositoryId?: string | undefined;
@@ -199,7 +203,6 @@ type SelectedTerraformFixPlan = {
 };
 
 const MAX_CHAT_MESSAGES = 80;
-const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
 const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
 const NO_RESOURCE_ADDITION_MESSAGE = "추가 없이 지금까지의 요청으로 새 초안을 생성합니다.";
 const REQUEST_CANCELLED_MESSAGE = "요청을 중지했습니다.";
@@ -252,7 +255,10 @@ type SpeechRecognitionWindow = Window & {
 // Repository Analysis에서 넘긴 Template을 표시하고 이후 AI Draft 요청에 유지합니다.
 export function WorkspaceAiChatDock({
   context,
+  isBlockedByWorkspaceOverlay,
+  isOpen,
   onApplyTerraformIssueFix,
+  onOpenChange,
   onSelectTerraformIssue,
   projectId,
   repositoryAnalysisSourceRepositoryId,
@@ -262,7 +268,6 @@ export function WorkspaceAiChatDock({
   terraformAiInteraction,
   terraformSafeFixApplyResult
 }: WorkspaceAiChatDockProps) {
-  const [isOpen, setOpen] = useState(false);
   const [activeChatTab, setActiveChatTab] = useState<WorkspaceAiChatScope>(() =>
     readStoredActiveChatScope(projectId)
   );
@@ -624,11 +629,11 @@ export function WorkspaceAiChatDock({
       (pendingTerraformFixApplyRef.current?.diagnosticKeys.length ?? 0) > 1);
 
   const closeChatDock = useCallback(() => {
-    setOpen(false);
+    onOpenChange(false);
     window.requestAnimationFrame(() => {
       launcherButtonRef.current?.focus();
     });
-  }, []);
+  }, [onOpenChange]);
 
   useEffect(() => {
     if (loadedProjectIdRef.current !== projectId) {
@@ -2125,11 +2130,15 @@ export function WorkspaceAiChatDock({
     voiceNoSpeechTimerRef.current = null;
   }
 
+  if (isBlockedByWorkspaceOverlay) {
+    return null;
+  }
+
   if (!isOpen) {
     return (
       <WorkspaceAiChatLauncher
         isRightPanelOpen={context.isRightPanelOpen}
-        onOpen={() => setOpen(true)}
+        onOpen={() => onOpenChange(true)}
         ref={launcherButtonRef}
       />
     );
@@ -2603,10 +2612,6 @@ export function WorkspaceAiChatDock({
       ) : null}
     </WorkspaceAiWorkbench>
   );
-}
-
-export function createWorkspaceAiChatStorageKey(projectId: string): string {
-  return `${STORAGE_KEY_PREFIX}.${projectId}`;
 }
 
 function WorkspaceAiPatchParameterPreview({

@@ -83,11 +83,29 @@ test("project draft query accepts no required parameters", () => {
 
 test("save project draft body accepts full DiagramJson", () => {
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: validDiagram
   });
 
+  assert.equal(parsed.expectedRevision, 1);
   assert.equal(parsed.diagramJson.nodes[0]?.parameters?.values.instanceType, "t3.micro");
   assert.equal(parsed.diagramJson.viewport.zoom, 1);
+});
+
+test("save project draft body requires an explicit expected revision", () => {
+  assert.equal(
+    saveProjectDraftBodySchema.safeParse({
+      diagramJson: validDiagram
+    }).success,
+    false
+  );
+  assert.equal(
+    saveProjectDraftBodySchema.safeParse({
+      diagramJson: validDiagram,
+      expectedRevision: null
+    }).success,
+    true
+  );
 });
 
 test("save project draft body preserves legacy DiagramJson byte-equivalently", () => {
@@ -104,7 +122,8 @@ test("save project draft body preserves legacy DiagramJson byte-equivalently", (
           source: "user" as const
         }
       ]
-    }
+    },
+    expectedRevision: 1
   };
   const parsed = saveProjectDraftBodySchema.parse(payload);
 
@@ -124,6 +143,7 @@ test("save project draft body preserves source Terraform authority with source-e
     route: authoredEdgeRoute
   };
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       nodes: [rotatedSourceNode],
@@ -139,6 +159,7 @@ test("save project draft body preserves source Terraform authority with source-e
 
 test("save project draft body preserves empty source labels and workspace-seed authority", () => {
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       nodes: [
@@ -170,6 +191,7 @@ test("save project draft body preserves Curated Module provenance metadata", () 
     ]
   };
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       nodes: [
@@ -186,6 +208,7 @@ test("save project draft body preserves Curated Module provenance metadata", () 
 
 test("save project draft body rejects non-finite node rotation", () => {
   const result = saveProjectDraftBodySchema.safeParse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       nodes: [
@@ -202,6 +225,7 @@ test("save project draft body rejects non-finite node rotation", () => {
 
 test("save project draft body rejects non-finite source viewBox coordinates", () => {
   const result = saveProjectDraftBodySchema.safeParse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       presentation: {
@@ -219,6 +243,7 @@ test("save project draft body rejects non-finite source viewBox coordinates", ()
 
 test("save project draft body rejects non-finite authored route data", () => {
   const result = saveProjectDraftBodySchema.safeParse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       edges: [
@@ -241,13 +266,18 @@ test("save project draft body preserves Terraform virtual files", () => {
     { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "main" {}' },
     { fileName: "variables.tf", terraformCode: 'variable "cidr" { type = string }' }
   ];
-  const parsed = saveProjectDraftBodySchema.parse({ diagramJson: validDiagram, terraformFiles });
+  const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
+    diagramJson: validDiagram,
+    terraformFiles
+  });
 
   assert.deepEqual(parsed.terraformFiles, terraformFiles);
 });
 
 test("save project draft body preserves diagram edge line style", () => {
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       edges: [
@@ -268,6 +298,7 @@ test("save project draft body preserves diagram edge line style", () => {
 
 test("save project draft body preserves parameter-reference edge metadata", () => {
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       edges: [
@@ -290,6 +321,7 @@ test("save project draft body preserves parameter-reference edge metadata", () =
 
 test("save project draft body preserves edge presentation roles", () => {
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       edges: [
@@ -306,6 +338,7 @@ test("save project draft body preserves edge presentation roles", () => {
 
 test("save project draft body rejects unsupported parameter-reference edge metadata", () => {
   const result = saveProjectDraftBodySchema.safeParse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       edges: [
@@ -325,6 +358,7 @@ test("save project draft body rejects unsupported parameter-reference edge metad
 
 test("save project draft body preserves diagram node border style", () => {
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       nodes: [
@@ -343,6 +377,7 @@ test("save project draft body preserves diagram node border style", () => {
 
 test("save project draft body rejects invalid diagram node border style", () => {
   const result = saveProjectDraftBodySchema.safeParse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       nodes: [
@@ -361,6 +396,7 @@ test("save project draft body rejects invalid diagram node border style", () => 
 
 test("save project draft body preserves diagram node metadata", () => {
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       nodes: [
@@ -382,6 +418,7 @@ test("save project draft body preserves diagram node metadata", () => {
 test("save project draft body preserves Template presentation metadata", () => {
   // Saved Template Boards need both the authored area flag and exact Design Catalog identity after reload.
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       nodes: [
@@ -406,6 +443,7 @@ test("save project draft body preserves Template presentation metadata", () => {
 
 test("save project draft body accepts reverse engineering node metadata", () => {
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       nodes: [
@@ -432,6 +470,7 @@ test("save project draft body accepts reverse engineering node metadata", () => 
 
 test("save project draft body rejects legacy awsRegion metadata", () => {
   const result = saveProjectDraftBodySchema.safeParse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       nodes: [
@@ -450,6 +489,7 @@ test("save project draft body rejects legacy awsRegion metadata", () => {
 
 test("save project draft body accepts Region and AZ values in parameters", () => {
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: {
       ...validDiagram,
       nodes: [
@@ -500,6 +540,7 @@ test("save project draft body accepts Region and AZ values in parameters", () =>
 
 test("save project draft body accepts an empty board DiagramJson", () => {
   const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
     diagramJson: {
       nodes: [],
       edges: [],
@@ -518,6 +559,7 @@ test("save project draft body accepts an empty board DiagramJson", () => {
 
 test("save project draft body rejects architecture-only json without viewport", () => {
   const result = saveProjectDraftBodySchema.safeParse({
+    expectedRevision: 1,
     diagramJson: {
       nodes: [],
       edges: []

@@ -9,9 +9,17 @@ import {
 } from "./api";
 import {
   getBoardViewportFromCssTransform,
+  getBoardThumbnailPersistentLabelScale,
   getFullBoardThumbnailViewport,
   getLogicalBoardBoundsFromRenderedNodes
 } from "./project-board-thumbnail-viewbox";
+
+const BOARD_THUMBNAIL_PERSISTENT_LABEL_SELECTOR =
+  '[data-board-thumbnail-persistent-label="true"]';
+
+type ActualBoardCaptureOptions = {
+  readonly preserveLowZoomLabels?: boolean | undefined;
+};
 
 type ProjectBoardThumbnailCaptureDependencies = {
   readonly abortProjectAssetUpload: typeof abortProjectAssetUpload;
@@ -50,8 +58,11 @@ function findActualBoardCaptureElement(): HTMLElement | null {
 }
 
 // 화면 밖 Resource도 보존하려고 현재 Board를 16:9 복제본으로 맞춘 뒤 렌더링합니다.
-export async function captureActualBoardElement(element: HTMLElement): Promise<Blob> {
-  const captureClone = createFullBoardCaptureClone(element);
+export async function captureActualBoardElement(
+  element: HTMLElement,
+  options: ActualBoardCaptureOptions = {}
+): Promise<Blob> {
+  const captureClone = createFullBoardCaptureClone(element, options);
 
   try {
     const sourceCanvas = await toCanvas(captureClone?.element ?? element, {
@@ -104,7 +115,10 @@ export async function captureActualBoardElement(element: HTMLElement): Promise<B
   }
 }
 
-function createFullBoardCaptureClone(element: HTMLElement): FullBoardCaptureClone | null {
+function createFullBoardCaptureClone(
+  element: HTMLElement,
+  options: ActualBoardCaptureOptions
+): FullBoardCaptureClone | null {
   const sourceViewport = element.querySelector<HTMLElement>(".react-flow__viewport");
 
   if (!sourceViewport || typeof document === "undefined") {
@@ -158,6 +172,20 @@ function createFullBoardCaptureClone(element: HTMLElement): FullBoardCaptureClon
   clone.style.top = "0";
   clone.style.width = `${BOARD_THUMBNAIL_CAPTURE_CONTRACT.width}px`;
   cloneViewport.style.transform = `translate(${thumbnailViewport.x}px, ${thumbnailViewport.y}px) scale(${thumbnailViewport.zoom})`;
+
+  if (options.preserveLowZoomLabels) {
+    const labelScale = getBoardThumbnailPersistentLabelScale(thumbnailViewport.zoom);
+    clone.style.setProperty("--board-lod-label-scale", String(labelScale));
+
+    for (const label of clone.querySelectorAll<HTMLElement>(
+      BOARD_THUMBNAIL_PERSISTENT_LABEL_SELECTOR
+    )) {
+      label.style.transform =
+        "translateX(-50%) scale(var(--board-lod-label-scale))";
+      label.style.transformOrigin = "top center";
+    }
+  }
+
   captureHost.append(clone);
   document.body.append(captureHost);
 

@@ -197,6 +197,46 @@ test("destroy plan waits for approval before showing destroy execution", () => {
   assert.equal(state.shouldShowDestroyButton, false);
 });
 
+test("failed destroy execution requires a fresh destroy plan instead of stale approval", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+      currentPlanOperation: "destroy",
+      failedAt: "2026-07-17T08:00:00.000Z",
+      failureStage: "destroy",
+      stateObjectKey: "deployments/deployment-id/state/terraform.tfstate",
+      status: "FAILED"
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApprovePlanButton, false);
+  assert.equal(state.canApprovePlan, false);
+  assert.equal(state.shouldShowDestroyPlanButton, true);
+  assert.equal(state.canRunDestroyPlan, true);
+  assert.equal(state.shouldShowDestroyButton, false);
+});
+
+test("regenerated destroy plan on a failed deployment returns to approval", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+      currentPlanOperation: "destroy",
+      failedAt: null,
+      failureStage: "destroy",
+      stateObjectKey: "deployments/deployment-id/state/terraform.tfstate",
+      status: "FAILED"
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApprovePlanButton, true);
+  assert.equal(state.canApprovePlan, true);
+  assert.equal(state.shouldShowDestroyPlanButton, false);
+  assert.equal(state.canRunDestroyPlan, false);
+  assert.equal(state.shouldShowDestroyButton, false);
+});
+
 test("destroy plan never falls back to the Terraform apply plan action", () => {
   const state = getDeploymentActionState(
     createDeployment({

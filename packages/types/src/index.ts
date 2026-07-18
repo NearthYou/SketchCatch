@@ -26,6 +26,12 @@ export type ApiErrorCode =
   | "bad_gateway"
   | "service_unavailable"
   | "internal_server_error"
+  | "PUBLIC_REPOSITORY_INPUT_INVALID"
+  | "PUBLIC_REPOSITORY_UNAVAILABLE"
+  | "PUBLIC_REPOSITORY_BRANCH_UNAVAILABLE"
+  | "PUBLIC_REPOSITORY_RATE_LIMITED"
+  | "PUBLIC_REPOSITORY_PROVIDER_UNAVAILABLE"
+  | "REPOSITORY_ACCESS_VERIFICATION_REQUIRED"
   | "LIVE_OBSERVATION_DISABLED"
   | "LIVE_OBSERVATION_CACHE_UNAVAILABLE"
   | "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
@@ -569,6 +575,42 @@ export type SourceRepositoryAnalysisResult = {
   aiHandoff?: RepositoryAnalysisAiHandoff | undefined;
 };
 
+export type RepositoryAnalysisProvider = "github";
+
+export type RepositoryAnalysisRecord = {
+  id: string;
+  projectId: string;
+  provider: RepositoryAnalysisProvider;
+  repositoryUrl: string;
+  owner: string;
+  name: string;
+  branch: string;
+  repositoryRevision: string;
+  analysisResult: SourceRepositoryAnalysisResult;
+  selectedTemplateId: RepositoryAnalysisTemplateId | null;
+  sourceRepositoryId: string | null;
+  analyzedAt: IsoDateTimeString;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type SaveRepositoryAnalysisRecordRequest = Pick<
+  RepositoryAnalysisRecord,
+  | "provider"
+  | "repositoryUrl"
+  | "owner"
+  | "name"
+  | "branch"
+  | "repositoryRevision"
+  | "analysisResult"
+  | "selectedTemplateId"
+  | "analyzedAt"
+>;
+
+export type RepositoryAnalysisRecordResponse = {
+  record: RepositoryAnalysisRecord | null;
+};
+
 export type CreateGitHubArchitectureDraftRequest = AnalyzeSourceRepositoryRequest & {
   selectedTemplateId: RepositoryAnalysisTemplateId;
 };
@@ -824,6 +866,20 @@ export type GitCicdReadinessResponse = {
   readiness: GitCicdReadinessSnapshot;
 };
 
+export type ProjectDeliveryProfile = {
+  githubInstallations: Array<Omit<GitHubInstallationConnection, "repositoryCount">>;
+  repositoryAnalysisTarget: RepositoryAnalysisRecord | null;
+  sourceRepository: SourceRepository | null;
+  monitoringConfig: GitCicdMonitoringConfig | null;
+  deploymentTarget: ProjectDeploymentTarget | null;
+  environmentName: string | null;
+  readiness: GitCicdReadinessSnapshot;
+};
+
+export type ProjectDeliveryProfileResponse = {
+  profile: ProjectDeliveryProfile;
+};
+
 export type GitCicdMonitoringValidationStatus = "required" | "valid" | "invalid";
 
 export type GitCicdMonitoredPath = {
@@ -985,10 +1041,7 @@ export type CreateGitCicdReleaseRunRequest = {
   workflowRunUrl: string;
 };
 
-export type GitCicdInfrastructureRunStage =
-  | "configuration"
-  | "infra_plan"
-  | "infra_apply";
+export type GitCicdInfrastructureRunStage = "configuration" | "infra_plan" | "infra_apply";
 
 export type CreateGitCicdInfrastructureRunRequest = CreateGitCicdReleaseRunRequest;
 
@@ -1393,18 +1446,12 @@ export type LambdaGitOpsReleaseEvidenceV1 = {
   outputUrl: string;
 };
 
-export type LambdaGitOpsReleaseEvidenceV2 = Omit<
-  LambdaGitOpsReleaseEvidenceV1,
-  "schemaVersion"
-> & {
+export type LambdaGitOpsReleaseEvidenceV2 = Omit<LambdaGitOpsReleaseEvidenceV1, "schemaVersion"> & {
   schemaVersion: 2;
   artifact: ApplicationArtifactEvidenceV2;
 };
 
-export type LambdaGitOpsReleaseEvidenceV3 = Omit<
-  LambdaGitOpsReleaseEvidenceV2,
-  "schemaVersion"
-> & {
+export type LambdaGitOpsReleaseEvidenceV3 = Omit<LambdaGitOpsReleaseEvidenceV2, "schemaVersion"> & {
   schemaVersion: 3;
   convergence: RuntimeConvergenceEvidence;
 };
@@ -1436,18 +1483,12 @@ export type Ec2AsgGitOpsReleaseEvidenceV1 = {
   outputUrl: string;
 };
 
-export type Ec2AsgGitOpsReleaseEvidenceV2 = Omit<
-  Ec2AsgGitOpsReleaseEvidenceV1,
-  "schemaVersion"
-> & {
+export type Ec2AsgGitOpsReleaseEvidenceV2 = Omit<Ec2AsgGitOpsReleaseEvidenceV1, "schemaVersion"> & {
   schemaVersion: 2;
   artifact: ApplicationArtifactEvidenceV2;
 };
 
-export type Ec2AsgGitOpsReleaseEvidenceV3 = Omit<
-  Ec2AsgGitOpsReleaseEvidenceV2,
-  "schemaVersion"
-> & {
+export type Ec2AsgGitOpsReleaseEvidenceV3 = Omit<Ec2AsgGitOpsReleaseEvidenceV2, "schemaVersion"> & {
   schemaVersion: 3;
   convergence: RuntimeConvergenceEvidence;
 };
@@ -1673,12 +1714,7 @@ export type ApplicationRelease = {
   updatedAt: IsoDateTimeString;
 };
 
-export type AwsCodeConnectionStatus =
-  | "CREATING"
-  | "PENDING"
-  | "AVAILABLE"
-  | "ERROR"
-  | "DELETING";
+export type AwsCodeConnectionStatus = "CREATING" | "PENDING" | "AVAILABLE" | "ERROR" | "DELETING";
 
 export type AwsCodeConnection = {
   id: string;
@@ -1687,6 +1723,7 @@ export type AwsCodeConnection = {
   providerType: "GitHub";
   status: AwsCodeConnectionStatus;
   statusReason: string | null;
+  cleanupRetryRequired?: boolean;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
@@ -1702,6 +1739,11 @@ export type ProjectBuildEnvironmentStatus =
   | "verification_failed"
   | "disconnected";
 
+export type ProjectRepositoryAccessVerificationStatus =
+  | "not_checked"
+  | "verified"
+  | "failed";
+
 export type ProjectBuildEnvironment = {
   id: string;
   projectId: string;
@@ -1714,6 +1756,12 @@ export type ProjectBuildEnvironment = {
   runtimeFingerprint: string;
   status: ProjectBuildEnvironmentStatus;
   lastVerifiedAt: IsoDateTimeString | null;
+  repositoryVerificationStatus: ProjectRepositoryAccessVerificationStatus;
+  repositoryVerificationRequestedCommitSha: string | null;
+  repositoryVerificationResolvedCommitSha: string | null;
+  repositoryVerificationBuildArn: string | null;
+  repositoryVerificationStatusReason: string | null;
+  repositoryVerifiedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
@@ -2102,8 +2150,14 @@ export type AwsConnectionDeletionPreviewResponse = {
   confirmationToken: string;
 };
 
-export { AVAILABLE_BRAINBOARD_TEMPLATE_IDS, BRAINBOARD_TEMPLATE_IDS } from "./brainboard-templates/ids.ts";
-export type { AvailableBrainboardTemplateId, BrainboardTemplateId } from "./brainboard-templates/ids.ts";
+export {
+  AVAILABLE_BRAINBOARD_TEMPLATE_IDS,
+  BRAINBOARD_TEMPLATE_IDS
+} from "./brainboard-templates/ids.ts";
+export type {
+  AvailableBrainboardTemplateId,
+  BrainboardTemplateId
+} from "./brainboard-templates/ids.ts";
 export {
   BRAINBOARD_TEMPLATE_AUTHOR,
   BRAINBOARD_TEMPLATE_PROVIDER,
@@ -2184,6 +2238,15 @@ export {
   createTerraformProviderFiles,
   isTerraformDeployableNode
 } from "./terraform-provider-files.ts";
+export {
+  findTerraformRequiredProvidersBlockLocations,
+  findTerraformRequiredProvidersDeclarations
+} from "./terraform-module-structure.ts";
+export type {
+  TerraformModuleFile,
+  TerraformRequiredProvidersBlockLocation,
+  TerraformRequiredProvidersDeclaration
+} from "./terraform-module-structure.ts";
 
 export type ReverseEngineeringScanStatus =
   | "queued"
@@ -2844,6 +2907,10 @@ export type DeleteAwsConnectionRequest = {
   confirmationToken: string;
 };
 
+export type DisconnectAwsCodeConnectionRequest = {
+  confirmedManagedCleanup: true;
+};
+
 export type AwsRolePermissionSetup = {
   verificationActions: string[];
   initialPolicyDocument: Record<string, unknown> | null;
@@ -3261,17 +3328,16 @@ export type CreateArchitecturePatchPreviewRequest = {
   skipConnection?: boolean | undefined;
 };
 
+export type ArchitectureDraftCandidateExclusion = {
+  candidateId: string;
+  resourceType: ResourceType;
+  label: string;
+};
+
 export type CreateArchitectureDraftRequest = {
   prompt: string;
+  candidateExclusions?: readonly ArchitectureDraftCandidateExclusion[] | undefined;
   templateId?: TemplateId | undefined;
-  dynamicQuestionAnswers?:
-    | readonly {
-        questionId: string;
-        question: string;
-        answer: string;
-      }[]
-    | undefined;
-  templateFallback?: Record<string, unknown> | undefined;
   repositoryEvidence?:
     | {
         mode: "strict";
@@ -3287,15 +3353,11 @@ export type CreateArchitectureDraftRequest = {
     | undefined;
 };
 
-export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
-  "preparing_requirements",
-  "normalizing_requirements",
-  "querying_amazon_q",
-  "validating_architecture",
-  "building_diagram"
-] as const;
-
-export type ArchitectureDraftProgressStage = (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
+export type ArchitectureDraftProgressSnapshot = {
+  sequence: number;
+  provisionalArchitectureJson: ArchitectureJson;
+  excludableCandidateIds: string[];
+};
 
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
@@ -3319,7 +3381,7 @@ export type CreateArchitectureDraftResponse =
 export type ArchitectureDraftStreamEvent =
   | {
       type: "progress";
-      stage: ArchitectureDraftProgressStage;
+      snapshot: ArchitectureDraftProgressSnapshot;
     }
   | {
       type: "result";
@@ -4037,11 +4099,18 @@ export type ProjectDraft = {
 
 export type SaveProjectDraftRequest = {
   diagramJson: DiagramJson;
+  expectedRevision: number | null;
   terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
 
 export type ProjectDraftResponse = {
   draft: ProjectDraft | null;
+};
+
+export type ProjectDraftConflictResponse = ApiErrorResponse & {
+  error: "conflict";
+  currentRevision: number;
+  currentServerSavedAt: IsoDateTimeString;
 };
 
 export type TerraformGenerateRequest = {

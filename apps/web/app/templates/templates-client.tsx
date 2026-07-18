@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import {
   type CloudService,
@@ -13,6 +14,7 @@ import {
   isBoardTemplateAvailable,
   listBoardTemplates
 } from "../../features/resource-settings/template-library";
+import { createWorkspaceStartTemplateHref } from "../workspace/new/workspace-start-template-flow";
 
 type TemplateFormState = {
   readonly title: string;
@@ -166,13 +168,13 @@ export function TemplatesClient() {
               </div>
               <div className="templateCardActions">
                 {isBoardTemplateAvailable(template) ? (
-                  <a
+                  <Link
                     className="dashboardSecondaryButton"
-                    href={`/workspace/new?mode=template&templateId=${encodeURIComponent(template.id)}`}
+                    href={createWorkspaceStartTemplateHref(template)}
                   >
                     <DashboardIcon name="layers" />
                     <span>보드에서 사용</span>
-                  </a>
+                  </Link>
                 ) : (
                   <button className="dashboardSecondaryButton" disabled type="button">
                     <DashboardIcon name="layers" />

@@ -11,6 +11,7 @@ import {
   type AwsCodeConnectionRecord,
   type AwsCodeConnectionRepository
 } from "./aws-codeconnection-service.js";
+import { disconnectAwsCodeConnection } from "./aws-codeconnection-disconnect-service.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const connectionId = "22222222-2222-4222-8222-222222222222";
@@ -20,14 +21,39 @@ const connectionArn =
 const fixedNow = new Date("2026-07-15T00:00:00.000Z");
 
 class InMemoryRepository implements AwsCodeConnectionRepository {
+  activeGitHubInstallationIds = ["github-installation-1"];
   verifiedConnection: Awaited<ReturnType<AwsCodeConnectionRepository["findVerifiedConnection"]>> = {
     id: connectionId,
+    accountId: "123456789012",
     roleArn:
       "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-22222222",
     externalId: "external-id",
-    region: "ap-northeast-2"
+    region: "ap-northeast-2",
+    userId,
+    status: "verified",
+    lastVerifiedAt: fixedNow,
+    deletionStartedAt: null,
+    deletionErrorSummary: null,
+    createdAt: fixedNow,
+    updatedAt: fixedNow
   };
   record: AwsCodeConnectionRecord | undefined;
+  activeBuildWork = false;
+  disconnectedBuildEnvironmentCount = 0;
+  managedResources = {
+    codeBuildProjects: [
+      {
+        projectId: "55555555-5555-4555-8555-555555555555",
+        projectName: "sketchcatch-55555555-build",
+        serviceRoleArn: "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-55555555"
+      }
+    ],
+    codeConnectionArn: connectionArn
+  };
+
+  async listActiveGitHubInstallationIds() {
+    return this.activeGitHubInstallationIds;
+  }
 
   async findVerifiedConnection() {
     return this.verifiedConnection;
@@ -94,12 +120,89 @@ class InMemoryRepository implements AwsCodeConnectionRepository {
     };
   }
 
-  async save(input: Omit<AwsCodeConnectionRecord, "createdAt"> & { createdAt?: Date }) {
+  async saveObservedStatus(input: {
+    id: string;
+    expectedUpdatedAt: Date;
+    connectionArn: string;
+    providerType: "GitHub";
+    status: AwsCodeConnectionStatus;
+    statusReason: string | null;
+    updatedAt: Date;
+  }) {
+    if (
+      !this.record ||
+      this.record.id !== input.id ||
+      this.record.status === "DELETING" ||
+      this.record.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()
+    ) {
+      return undefined;
+    }
     this.record = {
-      ...input,
-      createdAt: input.createdAt ?? this.record?.createdAt ?? fixedNow
+      ...this.record,
+      connectionArn: input.connectionArn,
+      providerType: input.providerType,
+      status: input.status,
+      statusReason: input.statusReason,
+      updatedAt: input.updatedAt
     };
     return this.record;
+  }
+
+  async findManagedResources() {
+    return this.managedResources;
+  }
+
+  async claimDeletion(input: { id: string; now: Date; staleBefore: Date }) {
+    if (!this.record || this.record.id !== input.id) return "not_found" as const;
+    if (this.activeBuildWork) return "blocked" as const;
+    if (
+      this.record.status === "CREATING" ||
+      (this.record.status === "DELETING" && this.record.updatedAt > input.staleBefore)
+    ) {
+      return "busy" as const;
+    }
+    this.record = {
+      ...this.record,
+      status: "DELETING",
+      statusReason: null,
+      updatedAt: input.now
+    };
+    return "claimed" as const;
+  }
+
+  async completeDeletion(input: { id: string; claimedAt: Date }) {
+    if (
+      !this.record ||
+      this.record.id !== input.id ||
+      this.record.status !== "DELETING" ||
+      this.record.updatedAt.getTime() !== input.claimedAt.getTime()
+    ) {
+      return false;
+    }
+    this.record = undefined;
+    this.disconnectedBuildEnvironmentCount = this.managedResources.codeBuildProjects.length;
+    return true;
+  }
+
+  async markDeletionFailed(input: {
+    id: string;
+    claimedAt: Date;
+    reason: string;
+    now: Date;
+  }) {
+    if (
+      !this.record ||
+      this.record.id !== input.id ||
+      this.record.updatedAt.getTime() !== input.claimedAt.getTime()
+    ) {
+      return;
+    }
+    this.record = {
+      ...this.record,
+      status: "ERROR",
+      statusReason: input.reason,
+      updatedAt: input.now
+    };
   }
 }
 
@@ -146,6 +249,49 @@ test("creating a GitHub CodeConnection requires a verified AWS connection", asyn
     (error: unknown) =>
       error instanceof AwsCodeConnectionError && error.code === "AWS_CONNECTION_REQUIRED"
   );
+});
+
+test("creating a GitHub CodeConnection requires a GitHub App installation", async () => {
+  const repository = new InMemoryRepository();
+  repository.activeGitHubInstallationIds = [];
+  const gateway = new FakeGateway();
+
+  await assert.rejects(
+    createAwsCodeConnection(
+      { connectionId, userId },
+      repository,
+      gateway,
+      { generateId: () => codeConnectionId, now: () => fixedNow }
+    ),
+    (error: unknown) =>
+      error instanceof AwsCodeConnectionError &&
+      error.code === "GITHUB_INSTALLATION_REQUIRED"
+  );
+
+  assert.equal(gateway.createCalls.length, 0);
+});
+
+test("creating a GitHub CodeConnection rejects ambiguous GitHub App installations", async () => {
+  const repository = new InMemoryRepository();
+  repository.activeGitHubInstallationIds = [
+    "github-installation-1",
+    "github-installation-2"
+  ];
+  const gateway = new FakeGateway();
+
+  await assert.rejects(
+    createAwsCodeConnection(
+      { connectionId, userId },
+      repository,
+      gateway,
+      { generateId: () => codeConnectionId, now: () => fixedNow }
+    ),
+    (error: unknown) =>
+      error instanceof AwsCodeConnectionError &&
+      error.code === "MULTIPLE_GITHUB_INSTALLATIONS_UNSUPPORTED"
+  );
+
+  assert.equal(gateway.createCalls.length, 0);
 });
 
 test("creating a GitHub CodeConnection stores the pending AWS connection once", async () => {
@@ -270,6 +416,7 @@ test("AWS CodeConnection creation tags the resource with SketchCatch ownership",
 
   await gateway.create({
     id: connectionId,
+    accountId: "123456789012",
     roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-22222222",
     externalId: "external-id",
     region: "ap-northeast-2",
@@ -325,6 +472,7 @@ test("CodeConnection recovery adopts only the deterministic name with matching o
 
   const found = await gateway.findOwnedByName({
     id: connectionId,
+    accountId: "123456789012",
     roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-22222222",
     externalId: "external-id",
     region: "ap-northeast-2",
@@ -378,3 +526,146 @@ test("refreshing a GitHub CodeConnection persists the AWS handshake status", asy
   assert.equal(read.codeConnection?.status, "AVAILABLE");
   assert.equal(repository.record?.updatedAt.toISOString(), "2026-07-15T00:05:00.000Z");
 });
+
+test("refresh does not overwrite a concurrent disconnect claim", async () => {
+  const repository = new InMemoryRepository();
+  repository.record = createAvailableRecord();
+  repository.saveObservedStatus = async () => {
+    repository.record = {
+      ...createAvailableRecord(),
+      status: "DELETING",
+      updatedAt: new Date("2026-07-15T00:01:00.000Z")
+    };
+    return undefined;
+  };
+
+  const refreshed = await refreshAwsCodeConnection(
+    { connectionId, userId },
+    repository,
+    new FakeGateway(),
+    { now: () => new Date("2026-07-15T00:02:00.000Z") }
+  );
+
+  assert.equal(refreshed.codeConnection?.status, "DELETING");
+});
+
+test("disconnect removes the confirmed managed build resources and metadata", async () => {
+  const repository = new InMemoryRepository();
+  repository.record = createAvailableRecord();
+  const cleanupCalls: unknown[] = [];
+
+  await disconnectAwsCodeConnection(
+    {
+      connectionId,
+      userId,
+      confirmedManagedCleanup: true
+    },
+    repository,
+    {
+      now: () => fixedNow,
+      cleanupManagedResources: async (input) => {
+        cleanupCalls.push(input);
+      }
+    }
+  );
+
+  assert.equal(cleanupCalls.length, 1);
+  assert.equal(repository.record, undefined);
+  assert.equal(repository.disconnectedBuildEnvironmentCount, 1);
+});
+
+test("disconnect is blocked while a project build or deployment is active", async () => {
+  const repository = new InMemoryRepository();
+  repository.record = createAvailableRecord();
+  repository.activeBuildWork = true;
+  await assert.rejects(
+    disconnectAwsCodeConnection(
+      {
+        connectionId,
+        userId,
+        confirmedManagedCleanup: true
+      },
+      repository,
+      { cleanupManagedResources: async () => undefined }
+    ),
+    (error: unknown) =>
+      error instanceof AwsCodeConnectionError &&
+      error.code === "CODECONNECTION_DELETE_BLOCKED"
+  );
+});
+
+test("disconnect keeps retryable metadata when AWS cleanup fails", async () => {
+  const repository = new InMemoryRepository();
+  repository.record = createAvailableRecord();
+
+  await assert.rejects(
+    disconnectAwsCodeConnection(
+      {
+        connectionId,
+        userId,
+        confirmedManagedCleanup: true
+      },
+      repository,
+      {
+        now: () => fixedNow,
+        cleanupManagedResources: async () => {
+          throw new Error("secret AWS cleanup detail");
+        }
+      }
+    ),
+    (error: unknown) =>
+      error instanceof AwsCodeConnectionError &&
+      error.code === "CODECONNECTION_DELETE_FAILED"
+  );
+
+  assert.equal(repository.record?.status, "ERROR");
+  assert.match(repository.record?.statusReason ?? "", /관리 리소스 정리에 실패/u);
+  assert.doesNotMatch(repository.record?.statusReason ?? "", /secret/u);
+
+  const refreshed = await refreshAwsCodeConnection(
+    { connectionId, userId },
+    repository,
+    new FakeGateway()
+  );
+  assert.equal(refreshed.codeConnection?.status, "ERROR");
+  assert.equal(refreshed.codeConnection?.cleanupRetryRequired, true);
+});
+
+test("disconnect retries an expired deletion claim", async () => {
+  const repository = new InMemoryRepository();
+  repository.record = {
+    ...createAvailableRecord(),
+    status: "DELETING"
+  };
+
+  await disconnectAwsCodeConnection(
+    { connectionId, userId, confirmedManagedCleanup: true },
+    repository,
+    {
+      cleanupManagedResources: async () => {
+        const previousClaimCompleted = await repository.completeDeletion({
+          id: codeConnectionId,
+          claimedAt: fixedNow
+        });
+        assert.equal(previousClaimCompleted, false);
+      },
+      deletionReservationTtlMs: 1_000,
+      now: () => new Date("2026-07-15T00:00:02.000Z")
+    }
+  );
+
+  assert.equal(repository.record, undefined);
+});
+
+function createAvailableRecord(): AwsCodeConnectionRecord {
+  return {
+    id: codeConnectionId,
+    awsConnectionId: connectionId,
+    connectionArn,
+    providerType: "GitHub",
+    status: "AVAILABLE",
+    statusReason: null,
+    createdAt: fixedNow,
+    updatedAt: fixedNow
+  };
+}

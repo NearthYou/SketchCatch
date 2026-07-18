@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useReducer, useRef } from "react";
@@ -49,6 +50,7 @@ import {
   prepareDeployment,
   prepareInfrastructureRollback,
   prepareProjectBuildEnvironment,
+  verifyProjectRepositoryAccess,
   retryDeploymentFrontend,
   runDeploymentInit,
   runDeploymentDestroy,
@@ -79,6 +81,7 @@ import {
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { PreparedWorkspaceDeploymentArtifacts } from "./workspace-deployment-artifacts";
 import { getDeploymentPreparationErrorMessage } from "./deployment-preparation-error";
+import { verifyRepositoryAccessForPlan } from "./repository-access-verification";
 import type { RequestState } from "./workspace-right-panel.types";
 import { canLoadDeploymentData, type DeploymentAvailability } from "./deployment-availability";
 import {
@@ -768,6 +771,8 @@ export function DirectDeploymentScreen({
     } catch (error) {
       setRequestState("error");
       setErrorMessage(getApiErrorMessage(error, fallbackMessage));
+    } finally {
+      setActiveProgress(null);
     }
   }
 
@@ -969,16 +974,12 @@ export function DirectDeploymentScreen({
     });
     await runRequest(async () => {
       if (requiresProjectBuildEnvironment(selectedDeployment)) {
-        const preparedBuildEnvironment =
-          buildEnvironment?.status === "ready"
-            ? buildEnvironment
-            : await prepareProjectBuildEnvironment(projectId);
-        setBuildEnvironment(preparedBuildEnvironment);
-        if (preparedBuildEnvironment.status !== "ready") {
-          throw new Error(
-            "빌드 환경 검증을 완료하지 못했습니다. GitHub 빌드 연결과 AWS 권한을 확인해 주세요."
-          );
-        }
+        await verifyRepositoryAccessForPlan({
+          currentBuildEnvironment: buildEnvironment,
+          onBuildEnvironmentChange: setBuildEnvironment,
+          prepare: () => prepareProjectBuildEnvironment(projectId),
+          verify: () => verifyProjectRepositoryAccess(projectId)
+        });
       }
       const deployment = await runDeploymentPlan(selectedDeployment.id);
       setDeployments((currentDeployments) =>
@@ -1334,6 +1335,43 @@ export function DirectDeploymentScreen({
                   </DeploymentSummaryItem>
                 ) : null}
               </div>
+              {needsBuildEnvironment &&
+              buildEnvironment?.repositoryVerificationStatus === "failed" ? (
+                <div className={styles.deploymentValidationError} role="alert">
+                  <strong>Repository 빌드 권한 확인 필요</strong>
+                  <p>
+                    {buildEnvironment.sourceRepositoryUrl} · 요청 commit{
+                      " "
+                    }{buildEnvironment.repositoryVerificationRequestedCommitSha ?? "확인 불가"} · 실제 checkout{
+                      " "
+                    }{buildEnvironment.repositoryVerificationResolvedCommitSha ?? "실패"}
+                  </p>
+                  <p>
+                    AWS {selectedAwsConnection?.accountId ?? "계정 확인 불가"} ·{
+                      " "
+                    }{selectedAwsConnection?.region ?? "region 확인 불가"}
+                  </p>
+                  <p>
+                    {buildEnvironment.repositoryVerificationStatusReason ??
+                      "CodeBuild가 프로젝트 Repository의 확정 commit을 checkout하지 못했습니다."}
+                  </p>
+                  <div className={styles.deploymentValidationActions}>
+                    <Link href="/dashboard/settings#github-account-connection">
+                      GitHub Repository 권한 확인
+                    </Link>
+                    <Link href="/dashboard/settings#aws-codebuild-github-authorization">
+                      AWS GitHub 권한 다시 연결
+                    </Link>
+                    <button
+                      disabled={!canRunPlan || requestState === "loading"}
+                      onClick={() => void startTerraformPlan()}
+                      type="button"
+                    >
+                      Repository 빌드 권한 다시 확인
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               {selectedDeployment?.planSummary ? (
                 <PlanSummaryRows deployment={selectedDeployment} />
               ) : null}
@@ -2156,9 +2194,9 @@ export function DirectDeploymentScreen({
           Local workspace에서는 AWS 연결과 Deployment 기록을 만들지 않습니다. 프로젝트를 만든 뒤
           저장된 Terraform artifact를 기준으로 배포를 시작하세요.
         </p>
-        <a className={styles.deploymentPrimaryButton} href="/workspace/new">
+        <Link className={styles.deploymentPrimaryButton} href="/workspace/new">
           프로젝트로 저장
-        </a>
+        </Link>
       </section>
     </div>
   );
@@ -2537,7 +2575,13 @@ function formatBuildEnvironmentStatus(
   buildEnvironment: ProjectBuildEnvironment | null
 ): string {
   if (!buildEnvironment) return "준비 필요";
-  if (buildEnvironment.status === "ready") return "사용 가능";
+  if (
+    buildEnvironment.status === "ready" &&
+    buildEnvironment.repositoryVerificationStatus === "verified"
+  ) {
+    return "Repository 검증 완료";
+  }
+  if (buildEnvironment.status === "ready") return "Repository 검증 필요";
   if (buildEnvironment.status === "preparing") return "준비 중";
   if (buildEnvironment.status === "verification_failed") return "확인 실패";
   return "AWS 재연결 필요";
@@ -2546,7 +2590,13 @@ function formatBuildEnvironmentStatus(
 function getBuildEnvironmentStatusTone(
   buildEnvironment: ProjectBuildEnvironment | null
 ): DeploymentStatusTone | "warning" {
-  if (buildEnvironment?.status === "ready") return "success";
+  if (
+    buildEnvironment?.status === "ready" &&
+    buildEnvironment.repositoryVerificationStatus === "verified"
+  ) {
+    return "success";
+  }
+  if (buildEnvironment?.status === "ready") return "warning";
   if (buildEnvironment?.status === "preparing") return "running";
   if (buildEnvironment?.status === "verification_failed") return "error";
   return "warning";

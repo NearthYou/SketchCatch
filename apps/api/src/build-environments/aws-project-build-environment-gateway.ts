@@ -1,9 +1,11 @@
 import { setTimeout as delay } from "node:timers/promises";
 import {
+  BatchGetBuildsCommand,
   BatchGetProjectsCommand,
   CodeBuildClient,
   CreateProjectCommand,
   DeleteProjectCommand,
+  StartBuildCommand,
   UpdateProjectCommand,
   type CodeBuildClientConfig
 } from "@aws-sdk/client-codebuild";
@@ -67,6 +69,12 @@ phases:
     commands:
       - echo "SketchCatch server-generated buildspecOverride is required"
 `;
+const repositoryAccessVerificationBuildspec = `version: 0.2
+phases:
+  build:
+    commands:
+      - echo "SketchCatch repository access verified"
+`;
 const forbiddenBuildRoleActions = ["ecs:", "s3:", "cloudfront:", "iam:passrole"];
 const buildCacheLifecyclePolicy = {
   rules: [
@@ -89,15 +97,15 @@ type AwsCommandClient = {
   destroy(): void;
 };
 
-export function createAwsProjectBuildEnvironmentGateway(options: {
-  assumeRole?: ReturnType<typeof createAwsSdkStsGateway>["assumeRole"];
-  createIamClient?: (configuration: IAMClientConfig) => AwsCommandClient;
-  createCodeBuildClient?: (configuration: CodeBuildClientConfig) => AwsCommandClient;
-  createEcrClient?: (configuration: ECRClientConfig) => AwsCommandClient;
-  createCloudWatchLogsClient?: (
-    configuration: CloudWatchLogsClientConfig
-  ) => AwsCommandClient;
-} = {}): ProjectBuildEnvironmentGateway {
+export function createAwsProjectBuildEnvironmentGateway(
+  options: {
+    assumeRole?: ReturnType<typeof createAwsSdkStsGateway>["assumeRole"];
+    createIamClient?: (configuration: IAMClientConfig) => AwsCommandClient;
+    createCodeBuildClient?: (configuration: CodeBuildClientConfig) => AwsCommandClient;
+    createEcrClient?: (configuration: ECRClientConfig) => AwsCommandClient;
+    createCloudWatchLogsClient?: (configuration: CloudWatchLogsClientConfig) => AwsCommandClient;
+  } = {}
+): ProjectBuildEnvironmentGateway {
   const assumeRole = options.assumeRole ?? createAwsSdkStsGateway().assumeRole;
   const createIamClient =
     options.createIamClient ??
@@ -174,6 +182,37 @@ export function createAwsProjectBuildEnvironmentGateway(options: {
       return withClients(input, (clients) => verifyBuildEnvironment(clients, input));
     },
 
+    async verifyRepositoryAccess(input, requestedCommitSha) {
+      return withClients(input, async ({ codeBuild }) => {
+        const started = await codeBuild.send(
+          new StartBuildCommand({
+            projectName: input.codeBuildProjectName,
+            sourceVersion: requestedCommitSha,
+            buildspecOverride: repositoryAccessVerificationBuildspec,
+            artifactsOverride: { type: "NO_ARTIFACTS" }
+          })
+        );
+        const startedBuild = started["build"] as { id?: string; arn?: string } | undefined;
+        const buildId = startedBuild?.id?.trim();
+        const initialBuildArn = startedBuild?.arn?.trim() || null;
+        if (!buildId) {
+          return {
+            verified: false,
+            requestedCommitSha,
+            resolvedCommitSha: null,
+            buildArn: initialBuildArn,
+            statusReason: "AWS CodeBuild did not return a repository verification build ID"
+          };
+        }
+        return waitForRepositoryAccessVerification(
+          codeBuild,
+          buildId,
+          initialBuildArn,
+          requestedCommitSha
+        );
+      });
+    },
+
     async remove(input) {
       return withRemovalClients(
         input,
@@ -233,6 +272,57 @@ export function createAwsProjectBuildEnvironmentGateway(options: {
   };
 }
 
+async function waitForRepositoryAccessVerification(
+  codeBuild: AwsCommandClient,
+  buildId: string,
+  initialBuildArn: string | null,
+  requestedCommitSha: string
+) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const response = await codeBuild.send(new BatchGetBuildsCommand({ ids: [buildId] }));
+    const build = (
+      response["builds"] as
+        | Array<{
+            arn?: string;
+            buildStatus?: string;
+            resolvedSourceVersion?: string;
+          }>
+        | undefined
+    )?.[0];
+    const buildArn = build?.arn?.trim() || initialBuildArn;
+    const resolvedCommitSha = build?.resolvedSourceVersion?.trim()?.toLowerCase() || null;
+    if (build?.buildStatus === "SUCCEEDED") {
+      const exactCommit = resolvedCommitSha === requestedCommitSha.toLowerCase();
+      return {
+        verified: exactCommit,
+        requestedCommitSha,
+        resolvedCommitSha,
+        buildArn,
+        statusReason: exactCommit
+          ? null
+          : "CodeBuild checkout commit did not match the confirmed repository commit"
+      };
+    }
+    if (["FAILED", "FAULT", "STOPPED", "TIMED_OUT"].includes(build?.buildStatus ?? "")) {
+      return {
+        verified: false,
+        requestedCommitSha,
+        resolvedCommitSha,
+        buildArn,
+        statusReason: `CodeBuild repository checkout failed with status ${build?.buildStatus}`
+      };
+    }
+    await delay(2_000);
+  }
+  return {
+    verified: false,
+    requestedCommitSha,
+    resolvedCommitSha: null,
+    buildArn: initialBuildArn,
+    statusReason: "CodeBuild repository checkout verification timed out"
+  };
+}
+
 async function withRemovalClients<T>(
   input: ProjectBuildEnvironmentRemoval,
   dependencies: {
@@ -240,9 +330,7 @@ async function withRemovalClients<T>(
     createIamClient: (configuration: IAMClientConfig) => AwsCommandClient;
     createCodeBuildClient: (configuration: CodeBuildClientConfig) => AwsCommandClient;
     createEcrClient: (configuration: ECRClientConfig) => AwsCommandClient;
-    createCloudWatchLogsClient: (
-      configuration: CloudWatchLogsClientConfig
-    ) => AwsCommandClient;
+    createCloudWatchLogsClient: (configuration: CloudWatchLogsClientConfig) => AwsCommandClient;
   },
   operation: (clients: {
     iam: AwsCommandClient;
@@ -367,10 +455,7 @@ async function verifyBuildCacheRepository(
   if (!hasBuildCacheOwnershipTags(tags, input.projectId)) {
     return failed("ECR build cache repository ownership tags are missing or changed");
   }
-  const lifecyclePolicy = await getBuildCacheLifecyclePolicy(
-    ecr,
-    input.buildCache.repositoryName
-  );
+  const lifecyclePolicy = await getBuildCacheLifecyclePolicy(ecr, input.buildCache.repositoryName);
   if (!lifecyclePolicy || !jsonDocumentsEqual(lifecyclePolicy, buildCacheLifecyclePolicyText)) {
     return failed("ECR build cache repository lifecycle policy changed from the project contract");
   }
@@ -434,9 +519,7 @@ async function getBuildCacheLifecyclePolicy(
 ): Promise<string | null> {
   try {
     const response = await ecr.send(new GetLifecyclePolicyCommand({ repositoryName }));
-    return typeof response.lifecyclePolicyText === "string"
-      ? response.lifecyclePolicyText
-      : null;
+    return typeof response.lifecyclePolicyText === "string" ? response.lifecyclePolicyText : null;
   } catch (error) {
     if (isEcrLifecyclePolicyMissing(error)) return null;
     throw error;
@@ -470,9 +553,7 @@ function hasBuildCacheOwnershipTags(
 }
 
 function hasSupportedBuildCacheEncryption(repository: Record<string, unknown>): boolean {
-  const encryption = repository.encryptionConfiguration as
-    | { encryptionType?: unknown }
-    | undefined;
+  const encryption = repository.encryptionConfiguration as { encryptionType?: unknown } | undefined;
   return encryption?.encryptionType === "AES256";
 }
 
@@ -714,11 +795,13 @@ async function verifyBuildEnvironment(
     return failed("CodeBuild service role policy does not match the build-only contract");
   }
   const boundaryPolicy = await getManagedPolicyDocument(clients.iam, input.permissionsBoundaryArn);
-  if (!policiesEqual(boundaryPolicy, createBuildPermissionsBoundaryPolicy(input))) {
+  if (!isSupportedBuildPermissionsBoundaryPolicy(boundaryPolicy, input)) {
     return failed("CodeBuild permissions boundary policy changed from the build-only contract");
   }
   const actions = collectAllowedActions(buildPolicy);
-  if (actions.some((action) => forbiddenBuildRoleActions.some((prefix) => action.startsWith(prefix)))) {
+  if (
+    actions.some((action) => forbiddenBuildRoleActions.some((prefix) => action.startsWith(prefix)))
+  ) {
     return failed("CodeBuild service role contains a deployment permission");
   }
   const requiredActions = [
@@ -834,11 +917,49 @@ function createBuildPermissionsBoundaryPolicy(
       {
         Effect: "Allow",
         Action: projectBuildCacheRepositoryActions,
-        Resource:
-          `arn:aws:ecr:${input.awsConnection.region}:${input.awsConnection.accountId}:repository/sketchcatch-*-build-cache`
+        Resource: `arn:aws:ecr:${input.awsConnection.region}:${input.awsConnection.accountId}:repository/sketchcatch-*-build-cache`
       }
     ]
   };
+}
+
+function createPreCacheBuildPermissionsBoundaryPolicy(
+  input: DesiredProjectBuildEnvironment
+): Record<string, unknown> {
+  const logsPrefix = `arn:aws:logs:${input.awsConnection.region}:${input.awsConnection.accountId}:log-group:/aws/codebuild/*`;
+  return {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+        Resource: [logsPrefix, `${logsPrefix}:*`]
+      },
+      {
+        Effect: "Allow",
+        Action: [
+          "codeconnections:GetConnection",
+          "codeconnections:GetConnectionToken",
+          "codeconnections:UseConnection",
+          "codestar-connections:UseConnection"
+        ],
+        Resource: [
+          `arn:aws:codeconnections:${input.awsConnection.region}:${input.awsConnection.accountId}:connection/*`,
+          `arn:aws:codestar-connections:${input.awsConnection.region}:${input.awsConnection.accountId}:connection/*`
+        ]
+      }
+    ]
+  };
+}
+
+function isSupportedBuildPermissionsBoundaryPolicy(
+  policy: Record<string, unknown> | null,
+  input: DesiredProjectBuildEnvironment
+): boolean {
+  return (
+    policiesEqual(policy, createBuildPermissionsBoundaryPolicy(input)) ||
+    policiesEqual(policy, createPreCacheBuildPermissionsBoundaryPolicy(input))
+  );
 }
 
 function createCodeBuildProjectInput(input: DesiredProjectBuildEnvironment) {
@@ -912,7 +1033,9 @@ async function listAttachedRolePolicyArns(
   const response = await iam.send(new ListAttachedRolePoliciesCommand({ RoleName: roleName }));
   return ((response.AttachedPolicies as Array<{ PolicyArn?: string }> | undefined) ?? [])
     .map((policy) => policy.PolicyArn)
-    .filter((policyArn): policyArn is string => typeof policyArn === "string" && Boolean(policyArn));
+    .filter(
+      (policyArn): policyArn is string => typeof policyArn === "string" && Boolean(policyArn)
+    );
 }
 
 async function getRolePolicyDocument(
@@ -947,7 +1070,7 @@ function parsePolicyDocument(raw: unknown): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(decodeURIComponent(raw)) as unknown;
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
+      ? (parsed as Record<string, unknown>)
       : null;
   } catch {
     return null;
@@ -959,7 +1082,8 @@ function collectAllowedActions(document: Record<string, unknown> | null): string
   return statements
     .filter(
       (statement): statement is Record<string, unknown> =>
-        Boolean(statement) && typeof statement === "object" &&
+        Boolean(statement) &&
+        typeof statement === "object" &&
         (statement as Record<string, unknown>).Effect === "Allow"
     )
     .filter((statement) => statement.Effect === "Allow")
@@ -981,18 +1105,26 @@ function policiesEqual(
 function canonicalizePolicyValue(value: unknown, key?: string): string {
   if (key === "Action" || key === "Resource") {
     const values = Array.isArray(value) ? value : [value];
-    return `[${values.map((item) => canonicalizePolicyValue(item)).sort().join(",")}]`;
+    return `[${values
+      .map((item) => canonicalizePolicyValue(item))
+      .sort()
+      .join(",")}]`;
   }
   if (Array.isArray(value)) {
-    return `[${value.map((item) => canonicalizePolicyValue(item)).sort().join(",")}]`;
+    return `[${value
+      .map((item) => canonicalizePolicyValue(item))
+      .sort()
+      .join(",")}]`;
   }
   if (value && typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>)
       .filter(([entryKey]) => entryKey !== "Sid")
       .sort(([left], [right]) => left.localeCompare(right));
     return `{${entries
-      .map(([entryKey, entryValue]) =>
-        `${JSON.stringify(entryKey)}:${canonicalizePolicyValue(entryValue, entryKey)}`)
+      .map(
+        ([entryKey, entryValue]) =>
+          `${JSON.stringify(entryKey)}:${canonicalizePolicyValue(entryValue, entryKey)}`
+      )
       .join(",")}}`;
   }
   return JSON.stringify(value);

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const diagramEditorSource = readFileSync(
   fileURLToPath(new URL("./DiagramEditor.tsx", import.meta.url)),
   "utf8"
-);
+).replaceAll("\r\n", "\n");
 const diagramEditorStyles = readFileSync(
   fileURLToPath(new URL("./diagram-editor.module.css", import.meta.url)),
   "utf8"
@@ -27,6 +27,23 @@ const workspaceProjectBarSource = readFileSync(
   fileURLToPath(new URL("./WorkspaceProjectBar.tsx", import.meta.url)),
   "utf8"
 );
+
+test("automatic organization preview leads with metric outcomes and collapses internal costs", () => {
+  const previewBlock = getSourceBlock(
+    diagramEditorSource,
+    "{compilerPreviewSummary ? (",
+    ") : isPreviewActive ? ("
+  );
+  const technicalDetailsIndex = previewBlock.indexOf("기술 세부 정보");
+
+  assert.notEqual(technicalDetailsIndex, -1);
+  assert.match(previewBlock, /compilerPreviewSummary\.outcome\.headline/);
+  assert.match(previewBlock, /compilerPreviewSummary\.outcome\.items/);
+  assert.doesNotMatch(
+    previewBlock.slice(0, technicalDetailsIndex),
+    /quality\.beforeScore|quality\.afterScore|quality\.compilationDistance|candidateId|compilerVersion|referenceTemplateIds/
+  );
+});
 
 test("diagram editor uses partial box selection for overlapping area nodes", () => {
   assert.match(diagramEditorSource, /selectionOnDrag=\{interactionMode === "select" && !isPreviewActive\}/);
@@ -269,7 +286,7 @@ test("diagram editor restores the light canvas with a restrained two-level grid"
   );
 });
 
-test("diagram editor exposes project, save, and panel controls in one stable top bar", () => {
+test("diagram editor keeps project and save controls in the top bar without duplicate panel toggles", () => {
   const projectBarBlock = getCssBlock(".projectBar");
   const saveStatusBlock = getCssBlock(".projectBarSaveStatus");
 
@@ -278,8 +295,8 @@ test("diagram editor exposes project, save, and panel controls in one stable top
   assert.match(diagramEditorSource, /saveStatus = "편집 중"/);
   assert.match(diagramEditorSource, /<WorkspaceProjectBar/);
   assert.match(diagramEditorSource, /onSave:\s*onDiagramSaveRequest/);
-  assert.match(diagramEditorSource, /onToggleLeftPanel:\s*toggleLeftPanel/);
-  assert.match(diagramEditorSource, /onToggleRightPanel:\s*toggleRightPanel/);
+  assert.doesNotMatch(diagramEditorSource, /onToggleLeftPanel:\s*toggleLeftPanel/);
+  assert.doesNotMatch(diagramEditorSource, /onToggleRightPanel:\s*toggleRightPanel/);
 
   assert.match(workspaceProjectBarSource, /import \{ ProductBrand \} from "\.\.\/\.\.\/components\/ui\/ProductBrand"/);
   assert.match(workspaceProjectBarSource, /<ProductBrand href=\{workspace\.dashboardHref\} \/>/);
@@ -289,8 +306,10 @@ test("diagram editor exposes project, save, and panel controls in one stable top
   );
   assert.match(workspaceProjectBarSource, /className=\{styles\.projectBarSaveStatus\}/);
   assert.match(workspaceProjectBarSource, /aria-label="지금 저장"/);
-  assert.match(workspaceProjectBarSource, /"리소스 패널 열기"/);
-  assert.match(workspaceProjectBarSource, /"Inspector 열기"/);
+  assert.doesNotMatch(workspaceProjectBarSource, /PanelLeft(?:Close|Open)/);
+  assert.doesNotMatch(workspaceProjectBarSource, /PanelRight(?:Close|Open)/);
+  assert.doesNotMatch(workspaceProjectBarSource, /"리소스 패널 열기"/);
+  assert.doesNotMatch(workspaceProjectBarSource, /"Inspector 열기"/);
 
   assert.match(projectBarBlock, /grid-column:\s*1 \/ -1;/);
   assert.match(projectBarBlock, /height:\s*64px;/);
@@ -308,12 +327,59 @@ test("workspace shell docks both panels and collapses them on compact screens", 
   assert.match(diagramEditorSource, /matchMedia\("\(max-width: 1120px\)"\)/);
 });
 
+test("editor panel open states persist while viewer mode bypasses preferences", () => {
+  assert.match(
+    diagramEditorSource,
+    /useState\(\(\) =>\s*viewerPolicy\.isViewer\s*\? true\s*:\s*readWorkspacePanelPreferences/
+  );
+  assert.match(
+    diagramEditorSource,
+    /if \(!viewerPolicy\.isViewer\) \{\s*writeWorkspacePanelPreferences/
+  );
+  assert.match(
+    diagramEditorSource,
+    /collapsePanelsForCompactViewport[\s\S]*?setLeftPanelOpen\(false\);[\s\S]*?setRightPanelOpen\(false\);/
+  );
+  assert.match(
+    diagramEditorSource,
+    /restorePanelPreferencesForWideViewport[\s\S]*?readWorkspacePanelPreferences[\s\S]*?setLeftPanelOpen\(preferences\.leftPanelOpen\);[\s\S]*?setRightPanelOpen\(preferences\.rightPanelOpen\);/
+  );
+});
+
+test("editor exposes accessible panel handles that follow the docked panel widths", () => {
+  assert.match(diagramEditorSource, /aria-label=\{isLeftPanelOpen \? "왼쪽 패널 닫기" : "왼쪽 패널 열기"\}/);
+  assert.match(diagramEditorSource, /aria-label=\{isRightPanelOpen \? "오른쪽 패널 닫기" : "오른쪽 패널 열기"\}/);
+  assert.match(diagramEditorSource, /aria-expanded=\{isLeftPanelOpen\}/);
+  assert.match(diagramEditorSource, /aria-expanded=\{isRightPanelOpen\}/);
+  assert.match(diagramEditorSource, /!viewerPolicy\.isViewer/);
+  assert.match(
+    diagramEditorStyles,
+    /\.leftPanelEdgeHandle\s*\{[^}]*left:\s*var\(--left-panel-width\);/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /\.rightPanelEdgeHandle\s*\{[^}]*right:\s*var\(--right-panel-width\);/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /\.editorShellLeftCollapsed \.leftPanelEdgeHandle\s*\{[^}]*left:\s*0;/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /\.editorShellRightCollapsed \.rightPanelEdgeHandle\s*\{[^}]*right:\s*0;/s
+  );
+});
+
 test("compact workspace refits the board without changing the saved DiagramJson", () => {
   assert.match(diagramEditorSource, /const fitVisibleDiagram = useCallback/);
   assert.match(diagramEditorSource, /const runViewportMoveWithoutPersistence = useCallback/);
   assert.match(
     diagramEditorSource,
     /const handleMoveEnd[\s\S]*?persistViewportAfterMove\([\s\S]*?automaticViewportMoveRequestIdRef\.current/
+  );
+  assert.match(
+    diagramEditorSource,
+    /persistViewportAfterMove\(\s*\{[\s\S]*?isPreviewActive,[\s\S]*?isViewer: viewerPolicy\.isViewer/
   );
   assert.match(
     diagramEditorSource,
@@ -330,13 +396,46 @@ test("compact workspace refits the board without changing the saved DiagramJson"
   );
 });
 
-test("fit view uses the unobscured board frame and visual resource bounds", () => {
+test("live Diagram updates ignore structurally unchanged results", () => {
   assert.match(
     diagramEditorSource,
-    /getViewportForBounds\(\s*getDiagramVisualBounds\(currentNodes\),\s*frame\.width,\s*frame\.height/s
+    /const applyLiveDiagramUpdate[\s\S]*?const before = diagramRef\.current;[\s\S]*?if \(areDiagramsEqual\(before, after\)\) \{\s*return;/
   );
+});
+
+test("fit view uses the unobscured board frame and complete diagram visual bounds", () => {
+  assert.match(
+    diagramEditorSource,
+    /const visualBounds = getDiagramVisualBounds\(currentNodes, flowEdges\);[\s\S]*?getViewportForBounds\(\s*visualBounds,\s*frame\.width,\s*frame\.height,\s*fitMinimumZoom/s
+  );
+  assert.match(diagramEditorSource, /getFitViewMinimumZoom\([\s\S]*?FIT_VIEW_PADDING/);
+  assert.match(diagramEditorSource, /setFlowMinimumZoom\(fitMinimumZoom\);/);
+  assert.doesNotMatch(diagramEditorSource, /flowInstance\.fitView\(fitOptions\)/);
   assert.match(diagramEditorSource, /offsetBoardViewportToFrame/);
   assert.doesNotMatch(diagramEditorSource, /const fitViewWidth = editorBounds/);
+});
+
+test("manual Fit View does not mark the editable draft dirty", () => {
+  assert.match(
+    diagramEditorSource,
+    /const handleFitView = useCallback\(\(\) => \{[\s\S]*?fitVisibleDiagram\(false\);/
+  );
+  assert.doesNotMatch(
+    diagramEditorSource,
+    /const handleFitView = useCallback\(\(\) => \{[\s\S]*?fitVisibleDiagram\(!isPreviewActive\);/
+  );
+});
+
+test("automatic organization preview stays at the lower-left of the board workspace", () => {
+  assert.match(diagramEditorStyles, /\.workspace\s*\{[\s\S]*?position:\s*relative;/);
+  assert.match(
+    diagramEditorStyles,
+    /\.compilerPreviewNotice\s*\{[\s\S]*?bottom:\s*16px;[\s\S]*?left:\s*16px;[\s\S]*?right:\s*auto;/
+  );
+  assert.match(
+    diagramEditorSource,
+    /<div className=\{styles\.workspace\}>[\s\S]*?aria-label="자동 정리 미리보기"/
+  );
 });
 
 test("viewport controls use the React Flow instance received from onInit", () => {
@@ -355,7 +454,7 @@ test("viewport controls use the React Flow instance received from onInit", () =>
 test("a single node click opens the matching resource inspector", () => {
   assert.match(
     diagramEditorSource,
-    /const handleFlowNodeClick[\s\S]*?setSelectedNodeIds\(\[node\.id\]\);[\s\S]*?setInspectedNodeId\(node\.id\);[\s\S]*?setRightPanelOpen\(true\);/
+    /const handleFlowNodeClick[\s\S]*?setSelectedNodeIds\(\[node\.id\]\);[\s\S]*?setInspectedNodeId\(node\.id\);[\s\S]*?updateRightPanelOpen\(true\);/
   );
 });
 
@@ -369,7 +468,8 @@ test("reverse preview can opt into read-only resource inspection", () => {
 });
 
 test("a dedicated workflow can replace the default empty board guidance", () => {
-  assert.match(diagramEditorSource, /emptyBoardDescription = "왼쪽 Resource에서 필요한 항목을 끌어오세요\."/);
+  assert.match(diagramEditorSource, /emptyBoardDescription = "왼쪽 패널에서 필요한 항목을 끌어오세요\."/);
+  assert.doesNotMatch(diagramEditorSource, /emptyBoardDescription = "[^"]*Resource/);
   assert.match(diagramEditorSource, /<span>\{emptyBoardDescription\}<\/span>/);
 });
 
@@ -739,7 +839,7 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
     /import \{ getDiagramVisualBounds \} from "\.\/resource-node-visual-footprint";/
   );
   assert.match(diagramEditorSource, /getDiagramVisualBounds\(\[targetNode\]\)/);
-  assert.match(diagramEditorSource, /getDiagramVisualBounds\(currentNodes\)/);
+  assert.match(diagramEditorSource, /getDiagramVisualBounds\(currentNodes, flowEdges\)/);
   assert.match(
     diagramEditorSource,
     /getDiagramVisualBounds\(previewDiagram\?\.nodes \?\? diagramRef\.current\.nodes\)/
@@ -752,7 +852,7 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
   );
   assert.match(
     diagramEditorSource,
-    /offsetBoardViewportToFrame\(\s*getViewportForBounds\(\s*getDiagramVisualBounds\(currentNodes\),\s*frame\.width,\s*frame\.height,/s
+    /const visualBounds = getDiagramVisualBounds\(currentNodes, flowEdges\);[\s\S]*?offsetBoardViewportToFrame\(\s*getViewportForBounds\(\s*visualBounds,\s*frame\.width,\s*frame\.height,/s
   );
   assert.match(diagramEditorSource, /getUnobscuredBoardViewportFrame\(/);
   assert.match(diagramEditorSource, /BOARD_VIEWPORT_TOP_INSET/);
@@ -760,7 +860,7 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
   assert.match(diagramEditorSource, /rebaseBoardViewport\(reactFlow\.getViewport\(\), previousFrame, nextFrame\)/);
   assert.match(
     diagramEditorSource,
-    /<div className=\{styles\.leftRail\} ref=\{leftRailRef\}>/
+    /<div[^>]*className=\{styles\.leftRail\}[^>]*ref=\{leftRailRef\}[^>]*>/
   );
   assert.doesNotMatch(diagramEditorSource, /collapsedLeftPanel/);
 });
