@@ -3,7 +3,8 @@ import test from "node:test";
 import type { GitHubInstallationConnection } from "@sketchcatch/types";
 import {
   deriveAwsCodeConnectionRepositoryAccessState,
-  deriveGitHubCodeBuildAuthorizationTarget
+  deriveGitHubCodeBuildAuthorizationTarget,
+  getAwsCodeConnectionDisplayName
 } from "./github-codebuild-authorization-state";
 
 const installation: GitHubInstallationConnection = {
@@ -97,4 +98,11 @@ test("an available AWS CodeConnection remains visibly unverified until repositor
 
 test("pending AWS CodeConnections do not expose the repository access presentation", () => {
   assert.equal(deriveAwsCodeConnectionRepositoryAccessState("PENDING"), null);
+});
+
+test("AWS approval guidance identifies the exact generated connection name", () => {
+  assert.equal(
+    getAwsCodeConnectionDisplayName("ee0c1542-4627-481e-a6b5-433b16f50f3b"),
+    "sketchcatch-ee0c1542-github"
+  );
 });
