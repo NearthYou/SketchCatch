@@ -26,6 +26,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Self-host the supplied Pretendard variable font
+
+- Replaced the package-backed Pretendard dynamic subset with the supplied Pretendard 1.3.9 variable WOFF2 and bundled its SIL Open Font License.
+- Kept every Web typography surface, including code, landing, Workspace, diagram, AI Workbench, and form controls, on the shared Pretendard token while removing the unused runtime font dependency.
+- Authenticated browser QA covered 26 public and signed-in views, including Dashboard sections, project routes, Workspace panels, AI modes, Direct Deployment, CI/CD, and observation surfaces; all 7,153 visible HTML elements resolved to `Pretendard, sans-serif` with zero exceptions and every view reported the font loaded.
+- Verification passed: focused typography audit 4/4, runtime font response (200, `font/woff2`, 2,057,688 bytes), lint, typecheck, production build, and diff check. Lint retains one unrelated existing API test warning.
+- No DB schema, migration, cloud mutation, deployment, or Git/CI/CD handoff was performed.
+
 ### 2026-07-19 - Reduce only the Live Observation guidance font size
 
 - Restored the original map header guidance verbatim after clarifying that the wording must not be summarized.
@@ -49,18 +57,6 @@ Short English-only working log for the current agent context. Older records are 
 - Focused Diagram Editor layout tests pass 54/54; Web lint/typecheck, root lint/typecheck/build, final harness, and diff checks pass. Broad test suites were not run; root lint retains one unrelated existing API test warning.
 - Archived one older progress entry to restore the harness size limit. No DB schema, migration, cloud mutation, deployment, or Git/CI/CD handoff was performed.
 - Next action: refresh the active Workspace and visually confirm the compact result notice; no further code change is pending.
-
-### 2026-07-18 - Standardize presentation typography
-
-- Added one auditable 6px presentation increment to every explicit and browser-default Web text size, including both inline text sizes, without changing existing base values; preserved one documented shape-only zero-size exception.
-- Unified UI and code typography on the bundled Pretendard 1.3.9 family and kept the existing package-backed font loading path.
-- Audited every CSS and inline font-family declaration, removed the landing page's duplicate font-face path, and routed the AI page through the shared Pretendard token.
-- Added the official version-pinned Pretendard 1.3.9 dynamic-subset stylesheet to the generated standalone S3 audience page, which cannot inherit the Web app token, and aligned its body/title size and title weight with the presentation adjustments.
-- Strengthened the typography contract to cover the package version, shared aliases, form-control inheritance, inline styles, and accidental local font-face reintroduction.
-- Reduced all 448 explicit text weights above 400 by one 100-point Pretendard step, including browser-default headings and strong text, while preserving regular body weight and font-face metadata.
-- Startup harness exposed an oversized progress log; duplicate archived records were removed, and the final harness passes.
-- Confirmed local PostgreSQL and Redis are running, focused typography and dependent Web tests pass 135/135, the strengthened typography audit passes 4/4, and root lint/typecheck/build pass.
-- No DB schema, migration, cloud mutation, Terraform execution, deployment, or Git/CI/CD handoff was performed.
 
 ## Broken Or Unverified
 

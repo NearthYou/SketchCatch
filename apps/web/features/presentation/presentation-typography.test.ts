@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -137,10 +137,17 @@ test("explicit text weights are one Pretendard step lighter", () => {
   }
 });
 
-test("all web typography resolves to the bundled Pretendard 1.3.9 family", () => {
+test("all web typography resolves to the supplied local Pretendard 1.3.9 variable font", () => {
   const layout = readFileSync(join(webRoot, "app", "layout.tsx"), "utf8");
   const globalStyles = readFileSync(join(webRoot, "app", "globals.css"), "utf8");
   const packageJson = readFileSync(join(webRoot, "package.json"), "utf8");
+  const localFontPath = join(
+    webRoot,
+    "public",
+    "fonts",
+    "pretendard-variable",
+    "PretendardVariable.woff2"
+  );
   const landingStyles = readFileSync(
     join(webRoot, "features", "landing", "product-entry.module.css"),
     "utf8"
@@ -158,8 +165,16 @@ test("all web typography resolves to the bundled Pretendard 1.3.9 family", () =>
     "utf8"
   );
 
-  assert.match(layout, /pretendard\/dist\/web\/static\/pretendard-dynamic-subset\.css/);
-  assert.match(packageJson, /"pretendard":\s*"1\.3\.9"/);
+  assert.doesNotMatch(layout, /pretendard\/dist\/web/);
+  assert.doesNotMatch(packageJson, /"pretendard"\s*:/);
+  assert.equal(existsSync(localFontPath), true);
+  assert.equal(statSync(localFontPath).size, 2_057_688);
+  assert.match(globalStyles, /@font-face\s*\{[^}]*font-family:\s*"Pretendard";/s);
+  assert.match(globalStyles, /font-weight:\s*45 920;/);
+  assert.match(
+    globalStyles,
+    /src:\s*url\("\/fonts\/pretendard-variable\/PretendardVariable\.woff2"\) format\("woff2-variations"\);/
+  );
   assert.match(globalStyles, /--font-sans:\s*"Pretendard",\s*sans-serif;/);
   assert.match(globalStyles, /--font-code:\s*var\(--font-sans\);/);
   assert.match(landingStyles, /--landing-font:\s*var\(--font-sans\);/);
@@ -185,7 +200,9 @@ test("all web typography resolves to the bundled Pretendard 1.3.9 family", () =>
 
   for (const cssFile of cssFiles) {
     const styles = readFileSync(cssFile, "utf8");
-    assert.doesNotMatch(styles, /@font-face/, `${cssFile}: use the single package-backed font source`);
+    if (cssFile !== join(webRoot, "app", "globals.css")) {
+      assert.doesNotMatch(styles, /@font-face/, `${cssFile}: use the single global font source`);
+    }
     const declarations = styles.matchAll(/font-family\s*:\s*([^;}]+)(?=[;}])/g);
 
     for (const declaration of declarations) {
