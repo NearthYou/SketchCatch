@@ -13,12 +13,30 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-18 - Merge current origin/dev into local dev
+
+- Merged the 10 incoming `origin/dev` commits into the 2 local `dev` commits without rewriting either history.
+- Resolved the only conflict in `agent-progress.md` by retaining both current work records and keeping previously archived records in `docs/agent-history/2026-07.md`.
+- Focused API tests pass 99/99 and focused Web tests pass 44/44; lint, typecheck, build, harness, and diff checks pass. Lint retains one unrelated existing unused-import warning.
+
 ### 2026-07-18 - Surface CodeConnections repository authorization failures
 
 - Mapped CodeBuild `OAuthProviderException` failures during project reconciliation and checkout verification to the safe 409 `CODECONNECTION_REPOSITORY_ACCESS_REQUIRED` contract instead of leaking the upstream invalid-token message as a 502.
 - Persisted failed repository-verification evidence and changed the AWS connection Settings presentation so `AVAILABLE` means OAuth connected but repository access remains unverified, with a direct AWS Connector installation/permission action.
 - Focused API tests pass 20/20 and focused Web tests pass 22/22; lint, typecheck, build, and diff checks pass. Lint retains one unrelated existing unused-import warning in `project-deletion-service.test.ts`.
 - The broad test run still contains unrelated failures in existing artifact, project deletion, and Workspace navigation suites. No AWS mutation, Terraform execution, DB migration, deployment, Git handoff, commit, or push was performed.
+
+### 2026-07-18 - Repair self-managed AI Draft generation
+
+- Resolved the contradiction where the final self-managed server choice required EC2 while the Amazon Q plan still forbade the EC2 runtime, without overriding an explicit EC2 opt-out.
+- Treated current single-region deployments with future multi-region expansion as roadmap notes in both Korean and English.
+- Replayed the reported questionnaire in the local browser; the real preview contains the EC2 fleet, Launch Template, Auto Scaling Group, target group, and load balancer with no new browser errors.
+- The complete AI Architecture Draft suite passes 79/79, related Workspace AI tests pass 9/9, and lint, typecheck, build, harness, and diff checks pass.
+
+### 2026-07-18 - Remove the post-analysis Delivery card
+
+- Removed the post-analysis Delivery card and preload; error recovery remains. Risk: no browser QA.
+- Focused 7/7, Web lint/typecheck/build, harness, and diff checks pass. Next: review and push; no deployment or migration.
 
 ### 2026-07-18 - Preserve Reverse Engineering history during AWS connection deletion
 

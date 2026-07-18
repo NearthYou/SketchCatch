@@ -19,6 +19,7 @@ export type DiagramEditorViewerPolicy = {
   readonly canSelectNodes: boolean;
   readonly isPreview: boolean;
   readonly isViewer: boolean;
+  readonly panOnScroll: boolean;
   readonly showBoardGrid: boolean;
   readonly showEditingControls: boolean;
   readonly showPanels: boolean;
@@ -27,9 +28,10 @@ export type DiagramEditorViewerPolicy = {
   readonly usesContainerHeight: boolean;
 };
 
-/** Viewer는 preview interaction을 재사용해 변형 없이 시점 탐색만 허용합니다. */
+/** Viewer는 preview interaction을 재사용하되 embed 문맥에 맞게 scroll pan을 제한합니다. */
 export function getDiagramEditorViewerPolicy(
-  mode: DiagramEditorMode = "editor"
+  mode: DiagramEditorMode = "editor",
+  options: { readonly panOnScroll?: boolean | undefined } = {}
 ): DiagramEditorViewerPolicy {
   const isViewer = mode === "viewer";
 
@@ -38,6 +40,7 @@ export function getDiagramEditorViewerPolicy(
     canSelectNodes: !isViewer,
     isPreview: isViewer,
     isViewer,
+    panOnScroll: options.panOnScroll ?? true,
     showBoardGrid: !isViewer,
     showEditingControls: !isViewer,
     showPanels: !isViewer,
@@ -139,6 +142,7 @@ export type DiagramEditorProps = {
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
   onDiagramSaveRequest?: (() => Promise<unknown>) | undefined;
   onWorkspacePanelOpen?: (() => void) | undefined;
+  panOnScroll?: boolean | undefined;
   onTemplateWorkspaceApply?:
     | ((seed: {
         readonly diagramJson: DiagramJson;

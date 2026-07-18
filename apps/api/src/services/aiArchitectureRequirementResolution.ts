@@ -1027,7 +1027,36 @@ function findUnsupportedRequirementMatches(prompt: string): UnsupportedRequireme
   return UNSUPPORTED_REQUIREMENT_RULES.filter(
     (rule) =>
       rule.keywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase())) &&
+      !isDeferredMultiRegionRoadmapSelection(normalizedPrompt, rule) &&
       !isCoveredBySupportedExplicitResource(rule, explicitResourceTypes)
+  );
+}
+
+// 현재는 단일 리전을 선택하고 다중 리전은 향후 계획으로만 남긴 답변을 구분합니다.
+function isDeferredMultiRegionRoadmapSelection(
+  normalizedPrompt: string,
+  rule: UnsupportedRequirementRule
+): boolean {
+  if (rule.label !== "멀티 리전") {
+    return false;
+  }
+
+  const latestMultiRegionLine = normalizedPrompt
+    .split(/\r?\n/u)
+    .filter((line) => /(?:다중|멀티)\s*리전|multi[ -]?region/iu.test(line))
+    .at(-1);
+
+  if (latestMultiRegionLine === undefined) {
+    return false;
+  }
+
+  return (
+    /(?:mvp(?:는|은)?\s*)?단일\s*리전.{0,40}(?:추후|향후|나중).{0,40}(?:다중|멀티)\s*리전/iu.test(
+      latestMultiRegionLine
+    ) ||
+    /(?:mvp\s+)?(?:is\s+)?single[ -]?region.{0,40}(?:future|later|eventually|roadmap).{0,40}multi[ -]?region/iu.test(
+      latestMultiRegionLine
+    )
   );
 }
 
