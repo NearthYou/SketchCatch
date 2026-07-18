@@ -1312,8 +1312,14 @@ export function DirectDeploymentScreen({
                   </p>
                 </div>
                 <dl className={styles.deploymentPlanSnapshot}>
-                  <InfoRow label="변경 범위" value={selectedScopeLabel} />
-                  <InfoRow label="Terraform Plan" value={planStatus.label} />
+                  <div>
+                    <span>변경 범위</span>
+                    <strong>{selectedScopeLabel}</strong>
+                  </div>
+                  <div>
+                    <span>Terraform Plan</span>
+                    <strong>{planStatus.label}</strong>
+                  </div>
                 </dl>
               </div>
             </section>
