@@ -1288,14 +1288,14 @@ function isClarificationAnswerValid(
   switch (question.id) {
     case "website_type":
       return hasPromptTerm(normalizedAnswer, [
+        "static", "dynamic", "single page", "spa", "api server", "api 서버",
+        "정적", "동적", "블로그", "포트폴리오", "회사 소개", "웹 애플리케이션",
         "쇼핑", "커머스", "마켓", "포털", "검색", "커뮤니티", "소셜", "예약",
         "배달", "교육", "강의", "스트리밍", "대시보드", "관리자", "saas",
         "네이버", "쿠팡", "당근", "카카오", "유튜브"
       ]);
     case "traffic":
-      return /\d/u.test(normalizedAnswer) || hasPromptTerm(normalizedAnswer, [
-        "적게", "적은", "많지", "보통", "많은", "몰릴", "초기", "처음"
-      ]);
+      return hasTrafficClarificationEvidence(normalizedAnswer);
     case "database":
       return isNaturalBooleanAnswer(normalizedAnswer) || hasPromptTerm(normalizedAnswer, [
         "database", "postgres", "postgresql", "mysql", "dynamodb", "rds", "db를", "db가",
@@ -1304,7 +1304,8 @@ function isClarificationAnswerValid(
       ]);
     case "ssl":
       return isNaturalBooleanAnswer(normalizedAnswer)
-        || hasPromptTerm(normalizedAnswer, ["ssl", "https", "http", "인증서", "보안", "도메인"]);
+        || hasPromptTerm(normalizedAnswer, ["ssl", "https", "http", "인증서", "도메인"])
+        || /보안(?:이|은|을| 때문에)?\s*(?:중요|필수|필요)/u.test(normalizedAnswer);
     case "file_upload":
       return isNaturalBooleanAnswer(normalizedAnswer)
         || hasPromptTerm(normalizedAnswer, [
@@ -1317,7 +1318,9 @@ function isClarificationAnswerValid(
         || hasPromptTerm(normalizedAnswer, ["realtime", "real-time", "실시간", "채팅", "알림", "websocket", "sse", "데이터 업데이트"]);
     case "frontend":
       return hasPromptTerm(normalizedAnswer, [
-        "리액트", "뷰", "앵귤러", "넥스트", "일반 웹", "순수 자바스크립트"
+        "html", "css", "javascript", "react", "vue", "angular", "next.js", "nuxt",
+        "리액트", "뷰", "앵귤러", "넥스트", "일반 웹", "순수 자바스크립트",
+        "모바일 앱", "웹뷰", "네이티브"
       ]) || hasUncertainPreferenceAnswer(normalizedAnswer);
     case "region":
       return hasPromptTerm(normalizedAnswer, [
@@ -1326,30 +1329,68 @@ function isClarificationAnswerValid(
       ])
         || hasUncertainPreferenceAnswer(normalizedAnswer);
     case "budget":
-      return /\d/u.test(normalizedAnswer)
-        || hasPromptTerm(normalizedAnswer, ["저렴", "싸게", "최소", "넉넉", "보통", "적당"])
+      return hasBudgetClarificationEvidence(normalizedAnswer)
         || hasUncertainPreferenceAnswer(normalizedAnswer);
     case "management_preference":
-      return hasPromptTerm(normalizedAnswer, ["맡기", "신경 쓰", "직접", "운영하기", "관리하기"])
-        || hasUncertainPreferenceAnswer(normalizedAnswer);
+      return hasPromptTerm(normalizedAnswer, [
+        "managed", "serverless", "완전 관리", "반관리", "서버리스", "관리 맡",
+        "운영 맡", "관리 신경", "운영 신경", "직접 관리", "직접 운영", "서버 직접"
+      ]) || hasUncertainPreferenceAnswer(normalizedAnswer);
     case "page_loading_time":
-      return /\d/u.test(normalizedAnswer)
-        || hasPromptTerm(normalizedAnswer, ["빠르게", "빨랐", "느려도", "즉시"])
+      return hasPageLoadingClarificationEvidence(normalizedAnswer)
         || hasUncertainPreferenceAnswer(normalizedAnswer);
     case "website_size":
-      return /\d/u.test(normalizedAnswer)
-        || hasPromptTerm(normalizedAnswer, ["작은", "크지", "보통", "큰", "사진", "영상", "콘텐츠 많"])
+      return hasWebsiteSizeClarificationEvidence(normalizedAnswer)
         || hasUncertainPreferenceAnswer(normalizedAnswer);
     case "traffic_pattern":
-      return hasPromptTerm(normalizedAnswer, ["일정", "낮", "밤", "저녁", "주말", "이벤트", "몰려", "예측"])
-        || hasUncertainPreferenceAnswer(normalizedAnswer);
+      return hasPromptTerm(normalizedAnswer, [
+        "traffic pattern", "steady", "time of day", "event spike", "unpredictable",
+        "트래픽 패턴", "일정", "낮에", "낮 시간", "밤에", "저녁에", "주말",
+        "이벤트", "특정 시기", "몰려", "예측 불가"
+      ]) || hasUncertainPreferenceAnswer(normalizedAnswer);
     case "downtime_tolerance":
-      return /\d/u.test(normalizedAnswer)
-        || hasPromptTerm(normalizedAnswer, ["중단", "안 돼", "안돼", "잠깐", "몇 시간", "하루", "괜찮"])
+      return hasDowntimeClarificationEvidence(normalizedAnswer)
         || hasUncertainPreferenceAnswer(normalizedAnswer);
     default:
       return false;
   }
+}
+
+function hasTrafficClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "traffic", "concurrent", "daily", "트래픽", "소규모", "중간 규모", "대규모",
+    "급변동", "동시 사용자", "동접", "방문자", "사용자가 적", "이용자가 적",
+    "적게", "적은", "많지", "보통", "많은", "몰릴", "초기", "처음"
+  ]) || /\d[\d,]*\s*(?:명|users?|visitors?|requests?)/iu.test(answer);
+}
+
+function hasBudgetClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "budget", "cost", "monthly", "예산", "비용", "월 비용", "저렴", "싸게",
+    "최소 비용", "넉넉한 예산", "비용은 보통", "적당한 비용"
+  ]) || /(?:\$\s*\d|\d[\d,.]*\s*(?:원|만원|달러|usd|krw))/iu.test(answer);
+}
+
+function hasPageLoadingClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "loading", "load time", "로딩", "페이지 속도", "페이지가 빠", "빠르게 열",
+    "빨랐", "느려도", "즉시 열"
+  ]) || /\d+(?:\.\d+)?\s*(?:초|seconds?|ms|milliseconds?)(?:\s*이내)?/iu.test(answer);
+}
+
+function hasWebsiteSizeClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "website size", "site size", "웹사이트 크기", "사이트 크기", "사이트 용량",
+    "콘텐츠 용량", "작은 사이트", "크지 않은 사이트", "이미지가 많", "사진이 많",
+    "동영상이 많", "영상이 많", "콘텐츠가 많"
+  ]) || /\d+(?:\.\d+)?\s*(?:kb|mb|gb|tb)\b/iu.test(answer);
+}
+
+function hasDowntimeClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "downtime", "availability", "서비스 중단", "중단 허용", "가용성", "무중단",
+    "중단되면 안", "중단되면 큰일", "잠깐 중단", "중단돼도", "중단되어도"
+  ]) || /(?:99(?:\.\d+)?\s*%|(?:월|한 달)\s*\d+\s*시간)/u.test(answer);
 }
 
 function isClarificationInformationRequest(answer: string): boolean {
@@ -1379,6 +1420,9 @@ function isBackendClarificationAnswerValid(answer: string): boolean {
     "nodejs",
     "python flask",
     "spring boot",
+    "스프링 boot",
+    "스프링 부트",
+    "스프링부트",
     "django",
     "백엔드 필요 없음",
     "정적 사이트",
@@ -1509,7 +1553,10 @@ function createArchitectureDraftClarification(
     questionId: question.id,
     suggestions: question.suggestions,
     ...(invalidAnswer
-      ? { validationMessage: "입력하신 답변을 이 질문에 맞는 요구사항으로 이해하지 못했어요. 다시 답해주세요." }
+      ? {
+          validationMessage:
+            "입력하신 답변이 현재 질문과 관련이 없어 반영하지 않았어요. 질문에 맞게 다시 답해주세요."
+        }
       : {}),
     providerMetadata: createFallbackProviderMetadata(request, billingMode)
   };

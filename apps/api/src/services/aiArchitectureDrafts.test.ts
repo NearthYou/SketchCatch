@@ -1077,6 +1077,70 @@ test("createAmazonQArchitectureDraftResponse re-asks every required question for
     });
   }
 });
+test("createAmazonQArchitectureDraftResponse rejects answers that belong to another question category", async () => {
+  const provider = createFakeAmazonQProvider(() => "{}");
+  const offTopicAnswers = {
+    website_type: "월 예산은 30만원이야",
+    traffic: "월 예산은 30만원이야",
+    database: "사용자는 한국에 있어",
+    frontend: "월 1시간 정도 중단돼도 괜찮아",
+    backend: "낮에 트래픽이 몰려",
+    region: "리액트 쓸게",
+    budget: "페이지는 3초 이내에 열려야 해",
+    ssl: "보안 그룹을 사용할래",
+    file_upload: "서울 사용자 대상이야",
+    realtime: "RDS 쓸 거야",
+    management_preference: "파일을 직접 업로드할래",
+    page_loading_time: "월 예산은 30만원이야",
+    website_size: "월 예산은 30만원이야",
+    traffic_pattern: "낮은 예산으로 만들래",
+    downtime_tolerance: "파일 크기는 100MB야"
+  } as const;
+  const clarificationAnswers: Array<{ questionId: string; answer: string }> = [];
+
+  for (let index = 0; index < 15; index += 1) {
+    const response = await createAmazonQArchitectureDraftResponse(
+      { prompt: "웹사이트를 만들고 싶어요.", clarificationAnswers },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    );
+    if (!("status" in response)) assert.fail(`Expected clarification at index ${index}`);
+    const offTopicAnswer = offTopicAnswers[response.questionId as keyof typeof offTopicAnswers];
+    assert.ok(offTopicAnswer, `Missing off-topic fixture for ${response.questionId}`);
+
+    const answersToReject = [
+      offTopicAnswer,
+      ...(["website_size", "traffic_pattern"].includes(response.questionId)
+        ? ["스프링부트 썼어"]
+        : [])
+    ];
+
+    for (const answer of answersToReject) {
+      const repeatedResponse = await createAmazonQArchitectureDraftResponse(
+        {
+          prompt: "웹사이트를 만들고 싶어요.",
+          clarificationAnswers: [
+            ...clarificationAnswers,
+            { questionId: response.questionId, answer }
+          ]
+        },
+        { provider, creditPolicy: confirmedCreditPolicy }
+      );
+
+      if (!("status" in repeatedResponse)) {
+        assert.fail(`Expected repeated clarification for ${response.questionId}`);
+      }
+      assert.equal(repeatedResponse.questionId, response.questionId, answer);
+      assert.match(repeatedResponse.validationMessage ?? "", /현재 질문과 관련이 없어/);
+      assert.match(repeatedResponse.validationMessage ?? "", /다시 답해/);
+    }
+    clarificationAnswers.push({
+      questionId: response.questionId,
+      answer: response.questionId === "backend"
+        ? "스프링부트 썼어"
+        : response.suggestions[0] ?? "추천해줘"
+    });
+  }
+});
 test("createAmazonQArchitectureDraftResponse understands five additional natural-language clarification examples", async () => {
   const provider = createFakeAmazonQProvider(() => "{}");
   const scenarios = [
