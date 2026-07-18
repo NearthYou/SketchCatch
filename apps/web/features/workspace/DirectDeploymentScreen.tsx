@@ -906,6 +906,10 @@ export function DirectDeploymentScreen({
         scope: selectedScope
       });
       const plannedDeployment = await runDeploymentPlan(deployment.id);
+      if (requiresProjectBuildEnvironment(plannedDeployment)) {
+        const refreshedBuildEnvironment = await getProjectBuildEnvironment(projectId);
+        setBuildEnvironment(refreshedBuildEnvironment);
+      }
       setDeployments((currentDeployments) => [plannedDeployment, ...currentDeployments]);
       setSelectedDeploymentId(plannedDeployment.id);
       const [logs, resources, outputs] = await Promise.all([
@@ -937,6 +941,10 @@ export function DirectDeploymentScreen({
     });
     await runRequest(async () => {
       const deployment = await runDeploymentPlan(selectedDeployment.id);
+      if (requiresProjectBuildEnvironment(deployment)) {
+        const refreshedBuildEnvironment = await getProjectBuildEnvironment(projectId);
+        setBuildEnvironment(refreshedBuildEnvironment);
+      }
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment

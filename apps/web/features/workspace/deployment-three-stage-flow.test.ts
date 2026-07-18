@@ -171,6 +171,24 @@ test("deployment review delegates build preparation and repository verification 
   assert.doesNotMatch(reviewSource, /runDeploymentInit|queuedApplyPlan/);
 });
 
+test("Plan responses immediately refresh the Repository verification status", () => {
+  const reviewStart = directDeploymentSource.indexOf("async function startDeploymentReview");
+  const retryStart = directDeploymentSource.indexOf("async function startTerraformPlan", reviewStart);
+  const approveStart = directDeploymentSource.indexOf("async function approveCurrentPlan", retryStart);
+  const reviewSource = directDeploymentSource.slice(reviewStart, retryStart);
+  const retrySource = directDeploymentSource.slice(retryStart, approveStart);
+
+  for (const source of [reviewSource, retrySource]) {
+    const planIndex = source.indexOf("await runDeploymentPlan(");
+    const refreshIndex = source.indexOf("await getProjectBuildEnvironment(projectId)", planIndex);
+    const applyIndex = source.indexOf("setBuildEnvironment(refreshedBuildEnvironment)", refreshIndex);
+
+    assert.ok(planIndex > -1);
+    assert.ok(refreshIndex > planIndex);
+    assert.ok(applyIndex > refreshIndex);
+  }
+});
+
 test("full-stack validation checks the confirmed target and opens its setup surface", () => {
   const targetCheckIndex = directDeploymentSource.indexOf("getProjectDeploymentTarget(projectId)");
   const artifactPreparationIndex = directDeploymentSource.indexOf(
