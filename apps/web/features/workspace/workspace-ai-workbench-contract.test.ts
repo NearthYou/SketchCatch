@@ -265,6 +265,10 @@ test("mobile focus trap ignores roving tabs that are not keyboard focusable", ()
 });
 
 test("transcript follows new content only while the reader is near the bottom", () => {
+  assert.match(
+    controllerSource,
+    /suggestionSelection !== undefined[\s\S]*?transcriptShouldFollowRef\.current = true;[\s\S]*?setMessages\(nextMessages\)/
+  );
   assert.match(workbenchSource, /onScroll=\{onTranscriptScroll\}/);
   assert.match(controllerSource, /transcriptShouldFollowRef/);
   assert.match(controllerSource, /isWorkspaceAiTranscriptNearBottom/);

@@ -1422,6 +1422,10 @@ export function WorkspaceAiChatDock({
       return;
     }
 
+    if (suggestionSelection !== undefined) {
+      transcriptShouldFollowRef.current = true;
+    }
+
     const userMessage = createChatMessage(
       "user",
       "status",
