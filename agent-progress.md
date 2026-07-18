@@ -21,14 +21,6 @@ Short English-only working log for the current agent context. Older records are 
 - Generated AWS workflows were syntax-checked and provider behavior was exercised with test doubles only. Live AWS acceptance was intentionally not run.
 
 ## Next Action
-### 2026-07-17 - Automate resource-inclusive project deletion
-
-- Replaced the two-step Destroy approval UI with one explicit confirmation that continues through plan, approval, destroy, S3 artifact cleanup, and project deletion.
-- Added compact stage and percentage progress for planning, approval, cloud cleanup, and final project cleanup.
-- Unified terminal Destroy eligibility so approved FAILED/aws_connection deployments with Terraform state are not rejected between approval and execution.
-- Exact route and service regressions pass (55/55 and 7/7); approval and destroy-plan services pass (18/18 and 7/7); focused Web flow tests pass (11/11).
-- Workspace lint and typecheck pass. API, types, and UI builds pass; the Web production build compiles successfully, then this Windows sandbox blocks the Next.js child process with spawn EPERM.
-
 ### 2026-07-18 - Expand project destroy recovery and AWS connection permissions
 
 - Refreshed the project deletion preview after a successful Terraform Destroy when final SketchCatch cleanup fails, preventing retries from starting a stale Destroy Plan.
@@ -192,4 +184,12 @@ Short English-only working log for the current agent context. Older records are 
 - Reproduced the exact reported answers against the running Web-to-API path: `frontend` with a daily-user-count answer and `region` with a Spring Boot answer both repeat the same question.
 - Confirmed that both live responses include the unrelated-answer validation message; the screenshots predate the committed validation and chat-state fixes.
 - Added both exact user phrases to the all-question regression and ran only that focused test (1/1 pass), per the requested limited verification scope.
+- No DB migration, cloud mutation, deployment, Terraform execution, or Git handoff was performed.
+
+### 2026-07-19 - Refine diagram generation feedback and monthly budget parsing
+
+- Both diagram-generation chats now hide generic generation progress during clarification and show the shared staged progress card only after the server starts final draft generation.
+- Removed standalone accepted-answer receipt messages while retaining the disabled selected option or selected custom option on the answered question.
+- Budget clarification accepts conversational monthly amounts such as `한달에 한 30정도로`, forwards the interpretation as monthly KRW ten-thousands, and maps 30 to the normal budget profile while excluding time, traffic, size, and percentage units.
+- Focused Web progress/selection tests pass 11/11 and the final focused monthly-budget regressions pass 2/2; the all-question cross-category regression also passed earlier. API/Web typechecks passed before the final parser iteration. CSS parsing passes and Next.js compiled successfully; the sandbox stopped the build after compilation with `spawn EPERM`.
 - No DB migration, cloud mutation, deployment, Terraform execution, or Git handoff was performed.
