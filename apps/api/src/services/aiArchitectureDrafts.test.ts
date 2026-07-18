@@ -2489,6 +2489,77 @@ test("createAmazonQArchitectureDraftResponse keeps the final self-managed answer
   );
 });
 
+test("createAmazonQArchitectureDraftResponse keeps an explicit EC2 opt-out after a self-managed answer", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "EC2-free Mobile API",
+      patternIds: ["serverless-api", "multi-az-rds"],
+      requiredResources: ["API_GATEWAY_REST_API", "LAMBDA", "RDS", "S3"],
+      forbiddenCapabilities: ["ec2_runtime"],
+      region: "ap-northeast-2"
+    })
+  );
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: `${createReportedSelfManagedMobileApiPrompt()}\n\n추가 요구사항: EC2 사용 안 함`
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(response.architectureJson.nodes.some((node) => node.type === "EC2"), false);
+  assert.equal(response.architectureJson.nodes.some((node) => node.type === "LAMBDA"), true);
+});
+
+test("createAmazonQArchitectureDraftResponse treats equivalent future multi-region wording as roadmap only", async () => {
+  const scopeAnswers = [
+    "MVP는 단일 리전으로 시작하고 향후 다중 리전으로 확장",
+    "MVP is single region, future multi-region expansion"
+  ];
+
+  for (const scopeAnswer of scopeAnswers) {
+    const provider = createFakeAmazonQProvider(() =>
+      JSON.stringify({
+        status: "plan",
+        title: "Large Self-managed Mobile API",
+        patternIds: ["multi-az-rds", "alb-asg-ec2"],
+        requiredResources: ["RDS", "S3", "EC2"],
+        region: "ap-northeast-2",
+        runtimeTopology: {
+          trafficEntry: "LOAD_BALANCER",
+          compute: "EC2",
+          computeCount: 4,
+          placement: "private_subnets",
+          spreadAcrossPrivateSubnets: true,
+          autoScaling: true
+        }
+      })
+    );
+
+    const response = await createAmazonQArchitectureDraftResponse(
+      { prompt: createReportedSelfManagedMobileApiPrompt(scopeAnswer) },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    );
+
+    if ("status" in response) {
+      assert.fail(`Expected preview, got clarification: ${response.question}`);
+    }
+
+    assert.equal(
+      response.metadata.guardrailWarnings?.some(
+        (warning) => warning.code === "unsupported_requirement_substituted"
+      ) ?? false,
+      false,
+      scopeAnswer
+    );
+  }
+});
+
 test("createAmazonQArchitectureDraftResponse lets low-budget DB-free API answers override earlier data sizing", async () => {
   const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
@@ -5939,7 +6010,9 @@ function createKoreanApiServerPollingQuestionnairePrompt(): string {
   ].join("\n");
 }
 
-function createReportedSelfManagedMobileApiPrompt(): string {
+function createReportedSelfManagedMobileApiPrompt(
+  globalScopeAnswer = "MVP는 단일 리전, 추후 다중 리전 확장 경고 표시"
+): string {
   return [
     "웹사이트 배포하고 싶어",
     "어떤 종류의 웹사이트인가요?: API 서버 (모바일 앱 백엔드)",
@@ -5954,7 +6027,7 @@ function createReportedSelfManagedMobileApiPrompt(): string {
     "페이지 로딩 시간 목표는?: 5초 이내 (느려도 괜찮음)",
     "트래픽 패턴은?: 이벤트성 급증 (특정 시기에만)",
     "서비스 중단 허용 시간은?: 상관없음",
-    "글로벌 사용자와 1초 로딩 목표를 어떤 범위로 설계할까요?: MVP는 단일 리전, 추후 다중 리전 확장 경고 표시",
+    `글로벌 사용자와 1초 로딩 목표를 어떤 범위로 설계할까요?: ${globalScopeAnswer}`,
     "실시간 알림은 어떤 방식으로 표현할까요?: SSE 단방향 알림 경로"
   ].join("\n\n");
 }

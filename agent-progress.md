@@ -31,7 +31,7 @@ Short English-only working log for the current agent context. Older records are 
 - Resolved the contradiction where the final self-managed server choice required EC2 while the Amazon Q plan still forbade the EC2 runtime.
 - Treated `MVP single region, multi-region later` as a roadmap note instead of a current unsupported multi-region requirement.
 - Replayed the reported questionnaire in the local browser; the real preview now contains the EC2 fleet, Launch Template, Auto Scaling Group, target group, and load balancer with no new browser errors.
-- The complete AI Architecture Draft suite passes 77/77, related Workspace AI tests pass 9/9, and lint, typecheck, and build pass.
+- The complete AI Architecture Draft suite passes 79/79, related Workspace AI tests pass 9/9, and lint, typecheck, and build pass.
 
 ### 2026-07-18 - Correct Cross-account AWS S3 Template mapping
 

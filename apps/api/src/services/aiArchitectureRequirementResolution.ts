@@ -1041,8 +1041,22 @@ function isDeferredMultiRegionRoadmapSelection(
     return false;
   }
 
-  return /mvp(?:는|은)?\s*단일\s*리전[\s,，]*추후\s*(?:다중|멀티)\s*리전\s*확장\s*경고\s*표시/iu.test(
-    normalizedPrompt
+  const latestMultiRegionLine = normalizedPrompt
+    .split(/\r?\n/u)
+    .filter((line) => /(?:다중|멀티)\s*리전|multi[ -]?region/iu.test(line))
+    .at(-1);
+
+  if (latestMultiRegionLine === undefined) {
+    return false;
+  }
+
+  return (
+    /(?:mvp(?:는|은)?\s*)?단일\s*리전.{0,40}(?:추후|향후|나중).{0,40}(?:다중|멀티)\s*리전/iu.test(
+      latestMultiRegionLine
+    ) ||
+    /(?:mvp\s+)?(?:is\s+)?single[ -]?region.{0,40}(?:future|later|eventually|roadmap).{0,40}multi[ -]?region/iu.test(
+      latestMultiRegionLine
+    )
   );
 }
 

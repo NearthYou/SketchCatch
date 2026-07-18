@@ -8865,6 +8865,11 @@ function explicitlyForbidsEc2Runtime(normalizedPrompt: string): boolean {
   return hasPromptTerm(normalizedPrompt, [
     "without ec2",
     "no ec2",
+    "do not use ec2",
+    "don't use ec2",
+    "not using ec2",
+    "exclude ec2",
+    "omit ec2",
     "no ec2 capacity",
     "ec2 excluded",
     "ec2 is excluded",
@@ -8872,7 +8877,12 @@ function explicitlyForbidsEc2Runtime(normalizedPrompt: string): boolean {
     "serverless runtime",
     "lambda only",
     "ec2 없이",
+    "ec2 사용 안",
+    "ec2 안 씀",
+    "ec2 안씀",
+    "ec2 쓰지 않",
     "ec2는 사용하지 않",
+    "ec2 필요 없",
     "ec2는 필요 없",
     "ec2 제외"
   ]);
