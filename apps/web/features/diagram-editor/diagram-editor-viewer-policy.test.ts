@@ -15,6 +15,7 @@ test("editor mode retains the editable workspace policy", () => {
     canSelectNodes: true,
     isPreview: false,
     isViewer: false,
+    panOnScroll: true,
     showBoardGrid: true,
     showEditingControls: true,
     showPanels: true,
@@ -30,6 +31,7 @@ test("viewer mode is a compact preview that permits only viewport navigation", (
     canSelectNodes: false,
     isPreview: true,
     isViewer: true,
+    panOnScroll: true,
     showBoardGrid: false,
     showEditingControls: false,
     showPanels: false,
@@ -37,6 +39,13 @@ test("viewer mode is a compact preview that permits only viewport navigation", (
     showWorkspaceChrome: false,
     usesContainerHeight: true
   });
+});
+
+test("embedded viewer can keep drag pan while refusing page scroll gestures", () => {
+  assert.equal(
+    getDiagramEditorViewerPolicy("viewer", { panOnScroll: false }).panOnScroll,
+    false
+  );
 });
 
 test("viewer nodes do not render editing interaction handles", () => {
