@@ -1,28 +1,5 @@
 # Agent Progress
 
-## 2026-07-18 - Reject irrelevant backend clarification text
-
-- Tightened backend clarification parsing so topic mentions and information requests do not count as backend requirement decisions.
-- Kept explicit yes/no answers, concrete backend choices, and recommendation requests valid.
-- The exact recipe request and a misleading API explanation request both repeat the backend question with the Korean validation message.
-- Focused regression and API typecheck pass; the live Web-to-API path returns questionId: backend for the rejected answer.
-- No cloud mutation, Terraform execution, DB migration, deployment, or Git/CI/CD handoff was performed.
-## 2026-07-18 - Lock submitted AI chat choices
-
-- Locked each chat question synchronously after its option is submitted, preventing rapid duplicate clicks before React rerenders.
-- Kept the selected option fully visible with a check-marked selected state while disabling every option for the answered question.
-- Added accepted-answer receipts that distinguish selected answers from natural-language answers and show the exact question-to-requirement mapping.
-- Focused Workspace AI and Workbench contract regressions pass 43/43; workspace lint, typecheck, and build pass.
-- The full Web suite still has unrelated generated knowledge artifact and resource catalog drift failures.
-
-## 2026-07-18 - Validate natural-language AI clarification answers
-
-- Added structured clarification answers keyed by stable question IDs across both Workspace AI chat surfaces and the API contract.
-- Relevant free-form answers advance to the next question; unrelated answers keep the current question and return a Korean validation message.
-- Accepted answers are appended as explicit requirement context and included in the masked Amazon Q payload without mixing assistant question text into the prompt.
-- Focused API regressions pass 81/81 and focused Web regressions pass 12/12.
-- No cloud mutation, Terraform execution, DB migration, or Git/CI/CD handoff was performed.
-
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
 
 ## Current Verified State
@@ -202,3 +179,10 @@ Short English-only working log for the current agent context. Older records are 
 - EC2 sizing, RDS removal, S3 addition, EC2-to-Lambda replacement, and connected CloudFront addition all produce the requested Preview graph.
 - Added complete Korean natural-language names and generated variants for every supported resource type, plus common service aliases and abbreviations. The exact `로드 밸런서 넣어줘` request now adds and connects a load balancer when there is one unambiguous compute target.
 - Focused clarification regressions pass 6/6, patch regressions pass 3/3, complete alias coverage passes 2/2, and API typecheck passes.
+
+### 2026-07-18 - Reject cross-question clarification answers
+
+- Replaced digit-only and generic-word clarification acceptance with question-specific semantic evidence for traffic, budget, SSL, management, loading time, website size, traffic pattern, and downtime.
+- `스프링부트 썼어` is accepted for the backend question but rejected for website size and traffic pattern; rejected answers now explain that they are unrelated before repeating the same question in both chat surfaces.
+- Both diagram-generation chats now show a dedicated `반영된 답변` row with the accepted natural-language text while keeping every option for that answered question disabled.
+- Cross-question coverage passes for all 15 required questions, four focused API regressions pass, focused Web feedback/selection checks pass, and API/Web typechecks pass. Full suites and builds were not run per user request.

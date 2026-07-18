@@ -5,19 +5,22 @@ Use this file only for compact continuation context. Write it in English.
 ## Currently Verified
 
 - Branch `fix/ck/477-ai-chatting-bug-fix` includes committed all-question validation and both-chat selection synchronization.
-- The current uncommitted follow-up adds clarification probes, diagram patch probes, and complete resource alias coverage.
+- The committed follow-up includes clarification probes, diagram patch probes, and complete resource alias coverage.
+- The current uncommitted fix rejects cross-question clarification answers with explicit user-facing feedback.
 
 ## Changes This Session
 
 - Expanded database storage, country-level region, and conversational photo-upload clarification semantics.
 - Verified EC2 sizing, RDS removal, S3 addition, EC2-to-Lambda replacement, and connected CloudFront addition against proposed graph outcomes.
 - Added Korean names and generated aliases for every supported resource type, with common service terms and abbreviations. `로드 밸런서 넣어줘` now creates a connected load balancer when one compute target is unambiguous.
+- Tightened all required-question free-form validation so numeric and generic words cannot satisfy an unrelated category; rejected answers explain why before repeating the question.
+- Both chat surfaces show the accepted natural-language text in a dedicated `반영된 답변` row and keep the answered question options disabled.
 
 ## Broken Or Unverified
 
-- Focused clarification regressions pass 6/6, Architecture Patch Preview regressions pass 3/3, complete alias coverage passes 2/2, and API typecheck passes.
+- Cross-question coverage passes for all 15 required questions; four focused API regressions, focused Web feedback/selection checks, and API/Web typechecks pass. Full suites and builds were not run per user request.
 
 ## Best Next Action
 
-- Review and commit the current focused API follow-up if requested.
+- Commit the focused cross-question clarification fix.
 - No DB migration, cloud mutation, deployment, Terraform execution, or Git handoff is involved.
