@@ -63,6 +63,7 @@ export type AwsImportPolicyContractInput = {
   region: string;
   targetRoleArn: string;
   templateBucketName: string;
+  templateStorageRegion?: string;
 };
 
 export type AwsImportPolicyContract = {
@@ -71,6 +72,7 @@ export type AwsImportPolicyContract = {
   connectionToken: string;
   accountId: string;
   region: string;
+  templateStorageRegion: string;
   targetRoleArn: string;
   targetRoleName: string;
   stackName: string;
@@ -98,6 +100,7 @@ export type AwsImportPolicyContract = {
 export function createAwsImportPolicyContract(
   input: AwsImportPolicyContractInput
 ): AwsImportPolicyContract {
+  const templateStorageRegion = input.templateStorageRegion ?? input.region;
   const targetRoleName = getValidatedTargetRoleName(input);
   const connectionToken = createConnectionToken(input.connectionId);
   const stackName = `sketchcatch-import-${connectionToken}-policy`;
@@ -137,7 +140,7 @@ export function createAwsImportPolicyContract(
   });
   const templateBaseUrl = createAwsImportTemplateUrl({
     bucketName: input.templateBucketName,
-    region: input.region,
+    region: templateStorageRegion,
     objectKey: templateObjectKey
   });
 
@@ -147,6 +150,7 @@ export function createAwsImportPolicyContract(
     connectionToken,
     accountId: input.accountId,
     region: input.region,
+    templateStorageRegion,
     targetRoleArn: input.targetRoleArn,
     targetRoleName,
     stackName,

@@ -82,6 +82,21 @@ test("manager control policy is bound to one immutable policy template", () => {
   assert.doesNotMatch(text, /TemplateBody|ResourceTypes/u);
 });
 
+test("cross-region connection keeps Stack region separate from template storage region", () => {
+  const contract = createAwsImportManagerContract({
+    ...connectionFixture,
+    region: "ap-northeast-1",
+    templateStorageRegion: "ap-northeast-2"
+  });
+
+  assert.equal(contract.region, "ap-northeast-1");
+  assert.equal(contract.templateStorageRegion, "ap-northeast-2");
+  assert.match(contract.managerStackArn, /^arn:aws:cloudformation:ap-northeast-1:/u);
+  assert.match(contract.policyStackArn, /^arn:aws:cloudformation:ap-northeast-1:/u);
+  assert.match(contract.templateBaseUrl, /\.s3\.ap-northeast-2\.amazonaws\.com\//u);
+  assert.match(contract.policyTemplateBaseUrl, /\.s3\.ap-northeast-2\.amazonaws\.com\//u);
+});
+
 test("policy stack create and update inputs accept only the internally published presigned template", async () => {
   const contract = createAwsImportManagerContract(connectionFixture);
   const published = await publishAwsImportCloudFormationTemplateToS3({

@@ -134,6 +134,39 @@ test("manager preparation returns the official regional CloudFormation Create Re
   );
 });
 
+test("manager preparation signs the template in storage region while opening the customer Stack region", async () => {
+  const crossRegionConnection = {
+    ...connection,
+    region: "ap-northeast-1"
+  } as const;
+  const crossRegionContract = createAwsImportManagerContract({
+    connectionId: crossRegionConnection.id,
+    accountId: crossRegionConnection.accountId,
+    region: crossRegionConnection.region,
+    targetRoleArn: crossRegionConnection.roleArn,
+    templateBucketName: "sketchcatch-private-templates",
+    templateStorageRegion: "ap-northeast-2"
+  });
+  let publishedRegion: string | undefined;
+  const gateway = createAwsImportAccessGateway({
+    publishTemplate: async (input) => {
+      publishedRegion = input.region;
+      return {
+        templateUrl: "https://private.example/template?X-Amz-Signature=secret"
+      } as never;
+    }
+  });
+
+  const result = await gateway.prepareManager({
+    connection: crossRegionConnection,
+    contract: crossRegionContract,
+    mode: { kind: "create" }
+  });
+
+  assert.equal(publishedRegion, "ap-northeast-2");
+  assert.match(result.consoleUrl, /^https:\/\/ap-northeast-1\.console\.aws\.amazon\.com\//u);
+});
+
 test("manager update preparation opens the exact existing Stack info fallback", async () => {
   const managerStackId =
     `arn:aws:cloudformation:${connection.region}:${connection.accountId}:stack/` +

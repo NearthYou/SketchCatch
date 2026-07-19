@@ -64,6 +64,7 @@ export type CreateAwsImportAccessServiceOptions = {
   repository: AwsImportAccessRepository;
   gateway: AwsImportAccessServiceGateway;
   templateBucketName: string;
+  templateStorageRegion?: string;
   now?: () => Date;
   generateApprovalSecret?: () => string;
   generateOperationId?: () => string;
@@ -95,7 +96,11 @@ export function createAwsImportAccessService(
     // gg: Manager 준비는 고객 AWS를 바꾸지 않고 private immutable Template Console URL만 만듭니다.
     async prepareManager(input) {
       const connection = await requireOwnedConnection(input, options.connectionRepository);
-      const contract = createContract(connection, options.templateBucketName);
+      const contract = createContract(
+        connection,
+        options.templateBucketName,
+        options.templateStorageRegion
+      );
       const operationId = generateOperationId();
       const current = await options.repository.getOrCreate({
         connectionId: input.connectionId,
@@ -157,7 +162,11 @@ export function createAwsImportAccessService(
     // gg: Manager는 tag/output만이 아니라 exact Template hash까지 확인한 뒤에만 승인 단계로 갑니다.
     async checkManager(input) {
       const connection = await requireOwnedConnection(input, options.connectionRepository);
-      const contract = createContract(connection, options.templateBucketName);
+      const contract = createContract(
+        connection,
+        options.templateBucketName,
+        options.templateStorageRegion
+      );
       const current = await options.repository.getOrCreate({
         connectionId: input.connectionId,
         now: now()
@@ -195,7 +204,11 @@ export function createAwsImportAccessService(
     // gg: raw approval secret은 응답으로 한 번만 내보내고 DB에는 binding SHA-256만 저장합니다.
     async previewPolicy(input) {
       const connection = await requireOwnedConnection(input, options.connectionRepository);
-      const contract = createContract(connection, options.templateBucketName);
+      const contract = createContract(
+        connection,
+        options.templateBucketName,
+        options.templateStorageRegion
+      );
       const current = await options.repository.getOrCreate({
         connectionId: input.connectionId,
         now: now()
@@ -255,7 +268,11 @@ export function createAwsImportAccessService(
         return toCommandResponse(current, input.operationId);
       }
 
-      const contract = createContract(connection, options.templateBucketName);
+      const contract = createContract(
+        connection,
+        options.templateBucketName,
+        options.templateStorageRegion
+      );
       const approvalFingerprint = createApprovalFingerprint(
         input.approvalId,
         createApprovalBinding(connection, contract, approvalStateFromRecord(current))
@@ -365,7 +382,11 @@ export function createAwsImportAccessService(
       if (claim.kind === "leased") {
         throw new AwsImportAccessLeaseError("다른 권한 작업이 진행 중입니다.");
       }
-      const contract = createContract(connection, options.templateBucketName);
+      const contract = createContract(
+        connection,
+        options.templateBucketName,
+        options.templateStorageRegion
+      );
       const inspection = await options.gateway.inspectManager({
         connection,
         contract,
@@ -443,7 +464,11 @@ export function createAwsImportAccessService(
     // gg: 정리 준비는 exact Stack 존재만 확인하고 고객 대신 삭제하지 않습니다.
     async prepareCleanup(input) {
       const connection = await requireOwnedConnection(input, options.connectionRepository);
-      const contract = createContract(connection, options.templateBucketName);
+      const contract = createContract(
+        connection,
+        options.templateBucketName,
+        options.templateStorageRegion
+      );
       const current = await options.repository.getOrCreate({
         connectionId: input.connectionId,
         now: now()
@@ -487,7 +512,11 @@ export function createAwsImportAccessService(
     // gg: 정리 확인도 read-only이며 Policy Stack 다음 Manager Stack 순서를 유지합니다.
     async checkCleanup(input) {
       const connection = await requireOwnedConnection(input, options.connectionRepository);
-      const contract = createContract(connection, options.templateBucketName);
+      const contract = createContract(
+        connection,
+        options.templateBucketName,
+        options.templateStorageRegion
+      );
       const current = await options.repository.getOrCreate({
         connectionId: input.connectionId,
         now: now()
@@ -584,14 +613,16 @@ async function requireOwnedConnection(
 /** gg: connection의 저장 account·region·Role만 Task 2 contract 입력으로 사용합니다. */
 function createContract(
   connection: AwsConnectionRecord & { accountId: string; roleArn: string },
-  templateBucketName: string
+  templateBucketName: string,
+  templateStorageRegion?: string
 ) {
   return createAwsImportManagerContract({
     connectionId: connection.id,
     accountId: connection.accountId,
     region: connection.region,
     targetRoleArn: connection.roleArn,
-    templateBucketName
+    templateBucketName,
+    ...(templateStorageRegion ? { templateStorageRegion } : {})
   });
 }
 

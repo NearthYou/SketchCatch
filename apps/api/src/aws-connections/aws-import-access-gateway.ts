@@ -177,7 +177,7 @@ export function createAwsImportAccessGateway(
       if (mode.kind === "update") assertExpectedManagerStackId(contract, mode.stackId);
       const published = await publishTemplate({
         bucketName: options.templateBucketName ?? getBucketName(contract.templateBaseUrl),
-        region: connection.region,
+        region: contract.templateStorageRegion,
         connectionId: connection.id,
         kind: "manager",
         contractVersion: contract.contractVersion,
@@ -311,7 +311,7 @@ export function createAwsImportAccessGateway(
       }
       const published = await publishTemplate({
         bucketName: options.templateBucketName ?? getBucketName(contract.policyTemplateBaseUrl),
-        region: connection.region,
+        region: contract.templateStorageRegion,
         connectionId: connection.id,
         kind: "policy",
         contractVersion: contract.policyContractVersion,

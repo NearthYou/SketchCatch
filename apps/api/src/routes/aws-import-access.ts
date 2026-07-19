@@ -180,7 +180,8 @@ async function createRequestService(
 
 /** gg: runtime service는 private bucket 설정과 기존 connection repository를 공유합니다. */
 function createDefaultService(client: DatabaseClient): AwsImportAccessRouteService {
-  const templateBucketName = getRuntimeEnv().s3BucketName;
+  const env = getRuntimeEnv();
+  const templateBucketName = env.s3BucketName;
   if (!templateBucketName) {
     throw new AwsImportAccessOperationError("Template 저장소 설정을 확인해 주세요.");
   }
@@ -188,7 +189,8 @@ function createDefaultService(client: DatabaseClient): AwsImportAccessRouteServi
     connectionRepository: createPostgresAwsConnectionRepository(client.db),
     repository: createPostgresAwsImportAccessRepository(client.db),
     gateway: createAwsImportAccessGateway({ templateBucketName }),
-    templateBucketName
+    templateBucketName,
+    templateStorageRegion: env.awsRegion
   });
 }
 

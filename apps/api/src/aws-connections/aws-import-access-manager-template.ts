@@ -33,6 +33,7 @@ export type AwsImportManagerContract = {
   connectionId: string;
   accountId: string;
   region: string;
+  templateStorageRegion: string;
   targetRoleArn: string;
   targetRoleName: string;
   managerStackName: string;
@@ -188,7 +189,7 @@ export function createAwsImportManagerContract(
   });
   const templateBaseUrl = createAwsImportTemplateUrl({
     bucketName: input.templateBucketName,
-    region: input.region,
+    region: policy.templateStorageRegion,
     objectKey: templateObjectKey
   });
 
@@ -197,6 +198,7 @@ export function createAwsImportManagerContract(
     connectionId: input.connectionId,
     accountId: input.accountId,
     region: input.region,
+    templateStorageRegion: policy.templateStorageRegion,
     targetRoleArn: policy.targetRoleArn,
     targetRoleName: policy.targetRoleName,
     managerStackName,
