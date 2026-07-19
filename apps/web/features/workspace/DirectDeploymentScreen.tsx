@@ -288,6 +288,7 @@ export function DirectDeploymentScreen({
     () => getDeploymentHistoryEntries(deployments),
     [deployments]
   );
+  const hasDeploymentHistory = deploymentHistoryEntries.length > 0;
   const deploymentHistoryMetrics = useMemo(
     () => getDeploymentHistoryMetrics(deploymentHistoryEntries),
     [deploymentHistoryEntries]
@@ -1988,6 +1989,14 @@ export function DirectDeploymentScreen({
             <p>성공한 배포의 변경 내용과 실행 결과를 확인합니다.</p>
           </div>
         </header>
+        {!hasDeploymentHistory ? (
+          <div className={styles.deploymentHistoryEmpty}>
+            <strong>아직 성공한 배포 버전이 없습니다.</strong>
+            <p>첫 번째 배포가 성공하면 이곳에 표시됩니다.</p>
+          </div>
+        ) : null}
+        {hasDeploymentHistory ? (
+          <>
         <dl className={styles.deploymentHistoryMetrics}>
           <DeploymentHistoryMetric
             icon={<Code2 size={20} />}
@@ -2032,13 +2041,7 @@ export function DirectDeploymentScreen({
             </button>
           ))}
         </div>
-        {deploymentHistoryEntries.length === 0 ? (
-          <div className={styles.deploymentHistoryEmpty}>
-            <strong>아직 성공한 배포 버전이 없습니다.</strong>
-            <p>첫 번째 배포가 성공하면 이곳에 표시됩니다.</p>
-          </div>
-        ) : (
-          <div className={styles.deploymentHistoryBody}>
+        <div className={styles.deploymentHistoryBody}>
             <div className={styles.deploymentHistoryTableRegion}>
               <table className={styles.deploymentHistoryTable}>
                 <caption className={styles.deploymentHistoryTableCaption}>
@@ -2130,14 +2133,6 @@ export function DirectDeploymentScreen({
                 </div>
                 <div className={styles.deploymentHistoryDetailContent}>
                   <dl className={styles.deploymentHistoryDetailFacts}>
-                    <div>
-                      <dt>실행 범위</dt>
-                      <dd>{formatDeploymentScope(deployment.scope)}</dd>
-                    </div>
-                    <div>
-                      <dt>변경 내용</dt>
-                      <dd>{formatDeploymentChangeSummary(deployment.planSummary)}</dd>
-                    </div>
                     {release ? (
                       <div>
                         <dt>앱 릴리즈</dt>
@@ -2237,8 +2232,9 @@ export function DirectDeploymentScreen({
                 </div>
               </article>
             ) : null}
-          </div>
-        )}
+        </div>
+          </>
+        ) : null}
       </section>
     );
   };
@@ -2246,7 +2242,8 @@ export function DirectDeploymentScreen({
   const renderHistoryView = () => (
     <div className={styles.deploymentHistoryGrid}>
       {renderDeploymentHistory()}
-      <div className={styles.deploymentHistorySecondary}>
+      {hasDeploymentHistory ? (
+        <div className={styles.deploymentHistorySecondary}>
         <details className={styles.deploymentDisclosure}>
           <summary>
             <span>리소스와 Output</span>
@@ -2273,7 +2270,8 @@ export function DirectDeploymentScreen({
           </summary>
           <div className={styles.deploymentDisclosureBody}>{renderLogsSection()}</div>
         </details>
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 

@@ -514,6 +514,32 @@ test("Deployment History uses KPI filters and the approved master-detail hierarc
   );
 });
 
+test("Deployment History hides inactive controls when no successful version exists", () => {
+  const historyStart = directDeploymentSource.indexOf("const renderDeploymentHistory");
+  const historyEnd = directDeploymentSource.indexOf("const renderHistoryView", historyStart);
+  const historySource = directDeploymentSource.slice(historyStart, historyEnd);
+  const viewStart = directDeploymentSource.indexOf("const renderHistoryView", historyEnd);
+  const viewEnd = directDeploymentSource.indexOf("const deploymentContent", viewStart);
+  const viewSource = directDeploymentSource.slice(viewStart, viewEnd);
+
+  assert.match(
+    directDeploymentSource,
+    /const hasDeploymentHistory = deploymentHistoryEntries\.length > 0/
+  );
+  assert.match(
+    historySource,
+    /!hasDeploymentHistory[\s\S]*deploymentHistoryEmpty[\s\S]*hasDeploymentHistory[\s\S]*deploymentHistoryMetrics/
+  );
+  assert.match(viewSource, /\{hasDeploymentHistory \? \([\s\S]*deploymentHistorySecondary/);
+});
+
+test("selected history detail does not repeat scope and change columns", () => {
+  assert.doesNotMatch(directDeploymentSource, /<dt>실행 범위<\/dt>/);
+  assert.doesNotMatch(directDeploymentSource, /<dt>변경 내용<\/dt>/);
+  assert.match(directDeploymentSource, /<dt>버전 ID<\/dt>/);
+  assert.match(directDeploymentSource, /<dt>실행 시간<\/dt>/);
+});
+
 test("expanded history details do not repeat their disclosure titles", () => {
   const resultsStart = directDeploymentSource.indexOf("const renderResultsSection");
   const logsStart = directDeploymentSource.indexOf("const renderLogsSection", resultsStart);
