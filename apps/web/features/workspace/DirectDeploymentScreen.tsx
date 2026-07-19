@@ -358,7 +358,22 @@ export function DirectDeploymentScreen({
     requestState !== "loading" &&
     !isInitialSnapshotLoading;
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
-  const deploymentActions = getDeploymentActionState(selectedDeployment, requestState);
+  const canReconcileAcceptedPlan = Boolean(
+    requestState === "error" &&
+      failedActionStepId === "validation" &&
+      selectedDeployment &&
+      pendingAutoAdvanceDeploymentIdRef.current === selectedDeployment.id &&
+      (selectedDeployment.status === "RUNNING" || selectedDeployment.currentPlanArtifactId)
+  );
+  const reconciledRequestState: RequestState = canReconcileAcceptedPlan
+    ? selectedDeployment?.status === "RUNNING"
+      ? "loading"
+      : "idle"
+    : requestState;
+  const deploymentActions = getDeploymentActionState(
+    selectedDeployment,
+    reconciledRequestState
+  );
 
   const cleanupActionTargets = cleanupDeployments.map((deployment) => ({
     actions: getDeploymentActionState(deployment, requestState),
@@ -400,11 +415,12 @@ export function DirectDeploymentScreen({
     failedStepId: failedActionStepId,
     hasUnsavedBaseline: hasCurrentDeploymentChanges,
     preflightState: directPreflightState,
+    reconciledRequestState,
     requestState
   });
   const deploymentProgressIsStarting = Boolean(
     activeProgress &&
-    (requestState === "loading" ||
+    (reconciledRequestState === "loading" ||
       preDeploymentState === "loading" ||
       (selectedDeployment?.status === "PENDING" && !selectedDeployment.currentPlanArtifactId))
   );
@@ -417,15 +433,18 @@ export function DirectDeploymentScreen({
 
   useEffect(() => {
     if (
-      requestState === "idle" &&
+      reconciledRequestState === "idle" &&
       selectedDeployment &&
       pendingAutoAdvanceDeploymentIdRef.current === selectedDeployment.id &&
       directDeploymentFlow.activeStepId === "approval"
     ) {
       pendingAutoAdvanceDeploymentIdRef.current = "";
+      setRequestState("idle");
+      setFailedActionStepId(null);
+      setErrorMessage("");
       setSelectedDirectStepId("approval");
     }
-  }, [directDeploymentFlow.activeStepId, requestState, selectedDeployment]);
+  }, [directDeploymentFlow.activeStepId, reconciledRequestState, selectedDeployment]);
 
   useEffect(() => {
     if (
@@ -1287,11 +1306,13 @@ export function DirectDeploymentScreen({
     const requestError =
       selectedStep.id === "validation" && preDeploymentState === "error"
         ? preDeploymentErrorMessage
-        : requestState === "error"
+        : reconciledRequestState === "error"
           ? errorMessage
           : detailErrorMessage || snapshotErrorMessage;
     const validationIsBusy =
-      isInitialSnapshotLoading || requestState === "loading" || preDeploymentState === "loading";
+      isInitialSnapshotLoading ||
+      reconciledRequestState === "loading" ||
+      preDeploymentState === "loading";
     const requiresApprovedPlanRevalidation = Boolean(
       hasCurrentDeploymentChanges && selectedDeployment?.approvedAt
     );

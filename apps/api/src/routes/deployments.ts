@@ -1224,6 +1224,7 @@ export async function registerDeploymentRoutes(
         userId: accessContext.userId
       });
       routeFailureStage = "plan";
+      const acceptedDeployment = await toDeployment(runningDeployment, repository);
 
       const queuedJob = workerDispatch.enabled
         ? await createDeploymentJob(
@@ -1264,7 +1265,7 @@ export async function registerDeploymentRoutes(
       executionHandedOff = true;
 
       return reply.status(202).send({
-        deployment: await toDeployment(runningDeployment, repository)
+        deployment: acceptedDeployment
       });
     } catch (error) {
       if (!executionHandedOff) {

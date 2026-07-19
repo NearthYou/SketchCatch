@@ -250,6 +250,28 @@ test("a failed foreground request does not auto-advance when polling finds a pla
   assert.equal(flow.steps[0]?.state, "error");
 });
 
+test("an accepted durable Plan resumes approval after its HTTP response fails", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: { ...idleActions, canApprovePlan: true, shouldShowApprovePlanButton: true },
+      deployment: {
+        approvedAt: null,
+        currentPlanArtifactId: "plan-from-accepted-worker",
+        currentPlanOperation: "apply",
+        status: "PENDING"
+      },
+      preflightState: "passed",
+      requestState: "error",
+      failedStepId: "validation",
+      reconciledRequestState: "idle"
+    } as Partial<DirectDeploymentFlowInput>)
+  );
+
+  assert.equal(flow.activeStepId, "approval");
+  assert.equal(flow.steps[0]?.state, "done");
+  assert.equal(flow.steps[1]?.state, "active");
+});
+
 test("running apply reports a running final step", () => {
   const flow = getDirectDeploymentFlow(
     createInput({

@@ -2874,6 +2874,35 @@ test("POST frontend retry dispatches a durable ECS worker job by default", async
   await app.close();
 });
 
+test("POST plan shapes its accepted response before dispatching durable work", async () => {
+  const repository = new FakeDeploymentRepository();
+  const jobRepository = new FakeDeploymentJobRepository();
+  const dispatcher = new FakeDeploymentWorkerDispatcher();
+  repository.deployment = {
+    ...createDeploymentRecord(deploymentId),
+    createdAt: "invalid-date" as never
+  };
+  repository.deployments = [repository.deployment];
+  const app = await buildDeploymentTestApp(repository, {
+    createDeploymentJobRepository: () => jobRepository,
+    workerDispatcher: dispatcher,
+    workerDispatchMode: "ecs"
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 500);
+  assert.equal(dispatcher.dispatchCalls.length, 0);
+  assert.equal(await jobRepository.findActiveDeploymentJob(deploymentId), undefined);
+  assert.equal(repository.deployment.status, "FAILED");
+
+  await app.close();
+});
+
 test("POST /api/deployments/:deploymentId/plan writes a runtime cache status snapshot", async () => {
   const repository = new FakeDeploymentRepository();
   const runtimeCache = createInMemoryRuntimeCache({ cleanupIntervalMs: null });

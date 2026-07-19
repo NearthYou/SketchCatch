@@ -124,7 +124,7 @@ test("Direct Deployment uses prepare, approve, and execute with three external p
   assert.match(directDeploymentSource, /stepId === "approval"/);
 });
 
-test("deployment polling owns snapshot feedback and cannot clear an action failure", () => {
+test("deployment polling keeps unrelated failures but reconciles its accepted Plan", () => {
   const refreshStart = directDeploymentSource.indexOf("async function refreshSnapshot");
   const intervalStart = directDeploymentSource.indexOf("const intervalId", refreshStart);
   const refreshSource = directDeploymentSource.slice(refreshStart, intervalStart);
@@ -137,6 +137,12 @@ test("deployment polling owns snapshot feedback and cannot clear an action failu
   assert.match(refreshSource, /setSnapshotErrorMessage\(\s*getApiErrorMessage/);
   assert.doesNotMatch(refreshSource, /setRequestState\(/);
   assert.doesNotMatch(refreshSource, /setErrorMessage\(/);
+  assert.match(
+    directDeploymentSource,
+    /pendingAutoAdvanceDeploymentIdRef\.current === selectedDeployment\.id/
+  );
+  assert.match(directDeploymentSource, /reconciledRequestState/);
+  assert.match(directDeploymentSource, /currentPlanArtifactId/);
 });
 
 test("deployment commands stop their failure boundary before secondary hydration", () => {

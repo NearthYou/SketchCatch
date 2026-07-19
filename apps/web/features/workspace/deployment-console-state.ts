@@ -58,6 +58,7 @@ export type DirectDeploymentFlowInput = {
   readonly failedStepId: DirectDeploymentStepId | null;
   readonly hasUnsavedBaseline: boolean;
   readonly preflightState: DirectDeploymentPreflightState;
+  readonly reconciledRequestState?: RequestState;
   readonly requestState: RequestState;
 };
 
@@ -180,10 +181,11 @@ function isBlockingPreDeploymentFinding(finding: CheckFinding | undefined): bool
 
 export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): DirectDeploymentFlow {
   const deployment = input.deployment;
+  const requestState = input.reconciledRequestState ?? input.requestState;
   const usesSavedCleanupSnapshot =
     input.actions.shouldShowDestroyPlanButton || input.actions.shouldShowDestroyButton;
-  const validation = getValidationStep(input);
-  if (input.requestState === "error" && input.failedStepId) {
+  const validation = getValidationStep({ ...input, requestState });
+  if (requestState === "error" && input.failedStepId) {
     return createFailedFlow(input.failedStepId, validation);
   }
   const hasUnsavedApplyBaseline =
@@ -213,9 +215,9 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
       step("approval", "idle", "Destroy Plan 후 진행", "Destroy Plan을 먼저 생성하세요."),
       step(
         "deployment",
-        input.requestState === "loading" ? "running" : "active",
-        input.requestState === "loading" ? "Destroy Plan 생성 중" : "Destroy Plan 필요",
-        input.actions.canRunDestroyPlan || input.requestState === "loading"
+        requestState === "loading" ? "running" : "active",
+        requestState === "loading" ? "Destroy Plan 생성 중" : "Destroy Plan 필요",
+        input.actions.canRunDestroyPlan || requestState === "loading"
           ? null
           : "저장된 배포 state를 확인하세요."
       )
@@ -228,15 +230,15 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
       completedValidation,
       step(
         "approval",
-        input.requestState === "loading" ? "running" : "active",
-        input.requestState === "loading" ? "승인 처리 중" : "승인 필요",
+        requestState === "loading" ? "running" : "active",
+        requestState === "loading" ? "승인 처리 중" : "승인 필요",
         input.actions.canApprovePlan ? null : "Plan과 승인 조건을 확인하세요."
       ),
       idleDeployment()
     );
   }
 
-  const finalState = getDeploymentState(deployment.status, input.requestState);
+  const finalState = getDeploymentState(deployment.status, requestState);
   return createFlow(
     "deployment",
     completedValidation,
