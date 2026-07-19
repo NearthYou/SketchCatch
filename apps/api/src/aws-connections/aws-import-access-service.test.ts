@@ -24,6 +24,28 @@ const ownerAccessContext: ProjectAccessContext = { kind: "user", userId: "owner-
 const connectionId = "11111111-2222-4333-8444-555555555555";
 const fixedNow = new Date("2026-07-19T12:00:00.000Z");
 
+test("getState is read-only and synthesizes check_required when no import row exists", async () => {
+  const fixture = createImportAccessServiceFixture();
+  let getOrCreateCalls = 0;
+  Object.assign(fixture.repository, {
+    async find() {
+      return undefined;
+    },
+    async getOrCreate() {
+      getOrCreateCalls += 1;
+      throw new Error("GET must not create a deletion-blocking import row");
+    }
+  });
+
+  const result = await fixture.service.getState(fixture.ownerInput);
+
+  assert.equal(getOrCreateCalls, 0);
+  assert.equal(fixture.getRecord(), undefined);
+  assert.equal(result.state.status, "check_required");
+  assert.equal(result.state.nextAction, "prepare_manager");
+  assert.equal(result.state.operationId, null);
+});
+
 test("policy apply consumes one approval and preserves deployment verification", async () => {
   const fixture = createImportAccessServiceFixture({ connectionStatus: "verified" });
   const preview = await fixture.service.previewPolicy(fixture.ownerInput);
@@ -174,7 +196,7 @@ test("preparing an already-current Manager is a read-only no-op", async () => {
 test("Manager preparation uses Quick Create only when absent and exact update when owned older", async () => {
   for (const scenario of ["absent", "owned_older"] as const) {
     const fixture = createImportAccessServiceFixture();
-    await fixture.service.getState(fixture.ownerInput);
+    await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
     const record = fixture.getRecord()!;
     if (scenario === "owned_older") {
       record.managerStackId = "manager-stack-id";
@@ -396,7 +418,7 @@ test("cleanup does not complete while an exact Manager artifact remains", async 
 
 test("cleanup forwards stored Stack identities and only a prior exact Manager marker", async () => {
   const fixture = createImportAccessServiceFixture();
-  await fixture.service.getState(fixture.ownerInput);
+  await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
   Object.assign(fixture.getRecord()!, {
     status: "cleanup_manager_required",
     managerStackId: "stored-manager-stack-id",
@@ -531,6 +553,28 @@ test("retry actions follow the failed operation instead of a generic retry", () 
   }
 });
 
+test("retry actions use safe error codes only as a fallback when operation metadata is absent", () => {
+  const cases = [
+    ["approval_state_changed", "preview_policy"],
+    ["policy_stack_retry", "preview_policy"],
+    ["policy_not_ready", "check_reads"],
+    ["probe_retry", "check_reads"],
+    ["manager_drifted", "prepare_manager"],
+    ["manager_not_ready", "check_manager"],
+    ["cleanup_retry", "check_cleanup"],
+    ["cleanup_policy_artifact_pending", "check_cleanup"],
+    ["cleanup_manager_artifact_pending", "check_cleanup"]
+  ] as const;
+
+  for (const [safeErrorCode, expected] of cases) {
+    const record = createRecord(connectionId, fixedNow);
+    record.status = "retry_required";
+    record.operationKind = null;
+    record.safeErrorCode = safeErrorCode;
+    assert.equal(nextActionForRecord(record), expected, safeErrorCode);
+  }
+});
+
 test("two concurrent read checks run only one probe behind the operation lease", async () => {
   let probeCalls = 0;
   let releaseProbe!: () => void;
@@ -569,7 +613,7 @@ test("non-target Policy finishes safely without running the import probe", async
       return createProbeResult();
     }
   });
-  await fixture.service.getState(fixture.ownerInput);
+  await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
   fixture.getRecord()!.coreReadSummary = { ec2: "success" };
   fixture.getRecord()!.expandedReadSummary = { iam: "permission_denied" };
 
@@ -643,6 +687,9 @@ function createImportAccessServiceFixture(
   const connection = createConnection(options.connectionStatus ?? "verified");
   let record: AwsImportAccessRecord | undefined;
   const repository: AwsImportAccessRepository = {
+    async find(id) {
+      return record?.awsConnectionId === id ? record : undefined;
+    },
     async getOrCreate(input) {
       record ??= createRecord(input.connectionId, input.now);
       return record;

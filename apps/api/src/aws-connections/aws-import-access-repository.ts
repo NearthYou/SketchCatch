@@ -34,6 +34,7 @@ export type FinishAwsImportAccessReadsResult =
   | { kind: "stale" };
 
 export type AwsImportAccessRepository = {
+  find(connectionId: string): Promise<AwsImportAccessRecord | undefined>;
   getOrCreate(input: { connectionId: string; now: Date }): Promise<AwsImportAccessRecord>;
   issueApproval(input: {
     connectionId: string;
@@ -77,6 +78,15 @@ export function createPostgresAwsImportAccessRepository(
   db: Database
 ): AwsImportAccessRepository {
   return {
+    // gg: Settings GET은 import row를 만들지 않아 엄격한 연결 삭제 guard에 간섭하지 않습니다.
+    async find(connectionId) {
+      const [record] = await db
+        .select()
+        .from(awsImportAccess)
+        .where(eq(awsImportAccess.awsConnectionId, connectionId));
+      return record;
+    },
+
     // gg: 기존 연결에는 자동 AWS 변경 없이 check_required 상태만 처음 만듭니다.
     async getOrCreate(input) {
       const [created] = await db

@@ -83,14 +83,13 @@ export function createAwsImportAccessService(
   const probeImportAccess = options.probeImportAccess ?? probeAwsImportAccess;
 
   return {
-    // gg: 상태 조회도 먼저 현재 사용자의 connection 소유권을 확인합니다.
+    // gg: 상태 조회는 소유권만 확인하고 row가 없으면 공개 초기 상태를 합성해 삭제를 막지 않습니다.
     async getState(input) {
       await requireOwnedConnection(input, options.connectionRepository);
-      const record = await options.repository.getOrCreate({
-        connectionId: input.connectionId,
-        now: now()
-      });
-      return toCommandResponse(record, record.operationId ?? generateOperationId());
+      const record = await options.repository.find(input.connectionId);
+      return record
+        ? toCommandResponse(record, record.operationId ?? generateOperationId())
+        : createInitialStateResponse(input.connectionId, generateOperationId());
     },
 
     // gg: Manager 준비는 고객 AWS를 바꾸지 않고 private immutable Template Console URL만 만듭니다.
@@ -919,21 +918,62 @@ function toCommandResponse(
   };
 }
 
-/** gg: retry_required도 실패한 operation 종류에 맞는 안전한 다음 단계로 되돌립니다. */
+/** gg: 아직 command를 시작하지 않은 연결은 저장 없이 같은 check_required 공개 계약을 반환합니다. */
+function createInitialStateResponse(
+  connectionId: string,
+  operationId: string
+): AwsImportAccessCommandResponse {
+  const state: AwsImportAccessState = {
+    connectionId,
+    status: "check_required",
+    nextAction: "prepare_manager",
+    coreReady: false,
+    limitedServiceLabels: [],
+    lastCheckedAt: null,
+    operationId: null,
+    safeSummary: null
+  };
+  return {
+    operationId,
+    state,
+    nextAction: state.nextAction
+  };
+}
+
+const RETRY_NEXT_ACTION_BY_OPERATION_KIND: Readonly<Record<string, AwsImportAccessNextAction>> = {
+  prepare_manager: "prepare_manager",
+  check_manager: "check_manager",
+  preview_policy: "preview_policy",
+  apply_policy: "preview_policy",
+  check_reads: "check_reads",
+  prepare_cleanup: "check_cleanup",
+  check_cleanup: "check_cleanup"
+};
+
+const RETRY_NEXT_ACTION_BY_SAFE_ERROR_CODE: Readonly<
+  Record<string, AwsImportAccessNextAction>
+> = {
+  approval_state_changed: "preview_policy",
+  policy_stack_retry: "preview_policy",
+  policy_not_ready: "check_reads",
+  probe_retry: "check_reads",
+  manager_drifted: "prepare_manager",
+  manager_not_ready: "check_manager",
+  cleanup_retry: "check_cleanup",
+  cleanup_policy_artifact_pending: "check_cleanup",
+  cleanup_manager_artifact_pending: "check_cleanup"
+};
+
+/** gg: retry_required는 operation metadata를 우선하고 safe code는 legacy fallback으로만 사용합니다. */
 export function nextActionForRecord(
-  record: Pick<AwsImportAccessRecord, "status" | "operationKind">
+  record: Pick<AwsImportAccessRecord, "status" | "operationKind" | "safeErrorCode">
 ): AwsImportAccessNextAction | null {
   if (record.status === "retry_required") {
-    switch (record.operationKind) {
-      case "prepare_manager": return "prepare_manager";
-      case "check_manager": return "check_manager";
-      case "preview_policy":
-      case "apply_policy": return "preview_policy";
-      case "check_reads": return "check_reads";
-      case "prepare_cleanup":
-      case "check_cleanup": return "check_cleanup";
-      default: return null;
-    }
+    return (record.operationKind
+      ? RETRY_NEXT_ACTION_BY_OPERATION_KIND[record.operationKind]
+      : undefined) ?? (record.safeErrorCode
+      ? RETRY_NEXT_ACTION_BY_SAFE_ERROR_CODE[record.safeErrorCode]
+      : undefined) ?? null;
   }
   switch (record.status) {
     case "check_required": return "prepare_manager";
