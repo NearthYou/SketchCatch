@@ -153,8 +153,12 @@ The capability that may infer, add, remove, or change Resources, relationships, 
 _Avoid_: Auto layout, coordinate cleanup, diagram beautifier
 
 **Board Auto Arrange**:
-A user-requested visual cleanup that may change only position, size, presentation grouping, and edge routing. It never adds, removes, or changes Resources, relationships, or configuration. `Keep Original` closes the preview without mutation, while `Use This Arrangement` is the single explicit approval that applies the preview without a second confirmation dialog.
+A user-requested visual cleanup that may change only position, size, decorative Presentation Frames, and edge routing. It never adds, removes, or changes Resources, relationships, configuration, or containment. Up to three distinct semantically safe visual candidates remain available for user comparison even when measured layout findings do not improve; the original is a comparison baseline rather than a competing candidate, and quality findings rank and explain changed candidates but never gate them. Desktop uses a thumbnail gallery above a side-by-side original and selected-candidate comparison. Mobile uses a horizontal thumbnail gallery and a same-viewport Original/Arrangement toggle. Each preview explains up to three concrete changes with Resource display names and useful reasons before any aggregate count, and explicitly states that Resources, relationships, and configuration remain unchanged. Switching candidates never mutates the Board. `Keep Original` closes the preview without mutation, while `Use This Arrangement` is the single explicit approval that applies the selected preview without a second confirmation dialog.
 _Avoid_: Architecture improvement, Resource optimization, automatic fix
+
+**Presentation Frame**:
+A presentation-only title and background frame that visually surrounds nearby Board elements without recording membership, parenthood, containment, relationships, or provider meaning. It uses the existing Design Group representation. Board Auto Arrange owns a frame only when its Design kind, Design Group type, catalog identity, and `board-auto-frame:` ID prefix all match; only an unlocked frame with this full identity may be automatically merged or removed on a later arrange request. User-authored Design Groups may receive position and size proposals but are never silently claimed, merged, or deleted by Board Auto Arrange. A frame stays where it was placed after ordinary Board edits until the user changes it or requests Board Auto Arrange again.
+_Avoid_: Group, container, parent area, architecture layer
 
 **Compilation Distance**:
 The relative amount of semantic and visual change between an input Practice Architecture and an Architecture Board Compiler proposal. Resource deletion has greater distance than configuration, relationship, containment, size, or position changes.
@@ -169,8 +173,16 @@ The Reverse Engineering result that preserves the discovered Resources, relation
 _Avoid_: Raw provider response, automatically improved architecture, Compiler result
 
 **AWS Import Access Update**:
-A user-approved permission update for an existing verified AWS connection so Reverse Engineering can read supported services. It keeps the same connection identity, does not create a duplicate connection, and re-verifies the same role after the user approves the AWS-side update.
-_Avoid_: New AWS connection, automatic IAM mutation, reconnect account
+A user-approved permission update owned by AWS connection settings so Reverse Engineering can read supported services. It preserves the existing connection identity, Role, original Stack, deployment policy, and deployment verification. Reverse Engineering may detect missing access and route the user to this flow, but never changes AWS permissions itself. Cleanup removes only the access artifacts owned by this update; an uncertain cleanup remains inactive and retryable.
+_Avoid_: New AWS connection, full deployment permission refresh, separate import Role, shared account manager Role, reconnect account
+
+**AWS Import Access Stack Pair**:
+Two connection-scoped CloudFormation stacks used only to manage Reverse Engineering access. The Manager Stack owns narrowly limited management and cleanup-verification access. The Policy Stack owns only the Reverse Engineering read policy attached to the existing connection Role. Cleanup always removes the Policy Stack before the Manager Stack. Neither stack owns the connection Role, original connection Stack, or deployment policy.
+_Avoid_: Original connection Stack, deployment Stack, separate import connection
+
+**AWS Import Readiness**:
+A per-connection, per-region capability state for Reverse Engineering that is separate from deployment connection verification. Core readers cover EC2 networking and compute, S3, RDS, Load Balancer, ECS, and CloudFront; all must accept their bounded read request before the connection is ready for normal import. Resource Explorer, Tagging API, IAM, KMS, CloudWatch and Logs, API Gateway, Lambda, and AMI are expanded readers whose failure produces `ready with limited details` rather than blocking core import. An empty list is a successful read, Resource Explorer not being configured is distinct from access denial, and transient provider errors are retryable rather than permission conclusions.
+_Avoid_: AWS connection status, deployment verification, Stack status
 
 **Partial Architecture Import**:
 A usable Reverse Engineering result containing every Resource successfully discovered even when one or more supported services could not be read. The Board remains visible and the UI gives a short notice plus an AWS Import Access Update action instead of blocking the result or exposing provider errors. `Use Imported Items Only` is the single explicit approval for applying this incomplete result and makes the incompleteness visible without a second confirmation dialog.
