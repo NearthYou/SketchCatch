@@ -5,6 +5,7 @@ import { z } from "zod";
 import type {
   ApiErrorResponse,
   ArchitectureJson,
+  DiagramJson,
   ProjectDraftConflictResponse
 } from "@sketchcatch/types";
 import { RESOURCE_TYPES } from "@sketchcatch/types";
@@ -90,7 +91,14 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 
 const reverseEngineeringSourceSchema = z.object({
   sourceScanId: z.string().min(1),
-  draftId: z.string().min(1)
+  draftId: z.string().min(1),
+  sourceNodeIds: z.array(z.string().min(1)).optional(),
+  sourceKind: z.enum(["saved_scan", "preview_scan"]).optional()
+});
+
+const requiredReverseEngineeringSourceSchema = reverseEngineeringSourceSchema.extend({
+  sourceNodeIds: z.array(z.string().min(1)),
+  sourceKind: z.literal("preview_scan")
 });
 
 const createArchitectureBodySchema = z.object({
@@ -102,7 +110,8 @@ const createArchitectureBodySchema = z.object({
 
 const createReverseEngineeringProjectBodySchema = createProjectBodySchema.extend({
   diagramJson: diagramJsonSchema,
-  architectureJson: architectureJsonSchema
+  architectureJson: architectureJsonSchema,
+  reverseEngineering: requiredReverseEngineeringSourceSchema
 });
 
 const assetTypeSchema = z.enum([
@@ -254,7 +263,10 @@ export async function registerProjectRoutes(
         .values({
           id: randomUUID(),
           projectId,
-          diagramJson: body.diagramJson,
+          diagramJson: attachReverseEngineeringSourceToDiagram(
+            body.diagramJson,
+            body.reverseEngineering
+          ),
           terraformFiles: null,
           revision: 1
         })
@@ -266,7 +278,10 @@ export async function registerProjectRoutes(
           projectId,
           version: 1,
           source: "imported",
-          architectureJson: body.architectureJson
+          architectureJson: attachReverseEngineeringSource(
+            body.architectureJson,
+            body.reverseEngineering
+          )
         })
         .returning();
 
@@ -848,16 +863,57 @@ function attachReverseEngineeringSource(
     return architectureJson;
   }
 
+  const sourceNodeIds = reverseEngineering.sourceNodeIds
+    ? new Set(reverseEngineering.sourceNodeIds)
+    : null;
+
   return {
     ...architectureJson,
-    nodes: architectureJson.nodes.map((node) => ({
-      ...node,
-      config: {
-        ...node.config,
-        reverseEngineeringSourceScanId: reverseEngineering.sourceScanId,
-        reverseEngineeringDraftId: reverseEngineering.draftId
+    nodes: architectureJson.nodes.map((node) =>
+      sourceNodeIds && !sourceNodeIds.has(node.id)
+        ? node
+        : {
+            ...node,
+            config: {
+              ...node.config,
+              reverseEngineeringSourceScanId: reverseEngineering.sourceScanId,
+              reverseEngineeringDraftId: reverseEngineering.draftId,
+              ...(reverseEngineering.sourceKind
+                ? { reverseEngineeringSourceKind: reverseEngineering.sourceKind }
+                : {})
+            }
+          }
+    )
+  };
+}
+
+// 새 Project의 Draft도 Snapshot과 같은 source ownership에 속한 node만 추적합니다.
+function attachReverseEngineeringSourceToDiagram(
+  diagramJson: DiagramJson,
+  reverseEngineering: z.infer<typeof requiredReverseEngineeringSourceSchema>
+): DiagramJson {
+  const sourceNodeIds = new Set(reverseEngineering.sourceNodeIds);
+
+  return {
+    ...diagramJson,
+    nodes: diagramJson.nodes.map((node) => {
+      if (!sourceNodeIds.has(node.id) || !node.parameters) {
+        return node;
       }
-    }))
+
+      return {
+        ...node,
+        parameters: {
+          ...node.parameters,
+          values: {
+            ...node.parameters.values,
+            reverseEngineeringSourceScanId: reverseEngineering.sourceScanId,
+            reverseEngineeringDraftId: reverseEngineering.draftId,
+            reverseEngineeringSourceKind: reverseEngineering.sourceKind
+          }
+        }
+      };
+    })
   };
 }
 

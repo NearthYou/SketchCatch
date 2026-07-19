@@ -358,9 +358,22 @@ export type CreateProjectRequest = {
   description?: string | undefined;
 };
 
+export type ReverseEngineeringSourceKind = "saved_scan" | "preview_scan";
+
+export type ReverseEngineeringSourceReference = {
+  sourceScanId: string;
+  draftId: string;
+  sourceNodeIds?: string[] | undefined;
+  sourceKind?: ReverseEngineeringSourceKind | undefined;
+};
+
 export type CreateReverseEngineeringProjectRequest = CreateProjectRequest & {
   diagramJson: DiagramJson;
   architectureJson: ArchitectureJson;
+  reverseEngineering: ReverseEngineeringSourceReference & {
+    sourceNodeIds: string[];
+    sourceKind: "preview_scan";
+  };
 };
 
 export type CreateReverseEngineeringProjectResponse = {
@@ -453,12 +466,7 @@ export type ProjectDetailsResponse = {
 export type CreateArchitectureSnapshotRequest = {
   version?: number | undefined;
   source?: string | undefined;
-  reverseEngineering?:
-    | {
-        sourceScanId: string;
-        draftId: string;
-      }
-    | undefined;
+  reverseEngineering?: ReverseEngineeringSourceReference | undefined;
   architectureJson: ArchitectureJson;
 };
 

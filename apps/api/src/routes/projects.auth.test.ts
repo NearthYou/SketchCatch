@@ -139,6 +139,42 @@ test("POST /api/projects/reverse-engineering atomically creates Project, Draft, 
   assert.equal(fakeDb.projectDraftRows[0]?.revision, 1);
   assert.equal(fakeDb.architectureRows[0]?.projectId, fakeDb.projectRows[0]?.id);
   assert.equal(fakeDb.architectureRows[0]?.source, "imported");
+  assert.equal(
+    fakeDb.projectDraftRows[0]?.diagramJson.nodes[0]?.parameters?.values[
+      "reverseEngineeringSourceScanId"
+    ],
+    "preview-scan-1"
+  );
+  assert.equal(
+    fakeDb.projectDraftRows[0]?.diagramJson.nodes[1]?.parameters?.values[
+      "reverseEngineeringSourceScanId"
+    ],
+    "previous-scan"
+  );
+  assert.equal(
+    fakeDb.projectDraftRows[0]?.diagramJson.nodes[0]?.parameters?.values[
+      "reverseEngineeringSourceKind"
+    ],
+    "preview_scan"
+  );
+  assert.equal(
+    fakeDb.architectureRows[0]?.architectureJson.nodes[0]?.config[
+      "reverseEngineeringSourceScanId"
+    ],
+    "preview-scan-1"
+  );
+  assert.equal(
+    fakeDb.architectureRows[0]?.architectureJson.nodes[1]?.config[
+      "reverseEngineeringSourceScanId"
+    ],
+    "previous-scan"
+  );
+  assert.equal(
+    fakeDb.architectureRows[0]?.architectureJson.nodes[0]?.config[
+      "reverseEngineeringSourceKind"
+    ],
+    "preview_scan"
+  );
   assert.equal(response.json().draft.revision, 1);
   assert.equal(response.json().architecture.source, "imported");
 
@@ -220,7 +256,9 @@ test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and dr
       source: "imported",
       reverseEngineering: {
         sourceScanId: "scan-1",
-        draftId: "draft-scan-1"
+        draftId: "draft-scan-1",
+        sourceNodeIds: ["resource-vpc-main"],
+        sourceKind: "saved_scan"
       },
       architectureJson: {
         nodes: [
@@ -231,6 +269,18 @@ test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and dr
             positionX: 0,
             positionY: 0,
             config: {}
+          },
+          {
+            id: "resource-vpc-existing",
+            type: "VPC",
+            label: "Existing VPC",
+            positionX: 240,
+            positionY: 0,
+            config: {
+              reverseEngineeringSourceScanId: "previous-scan",
+              reverseEngineeringDraftId: "previous-draft",
+              reverseEngineeringSourceKind: "saved_scan"
+            }
           }
         ],
         edges: []
@@ -239,10 +289,13 @@ test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and dr
   });
   const savedArchitecture = fakeDb.architectureRows[0];
   const savedNode = savedArchitecture?.architectureJson.nodes[0];
+  const existingNode = savedArchitecture?.architectureJson.nodes[1];
 
   assert.equal(response.statusCode, 201);
   assert.equal(savedNode?.config["reverseEngineeringSourceScanId"], "scan-1");
   assert.equal(savedNode?.config["reverseEngineeringDraftId"], "draft-scan-1");
+  assert.equal(savedNode?.config["reverseEngineeringSourceKind"], "saved_scan");
+  assert.equal(existingNode?.config["reverseEngineeringSourceScanId"], "previous-scan");
 
   await app.close();
 });
@@ -1116,13 +1169,73 @@ function makeProjectDraft(overrides: Partial<ProjectDraftRow> = {}): ProjectDraf
 function createReverseEngineeringProjectPayload() {
   return {
     name: "Imported AWS project",
+    reverseEngineering: {
+      sourceScanId: "preview-scan-1",
+      draftId: "draft-preview-scan-1",
+      sourceNodeIds: ["imported-vpc"],
+      sourceKind: "preview_scan" as const
+    },
     diagramJson: {
-      nodes: [],
+      nodes: [
+        {
+          id: "imported-vpc",
+          type: "aws_vpc",
+          kind: "resource" as const,
+          position: { x: 0, y: 0 },
+          size: { width: 168, height: 96 },
+          label: "Imported VPC",
+          locked: false,
+          zIndex: 1,
+          parameters: {
+            resourceType: "aws_vpc",
+            resourceName: "imported",
+            fileName: "main",
+            values: {}
+          }
+        },
+        {
+          id: "existing-vpc",
+          type: "aws_vpc",
+          kind: "resource" as const,
+          position: { x: 240, y: 0 },
+          size: { width: 168, height: 96 },
+          label: "Existing VPC",
+          locked: false,
+          zIndex: 1,
+          parameters: {
+            resourceType: "aws_vpc",
+            resourceName: "existing",
+            fileName: "main",
+            values: {
+              reverseEngineeringSourceScanId: "previous-scan",
+              reverseEngineeringDraftId: "previous-draft"
+            }
+          }
+        }
+      ],
       edges: [],
       viewport: { x: 0, y: 0, zoom: 1 }
     },
     architectureJson: {
-      nodes: [],
+      nodes: [
+        {
+          id: "imported-vpc",
+          type: "VPC" as const,
+          positionX: 0,
+          positionY: 0,
+          config: {}
+        },
+        {
+          id: "existing-vpc",
+          type: "VPC" as const,
+          positionX: 240,
+          positionY: 0,
+          config: {
+            reverseEngineeringSourceScanId: "previous-scan",
+            reverseEngineeringDraftId: "previous-draft"
+          }
+        }
+      ],
       edges: []
     }
   };

@@ -4,8 +4,92 @@ import type { DiagramJson } from "@sketchcatch/types";
 
 import {
   applyExistingReverseEngineeringPreview,
-  createReverseEngineeringApplyPreview
+  attachReverseEngineeringSourceToDiagram,
+  createReverseEngineeringApplyPreview,
+  getSavedReverseEngineeringSourceScanIds,
+  selectReverseEngineeringOrganizationCandidate
 } from "./reverse-engineering-apply-flow";
+
+test("Reverse provenance is added only to nodes owned by this scan", () => {
+  const diagram = createDiagram();
+  diagram.nodes.push({
+    ...structuredClone(diagram.nodes[0]!),
+    id: "existing-vpc",
+    parameters: {
+      ...structuredClone(diagram.nodes[0]!.parameters!),
+      values: {
+        reverseEngineeringSourceScanId: "previous-scan",
+        reverseEngineeringDraftId: "previous-draft"
+      }
+    }
+  });
+
+  const sourced = attachReverseEngineeringSourceToDiagram({
+    diagram,
+    sourceScanId: "new-scan",
+    draftId: "new-draft",
+    sourceNodeIds: ["vpc-1"],
+    sourceKind: "preview_scan"
+  });
+
+  assert.equal(
+    sourced.nodes[0]?.parameters?.values["reverseEngineeringSourceScanId"],
+    "new-scan"
+  );
+  assert.equal(
+    sourced.nodes[1]?.parameters?.values["reverseEngineeringSourceScanId"],
+    "previous-scan"
+  );
+  assert.equal(
+    sourced.nodes[0]?.parameters?.values["reverseEngineeringSourceKind"],
+    "preview_scan"
+  );
+  assert.equal(
+    diagram.nodes[0]?.parameters?.values["reverseEngineeringSourceScanId"],
+    undefined
+  );
+});
+
+test("deleted-source tracking ignores ephemeral preview provenance", () => {
+  const diagram = createDiagram();
+  diagram.nodes.push({
+    ...structuredClone(diagram.nodes[0]!),
+    id: "saved-vpc",
+    parameters: {
+      ...structuredClone(diagram.nodes[0]!.parameters!),
+      values: {
+        reverseEngineeringSourceScanId: "saved-scan",
+        reverseEngineeringSourceKind: "saved_scan"
+      }
+    }
+  });
+  const sourced = attachReverseEngineeringSourceToDiagram({
+    diagram,
+    sourceScanId: "preview-scan",
+    draftId: "preview-draft",
+    sourceNodeIds: ["vpc-1"],
+    sourceKind: "preview_scan"
+  });
+
+  assert.deepEqual(getSavedReverseEngineeringSourceScanIds(sourced), ["saved-scan"]);
+});
+
+test("mode-specific organization selection never applies an independently ranked replace candidate", () => {
+  const replaceCandidate = createOrganizationCandidate("arrangement-2", 100);
+  const appendCandidate = createOrganizationCandidate("arrangement-1", 400);
+
+  const selected = selectReverseEngineeringOrganizationCandidate({
+    candidates: {
+      replace: [replaceCandidate],
+      append: [appendCandidate]
+    },
+    mode: "append",
+    selectedCandidateId: replaceCandidate.id
+  });
+
+  assert.equal(selected, appendCandidate);
+  assert.equal(selected?.diagram.nodes[0]?.position.x, 400);
+});
 
 test("Reverse preview keeps the exact persisted revision and Board fingerprint", () => {
   const diagram = createDiagram();
@@ -194,4 +278,23 @@ function moveDiagram(diagram: DiagramJson, x = 180): DiagramJson {
   const moved = structuredClone(diagram);
   moved.nodes[0]!.position = { x, y: 80 };
   return moved;
+}
+
+function createOrganizationCandidate(id: string, x: number) {
+  const diagram = moveDiagram(createDiagram(), x);
+
+  return {
+    id,
+    diagram,
+    visualDiff: {
+      movedNodeIds: ["vpc-1"],
+      resizedNodeIds: [],
+      reroutedEdgeIds: [],
+      addedFrameIds: [],
+      changedFrameIds: [],
+      removedFrameIds: []
+    },
+    explanations: [],
+    visualFingerprint: `${id}-fingerprint`
+  };
 }

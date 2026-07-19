@@ -101,7 +101,9 @@ function renderPanel(
   placement: "original" | "compiled",
   options: {
     readonly applyMessage?: string | null;
+    readonly applicationMode?: ReverseEngineeringResultPanelProps["applicationMode"];
     readonly applyState?: ReverseEngineeringResultPanelProps["applyState"];
+    readonly additionCount?: number;
     readonly boardNodeCount?: number;
     readonly hasCurrentBoardResources?: boolean;
     readonly coverage?: ReverseEngineeringServiceCoverage;
@@ -111,10 +113,14 @@ function renderPanel(
 ): string {
   const props: ReverseEngineeringResultPanelProps = {
     applyMessage: options.applyMessage ?? null,
+    applicationMode: options.applicationMode ?? "replace",
     applyState: options.applyState ?? "idle",
     boardCandidates: [],
     comparison: {
-      additions: [],
+      additions: Array.from({ length: options.additionCount ?? 0 }, (_, index) => ({
+        nodeId: `addition-${index}`,
+        label: `Addition ${index}`
+      })),
       changes: [],
       deletions: [],
       duplicates: [],
@@ -124,9 +130,10 @@ function renderPanel(
     hasCurrentBoardResources: options.hasCurrentBoardResources ?? false,
     logs: [],
     onAppendToCurrentBoard() {},
+    onApplicationModeChange() {},
     onCompilePlacement() {},
     onKeepOriginalPlacement() {},
-    onOpenAsNewBoard() {},
+    onReplaceCurrentBoard() {},
     onRetryScan() {},
     onSelectOrganizationCandidate() {},
     organizationCandidates: options.organizationCandidates ?? [],
@@ -270,4 +277,19 @@ test("부분 결과를 기존 보드에 적용할 때 교체와 추가를 분명
   assert.match(html, />현재 보드를 가져온 항목으로 바꾸기</);
   assert.match(html, />가져온 항목만 현재 보드에 추가</);
   assert.doesNotMatch(html, />가져온 항목만 사용</);
+});
+
+test("현재 보드에서는 실제로 적용할 replace 또는 append 배치를 먼저 선택해 미리본다", () => {
+  const html = renderPanel("compiled", {
+    additionCount: 1,
+    applicationMode: "append",
+    boardNodeCount: 1,
+    hasCurrentBoardResources: true,
+    organizationCandidates
+  });
+
+  assert.match(html, /aria-pressed="false"[^>]*>현재 보드 교체 미리보기</);
+  assert.match(html, /aria-pressed="true"[^>]*>현재 보드 추가 미리보기</);
+  assert.match(html, /<button[^>]*disabled=""[^>]*><span>현재 보드를 가져온 항목으로 바꾸기<\/span>/);
+  assert.match(html, /<button(?![^>]*disabled="")[^>]*>현재 보드에 추가<\/button>/);
 });

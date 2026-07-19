@@ -8,6 +8,7 @@ import type {
 } from "@sketchcatch/types";
 import type { ReactNode } from "react";
 import type {
+  ReverseEngineeringBoardApplicationMode,
   ReverseEngineeringBoardComparison,
   ReverseEngineeringPlacement
 } from "./reverse-engineering-board-application";
@@ -23,6 +24,7 @@ import styles from "./reverse-engineering.module.css";
 export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "partial" | "error";
 export type ReverseEngineeringResultPanelProps = {
   readonly applyMessage: string | null;
+  readonly applicationMode: ReverseEngineeringBoardApplicationMode;
   readonly applyState: ReverseEngineeringApplyState;
   readonly boardCandidates: readonly ReverseEngineeringBoardCandidate[];
   readonly comparison: ReverseEngineeringBoardComparison;
@@ -30,9 +32,10 @@ export type ReverseEngineeringResultPanelProps = {
   readonly hasCurrentBoardResources: boolean;
   readonly logs: ReverseEngineeringScanLogLine[];
   readonly onAppendToCurrentBoard: () => void;
+  readonly onApplicationModeChange: (mode: ReverseEngineeringBoardApplicationMode) => void;
   readonly onCompilePlacement: () => void;
   readonly onKeepOriginalPlacement: () => void;
-  readonly onOpenAsNewBoard: () => void;
+  readonly onReplaceCurrentBoard: () => void;
   readonly onRetryScan: () => void;
   readonly onSelectOrganizationCandidate: (candidateId: string) => void;
   readonly organizationCandidates: readonly BoardAutoOrganizeCandidate[];
@@ -46,14 +49,16 @@ export type ReverseEngineeringResultPanelProps = {
 // 스캔 결과와 사용자가 누를 적용 버튼을 한 화면에 모아 보여줍니다.
 export function ReverseEngineeringResultPanel({
   applyMessage,
+  applicationMode,
   applyState,
   comparison,
   createProjectOnApply,
   hasCurrentBoardResources,
   onAppendToCurrentBoard,
+  onApplicationModeChange,
   onCompilePlacement,
   onKeepOriginalPlacement,
-  onOpenAsNewBoard,
+  onReplaceCurrentBoard,
   onRetryScan,
   onSelectOrganizationCandidate,
   organizationCandidates,
@@ -152,6 +157,26 @@ export function ReverseEngineeringResultPanel({
             ? "Resource와 관계와 설정은 그대로 두고, 위치와 연결선만 정리한 모습입니다."
             : "가져온 Resource와 관계와 설정을 바꾸지 않은 상태를 먼저 보여드립니다."}
         </p>
+        {hasCurrentBoardResources ? (
+          <div className={styles.placementActions} role="group" aria-label="적용 방식 미리보기">
+            <button
+              aria-pressed={applicationMode === "replace"}
+              className={styles.secondaryButton}
+              onClick={() => onApplicationModeChange("replace")}
+              type="button"
+            >
+              현재 보드 교체 미리보기
+            </button>
+            <button
+              aria-pressed={applicationMode === "append"}
+              className={styles.secondaryButton}
+              onClick={() => onApplicationModeChange("append")}
+              type="button"
+            >
+              현재 보드 추가 미리보기
+            </button>
+          </div>
+        ) : null}
         <div className={styles.placementActions} role="group" aria-label="배치 미리보기 선택">
           <button
             aria-pressed={placement === "compiled"}
@@ -208,8 +233,12 @@ export function ReverseEngineeringResultPanel({
         <div className={styles.buttonRow}>
           <button
             className={styles.primaryButton}
-            disabled={isApplying || !hasApplicableResources}
-            onClick={onOpenAsNewBoard}
+            disabled={
+              isApplying ||
+              !hasApplicableResources ||
+              (hasCurrentBoardResources && applicationMode !== "replace")
+            }
+            onClick={onReplaceCurrentBoard}
             type="button"
           >
             <span>{primaryApplyLabel}</span>
@@ -218,7 +247,10 @@ export function ReverseEngineeringResultPanel({
             <button
               className={styles.secondaryButton}
               disabled={
-                isApplying || !hasApplicableResources || comparison.additions.length === 0
+                isApplying ||
+                !hasApplicableResources ||
+                comparison.additions.length === 0 ||
+                applicationMode !== "append"
               }
               onClick={onAppendToCurrentBoard}
               type="button"
@@ -303,7 +335,9 @@ function getPrimaryApplyLabel({
     return "프로젝트로 만들기";
   }
 
-  return hasCurrentBoardResources ? "새 보드로 열기" : "보드에 적용";
+  return hasCurrentBoardResources
+    ? "현재 보드를 가져온 항목으로 바꾸기"
+    : "보드에 적용";
 }
 
 // 긴 보조 정보는 기본 화면을 가리지 않도록 접을 수 있는 한 묶음으로 보여줍니다.
