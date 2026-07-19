@@ -207,6 +207,9 @@ function toSafeResponse(
     state: result.state,
     nextAction: result.nextAction,
     ...(result.consoleUrl ? { consoleUrl: result.consoleUrl } : {}),
+    ...(result.managerTemplateUrl
+      ? { managerTemplateUrl: result.managerTemplateUrl }
+      : {}),
     ...("approvalId" in result ? { approvalId: result.approvalId } : {})
   };
 }

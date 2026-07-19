@@ -54,6 +54,12 @@ test("all eight import-access routes require auth and expose only safe DTOs", as
     });
     assert.equal(response.statusCode, 200, `${method} ${suffix}: ${response.body}`);
     assert.equal(response.json().connectionId, connectionId);
+    assert.equal(
+      response.json().managerTemplateUrl,
+      suffix === "/manager/prepare"
+        ? "https://private.example/manager-template?signature=short"
+        : undefined
+    );
     assert.doesNotMatch(
       response.body,
       /arn:aws|"Action"|PolicyDocument|TemplateBody|RequestId|serviceRole/u
@@ -137,7 +143,14 @@ function createRouteService(calls: string[]): AwsImportAccessRouteService {
   });
   return {
     async getState() { calls.push("getState"); return response("state"); },
-    async prepareManager() { calls.push("prepareManager"); return response("prepare"); },
+    async prepareManager() {
+      calls.push("prepareManager");
+      return {
+        ...response("prepare"),
+        consoleUrl: "https://ap-northeast-2.console.aws.amazon.com/cloudformation/home",
+        managerTemplateUrl: "https://private.example/manager-template?signature=short"
+      };
+    },
     async checkManager() { calls.push("checkManager"); return response("manager"); },
     async previewPolicy() {
       calls.push("previewPolicy");

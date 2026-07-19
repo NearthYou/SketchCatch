@@ -211,7 +211,12 @@ test("Manager preparation uses Quick Create only when absent and exact update wh
     const modes: unknown[] = [];
     fixture.gateway.prepareManager = async (input) => {
       modes.push(input.mode);
-      return { consoleUrl: "https://console.example/manager" };
+      return {
+        consoleUrl: "https://console.example/manager",
+        ...(input.mode.kind === "update"
+          ? { managerTemplateUrl: "https://private.example/manager-template?signature=short" }
+          : {})
+      };
     };
 
     const result = await fixture.service.prepareManager(fixture.ownerInput);
@@ -224,6 +229,12 @@ test("Manager preparation uses Quick Create only when absent and exact update wh
     );
     assert.equal(result.state.status, "manager_approval_required");
     assert.equal(result.consoleUrl, "https://console.example/manager");
+    assert.equal(
+      (result as unknown as { managerTemplateUrl?: string }).managerTemplateUrl,
+      scenario === "owned_older"
+        ? "https://private.example/manager-template?signature=short"
+        : undefined
+    );
   }
 });
 

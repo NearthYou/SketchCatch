@@ -137,7 +137,12 @@ export function createAwsImportAccessService(
               : "Manager 준비 상태를 다시 확인해 주세요."
         }
       });
-      return toCommandResponse(next, operationId, prepared?.consoleUrl);
+      return toCommandResponse(
+        next,
+        operationId,
+        prepared?.consoleUrl,
+        prepared?.managerTemplateUrl
+      );
     },
 
     // gg: Manager는 tag/output만이 아니라 exact Template hash까지 확인한 뒤에만 승인 단계로 갑니다.
@@ -779,14 +784,16 @@ function toPublicState(record: AwsImportAccessRecord): AwsImportAccessState {
 function toCommandResponse(
   record: AwsImportAccessRecord,
   operationId: string,
-  consoleUrl?: string
+  consoleUrl?: string,
+  managerTemplateUrl?: string
 ): AwsImportAccessCommandResponse {
   const state = toPublicState(record);
   return {
     operationId,
     state,
     nextAction: state.nextAction,
-    ...(consoleUrl ? { consoleUrl } : {})
+    ...(consoleUrl ? { consoleUrl } : {}),
+    ...(managerTemplateUrl ? { managerTemplateUrl } : {})
   };
 }
 

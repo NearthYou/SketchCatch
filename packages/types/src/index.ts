@@ -2144,6 +2144,7 @@ export type AwsImportAccessCommandResponse = {
   state: AwsImportAccessState;
   nextAction: AwsImportAccessNextAction | null;
   consoleUrl?: string;
+  managerTemplateUrl?: string;
 };
 
 export type AwsConnection = {

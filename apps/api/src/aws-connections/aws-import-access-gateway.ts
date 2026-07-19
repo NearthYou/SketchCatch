@@ -33,10 +33,7 @@ import {
   createAwsImportPolicyStackUpdateInput,
   type AwsImportManagerContract
 } from "./aws-import-access-manager-template.js";
-import {
-  AWS_IMPORT_READERS,
-  createAwsImportReadPolicyDocument
-} from "./aws-import-access-catalog.js";
+import { createAwsImportReadPolicyDocument } from "./aws-import-access-catalog.js";
 
 export type ExpectedManagerStackState = {
   stackId: string;
@@ -95,7 +92,7 @@ export type AwsImportAccessGateway = {
     connection: AwsConnectionRecord;
     contract: AwsImportManagerContract;
     mode: ManagerPreparationMode;
-  }): Promise<{ consoleUrl: string }>;
+  }): Promise<{ consoleUrl: string; managerTemplateUrl?: string }>;
   inspectManager(input: {
     connection: AwsConnectionRecord;
     contract: AwsImportManagerContract;
@@ -167,7 +164,8 @@ export function createAwsImportAccessGateway(
         consoleUrl:
           `https://${connection.region}.console.aws.amazon.com/cloudformation/home?` +
           `region=${connection.region}#/stacks/` +
-          `${mode.kind === "create" ? "create/review" : "stackinfo"}?${query.toString()}`
+          `${mode.kind === "create" ? "create/review" : "stackinfo"}?${query.toString()}`,
+        ...(mode.kind === "update" ? { managerTemplateUrl: published.templateUrl } : {})
       };
     },
 
@@ -257,8 +255,13 @@ export function createAwsImportAccessGateway(
 
     // gg: caller 입력에서 Template URL·Role·tag를 받지 않고 내부 publisher 결과만 사용합니다.
     async createOrUpdatePolicyStack({ connection, contract, operationId, expectedPolicy }) {
-      const client = await createConnectionClient(connection, createClient, assumeConnectionRole);
-      await assertExpectedPolicyStackState(client, contract, expectedPolicy);
+      const clients = await createConnectionClients(
+        connection,
+        createClient,
+        createIamClient,
+        assumeConnectionRole
+      );
+      await assertExpectedPolicyAndIamState(clients, contract, expectedPolicy);
       if (expectedPolicy.kind === "present") {
         if (
           expectedPolicy.contractVersion === contract.policyContractVersion &&
@@ -278,7 +281,7 @@ export function createAwsImportAccessGateway(
         expiresInSeconds: 600,
         now
       });
-      await assertExpectedPolicyStackState(client, contract, expectedPolicy);
+      await assertExpectedPolicyAndIamState(clients, contract, expectedPolicy);
       const request = expectedPolicy.kind === "present"
         ? createAwsImportPolicyStackUpdateInput(
             contract,
@@ -289,8 +292,8 @@ export function createAwsImportAccessGateway(
           )
         : createAwsImportPolicyStackCreateInput(contract, published, { now }, operationId);
       const response = expectedPolicy.kind === "present"
-        ? await client.send(new UpdateStackCommand(request))
-        : await client.send(new CreateStackCommand(request));
+        ? await clients.cloudFormation.send(new UpdateStackCommand(request))
+        : await clients.cloudFormation.send(new CreateStackCommand(request));
       const stackId = getStackId(response) ??
         (expectedPolicy.kind === "present" ? expectedPolicy.stackId : undefined);
       if (!stackId) throw new AwsImportAccessGatewayError("Policy Stack 작업을 시작하지 못했습니다.");
@@ -371,17 +374,6 @@ export class AwsImportAccessGatewayError extends Error {
   }
 }
 
-/** gg: 기존 connection Role만 맡아 해당 account·region의 CloudFormation을 조회합니다. */
-async function createConnectionClient(
-  connection: AwsConnectionRecord,
-  createClient: (config: CloudFormationClientConfig) => CloudFormationClientLike,
-  assumeConnectionRole: (connection: AwsConnectionRecord) => Promise<AwsTemporaryCredentials>
-): Promise<CloudFormationClientLike> {
-  assertUsableConnection(connection);
-  const credentials = await assumeConnectionRole(connection);
-  return createClient({ region: connection.region, credentials });
-}
-
 /** gg: 한 번 얻은 exact connection credentials를 CloudFormation과 IAM read client가 공유합니다. */
 async function createConnectionClients(
   connection: AwsConnectionRecord,
@@ -447,29 +439,56 @@ async function getStackTemplate(
   return response.TemplateBody ?? null;
 }
 
-/** gg: publication network window 양쪽에서 승인한 Policy current state를 똑같이 확인합니다. */
+/** gg: publication 양쪽에서 approved Stack과 full IAM state를 같은 gate로 확인합니다. */
+async function assertExpectedPolicyAndIamState(
+  clients: { cloudFormation: CloudFormationClientLike; iam: IamClientLike },
+  contract: AwsImportManagerContract,
+  expected: ExpectedPolicyStackState
+): Promise<void> {
+  const policyDocument = await assertExpectedPolicyStackState(
+    clients.cloudFormation,
+    contract,
+    expected
+  );
+  if (!await verifyManagerIamResources(clients.iam, contract, policyDocument)) {
+    throw new AwsImportAccessGatewayError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
+  }
+}
+
+/** gg: exact current Policy document를 IAM default-version 검증에도 그대로 사용합니다. */
 async function assertExpectedPolicyStackState(
   client: CloudFormationClientLike,
   contract: AwsImportManagerContract,
   expected: ExpectedPolicyStackState
-): Promise<void> {
+): Promise<unknown | null> {
   const current = await describeStack(
     client,
     expected.kind === "present" ? expected.stackId : contract.policyStackName
   );
-  const valid = expected.kind === "absent"
-    ? current === null
-    : current !== null &&
-      current.StackId === expected.stackId &&
-      verifyExpectedPolicyStack(
-        current,
-        await getStackTemplate(client, expected.stackId),
-        contract,
-        expected
-      );
-  if (!valid) {
+  if (expected.kind === "absent") {
+    if (current === null) return null;
     throw new AwsImportAccessGatewayError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
   }
+  const templateBody = await getStackTemplate(client, expected.stackId);
+  if (
+    current === null ||
+    current.StackId !== expected.stackId ||
+    !verifyExpectedPolicyStack(current, templateBody, contract, expected)
+  ) {
+    throw new AwsImportAccessGatewayError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
+  }
+  if (
+    expected.contractVersion === contract.policyContractVersion &&
+    expected.templateSha256 === contract.policyTemplateSha256 &&
+    expected.policyFingerprint === contract.policyFingerprint
+  ) {
+    return createAwsImportReadPolicyDocument();
+  }
+  const policyDocument = extractSafeOwnedPolicyDocument(templateBody, contract, expected);
+  if (policyDocument === null) {
+    throw new AwsImportAccessGatewayError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
+  }
+  return policyDocument;
 }
 
 /** gg: Manager Stack의 이름·상태·tag·output·전체 Template을 한 계약으로 확인합니다. */
@@ -683,7 +702,7 @@ function verifyExpectedManagerStack(
   );
 }
 
-/** gg: older Policy는 현재 reader catalog의 action 부분집합인 단일 ManagedPolicy Template만 허용합니다. */
+/** gg: older Policy는 exact stored identity와 read-only verb인 단일 ManagedPolicy만 허용합니다. */
 function extractSafeOwnedPolicyDocument(
   templateBody: string | null,
   contract: AwsImportManagerContract,
@@ -723,10 +742,9 @@ function extractSafeOwnedPolicyDocument(
       statement.Sid !== "ReadImportedArchitecture" || statement.Effect !== "Allow" ||
       statement.Resource !== "*" || !Array.isArray(statement.Action) ||
       statement.Action.length === 0) return null;
-    const allowedActions = new Set(AWS_IMPORT_READERS.flatMap((reader) => reader.actions));
     const actions = statement.Action;
     if (
-      actions.some((action) => typeof action !== "string" || !allowedActions.has(action)) ||
+      actions.some((action) => !isReadOnlyIamAction(action)) ||
       new Set(actions).size !== actions.length
     ) return null;
     if (sha256(JSON.stringify(policy)) !== expected.policyFingerprint) return null;
@@ -743,6 +761,18 @@ function extractSafeOwnedPolicyDocument(
   } catch {
     return null;
   }
+}
+
+/** gg: catalog 변화와 독립적으로 AWS read verb만 허용하고 wildcard와 write verb를 거절합니다. */
+function isReadOnlyIamAction(action: unknown): action is string {
+  if (typeof action !== "string") return false;
+  const match = /^[a-z0-9-]+:([A-Za-z0-9]+)$/u.exec(action);
+  if (!match) return false;
+  const operation = match[1]!;
+  return operation === "GET" ||
+    /^(?:BatchGet|Describe|Get|Head|List|Lookup|Search|Select)(?:[A-Z0-9].*)?$/u.test(
+      operation
+    );
 }
 
 /** gg: apply 직전에는 승인 시점의 current Policy identity를 target 계약과 별도로 확인합니다. */
