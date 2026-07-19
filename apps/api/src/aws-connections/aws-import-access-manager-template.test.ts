@@ -82,7 +82,7 @@ test("manager control policy is bound to one immutable policy template", () => {
   assert.doesNotMatch(text, /TemplateBody|ResourceTypes/u);
 });
 
-test("cross-region connection keeps Stack region separate from template storage region", () => {
+test("cross-region connection keeps Stack region separate from template storage region", async () => {
   const contract = createAwsImportManagerContract({
     ...connectionFixture,
     region: "ap-northeast-1",
@@ -95,6 +95,26 @@ test("cross-region connection keeps Stack region separate from template storage 
   assert.match(contract.policyStackArn, /^arn:aws:cloudformation:ap-northeast-1:/u);
   assert.match(contract.templateBaseUrl, /\.s3\.ap-northeast-2\.amazonaws\.com\//u);
   assert.match(contract.policyTemplateBaseUrl, /\.s3\.ap-northeast-2\.amazonaws\.com\//u);
+
+  const published = await publishAwsImportCloudFormationTemplateToS3({
+    bucketName: connectionFixture.templateBucketName,
+    region: contract.templateStorageRegion,
+    connectionId: connectionFixture.connectionId,
+    kind: "policy",
+    contractVersion: contract.policyContractVersion,
+    templateBody: contract.policyTemplateBody,
+    expiresInSeconds: 600,
+    now: signedWindowClock,
+    s3Client: { async send() { return {}; } } as unknown as S3Client,
+    signTemplateUrl: async ({ baseUrl }) => createValidPresignedUrl(baseUrl)
+  });
+
+  assert.doesNotThrow(() =>
+    createAwsImportPolicyStackCreateInput(contract, published, { now: signedWindowClock })
+  );
+  assert.doesNotThrow(() =>
+    createAwsImportPolicyStackUpdateInput(contract, published, { now: signedWindowClock })
+  );
 });
 
 test("policy stack create and update inputs accept only the internally published presigned template", async () => {

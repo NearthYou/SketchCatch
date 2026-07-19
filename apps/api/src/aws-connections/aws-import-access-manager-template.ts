@@ -386,7 +386,7 @@ function assertPublishedPolicyTemplate(
       sha256: contract.policyTemplateSha256,
       objectKey: contract.policyTemplateObjectKey,
       baseUrl: contract.policyTemplateBaseUrl,
-      region: contract.region
+      region: contract.templateStorageRegion
     },
     validationOptions
   );
