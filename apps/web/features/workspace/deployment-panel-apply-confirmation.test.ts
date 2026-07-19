@@ -21,6 +21,14 @@ test("apply confirmation can be dismissed after it opens for an approved plan", 
     deploymentPanelSource,
     /showApplyConfirmation \|\| shouldShowApplyButton/
   );
+  assert.match(
+    deploymentPanelSource,
+    /const handledConfirmationDismissRequestIdRef = useRef\(confirmationDismissRequestId\);/
+  );
+  assert.match(
+    deploymentPanelSource,
+    /if \(confirmationDismissRequestId === handledConfirmationDismissRequestIdRef\.current\) \{\s*return;\s*\}/
+  );
 });
 
 test("approved plan actions show deployment before approval revocation", () => {
