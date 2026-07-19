@@ -106,7 +106,13 @@ test("Compiler는 잘못된 관계를 숨기지 않고 diagnostic으로 반환�
     trigger: "reverse-engineering"
   });
 
-  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.dangling_relationship"));
+  const diagnostic = proposal.diagnostics.find(
+    ({ code }) => code === "compiler.dangling_relationship"
+  );
+
+  assert.ok(diagnostic);
+  assert.match(diagnostic.message, /API → missing/);
+  assert.doesNotMatch(diagnostic.message, /관계 dangling/);
 });
 
 test("Compiler changes는 승인 전 proposal일 뿐 현재 Diagram을 mutation하지 않는다", () => {
@@ -120,6 +126,16 @@ test("Compiler changes는 승인 전 proposal일 뿐 현재 Diagram을 mutation�
 
   assert.deepEqual(currentDiagram, before);
   assert.ok(proposal.changes.some(({ action, kind }) => kind === "resource" && action === "add"));
+  assert.ok(proposal.changes.some(({ summary }) => summary === "Resource API 추가"));
+  assert.equal(
+    proposal.changes.some(({ summary }) => summary === "Resource api 추가"),
+    false
+  );
+  assert.ok(proposal.changes.some(({ summary }) => summary === "관계 API → Function 추가"));
+  assert.equal(
+    proposal.changes.some(({ summary }) => summary === "관계 api-function 추가"),
+    false
+  );
   assert.ok(proposal.quality.compilationDistance > 0);
 });
 
@@ -265,12 +281,7 @@ test("Compiler roundtrip은 반복 조립한 Module instance를 서로 섞지 �
     currentDiagram.nodes.flatMap((node) => {
       const source = node.metadata?.moduleSource;
       return source
-        ? [
-            [
-              node.id,
-              { moduleId: source.moduleId, expansionId: source.expandedAt }
-            ] as const
-          ]
+        ? [[node.id, { moduleId: source.moduleId, expansionId: source.expandedAt }] as const]
         : [];
     })
   );
@@ -564,7 +575,17 @@ test("Compiler는 contains/hosts와 Terraform 참조에서 Security Group을 제
       ({ kind, targetIds }) => kind === "containment" && targetIds.includes("instance")
     )
   );
-  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.inferred_containment"));
+  const containmentChange = proposal.changes.find(
+    ({ kind, targetIds }) => kind === "containment" && targetIds.includes("instance")
+  );
+  const containmentDiagnostic = proposal.diagnostics.find(
+    ({ code }) => code === "compiler.inferred_containment"
+  );
+
+  assert.match(containmentChange?.summary ?? "", /Resource App/);
+  assert.doesNotMatch(containmentChange?.summary ?? "", /Resource instance/);
+  assert.match(containmentDiagnostic?.message ?? "", /App/);
+  assert.match(containmentDiagnostic?.message ?? "", /Public subnet/);
 });
 
 test("Compiler는 hosted EKS Cluster를 presentation Area로 만들고 Terraform 참조 관계를 명시한다", () => {
@@ -609,10 +630,16 @@ test("Compiler는 hosted EKS Cluster를 presentation Area로 만들고 Terraform
   assert.equal(cluster?.config["presentationArea"], true);
   assert.equal(nodeGroup?.config["parentAreaNodeId"], "cluster");
   assert.ok(referenceChange);
+  assert.equal(referenceChange.summary, "관계 Node group → Cluster 추가");
   assert.ok(proposal.changes.some(({ kind }) => kind === "presentation"));
-  assert.ok(
-    proposal.diagnostics.some(({ code }) => code === "compiler.inferred_terraform_relationship")
+  const relationshipDiagnostic = proposal.diagnostics.find(
+    ({ code }) => code === "compiler.inferred_terraform_relationship"
   );
+
+  assert.ok(relationshipDiagnostic);
+  assert.match(relationshipDiagnostic.message, /Node group/);
+  assert.match(relationshipDiagnostic.message, /Cluster/);
+  assert.doesNotMatch(relationshipDiagnostic.message, /node-group/);
 });
 
 test("Compiler는 연결된 ASG도 일반 Resource tile로 유지한다", () => {
