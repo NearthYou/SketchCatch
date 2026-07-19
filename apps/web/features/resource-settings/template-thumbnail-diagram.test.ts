@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { brainboardFailedCaptureEvidence } from "../../../../packages/types/src";
+import { TEMPLATE_IDS, brainboardFailedCaptureEvidence } from "../../../../packages/types/src";
 import { isBoardTemplateAvailable, listBoardTemplates } from "./template-library";
 import { createTemplateThumbnailDiagram } from "./template-thumbnail-diagram";
+import { getTemplateThumbnailAsset } from "./template-thumbnail-manifest";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const pagePath = join(currentDir, "../../app/dev/template-thumbnail/page.tsx");
@@ -28,6 +30,18 @@ test("Template thumbnail diagrams expose all 29 available Templates without crea
 
   assert.equal(createTemplateThumbnailDiagram(brainboardFailedCaptureEvidence.id), null);
   assert.equal(createTemplateThumbnailDiagram("unknown-template"), null);
+});
+
+test("authored Template thumbnail manifest hashes match the exact current diagrams", () => {
+  for (const templateId of TEMPLATE_IDS) {
+    const diagram = createTemplateThumbnailDiagram(templateId);
+    assert.ok(diagram, templateId);
+    assert.equal(
+      getTemplateThumbnailAsset(templateId).diagramHash,
+      createHash("sha256").update(JSON.stringify(diagram)).digest("hex"),
+      templateId
+    );
+  }
 });
 
 test("Template thumbnail route is dev-only and captures the real DiagramEditor at 1280 by 720", () => {
