@@ -13,16 +13,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-19 - Remove idle AI banners and compact auto-organize preview
-
-- Removed the idle readiness row from all three AI Workbench scopes while retaining processing, error, stale, approval, and cancel states.
-- Removed the original/result view toggle and reduced the auto-organize card from 520px to 360px with tighter spacing. Focused tests pass 23/23; no broad test suite was run.
-
-### 2026-07-19 - Reduce Board resource label size
-
-- Reduced only icon-tile Resource labels from 18px to 12px while preserving Bold weight, two-line clamping, and the full-name tooltip.
-- The focused DiagramNodeView suite passes 25/25. No broad test suite was run.
-
 ### 2026-07-19 - Replace Pretendard with Regular and Bold LINE Seed Sans KR typography
 
 - Replaced all active Web and smoke-page Pretendard usage with the supplied LINE Seed Sans KR Thin, Regular, and Bold WOFF2 files and the official licensing notice; removed the obsolete Pretendard and intermediate Spoqa assets.
@@ -217,3 +207,9 @@ Short English-only working log for the current agent context. Older records are 
 
 - Reduced only the empty-state top padding shared by the Terraform validation and Architecture issue panels, decreasing the title-to-message gap from 32px to 24px while preserving typography and all outer spacing.
 - The focused typography test passes 4/4. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no CSS or spec issue after the verification record was completed, with no known risk or follow-up required.
+
+### 2026-07-19 - Simplify Live Observation framing
+
+- Removed the marked deployed-architecture label/resource count and pre-session observation intro card, while preserving the right-aligned map guidance and all Deployment controls.
+- Reduced only the `Live Observation` eyebrow from 18px to 12px; the Korean modal title remains unchanged.
+- Focused Live Observation and typography tests pass 26/26. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no standards issue; a spec concern about the right-side guidance size was disproved by the pre-existing later CSS override, with no known risk or follow-up required.

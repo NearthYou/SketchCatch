@@ -81,13 +81,6 @@ export function LiveObservationDiagramMap({
       data-testid="live-observation-architecture-map"
     >
       <header className={styles.liveObservationArchitectureHeader}>
-        <div>
-          <strong>DEPLOYED ARCHITECTURE · READ ONLY</strong>
-          <span>
-            {model.resources.length} Resources
-            {model.capacityModeLabel ? ` · ${model.capacityModeLabel}` : ""}
-          </span>
-        </div>
         <p>
           {getAggregateStateLabel(model.aggregateObservationState)} · 지원 Resource에는 AWS 세션의
           집계 상태를 표시합니다. 개별 Resource API 성공을 의미하지 않습니다. 전체 구조는

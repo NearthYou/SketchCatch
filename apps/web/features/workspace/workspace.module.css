@@ -6467,7 +6467,6 @@
 .liveObservationHeader h2,
 .liveObservationHeader p,
 .liveObservationAudienceUtility p,
-.liveObservationIntro p,
 .liveObservationMessage p,
 .liveObservationControlActivity p {
   margin: 0;
@@ -6501,6 +6500,10 @@
   letter-spacing: 0.06em;
   line-height: 1.3;
   text-transform: uppercase;
+}
+
+.liveObservationEyebrow {
+  font-size: calc(6px + var(--presentation-font-size-increase));
 }
 
 .liveObservationCloseButton {
@@ -6694,7 +6697,6 @@
 }
 
 .liveObservationMessage,
-.liveObservationIntro,
 .liveObservationError {
   border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 10px;
@@ -6709,8 +6711,7 @@
   text-align: center;
 }
 
-.liveObservationMessage p,
-.liveObservationIntro p {
+.liveObservationMessage p {
   color: var(--workspace-muted, #60646c);
   margin-top: 4px;
 }
@@ -6720,13 +6721,6 @@
   border-color: #f3b7b8;
   color: #991b1b;
   margin-bottom: 0;
-}
-
-.liveObservationIntro {
-  align-items: center;
-  background: #ffffff;
-  display: flex;
-  gap: 12px;
 }
 
 .liveObservationEvidenceRail {
@@ -6930,34 +6924,14 @@
   display: flex;
   flex: 0 0 auto;
   gap: 18px;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 11px 16px;
 }
 
-.liveObservationArchitectureHeader > div {
-  display: grid;
-  flex: 0 0 auto;
-  gap: 3px;
-}
-
-.liveObservationArchitectureHeader strong,
-.liveObservationArchitectureHeader span,
-.liveObservationArchitectureHeader p {
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  line-height: 1.45;
-}
-
-.liveObservationArchitectureHeader strong {
-  color: var(--workspace-text, #171717);
-}
-
-.liveObservationArchitectureHeader span,
 .liveObservationArchitectureHeader p {
   color: var(--workspace-muted, #60646c);
-}
-
-.liveObservationArchitectureHeader p {
   font-size: calc(6px + var(--presentation-font-size-increase));
+  line-height: 1.45;
   margin: 0;
   max-width: 610px;
   text-align: right;
