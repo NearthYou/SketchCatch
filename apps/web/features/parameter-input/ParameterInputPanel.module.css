@@ -148,6 +148,15 @@ div.resourceIcon,
   font-size: calc(0.88rem + var(--presentation-font-size-increase) - 3px);
 }
 
+.metadataSection .fieldLabel {
+  font-size: calc(0.85rem + var(--presentation-font-size-increase) - 3px);
+  line-height: 1.25;
+}
+
+.metadataSection .field {
+  gap: 5px;
+}
+
 .input:focus {
   border-color: var(--workspace-accent, #000000);
   box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);
@@ -724,8 +733,8 @@ div.resourceIcon,
 
 .metadataGrid {
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .parameterSummaryBar {
@@ -965,6 +974,12 @@ div.resourceIcon,
 
   .parameterField > .errorText {
     grid-column: 2;
+  }
+}
+
+@container (max-width: 360px) {
+  .metadataGrid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

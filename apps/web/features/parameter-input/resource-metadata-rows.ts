@@ -24,7 +24,7 @@ export function buildResourceMetadataRows(
     {
       editable: true,
       key: "resourceName",
-      label: "Terraform resource name",
+      label: "Terraform name",
       value: parameters.resourceName
     },
     {
