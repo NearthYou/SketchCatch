@@ -124,7 +124,7 @@ export function ReverseEngineeringResultPanel({
         {hasPartialFailure ? (
           <div className={styles.warning} role="alert">
             <strong>일부 항목을 가져오지 못했어요</strong>
-            <p>가져온 항목은 그대로 확인하고 사용할 수 있어요.</p>
+            <p>가져온 항목만 사용해 계속 진행할 수 있어요.</p>
             {hasPermissionFailure ? (
               <a className={styles.secondaryButton} href={permissionRecoveryHref}>
                 환경설정에서 권한 보완
