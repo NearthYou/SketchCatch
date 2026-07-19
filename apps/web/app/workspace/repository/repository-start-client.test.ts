@@ -19,8 +19,8 @@ test("Repository start screen exposes an explicit AI chat fallback", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
 
   assert.match(source, /createPublicRepositoryRecommendation/);
-  assert.match(source, /createPublicRepositoryArchitectureDraftRequest/);
-  assert.match(source, /createAiArchitectureDraft/);
+  assert.doesNotMatch(source, /createPublicRepositoryArchitectureDraftRequest/);
+  assert.doesNotMatch(source, /createAiArchitectureDraft/);
   assert.match(source, /createWorkspaceAiStartHref/);
   assert.match(source, /원하는 구성이 없나요\? AI로 새 설계 만들기/);
   assert.match(source, /className=\{styles\.publicAiFallbackAction\}/);
@@ -32,7 +32,7 @@ test("Repository start screen exposes an explicit AI chat fallback", () => {
   assert.doesNotMatch(source, /Template 없이 AI로 생성/);
 });
 
-test("connected Repository board generation uses the AI Architecture Draft path", () => {
+test("Repository board generation saves the selected Fixed Template directly", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
   const publicBoardBody = source.slice(
     source.indexOf("async function createPublicRepositoryBoard"),
@@ -44,18 +44,20 @@ test("connected Repository board generation uses the AI Architecture Draft path"
   );
 
   assert.match(source, /createConnectedRepositoryBoard/);
-  assert.match(source, /createConnectedRepositoryArchitectureDraftRequest/);
-  assert.match(source, /createAiArchitectureDraft/);
+  assert.doesNotMatch(source, /createConnectedRepositoryArchitectureDraftRequest/);
+  assert.doesNotMatch(source, /createAiArchitectureDraft/);
+  assert.match(publicBoardBody, /saveTemplateBoard\(templateId, publicAnalysis\)/);
+  assert.match(connectedBoardBody, /await saveTemplateBoard\(/);
   assert.doesNotMatch(publicBoardBody, /saveProjectDraft/);
   assert.doesNotMatch(connectedBoardBody, /saveProjectDraft/);
-  assert.match(source, /saveRepositoryBoard\(diagram/);
+  assert.match(source, /await saveRepositoryBoard\(/);
   assert.match(source, /createRepositoryAnalysisRecordPayload/);
   assert.match(source, /onCreateBoard=\{\(templateId\) => void createConnectedRepositoryBoard\(templateId\)\}/);
   assert.doesNotMatch(source, /createRepositoryBoardHref/);
   assert.doesNotMatch(source, /href=\{createRepositoryBoardHref/);
 });
 
-test("public Repository AI draft failures do not masquerade as Repository access failures", () => {
+test("public Repository Template failures do not masquerade as Repository access failures", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
   const publicErrorBody = source.slice(
     source.indexOf('{publicAnalysisState === "architecture_error" && !pendingAnalysisRecord ? ('),
@@ -63,7 +65,7 @@ test("public Repository AI draft failures do not masquerade as Repository access
   );
 
   assert.ok(publicErrorBody.length > 0);
-  assert.match(publicErrorBody, /title="AI 아키텍처를 생성할 수 없습니다"/);
+  assert.match(publicErrorBody, /title="Fixed Template 보드를 생성할 수 없습니다"/);
   assert.match(publicErrorBody, /onClick=\{\(\) => void createPublicRepositoryBoard\(\)\}/);
   assert.match(publicErrorBody, />\s*다시 생성\s*</);
   assert.doesNotMatch(publicErrorBody, /<RepositoryAnalysisRecovery/);

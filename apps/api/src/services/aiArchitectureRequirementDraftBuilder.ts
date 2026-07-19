@@ -1127,6 +1127,55 @@ function addExplicitResourceDependencies(context: DraftBuildContext): void {
   ) {
     addNetworkBoundary(context, { appSubnetCount: 1 });
   }
+
+  const requiresNatGateway = context.explicitResourceDefinitions.some(
+    (definition) => definition.terraformResourceType === "aws_nat_gateway"
+  );
+  const elasticIpDefinition: ExplicitResourceDefinition = {
+    id: "aws-eip",
+    resourceType: "ELASTIC_IP",
+    terraformBlockType: "resource",
+    terraformResourceType: "aws_eip"
+  };
+  if (requiresNatGateway && !hasExplicitResourceDefinition(context, elasticIpDefinition)) {
+    addNode(context, {
+      id: "nat-elastic-ip",
+      type: "ELASTIC_IP",
+      label: "NAT Elastic IP",
+      positionX: 860,
+      positionY: 320,
+      config: {
+        ...createArchitectureResourceDeploymentConfig("aws_eip"),
+        terraformResourceType: "aws_eip"
+      }
+    });
+  }
+
+  const requiresSecurityGroupRule = context.explicitResourceDefinitions.some(
+    (definition) => definition.terraformResourceType === "aws_security_group_rule"
+  );
+  const securityGroupDefinition: ExplicitResourceDefinition = {
+    id: "aws-security-group",
+    resourceType: "SECURITY_GROUP",
+    terraformBlockType: "resource",
+    terraformResourceType: "aws_security_group"
+  };
+  if (
+    requiresSecurityGroupRule &&
+    !hasExplicitResourceDefinition(context, securityGroupDefinition)
+  ) {
+    addNode(context, {
+      id: "security-group",
+      type: "SECURITY_GROUP",
+      label: "Security Group",
+      positionX: 860,
+      positionY: 460,
+      config: {
+        ...createArchitectureResourceDeploymentConfig("aws_security_group"),
+        terraformResourceType: "aws_security_group"
+      }
+    });
+  }
 }
 
 function addExplicitResourceNodes(context: DraftBuildContext): void {

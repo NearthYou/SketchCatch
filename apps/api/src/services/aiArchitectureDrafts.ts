@@ -5676,15 +5676,14 @@ function findStrictRepositoryEvidenceValidationIssues(
     forbiddenTypes.add("COGNITO_USER_POOL_CLIENT");
   }
 
-  const fixedTemplateResourceTypes = new Set(
+  const unexpectedTypes = [...new Set(
     architectureJson.nodes
-      .filter((node) => node.config.templateId === request.templateId)
+      .filter(
+        (node) =>
+          forbiddenTypes.has(node.type) && node.config.templateId !== request.templateId
+      )
       .map((node) => node.type)
-  );
-  const unexpectedTypes = [...forbiddenTypes].filter(
-    (resourceType) =>
-      nodeTypes.has(resourceType) && !fixedTemplateResourceTypes.has(resourceType)
-  );
+  )];
   if (unexpectedTypes.length > 0) {
     issues.push(`Strict repository evidence contains unsupported inferred resources: ${unexpectedTypes.join(", ")}.`);
   }

@@ -51,7 +51,7 @@ const EXPECTED_PRESENTATION_NODES = {
   },
   "ecs-fargate-container-app": {
     user: node("design-user-client", 80, 360),
-    region: node("aws-region", 240, 40, undefined, { width: 2040, height: 840 }),
+    region: node("aws-region", 240, 40, undefined, { width: 2200, height: 840 }),
     "definition-ops-group": node("design-group", 1840, 480, "region", { width: 400, height: 360 }),
     "global-iam-group": node("design-group", 1840, 120, "region", { width: 400, height: 360 })
   },
@@ -163,6 +163,8 @@ const EXPECTED_RESOURCE_PARENTS = {
     repository: "definition-ops-group",
     task: "definition-ops-group",
     "log-group": "definition-ops-group",
+    "scaling-target": "definition-ops-group",
+    "scaling-policy": "definition-ops-group",
     "execution-role": "global-iam-group",
     "execution-policy": "global-iam-group",
     "task-role": "global-iam-group"

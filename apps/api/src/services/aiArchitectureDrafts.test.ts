@@ -87,6 +87,22 @@ test("createArchitectureDraft completes an explicitly requested Internet Gateway
   assert.equal(internetGateway?.config.vpcId, "aws_vpc.vpc_main.id");
 });
 
+test("createArchitectureDraft adds the Elastic IP referenced by an explicit NAT Gateway", () => {
+  const result = createArchitectureDraft({
+    prompt: "Create a Practice Architecture that explicitly includes one AWS NAT Gateway."
+  });
+  const elasticIp = result.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_eip"
+  );
+  const natGateway = result.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_nat_gateway"
+  );
+
+  assert.ok(elasticIp);
+  assert.ok(natGateway);
+  assert.equal(natGateway.config.allocationId, "aws_eip.nat_elastic_ip.id");
+});
+
 test("createArchitectureDraft keeps the required SSM Parameter data-source name", () => {
   const result = createArchitectureDraft({
     prompt: "Create a Practice Architecture that explicitly includes an AWS SSM Parameter data source."
