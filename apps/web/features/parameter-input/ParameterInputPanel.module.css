@@ -733,8 +733,8 @@ div.resourceIcon,
 
 .metadataGrid {
   display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .parameterSummaryBar {
@@ -974,12 +974,6 @@ div.resourceIcon,
 
   .parameterField > .errorText {
     grid-column: 2;
-  }
-}
-
-@container (max-width: 360px) {
-  .metadataGrid {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 
