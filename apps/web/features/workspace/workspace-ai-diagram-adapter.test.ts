@@ -476,7 +476,10 @@ test("convertArchitectureJsonToDiagramJson supplies CloudFront required nested b
         config: {
           origin: {
             domainName: "assets.example.com",
-            originId: "static-assets"
+            originId: "static-assets",
+            originPath: "   ",
+            optionalValue: null,
+            omittedValue: undefined
           },
           defaultCacheBehavior: {
             allowedMethods: ["GET", "HEAD"],

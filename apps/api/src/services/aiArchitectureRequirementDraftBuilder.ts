@@ -1131,13 +1131,10 @@ function addExplicitResourceDependencies(context: DraftBuildContext): void {
   const requiresNatGateway = context.explicitResourceDefinitions.some(
     (definition) => definition.terraformResourceType === "aws_nat_gateway"
   );
-  const elasticIpDefinition: ExplicitResourceDefinition = {
-    id: "aws-eip",
-    resourceType: "ELASTIC_IP",
-    terraformBlockType: "resource",
-    terraformResourceType: "aws_eip"
-  };
-  if (requiresNatGateway && !hasExplicitResourceDefinition(context, elasticIpDefinition)) {
+  if (
+    requiresNatGateway &&
+    !hasExplicitTerraformResourceDefinition(context, "aws_eip")
+  ) {
     addNode(context, {
       id: "nat-elastic-ip",
       type: "ELASTIC_IP",
@@ -1154,15 +1151,9 @@ function addExplicitResourceDependencies(context: DraftBuildContext): void {
   const requiresSecurityGroupRule = context.explicitResourceDefinitions.some(
     (definition) => definition.terraformResourceType === "aws_security_group_rule"
   );
-  const securityGroupDefinition: ExplicitResourceDefinition = {
-    id: "aws-security-group",
-    resourceType: "SECURITY_GROUP",
-    terraformBlockType: "resource",
-    terraformResourceType: "aws_security_group"
-  };
   if (
     requiresSecurityGroupRule &&
-    !hasExplicitResourceDefinition(context, securityGroupDefinition)
+    !hasExplicitTerraformResourceDefinition(context, "aws_security_group")
   ) {
     addNode(context, {
       id: "security-group",
@@ -1201,6 +1192,15 @@ function addExplicitResourceNodes(context: DraftBuildContext): void {
       config: createExplicitResourceConfig(definition)
     });
   });
+}
+
+function hasExplicitTerraformResourceDefinition(
+  context: DraftBuildContext,
+  terraformResourceType: string
+): boolean {
+  return context.explicitResourceDefinitions.some(
+    (definition) => definition.terraformResourceType === terraformResourceType
+  );
 }
 
 function hasExplicitResourceDefinition(

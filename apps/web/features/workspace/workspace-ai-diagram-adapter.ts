@@ -1242,10 +1242,12 @@ function normalizeGeneratedNestedBlock(
   const childByName = new Map(children.map((child) => [child.name, child]));
 
   return Object.fromEntries(
-    Object.entries(value).map(([key, childValue]) => [
-      key,
-      normalizeGeneratedParameterValue(childValue, childByName.get(key))
-    ])
+    Object.entries(value)
+      .filter(([, childValue]) => isMeaningfulGeneratedParameterValue(childValue))
+      .map(([key, childValue]) => [
+        key,
+        normalizeGeneratedParameterValue(childValue, childByName.get(key))
+      ])
   );
 }
 
