@@ -1,6 +1,11 @@
-Copyright (c) 2015-10-09 Spoqa (spoqa.com), with Reserved Font Name Spoqa Han Sans.
-Copyright (c) 2015-10-09 Spoqa (spoqa.com), with Reserved Font Name Spoqa Han Sans JP.
-Copyright (c) 2020-11-30 Spoqa (spoqa.com), with Reserved Font Name Spoqa Han Sans Neo.
+LINE Seed Sans KR
+Copyright (c) LY Corporation.
+
+Official licensing notice: https://seed.line.me/index_kr.html
+All fonts are released under the SIL Open Font License, Version 1.1.
+They may be used for personal or commercial purposes. The font files themselves
+may not be sold by parties other than LY Corporation. Attribution is strongly
+recommended for commercial use.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

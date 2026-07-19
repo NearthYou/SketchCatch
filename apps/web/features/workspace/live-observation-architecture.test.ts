@@ -298,15 +298,21 @@ test("renders validated Architecture detail lines inside scaling Resource nodes"
 
 test("uses observation-only readable cards and collision-free reference-layout spacing", () => {
   assert.match(diagramMapSource, /getLiveObservationMapNodeLayout/);
-  assert.match(diagramMapSource, /LIVE_OBSERVATION_RESOURCE_MIN_WIDTH = 168/);
-  assert.match(diagramMapSource, /LIVE_OBSERVATION_RESOURCE_MIN_HEIGHT = 112/);
-  assert.match(diagramMapSource, /LIVE_OBSERVATION_DETAIL_RESOURCE_MIN_WIDTH = 216/);
-  assert.match(diagramMapSource, /LIVE_OBSERVATION_DETAIL_RESOURCE_MIN_HEIGHT = 124/);
+  assert.match(diagramMapSource, /LIVE_OBSERVATION_RESOURCE_WIDTH = 148/);
+  assert.match(diagramMapSource, /LIVE_OBSERVATION_RESOURCE_HEIGHT = 104/);
+  assert.match(diagramMapSource, /LIVE_OBSERVATION_DETAIL_RESOURCE_WIDTH = 184/);
+  assert.match(diagramMapSource, /LIVE_OBSERVATION_DETAIL_RESOURCE_HEIGHT = 124/);
   assert.match(diagramMapSource, /LIVE_OBSERVATION_LAYOUT_SCALE = 2\.75/);
   assert.match(
     diagramMapSource,
     /position:\s*layout\.position[\s\S]*height:\s*layout\.height[\s\S]*width:\s*layout\.width/
   );
+  assert.match(diagramMapSource, /<ResourceIcon node=\{node\} size=\{28\} \/>/);
+  assert.match(
+    diagramMapSource,
+    /height:\s*hasDetailLines[\s\S]*LIVE_OBSERVATION_DETAIL_RESOURCE_HEIGHT[\s\S]*LIVE_OBSERVATION_RESOURCE_HEIGHT[\s\S]*width:\s*hasDetailLines[\s\S]*LIVE_OBSERVATION_DETAIL_RESOURCE_WIDTH[\s\S]*LIVE_OBSERVATION_RESOURCE_WIDTH/
+  );
+  assert.doesNotMatch(diagramMapSource, /Math\.max\(\s*node\.size\.(?:height|width)/);
   assert.doesNotMatch(
     diagramMapSource,
     /height:\s*hasDetailLines\s*\?\s*Math\.max\(node\.size\.height,\s*104\)/
@@ -314,7 +320,7 @@ test("uses observation-only readable cards and collision-free reference-layout s
 
   const referenceColumnDistance = 1_056 - 972;
   const scaledColumnDistance = referenceColumnDistance * 2.75;
-  const detailCardWidth = 216;
+  const detailCardWidth = 184;
   assert.ok(
     scaledColumnDistance > detailCardWidth,
     "Reference-layout detail cards must retain a visible horizontal gap"
@@ -347,15 +353,19 @@ test("keeps the initial map readable while preserving pan, zoom, and MiniMap exp
   );
   assert.match(
     workspaceCssSource,
-    /\.liveObservationArchitectureResourceNode > strong\s*\{[^}]*font-size:\s*calc\(13px \+ var\(--presentation-font-size-increase\)\);/s
+    /\.liveObservationArchitectureResourceNode > strong\s*\{[^}]*font-size:\s*calc\(9px \+ var\(--presentation-font-size-increase\)\);/s
   );
   assert.match(
     workspaceCssSource,
-    /\.liveObservationArchitectureResourceDetail\s*\{[^}]*font-size:\s*calc\(11px \+ var\(--presentation-font-size-increase\)\);/s
+    /\.liveObservationArchitectureResourceNode > small\s*\{[^}]*font-size:\s*calc\(7px \+ var\(--presentation-font-size-increase\)\);/s
   );
   assert.match(
     workspaceCssSource,
-    /\.liveObservationArchitectureStateBadge\s*\{[^}]*font-size:\s*calc\(10px \+ var\(--presentation-font-size-increase\)\);/s
+    /\.liveObservationArchitectureResourceDetail\s*\{[^}]*font-size:\s*calc\(7px \+ var\(--presentation-font-size-increase\)\);/s
+  );
+  assert.match(
+    workspaceCssSource,
+    /\.liveObservationArchitectureStateBadge\s*\{[^}]*font-size:\s*calc\(6px \+ var\(--presentation-font-size-increase\)\);[^}]*line-height:\s*1\.25;/s
   );
 });
 

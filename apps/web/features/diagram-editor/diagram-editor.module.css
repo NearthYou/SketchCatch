@@ -119,13 +119,13 @@
 .projectBarContext strong {
   color: var(--workspace-text);
   font-size: calc(14px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .projectBarContext span {
   color: var(--workspace-muted);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(500 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .projectBarActions {
@@ -140,7 +140,7 @@
   color: var(--workspace-muted);
   display: inline-flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   min-width: 0;
   padding: 0 6px;
@@ -252,8 +252,8 @@
   color: var(--workspace-muted);
   cursor: pointer;
   font: inherit;
-  font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   height: 34px;
   padding: 0 10px;
 }
@@ -349,8 +349,8 @@
 }
 
 .leftRail :global(.providerVersionValue) {
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-size: calc(7px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .leftRail :global(.providerVersionChevron) {
@@ -384,8 +384,8 @@
   color: var(--workspace-text);
   cursor: pointer;
   font: inherit;
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-size: calc(6px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   min-height: 32px;
   padding: 0 8px;
   text-align: left;
@@ -402,8 +402,8 @@
   align-items: center;
   color: var(--workspace-text);
   display: grid;
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-size: calc(10px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   justify-items: center;
   line-height: 1;
   width: 34px;
@@ -443,7 +443,7 @@
   border: 0;
   color: var(--workspace-text);
   font: inherit;
-  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-size: calc(9px + var(--presentation-font-size-increase));
   min-width: 0;
   outline: none;
   width: 100%;
@@ -509,7 +509,7 @@
 
 .leftRail :global(.resourceAreaLabel) {
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -539,7 +539,7 @@
   color: var(--workspace-muted);
   display: flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   justify-content: space-between;
   margin: 2px 2px 7px;
 }
@@ -604,13 +604,13 @@
   border-radius: 6px;
   display: inline-flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   justify-content: center;
 }
 
 .leftRail :global(.resourceTileLabel) {
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-size: calc(9px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.25;
   min-width: 0;
   overflow: hidden;
@@ -642,7 +642,7 @@
   cursor: pointer;
   font: inherit;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   min-height: 36px;
   padding: 0 12px;
 }
@@ -656,7 +656,7 @@
 .leftRail :global(.sectionCaption) {
   color: var(--workspace-muted);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   margin: 2px 2px 10px;
 }
 
@@ -699,7 +699,7 @@
   cursor: pointer;
   font: inherit;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   min-height: 30px;
 }
 
@@ -718,10 +718,10 @@
   border-radius: 8px;
   color: var(--workspace-muted);
   display: grid;
-  gap: 7px;
-  grid-template-columns: 16px minmax(0, 1fr);
-  min-height: 36px;
-  padding: 0 10px;
+  gap: 6px;
+  grid-template-columns: 14px minmax(0, 1fr);
+  min-height: 32px;
+  padding: 0 8px;
 }
 
 .leftRail :global(.moduleCatalogSearch:focus-within) {
@@ -734,7 +734,7 @@
   border: 0;
   color: var(--workspace-text);
   font: inherit;
-  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-size: calc(9px + var(--presentation-font-size-increase));
   min-width: 0;
   outline: none;
   width: 100%;
@@ -759,7 +759,7 @@
   color: var(--workspace-text);
   display: flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 7px;
   justify-content: space-between;
   padding: 0 2px;
@@ -829,7 +829,7 @@
 .leftRail :global(.moduleCatalogCard small) {
   color: var(--workspace-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .leftRail :global(.templateLibraryOpenCard) {
@@ -1200,7 +1200,7 @@ button.rightRailResizeHandle {
   fill: currentColor;
   font-family: var(--workspace-font);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .edgePatchBadge[data-preview-state="added"] {
@@ -1353,7 +1353,7 @@ button.rightRailResizeHandle {
   box-shadow: 0 12px 28px rgba(31, 41, 55, 0.1);
   color: #7a4d00;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(850 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   left: 50%;
   line-height: 1.35;
   max-width: min(520px, calc(100% - 32px));
@@ -1372,20 +1372,20 @@ button.rightRailResizeHandle {
   align-items: stretch;
   background: color-mix(in srgb, var(--board-surface) 96%, #e7f0ff);
   border-color: color-mix(in srgb, var(--board-primary) 36%, var(--board-border));
-  bottom: 16px;
+  bottom: 12px;
   color: var(--board-ink);
   flex-direction: column;
-  font-weight: calc(500 - var(--presentation-font-weight-reduction));
-  left: 16px;
+  font-weight: var(--presentation-font-weight-bold);
+  left: 12px;
   max-height: min(480px, calc(100% - 32px));
-  max-width: calc(100% - 48px);
+  max-width: calc(100% - 24px);
   overflow-y: auto;
-  padding: 12px;
+  padding: 8px;
   right: auto;
   text-align: left;
   top: auto;
   transform: none;
-  width: 520px;
+  width: 360px;
 }
 
 .compilerPreviewHeader {
@@ -1405,47 +1405,13 @@ button.rightRailResizeHandle {
 .compilerPreviewHeader strong {
   color: var(--board-ink);
   font-size: calc(15px + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .compilerPreviewHeader span {
   color: var(--board-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
-}
-
-.compilerPreviewViewToggle {
-  background: var(--board-surface-subtle);
-  border: 1px solid var(--board-border);
-  border-radius: 6px;
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: 2px;
-  padding: 2px;
-}
-
-.compilerPreviewViewToggle button {
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
-  color: var(--board-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(750 - var(--presentation-font-weight-reduction));
-  min-height: 28px;
-  padding: 0 10px;
-}
-
-.compilerPreviewViewToggle button[aria-pressed="true"] {
-  background: var(--board-surface);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
-  color: var(--board-ink);
-}
-
-.compilerPreviewViewToggle button:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--board-primary) 32%, transparent);
-  outline-offset: 2px;
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .compilerPreviewActions {
@@ -1458,7 +1424,7 @@ button.rightRailResizeHandle {
 .compilerPreviewNotice > .compilerPreviewActions {
   border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
   justify-content: flex-end;
-  padding-top: 10px;
+  padding-top: 6px;
 }
 
 .compilerPreviewActions button {
@@ -1469,10 +1435,10 @@ button.rightRailResizeHandle {
   cursor: pointer;
   font: inherit;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(750 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1;
-  min-height: 32px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 8px;
 }
 
 .compilerPreviewActions button:hover,
@@ -1521,7 +1487,7 @@ button.rightRailResizeHandle {
 .panelKicker {
   color: #727d91;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0;
   margin: 0 0 3px;
   text-transform: uppercase;
@@ -1547,7 +1513,7 @@ button.rightRailResizeHandle {
   color: #727d91;
   display: flex;
   font-size: calc(0.78rem + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   margin: 0 0 8px 4px;
 }
@@ -1610,7 +1576,7 @@ button.rightRailResizeHandle {
 .paletteItemName {
   color: #171c2f;
   font-size: calc(0.84rem + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .paletteItemType {
@@ -1837,7 +1803,7 @@ button.rightRailResizeHandle {
   box-shadow: none;
   display: flex;
   font-size: calc(14px + var(--presentation-font-size-increase));
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   height: 34px;
   left: 0;
@@ -1923,7 +1889,7 @@ button.rightRailResizeHandle {
   color: var(--board-primary);
   flex: 0 1 auto;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 14px;
   max-width: 120px;
   min-width: 0;
@@ -1941,7 +1907,7 @@ button.rightRailResizeHandle {
   color: var(--board-primary);
   display: flex;
   font-size: calc(0.9rem + var(--presentation-font-size-increase));
-  font-weight: calc(900 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   height: 38px;
   justify-content: center;
   width: 38px;
@@ -1963,13 +1929,13 @@ button.rightRailResizeHandle {
 .nodeType {
   color: var(--board-muted);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   text-transform: uppercase;
 }
 
 .nodeLabel {
   font-size: calc(0.92rem + var(--presentation-font-size-increase));
-  font-weight: calc(850 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .nodeSubtitle {
@@ -2031,8 +1997,8 @@ button.rightRailResizeHandle {
   box-sizing: border-box;
   color: var(--board-ink);
   display: -webkit-box;
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-size: calc(6px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   left: 50%;
   line-height: 15px;
   max-height: 30px;
@@ -2089,7 +2055,7 @@ button.rightRailResizeHandle {
   border-radius: 5px;
   display: flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   justify-content: center;
   line-height: 14px;
   min-height: 18px;
@@ -2238,7 +2204,7 @@ button.rightRailResizeHandle {
   content: "+";
   /* ui-legibility-exception: shape; a11y: DiagramNodeView gives each connection handle an aria-label. */
   font-size: calc(calc(9px * var(--board-control-scale)) + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1;
 }
 
@@ -2355,7 +2321,7 @@ button.rightRailResizeHandle {
   color: var(--board-body);
   display: flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   justify-content: space-between;
   margin-top: 3px;
   padding-top: 6px;
@@ -2414,7 +2380,7 @@ button.rightRailResizeHandle {
 .edgeToolbarPanelLabel {
   color: var(--board-body);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 16px;
 }
 

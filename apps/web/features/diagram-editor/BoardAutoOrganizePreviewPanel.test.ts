@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { register } from "node:module";
 import test from "node:test";
 import type { DiagramJson } from "@sketchcatch/types";
@@ -16,8 +17,9 @@ const cssLoaderSource = `export async function load(url, context, nextLoad) {
 
 register(`data:text/javascript,${encodeURIComponent(cssLoaderSource)}`, import.meta.url);
 Object.assign(globalThis, { React });
+const stylesSource = readFileSync(new URL("./diagram-editor.module.css", import.meta.url), "utf8");
 
-test("자동 정리 패널은 같은 Board의 원본·정리 결과와 두 최종 선택만 보여준다", async () => {
+test("자동 정리 패널은 보기 전환 없이 정리 결과와 두 최종 선택만 보여준다", async () => {
   const { BoardAutoOrganizePreviewPanel } = await import("./BoardAutoOrganizePreviewPanel");
   const source = diagram();
   const organized = structuredClone(source);
@@ -33,21 +35,25 @@ test("자동 정리 패널은 같은 Board의 원본·정리 결과와 두 최�
     createElement(BoardAutoOrganizePreviewPanel, {
       session,
       onKeepOriginal() {},
-      onSelectView() {},
       onUseOrganized() {}
     })
   );
 
   assert.equal(html.includes("원본 유지"), true);
   assert.equal(html.includes("이 정리 사용"), true);
-  assert.equal(html.includes("원본"), true);
-  assert.equal(html.includes("정리 결과"), true);
+  assert.equal(html.includes('aria-label="미리보기 선택"'), false);
+  assert.equal(html.includes("aria-pressed"), false);
   assert.equal(html.includes(session.summary.whatChanged), false);
   assert.equal(html.includes(session.summary.reviewItems[0]!), false);
   assert.equal(html.includes("hidden-candidate"), false);
   assert.equal(html.includes("hidden-compiler"), false);
   assert.equal(html.includes("hidden-template"), false);
   assert.equal(html.includes("99"), false);
+  assert.match(
+    stylesSource,
+    /\.compilerPreviewNotice\s*\{[^}]*max-width:\s*calc\(100% - 24px\);[^}]*padding:\s*8px;[^}]*width:\s*360px;/s
+  );
+  assert.doesNotMatch(stylesSource, /\.compilerPreviewViewToggle/);
   assert.equal(html.includes("기술 세부 정보"), false);
 });
 

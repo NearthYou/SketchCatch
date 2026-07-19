@@ -20,25 +20,37 @@
   gap: 4px;
 }
 
-.moduleCatalogCopy h3,
-.moduleCatalogResourceSummary strong {
+.moduleCatalogCopy h3 {
   color: var(--workspace-text);
   font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.35;
   margin: 0;
 }
 
-.moduleCatalogCopy p,
+.moduleCatalogResourceSummary strong {
+  color: var(--workspace-text);
+  font-size: calc(10px + var(--presentation-font-size-increase));
+  line-height: 1.35;
+  margin: 0;
+}
+
+.moduleCatalogCopy p {
+  color: var(--workspace-muted);
+  font-size: calc(9px + var(--presentation-font-size-increase));
+  line-height: 1.45;
+  margin: 0;
+}
+
 .moduleCatalogMetadata,
 .moduleCatalogResourceSummary p {
   color: var(--workspace-muted);
-  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-size: calc(6px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
 }
 
 .moduleCatalogMetadata {
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .moduleCatalogResourceSummary {
@@ -54,7 +66,7 @@
   cursor: pointer;
   font: inherit;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(750 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   min-height: 36px;
   width: 100%;
 }
