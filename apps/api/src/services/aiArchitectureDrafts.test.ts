@@ -37,6 +37,283 @@ test("GitHub Actions handoff does not imply an AWS-native CI/CD pipeline", () =>
   assert.equal(awsNativePlan?.requiredResources?.includes("CODEPIPELINE"), true);
 });
 
+test("createArchitectureDraft completes an explicitly requested Subnet with its required VPC parameters", () => {
+  const result = createArchitectureDraft({
+    prompt: "Create a Practice Architecture that explicitly includes one AWS Subnet."
+  });
+  const vpc = result.architectureJson.nodes.find((node) => node.type === "VPC");
+  const subnet = result.architectureJson.nodes.find((node) => node.type === "SUBNET");
+
+  assert.ok(vpc);
+  assert.equal(vpc.config.cidrBlock, "10.0.0.0/16");
+  assert.ok(subnet);
+  assert.match(String(subnet.config.cidrBlock ?? ""), /^10\.\d+\.\d+\.\d+\/\d+$/u);
+  assert.equal(subnet.config.availabilityZone, "ap-northeast-2a");
+  assert.equal(subnet.config.vpcId, "aws_vpc.vpc_main.id");
+});
+
+test("createArchitectureDraft fills required parameters for an explicitly requested Security Group rule", () => {
+  const result = createArchitectureDraft({
+    prompt: "Create a Practice Architecture with an AWS Security Group and Security Group rule."
+  });
+  const vpc = result.architectureJson.nodes.find((node) => node.type === "VPC");
+  const securityGroup = result.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_security_group"
+  );
+  const rule = result.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_security_group_rule"
+  );
+
+  assert.ok(vpc);
+  assert.equal(securityGroup?.config.vpcId, "aws_vpc.vpc_main.id");
+  assert.equal(rule?.config.type, "ingress");
+  assert.equal(rule?.config.securityGroupId, "aws_security_group.security_group.id");
+  assert.equal(rule?.config.protocol, "tcp");
+  assert.equal(rule?.config.fromPort, 443);
+  assert.equal(rule?.config.toPort, 443);
+  assert.deepEqual(rule?.config.cidrBlocks, ["10.0.0.0/16"]);
+});
+
+test("createArchitectureDraft completes an explicitly requested Internet Gateway with its VPC reference", () => {
+  const result = createArchitectureDraft({
+    prompt: "Create a Practice Architecture that explicitly includes one AWS Internet Gateway."
+  });
+  const vpc = result.architectureJson.nodes.find((node) => node.type === "VPC");
+  const internetGateway = result.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_internet_gateway"
+  );
+
+  assert.ok(vpc);
+  assert.equal(internetGateway?.config.vpcId, "aws_vpc.vpc_main.id");
+});
+
+test("createArchitectureDraft keeps the required SSM Parameter data-source name", () => {
+  const result = createArchitectureDraft({
+    prompt: "Create a Practice Architecture that explicitly includes an AWS SSM Parameter data source."
+  });
+  const parameter = result.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_ssm_parameter"
+  );
+
+  assert.equal(parameter?.config.name, "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64");
+  assert.equal(parameter?.config.vpcId, undefined);
+});
+
+test("createArchitectureDraft changes Subnet parameters when the selected region changes", () => {
+  const getAvailabilityZone = (region: string): unknown =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with one AWS Subnet in ${region}.`
+    }).architectureJson.nodes.find((node) => node.type === "SUBNET")?.config.availabilityZone;
+
+  const seoulAvailabilityZone = getAvailabilityZone("Seoul ap-northeast-2");
+  const tokyoAvailabilityZone = getAvailabilityZone("Tokyo ap-northeast-1");
+
+  assert.equal(seoulAvailabilityZone, "ap-northeast-2a");
+  assert.equal(tokyoAvailabilityZone, "ap-northeast-1a");
+  assert.notEqual(seoulAvailabilityZone, tokyoAvailabilityZone);
+});
+
+test("createArchitectureDraft changes compute and database sizing when the selected traffic changes", () => {
+  const createSizedDraft = (traffic: string) =>
+    createArchitectureDraft({
+      prompt: [
+        "Create a Practice Architecture with AWS EC2 and RDS.",
+        `Expected traffic: ${traffic}.`,
+        "Monthly budget: 50-200 manwon (high performance)."
+      ].join("\n")
+    });
+  const smallDraft = createSizedDraft("small traffic (under 100 daily users and under 10 concurrent users)");
+  const largeDraft = createSizedDraft("large traffic (over 10,000 daily users and over 500 concurrent users)");
+  const smallEc2 = smallDraft.architectureJson.nodes.find((node) => node.type === "EC2");
+  const largeEc2 = largeDraft.architectureJson.nodes.find((node) => node.type === "EC2");
+  const smallRds = smallDraft.architectureJson.nodes.find((node) => node.type === "RDS");
+  const largeRds = largeDraft.architectureJson.nodes.find((node) => node.type === "RDS");
+
+  assert.ok(smallEc2);
+  assert.ok(largeEc2);
+  assert.notEqual(smallEc2.config.instanceType, largeEc2.config.instanceType);
+  assert.ok(smallRds);
+  assert.ok(largeRds);
+  assert.notEqual(smallRds.config.allocatedStorage, largeRds.config.allocatedStorage);
+  assert.notEqual(smallRds.config.instanceClass, largeRds.config.instanceClass);
+});
+
+
+test("createArchitectureDraft changes cost-sensitive parameters when the selected budget changes", () => {
+  const createBudgetDraft = (budget: string) =>
+    createArchitectureDraft({
+      prompt: [
+        "Create a Practice Architecture with AWS EC2 and CloudFront.",
+        "Expected traffic: small traffic.",
+        `Monthly budget: ${budget}.`
+      ].join("\n")
+    });
+  const lowBudgetDraft = createBudgetDraft("under 100,000 KRW (minimum cost / low budget)");
+  const enterpriseDraft = createBudgetDraft("over 2,000,000 KRW (enterprise)");
+  const lowEc2 = lowBudgetDraft.architectureJson.nodes.find((node) => node.type === "EC2");
+  const enterpriseEc2 = enterpriseDraft.architectureJson.nodes.find((node) => node.type === "EC2");
+  const lowCloudFront = lowBudgetDraft.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT");
+  const enterpriseCloudFront = enterpriseDraft.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT");
+
+  assert.equal(lowEc2?.config.instanceType, "t3.micro");
+  assert.equal(enterpriseEc2?.config.instanceType, "m7i.large");
+  assert.equal(lowCloudFront?.config.priceClass, "PriceClass_100");
+  assert.equal(enterpriseCloudFront?.config.priceClass, "PriceClass_All");
+});
+
+test("createAmazonQArchitectureDraftResponse overrides invariant provider sizing with selected budget values", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "preview",
+      title: "Static Site",
+      architectureJson: {
+        nodes: [
+          node("site-bucket", "S3", "Static Website Bucket", 120, 180),
+          configuredNode(node("cdn", "CLOUDFRONT", "CloudFront CDN", 360, 180), {
+            priceClass: "PriceClass_200",
+            originResourceId: "site-bucket",
+            origin: "",
+            defaultCacheBehavior: "",
+            restrictions: "",
+            viewerCertificate: ""
+          })
+        ],
+        edges: [{ id: "cdn-to-site", sourceId: "cdn", targetId: "site-bucket", label: "origin" }]
+      },
+      requirementCoverage: sampleRequirementCoverage(["site-bucket", "cdn"])
+    })
+  );
+  const createBudgetPreview = async (budget: string) =>
+    createAmazonQArchitectureDraftResponse(
+      {
+        prompt: [
+          "Static site with HTML/CSS/JS only.",
+          "Expected traffic: small traffic under 100 daily users.",
+          "Database: none. Backend: none.",
+          "Primary users: Korea / Seoul region.",
+          `Monthly budget: ${budget}.`,
+          "HTTPS is optional. File upload: none. Realtime: none.",
+          "Management mode: fully managed.",
+          "Page loading time: no preference. Site size: under 10MB.",
+          "Traffic pattern: steady. Availability: no preference."
+        ].join("\n")
+      },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    );
+  const lowBudgetPreview = await createBudgetPreview("under 100,000 KRW (minimum cost / low budget)");
+  const enterprisePreview = await createBudgetPreview("over 2,000,000 KRW (enterprise)");
+
+  if ("status" in lowBudgetPreview || "status" in enterprisePreview) {
+    assert.fail(`Expected provider previews: ${JSON.stringify({ lowBudgetPreview, enterprisePreview })}`);
+  }
+  assert.equal(
+    lowBudgetPreview.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT")?.config.priceClass,
+    "PriceClass_100"
+  );
+  assert.equal(
+    enterprisePreview.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT")?.config.priceClass,
+    "PriceClass_All"
+  );
+  const completedCloudFront = lowBudgetPreview.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT");
+  assert.equal(typeof completedCloudFront?.config.origin, "object");
+  assert.equal(typeof completedCloudFront?.config.defaultCacheBehavior, "object");
+  assert.equal(typeof completedCloudFront?.config.restrictions, "object");
+  assert.equal(typeof completedCloudFront?.config.viewerCertificate, "object");
+});
+
+test("createArchitectureDraft changes RDS parameters when the selected database size changes", () => {
+  const createDatabaseDraft = (database: string) =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with AWS RDS. Database size: ${database}.`
+    });
+  const smallRds = createDatabaseDraft("simple data under 10GB").architectureJson.nodes.find((node) => node.type === "RDS");
+  const largeRds = createDatabaseDraft("large database over 100GB with complex queries").architectureJson.nodes.find(
+    (node) => node.type === "RDS"
+  );
+
+  assert.equal(smallRds?.config.allocatedStorage, 20);
+  assert.equal(largeRds?.config.allocatedStorage, 200);
+  assert.equal(smallRds?.config.instanceClass, "db.t4g.small");
+  assert.equal(largeRds?.config.instanceClass, "db.r6g.large");
+});
+
+test("createArchitectureDraft changes resilience parameters when the selected availability changes", () => {
+  const createAvailabilityDraft = (availability: string) =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with AWS RDS. Availability target: ${availability}.`
+    });
+  const standardRds = createAvailabilityDraft("99%").architectureJson.nodes.find((node) => node.type === "RDS");
+  const highlyAvailableRds = createAvailabilityDraft("99.99%").architectureJson.nodes.find((node) => node.type === "RDS");
+
+  assert.equal(standardRds?.config.multiAz, false);
+  assert.equal(standardRds?.config.backupRetentionPeriod, 7);
+  assert.equal(highlyAvailableRds?.config.multiAz, true);
+  assert.equal(highlyAvailableRds?.config.backupRetentionPeriod, 14);
+});
+
+test("createArchitectureDraft changes maintenance parameters when the selected management mode changes", () => {
+  const createManagementDraft = (management: string) =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with AWS RDS. Management mode: ${management}.`
+    });
+  const selfManagedRds = createManagementDraft("self-managed / direct management").architectureJson.nodes.find(
+    (node) => node.type === "RDS"
+  );
+  const fullyManagedRds = createManagementDraft("fully managed").architectureJson.nodes.find(
+    (node) => node.type === "RDS"
+  );
+
+  assert.equal(selfManagedRds?.config.autoMinorVersionUpgrade, false);
+  assert.equal(fullyManagedRds?.config.autoMinorVersionUpgrade, true);
+});
+
+test("createArchitectureDraft changes S3 parameters when the selected upload type changes", () => {
+  const createUploadDraft = (upload: string) =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with AWS S3. File upload type: ${upload}.`
+    });
+  const imageBucket = createUploadDraft("profile image upload").architectureJson.nodes.find((node) => node.type === "S3");
+  const largeFileBucket = createUploadDraft("large file upload over 100MB").architectureJson.nodes.find(
+    (node) => node.type === "S3"
+  );
+
+  assert.equal(imageBucket?.config.bucketPrefix, "sketchcatch-image-uploads-");
+  assert.equal(largeFileBucket?.config.bucketPrefix, "sketchcatch-large-file-uploads-");
+});
+
+test("createArchitectureDraft changes Lambda parameters when the selected realtime mode changes", () => {
+  const createRealtimeDraft = (realtime: string) =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with AWS Lambda. Realtime requirement: ${realtime}.`
+    });
+  const notificationLambda = createRealtimeDraft("realtime notification").architectureJson.nodes.find(
+    (node) => node.type === "LAMBDA"
+  );
+  const dataUpdateLambda = createRealtimeDraft("realtime data updates").architectureJson.nodes.find(
+    (node) => node.type === "LAMBDA"
+  );
+
+  assert.equal(notificationLambda?.config.memorySize, 128);
+  assert.equal(notificationLambda?.config.timeout, 15);
+  assert.equal(dataUpdateLambda?.config.memorySize, 512);
+  assert.equal(dataUpdateLambda?.config.timeout, 30);
+});
+
+test("createArchitectureDraft changes public access protection when the selected security priority changes", () => {
+  const createSecurityDraft = (security: string) =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with an AWS Security Group. Security requirement: ${security}.`
+    });
+  const basicSecurityGroup = createSecurityDraft("basic public content only").architectureJson.nodes.find(
+    (node) => node.type === "SECURITY_GROUP"
+  );
+  const protectedSecurityGroup = createSecurityDraft("protect private user data with encryption").architectureJson.nodes.find(
+    (node) => node.type === "SECURITY_GROUP"
+  );
+
+  assert.equal(basicSecurityGroup?.config.ingress, undefined);
+  assert.deepEqual(protectedSecurityGroup?.config.ingress, []);
+});
 test("fixed Template keeps its core resources and merges compatible answer-driven additions", () => {
   const result = createArchitectureDraft({
     prompt: [

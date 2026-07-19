@@ -34,7 +34,10 @@ import {
   SUPPORTED_ARCHITECTURE_RESOURCE_TYPES
 } from "./aiArchitectureResourceCatalog.js";
 import { planPracticeArchitecture } from "./aiArchitectureRequirementDraftBuilder.js";
-import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditions.js";
+import {
+  applyOperatingConditionConfig,
+  applyOperatingConditionConfigToArchitecture
+} from "./aiArchitectureOperatingConditions.js";
 import {
   ArchitectureDraftGenerationError,
   createInternalArchitectureGenerationError,
@@ -810,9 +813,12 @@ function applyOperationalPolicyToProviderResponse(
   return {
     ...response,
     architectureJson: applyArchitectureParameterCompletenessDefaults(
-      applyArchitectureOperationalPolicy(
-        requirementSanitizedArchitectureJson,
-        resolveArchitectureOperationalRequirements(prompt)
+      applyOperatingConditionConfigToArchitecture(
+        applyArchitectureOperationalPolicy(
+          requirementSanitizedArchitectureJson,
+          resolveArchitectureOperationalRequirements(prompt)
+        ),
+        resolveArchitectureRequirement({ prompt }).operatingProfile
       )
     )
   };
@@ -905,10 +911,10 @@ function applyArchitectureParameterCompletenessDefaults(
         ...node,
         config: {
           ...node.config,
-          functionName: node.config.functionName ?? "practice-api-handler",
-          role: node.config.role ?? lambdaRoleArn,
-          handler: node.config.handler ?? "index.handler",
-          runtime: node.config.runtime ?? "nodejs20.x"
+          functionName: withRequiredArchitectureConfigDefault(node.config.functionName, "practice-api-handler"),
+          role: withRequiredArchitectureConfigDefault(node.config.role, lambdaRoleArn),
+          handler: withRequiredArchitectureConfigDefault(node.config.handler, "index.handler"),
+          runtime: withRequiredArchitectureConfigDefault(node.config.runtime, "nodejs20.x")
         }
       };
     }
@@ -923,24 +929,24 @@ function applyArchitectureParameterCompletenessDefaults(
         ...node,
         config: {
           ...node.config,
-          enabled: node.config.enabled ?? true,
+          enabled: withRequiredArchitectureConfigDefault(node.config.enabled, true),
           originResourceId,
-          origin: node.config.origin ?? {
+          origin: withRequiredArchitectureConfigDefault(node.config.origin, {
             domainName: `${originResourceId}.s3.amazonaws.com`,
             originId: "static-assets"
-          },
-          defaultCacheBehavior: node.config.defaultCacheBehavior ?? {
+          }),
+          defaultCacheBehavior: withRequiredArchitectureConfigDefault(node.config.defaultCacheBehavior, {
             allowedMethods: ["GET", "HEAD", "OPTIONS"],
             cachedMethods: ["GET", "HEAD"],
             targetOriginId: "static-assets",
             viewerProtocolPolicy: "redirect-to-https"
-          },
-          restrictions: node.config.restrictions ?? {
+          }),
+          restrictions: withRequiredArchitectureConfigDefault(node.config.restrictions, {
             geoRestriction: [{ restrictionType: "none" }]
-          },
-          viewerCertificate: node.config.viewerCertificate ?? {
+          }),
+          viewerCertificate: withRequiredArchitectureConfigDefault(node.config.viewerCertificate, {
             cloudfrontDefaultCertificate: true
-          }
+          })
         }
       };
     }
@@ -950,18 +956,18 @@ function applyArchitectureParameterCompletenessDefaults(
         ...node,
         config: {
           ...node.config,
-          allocatedStorage: node.config.allocatedStorage ?? 20,
-          engine: node.config.engine ?? "postgres",
-          instanceClass: node.config.instanceClass ?? "db.t4g.micro",
-          username: node.config.username ?? "admin",
-          password: node.config.password ?? "var.db_password",
-          dbName: node.config.dbName ?? "appdb",
-          publiclyAccessible: node.config.publiclyAccessible ?? false,
-          storageEncrypted: node.config.storageEncrypted ?? true,
-          storageType: node.config.storageType ?? "gp3",
-          backupRetentionPeriod: node.config.backupRetentionPeriod ?? 7,
-          deletionProtection: node.config.deletionProtection ?? true,
-          skipFinalSnapshot: node.config.skipFinalSnapshot ?? false
+          allocatedStorage: withRequiredArchitectureConfigDefault(node.config.allocatedStorage, 20),
+          engine: withRequiredArchitectureConfigDefault(node.config.engine, "postgres"),
+          instanceClass: withRequiredArchitectureConfigDefault(node.config.instanceClass, "db.t4g.micro"),
+          username: withRequiredArchitectureConfigDefault(node.config.username, "admin"),
+          password: withRequiredArchitectureConfigDefault(node.config.password, "var.db_password"),
+          dbName: withRequiredArchitectureConfigDefault(node.config.dbName, "appdb"),
+          publiclyAccessible: withRequiredArchitectureConfigDefault(node.config.publiclyAccessible, false),
+          storageEncrypted: withRequiredArchitectureConfigDefault(node.config.storageEncrypted, true),
+          storageType: withRequiredArchitectureConfigDefault(node.config.storageType, "gp3"),
+          backupRetentionPeriod: withRequiredArchitectureConfigDefault(node.config.backupRetentionPeriod, 7),
+          deletionProtection: withRequiredArchitectureConfigDefault(node.config.deletionProtection, true),
+          skipFinalSnapshot: withRequiredArchitectureConfigDefault(node.config.skipFinalSnapshot, false)
         }
       };
     }
@@ -971,14 +977,14 @@ function applyArchitectureParameterCompletenessDefaults(
         ...node,
         config: {
           ...node.config,
-          name: node.config.name ?? "practice-board-data",
-          billingMode: node.config.billingMode ?? "PAY_PER_REQUEST",
-          hashKey: node.config.hashKey ?? "pk",
-          rangeKey: node.config.rangeKey ?? "sk",
-          attribute: node.config.attribute ?? [
+          name: withRequiredArchitectureConfigDefault(node.config.name, "practice-board-data"),
+          billingMode: withRequiredArchitectureConfigDefault(node.config.billingMode, "PAY_PER_REQUEST"),
+          hashKey: withRequiredArchitectureConfigDefault(node.config.hashKey, "pk"),
+          rangeKey: withRequiredArchitectureConfigDefault(node.config.rangeKey, "sk"),
+          attribute: withRequiredArchitectureConfigDefault(node.config.attribute, [
             { name: "pk", type: "S" },
             { name: "sk", type: "S" }
-          ]
+          ])
         }
       };
     }
@@ -990,6 +996,21 @@ function applyArchitectureParameterCompletenessDefaults(
     ...architectureJson,
     nodes
   };
+}
+
+function withRequiredArchitectureConfigDefault(
+  value: unknown,
+  fallback: unknown
+): unknown {
+  return isMeaningfulArchitectureConfigValue(value) ? value : fallback;
+}
+
+function isMeaningfulArchitectureConfigValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
 }
 
 type ArchitectureDraftProgressReporter = {
