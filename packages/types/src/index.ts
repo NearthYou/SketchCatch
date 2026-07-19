@@ -4295,4 +4295,5 @@ export type TerraformSyncToDiagramResponse = {
   proposals?: TerraformDiagramChangeProposal[] | undefined;
 };
 
+export * from "./architecture-technology-stack.ts";
 export * from "./runtime-convergence.ts";

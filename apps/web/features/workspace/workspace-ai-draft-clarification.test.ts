@@ -204,6 +204,29 @@ test("common natural-language answers select the matching existing option", () =
       expected: "대규모 (일 10,000명 이상, 동시 500명 이상)"
     },
     {
+      questionId: "frontend",
+      question: "프론트엔드 기술은?",
+      suggestions: [
+        "HTML/CSS/JS만 (순수 웹)",
+        "React/Vue/Angular (SPA 프레임워크)",
+        "Next.js/Nuxt.js (SSR 필요)",
+        "모바일 앱 (웹뷰 또는 네이티브)"
+      ],
+      answer: "Svelte 쓸 거야",
+      expected: "React/Vue/Angular (SPA 프레임워크)"
+    },
+    {
+      questionId: "backend",
+      question: "백엔드가 필요한가요?",
+      suggestions: [
+        "필요 없음 (정적 사이트)",
+        "간단한 API (Node.js, Python Flask 등)",
+        "복잡한 비즈니스 로직 (Spring Boot, Django 등)",
+        "마이크로서비스 (여러 서비스 분리)"
+      ],
+      answer: "FastAPI 썼어",
+      expected: "간단한 API (Node.js, Python Flask 등)"
+    },    {
       questionId: "backend",
       question: "백엔드가 필요한가요?",
       suggestions: [

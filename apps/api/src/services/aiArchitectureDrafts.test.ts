@@ -819,11 +819,12 @@ test("createAmazonQArchitectureDraftResponse forwards accepted natural-language 
   });
   const promptWithoutAnsweredQuestions = createKoreaNoUploadNoRealtimePrompt()
     .split("\n")
-    .filter((line) => !/^(?:website type|traffic:|backend:)/iu.test(line))
+    .filter((line) => !/^(?:website type|traffic:|frontend:|backend:)/iu.test(line))
     .join("\n");
   const clarificationAnswers = [
     { questionId: "website_type", answer: "네이버 쇼핑몰 같은 사이트를 만들고 싶어" },
     { questionId: "traffic", answer: "일일 500명 정도" },
+    { questionId: "frontend", answer: "Svelte 쓸 거야" },
     { questionId: "backend", answer: "스프링부트 썼어" }
   ];
   await createAmazonQArchitectureDraftResponse(
@@ -836,6 +837,7 @@ test("createAmazonQArchitectureDraftResponse forwards accepted natural-language 
   assert.match(requestedPrompt, /Accepted architecture clarification answers:/);
   assert.match(requestedPrompt, /website_type: 네이버 쇼핑몰 같은 사이트/);
   assert.match(requestedPrompt, /traffic: 중간 규모 \(일 1,000명, 동시 50명\)/);
+  assert.match(requestedPrompt, /frontend: React\/Vue\/Angular \(SPA 프레임워크\)/);
   assert.match(requestedPrompt, /backend: 복잡한 비즈니스 로직 \(Spring Boot, Django 등\)/);
   assert.doesNotMatch(requestedPrompt, /어떤 종류의 웹사이트인가요\?: 네이버/);
   assert.deepEqual(

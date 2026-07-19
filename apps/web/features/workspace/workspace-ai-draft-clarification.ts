@@ -4,6 +4,7 @@ import type {
   CreateArchitectureDraftResponse,
   CreateArchitectureDraftRequest
 } from "@sketchcatch/types";
+import { resolveArchitectureTechnologyStackCategory } from "@sketchcatch/types";
 
 export function withArchitectureDraftClarificationAnswer(
   request: CreateArchitectureDraftRequest,
@@ -107,7 +108,23 @@ function findQuestionSpecificSuggestion(
   normalizedAnswer: string
 ): string | null {
   let pattern: RegExp | null = null;
-  if (clarification.questionId === "traffic") {
+  const stackCategory = resolveArchitectureTechnologyStackCategory(
+    clarification.questionId,
+    normalizedAnswer
+  );
+  if (stackCategory !== null) {
+    const stackPatternByCategory: Record<typeof stackCategory, RegExp> = {
+      frontend_static: /(?:html|css|javascript|순수\s*웹)/iu,
+      frontend_spa: /(?:spa|react|vue|angular|프레임워크)/iu,
+      frontend_ssr: /(?:next|nuxt|ssr)/iu,
+      frontend_mobile: /(?:모바일|웹뷰|네이티브)/iu,
+      backend_simple_api: /(?:간단한\s*api|node|python\s*flask)/iu,
+      backend_complex: /(?:복잡한\s*비즈니스\s*로직|spring\s*boot|django)/iu,
+      backend_microservices: /(?:microservice|마이크로서비스)/iu
+    };
+    pattern = stackPatternByCategory[stackCategory];
+  }
+  if (pattern === null && clarification.questionId === "traffic") {
     const trafficScale = resolveExplicitTrafficScale(normalizedAnswer);
     if (trafficScale === "small") pattern = /(?:small|소규모)/iu;
     if (trafficScale === "medium") pattern = /(?:medium|중간\s*규모)/iu;

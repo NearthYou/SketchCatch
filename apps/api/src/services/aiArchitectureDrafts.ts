@@ -14,7 +14,10 @@ import type {
   TemplateDefinition,
   TemplateId
 } from "@sketchcatch/types";
-import { getTemplateDefinitionById } from "@sketchcatch/types";
+import {
+  getTemplateDefinitionById,
+  resolveArchitectureTechnologyStackCategory
+} from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import type { RuntimeCache } from "../runtime-cache/index.js";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
@@ -1345,6 +1348,7 @@ function isMobileAppPrompt(prompt: string): boolean {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
 
   return (
+    resolveArchitectureTechnologyStackCategory("frontend", normalizedPrompt) === "frontend_mobile" ||
     /(?:mobile\s+app|app\s+store|play\s*store|google\s*play|모바일\s*앱|네이티브|웹뷰|플레이스토어|구글\s*플레이|앱\s*스토어)/iu.test(
       normalizedPrompt
     ) || hasStandaloneMobileAppCreationPrompt(normalizedPrompt)
@@ -1372,7 +1376,7 @@ function isDatabaseAnswered(prompt: string): boolean {
 }
 
 function isFrontendAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["frontend", "html", "css", "javascript", " js", "react", "vue", "angular", "next.js", "nuxt", "ssr", "프론트엔드", "순수 웹", "모바일", "웹뷰", "네이티브", "?꾨줎", "?쒖닔", "?밸럭"]);
+  return resolveArchitectureTechnologyStackCategory("frontend", prompt) !== null || hasPromptTerm(prompt, ["frontend", "html", "css", "javascript", " js", "react", "vue", "angular", "next.js", "nuxt", "ssr", "프론트엔드", "순수 웹", "모바일", "웹뷰", "네이티브", "?꾨줎", "?쒖닔", "?밸럭"]);
 }
 
 function isBackendAnswered(prompt: string): boolean {
@@ -1485,6 +1489,22 @@ function findCanonicalClarificationSuggestion(
   );
   if (exactSuggestion !== undefined) return exactSuggestion;
 
+  const stackCategory = resolveArchitectureTechnologyStackCategory(questionId, normalizedAnswer);
+  if (stackCategory !== null) {
+    const stackPatternByCategory: Record<typeof stackCategory, RegExp> = {
+      frontend_static: /(?:html|css|javascript|순수\s*웹)/iu,
+      frontend_spa: /(?:spa|react|vue|angular|프레임워크)/iu,
+      frontend_ssr: /(?:next|nuxt|ssr)/iu,
+      frontend_mobile: /(?:모바일|웹뷰|네이티브)/iu,
+      backend_simple_api: /(?:간단한\s*api|node|python\s*flask)/iu,
+      backend_complex: /(?:복잡한\s*비즈니스\s*로직|spring\s*boot|django)/iu,
+      backend_microservices: /(?:microservice|마이크로서비스)/iu
+    };
+    return question.suggestions.find((suggestion) =>
+      stackPatternByCategory[stackCategory].test(suggestion)
+    );
+  }
+
   if (questionId === "traffic") {
     const trafficProfile = resolveExplicitTrafficProfile(normalizedAnswer);
     if (trafficProfile !== undefined) {
@@ -1560,6 +1580,11 @@ function isClarificationAnswerValid(
   }
   if (isClarificationInformationRequest(normalizedAnswer)) {
     return false;
+  }
+  if (
+    resolveArchitectureTechnologyStackCategory(question.id, normalizedAnswer) !== null
+  ) {
+    return true;
   }
   if (question.id === "backend") {
     return isBackendClarificationAnswerValid(normalizedAnswer);
@@ -9527,6 +9552,12 @@ function classifyTrafficCount(
 }
 
 function resolveFrontendProfile(normalizedPrompt: string): ArchitectureAnswerProfile["frontend"] {
+  const stackCategory = resolveArchitectureTechnologyStackCategory("frontend", normalizedPrompt);
+  if (stackCategory === "frontend_mobile") return "mobile";
+  if (stackCategory === "frontend_ssr") return "ssr";
+  if (stackCategory === "frontend_spa") return "spa";
+  if (stackCategory === "frontend_static") return "static";
+
   if (isMobileAppPrompt(normalizedPrompt)) {
     return "mobile";
   }
@@ -9550,6 +9581,11 @@ function resolveBackendProfile(normalizedPrompt: string): ArchitectureAnswerProf
   if (requiresNoBackend(normalizedPrompt)) {
     return "none";
   }
+
+  const stackCategory = resolveArchitectureTechnologyStackCategory("backend", normalizedPrompt);
+  if (stackCategory === "backend_microservices") return "microservices";
+  if (stackCategory === "backend_complex") return "complex";
+  if (stackCategory === "backend_simple_api") return "simple_api";
 
   if (/(microservice|마이크로서비스)/iu.test(normalizedPrompt)) {
     return "microservices";
@@ -9985,7 +10021,8 @@ function requiresInferredSimpleBackend(normalizedPrompt: string): boolean {
 }
 
 function requiresSpaFrontend(normalizedPrompt: string): boolean {
-  return /(spa|single\s*page|react|vue|angular)/iu.test(normalizedPrompt);
+  return resolveArchitectureTechnologyStackCategory("frontend", normalizedPrompt) === "frontend_spa"
+    || /(spa|single\s*page|react|vue|angular)/iu.test(normalizedPrompt);
 }
 
 function requiresSsrFrontend(normalizedPrompt: string): boolean {
@@ -9999,7 +10036,8 @@ function requiresUploadStorage(normalizedPrompt: string): boolean {
 }
 
 function requiresComplexBackend(normalizedPrompt: string): boolean {
-  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
+  const stackCategory = resolveArchitectureTechnologyStackCategory("backend", normalizedPrompt);
+  return stackCategory === "backend_complex" || stackCategory === "backend_microservices" || /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
     normalizedPrompt
   );
 }
@@ -10132,7 +10170,8 @@ function hasExplicitDatabaseMarker(normalizedPrompt: string): boolean {
 }
 
 function hasExplicitComplexBackendMarker(normalizedPrompt: string): boolean {
-  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
+  const stackCategory = resolveArchitectureTechnologyStackCategory("backend", normalizedPrompt);
+  return stackCategory === "backend_complex" || stackCategory === "backend_microservices" || /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
     normalizedPrompt
   );
 }
