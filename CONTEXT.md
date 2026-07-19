@@ -17,7 +17,7 @@ An infrastructure building block from a cloud provider inside a Practice Archite
 _Avoid_: Component, block, service
 
 **Resource Display Name**:
-A plain-language, single-line name shown consistently for one Resource across the Architecture Board, Resource panels, Template previews, and user-facing explanations. Primary Resources keep provider-native Resource types, widely recognized provider abbreviations, and established AWS role terms such as `Public`, `Private`, `NAT`, `AZ`, and `Worker Node` in English, while expressing application-specific roles concisely in Korean, such as `애플리케이션 Security Group`. Technical helper Resources may instead use a short purpose-oriented name such as `ECR 읽기 권한 연결`, with the exact provider type remaining in technical details. Every Resource created from a Template initially follows this convention, and every initial name is unique within that Template. Resources of the same type are distinguished by functional role first, location second, and a number only as a last resort. The Architecture Board may render English terms in uppercase while other surfaces preserve the authored casing. After applying the Template, the user may edit the name freely. The name may change for user clarity without changing that Resource's IaC Identity or provider-side name.
+A plain-language, single-line name shown consistently for one Resource across the Architecture Board, Resource panels, Template previews, and user-facing explanations. Every initial Resource Display Name created from a Template is English-only, including provider-native Resource types, widely recognized provider abbreviations, established AWS role terms, application-specific roles, and technical helper Resource names. Every initial name is unique within that Template. Resources of the same type are distinguished by functional role first, location second, and a number only as a last resort. The Architecture Board may render English terms in uppercase while other surfaces preserve the authored casing. After applying the Template, the user may edit the name freely. The name may change for user clarity without changing that Resource's IaC Identity or provider-side name. This initial Template label rule does not change Terraform identity, provider-side names, Board structure, or general UI language.
 _Avoid_: Terraform resource name, Resource ID, AWS Name tag
 
 **IaC Identity**:
@@ -25,7 +25,7 @@ The stable infrastructure-as-code address used to reference and track a Resource
 _Avoid_: Board label, display name, provider-side name
 
 **Architecture Area Title**:
-A concise, single-line label for a non-Resource Board area that helps users recognize architectural scope such as a Region, Availability Zone, network zone, or global service area. It is not a Resource Display Name or an IaC Identity.
+A concise, single-line label for a non-Resource Board area that helps users recognize architectural scope such as a Region, Availability Zone, network zone, or global service area. Every initial Architecture Area Title created from a Template is English-only. It is not a Resource Display Name or an IaC Identity, and this initial Template label rule does not change Terraform identity, provider-side names, Board structure, user-edited post-creation labels, or general UI language.
 _Avoid_: Resource name, Terraform address, provider resource
 
 **Curated Module**:
