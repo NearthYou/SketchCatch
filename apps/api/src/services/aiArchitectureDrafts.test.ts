@@ -565,8 +565,8 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.equal(countNodes("UNKNOWN"), 4);
   assert.equal(countNodes("NAT_GATEWAY"), 1);
   assert.equal(countNodes("ELASTIC_IP"), 1);
-  assert.equal(countNodes("APPLICATION_AUTO_SCALING_TARGET"), 0);
-  assert.equal(countNodes("APPLICATION_AUTO_SCALING_POLICY"), 0);
+  assert.equal(countNodes("APPLICATION_AUTO_SCALING_TARGET"), 1);
+  assert.equal(countNodes("APPLICATION_AUTO_SCALING_POLICY"), 1);
   assert.equal(countNodes("CODESTAR_CONNECTION"), 0);
   assert.equal(countNodes("CODEPIPELINE"), 0);
   assert.equal(countNodes("CODEBUILD_PROJECT"), 0);
@@ -691,6 +691,8 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.ok(edgeLabels.has("ALB SG -> Task SG: TCP 8080 only"));
   assert.ok(edgeLabels.has("application revisions pull API image from ECR"));
   assert.ok(edgeLabels.has("writes ECS container logs via awslogs"));
+  assert.ok(edgeLabels.has("scales"));
+  assert.ok(edgeLabels.has("tracks requests"));
   assert.equal(
     response.architectureJson.edges.filter(
       (edge) =>

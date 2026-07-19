@@ -3752,7 +3752,9 @@ function applyStrictRepositoryEvidencePolicy(
   });
   const nodes = [...updatedCoreNodes, ...additionalNodes];
   const nodeIds = new Set(nodes.map((node) => node.id));
-  const edges: ArchitectureJson["edges"] = [];
+  const edges: ArchitectureJson["edges"] = fixedTemplateDraft.architectureJson.edges.filter(
+    (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+  );
   const edgePairs = new Set(edges.map((edge) => `${edge.sourceId}->${edge.targetId}`));
   const connect = (sourceId: string, targetId: string, label: string): void => {
     const pair = `${sourceId}->${targetId}`;
@@ -5616,7 +5618,15 @@ function findStrictRepositoryEvidenceValidationIssues(
     forbiddenTypes.add("COGNITO_USER_POOL_CLIENT");
   }
 
-  const unexpectedTypes = [...forbiddenTypes].filter((resourceType) => nodeTypes.has(resourceType));
+  const fixedTemplateResourceTypes = new Set(
+    architectureJson.nodes
+      .filter((node) => node.config.templateId === request.templateId)
+      .map((node) => node.type)
+  );
+  const unexpectedTypes = [...forbiddenTypes].filter(
+    (resourceType) =>
+      nodeTypes.has(resourceType) && !fixedTemplateResourceTypes.has(resourceType)
+  );
   if (unexpectedTypes.length > 0) {
     issues.push(`Strict repository evidence contains unsupported inferred resources: ${unexpectedTypes.join(", ")}.`);
   }
