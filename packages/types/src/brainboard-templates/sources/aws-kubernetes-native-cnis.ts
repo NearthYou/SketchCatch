@@ -43,7 +43,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "37304ca4-7959-4553-802c-96b74972173a",
       domOrder: 1,
-      label: "default",
+      label: "EKS VPC",
       position: {
         x: 850,
         y: 405
@@ -61,7 +61,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5941a072-4406-4e02-ab93-560811155e88",
       domOrder: 2,
-      label: "sg",
+      label: "EKS Cluster SG",
       position: {
         x: 885,
         y: 730
@@ -79,7 +79,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5adb3d4d-2c10-46fe-93f8-691ad10c863a",
       domOrder: 3,
-      label: "us-east-1a",
+      label: "AZ us-east-1a",
       position: {
         x: 960,
         y: 835
@@ -97,7 +97,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "e88227bb-9f4f-4710-87a7-ad9ae751e7c0",
       domOrder: 4,
-      label: "us-east-1b",
+      label: "AZ us-east-1b",
       position: {
         x: 1700,
         y: 835
@@ -115,7 +115,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5b25dc4d-2481-4368-89be-255a3f450843",
       domOrder: 5,
-      label: "snet-1b",
+      label: "Public Subnet B",
       position: {
         x: 1720,
         y: 960
@@ -133,7 +133,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c7985a34-a745-4fc3-8e0c-32ceec6626f8",
       domOrder: 6,
-      label: "snet-1a",
+      label: "Public Subnet A",
       position: {
         x: 980,
         y: 960
@@ -151,7 +151,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "80d3a744-01c0-4e70-91e9-2186f7cdf201",
       domOrder: 7,
-      label: " ",
+      label: "Internet",
       position: {
         x: 1445,
         y: 125
@@ -169,7 +169,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "25376bca-5df7-479f-a809-cf06e64b7ca7",
       domOrder: 8,
-      label: "IAM role policy attachment WN",
+      label: "Worker Node 권한 연결",
       position: {
         x: 560,
         y: 755
@@ -187,7 +187,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2d045230-f49c-49bc-87b8-88f700f6781a",
       domOrder: 9,
-      label: "IAM role policy attachment RC",
+      label: "EKS Cluster 권한 연결",
       position: {
         x: 2300,
         y: 405
@@ -205,7 +205,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "42135c8e-4923-4254-b4c1-b22be65e236b",
       domOrder: 10,
-      label: "node_group",
+      label: "Worker Node IAM Role",
       position: {
         x: 760,
         y: 575
@@ -223,7 +223,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6f7256c8-2659-4d8d-865d-796e54991c87",
       domOrder: 11,
-      label: "IAM role policy attachment CNI policy",
+      label: "CNI 권한 연결",
       position: {
         x: 560,
         y: 405
@@ -241,7 +241,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b99df77b-1e2f-4322-9e97-0b4d91671f96",
       domOrder: 12,
-      label: "eks",
+      label: "EKS Cluster IAM Role",
       position: {
         x: 2210,
         y: 575
@@ -259,7 +259,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c5930055-9371-4053-8473-91274baf223e",
       domOrder: 13,
-      label: "IAM role policy attachment Registry",
+      label: "ECR 읽기 권한 연결",
       position: {
         x: 560,
         y: 575
@@ -277,7 +277,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "cb3135b3-a5b2-4d99-a025-049c131c7ab1",
       domOrder: 14,
-      label: "IAM role policy attachment CP",
+      label: "VPC Controller 권한 연결",
       position: {
         x: 2300,
         y: 735
@@ -295,7 +295,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "45cb2eaf-9c40-4235-aa0a-b588cd32fcb4",
       domOrder: 15,
-      label: "Internet gateway",
+      label: "Internet Gateway",
       position: {
         x: 1445,
         y: 375
@@ -313,7 +313,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "7928be85-4122-45f6-b424-fba82256c200",
       domOrder: 16,
-      label: "Route table",
+      label: "Public Route Table",
       position: {
         x: 1445,
         y: 575
@@ -331,7 +331,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "767c4506-e235-40be-b156-037382cf07a7",
       domOrder: 17,
-      label: "EKS node group",
+      label: "EKS Node Group",
       position: {
         x: 1295,
         y: 1160
@@ -349,7 +349,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c34dd495-8609-4ac1-9a14-ee10979fd664",
       domOrder: 18,
-      label: "SG rule",
+      label: "Cluster API HTTPS 허용",
       position: {
         x: 1445,
         y: 1300
@@ -367,7 +367,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fe650b89-3abf-433e-87d7-612606ec80df",
       domOrder: 19,
-      label: "EKS cluster",
+      label: "EKS Cluster",
       position: {
         x: 1605,
         y: 1160
@@ -385,7 +385,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "228e33c2-8279-40e1-ad69-745eebcae150",
       domOrder: 20,
-      label: "rt association",
+      label: "Public Route 연결 A",
       position: {
         x: 1080,
         y: 1030
@@ -403,7 +403,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fa115f68-d3a4-433f-9f23-acba35012866",
       domOrder: 21,
-      label: "rt association",
+      label: "Public Route 연결 B",
       position: {
         x: 1820,
         y: 1030
@@ -1177,13 +1177,13 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_vpc.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "5941a072-4406-4e02-ab93-560811155e88": {
       kind: "resource",
       address: "aws_security_group.sg",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "5adb3d4d-2c10-46fe-93f8-691ad10c863a": {
       kind: "presentation",
@@ -1201,13 +1201,13 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_subnet.snet-1b",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "c7985a34-a745-4fc3-8e0c-32ceec6626f8": {
       kind: "resource",
       address: "aws_subnet.snet-1a",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "80d3a744-01c0-4e70-91e9-2186f7cdf201": {
       kind: "presentation",
@@ -1231,7 +1231,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_iam_role.node_group",
       fileName: "iam.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "6f7256c8-2659-4d8d-865d-796e54991c87": {
       kind: "resource",
@@ -1243,7 +1243,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_iam_role.eks",
       fileName: "iam.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "c5930055-9371-4053-8473-91274baf223e": {
       kind: "resource",

@@ -25,7 +25,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "89087529-31fb-4b85-abed-3418eee9a00f",
       domOrder: 0,
-      label: "Global - Not tied to any region",
+      label: "Global",
       position: {
         x: 500,
         y: -960
@@ -43,7 +43,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fc0d1fe3-09ac-4ee4-a83f-c04900b17d19",
       domOrder: 1,
-      label: "Users' accounts based on variables",
+      label: "변수 기반 사용자 계정",
       position: {
         x: 1095,
         y: -715
@@ -61,7 +61,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "1c28c7ec-2e94-4ac1-95ed-09370ec23e35",
       domOrder: 2,
-      label: "IAM group",
+      label: "사용자 IAM Group",
       position: {
         x: 715,
         y: -415
@@ -79,7 +79,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "38a919c0-d6ae-430e-ba56-5a42ddda95d4",
       domOrder: 3,
-      label: "mfa",
+      label: "MFA 필수 IAM Policy",
       position: {
         x: 595,
         y: -815
@@ -97,7 +97,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8f00e827-caf6-40fd-9677-c8484b42f94c",
       domOrder: 4,
-      label: "iam_group_policy_attachment_13_c_c",
+      label: "비밀번호 변경 권한 연결",
       position: {
         x: 835,
         y: -635
@@ -115,7 +115,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b1fc8d2d-aa45-40dd-b38c-780b160f02e2",
       domOrder: 5,
-      label: "IAM policy change password",
+      label: "비밀번호 변경 Managed Policy",
       position: {
         x: 835,
         y: -815
@@ -133,7 +133,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f1b74bf3-c510-4da8-baaa-d199ffaa6267",
       domOrder: 6,
-      label: "default",
+      label: "MFA 필수 권한 연결",
       position: {
         x: 595,
         y: -635
@@ -151,7 +151,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "76efa2d0-4ef5-414c-af9b-7e5467b8adb1",
       domOrder: 7,
-      label: "users",
+      label: "IAM User 계정",
       position: {
         x: 1443.2571075439453,
         y: -641.3308456420898
@@ -169,7 +169,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b80b763b-bc6e-47c3-bdbd-ac5fe8bf37f7",
       domOrder: 8,
-      label: "default",
+      label: "IAM User Group 연결",
       position: {
         x: 1203.2571075439453,
         y: -641.3308456420898
@@ -187,7 +187,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f851591c-6a06-4091-874b-a9a3acce7c18",
       domOrder: 9,
-      label: "default",
+      label: "IAM Console Login Profile",
       position: {
         x: 1443.2571075439453,
         y: -471.3308456420898
@@ -596,43 +596,43 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_iam_policy.mfa",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "8f00e827-caf6-40fd-9677-c8484b42f94c": {
       kind: "resource",
       address: "aws_iam_group_policy_attachment.iam_group_policy_attachment_13_c_c",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "b1fc8d2d-aa45-40dd-b38c-780b160f02e2": {
       kind: "resource",
       address: "data.aws_iam_policy.change_password",
       fileName: "main.tf",
-      addressMapping: "single-residual"
+      addressMapping: "reviewed-override"
     },
     "f1b74bf3-c510-4da8-baaa-d199ffaa6267": {
       kind: "resource",
       address: "aws_iam_group_policy_attachment.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "76efa2d0-4ef5-414c-af9b-7e5467b8adb1": {
       kind: "resource",
       address: "aws_iam_user.users",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "b80b763b-bc6e-47c3-bdbd-ac5fe8bf37f7": {
       kind: "resource",
       address: "aws_iam_user_group_membership.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "f851591c-6a06-4091-874b-a9a3acce7c18": {
       kind: "resource",
       address: "aws_iam_user_login_profile.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     }
   }
 });

@@ -43,7 +43,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "7e275d52-672d-4e38-b17a-aad1e06c04e8",
       domOrder: 1,
-      label: "default",
+      label: "FSx VPC",
       position: {
         x: -420,
         y: 170
@@ -61,7 +61,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "9cd19ce4-c2ad-4a31-9a8b-ded606955752",
       domOrder: 2,
-      label: "us-east-2a",
+      label: "AZ us-east-2a",
       position: {
         x: -290,
         y: 305
@@ -79,7 +79,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "555b4f12-4843-4c1a-aa99-8771f272d00c",
       domOrder: 3,
-      label: "us-east-2b",
+      label: "AZ us-east-2b",
       position: {
         x: 360,
         y: 309
@@ -97,7 +97,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "265b7ddb-d288-41f7-8459-7d3ace1c30b9",
       domOrder: 4,
-      label: "Public subnet",
+      label: "Public Subnet A",
       position: {
         x: -272.784155214228,
         y: 460
@@ -115,7 +115,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2702e115-2e4a-4d50-9424-59b727352c73",
       domOrder: 5,
-      label: "Public subnet",
+      label: "Public Subnet B",
       position: {
         x: 380,
         y: 458
@@ -133,7 +133,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b0dc4cbd-651f-42f7-b725-d3e7220d5559",
       domOrder: 6,
-      label: "Private subnet",
+      label: "Private Subnet A",
       position: {
         x: -271.54138702460847,
         y: 790
@@ -151,7 +151,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "9530b9bb-8579-4ae9-ae26-fa12f94a4068",
       domOrder: 7,
-      label: "Private subnet",
+      label: "Private Subnet B",
       position: {
         x: 390,
         y: 790
@@ -169,7 +169,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "48a880f1-2fcf-4c52-9018-1f5af605f205",
       domOrder: 8,
-      label: "fsx",
+      label: "FSx for Lustre SG",
       position: {
         x: -350,
         y: 850
@@ -223,7 +223,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6b6b83ad-b493-4db8-ad88-17d2c5e75426",
       domOrder: 11,
-      label: "IGW",
+      label: "Internet Gateway",
       position: {
         x: 270,
         y: 140
@@ -241,7 +241,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "19e4afd8-69f2-4959-a167-b8534d802b99",
       domOrder: 12,
-      label: "Net ACL",
+      label: "Public Network ACL B",
       position: {
         x: 780,
         y: 615
@@ -259,7 +259,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b8e1ad82-f128-4801-ab61-99638f01082e",
       domOrder: 13,
-      label: "Net ACL",
+      label: "Public Network ACL A",
       position: {
         x: 130,
         y: 615
@@ -277,7 +277,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c7a6ebee-753c-4aab-9075-6ae092cfc4a0",
       domOrder: 14,
-      label: "eip_a",
+      label: "NAT EIP A",
       position: {
         x: 125,
         y: 340
@@ -295,7 +295,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d7459e44-ed51-418c-805d-3f65ae50de2e",
       domOrder: 15,
-      label: "nat-gw-2a-public",
+      label: "NAT Gateway A",
       position: {
         x: 125,
         y: 500
@@ -313,7 +313,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "0cbffe9f-5ede-4969-b752-e22cb6fadcc2",
       domOrder: 16,
-      label: "nat-gw-2b-public",
+      label: "NAT Gateway B",
       position: {
         x: 780,
         y: 500
@@ -331,7 +331,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "194c263d-746a-43f0-af23-18445c225246",
       domOrder: 17,
-      label: "default",
+      label: "S3 Bucket 1",
       position: {
         x: 630,
         y: 1470
@@ -349,7 +349,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "cd6d6243-292a-4775-baf7-35bcff8f1b56",
       domOrder: 18,
-      label: "vpc_logs",
+      label: "VPC Log S3 Bucket",
       position: {
         x: -190,
         y: 1470
@@ -367,7 +367,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6273bc80-9064-4f64-802d-e03902cbc52d",
       domOrder: 19,
-      label: "Restrict public access",
+      label: "S3 Bucket 1 공개 차단",
       position: {
         x: 820,
         y: 1470
@@ -385,7 +385,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c0943882-2bf4-415b-83ab-21c7bb692b08",
       domOrder: 20,
-      label: "Restrict public access",
+      label: "VPC Log S3 공개 차단",
       position: {
         x: 0,
         y: 1470
@@ -403,7 +403,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "74346525-1052-4a0b-9e90-0253d59203dd",
       domOrder: 21,
-      label: "eip_b",
+      label: "NAT EIP B",
       position: {
         x: 780,
         y: 340
@@ -439,7 +439,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f6768a8b-80fa-4dda-a435-32f0c81c5e24",
       domOrder: 23,
-      label: "flow log",
+      label: "VPC Flow Log",
       position: {
         x: -395,
         y: 1470
@@ -457,7 +457,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c3ae8f08-53e4-4d58-a37c-11e1c914492a",
       domOrder: 24,
-      label: "FSX lustre FS mono-subnet",
+      label: "FSx for Lustre",
       position: {
         x: -60,
         y: 1010
@@ -475,7 +475,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d0683fa2-c9a4-4966-9b98-ffa6892efa08",
       domOrder: 25,
-      label: "FSX lustre FS mono-subnet",
+      label: "FSx for Lustre",
       position: {
         x: 600,
         y: 1010
@@ -493,7 +493,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "54dcd23d-fd8e-4f8f-bc56-a81fcde34c8e",
       domOrder: 26,
-      label: "versioning",
+      label: "S3 Bucket 1 버전 관리",
       position: {
         x: 820,
         y: 1630
@@ -511,7 +511,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c256a91a-8093-495c-b853-e52691c9d8c4",
       domOrder: 27,
-      label: "versioning",
+      label: "VPC Log S3 버전 관리",
       position: {
         x: 0,
         y: 1630
@@ -529,7 +529,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "364622cd-cd1c-483a-98b0-60f51b5ecdc9",
       domOrder: 28,
-      label: "server side encryption configuration",
+      label: "S3 Bucket 1 암호화",
       position: {
         x: 630,
         y: 1630
@@ -547,7 +547,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8142cb9b-82c4-4772-a377-7d0162045d7b",
       domOrder: 29,
-      label: "server side encryption configuration",
+      label: "VPC Log S3 암호화",
       position: {
         x: -190,
         y: 1630
@@ -1187,7 +1187,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_vpc.default",
       fileName: "vpc.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "9cd19ce4-c2ad-4a31-9a8b-ded606955752": {
       kind: "presentation",
@@ -1229,7 +1229,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_security_group.fsx",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "6a076cc5-40f2-4be7-b5b1-989687a1b017": {
       kind: "presentation",
@@ -1265,31 +1265,31 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_eip.eip_a",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "d7459e44-ed51-418c-805d-3f65ae50de2e": {
       kind: "resource",
       address: "aws_nat_gateway.nat-gw-2a-public",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "0cbffe9f-5ede-4969-b752-e22cb6fadcc2": {
       kind: "resource",
       address: "aws_nat_gateway.nat-gw-2b-public",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "194c263d-746a-43f0-af23-18445c225246": {
       kind: "resource",
       address: "aws_s3_bucket.default",
       fileName: "storage.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "cd6d6243-292a-4775-baf7-35bcff8f1b56": {
       kind: "resource",
       address: "aws_s3_bucket.vpc_logs",
       fileName: "vpc.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "6273bc80-9064-4f64-802d-e03902cbc52d": {
       kind: "resource",
@@ -1307,7 +1307,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_eip.eip_b",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "064d4e6f-a4bb-4041-8104-da21f1dd5bfb": {
       kind: "presentation",

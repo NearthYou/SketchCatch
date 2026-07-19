@@ -43,7 +43,7 @@ export const awsEc2VpcSubnetSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3704567b-d0d1-49f3-9215-bf83a1df977a",
       domOrder: 1,
-      label: "vpc",
+      label: "EC2 VPC",
       position: {
         x: 467.5,
         y: 2872.5
@@ -61,7 +61,7 @@ export const awsEc2VpcSubnetSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "818d32cf-1a97-4f1c-8f60-92faf5dc7c0e",
       domOrder: 2,
-      label: "us-east-1a",
+      label: "AZ us-east-1a",
       position: {
         x: 540,
         y: 2947.5
@@ -79,7 +79,7 @@ export const awsEc2VpcSubnetSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8c044337-0d96-4095-b3a4-89d844d1c129",
       domOrder: 3,
-      label: "snet",
+      label: "Public Subnet",
       position: {
         x: 637.5,
         y: 3067.5
@@ -115,7 +115,7 @@ export const awsEc2VpcSubnetSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8fbaeef4-cb2d-473e-8885-2b1fb5161e59",
       domOrder: 5,
-      label: "t3a instance",
+      label: "t3a.medium EC2 Instance",
       position: {
         x: 781.8345757922517,
         y: 3252.5
@@ -133,7 +133,7 @@ export const awsEc2VpcSubnetSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f6a2e88c-0606-4841-8438-05473a0719d3",
       domOrder: 6,
-      label: "network interface",
+      label: "Elastic Network Interface",
       position: {
         x: 1158.5575473905592,
         y: 3252.5
@@ -260,7 +260,7 @@ export const awsEc2VpcSubnetSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_vpc.vpc",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "818d32cf-1a97-4f1c-8f60-92faf5dc7c0e": {
       kind: "presentation",
@@ -272,7 +272,7 @@ export const awsEc2VpcSubnetSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_subnet.snet",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "4a830da1-bf0a-4bfe-8cd4-2c0c595869bf": {
       kind: "presentation",

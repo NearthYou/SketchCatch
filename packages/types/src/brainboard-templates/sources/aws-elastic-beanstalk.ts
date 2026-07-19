@@ -43,7 +43,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d40ff46e-9c47-41ae-ac6d-94b6ee7e82a0",
       domOrder: 1,
-      label: "default",
+      label: "Elastic Beanstalk VPC",
       position: {
         x: 55,
         y: 340
@@ -61,7 +61,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "21fc0544-3752-484e-8b4b-ba2e5d1a62f4",
       domOrder: 2,
-      label: "",
+      label: "Elastic Beanstalk ASG",
       position: {
         x: 140,
         y: 745
@@ -79,7 +79,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "7eb561cf-2bc5-4d66-933a-2242b1a6567f",
       domOrder: 3,
-      label: "ap-southeast-2a",
+      label: "AZ ap-southeast-2a",
       position: {
         x: 220,
         y: 520
@@ -97,7 +97,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "9a33d988-aa5c-4ab1-9c0e-fd1b80102646",
       domOrder: 4,
-      label: "ap-southeast-2b",
+      label: "AZ ap-southeast-2b",
       position: {
         x: 790,
         y: 520
@@ -115,7 +115,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5817b9fb-4c2c-4e1f-bb4d-61b71657a381",
       domOrder: 5,
-      label: "subnet_2a",
+      label: "Public Subnet A",
       position: {
         x: 240,
         y: 600
@@ -133,7 +133,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "a5c63292-27e8-447b-b4fc-2d231bb3580f",
       domOrder: 6,
-      label: "subnet_2b",
+      label: "Public Subnet B",
       position: {
         x: 815,
         y: 600
@@ -151,7 +151,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "97044051-a775-4409-8077-9c1e1f468426",
       domOrder: 7,
-      label: "default",
+      label: "Internet Gateway",
       position: {
         x: 620,
         y: 310
@@ -169,7 +169,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "0b61aaf6-6cd1-497d-8a4d-9df7c71157b1",
       domOrder: 8,
-      label: "t2_7",
+      label: "Elastic Beanstalk EC2 A",
       position: {
         x: 330,
         y: 810
@@ -187,7 +187,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "1cb32ea4-78fa-41f1-aaa4-8bd6de25c903",
       domOrder: 9,
-      label: "t2_7_c",
+      label: "Elastic Beanstalk EC2 B",
       position: {
         x: 920,
         y: 810
@@ -205,7 +205,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "002f83ee-6206-4b3b-a473-e684f6504631",
       domOrder: 10,
-      label: "default",
+      label: "Elastic Beanstalk Environment",
       position: {
         x: 620,
         y: 810
@@ -223,7 +223,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "553a42d0-41d3-4c72-a135-0ef20079465d",
       domOrder: 11,
-      label: "default elastic beanstalk app",
+      label: "Elastic Beanstalk Application",
       position: {
         x: 620,
         y: 1020
@@ -241,7 +241,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2e07a06a-d2b6-4ae1-9424-895648bce499",
       domOrder: 12,
-      label: "default",
+      label: "Public Route Table",
       position: {
         x: 620,
         y: 660
@@ -259,7 +259,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3657c666-e254-4beb-9895-baef2c9ff360",
       domOrder: 13,
-      label: "rt association",
+      label: "Public Route 연결 B",
       position: {
         x: 920,
         y: 660
@@ -277,7 +277,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5ffcf553-4f13-488e-9f55-675ad24b98fe",
       domOrder: 14,
-      label: "rt association",
+      label: "Public Route 연결 A",
       position: {
         x: 330,
         y: 660
@@ -578,7 +578,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_vpc.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "21fc0544-3752-484e-8b4b-ba2e5d1a62f4": {
       kind: "presentation",
@@ -602,19 +602,19 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_subnet.subnet_2a",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "a5c63292-27e8-447b-b4fc-2d231bb3580f": {
       kind: "resource",
       address: "aws_subnet.subnet_2b",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "97044051-a775-4409-8077-9c1e1f468426": {
       kind: "resource",
       address: "aws_internet_gateway.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "0b61aaf6-6cd1-497d-8a4d-9df7c71157b1": {
       kind: "presentation",
@@ -632,7 +632,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_elastic_beanstalk_environment.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "553a42d0-41d3-4c72-a135-0ef20079465d": {
       kind: "resource",
@@ -644,7 +644,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_route_table.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "3657c666-e254-4beb-9895-baef2c9ff360": {
       kind: "resource",

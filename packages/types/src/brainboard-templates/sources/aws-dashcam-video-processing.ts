@@ -43,7 +43,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "13f9d1bb-7e57-4f23-a141-d99ebc4d39e2",
       domOrder: 1,
-      label: "video_processing_cluster",
+      label: "영상 처리 ECS Cluster",
       position: {
         x: 275,
         y: 475
@@ -61,7 +61,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "2076baeb-dbf8-463d-bb50-7ec9b5d259b9",
       domOrder: 2,
-      label: "output_bucket",
+      label: "처리 결과 S3 Bucket",
       position: {
         x: 270,
         y: 315
@@ -79,7 +79,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "23f9af50-c989-4d73-ac79-fbae47e10c04",
       domOrder: 3,
-      label: "video_distribution",
+      label: "결과 영상 CloudFront Distribution",
       position: {
         x: 50,
         y: 315
@@ -97,7 +97,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "30b41b95-ecec-400f-95b4-d47d7debfcea",
       domOrder: 4,
-      label: "video_resource",
+      label: "영상 API /videos Resource",
       position: {
         x: 660,
         y: 225
@@ -115,7 +115,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "32b37e79-d0da-4ea7-88c6-2c8789b455ce",
       domOrder: 5,
-      label: "video_bucket",
+      label: "원본 영상 S3 Bucket",
       position: {
         x: 65,
         y: 485
@@ -133,7 +133,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "3b240358-1a05-4628-a2e8-be852cdbf846",
       domOrder: 6,
-      label: "lambda_policy",
+      label: "Lambda 기본 실행 권한 연결",
       position: {
         x: 60,
         y: -60
@@ -151,7 +151,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "5069c2b1-c725-4588-8c24-bb96be01ffd9",
       domOrder: 7,
-      label: "video_task",
+      label: "영상 처리 ECS Task Definition",
       position: {
         x: 600,
         y: 320
@@ -169,7 +169,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "50a96af0-1d2d-46fd-a526-01a847c44613",
       domOrder: 8,
-      label: "video_service",
+      label: "영상 처리 ECS Service",
       position: {
         x: 600,
         y: 480
@@ -187,7 +187,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "6c4d1286-6d25-4835-8637-4d392c54de45",
       domOrder: 9,
-      label: "video_integration",
+      label: "영상 API Lambda 통합",
       position: {
         x: 440,
         y: 120
@@ -205,7 +205,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "9ea9ad58-0146-4a72-b2bb-a08d51f00503",
       domOrder: 10,
-      label: "video_method",
+      label: "영상 API POST Method",
       position: {
         x: 660,
         y: -30
@@ -223,7 +223,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "be541b7f-676c-46ae-992e-e7f31d3baf48",
       domOrder: 11,
-      label: "video_processor",
+      label: "영상 처리 Lambda",
       position: {
         x: 280,
         y: 120
@@ -241,7 +241,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "cc70890f-c0f2-4f54-bf31-4017ea652dc6",
       domOrder: 12,
-      label: "video_api",
+      label: "영상 처리 REST API",
       position: {
         x: 1020,
         y: 120
@@ -259,7 +259,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "ecf5cf0b-9489-429e-a6a3-3db886ef26cb",
       domOrder: 13,
-      label: "video_queue",
+      label: "영상 처리 SQS Queue",
       position: {
         x: 895,
         y: 320
@@ -277,7 +277,7 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "f7a66538-185b-4023-ad8a-0d84ad5d2842",
       domOrder: 14,
-      label: "lambda_exec",
+      label: "영상 처리 Lambda IAM Role",
       position: {
         x: 55,
         y: 120
@@ -946,85 +946,85 @@ export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate(
       kind: "resource",
       address: "aws_ecs_cluster.video_processing_cluster",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "2076baeb-dbf8-463d-bb50-7ec9b5d259b9": {
       kind: "resource",
       address: "aws_s3_bucket.output_bucket",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "23f9af50-c989-4d73-ac79-fbae47e10c04": {
       kind: "resource",
       address: "aws_cloudfront_distribution.video_distribution",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "30b41b95-ecec-400f-95b4-d47d7debfcea": {
       kind: "resource",
       address: "aws_api_gateway_resource.video_resource",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "32b37e79-d0da-4ea7-88c6-2c8789b455ce": {
       kind: "resource",
       address: "aws_s3_bucket.video_bucket",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "3b240358-1a05-4628-a2e8-be852cdbf846": {
       kind: "resource",
       address: "aws_iam_role_policy_attachment.lambda_policy",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "5069c2b1-c725-4588-8c24-bb96be01ffd9": {
       kind: "resource",
       address: "aws_ecs_task_definition.video_task",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "50a96af0-1d2d-46fd-a526-01a847c44613": {
       kind: "resource",
       address: "aws_ecs_service.video_service",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "6c4d1286-6d25-4835-8637-4d392c54de45": {
       kind: "resource",
       address: "aws_api_gateway_integration.video_integration",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "9ea9ad58-0146-4a72-b2bb-a08d51f00503": {
       kind: "resource",
       address: "aws_api_gateway_method.video_method",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "be541b7f-676c-46ae-992e-e7f31d3baf48": {
       kind: "resource",
       address: "aws_lambda_function.video_processor",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "cc70890f-c0f2-4f54-bf31-4017ea652dc6": {
       kind: "resource",
       address: "aws_api_gateway_rest_api.video_api",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "ecf5cf0b-9489-429e-a6a3-3db886ef26cb": {
       kind: "resource",
       address: "aws_sqs_queue.video_queue",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "f7a66538-185b-4023-ad8a-0d84ad5d2842": {
       kind: "resource",
       address: "aws_iam_role.lambda_exec",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     }
   }
 });

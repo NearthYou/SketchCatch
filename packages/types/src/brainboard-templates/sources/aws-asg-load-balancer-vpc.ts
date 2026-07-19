@@ -43,7 +43,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "4ccb83f3-67ac-497f-bcfd-4ce5691f8e73",
       domOrder: 1,
-      label: "us-east-1a",
+      label: "AZ us-east-1a",
       position: {
         x: 1480,
         y: 3270
@@ -61,7 +61,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f5024a0a-d5e3-4403-a70f-d07a5402a90c",
       domOrder: 2,
-      label: "vpc",
+      label: "웹 VPC",
       position: {
         x: 515,
         y: 3070
@@ -79,7 +79,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8720b1c9-ad44-42e7-a8f2-aa43ebee2449",
       domOrder: 3,
-      label: "us-east-1a",
+      label: "AZ us-east-1a",
       position: {
         x: 621.3702764744684,
         y: 3271.0155158741018
@@ -97,7 +97,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "af851fdf-0467-46fb-a990-ae069729728c",
       domOrder: 4,
-      label: "snet2",
+      label: "Public Subnet B",
       position: {
         x: 1510,
         y: 3380
@@ -115,7 +115,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "dedbf41c-255d-4b77-b246-a9ba0de7d9fe",
       domOrder: 5,
-      label: "default",
+      label: "웹 공용 SG",
       position: {
         x: 542.5,
         y: 3919.066238679101
@@ -133,7 +133,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "a514bd55-a14d-45a0-a047-4220529bd4e2",
       domOrder: 6,
-      label: "ec2",
+      label: "EC2 SG",
       position: {
         x: 542.5,
         y: 3579.4688830166933
@@ -151,7 +151,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "cd499b89-a918-4f50-a93a-2b865f961e60",
       domOrder: 7,
-      label: "default",
+      label: "웹 Launch Configuration",
       position: {
         x: 1127.3114276037932,
         y: 4031.0385590190112
@@ -169,7 +169,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d75efaba-a405-4bf0-9cf0-929116e2c267",
       domOrder: 8,
-      label: "web",
+      label: "웹 ASG",
       position: {
         x: 693.2370052628482,
         y: 3597.5030857498527
@@ -188,7 +188,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ff98d607-abd3-49b8-bf7f-f5dae753e5c8",
       domOrder: 9,
-      label: "snet",
+      label: "Public Subnet A",
       position: {
         x: 651.3702764744684,
         y: 3381.0155158741018
@@ -206,7 +206,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "478775af-5d74-4733-9750-fbe7e051cdcb",
       domOrder: 10,
-      label: "internet_gw",
+      label: "Internet Gateway",
       position: {
         x: 1252.5,
         y: 3039.7979623110955
@@ -224,7 +224,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "739e74c1-d7e8-4318-879c-d8551ead85da",
       domOrder: 11,
-      label: "rt",
+      label: "Public Route Table",
       position: {
         x: 1252.5,
         y: 3260
@@ -242,7 +242,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d67cbec1-5217-44ea-95e8-93c2bae28504",
       domOrder: 12,
-      label: "clb_9",
+      label: "웹 Classic Load Balancer",
       position: {
         x: 1244.6867490439472,
         y: 3933.163290451488
@@ -260,7 +260,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "30a33276-f2ed-4578-90f4-3fd2ee58da38",
       domOrder: 13,
-      label: "rt_association",
+      label: "Public Route 연결 A",
       position: {
         x: 826.3702764744684,
         y: 3471.0155158741018
@@ -278,7 +278,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "779fbe96-abee-444a-be06-a8e7647cefab",
       domOrder: 14,
-      label: "CPU alarm UP",
+      label: "CPU Scale Out Alarm",
       position: {
         x: 1123.9829766018972,
         y: 3735.231136281579
@@ -296,7 +296,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "859e7225-86d1-4b45-a900-ecfbb9e2a60b",
       domOrder: 15,
-      label: "CPU alarm down",
+      label: "CPU Scale In Alarm",
       position: {
         x: 1364.6895076158446,
         y: 3733.7805404119617
@@ -314,7 +314,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "a4eeb4d5-0d6c-44fe-9dd7-2fec572dc954",
       domOrder: 16,
-      label: "ASG policy UP",
+      label: "ASG Scale Out Policy",
       position: {
         x: 1123.9829766018972,
         y: 3609.5351962681857
@@ -332,7 +332,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c7a4f916-1ccf-4d20-a6db-bd672f5aebe2",
       domOrder: 17,
-      label: "ASG policy DOWN",
+      label: "ASG Scale In Policy",
       position: {
         x: 1364.6895076158446,
         y: 3607.854822022028
@@ -350,7 +350,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "e2bbe386-707f-478f-8d80-25a84ae7df25",
       domOrder: 18,
-      label: "rt_association2",
+      label: "Public Route 연결 B",
       position: {
         x: 1685,
         y: 3470
@@ -720,7 +720,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_vpc.vpc",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "8720b1c9-ad44-42e7-a8f2-aa43ebee2449": {
       kind: "presentation",
@@ -732,61 +732,61 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_subnet.snet2",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "dedbf41c-255d-4b77-b246-a9ba0de7d9fe": {
       kind: "resource",
       address: "aws_security_group.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "a514bd55-a14d-45a0-a047-4220529bd4e2": {
       kind: "resource",
       address: "aws_security_group.ec2",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "cd499b89-a918-4f50-a93a-2b865f961e60": {
       kind: "resource",
       address: "aws_launch_configuration.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "d75efaba-a405-4bf0-9cf0-929116e2c267": {
       kind: "resource",
       address: "aws_autoscaling_group.web",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "ff98d607-abd3-49b8-bf7f-f5dae753e5c8": {
       kind: "resource",
       address: "aws_subnet.snet",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "478775af-5d74-4733-9750-fbe7e051cdcb": {
       kind: "resource",
       address: "aws_internet_gateway.internet_gw",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "739e74c1-d7e8-4318-879c-d8551ead85da": {
       kind: "resource",
       address: "aws_route_table.rt",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "d67cbec1-5217-44ea-95e8-93c2bae28504": {
       kind: "resource",
       address: "aws_elb.clb_9",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "30a33276-f2ed-4578-90f4-3fd2ee58da38": {
       kind: "resource",
       address: "aws_route_table_association.rt_association",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "779fbe96-abee-444a-be06-a8e7647cefab": {
       kind: "resource",
@@ -816,7 +816,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_route_table_association.rt_association2",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     }
   }
 });
