@@ -121,24 +121,6 @@ Short English-only working log for the current agent context. Older records are 
 - General AWS connection deletion excludes GitHub CodeConnection; the dedicated GitHub build disconnect remains its only deletion path.
 - Reverse Engineering scan history remains preserved when an AWS connection is deleted through the imported `dev` migration and API changes.
 
-### 2026-07-18 - Preserve current branch presentation adjustments
-
-- Live Observation guidance keeps its original wording and width while using the requested smaller text size.
-- AI Workbench desktop navigation remains icon-only with mode-specific titles.
-- Automatic organization results remain minimal and omit change summaries, review lists, and technical details.
-
-## Broken Or Unverified
-
-- No merge-owned check is failing.
-- Broad test suites were not run because the user requested avoiding unnecessary tests; focused conflict regressions and all required repository checks passed.
-- Previously documented environment-specific or unrelated broad-suite failures remain recorded in Git history and `docs/agent-history/2026-07.md`.
-- No live AWS mutation, Terraform apply/destroy, Deployment, GitHub mutation, or Git handoff is authorized or performed by this merge resolution.
-
-## Next Action
-
-- Publish the verified branch and open the approved PR to `dev`, linked to issue #490.
-- Keep production deployment execution outside this PR; the DNS incident does not authorize a cloud rerun.
-
 ### 2026-07-19 - Tighten Workspace AI conversation spacing
 
 - Expanded the desktop transcript, suggestion, composer, and composer metadata widths so the conversation panel uses its available space consistently.
@@ -208,3 +190,12 @@ Short English-only working log for the current agent context. Older records are 
 - Added Project Build Environment hydration to durable Plan polling, preventing an early HTTP 202 response from leaving `ready + verified` infrastructure displayed as `준비 필요`.
 - The reported Deployment `8eb279cb-cea8-417f-88af-d31cd21926d0` is pending with matching current/approved Plan artifacts; its build environment is `ready + verified`. The live browser now shows step 3, `Repository 검증 완료`, and the deployment action without console errors.
 - TDD regressions passed RED then GREEN; focused Web checks pass 56/56. Root lint, typecheck, build, final harness, and diff checks are recorded by the finishing verification run. No deployment execution, approval revocation, AWS mutation, DB migration, dependency change, or direct push to `dev` was performed.
+
+### 2026-07-19 - Split and exercise the Live Observation Fargate template
+
+- Moved the CloudFront -> ALB -> ECS Fargate template and bounded 1-3 Task scaling change to linked issue #495, branch `fix/sw/495-live-observation-template`, and Draft PR #497. PR #493 now keeps only its prior UI work.
+- Fixed reopened deployment overlays so an old confirmation-dismiss request does not hide an already approved Apply confirmation; the focused regression passed RED then GREEN (2/2).
+- Approved sandbox Deployment `49911285-260e-4fce-a645-a4ca9efa098f` started the exact `+36` Plan in account `614935468487`, region `ap-northeast-2`, then failed at `application-autoscaling:RegisterScalableTarget` because `SketchCatchTerraformExecutionRole` lacks that action.
+- No load was generated. The partial-state Destroy Plan deleted 34 resources successfully. Direct AWS inventory checks returned zero target VPC, ALB, ECS cluster, CloudFront distribution, ECR repository, log group, and generated web bucket; the control bucket and execution Role were preserved.
+- Live scale-out remains blocked until the execution Role receives the Application Auto Scaling actions and the account has `AWSServiceRoleForApplicationAutoScaling_ECSService`, followed by a newly approved Plan/Apply/bounded-traffic/Destroy cycle.
+- The focused Web regression passes 2/2; harness, lint, typecheck, build, and diff checks pass. No DB migration or dependency change was made.
