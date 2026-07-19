@@ -1,18 +1,18 @@
 .authPage {
+  --presentation-font-size-increase: 0px;
   min-height: 100vh;
   padding-top: 16px;
   background: #fafafa;
   color: #171717;
+  font-size: calc(16px + var(--presentation-font-size-increase));
 }
 
 .authPageCentered {
-  --presentation-font-size-increase: 0px;
   display: grid;
   min-height: 100svh;
   align-items: safe center;
   justify-items: center;
   padding: 32px 0;
-  font-size: calc(16px + var(--presentation-font-size-increase));
 }
 
 .authPageCentered .authLayout {

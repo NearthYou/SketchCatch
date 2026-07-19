@@ -56,7 +56,7 @@
 .dashboardNavigation {
   display: grid;
   align-content: start;
-  gap: 4px;
+  gap: 8px;
   padding: 20px 12px;
 }
 

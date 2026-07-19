@@ -11,6 +11,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Extend reduced auth typography and loosen Dashboard navigation
+
+- Extended the six-pixel typography reduction from centered Login and Signup screens to all AuthShell routes, including both Password Reset screens.
+- Increased only the Dashboard sidebar navigation gap from 4px to 8px, preserving item height, typography, sidebar width, and all other spacing.
+- No test suite was run at the user's request. Harness, lint, typecheck, build, source review, and diff checks pass; the existing dev server remains active with no known risk or follow-up action.
+
 ### 2026-07-19 - Reduce public and centered auth typography
 
 - Reduced the Root page and its session state by the six-pixel presentation increase, including inherited text.
