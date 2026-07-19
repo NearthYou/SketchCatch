@@ -67,7 +67,10 @@ import {
   resolveProjectWorkspaceTitle
 } from "./project-workspace-title";
 import type { WorkspaceCloudPlatform } from "./project-draft-persistence";
-import type { SavedServerProjectDiagramDraft } from "./project-draft-sync";
+import {
+  getProjectDraftConflict,
+  type SavedServerProjectDiagramDraft
+} from "./project-draft-sync";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type { InitialCicdReturnCommand } from "./cicd-return-command";
 import { ProjectDraftConflictDialog } from "./ProjectDraftConflictDialog";
@@ -786,17 +789,30 @@ function ProjectWorkspaceDraftManagerState({
   /** 정리안 요청에 현재 Terraform working files를 붙여 전용 서버 검증 API만 호출합니다. */
   const handleBoardAutoOrganizeApplyRequest = useCallback(
     async (request: BoardAutoOrganizeApplyRequest): Promise<ProjectDraftResponse> => {
-      const response = await applyProjectDraftBoardAutoOrganize({
-        ...request,
-        projectId,
-        terraformFiles: latestTerraformFilesRef.current.map((file) => ({ ...file }))
-      });
+      try {
+        const response = await applyProjectDraftBoardAutoOrganize({
+          ...request,
+          projectId,
+          terraformFiles: latestTerraformFilesRef.current.map((file) => ({ ...file }))
+        });
 
-      if (!response.draft) {
-        throw new Error("Board 정리안 적용 결과가 비어 있습니다.");
+        if (!response.draft) {
+          throw new Error("Board 정리안 적용 결과가 비어 있습니다.");
+        }
+
+        return response;
+      } catch (error) {
+        const conflict = getProjectDraftConflict(error);
+
+        if (conflict) {
+          serverConflictRef.current = true;
+          setDraftConflict(conflict);
+          setDraftReloadError(null);
+          setServerSaveState("server-conflict");
+        }
+
+        throw error;
       }
-
-      return response;
     },
     [projectId]
   );

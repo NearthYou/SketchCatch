@@ -30,6 +30,7 @@ export type TerraformCodeEditorState = {
   readonly highlightedBlockStyle: CSSProperties | null;
   readonly highlightedLines: readonly TerraformHighlightedLine[];
   readonly lineNumbers: readonly number[];
+  readonly isMutationLocked: boolean;
   readonly sourceLineHighlightStyle: CSSProperties | null;
   readonly syntaxHighlightStyle: CSSProperties;
 };
@@ -98,6 +99,7 @@ export function TerraformCodeEditorSurface({
         onKeyDown={actions.handleKeyDown}
         onScroll={actions.handleScroll}
         placeholder="# Board에 Resource를 추가하면 Terraform Preview가 여기에 표시됩니다."
+        readOnly={state.isMutationLocked}
         spellCheck={false}
         value={state.code}
         wrap="off"

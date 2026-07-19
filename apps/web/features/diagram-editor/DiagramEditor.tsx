@@ -322,6 +322,7 @@ function DiagramEditorInner({
   const [autoOrganizePreview, setAutoOrganizePreview] =
     useState<BoardAutoOrganizePreviewSession | null>(null);
   const [autoOrganizeError, setAutoOrganizeError] = useState(false);
+  const [isAutoOrganizeApplyPending, setAutoOrganizeApplyPending] = useState(false);
   const [terraformRefreshRequestId, setTerraformRefreshRequestId] = useState(0);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
@@ -502,8 +503,11 @@ function DiagramEditorInner({
     );
   }, []);
 
+  /** 서버 적용 대기 중에는 어떤 경로도 실제 Diagram을 교체하지 못하게 막습니다. */
   const replaceDiagram = useCallback(
     (nextDiagram: DiagramJson, notifyChange = true) => {
+      if (autoOrganizeApplyInFlightRef.current) return;
+
       if (areDiagramsEqual(diagramRef.current, nextDiagram)) {
         diagramRef.current = nextDiagram;
         setDiagram(nextDiagram);
@@ -526,8 +530,11 @@ function DiagramEditorInner({
     []
   );
 
+  /** 적용 대기 중 다른 panel이 preview source를 바꾸지 못하게 막습니다. */
   const setPreviewDiagram = useCallback<DiagramEditorPanelContext["setPreviewDiagram"]>(
     (nextPreviewDiagram, nextPreviewAnnotations = null) => {
+      if (autoOrganizeApplyInFlightRef.current) return;
+
       autoOrganizeMinimumZoomRef.current = null;
       setAutoOrganizePreview(null);
       setAutoOrganizeError(false);
@@ -652,7 +659,10 @@ function DiagramEditorInner({
     setPreviewDiagram
   ]);
 
+  /** 잠긴 적용 transaction 밖의 실제 변경만 History에 기록합니다. */
   const pushHistory = useCallback((before: DiagramJson, after: DiagramJson) => {
+    if (autoOrganizeApplyInFlightRef.current) return;
+
     if (areDiagramsEqual(before, after)) {
       return;
     }
@@ -663,8 +673,11 @@ function DiagramEditorInner({
     }));
   }, []);
 
+  /** 모든 Resource·설정 변경이 통과하는 단일 잠금 확인 뒤 Diagram과 History를 함께 바꿉니다. */
   const commitDiagramUpdate = useCallback(
     (updater: (currentDiagram: DiagramJson) => DiagramJson) => {
+      if (autoOrganizeApplyInFlightRef.current) return;
+
       const before = diagramRef.current;
       const after = updater(before);
 
@@ -678,8 +691,11 @@ function DiagramEditorInner({
     [pushHistory, replaceDiagram]
   );
 
+  /** drag·resize 같은 live 변경도 서버 적용이 끝날 때까지 받지 않습니다. */
   const applyLiveDiagramUpdate = useCallback(
     (updater: (currentDiagram: DiagramJson) => DiagramJson) => {
+      if (autoOrganizeApplyInFlightRef.current) return;
+
       const before = diagramRef.current;
       const after = updater(before);
 
@@ -943,7 +959,10 @@ function DiagramEditorInner({
 
   useEffect(() => () => cancelQueuedNodeDragPreview(), [cancelQueuedNodeDragPreview]);
 
+  /** pending apply가 History 기준을 고정하는 동안 Undo를 실행하지 않습니다. */
   const undo = useCallback(() => {
+    if (autoOrganizeApplyInFlightRef.current) return;
+
     cancelSnapAnimation();
     const previous = history.past.at(-1);
 
@@ -962,7 +981,10 @@ function DiagramEditorInner({
     setSelectedEdgeIds([]);
   }, [cancelSnapAnimation, history, replaceDiagram]);
 
+  /** pending apply가 History 기준을 고정하는 동안 Redo를 실행하지 않습니다. */
   const redo = useCallback(() => {
+    if (autoOrganizeApplyInFlightRef.current) return;
+
     cancelSnapAnimation();
     const next = history.future[0];
 
@@ -1035,8 +1057,11 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  /** AI·Terraform·Reverse panel의 전체 Diagram 적용도 같은 pending lock을 지킵니다. */
   const applyDiagramJson = useCallback<DiagramEditorPanelContext["applyDiagramJson"]>(
     (nextDiagram) => {
+      if (autoOrganizeApplyInFlightRef.current) return;
+
       shouldApplySourceViewportRef.current = true;
       commitDiagramUpdate(() => normalizeDiagramResourceNodeGeometry(cloneDiagram(nextDiagram)));
       setPreviewDiagram(null);
@@ -1115,6 +1140,7 @@ function DiagramEditorInner({
   const applyAutomaticOrganization = useCallback(async () => {
     if (autoOrganizePreview === null || autoOrganizeApplyInFlightRef.current) return;
     autoOrganizeApplyInFlightRef.current = true;
+    setAutoOrganizeApplyPending(true);
 
     try {
       if (!onBoardAutoOrganizeApplyRequest) {
@@ -1140,6 +1166,7 @@ function DiagramEditorInner({
 
       autoOrganizeMinimumZoomRef.current = null;
       shouldApplySourceViewportRef.current = false;
+      autoOrganizeApplyInFlightRef.current = false;
       commitDiagramUpdate(() => cloneDiagram(result.diagramToApply));
 
       if (result.saveResult.draft) {
@@ -1165,6 +1192,7 @@ function DiagramEditorInner({
       setAutoOrganizeError(true);
     } finally {
       autoOrganizeApplyInFlightRef.current = false;
+      setAutoOrganizeApplyPending(false);
     }
   }, [
     autoOrganizePreview,
@@ -1186,9 +1214,12 @@ function DiagramEditorInner({
     setAutoOrganizeError(false);
   }, [autoOrganizePreview, restoreAutoOrganizeViewport]);
 
+  /** 적용 중에는 Terraform source authority 표시도 바꾸지 않습니다. */
   const commitTerraformSourceAuthority = useCallback<
     DiagramEditorPanelContext["commitTerraformSourceAuthority"]
   >(() => {
+    if (autoOrganizeApplyInFlightRef.current) return diagramRef.current;
+
     const authoritativeDiagram = markTerraformSourceAuthoritative(diagramRef.current);
 
     if (
@@ -1205,7 +1236,7 @@ function DiagramEditorInner({
   // 템플릿 적용은 현재 보드를 백업한 뒤 전체 보드를 템플릿 구조로 교체합니다.
   const applyBoardTemplate = useCallback(
     (template: AvailableBoardTemplate): void => {
-      if (typeof window === "undefined") return;
+      if (typeof window === "undefined" || autoOrganizeApplyInFlightRef.current) return;
 
       const nextDiagram = applyTemplateToDiagramWithBackup({
         currentDiagram: diagramRef.current,
@@ -1229,7 +1260,9 @@ function DiagramEditorInner({
     [applyDiagramJson, onTemplateWorkspaceApply]
   );
 
+  /** 적용 중에는 Terraform 재생성이 고정 source snapshot을 흔들지 않게 막습니다. */
   const requestTerraformRefresh = useCallback(() => {
+    if (autoOrganizeApplyInFlightRef.current) return;
     setTerraformRefreshRequestId((requestId) => requestId + 1);
   }, []);
 
@@ -1307,6 +1340,7 @@ function DiagramEditorInner({
     () => ({
       diagram,
       inspectedNodeId,
+      isMutationLocked: isAutoOrganizeApplyPending,
       isPreviewActive,
       isRightPanelOpen: hasRightRail && isRightPanelOpen,
       previewAnnotations,
@@ -1322,7 +1356,7 @@ function DiagramEditorInner({
       getDiagramRevision,
       requestTerraformRefresh,
       selectResourceNode,
-      saveDiagramNow: onDiagramSaveRequest,
+      saveDiagramNow: isAutoOrganizeApplyPending ? undefined : onDiagramSaveRequest,
       setPreviewDiagram,
       setRightPanelOpen: updateRightPanelOpen,
       updateNodeParameters,
@@ -1336,6 +1370,7 @@ function DiagramEditorInner({
       getDiagramRevision,
       hasRightRail,
       inspectedNodeId,
+      isAutoOrganizeApplyPending,
       isPreviewActive,
       isRightPanelOpen,
       onDiagramSaveRequest,
@@ -3191,15 +3226,15 @@ function DiagramEditorInner({
       {viewerPolicy.showWorkspaceChrome ? (
         <WorkspaceProjectBar
           actions={{
-            onSave: onDiagramSaveRequest,
-            onSaveAndDeploy: onSaveAndDeployRequest
+            onSave: isAutoOrganizeApplyPending ? undefined : onDiagramSaveRequest,
+            onSaveAndDeploy: isAutoOrganizeApplyPending ? undefined : onSaveAndDeployRequest
           }}
           workspace={{
             dashboardHref,
             isDeploymentConsoleOpen,
             projectName,
             saveStatus,
-            showSaveAction,
+            showSaveAction: showSaveAction && !isAutoOrganizeApplyPending,
             userName: workspaceUserName
           }}
         />
@@ -3316,7 +3351,12 @@ function DiagramEditorInner({
                 <button
                   aria-label="Architecture Board 자동 정리 미리보기"
                   className={styles.iconButton}
-                  disabled={isPreviewActive || diagram.nodes.length === 0}
+                  disabled={
+                    isPreviewActive ||
+                    diagram.nodes.length === 0 ||
+                    !onBoardAutoOrganizeApplyRequest ||
+                    projectDraftRevision === null
+                  }
                   onClick={previewAutomaticOrganization}
                   title="자동 정리"
                   type="button"

@@ -89,6 +89,7 @@ export type DiagramPreviewAnnotations = {
 export type DiagramEditorPanelContext = {
   diagram: DiagramJson;
   inspectedNodeId: string | null;
+  isMutationLocked: boolean;
   isPreviewActive: boolean;
   isRightPanelOpen: boolean;
   previewAnnotations: DiagramPreviewAnnotations | null;

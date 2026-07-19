@@ -24,6 +24,22 @@ const workspaceApiSource = readFileSync(
   fileURLToPath(new URL("./api.ts", import.meta.url)),
   "utf8"
 );
+const diagramEditorTypesSource = readFileSync(
+  fileURLToPath(new URL("../diagram-editor/types.ts", import.meta.url)),
+  "utf8"
+);
+const workspaceRightPanelSource = readFileSync(
+  fileURLToPath(new URL("./WorkspaceRightPanel.tsx", import.meta.url)),
+  "utf8"
+);
+const terraformCodePanelSource = readFileSync(
+  fileURLToPath(new URL("./TerraformCodePanel.tsx", import.meta.url)),
+  "utf8"
+);
+const terraformEditorSurfaceSource = readFileSync(
+  fileURLToPath(new URL("./TerraformCodeEditorSurface.tsx", import.meta.url)),
+  "utf8"
+);
 
 test("project draft conflict explains the stale tab and offers reload or local editing", () => {
   assert.equal(PROJECT_DRAFT_CONFLICT_COPY.title, "다른 탭에서 이 프로젝트가 변경되었습니다");
@@ -125,6 +141,73 @@ test("Project Workspace commits Board history only after the dedicated apply API
   assert.match(workspaceApiSource, /export async function applyProjectDraftBoardAutoOrganize/);
   assert.match(workspaceApiSource, /draft\/auto-organize\/apply/);
 });
+
+test("pending Board apply locks Resource, Diagram, History, save, and Terraform mutation seams", () => {
+  const replaceDiagramSource = getSourceSection(
+    diagramEditorSource,
+    "const replaceDiagram = useCallback",
+    "const getDiagramRevision = useCallback"
+  );
+  const pushHistorySource = getSourceSection(
+    diagramEditorSource,
+    "const pushHistory = useCallback",
+    "const commitDiagramUpdate = useCallback"
+  );
+  const applyHandlerSource = getSourceSection(
+    diagramEditorSource,
+    "const applyAutomaticOrganization = useCallback",
+    "const cancelAutomaticOrganization = useCallback"
+  );
+
+  assert.match(replaceDiagramSource, /autoOrganizeApplyInFlightRef\.current/);
+  assert.match(pushHistorySource, /autoOrganizeApplyInFlightRef\.current/);
+  assert.match(diagramEditorSource, /isMutationLocked:\s*isAutoOrganizeApplyPending/);
+  assert.match(diagramEditorTypesSource, /isMutationLocked:\s*boolean/);
+  assert.match(
+    workspaceRightPanelSource,
+    /isMutationLocked=\{context\.isMutationLocked\}/
+  );
+  assert.match(terraformCodePanelSource, /mutationLockedRef\.current/);
+  assert.match(terraformEditorSurfaceSource, /readOnly=\{state\.isMutationLocked\}/);
+  assert.ok(
+    applyHandlerSource.indexOf("autoOrganizeApplyInFlightRef.current = false") <
+      applyHandlerSource.indexOf("commitDiagramUpdate("),
+    "the one approved commit must unlock synchronously after the server response"
+  );
+});
+
+test("auto-organize cannot open where no persisted apply boundary exists", () => {
+  assert.match(
+    diagramEditorSource,
+    /disabled=\{[^}]*!onBoardAutoOrganizeApplyRequest[^}]*\}/
+  );
+  assert.match(
+    diagramEditorSource,
+    /disabled=\{[^}]*projectDraftRevision === null[^}]*\}/
+  );
+});
+
+test("auto-organize 409 reuses the ProjectDraft conflict dialog state", () => {
+  const applyRequestSource = getSourceSection(
+    projectManagerSource,
+    "const handleBoardAutoOrganizeApplyRequest = useCallback",
+    "const handleBoardAutoOrganizeApplied = useCallback"
+  );
+
+  assert.match(applyRequestSource, /getProjectDraftConflict\(error\)/);
+  assert.match(applyRequestSource, /setDraftConflict\(conflict\)/);
+  assert.match(applyRequestSource, /setServerSaveState\("server-conflict"\)/);
+});
+
+/** 두 marker 사이의 production source만 안전하게 잘라 구조 회귀를 확인합니다. */
+function getSourceSection(source: string, startMarker: string, endMarker: string): string {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start);
+
+  assert.notEqual(start, -1, `${startMarker} must exist`);
+  assert.notEqual(end, -1, `${endMarker} must exist`);
+  return source.slice(start, end);
+}
 
 /** stale apply 회귀에 필요한 작은 Diagram을 만듭니다. */
 function createDiagram(): DiagramJson {
