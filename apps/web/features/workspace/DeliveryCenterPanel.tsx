@@ -22,11 +22,13 @@ import styles from "./delivery-center.module.css";
 type LoadState = "loading" | "idle" | "error";
 
 export function DeliveryCenterPanel({
+  onDeploymentTargetSaved,
   onOpenDirectDeployment,
   onOpenLiveObservation,
   projectId,
   readinessRefreshRequestId = 0
 }: {
+  readonly onDeploymentTargetSaved?: (() => void) | undefined;
   readonly onOpenDirectDeployment?: (scope: "application" | "full_stack" | null) => void;
   readonly onOpenLiveObservation?: (selection?: LiveObservationSelection) => void;
   readonly projectId: string;
@@ -38,6 +40,11 @@ export function DeliveryCenterPanel({
   const [reloadKey, setReloadKey] = useState(0);
 
   const reload = useCallback(() => setReloadKey((value) => value + 1), []);
+
+  function handleDeploymentTargetSaved(): void {
+    reload();
+    onDeploymentTargetSaved?.();
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -191,7 +198,7 @@ export function DeliveryCenterPanel({
           <div className={styles.editorSection}>
             <ProjectDeploymentTargetEditor
               initialProfile={profile}
-              onSaved={reload}
+              onSaved={handleDeploymentTargetSaved}
               projectId={projectId}
             />
           </div>

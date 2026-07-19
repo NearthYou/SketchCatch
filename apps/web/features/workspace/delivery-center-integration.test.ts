@@ -31,7 +31,7 @@ test("CI/CD Delivery owns the project delivery configuration sections", () => {
   assert.match(panelSource, /ProjectCicdMonitoringSettingsClient/);
   assert.match(panelSource, /ProjectDeploymentTargetEditor/);
   assert.match(panelSource, /initialProfile=\{profile\}/);
-  assert.match(panelSource, /onSaved=\{reload\}/);
+  assert.match(panelSource, /onSaved=\{handleDeploymentTargetSaved\}/);
   assert.doesNotMatch(
     panelSource,
     /app\/projects\/\[projectId\]\/settings\/project-deployment-target-settings-client/
@@ -89,6 +89,13 @@ test("target save refreshes Delivery without starting deployment or Git handoff"
     editorSource,
     /createGitCicdPullRequest|startGitCicdPipelineRun|startDirectDeployment/
   );
+});
+
+test("saved deployment target invalidates the stale Direct Deployment prerequisite", () => {
+  assert.match(panelSource, /onDeploymentTargetSaved/);
+  assert.match(panelSource, /onSaved=\{handleDeploymentTargetSaved\}/);
+  assert.match(shellSource, /deploymentTargetSavedRevision/);
+  assert.match(shellSource, /onDeploymentTargetSaved=\{\(\) =>/);
 });
 
 test("GitHub callback follows the canonical source-only continuation instead of owning target state", () => {

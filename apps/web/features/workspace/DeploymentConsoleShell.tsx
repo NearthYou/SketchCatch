@@ -55,6 +55,7 @@ export function DeploymentConsoleShell({
   const [readinessRefreshRequestId, setReadinessRefreshRequestId] = useState(
     initialCicdReturnCommand ? 1 : 0
   );
+  const [deploymentTargetSavedRevision, setDeploymentTargetSavedRevision] = useState(0);
   const [isDeploymentExpanded, setIsDeploymentExpanded] = useState(initialExpanded);
   const [confirmationDismissRequestId, setConfirmationDismissRequestId] = useState(0);
   const acknowledgedInitialCicdReturnHrefRef = useRef<string | null>(null);
@@ -188,10 +189,18 @@ export function DeploymentConsoleShell({
         <DirectDeploymentScreen
           {...directProps}
           confirmationDismissRequestId={confirmationDismissRequestId}
+          deploymentTargetSavedRevision={deploymentTargetSavedRevision}
           onConfirmationStateChange={(isOpen) => {
             confirmationOpenRef.current = isOpen;
           }}
-          onOpenDeliverySetup={() => selectScreen("cicd")}
+          onOpenDeliverySetup={() => {
+            selectScreen("cicd");
+            window.requestAnimationFrame(() =>
+              document
+                .getElementById("deployment-target-title")
+                ?.scrollIntoView({ block: "start" })
+            );
+          }}
           onOpenLiveObservation={onOpenLiveObservation}
           requestedScope={requestedDirectScope}
           onApplyPlanApproved={(deployment) => {
@@ -223,6 +232,9 @@ export function DeploymentConsoleShell({
       </div>
       <div hidden={activeScreen !== "cicd"}>
         <DeliveryCenterPanel
+          onDeploymentTargetSaved={() =>
+            setDeploymentTargetSavedRevision((revision) => revision + 1)
+          }
           onOpenDirectDeployment={(scope) => {
             setRequestedDirectScope(scope);
             selectScreen("deployment");

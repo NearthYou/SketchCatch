@@ -11,40 +11,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-19 - Reduce Workspace panel labels
-
-- Reduced the marked AWS provider version, Resource panel eyebrow, Resource count badge, and Terraform Resource address by exactly three pixels, then reduced the provider-version dropdown options by six pixels while preserving their containers and neighboring typography.
-- No test suite was run at the user's request. Harness, lint, typecheck, build, source review, and diff checks pass; the dev server remains active with no known risk or follow-up action.
-
-### 2026-07-19 - Reduce Workspace resource tile labels
-
-- Reduced only the Workspace Resource palette tile-label base size from 12px to 9px, producing the requested three-pixel decrease while preserving card, icon, category, and section typography.
-- No test suite was run at the user's request. Harness, lint, typecheck, build, source review, and diff checks pass; the dev server remains active with no known risk or follow-up action.
-
-### 2026-07-19 - Extend reduced auth typography and loosen Dashboard navigation
-
-- Extended the six-pixel typography reduction from centered Login and Signup screens to all AuthShell routes, including both Password Reset screens.
-- Increased only the Dashboard sidebar navigation gap from 4px to 8px, preserving item height, typography, sidebar width, and all other spacing.
-- No test suite was run at the user's request. Harness, lint, typecheck, build, source review, and diff checks pass; the existing dev server remains active with no known risk or follow-up action.
-
-### 2026-07-19 - Reduce public and centered auth typography
-
-- Reduced the Root page and its session state by the six-pixel presentation increase, including inherited text.
-- Applied the same reduction only to centered AuthShell routes and the Signup legal-document portal, limiting the change to Login and Signup while leaving Password Reset unchanged.
-- No test suite was run following the user's explicit request to avoid unnecessary tests. Harness, lint, typecheck, build, and the two-axis source review pass; the existing dev server remains active with no known risk or follow-up action.
-
-### 2026-07-19 - Merge latest dev into PR #491
-
-- Merged `origin/dev` at `2ae411aa`, preserving the branch presentation typography while accepting the current AWS connection state model and removal of the AI choice-selected label.
-- Resolved five textual conflicts and repaired two semantic typography regressions introduced by auto-merged Workspace CSS. Imported migration `0053` and deployment safety changes remain unchanged from `dev`.
-- Conflict-focused Web tests pass 31/31, deployment API tests pass 166/166, migration compatibility and Terraform formatting pass, and the full harness lint/typecheck/build sequence passes. No AWS mutation, Terraform execution, or deployment occurred.
-
-### 2026-07-19 - Resolve Live Observation PR feedback
-
-- Lazily mounts the full React Flow Architecture map only while its controlled disclosure is open, preventing zero-sized hidden-container viewport initialization. Added a focused source-contract regression.
-- Declined two defensive optional-chaining suggestions because the shared v2 contract requires both `latestObservation.payload` and `payload.capacity`; only their quantitative members are nullable.
-- Focused Web checks pass 11/11, and root harness, lint, typecheck, build, and diff checks pass. PR #491 remains based on the existing `fix/ys/479-uiux-수정` branch; no AWS mutation or DB migration occurred.
-
 ### 2026-07-19 - Restore the focused Live Observation traffic presentation
 
 - Traced the regression to `8f0c7b54`, which replaced the focused linear traffic renderer with the full immutable Architecture map. Restored the focused path as the default while retaining the full map in a collapsed disclosure and preserving all v2 session, Output URL, and AWS verification gates.
@@ -211,9 +177,34 @@ Short English-only working log for the current agent context. Older records are 
 - Focused API checks pass 70/70 and focused Web checks pass 52/52. Root lint, typecheck, and production build pass; the final harness and diff checks are recorded by the finishing verification run.
 - No DB migration, dependency change, AWS mutation, Terraform Apply/Destroy, deployment, or direct push to `dev` was performed.
 
+### 2026-07-19 - Diagnose Delivery target prerequisite presentation
+
+- Reproduced the reported `전체 스택 선행 설정 필요` warning in the authenticated local `demo222` Workspace. The current Repository-derived Dockerfile, commit SHA, CodeBuild, ECR, cluster, service, and container defaults are populated, but no `ProjectDeploymentTarget` has been saved yet.
+- Confirmed the warning action only switches to the CI/CD screen and that the prior Direct Deployment warning remains visible after a screen round trip because it is not invalidated by Delivery profile reloads. The server-side gate remains fail-closed and target saving does not deploy or mutate AWS.
+- Focused Web checks pass 50/50 and focused API runtime-target checks pass 4/4. No source fix, target save, AWS mutation, Terraform execution, deployment, dependency, DB migration, commit, or push was performed.
+
+### 2026-07-19 - Synchronize saved Delivery targets with Direct Deployment
+
+- Propagated successful deployment-target saves through the Delivery console and cleared stale Direct Deployment prerequisite presentation while retaining the fresh target and AWS connection checks before Plan preparation.
+- Renamed the navigation-only setup action, scrolled it to the target editor, and revealed missing inferred settings with actionable Korean labels without auto-saving user confirmation.
+- TDD regressions passed RED then GREEN; focused Web checks pass 62/62. Harness, lint, typecheck, and the direct Web production build pass. The root Turbo build reported 5/5 successful tasks but its wrapper hung after completion and was terminated. No API contract, DB migration, dependency, Terraform execution, AWS mutation, deployment, or push was performed.
+
 ### 2026-07-19 - Move Plan build preparation behind durable worker acceptance
 
 - Traced the reported Plan HTTP 500 to Next.js development proxy's 30-second timeout: the API spent about 34 seconds preparing CodeBuild and verifying Repository access before it created the durable worker job.
 - The Plan route now returns its accepted Deployment after durable dispatch, while the worker runs build-environment preparation inside the Plan execution lease and heartbeat boundary. Preparation failures remain recorded as `build_environment` failures.
 - The reported Deployment `eae903e0-926c-46d7-b819-99b124246373` completed despite the proxy error and produced a pending `36 create / 0 update / 0 delete` Plan with no failure stage or error summary.
 - Focused API regressions pass 106/106; root lint, typecheck, build, final harness, and diff checks are recorded by the finishing verification run. No DB migration, dependency change, AWS mutation by Codex, Terraform Apply/Destroy, deployment rerun, or direct push to `dev` was performed.
+
+### 2026-07-19 - Advance approved Plans and refresh durable build readiness
+
+- Fixed Direct Deployment so a successful Plan approval selects the deployment step instead of leaving the user on the disabled approval panel.
+- Added Project Build Environment hydration to durable Plan polling, preventing an early HTTP 202 response from leaving `ready + verified` infrastructure displayed as `준비 필요`.
+- The reported Deployment `8eb279cb-cea8-417f-88af-d31cd21926d0` is pending with matching current/approved Plan artifacts; its build environment is `ready + verified`. The live browser now shows step 3, `Repository 검증 완료`, and the deployment action without console errors.
+- TDD regressions passed RED then GREEN; focused Web checks pass 56/56. Root lint, typecheck, build, final harness, and diff checks are recorded by the finishing verification run. No deployment execution, approval revocation, AWS mutation, DB migration, dependency change, or direct push to `dev` was performed.
+
+### 2026-07-19 - Restore Direct Deployment validation recovery
+
+- Confirmed the GitHub App installation already grants `jh-9999/audience-live-check` access, the managed Seoul CodeConnection is `Available`, and the managed CodeBuild project checked out the confirmed SHA successfully twice. The Workspace was showing an older failed verification record rather than a disconnected global integration.
+- Fixed Direct Deployment step selection so a previously selected idle deployment step falls back to the current validation step. The failed Workspace now exposes both `저장 후 검증 실행` and `Repository 빌드 권한 다시 확인` instead of an empty action area.
+- The regression passed RED then GREEN and the authenticated browser reproduced the repaired action path. Focused Web checks pass 26/26; root harness, lint, typecheck, production build, and diff checks pass. No GitHub save, CodeConnection reapproval, CodeBuild start, deployment, AWS mutation, DB migration, dependency change, or push was performed.

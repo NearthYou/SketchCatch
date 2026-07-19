@@ -771,20 +771,38 @@ export function RepositoryStartClient({
               />
             ) : null}
             {publicAnalysisState === "error" && !pendingAnalysisRecord ? (
-              <RepositoryAnalysisRecovery
-                action={recoveryAction}
-                connectionSetupAvailability={githubAppAvailability?.connectionSetup}
-                errorMessage={errorMessage}
-                isBusy={actionState === "loading" || isPublicAnalysisBusy}
-                onAddPermission={(managementUrl) => {
-                  window.open(managementUrl, "_blank", "noopener,noreferrer");
-                }}
-                onAnalyzeConnected={() => void analyzeRepository()}
-                onConnect={(candidate) => void connectRepository(candidate)}
-                onConnectGitHub={() => void openGitHubConnection()}
-                onRetry={() => void analyzePublicRepositoryUrl(repositoryUrl, defaultBranch)}
-                onVerifyPermission={() => void loadCandidates()}
-              />
+              publicAnalysis ? (
+                <ProductState
+                  action={(
+                    <button
+                      disabled={isPublicAnalysisBusy}
+                      onClick={() => void createPublicRepositoryBoard()}
+                      type="button"
+                    >
+                      다시 생성
+                    </button>
+                  )}
+                  compact
+                  description={errorMessage}
+                  kind="error"
+                  title="AI 아키텍처를 생성할 수 없습니다"
+                />
+              ) : (
+                <RepositoryAnalysisRecovery
+                  action={recoveryAction}
+                  connectionSetupAvailability={githubAppAvailability?.connectionSetup}
+                  errorMessage={errorMessage}
+                  isBusy={actionState === "loading" || isPublicAnalysisBusy}
+                  onAddPermission={(managementUrl) => {
+                    window.open(managementUrl, "_blank", "noopener,noreferrer");
+                  }}
+                  onAnalyzeConnected={() => void analyzeRepository()}
+                  onConnect={(candidate) => void connectRepository(candidate)}
+                  onConnectGitHub={() => void openGitHubConnection()}
+                  onRetry={() => void analyzePublicRepositoryUrl(repositoryUrl, defaultBranch)}
+                  onVerifyPermission={() => void loadCandidates()}
+                />
+              )
             ) : null}
           </section>
         ) : null}
