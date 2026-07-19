@@ -395,6 +395,41 @@ test("POST /api/projects/:id/draft/auto-organize/apply rejects meaning changes w
   await app.close();
 });
 
+test("POST /api/projects/:id/draft/auto-organize/apply rejects a forged source at the current revision", async () => {
+  const forgedSourceDiagram = structuredClone(draftDiagram);
+  forgedSourceDiagram.nodes[0]!.parameters!.values.cidrBlock = "10.9.0.0/16";
+  const forgedCandidateDiagram = structuredClone(forgedSourceDiagram);
+  forgedCandidateDiagram.nodes[0]!.position = { x: 360, y: 180 };
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    drafts: [makeProjectDraft({ revision: 4 })]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft/auto-organize/apply`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      sessionId: "board-auto-session:forged",
+      candidateId: "arrangement-1",
+      sourceDiagram: forgedSourceDiagram,
+      sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(forgedSourceDiagram),
+      candidateDiagram: forgedCandidateDiagram,
+      expectedRevision: 4,
+      terraformFiles: []
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(fakeDb.draftRows[0]?.revision, 4);
+  assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, draftDiagram);
+  assert.equal(fakeDb.projectUpdated, false);
+
+  await app.close();
+});
+
 async function authHeaders(userId: string): Promise<Record<string, string>> {
   return {
     authorization: `Bearer ${await createAccessToken(userId)}`

@@ -34,6 +34,10 @@ test("server applies a visual-only candidate through the existing draft revision
       userId: USER_ID
     },
     {
+      readDraft: async () => ({
+        ...createDraftRow(sourceDiagram, terraformFiles),
+        revision: 7
+      }),
       saveDraftRevision: async (input) => {
         saveInputs.push(input);
         return { status: "saved", draft: createDraftRow(candidateDiagram, terraformFiles) };
@@ -69,6 +73,10 @@ test("server rejects a candidate that changes Resource meaning without calling t
           userId: USER_ID
         },
         {
+          readDraft: async () => ({
+            ...createDraftRow(sourceDiagram, []),
+            revision: 7
+          }),
           saveDraftRevision: async () => {
             saveCalls += 1;
             return { status: "saved", draft: createDraftRow(candidateDiagram, []) };
@@ -76,6 +84,44 @@ test("server rejects a candidate that changes Resource meaning without calling t
         }
       ),
     BoardAutoOrganizeSemanticMismatchError
+  );
+
+  assert.equal(saveCalls, 0);
+});
+
+test("server rejects a forged source and candidate that disagree with the persisted draft", async () => {
+  const persistedDiagram = createDiagram();
+  const forgedSourceDiagram = structuredClone(persistedDiagram);
+  forgedSourceDiagram.nodes[0]!.parameters!.values.cidrBlock = "10.9.0.0/16";
+  const forgedCandidateDiagram = structuredClone(forgedSourceDiagram);
+  forgedCandidateDiagram.nodes[0]!.position = { x: 320, y: 180 };
+  let saveCalls = 0;
+
+  await assert.rejects(
+    () =>
+      applyBoardAutoOrganizeDraft(
+        {
+          candidateDiagram: forgedCandidateDiagram,
+          db: {} as Database,
+          expectedRevision: 7,
+          projectId: PROJECT_ID,
+          sourceDiagram: forgedSourceDiagram,
+          sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(forgedSourceDiagram),
+          terraformFiles: [],
+          userId: USER_ID
+        },
+        {
+          readDraft: async () => ({
+            ...createDraftRow(persistedDiagram, []),
+            revision: 7
+          }),
+          saveDraftRevision: async () => {
+            saveCalls += 1;
+            return { status: "saved", draft: createDraftRow(forgedCandidateDiagram, []) };
+          }
+        }
+      ),
+    BoardAutoOrganizeSourceMismatchError
   );
 
   assert.equal(saveCalls, 0);

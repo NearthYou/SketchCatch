@@ -4,7 +4,10 @@ import {
   type DiagramJson,
   type TerraformSyncFileInput
 } from "@sketchcatch/types";
+import { eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
+import { projectDrafts } from "../../db/schema.js";
+import type { ProjectDraftRow } from "./project-drafts.js";
 import {
   saveProjectDraftRevision,
   type SaveProjectDraftRevisionResult
@@ -22,6 +25,7 @@ type BoardAutoOrganizeApplyInput = {
 };
 
 type BoardAutoOrganizeApplyDependencies = {
+  readonly readDraft?: typeof readProjectDraft;
   readonly saveDraftRevision?: typeof saveProjectDraftRevision;
 };
 
@@ -30,14 +34,33 @@ export async function applyBoardAutoOrganizeDraft(
   input: BoardAutoOrganizeApplyInput,
   dependencies: BoardAutoOrganizeApplyDependencies = {}
 ): Promise<SaveProjectDraftRevisionResult> {
+  const serializedRequestSource = serializeBoardAutoOrganizeSource(input.sourceDiagram);
+
+  if (createFingerprint(serializedRequestSource) !== input.sourceFingerprint) {
+    throw new BoardAutoOrganizeSourceMismatchError();
+  }
+
+  const readDraft = dependencies.readDraft ?? readProjectDraft;
+  const persistedDraft = await readDraft({ db: input.db, projectId: input.projectId });
+
+  if (!persistedDraft || input.expectedRevision === null) {
+    throw new BoardAutoOrganizeSourceMismatchError();
+  }
+
+  if (persistedDraft.revision !== input.expectedRevision) {
+    return { status: "conflict", currentDraft: persistedDraft };
+  }
+
   if (
-    createBoardAutoOrganizeSourceFingerprint(input.sourceDiagram) !==
-    input.sourceFingerprint
+    serializeBoardAutoOrganizeSource(persistedDraft.diagramJson) !== serializedRequestSource ||
+    !hasSameBoardAutoOrganizeSemantics(persistedDraft.diagramJson, input.sourceDiagram)
   ) {
     throw new BoardAutoOrganizeSourceMismatchError();
   }
 
-  if (!hasSameBoardAutoOrganizeSemantics(input.sourceDiagram, input.candidateDiagram)) {
+  if (
+    !hasSameBoardAutoOrganizeSemantics(persistedDraft.diagramJson, input.candidateDiagram)
+  ) {
     throw new BoardAutoOrganizeSemanticMismatchError();
   }
 
@@ -53,6 +76,22 @@ export async function applyBoardAutoOrganizeDraft(
     projectId: input.projectId,
     userId: input.userId
   });
+}
+
+/** 적용 직전의 ProjectDraft를 읽어 요청 source가 실제 저장 revision에서 왔는지 확인합니다. */
+async function readProjectDraft({
+  db,
+  projectId
+}: {
+  readonly db: Database;
+  readonly projectId: string;
+}): Promise<ProjectDraftRow | null> {
+  const [draft] = await db
+    .select()
+    .from(projectDrafts)
+    .where(eq(projectDrafts.projectId, projectId));
+
+  return draft ?? null;
 }
 
 /** Task 6 후보와 같은 source serializer/FNV-1a 규칙으로 서버 fingerprint를 다시 만듭니다. */
