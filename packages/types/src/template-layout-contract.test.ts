@@ -126,7 +126,9 @@ const EXPECTED_LAYOUTS = {
     "target-group": at(1080, 360, "vpc"),
     listener: at(880, 360, "vpc"),
     task: at(2040, 560, "definition-ops-group"),
-    service: at(1400, 360, "cluster")
+    service: at(1400, 360, "cluster"),
+    "scaling-target": at(2040, 680, "definition-ops-group"),
+    "scaling-policy": at(2200, 560, "definition-ops-group")
   },
   "eks-container-app": {
     vpc: at(320, 240, "region", { width: 1480, height: 1040 }),
@@ -210,6 +212,8 @@ const EXPECTED_ROUTING = {
     "target-group-service": route("handle-right", "handle-left"),
     "cluster-service": route("handle-right", "handle-left"),
     "service-task": route("handle-right", "handle-left"),
+    "service-scaling-target": route("handle-right", "handle-left"),
+    "scaling-target-policy": route("handle-right", "handle-left"),
     "repository-task": route("handle-bottom", "handle-top"),
     "task-log-group": route("handle-right", "handle-left"),
     "task-role": route("handle-top", "handle-bottom")
