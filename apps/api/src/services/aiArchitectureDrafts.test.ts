@@ -817,25 +817,30 @@ test("createAmazonQArchitectureDraftResponse forwards accepted natural-language 
       suggestions: []
     });
   });
-  const promptWithoutWebsiteType = createKoreaNoUploadNoRealtimePrompt()
+  const promptWithoutAnsweredQuestions = createKoreaNoUploadNoRealtimePrompt()
     .split("\n")
-    .slice(1)
+    .filter((line) => !/^(?:website type|traffic:|backend:)/iu.test(line))
     .join("\n");
+  const clarificationAnswers = [
+    { questionId: "website_type", answer: "네이버 쇼핑몰 같은 사이트를 만들고 싶어" },
+    { questionId: "traffic", answer: "일일 500명 정도" },
+    { questionId: "backend", answer: "스프링부트 썼어" }
+  ];
   await createAmazonQArchitectureDraftResponse(
     {
-      prompt: promptWithoutWebsiteType,
-      clarificationAnswers: [
-        { questionId: "website_type", answer: "네이버 쇼핑몰 같은 사이트를 만들고 싶어" }
-      ]
+      prompt: promptWithoutAnsweredQuestions,
+      clarificationAnswers
     },
     { provider, creditPolicy: confirmedCreditPolicy }
   );
   assert.match(requestedPrompt, /Accepted architecture clarification answers:/);
   assert.match(requestedPrompt, /website_type: 네이버 쇼핑몰 같은 사이트/);
+  assert.match(requestedPrompt, /traffic: 중간 규모 \(일 1,000명, 동시 50명\)/);
+  assert.match(requestedPrompt, /backend: 복잡한 비즈니스 로직 \(Spring Boot, Django 등\)/);
   assert.doesNotMatch(requestedPrompt, /어떤 종류의 웹사이트인가요\?: 네이버/);
   assert.deepEqual(
     (requestedPayload as { clarificationAnswers?: unknown }).clarificationAnswers,
-    [{ questionId: "website_type", answer: "네이버 쇼핑몰 같은 사이트를 만들고 싶어" }]
+    clarificationAnswers
   );
 });
 
@@ -1174,6 +1179,7 @@ test("createArchitectureDraft maps a conversational monthly budget to the matchi
   assert.equal(response.metadata.operatingProfile?.budgetLevel, "normal");
 });
 
+
 test("createAmazonQArchitectureDraftResponse understands natural-language clarification examples", async () => {
   const provider = createFakeAmazonQProvider(() => "{}");
   const scenarios = [
@@ -1183,6 +1189,7 @@ test("createAmazonQArchitectureDraftResponse understands natural-language clarif
     { questionId: "region", answer: "일본과 싱가포르 사용자가 대부분이야" },
     { questionId: "region", answer: "홍콩만" },
     { questionId: "website_size", answer: "간단한 사이트야" },
+    { questionId: "backend", answer: "스프링부트 썼어" },
     { questionId: "file_upload", answer: "사용자가 프로필 사진을 올릴 수 있어야 해" },
     { questionId: "file_upload", answer: "없어" },
     { questionId: "realtime", answer: "아니" }

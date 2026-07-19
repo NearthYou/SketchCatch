@@ -107,7 +107,17 @@ function findQuestionSpecificSuggestion(
   normalizedAnswer: string
 ): string | null {
   let pattern: RegExp | null = null;
-  if (clarification.questionId === "region" && /(?:hong\s*kong|홍콩)/iu.test(normalizedAnswer)) {
+  if (clarification.questionId === "traffic") {
+    const trafficScale = resolveExplicitTrafficScale(normalizedAnswer);
+    if (trafficScale === "small") pattern = /(?:small|소규모)/iu;
+    if (trafficScale === "medium") pattern = /(?:medium|중간\s*규모)/iu;
+    if (trafficScale === "large") pattern = /(?:large|대규모)/iu;
+  } else if (
+    clarification.questionId === "backend"
+    && /(?:spring\s*boot|스프링\s*부트|django|장고)/iu.test(normalizedAnswer)
+  ) {
+    pattern = /(?:complex\s*business|복잡한\s*비즈니스\s*로직)/iu;
+  } else if (clarification.questionId === "region" && /(?:hong\s*kong|홍콩)/iu.test(normalizedAnswer)) {
     pattern = /(?:asia\s*pacific|아시아\s*태평양)/iu;
   } else if (
     clarification.questionId === "website_size"
@@ -124,6 +134,43 @@ function findQuestionSpecificSuggestion(
   return pattern === null
     ? null
     : clarification.suggestions.find((suggestion) => pattern.test(suggestion)) ?? null;
+}
+
+function resolveExplicitTrafficScale(value: string): "small" | "medium" | "large" | null {
+  const dailyCount = extractTrafficCount(
+    value,
+    /(?:일일|하루|daily|일(?=\s*\d))[^\d]{0,20}(\d[\d,]*)(?:\s*명)?(?:\s*(미만|이하|이상|\+))?/iu
+  );
+  const concurrentCount = extractTrafficCount(
+    value,
+    /(?:동시|동접|concurrent)[^\d]{0,20}(\d[\d,]*)(?:\s*명)?(?:\s*(미만|이하|이상|\+))?/iu
+  );
+  const scales = [
+    dailyCount === null ? null : classifyTrafficCount(dailyCount, 100, 10_000),
+    concurrentCount === null ? null : classifyTrafficCount(concurrentCount, 10, 500)
+  ].filter((scale): scale is "small" | "medium" | "large" => scale !== null);
+
+  if (scales.includes("large")) return "large";
+  if (scales.includes("medium")) return "medium";
+  return scales.includes("small") ? "small" : null;
+}
+
+function extractTrafficCount(value: string, pattern: RegExp): number | null {
+  const match = value.match(pattern);
+  const countText = match?.[1];
+  if (countText === undefined) return null;
+  const count = Number(countText.replaceAll(",", ""));
+  if (!Number.isFinite(count)) return null;
+  return match?.[2] === "미만" || match?.[2] === "이하" ? Math.max(0, count - 1) : count;
+}
+
+function classifyTrafficCount(
+  count: number,
+  smallUpperBound: number,
+  largeLowerBound: number
+): "small" | "medium" | "large" {
+  if (count < smallUpperBound) return "small";
+  return count < largeLowerBound ? "medium" : "large";
 }
 
 function findWebsiteTypeSuggestion(

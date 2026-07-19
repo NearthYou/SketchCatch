@@ -180,6 +180,40 @@ test("common natural-language answers select the matching existing option", () =
       suggestions: ["필요 없음", "실시간 채팅", "실시간 알림"],
       answer: "아니",
       expected: "필요 없음"
+    },
+    {
+      questionId: "traffic",
+      question: "예상 트래픽 규모는?",
+      suggestions: [
+        "소규모 (일 100명 미만, 동시 10명 미만)",
+        "중간 규모 (일 1,000명, 동시 50명)",
+        "대규모 (일 10,000명 이상, 동시 500명 이상)"
+      ],
+      answer: "일일 500명 정도",
+      expected: "중간 규모 (일 1,000명, 동시 50명)"
+    },
+    {
+      questionId: "traffic",
+      question: "예상 트래픽 규모는?",
+      suggestions: [
+        "소규모 (일 100명 미만, 동시 10명 미만)",
+        "중간 규모 (일 1,000명, 동시 50명)",
+        "대규모 (일 10,000명 이상, 동시 500명 이상)"
+      ],
+      answer: "동시 접속자 500명 정도",
+      expected: "대규모 (일 10,000명 이상, 동시 500명 이상)"
+    },
+    {
+      questionId: "backend",
+      question: "백엔드가 필요한가요?",
+      suggestions: [
+        "필요 없음 (정적 사이트)",
+        "간단한 API (Node.js, Python Flask 등)",
+        "복잡한 비즈니스 로직 (Spring Boot, Django 등)",
+        "마이크로서비스 (여러 서비스 분리)"
+      ],
+      answer: "스프링부트 썼어",
+      expected: "복잡한 비즈니스 로직 (Spring Boot, Django 등)"
     }
   ] as const;
 

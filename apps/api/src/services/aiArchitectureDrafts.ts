@@ -1358,6 +1358,22 @@ function findCanonicalClarificationSuggestion(
   );
   if (exactSuggestion !== undefined) return exactSuggestion;
 
+  if (questionId === "traffic") {
+    const trafficProfile = resolveExplicitTrafficProfile(normalizedAnswer);
+    if (trafficProfile !== undefined) {
+      const profilePattern = trafficProfile === "small"
+        ? /(?:small|소규모)/iu
+        : trafficProfile === "medium"
+          ? /(?:medium|중간\s*규모)/iu
+          : /(?:large|대규모)/iu;
+      return question.suggestions.find((suggestion) => profilePattern.test(suggestion));
+    }
+  }
+  if (questionId === "backend" && /(?:spring\s*boot|스프링\s*부트|django|장고)/iu.test(normalizedAnswer)) {
+    return question.suggestions.find((suggestion) =>
+      /(?:complex\s*business|복잡한\s*비즈니스\s*로직)/iu.test(suggestion)
+    );
+  }
   if (questionId === "region" && /(?:hong\s*kong|홍콩)/iu.test(normalizedAnswer)) {
     return question.suggestions.find((suggestion) =>
       /(?:asia\s*pacific|아시아\s*태평양)/iu.test(suggestion)
@@ -9295,19 +9311,57 @@ function resolveTrafficProfile(normalizedPrompt: string): ArchitectureAnswerProf
     return "bursty";
   }
 
-  if (/(large\s+traffic|10,?000|500\+|대규모|일\s*10,?000|동시\s*500)/iu.test(normalizedPrompt)) {
-    return "large";
-  }
+  if (/(large\s+traffic|대규모)/iu.test(normalizedPrompt)) return "large";
+  if (/(medium\s+traffic|중간\s*규모)/iu.test(normalizedPrompt)) return "medium";
+  if (/(small\s+traffic|소규모)/iu.test(normalizedPrompt)) return "small";
 
-  if (/(medium\s+traffic|1,?000|concurrent\s+50|중간\s*규모|일\s*1,?000|동시\s*50|동접자?\s*1000)/iu.test(normalizedPrompt)) {
-    return "medium";
-  }
+  const explicitTrafficProfile = resolveExplicitTrafficProfile(normalizedPrompt);
+  if (explicitTrafficProfile !== undefined) return explicitTrafficProfile;
 
-  if (/(small\s+traffic|under\s+10|100명\s*미만|소규모|동시\s*10명\s*미만)/iu.test(normalizedPrompt)) {
-    return "small";
-  }
+  if (/(10,?000|500\+|일\s*10,?000|동시\s*500)/iu.test(normalizedPrompt)) return "large";
+  if (/(1,?000|concurrent\s+50|일\s*1,?000|동시\s*50|동접자?\s*1000)/iu.test(normalizedPrompt)) return "medium";
+  if (/(under\s+10|100명\s*미만|동시\s*10명\s*미만)/iu.test(normalizedPrompt)) return "small";
 
   return undefined;
+}
+
+function resolveExplicitTrafficProfile(
+  value: string
+): Exclude<ArchitectureAnswerProfile["traffic"], "bursty" | undefined> | undefined {
+  const dailyCount = extractTrafficCount(
+    value,
+    /(?:일일|하루|daily|일(?=\s*\d))[^\d]{0,20}(\d[\d,]*)(?:\s*명)?(?:\s*(미만|이하|이상|\+))?/iu
+  );
+  const concurrentCount = extractTrafficCount(
+    value,
+    /(?:동시|동접|concurrent)[^\d]{0,20}(\d[\d,]*)(?:\s*명)?(?:\s*(미만|이하|이상|\+))?/iu
+  );
+  const profiles = [
+    dailyCount === undefined ? undefined : classifyTrafficCount(dailyCount, 100, 10_000),
+    concurrentCount === undefined ? undefined : classifyTrafficCount(concurrentCount, 10, 500)
+  ].filter((profile): profile is "small" | "medium" | "large" => profile !== undefined);
+
+  if (profiles.includes("large")) return "large";
+  if (profiles.includes("medium")) return "medium";
+  return profiles.includes("small") ? "small" : undefined;
+}
+
+function extractTrafficCount(value: string, pattern: RegExp): number | undefined {
+  const match = value.match(pattern);
+  const countText = match?.[1];
+  if (countText === undefined) return undefined;
+  const count = Number(countText.replaceAll(",", ""));
+  if (!Number.isFinite(count)) return undefined;
+  return match?.[2] === "미만" || match?.[2] === "이하" ? Math.max(0, count - 1) : count;
+}
+
+function classifyTrafficCount(
+  count: number,
+  smallUpperBound: number,
+  largeLowerBound: number
+): "small" | "medium" | "large" {
+  if (count < smallUpperBound) return "small";
+  return count < largeLowerBound ? "medium" : "large";
 }
 
 function resolveFrontendProfile(normalizedPrompt: string): ArchitectureAnswerProfile["frontend"] {
