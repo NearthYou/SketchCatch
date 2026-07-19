@@ -1,25 +1,9 @@
 @font-face {
-  font-family: "LINE Seed Sans KR";
+  font-family: "Pretendard";
   font-style: normal;
-  font-weight: 100;
+  font-weight: 45 920;
   font-display: swap;
-  src: url("/fonts/line-seed/LINESeedKR-Th.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "LINE Seed Sans KR";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/line-seed/LINESeedKR-Rg.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "LINE Seed Sans KR";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/line-seed/LINESeedKR-Bd.woff2") format("woff2");
+  src: url("/fonts/pretendard-variable/PretendardVariable.woff2") format("woff2-variations");
 }
 
 :root {
@@ -46,7 +30,7 @@
   --color-success-surface: #ecfdf3;
   --color-warning: #8a4b08;
   --color-warning-surface: #fff8eb;
-  --font-sans: "LINE Seed Sans KR", sans-serif;
+  --font-sans: "Pretendard", sans-serif;
   --font-code: var(--font-sans);
   --presentation-font-size-increase: 6px;
   --presentation-font-weight-regular: 400;

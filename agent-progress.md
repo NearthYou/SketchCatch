@@ -11,6 +11,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Restore Pretendard without changing typography scale
+
+- Replaced the global LINE Seed font source with the self-hosted Pretendard 1.3.9 variable asset while preserving every current size and the 400/700 Regular/Bold tokens.
+- Updated generated Template HTML to Pretendard while keeping its 22px/38px sizes and 400/700 weights. Focused typography, lint, typecheck, build, harness, and diff checks pass; no broad suite was run at the user's request. Refresh the Web app for final visual confirmation.
+
 ### 2026-07-19 - Merge the Live Observation ECS Template update
 
 - Resolved the progress-log conflict while preserving the incoming CloudFront/ALB/ECS Template work and all recent UI typography records; two older AI records moved to the monthly archive.
@@ -207,10 +212,4 @@ Short English-only working log for the current agent context. Older records are 
 
 - Removed the visible `선택됨` suffix from selected `/workspace/ai` answer buttons while retaining `aria-pressed` and selected-button styling.
 - Removed the unused label style and added a source regression for the route-specific transcript.
-- The focused Web regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
-
-### 2026-07-19 - Keep AI Start progress moving across card remounts
-
-- Moved `/workspace/ai` diagram-generation step ownership from the conditional progress card into the persistent conversation transcript.
-- The card now receives a controlled step, so rerenders or remounts cannot reset the visible progress to requirement analysis; the shared Workspace dock retains its local fallback timer.
 - The focused Web regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
