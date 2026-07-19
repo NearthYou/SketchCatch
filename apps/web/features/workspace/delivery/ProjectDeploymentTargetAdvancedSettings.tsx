@@ -44,14 +44,16 @@ const runtimeSystemFields: Record<RuntimeTargetKind, readonly SystemFieldDefinit
 export function ProjectDeploymentTargetAdvancedSettings({
   draft,
   lockedSystemFields,
+  revealMissingFields = false,
   updateDraft
 }: {
   readonly draft: ProjectDeploymentTargetDraft;
   readonly lockedSystemFields: ReadonlySet<SystemManagedField>;
+  readonly revealMissingFields?: boolean | undefined;
   readonly updateDraft: DraftUpdater;
 }) {
   return (
-    <details className={styles.advancedSettings}>
+    <details className={styles.advancedSettings} open={revealMissingFields || undefined}>
       <summary>
         <span>
           <strong>고급 설정</strong>

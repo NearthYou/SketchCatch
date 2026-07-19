@@ -51,7 +51,7 @@ test("editor keeps required decisions visible and moves inferred values behind a
   assert.ok(editorSource.indexOf("AWS 연결 <em>필수</em>") < advancedSettingsIndex);
   assert.ok(editorSource.indexOf("실행 방식 <em>필수</em>") < advancedSettingsIndex);
   assert.ok(editorSource.indexOf("자동 설정 결과") < advancedSettingsIndex);
-  assert.match(advancedSettingsSource, /<details className=\{styles\.advancedSettings\}>/);
+  assert.match(advancedSettingsSource, /<details className=\{styles\.advancedSettings\}/);
   assert.match(advancedSettingsSource, /<span>Source root<\/span>/);
   assert.match(advancedSettingsSource, /readOnly=\{lockedSystemFields\.has\("commitSha"\)\}/);
   assert.match(
@@ -60,10 +60,16 @@ test("editor keeps required decisions visible and moves inferred values behind a
   );
   assert.match(advancedSettingsSource, /Output URL/);
   assert.match(advancedSettingsSource, /readOnly=\{draft\.runtimeTargetKind === "ecs_fargate"\}/);
-  assert.doesNotMatch(
-    advancedSettingsSource,
-    /<details className=\{styles\.advancedSettings\} open/
-  );
+});
+
+test("missing inferred fields reveal advanced settings with actionable Korean guidance", () => {
+  assert.match(editorSource, /const missingAdvancedFieldKeys/);
+  assert.match(editorSource, /revealMissingFields=\{/);
+  assert.match(editorSource, /자동 입력되지 않은 설정을 확인하세요/);
+  assert.match(advancedSettingsSource, /open=\{revealMissingFields \|\| undefined\}/);
+  assert.match(editorSource, /빌드 기준 파일/);
+  assert.match(editorSource, /확정 commit/);
+  assert.match(editorSource, /ECS 클러스터/);
 });
 
 test("editor renders only the selected Runtime section and stacks fields on small screens", () => {
