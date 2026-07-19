@@ -147,6 +147,7 @@ export function LiveObservationModal({
     outputErrorMessage ||
     streamErrorMessage;
   const providerSnapshot = selectedSnapshot?.latestObservation?.payload ?? null;
+  const providerLogs = providerSnapshot?.logs ?? [];
   const capacityModeLabel = selectedArchitecture
     ? getLiveObservationCapacityMode(selectedArchitecture, providerSnapshot?.capacity)
     : null;
@@ -639,11 +640,11 @@ export function LiveObservationModal({
               </div>
             </details>
           ) : null}
-          {providerSnapshot && providerSnapshot.logs.length > 0 ? (
+          {providerLogs.length > 0 ? (
             <details className={styles.liveObservationLogs}>
-              <summary>최근 런타임 로그 {providerSnapshot.logs.length}건</summary>
+              <summary>최근 런타임 로그 {providerLogs.length}건</summary>
               <ol>
-                {providerSnapshot.logs.map((entry, index) => (
+                {providerLogs.map((entry, index) => (
                   <li key={`${entry.timestamp}-${index}`}>
                     <time dateTime={entry.timestamp}>{formatTimestamp(entry.timestamp)}</time>
                     <code>{entry.message}</code>

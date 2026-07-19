@@ -172,7 +172,7 @@ export function getLiveObservationOperationalAnalysis(
       (snapshot.availability !== null && snapshot.availability < 99));
   const state = hasIncident ? "incident" : hasBottleneck ? "bottleneck" : "healthy";
   const stateLabel = hasIncident ? "장애" : hasBottleneck ? "병목" : "정상";
-  const scaleEventCount = snapshot.logs.filter((entry) =>
+  const scaleEventCount = (snapshot.logs ?? []).filter((entry) =>
     /scal(?:e|ed|ing)|desired\s*(?:count|capacity)|capacity/i.test(entry.message)
   ).length;
   const costMultiplier =
