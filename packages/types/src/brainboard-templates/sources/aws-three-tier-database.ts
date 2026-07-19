@@ -43,7 +43,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2f8fe703-8781-4e1d-afb9-8b41aa88cb4e",
       domOrder: 1,
-      label: "launch_template",
+      label: "공용 EC2 Launch Template",
       position: {
         x: 580,
         y: 570
@@ -61,7 +61,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "afe878e0-c406-499d-ba2c-c76a7ba9ed00",
       domOrder: 2,
-      label: "main vpc",
+      label: "3-Tier VPC",
       position: {
         x: -685,
         y: 30
@@ -79,7 +79,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "0ba0b6ac-5652-4698-9c34-622056feec30",
       domOrder: 3,
-      label: "web",
+      label: "웹 Auto Scaling Group",
       position: {
         x: -585,
         y: 285
@@ -97,7 +97,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "4c5c5291-683f-4364-88a1-09dc5d885de3",
       domOrder: 4,
-      label: "us-east-1b",
+      label: "AZ us-east-1b",
       position: {
         x: 65,
         y: 190
@@ -115,7 +115,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "95f6fcc3-863d-4859-81fc-19bb52b136f1",
       domOrder: 5,
-      label: "app",
+      label: "애플리케이션 Auto Scaling Group",
       position: {
         x: -585,
         y: 755
@@ -133,7 +133,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ad311bd8-eb8c-4b09-ac61-b818cccb630d",
       domOrder: 6,
-      label: "DB subnet group",
+      label: "Aurora DB Subnet Group",
       position: {
         x: -550,
         y: 1280
@@ -151,7 +151,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "e045ce90-bb03-4d17-8184-40474d73bdda",
       domOrder: 7,
-      label: "us-east-1a",
+      label: "AZ us-east-1a",
       position: {
         x: -595,
         y: 190
@@ -169,7 +169,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "02eb7678-c7b3-496c-8f2e-864b8752639a",
       domOrder: 8,
-      label: "web subnet 2",
+      label: "웹 Subnet B",
       position: {
         x: 100,
         y: 350
@@ -187,7 +187,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2de9df0c-ca00-47b9-adc8-c9bedfbb8a56",
       domOrder: 9,
-      label: "web subnet 1",
+      label: "웹 Subnet A",
       position: {
         x: -550,
         y: 350
@@ -205,7 +205,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2e727aab-c78f-47d3-ad08-15ab55425c05",
       domOrder: 10,
-      label: "db subnet 2",
+      label: "DB Subnet B",
       position: {
         x: 100,
         y: 1220
@@ -223,7 +223,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "44023200-da2c-4dd0-a42f-e155df3eebf8",
       domOrder: 11,
-      label: "db subnet 1",
+      label: "DB Subnet A",
       position: {
         x: -560,
         y: 1220
@@ -241,7 +241,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5c70cc8e-00c1-40aa-9579-f774354c3de4",
       domOrder: 12,
-      label: "App subnet 1",
+      label: "애플리케이션 Subnet A",
       position: {
         x: -550,
         y: 820
@@ -259,7 +259,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d1bbba94-5f95-4e6e-ba67-d968459db06c",
       domOrder: 13,
-      label: "App subnet 2",
+      label: "애플리케이션 Subnet B",
       position: {
         x: 100,
         y: 820
@@ -277,7 +277,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "0f77fb2f-97d3-4562-89b4-36bd1d3eb6b2",
       domOrder: 14,
-      label: "a record",
+      label: "웹 A Record",
       position: {
         x: 315,
         y: -300
@@ -295,7 +295,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "10899cec-fe58-405a-b610-379fc832e90f",
       domOrder: 15,
-      label: "WAF WEB ACL",
+      label: "웹 WAF ACL",
       position: {
         x: -315,
         y: -300
@@ -313,7 +313,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "283de881-4574-4a4c-95b9-f12b34d9087d",
       domOrder: 16,
-      label: "S3 bucket versioning",
+      label: "웹 앱 Versioning",
       position: {
         x: 790,
         y: 30
@@ -331,7 +331,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3cd01172-fce2-4b44-9829-238c8a8fbde6",
       domOrder: 17,
-      label: "S3 bucket",
+      label: "웹 앱 S3 Bucket",
       position: {
         x: 600,
         y: 30
@@ -349,7 +349,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "43af3152-6e4e-4144-9c44-b4496e6c00c7",
       domOrder: 18,
-      label: "WAF rule",
+      label: "웹 WAF Rule",
       position: {
         x: -435,
         y: -300
@@ -367,7 +367,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8cc81941-dca9-431b-bb7a-b6a24cd2ba32",
       domOrder: 19,
-      label: "cname record",
+      label: "웹 CNAME Record",
       position: {
         x: 315,
         y: -160
@@ -385,7 +385,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "91e71162-3ab7-4638-b2d0-974e34879a4f",
       domOrder: 20,
-      label: "hosted zone",
+      label: "웹 Route 53 Hosted Zone",
       position: {
         x: 45,
         y: -300
@@ -403,7 +403,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c2b68a8b-d2de-47d6-a48d-de1200d2cc00",
       domOrder: 21,
-      label: "cloudfront_distribution",
+      label: "CloudFront Distribution",
       position: {
         x: -140,
         y: -140
@@ -421,7 +421,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c6e0203e-f336-4b67-bace-94a51d09f617",
       domOrder: 22,
-      label: "WAF ipset",
+      label: "웹 WAF IP Set",
       position: {
         x: -555,
         y: -300
@@ -457,7 +457,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "4c5ee754-3e97-4d3e-8ad5-5466eac8840c",
       domOrder: 24,
-      label: "internet gateway",
+      label: "Internet Gateway",
       position: {
         x: -140,
         y: 0
@@ -475,7 +475,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "732af918-f8b1-43e9-a3ea-a9b583c1fb45",
       domOrder: 25,
-      label: "web",
+      label: "웹 ELB",
       position: {
         x: -140,
         y: 140
@@ -511,7 +511,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "89409729-7427-4813-a81b-274de912ec4a",
       domOrder: 27,
-      label: "app",
+      label: "애플리케이션 ELB",
       position: {
         x: -140,
         y: 660
@@ -529,7 +529,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b1c5fe40-f4ea-4435-979e-55a7011ac6e2",
       domOrder: 28,
-      label: "web_a",
+      label: "NAT EIP A",
       position: {
         x: -520,
         y: 90
@@ -565,7 +565,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f22651e0-1d69-417f-b33c-e2e1e5e82cb8",
       domOrder: 30,
-      label: "web_b",
+      label: "NAT EIP B",
       position: {
         x: 260,
         y: 90
@@ -601,7 +601,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "14b312b8-59be-4b2b-8b62-d422fa392e41",
       domOrder: 32,
-      label: "NAT gateway",
+      label: "NAT Gateway B",
       position: {
         x: 260,
         y: 420
@@ -619,7 +619,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3d3c925d-b665-4a01-b2e4-b928b6f3ab31",
       domOrder: 33,
-      label: "Web servers",
+      label: "웹 EC2 B",
       position: {
         x: 140,
         y: 420
@@ -637,7 +637,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "4952ad77-6b67-4d60-ba48-399fb1da6ca6",
       domOrder: 34,
-      label: "Read-only replica",
+      label: "Aurora Reader",
       position: {
         x: 200,
         y: 1330
@@ -655,7 +655,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "84a9b330-9c06-4a61-85b8-00f4db547d21",
       domOrder: 35,
-      label: "Read-write replica",
+      label: "Aurora PostgreSQL Cluster",
       position: {
         x: -470,
         y: 1330
@@ -673,7 +673,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "9f288d70-3c85-4204-acc7-9543bc9d38f6",
       domOrder: 36,
-      label: "NAT gateway",
+      label: "NAT Gateway A",
       position: {
         x: -520,
         y: 420
@@ -691,7 +691,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "a4c5b76d-069d-4e57-b11d-aead846a2201",
       domOrder: 37,
-      label: "Web servers",
+      label: "웹 EC2 A",
       position: {
         x: -410,
         y: 420
@@ -709,7 +709,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c07e1ce3-dd7c-4a9c-82c8-752a10ea5fba",
       domOrder: 38,
-      label: "EC2 web servers",
+      label: "애플리케이션 EC2 A",
       position: {
         x: -467.89650718174215,
         y: 889.635576275471
@@ -727,7 +727,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "dc04ec1e-665b-45ab-ba9f-290b55340c7b",
       domOrder: 39,
-      label: "EC2 web servers",
+      label: "애플리케이션 EC2 B",
       position: {
         x: 190,
         y: 890
@@ -1748,7 +1748,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_launch_template.launch_template",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "afe878e0-c406-499d-ba2c-c76a7ba9ed00": {
       kind: "resource",
@@ -1760,7 +1760,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_autoscaling_group.web",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "4c5c5291-683f-4364-88a1-09dc5d885de3": {
       kind: "presentation",
@@ -1772,7 +1772,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_autoscaling_group.app",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "ad311bd8-eb8c-4b09-ac61-b818cccb630d": {
       kind: "resource",
@@ -1892,7 +1892,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_elb.web",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "83f8b4db-3937-4bcb-8707-cf55e4749ea3": {
       kind: "presentation",
@@ -1904,13 +1904,13 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_elb.app",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "b1c5fe40-f4ea-4435-979e-55a7011ac6e2": {
       kind: "resource",
       address: "aws_eip.web_a",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "cf263726-f3f8-471f-94ee-0229644bc7b4": {
       kind: "presentation",
@@ -1922,7 +1922,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_eip.web_b",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "ec823e04-54e9-4c9c-9ac4-a7b939ec22bf": {
       kind: "presentation",

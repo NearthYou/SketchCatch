@@ -112,7 +112,7 @@ test("Cross-account Template은 원본의 Group 영역과 세 S3 Resource만 사
   assert.equal(accountGroups.length, 2);
   assert.deepEqual(
     accountGroups.map(({ label }) => label).sort(),
-    ["Prod account", "Test account"]
+    ["Prod AWS Account", "Test AWS Account"]
   );
   assert.ok(accountGroups.every(isAreaNode));
 
@@ -122,7 +122,7 @@ test("Cross-account Template은 원본의 Group 영역과 세 S3 Resource만 사
   );
   assert.deepEqual(
     scopedNodes.map(({ label }) => label).sort(),
-    ["Prod", "S3 bucket Prod", "Test"]
+    ["prod.txt S3 Object", "test.txt S3 Object", "계정 간 공유 S3 Bucket"]
   );
   assert.equal(
     template.diagramJson.nodes.some(

@@ -43,7 +43,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "595f9ca1-9786-4270-a86e-f584fd0dd78b",
       domOrder: 1,
-      label: "default",
+      label: "ALB VPC",
       position: {
         x: -1265,
         y: -750
@@ -61,7 +61,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "c62807d5-e1bf-450d-a78e-bd44c7911496",
       domOrder: 2,
-      label: "sg",
+      label: "ALB·EC2 SG",
       position: {
         x: -1210,
         y: -610
@@ -79,7 +79,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "cb5d901c-6f13-45b6-8c28-708389c20c56",
       domOrder: 3,
-      label: "us-east-2a",
+      label: "AZ us-east-2a",
       position: {
         x: -1140,
         y: -550
@@ -97,7 +97,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "d5d05b1a-2611-4237-b99e-7e67ad204bcb",
       domOrder: 4,
-      label: "us-east-2b",
+      label: "AZ us-east-2b",
       position: {
         x: -390,
         y: -550
@@ -115,7 +115,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "e275ea03-fd95-411d-bf68-9beda7afa0a5",
       domOrder: 5,
-      label: "default",
+      label: "ALB Subnet A",
       position: {
         x: -1070,
         y: -460
@@ -133,7 +133,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "71f7a4a8-0f10-4c27-ab01-6feb1e6279b4",
       domOrder: 6,
-      label: "subnet2",
+      label: "ALB Subnet B",
       position: {
         x: -320,
         y: -460
@@ -151,7 +151,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "9976bc88-df75-470c-8d22-b9d110e98a1c",
       domOrder: 7,
-      label: "LB listener",
+      label: "ALB HTTP 8080 Listener",
       position: {
         x: -850,
         y: -230
@@ -169,7 +169,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "b06847a7-437a-4d11-b271-28a83e9ff1c0",
       domOrder: 8,
-      label: "LB target group",
+      label: "HTTP 8080 Target Group",
       position: {
         x: -850,
         y: -50
@@ -187,7 +187,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "048a3f38-9205-4ca7-b6fa-5f37ce90c75f",
       domOrder: 9,
-      label: "t3a_9",
+      label: "애플리케이션 EC2",
       position: {
         x: -640,
         y: 70
@@ -205,7 +205,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "f18c57e0-c9a1-45c1-83f4-03b84924b7c8",
       domOrder: 10,
-      label: "LB target group attachment",
+      label: "EC2 Target Group 연결",
       position: {
         x: -850,
         y: 70
@@ -223,7 +223,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "3548540e-5692-4cc2-914b-11b77e43085d",
       domOrder: 11,
-      label: "alb",
+      label: "Application Load Balancer",
       position: {
         x: -460,
         y: -570
@@ -241,7 +241,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "4882367c-117c-4af0-9957-4d6d466d7658",
       domOrder: 12,
-      label: "aws_internet_gateway_12",
+      label: "Internet Gateway",
       position: {
         x: -460,
         y: -780
@@ -506,13 +506,13 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
       kind: "resource",
       address: "aws_vpc.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "c62807d5-e1bf-450d-a78e-bd44c7911496": {
       kind: "resource",
       address: "aws_security_group.sg",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "cb5d901c-6f13-45b6-8c28-708389c20c56": {
       kind: "presentation",
@@ -530,13 +530,13 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
       kind: "resource",
       address: "aws_subnet.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "71f7a4a8-0f10-4c27-ab01-6feb1e6279b4": {
       kind: "resource",
       address: "aws_subnet.subnet2",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "9976bc88-df75-470c-8d22-b9d110e98a1c": {
       kind: "resource",
@@ -554,7 +554,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
       kind: "resource",
       address: "aws_instance.t3a_9",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "f18c57e0-c9a1-45c1-83f4-03b84924b7c8": {
       kind: "resource",
@@ -566,13 +566,13 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
       kind: "resource",
       address: "aws_lb.alb",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "4882367c-117c-4af0-9957-4d6d466d7658": {
       kind: "resource",
       address: "aws_internet_gateway.aws_internet_gateway_12",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     }
   }
 });

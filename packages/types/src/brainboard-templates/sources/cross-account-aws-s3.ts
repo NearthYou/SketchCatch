@@ -43,7 +43,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "abd36fbe-31bb-4fe3-b43e-9e77644f51b5",
       domOrder: 1,
-      label: "Prod account",
+      label: "Prod AWS Account",
       position: {
         x: -10,
         y: -260
@@ -61,7 +61,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6e055294-83c2-4d44-beac-e292b11dcb50",
       domOrder: 2,
-      label: "Test account",
+      label: "Test AWS Account",
       position: {
         x: -10,
         y: 30
@@ -79,7 +79,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5418dbae-f0eb-4864-8a8e-a9897008c92a",
       domOrder: 3,
-      label: "S3 bucket Prod",
+      label: "계정 간 공유 S3 Bucket",
       position: {
         x: 90,
         y: -160
@@ -97,7 +97,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "0ff5c7a0-b03e-4e19-acc7-8c089bb7f92e",
       domOrder: 5,
-      label: "Test",
+      label: "test.txt S3 Object",
       position: {
         x: 90,
         y: 80
@@ -115,7 +115,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8b881706-f98a-48f1-9995-abf026d7768a",
       domOrder: 6,
-      label: "Prod",
+      label: "prod.txt S3 Object",
       position: {
         x: 360,
         y: -160

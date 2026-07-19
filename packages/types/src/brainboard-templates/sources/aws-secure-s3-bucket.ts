@@ -43,7 +43,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "06c1d1a2-a280-419f-95a3-7e3cda0c3330",
       domOrder: 1,
-      label: "s3_bucket",
+      label: "보안 S3 Bucket",
       position: {
         x: 1020,
         y: -1440
@@ -61,7 +61,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "262e64a9-86bc-4bc5-b7e1-82e26ddedb06",
       domOrder: 2,
-      label: "s3_bucket_notification",
+      label: "로그 객체 생성 SNS 알림",
       position: {
         x: 1020,
         y: -1660
@@ -79,7 +79,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2bad56b6-e6ee-4248-9659-56171ccca61c",
       domOrder: 3,
-      label: "lifecycle_configuration",
+      label: "로그 보관 Lifecycle",
       position: {
         x: 695,
         y: -1620
@@ -97,7 +97,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "4940107a-b41a-4e29-b53b-5618978ed6c3",
       domOrder: 4,
-      label: "bucket_versioning",
+      label: "S3 Versioning",
       position: {
         x: 1020,
         y: -1210
@@ -115,7 +115,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6d669ff4-d4d1-44a6-b483-d16ca60e815a",
       domOrder: 5,
-      label: "server_side_encryption_configuration",
+      label: "S3 KMS 암호화",
       position: {
         x: 695,
         y: -1210
@@ -133,7 +133,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c636c16f-3b4a-4e46-bff2-70462f108900",
       domOrder: 6,
-      label: "public_access_block",
+      label: "S3 Public Access 차단",
       position: {
         x: 1335,
         y: -1440
@@ -151,7 +151,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "e06758f9-5a60-4934-8ac3-af746693a4a9",
       domOrder: 7,
-      label: "sns_topic",
+      label: "버킷 알림 SNS Topic",
       position: {
         x: 1345,
         y: -1660
@@ -169,7 +169,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "e4f7100a-1573-46ab-96db-116709afa0e8",
       domOrder: 8,
-      label: "s3_bucket_acl",
+      label: "S3 Private ACL",
       position: {
         x: 1280,
         y: -1560
@@ -187,7 +187,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ef48c7ff-a34a-49fb-94fd-ea9c35cedc11",
       domOrder: 9,
-      label: "Replication configuration",
+      label: "S3 Replication 설정",
       position: {
         x: 1280,
         y: -1210
@@ -205,7 +205,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f079d191-2684-4c89-8e19-370d63c1d764",
       domOrder: 10,
-      label: "iam_role",
+      label: "S3 Replication IAM Role",
       position: {
         x: 1460,
         y: -1210
@@ -223,7 +223,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fa1b482b-0830-4610-a6ac-086a532b1f3f",
       domOrder: 11,
-      label: "logging",
+      label: "S3 접근 로그 수집",
       position: {
         x: 695,
         y: -1440
@@ -767,13 +767,13 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_s3_bucket.s3_bucket",
       fileName: "s3_bucket.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "262e64a9-86bc-4bc5-b7e1-82e26ddedb06": {
       kind: "resource",
       address: "aws_s3_bucket_notification.s3_bucket_notification",
       fileName: "s3_bucket.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "2bad56b6-e6ee-4248-9659-56171ccca61c": {
       kind: "resource",
@@ -804,13 +804,13 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_sns_topic.sns_topic",
       fileName: "s3_bucket.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "e4f7100a-1573-46ab-96db-116709afa0e8": {
       kind: "resource",
       address: "aws_s3_bucket_acl.s3_bucket_acl",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "ef48c7ff-a34a-49fb-94fd-ea9c35cedc11": {
       kind: "resource",
@@ -822,7 +822,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_iam_role.iam_role",
       fileName: "s3_bucket.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "fa1b482b-0830-4610-a6ac-086a532b1f3f": {
       kind: "resource",

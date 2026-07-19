@@ -43,7 +43,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ac3623f0-25ad-4acb-92d8-0d35223ec63c",
       domOrder: 1,
-      label: "default vpc",
+      label: "RDS VPC",
       position: {
         x: 150,
         y: -170
@@ -61,7 +61,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "a0e46c7b-3b5b-4d6e-8a12-3d468f1dc564",
       domOrder: 2,
-      label: "default security group",
+      label: "PostgreSQL SG",
       position: {
         x: 213,
         y: -85
@@ -79,7 +79,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2adbfb12-8509-4302-9f1d-029292991c80",
       domOrder: 3,
-      label: "us-west-2a",
+      label: "AZ us-west-2a",
       position: {
         x: 315,
         y: 0
@@ -97,7 +97,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5b7c9fe1-1c7e-4928-bb43-c3eb0b25f11c",
       domOrder: 4,
-      label: "default",
+      label: "PostgreSQL DB Subnet Group",
       position: {
         x: 660,
         y: 195
@@ -115,7 +115,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8d685e1f-ef90-4fef-afde-9ba043869054",
       domOrder: 5,
-      label: "us-west-2b",
+      label: "AZ us-west-2b",
       position: {
         x: 880,
         y: 0
@@ -133,7 +133,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "87a87f94-1a87-409c-9228-fca73e37a118",
       domOrder: 6,
-      label: "subnet 2a",
+      label: "DB Subnet A",
       position: {
         x: 335,
         y: 140
@@ -151,7 +151,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b45989bc-c032-4bca-a116-0b5f0ee6c759",
       domOrder: 7,
-      label: "subnet 2b",
+      label: "DB Subnet B",
       position: {
         x: 915,
         y: 140
@@ -169,7 +169,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "4a365324-6e51-43b7-8084-59822f636a0d",
       domOrder: 8,
-      label: "db1",
+      label: "PostgreSQL Primary DB",
       position: {
         x: 710,
         y: 570
@@ -187,7 +187,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "53095c7c-9c63-4973-934d-398e684b2b0a",
       domOrder: 9,
-      label: "postgres read replica",
+      label: "PostgreSQL Read Replica",
       position: {
         x: 1145,
         y: 720
@@ -205,7 +205,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d25dcc61-c9c3-4b64-922b-cd44cb13798b",
       domOrder: 10,
-      label: "Log DB parameter",
+      label: "PostgreSQL 연결 로그 설정",
       position: {
         x: 710,
         y: 850
@@ -571,7 +571,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_db_subnet_group.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "8d685e1f-ef90-4fef-afde-9ba043869054": {
       kind: "presentation",
@@ -595,13 +595,13 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_db_instance.db1",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "53095c7c-9c63-4973-934d-398e684b2b0a": {
       kind: "resource",
       address: "aws_db_instance.db_replica",
       fileName: "main.tf",
-      addressMapping: "single-residual"
+      addressMapping: "reviewed-override"
     },
     "d25dcc61-c9c3-4b64-922b-cd44cb13798b": {
       kind: "resource",

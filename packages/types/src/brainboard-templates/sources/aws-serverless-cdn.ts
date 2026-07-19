@@ -43,7 +43,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "04926feb-4622-439a-b228-cfc9e415e98e",
       domOrder: 1,
-      label: "apigwv2_api",
+      label: "애플리케이션 HTTP API",
       position: {
         x: 765,
         y: 1712.8609821992764
@@ -61,7 +61,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "0c2d3032-4148-4e80-bae8-9cfb63f6ec6e",
       domOrder: 2,
-      label: "www",
+      label: "www CloudFront A Record",
       position: {
         x: 990,
         y: 1018.060958164477
@@ -79,7 +79,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "372d8cce-6e53-4d81-a7d5-5337d826b75b",
       domOrder: 3,
-      label: "website_bucket",
+      label: "웹사이트 S3 Bucket",
       position: {
         x: 1285.383966064453,
         y: 1218.296043395996
@@ -97,7 +97,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3afa58d4-2389-47e3-af6d-197aa176ca4a",
       domOrder: 4,
-      label: "s3_bucket_versioning",
+      label: "웹사이트 Versioning",
       position: {
         x: 1550.5156738281253,
         y: 1369.0558364868166
@@ -115,7 +115,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3e80ddec-93fc-4732-8e32-ec2d48a5956f",
       domOrder: 5,
-      label: "cognito_user_pool",
+      label: "사용자 Cognito User Pool",
       position: {
         x: 765,
         y: 1509.0890020931467
@@ -133,7 +133,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "46b1dd16-edd2-49f2-b3b6-b228d6838314",
       domOrder: 6,
-      label: "iam_role",
+      label: "Lambda 실행 IAM Role",
       position: {
         x: 1158.5118881955068,
         y: 1715.4115959026792
@@ -151,7 +151,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "48e4d8e3-8e35-4e2b-9d9a-3bd6309ce560",
       domOrder: 7,
-      label: "lambda_function",
+      label: "사용자 처리 Lambda",
       position: {
         x: 990,
         y: 1509.0890020931467
@@ -169,7 +169,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "58851a9c-d1ed-4576-8636-e8c2de255585",
       domOrder: 8,
-      label: "public_content",
+      label: "공개 콘텐츠 S3 Bucket",
       position: {
         x: 765,
         y: 1917.4084740890592
@@ -187,7 +187,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "913fcb3c-08dd-487b-9f34-7a0e3aded6b6",
       domOrder: 9,
-      label: "dynamodb_global_table",
+      label: "애플리케이션 DynamoDB Global Table",
       position: {
         x: 1390,
         y: 1712.8609821992764
@@ -205,7 +205,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "96f0a15e-0305-405a-b9e9-eee46aed63e0",
       domOrder: 10,
-      label: "error",
+      label: "오류 페이지 S3 Object",
       position: {
         x: 1284.836767578125,
         y: 1372.1038528442382
@@ -223,7 +223,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "97ab46f5-02c0-4d3e-8d23-73e7cf4d9936",
       domOrder: 11,
-      label: "route53_zone",
+      label: "웹사이트 Route 53 Hosted Zone",
       position: {
         x: 765,
         y: 1015
@@ -241,7 +241,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "9c5f4598-f184-4890-bdd0-1899be4e8cf7",
       domOrder: 12,
-      label: "index",
+      label: "홈 페이지 S3 Object",
       position: {
         x: 1552.8494110107422,
         y: 1219.7053787231446
@@ -259,7 +259,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "a9812863-e435-4e22-8ead-21024b258441",
       domOrder: 13,
-      label: "website_distribution",
+      label: "웹사이트 CloudFront Distribution",
       position: {
         x: 1285.383966064453,
         y: 1018.060958164477
@@ -277,7 +277,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b90b246d-aeeb-4e30-aa60-7929ecace81d",
       domOrder: 14,
-      label: "ses_email_identity",
+      label: "발신자 SES Email Identity",
       position: {
         x: 1390,
         y: 1509.0890020931467
@@ -295,7 +295,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ceb49680-3cb4-41d8-9e9d-34f674391bb4",
       domOrder: 15,
-      label: "lambda_function3",
+      label: "콘텐츠 처리 Lambda",
       position: {
         x: 990,
         y: 1917.4084740890592
@@ -313,7 +313,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d0fc5fc8-4e65-463c-96a9-abb6c4abd050",
       domOrder: 16,
-      label: "origin_access_identity",
+      label: "웹사이트 CloudFront OAI",
       position: {
         x: 1546.491870117187,
         y: 1018.060958164477
@@ -331,7 +331,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ddbce9f8-63fd-43a9-a133-86dda6fed0e9",
       domOrder: 17,
-      label: "s3_bucket_website_configuration",
+      label: "웹사이트 S3 Website 설정",
       position: {
         x: 990.4061098255536,
         y: 1219.127717584708
@@ -349,7 +349,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "e608c4e1-a9bf-4675-be19-e67f7bde4f98",
       domOrder: 18,
-      label: "s3_bucket_acl",
+      label: "웹사이트 Public-read ACL",
       position: {
         x: 1071.368246459961,
         y: 1372.2546951293946
@@ -367,7 +367,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ed57ef8a-ac66-4a30-a586-09a0f3c4406a",
       domOrder: 19,
-      label: "lambda_function2",
+      label: "API 처리 Lambda",
       position: {
         x: 990,
         y: 1712.8609821992764
@@ -385,7 +385,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "675bd894-0771-422e-947d-b7c25fad993f",
       domOrder: 20,
-      label: "users",
+      label: "사용자",
       position: {
         x: 357.720388434915,
         y: 1509.0890020931467
@@ -1474,115 +1474,115 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_apigatewayv2_api.apigwv2_api",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "0c2d3032-4148-4e80-bae8-9cfb63f6ec6e": {
       kind: "resource",
       address: "aws_route53_record.www",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "372d8cce-6e53-4d81-a7d5-5337d826b75b": {
       kind: "resource",
       address: "aws_s3_bucket.website_bucket",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "3afa58d4-2389-47e3-af6d-197aa176ca4a": {
       kind: "resource",
       address: "aws_s3_bucket_versioning.s3_bucket_versioning",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "3e80ddec-93fc-4732-8e32-ec2d48a5956f": {
       kind: "resource",
       address: "aws_cognito_user_pool.cognito_user_pool",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "46b1dd16-edd2-49f2-b3b6-b228d6838314": {
       kind: "resource",
       address: "aws_iam_role.iam_role",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "48e4d8e3-8e35-4e2b-9d9a-3bd6309ce560": {
       kind: "resource",
       address: "aws_lambda_function.lambda_function",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "58851a9c-d1ed-4576-8636-e8c2de255585": {
       kind: "resource",
       address: "aws_s3_bucket.public_content",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "913fcb3c-08dd-487b-9f34-7a0e3aded6b6": {
       kind: "resource",
       address: "aws_dynamodb_global_table.dynamodb_global_table",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "96f0a15e-0305-405a-b9e9-eee46aed63e0": {
       kind: "resource",
       address: "aws_s3_object.error",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "97ab46f5-02c0-4d3e-8d23-73e7cf4d9936": {
       kind: "resource",
       address: "aws_route53_zone.route53_zone",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "9c5f4598-f184-4890-bdd0-1899be4e8cf7": {
       kind: "resource",
       address: "aws_s3_object.index",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "a9812863-e435-4e22-8ead-21024b258441": {
       kind: "resource",
       address: "aws_cloudfront_distribution.website_distribution",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "b90b246d-aeeb-4e30-aa60-7929ecace81d": {
       kind: "resource",
       address: "aws_ses_email_identity.ses_email_identity",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "ceb49680-3cb4-41d8-9e9d-34f674391bb4": {
       kind: "resource",
       address: "aws_lambda_function.lambda_function3",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "d0fc5fc8-4e65-463c-96a9-abb6c4abd050": {
       kind: "resource",
       address: "aws_cloudfront_origin_access_identity.origin_access_identity",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "ddbce9f8-63fd-43a9-a133-86dda6fed0e9": {
       kind: "resource",
       address: "aws_s3_bucket_website_configuration.s3_bucket_website_configuration",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "e608c4e1-a9bf-4675-be19-e67f7bde4f98": {
       kind: "resource",
       address: "aws_s3_bucket_acl.s3_bucket_acl",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "ed57ef8a-ac66-4a30-a586-09a0f3c4406a": {
       kind: "resource",
       address: "aws_lambda_function.lambda_function2",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "675bd894-0771-422e-947d-b7c25fad993f": {
       kind: "presentation",

@@ -43,7 +43,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f51e7972-ab44-48f6-a7e3-9cb720aa0c51",
       domOrder: 1,
-      label: "IAM policy",
+      label: "S3 전체 접근 IAM Policy",
       position: {
         x: 260,
         y: -700
@@ -61,7 +61,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8cfad4ae-9882-4ba7-a0d7-1dbe9defb4f7",
       domOrder: 2,
-      label: "IAM role",
+      label: "API Gateway S3 IAM Role",
       position: {
         x: -10,
         y: -510
@@ -79,7 +79,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "4dfe1d77-191d-4f82-94f4-153e22afac77",
       domOrder: 3,
-      label: "IAM role policy attachment",
+      label: "S3 전체 접근 권한 연결",
       position: {
         x: -10,
         y: -700
@@ -97,7 +97,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "208ba11f-9da2-4fbf-8748-3fdbaddee037",
       domOrder: 4,
-      label: "API gateway rest API",
+      label: "S3 REST API",
       position: {
         x: 770,
         y: -280
@@ -115,7 +115,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d7f660ea-c9a7-4269-9a78-047de51122c5",
       domOrder: 5,
-      label: "API gateway resource",
+      label: "폴더 API Resource",
       position: {
         x: 770,
         y: -640
@@ -133,7 +133,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5d9d4b38-323c-4029-b582-1ab3e2875f5e",
       domOrder: 6,
-      label: "API gateway resource",
+      label: "항목 API Resource",
       position: {
         x: 1110,
         y: -640
@@ -151,7 +151,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "75347de7-6fdd-43eb-affc-adda7651310c",
       domOrder: 7,
-      label: "API gateway method",
+      label: "버킷 목록 GET Method",
       position: {
         x: 770,
         y: -20
@@ -169,7 +169,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5e8966bc-bff7-49f0-889c-7570aa6ff7ec",
       domOrder: 8,
-      label: "Status 200",
+      label: "GET 200 Method Response",
       position: {
         x: 1110,
         y: 0
@@ -187,7 +187,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "18c510a5-9ff3-4248-a32d-7172fdb43a77",
       domOrder: 9,
-      label: "Status 400",
+      label: "GET 400 Method Response",
       position: {
         x: 860,
         y: 360
@@ -205,7 +205,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ef9e666e-bd66-40f8-b84a-0fd40902e25c",
       domOrder: 10,
-      label: "Integration Response 400",
+      label: "S3 400 Integration Response",
       position: {
         x: 540,
         y: 360
@@ -223,7 +223,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fb45b084-8383-4a40-bddb-78957f701b33",
       domOrder: 11,
-      label: "Integration Response 400",
+      label: "S3 500 Integration Response",
       position: {
         x: 260,
         y: 230
@@ -241,7 +241,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b7ca82da-ac8a-45c3-b72b-f47f1eb5b83e",
       domOrder: 12,
-      label: "API gateway deployment",
+      label: "S3 REST API Deployment",
       position: {
         x: 260,
         y: -500
@@ -259,7 +259,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "91ca7d35-8b99-47be-83c9-952aa6c46c46",
       domOrder: 13,
-      label: "API gateway integration",
+      label: "S3 GET Integration",
       position: {
         x: 260,
         y: -280
@@ -277,7 +277,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "aa4a3412-93c5-49e6-891b-37102ca3f8b2",
       domOrder: 14,
-      label: "Status 500",
+      label: "GET 500 Method Response",
       position: {
         x: 260,
         y: -20
@@ -295,7 +295,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b93e0c77-0069-4893-a2ce-c5635c99d530",
       domOrder: 15,
-      label: "Integration Response 200",
+      label: "S3 200 Integration Response",
       position: {
         x: 1110,
         y: 440
