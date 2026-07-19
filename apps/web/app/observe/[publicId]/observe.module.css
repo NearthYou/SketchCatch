@@ -20,7 +20,7 @@
   margin: 0 0 8px;
   color: #0d74ce;
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .panel h1 {
@@ -43,7 +43,7 @@
   background: #171717;
   color: #ffffff;
   font-size: calc(16px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   cursor: pointer;
   transition: opacity 140ms ease, transform 140ms ease;
 }

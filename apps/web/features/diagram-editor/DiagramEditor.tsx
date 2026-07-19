@@ -60,9 +60,7 @@ import {
   createBoardAutoOrganizePreviewSession,
   getBoardAutoOrganizeViewportPolicy,
   resolveBoardAutoOrganizeDecision,
-  selectBoardAutoOrganizePreviewView,
-  type BoardAutoOrganizePreviewSession,
-  type BoardAutoOrganizePreviewView
+  type BoardAutoOrganizePreviewSession
 } from "../architecture-board-compiler";
 import { ParameterInputPanel } from "../parameter-input";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
@@ -1069,20 +1067,6 @@ function DiagramEditorInner({
       setAutoOrganizeError(true);
     }
   }, [boardMinimumZoom, getFlowInstance, onWorkspacePanelOpen]);
-
-  const selectAutomaticOrganizationPreview = useCallback(
-    (view: BoardAutoOrganizePreviewView) => {
-      if (autoOrganizePreview === null) return;
-      const nextSession = selectBoardAutoOrganizePreviewView(autoOrganizePreview, view);
-      const viewportPolicy = getBoardAutoOrganizeViewportPolicy("switch");
-
-      shouldApplySourceViewportRef.current = viewportPolicy.applySourceViewport;
-      shouldAutoFitPreviewDiagramRef.current = viewportPolicy.autoFit;
-      setPreviewDiagramState(cloneDiagram(nextSession.visibleDiagram));
-      setAutoOrganizePreview(nextSession);
-    },
-    [autoOrganizePreview]
-  );
 
   const applyAutomaticOrganization = useCallback(() => {
     if (autoOrganizePreview === null) return;
@@ -3345,7 +3329,6 @@ function DiagramEditorInner({
             {autoOrganizePreview ? (
               <BoardAutoOrganizePreviewPanel
                 onKeepOriginal={cancelAutomaticOrganization}
-                onSelectView={selectAutomaticOrganizationPreview}
                 onUseOrganized={applyAutomaticOrganization}
                 session={autoOrganizePreview}
               />

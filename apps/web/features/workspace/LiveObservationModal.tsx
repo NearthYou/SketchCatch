@@ -633,17 +633,7 @@ export function LiveObservationModal({
                 <p>{providerEvidence?.capacityDetailLabel ?? "수집 대기"}</p>
               </div>
             </section>
-          ) : (
-            <div className={styles.liveObservationIntro}>
-              <div>
-                <strong>관측은 명시적으로 시작됩니다.</strong>
-                <p>
-                  세션 생성 전에 CloudFront → S3/ALB → ECS 연결 상태를 AWS에서 다시
-                  검증합니다.
-                </p>
-              </div>
-            </div>
-          )}
+          ) : null}
           {providerSnapshot && providerSnapshot.logs.length > 0 ? (
             <details className={styles.liveObservationLogs}>
               <summary>최근 런타임 로그 {providerSnapshot.logs.length}건</summary>

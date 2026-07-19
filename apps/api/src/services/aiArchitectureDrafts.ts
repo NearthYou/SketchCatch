@@ -721,6 +721,12 @@ function parseRequirementConflictClarification(
 ): AmazonQArchitectureDraftClarification {
   const normalizedText = text.trim();
 
+  if (isNoRelevantInformationResponse(normalizedText)) {
+    throw createProviderResponseInvalidError(
+      new Error("Requirement conflict diagnosis did not contain relevant information")
+    );
+  }
+
   try {
     const parsed = JSON.parse(extractJsonObject(normalizedText)) as unknown;
     if (
@@ -728,10 +734,13 @@ function parseRequirementConflictClarification(
       typeof parsed.question === "string" &&
       parsed.question.trim().length > 0
     ) {
+      const suggestions = readStringArray(parsed.suggestions);
+      requireRequirementConflictClarificationChoices(suggestions);
+
       return {
         status: "needs_clarification",
         question: parsed.question.trim(),
-        suggestions: readStringArray(parsed.suggestions)
+        suggestions
       };
     }
 
@@ -767,6 +776,7 @@ function parseRequirementConflictClarification(
       new Error("Requirement conflict diagnosis was empty")
     );
   }
+  requireRequirementConflictClarificationChoices(suggestions);
 
   return {
     status: "needs_clarification",
@@ -784,6 +794,21 @@ function createRequirementConflictFallbackClarification(validationIssues: readon
     providerMetadata: createFallbackProviderMetadata(request, billingMode)
   };
 }
+
+function requireRequirementConflictClarificationChoices(suggestions: readonly string[]): void {
+  if (suggestions.length < 2 || suggestions.length > 4) {
+    throw createProviderResponseInvalidError(
+      new Error("Requirement conflict diagnosis must include two to four choices")
+    );
+  }
+}
+
+function isNoRelevantInformationResponse(value: string): boolean {
+  return /(?:could not|couldn't|cannot|can't) find relevant information|not enough information/iu.test(
+    value
+  );
+}
+
 function parseArchitectureDraftProviderResponse(text: string): AmazonQArchitectureDraftResponse {
   try {
     return parseAmazonQArchitectureDraftResponse(text);

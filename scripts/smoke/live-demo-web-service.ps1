@@ -357,9 +357,10 @@ function New-DemoAudienceHtmlBase64 {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/npm/@kfonts/line-seed-sans-kr@0.1.0/index.css">
   <title>SketchCatch Live Observation</title>
   <style>
-    body { max-width: 680px; margin: 0 auto; padding: 56px 24px; font: 16px/1.6 "Pretendard", "Noto Sans KR", Inter, sans-serif; color: #172033; background: #fafafa; }
+    body { max-width: 680px; margin: 0 auto; padding: 56px 24px; font: 400 16px/1.6 "LINE Seed Sans KR", "Noto Sans KR", sans-serif; color: #172033; background: #fafafa; }
     main { padding: 32px; border: 1px solid #dcdee0; border-radius: 16px; background: white; box-shadow: 0 20px 60px rgba(23,32,51,.08); }
     button { width: 100%; padding: 18px; border: 0; border-radius: 8px; color: white; background: #000000; font-size: 18px; font-weight: 700; cursor: pointer; }
     button:disabled { cursor: wait; opacity: .65; }

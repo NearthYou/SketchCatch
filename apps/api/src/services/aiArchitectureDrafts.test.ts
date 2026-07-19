@@ -3751,7 +3751,9 @@ test("createAmazonQArchitectureDraftResponse asks OpenAI to resolve repeated val
   if (!("status" in response)) assert.fail("Expected an OpenAI clarification response");
   assert.equal(response.status, "needs_clarification");
   assert.equal(response.providerMetadata.provider, "openai");
-});test("createAmazonQArchitectureDraftResponse retries once when a compact plan fails materialization", async () => {
+});
+
+test("createAmazonQArchitectureDraftResponse retries once when a compact plan fails materialization", async () => {
   const calls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
     calls.push(request);

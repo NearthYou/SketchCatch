@@ -49,7 +49,7 @@
   color: #b42318;
   display: inline-flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(900 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   height: 16px;
   justify-content: center;
   min-width: 16px;
@@ -121,7 +121,7 @@
 
 .controls button {
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   padding: 4px 0;
 }
 

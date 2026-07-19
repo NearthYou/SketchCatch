@@ -21,7 +21,7 @@
   display: grid;
   font: inherit;
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 10px;
   grid-template-columns: 18px minmax(0, 1fr);
   min-height: 40px;

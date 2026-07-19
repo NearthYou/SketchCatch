@@ -3,7 +3,7 @@
   color: var(--color-ink);
   display: inline-flex;
   font-size: calc(18px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 7px;
   line-height: 1;
   min-width: 0;
@@ -109,7 +109,7 @@
   color: var(--color-body);
   display: inline-flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1;
   min-height: 24px;
   padding: 0 9px;

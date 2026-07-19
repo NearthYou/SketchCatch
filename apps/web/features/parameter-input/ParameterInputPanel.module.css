@@ -26,7 +26,7 @@
   border-radius: 8px;
   display: inline-flex;
   font-size: calc(0.75rem + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   height: 44px;
   justify-content: center;
   width: 44px;
@@ -105,7 +105,7 @@ div.resourceIcon,
 .fieldLabel {
   color: #252c42;
   font-size: calc(0.85rem + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.35;
 }
 
@@ -167,7 +167,7 @@ div.resourceIcon,
 
 .errorText {
   color: #b91c1c;
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .checkboxRow {
@@ -235,7 +235,7 @@ div.resourceIcon,
   background: var(--workspace-accent-soft, #f0f0f3);
   color: var(--workspace-accent, #000000);
   font-size: calc(0.82rem + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .removeBlockButton {
@@ -244,7 +244,7 @@ div.resourceIcon,
   border-color: #fecdd3;
   color: #be123c;
   font-size: calc(0.82rem + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .iconButton {
@@ -416,7 +416,7 @@ div.resourceIcon,
 
 .regionOptionLabel {
   font-size: calc(0.86rem + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -453,7 +453,7 @@ div.resourceIcon,
   color: #3c4559;
   cursor: pointer;
   font-size: calc(0.83rem + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .nestedFields {
@@ -567,7 +567,7 @@ div.resourceIcon,
   color: var(--workspace-muted, #60646c);
   display: inline-flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   justify-content: center;
   min-height: 20px;
   min-width: 20px;
@@ -592,7 +592,7 @@ div.resourceIcon,
   display: inline-flex;
   font: inherit;
   font-size: calc(0.76rem + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 5px;
   min-height: 32px;
   padding: 6px 9px;
@@ -748,14 +748,14 @@ div.resourceIcon,
 .parameterSummaryItem dt {
   color: var(--workspace-muted, #60646c);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.25;
 }
 
 .parameterSummaryItem dd {
   color: var(--workspace-text, #171717);
   font-size: calc(1rem + var(--presentation-font-size-increase));
-  font-weight: calc(900 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.1;
   margin: 0;
 }
@@ -820,7 +820,7 @@ div.resourceIcon,
   border-radius: 999px;
   display: inline-flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.2;
   min-height: 20px;
   padding: 3px 7px;

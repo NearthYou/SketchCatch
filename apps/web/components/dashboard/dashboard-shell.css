@@ -39,7 +39,7 @@
   gap: 7px;
   color: #171717;
   font-size: calc(18px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1;
   text-decoration: none;
 }
@@ -56,7 +56,7 @@
 .dashboardNavigation {
   display: grid;
   align-content: start;
-  gap: 4px;
+  gap: 8px;
   padding: 20px 12px;
 }
 
@@ -70,7 +70,7 @@
   padding: 0 12px;
   color: #55585f;
   font-size: calc(14px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   text-decoration: none;
   transition:
     background-color var(--motion-fast),
@@ -108,7 +108,7 @@
   background: #171717;
   color: #ffffff;
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .dashboardAccountText {
@@ -218,7 +218,7 @@
   border-radius: 8px;
   padding: 0 16px;
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   text-decoration: none;
   white-space: nowrap;
   transition:

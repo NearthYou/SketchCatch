@@ -256,9 +256,13 @@ test("full-stack validation checks the confirmed target and opens its setup surf
   assert.ok(targetCheckIndex > -1);
   assert.ok(artifactPreparationIndex > targetCheckIndex);
   assert.match(directDeploymentSource, /getDeploymentTargetPrerequisite/);
-  assert.match(directDeploymentSource, /Repository와 배포 타깃 설정/);
+  assert.match(directDeploymentSource, /CI\/CD 설정으로 이동/);
   assert.match(directDeploymentSource, /onOpenDeliverySetup/);
-  assert.match(deploymentShellSource, /onOpenDeliverySetup=\{\(\) => selectScreen\("cicd"\)\}/);
+  assert.match(directDeploymentSource, /deploymentTargetSavedRevision/);
+  assert.match(
+    deploymentShellSource,
+    /deploymentTargetSavedRevision=\{deploymentTargetSavedRevision\}/
+  );
 });
 
 test("deployment actions preserve detailed preparation errors", () => {
