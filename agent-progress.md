@@ -13,7 +13,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-19 - Reduce compact metadata
 
-- Reduced Template service text and Resource metadata values by 3px; labels and containers are unchanged. Required checks pass.
+- Reduced Template services, Resource values, and Terraform counts by 3px; labels and containers are unchanged. Checks pass.
 
 ### 2026-07-19 - Restore the focused Live Observation traffic presentation
 
