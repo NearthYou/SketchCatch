@@ -11,6 +11,10 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Reduce Template metadata
+
+- Reduced only the card service line by 3px; titles and card dimensions are unchanged. Required checks pass.
+
 ### 2026-07-19 - Restore the focused Live Observation traffic presentation
 
 - Traced the regression to `8f0c7b54`, which replaced the focused linear traffic renderer with the full immutable Architecture map. Restored the focused path as the default while retaining the full map in a collapsed disclosure and preserving all v2 session, Output URL, and AWS verification gates.
