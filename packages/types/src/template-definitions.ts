@@ -234,7 +234,7 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       "bucket-policy-bucket": layoutRoute("handle-left", "handle-right")
     },
     presentationNodes: {
-      user: presentationNode("design-user-client", "User / Client", 120, 400),
+      user: presentationNode("design-user-client", "웹 사용자", 120, 400),
       region: presentationNode("aws-region", "Region", 480, 240, { width: 480, height: 480 })
     },
     presentationEdges: {
@@ -272,7 +272,7 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       "handler-table": layoutRoute("handle-right", "handle-left")
     },
     presentationNodes: {
-      user: presentationNode("design-user-client", "User / Client", 80, 520),
+      user: presentationNode("design-user-client", "API Client", 80, 520),
       region: presentationNode("aws-region", "Region", 200, 80, { width: 1160, height: 880 }),
       "global-iam-group": presentationNode("design-group", "Global IAM", 1400, 280, {
         width: 400,
@@ -321,7 +321,7 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       ),
       user: presentationNode(
         "design-user-client",
-        "User / Client",
+        "웹 사용자",
         160,
         640,
         undefined,
@@ -453,10 +453,10 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
     },
     presentationNodes: {
       internet: presentationNode("design-internet", "Internet", 80, 240),
-      region: presentationNode("aws-region", "Region", 200, 40, { width: 1960, height: 1560 }),
+      region: presentationNode("aws-region", "Asia Pacific (Seoul)", 200, 40, { width: 1960, height: 1560 }),
       "az-a": presentationNode(
         "aws-availability-zone",
-        "AZ A",
+        "AZ ap-northeast-2a",
         440,
         280,
         { width: 560, height: 1120 },
@@ -464,7 +464,7 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       ),
       "az-b": presentationNode(
         "aws-availability-zone",
-        "AZ B",
+        "AZ ap-northeast-2b",
         1400,
         280,
         { width: 560, height: 1120 },
@@ -523,8 +523,8 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       "task-role": layoutRoute("handle-top", "handle-bottom")
     },
     presentationNodes: {
-      user: presentationNode("design-user-client", "User / Client", 80, 360),
-      region: presentationAreaAroundChildren("aws-region", "Region", 240, 40, [
+      user: presentationNode("design-user-client", "웹 사용자", 80, 360),
+      region: presentationAreaAroundChildren("aws-region", "Asia Pacific (Seoul)", 240, 40, [
         layoutAt(400, 200, "region", { width: 1360, height: 560 }),
         layoutAt(360, 240, "region"),
         presentationAreaAroundChildren(
@@ -623,10 +623,10 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       "deployment-service": layoutRoute("handle-right", "handle-left")
     },
     presentationNodes: {
-      region: presentationNode("aws-region", "Region", 200, 40, { width: 2120, height: 1320 }),
+      region: presentationNode("aws-region", "Asia Pacific (Seoul)", 200, 40, { width: 2120, height: 1320 }),
       "az-a": presentationNode(
         "aws-availability-zone",
-        "AZ A",
+        "AZ ap-northeast-2a",
         440,
         400,
         { width: 520, height: 280 },
@@ -634,7 +634,7 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       ),
       "az-b": presentationNode(
         "aws-availability-zone",
-        "AZ B",
+        "AZ ap-northeast-2b",
         1200,
         400,
         { width: 520, height: 280 },
@@ -668,8 +668,8 @@ export const templateDefinitions = [
     description: "S3와 CloudFront로 보호된 정적 웹사이트를 배포합니다.",
     tags: ["S3", "CloudFront", "OAC"],
     resources: [
-      resource("bucket", "S3 Bucket", "aws", "aws_s3_bucket", 100, 180, { forceDestroy: true }),
-      resource("index-object", "Index Document", "aws", "aws_s3_object", 100, 500, {
+      resource("bucket", "정적 웹 S3 Bucket", "aws", "aws_s3_bucket", 100, 180, { forceDestroy: true }),
+      resource("index-object", "시작 페이지 S3 Object", "aws", "aws_s3_object", 100, 500, {
         bucket: "@ref:bucket.id",
         key: "index.html",
         contentType: "text/html; charset=utf-8",
@@ -678,7 +678,7 @@ export const templateDefinitions = [
       }),
       resource(
         "public-access",
-        "S3 Public Access Block",
+        "S3 공개 접근 차단",
         "aws",
         "aws_s3_bucket_public_access_block",
         100,
@@ -689,7 +689,7 @@ export const templateDefinitions = [
       ),
       resource(
         "oac",
-        "CloudFront Origin Access Control",
+        "CloudFront OAC",
         "aws",
         "aws_cloudfront_origin_access_control",
         360,
@@ -703,7 +703,7 @@ export const templateDefinitions = [
       ),
       resource(
         "distribution",
-        "CloudFront Distribution",
+        "정적 웹 CloudFront Distribution",
         "aws",
         "aws_cloudfront_distribution",
         620,
@@ -732,7 +732,7 @@ export const templateDefinitions = [
           viewerCertificate: [{ cloudfrontDefaultCertificate: true }]
         }
       ),
-      resource("bucket-policy", "S3 Bucket Policy", "aws", "aws_s3_bucket_policy", 360, 360, {
+      resource("bucket-policy", "CloudFront S3 읽기 허용", "aws", "aws_s3_bucket_policy", 360, 360, {
         bucket: "@ref:bucket.id",
         policy: JSON.stringify({
           Version: "2012-10-17",
@@ -770,15 +770,15 @@ export const templateDefinitions = [
     description: "API Gateway, Lambda, DynamoDB로 구성한 최소 API입니다.",
     tags: ["API Gateway", "Lambda", "DynamoDB"],
     resources: [
-      resource("api", "API Gateway", "aws", "aws_api_gateway_rest_api", 80, 180, {
+      resource("api", "항목 API Gateway", "aws", "aws_api_gateway_rest_api", 80, 180, {
         name: "items-api"
       }),
-      resource("route", "API Route", "aws", "aws_api_gateway_resource", 300, 180, {
+      resource("route", "항목 API Route", "aws", "aws_api_gateway_resource", 300, 180, {
         pathPart: "items",
         restApiId: "@ref:api.id",
         parentId: "@ref:api.root_resource_id"
       }),
-      resource("method", "POST Method", "aws", "aws_api_gateway_method", 500, 180, {
+      resource("method", "항목 POST Method", "aws", "aws_api_gateway_method", 500, 180, {
         httpMethod: "POST",
         authorization: "NONE",
         restApiId: "@ref:api.id",
@@ -786,7 +786,7 @@ export const templateDefinitions = [
       }),
       resource(
         "integration",
-        "Lambda Integration",
+        "Lambda Proxy 연결",
         "aws",
         "aws_api_gateway_integration",
         700,
@@ -800,17 +800,17 @@ export const templateDefinitions = [
           uri: "@ref:handler.invoke_arn"
         }
       ),
-      resource("deployment", "API Deployment", "aws", "aws_api_gateway_deployment", 900, 180, {
+      resource("deployment", "API 설정 스냅샷", "aws", "aws_api_gateway_deployment", 900, 180, {
         restApiId: "@ref:api.id",
         triggers: { redeployment: "items-v1" },
         dependsOn: ["@address:integration"]
       }),
-      resource("stage", "API Stage", "aws", "aws_api_gateway_stage", 1080, 180, {
+      resource("stage", "운영 API Stage", "aws", "aws_api_gateway_stage", 1080, 180, {
         restApiId: "@ref:api.id",
         deploymentId: "@ref:deployment.id",
         stageName: "prod"
       }),
-      resource("handler", "Lambda Function", "aws", "aws_lambda_function", 300, 360, {
+      resource("handler", "항목 처리 Lambda", "aws", "aws_lambda_function", 300, 360, {
         functionName: "items-handler",
         handler: "index.handler",
         runtime: "nodejs22.x",
@@ -820,29 +820,29 @@ export const templateDefinitions = [
         role: "@ref:role.arn",
         environment: { variables: { TABLE_NAME: "@ref:table.name" } }
       }),
-      resource("role", "Lambda IAM Role", "aws", "aws_iam_role", 80, 360, {
+      resource("role", "Lambda 실행 IAM Role", "aws", "aws_iam_role", 80, 360, {
         name: "items-handler-role",
         assumeRolePolicy: LAMBDA_ASSUME_ROLE_POLICY
       }),
-      resource("role-policy", "Lambda DynamoDB Policy", "aws", "aws_iam_role_policy", 80, 500, {
+      resource("role-policy", "DynamoDB 접근 권한", "aws", "aws_iam_role_policy", 80, 500, {
         name: "items-handler-dynamodb",
         role: "@ref:role.id",
         policy: createDynamoDbPolicy("table")
       }),
-      resource("permission", "API Lambda Permission", "aws", "aws_lambda_permission", 900, 360, {
+      resource("permission", "API Gateway Lambda 호출 허용", "aws", "aws_lambda_permission", 900, 360, {
         statementId: "AllowApiGatewayInvoke",
         action: "lambda:InvokeFunction",
         functionName: "@ref:handler.function_name",
         principal: "apigateway.amazonaws.com",
         sourceArn: "${@ref:api.execution_arn}/*/*"
       }),
-      resource("table", "DynamoDB Table", "aws", "aws_dynamodb_table", 560, 360, {
+      resource("table", "항목 DynamoDB Table", "aws", "aws_dynamodb_table", 560, 360, {
         name: "items",
         billingMode: "PAY_PER_REQUEST",
         hashKey: "id",
         attribute: [{ name: "id", type: "S" }]
       }),
-      resource("log-group", "Lambda Log Group", "aws", "aws_cloudwatch_log_group", 780, 500, {
+      resource("log-group", "Lambda 로그 저장", "aws", "aws_cloudwatch_log_group", 780, 500, {
         name: "/aws/lambda/${@ref:handler.function_name}",
         retentionInDays: 7
       })
@@ -866,37 +866,37 @@ export const templateDefinitions = [
     description: "Frontend, Cognito, API, Lambda, DynamoDB를 연결한 웹 앱입니다.",
     tags: ["Cognito", "API", "Lambda", "DynamoDB"],
     resources: [
-      resource("frontend", "Amplify App", "aws", "aws_amplify_app", 80, 180, {
+      resource("frontend", "웹 프론트엔드 Amplify App", "aws", "aws_amplify_app", 80, 180, {
         name: "serverless-web"
       }),
-      resource("user-pool", "Cognito User Pool", "aws", "aws_cognito_user_pool", 320, 180, {
+      resource("user-pool", "사용자 Cognito User Pool", "aws", "aws_cognito_user_pool", 320, 180, {
         name: "serverless-users"
       }),
       resource(
         "user-client",
-        "Cognito User Pool Client",
+        "웹 Cognito App Client",
         "aws",
         "aws_cognito_user_pool_client",
         520,
         180,
         { name: "serverless-web-client", userPoolId: "@ref:user-pool.id" }
       ),
-      resource("api", "API Gateway", "aws", "aws_api_gateway_rest_api", 760, 180, {
+      resource("api", "애플리케이션 API Gateway", "aws", "aws_api_gateway_rest_api", 760, 180, {
         name: "serverless-api"
       }),
-      resource("authorizer", "Cognito Authorizer", "aws", "aws_api_gateway_authorizer", 980, 180, {
+      resource("authorizer", "Cognito API 인증", "aws", "aws_api_gateway_authorizer", 980, 180, {
         name: "serverless-cognito",
         restApiId: "@ref:api.id",
         type: "COGNITO_USER_POOLS",
         providerArns: ["@ref:user-pool.arn"],
         identitySource: "method.request.header.Authorization"
       }),
-      resource("route", "API Route", "aws", "aws_api_gateway_resource", 760, 340, {
+      resource("route", "항목 API Route", "aws", "aws_api_gateway_resource", 760, 340, {
         pathPart: "items",
         restApiId: "@ref:api.id",
         parentId: "@ref:api.root_resource_id"
       }),
-      resource("method", "Authorized POST Method", "aws", "aws_api_gateway_method", 980, 340, {
+      resource("method", "항목 인증 POST Method", "aws", "aws_api_gateway_method", 980, 340, {
         httpMethod: "POST",
         authorization: "COGNITO_USER_POOLS",
         authorizerId: "@ref:authorizer.id",
@@ -905,7 +905,7 @@ export const templateDefinitions = [
       }),
       resource(
         "integration",
-        "Lambda Integration",
+        "Lambda Proxy 연결",
         "aws",
         "aws_api_gateway_integration",
         1180,
@@ -919,17 +919,17 @@ export const templateDefinitions = [
           uri: "@ref:handler.invoke_arn"
         }
       ),
-      resource("deployment", "API Deployment", "aws", "aws_api_gateway_deployment", 1180, 500, {
+      resource("deployment", "API 설정 스냅샷", "aws", "aws_api_gateway_deployment", 1180, 500, {
         restApiId: "@ref:api.id",
         triggers: { redeployment: "serverless-v1" },
         dependsOn: ["@address:integration"]
       }),
-      resource("stage", "API Stage", "aws", "aws_api_gateway_stage", 1180, 660, {
+      resource("stage", "운영 API Stage", "aws", "aws_api_gateway_stage", 1180, 660, {
         restApiId: "@ref:api.id",
         deploymentId: "@ref:deployment.id",
         stageName: "prod"
       }),
-      resource("handler", "Lambda Function", "aws", "aws_lambda_function", 360, 380, {
+      resource("handler", "항목 처리 Lambda", "aws", "aws_lambda_function", 360, 380, {
         functionName: "serverless-handler",
         handler: "index.handler",
         runtime: "nodejs22.x",
@@ -939,29 +939,29 @@ export const templateDefinitions = [
         role: "@ref:role.arn",
         environment: { variables: { TABLE_NAME: "@ref:table.name" } }
       }),
-      resource("role", "Lambda IAM Role", "aws", "aws_iam_role", 100, 380, {
+      resource("role", "Lambda 실행 IAM Role", "aws", "aws_iam_role", 100, 380, {
         name: "serverless-handler-role",
         assumeRolePolicy: LAMBDA_ASSUME_ROLE_POLICY
       }),
-      resource("role-policy", "Lambda DynamoDB Policy", "aws", "aws_iam_role_policy", 100, 540, {
+      resource("role-policy", "DynamoDB 접근 권한", "aws", "aws_iam_role_policy", 100, 540, {
         name: "serverless-handler-dynamodb",
         role: "@ref:role.id",
         policy: createDynamoDbPolicy("table")
       }),
-      resource("permission", "API Lambda Permission", "aws", "aws_lambda_permission", 620, 540, {
+      resource("permission", "API Gateway Lambda 호출 허용", "aws", "aws_lambda_permission", 620, 540, {
         statementId: "AllowApiGatewayInvoke",
         action: "lambda:InvokeFunction",
         functionName: "@ref:handler.function_name",
         principal: "apigateway.amazonaws.com",
         sourceArn: "${@ref:api.execution_arn}/*/*"
       }),
-      resource("table", "DynamoDB Table", "aws", "aws_dynamodb_table", 620, 380, {
+      resource("table", "항목 DynamoDB Table", "aws", "aws_dynamodb_table", 620, 380, {
         name: "serverless-items",
         billingMode: "PAY_PER_REQUEST",
         hashKey: "id",
         attribute: [{ name: "id", type: "S" }]
       }),
-      resource("log-group", "Lambda Log Group", "aws", "aws_cloudwatch_log_group", 860, 540, {
+      resource("log-group", "Lambda 로그 저장", "aws", "aws_cloudwatch_log_group", 860, 540, {
         name: "/aws/lambda/${@ref:handler.function_name}",
         retentionInDays: 7
       })
@@ -984,7 +984,7 @@ export const templateDefinitions = [
     description: "Public, application, database tier를 분리한 VPC 기반 구조입니다.",
     tags: ["VPC", "ALB", "ASG", "RDS"],
     resources: [
-      resource("vpc", "VPC", "aws", "aws_vpc", 360, 80, {
+      resource("vpc", "3-Tier VPC", "aws", "aws_vpc", 360, 80, {
         cidrBlock: "10.20.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true
@@ -1023,7 +1023,7 @@ export const templateDefinitions = [
       ),
       resource(
         "app-subnet-a",
-        "App Subnet A",
+        "애플리케이션 Private Subnet A",
         "aws",
         "aws_subnet",
         480,
@@ -1034,7 +1034,7 @@ export const templateDefinitions = [
       ),
       resource(
         "app-subnet-b",
-        "App Subnet B",
+        "애플리케이션 Private Subnet B",
         "aws",
         "aws_subnet",
         680,
@@ -1045,7 +1045,7 @@ export const templateDefinitions = [
       ),
       resource(
         "db-subnet-a",
-        "DB Subnet A",
+        "데이터베이스 Isolated Subnet A",
         "aws",
         "aws_subnet",
         880,
@@ -1056,7 +1056,7 @@ export const templateDefinitions = [
       ),
       resource(
         "db-subnet-b",
-        "DB Subnet B",
+        "데이터베이스 Isolated Subnet B",
         "aws",
         "aws_subnet",
         1080,
@@ -1072,11 +1072,11 @@ export const templateDefinitions = [
         vpcId: "@ref:vpc.id",
         route: [{ cidrBlock: "0.0.0.0/0", gatewayId: "@ref:internet-gateway.id" }]
       }),
-      resource("public-route-a", "Public Route A", "aws", "aws_route_table_association", 420, 440, {
+      resource("public-route-a", "Public Route 연결 A", "aws", "aws_route_table_association", 420, 440, {
         subnetId: "@ref:public-subnet-a.id",
         routeTableId: "@ref:public-route-table.id"
       }),
-      resource("public-route-b", "Public Route B", "aws", "aws_route_table_association", 580, 440, {
+      resource("public-route-b", "Public Route 연결 B", "aws", "aws_route_table_association", 580, 440, {
         subnetId: "@ref:public-subnet-b.id",
         routeTableId: "@ref:public-route-table.id"
       }),
@@ -1084,31 +1084,31 @@ export const templateDefinitions = [
         allocationId: "@ref:nat-eip.id",
         subnetId: "@ref:public-subnet-a.id"
       }),
-      resource("nat-eip", "NAT Elastic IP", "aws", "aws_eip", 620, 440, { domain: "vpc" }),
-      resource("app-route-table", "App Route Table", "aws", "aws_route_table", 900, 440, {
+      resource("nat-eip", "NAT EIP", "aws", "aws_eip", 620, 440, { domain: "vpc" }),
+      resource("app-route-table", "애플리케이션 Private Route Table", "aws", "aws_route_table", 900, 440, {
         vpcId: "@ref:vpc.id",
         route: [{ cidrBlock: "0.0.0.0/0", natGatewayId: "@ref:nat-gateway.id" }]
       }),
-      resource("app-route-a", "App Route A", "aws", "aws_route_table_association", 1060, 440, {
+      resource("app-route-a", "애플리케이션 Route 연결 A", "aws", "aws_route_table_association", 1060, 440, {
         subnetId: "@ref:app-subnet-a.id",
         routeTableId: "@ref:app-route-table.id"
       }),
-      resource("app-route-b", "App Route B", "aws", "aws_route_table_association", 1220, 440, {
+      resource("app-route-b", "애플리케이션 Route 연결 B", "aws", "aws_route_table_association", 1220, 440, {
         subnetId: "@ref:app-subnet-b.id",
         routeTableId: "@ref:app-route-table.id"
       }),
-      resource("db-route-table", "DB Route Table", "aws", "aws_route_table", 1380, 440, {
+      resource("db-route-table", "데이터베이스 Isolated Route Table", "aws", "aws_route_table", 1380, 440, {
         vpcId: "@ref:vpc.id"
       }),
-      resource("db-route-a", "DB Route A", "aws", "aws_route_table_association", 1540, 440, {
+      resource("db-route-a", "데이터베이스 Route 연결 A", "aws", "aws_route_table_association", 1540, 440, {
         subnetId: "@ref:db-subnet-a.id",
         routeTableId: "@ref:db-route-table.id"
       }),
-      resource("db-route-b", "DB Route B", "aws", "aws_route_table_association", 1700, 440, {
+      resource("db-route-b", "데이터베이스 Route 연결 B", "aws", "aws_route_table_association", 1700, 440, {
         subnetId: "@ref:db-subnet-b.id",
         routeTableId: "@ref:db-route-table.id"
       }),
-      resource("alb-security-group", "ALB Security Group", "aws", "aws_security_group", 80, 620, {
+      resource("alb-security-group", "ALB SG", "aws", "aws_security_group", 80, 620, {
         name: "three-tier-alb",
         description: "Allow HTTP to the ALB",
         vpcId: "@ref:vpc.id",
@@ -1117,7 +1117,7 @@ export const templateDefinitions = [
       }),
       resource(
         "app-security-group",
-        "Application Security Group",
+        "애플리케이션 SG",
         "aws",
         "aws_security_group",
         260,
@@ -1139,7 +1139,7 @@ export const templateDefinitions = [
       ),
       resource(
         "db-security-group",
-        "Database Security Group",
+        "데이터베이스 SG",
         "aws",
         "aws_security_group",
         440,
@@ -1159,7 +1159,7 @@ export const templateDefinitions = [
           egress: [{ fromPort: 0, toPort: 0, protocol: "-1", cidrBlocks: ["0.0.0.0/0"] }]
         }
       ),
-      dataResource("latest-ami", "Latest Amazon Linux AMI", "aws", "aws_ami", 340, 620, {
+      dataResource("latest-ami", "최신 Amazon Linux AMI", "aws", "aws_ami", 340, 620, {
         mostRecent: true,
         owners: ["amazon"],
         filter: [
@@ -1170,7 +1170,7 @@ export const templateDefinitions = [
       }),
       resource(
         "launch-template",
-        "Application Launch Template",
+        "애플리케이션 Launch Template",
         "aws",
         "aws_launch_template",
         560,
@@ -1183,13 +1183,13 @@ export const templateDefinitions = [
           vpcSecurityGroupIds: ["@ref:app-security-group.id"]
         }
       ),
-      resource("load-balancer", "Application Load Balancer", "aws", "aws_lb", 100, 780, {
+      resource("load-balancer", "Public ALB", "aws", "aws_lb", 100, 780, {
         name: "three-tier-alb",
         loadBalancerType: "application",
         subnets: ["@ref:public-subnet-a.id", "@ref:public-subnet-b.id"],
         securityGroups: ["@ref:alb-security-group.id"]
       }),
-      resource("target-group", "Application Target Group", "aws", "aws_lb_target_group", 300, 780, {
+      resource("target-group", "애플리케이션 Target Group", "aws", "aws_lb_target_group", 300, 780, {
         name: "three-tier-app",
         port: 80,
         protocol: "HTTP",
@@ -1205,7 +1205,7 @@ export const templateDefinitions = [
       }),
       resource(
         "application-group",
-        "Auto Scaling Group",
+        "애플리케이션 ASG",
         "aws",
         "aws_autoscaling_group",
         700,
@@ -1220,11 +1220,11 @@ export const templateDefinitions = [
           launchTemplate: { id: "@ref:launch-template.id", version: "$Latest" }
         }
       ),
-      resource("db-subnet-group", "Database Subnet Group", "aws", "aws_db_subnet_group", 900, 780, {
+      resource("db-subnet-group", "RDS Subnet Group", "aws", "aws_db_subnet_group", 900, 780, {
         name: "three-tier-db",
         subnetIds: ["@ref:db-subnet-a.id", "@ref:db-subnet-b.id"]
       }),
-      resource("database", "RDS Database", "aws", "aws_db_instance", 1100, 780, {
+      resource("database", "PostgreSQL RDS", "aws", "aws_db_instance", 1100, 780, {
         identifier: "three-tier-db",
         engine: "postgres",
         instanceClass: "db.t4g.micro",
@@ -1281,7 +1281,7 @@ export const templateDefinitions = [
     description: "ECS Fargate와 Application Load Balancer를 사용하는 컨테이너 앱입니다.",
     tags: ["ECS", "Fargate", "ALB"],
     resources: [
-      resource("vpc", "VPC", "aws", "aws_vpc", 300, 80, {
+      resource("vpc", "ECS VPC", "aws", "aws_vpc", 300, 80, {
         cidrBlock: "10.30.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true
@@ -1325,18 +1325,18 @@ export const templateDefinitions = [
         vpcId: "@ref:vpc.id",
         route: [{ cidrBlock: "0.0.0.0/0", gatewayId: "@ref:internet-gateway.id" }]
       }),
-      resource("route-a", "Public Route A", "aws", "aws_route_table_association", 900, 260, {
+      resource("route-a", "Public Route 연결 A", "aws", "aws_route_table_association", 900, 260, {
         subnetId: "@ref:subnet-a.id",
         routeTableId: "@ref:route-table.id"
       }),
-      resource("route-b", "Public Route B", "aws", "aws_route_table_association", 1100, 260, {
+      resource("route-b", "Public Route 연결 B", "aws", "aws_route_table_association", 1100, 260, {
         subnetId: "@ref:subnet-b.id",
         routeTableId: "@ref:route-table.id"
       }),
       resource("cluster", "ECS Cluster", "aws", "aws_ecs_cluster", 500, 220, {
         name: "fargate-cluster"
       }),
-      resource("alb-security-group", "ALB Security Group", "aws", "aws_security_group", 100, 500, {
+      resource("alb-security-group", "ALB SG", "aws", "aws_security_group", 100, 500, {
         name: "fargate-alb",
         description: "Allow public HTTP to the load balancer",
         vpcId: "@ref:vpc.id",
@@ -1345,7 +1345,7 @@ export const templateDefinitions = [
       }),
       resource(
         "task-security-group",
-        "Task Security Group",
+        "Fargate Task SG",
         "aws",
         "aws_security_group",
         300,
@@ -1365,13 +1365,13 @@ export const templateDefinitions = [
           egress: [{ fromPort: 0, toPort: 0, protocol: "-1", cidrBlocks: ["0.0.0.0/0"] }]
         }
       ),
-      resource("execution-role", "ECS Execution Role", "aws", "aws_iam_role", 300, 500, {
+      resource("execution-role", "ECS Task Execution IAM Role", "aws", "aws_iam_role", 300, 500, {
         name: "fargate-execution-role",
         assumeRolePolicy: ECS_ASSUME_ROLE_POLICY
       }),
       resource(
         "execution-policy",
-        "ECS Execution Policy",
+        "ECS Task 실행 권한 연결",
         "aws",
         "aws_iam_role_policy_attachment",
         500,
@@ -1381,25 +1381,25 @@ export const templateDefinitions = [
           policyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
         }
       ),
-      resource("task-role", "ECS Task Role", "aws", "aws_iam_role", 700, 500, {
+      resource("task-role", "ECS Task IAM Role", "aws", "aws_iam_role", 700, 500, {
         name: "fargate-task-role",
         assumeRolePolicy: ECS_ASSUME_ROLE_POLICY
       }),
-      resource("repository", "ECR Repository", "aws", "aws_ecr_repository", 900, 500, {
+      resource("repository", "애플리케이션 ECR Repository", "aws", "aws_ecr_repository", 900, 500, {
         name: "fargate-app",
         imageTagMutability: "IMMUTABLE"
       }),
-      resource("log-group", "Fargate Log Group", "aws", "aws_cloudwatch_log_group", 1100, 500, {
+      resource("log-group", "ECS Task 로그 저장", "aws", "aws_cloudwatch_log_group", 1100, 500, {
         name: "/ecs/fargate-app",
         retentionInDays: 7
       }),
-      resource("load-balancer", "Application Load Balancer", "aws", "aws_lb", 100, 660, {
+      resource("load-balancer", "Public ALB", "aws", "aws_lb", 100, 660, {
         name: "fargate-alb",
         loadBalancerType: "application",
         subnets: ["@ref:subnet-a.id", "@ref:subnet-b.id"],
         securityGroups: ["@ref:alb-security-group.id"]
       }),
-      resource("target-group", "Fargate Target Group", "aws", "aws_lb_target_group", 300, 660, {
+      resource("target-group", "애플리케이션 Target Group", "aws", "aws_lb_target_group", 300, 660, {
         name: "fargate-web",
         port: 80,
         protocol: "HTTP",
@@ -1413,7 +1413,7 @@ export const templateDefinitions = [
         protocol: "HTTP",
         defaultAction: { type: "forward", targetGroupArn: "@ref:target-group.arn" }
       }),
-      resource("task", "ECS Task Definition", "aws", "aws_ecs_task_definition", 700, 660, {
+      resource("task", "애플리케이션 ECS Task Definition", "aws", "aws_ecs_task_definition", 700, 660, {
         family: "fargate-app",
         networkMode: "awsvpc",
         requiresCompatibilities: ["FARGATE"],
@@ -1438,7 +1438,7 @@ export const templateDefinitions = [
           }
         ])
       }),
-      resource("service", "ECS Service", "aws", "aws_ecs_service", 900, 660, {
+      resource("service", "애플리케이션 ECS Service", "aws", "aws_ecs_service", 900, 660, {
         name: "fargate-service",
         cluster: "@ref:cluster.id",
         taskDefinition: "@ref:task.arn",
@@ -1494,14 +1494,14 @@ export const templateDefinitions = [
     description: "EKS managed node group에서 Kubernetes workload를 실행합니다.",
     tags: ["EKS", "Kubernetes", "Service"],
     resources: [
-      resource("vpc", "VPC", "aws", "aws_vpc", 300, 80, {
+      resource("vpc", "EKS VPC", "aws", "aws_vpc", 300, 80, {
         cidrBlock: "10.40.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true
       }),
       resource(
         "subnet-a",
-        "EKS Subnet A",
+        "Public Subnet A",
         "aws",
         "aws_subnet",
         100,
@@ -1517,7 +1517,7 @@ export const templateDefinitions = [
       ),
       resource(
         "subnet-b",
-        "EKS Subnet B",
+        "Public Subnet B",
         "aws",
         "aws_subnet",
         300,
@@ -1538,17 +1538,17 @@ export const templateDefinitions = [
         vpcId: "@ref:vpc.id",
         route: [{ cidrBlock: "0.0.0.0/0", gatewayId: "@ref:internet-gateway.id" }]
       }),
-      resource("route-a", "EKS Route A", "aws", "aws_route_table_association", 900, 260, {
+      resource("route-a", "Public Route 연결 A", "aws", "aws_route_table_association", 900, 260, {
         subnetId: "@ref:subnet-a.id",
         routeTableId: "@ref:route-table.id"
       }),
-      resource("route-b", "EKS Route B", "aws", "aws_route_table_association", 1100, 260, {
+      resource("route-b", "Public Route 연결 B", "aws", "aws_route_table_association", 1100, 260, {
         subnetId: "@ref:subnet-b.id",
         routeTableId: "@ref:route-table.id"
       }),
       resource(
         "cluster-security-group",
-        "EKS Cluster Security Group",
+        "EKS Cluster SG",
         "aws",
         "aws_security_group",
         100,
@@ -1560,17 +1560,17 @@ export const templateDefinitions = [
           egress: [{ fromPort: 0, toPort: 0, protocol: "-1", cidrBlocks: ["0.0.0.0/0"] }]
         }
       ),
-      resource("cluster-role", "EKS Cluster Role", "aws", "aws_iam_role", 520, 180, {
+      resource("cluster-role", "EKS Cluster IAM Role", "aws", "aws_iam_role", 520, 180, {
         name: "eks-cluster-role",
         assumeRolePolicy: EKS_ASSUME_ROLE_POLICY
       }),
-      resource("node-role", "EKS Node Role", "aws", "aws_iam_role", 520, 340, {
+      resource("node-role", "Worker Node IAM Role", "aws", "aws_iam_role", 520, 340, {
         name: "eks-node-role",
         assumeRolePolicy: EC2_ASSUME_ROLE_POLICY
       }),
       resource(
         "cluster-policy",
-        "EKS Cluster Policy",
+        "EKS Cluster 권한 연결",
         "aws",
         "aws_iam_role_policy_attachment",
         760,
@@ -1582,7 +1582,7 @@ export const templateDefinitions = [
       ),
       resource(
         "node-policy",
-        "EKS Node Policy",
+        "Worker Node 권한 연결",
         "aws",
         "aws_iam_role_policy_attachment",
         760,
@@ -1594,7 +1594,7 @@ export const templateDefinitions = [
       ),
       resource(
         "node-cni-policy",
-        "EKS CNI Policy",
+        "CNI 권한 연결",
         "aws",
         "aws_iam_role_policy_attachment",
         760,
@@ -1603,7 +1603,7 @@ export const templateDefinitions = [
       ),
       resource(
         "node-ecr-policy",
-        "EKS ECR Policy",
+        "ECR 읽기 권한 연결",
         "aws",
         "aws_iam_role_policy_attachment",
         760,
@@ -1622,7 +1622,7 @@ export const templateDefinitions = [
         },
         dependsOn: ["@address:cluster-policy"]
       }),
-      resource("node-group", "EKS Managed Node Group", "aws", "aws_eks_node_group", 300, 580, {
+      resource("node-group", "EKS Node Group", "aws", "aws_eks_node_group", 300, 580, {
         clusterName: "@ref:cluster.name",
         nodeRoleArn: "@ref:node-role.arn",
         subnetIds: ["@ref:subnet-a.id", "@ref:subnet-b.id"],
@@ -1632,7 +1632,7 @@ export const templateDefinitions = [
       }),
       resource(
         "namespace",
-        "Kubernetes Namespace",
+        "애플리케이션 Kubernetes Namespace",
         "kubernetes",
         "kubernetes_namespace",
         620,
@@ -1641,7 +1641,7 @@ export const templateDefinitions = [
       ),
       resource(
         "deployment",
-        "Kubernetes Deployment",
+        "웹 Kubernetes Deployment",
         "kubernetes",
         "kubernetes_deployment",
         620,
@@ -1661,7 +1661,7 @@ export const templateDefinitions = [
           dependsOn: ["@address:node-group"]
         }
       ),
-      resource("service", "Kubernetes Service", "kubernetes", "kubernetes_service", 860, 660, {
+      resource("service", "웹 Kubernetes Service", "kubernetes", "kubernetes_service", 860, 660, {
         metadata: { name: "web", namespace: "@ref:namespace.metadata.0.name" },
         spec: { selector: { app: "web" }, port: [{ port: 80, targetPort: 80 }], type: "ClusterIP" }
       })
