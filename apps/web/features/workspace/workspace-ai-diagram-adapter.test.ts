@@ -3183,7 +3183,6 @@ test("createPlannedDiagramJson matches the approved Repository ECS reference lay
   const githubActions = nodeById.get("repository-github-actions");
   const cloudFront = nodeById.get("repository-cloudfront");
   const webAssets = nodeById.get("repository-web-assets");
-  const templateUser = nodeById.get(`fixed-template-${templateId}-presentation-user`);
   const definitionOpsGroup = nodeById.get(
     `fixed-template-${templateId}-presentation-definition-ops-group`
   );
@@ -3263,7 +3262,7 @@ test("createPlannedDiagramJson matches the approved Repository ECS reference lay
       taskSecurityGroup
   );
   assert.ok(githubActions);
-  assert.ok(templateUser);
+  assert.equal(nodeById.has(`fixed-template-${templateId}-presentation-user`), false);
   assert.ok(definitionOpsGroup);
   assert.ok(globalIamGroup);
 
@@ -3331,8 +3330,6 @@ test("createPlannedDiagramJson matches the approved Repository ECS reference lay
   assert.ok(browser.iconUrl?.includes("Res_Client_48_Light.svg"));
   assert.equal(githubActions.kind, "design");
   assert.ok(githubActions.iconUrl?.includes("Res_Git-Repository_48_Light.svg"));
-  assert.equal(templateUser.kind, "design");
-  assert.ok(templateUser.iconUrl?.includes("Res_Client_48_Light.svg"));
   assert.deepEqual(
     diagramJson.nodes
       .filter((node) => node.type === "design_group")

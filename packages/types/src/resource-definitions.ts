@@ -324,6 +324,7 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-caller-identity",
     resourceType: "AWS_CALLER_IDENTITY",
+    parameterPanel: false,
     terraformBlockType: "data",
     terraformPreview: true,
     terraformResourceType: "aws_caller_identity",

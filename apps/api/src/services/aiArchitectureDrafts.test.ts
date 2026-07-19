@@ -1083,11 +1083,29 @@ test("createAmazonQArchitectureDraftResponse asks clarification questions in the
     }
   ] as const;
 
+  const nonOverlappingAnsweredRequirements = [
+    "Website type: dynamic web application.",
+    "Expected traffic: medium, 1,000 daily and 50 concurrent.",
+    "Database: none.",
+    "Frontend: HTML, CSS, and JavaScript.",
+    "Backend: simple Node.js API.",
+    "Primary users: Korea, Seoul region.",
+    "Monthly budget: under 100 USD.",
+    "HTTPS is required.",
+    "File upload: none.",
+    "Realtime features: none.",
+    "Management preference: fully managed.",
+    "Page loading target: within 3 seconds.",
+    "Website size: under 10 MB.",
+    "Traffic pattern: steady."
+  ] as const;
+  assert.equal(answeredRequirements.length, nonOverlappingAnsweredRequirements.length);
+
   const promptsAndQuestions = orderedClarifications.map((clarification, answeredCount) => ({
     prompt:
       answeredCount === 0
         ? "웹사이트를 만들고 싶어요."
-        : answeredRequirements.slice(0, answeredCount).join("\n"),
+        : nonOverlappingAnsweredRequirements.slice(0, answeredCount).join("\n"),
     ...clarification
   }));
 

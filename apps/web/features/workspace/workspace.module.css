@@ -6783,8 +6783,8 @@
 .liveObservationMetricsHeader::after {
   color: var(--workspace-muted, #60646c);
   content: "+";
-  font-size: 20px;
-  font-weight: 500;
+  font-size: calc(20px + var(--presentation-font-size-increase));
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
   line-height: 1;
 }
 
@@ -6814,8 +6814,8 @@
   border-radius: 999px;
   color: #52657f;
   flex: 0 0 auto;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.08em;
   margin-left: auto;
   padding: 6px 9px;
@@ -6917,8 +6917,8 @@
 .liveObservationAnalysisGrid > article > span,
 .liveObservationAnalysisRecommendation > div > span {
   color: var(--workspace-muted, #60646c);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.04em;
 }
 
@@ -6943,7 +6943,7 @@
 .liveObservationAnalysisRecommendation > small,
 .liveObservationAnalysisRecommendation > div > small {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.4;
   margin-top: auto;
   padding-top: 10px;
@@ -7511,9 +7511,9 @@
   border: 1px solid #ffba73;
   border-radius: 999px;
   color: #b84d00;
-  font-size: 11px;
+  font-size: calc(11px + var(--presentation-font-size-increase));
   font-style: normal;
-  font-weight: 900;
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.03em;
   padding: 5px 8px;
   white-space: nowrap;
@@ -7814,14 +7814,14 @@
 }
 
 .liveObservationCapacityLabel strong {
-  font-size: 11px;
+  font-size: calc(11px + var(--presentation-font-size-increase));
   letter-spacing: 0.1em;
 }
 
 .liveObservationCapacityLabel small {
   color: #16865c;
-  font-size: 9px;
-  font-weight: 900;
+  font-size: calc(9px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.06em;
 }
 
@@ -7866,7 +7866,7 @@
   border-radius: 999px;
   color: #ffffff;
   display: flex;
-  font-size: 8px;
+  font-size: calc(8px + var(--presentation-font-size-increase));
   height: 19px;
   justify-content: center;
   line-height: 1;
@@ -7884,8 +7884,8 @@
 }
 
 .liveObservationCapacityUnit > span {
-  font-size: 8px;
-  font-weight: 800;
+  font-size: calc(8px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.06em;
   margin-top: 6px;
 }

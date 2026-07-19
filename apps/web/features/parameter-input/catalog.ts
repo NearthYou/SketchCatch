@@ -37,7 +37,6 @@ const blockTypeParameterDefinitions: Record<
   string,
   readonly ParameterCatalogDefinition[]
 > = {
-  [createTerraformParameterCatalogKey("data", "aws_caller_identity")]: [],
   [createTerraformParameterCatalogKey("data", "aws_ssm_parameter")]: [
     required("name", "name", "Parameter name", "/sketchcatch/audit"),
     boolean("withDecryption", "with_decryption", "Decrypt SecureString")
@@ -933,22 +932,15 @@ const terraformValidateRequiredAdditions = {
     ]
   },
   aws_autoscaling_policy: {
-    removeNames: [
-      "policyType",
-      "adjustmentType",
-      "scalingAdjustment",
-      "targetTrackingConfiguration"
-    ],
+    removeNames: ["adjustmentType", "scalingAdjustment"],
     definitions: [
-      select("policyType", "policy_type", "Policy type", ["SimpleScaling"], true),
       select(
         "adjustmentType",
         "adjustment_type",
         "Adjustment type",
-        ["ChangeInCapacity"],
-        true
+        ["ChangeInCapacity"]
       ),
-      number("scalingAdjustment", "scaling_adjustment", "Scaling adjustment", true, "1")
+      number("scalingAdjustment", "scaling_adjustment", "Scaling adjustment", false, "1")
     ]
   },
   aws_ebs_volume: {
@@ -1554,7 +1546,11 @@ function createResourceParameterCatalog(): ParameterCatalog["resources"] {
   };
 
   for (const definition of resourceDefinitions) {
-    if (!definition.capabilities.parameterPanel || resources[definition.terraform.resourceType]) {
+    if (
+      !definition.capabilities.parameterPanel ||
+      definition.terraform.blockType !== "resource" ||
+      resources[definition.terraform.resourceType]
+    ) {
       continue;
     }
 
