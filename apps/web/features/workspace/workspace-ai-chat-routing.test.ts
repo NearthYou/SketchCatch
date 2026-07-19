@@ -11,4 +11,3 @@ test("수정 질문의 리소스 답변은 기존 수정 흐름에 남긴다", (
   assert.equal(shouldStartFreshDraftDuringPatchClarification("서버 만들고 싶어"), false);
   assert.equal(shouldStartFreshDraftDuringPatchClarification("데이터 저장 공간"), false);
 });
-

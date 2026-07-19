@@ -303,8 +303,8 @@ export function toFlowEdges(
         labelStyle: {
           fill: "#172033",
           fontFamily: "var(--workspace-font)",
-          fontSize: 12,
-          fontWeight: 600
+          fontSize: "calc(12px + var(--presentation-font-size-increase))",
+          fontWeight: "calc(600 - var(--presentation-font-weight-reduction))"
         },
         selectable: !isPreview,
         deletable: !isPreview,

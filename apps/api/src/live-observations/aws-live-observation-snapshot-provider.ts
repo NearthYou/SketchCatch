@@ -691,7 +691,7 @@ async function prepareDefaultCredentials(
     roleArn: target.roleArn,
     externalId: target.externalId,
     region: target.region,
-    roleSessionName: `sketchcatch-live-observation-${randomUUID()}`,
+    roleSessionName: `sketchcatch-live-obs-${randomUUID()}`,
     abortSignal
   });
 }

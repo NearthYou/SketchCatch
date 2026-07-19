@@ -1,17 +1,41 @@
 # Agent Progress
 
-Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
+Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/` and remain available in Git history.
 
 ## Current Verified State
 
-- `/workspace/ai` is rebuilt as a new conversation surface with a selected-option trail, a decorative AWS Resource Orbit, and a Compiler-authoritative final Preview.
-- Clicked assistant options are semantic, current-session selections; direct input, voice input, retry, and candidate exclusion remain separate concerns.
-- The Orbit uses deterministic presentation-only selections from the actual AWS Resource icon catalog and does not restore or depend on backend progress stages.
-- A final Preview appears only from a successful Architecture Board Compiler proposal and renders that proposal's Diagram read-only until explicit Board application.
-- The deleted progress card, requirement list, history panel, mobile tabs, route-only summary, and other unused presentation/progress contracts remain deleted.
-- Cancellation, stale-response rejection, retry, candidate exclusion/undo, clarification, Compiler, explicit approval, and save boundaries remain in functional code.
+- The current branch applies the self-hosted Pretendard variable font across Web typography surfaces and keeps presentation typography tokens as the design baseline.
+- The automatic Board organization result remains compact while preserving the incoming `dev` comparison session and original/organized view selection.
+- Incoming `dev` API, deployment, Git/CI/CD, AWS connection, Reverse Engineering, and data-contract changes remain accepted as the backend baseline.
+- The merge resolution is complete and ready for the merge commit.
 
 ## Session Record
+
+### 2026-07-19 - Merge latest dev into PR #491
+
+- Merged `origin/dev` at `2ae411aa`, preserving the branch presentation typography while accepting the current AWS connection state model and removal of the AI choice-selected label.
+- Resolved five textual conflicts and repaired two semantic typography regressions introduced by auto-merged Workspace CSS. Imported migration `0053` and deployment safety changes remain unchanged from `dev`.
+- Conflict-focused Web tests pass 31/31, deployment API tests pass 166/166, migration compatibility and Terraform formatting pass, and the full harness lint/typecheck/build sequence passes. No AWS mutation, Terraform execution, or deployment occurred.
+
+### 2026-07-19 - Resolve Live Observation PR feedback
+
+- Lazily mounts the full React Flow Architecture map only while its controlled disclosure is open, preventing zero-sized hidden-container viewport initialization. Added a focused source-contract regression.
+- Declined two defensive optional-chaining suggestions because the shared v2 contract requires both `latestObservation.payload` and `payload.capacity`; only their quantitative members are nullable.
+- Focused Web checks pass 11/11, and root harness, lint, typecheck, build, and diff checks pass. PR #491 remains based on the existing `fix/ys/479-uiux-수정` branch; no AWS mutation or DB migration occurred.
+
+### 2026-07-19 - Restore the focused Live Observation traffic presentation
+
+- Traced the regression to `8f0c7b54`, which replaced the focused linear traffic renderer with the full immutable Architecture map. Restored the focused path as the default while retaining the full map in a collapsed disclosure and preserving all v2 session, Output URL, and AWS verification gates.
+- Fresh public-request or CloudWatch ALB evidence now triggers bounded particles, and v2 `running/desired/max` evidence renders Fargate Task slots as RUNNING/STARTING/AVAILABLE. The ECS Fargate Template adds bounded Service Auto Scaling at 1-3 Tasks with an intentionally low 10 requests-per-target target; Terraform init/validate passes.
+- Focused regressions pass 31/31, the ECS Template passes Terraform init/validate, and root harness, lint, typecheck, build, and diff checks pass. Authenticated local browser QA opens the modal; the local test Workspace had no Deployment Architecture, so final visual replay with real capacity remains pending a newly approved sandbox Deployment. No AWS mutation, traffic generation, Deployment, dependency, migration, commit, or push occurred.
+
+### 2026-07-19 - Verify Live Observation traffic in the approved AWS sandbox
+
+- Used only approved non-production account `614935468487` in `ap-northeast-2`; the production-denylisted account was never used. Applied the exact approved 34-create Terraform Plan, verified CloudFront HTTPS, ALB, and ECS 1/1 healthy, and preserved the shared control bucket and fixed execution Role.
+- Fixed the Live Observation STS failure caused by a 65-character `RoleSessionName` by shortening the session prefix. The focused snapshot-provider suite passes 6/6, and a fresh session reached `available` with zero errors and fixed Fargate capacity 1/1/1.
+- Ran the bounded traffic plan with 3 manual audience requests plus 957 automatic HTTPS GET requests: 60 at 1 RPS and 897 at 5 RPS. All 960 requests returned 200, 5xx remained zero, CloudWatch peaked at 300 target 2xx responses per minute, and ALB p95 peaked at 1.734 ms.
+- The exact 34-address Destroy Plan matched the saved Deployment state with no additions or omissions. Destroy started within 30 minutes of Apply success and finished `34 destroyed`; API resources/outputs are zero, tagged `liveobs-7cccab4b` inventory is empty, application IAM Roles are absent, and the ECS service/cluster are `INACTIVE` with zero tasks.
+- `pnpm harness:check`, focused tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass. The repository was externally switched to `codex/docs-progressive-delivery-journey` during the run, so the one-line fix remains uncommitted there; `apps/web/next-env.d.ts` matches the tracked content again. No secret was printed, no production mutation occurred, and no commit or push was performed.
 
 ### 2026-07-19 - Harden Direct Deployment Apply recovery boundaries
 
@@ -38,6 +62,13 @@ Short English-only working log for the current agent context. Older records are 
 - No database migration, cloud mutation, deployment, or dependency change was made.
 
 
+### 2026-07-19 - Isolate the desktop AI Orbit from the conversation
+
+- Rendered all three desktop Orbit layers as circles and constrained the decorative canvas to the space right of the active conversation panel.
+- Preserved the existing mobile ellipse geometry, Orbit motion and convergence, and final Preview behavior.
+- The 43 Workspace AI checks, root lint/typecheck/build, harness, and diff checks pass. Browser measurements at 1024x768 and 1440x900 show circular rings outside the conversation boundary; 390x844 retains the existing mobile scales with no console warnings or errors.
+- The broader `pnpm test` remains red outside this change: API application integration checks cannot start in the isolated environment, and the existing Resource Catalog contracts fail three assertions before later Web tests are cancelled. None of those failing files changed here.
+
 ### 2026-07-19 - Separate AWS OAuth status from Repository verification
 
 - Changed an `AVAILABLE` AWS CodeConnection from a permanent Repository warning to a connected success state that explains project save/validation performs the actual checkout verification.
@@ -60,23 +91,46 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-19 - Use the current Board source automatically for Deployment
 
-- Generic Deploy now opens Direct Deployment for the selected project instead of restoring a previously active CI/CD tab; explicit CI/CD entry still opens CI/CD.
-- CI/CD now loads the Board-provenance Repository, monitoring config, and readiness atomically from `ProjectDeliveryProfile`; it never substitutes another active Repository when the current Board has no source provenance.
-- Removed the redundant Source Repository card and its stale-freshness helper from Delivery while preserving GitHub permission and readiness gates. Focused Web tests pass 10/10, Delivery Profile API tests pass 4/4, and harness, lint, typecheck, build, and diff checks pass.
-- The maintained Web suite remains at 906/910 with four unrelated existing failures: three Resource Catalog contracts and one stale Workspace external-link source assertion. Browser automation reached only the login gate, so the authenticated modal was not visually replayed. No deployment, cloud mutation, DB migration, dependency, lockfile, commit, or push was performed.
+- Resolved Web conflicts with the current branch as the design authority and `dev` as the API/backend authority.
+- Preserved both sides where compatible, including the new Board auto-organize comparison state, deployment history structure, AI Orbit behavior, and current branch typography and compact result presentation.
+- Retained the imported `dev` API and migration changes without editing their implementation.
+- Verification passed: focused auto-organize and deployment regressions 25/25, the broader focused merge set 91/92 before its single stale typography assertion was corrected, Pretendard typography audit 4/4, harness, lint, typecheck, production build, and diff check.
 
-### 2026-07-19 - Collapse pre-deployment safety details by default
+### 2026-07-19 - Self-host the supplied Pretendard variable font
 
-- Replaced the pre-deployment safety result container with a native `details` disclosure: severity and title stay visible, while the summary, Trivy state, metrics, and findings start collapsed and remain keyboard accessible.
-- Added a focused source/style regression for the closed default, semantic summary, focus state, chevron state, and reduced motion; the focused 2/2 check, harness, lint, typecheck, build, and diff checks pass.
-- The full maintained test command still fails on the existing artifact heartbeat cancellation plus four existing Web failures (three Resource Catalog contracts and one external-link contract). Browser automation reached only the unauthenticated landing, so the signed-in deployment result was not visually replayed. No deployment, cloud mutation, DB migration, dependency, lockfile, or Git handoff was performed.
+- Replaced the package-backed Pretendard dynamic subset with the supplied Pretendard 1.3.9 variable WOFF2 and bundled its license.
+- Authenticated browser QA previously covered 26 public and signed-in views; all 7,153 visible HTML elements resolved to `Pretendard, sans-serif` with zero exceptions.
+- Focused typography audit, runtime font response, lint, typecheck, production build, and diff checks previously passed.
 
-### 2026-07-19 - Exclude CodeConnection from AWS connection deletion
+### 2026-07-19 - Preserve current Board deployment provenance
 
-- Removed GitHub CodeConnection from the general AWS connection deletion preview, confirmation fingerprint, and remote cleanup input; only the explicit GitHub build disconnect path may delete it.
-- A connection with no CodeBuild resources now skips AWS cleanup even when CodeConnection metadata exists, allowing local AWS connection deletion to continue without the reported CodeConnections failure.
-- Replaced the misleading AWS Connector Marketplace checkout link with the official direct GitHub App installation and Repository permission URL.
-- Focused API tests pass 46/46 and focused Web tests pass 13/13; lint, typecheck, production build, harness, and browser console checks pass. The broader Web suite remains at 904/908 with three unrelated Resource Catalog failures and one existing Workspace external-link contract failure. The direct GitHub App path reaches Repository permission selection without Marketplace billing. No AWS mutation, GitHub App installation, DB migration, deployment, Git handoff, commit, or push was performed.
+- Generic Deploy opens Direct Deployment for the selected project, while explicit CI/CD entry remains separate.
+- CI/CD uses Board-provenance Repository, monitoring, and readiness data without substituting an unrelated active Repository.
+- The redundant Delivery source card was removed while permission and readiness gates remain intact.
+
+### 2026-07-19 - Preserve deployment and AWS connection safety changes
+
+- Pre-deployment safety details start collapsed and remain keyboard accessible.
+- General AWS connection deletion excludes GitHub CodeConnection; the dedicated GitHub build disconnect remains its only deletion path.
+- Reverse Engineering scan history remains preserved when an AWS connection is deleted through the imported `dev` migration and API changes.
+
+### 2026-07-18 - Preserve current branch presentation adjustments
+
+- Live Observation guidance keeps its original wording and width while using the requested smaller text size.
+- AI Workbench desktop navigation remains icon-only with mode-specific titles.
+- Automatic organization results remain minimal and omit change summaries, review lists, and technical details.
+
+## Broken Or Unverified
+
+- No merge-owned check is failing.
+- Broad test suites were not run because the user requested avoiding unnecessary tests; focused conflict regressions and all required repository checks passed.
+- Previously documented environment-specific or unrelated broad-suite failures remain recorded in Git history and `docs/agent-history/2026-07.md`.
+- No live AWS mutation, Terraform apply/destroy, Deployment, GitHub mutation, or Git handoff is authorized or performed by this merge resolution.
+
+## Next Action
+
+- Review PR #491 after CI and merge it into `dev` when approved.
+- Keep real ECS scale-out acceptance blocked until a newly approved non-production Plan/Apply/traffic/Destroy cycle.
 
 ### 2026-07-19 - Complete the dev deployment and clarify operational guidance
 
@@ -98,16 +152,24 @@ Short English-only working log for the current agent context. Older records are 
 - Direct ECS rollback now deregisters the exact application-created Task Definition revision after the trusted runtime restore, with account/region/ARN validation and a revision-scoped STS session policy.
 - Deregistered the three unused demo revisions (`5`, `7`, and `9`). Exact AWS inventory verification returned `CLEANUP_RESULT remaining=0`; the browser shows `DESTROYED`, 36 resources removed, and zero remaining Resources or Outputs.
 - Focused API tests pass 11/11 and the Web regression passes 24/24. Affected ESLint and direct API/Web typechecks pass; final root harness, lint, typecheck, build, and diff checks are recorded by the finishing verification run.
+### 2026-07-19 - Tighten Workspace AI conversation spacing
+
+- Expanded the desktop transcript, suggestion, composer, and composer metadata widths so the conversation panel uses its available space consistently.
+- Let the selected-option trail extend to an 18px right inset, and size its heading column to its content instead of reserving a wide empty column. The existing mobile layout remains unchanged.
+- Browser checks pass at 390×844, 1024×768, 1440×900, and 1920×900 with no horizontal overflow or console errors. Workspace AI tests pass 43/43; harness, lint, typecheck, build, and diff checks pass.
+
 ### 2026-07-19 - Distinguish daily traffic from concurrent users
 
 - Traffic clarification matching now interprets daily visitors and concurrent users as separate dimensions before numeric option matching.
 - `일일 500명` maps to the medium option while `동시 접속자 500명` remains large; `스프링부트 썼어` reuses the existing complex business logic option instead of creating a custom option.
 - Focused Web/API regressions and the harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
+
 ### 2026-07-19 - Advance AI diagram generation progress sooner
 
 - Reduced the staged diagram-generation interval from 3 seconds to 1.5 seconds and added a final draft preparation stage.
 - The first visible transition now occurs after 1.5 seconds, and the progress card continues through five stages while the AI response is pending.
 - The focused Web status regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
+
 ### 2026-07-19 - Remove the selected text from AI Start choices
 
 - Removed the visible `선택됨` suffix from selected `/workspace/ai` answer buttons while retaining `aria-pressed` and selected-button styling.
@@ -124,12 +186,14 @@ Short English-only working log for the current agent context. Older records are 
 - Replaced the terminal requirements-unsatisfied 422 path with a dedicated Amazon Q conflict-diagnosis request after generation and repair both fail validation.
 - Amazon Q receives the original requirement, accepted answers, decision space, normalized requirement, and exact validation issues; its question and preserve-versus-relax choices are returned unchanged through the existing clarification flow.
 - The focused API regression and API typecheck pass. No database migration, deployment, cloud mutation, or push was performed.
+
 ### 2026-07-19 - Route conflict diagnosis through the real Amazon Q provider
 
 - Fixed the production Amazon Q Business provider, which previously ignored the conflict prompt and always returned another locally generated canonical plan, causing the replacement HTTP 502.
 - Conflict requests now call Amazon Q Business ChatSync with the exact validation failures and user requirement. JSON and plain-text/numbered Q answers both become the existing clarification question and choices without server-side trade-off selection.
 - Workspace AI draft failures now keep full diagnostics in the browser console and show one short transcript message instead of duplicated developer diagnostics.
 - Focused API provider/parser and Web presentation regressions pass; API/Web typechecks pass. No database migration, deployment, cloud mutation, or push was performed.
+
 ### 2026-07-19 - Classify natural-language technology stack answers
 
 - Added one shared frontend/backend technology-stack classifier used by API answer validation, canonical prompt context, architecture profiles, and Web selection presentation.

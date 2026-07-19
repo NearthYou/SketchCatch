@@ -48,8 +48,8 @@
   border-radius: 999px;
   color: #b42318;
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   height: 16px;
   justify-content: center;
   min-width: 16px;
@@ -98,7 +98,7 @@
 .panelHeader span,
 .list time {
   color: #6b7280;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .panel button {
@@ -120,15 +120,15 @@
 }
 
 .controls button {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   padding: 4px 0;
 }
 
 .notice,
 .empty {
   color: #6b7280;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   margin: 0;
   padding: 12px 16px;
 }
@@ -163,12 +163,12 @@
 }
 
 .list strong {
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .list span {
   color: #4b5563;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.45;
 }
 

@@ -1,4 +1,4 @@
-import type { DiagramJson, DiagramNode, LiveObservationSnapshot } from "@sketchcatch/types";
+import type { DiagramJson, DiagramNode, LiveObservationV2Snapshot } from "@sketchcatch/types";
 
 const TRAFFIC_SOURCE_TYPES = new Set([
   "aws_apigatewayv2_api",
@@ -62,7 +62,7 @@ export type LiveObservationDiagramModel =
       readonly stages: readonly LiveObservationPresentationStage[];
       readonly capacityUnits: readonly LiveObservationCapacityUnit[];
       readonly hiddenCapacityCount: number;
-      readonly pressureLevel: LiveObservationSnapshot["live"]["pressureLevel"];
+      readonly pressureLevel: LiveObservationV2Snapshot["live"]["pressureLevel"];
     }
   | {
       readonly status: "unavailable";
@@ -81,11 +81,17 @@ type CapacityBinding = {
 
 export function createLiveObservationDiagramModel(
   diagram: DiagramJson,
-  snapshot: LiveObservationSnapshot | null
+  snapshot: LiveObservationV2Snapshot | null
 ): LiveObservationDiagramModel {
   const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
   const predecessors = createPredecessorMap(diagram);
-  const capacityBindings = createCapacityBindings(diagram, nodeById, predecessors);
+  const successors = createSuccessorMap(diagram);
+  const capacityBindings = createCapacityBindings(
+    diagram,
+    nodeById,
+    predecessors,
+    successors
+  );
 
   if (capacityBindings.length === 0) {
     return { status: "unavailable", reason: "capacity-missing" };
@@ -111,14 +117,15 @@ export function createLiveObservationDiagramModel(
     .filter((binding) => binding.controllerId === selectedControllerId)
     .map((binding) => binding.template);
 
-  const runningCount = snapshot?.capacity.inServiceInstanceCount ?? 0;
-  const desiredCount = snapshot?.capacity.desiredCapacity ?? runningCount;
+  const providerCapacity = snapshot?.latestObservation?.payload.capacity;
+  const runningCount = providerCapacity?.running ?? 0;
+  const desiredCount = providerCapacity?.desired ?? runningCount;
   const orderedCapacityNodes = [...capacityNodes].sort(compareCapacityNodes);
   const requestedCapacityCount = Math.max(
     orderedCapacityNodes.length,
-    snapshot?.capacity.currentInstanceCount ?? 0,
+    providerCapacity?.running ?? 0,
     desiredCount,
-    snapshot?.capacity.maxCapacity ?? 0
+    providerCapacity?.max ?? 0
   );
   const visibleCapacityCount = Math.min(
     MAX_VISIBLE_CAPACITY_UNITS,
@@ -154,7 +161,8 @@ export function createLiveObservationDiagramModel(
 function createCapacityBindings(
   diagram: DiagramJson,
   nodeById: ReadonlyMap<string, DiagramNode>,
-  predecessors: ReadonlyMap<string, readonly string[]>
+  predecessors: ReadonlyMap<string, readonly string[]>,
+  successors: ReadonlyMap<string, readonly string[]>
 ): readonly CapacityBinding[] {
   const explicit = diagram.nodes.flatMap((node) => {
     if (node.metadata?.liveObservationRole !== "capacity-unit") return [];
@@ -176,7 +184,10 @@ function createCapacityBindings(
         : null;
     if (!templateType) return [];
 
-    const connectedTemplate = (predecessors.get(controller.id) ?? [])
+    const connectedTemplate = [
+      ...(predecessors.get(controller.id) ?? []),
+      ...(successors.get(controller.id) ?? [])
+    ]
       .map((nodeId) => nodeById.get(nodeId))
       .find((node) => node && getResourceType(node) === templateType);
 
@@ -185,6 +196,22 @@ function createCapacityBindings(
       template: connectedTemplate ?? controller
     }];
   });
+}
+
+function createSuccessorMap(diagram: DiagramJson): ReadonlyMap<string, readonly string[]> {
+  const successors = new Map<string, string[]>();
+
+  for (const edge of diagram.edges) {
+    const current = successors.get(edge.sourceNodeId) ?? [];
+    current.push(edge.targetNodeId);
+    successors.set(edge.sourceNodeId, current);
+  }
+
+  for (const values of successors.values()) {
+    values.sort();
+  }
+
+  return successors;
 }
 
 export function getLiveObservationDiagramSegmentCount(diagram: DiagramJson): number {

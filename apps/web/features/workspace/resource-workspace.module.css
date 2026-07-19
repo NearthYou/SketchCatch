@@ -2,7 +2,7 @@
   background: var(--workspace-surface-muted, #fafafa);
   color: var(--workspace-text, #171717);
   display: grid;
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
 }
@@ -33,8 +33,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 8px;
   min-height: 32px;
   padding: 0 8px;
@@ -74,14 +74,14 @@
 
 .resourceListTitle span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
   text-transform: uppercase;
 }
 
 .resourceListTitle h2 {
-  font-size: 16px;
+  font-size: calc(16px + var(--presentation-font-size-increase));
   line-height: 1.4;
   margin: 0;
 }
@@ -89,7 +89,7 @@
 .resourceListTitle > strong {
   background: var(--workspace-surface-strong, #f0f0f3);
   border-radius: 9999px;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   min-width: 36px;
   padding: 5px 9px;
   text-align: center;
@@ -145,7 +145,7 @@
 }
 
 .resourceListIdentity strong {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -202,8 +202,8 @@
 
 .resourceListAddress {
   color: var(--workspace-muted, #60646c);
-  font-family: Inter, Geist, sans-serif;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -224,7 +224,7 @@
 
 .resourceListValueRow span,
 .resourceListValueRow strong {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -235,7 +235,7 @@
 
 .resourceListValueRow strong {
   color: var(--workspace-text, #171717);
-  font-weight: 600;
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
 }
 
 .resourceListConfigToggle {
@@ -245,8 +245,8 @@
   color: var(--workspace-text, #171717);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   justify-self: start;
   padding: 6px 8px;
 }
@@ -254,7 +254,7 @@
 .resourceListNoValues {
   border-top: 1px solid var(--workspace-line, #f0f0f3);
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   padding-top: 10px;
 }
 
@@ -272,11 +272,11 @@
 
 .resourceListEmpty strong {
   color: var(--workspace-text, #171717);
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .resourceListEmpty span {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.5;
 }
 
