@@ -9,7 +9,7 @@ Use this file only for compact continuation context. Write it in English and ref
 - Repository ECS analysis records runtime Secret names only. Preflight uses isolated placeholders; approved Apply generates `CHECK_IN_SIGNING_SECRET`, stores it in Secrets Manager, grants exact Task execution-role read access, and maps the ARN into every Task.
 - Fixed `INSTANCE_ID` injection is removed so hostname-based `servedBy` can distinguish Tasks. Stateless repository evidence keeps bounded Fargate capacity 1–3.
 - The previous 963-request sandbox run completed with 963 HTTP 200 responses, and its failed observation acceptance triggered approved cleanup. Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` is `DESTROYED`; the scoped AWS resources were verified absent.
-- Focused verification for the merge conflicts and baseline repairs passes. Final full checks are pending.
+- Harness, lint, typecheck, build, the 52-test Terraform safety suite, and focused Web/API regressions pass. The long root test run was stopped at the user's request before completion.
 
 ## Changes This Session
 
@@ -25,7 +25,7 @@ Use this file only for compact continuation context. Write it in English and ref
 
 ## Best Next Action
 
-1. Finish the merged-result checks and publish the current branch as a PR to `dev`.
+1. Publish the current branch as a PR to `dev`.
 2. After merge, re-analyze `audience-live-check` and inspect its runtime Secret mapping before seeking any Apply approval.
 
 ## Suggested Skills

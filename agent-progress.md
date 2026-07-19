@@ -11,7 +11,8 @@ Short English-only working log for the current agent context. Older records are 
 - The approved sandbox traffic run sent exactly 963 requests with 963 HTTP 200 responses. The failed observation acceptance triggered approved cleanup, and the `liveobs-7cccab4b` AWS resource set was verified absent.
 - Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` is `DESTROYED` with cleared state and current-plan pointers.
 - Repository ECS delivery carries runtime Secret names through analysis, uses an isolated preflight placeholder, generates `CHECK_IN_SIGNING_SECRET` during approved Apply, maps its Secrets Manager ARN into every Task, and leaves `INSTANCE_ID` unset for hostname-based observation.
-- Windows subprocess, local environment isolation, generated architecture knowledge, resource catalog, typography, and Workspace source-contract regressions are repaired. Focused tests pass; final merged-result checks are pending.
+- Windows subprocess, local environment isolation, generated architecture knowledge, resource catalog, typography, and Workspace source-contract regressions are repaired.
+- Final merged-result checks pass for `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, the 52-test Terraform safety suite, and focused Web/API regressions. The user requested stopping the long root `pnpm test` run before completion.
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
@@ -48,6 +49,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-1. Complete the merged-result harness, lint, typecheck, build, and test checks.
-2. Push this focused branch and open a Korean PR against `dev`.
-3. Re-analyze `audience-live-check` only after merge; obtain separate explicit approval before any future Apply or traffic run.
+1. Push this focused branch and open a Korean PR against `dev`.
+2. Re-analyze `audience-live-check` only after merge; obtain separate explicit approval before any future Apply or traffic run.
