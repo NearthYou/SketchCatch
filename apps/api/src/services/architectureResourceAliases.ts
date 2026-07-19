@@ -56,6 +56,7 @@ export const RESOURCE_TYPE_KOREAN_NAMES = {
   AMPLIFY_APP: "Amplify 앱",
   DB_SUBNET_GROUP: "DB 서브넷 그룹",
   SECRETS_MANAGER_SECRET: "Secrets Manager 보안 암호",
+  RANDOM_PASSWORD: "Terraform 생성 보안 값",
   VPC_ENDPOINT: "VPC 엔드포인트",
   CLOUDWATCH_LOG_GROUP: "CloudWatch 로그 그룹",
   CLOUDWATCH_LOG_STREAM: "CloudWatch 로그 스트림",

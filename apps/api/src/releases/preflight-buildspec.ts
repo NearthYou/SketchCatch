@@ -28,6 +28,9 @@ export function renderPreflightBuildspec(config: ConfirmedBuildConfig): string {
   if (!/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/u.test(ecsWeb.api.healthCheckPath)) {
     throw new Error("ECS web health check path is invalid");
   }
+  const preflightRuntimeSecretFlags = renderPreflightRuntimeSecretFlags(
+    ecsWeb.api.requiredRuntimeSecrets
+  );
   const installCommand = createFrontendInstallCommand(ecsWeb.frontend);
   const buildCommand = createFrontendBuildCommand(ecsWeb.frontend);
   const packageManagerSetupCommands = createPackageManagerSetupCommands(
@@ -112,7 +115,7 @@ ${packageManagerSetupCommands}
       - export SKETCHCATCH_PREFLIGHT_STAGE=api_health
       - |
         set -euo pipefail
-        CONTAINER_ID=$(docker run --detach --publish "127.0.0.1:18080:\${SKETCHCATCH_CONTAINER_PORT}" sketchcatch-preflight-api)
+        CONTAINER_ID=$(docker run --detach --publish "127.0.0.1:18080:\${SKETCHCATCH_CONTAINER_PORT}"${preflightRuntimeSecretFlags} sketchcatch-preflight-api)
         cleanup_container() {
           docker rm --force "\${CONTAINER_ID}" >/dev/null 2>&1 || true
         }
@@ -169,6 +172,26 @@ ${packageManagerSetupCommands}
       - test -n "\${SKETCHCATCH_FRONTEND_UPLOAD_ETAG}"
       - test -n "\${SKETCHCATCH_MANIFEST_UPLOAD_ETAG}"
 `;
+}
+
+const preflightOnlySecretPlaceholder =
+  "sketchcatch-preflight-only-not-a-runtime-secret-32-bytes-minimum";
+
+function renderPreflightRuntimeSecretFlags(names: readonly string[] | undefined): string {
+  const uniqueNames = [...new Set(names ?? [])];
+  if (uniqueNames.length > 32) {
+    throw new Error("ECS web runtime secret environment names exceed the preflight limit");
+  }
+  for (const name of uniqueNames) {
+    if (!/^[A-Z][A-Z0-9_]{0,127}$/u.test(name)) {
+      throw new Error(`ECS web runtime secret environment name is invalid: ${name}`);
+    }
+  }
+
+  return uniqueNames
+    .sort((left, right) => left.localeCompare(right))
+    .map((name) => ` --env "${name}=${preflightOnlySecretPlaceholder}"`)
+    .join("");
 }
 
 function createPackageManagerSetupCommands(

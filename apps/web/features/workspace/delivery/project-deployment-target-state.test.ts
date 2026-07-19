@@ -448,7 +448,13 @@ test("web-inclusive ECS Architecture derives the frontend build snapshot from Re
             signals: ["Vite static build output"]
           }
         ],
-        architectureFacts: [],
+        architectureFacts: [
+          {
+            kind: "runtime_secret" as const,
+            value: "CHECK_IN_SIGNING_SECRET",
+            sourcePath: "README.md"
+          }
+        ],
         missingEvidence: []
       }
     },
@@ -490,6 +496,9 @@ test("web-inclusive ECS Architecture derives the frontend build snapshot from Re
   assert.equal(draft.healthCheckPath, "/health");
   assert.equal(request.confirmedBuildConfig.ecsWeb?.frontend.packageManager, "npm");
   assert.equal(request.confirmedBuildConfig.ecsWeb?.frontend.outputPath, "apps/web/dist");
+  assert.deepEqual(request.confirmedBuildConfig.ecsWeb?.api.requiredRuntimeSecrets, [
+    "CHECK_IN_SIGNING_SECRET"
+  ]);
 });
 
 test("empty ECS settings use Source Repository evidence and current Architecture defaults", () => {

@@ -687,8 +687,7 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     {
       name: "WEB_ORIGIN",
       value: "https://${aws_cloudfront_distribution.repository-cloudfront.domain_name}"
-    },
-    { name: "INSTANCE_ID", value: "fargate" }
+    }
   ]);
   assert.equal(
     containerDefinitions[0]?.logConfiguration?.options?.["awslogs-group"],
@@ -751,6 +750,64 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     ),
     []
   );
+});
+
+test("strict repository evidence maps a generated signing secret and 1-to-3 scaling into ECS", () => {
+  const response = createArchitectureDraft({
+    prompt: "Deploy an ECS Fargate API service behind an Application Load Balancer from repository evidence.",
+    templateId: "ecs-fargate-container-app",
+    repositoryEvidence: {
+      mode: "strict",
+      repositoryName: "audience-live-check",
+      facts: [
+        { kind: "backend_runtime", value: "ecs_fargate_service", sourcePath: "README.md" },
+        { kind: "health_check", value: "http:8080/health", sourcePath: "apps/api/Dockerfile" },
+        { kind: "runtime_scale", value: "autoscaling_1_3", sourcePath: "README.md" },
+        { kind: "runtime_secret", value: "CHECK_IN_SIGNING_SECRET", sourcePath: "README.md" }
+      ]
+    }
+  });
+
+  const nodeByTerraformType = (terraformResourceType: string) =>
+    response.architectureJson.nodes.find(
+      (node) => node.config.terraformResourceType === terraformResourceType
+    );
+  const taskDefinition = response.architectureJson.nodes.find(
+    (node) => node.type === "ECS_TASK_DEFINITION"
+  );
+  const service = response.architectureJson.nodes.find((node) => node.type === "ECS_SERVICE");
+  const scalingTarget = response.architectureJson.nodes.find(
+    (node) => node.type === "APPLICATION_AUTO_SCALING_TARGET"
+  );
+  const scalingPolicy = response.architectureJson.nodes.find(
+    (node) => node.type === "APPLICATION_AUTO_SCALING_POLICY"
+  );
+  const containers = JSON.parse(String(taskDefinition?.config.containerDefinitions)) as Array<{
+    environment?: Array<{ name: string; value: string }>;
+    secrets?: Array<{ name: string; valueFrom: string }>;
+  }>;
+
+  assert.equal(service?.config.desiredCount, 1);
+  assert.equal(scalingTarget?.config.minCapacity, 1);
+  assert.equal(scalingTarget?.config.maxCapacity, 3);
+  assert.equal(
+    (scalingPolicy?.config.targetTrackingScalingPolicyConfiguration as { targetValue?: number })
+      .targetValue,
+    10
+  );
+  assert.ok(nodeByTerraformType("random_password"));
+  assert.ok(nodeByTerraformType("aws_secretsmanager_secret"));
+  assert.ok(nodeByTerraformType("aws_secretsmanager_secret_version"));
+  assert.ok(nodeByTerraformType("aws_iam_role_policy"));
+  assert.equal(containers[0]?.environment?.some((entry) => entry.name === "INSTANCE_ID"), false);
+  assert.deepEqual(containers[0]?.secrets, [{
+    name: "CHECK_IN_SIGNING_SECRET",
+    valueFrom: "${aws_secretsmanager_secret.repository-check-in-signing-secret.arn}"
+  }]);
+  assert.deepEqual(taskDefinition?.config.dependsOn, [
+    "aws_secretsmanager_secret_version.repository-check-in-signing-secret-version",
+    "aws_iam_role_policy.repository-check-in-signing-secret-policy"
+  ]);
 });
 
 test("repository evidence strict mode does not create edges for unsupported delivery services", async () => {
@@ -1333,11 +1390,29 @@ test("createAmazonQArchitectureDraftResponse asks clarification questions in the
     }
   ] as const;
 
+  const nonOverlappingAnsweredRequirements = [
+    "Website type: dynamic web application.",
+    "Expected traffic: medium, 1,000 daily and 50 concurrent.",
+    "Database: none.",
+    "Frontend: HTML, CSS, and JavaScript.",
+    "Backend: simple Node.js API.",
+    "Primary users: Korea, Seoul region.",
+    "Monthly budget: under 100 USD.",
+    "HTTPS is required.",
+    "File upload: none.",
+    "Realtime features: none.",
+    "Management preference: fully managed.",
+    "Page loading target: within 3 seconds.",
+    "Website size: under 10 MB.",
+    "Traffic pattern: steady."
+  ] as const;
+  assert.equal(answeredRequirements.length, nonOverlappingAnsweredRequirements.length);
+
   const promptsAndQuestions = orderedClarifications.map((clarification, answeredCount) => ({
     prompt:
       answeredCount === 0
         ? "웹사이트를 만들고 싶어요."
-        : answeredRequirements.slice(0, answeredCount).join("\n"),
+        : nonOverlappingAnsweredRequirements.slice(0, answeredCount).join("\n"),
     ...clarification
   }));
 

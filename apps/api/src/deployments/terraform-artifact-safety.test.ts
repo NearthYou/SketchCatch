@@ -8,6 +8,20 @@ import {
   TerraformArtifactSafetyError
 } from "./terraform-artifact-safety.js";
 
+const boundedRuntimeSecretPolicyLiteral = JSON.stringify(JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [{
+    Sid: "ReadCheckInSigningSecret",
+    Effect: "Allow",
+    Action: ["secretsmanager:GetSecretValue"],
+    Resource: "${aws_secretsmanager_secret.runtime.arn}"
+  }]
+}));
+const broadRuntimeSecretPolicyLiteral = JSON.stringify(JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [{ Effect: "Allow", Action: ["secretsmanager:*"], Resource: "*" }]
+}));
+
 test("generated S3 artifacts omit synthetic public access blocks and pass safety", () => {
   const graph: InfrastructureGraph = {
     nodes: [
@@ -117,6 +131,7 @@ test("ECS web-service live apply safety accepts every Terraform resource in the 
     "aws_s3_bucket_public_access_block",
     "aws_s3_bucket_versioning",
     "aws_s3_object",
+    "aws_secretsmanager_secret",
     "aws_security_group",
     "aws_subnet",
     "aws_vpc"
@@ -127,6 +142,60 @@ test("ECS web-service live apply safety accepts every Terraform resource in the 
 
   assert.doesNotThrow(() =>
     assertTerraformArtifactIsSafe(terraformCode, { liveProfile: "demo_web_service" })
+  );
+});
+
+test("ECS web-service safety accepts the bounded generated runtime-secret bundle", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `terraform {
+        required_providers {
+          random = {
+            source  = "hashicorp/random"
+            version = "~> 3.0"
+          }
+        }
+      }
+      resource "random_password" "runtime" {
+        length  = 48
+        special = false
+      }
+      resource "aws_secretsmanager_secret" "runtime" {}
+      resource "aws_secretsmanager_secret_version" "runtime" {
+        secret_id     = aws_secretsmanager_secret.runtime.id
+        secret_string = random_password.runtime.result
+      }
+      resource "aws_iam_role_policy" "runtime" {
+        name   = "runtime-secret-read"
+        role   = aws_iam_role.execution.id
+        policy = ${boundedRuntimeSecretPolicyLiteral}
+      }`,
+      { liveProfile: "demo_web_service" }
+    )
+  );
+});
+
+test("ECS web-service safety rejects literal runtime Secret values and broad inline IAM", () => {
+  assert.throws(
+    () => assertTerraformArtifactIsSafe(
+      `resource "aws_secretsmanager_secret_version" "runtime" {
+        secret_id     = aws_secretsmanager_secret.runtime.id
+        secret_string = "known-value"
+      }`,
+      { liveProfile: "demo_web_service" }
+    ),
+    /must reference generated password material/u
+  );
+  assert.throws(
+    () => assertTerraformArtifactIsSafe(
+      `resource "aws_iam_role_policy" "runtime" {
+        name   = "runtime-secret-read"
+        role   = aws_iam_role.execution.id
+        policy = ${broadRuntimeSecretPolicyLiteral}
+      }`,
+      { liveProfile: "demo_web_service" }
+    ),
+    /must grant only exact Secrets Manager read access/u
   );
 });
 

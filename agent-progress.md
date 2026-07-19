@@ -4,63 +4,50 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch `dev` includes origin through `1b3c1330` plus the reviewed removal of the legacy `practice` Deployment live profile from shared types, API validation, runtime defaults, and the database enum.
-- Migration `0054_remove_practice_live_profile.sql` converts existing `practice` rows to `demo_web_service` before rebuilding the enum; the compatible API normalizes legacy rows during rollout.
-- Production ECS deployment run `29700391499` published app SHA `2da6ba32d28e98afcbfad0e9f591915a48b5b461`; migration run `29700681495` completed with snapshot `sketchcatch-production-pre-migration-29700681495` and ECS task exit code 0.
-- Post-migration HTTPS checks for `/`, `/health`, and `/health/db` return 200.
-- The previous uncommitted work from `Refactor/jh/498-배포-ui-수정` remains recoverable in `stash@{0}`.
-- The latest merged result passes 130 focused API checks and 31 focused Web checks. Root harness, migration compatibility, lint, serial typecheck, build, and diff checks pass. The full API suite still exposes unrelated existing failures.
-- The approved sandbox cycle used `SketchCatchSandboxOperator` for account `614935468487` in `ap-northeast-2`. Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` applied exactly `+36 ~0 -0` and completed successfully at 2026-07-20 00:55 KST. No traffic has been generated.
+- Branch `fix/sw/live-observation-deployment-picker-layering` includes `origin/dev` through `ad1464ba` after resolving the active merge conflicts.
+- The legacy `practice` Deployment profile is removed; `demo_web_service` is the default live profile, and imported migration `0054` rewrites legacy rows before removing the enum value.
+- Live Observation renders bounded traffic motion, a task-count-responsive Fargate fleet, and collapsed operational analysis without development-only traffic or Task preview controls.
+- Delayed first CloudWatch points retain request and capacity evidence, and stopped sessions no longer continue the countdown.
+- The approved sandbox traffic run sent exactly 963 requests with 963 HTTP 200 responses. The failed observation acceptance triggered approved cleanup, and the `liveobs-7cccab4b` AWS resource set was verified absent.
+- Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` is `DESTROYED` with cleared state and current-plan pointers.
+- Repository ECS delivery carries runtime Secret names through analysis, uses an isolated preflight placeholder, generates `CHECK_IN_SIGNING_SECRET` during approved Apply, maps its Secrets Manager ARN into every Task, and leaves `INSTANCE_ID` unset for hostname-based observation.
+- Windows subprocess, local environment isolation, generated architecture knowledge, resource catalog, typography, and Workspace source-contract regressions are repaired.
+- Final merged-result checks pass for `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, the 52-test Terraform safety suite, and focused Web/API regressions. The user requested stopping the long root `pnpm test` run before completion.
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
 
-### 2026-07-20 - Deploy the compatible profile contract and migrate production
+### 2026-07-20 - Integrate current dev before PR
 
-- Deployed API, Web, and worker image tag `2da6ba32d28e98afcbfad0e9f591915a48b5b461` through production ECS run `29700391499`; validation, image publication, preflight, worker registration, and both service stabilizations succeeded.
-- Ran production migration workflow `29700681495` only after the compatible services were healthy. Snapshot `sketchcatch-production-pre-migration-29700681495` became available before the one-off ECS migration task completed with exit code 0.
-- Confirmed `https://sketchcatch.net/`, `/health`, and `/health/db` return 200 after migration.
+- Merged `origin/dev` through `ad1464ba`, retaining both the runtime Secret delivery contract and the removal of the legacy `practice` profile.
+- Adapted runtime Secret safety tests to the current `demo_web_service` profile without weakening generated-secret or least-privilege IAM validation.
+- Preserved the imported profile-removal migration and UI refinements without editing their migration files.
 
-### 2026-07-20 - Remove the legacy Deployment live profile
+### 2026-07-20 - Repair repository verification baseline
 
-- Removed `practice` from the public Deployment profile contract and made `demo_web_service` the default live apply profile, including Application Auto Scaling resources.
-- Added migration `0054` to rewrite existing rows before removing the PostgreSQL enum value, plus code-first compatibility for safe rollout ordering.
-- Removed the unused duplicate frontend profile recommendation helper and updated API/web fixtures and contract documentation.
-- Integrated origin `dev` through `1b3c1330` and verified the combined result before publishing `dev`.
-- Verified focused tests, migration compatibility, lint, serial typecheck, build, and diff checks. The unrelated full-suite baseline failures remain outside this workstream.
+- Made the shared contract test invoke `pnpm` correctly on Windows and isolated API tests from local `.env` values.
+- Regenerated Architecture Board knowledge and aligned Repository ECS, Workspace, typography, and resource-catalog tests with current behavior.
+- Kept schema-less Terraform items visible but disabled until an editable parameter contract exists.
 
-### 2026-07-20 - Integrate latest dev for direct publication
+### 2026-07-20 - Add repository runtime-secret delivery contract
 
-- Merged `origin/dev` at `252e7085`, including PR #499's ProjectDraft recovery presentation and timestamp changes.
-- Resolved the progress-log conflict by retaining the current workstream here and archiving PR #499's completed record under `docs/agent-history/2026-07.md`.
-- Preserved both overlay intents in one regression: blocking draft recovery stays above Live Observation, while Live Observation stays above non-blocking Workspace surfaces.
-- Full merged-result verification passes before the merge commit. No direct `dev` push has been performed.
+- Added names-only runtime Secret evidence, isolated preflight placeholders, Terraform-generated signing material, Secrets Manager storage, exact execution-role read access, and ECS Task Definition secret mapping.
+- Preserved the approved Secret mapping across application releases while replacing only the image.
+- Removed the fixed `INSTANCE_ID=fargate` value so hostname fallback can identify distinct Tasks.
 
-### 2026-07-20 - Prepare the approved Live Observation sandbox cycle
+### 2026-07-20 - Exercise and fail closed the Live Observation traffic run
 
-- Revalidated the non-production caller and execution role, restarted the local API with the safe sandbox profile, and regenerated the exact infrastructure Plan `+36 ~0 -0`.
-- Applied Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` successfully in account `614935468487`, region `ap-northeast-2`; CloudFront, ALB, ECS/Fargate, and Application Auto Scaling resources are available.
-- Reproduced and fixed Direct Deployment's click-event leakage into `LiveObservationSelection`, then confirmed the successful Deployment is selected in the open Live Observation modal with one available Fargate task.
-- No traffic was sent. Wait for the user's exact `지금 시작` instruction before starting observation and the bounded maximum 963-request run; run Destroy within 30 minutes after `정리해`, or immediately on test failure.
-
-### 2026-07-20 - Compact active agent context
-
-- Removed stale branches and completed workstreams from the active trackers, grouped missing 2026-07-19 evidence in `docs/agent-history/2026-07.md`, and left exact detail discoverable in Git history.
-- The cleanup changed no product code, contract, dependency, migration, or cloud state.
-
-### 2026-07-20 - Keep the Live Observation Deployment picker usable
-
-- Raised Live Observation above non-blocking Workspace notification and AI surfaces while preserving the blocking ProjectDraft recovery layer.
-- Disabled the empty Deployment picker and added an unavailable placeholder instead of an enabled blank native menu.
-- Prevented the Direct Deployment launch button from forwarding its click event as a Deployment selection.
-- Added source-contract regressions for all three conditions. Focused checks pass 36/36 and browser QA confirms the empty-picker behavior.
+- Sent the approved maximum of 963 bounded requests; all returned HTTP 200 and no additional traffic was generated.
+- Retained delayed CloudWatch evidence, stopped inactive countdowns, and removed temporary development controls.
+- Completed approved manual cleanup after automatic Destroy could not read internal Terraform state, then verified the scoped AWS resources absent.
 
 ## Known Risk
 
-- Live scale-out is not yet accepted because the approved traffic run has not started. The sandbox resources are live and may accrue charges until Destroy completes.
+- End-to-end Live Observation animation and provider-confirmed scale-out remain unaccepted because the active UI session missed the traffic before the delayed-snapshot fix.
+- Automatic cleanup remains blocked for this credential layout until the approved cleanup operator can read the internal deployment-state object.
+- No new AWS resources or traffic may be created without a new explicit approval.
 
 ## Next Action
 
-1. Confirm the next user Deployment is created with `demo_web_service` and no longer exposes the removed profile.
-2. On the user's exact `지금 시작`, start observation and run at most 963 requests while monitoring traffic animation and ECS/Fargate scale-out.
-3. On `정리해`, complete Destroy within 30 minutes; on any traffic-test failure, start Destroy immediately.
+1. Push this focused branch and open a Korean PR against `dev`.
+2. Re-analyze `audience-live-check` only after merge; obtain separate explicit approval before any future Apply or traffic run.

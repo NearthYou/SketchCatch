@@ -118,16 +118,7 @@ const requestedMissingCatalogItems = [
   }
 ] as const;
 
-const legacySchemaLessPaletteItemIds = [
-  "aws-cognito-user-pool",
-  "aws-cognito-user-pool-client",
-  "aws-caller-identity",
-  "aws-ssm-parameter",
-  "aws-ec2-managed-prefix-list",
-  "aws-s3-website-configuration",
-  "aws-codestarconnections-connection",
-  "aws-step-functions-state-machine"
-] as const;
+const schemaLessPaletteItemIds = ["terraform-random-password", "aws-caller-identity"] as const;
 
 test("resourceCatalog sizes area defaults below the Region hierarchy root", () => {
   assert.deepEqual(getResourceSize("aws_region"), { width: 260, height: 180 });
@@ -274,15 +265,15 @@ test("resource parameter panel capability matches the parameter catalog", () => 
   }
 });
 
-test("legacy schema-less Terraform items remain enabled in the manual palette", () => {
-  for (const id of legacySchemaLessPaletteItemIds) {
+test("schema-less Terraform items remain visible but disabled in the manual palette", () => {
+  for (const id of schemaLessPaletteItemIds) {
     const resource = resourceCatalog.find((candidate) => candidate.id === id);
     const definition = getResourceDefinitionById(id);
 
     assert.ok(resource, id);
     assert.ok(definition, id);
     assert.equal(definition.capabilities.parameterPanel, false, id);
-    assert.equal(resource.enabled, true, id);
+    assert.equal(resource.enabled, false, id);
   }
 });
 
@@ -472,8 +463,6 @@ test("committed Brainboard captures have exactly one shared and catalog match fo
 
 test("captured Brainboard resources are configurable from the manual Palette", () => {
   assert.equal(capturedBrainboardPaletteResourceIds.length, 31);
-
-  assert.equal(getTerraformCatalogItems().every((resource) => resource.enabled), true);
 
   for (const id of capturedBrainboardPaletteResourceIds) {
     const resource = resourceCatalog.find((candidate) => candidate.id === id);

@@ -4,34 +4,31 @@ Use this file only for compact continuation context. Write it in English and ref
 
 ## Currently Verified
 
-- Branch: `dev`, synchronized with origin through `1b3c1330` and integrated with the reviewed profile-removal work. Previous uncommitted `Refactor/jh/498-배포-ui-수정` work is preserved in `stash@{0}`.
-- The legacy `practice` Deployment profile is removed from the public contract and replaced by `demo_web_service`; migration `0054` rewrites existing rows before removing the enum value.
-- Production ECS run `29700391499` deployed app SHA `2da6ba32d28e98afcbfad0e9f591915a48b5b461`; production migration run `29700681495` completed after snapshot `sketchcatch-production-pre-migration-29700681495` became available.
-- Post-migration HTTPS checks for `/`, `/health`, and `/health/db` return 200.
-- The merged result passes 130 focused API checks and 31 focused Web checks. Root harness, migration compatibility, lint, serial typecheck, build, and diff checks pass. The full API suite has unrelated baseline failures outside this diff.
-- The approved sandbox Apply completed successfully at 2026-07-20 00:55 KST in account `614935468487`, region `ap-northeast-2`, with exact changes `+36 ~0 -0`. No traffic has been generated.
+- Branch: `fix/sw/live-observation-deployment-picker-layering`, integrated with `origin/dev` through `ad1464ba` and being prepared for a PR to `dev`.
+- The legacy `practice` profile is removed in favor of `demo_web_service`; imported migration `0054` handles existing rows.
+- Repository ECS analysis records runtime Secret names only. Preflight uses isolated placeholders; approved Apply generates `CHECK_IN_SIGNING_SECRET`, stores it in Secrets Manager, grants exact Task execution-role read access, and maps the ARN into every Task.
+- Fixed `INSTANCE_ID` injection is removed so hostname-based `servedBy` can distinguish Tasks. Stateless repository evidence keeps bounded Fargate capacity 1–3.
+- The previous 963-request sandbox run completed with 963 HTTP 200 responses, and its failed observation acceptance triggered approved cleanup. Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` is `DESTROYED`; the scoped AWS resources were verified absent.
+- Harness, lint, typecheck, build, the 52-test Terraform safety suite, and focused Web/API regressions pass. The long root test run was stopped at the user's request before completion.
 
 ## Changes This Session
 
-- Removed `practice` from shared types, API request validation, DB schema defaults, and live apply profile selection.
-- Added code-first normalization so old DB rows behave as `demo_web_service` while the compatible image and migration roll out separately.
-- Added `0054_remove_practice_live_profile.sql`, journal registration, migration regression tests, and updated deployment contract documentation.
-- Removed the unused duplicate frontend profile recommender and updated affected fixtures.
-- Deployed the compatible API, Web, and worker image first, then applied migration `0054` through the approved snapshot-backed workflow.
+- Repaired Windows subprocess execution, API test environment isolation, stale generated architecture knowledge, and current Workspace/resource-catalog contracts.
+- Merged current `origin/dev` while preserving both runtime Secret delivery and profile-removal safety intents.
+- Updated runtime Secret safety coverage to use `demo_web_service` and kept literal-secret and broad-IAM rejection intact.
 
 ## Broken Or Unverified
 
-- The full API suite reproduces 12 unrelated existing assertion failures and one cancelled artifact timer test; all tests changed or added by this workstream pass.
-- Live scale-out is not yet accepted because the user has not issued the exact `지금 시작` instruction.
-- The successful sandbox resources are live and may accrue charges until Destroy completes.
-- Do not generate any requests before `지금 시작`; cap the run at 963 requests. On `정리해`, complete Destroy within 30 minutes. On traffic-test failure, start Destroy immediately.
+- End-to-end Live Observation animation and provider-confirmed scale-out remain unaccepted because the prior active UI session missed the traffic before the delayed-snapshot fix.
+- Automatic cleanup remains blocked until the approved operator can read the internal deployment-state object.
+- Do not generate traffic or recreate AWS resources without a new explicit approval.
 
 ## Best Next Action
 
-1. Confirm the next user Deployment uses `demo_web_service` and no longer exposes the removed profile.
-2. Wait for `지금 시작`; then start the Live Observation session and the bounded traffic run while monitoring animation, provider metrics, and ECS/Fargate scale-out.
-3. Destroy on `정리해` within 30 minutes, or immediately if the traffic test fails.
+1. Publish the current branch as a PR to `dev`.
+2. After merge, re-analyze `audience-live-check` and inspect its runtime Secret mapping before seeking any Apply approval.
 
 ## Suggested Skills
 
-- Use `qa` only if Deployment profile UI behavior changes further.
+- Use `qa` if Live Observation browser behavior changes again.
+- Use `review` before merging the PR.

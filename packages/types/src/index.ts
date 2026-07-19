@@ -107,6 +107,7 @@ export const RESOURCE_TYPES = [
   "AMPLIFY_APP",
   "DB_SUBNET_GROUP",
   "SECRETS_MANAGER_SECRET",
+  "RANDOM_PASSWORD",
   "VPC_ENDPOINT",
   "CLOUDWATCH_LOG_GROUP",
   "CLOUDWATCH_LOG_STREAM",
@@ -720,6 +721,7 @@ export const REPOSITORY_ARCHITECTURE_FACT_KINDS = [
   "health_check",
   "transport_security",
   "runtime_scale",
+  "runtime_secret",
   "excluded_capability",
   "infrastructure_definition"
 ] as const;
@@ -1274,6 +1276,8 @@ export type ApiBuildConfig = {
   dockerfilePath: string;
   containerPort: number;
   healthCheckPath: string;
+  /** Names only. Preflight injects isolated placeholders and never reads runtime secret values. */
+  requiredRuntimeSecrets?: readonly string[] | undefined;
 };
 
 export type FrontendBuildConfig = {

@@ -58,6 +58,16 @@ test("GitHub installation availability is explicit when the server has no GitHub
 });
 
 test("GitHub installation read stays available without install-url route configuration", async () => {
+  const previousEnvironment = {
+    appId: process.env.GIT_APP_ID,
+    appSlug: process.env.GIT_APP_SLUG,
+    callbackUrl: process.env.GIT_APP_CALLBACK_URL,
+    privateKey: process.env.GIT_APP_PRIVATE_KEY_BASE64
+  };
+  delete process.env.GIT_APP_ID;
+  delete process.env.GIT_APP_SLUG;
+  delete process.env.GIT_APP_CALLBACK_URL;
+  delete process.env.GIT_APP_PRIVATE_KEY_BASE64;
   const repository = createRepository({
     async listActiveGitHubInstallationConnections() {
       return [createInstallationConnection()];
@@ -106,6 +116,10 @@ test("GitHub installation read stays available without install-url route configu
     });
   } finally {
     await app.close();
+    restoreEnvironmentValue("GIT_APP_ID", previousEnvironment.appId);
+    restoreEnvironmentValue("GIT_APP_SLUG", previousEnvironment.appSlug);
+    restoreEnvironmentValue("GIT_APP_CALLBACK_URL", previousEnvironment.callbackUrl);
+    restoreEnvironmentValue("GIT_APP_PRIVATE_KEY_BASE64", previousEnvironment.privateKey);
   }
 });
 

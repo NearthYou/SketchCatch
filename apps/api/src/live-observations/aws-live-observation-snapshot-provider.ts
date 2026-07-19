@@ -201,8 +201,7 @@ export function createAwsLiveObservationSnapshotProvider(
   const observeFresh = async (
     target: AwsLiveObservationSnapshotTarget,
     evaluatedAtMs: number,
-    abortSignal: AbortSignal,
-    lastKnownSnapshot: LiveObservationProviderSnapshot | null
+    abortSignal: AbortSignal
   ): Promise<LiveObservationProviderSnapshot> => {
     let credentials: AwsTemporaryCredentials;
     try {
@@ -234,14 +233,7 @@ export function createAwsLiveObservationSnapshotProvider(
       )
     ]);
 
-    if (metrics.state === "delayed") {
-      return delayedSnapshot(
-        lastKnownSnapshot,
-        metrics.observedAt ?? new Date(evaluatedAtMs).toISOString(),
-        logs ?? []
-      );
-    }
-    if (metrics.state !== "available" || !capacity || logs === null) {
+    if (metrics.state === "unavailable" || !capacity || logs === null) {
       return emptySnapshot(
         "unavailable",
         metrics.observedAt ?? new Date(evaluatedAtMs).toISOString(),
@@ -260,7 +252,7 @@ export function createAwsLiveObservationSnapshotProvider(
       capacity,
       logs,
       observedAt: metrics.observedAt,
-      state: "available"
+      state: metrics.state
     });
   };
   type CacheEntry =
@@ -277,7 +269,6 @@ export function createAwsLiveObservationSnapshotProvider(
     async observe(target, observationId) {
       const evaluatedAtMs = now();
       const key = createCacheKey(observationId, target);
-      let lastKnownSnapshot: LiveObservationProviderSnapshot | null = null;
       const cached = cache.get(key);
       if (cached) {
         if (cached.state === "pending") {
@@ -285,12 +276,6 @@ export function createAwsLiveObservationSnapshotProvider(
         }
         if (cached.expiresAtMs > evaluatedAtMs) {
           return parseLiveObservationProviderSnapshot(cached.snapshot);
-        }
-        if (
-          cached.snapshot.state === "available" ||
-          (cached.snapshot.state === "delayed" && cached.snapshot.requests !== null)
-        ) {
-          lastKnownSnapshot = cached.snapshot;
         }
         cache.delete(key);
       }
@@ -316,8 +301,7 @@ export function createAwsLiveObservationSnapshotProvider(
       const pending = observeFresh(
         target,
         evaluatedAtMs,
-        abortController.signal,
-        lastKnownSnapshot
+        abortController.signal
       )
         .catch(() => emptySnapshot("unavailable", new Date(evaluatedAtMs).toISOString()))
         .then((snapshot) => {
@@ -393,8 +377,14 @@ async function observeMetrics(
   evaluatedAtMs: number,
   abortSignal: AbortSignal
 ): Promise<
-  | { state: "available"; requests: number; errors: number; latencySeconds: number; observedAt: string }
-  | { state: "delayed" | "unavailable"; observedAt: string | null }
+  | {
+      state: "available" | "delayed";
+      requests: number;
+      errors: number;
+      latencySeconds: number;
+      observedAt: string;
+    }
+  | { state: "unavailable"; observedAt: string | null }
 > {
   try {
     const response = await client.getMetricData({
@@ -480,11 +470,11 @@ async function observeMetrics(
     }
 
     const observedAtMs = periodStartMs + PERIOD_SECONDS * 1_000;
-    if (evaluatedAtMs - observedAtMs > PERIOD_SECONDS * 1_000) {
-      return { state: "delayed", observedAt: new Date(observedAtMs).toISOString() };
-    }
+    const state = evaluatedAtMs - observedAtMs > PERIOD_SECONDS * 1_000
+      ? "delayed" as const
+      : "available" as const;
     return {
-      state: "available",
+      state,
       requests,
       errors,
       latencySeconds: latency.value,
@@ -636,26 +626,6 @@ async function observeLogs(
   } catch {
     return null;
   }
-}
-
-function delayedSnapshot(
-  lastKnownSnapshot: LiveObservationProviderSnapshot | null,
-  observedAt: string,
-  logs: LiveObservationProviderSnapshot["logs"]
-): LiveObservationProviderSnapshot {
-  if (!lastKnownSnapshot || lastKnownSnapshot.requests === null) {
-    return emptySnapshot("delayed", observedAt, logs);
-  }
-  return parseLiveObservationProviderSnapshot({
-    requests: lastKnownSnapshot.requests,
-    errorRate: lastKnownSnapshot.errorRate,
-    p95LatencyMs: lastKnownSnapshot.p95LatencyMs,
-    availability: lastKnownSnapshot.availability,
-    capacity: { ...lastKnownSnapshot.capacity },
-    logs,
-    observedAt,
-    state: "delayed"
-  });
 }
 
 function emptySnapshot(

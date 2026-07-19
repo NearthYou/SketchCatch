@@ -2757,6 +2757,7 @@ function applyRepositoryEvidencePriorityToRequirementPlan(
 
   const factKeys = new Set(evidence.facts.map((fact) => `${fact.kind}:${fact.value}`));
   const hasFact = (kind: string, value: string): boolean => factKeys.has(`${kind}:${value}`);
+  const scalesToThree = hasFact("runtime_scale", "autoscaling_1_3");
   const requiredResources = new Set<string>();
   const resourceQuantities: Record<string, number> = {};
   for (const resourceType of [
@@ -2783,7 +2784,7 @@ function applyRepositoryEvidencePriorityToRequirementPlan(
   if (hasFact("excluded_capability", "database")) {
     requiredResources.delete("RDS");
   }
-  if (hasFact("runtime_scale", "single_task")) {
+  if (hasFact("runtime_scale", "single_task") || scalesToThree) {
     resourceQuantities.ECS_SERVICE = 1;
     resourceQuantities.ECS_TASK_DEFINITION = 1;
     resourceQuantities.LOAD_BALANCER_TARGET_GROUP = 1;
@@ -2798,10 +2799,10 @@ function applyRepositoryEvidencePriorityToRequirementPlan(
       ...(plan.runtimeTopology ?? {}),
       trafficEntry: "LOAD_BALANCER",
       compute: "ECS_FARGATE",
-      ...(hasFact("runtime_scale", "single_task") ? { computeCount: 1 } : {}),
+      ...(hasFact("runtime_scale", "single_task") || scalesToThree ? { computeCount: 1 } : {}),
       placement: "private_subnets",
       spreadAcrossPrivateSubnets: true,
-      autoScaling: false
+      autoScaling: scalesToThree
     },
     forbiddenCapabilities: mergeUniqueTextItems(plan.forbiddenCapabilities, [
       "ec2_runtime",
@@ -2811,10 +2812,14 @@ function applyRepositoryEvidencePriorityToRequirementPlan(
     ...(hasFact("excluded_capability", "database") ? { database: "none" } : {}),
     availability: undefined,
     amazonQBrief: mergeUniqueTextItems(plan.amazonQBrief, [
-      "Repository evidence is authoritative: keep one Fargate task unless the user explicitly overrides it.",
+      scalesToThree
+        ? "Repository evidence is authoritative: start with one Fargate task and allow request-based scaling up to three tasks."
+        : "Repository evidence is authoritative: keep one Fargate task unless the user explicitly overrides it.",
       "Use GitHub Actions as an external delivery actor; do not add AWS-native CI/CD pipeline resources.",
       "Place the internet-facing ALB in two public subnets and the Fargate service in two private app subnets.",
-      "Use one cost-conscious NAT gateway for private task image pulls and log delivery; do not add autoscaling or persistence."
+      scalesToThree
+        ? "Use one cost-conscious NAT gateway for private task image pulls and log delivery; keep persistence out of the runtime path."
+        : "Use one cost-conscious NAT gateway for private task image pulls and log delivery; do not add autoscaling or persistence."
     ])
   };
 }
@@ -3118,16 +3123,27 @@ function applyStrictRepositoryEvidencePolicy(
 
   const factKeys = new Set(evidence.facts.map((fact) => `${fact.kind}:${fact.value}`));
   const hasFact = (kind: string, value: string): boolean => factKeys.has(`${kind}:${value}`);
+  const scalesToThree = hasFact("runtime_scale", "autoscaling_1_3");
+  const usesCheckInSigningSecret = hasFact(
+    "runtime_secret",
+    "CHECK_IN_SIGNING_SECRET"
+  );
   const templatePrefix = "fixed-template-ecs-fargate-container-app-";
   const fixedTemplateDraft = applyFixedTemplateSelection(
     { ...draft, architectureJson: { nodes: [], edges: [] } },
     request.templateId
   );
-  const strictEvidenceManagedTemplateResourceIds = new Set(["repository", "log-group"]);
+  const strictEvidenceManagedTemplateResourceIds = new Set([
+    "repository",
+    "log-group",
+    ...(hasFact("frontend_delivery", "s3_cloudfront_static") ? ["distribution"] : [])
+  ]);
+  const scalingTemplateResourceIds = new Set(["scaling-target", "scaling-policy"]);
   const coreNodes = fixedTemplateDraft.architectureJson.nodes.filter(
     (node) =>
       node.id.startsWith(templatePrefix) &&
-      !strictEvidenceManagedTemplateResourceIds.has(String(node.config.templateResourceId ?? ""))
+      !strictEvidenceManagedTemplateResourceIds.has(String(node.config.templateResourceId ?? "")) &&
+      (scalesToThree || !scalingTemplateResourceIds.has(String(node.config.templateResourceId ?? "")))
   );
   const nodeByTemplateResourceId = new Map(
     coreNodes.flatMap((node) =>
@@ -3152,7 +3168,7 @@ function applyStrictRepositoryEvidencePolicy(
   const apiName = `${deploymentName}-api`;
   const logGroupName = `/ecs/${apiName}`;
   const managedServicesAreaId = "repository-managed-services";
-  const hasManagedServices = staticDelivery || usesEcr || usesCloudWatch;
+  const hasManagedServices = staticDelivery || usesEcr || usesCloudWatch || usesCheckInSigningSecret;
   const vpcId = coreNodeId("vpc");
   const publicSubnetAId = coreNodeId("subnet-a");
   const publicSubnetBId = coreNodeId("subnet-b");
@@ -3172,6 +3188,10 @@ function applyStrictRepositoryEvidencePolicy(
   const webBucketPolicyId = "repository-web-bucket-policy";
   const ecrId = "repository-ecr";
   const logGroupId = "repository-ecs-logs";
+  const checkInSecretMaterialId = "repository-check-in-secret-material";
+  const checkInSecretId = "repository-check-in-signing-secret";
+  const checkInSecretVersionId = "repository-check-in-signing-secret-version";
+  const checkInSecretPolicyId = "repository-check-in-signing-secret-policy";
   const vpcRef = `aws_vpc.${vpcId}.id`;
   const publicSubnetRefs = [publicSubnetAId, publicSubnetBId].map(
     (id) => `aws_subnet.${id}.id`
@@ -3486,6 +3506,76 @@ function applyStrictRepositoryEvidencePolicy(
     });
   }
 
+  if (usesCheckInSigningSecret) {
+    additionalNodes.push(
+      {
+        id: checkInSecretMaterialId,
+        type: "RANDOM_PASSWORD",
+        label: "Generated Check-in Signing Material",
+        positionX: 1380,
+        positionY: 280,
+        config: {
+          terraformResourceType: "random_password",
+          terraformResourceName: "check_in_signing",
+          parentAreaNodeId: managedServicesAreaId,
+          length: 48,
+          special: false
+        }
+      },
+      {
+        id: checkInSecretId,
+        type: "SECRETS_MANAGER_SECRET",
+        label: "Check-in Signing Secret",
+        positionX: 1560,
+        positionY: 140,
+        config: {
+          terraformResourceType: "aws_secretsmanager_secret",
+          terraformResourceName: "check_in_signing",
+          parentAreaNodeId: managedServicesAreaId,
+          namePrefix: `${deploymentName}/check-in-signing-`,
+          recoveryWindowInDays: 0
+        }
+      },
+      {
+        id: checkInSecretVersionId,
+        type: "SECRETS_MANAGER_SECRET",
+        label: "Generated Signing Secret Version",
+        positionX: 1580,
+        positionY: 280,
+        config: {
+          terraformResourceType: "aws_secretsmanager_secret_version",
+          terraformResourceName: "check_in_signing",
+          parentAreaNodeId: managedServicesAreaId,
+          secretId: `aws_secretsmanager_secret.${checkInSecretId}.id`,
+          secretString: `random_password.${checkInSecretMaterialId}.result`
+        }
+      },
+      {
+        id: checkInSecretPolicyId,
+        type: "IAM_POLICY",
+        label: "ECS Signing Secret Read Policy",
+        positionX: 1780,
+        positionY: 280,
+        config: {
+          terraformResourceType: "aws_iam_role_policy",
+          terraformResourceName: "check_in_signing_read",
+          parentAreaNodeId: managedServicesAreaId,
+          name: `${deploymentName}-check-in-signing-read`,
+          role: `aws_iam_role.${coreNodeId("execution-role")}.id`,
+          policy: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [{
+              Sid: "ReadCheckInSigningSecret",
+              Effect: "Allow",
+              Action: ["secretsmanager:GetSecretValue"],
+              Resource: `\${aws_secretsmanager_secret.${checkInSecretId}.arn}`
+            }]
+          })
+        }
+      }
+    );
+  }
+
   additionalNodes.push({
     id: "repository-browser",
     type: "UNKNOWN",
@@ -3503,7 +3593,9 @@ function applyStrictRepositoryEvidencePolicy(
   additionalNodes.push({
     id: fargateRuntimeId,
     type: "UNKNOWN",
-    label: "Fargate Task (1, Private App A/B)",
+    label: scalesToThree
+      ? "Fargate Tasks (1–3, Private App A/B)"
+      : "Fargate Task (1, Private App A/B)",
     positionX: 460,
     positionY: 1140,
     config: {
@@ -3684,9 +3776,15 @@ function applyStrictRepositoryEvidencePolicy(
             ...node.config,
             ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
             family: apiName,
-            dependsOn: usesCloudWatch
-              ? [`aws_cloudwatch_log_group.${logGroupId}`]
-              : undefined,
+            dependsOn: [
+              ...(usesCloudWatch ? [`aws_cloudwatch_log_group.${logGroupId}`] : []),
+              ...(usesCheckInSigningSecret
+                ? [
+                    `aws_secretsmanager_secret_version.${checkInSecretVersionId}`,
+                    `aws_iam_role_policy.${checkInSecretPolicyId}`
+                  ]
+                : [])
+            ],
             containerDefinitions: JSON.stringify([{
               name: "api",
               image: "public.ecr.aws/docker/library/nginx:1.27-alpine",
@@ -3703,9 +3801,16 @@ function applyStrictRepositoryEvidencePolicy(
                       name: "WEB_ORIGIN",
                       value: `https://\${aws_cloudfront_distribution.${cloudFrontId}.domain_name}`
                     }]
-                  : []),
-                { name: "INSTANCE_ID", value: "fargate" }
+                  : [])
               ],
+              ...(usesCheckInSigningSecret
+                ? {
+                    secrets: [{
+                      name: "CHECK_IN_SIGNING_SECRET",
+                      valueFrom: `\${aws_secretsmanager_secret.${checkInSecretId}.arn}`
+                    }]
+                  }
+                : {}),
               ...(usesCloudWatch
                 ? {
                     logConfiguration: {
@@ -3731,7 +3836,7 @@ function applyStrictRepositoryEvidencePolicy(
             ...node.config,
             name: `${deploymentName}-service`,
             parentAreaNodeId: coreNodeId("task-security-group"),
-            desiredCount: singleTask ? 1 : node.config.desiredCount,
+            desiredCount: singleTask || scalesToThree ? 1 : node.config.desiredCount,
             networkConfiguration: {
               subnets: privateAppSubnetRefs,
               securityGroups: [`aws_security_group.${coreNodeId("task-security-group")}.id`],
@@ -3741,6 +3846,39 @@ function applyStrictRepositoryEvidencePolicy(
               targetGroupArn: `aws_lb_target_group.${coreNodeId("target-group")}.arn`,
               containerName: "api",
               containerPort
+            }
+          }
+        };
+      case "scaling-target":
+        return {
+          ...node,
+          label: "Fargate Task Capacity 1–3",
+          positionX: 1780,
+          positionY: 420,
+          config: {
+            ...node.config,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
+            minCapacity: 1,
+            maxCapacity: 3
+          }
+        };
+      case "scaling-policy":
+        return {
+          ...node,
+          label: "10 Requests per Target",
+          positionX: 1560,
+          positionY: 420,
+          config: {
+            ...node.config,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
+            targetTrackingScalingPolicyConfiguration: {
+              targetValue: 10,
+              scaleInCooldown: 60,
+              scaleOutCooldown: 30,
+              predefinedMetricSpecification: [{
+                predefinedMetricType: "ALBRequestCountPerTarget",
+                resourceLabel: `\${aws_lb.${coreNodeId("load-balancer")}.arn_suffix}/\${aws_lb_target_group.${coreNodeId("target-group")}.arn_suffix}`
+              }]
             }
           }
         };
@@ -3864,6 +4002,16 @@ function applyStrictRepositoryEvidencePolicy(
   connect(coreNodeId("cluster"), coreNodeId("service"), "runs the API service");
   connect(coreNodeId("task"), coreNodeId("service"), "defines the deployed revision");
   connect(coreNodeId("service"), fargateRuntimeId, "schedules desired task in private app subnets");
+  if (scalesToThree) {
+    connect(coreNodeId("service"), coreNodeId("scaling-target"), "scales desired task count 1–3");
+    connect(coreNodeId("scaling-target"), coreNodeId("scaling-policy"), "tracks ALB requests per target");
+  }
+  if (usesCheckInSigningSecret) {
+    connect(checkInSecretMaterialId, checkInSecretVersionId, "generates isolated signing material");
+    connect(checkInSecretId, checkInSecretVersionId, "stores the generated secret version");
+    connect(checkInSecretPolicyId, coreNodeId("execution-role"), "allows this secret only");
+    connect(checkInSecretId, coreNodeId("task"), "injects CHECK_IN_SIGNING_SECRET by ARN");
+  }
   if (usesEcr) {
     connect(ecrId, fargateRuntimeId, "application revisions pull API image from ECR");
   }
@@ -3901,6 +4049,12 @@ function applyStrictRepositoryEvidencePolicy(
           : []),
         ...(usesEcr
           ? ["The initial Terraform apply uses a public 8080 /health smoke image because the new ECR repository is empty; the first application release registers the repository image as a new ECS task definition revision."]
+          : []),
+        ...(usesCheckInSigningSecret
+          ? ["Terraform generates CHECK_IN_SIGNING_SECRET during Apply, stores it in Secrets Manager, and injects the same secret ARN into every ECS task without exposing the value in repository analysis or build logs."]
+          : []),
+        ...(usesCheckInSigningSecret
+          ? ["INSTANCE_ID is intentionally not fixed in the task definition; the application can use each task hostname for servedBy observability."]
           : []),
         ...(staticDelivery
           ? ["Terraform uploads a bootstrap index.html so the CloudFront URL is immediately healthy; CI/CD replaces it with apps/web/dist and invalidates CloudFront."]
@@ -5623,6 +5777,11 @@ function findStrictRepositoryEvidenceValidationIssues(
   const factKeys = new Set(facts.map((fact) => `${fact.kind}:${fact.value}`));
   const hasFact = (kind: string, value: string): boolean => factKeys.has(`${kind}:${value}`);
   const issues: string[] = [];
+  const scalesToThree = hasFact("runtime_scale", "autoscaling_1_3");
+  const usesCheckInSigningSecret = hasFact(
+    "runtime_secret",
+    "CHECK_IN_SIGNING_SECRET"
+  );
   const nodeTypes = new Set(architectureJson.nodes.map((node) => node.type));
   const requiredTypes = new Set<ResourceType>([
     "ECS_CLUSTER",
@@ -5639,6 +5798,15 @@ function findStrictRepositoryEvidenceValidationIssues(
   }
   if (hasFact("container_registry", "ecr")) requiredTypes.add("ECR_REPOSITORY");
   if (hasFact("observability", "cloudwatch")) requiredTypes.add("CLOUDWATCH_LOG_GROUP");
+  if (scalesToThree) {
+    requiredTypes.add("APPLICATION_AUTO_SCALING_TARGET");
+    requiredTypes.add("APPLICATION_AUTO_SCALING_POLICY");
+  }
+  if (usesCheckInSigningSecret) {
+    requiredTypes.add("RANDOM_PASSWORD");
+    requiredTypes.add("SECRETS_MANAGER_SECRET");
+    requiredTypes.add("IAM_POLICY");
+  }
 
   const missingTypes = [...requiredTypes].filter((resourceType) => !nodeTypes.has(resourceType));
   if (missingTypes.length > 0) {
@@ -5646,14 +5814,16 @@ function findStrictRepositoryEvidenceValidationIssues(
   }
 
   const forbiddenTypes = new Set<ResourceType>([
-    "APPLICATION_AUTO_SCALING_TARGET",
-    "APPLICATION_AUTO_SCALING_POLICY",
     "CODESTAR_CONNECTION",
     "CODEPIPELINE",
     "CODEBUILD_PROJECT",
     "CODEDEPLOY_APP",
     "CODEDEPLOY_DEPLOYMENT_GROUP"
   ]);
+  if (!scalesToThree) {
+    forbiddenTypes.add("APPLICATION_AUTO_SCALING_TARGET");
+    forbiddenTypes.add("APPLICATION_AUTO_SCALING_POLICY");
+  }
   if (hasFact("excluded_capability", "database")) {
     forbiddenTypes.add("RDS");
     forbiddenTypes.add("RDS_CLUSTER");
@@ -5692,6 +5862,27 @@ function findStrictRepositoryEvidenceValidationIssues(
     const services = architectureJson.nodes.filter((node) => node.type === "ECS_SERVICE");
     if (services.length !== 1 || services[0]?.config.desiredCount !== 1) {
       issues.push("Strict repository evidence requires exactly one ECS service with desiredCount 1.");
+    }
+  }
+
+  if (scalesToThree) {
+    const services = architectureJson.nodes.filter((node) => node.type === "ECS_SERVICE");
+    const targets = architectureJson.nodes.filter(
+      (node) => node.type === "APPLICATION_AUTO_SCALING_TARGET"
+    );
+    const policies = architectureJson.nodes.filter(
+      (node) => node.type === "APPLICATION_AUTO_SCALING_POLICY"
+    );
+    if (services.length !== 1 || services[0]?.config.desiredCount !== 1) {
+      issues.push("Strict repository evidence requires one ECS service starting at desiredCount 1.");
+    }
+    if (
+      targets.length !== 1 ||
+      targets[0]?.config.minCapacity !== 1 ||
+      targets[0]?.config.maxCapacity !== 3 ||
+      policies.length !== 1
+    ) {
+      issues.push("Strict repository evidence requires ECS Service Auto Scaling capacity 1–3.");
     }
   }
 

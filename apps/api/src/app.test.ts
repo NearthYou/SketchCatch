@@ -285,7 +285,7 @@ test("OPTIONS preflight allows notification read PATCH requests", async () => {
 
 test("OPTIONS preflight allows the configured public web origin", async () => {
   const previousPublicBaseUrl = process.env.SKETCHCATCH_PUBLIC_BASE_URL;
-  process.env.SKETCHCATCH_PUBLIC_BASE_URL = "http://127.0.0.1:3002";
+  process.env.SKETCHCATCH_PUBLIC_BASE_URL = "https://127.0.0.1:3002";
   const app = buildApp();
 
   try {
@@ -293,14 +293,14 @@ test("OPTIONS preflight allows the configured public web origin", async () => {
       headers: {
         "access-control-request-headers": "content-type,authorization",
         "access-control-request-method": "POST",
-        origin: "http://127.0.0.1:3002"
+        origin: "https://127.0.0.1:3002"
       },
       method: "OPTIONS",
       url: "/api/projects/11111111-1111-4111-8111-111111111111/source-repositories"
     });
 
     assert.equal(response.statusCode, 204);
-    assert.equal(response.headers["access-control-allow-origin"], "http://127.0.0.1:3002");
+    assert.equal(response.headers["access-control-allow-origin"], "https://127.0.0.1:3002");
     assert.equal(response.headers["access-control-allow-credentials"], "true");
   } finally {
     if (previousPublicBaseUrl === undefined) {
