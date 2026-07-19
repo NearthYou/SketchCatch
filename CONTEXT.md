@@ -16,6 +16,18 @@ _Avoid_: Main board, canvas, drawing board
 An infrastructure building block from a cloud provider inside a Practice Architecture, such as AWS VPC, Azure Virtual Network, GCP VPC Network, compute instances, databases, storage, IAM, or edge delivery resources.
 _Avoid_: Component, block, service
 
+**Resource Display Name**:
+A plain-language, single-line name shown consistently for one Resource across the Architecture Board, Resource panels, Template previews, and user-facing explanations. Primary Resources keep provider-native Resource types, widely recognized provider abbreviations, and established AWS role terms such as `Public`, `Private`, `NAT`, `AZ`, and `Worker Node` in English, while expressing application-specific roles concisely in Korean, such as `애플리케이션 Security Group`. Technical helper Resources may instead use a short purpose-oriented name such as `ECR 읽기 권한 연결`, with the exact provider type remaining in technical details. Every Resource created from a Template initially follows this convention, and every initial name is unique within that Template. Resources of the same type are distinguished by functional role first, location second, and a number only as a last resort. The Architecture Board may render English terms in uppercase while other surfaces preserve the authored casing. After applying the Template, the user may edit the name freely. The name may change for user clarity without changing that Resource's IaC Identity or provider-side name.
+_Avoid_: Terraform resource name, Resource ID, AWS Name tag
+
+**IaC Identity**:
+The stable infrastructure-as-code address used to reference and track a Resource, such as `aws_subnet.snet1`. It is available as secondary technical information in Resource details, copy actions, and diagnostics, but never replaces the primary Resource Display Name.
+_Avoid_: Board label, display name, provider-side name
+
+**Architecture Area Title**:
+A concise, single-line label for a non-Resource Board area that helps users recognize architectural scope such as a Region, Availability Zone, network zone, or global service area. It is not a Resource Display Name or an IaC Identity.
+_Avoid_: Resource name, Terraform address, provider resource
+
 **Curated Module**:
 A reusable, preassembled group of Resources, relationships, configuration, and Board structure offered from the Workspace `Modules` catalog. Expanding one creates editable Resources on the Architecture Board; it is not a Terraform module or an indivisible parent Resource.
 _Avoid_: Terraform module, Template, Resource category, AI pattern
