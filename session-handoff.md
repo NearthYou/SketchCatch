@@ -4,9 +4,9 @@ Use this file only for compact continuation context. Write it in English and ref
 
 ## Currently Verified
 
-- Branch: `codex/remove-practice-profile`, created from clean `dev` at `8697d717`. Previous uncommitted `Refactor/jh/498-배포-ui-수정` work is preserved in `stash@{0}`.
+- Branch: `dev`, synchronized with origin through `1b3c1330` and integrated with the reviewed profile-removal work. Previous uncommitted `Refactor/jh/498-배포-ui-수정` work is preserved in `stash@{0}`.
 - The legacy `practice` Deployment profile is removed from the public contract and replaced by `demo_web_service`; migration `0054` rewrites existing rows before removing the enum value.
-- Focused profile, migration, safety, route, and web checks pass. Root harness, migration compatibility, lint, typecheck, build, and diff checks pass. The full API suite has unrelated baseline failures outside this diff.
+- The merged result passes 130 focused API checks and 31 focused Web checks. Root harness, migration compatibility, lint, serial typecheck, build, and diff checks pass. The full API suite has unrelated baseline failures outside this diff.
 - The approved sandbox Apply completed successfully at 2026-07-20 00:55 KST in account `614935468487`, region `ap-northeast-2`, with exact changes `+36 ~0 -0`. No traffic has been generated.
 
 ## Changes This Session
@@ -26,11 +26,10 @@ Use this file only for compact continuation context. Write it in English and ref
 
 ## Best Next Action
 
-1. Merge and deploy the compatible API/worker image from `codex/remove-practice-profile`, then run the approved production DB migration workflow with an RDS snapshot.
+1. Deploy the compatible API/worker image from `dev`, then run the approved production DB migration workflow with an RDS snapshot.
 2. Wait for `지금 시작`; then start the Live Observation session and the bounded traffic run while monitoring animation, provider metrics, and ECS/Fargate scale-out.
 3. Destroy on `정리해` within 30 minutes, or immediately if the traffic test fails.
 
 ## Suggested Skills
 
-- Use `review` before publishing the profile-removal branch.
 - Use `qa` only if Deployment profile UI behavior changes further.
