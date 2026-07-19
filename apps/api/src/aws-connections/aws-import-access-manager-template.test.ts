@@ -156,6 +156,7 @@ test("manager template owns only the service Role and its control and cleanup Po
     (statement) => statement.Sid === "ReadExactTargetRoleAttachments"
   );
   const cleanupText = JSON.stringify(contract.cleanupVerificationPolicyDocument);
+  const cleanupStatements = contract.cleanupVerificationPolicyDocument.Statement as PolicyStatement[];
 
   assert.deepEqual(Object.keys(template.Resources).sort(), [
     "CleanupVerificationPolicy",
@@ -165,6 +166,11 @@ test("manager template owns only the service Role and its control and cleanup Po
   assert.equal(template.Resources.CloudFormationServiceRole?.Type, "AWS::IAM::Role");
   assert.equal(template.Resources.PolicyStackControlPolicy?.Type, "AWS::IAM::ManagedPolicy");
   assert.equal(template.Resources.CleanupVerificationPolicy?.Type, "AWS::IAM::ManagedPolicy");
+  assert.equal(
+    ((template.Resources.CloudFormationServiceRole?.Properties as Record<string, unknown>)
+      .Policies as Array<Record<string, unknown>>)[0]?.PolicyName,
+    contract.serviceRoleInlinePolicyName
+  );
   assert.equal(template.Resources.CloudFormationServiceRole?.DependsOn, "CleanupVerificationPolicy");
   assert.equal(template.Resources.PolicyStackControlPolicy?.DependsOn, "CleanupVerificationPolicy");
   assert.deepEqual(
@@ -226,6 +232,15 @@ test("manager template owns only the service Role and its control and cleanup Po
   assert.doesNotMatch(cleanupText, /"iam:(?:Create|Update|Put|Delete|Attach|Detach|PassRole)/u);
   assert.match(cleanupText, new RegExp(contract.managerStackArn.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")));
   assert.match(cleanupText, new RegExp(contract.policyStackArn.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")));
+  assert.deepEqual(
+    cleanupStatements.find((statement) => statement.Sid === "ReadExactServiceRoleInlinePolicy"),
+    {
+      Sid: "ReadExactServiceRoleInlinePolicy",
+      Effect: "Allow",
+      Action: ["iam:ListRolePolicies", "iam:GetRolePolicy"],
+      Resource: contract.serviceRoleArn
+    }
+  );
 });
 
 test("manager contract exposes immutable template and post-verification hashes", () => {

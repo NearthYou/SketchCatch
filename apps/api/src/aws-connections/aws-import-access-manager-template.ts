@@ -41,6 +41,7 @@ export type AwsImportManagerContract = {
   policyStackArn: string;
   serviceRoleName: string;
   serviceRoleArn: string;
+  serviceRoleInlinePolicyName: string;
   controlPolicyName: string;
   controlPolicyArn: string;
   cleanupVerificationPolicyName: string;
@@ -89,6 +90,7 @@ export function createAwsImportManagerContract(
   const managerStackArn = createStackArn(input.region, input.accountId, managerStackName);
   const serviceRoleName = `SketchCatchImportCfn-${policy.connectionToken}`;
   const serviceRoleArn = `arn:aws:iam::${input.accountId}:role/${serviceRoleName}`;
+  const serviceRoleInlinePolicyName = `SketchCatchImportPolicyLifecycle-${policy.connectionToken}`;
   const controlPolicyName = `SketchCatchImportControl-${policy.connectionToken}`;
   const controlPolicyArn = `arn:aws:iam::${input.accountId}:policy/${controlPolicyName}`;
   const cleanupVerificationPolicyName = `SketchCatchImportCleanup-${policy.connectionToken}`;
@@ -146,7 +148,7 @@ export function createAwsImportManagerContract(
           },
           Policies: [
             {
-              PolicyName: `SketchCatchImportPolicyLifecycle-${policy.connectionToken}`,
+              PolicyName: serviceRoleInlinePolicyName,
               PolicyDocument: serviceRolePolicyDocument
             }
           ],
@@ -203,6 +205,7 @@ export function createAwsImportManagerContract(
     policyStackArn: policy.stackArn,
     serviceRoleName,
     serviceRoleArn,
+    serviceRoleInlinePolicyName,
     controlPolicyName,
     controlPolicyArn,
     cleanupVerificationPolicyName,
@@ -247,16 +250,19 @@ export function createAwsImportManagerContract(
 export function createAwsImportPolicyStackCreateInput(
   contract: AwsImportManagerContract,
   publishedPolicyTemplate: AwsImportPublishedTemplate,
-  validationOptions: AwsImportTemplateValidationOptions = {}
+  validationOptions: AwsImportTemplateValidationOptions = {},
+  clientRequestToken?: string
 ): CreateStackInput {
   assertPublishedPolicyTemplate(contract, publishedPolicyTemplate, validationOptions);
+  assertClientRequestToken(clientRequestToken);
 
   return {
     StackName: contract.policyStackName,
     TemplateURL: publishedPolicyTemplate.templateUrl,
     RoleARN: contract.serviceRoleArn,
     Capabilities: ["CAPABILITY_NAMED_IAM"],
-    Tags: contract.ownershipTags.map((tag) => ({ ...tag }))
+    Tags: contract.ownershipTags.map((tag) => ({ ...tag })),
+    ...(clientRequestToken ? { ClientRequestToken: clientRequestToken } : {})
   };
 }
 
@@ -264,17 +270,32 @@ export function createAwsImportPolicyStackCreateInput(
 export function createAwsImportPolicyStackUpdateInput(
   contract: AwsImportManagerContract,
   publishedPolicyTemplate: AwsImportPublishedTemplate,
-  validationOptions: AwsImportTemplateValidationOptions = {}
+  validationOptions: AwsImportTemplateValidationOptions = {},
+  clientRequestToken?: string
 ): UpdateStackInput {
   assertPublishedPolicyTemplate(contract, publishedPolicyTemplate, validationOptions);
+  assertClientRequestToken(clientRequestToken);
 
   return {
     StackName: contract.policyStackName,
     TemplateURL: publishedPolicyTemplate.templateUrl,
     RoleARN: contract.serviceRoleArn,
     Capabilities: ["CAPABILITY_NAMED_IAM"],
-    Tags: contract.ownershipTags.map((tag) => ({ ...tag }))
+    Tags: contract.ownershipTags.map((tag) => ({ ...tag })),
+    ...(clientRequestToken ? { ClientRequestToken: clientRequestToken } : {})
   };
+}
+
+/** gg: AWS 중복 방지 token도 서버가 만든 operation UUID만 허용합니다. */
+function assertClientRequestToken(clientRequestToken: string | undefined): void {
+  if (
+    clientRequestToken !== undefined &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      clientRequestToken
+    )
+  ) {
+    throw new Error("AWS import operation ID is invalid");
+  }
 }
 
 /** gg: 기존 Role이 자기 Policy Stack만 생성·갱신하고 정확한 service Role만 전달하게 합니다. */
@@ -431,6 +452,12 @@ function createCleanupVerificationPolicyDocument(input: {
         Effect: "Allow",
         Action: ["iam:GetRole", "iam:ListAttachedRolePolicies"],
         Resource: [input.serviceRoleArn, input.targetRoleArn]
+      },
+      {
+        Sid: "ReadExactServiceRoleInlinePolicy",
+        Effect: "Allow",
+        Action: ["iam:ListRolePolicies", "iam:GetRolePolicy"],
+        Resource: input.serviceRoleArn
       }
     ]
   };
