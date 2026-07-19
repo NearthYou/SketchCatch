@@ -11,10 +11,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-19 - Refine Resource parameter typography
+### 2026-07-19 - Refine Resource panel typography
 
 - Reduced Resource summary row text from an 18px to 16px computed size, made parameter labels bold, and changed values from bold to regular weight.
-- Root lint, typecheck, build, harness, and diff checks pass. No broad test suite was run at the user's request.
+- Reduced only the uppercase `RESOURCES` eyebrow by 3px while preserving the panel title and count size.
+- Root lint, typecheck, build, harness, and diff checks pass. No broad test suite was run at the user's request. No known functional risk remains; refresh the Resource panel for final visual confirmation.
 
 ### 2026-07-19 - Merge latest dev into PR #491
 
