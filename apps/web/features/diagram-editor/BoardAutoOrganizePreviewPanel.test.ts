@@ -42,6 +42,7 @@ test("preview panel shows candidate thumbnails and a responsive original-arrange
     })
   );
 
+  assert.equal(html.includes("자동 정리 미리보기"), true);
   assert.equal(html.includes("정리안 1"), true);
   assert.equal(html.includes("정리안 2"), true);
   assert.equal(html.includes("원본과 정리안 비교"), true);

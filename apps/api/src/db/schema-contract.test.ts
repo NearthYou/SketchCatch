@@ -371,11 +371,12 @@ test("deployments store the explicit live deployment profile", () => {
 
   assert.equal(deploymentLiveProfileEnum.enumName, "deployment_live_profile");
   assert.deepEqual(deploymentLiveProfileEnum.enumValues, [
-    "practice",
     "demo_web_service",
     "demo_web_service_with_rds"
   ]);
-  assert(findColumn(config.columns, "live_profile"));
+  const liveProfile = config.columns.find((column) => column.name === "live_profile");
+  assert(liveProfile);
+  assert.equal(liveProfile.default, "demo_web_service");
 });
 
 test("deployment Live Observation manifests are one-to-one schema v2 records without secrets", () => {
@@ -529,17 +530,18 @@ test("AWS import access storage is connection-scoped and blocks premature deleti
   assert.equal(findColumn(config.columns, "policy_json"), undefined);
 });
 
-test("0054 AWS import access migration stays byte-for-byte immutable after application", () => {
+test("0055 AWS import access migration stays restart-safe after collision renumbering", () => {
   const originalMigration = readFileSync(
-    new URL("../../drizzle/0054_aws_import_access.sql", import.meta.url),
+    new URL("../../drizzle/0055_aws_import_access.sql", import.meta.url),
     "utf8"
   );
 
   assert.equal(
     createHash("sha256").update(originalMigration).digest("hex"),
-    "5dfaa2119457383463b7e4e9a51365179d66143359fb49cc2ae5a483597f58a2"
+    "c850c654e5df44172588f25eefa08abc03a81b8aee5a5ae8aea5cb3007c7b833"
   );
-  assert.match(originalMigration, /CREATE TABLE "aws_import_access"/);
+  assert.match(originalMigration, /CREATE TABLE IF NOT EXISTS "aws_import_access"/);
+  assert.match(originalMigration, /IF NOT EXISTS[\s\S]*pg_constraint/u);
   assert.doesNotMatch(originalMigration, /"policy_template_hash"/);
   assert.match(originalMigration, /ON DELETE restrict/);
   assert.doesNotMatch(
@@ -548,9 +550,9 @@ test("0054 AWS import access migration stays byte-for-byte immutable after appli
   );
 });
 
-test("0055 owns only the AWS import policy template hash repair", () => {
+test("0056 owns only the AWS import policy template hash repair", () => {
   const repairMigrationUrl = new URL(
-    "../../drizzle/0055_aws_import_access_schema_repair.sql",
+    "../../drizzle/0056_aws_import_access_schema_repair.sql",
     import.meta.url
   );
 
@@ -588,7 +590,7 @@ test("0055 owns only the AWS import policy template hash repair", () => {
   };
   const entries = journal.entries ?? [];
   const originalMigrationPosition = entries.findIndex(
-    (candidate) => candidate.tag === "0054_aws_import_access"
+    (candidate) => candidate.tag === "0055_aws_import_access"
   );
 
   assert.notEqual(originalMigrationPosition, -1);
@@ -596,17 +598,17 @@ test("0055 owns only the AWS import policy template hash repair", () => {
     entries.slice(originalMigrationPosition, originalMigrationPosition + 2),
     [
       {
-        idx: 54,
+        idx: 55,
         version: "7",
-        when: 1784462400000,
-        tag: "0054_aws_import_access",
+        when: 1784485550392,
+        tag: "0055_aws_import_access",
         breakpoints: true
       },
       {
-        idx: 55,
+        idx: 56,
         version: "7",
-        when: 1784462400001,
-        tag: "0055_aws_import_access_schema_repair",
+        when: 1784485550393,
+        tag: "0056_aws_import_access_schema_repair",
         breakpoints: true
       }
     ]

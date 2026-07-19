@@ -215,6 +215,7 @@ export function DirectDeploymentScreen({
     initialDeploymentHistoryDetailsState
   );
   const previousLatestHistoryDeploymentIdRef = useRef("");
+  const handledConfirmationDismissRequestIdRef = useRef(confirmationDismissRequestId);
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
   const [showInfrastructureRollbackConfirmation, setShowInfrastructureRollbackConfirmation] =
     useState(false);
@@ -484,10 +485,13 @@ export function DirectDeploymentScreen({
   }, [onConfirmationStateChange, showApplyConfirmation, showInfrastructureRollbackConfirmation]);
 
   useEffect(() => {
-    if (confirmationDismissRequestId > 0) {
-      setShowApplyConfirmation(false);
-      setShowInfrastructureRollbackConfirmation(false);
+    if (confirmationDismissRequestId === handledConfirmationDismissRequestIdRef.current) {
+      return;
     }
+
+    handledConfirmationDismissRequestIdRef.current = confirmationDismissRequestId;
+    setShowApplyConfirmation(false);
+    setShowInfrastructureRollbackConfirmation(false);
   }, [confirmationDismissRequestId]);
 
   const loadDeploymentRuntimeSnapshot =

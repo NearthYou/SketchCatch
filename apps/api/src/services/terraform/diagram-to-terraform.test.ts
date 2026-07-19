@@ -114,6 +114,46 @@ test("renders S3 buckets without synthetic companion resources", () => {
   );
 });
 
+test("renders generated random password references as Terraform expressions", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "runtime-secret-material",
+        label: "runtime_secret_material",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "random_password",
+          resourceName: "runtime",
+          fileName: "main"
+        },
+        config: { length: 48, special: false }
+      },
+      {
+        id: "runtime-secret-version",
+        label: "runtime_secret_version",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_secretsmanager_secret_version",
+          resourceName: "runtime",
+          fileName: "main"
+        },
+        config: {
+          secretId: "aws_secretsmanager_secret.runtime.id",
+          secretString: "random_password.runtime.result"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /secret_string = random_password\.runtime\.result/u);
+  assert.doesNotMatch(terraform, /secret_string = "random_password\.runtime\.result"/u);
+});
+
 test("renders managed web bucket versioning and protects release-managed bootstrap content", () => {
   const graph: InfrastructureGraph = {
     nodes: [
@@ -422,7 +462,9 @@ test("renders application delivery outputs for a single-task Fargate topology", 
     nodes: [
       createLiveObservationNode("aws_s3_bucket", "web_assets", {}),
       createLiveObservationNode("aws_cloudfront_distribution", "web", {
-        orderedCacheBehavior: [{ pathPattern: "/api/*" }]
+        defaultCacheBehavior: [{
+          allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+        }]
       }),
       createLiveObservationNode("aws_ecr_repository", "api_image", {}),
       createLiveObservationNode("aws_lb", "demo", {}),

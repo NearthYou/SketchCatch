@@ -304,7 +304,7 @@ export function toFlowEdges(
           fill: "#172033",
           fontFamily: "var(--workspace-font)",
           fontSize: "calc(12px + var(--presentation-font-size-increase))",
-          fontWeight: "calc(600 - var(--presentation-font-weight-reduction))"
+          fontWeight: "var(--presentation-font-weight-bold)"
         },
         selectable: !isPreview,
         deletable: !isPreview,

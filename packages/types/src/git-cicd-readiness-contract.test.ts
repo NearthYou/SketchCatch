@@ -91,26 +91,32 @@ const snapshot: GitCicdReadinessSnapshot = {
 
 test("defines the Git/CI/CD readiness snapshot contract", () => {
   const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
+  const typecheckArguments = [
+    "exec",
+    "tsc",
+    "--noEmit",
+    "--ignoreConfig",
+    "--target",
+    "ES2022",
+    "--module",
+    "NodeNext",
+    "--moduleResolution",
+    "NodeNext",
+    "--allowImportingTsExtensions",
+    "--strict",
+    "--skipLibCheck",
+    "--types",
+    "node",
+    "src/git-cicd-readiness-contract.test.ts"
+  ];
+  const command = process.platform === "win32" ? (process.env.ComSpec ?? "cmd.exe") : "pnpm";
+  const commandArguments =
+    process.platform === "win32"
+      ? ["/d", "/s", "/c", "pnpm", ...typecheckArguments]
+      : typecheckArguments;
   const typecheck = spawnSync(
-    "pnpm",
-    [
-      "exec",
-      "tsc",
-      "--noEmit",
-      "--ignoreConfig",
-      "--target",
-      "ES2022",
-      "--module",
-      "NodeNext",
-      "--moduleResolution",
-      "NodeNext",
-      "--allowImportingTsExtensions",
-      "--strict",
-      "--skipLibCheck",
-      "--types",
-      "node",
-      "src/git-cicd-readiness-contract.test.ts"
-    ],
+    command,
+    commandArguments,
     { cwd: packageDirectory, encoding: "utf8" }
   );
 

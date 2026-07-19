@@ -168,6 +168,69 @@ test("materializes Service Auto Scaling from the exact ECS target and policy cha
   });
 });
 
+test("materializes the single Terraform-style target tracking block stored by Template Architecture", () => {
+  const input = createInput();
+  const architecture: ArchitectureJson = {
+    ...serviceAutoScalingArchitecture,
+    nodes: serviceAutoScalingArchitecture.nodes.map((node) =>
+      node.id === "ecs-scaling-policy"
+        ? {
+            ...node,
+            config: {
+              ...node.config,
+              targetTrackingScalingPolicyConfiguration: [
+                node.config["targetTrackingScalingPolicyConfiguration"]
+              ]
+            }
+          }
+        : node
+    )
+  };
+
+  const manifest = createDeploymentLiveObservationManifest({ ...input, architecture });
+
+  assert.equal(manifest.adapter.version, 4);
+  if (manifest.adapter.version !== 4) assert.fail("Expected CloudFront adapter v4");
+  assert.deepEqual(manifest.adapter.payload.capacityTarget.scaling, {
+    mode: "service_auto_scaling",
+    minCapacity: 1,
+    maxCapacity: 4,
+    metric: "ALBRequestCountPerTarget",
+    targetValue: 60
+  });
+});
+
+test("rejects empty or ambiguous Terraform-style target tracking blocks", () => {
+  const input = createInput();
+  const withBlocks = (blocks: readonly unknown[]): ArchitectureJson => ({
+    ...serviceAutoScalingArchitecture,
+    nodes: serviceAutoScalingArchitecture.nodes.map((node) =>
+      node.id === "ecs-scaling-policy"
+        ? {
+            ...node,
+            config: {
+              ...node.config,
+              targetTrackingScalingPolicyConfiguration: blocks
+            }
+          }
+        : node
+    )
+  });
+  const block = serviceAutoScalingArchitecture.nodes[2]!.config[
+    "targetTrackingScalingPolicyConfiguration"
+  ];
+
+  assert.throws(() =>
+    createDeploymentLiveObservationManifest({ ...input, architecture: withBlocks([]) })
+  );
+  assert.throws(() =>
+    createDeploymentLiveObservationManifest({
+      ...input,
+      architecture: withBlocks([block, block])
+    })
+  );
+});
+
 test("materializes Service Auto Scaling with a zero minimum capacity", () => {
   const input = createInput();
   const architecture: ArchitectureJson = {

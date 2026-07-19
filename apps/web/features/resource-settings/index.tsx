@@ -313,7 +313,7 @@ export function ResourceSettingsPanel({
         <>
 
           <label className="searchBox">
-            <Search size={18} aria-hidden="true" />
+            <Search size={16} aria-hidden="true" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -473,9 +473,7 @@ function TemplateLibraryModal({
       >
         <div className={modalStyles.header}>
           <div>
-            <span>Template library</span>
             <h2>템플릿 전체보기</h2>
-            <p>템플릿을 선택해 예시 이미지와 구성 정보를 먼저 확인하세요.</p>
           </div>
           <button
             className={modalStyles.closeButton}
@@ -546,18 +544,8 @@ function TemplateDetailPreviewModal({
       >
         <div className={modalStyles.header}>
           <div>
-            <span>Template preview</span>
             <h2>{template.title}</h2>
-            <p>보드에 적용하기 전에 구성과 예시 이미지를 확인하세요.</p>
           </div>
-          <button
-            className={modalStyles.closeButton}
-            onClick={onClose}
-            ref={closeButtonRef}
-            type="button"
-          >
-            닫기
-          </button>
         </div>
 
         <div className={modalStyles.detailContent}>
@@ -587,7 +575,12 @@ function TemplateDetailPreviewModal({
         </div>
 
         <div className={modalStyles.actions}>
-          <button className={modalStyles.secondaryButton} onClick={onClose} type="button">
+          <button
+            className={modalStyles.secondaryButton}
+            onClick={onClose}
+            ref={closeButtonRef}
+            type="button"
+          >
             취소
           </button>
           <button className={modalStyles.primaryButton} onClick={onApply} type="button">
@@ -625,7 +618,7 @@ function ModuleCatalogPanel({ onModuleAdd }: { readonly onModuleAdd?: ((moduleId
           ))}
         </div>
         <label className="moduleCatalogSearch">
-          <Search aria-hidden="true" size={16} />
+          <Search aria-hidden="true" size={14} />
           <input
             aria-label="모듈 검색"
             onChange={(event) => setQuery(event.target.value)}

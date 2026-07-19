@@ -413,7 +413,7 @@ test("automatic organization preview stays at the lower-left of the board worksp
   assert.match(diagramEditorStyles, /\.workspace\s*\{[\s\S]*?position:\s*relative;/);
   assert.match(
     diagramEditorStyles,
-    /\.compilerPreviewNotice\s*\{[\s\S]*?bottom:\s*16px;[\s\S]*?left:\s*16px;[\s\S]*?right:\s*auto;/
+    /\.compilerPreviewNotice\s*\{[\s\S]*?bottom:\s*12px;[\s\S]*?left:\s*12px;[\s\S]*?right:\s*auto;/
   );
 });
 
@@ -533,7 +533,7 @@ test("area node header uses a rounded icon without a bottom divider", () => {
   );
   assert.match(
     headerBlock,
-    /font-weight:\s*calc\(650 - var\(--presentation-font-weight-reduction\)\);/
+    /font-weight:\s*var\(--presentation-font-weight-bold\);/
   );
   assert.match(headerBlock, /left:\s*0;/);
   assert.match(headerBlock, /top:\s*0;/);

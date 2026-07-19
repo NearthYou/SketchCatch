@@ -333,13 +333,21 @@ export function inferEcsWebBuildConfig(
       : (handoff.applicationUnits.find((unit) => unit.id === dockerfile.applicationUnitId)
           ?.rootPath ?? getParentRepositoryPath(dockerfile.path));
   const healthCheckPath = architectureDefaults?.healthCheckPath || "/health";
+  const requiredRuntimeSecrets = [
+    ...new Set(
+      (handoff.architectureFacts ?? [])
+        .filter((fact) => fact.kind === "runtime_secret")
+        .map((fact) => fact.value)
+    )
+  ].sort((left, right) => left.localeCompare(right));
 
   return {
     api: {
       sourceRoot: apiSourceRoot,
       dockerfilePath: dockerfile.path,
       containerPort: 8080,
-      healthCheckPath
+      healthCheckPath,
+      ...(requiredRuntimeSecrets.length > 0 ? { requiredRuntimeSecrets } : {})
     },
     frontend: {
       sourceRoot: frontendUnit.rootPath,

@@ -1297,7 +1297,7 @@ function makeDeployment(overrides: Partial<DeploymentRow> = {}): DeploymentRow {
     awsAccountIdSnapshot: null,
     awsRegionSnapshot: null,
     awsConnectionNameSnapshot: null,
-    liveProfile: "practice",
+    liveProfile: "demo_web_service",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",

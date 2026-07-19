@@ -38,7 +38,7 @@ export function BoardAutoOrganizePreviewPanel({
     >
       <div className={styles.compilerPreviewHeader}>
         <div>
-          <strong>Board 정리안 비교</strong>
+          <strong>자동 정리 미리보기</strong>
           <span>마음에 드는 정리안을 고른 뒤 원본과 비교해 보세요.</span>
         </div>
       </div>

@@ -7,33 +7,78 @@ const modalSource = readFileSync(
   fileURLToPath(new URL("./LiveObservationModal.tsx", import.meta.url)),
   "utf8"
 );
-const diagramMapSource = readFileSync(
-  fileURLToPath(new URL("./LiveObservationDiagramMap.tsx", import.meta.url)),
-  "utf8"
-);
 const rightPanelSource = readFileSync(
   fileURLToPath(new URL("./WorkspaceRightPanel.tsx", import.meta.url)),
   "utf8"
 );
+const deploymentOutputLinksSource = readFileSync(
+  fileURLToPath(new URL("./DeploymentOutputLinks.tsx", import.meta.url)),
+  "utf8"
+);
+const workspaceStyles = readFileSync(
+  fileURLToPath(new URL("./workspace.module.css", import.meta.url)),
+  "utf8"
+);
+const aiWorkbenchStyles = readFileSync(
+  fileURLToPath(new URL("./workspace-ai-workbench.module.css", import.meta.url)),
+  "utf8"
+);
+const aiLauncherStyles = readFileSync(
+  fileURLToPath(new URL("./workspace-ai-chat-launcher.module.css", import.meta.url)),
+  "utf8"
+);
+const diagramEditorStyles = readFileSync(
+  fileURLToPath(new URL("../diagram-editor/diagram-editor.module.css", import.meta.url)),
+  "utf8"
+);
+const deploymentNotificationStyles = readFileSync(
+  fileURLToPath(
+    new URL(
+      "../../components/notifications/deployment-notification-center.module.css",
+      import.meta.url
+    )
+  ),
+  "utf8"
+);
 
-test("modal re-entry restores the selected Deployment and diagram viewport", () => {
+test("Live Observation stays above non-blocking Workspace surfaces and below recovery", () => {
+  const liveObservationZIndex = getRuleZIndex(workspaceStyles, ".liveObservationOverlay");
+  const projectDraftRecoveryZIndex = getRuleZIndex(
+    workspaceStyles,
+    ".projectDraftRecoveryBackdrop"
+  );
+  const competingZIndexes = [
+    getRuleZIndex(workspaceStyles, ".workspaceNotificationHost"),
+    getRuleZIndex(aiWorkbenchStyles, ".overlay"),
+    getRuleZIndex(aiWorkbenchStyles, ".workWindow"),
+    getRuleZIndex(aiLauncherStyles, ".launcher"),
+    getRuleZIndex(deploymentNotificationStyles, ".center"),
+    getRuleZIndex(
+      diagramEditorStyles,
+      ".floatingPanelSlot:has([data-workspace-ai-chat-overlay])"
+    )
+  ];
+
+  assert.ok(
+    competingZIndexes.every((zIndex) => liveObservationZIndex > zIndex),
+    `Live Observation z-index ${liveObservationZIndex} must exceed non-blocking Workspace surfaces (${competingZIndexes.join(", ")})`
+  );
+  assert.ok(
+    projectDraftRecoveryZIndex > liveObservationZIndex,
+    `ProjectDraft recovery z-index ${projectDraftRecoveryZIndex} must remain above Live Observation ${liveObservationZIndex}`
+  );
+});
+
+test("modal re-entry restores the selected Deployment without a secondary diagram viewport", () => {
   assert.match(rightPanelSource, /createLiveObservationViewState\(projectId\)/);
   assert.match(
     rightPanelSource,
     /selectedDeploymentId=\{retainedLiveObservationView\.selectedDeploymentId\}/
   );
-  assert.match(
-    rightPanelSource,
-    /initialViewport=\{retainedLiveObservationView\.viewport\}/
-  );
-  assert.match(
-    modalSource,
-    /<LiveObservationDiagramMap[\s\S]*?key=\{selectedDeploymentId\}/
-  );
   assert.match(modalSource, /onSelectedDeploymentIdChange\(nextDeploymentId\)/);
-  assert.match(diagramMapSource, /defaultViewport=\{initialViewport \?\?/);
-  assert.match(diagramMapSource, /fitView=\{initialViewport === null\}/);
-  assert.match(diagramMapSource, /onMoveEnd=\{\(_event, viewport\) => onViewportChange\(viewport\)\}/);
+  assert.doesNotMatch(modalSource, /LiveObservationDiagramMap/);
+  assert.doesNotMatch(rightPanelSource, /initialViewport=\{/);
+  assert.doesNotMatch(rightPanelSource, /onViewportChange=\{/);
 });
 
 test("Deployment selection effect notifies the parent only when the target changes", () => {
@@ -44,6 +89,28 @@ test("Deployment selection effect notifies the parent only when the target chang
   assert.match(
     modalSource,
     /const fallbackDeploymentId =[\s\S]*?if \(fallbackDeploymentId !== selectedDeploymentId\) \{[\s\S]*?onSelectedDeploymentIdChange\(fallbackDeploymentId\);[\s\S]*?\}/
+  );
+});
+
+test("empty Deployment picker cannot open a blank native menu", () => {
+  const deploymentPickerSource = getSourceBlock(modalSource, "<select", "</select>");
+
+  assert.match(
+    deploymentPickerSource,
+    /disabled=\{[\s\S]*?eligibleDeployments\.length === 0/
+  );
+  assert.match(deploymentPickerSource, /<option disabled value="">/);
+  assert.match(deploymentPickerSource, /관측 가능한 성공 배포가 없습니다\./);
+});
+
+test("Direct Deployment opens Live Observation without leaking the click event as a selection", () => {
+  assert.match(
+    deploymentOutputLinksSource,
+    /onClick=\{\(\) => onOpenLiveObservation\(\)\}/
+  );
+  assert.doesNotMatch(
+    deploymentOutputLinksSource,
+    /onClick=\{onOpenLiveObservation\}/
   );
 });
 
@@ -65,20 +132,20 @@ test("modal re-entry restores only the selected, unexpired active session and ab
 });
 
 test("selected Deployment independently loads and renders its immutable Architecture", () => {
-  const mapIndex = modalSource.indexOf("<LiveObservationDiagramMap");
+  const focusedFlowIndex = modalSource.indexOf("<LiveObservationFocusedFlow");
   const evidenceIndex = modalSource.indexOf(
-    '<section className={styles.liveObservationEvidenceRail}'
+    'aria-label="실시간 운영 분석"'
   );
 
   assert.match(modalSource, /useLiveObservationQueries\(\{/);
   assert.match(modalSource, /deploymentId: selectedDeploymentId/);
-  assert.match(modalSource, /LiveObservationDiagramMap/);
+  assert.match(modalSource, /LiveObservationFocusedFlow/);
   assert.match(
     modalSource,
     /const selectedArchitecture = queries\.architecture\.data\?\.architecture \?\? null;/
   );
-  assert.ok(mapIndex >= 0);
-  assert.ok(evidenceIndex > mapIndex, "Architecture map must render before the evidence rail");
+  assert.ok(focusedFlowIndex >= 0);
+  assert.ok(evidenceIndex > focusedFlowIndex, "Focused flow must render before the evidence rail");
 });
 
 test("restores the focused traffic path as the default observation view", () => {
@@ -97,18 +164,26 @@ test("restores the focused traffic path as the default observation view", () => 
   );
 });
 
-test("mounts the full Architecture map only after its disclosure opens", () => {
+test("keeps Live Observation focused on the traffic path", () => {
+  assert.doesNotMatch(modalSource, /LiveObservationDiagramMap/);
+  assert.doesNotMatch(modalSource, /WorkspaceDesignAnalysisPanel/);
+  assert.doesNotMatch(modalSource, /전체 Architecture 보기/);
+  assert.doesNotMatch(modalSource, /설계 분석/);
+});
+
+test("anchors the QR utility below its button without covering header controls", () => {
   assert.match(
     modalSource,
-    /const \[isArchitectureOpen, setIsArchitectureOpen\] = useState\(false\)/
+    /const \[audienceUtilityOpen, setAudienceUtilityOpen\] = useState\(false\)/
+  );
+  assert.match(modalSource, /className=\{styles\.liveObservationQrMenu\}/);
+  assert.match(
+    workspaceStyles,
+    /\.liveObservationQrMenu\s*\{[^}]*position:\s*relative/
   );
   assert.match(
-    modalSource,
-    /<details[\s\S]*?onToggle=\{\(event\) => setIsArchitectureOpen\(event\.currentTarget\.open\)\}[\s\S]*?open=\{isArchitectureOpen\}/
-  );
-  assert.match(
-    modalSource,
-    /\{isArchitectureOpen \? \([\s\S]*?<LiveObservationDiagramMap[\s\S]*?\) : null\}/
+    workspaceStyles,
+    /\.liveObservationAudienceUtility\s*\{[^}]*top:\s*calc\(100% \+ 10px\)/
   );
 });
 
@@ -131,7 +206,7 @@ test("renders Architecture state only when it belongs to the selected Deployment
   );
   assert.match(
     modalSource,
-    /<LiveObservationDiagramMap[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
+    /<LiveObservationFocusedFlow[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
   assert.match(
     modalSource,
@@ -184,7 +259,7 @@ test("session creation locks Deployment selection and observation evidence stays
   );
   const evidenceBlock = getSourceBlock(
     modalSource,
-    "{selectedSnapshot ? (",
+    'aria-label="실시간 운영 분석"',
     "{providerSnapshot && providerSnapshot.logs.length > 0 ? ("
   );
 
@@ -196,28 +271,52 @@ test("session creation locks Deployment selection and observation evidence stays
   assert.match(modalSource, /const selectedSnapshot = selectedSession \? snapshot : null;/);
   assert.match(
     modalSource,
-    /<LiveObservationDiagramMap[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
+    /<LiveObservationFocusedFlow[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
-  assert.match(evidenceBlock, /selectedSnapshot\.live\.acceptedEventCount/);
+  assert.match(evidenceBlock, /selectedSnapshot\?\.live\.acceptedEventCount/);
   assert.match(deploymentSelectionHandler, /session\.deploymentId !== nextDeploymentId/);
   assert.match(deploymentSelectionHandler, /onSessionChange\(null\)/);
   assert.match(deploymentSelectionHandler, /onSnapshotChange\(null\)/);
 });
 
-test("capacity evidence renders the provider-derived mode and matching value labels", () => {
+test("shows the countdown only while the selected session is active", () => {
+  const sessionStatus = getSourceBlock(
+    modalSource,
+    "className={styles.liveObservationSessionStatus}",
+    "</div>"
+  );
+
+  assert.match(
+    sessionStatus,
+    /\{isSessionActive \? <strong>\{formatRemainingTime\(remainingSeconds\)\}<\/strong> : null\}/
+  );
+  assert.doesNotMatch(sessionStatus, /\{selectedSession \? <strong>/);
+});
+
+test("capacity analysis renders provider-derived mode and operational values", () => {
   const evidenceBlock = getSourceBlock(
     modalSource,
-    "{selectedSnapshot ? (",
+    'aria-label="실시간 운영 분석"',
     "{providerSnapshot && providerSnapshot.logs.length > 0 ? ("
   );
 
-  assert.match(evidenceBlock, /providerEvidence\?\.capacityModeLabel/);
-  assert.match(evidenceBlock, /providerEvidence\?\.capacityDetailLabel/);
-  assert.doesNotMatch(evidenceBlock, /정상 \/ 실행 \/ 최대/);
-  assert.match(
-    modalSource,
-    /const providerEvidence = providerSnapshot && capacityModeLabel\s*\?/
-  );
+  assert.match(evidenceBlock, /capacityModeLabel \?\? "확인 중"/);
+  assert.match(evidenceBlock, /operationalAnalysis\.capacity/);
+  assert.match(modalSource, /getLiveObservationOperationalAnalysis/);
+});
+
+test("turns raw metrics into an operational decision flow", () => {
+  assert.match(modalSource, /aria-label="실시간 운영 분석"/);
+  assert.match(modalSource, /현재 인프라 상태/);
+  assert.match(modalSource, /용량 및 스케일링/);
+  assert.match(modalSource, /병목과 장애/);
+  assert.match(modalSource, /비용 영향/);
+  assert.match(modalSource, /개선 권장사항/);
+  assert.match(modalSource, /operationalAnalysis\.terraformAction/);
+  assert.match(modalSource, /실행 \/ 희망 \/ 최대/);
+  assert.match(modalSource, /<details[\s\S]*aria-label="실시간 운영 분석"/);
+  assert.match(modalSource, /<summary className=\{styles\.liveObservationMetricsHeader\}>/);
+  assert.doesNotMatch(modalSource, /<details[^>]*\sopen/);
 });
 
 function getSourceBlock(source: string, startMarker: string, endMarker: string): string {
@@ -227,4 +326,12 @@ function getSourceBlock(source: string, startMarker: string, endMarker: string):
   assert.notEqual(start, -1, `Missing source marker: ${startMarker}`);
   assert.notEqual(end, -1, `Missing source marker: ${endMarker}`);
   return source.slice(start, end + endMarker.length);
+}
+
+function getRuleZIndex(source: string, selector: string): number {
+  const rule = getSourceBlock(source, `${selector} {`, "}");
+  const match = rule.match(/z-index:\s*(\d+)/);
+
+  assert.ok(match, `Missing z-index for ${selector}`);
+  return Number(match[1]);
 }

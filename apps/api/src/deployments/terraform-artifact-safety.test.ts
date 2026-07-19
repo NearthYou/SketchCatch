@@ -8,7 +8,21 @@ import {
   TerraformArtifactSafetyError
 } from "./terraform-artifact-safety.js";
 
-test("generated practice S3 artifacts omit synthetic public access blocks and pass safety", () => {
+const boundedRuntimeSecretPolicyLiteral = JSON.stringify(JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [{
+    Sid: "ReadCheckInSigningSecret",
+    Effect: "Allow",
+    Action: ["secretsmanager:GetSecretValue"],
+    Resource: "${aws_secretsmanager_secret.runtime.arn}"
+  }]
+}));
+const broadRuntimeSecretPolicyLiteral = JSON.stringify(JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [{ Effect: "Allow", Action: ["secretsmanager:*"], Resource: "*" }]
+}));
+
+test("generated S3 artifacts omit synthetic public access blocks and pass safety", () => {
   const graph: InfrastructureGraph = {
     nodes: [
       {
@@ -32,11 +46,11 @@ test("generated practice S3 artifacts omit synthetic public access blocks and pa
 
   assert.doesNotMatch(terraformCode, /aws_s3_bucket_public_access_block/);
   assert.doesNotThrow(() =>
-    assertTerraformArtifactIsSafe(terraformCode, { liveProfile: "practice" })
+    assertTerraformArtifactIsSafe(terraformCode, { liveProfile: "demo_web_service" })
   );
 });
 
-test("practice safety accepts legacy S3 public access block artifacts", () => {
+test("ECS web-service safety accepts legacy S3 public access block artifacts", () => {
   assert.doesNotThrow(() =>
     assertTerraformArtifactIsSafe(
       `resource "aws_s3_bucket_public_access_block" "service_bucket_public_access" {
@@ -46,7 +60,7 @@ test("practice safety accepts legacy S3 public access block artifacts", () => {
         ignore_public_acls = true
         restrict_public_buckets = true
       }`,
-      { liveProfile: "practice" }
+      { liveProfile: "demo_web_service" }
     )
   );
 });
@@ -77,7 +91,7 @@ test("assertTerraformArtifactIsSafe accepts the MVP AWS resource subset", () => 
   );
 });
 
-test("practice safety accepts generated NAT gateway networking resources for planning", () => {
+test("ECS web-service safety accepts generated NAT gateway networking resources for planning", () => {
   assert.doesNotThrow(() =>
     assertTerraformArtifactIsSafe(
       `resource "aws_eip" "nat" {
@@ -88,12 +102,12 @@ test("practice safety accepts generated NAT gateway networking resources for pla
         allocation_id = aws_eip.nat.id
         subnet_id     = aws_subnet.public.id
       }`,
-      { liveProfile: "practice", resourceValidationMode: "plan" }
+      { liveProfile: "demo_web_service", resourceValidationMode: "plan" }
     )
   );
 });
 
-test("practice live apply safety accepts every Terraform resource in the Repository ECS diagram", () => {
+test("ECS web-service live apply safety accepts every Terraform resource in the Repository ECS diagram", () => {
   const resourceTypes = [
     "aws_cloudfront_distribution",
     "aws_cloudfront_origin_access_control",
@@ -117,6 +131,7 @@ test("practice live apply safety accepts every Terraform resource in the Reposit
     "aws_s3_bucket_public_access_block",
     "aws_s3_bucket_versioning",
     "aws_s3_object",
+    "aws_secretsmanager_secret",
     "aws_security_group",
     "aws_subnet",
     "aws_vpc"
@@ -126,21 +141,75 @@ test("practice live apply safety accepts every Terraform resource in the Reposit
     .join("\n");
 
   assert.doesNotThrow(() =>
-    assertTerraformArtifactIsSafe(terraformCode, { liveProfile: "practice" })
+    assertTerraformArtifactIsSafe(terraformCode, { liveProfile: "demo_web_service" })
   );
 });
 
-test("practice live apply safety still rejects resources outside the approved profile", () => {
+test("ECS web-service safety accepts the bounded generated runtime-secret bundle", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `terraform {
+        required_providers {
+          random = {
+            source  = "hashicorp/random"
+            version = "~> 3.0"
+          }
+        }
+      }
+      resource "random_password" "runtime" {
+        length  = 48
+        special = false
+      }
+      resource "aws_secretsmanager_secret" "runtime" {}
+      resource "aws_secretsmanager_secret_version" "runtime" {
+        secret_id     = aws_secretsmanager_secret.runtime.id
+        secret_string = random_password.runtime.result
+      }
+      resource "aws_iam_role_policy" "runtime" {
+        name   = "runtime-secret-read"
+        role   = aws_iam_role.execution.id
+        policy = ${boundedRuntimeSecretPolicyLiteral}
+      }`,
+      { liveProfile: "demo_web_service" }
+    )
+  );
+});
+
+test("ECS web-service safety rejects literal runtime Secret values and broad inline IAM", () => {
+  assert.throws(
+    () => assertTerraformArtifactIsSafe(
+      `resource "aws_secretsmanager_secret_version" "runtime" {
+        secret_id     = aws_secretsmanager_secret.runtime.id
+        secret_string = "known-value"
+      }`,
+      { liveProfile: "demo_web_service" }
+    ),
+    /must reference generated password material/u
+  );
+  assert.throws(
+    () => assertTerraformArtifactIsSafe(
+      `resource "aws_iam_role_policy" "runtime" {
+        name   = "runtime-secret-read"
+        role   = aws_iam_role.execution.id
+        policy = ${broadRuntimeSecretPolicyLiteral}
+      }`,
+      { liveProfile: "demo_web_service" }
+    ),
+    /must grant only exact Secrets Manager read access/u
+  );
+});
+
+test("ECS web-service live apply safety still rejects RDS resources", () => {
   assert.throws(
     () =>
       assertTerraformArtifactIsSafe(`resource "aws_db_instance" "database" {}`, {
-        liveProfile: "practice"
+        liveProfile: "demo_web_service"
       }),
     /Terraform resource "aws_db_instance" is not allowed before live deployment/
   );
 });
 
-test("practice safety accepts the ECS Fargate runtime resources used by project deployment", () => {
+test("ECS web-service safety accepts the ECS Fargate runtime resources used by project deployment", () => {
   assert.doesNotThrow(() =>
     assertTerraformArtifactIsSafe(
       `resource "aws_cloudwatch_log_group" "app" {}
@@ -152,8 +221,17 @@ test("practice safety accepts the ECS Fargate runtime resources used by project 
       resource "aws_lb_listener" "http" {}
       resource "aws_lb_target_group" "app" {}
       resource "aws_cloudfront_distribution" "app" {}`,
-      { liveProfile: "practice" }
+      { liveProfile: "demo_web_service" }
     )
+  );
+});
+
+test("default live apply safety accepts ECS Application Auto Scaling resources", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      resource "aws_appautoscaling_target" "ecs_service_requests" {}
+      resource "aws_appautoscaling_policy" "ecs_service_requests" {}
+    `)
   );
 });
 
@@ -775,17 +853,15 @@ test("assertTerraformArtifactIsSafe accepts canonical managed hashes with CRLF u
   );
 });
 
-test("assertTerraformArtifactIsSafe rejects managed demo EC2 user data outside the demo profile", () => {
-  assert.throws(
-    () =>
-      assertTerraformArtifactIsSafe(`
+test("assertTerraformArtifactIsSafe uses the ECS web-service profile by default", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
         resource "aws_instance" "api" {
           ami              = "ami-1234567890abcdef0"
           instance_type    = "t3.micro"
           user_data_base64 = "${createManagedDemoUserDataBase64()}"
         }
-      `),
-    /EC2 user_data_base64 is not allowed for practice/
+      `)
   );
 });
 
@@ -811,18 +887,16 @@ test("assertTerraformArtifactIsSafe accepts managed demo launch template user da
   );
 });
 
-test("assertTerraformArtifactIsSafe rejects demo launch template user data outside the demo profile", () => {
-  assert.throws(
-    () =>
-      assertTerraformArtifactIsSafe(`
+test("assertTerraformArtifactIsSafe accepts managed launch template user data by default", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
         resource "aws_launch_template" "api" {
           name_prefix      = "sketchcatch-demo-"
           image_id         = "ami-1234567890abcdef0"
           instance_type    = "t3.micro"
           user_data        = "${createManagedDemoUserDataBase64()}"
         }
-      `),
-    /launch template user_data is not allowed for practice/
+      `)
   );
 });
 

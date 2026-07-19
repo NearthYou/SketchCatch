@@ -25,7 +25,7 @@
 .header p {
   color: var(--workspace-muted, #60646c);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.08em;
   margin-bottom: 4px;
   text-transform: uppercase;
@@ -36,7 +36,7 @@
   border-radius: 999px;
   color: #0969da;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   padding: 6px 10px;
   white-space: nowrap;
 }
@@ -70,12 +70,12 @@
 .facts dt {
   color: var(--workspace-muted, #60646c);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .facts dd {
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   margin: 4px 0 0;
   overflow-wrap: anywhere;
 }
@@ -89,7 +89,7 @@
   display: flex;
   flex-wrap: wrap;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 8px;
   margin: 0;
   padding: 10px 12px;
@@ -98,7 +98,7 @@
 
 .notice a {
   color: inherit;
-  font-weight: calc(900 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .review,
@@ -176,7 +176,7 @@
 .readinessItemContent > div > span {
   border-radius: 999px;
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   white-space: nowrap;
 }
 
@@ -277,7 +277,7 @@
   border-radius: 8px;
   color: #116329;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   margin: 0;
   padding: 12px;
 }
@@ -291,7 +291,7 @@
   display: flex;
   flex-wrap: wrap;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 12px;
   justify-content: space-between;
   padding: 12px;
@@ -310,7 +310,7 @@
 .commandCard > div:first-child > p {
   color: var(--workspace-muted, #60646c);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(800 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.08em;
 }
 

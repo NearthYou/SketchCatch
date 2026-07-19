@@ -23,7 +23,7 @@
   margin: 0;
   color: #60646c;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.5;
   text-transform: uppercase;
 }
@@ -31,7 +31,7 @@
 .dashboardPageHeader h1 {
   margin: 8px 0 0;
   font-size: calc(32px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.2;
   letter-spacing: 0;
 }
@@ -159,7 +159,7 @@
 .dashboardMetric > span {
   color: #60646c;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .dashboardMetricValue {
@@ -235,7 +235,7 @@
   gap: 5px;
   color: #0d74ce;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   text-decoration: none;
 }
 
@@ -333,7 +333,7 @@ a.dashboardActivityRow:hover {
   gap: 6px;
   color: #0d74ce;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -436,7 +436,7 @@ a.dashboardActivityRow:hover {
   margin: 0;
   overflow: hidden;
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -481,7 +481,7 @@ a.dashboardActivityRow:hover {
   gap: 7px;
   color: var(--color-body);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .dashboardCardGrid {
@@ -629,7 +629,7 @@ a.dashboardActivityRow:hover {
   padding: 4px 7px;
   color: #55585f;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .projectCardMeta {
@@ -659,6 +659,10 @@ a.dashboardActivityRow:hover {
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.projectCardTimestampCompact {
+  font-size: calc(12px + var(--presentation-font-size-increase) - 3px);
 }
 
 .projectCardWithActions {
@@ -714,7 +718,7 @@ a.dashboardActivityRow:hover {
   color: #171717;
   font: inherit;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.35;
   text-decoration: none;
 }
@@ -854,7 +858,7 @@ a.dashboardActivityRow:hover {
   color: var(--color-body, #55585f);
   font-size: calc(12px + var(--presentation-font-size-increase));
   font-variant-numeric: tabular-nums;
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .projectDeleteDialogProgressTrack {
@@ -900,7 +904,7 @@ a.dashboardActivityRow:hover {
 .projectDeleteDialogFacts dd {
   margin: 5px 0 0;
   font-size: calc(15px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .projectDeleteDialogActions {
@@ -1014,7 +1018,7 @@ a.dashboardActivityRow:hover {
   margin: 0;
   color: #60646c;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   text-transform: uppercase;
 }
 
@@ -1054,7 +1058,7 @@ a.dashboardActivityRow:hover {
 .dashboardTemplateCard dd {
   margin: 4px 0 0;
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .dashboardTemplateCard > a {
@@ -1063,7 +1067,7 @@ a.dashboardActivityRow:hover {
   gap: 6px;
   color: #0d74ce;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   text-decoration: none;
 }
 

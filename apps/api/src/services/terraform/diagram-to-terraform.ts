@@ -14,9 +14,9 @@ const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const INDENT_UNIT = "  ";
 export const TERRAFORM_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 const TERRAFORM_REFERENCE_PATTERN =
-  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^(?:aws|kubernetes)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
+  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^(?:aws|kubernetes|random)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
 const TERRAFORM_RESOURCE_ADDRESS_PATTERN =
-  /^(?:(?:aws|kubernetes)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+|module\.[a-zA-Z0-9_-]+)$/;
+  /^(?:(?:aws|kubernetes|random)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+|module\.[a-zA-Z0-9_-]+)$/;
 
 export class TerraformDiagramValidationError extends Error {
   readonly reason = "invalid_identifier";
@@ -261,12 +261,30 @@ function cloudFrontRoutesApiTraffic(node: InfrastructureGraphNode): boolean {
   const behaviorValue = node.config["orderedCacheBehavior"];
   const behaviors = Array.isArray(behaviorValue) ? behaviorValue : [behaviorValue];
 
-  return behaviors.some(
+  if (behaviors.some(
     (behavior) =>
       isRecord(behavior) &&
       typeof behavior["pathPattern"] === "string" &&
       behavior["pathPattern"].startsWith("/api/")
-  );
+  )) {
+    return true;
+  }
+
+  const defaultBehaviorValue = node.config["defaultCacheBehavior"];
+  const defaultBehaviors = Array.isArray(defaultBehaviorValue)
+    ? defaultBehaviorValue
+    : [defaultBehaviorValue];
+  const apiWriteMethods = ["DELETE", "PATCH", "POST", "PUT"];
+
+  return defaultBehaviors.some((behavior) => {
+    if (!isRecord(behavior) || !Array.isArray(behavior["allowedMethods"])) return false;
+    const allowedMethods = new Set(
+      behavior["allowedMethods"]
+        .filter((method): method is string => typeof method === "string")
+        .map((method) => method.toUpperCase())
+    );
+    return apiWriteMethods.every((method) => allowedMethods.has(method));
+  });
 }
 
 function renderCompanionBlocks(node: InfrastructureGraphNode): string[] {

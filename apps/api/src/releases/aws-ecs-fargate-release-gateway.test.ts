@@ -126,6 +126,10 @@ test("ECS activation clones the approved Terraform task definition, not mutable 
         "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/demo-task:2",
       currentContainerEnvironment: [{ name: "SOURCE", value: "service-drift" }],
       approvedContainerEnvironment: [{ name: "SOURCE", value: "terraform-approved" }],
+      approvedContainerSecrets: [{
+        name: "CHECK_IN_SIGNING_SECRET",
+        valueFrom: "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:check-in"
+      }],
       onRegister(input) {
         registeredEnvironment = input["containerDefinitions"];
       }
@@ -143,6 +147,8 @@ test("ECS activation clones the approved Terraform task definition, not mutable 
   });
 
   assert.match(JSON.stringify(registeredEnvironment), /terraform-approved/u);
+  assert.match(JSON.stringify(registeredEnvironment), /CHECK_IN_SIGNING_SECRET/u);
+  assert.match(JSON.stringify(registeredEnvironment), /arn:aws:secretsmanager/u);
   assert.doesNotMatch(JSON.stringify(registeredEnvironment), /service-drift/u);
   assert.doesNotMatch(JSON.stringify(registeredEnvironment), /bootstrap-command/u);
 });
@@ -192,6 +198,7 @@ function createRuntimeClients(
     currentTaskRoleArn?: string;
     currentContainerEnvironment?: Array<{ name: string; value: string }>;
     approvedContainerEnvironment?: Array<{ name: string; value: string }>;
+    approvedContainerSecrets?: Array<{ name: string; valueFrom: string }>;
     onRegister?: (input: Record<string, unknown>) => void;
     onEcrCommand?: (
       name: string,
@@ -216,7 +223,8 @@ function createRuntimeClients(
         portMappings: [{ containerPort: 3000, protocol: "tcp" }],
         entryPoint: ["/bin/sh", "-c"],
         command: ["bootstrap-command"],
-        environment: overrides.approvedContainerEnvironment
+        environment: overrides.approvedContainerEnvironment,
+        secrets: overrides.approvedContainerSecrets
       }
     ]
   };

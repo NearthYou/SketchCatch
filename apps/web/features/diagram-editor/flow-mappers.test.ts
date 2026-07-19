@@ -837,7 +837,7 @@ test("toFlowEdges preserves non-empty labels independently of selection", () => 
   assert.equal(labeledFlowEdge?.label, "publishes");
   assert.equal(
     labeledFlowEdge?.labelStyle?.fontWeight,
-    "calc(600 - var(--presentation-font-weight-reduction))"
+    "var(--presentation-font-weight-bold)"
   );
   assert.equal(labeledFlowEdge?.labelStyle?.fill, "#172033");
   assert.equal(labeledFlowEdge?.labelBgStyle?.fill, "#f8fbff");

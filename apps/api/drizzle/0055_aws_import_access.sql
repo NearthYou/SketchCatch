@@ -1,4 +1,4 @@
-CREATE TABLE "aws_import_access" (
+CREATE TABLE IF NOT EXISTS "aws_import_access" (
 	"aws_connection_id" varchar(36) PRIMARY KEY NOT NULL,
 	"status" varchar(40) NOT NULL,
 	"manager_stack_name" varchar(128),
@@ -30,4 +30,18 @@ CREATE TABLE "aws_import_access" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "aws_import_access" ADD CONSTRAINT "aws_import_access_aws_connection_id_aws_connections_id_fk" FOREIGN KEY ("aws_connection_id") REFERENCES "public"."aws_connections"("id") ON DELETE restrict ON UPDATE no action;
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint
+		WHERE conname = 'aws_import_access_aws_connection_id_aws_connections_id_fk'
+	) THEN
+		ALTER TABLE "aws_import_access"
+			ADD CONSTRAINT "aws_import_access_aws_connection_id_aws_connections_id_fk"
+			FOREIGN KEY ("aws_connection_id")
+			REFERENCES "public"."aws_connections"("id")
+			ON DELETE restrict
+			ON UPDATE no action;
+	END IF;
+END $$;

@@ -122,6 +122,7 @@ const EXPECTED_LAYOUTS = {
     "task-role": at(1880, 320, "global-iam-group"),
     repository: at(1880, 560, "definition-ops-group"),
     "log-group": at(1880, 680, "definition-ops-group"),
+    distribution: at(240, 360),
     "load-balancer": at(640, 360, "vpc"),
     "target-group": at(1080, 360, "vpc"),
     listener: at(880, 360, "vpc"),
@@ -207,6 +208,7 @@ const EXPECTED_ROUTING = {
     "alb-sg-load-balancer": route("handle-bottom", "handle-top"),
     "alb-sg-task-sg": route("handle-bottom", "handle-top"),
     "task-sg-service": route("handle-bottom", "handle-top"),
+    "distribution-load-balancer": route("handle-right", "handle-left"),
     "load-balancer-listener": route("handle-right", "handle-left"),
     "listener-target-group": route("handle-right", "handle-left"),
     "target-group-service": route("handle-right", "handle-left"),
@@ -237,7 +239,7 @@ const EXPECTED_SEMANTIC_HASHES = {
   "minimal-serverless-api": "a5626d6cb29ea6cd50d66fb1b0955e079b5218178f686cb07c04ba2cbd801cf7",
   "full-serverless-web-app": "cd37d8e9a1d43cd37b518d943f7e1cbac9807d81bc524029e0b45668787b6d67",
   "three-tier-web-app": "52ff655776bd42cd77d1227dfde7a28475e458c530f6d90f8be5b89e1fd5f27d",
-  "ecs-fargate-container-app": "b40e35218e1872c61cefea6f82d4ea420aacd504a24c5b32efe896cbc507839e",
+  "ecs-fargate-container-app": "d71315484fc0d86b5ecec6bc7dd7f790a46d5b6f3d0202c62c954a7acf63d9cd",
   "eks-container-app": "660d3cb3429ec63f39c6fe5287cbf87e5c8d300f250011c292ba02b19fb24321"
 } as const satisfies Record<RepositoryTemplateId, string>;
 

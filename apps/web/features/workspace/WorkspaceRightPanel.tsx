@@ -48,9 +48,7 @@ import type { LiveObservationSelection } from "./live-observation";
 import {
   createLiveObservationViewState,
   readLiveObservationViewState,
-  selectLiveObservationDeployment,
-  storeLiveObservationViewport,
-  type LiveObservationViewport
+  selectLiveObservationDeployment
 } from "./live-observation-view-state";
 import {
   createLiveObservationSessionState,
@@ -675,21 +673,6 @@ export function WorkspaceRightPanel({
     [projectId]
   );
 
-  const updateLiveObservationViewport = useCallback(
-    (viewport: LiveObservationViewport): void => {
-      setLiveObservationViewState((current) => {
-        const currentView = readLiveObservationViewState(current, projectId);
-        return storeLiveObservationViewport(
-          current,
-          projectId,
-          currentView.selectedDeploymentId,
-          viewport
-        );
-      });
-    },
-    [projectId]
-  );
-
   const updateLiveObservationSession = useCallback(
     (session: LiveObservationV2Session | null): void => {
       setLiveObservationSessionState((current) =>
@@ -1000,7 +983,6 @@ export function WorkspaceRightPanel({
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
     <LiveObservationModal
-      initialViewport={retainedLiveObservationView.viewport}
       onClose={() => {
         setIsLiveObservationOpen(false);
         setLiveObservationSelection(null);
@@ -1008,7 +990,6 @@ export function WorkspaceRightPanel({
       onSessionChange={updateLiveObservationSession}
       onSelectedDeploymentIdChange={updateLiveObservationDeployment}
       onSnapshotChange={updateLiveObservationSnapshot}
-      onViewportChange={updateLiveObservationViewport}
       projectId={projectId}
       selectedDeploymentId={retainedLiveObservationView.selectedDeploymentId}
       session={retainedLiveObservationSession.session}

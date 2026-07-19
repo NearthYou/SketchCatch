@@ -1,59 +1,34 @@
 # Session Handoff
 
-Use this file only for compact continuation context. Write it in English.
+Use this file only for compact continuation context. Write it in English and reference durable artifacts instead of repeating them.
 
 ## Currently Verified
 
-- Branch `fix/ck/477-ai-chatting-bug-fix` includes committed all-question validation, both-chat selection synchronization, clarification probes, diagram patch probes, and complete resource alias coverage.
-- The running Web-to-API path repeats the frontend question for the reported daily-user-count phrase and the region question for the reported Spring Boot phrase, with explicit unrelated-answer feedback.
-- The branch includes the committed Architecture Draft Korean-explanation, `다음 행동` cleanup, and fresh-draft routing fix.
+- Branch: `fix/sw/live-observation-deployment-picker-layering`, integrated with `origin/dev` through `ad1464ba` and being prepared for a PR to `dev`.
+- The legacy `practice` profile is removed in favor of `demo_web_service`; imported migration `0054` handles existing rows.
+- Repository ECS analysis records runtime Secret names only. Preflight uses isolated placeholders; approved Apply generates `CHECK_IN_SIGNING_SECRET`, stores it in Secrets Manager, grants exact Task execution-role read access, and maps the ARN into every Task.
+- Fixed `INSTANCE_ID` injection is removed so hostname-based `servedBy` can distinguish Tasks. Stateless repository evidence keeps bounded Fargate capacity 1–3.
+- The previous 963-request sandbox run completed with 963 HTTP 200 responses, and its failed observation acceptance triggered approved cleanup. Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` is `DESTROYED`; the scoped AWS resources were verified absent.
+- Harness, lint, typecheck, build, the 52-test Terraform safety suite, and focused Web/API regressions pass. The long root test run was stopped at the user's request before completion.
 
 ## Changes This Session
 
-- Expanded database storage, country-level region, and conversational photo-upload clarification semantics.
-- Verified EC2 sizing, RDS removal, S3 addition, EC2-to-Lambda replacement, and connected CloudFront addition against proposed graph outcomes.
-- Added Korean names and generated aliases for every supported resource type, with common service terms and abbreviations. `로드 밸런서 넣어줘` now creates a connected load balancer when one compute target is unambiguous.
-- Tightened all required-question free-form validation so numeric and generic words cannot satisfy an unrelated category; rejected answers explain why before repeating the question.
-- Both chat surfaces keep the answered question options disabled and selected, without adding standalone accepted-answer receipt messages.
-- Shared staged progress appears only after all clarification questions are complete and the server begins generating the final Architecture Draft.
-- `한달에 한 30정도로` is accepted as a monthly 30만원 budget and mapped to the normal budget profile; answers with time, traffic, size, or percentage units remain excluded.
-- Equal Board prop replacements keep the proposal revision stable; real Board content changes continue to invalidate proposals.
-- Board approval copy and actions use separate rows in the narrow Workbench.
-- Diagram AI results no longer render a separate `다음 행동` section in either chat surface.
-- Amazon Q is instructed to return Korean user-facing prose; English `Architecture Draft` suffixes and known English highlights are normalized, while unknown English-only highlights fall back to a Korean resource summary.
-- Focused API tests pass 86/86, Workbench contract tests pass 22/22, and API/Web typechecks pass.
-- A pending patch clarification no longer captures explicit fresh-draft requests such as `다이어그램 생성하고 싶어`; resource answers such as `서버 만들고 싶어` remain patch answers.
-- Focused fresh-draft routing tests pass 2/2 and Web typecheck passes.
-- Selecting a chat option re-enables transcript following so the newly appended question scrolls into view without changing manual scroll preservation for other updates.
-- Workbench contract tests pass 22/22 and Web typecheck passes.
-- Both diagram-generation chats now use one patch-clarification matcher and option presenter, plus the same fresh-draft routing and special-answer handling.
-- Focused routing/clarification tests pass 13/13, including five shared examples; Web typecheck passes.
+- Repaired Windows subprocess execution, API test environment isolation, stale generated architecture knowledge, and current Workspace/resource-catalog contracts.
+- Merged current `origin/dev` while preserving both runtime Secret delivery and profile-removal safety intents.
+- Updated runtime Secret safety coverage to use `demo_web_service` and kept literal-secret and broad-IAM rejection intact.
 
 ## Broken Or Unverified
 
-- Browser interaction was not rerun; verification is focused because the user requested limited testing.
+- End-to-end Live Observation animation and provider-confirmed scale-out remain unaccepted because the prior active UI session missed the traffic before the delayed-snapshot fix.
+- Automatic cleanup remains blocked until the approved operator can read the internal deployment-state object.
+- Do not generate traffic or recreate AWS resources without a new explicit approval.
 
 ## Best Next Action
 
-1. Review PR #491 after CI and merge it into `dev` when approved.
-2. Keep real Live Observation scale-out acceptance blocked until a newly approved non-production Plan/Apply/traffic/Destroy cycle.
-3. Merge the production runtime drift-review PR only after a current review-only Plan passes; never use a targeted Apply.
+1. Publish the current branch as a PR to `dev`.
+2. After merge, re-analyze `audience-live-check` and inspect its runtime Secret mapping before seeking any Apply approval.
 
-## Production Runtime Plan Review
+## Suggested Skills
 
-- Review-only production runtime Plan 29498864502 at `c8b107d3` succeeded with 3 add, 7 change, and 2 task-definition replacement destroys. It injects the GitHub App Secret into API and worker and preserves the Live Observation capability Secret; no Secret value was recorded.
-- Branch `fix/sw/production-runtime-plan-drift` stores the existing capability ARN as a dedicated production-infra-plan Environment Secret and overlays it into the runtime tfvars without replacing `PRODUCTION_INFRA_RUNTIME_TFVARS_JSON`.
-
-## PR #439 Follow-up Review
-
-- Pending follow-up branch scopes the static Secret checks to their declared Terraform sets, selects the named worker container in the Terraform test, and removes an unnecessary `tolist` conversion.
-- The nullable worker Secret list is normalized with `try(..., [])` so the test remains safe when `secrets` is absent or null.
-- Harness, structure check, Terraform formatting, lint, typecheck, build, and diff check pass. Local Terraform validate/test cannot load the uncached AWS provider 6.54.0; no cloud mutation was performed.
-
-## Live Observation Sandbox Run
-
-- Approved sandbox Deployment `0225dcbf-64a0-49e6-afa0-02eefddd4141` is `DESTROYED`; direct AWS checks found no remaining `liveobs-7cccab4b` resources. Preserve `sketchcatch-control-614935468487-apne2-7cccab4b` and `SketchCatchTerraformExecutionRole`.
-- `apps/api/src/live-observations/aws-live-observation-snapshot-provider.ts` shortens the STS session prefix from `sketchcatch-live-observation-` to `sketchcatch-live-obs-`; focused tests and all required root checks pass.
-- The Live Observation changes are assigned to `fix/ys/479-uiux-수정`; `apps/web/next-env.d.ts` matches the index, and the requested local servers remain on HTTPS 3000 and HTTP 4000.
-- The focused linear Live Observation UI is restored on top of v2: accepted requests and fresh CloudWatch ALB request snapshots trigger particles, while provider `running/desired/max` drives Fargate Task slots. The full immutable Architecture map remains available in a collapsed disclosure.
-- The built-in ECS Fargate Template now emits bounded Application Auto Scaling (`min=1`, `max=3`, `ALBRequestCountPerTarget=10`); focused UI/type tests and template Terraform validate pass. Do not claim live scale-out until a new approved sandbox Plan/Apply/traffic/Destroy cycle proves it.
+- Use `qa` if Live Observation browser behavior changes again.
+- Use `review` before merging the PR.

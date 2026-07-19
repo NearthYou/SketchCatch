@@ -27,6 +27,16 @@ test("starts a focused-flow burst from a fresh CloudWatch request observation", 
   );
 });
 
+test("bounds hundreds of requests to five representative particles", () => {
+  const previous = snapshot({ acceptedEventCount: 0, observedAt: "2026-07-19T01:00:00.000Z" });
+  const next = snapshot({ acceptedEventCount: 250, observedAt: "2026-07-19T01:00:01.000Z" });
+
+  assert.deepEqual(
+    getLiveObservationTrafficBurst(getLiveObservationTrafficCursor(previous), next),
+    { overflowCount: 245, visibleParticleCount: 5 }
+  );
+});
+
 test("does not replay the same provider observation or target a missing running task", () => {
   const previous = snapshot({ requests: 9, observedAt: "2026-07-19T01:01:00.000Z" });
   const sameObservation = snapshot({ requests: 9, observedAt: "2026-07-19T01:01:00.000Z" });
