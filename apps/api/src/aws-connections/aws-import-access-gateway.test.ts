@@ -814,12 +814,285 @@ test("service Role rejects extra inline policies and any attached managed policy
   }
 });
 
+test("cleanup reports lingering read Policy artifacts after the Policy Stack is absent", async () => {
+  const gateway = createCleanupGateway({
+    managerStack: "present",
+    policyStack: "absent",
+    serviceRole: true,
+    policies: [
+      contract.controlPolicyArn,
+      contract.cleanupVerificationPolicyArn,
+      contract.readManagedPolicyArn
+    ],
+    targetAttachments: [
+      contract.controlPolicyArn,
+      contract.cleanupVerificationPolicyArn,
+      contract.readManagedPolicyArn
+    ]
+  });
+
+  const result = await gateway.inspectCleanup({
+    connection,
+    contract,
+    expectedCurrent: {
+      manager: {
+        stackId: "manager-stack-id",
+        contractVersion: contract.contractVersion,
+        templateSha256: contract.templateSha256
+      },
+      policy: {
+        kind: "present",
+        stackId: "policy-stack-id",
+        contractVersion: contract.policyContractVersion,
+        templateSha256: contract.policyTemplateSha256,
+        policyFingerprint: contract.policyFingerprint
+      }
+    }
+  } as never);
+  const exact = result as unknown as ExactCleanupResult;
+
+  assert.equal(exact.verified, true);
+  assert.equal(exact.policy.stack.status, "absent");
+  assert.equal(exact.policy.readPolicy.status, "owned_present");
+  assert.equal(exact.policy.targetAttachment.status, "owned_present");
+  assert.equal(exact.manager.stack.status, "owned_present");
+});
+
+test("cleanup keeps checking exact Manager artifacts after its Stack is absent", async () => {
+  const gateway = createCleanupGateway({
+    managerStack: "absent",
+    policyStack: "absent",
+    serviceRole: true,
+    policies: [contract.controlPolicyArn],
+    targetAttachments: [contract.controlPolicyArn]
+  });
+
+  const exact = await gateway.inspectCleanup({ connection, contract }) as unknown as
+    ExactCleanupResult;
+
+  assert.equal(exact.verified, true);
+  assert.equal(exact.manager.stack.status, "absent");
+  assert.equal(exact.manager.serviceRole.status, "owned_present");
+  assert.equal(exact.manager.controlPolicy.status, "owned_present");
+  assert.equal(exact.manager.controlAttachment.status, "owned_present");
+  assert.equal(exact.manager.cleanupPolicy.status, "absent");
+});
+
+test("cleanup rejects a replacement Stack that differs from the stored exact identity", async () => {
+  const gateway = createCleanupGateway({
+    managerStack: "present",
+    policyStack: "absent",
+    serviceRole: true,
+    policies: [contract.controlPolicyArn, contract.cleanupVerificationPolicyArn],
+    targetAttachments: [contract.controlPolicyArn, contract.cleanupVerificationPolicyArn]
+  });
+
+  const exact = await gateway.inspectCleanup({
+    connection,
+    contract,
+    expectedCurrent: {
+      manager: {
+        stackId: "stored-manager-stack-id",
+        contractVersion: contract.contractVersion,
+        templateSha256: contract.templateSha256
+      }
+    }
+  } as never) as unknown as ExactCleanupResult;
+
+  assert.equal(exact.verified, false);
+  assert.equal(exact.manager.stack.status, "drifted");
+});
+
+test("cleanup accepts a last AccessDenied only after a prior exact Manager cleanup marker", async () => {
+  const denied = Object.assign(new Error("AccessDenied private-request-id"), {
+    name: "AccessDenied"
+  });
+  const gateway = createAwsImportAccessGateway({
+    createCloudFormationClient: () => ({ async send() { throw denied; } }),
+    createIamClient: () => ({ async send() { throw denied; } }),
+    assumeConnectionRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    })
+  });
+
+  const withoutMarker = await gateway.inspectCleanup({ connection, contract }) as unknown as
+    ExactCleanupResult;
+  const withMarker = await gateway.inspectCleanup({
+    connection,
+    contract,
+    priorManagerCleanupVerified: true
+  } as never) as unknown as ExactCleanupResult;
+
+  assert.equal(withoutMarker.verified, false);
+  assert.equal(withoutMarker.manager.stack.status, "unknown");
+  assert.equal(withMarker.verified, true);
+  assert.equal(withMarker.manager.stack.status, "absent");
+  assert.equal(withMarker.completionEvidence, "prior_exact_marker_access_denied");
+  assert.doesNotMatch(JSON.stringify(withMarker), /private-request-id|AccessDenied/iu);
+});
+
+test("manager inspection maps only explicit target Role errors to connection recovery", async () => {
+  for (const scenario of [
+    { name: "AccessDenied", message: "not authorized to assume target role", reason: "connection" },
+    { name: "ValidationError", message: "invalid role arn", reason: "connection" },
+    { name: "ExpiredToken", message: "provider credential expired", reason: "retry" },
+    { name: "TimeoutError", message: "socket timeout", reason: "retry" }
+  ] as const) {
+    const gateway = createAwsImportAccessGateway({
+      assumeConnectionRole: async () => {
+        throw Object.assign(new Error(scenario.message), { name: scenario.name });
+      }
+    });
+
+    const result = await gateway.inspectManager({ connection, contract });
+
+    assert.equal(result.reason, scenario.reason, scenario.name);
+  }
+});
+
 test("gateway exposes no DeleteStack operation", () => {
   const gateway = createAwsImportAccessGateway();
   assert.equal("deleteStack" in gateway, false);
   assert.equal("delete" in gateway, false);
   assert.equal(typeof UpdateStackCommand, "function");
 });
+
+type ExactCleanupStatus = "absent" | "owned_present" | "drifted" | "unknown";
+type ExactCleanupResult = {
+  verified: boolean;
+  completionEvidence?: "direct" | "prior_exact_marker_access_denied";
+  policy: {
+    stack: { status: ExactCleanupStatus };
+    readPolicy: { status: ExactCleanupStatus };
+    targetAttachment: { status: ExactCleanupStatus };
+  };
+  manager: {
+    stack: { status: ExactCleanupStatus };
+    serviceRole: { status: ExactCleanupStatus };
+    controlPolicy: { status: ExactCleanupStatus };
+    controlAttachment: { status: ExactCleanupStatus };
+    cleanupPolicy: { status: ExactCleanupStatus };
+    cleanupAttachment: { status: ExactCleanupStatus };
+  };
+};
+
+function createCleanupGateway(input: {
+  managerStack: "present" | "absent";
+  policyStack: "present" | "absent";
+  serviceRole: boolean;
+  policies: readonly string[];
+  targetAttachments: readonly string[];
+}) {
+  const policies = new Set(input.policies);
+  return createAwsImportAccessGateway({
+    createCloudFormationClient: () => ({
+      async send(command: unknown) {
+        if (command instanceof DescribeStacksCommand) {
+          const isPolicy = command.input.StackName === contract.policyStackName ||
+            command.input.StackName === "policy-stack-id";
+          const present = isPolicy ? input.policyStack === "present" : input.managerStack === "present";
+          if (!present) throw Object.assign(new Error("not found"), { name: "ValidationError" });
+          return {
+            Stacks: [isPolicy
+              ? createPolicyStack("policy-stack-id")
+              : createManagerStack("manager-stack-id")]
+          };
+        }
+        if (command instanceof GetTemplateCommand) {
+          return {
+            TemplateBody: command.input.StackName === "policy-stack-id"
+              ? contract.policyTemplateBody
+              : contract.templateBody
+          };
+        }
+        return {};
+      }
+    }),
+    createIamClient: () => ({
+      async send(command: unknown) {
+        if (command instanceof GetRoleCommand) {
+          if (!input.serviceRole) throw noSuchEntity();
+          return {
+            Role: {
+              AssumeRolePolicyDocument: encodeURIComponent(JSON.stringify({
+                Version: "2012-10-17",
+                Statement: [{
+                  Effect: "Allow",
+                  Principal: { Service: "cloudformation.amazonaws.com" },
+                  Action: "sts:AssumeRole"
+                }]
+              }))
+            }
+          };
+        }
+        if (command instanceof ListRolePoliciesCommand) {
+          return { PolicyNames: [contract.serviceRoleInlinePolicyName] };
+        }
+        if (command instanceof GetRolePolicyCommand) {
+          return {
+            PolicyDocument: encodeURIComponent(JSON.stringify(contract.serviceRolePolicyDocument))
+          };
+        }
+        if (command instanceof ListAttachedRolePoliciesCommand) {
+          if (command.input.RoleName === contract.serviceRoleName) {
+            if (!input.serviceRole) throw noSuchEntity();
+            return { AttachedPolicies: [] };
+          }
+          return {
+            AttachedPolicies: input.targetAttachments.map((PolicyArn) => ({ PolicyArn }))
+          };
+        }
+        if (command instanceof GetPolicyCommand) {
+          if (!command.input.PolicyArn || !policies.has(command.input.PolicyArn)) {
+            throw noSuchEntity();
+          }
+          return { Policy: { Arn: command.input.PolicyArn, DefaultVersionId: "v1" } };
+        }
+        if (command instanceof GetPolicyVersionCommand) {
+          const document = command.input.PolicyArn === contract.controlPolicyArn
+            ? contract.controlPolicyDocument
+            : command.input.PolicyArn === contract.cleanupVerificationPolicyArn
+              ? contract.cleanupVerificationPolicyDocument
+              : createAwsImportReadPolicyDocument();
+          return { PolicyVersion: { Document: encodeURIComponent(JSON.stringify(document)) } };
+        }
+        return {};
+      }
+    }),
+    assumeConnectionRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    })
+  });
+}
+
+function createManagerStack(stackId: string) {
+  return {
+    StackId: stackId,
+    StackName: contract.managerStackName,
+    StackStatus: "UPDATE_COMPLETE",
+    Tags: contract.ownershipTags,
+    Outputs: Object.entries({
+      SketchCatchConnectionId: contract.connectionId,
+      TemplateContractVersion: contract.contractVersion,
+      TargetRoleArn: contract.targetRoleArn,
+      CloudFormationServiceRoleArn: contract.serviceRoleArn,
+      PolicyStackName: contract.policyStackName,
+      PolicyStackArnPattern: contract.policyStackArn,
+      PolicyTemplateSha256: contract.policyTemplateSha256,
+      PolicyFingerprint: contract.policyFingerprint,
+      ControlPolicyArn: contract.controlPolicyArn,
+      CleanupVerificationPolicyArn: contract.cleanupVerificationPolicyArn
+    }).map(([OutputKey, OutputValue]) => ({ OutputKey, OutputValue }))
+  };
+}
+
+function noSuchEntity(): Error {
+  return Object.assign(new Error("not found"), { name: "NoSuchEntity" });
+}
 
 function createPresignedUrl(baseUrl: string): string {
   return `${baseUrl}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=AKIA%2F20260719%2Fap-northeast-2%2Fs3%2Faws4_request&X-Amz-Date=20260719T120000Z&X-Amz-Expires=600&X-Amz-Signature=${"a".repeat(64)}&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject`;

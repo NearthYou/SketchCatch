@@ -445,9 +445,17 @@ export function createAwsImportAccessService(
     async prepareCleanup(input) {
       const connection = await requireOwnedConnection(input, options.connectionRepository);
       const contract = createContract(connection, options.templateBucketName);
-      await options.repository.getOrCreate({ connectionId: input.connectionId, now: now() });
+      const current = await options.repository.getOrCreate({
+        connectionId: input.connectionId,
+        now: now()
+      });
       const operationId = generateOperationId();
-      const inspection = await options.gateway.inspectCleanup({ connection, contract });
+      const inspection = await options.gateway.inspectCleanup({
+        connection,
+        contract,
+        expectedCurrent: createExpectedCurrentState(current),
+        priorManagerCleanupVerified: current.status === "cleanup_manager_required"
+      });
       const cleanup = deriveCleanupState(inspection);
       const saved = await saveCommandOrThrow(options.repository, {
         connectionId: input.connectionId,
@@ -480,9 +488,17 @@ export function createAwsImportAccessService(
     async checkCleanup(input) {
       const connection = await requireOwnedConnection(input, options.connectionRepository);
       const contract = createContract(connection, options.templateBucketName);
-      await options.repository.getOrCreate({ connectionId: input.connectionId, now: now() });
+      const current = await options.repository.getOrCreate({
+        connectionId: input.connectionId,
+        now: now()
+      });
       const operationId = generateOperationId();
-      const inspection = await options.gateway.inspectCleanup({ connection, contract });
+      const inspection = await options.gateway.inspectCleanup({
+        connection,
+        contract,
+        expectedCurrent: createExpectedCurrentState(current),
+        priorManagerCleanupVerified: current.status === "cleanup_manager_required"
+      });
       const cleanup = deriveCleanupState(inspection);
       const saved = await saveCommandOrThrow(options.repository, {
         connectionId: input.connectionId,
@@ -805,7 +821,7 @@ function safeDigestEqual(left: string, right: string): boolean {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-/** gg: Task 4가 artifact 확인을 강화하기 전에도 Policy-first 삭제 순서를 고정합니다. */
+/** gg: exact Policy artifact가 모두 사라진 뒤 Manager로, Manager artifact가 모두 사라진 뒤 완료로 갑니다. */
 function deriveCleanupState(inspection: CleanupInspection): {
   status: AwsImportAccessStatus;
   summary: string;
@@ -819,7 +835,7 @@ function deriveCleanupState(inspection: CleanupInspection): {
       errorCode: inspection.reason ?? "cleanup_retry"
     };
   }
-  if (inspection.policyStackExists) {
+  if (inspection.policy.stack.status === "owned_present") {
     return {
       status: "cleanup_policy_required",
       summary: "AWS Console에서 가져오기 Policy를 먼저 정리해 주세요.",
@@ -827,12 +843,35 @@ function deriveCleanupState(inspection: CleanupInspection): {
       stackName: "policy"
     };
   }
-  if (inspection.managerStackExists) {
+  if (
+    inspection.policy.readPolicy.status !== "absent" ||
+    inspection.policy.targetAttachment.status !== "absent"
+  ) {
+    return {
+      status: "cleanup_required",
+      summary: "Policy Stack 정리 뒤 남은 가져오기 Policy를 다시 확인해 주세요.",
+      errorCode: "cleanup_policy_artifact_pending"
+    };
+  }
+  if (inspection.manager.stack.status === "owned_present") {
     return {
       status: "cleanup_manager_required",
       summary: "AWS Console에서 Manager를 정리해 주세요.",
       errorCode: null,
       stackName: "manager"
+    };
+  }
+  if (
+    inspection.manager.serviceRole.status !== "absent" ||
+    inspection.manager.controlPolicy.status !== "absent" ||
+    inspection.manager.controlAttachment.status !== "absent" ||
+    inspection.manager.cleanupPolicy.status !== "absent" ||
+    inspection.manager.cleanupAttachment.status !== "absent"
+  ) {
+    return {
+      status: "cleanup_required",
+      summary: "Manager Stack 정리 뒤 남은 AWS 권한 항목을 다시 확인해 주세요.",
+      errorCode: "cleanup_manager_artifact_pending"
     };
   }
   return {

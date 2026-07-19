@@ -62,7 +62,7 @@ export type ManagerInspection = {
   policyContractVersion: string | null;
   policyTemplateSha256: string | null;
   policyFingerprint: string | null;
-  reason?: "not_found" | "drifted" | "retry";
+  reason?: "not_found" | "drifted" | "retry" | "connection";
 };
 
 export type PolicyStackResult = {
@@ -84,10 +84,28 @@ export type ManagerPreparationMode =
   | { kind: "create" }
   | { kind: "update"; stackId: string };
 
+export type CleanupArtifactInspection = {
+  status: "absent" | "owned_present" | "drifted" | "unknown";
+};
+
 export type CleanupInspection = {
   verified: boolean;
   managerStackExists: boolean;
   policyStackExists: boolean;
+  policy: {
+    stack: CleanupArtifactInspection;
+    readPolicy: CleanupArtifactInspection;
+    targetAttachment: CleanupArtifactInspection;
+  };
+  manager: {
+    stack: CleanupArtifactInspection;
+    serviceRole: CleanupArtifactInspection;
+    controlPolicy: CleanupArtifactInspection;
+    controlAttachment: CleanupArtifactInspection;
+    cleanupPolicy: CleanupArtifactInspection;
+    cleanupAttachment: CleanupArtifactInspection;
+  };
+  completionEvidence?: "direct" | "prior_exact_marker_access_denied";
   reason?: "drifted" | "retry";
 };
 
@@ -111,6 +129,8 @@ export type AwsImportAccessGateway = {
   inspectCleanup(input: {
     connection: AwsConnectionRecord;
     contract: AwsImportManagerContract;
+    expectedCurrent?: ExpectedCurrentImportAccessState;
+    priorManagerCleanupVerified?: boolean;
   }): Promise<CleanupInspection>;
 };
 
@@ -178,6 +198,7 @@ export function createAwsImportAccessGateway(
 
     // gg: exact Template hash가 맞으면 trust·Policy·attachment도 같은 계약으로 검증된 것입니다.
     async inspectManager({ connection, contract, expectedCurrent }) {
+      let connectionEstablished = false;
       try {
         const clients = await createConnectionClients(
           connection,
@@ -185,6 +206,7 @@ export function createAwsImportAccessGateway(
           createIamClient,
           assumeConnectionRole
         );
+        connectionEstablished = true;
         const manager = await describeStack(clients.cloudFormation, contract.managerStackName);
         const policy = await describeStack(clients.cloudFormation, contract.policyStackName);
         const managerTemplate = manager
@@ -243,7 +265,7 @@ export function createAwsImportAccessGateway(
               }
             : {})
         };
-      } catch {
+      } catch (error) {
         return {
           verified: false,
           managerStatus: "invalid",
@@ -256,7 +278,9 @@ export function createAwsImportAccessGateway(
           policyContractVersion: null,
           policyTemplateSha256: null,
           policyFingerprint: null,
-          reason: "retry"
+          reason: !connectionEstablished && isExplicitTargetRoleConnectionError(error)
+            ? "connection"
+            : "retry"
         };
       }
     },
@@ -318,8 +342,13 @@ export function createAwsImportAccessGateway(
       return { policyStackId: stackId, status: "accepted" };
     },
 
-    // gg: 정리는 exact Stack·Template·IAM artifact만 읽고 DeleteStack은 제공하지 않습니다.
-    async inspectCleanup({ connection, contract }) {
+    // gg: 정리는 stored Stack identity와 exact IAM artifact를 분리해 읽고 DeleteStack은 제공하지 않습니다.
+    async inspectCleanup({
+      connection,
+      contract,
+      expectedCurrent,
+      priorManagerCleanupVerified = false
+    }) {
       try {
         const clients = await createConnectionClients(
           connection,
@@ -327,58 +356,147 @@ export function createAwsImportAccessGateway(
           createIamClient,
           assumeConnectionRole
         );
-        const policy = await describeStack(clients.cloudFormation, contract.policyStackName);
-        const manager = await describeStack(clients.cloudFormation, contract.managerStackName);
-        if (!manager && policy) {
-          return {
-            verified: false,
-            managerStackExists: false,
-            policyStackExists: true,
-            reason: "drifted"
-          };
-        }
-        const managerVerified = manager
-          ? verifyManagerStack(
-              manager,
-              await getStackTemplate(
-                clients.cloudFormation,
-                manager.StackId ?? contract.managerStackName
-              ),
-              contract
+        const policyStack = await describeCleanupStack(
+          clients.cloudFormation,
+          contract.policyStackName,
+          expectedCurrent?.policy?.stackId
+        );
+        const managerStack = await describeCleanupStack(
+          clients.cloudFormation,
+          contract.managerStackName,
+          expectedCurrent?.manager?.stackId
+        );
+        const policyTemplate = policyStack
+          ? await getStackTemplate(
+              clients.cloudFormation,
+              policyStack.StackId ?? contract.policyStackName
             )
-          : true;
-        const policyVerified = policy
-          ? verifyPolicyStack(
-              policy,
-              await getStackTemplate(
-                clients.cloudFormation,
-                policy.StackId ?? contract.policyStackName
-              ),
-              contract
+          : null;
+        const managerTemplate = managerStack
+          ? await getStackTemplate(
+              clients.cloudFormation,
+              managerStack.StackId ?? contract.managerStackName
             )
-          : true;
-        const iamVerified = manager
-          ? await verifyManagerIamResources(
+          : null;
+        const inspectedPolicyStack = inspectPolicyStack(
+          policyStack,
+          policyTemplate,
+          contract,
+          expectedCurrent,
+          issuedPolicyActionsByVersion
+        );
+        const inspectedManagerStack = inspectManagerStack(
+          managerStack,
+          managerTemplate,
+          contract,
+          expectedCurrent
+        );
+        const policyStackArtifact = cleanupStackArtifact(
+          inspectedPolicyStack.status,
+          policyStack,
+          expectedCurrent?.policy?.stackId
+        );
+        const managerStackArtifact = cleanupStackArtifact(
+          inspectedManagerStack.status,
+          managerStack,
+          expectedCurrent?.manager?.stackId
+        );
+        const readPolicy = await inspectManagedPolicyPresence(
+          clients.iam,
+          contract.readManagedPolicyArn
+        );
+        const controlPolicy = await inspectManagedPolicyPresence(
+          clients.iam,
+          contract.controlPolicyArn
+        );
+        const cleanupPolicy = await inspectManagedPolicyPresence(
+          clients.iam,
+          contract.cleanupVerificationPolicyArn
+        );
+        const serviceRole = await inspectRolePresence(clients.iam, contract.serviceRoleName);
+        const attachments = await inspectTargetPolicyAttachments(
+          clients.iam,
+          contract.targetRoleName,
+          [
+            contract.readManagedPolicyArn,
+            contract.controlPolicyArn,
+            contract.cleanupVerificationPolicyArn
+          ]
+        );
+        const readAttachment = attachments[contract.readManagedPolicyArn] ?? UNKNOWN_ARTIFACT;
+        const controlAttachment = attachments[contract.controlPolicyArn] ?? UNKNOWN_ARTIFACT;
+        const cleanupAttachment = attachments[contract.cleanupVerificationPolicyArn] ??
+          UNKNOWN_ARTIFACT;
+        const artifacts = [
+          policyStackArtifact,
+          managerStackArtifact,
+          readPolicy,
+          readAttachment,
+          serviceRole,
+          controlPolicy,
+          controlAttachment,
+          cleanupPolicy,
+          cleanupAttachment
+        ];
+        const policyPresentCoherent = policyStackArtifact.status !== "owned_present" ||
+          (readPolicy.status === "owned_present" &&
+            readAttachment.status === "owned_present" &&
+            inspectedPolicyStack.policyDocument !== null &&
+            await managedPolicyMatches(
+              clients.iam,
+              contract.readManagedPolicyArn,
+              inspectedPolicyStack.policyDocument
+            ));
+        const managerPresentCoherent = managerStackArtifact.status !== "owned_present" ||
+          (serviceRole.status === "owned_present" &&
+            controlPolicy.status === "owned_present" &&
+            controlAttachment.status === "owned_present" &&
+            cleanupPolicy.status === "owned_present" &&
+            cleanupAttachment.status === "owned_present" &&
+            await verifyManagerIamResources(
               clients.iam,
               contract,
-              policy ? createAwsImportReadPolicyDocument() : null
-            )
-          : true;
+              policyStackArtifact.status === "owned_present"
+                ? inspectedPolicyStack.policyDocument
+                : null
+            ));
+        const stackOrderCoherent = managerStackArtifact.status === "owned_present" ||
+          policyStackArtifact.status !== "owned_present";
+        const hasUnknown = artifacts.some((artifact) => artifact.status === "unknown");
+        const hasDrift = artifacts.some((artifact) => artifact.status === "drifted") ||
+          !policyPresentCoherent || !managerPresentCoherent || !stackOrderCoherent;
+        const verified = !hasUnknown && !hasDrift;
         return {
-          verified: managerVerified && policyVerified && iamVerified,
-          managerStackExists: Boolean(manager),
-          policyStackExists: Boolean(policy),
-          ...(!managerVerified || !policyVerified || !iamVerified
-            ? { reason: "drifted" as const }
-            : {})
+          verified,
+          managerStackExists: Boolean(managerStack),
+          policyStackExists: Boolean(policyStack),
+          policy: {
+            stack: policyStackArtifact,
+            readPolicy,
+            targetAttachment: readAttachment
+          },
+          manager: {
+            stack: managerStackArtifact,
+            serviceRole,
+            controlPolicy,
+            controlAttachment,
+            cleanupPolicy,
+            cleanupAttachment
+          },
+          ...(artifacts.every((artifact) => artifact.status === "absent")
+            ? { completionEvidence: "direct" as const }
+            : {}),
+          ...(hasUnknown
+            ? { reason: "retry" as const }
+            : hasDrift
+              ? { reason: "drifted" as const }
+              : {})
         };
-      } catch {
-        return {
-          verified: false,
-          managerStackExists: true,
-          policyStackExists: true,
-          reason: "retry"
-        };
+      } catch (error) {
+        if (priorManagerCleanupVerified && isAccessDeniedError(error)) {
+          return createAssumedAbsentCleanupInspection();
+        }
+        return createUnknownCleanupInspection();
       }
     }
   };
@@ -444,6 +562,159 @@ async function describeStack(
     if (isStackNotFound(error)) return null;
     throw error;
   }
+}
+
+const ABSENT_ARTIFACT = { status: "absent" } as const satisfies CleanupArtifactInspection;
+const OWNED_PRESENT_ARTIFACT = {
+  status: "owned_present"
+} as const satisfies CleanupArtifactInspection;
+const DRIFTED_ARTIFACT = { status: "drifted" } as const satisfies CleanupArtifactInspection;
+const UNKNOWN_ARTIFACT = { status: "unknown" } as const satisfies CleanupArtifactInspection;
+
+/** gg: stored Stack ID가 사라졌을 때도 같은 이름의 replacement Stack을 한 번 더 확인합니다. */
+async function describeCleanupStack(
+  client: CloudFormationClientLike,
+  stackName: string,
+  expectedStackId: string | undefined
+): Promise<Stack | null> {
+  if (!expectedStackId) return describeStack(client, stackName);
+  const expected = await describeStack(client, expectedStackId);
+  return expected ?? describeStack(client, stackName);
+}
+
+/** gg: Stack은 exact stored identity와 발급 계약이 모두 맞을 때만 owned로 분류합니다. */
+function cleanupStackArtifact(
+  status: ManagerInspection["managerStatus"] | ManagerInspection["policyStatus"],
+  stack: Stack | null,
+  expectedStackId: string | undefined
+): CleanupArtifactInspection {
+  if (status === "absent") return ABSENT_ARTIFACT;
+  if (expectedStackId && stack?.StackId !== expectedStackId) return DRIFTED_ARTIFACT;
+  return status === "target" || status === "owned_older"
+    ? OWNED_PRESENT_ARTIFACT
+    : DRIFTED_ARTIFACT;
+}
+
+/** gg: exact ARN의 managed Policy 존재만 분류하고 NoSuchEntity 외 실패는 상위 retry로 보냅니다. */
+async function inspectManagedPolicyPresence(
+  iam: IamClientLike,
+  policyArn: string
+): Promise<CleanupArtifactInspection> {
+  try {
+    const response = (await iam.send(new GetPolicyCommand({ PolicyArn: policyArn }))) as {
+      Policy?: { Arn?: string };
+    };
+    return response.Policy ? OWNED_PRESENT_ARTIFACT : DRIFTED_ARTIFACT;
+  } catch (error) {
+    if (isIamArtifactNotFound(error)) return ABSENT_ARTIFACT;
+    throw error;
+  }
+}
+
+/** gg: connection-scoped service Role 이름의 존재를 다른 Role과 합치지 않고 확인합니다. */
+async function inspectRolePresence(
+  iam: IamClientLike,
+  roleName: string
+): Promise<CleanupArtifactInspection> {
+  try {
+    const response = (await iam.send(new GetRoleCommand({ RoleName: roleName }))) as {
+      Role?: unknown;
+    };
+    return response.Role ? OWNED_PRESENT_ARTIFACT : DRIFTED_ARTIFACT;
+  } catch (error) {
+    if (isIamArtifactNotFound(error)) return ABSENT_ARTIFACT;
+    throw error;
+  }
+}
+
+/** gg: target Role의 한 bounded attachment page에서 exact owned ARN만 분리합니다. */
+async function inspectTargetPolicyAttachments(
+  iam: IamClientLike,
+  roleName: string,
+  policyArns: readonly string[]
+): Promise<Record<string, CleanupArtifactInspection>> {
+  const response = (await iam.send(new ListAttachedRolePoliciesCommand({
+    RoleName: roleName
+  }))) as { AttachedPolicies?: Array<{ PolicyArn?: string }>; IsTruncated?: boolean };
+  const attached = new Set(
+    (response.AttachedPolicies ?? []).flatMap((policy) => policy.PolicyArn ? [policy.PolicyArn] : [])
+  );
+  return Object.fromEntries(policyArns.map((policyArn) => [
+    policyArn,
+    attached.has(policyArn)
+      ? OWNED_PRESENT_ARTIFACT
+      : response.IsTruncated === true
+        ? UNKNOWN_ARTIFACT
+        : ABSENT_ARTIFACT
+  ]));
+}
+
+/** gg: exact absence를 직접 확인하지 못한 cleanup 결과는 어떤 artifact도 삭제됐다고 단정하지 않습니다. */
+function createUnknownCleanupInspection(): CleanupInspection {
+  return {
+    verified: false,
+    managerStackExists: true,
+    policyStackExists: true,
+    policy: {
+      stack: UNKNOWN_ARTIFACT,
+      readPolicy: UNKNOWN_ARTIFACT,
+      targetAttachment: UNKNOWN_ARTIFACT
+    },
+    manager: {
+      stack: UNKNOWN_ARTIFACT,
+      serviceRole: UNKNOWN_ARTIFACT,
+      controlPolicy: UNKNOWN_ARTIFACT,
+      controlAttachment: UNKNOWN_ARTIFACT,
+      cleanupPolicy: UNKNOWN_ARTIFACT,
+      cleanupAttachment: UNKNOWN_ARTIFACT
+    },
+    reason: "retry"
+  };
+}
+
+/** gg: prior exact Manager marker 뒤 마지막 AccessDenied만 cleanup 완료 증거로 좁혀 사용합니다. */
+function createAssumedAbsentCleanupInspection(): CleanupInspection {
+  return {
+    verified: true,
+    managerStackExists: false,
+    policyStackExists: false,
+    policy: {
+      stack: ABSENT_ARTIFACT,
+      readPolicy: ABSENT_ARTIFACT,
+      targetAttachment: ABSENT_ARTIFACT
+    },
+    manager: {
+      stack: ABSENT_ARTIFACT,
+      serviceRole: ABSENT_ARTIFACT,
+      controlPolicy: ABSENT_ARTIFACT,
+      controlAttachment: ABSENT_ARTIFACT,
+      cleanupPolicy: ABSENT_ARTIFACT,
+      cleanupAttachment: ABSENT_ARTIFACT
+    },
+    completionEvidence: "prior_exact_marker_access_denied"
+  };
+}
+
+function isIamArtifactNotFound(error: unknown): boolean {
+  return error instanceof Error && error.name === "NoSuchEntity";
+}
+
+function isAccessDeniedError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const value = `${error.name} ${error.message}`.toLowerCase();
+  return value.includes("accessdenied") || value.includes("not authorized");
+}
+
+/** gg: STS target Role 계약 오류만 Settings 복구로 보내고 provider expiry·network는 retry로 둡니다. */
+function isExplicitTargetRoleConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const value = `${error.name} ${error.message}`.toLowerCase();
+  if (value.includes("expiredtoken") || value.includes("credential") && value.includes("expired")) {
+    return false;
+  }
+  if (value.includes("accessdenied") || value.includes("not authorized")) return true;
+  return (value.includes("invalid") || value.includes("malformed") || value.includes("mismatch")) &&
+    (value.includes("role") || value.includes("externalid") || value.includes("external id"));
 }
 
 /** gg: Stack이 실제 사용한 Template 본문만 읽어 deterministic hash를 검증합니다. */

@@ -336,6 +336,109 @@ test("cleanup opens the exact owned Policy Stack and never a caller-selected sta
   assert.doesNotMatch(result.consoleUrl ?? "", /stack=policy(?:&|$)/u);
 });
 
+test("cleanup keeps check_cleanup when a deleted Policy Stack leaves exact artifacts", async () => {
+  const fixture = createImportAccessServiceFixture();
+  fixture.gateway.inspectCleanup = async () => ({
+    verified: true,
+    managerStackExists: true,
+    policyStackExists: false,
+    policy: {
+      stack: { status: "absent" },
+      readPolicy: { status: "owned_present" },
+      targetAttachment: { status: "owned_present" }
+    },
+    manager: {
+      stack: { status: "owned_present" },
+      serviceRole: { status: "owned_present" },
+      controlPolicy: { status: "owned_present" },
+      controlAttachment: { status: "owned_present" },
+      cleanupPolicy: { status: "owned_present" },
+      cleanupAttachment: { status: "owned_present" }
+    }
+  });
+
+  const result = await fixture.service.checkCleanup(fixture.ownerInput);
+
+  assert.equal(result.state.status, "cleanup_required");
+  assert.equal(result.nextAction, "check_cleanup");
+  assert.equal(result.consoleUrl, undefined);
+  assert.equal(fixture.getRecord()?.safeErrorCode, "cleanup_policy_artifact_pending");
+});
+
+test("cleanup does not complete while an exact Manager artifact remains", async () => {
+  const fixture = createImportAccessServiceFixture();
+  fixture.gateway.inspectCleanup = async () => ({
+    verified: true,
+    managerStackExists: false,
+    policyStackExists: false,
+    policy: {
+      stack: { status: "absent" },
+      readPolicy: { status: "absent" },
+      targetAttachment: { status: "absent" }
+    },
+    manager: {
+      stack: { status: "absent" },
+      serviceRole: { status: "owned_present" },
+      controlPolicy: { status: "absent" },
+      controlAttachment: { status: "absent" },
+      cleanupPolicy: { status: "absent" },
+      cleanupAttachment: { status: "absent" }
+    }
+  });
+
+  const result = await fixture.service.checkCleanup(fixture.ownerInput);
+
+  assert.equal(result.state.status, "cleanup_required");
+  assert.equal(result.nextAction, "check_cleanup");
+  assert.equal(result.consoleUrl, undefined);
+  assert.equal(fixture.getRecord()?.safeErrorCode, "cleanup_manager_artifact_pending");
+});
+
+test("cleanup forwards stored Stack identities and only a prior exact Manager marker", async () => {
+  const fixture = createImportAccessServiceFixture();
+  await fixture.service.getState(fixture.ownerInput);
+  Object.assign(fixture.getRecord()!, {
+    status: "cleanup_manager_required",
+    managerStackId: "stored-manager-stack-id",
+    managerContractVersion: "stored-manager-version",
+    managerTemplateHash: "a".repeat(64),
+    policyStackId: "stored-policy-stack-id",
+    policyContractVersion: "stored-policy-version",
+    policyTemplateHash: "b".repeat(64),
+    policyFingerprint: "c".repeat(64)
+  });
+  let received: Parameters<AwsImportAccessServiceGateway["inspectCleanup"]>[0] | undefined;
+  fixture.gateway.inspectCleanup = async (input) => {
+    received = input;
+    return {
+      verified: true,
+      managerStackExists: false,
+      policyStackExists: false,
+      completionEvidence: "prior_exact_marker_access_denied",
+      policy: {
+        stack: { status: "absent" },
+        readPolicy: { status: "absent" },
+        targetAttachment: { status: "absent" }
+      },
+      manager: {
+        stack: { status: "absent" },
+        serviceRole: { status: "absent" },
+        controlPolicy: { status: "absent" },
+        controlAttachment: { status: "absent" },
+        cleanupPolicy: { status: "absent" },
+        cleanupAttachment: { status: "absent" }
+      }
+    };
+  };
+
+  const result = await fixture.service.checkCleanup(fixture.ownerInput);
+
+  assert.equal(received?.priorManagerCleanupVerified, true);
+  assert.equal(received?.expectedCurrent?.manager?.stackId, "stored-manager-stack-id");
+  assert.equal(received?.expectedCurrent?.policy?.stackId, "stored-policy-stack-id");
+  assert.equal(result.state.status, "cleanup_complete");
+});
+
 test("apply completion cannot overwrite a newer operation after its lease", async () => {
   const fixture = createImportAccessServiceFixture();
   const preview = await fixture.service.previewPolicy(fixture.ownerInput);

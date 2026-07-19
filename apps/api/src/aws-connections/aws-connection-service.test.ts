@@ -8,6 +8,7 @@ import {
   getAwsConnectionCloudFormationTemplate,
   listAwsConnections,
   AwsConnectionConflictError,
+  AwsConnectionDeleteConflictError,
   type AwsConnectionRecord,
   shouldBlockAwsConnectionDeletion,
   type AwsConnectionRepository,
@@ -834,6 +835,132 @@ test("AWS connection deletion requires explicit preview confirmation before clai
   assert.equal(cleanupCalls, 0);
 });
 
+test("AWS connection deletion preview allows no import row or cleanup_complete only", async () => {
+  const repository = createInMemoryAwsConnectionRepository();
+  const created = await createAwsConnection(
+    {
+      accessContext,
+      region: "ap-northeast-2",
+      callerPrincipalArns: [apiCallerPrincipalArn]
+    },
+    repository,
+    {
+      generateId: () => "88888888-8888-4888-8888-888888888888",
+      generateExternalId: () => "external-id"
+    }
+  );
+  repository.findManagedResources = async () => ({
+    codeBuildProjects: [],
+    codeConnectionArn: null
+  });
+  let importStatus: string | undefined;
+  repository.findAwsImportAccessCleanupStatus = async () => importStatus as never;
+
+  for (const scenario of [
+    { status: undefined, canDelete: true },
+    { status: "cleanup_complete", canDelete: true },
+    { status: "cleanup_required", canDelete: false },
+    { status: "cleanup_manager_required", canDelete: false },
+    { status: "retry_required", canDelete: false }
+  ] as const) {
+    importStatus = scenario.status;
+    const preview = await getAwsConnectionDeletionPreview(
+      { connectionId: created.awsConnection.id, accessContext },
+      repository
+    );
+    assert.equal(preview.canDelete, scenario.canDelete, String(scenario.status));
+    if (!scenario.canDelete) {
+      assert.match(preview.blockerMessage ?? "", /가져오기 권한 정리/);
+    }
+  }
+});
+
+test("AWS connection deletion retry claim cannot bypass an import cleanup guard", async () => {
+  const repository = createInMemoryAwsConnectionRepository();
+  const created = await createAwsConnection(
+    {
+      accessContext,
+      region: "ap-northeast-2",
+      callerPrincipalArns: [apiCallerPrincipalArn]
+    },
+    repository,
+    {
+      generateId: () => "99999999-9999-4999-8999-999999999999",
+      generateExternalId: () => "external-id"
+    }
+  );
+  repository.findManagedResources = async () => ({ codeBuildProjects: [], codeConnectionArn: null });
+  repository.findAwsImportAccessCleanupStatus = async () => "cleanup_complete" as never;
+  const preview = await getAwsConnectionDeletionPreview(
+    { connectionId: created.awsConnection.id, accessContext },
+    repository
+  );
+  repository.claimAccessibleAwsConnectionDeletion = async () => ({
+    connection: {
+      ...(await repository.findAccessibleAwsConnection(created.awsConnection.id, accessContext))!,
+      deletionStartedAt: new Date("2026-07-20T00:00:00.000Z"),
+      deletionErrorSummary: "previous cleanup failure"
+    },
+    claimed: false,
+    blocked: true,
+    blockReason: "import_access"
+  } as never);
+
+  await assert.rejects(
+    deleteAwsConnection(
+      {
+        connectionId: created.awsConnection.id,
+        accessContext,
+        confirmedManagedCleanup: true,
+        confirmationToken: preview.confirmationToken
+      },
+      repository
+    ),
+    /가져오기 권한 정리/
+  );
+});
+
+test("AWS connection deletion surfaces a final import-status race as conflict", async () => {
+  const repository = createInMemoryAwsConnectionRepository();
+  const created = await createAwsConnection(
+    {
+      accessContext,
+      region: "ap-northeast-2",
+      callerPrincipalArns: [apiCallerPrincipalArn]
+    },
+    repository,
+    {
+      generateId: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      generateExternalId: () => "external-id"
+    }
+  );
+  repository.findManagedResources = async () => ({ codeBuildProjects: [], codeConnectionArn: null });
+  repository.findAwsImportAccessCleanupStatus = async () => "cleanup_complete" as never;
+  const preview = await getAwsConnectionDeletionPreview(
+    { connectionId: created.awsConnection.id, accessContext },
+    repository
+  );
+  repository.deleteClaimedAwsConnection = async () => {
+    throw new AwsConnectionDeleteConflictError(
+      "AWS 가져오기 권한 정리 상태가 변경되었습니다."
+    );
+  };
+
+  await assert.rejects(
+    deleteAwsConnection(
+      {
+        connectionId: created.awsConnection.id,
+        accessContext,
+        confirmedManagedCleanup: true,
+        confirmationToken: preview.confirmationToken
+      },
+      repository
+    ),
+    /가져오기 권한 정리 상태가 변경/
+  );
+  assert.ok(await repository.findAccessibleAwsConnection(created.awsConnection.id, accessContext));
+});
+
 function createInMemoryAwsConnectionRepository(): AwsConnectionRepository {
   const records = new Map<string, AwsConnectionRecord>();
 
@@ -855,6 +982,9 @@ function createInMemoryAwsConnectionRepository(): AwsConnectionRepository {
     },
     async countReverseEngineeringScans() {
       return 0;
+    },
+    async findAwsImportAccessCleanupStatus() {
+      return undefined;
     },
     async claimAccessibleAwsConnectionDeletion(connectionId) {
       const record = records.get(connectionId);
@@ -940,6 +1070,9 @@ function createListRepository(rows: AwsConnectionRecord[]): AwsConnectionReposit
     },
     async countReverseEngineeringScans() {
       return 0;
+    },
+    async findAwsImportAccessCleanupStatus() {
+      return undefined;
     },
     async claimAccessibleAwsConnectionDeletion() {
       return undefined;

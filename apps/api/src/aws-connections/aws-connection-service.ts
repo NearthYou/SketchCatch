@@ -5,6 +5,7 @@ import type {
   AwsConnectionListResponse,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnectionDeletionPreviewResponse,
+  AwsImportAccessStatus,
   AwsRolePermissionSetup,
   CreateAwsConnectionResponse,
   SketchCatchCallerRoleSetup,
@@ -17,6 +18,7 @@ import { projectBuildCacheRepositoryActions } from "../build-environments/projec
 import {
   awsCodeConnections,
   awsConnections,
+  awsImportAccess,
   deployedResources,
   deploymentJobs,
   deployments,
@@ -213,6 +215,9 @@ export type AwsConnectionRepository = {
   findAwsConnectionById(connectionId: string): Promise<AwsConnectionRecord | undefined>;
   hasDeploymentUsingAwsConnection(connectionId: string): Promise<boolean>;
   countReverseEngineeringScans(connectionId: string): Promise<number>;
+  findAwsImportAccessCleanupStatus(
+    connectionId: string
+  ): Promise<AwsImportAccessStatus | undefined>;
   claimAccessibleAwsConnectionDeletion(
     connectionId: string,
     accessContext: ProjectAccessContext,
@@ -222,6 +227,7 @@ export type AwsConnectionRepository = {
         connection: AwsConnectionRecord;
         claimed: boolean;
         blocked: boolean;
+        blockReason?: "deployment" | "import_access";
       }
     | undefined
   >;
@@ -445,6 +451,16 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
       return result?.count ?? 0;
     },
 
+    // gg: preview는 import child가 없거나 exact cleanup_complete일 때만 삭제를 제안합니다.
+    async findAwsImportAccessCleanupStatus(connectionId) {
+      const [record] = await db
+        .select({ status: awsImportAccess.status })
+        .from(awsImportAccess)
+        .where(eq(awsImportAccess.awsConnectionId, connectionId));
+      return record?.status;
+    },
+
+    // gg: fresh/retry claim 모두 같은 transaction에서 import cleanup 상태를 먼저 잠급니다.
     async claimAccessibleAwsConnectionDeletion(connectionId, accessContext, now) {
       return db.transaction(async (transaction) => {
         const tx = transaction as unknown as Database;
@@ -459,6 +475,19 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
           )
           .for("update");
         if (!connection) return undefined;
+        const [importAccess] = await transaction
+          .select({ status: awsImportAccess.status })
+          .from(awsImportAccess)
+          .where(eq(awsImportAccess.awsConnectionId, connectionId))
+          .for("update");
+        if (importAccess && importAccess.status !== "cleanup_complete") {
+          return {
+            connection,
+            claimed: false,
+            blocked: true,
+            blockReason: "import_access"
+          };
+        }
         if (connection.deletionStartedAt && connection.deletionErrorSummary) {
           const [reclaimed] = await transaction
             .update(awsConnections)
@@ -479,7 +508,12 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
           return { connection, claimed: false, blocked: false };
         }
         if (await hasBlockingDeployment(connectionId, tx)) {
-          return { connection, claimed: false, blocked: true };
+          return {
+            connection,
+            claimed: false,
+            blocked: true,
+            blockReason: "deployment"
+          };
         }
         const [claimed] = await transaction
           .update(awsConnections)
@@ -524,12 +558,45 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
         );
     },
 
+    // gg: final parent delete 직전 child를 다시 잠그고 cleanup_complete만 함께 제거합니다.
     async deleteClaimedAwsConnection(connectionId, accessContext) {
       return db.transaction(async (transaction) => {
+        const [claimedConnection] = await transaction
+          .select()
+          .from(awsConnections)
+          .where(
+            and(
+              eq(awsConnections.id, connectionId),
+              eq(awsConnections.userId, accessContext.userId),
+              isNotNull(awsConnections.deletionStartedAt)
+            )
+          )
+          .for("update");
+        if (!claimedConnection) return undefined;
+        const [importAccess] = await transaction
+          .select({ status: awsImportAccess.status })
+          .from(awsImportAccess)
+          .where(eq(awsImportAccess.awsConnectionId, connectionId))
+          .for("update");
+        if (importAccess && importAccess.status !== "cleanup_complete") {
+          throw new AwsConnectionDeleteConflictError(
+            "AWS 가져오기 권한 정리 상태가 변경되었습니다. 다시 확인해 주세요."
+          );
+        }
         await transaction
           .update(projectBuildEnvironments)
           .set({ status: "disconnected", lastVerifiedAt: null, updatedAt: new Date() })
           .where(eq(projectBuildEnvironments.awsConnectionId, connectionId));
+        if (importAccess?.status === "cleanup_complete") {
+          await transaction
+            .delete(awsImportAccess)
+            .where(
+              and(
+                eq(awsImportAccess.awsConnectionId, connectionId),
+                eq(awsImportAccess.status, "cleanup_complete")
+              )
+            );
+        }
         const [connection] = await transaction
           .delete(awsConnections)
           .where(
@@ -790,6 +857,7 @@ export async function createAwsConnection(
   };
 }
 
+/** gg: 사용자 preview에서도 import cleanup child를 읽어 삭제 가능 여부를 보수적으로 표시합니다. */
 export async function getAwsConnectionDeletionPreview(
   input: GetAwsConnectionDeletionPreviewInput,
   repository: AwsConnectionRepository
@@ -807,20 +875,30 @@ export async function getAwsConnectionDeletionPreview(
     );
   }
 
-  const [resources, hasBlockingDeployment, reverseEngineeringScanCount] = await Promise.all([
+  const [
+    resources,
+    hasBlockingDeployment,
+    reverseEngineeringScanCount,
+    importAccessStatus
+  ] = await Promise.all([
     repository.findManagedResources(connection.id),
     repository.hasDeploymentUsingAwsConnection(connection.id),
-    repository.countReverseEngineeringScans(connection.id)
+    repository.countReverseEngineeringScans(connection.id),
+    repository.findAwsImportAccessCleanupStatus(connection.id)
   ]);
   const deletionResources = selectAwsConnectionDeletionManagedResources(resources);
   const cleanupInProgress = Boolean(
     connection.deletionStartedAt && !connection.deletionErrorSummary
   );
-  const blockerMessage = hasBlockingDeployment
-    ? "실행 중이거나 아직 파기되지 않은 AWS 리소스 또는 Terraform state가 있습니다. 먼저 해당 프로젝트에서 AWS 리소스를 삭제해 주세요."
-    : cleanupInProgress
-      ? "AWS 연결 삭제가 이미 진행 중입니다."
-      : null;
+  const importCleanupBlocked = importAccessStatus !== undefined &&
+    importAccessStatus !== "cleanup_complete";
+  const blockerMessage = importCleanupBlocked
+    ? "AWS 가져오기 권한 정리가 완료되지 않았습니다. 먼저 가져오기 권한 정리를 완료해 주세요."
+    : hasBlockingDeployment
+      ? "실행 중이거나 아직 파기되지 않은 AWS 리소스 또는 Terraform state가 있습니다. 먼저 해당 프로젝트에서 AWS 리소스를 삭제해 주세요."
+      : cleanupInProgress
+        ? "AWS 연결 삭제가 이미 진행 중입니다."
+        : null;
 
   return {
     connectionId: connection.id,
@@ -846,6 +924,7 @@ export async function getAwsConnectionDeletionPreview(
   };
 }
 
+/** gg: preview 뒤 claim과 final transaction이 import cleanup 상태를 각각 다시 확인합니다. */
 export async function deleteAwsConnection(
   input: DeleteAwsConnectionInput,
   repository: AwsConnectionRepository,
@@ -880,7 +959,9 @@ export async function deleteAwsConnection(
   }
   if (deletionClaim.blocked) {
     throw new AwsConnectionDeleteConflictError(
-      "실행 중이거나 아직 파기되지 않은 AWS 리소스 또는 Terraform state가 있어 연결을 삭제할 수 없습니다. 먼저 해당 프로젝트에서 AWS 리소스를 삭제해 주세요."
+      deletionClaim.blockReason === "import_access"
+        ? "AWS 가져오기 권한 정리가 완료되지 않아 연결을 삭제할 수 없습니다. 다시 확인해 주세요."
+        : "실행 중이거나 아직 파기되지 않은 AWS 리소스 또는 Terraform state가 있어 연결을 삭제할 수 없습니다. 먼저 해당 프로젝트에서 AWS 리소스를 삭제해 주세요."
     );
   }
   if (!deletionClaim.claimed) {
