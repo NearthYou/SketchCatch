@@ -995,7 +995,7 @@ test("cleanup keeps an unrelated later AccessDenied retryable despite the prior 
   assert.doesNotMatch(JSON.stringify(result), /private-request-id|AccessDenied/iu);
 });
 
-test("cleanup accepts only the exact final Policy sentinel AccessDenied after the prior marker", async () => {
+test("cleanup does not treat the final Policy AccessDenied as proof that every artifact is absent", async () => {
   const events: string[] = [];
   const denied = Object.assign(new Error("AccessDenied private-request-id"), {
     name: "AccessDenied"
@@ -1040,10 +1040,11 @@ test("cleanup accepts only the exact final Policy sentinel AccessDenied after th
     priorManagerCleanupVerified: true
   } as never) as unknown as ExactCleanupResult;
 
-  assert.deepEqual(events, ["exact-final-policy-sentinel"]);
-  assert.equal(result.verified, true);
-  assert.equal(result.manager.stack.status, "absent");
-  assert.equal(result.completionEvidence, "prior_exact_marker_access_denied");
+  assert.deepEqual(events, ["unrelated-cloudformation-read"]);
+  assert.equal(result.verified, false);
+  assert.equal(result.manager.stack.status, "unknown");
+  assert.equal(result.reason, "retry");
+  assert.equal(result.completionEvidence, undefined);
   assert.doesNotMatch(JSON.stringify(result), /private-request-id|AccessDenied/iu);
 });
 

@@ -347,8 +347,7 @@ export function createAwsImportAccessGateway(
     async inspectCleanup({
       connection,
       contract,
-      expectedCurrent,
-      priorManagerCleanupVerified = false
+      expectedCurrent
     }) {
       try {
         const clients = await createConnectionClients(
@@ -357,16 +356,6 @@ export function createAwsImportAccessGateway(
           createIamClient,
           assumeConnectionRole
         );
-        const finalCleanupPolicySentinel =
-          priorManagerCleanupVerified && expectedCurrent?.manager
-            ? await inspectFinalCleanupPolicySentinel(
-                clients.iam,
-                contract.cleanupVerificationPolicyArn
-              )
-            : undefined;
-        if (finalCleanupPolicySentinel?.kind === "access_denied") {
-          return createAssumedAbsentCleanupInspection();
-        }
         const policyStack = await describeCleanupStack(
           clients.cloudFormation,
           contract.policyStackName,
@@ -420,11 +409,10 @@ export function createAwsImportAccessGateway(
           clients.iam,
           contract.controlPolicyArn
         );
-        const cleanupPolicy = finalCleanupPolicySentinel?.artifact ??
-          await inspectManagedPolicyPresence(
-            clients.iam,
-            contract.cleanupVerificationPolicyArn
-          );
+        const cleanupPolicy = await inspectManagedPolicyPresence(
+          clients.iam,
+          contract.cleanupVerificationPolicyArn
+        );
         const serviceRole = await inspectRolePresence(clients.iam, contract.serviceRoleName);
         const attachments = await inspectTargetPolicyAttachments(
           clients.iam,
@@ -633,26 +621,6 @@ async function inspectManagedPolicyPresence(
   }
 }
 
-type FinalCleanupPolicySentinel =
-  | { kind: "inspected"; artifact: CleanupArtifactInspection }
-  | { kind: "access_denied" };
-
-/** gg: prior exact Manager marker 뒤 cleanup-verification Policy 자체의 GetPolicy 거부만 마지막 신호입니다. */
-async function inspectFinalCleanupPolicySentinel(
-  iam: IamClientLike,
-  cleanupVerificationPolicyArn: string
-): Promise<FinalCleanupPolicySentinel> {
-  try {
-    return {
-      kind: "inspected",
-      artifact: await inspectManagedPolicyPresence(iam, cleanupVerificationPolicyArn)
-    };
-  } catch (error) {
-    if (isAccessDeniedError(error)) return { kind: "access_denied" };
-    throw error;
-  }
-}
-
 /** gg: connection-scoped service Role 이름의 존재를 다른 Role과 합치지 않고 확인합니다. */
 async function inspectRolePresence(
   iam: IamClientLike,
@@ -714,37 +682,8 @@ function createUnknownCleanupInspection(): CleanupInspection {
   };
 }
 
-/** gg: prior exact Manager marker 뒤 마지막 AccessDenied만 cleanup 완료 증거로 좁혀 사용합니다. */
-function createAssumedAbsentCleanupInspection(): CleanupInspection {
-  return {
-    verified: true,
-    managerStackExists: false,
-    policyStackExists: false,
-    policy: {
-      stack: ABSENT_ARTIFACT,
-      readPolicy: ABSENT_ARTIFACT,
-      targetAttachment: ABSENT_ARTIFACT
-    },
-    manager: {
-      stack: ABSENT_ARTIFACT,
-      serviceRole: ABSENT_ARTIFACT,
-      controlPolicy: ABSENT_ARTIFACT,
-      controlAttachment: ABSENT_ARTIFACT,
-      cleanupPolicy: ABSENT_ARTIFACT,
-      cleanupAttachment: ABSENT_ARTIFACT
-    },
-    completionEvidence: "prior_exact_marker_access_denied"
-  };
-}
-
 function isIamArtifactNotFound(error: unknown): boolean {
   return error instanceof Error && error.name === "NoSuchEntity";
-}
-
-function isAccessDeniedError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const value = `${error.name} ${error.message}`.toLowerCase();
-  return value.includes("accessdenied") || value.includes("not authorized");
 }
 
 /** gg: STS target Role 계약 오류만 Settings 복구로 보내고 provider expiry·network는 retry로 둡니다. */
