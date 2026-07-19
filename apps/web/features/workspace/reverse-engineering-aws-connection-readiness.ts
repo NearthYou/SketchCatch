@@ -110,12 +110,15 @@ function createRecovery(input: {
     title: "AWS Role이 아직 준비되지 않았습니다.",
     description: input.description,
     actionLabel: input.actionLabel,
-    settingsHref: createSettingsHref(input.selectedConnectionId),
+    settingsHref: createReverseEngineeringAwsSettingsHref(input.selectedConnectionId),
     selectedConnectionId: input.selectedConnectionId
   };
 }
 
-function createSettingsHref(selectedConnectionId: string | null): string {
+// gg: Settings 복구 뒤 같은 AWS 연결로 돌아오도록 connection ID를 주소에 보존합니다.
+export function createReverseEngineeringAwsSettingsHref(
+  selectedConnectionId: string | null
+): string {
   if (!selectedConnectionId) {
     return SETTINGS_HREF;
   }

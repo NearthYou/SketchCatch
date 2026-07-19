@@ -70,6 +70,17 @@ test("원본과 Compiler 후보는 미리보기만 갱신하고 명시적 적용
   assert.match(applyFlow, /context\.applyDiagramJson\(diagramToApply\)/);
 });
 
+test("Reverse Engineering은 AWS 권한을 바꾸지 않고 같은 연결의 Settings로만 보낸다", () => {
+  assert.match(
+    panelSource,
+    /permissionRecoveryHref=\{createReverseEngineeringAwsSettingsHref\(\s*selectedCandidateResponse\.scan\.awsConnectionId\s*\)\}/
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /getAwsConnectionCloudFormationTemplate|verifyAwsConnection|prepareReverseEngineeringImportPermissionUpdate|reverifyReverseEngineeringImportPermission/
+  );
+});
+
 function getSourceBlock(source: string, startMarker: string, endMarker: string): string {
   const start = source.indexOf(startMarker);
   const end = source.indexOf(endMarker, start);

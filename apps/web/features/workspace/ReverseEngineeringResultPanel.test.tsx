@@ -3,6 +3,7 @@ import test from "node:test";
 import type {
   ArchitectureBoardCompilationProposal,
   ReverseEngineeringScanError,
+  ReverseEngineeringServiceCoverage,
   ReverseEngineeringScanResponse
 } from "@sketchcatch/types";
 import React, { createElement } from "react";
@@ -112,6 +113,7 @@ function renderPanel(
     readonly appendCompilation?: ArchitectureBoardCompilationProposal | null;
     readonly boardNodeCount?: number;
     readonly hasCurrentBoardResources?: boolean;
+    readonly coverage?: ReverseEngineeringServiceCoverage;
     readonly scanErrors?: readonly ReverseEngineeringScanError[];
   } = {}
 ): string {
@@ -136,6 +138,8 @@ function renderPanel(
     onKeepOriginalPlacement() {},
     onOpenAsNewBoard() {},
     onRetryScan() {},
+    permissionRecoveryHref:
+      "/dashboard/settings?tab=aws&next=reverse&awsConnectionId=connection-1",
     placement,
     response: {
       ...response,
@@ -152,7 +156,8 @@ function renderPanel(
                 config: {}
               }))
             },
-            scanErrors: [...(options.scanErrors ?? [])]
+            scanErrors: [...(options.scanErrors ?? [])],
+            ...(options.coverage ? { coverage: options.coverage } : {})
           }
         : undefined
     },
@@ -234,8 +239,19 @@ test("Compiler 결과 기본 화면은 내부 점수 대신 실제 품질 지표
   );
 });
 
-test("부분 실패는 짧은 안내와 권한 추가 행동만 보여주고 내부 AWS 정보를 숨긴다", () => {
+test("부분 실패는 같은 AWS 연결의 Settings 복구 행동만 보여주고 내부 AWS 정보를 숨긴다", () => {
   const html = renderPanel("original", {
+    coverage: {
+      status: "partial",
+      unavailableServices: [
+        {
+          serviceKey: "ec2",
+          displayName: "EC2",
+          reason: "permission_required",
+          remedy: "open_settings"
+        }
+      ]
+    },
     scanErrors: [
       {
         id: "scan-error-service-ec2",
@@ -250,11 +266,16 @@ test("부분 실패는 짧은 안내와 권한 추가 행동만 보여주고 내
   });
 
   assert.match(html, /일부 항목을 가져오지 못했어요/);
-  assert.match(html, />가져오기 권한 추가</);
+  assert.match(html, />환경설정에서 권한 보완</);
+  assert.match(
+    html,
+    /href="\/dashboard\/settings\?tab=aws&amp;next=reverse&amp;awsConnectionId=connection-1"/
+  );
+  assert.doesNotMatch(html, /AWS에서 승인했어요|가져오기 권한 추가/);
   assert.match(html, /보드에 표시할 항목이 없어요/);
   assert.match(html, /<button[^>]*disabled=""[^>]*><span>가져온 항목만 보드에 적용<\/span>/);
   assert.match(html, /EC2/);
-  assert.match(html, /가져오기 권한을 추가한 뒤 다시 시도해 주세요/);
+  assert.match(html, /환경설정에서 읽기 권한을 보완해 주세요/);
   assert.doesNotMatch(
     html,
     /AccessDenied|arn:aws|DescribeVpcs|provider_api|permission_denied|retryable|RequestId/

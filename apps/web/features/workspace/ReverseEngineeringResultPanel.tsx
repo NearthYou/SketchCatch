@@ -3,7 +3,8 @@ import type {
   DiscoveredResource,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResponse,
-  ReverseEngineeringScanError
+  ReverseEngineeringScanError,
+  ReverseEngineeringServiceCoverage
 } from "@sketchcatch/types";
 import type { ReactNode } from "react";
 import type {
@@ -23,15 +24,6 @@ import {
 import styles from "./reverse-engineering.module.css";
 
 export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "error";
-export type ReverseEngineeringPermissionUpdateState =
-  | "idle"
-  | "preparing"
-  | "awaiting_aws_approval"
-  | "manual_template_required"
-  | "rechecking"
-  | "success"
-  | "error";
-
 export type ReverseEngineeringResultPanelProps = {
   readonly applyMessage: string | null;
   readonly applyState: ReverseEngineeringApplyState;
@@ -46,11 +38,8 @@ export type ReverseEngineeringResultPanelProps = {
   readonly onCompilePlacement: () => void;
   readonly onKeepOriginalPlacement: () => void;
   readonly onOpenAsNewBoard: () => void;
-  readonly onPrepareImportPermissions?: (() => void) | undefined;
-  readonly onReverifyImportPermissions?: (() => void) | undefined;
   readonly onRetryScan: () => void;
-  readonly permissionUpdateMessage?: string | null | undefined;
-  readonly permissionUpdateState?: ReverseEngineeringPermissionUpdateState | undefined;
+  readonly permissionRecoveryHref: string;
   readonly response: ReverseEngineeringScanResponse;
   readonly selectedCandidateId: string;
   readonly placement: ReverseEngineeringPlacement;
@@ -69,11 +58,8 @@ export function ReverseEngineeringResultPanel({
   onCompilePlacement,
   onKeepOriginalPlacement,
   onOpenAsNewBoard,
-  onPrepareImportPermissions,
-  onReverifyImportPermissions,
   onRetryScan,
-  permissionUpdateMessage = null,
-  permissionUpdateState = "idle",
+  permissionRecoveryHref,
   placement,
   response
 }: ReverseEngineeringResultPanelProps) {
@@ -86,10 +72,12 @@ export function ReverseEngineeringResultPanel({
   const isApplying = applyState === "saving";
   const summary = summarizeReverseEngineeringScan(result);
   const hasApplicableResources = summary.boardCount > 0;
-  const hasPartialFailure = result.scanErrors.length > 0;
-  const hasPermissionFailure = result.scanErrors.some(
-    (scanError) => scanError.reason === "permission_denied"
-  );
+  const hasPartialFailure = result.coverage
+    ? result.coverage.status === "partial"
+    : result.scanErrors.length > 0;
+  const hasPermissionFailure = result.coverage
+    ? result.coverage.unavailableServices.some((service) => service.remedy === "open_settings")
+    : result.scanErrors.some((scanError) => scanError.reason === "permission_denied");
   const unsupportedResources = result.discoveredResources.filter(
     (resource) => presentReverseEngineeringResource(resource).displayState === "review_only"
   );
@@ -139,31 +127,10 @@ export function ReverseEngineeringResultPanel({
             <strong>일부 항목을 가져오지 못했어요</strong>
             <p>가져온 항목은 그대로 확인하고 사용할 수 있어요.</p>
             {hasPermissionFailure ? (
-              permissionUpdateState === "awaiting_aws_approval" ||
-              permissionUpdateState === "manual_template_required" ? (
-                <button
-                  className={styles.secondaryButton}
-                  disabled={permissionUpdateState === "manual_template_required"}
-                  onClick={onReverifyImportPermissions}
-                  type="button"
-                >
-                  AWS에서 승인했어요
-                </button>
-              ) : (
-                <button
-                  className={styles.secondaryButton}
-                  disabled={
-                    permissionUpdateState === "preparing" ||
-                    permissionUpdateState === "rechecking"
-                  }
-                  onClick={onPrepareImportPermissions}
-                  type="button"
-                >
-                  가져오기 권한 추가
-                </button>
-              )
+              <a className={styles.secondaryButton} href={permissionRecoveryHref}>
+                환경설정에서 권한 보완
+              </a>
             ) : null}
-            {permissionUpdateMessage ? <p>{permissionUpdateMessage}</p> : null}
           </div>
         ) : null}
       </section>
@@ -270,6 +237,7 @@ export function ReverseEngineeringResultPanel({
 
       <ReverseEngineeringDetailGroup title="부분 실패">
         <ReverseEngineeringScanCoveragePanel
+          coverage={result.coverage}
           onRetryScan={onRetryScan}
           scanErrors={result.scanErrors}
         />
@@ -393,20 +361,31 @@ function ReverseEngineeringDetailGroup({
 
 // 사용자가 적용하기 전에 이번 스캔이 전체 결과인지 부분 결과인지 먼저 알려줍니다.
 function ReverseEngineeringScanCoveragePanel({
+  coverage,
   onRetryScan,
   scanErrors
 }: {
+  readonly coverage?: ReverseEngineeringServiceCoverage | undefined;
   readonly onRetryScan: () => void;
   readonly scanErrors: ReverseEngineeringScanError[];
 }) {
-  const notice = getScanCoverageNotice(scanErrors);
-  const hasRetryableScanError = scanErrors.some((scanError) => scanError.retryable);
-  const presentations = presentReverseEngineeringScanErrors(scanErrors);
+  const notice = getScanCoverageNotice(coverage, scanErrors);
+  const hasPartialFailure = coverage ? coverage.status === "partial" : scanErrors.length > 0;
+  const hasRetryableScanError = coverage
+    ? coverage.unavailableServices.some((service) => service.remedy === "retry")
+    : scanErrors.some((scanError) => scanError.retryable);
+  const presentations = coverage
+    ? coverage.unavailableServices.map((service) => ({
+        key: service.serviceKey,
+        serviceName: service.displayName,
+        remedy: getCoverageRemedy(service.reason)
+      }))
+    : presentReverseEngineeringScanErrors(scanErrors);
 
   return (
     <div>
-      <p className={scanErrors.length > 0 ? styles.warning : styles.hint}>{notice}</p>
-      {scanErrors.length > 0 ? (
+      <p className={hasPartialFailure ? styles.warning : styles.hint}>{notice}</p>
+      {hasPartialFailure ? (
         <details className={styles.detail}>
           <summary className={styles.detailSummary}>못 읽은 서비스 자세히 보기</summary>
           <div className={styles.detailBody}>
@@ -432,16 +411,37 @@ function ReverseEngineeringScanCoveragePanel({
 }
 
 // Resource Explorer 실패처럼 전체 스캔 범위에 영향을 주는 상태를 쉬운 말로 바꿉니다.
-function getScanCoverageNotice(scanErrors: ReverseEngineeringScanError[]): string {
-  if (scanErrors.some((scanError) => scanError.id === "scan-error-resource-explorer")) {
+function getScanCoverageNotice(
+  coverage: ReverseEngineeringServiceCoverage | undefined,
+  scanErrors: ReverseEngineeringScanError[]
+): string {
+  if (
+    coverage?.unavailableServices.some((service) => service.serviceKey === "resource-explorer") ||
+    scanErrors.some((scanError) => scanError.id === "scan-error-resource-explorer")
+  ) {
     return "Resource Explorer를 읽지 못했습니다. 가져온 결과가 전체 AWS 상태가 아닐 수 있습니다.";
   }
 
-  if (scanErrors.length > 0) {
+  if (coverage?.status === "partial" || scanErrors.length > 0) {
     return "일부 AWS 서비스를 읽지 못했습니다. 가져온 결과가 전체 AWS 상태가 아닐 수 있습니다.";
   }
 
   return "현재 권한으로 읽을 수 있는 범위에서는 부분 실패 없이 스캔했습니다.";
+}
+
+// gg: 공개 coverage의 세 가지 원인만 사용자가 바로 할 수 있는 짧은 문장으로 바꿉니다.
+function getCoverageRemedy(
+  reason: ReverseEngineeringServiceCoverage["unavailableServices"][number]["reason"]
+): string {
+  if (reason === "permission_required") {
+    return "환경설정에서 읽기 권한을 보완해 주세요.";
+  }
+
+  if (reason === "not_configured") {
+    return "AWS에서 이 서비스의 조회 준비를 확인해 주세요.";
+  }
+
+  return "잠시 후 다시 시도해 주세요.";
 }
 
 // 아직 정식 변환하지 못한 AWS 리소스를 숨기지 않고 별도 목록으로 보여줍니다.

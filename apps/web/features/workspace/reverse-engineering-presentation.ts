@@ -31,7 +31,7 @@ export type ReverseEngineeringScanErrorPresentation = {
 
 type ReverseEngineeringScanSummaryInput = Pick<
   ReverseEngineeringScanResult,
-  "architectureJson" | "discoveredResources" | "scanErrors"
+  "architectureJson" | "coverage" | "discoveredResources" | "scanErrors"
 >;
 
 const SERVICE_LABELS: Readonly<Record<string, string>> = {
@@ -104,7 +104,9 @@ export function summarizeReverseEngineeringScan(
     reviewOnlyCount: result.discoveredResources.filter(
       (resource) => presentReverseEngineeringResource(resource).displayState === "review_only"
     ).length,
-    unreadableServiceCount: presentReverseEngineeringScanErrors(result.scanErrors).length
+    unreadableServiceCount:
+      result.coverage?.unavailableServices.length ??
+      presentReverseEngineeringScanErrors(result.scanErrors).length
   };
 }
 
