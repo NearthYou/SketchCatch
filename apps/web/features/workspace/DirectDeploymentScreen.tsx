@@ -124,6 +124,7 @@ import {
 import styles from "./workspace.module.css";
 
 type DeploymentRuntimeSnapshot = {
+  readonly buildEnvironment: ProjectBuildEnvironment | null;
   readonly deployments: Deployment[];
   readonly releases: ApplicationRelease[];
   readonly logs: DeploymentLog[];
@@ -488,8 +489,15 @@ export function DirectDeploymentScreen({
 
   const loadDeploymentRuntimeSnapshot =
     useCallback(async (): Promise<DeploymentRuntimeSnapshot> => {
-      const [nextDeployments, nextReleases, nextLogs, nextResources, nextOutputs] =
-        await Promise.all([
+      const [
+        nextBuildEnvironment,
+        nextDeployments,
+        nextReleases,
+        nextLogs,
+        nextResources,
+        nextOutputs
+      ] = await Promise.all([
+          getProjectBuildEnvironment(projectId),
           listDeployments(projectId),
           listApplicationReleases(projectId),
           selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([]),
@@ -500,6 +508,7 @@ export function DirectDeploymentScreen({
         ]);
 
       return {
+        buildEnvironment: nextBuildEnvironment,
         deployments: nextDeployments,
         releases: nextReleases,
         logs: nextLogs,
@@ -511,6 +520,7 @@ export function DirectDeploymentScreen({
 
   const applyDeploymentRuntimeSnapshot = useCallback(
     (snapshot: DeploymentRuntimeSnapshot): void => {
+      setBuildEnvironment(snapshot.buildEnvironment);
       setDeployments(snapshot.deployments);
       setApplicationReleases(snapshot.releases);
       setDeploymentLogs(snapshot.logs);
@@ -1071,9 +1081,11 @@ export function DirectDeploymentScreen({
         )
       );
       setSelectedDeploymentId(deployment.id);
+      setSelectedDirectStepId("deployment");
       if (deployment.currentPlanOperation === "apply") {
         onApplyPlanApproved?.(deployment);
       }
+      refreshBuildEnvironmentAfterPlan(deployment);
       refreshDeploymentDetails(deployment.id);
     }
   }
