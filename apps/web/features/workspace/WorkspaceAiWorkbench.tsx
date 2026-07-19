@@ -69,9 +69,8 @@ export function WorkspaceAiWorkbench({
   surfaceRef,
   transcriptRef
 }: WorkspaceAiWorkbenchProps) {
-  const activeDefinition = scopeDefinitions.find((definition) => definition.scope === activeScope);
-  const activeScopeLabel = activeDefinition?.label ?? "AI 작업";
-  const readyLabel = activeDefinition?.inputAvailable ? "입력 가능" : "작업 선택 가능";
+  const activeScopeLabel =
+    scopeDefinitions.find((definition) => definition.scope === activeScope)?.label ?? "AI 작업";
   const modeList = isMobileSurface ? (
     <WorkspaceAiModeList
       activeScope={activeScope}
@@ -112,7 +111,7 @@ export function WorkspaceAiWorkbench({
       >
         {modeList}
 
-        <div className={styles.workArea}>
+        <div className={`${styles.workArea} ${status ? styles.workAreaWithStatus : ""}`}>
           <header className={styles.header}>
             <div className={styles.heading}>
               <h2 id="workspace-ai-chat-title">{activeScopeLabel}</h2>
@@ -141,23 +140,25 @@ export function WorkspaceAiWorkbench({
             </div>
           </header>
 
-          <div
-            aria-live="polite"
-            className={styles.statusLine}
-            data-status={status?.label ?? "준비"}
-            role="status"
-          >
-            <span aria-hidden="true" className={styles.statusMark} />
-            <div>
-              <strong>{status?.label ?? readyLabel}</strong>
-              <p>{status?.description ?? `${activeScopeLabel} 작업을 시작할 수 있습니다.`}</p>
+          {status ? (
+            <div
+              aria-live="polite"
+              className={styles.statusLine}
+              data-status={status.label}
+              role="status"
+            >
+              <span aria-hidden="true" className={styles.statusMark} />
+              <div>
+                <strong>{status.label}</strong>
+                <p>{status.description}</p>
+              </div>
+              {isBusy ? (
+                <button className={styles.cancelButton} onClick={onCancelRequest} type="button">
+                  요청 중지
+                </button>
+              ) : null}
             </div>
-            {isBusy ? (
-              <button className={styles.cancelButton} onClick={onCancelRequest} type="button">
-                요청 중지
-              </button>
-            ) : null}
-          </div>
+          ) : null}
 
           <div
             aria-labelledby={`workspace-ai-chat-tab-${activeScope}`}

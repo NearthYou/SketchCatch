@@ -6,11 +6,17 @@ Short English-only working log for the current agent context. Older records are 
 
 - The current branch applies the supplied self-hosted LINE Seed Sans KR files across Web typography surfaces, with Regular as the body baseline and Bold for headings and emphasis.
 - Board resource labels use a compact 12px computed size so long names fit more clearly within the existing two-line boundary.
+- Idle AI Workbench readiness banners are hidden while actionable statuses remain, and the compact auto-organize preview no longer exposes a view toggle.
 - The automatic Board organization result remains compact while preserving the incoming `dev` comparison session and original/organized view selection.
 - Incoming `dev` API, deployment, Git/CI/CD, AWS connection, Reverse Engineering, and data-contract changes remain accepted as the backend baseline.
 - The merge resolution is complete and ready for the merge commit.
 
 ## Session Record
+
+### 2026-07-19 - Remove idle AI banners and compact auto-organize preview
+
+- Removed the idle readiness row from all three AI Workbench scopes while retaining processing, error, stale, approval, and cancel states.
+- Removed the original/result view toggle and reduced the auto-organize card from 520px to 360px with tighter spacing. Focused tests pass 23/23; no broad test suite was run.
 
 ### 2026-07-19 - Reduce Board resource label size
 
