@@ -562,7 +562,7 @@
         "자동 정리는 미리보기·적용·취소·Undo 경계를 유지하며 승인 전 Board를 변경하지 않는다.",
         "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다.",
         "Workspace AI는 클릭한 option만 의미 기록으로 누적하고 실제 Resource icon Orbit과 Compiler Diagram 최종 Preview를 분리하며 승인 전 Board를 변경하지 않는다.",
-        "Live Observation 하단의 설계 분석이 현재 Board 기준 병목, 장애, 보안, 예상 비용, 개선 권장사항을 같은 화면에서 표시한다."
+        "Live Observation 하단의 기본 닫힘 운영 분석이 관측 근거를 현재 상태, 용량과 스케일링, 병목과 장애, 비용 영향, Terraform 개선 권장사항으로 연결한다."
       ],
       "evidence": {
         "lastVerified": "2026-07-19",

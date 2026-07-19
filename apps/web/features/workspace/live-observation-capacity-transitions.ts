@@ -18,7 +18,7 @@ export function reconcileLiveObservationCapacityUnits(
 ): LiveObservationPresentedCapacityUnit[] {
   const nextIds = new Set(next.map((unit) => unit.node.id));
   const exiting = current
-    .filter((unit) => unit.transition === "stable" && !nextIds.has(unit.node.id))
+    .filter((unit) => !nextIds.has(unit.node.id))
     .map((unit) => ({ ...unit, transition: "exiting" as const }));
 
   return [...settleLiveObservationCapacityUnits(next), ...exiting];

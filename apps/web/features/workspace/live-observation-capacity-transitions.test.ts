@@ -25,6 +25,26 @@ test("keeps a removed task as exiting until the transition settles", () => {
   );
 });
 
+test("keeps an already exiting task through a rapid forecast update", () => {
+  const exiting = reconcileLiveObservationCapacityUnits(
+    [unit("task-1", "active"), unit("task-2", "active")].map((capacityUnit) => ({
+      ...capacityUnit,
+      transition: "stable" as const
+    })),
+    [unit("task-1", "active")]
+  );
+
+  const updated = reconcileLiveObservationCapacityUnits(
+    exiting,
+    [unit("task-1", "active"), unit("task-3", "launching")]
+  );
+
+  assert.deepEqual(
+    updated.map((capacityUnit) => [capacityUnit.node.id, capacityUnit.transition]),
+    [["task-1", "stable"], ["task-3", "stable"], ["task-2", "exiting"]]
+  );
+});
+
 function unit(
   id: string,
   observationState: LiveObservationCapacityUnit["observationState"]

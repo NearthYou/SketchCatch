@@ -52,6 +52,28 @@ test("does not render inactive task slots up to the autoscaling maximum", () => 
   assert.equal(model.capacityUnits[0]?.observationState, "active");
 });
 
+test("does not invent a placeholder task before live capacity is observed", () => {
+  const diagram = createLiveObservationArchitectureModel(architecture, null).diagram;
+  const model = createLiveObservationDiagramModel(diagram, null);
+
+  assert.equal(model.status, "ready");
+  if (model.status !== "ready") return;
+
+  assert.equal(model.capacityUnits.length, 0);
+});
+
+test("keeps ten observed tasks available for a compact wrapped presentation", () => {
+  const snapshot = providerSnapshot({ desired: 10, max: 10, running: 10 });
+  const diagram = createLiveObservationArchitectureModel(architecture, snapshot).diagram;
+  const model = createLiveObservationDiagramModel(diagram, snapshot);
+
+  assert.equal(model.status, "ready");
+  if (model.status !== "ready") return;
+
+  assert.equal(model.capacityUnits.length, 10);
+  assert.ok(model.capacityUnits.every((unit) => unit.observationState === "active"));
+});
+
 function resourceNode(
   id: string,
   type: ArchitectureJson["nodes"][number]["type"],

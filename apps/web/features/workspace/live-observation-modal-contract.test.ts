@@ -134,7 +134,7 @@ test("modal re-entry restores only the selected, unexpired active session and ab
 test("selected Deployment independently loads and renders its immutable Architecture", () => {
   const focusedFlowIndex = modalSource.indexOf("<LiveObservationFocusedFlow");
   const evidenceIndex = modalSource.indexOf(
-    '<section className={styles.liveObservationEvidenceRail}'
+    'aria-label="실시간 운영 분석"'
   );
 
   assert.match(modalSource, /useLiveObservationQueries\(\{/);
@@ -169,6 +169,22 @@ test("keeps Live Observation focused on the traffic path", () => {
   assert.doesNotMatch(modalSource, /WorkspaceDesignAnalysisPanel/);
   assert.doesNotMatch(modalSource, /전체 Architecture 보기/);
   assert.doesNotMatch(modalSource, /설계 분석/);
+});
+
+test("anchors the QR utility below its button without covering header controls", () => {
+  assert.match(
+    modalSource,
+    /const \[audienceUtilityOpen, setAudienceUtilityOpen\] = useState\(false\)/
+  );
+  assert.match(modalSource, /className=\{styles\.liveObservationQrMenu\}/);
+  assert.match(
+    workspaceStyles,
+    /\.liveObservationQrMenu\s*\{[^}]*position:\s*relative/
+  );
+  assert.match(
+    workspaceStyles,
+    /\.liveObservationAudienceUtility\s*\{[^}]*top:\s*calc\(100% \+ 10px\)/
+  );
 });
 
 test("renders Architecture state only when it belongs to the selected Deployment", () => {
@@ -243,7 +259,7 @@ test("session creation locks Deployment selection and observation evidence stays
   );
   const evidenceBlock = getSourceBlock(
     modalSource,
-    "{selectedSnapshot ? (",
+    'aria-label="실시간 운영 분석"',
     "{providerSnapshot && providerSnapshot.logs.length > 0 ? ("
   );
 
@@ -257,26 +273,36 @@ test("session creation locks Deployment selection and observation evidence stays
     modalSource,
     /<LiveObservationFocusedFlow[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
-  assert.match(evidenceBlock, /selectedSnapshot\.live\.acceptedEventCount/);
+  assert.match(evidenceBlock, /selectedSnapshot\?\.live\.acceptedEventCount/);
   assert.match(deploymentSelectionHandler, /session\.deploymentId !== nextDeploymentId/);
   assert.match(deploymentSelectionHandler, /onSessionChange\(null\)/);
   assert.match(deploymentSelectionHandler, /onSnapshotChange\(null\)/);
 });
 
-test("capacity evidence renders the provider-derived mode and matching value labels", () => {
+test("capacity analysis renders provider-derived mode and operational values", () => {
   const evidenceBlock = getSourceBlock(
     modalSource,
-    "{selectedSnapshot ? (",
+    'aria-label="실시간 운영 분석"',
     "{providerSnapshot && providerSnapshot.logs.length > 0 ? ("
   );
 
-  assert.match(evidenceBlock, /providerEvidence\?\.capacityModeLabel/);
-  assert.match(evidenceBlock, /providerEvidence\?\.capacityDetailLabel/);
-  assert.doesNotMatch(evidenceBlock, /정상 \/ 실행 \/ 최대/);
-  assert.match(
-    modalSource,
-    /const providerEvidence = providerSnapshot && capacityModeLabel\s*\?/
-  );
+  assert.match(evidenceBlock, /capacityModeLabel \?\? "확인 중"/);
+  assert.match(evidenceBlock, /operationalAnalysis\.capacity/);
+  assert.match(modalSource, /getLiveObservationOperationalAnalysis/);
+});
+
+test("turns raw metrics into an operational decision flow", () => {
+  assert.match(modalSource, /aria-label="실시간 운영 분석"/);
+  assert.match(modalSource, /현재 인프라 상태/);
+  assert.match(modalSource, /용량 및 스케일링/);
+  assert.match(modalSource, /병목과 장애/);
+  assert.match(modalSource, /비용 영향/);
+  assert.match(modalSource, /개선 권장사항/);
+  assert.match(modalSource, /operationalAnalysis\.terraformAction/);
+  assert.match(modalSource, /실행 \/ 희망 \/ 최대/);
+  assert.match(modalSource, /<details[\s\S]*aria-label="실시간 운영 분석"/);
+  assert.match(modalSource, /<summary className=\{styles\.liveObservationMetricsHeader\}>/);
+  assert.doesNotMatch(modalSource, /<details[^>]*\sopen/);
 });
 
 function getSourceBlock(source: string, startMarker: string, endMarker: string): string {
