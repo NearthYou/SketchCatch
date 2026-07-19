@@ -162,6 +162,13 @@ const diagramEdgeSchema = z.object({
   zIndex: z.number().finite().optional()
 });
 
+const terraformSyncFileInputSchema = z
+  .object({
+    fileName: z.string().trim().min(1),
+    terraformCode: z.string()
+  })
+  .strict();
+
 export const diagramJsonSchema: z.ZodType<DiagramJson> = z.object({
   nodes: z.array(diagramNodeSchema),
   edges: z.array(diagramEdgeSchema),
@@ -181,14 +188,17 @@ export const projectDraftQuerySchema = z.object({
 export const saveProjectDraftBodySchema = z.object({
   diagramJson: diagramJsonSchema,
   expectedRevision: z.number().int().positive().nullable(),
-  terraformFiles: z
-    .array(
-      z
-        .object({
-          fileName: z.string().trim().min(1),
-          terraformCode: z.string()
-        })
-        .strict()
-    )
-    .optional()
+  terraformFiles: z.array(terraformSyncFileInputSchema).optional()
 });
+
+export const boardAutoOrganizeApplyBodySchema = z
+  .object({
+    sessionId: z.string().trim().min(1).max(160),
+    candidateId: z.string().trim().min(1).max(160),
+    sourceDiagram: diagramJsonSchema,
+    sourceFingerprint: z.string().regex(/^[0-9a-f]{8}$/u),
+    candidateDiagram: diagramJsonSchema,
+    expectedRevision: z.number().int().positive().nullable(),
+    terraformFiles: z.array(terraformSyncFileInputSchema)
+  })
+  .strict();

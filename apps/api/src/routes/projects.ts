@@ -36,7 +36,15 @@ import {
   ProjectDraftRevisionMissingError,
   saveProjectDraftRevision
 } from "../modules/projects/project-draft-save-service.js";
-import { saveProjectDraftBodySchema } from "./project-draft-schemas.js";
+import {
+  applyBoardAutoOrganizeDraft,
+  BoardAutoOrganizeSemanticMismatchError,
+  BoardAutoOrganizeSourceMismatchError
+} from "../modules/projects/board-auto-organize-apply-service.js";
+import {
+  boardAutoOrganizeApplyBodySchema,
+  saveProjectDraftBodySchema
+} from "./project-draft-schemas.js";
 
 const createProjectBodySchema = z.object({
   name: z.string().min(1).max(120),
@@ -420,6 +428,56 @@ export async function registerProjectRoutes(
 
       return { draft: toProjectDraft(result.draft) };
     } catch (error) {
+      if (error instanceof ProjectDraftRevisionMissingError) {
+        return sendConflict(reply, error.message);
+      }
+
+      throw error;
+    }
+  });
+
+  // 자동 정리 적용은 일반 Draft 저장과 같은 소유권·revision CAS를 재사용합니다.
+  app.post("/projects/:id/draft/auto-organize/apply", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const params = routeParamsSchema.parse(request.params);
+    const body = boardAutoOrganizeApplyBodySchema.parse(request.body);
+    const { db } = getProjectDatabaseClient();
+
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+    if (!project) {
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
+    }
+
+    try {
+      const result = await applyBoardAutoOrganizeDraft({
+        candidateDiagram: body.candidateDiagram,
+        db,
+        expectedRevision: body.expectedRevision,
+        projectId: params.id,
+        sourceDiagram: body.sourceDiagram,
+        sourceFingerprint: body.sourceFingerprint,
+        terraformFiles: body.terraformFiles,
+        userId: currentUserId
+      });
+
+      if (result.status === "conflict") {
+        return sendProjectDraftConflict(reply, result.currentDraft);
+      }
+
+      return { draft: toProjectDraft(result.draft) };
+    } catch (error) {
+      if (error instanceof BoardAutoOrganizeSourceMismatchError) {
+        return sendConflict(reply, error.message);
+      }
+
+      if (error instanceof BoardAutoOrganizeSemanticMismatchError) {
+        return sendBadRequest(reply, error.message);
+      }
+
       if (error instanceof ProjectDraftRevisionMissingError) {
         return sendConflict(reply, error.message);
       }

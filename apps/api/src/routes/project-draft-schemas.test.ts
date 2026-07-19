@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DiagramJson } from "@sketchcatch/types";
-import { projectDraftQuerySchema, saveProjectDraftBodySchema } from "./project-draft-schemas.js";
+import {
+  boardAutoOrganizeApplyBodySchema,
+  projectDraftQuerySchema,
+  saveProjectDraftBodySchema
+} from "./project-draft-schemas.js";
 
 const validDiagram: DiagramJson = {
   nodes: [
@@ -567,4 +571,49 @@ test("save project draft body rejects architecture-only json without viewport", 
   });
 
   assert.equal(result.success, false);
+});
+
+test("board auto-organize apply accepts only the exact visual candidate request", () => {
+  const candidateDiagram = structuredClone(validDiagram);
+  candidateDiagram.nodes[0]!.position = { x: 360, y: 180 };
+  const payload = {
+    sessionId: "board-auto-session:1234abcd",
+    candidateId: "arrangement-2",
+    sourceDiagram: validDiagram,
+    sourceFingerprint: "1234abcd",
+    candidateDiagram,
+    expectedRevision: 7,
+    terraformFiles: [{ fileName: "main.tf", terraformCode: "" }]
+  };
+
+  const parsed = boardAutoOrganizeApplyBodySchema.parse(payload);
+
+  assert.deepEqual(parsed, payload);
+  assert.equal(
+    boardAutoOrganizeApplyBodySchema.safeParse({
+      ...payload,
+      compilerVersion: "internal-only"
+    }).success,
+    false
+  );
+});
+
+test("board auto-organize apply requires its source fingerprint and draft revision", () => {
+  const payload = {
+    sessionId: "board-auto-session:1234abcd",
+    candidateId: "arrangement-1",
+    sourceDiagram: validDiagram,
+    candidateDiagram: validDiagram,
+    terraformFiles: []
+  };
+
+  assert.equal(boardAutoOrganizeApplyBodySchema.safeParse(payload).success, false);
+  assert.equal(
+    boardAutoOrganizeApplyBodySchema.safeParse({
+      ...payload,
+      sourceFingerprint: "1234abcd",
+      expectedRevision: null
+    }).success,
+    true
+  );
 });

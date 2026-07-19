@@ -5,6 +5,7 @@ import { buildApp } from "../app.js";
 import { createAccessToken } from "../auth/tokens.js";
 import type { Database, DatabaseClient } from "../db/client.js";
 import { projectDrafts, projects, users } from "../db/schema.js";
+import { createBoardAutoOrganizeSourceFingerprint } from "../modules/projects/board-auto-organize-apply-service.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -320,6 +321,76 @@ test("PUT /api/projects/:id/draft does not overwrite a draft created during the 
 
   assert.equal(response.statusCode, 409);
   assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, competingDiagram);
+
+  await app.close();
+});
+
+test("POST /api/projects/:id/draft/auto-organize/apply saves one visual-only candidate", async () => {
+  const candidateDiagram = structuredClone(draftDiagram);
+  candidateDiagram.nodes[0]!.position = { x: 360, y: 180 };
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    drafts: [makeProjectDraft({ revision: 4 })]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft/auto-organize/apply`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      sessionId: "board-auto-session:source",
+      candidateId: "arrangement-1",
+      sourceDiagram: draftDiagram,
+      sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(draftDiagram),
+      candidateDiagram,
+      expectedRevision: 4,
+      terraformFiles: [
+        { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "vpc" {}' }
+      ]
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().draft.revision, 5);
+  assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, candidateDiagram);
+  assert.equal(fakeDb.draftRows[0]?.terraformFiles?.[0]?.fileName, "main.tf");
+  assert.equal(fakeDb.projectUpdated, true);
+
+  await app.close();
+});
+
+test("POST /api/projects/:id/draft/auto-organize/apply rejects meaning changes without saving", async () => {
+  const candidateDiagram = structuredClone(draftDiagram);
+  candidateDiagram.nodes[0]!.parameters!.values.cidrBlock = "10.9.0.0/16";
+  const originalDraft = makeProjectDraft({ revision: 4 });
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    drafts: [originalDraft]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft/auto-organize/apply`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      sessionId: "board-auto-session:source",
+      candidateId: "arrangement-1",
+      sourceDiagram: draftDiagram,
+      sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(draftDiagram),
+      candidateDiagram,
+      expectedRevision: 4,
+      terraformFiles: []
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(fakeDb.draftRows[0]?.revision, 4);
+  assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, draftDiagram);
+  assert.equal(fakeDb.projectUpdated, false);
 
   await app.close();
 });
