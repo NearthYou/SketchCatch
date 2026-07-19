@@ -3486,6 +3486,70 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q which requirement to 
   ]);
   assert.equal(response.providerMetadata.provider, "amazon_q");
 });
+
+test("createAmazonQArchitectureDraftResponse rejects Amazon Q no-relevant-information fallback as a clarification", async () => {
+  let callCount = 0;
+  const provider = createFakeAmazonQProvider(() => {
+    callCount += 1;
+
+    if (callCount < 3) {
+      return JSON.stringify({
+        status: "plan",
+        title: "Unsupported Quantity Plan",
+        requiredResources: ["IAM_ROLE"],
+        resourceQuantities: { IAM_ROLE: 3 }
+      });
+    }
+
+    return "Sorry, I could not find relevant information to complete your request.";
+  });
+
+  await assert.rejects(
+    createAmazonQArchitectureDraftResponse(
+      { prompt: createDynamicWebDeploymentSelectionPrompt() },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    ),
+    (error: unknown) =>
+      error instanceof ArchitectureDraftGenerationError &&
+      error.kind === "provider_response_invalid" &&
+      error.statusCode === 502
+  );
+  assert.equal(callCount, 3);
+});
+
+test("createAmazonQArchitectureDraftResponse requires choices in an Amazon Q conflict clarification", async () => {
+  let callCount = 0;
+  const provider = createFakeAmazonQProvider(() => {
+    callCount += 1;
+
+    if (callCount < 3) {
+      return JSON.stringify({
+        status: "plan",
+        title: "Unsupported Quantity Plan",
+        requiredResources: ["IAM_ROLE"],
+        resourceQuantities: { IAM_ROLE: 3 }
+      });
+    }
+
+    return JSON.stringify({
+      status: "needs_clarification",
+      question: "어떤 요구사항을 유지할까요?",
+      suggestions: []
+    });
+  });
+
+  await assert.rejects(
+    createAmazonQArchitectureDraftResponse(
+      { prompt: createDynamicWebDeploymentSelectionPrompt() },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    ),
+    (error: unknown) =>
+      error instanceof ArchitectureDraftGenerationError &&
+      error.kind === "provider_response_invalid" &&
+      error.statusCode === 502
+  );
+  assert.equal(callCount, 3);
+});
 test("createAmazonQArchitectureDraftResponse retries once when a compact plan fails materialization", async () => {
   const calls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
