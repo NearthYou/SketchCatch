@@ -53,7 +53,7 @@ import {
   type AwsConnectionCleanupRetryDisplay
 } from "../../../features/dashboard/aws-connection-settings-state";
 import {
-  deriveAwsCodeConnectionRepositoryAccessState,
+  deriveAwsCodeConnectionConnectedState,
   deriveGitHubCodeBuildAuthorizationTarget,
   getAwsCodeConnectionDisplayName,
   type GitHubCodeBuildAuthorizationTarget
@@ -954,20 +954,20 @@ function GitHubBuildConnectionAction({
       </div>
     );
   }
-  const repositoryAccessState = deriveAwsCodeConnectionRepositoryAccessState(
+  const connectedState = deriveAwsCodeConnectionConnectedState(
     connection.codeConnection.status
   );
-  if (repositoryAccessState) {
+  if (connectedState) {
     return (
-      <div className={styles.buildConnectionUnverified} role="status">
-        <AlertTriangle size={16} />
-        <span>{repositoryAccessState.title} · {repositoryAccessState.description}</span>
+      <div className={styles.buildConnectionReady} role="status">
+        <CheckCircle2 size={16} />
+        <span>{connectedState.title} · {connectedState.description}</span>
         <a
-          href={repositoryAccessState.actionHref}
+          href={connectedState.actionHref}
           rel="noreferrer"
           target="_blank"
         >
-          {repositoryAccessState.actionLabel} <ExternalLink size={14} />
+          {connectedState.actionLabel} <ExternalLink size={14} />
         </a>
         <button disabled={actionPending} onClick={onRefresh} type="button">상태 확인</button>
         <button data-danger="true" disabled={actionPending} onClick={onDisconnect} type="button">연결 해제</button>

@@ -24,6 +24,13 @@ Short English-only working log for the current agent context. Older records are 
 - No database migration, cloud mutation, deployment, or dependency change was made.
 
 
+### 2026-07-19 - Separate AWS OAuth status from Repository verification
+
+- Changed an `AVAILABLE` AWS CodeConnection from a permanent Repository warning to a connected success state that explains project save/validation performs the actual checkout verification.
+- Preserved AWS Connector permission management, status refresh, and disconnect actions while renaming the presentation helper so it no longer models project Repository access.
+- TDD focused checks pass 14/14; harness, lint, typecheck, build, and diff checks pass. The Web suite remains at the existing 914/917 because of three unrelated Resource Catalog contract failures; the root suite additionally retains the existing artifact heartbeat cancellation. Independent standards/spec review reported no findings.
+- No API, shared contract, DB migration, dependency, AWS mutation, Terraform execution, deployment, or push was performed.
+
 ### 2026-07-19 - Keep GitOps build environments stable across application commits
 
 - Removed the per-release `confirmedCommitSha` from the reusable Project Build Environment fingerprint while retaining exact commit checkout and resolved-SHA verification.

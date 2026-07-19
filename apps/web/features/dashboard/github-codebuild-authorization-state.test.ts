@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { GitHubInstallationConnection } from "@sketchcatch/types";
 import {
-  deriveAwsCodeConnectionRepositoryAccessState,
+  deriveAwsCodeConnectionConnectedState,
   deriveGitHubCodeBuildAuthorizationTarget,
   getAwsCodeConnectionDisplayName
 } from "./github-codebuild-authorization-state";
@@ -86,18 +86,18 @@ test("AWS CodeBuild authorization exposes the only expected GitHub account", () 
   });
 });
 
-test("an available AWS CodeConnection opens installed GitHub Apps instead of starting a new AWS Connector installation", () => {
-  assert.deepEqual(deriveAwsCodeConnectionRepositoryAccessState("AVAILABLE"), {
+test("an available AWS CodeConnection reports OAuth connected and defers repository verification to the project", () => {
+  assert.deepEqual(deriveAwsCodeConnectionConnectedState("AVAILABLE"), {
     actionHref: "https://github.com/settings/installations",
     actionLabel: "AWS Connector 권한 관리",
-    description: "Repository 접근은 아직 확인되지 않았습니다",
-    status: "repository_access_unverified",
+    description: "Repository 접근은 프로젝트 저장·검증에서 확인합니다",
+    status: "connected",
     title: "AWS OAuth 연결됨"
   });
 });
 
-test("pending AWS CodeConnections do not expose the repository access presentation", () => {
-  assert.equal(deriveAwsCodeConnectionRepositoryAccessState("PENDING"), null);
+test("pending AWS CodeConnections do not expose the connected presentation", () => {
+  assert.equal(deriveAwsCodeConnectionConnectedState("PENDING"), null);
 });
 
 test("AWS approval guidance identifies the exact generated connection name", () => {
