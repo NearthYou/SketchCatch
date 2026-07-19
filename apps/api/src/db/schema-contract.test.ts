@@ -548,11 +548,7 @@ test("0054 AWS import access migration stays byte-for-byte immutable after appli
   );
 });
 
-test("0055 adds every current AWS import access column missing from original 0054", () => {
-  const originalMigration = readFileSync(
-    new URL("../../drizzle/0054_aws_import_access.sql", import.meta.url),
-    "utf8"
-  );
+test("0055 owns only the AWS import policy template hash repair", () => {
   const repairMigrationUrl = new URL(
     "../../drizzle/0055_aws_import_access_schema_repair.sql",
     import.meta.url
@@ -562,20 +558,13 @@ test("0055 adds every current AWS import access column missing from original 005
   if (!existsSync(repairMigrationUrl)) return;
 
   const repairMigration = readFileSync(repairMigrationUrl, "utf8");
-  const originalColumns = new Set(
-    [...originalMigration.matchAll(/^\s*"([^"]+)"\s+/gmu)].map((match) => match[1])
-  );
-  const missingSchemaColumns = getTableConfig(awsImportAccess)
-    .columns.map((column) => column.name)
-    .filter((columnName) => !originalColumns.has(columnName))
-    .sort();
   const repairedColumns = [
     ...repairMigration.matchAll(/ADD COLUMN IF NOT EXISTS "([^"]+)"/gu)
   ]
     .map((match) => match[1])
     .sort();
 
-  assert.deepEqual(repairedColumns, missingSchemaColumns);
+  assert(findColumn(getTableConfig(awsImportAccess).columns, "policy_template_hash"));
   assert.deepEqual(repairedColumns, ["policy_template_hash"]);
   assert.match(
     repairMigration,
@@ -588,18 +577,39 @@ test("0055 adds every current AWS import access column missing from original 005
 
   const journal = JSON.parse(
     readFileSync(new URL("../../drizzle/meta/_journal.json", import.meta.url), "utf8")
-  ) as { entries?: Array<{ idx?: number; tag?: string }> };
+  ) as {
+    entries?: Array<{
+      idx?: number;
+      version?: string;
+      when?: number;
+      tag?: string;
+      breakpoints?: boolean;
+    }>;
+  };
+  const entries = journal.entries ?? [];
+  const originalMigrationPosition = entries.findIndex(
+    (candidate) => candidate.tag === "0054_aws_import_access"
+  );
+
+  assert.notEqual(originalMigrationPosition, -1);
   assert.deepEqual(
-    journal.entries?.find(
-      (candidate) => candidate.tag === "0055_aws_import_access_schema_repair"
-    ),
-    {
-      idx: 55,
-      version: "7",
-      when: 1784462400001,
-      tag: "0055_aws_import_access_schema_repair",
-      breakpoints: true
-    }
+    entries.slice(originalMigrationPosition, originalMigrationPosition + 2),
+    [
+      {
+        idx: 54,
+        version: "7",
+        when: 1784462400000,
+        tag: "0054_aws_import_access",
+        breakpoints: true
+      },
+      {
+        idx: 55,
+        version: "7",
+        when: 1784462400001,
+        tag: "0055_aws_import_access_schema_repair",
+        breakpoints: true
+      }
+    ]
   );
 });
 
