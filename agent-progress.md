@@ -11,25 +11,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-19 - Restore the focused Live Observation traffic presentation
+### 2026-07-19 - Separate Repository access and Architecture Draft failures
 
-- Traced the regression to `8f0c7b54`, which replaced the focused linear traffic renderer with the full immutable Architecture map. Restored the focused path as the default while retaining the full map in a collapsed disclosure and preserving all v2 session, Output URL, and AWS verification gates.
-- Fresh public-request or CloudWatch ALB evidence now triggers bounded particles, and v2 `running/desired/max` evidence renders Fargate Task slots as RUNNING/STARTING/AVAILABLE. The ECS Fargate Template adds bounded Service Auto Scaling at 1-3 Tasks with an intentionally low 10 requests-per-target target; Terraform init/validate passes.
-- Focused regressions pass 31/31, the ECS Template passes Terraform init/validate, and root harness, lint, typecheck, build, and diff checks pass. Authenticated local browser QA opens the modal; the local test Workspace had no Deployment Architecture, so final visual replay with real capacity remains pending a newly approved sandbox Deployment. No AWS mutation, traffic generation, Deployment, dependency, migration, commit, or push occurred.
-
-### 2026-07-19 - Verify Live Observation traffic in the approved AWS sandbox
-
-- Used only approved non-production account `614935468487` in `ap-northeast-2`; the production-denylisted account was never used. Applied the exact approved 34-create Terraform Plan, verified CloudFront HTTPS, ALB, and ECS 1/1 healthy, and preserved the shared control bucket and fixed execution Role.
-- Fixed the Live Observation STS failure caused by a 65-character `RoleSessionName` by shortening the session prefix. The focused snapshot-provider suite passes 6/6, and a fresh session reached `available` with zero errors and fixed Fargate capacity 1/1/1.
-- Ran the bounded traffic plan with 3 manual audience requests plus 957 automatic HTTPS GET requests: 60 at 1 RPS and 897 at 5 RPS. All 960 requests returned 200, 5xx remained zero, CloudWatch peaked at 300 target 2xx responses per minute, and ALB p95 peaked at 1.734 ms.
-- The exact 34-address Destroy Plan matched the saved Deployment state with no additions or omissions. Destroy started within 30 minutes of Apply success and finished `34 destroyed`; API resources/outputs are zero, tagged `liveobs-7cccab4b` inventory is empty, application IAM Roles are absent, and the ECS service/cluster are `INACTIVE` with zero tasks.
-- `pnpm harness:check`, focused tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass. The repository was externally switched to `codex/docs-progressive-delivery-journey` during the run, so the one-line fix remains uncommitted there; `apps/web/next-env.d.ts` matches the tracked content again. No secret was printed, no production mutation occurred, and no commit or push was performed.
-
-### 2026-07-19 - Harden Direct Deployment Apply recovery boundaries
-
-- Bound approved Plans to the exact Terraform state baseline (deployment, object key, lineage hash, and serial) and added migration `0053`; Apply blocks stale state before AWS credentials or mutation.
-- Fenced no-change release and post-Apply persistence, preserved partial/cancelled outcomes, added graceful worker cancellation with a 120-second ECS stop timeout, checkpointed state before optional result persistence, and classified release failures as `application_release`.
-- Focused Plan/Apply/worker regressions pass 65/65. Migration compatibility, infrastructure structure, Terraform formatting, lint, typecheck, build, harness, and diff checks pass. The full suite was intentionally skipped; no cloud mutation or deployment was performed.
+- Replaced the inferred public Repository error branch with explicit `repository_error` and `architecture_error` states so a Draft failure cannot render Repository recovery or trigger permission rechecks.
+- Repository board generation no longer surfaces provider clarification questions; it keeps the selected Template context and reports one retryable generation failure instead.
+- Added Repository route tests to the default Web test command so the regression runs in normal package verification.
+- Focused Repository checks pass 15/15. Harness, lint, typecheck, and production build pass.
+- The broad Web suite runs the new checks successfully but retains three unrelated existing Resource/Module knowledge and Workspace AI CSS contract failures.
+- No API contract, dependency, lockfile, DB migration, cloud mutation, deployment, commit, or push was performed.
 
 ### 2026-07-19 - Document Direct Deployment Apply audit improvements
 
@@ -209,3 +198,22 @@ Short English-only working log for the current agent context. Older records are 
 - Confirmed the GitHub App installation already grants `jh-9999/audience-live-check` access, the managed Seoul CodeConnection is `Available`, and the managed CodeBuild project checked out the confirmed SHA successfully twice. The Workspace was showing an older failed verification record rather than a disconnected global integration.
 - Fixed Direct Deployment step selection so a previously selected idle deployment step falls back to the current validation step. The failed Workspace now exposes both `저장 후 검증 실행` and `Repository 빌드 권한 다시 확인` instead of an empty action area.
 - The regression passed RED then GREEN and the authenticated browser reproduced the repaired action path. Focused Web checks pass 26/26; root harness, lint, typecheck, production build, and diff checks pass. No GitHub save, CodeConnection reapproval, CodeBuild start, deployment, AWS mutation, DB migration, dependency change, or push was performed.
+
+### 2026-07-19 - Complete AI diagram parameters from requirements
+
+- Completed VPC dependencies, core defaults, SSM data-source defaults, and requirement-sensitive profiles across traffic, budget, database, management, availability, upload, and realtime selections.
+- Normalized generated nested-block objects recursively against the Terraform catalog, so required CloudFront origin, cache behavior, restrictions, certificate, and geo restriction blocks no longer render empty or fail list validation.
+- Focused API parameter checks pass 14/14, Web adapter/parameter checks pass 49/49, and root lint, typecheck, build, harness, and diff checks pass. The unrelated concurrent conflict-resolution failures remain documented in history.
+- No DB migration, dependency change, cloud mutation, Terraform execution, deployment, or Git/CI/CD handoff was performed.
+
+### 2026-07-19 - Use OpenAI for Architecture Draft validation-conflict choices
+
+- Replaced the post-retry Architecture Draft conflict diagnosis call from Amazon Q Business with an OpenAI Responses Structured Output resolver. The resolver receives the original request, selected Template, normalized requirement, Repository evidence, decision space, validation issues, and the final failed ArchitectureJson when available.
+- Only a `needs_clarification` question with 2-4 choices is accepted from OpenAI. Missing keys, malformed output, or provider failures use a local validation-conflict clarification and never reinterpret an Amazon Q retrieval miss as a user question.
+- Added a focused regression proving Amazon Q is called only for the original draft and repair attempts, while the repeated validation failure is sent to the OpenAI resolver and returned with OpenAI metadata. API typecheck and harness pass; the focused regression passed before a later host `spawn EPERM` retry. The full draft suite remains 92/103 because 11 concurrent uncommitted validation/operating-condition regressions fail outside this change. Root lint and typecheck pass; root build exceeded the 59-second command ceiling twice without a completion result. Scoped diff check passes, while the repository-wide diff check is blocked by an unrelated blank line in docs/agent-history/2026-07.md.
+- No DB migration, dependency change, cloud mutation, Terraform execution, deployment, commit, or push was performed.
+### 2026-07-19 - Prefer fixed Template resources during strict Repository validation
+
+- Exempted resources owned by the selected fixed Template from strict Repository inferred-resource rejection and preserved the Template's original scaling relationships.
+- Chrome reproduction now creates the Board successfully with the ECS scaling target and policy present; browser console warnings/errors are empty.
+- Focused regression, lint, typecheck, build, harness, and diff checks pass. Full tests still stop on three unrelated shared-contract failures; the broader Architecture Draft file has nine pre-existing non-template failures.
