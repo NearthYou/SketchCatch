@@ -1330,6 +1330,11 @@ function formatAcceptedArchitectureClarificationAnswer(
   answer: NonNullable<CreateArchitectureDraftRequest["clarificationAnswers"]>[number]
 ): string {
   const trimmedAnswer = answer.answer.trim();
+  const canonicalSuggestion = findCanonicalClarificationSuggestion(
+    answer.questionId,
+    trimmedAnswer
+  );
+  if (canonicalSuggestion !== undefined) return canonicalSuggestion;
   if (answer.questionId !== "budget") return trimmedAnswer;
 
   const monthlyBudgetManwon = resolveConversationalMonthlyBudgetManwon(trimmedAnswer);
@@ -1338,6 +1343,42 @@ function formatAcceptedArchitectureClarificationAnswer(
   }
 
   return `${trimmedAnswer} (월 ${monthlyBudgetManwon}만원으로 해석)`;
+}
+
+function findCanonicalClarificationSuggestion(
+  questionId: string,
+  answer: string
+): string | undefined {
+  const question = REQUIRED_ARCHITECTURE_QUESTIONS.find(({ id }) => id === questionId);
+  if (question === undefined) return undefined;
+
+  const normalizedAnswer = answer.normalize("NFKC").trim().toLowerCase();
+  const exactSuggestion = question.suggestions.find(
+    (suggestion) => suggestion.normalize("NFKC").trim().toLowerCase() === normalizedAnswer
+  );
+  if (exactSuggestion !== undefined) return exactSuggestion;
+
+  if (questionId === "region" && /(?:hong\s*kong|홍콩)/iu.test(normalizedAnswer)) {
+    return question.suggestions.find((suggestion) =>
+      /(?:asia\s*pacific|아시아\s*태평양)/iu.test(suggestion)
+    );
+  }
+  if (
+    questionId === "website_size"
+    && /(?:간단|단순)(?:한)?\s*(?:웹)?사이트/u.test(normalizedAnswer)
+  ) {
+    return question.suggestions.find((suggestion) => /10mb\s*미만/iu.test(suggestion));
+  }
+  if (
+    (questionId === "file_upload" || questionId === "realtime")
+    && isNaturalNegativeClarificationAnswer(normalizedAnswer)
+  ) {
+    return question.suggestions.find((suggestion) =>
+      /^(?:없음|필요\s*없음)/u.test(suggestion)
+    );
+  }
+
+  return undefined;
 }
 
 type MissingRequiredArchitectureQuestion = {
@@ -1420,7 +1461,7 @@ function isClarificationAnswerValid(
     case "region":
       return hasPromptTerm(normalizedAnswer, [
         "국내", "해외", "전 세계", "전세계", "가까운 곳", "한국", "서울", "일본", "도쿄",
-        "싱가포르", "중국", "미국", "유럽", "아시아"
+        "싱가포르", "홍콩", "hong kong", "중국", "미국", "유럽", "아시아"
       ])
         || hasUncertainPreferenceAnswer(normalizedAnswer);
     case "budget":
@@ -1498,7 +1539,8 @@ function hasPageLoadingClarificationEvidence(answer: string): boolean {
 function hasWebsiteSizeClarificationEvidence(answer: string): boolean {
   return hasPromptTerm(answer, [
     "website size", "site size", "웹사이트 크기", "사이트 크기", "사이트 용량",
-    "콘텐츠 용량", "작은 사이트", "크지 않은 사이트", "이미지가 많", "사진이 많",
+    "콘텐츠 용량", "작은 사이트", "간단한 사이트", "간단한 웹사이트", "단순한 사이트",
+    "크지 않은 사이트", "이미지가 많", "사진이 많",
     "동영상이 많", "영상이 많", "콘텐츠가 많"
   ]) || /\d+(?:\.\d+)?\s*(?:kb|mb|gb|tb)\b/iu.test(answer);
 }
@@ -1558,6 +1600,10 @@ function isBackendClarificationAnswerValid(answer: string): boolean {
 function isNaturalBooleanAnswer(answer: string): boolean {
   return /^(?:(?:네|예|응|맞아|맞아요)(?:[\s,.!]|$)|(?:아니|아니요)(?:[\s,.!]|$)|(?:필요(?:해|해요|합니다|하지\s*않(?:아|아요)?|없(?:어|어요)?)|안\s*필요(?:해|해요)?|없어|없어요|있어|있어요|있음|없음)(?:[\s,.!]|$))/u.test(answer)
     || hasUncertainPreferenceAnswer(answer);
+}
+
+function isNaturalNegativeClarificationAnswer(answer: string): boolean {
+  return /^(?:(?:아니|아니요)|(?:필요\s*)?없(?:어|어요|음)|안\s*필요(?:해|해요)?)(?:[\s,.!]|$)/u.test(answer);
 }
 
 function hasUncertainPreferenceAnswer(answer: string): boolean {
@@ -9304,7 +9350,7 @@ function resolveRegionProfile(normalizedPrompt: string): ArchitectureAnswerProfi
     return "global";
   }
 
-  if (/(asia\s*pacific|apac|tokyo|singapore|아시아\s*태평양|도쿄|싱가포르)/iu.test(normalizedPrompt)) {
+  if (/(asia\s*pacific|apac|tokyo|singapore|hong\s*kong|아시아\s*태평양|도쿄|싱가포르|홍콩)/iu.test(normalizedPrompt)) {
     return "apac";
   }
 

@@ -88,6 +88,8 @@ function findMatchingClarificationSuggestion(
     const semanticSuggestion = findWebsiteTypeSuggestion(clarification.suggestions, normalizedAnswer);
     if (semanticSuggestion !== null) return semanticSuggestion;
   }
+  const semanticSuggestion = findQuestionSpecificSuggestion(clarification, normalizedAnswer);
+  if (semanticSuggestion !== null) return semanticSuggestion;
   const answerTokens = extractMeaningfulClarificationTokens(normalizedAnswer);
   let bestMatch: { readonly score: number; readonly suggestion: string } | null = null;
   for (const suggestion of clarification.suggestions) {
@@ -98,6 +100,30 @@ function findMatchingClarificationSuggestion(
     }
   }
   return bestMatch?.suggestion ?? null;
+}
+
+function findQuestionSpecificSuggestion(
+  clarification: ArchitectureDraftClarification,
+  normalizedAnswer: string
+): string | null {
+  let pattern: RegExp | null = null;
+  if (clarification.questionId === "region" && /(?:hong\s*kong|홍콩)/iu.test(normalizedAnswer)) {
+    pattern = /(?:asia\s*pacific|아시아\s*태평양)/iu;
+  } else if (
+    clarification.questionId === "website_size"
+    && /(?:간단|단순)(?:한)?\s*(?:웹)?사이트/u.test(normalizedAnswer)
+  ) {
+    pattern = /10mb\s*미만/iu;
+  } else if (
+    (clarification.questionId === "file_upload" || clarification.questionId === "realtime")
+    && /^(?:(?:아니|아니요)|(?:필요\s*)?없(?:어|어요|음)|안\s*필요(?:해|해요)?)(?:[\s,.!]|$)/u.test(normalizedAnswer)
+  ) {
+    pattern = /^(?:없음|필요\s*없음)/u;
+  }
+
+  return pattern === null
+    ? null
+    : clarification.suggestions.find((suggestion) => pattern.test(suggestion)) ?? null;
 }
 
 function findWebsiteTypeSuggestion(

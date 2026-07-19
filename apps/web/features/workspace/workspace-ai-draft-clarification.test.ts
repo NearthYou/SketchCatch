@@ -149,3 +149,48 @@ test("accepted natural-language answers resolve to an existing option or a check
     null
   );
 });
+
+test("common natural-language answers select the matching existing option", () => {
+  const nextQuestion = { ...clarification, questionId: "budget", question: "월 예산 범위는?" };
+  const scenarios = [
+    {
+      questionId: "region",
+      question: "주요 사용자 지역은?",
+      suggestions: ["한국만 (서울 리전)", "아시아 태평양 (도쿄, 싱가포르 포함)", "글로벌 (미국, 유럽 포함)"],
+      answer: "홍콩만",
+      expected: "아시아 태평양 (도쿄, 싱가포르 포함)"
+    },
+    {
+      questionId: "website_size",
+      question: "전체 웹사이트 크기는?",
+      suggestions: ["10MB 미만 (간단한 사이트)", "10MB-100MB (일반적인 사이트)"],
+      answer: "간단한 사이트야",
+      expected: "10MB 미만 (간단한 사이트)"
+    },
+    {
+      questionId: "file_upload",
+      question: "파일 업로드 기능이 있나요?",
+      suggestions: ["없음 (텍스트만)", "이미지만 (프로필, 게시글 이미지)"],
+      answer: "없어",
+      expected: "없음 (텍스트만)"
+    },
+    {
+      questionId: "realtime",
+      question: "실시간 기능이 필요한가요?",
+      suggestions: ["필요 없음", "실시간 채팅", "실시간 알림"],
+      answer: "아니",
+      expected: "필요 없음"
+    }
+  ] as const;
+
+  for (const scenario of scenarios) {
+    assert.deepEqual(
+      resolveAcceptedArchitectureDraftClarificationSelection(
+        { ...clarification, ...scenario },
+        scenario.answer,
+        nextQuestion
+      ),
+      { label: scenario.expected, matchedSuggestion: true }
+    );
+  }
+});

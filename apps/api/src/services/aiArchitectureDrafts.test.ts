@@ -1174,14 +1174,18 @@ test("createArchitectureDraft maps a conversational monthly budget to the matchi
   assert.equal(response.metadata.operatingProfile?.budgetLevel, "normal");
 });
 
-test("createAmazonQArchitectureDraftResponse understands five additional natural-language clarification examples", async () => {
+test("createAmazonQArchitectureDraftResponse understands natural-language clarification examples", async () => {
   const provider = createFakeAmazonQProvider(() => "{}");
   const scenarios = [
     { questionId: "website_type", answer: "당근처럼 동네 중고거래 플랫폼을 만들고 싶어" },
     { questionId: "traffic", answer: "출시 초기에는 이용자가 많지 않을 것 같아" },
     { questionId: "database", answer: "회원가입 정보와 주문 내역을 저장해야 해" },
     { questionId: "region", answer: "일본과 싱가포르 사용자가 대부분이야" },
-    { questionId: "file_upload", answer: "사용자가 프로필 사진을 올릴 수 있어야 해" }
+    { questionId: "region", answer: "홍콩만" },
+    { questionId: "website_size", answer: "간단한 사이트야" },
+    { questionId: "file_upload", answer: "사용자가 프로필 사진을 올릴 수 있어야 해" },
+    { questionId: "file_upload", answer: "없어" },
+    { questionId: "realtime", answer: "아니" }
   ] as const;
   const targetQuestionIds = new Set(scenarios.map(({ questionId }) => questionId));
   const answers: Array<{ questionId: string; answer: string }> = [];
