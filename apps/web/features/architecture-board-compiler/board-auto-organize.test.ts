@@ -102,6 +102,41 @@ test("관계의 양 끝이 바뀐 후보 경로는 원래 관계에 적용하지
   assert.deepEqual(constrained.diagram.edges[0]?.route, original.edges[0]?.route);
 });
 
+test("Board 자동 정리 경계는 잠긴 자동 프레임과 사용자 그룹을 보존하고 full-tuple 프레임만 받는다", () => {
+  const original = sourceDiagram();
+  const lockedFrame = autoFrame("board-auto-frame:locked", true);
+  const staleFrame = autoFrame("board-auto-frame:stale", false);
+  const prefixOnlyUserFrame = {
+    ...autoFrame("board-auto-frame:user", false),
+    metadata: { presentationCatalogItemId: "design-region" },
+    label: "사용자 그룹"
+  };
+  original.nodes.push(lockedFrame, staleFrame, prefixOnlyUserFrame);
+  const candidate = maliciousProposal(original);
+  const newOwnedFrame = autoFrame("board-auto-frame:new", false);
+  candidate.diagram.nodes.push(newOwnedFrame);
+
+  const constrained = constrainBoardAutoOrganizeProposal(original, candidate);
+
+  assert.deepEqual(
+    constrained.diagram.nodes.find((node) => node.id === lockedFrame.id),
+    lockedFrame
+  );
+  assert.deepEqual(
+    constrained.diagram.nodes.find((node) => node.id === prefixOnlyUserFrame.id),
+    prefixOnlyUserFrame
+  );
+  assert.equal(
+    constrained.diagram.nodes.some((node) => node.id === staleFrame.id),
+    false
+  );
+  assert.equal(
+    constrained.diagram.nodes.some((node) => node.id === newOwnedFrame.id),
+    true
+  );
+  assert.equal(hasSameBoardAutoOrganizeSemantics(original, constrained.diagram), true);
+});
+
 function sourceDiagram(): DiagramJson {
   return {
     nodes: [
@@ -270,5 +305,20 @@ function change(
     after: null,
     summary: kind,
     cost: 1
+  };
+}
+
+/** Board 자동 정리 소유권 테스트용 full-tuple 프레임을 만듭니다. */
+function autoFrame(id: string, locked: boolean): DiagramJson["nodes"][number] {
+  return {
+    id,
+    type: "design_group",
+    kind: "design",
+    position: { x: 20, y: 20 },
+    size: { width: 300, height: 180 },
+    label: "자동 표시 영역",
+    locked,
+    zIndex: 0,
+    metadata: { presentationCatalogItemId: "design-group" }
   };
 }

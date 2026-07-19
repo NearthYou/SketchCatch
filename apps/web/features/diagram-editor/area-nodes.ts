@@ -1,4 +1,7 @@
-import type { DiagramNode } from "../../../../packages/types/src";
+import {
+  isBoardAutoPresentationFrameNode,
+  type DiagramNode
+} from "../../../../packages/types/src";
 import { getAwsRegionLabel } from "../parameter-input/aws-region-options";
 import {
   getRegionNodeAwsRegion,
@@ -194,7 +197,11 @@ export function isResourceAreaNode(node: DiagramNode): boolean {
 
 /** Security Group은 읽기 쉬운 범위지만 AWS 포함 관계를 만들지는 않습니다. */
 export function isContainmentAreaNode(node: DiagramNode): boolean {
-  return isAreaNode(node) && !isSecurityGroupScopeNode(node);
+  return (
+    isAreaNode(node) &&
+    !isSecurityGroupScopeNode(node) &&
+    !isBoardAutoPresentationFrameNode(node)
+  );
 }
 
 /** 기본 Area 타입이 아니지만 작성된 템플릿에서만 프레임으로 표시되는 리소스입니다. */

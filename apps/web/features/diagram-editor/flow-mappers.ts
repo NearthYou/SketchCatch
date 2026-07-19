@@ -660,6 +660,7 @@ function getFlowEdgeZIndex(
   return endpointZIndex + (hasOnlyAreaEndpoints ? 8 : -8);
 }
 
+/** 실제 containment Area만 Resource 화면 층에 영향을 주도록 깊이를 계산합니다. */
 function getAreaAncestorDepth(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
@@ -675,7 +676,7 @@ function getAreaAncestorDepth(
 
     const parentNode = nodeById.get(parentAreaNodeId);
 
-    if (!parentNode || !isAreaNode(parentNode)) {
+    if (!parentNode || !isContainmentAreaNode(parentNode)) {
       break;
     }
 
