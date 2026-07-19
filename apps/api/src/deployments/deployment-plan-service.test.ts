@@ -949,6 +949,9 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
       planArtifactStorage,
       readTerraformArtifactFile: async () => planTerraformArtifactContent,
       analyzePreDeployment: () => createAnalysis(),
+      prepareBuildEnvironment: async () => {
+        runnerStages.push("build-environment");
+      },
       prepareApplicationArtifact: async () => {
         runnerStages.push("application-artifact");
         return {
@@ -1014,7 +1017,13 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
     }
   );
 
-  assert.deepEqual(runnerStages, ["application-artifact", "init", "plan", "show-json"]);
+  assert.deepEqual(runnerStages, [
+    "build-environment",
+    "application-artifact",
+    "init",
+    "plan",
+    "show-json"
+  ]);
   assert.deepEqual(repository.activeStages, ["preflight", "plan"]);
   assert.equal(cleanupCalled, true);
   assert.equal(result.deployment.status, "PENDING");

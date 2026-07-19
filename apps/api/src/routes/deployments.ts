@@ -119,13 +119,8 @@ import {
 } from "../deployments/deployment-runtime-cache.js";
 import type { RuntimeCache } from "../runtime-cache/index.js";
 import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
-import { createAwsProjectBuildEnvironmentGateway } from "../build-environments/aws-project-build-environment-gateway.js";
-import {
-  ProjectBuildEnvironmentError,
-  createPostgresProjectBuildEnvironmentRepository,
-  prepareProjectBuildEnvironment as prepareProjectBuildEnvironmentService,
-  verifyProjectRepositoryAccess as verifyProjectRepositoryAccessService
-} from "../build-environments/project-build-environment-service.js";
+import { ProjectBuildEnvironmentError } from "../build-environments/project-build-environment-service.js";
+import { prepareEcsBuildEnvironmentForPlan } from "../deployments/deployment-plan-build-environment.js";
 import {
   acquireProjectExecutionLease,
   recordProjectExecutionCoordinates,
@@ -368,69 +363,6 @@ function createDeploymentWorkerDispatch(options: DeploymentRouteOptions | undefi
         : createLocalDeploymentWorkerDispatcher()),
     enabled: true
   };
-}
-
-async function prepareEcsBuildEnvironmentForPlan(input: {
-  db: DatabaseClient["db"];
-  deployment: DeploymentRecord;
-  options: DeploymentRouteOptions | undefined;
-  userId: string;
-}): Promise<void> {
-  if (
-    input.deployment.scope === "infrastructure" ||
-    input.deployment.targetKind !== "ecs_fargate"
-  ) {
-    return;
-  }
-
-  const prepareProjectBuildEnvironment =
-    input.options?.prepareProjectBuildEnvironment ??
-    (async (preparation: {
-      architectureId: string;
-      db: DatabaseClient["db"];
-      projectId: string;
-      userId: string;
-    }) => {
-      await prepareProjectBuildEnvironmentService(
-        {
-          architectureId: preparation.architectureId,
-          projectId: preparation.projectId,
-          userId: preparation.userId
-        },
-        createPostgresProjectBuildEnvironmentRepository(preparation.db),
-        createAwsProjectBuildEnvironmentGateway()
-      );
-    });
-  await prepareProjectBuildEnvironment({
-    architectureId: input.deployment.architectureId,
-    db: input.db,
-    projectId: input.deployment.projectId,
-    userId: input.userId
-  });
-
-  const verifyProjectRepositoryAccess =
-    input.options?.verifyProjectRepositoryAccess ??
-    (async (verification: { db: DatabaseClient["db"]; projectId: string; userId: string }) =>
-      verifyProjectRepositoryAccessService(
-        {
-          projectId: verification.projectId,
-          userId: verification.userId
-        },
-        createPostgresProjectBuildEnvironmentRepository(verification.db),
-        createAwsProjectBuildEnvironmentGateway()
-      ));
-  const verification = await verifyProjectRepositoryAccess({
-    db: input.db,
-    projectId: input.deployment.projectId,
-    userId: input.userId
-  });
-  if (verification.buildEnvironment?.repositoryVerificationStatus !== "verified") {
-    throw new ProjectBuildEnvironmentError(
-      "REPOSITORY_ACCESS_VERIFICATION_REQUIRED",
-      verification.buildEnvironment?.repositoryVerificationStatusReason ??
-        "Repository checkout verification must succeed before Terraform Plan"
-    );
-  }
 }
 
 async function isMatchingActiveDeploymentOperation(input: {
@@ -1170,12 +1102,10 @@ export async function registerDeploymentRoutes(
       options,
       getDeploymentDatabaseClient
     );
-    const runDeploymentPlan = options?.runDeploymentPlan ?? defaultRunDeploymentPlan;
     const workerDispatch = createDeploymentWorkerDispatch(options);
     let reservedLease: ReservedRouteExecutionLease | undefined;
     let executionHandedOff = false;
     let runningDeployment: DeploymentRecord | undefined;
-    let routeFailureStage: "build_environment" | "plan" = "build_environment";
 
     try {
       const deployment = await getDeployment(
@@ -1217,13 +1147,6 @@ export async function registerDeploymentRoutes(
         throw new DeploymentConflictError("Deployment plan could not be started");
       }
 
-      await prepareEcsBuildEnvironmentForPlan({
-        db,
-        deployment,
-        options,
-        userId: accessContext.userId
-      });
-      routeFailureStage = "plan";
       const acceptedDeployment = await toDeployment(runningDeployment, repository);
 
       const queuedJob = workerDispatch.enabled
@@ -1251,6 +1174,49 @@ export async function registerDeploymentRoutes(
           repository
         );
       } else {
+        const runPreparedDeploymentPlan = async (
+          planInput: RunDeploymentPlanInput,
+          planRepository: DeploymentRepository
+        ): Promise<RunDeploymentPlanResult> => {
+          const prepareBuildEnvironment = () =>
+            prepareEcsBuildEnvironmentForPlan(
+              {
+                db,
+                deployment,
+                userId: accessContext.userId
+              },
+              {
+                ...(options?.prepareProjectBuildEnvironment
+                  ? { prepareProjectBuildEnvironment: options.prepareProjectBuildEnvironment }
+                  : {}),
+                ...(options?.verifyProjectRepositoryAccess
+                  ? { verifyProjectRepositoryAccess: options.verifyProjectRepositoryAccess }
+                  : {})
+              }
+            );
+
+          if (!options?.runDeploymentPlan) {
+            return defaultRunDeploymentPlan(planInput, planRepository, {
+              prepareBuildEnvironment
+            });
+          }
+
+          try {
+            await prepareBuildEnvironment();
+          } catch (error) {
+            await planRepository
+              .failDeployment(deployment.id, {
+                failureStage: "build_environment",
+                errorSummary:
+                  error instanceof ProjectBuildEnvironmentError
+                    ? error.message
+                    : "Deployment plan preparation failed"
+              })
+              .catch(() => undefined);
+            throw error;
+          }
+          return options.runDeploymentPlan(planInput, planRepository);
+        };
         startDeploymentPlanJob(
           {
             deploymentId: params.deploymentId,
@@ -1258,7 +1224,7 @@ export async function registerDeploymentRoutes(
             startedFromStatus: deployment.status
           },
           repository,
-          runDeploymentPlan,
+          runPreparedDeploymentPlan,
           request.log
         );
       }
@@ -1272,7 +1238,7 @@ export async function registerDeploymentRoutes(
         if (runningDeployment) {
           await repository
             .failDeployment(runningDeployment.id, {
-              failureStage: routeFailureStage,
+              failureStage: "plan",
               errorSummary:
                 error instanceof ProjectBuildEnvironmentError
                   ? error.message

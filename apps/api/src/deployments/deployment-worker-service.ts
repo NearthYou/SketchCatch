@@ -174,8 +174,12 @@ export async function runDeploymentWorkerJob(
 
 export function createDeploymentWorkerOperationRunner(
   deploymentRepository: DeploymentRepository,
-  services: DeploymentWorkerServices = defaultDeploymentWorkerServices
+  serviceOverrides: Partial<DeploymentWorkerServices> = {}
 ): RunDeploymentWorkerOperation {
+  const services: DeploymentWorkerServices = {
+    ...defaultDeploymentWorkerServices,
+    ...serviceOverrides
+  };
   return async (input) => {
     const commonInput = {
       deploymentId: input.deploymentId,
