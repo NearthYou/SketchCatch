@@ -50,10 +50,7 @@ test("Board 자동 정리 경계는 Resource·관계·설정·영역 소속을 �
   assert.equal(constrained.diagram.edges[0]?.label, "request");
   assert.deepEqual(constrained.diagram.variables, original.variables);
   assert.deepEqual(constrained.diagram.viewport, original.viewport);
-  assert.deepEqual(constrained.diagram.presentation, {
-    geometryPolicy: "catalog-normalized",
-    terraformSourceFingerprint: "source-fingerprint"
-  });
+  assert.deepEqual(constrained.diagram.presentation, original.presentation);
   assert.deepEqual(constrained.changes.map(({ kind }) => kind), ["geometry", "edge-routing"]);
 });
 
@@ -137,6 +134,7 @@ test("Board 자동 정리 경계는 잠긴 자동 프레임과 사용자 그룹�
   assert.equal(hasSameBoardAutoOrganizeSemantics(original, constrained.diagram), true);
 });
 
+/** presentation까지 원본 그대로 지켜야 하는 자동 정리 fixture를 만듭니다. */
 function sourceDiagram(): DiagramJson {
   return {
     nodes: [
@@ -204,6 +202,7 @@ function sourceDiagram(): DiagramJson {
     ],
     presentation: {
       geometryPolicy: "source-exact",
+      initialViewportPending: true,
       sourceViewBox: { x: -100, y: -80, width: 800, height: 600 },
       terraformSourceFingerprint: "source-fingerprint"
     }

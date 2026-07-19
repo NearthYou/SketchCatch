@@ -34,7 +34,6 @@ export function constrainBoardAutoOrganizeProposal(
 ): ArchitectureBoardCompilationProposal {
   const candidateNodesById = new Map(proposal.diagram.nodes.map((node) => [node.id, node]));
   const candidateEdgesById = new Map(proposal.diagram.edges.map((edge) => [edge.id, edge]));
-  const presentation = getConstrainedPresentation(currentDiagram, proposal.diagram);
   const constrainedCandidate: DiagramJson = {
     ...structuredClone(currentDiagram),
     nodes: [
@@ -75,10 +74,7 @@ export function constrainBoardAutoOrganizeProposal(
             ? { route: structuredClone(sourceEdge.route) }
             : {})
       };
-    }),
-    ...(presentation === undefined
-      ? { presentation: undefined }
-      : { presentation })
+    })
   };
   const diagram = reconcilePresentationFrames(currentDiagram, constrainedCandidate);
 
@@ -93,28 +89,6 @@ export function constrainBoardAutoOrganizeProposal(
     changes: proposal.changes
       .filter(({ kind }) => kind === "geometry" || kind === "edge-routing")
       .map((change) => structuredClone(change))
-  };
-}
-
-function getConstrainedPresentation(
-  source: DiagramJson,
-  candidate: DiagramJson
-): DiagramJson["presentation"] {
-  const sourcePresentation = source.presentation;
-  const candidatePresentation = candidate.presentation;
-
-  if (
-    sourcePresentation?.geometryPolicy !== "source-exact" ||
-    candidatePresentation?.geometryPolicy !== "catalog-normalized"
-  ) {
-    return sourcePresentation === undefined ? undefined : structuredClone(sourcePresentation);
-  }
-
-  return {
-    geometryPolicy: "catalog-normalized",
-    ...(sourcePresentation.terraformSourceFingerprint === undefined
-      ? {}
-      : { terraformSourceFingerprint: sourcePresentation.terraformSourceFingerprint })
   };
 }
 

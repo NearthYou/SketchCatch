@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
+import type { DiagramEdgeRoute, DiagramJson, DiagramNode } from "@sketchcatch/types";
 import { hasSameBoardAutoOrganizeSemantics } from "@sketchcatch/types";
 
-import { createBoardAutoOrganizeCandidates } from "./board-auto-organize-candidates";
+import {
+  createBoardAutoOrganizeCandidates,
+  hasValidBoardAutoOrganizeRouteGeometry
+} from "./board-auto-organize-candidates";
 
 test("후보 gallery는 서로 다른 visual-only Diagram을 최대 세 개 반환한다", () => {
   const crowdedDiagram = diagram();
@@ -58,6 +61,33 @@ test("잠긴 자동 프레임과 사용자 Design Group은 모든 후보에서 �
       true
     );
   }
+});
+
+test("route validator는 svgPath 안의 NaN과 Infinity를 거부한다", () => {
+  const route = validRoute();
+
+  assert.equal(hasValidBoardAutoOrganizeRouteGeometry(route), true);
+  assert.equal(
+    hasValidBoardAutoOrganizeRouteGeometry({ ...route, svgPath: "M NaN 0 L 10 10" }),
+    false
+  );
+  assert.equal(
+    hasValidBoardAutoOrganizeRouteGeometry({ ...route, svgPath: "M 0 0 L -Infinity 10" }),
+    false
+  );
+});
+
+test("route validator는 유한하지 않은 arrowAngle을 거부한다", () => {
+  const route = validRoute();
+
+  assert.equal(
+    hasValidBoardAutoOrganizeRouteGeometry({ ...route, arrowAngle: Number.NaN }),
+    false
+  );
+  assert.equal(
+    hasValidBoardAutoOrganizeRouteGeometry({ ...route, arrowAngle: Number.POSITIVE_INFINITY }),
+    false
+  );
 });
 
 /** 여러 전략이 실제로 다른 배치를 만들 수 있는 혼잡한 Board를 만듭니다. */
@@ -124,6 +154,18 @@ function edge(id: string, sourceNodeId: string, targetNodeId: string, label = "r
       waypoints: [],
       arrowDirection: "source-to-target" as const
     }
+  };
+}
+
+/** route validator가 허용해야 하는 유한 geometry fixture를 만듭니다. */
+function validRoute(): DiagramEdgeRoute {
+  return {
+    svgPath: "M 0 0 L 10 10",
+    sourcePoint: { x: 0, y: 0 },
+    targetPoint: { x: 10, y: 10 },
+    waypoints: [],
+    arrowDirection: "source-to-target",
+    arrowAngle: 45
   };
 }
 

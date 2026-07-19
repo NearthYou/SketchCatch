@@ -17,6 +17,7 @@ import { createBoardAutoOrganizeExplanations } from "./board-auto-organize-expla
 
 const MAX_CANDIDATES = 3;
 const BOARD_COORDINATE_LIMIT = 1_000_000;
+const NON_FINITE_SVG_PATH_PATTERN = /(?:NaN|Infinity)/iu;
 const REGRESSION_FINDING_KEYS = [
   "nodeOverlapCount",
   "siblingAreaOverlapCount",
@@ -184,7 +185,11 @@ function isSafeVisualCandidate(
       .every(hasValidNodeGeometry) &&
     candidate.edges
       .filter((edge) => changedEdgeIds.has(edge.id))
-      .every((edge) => edge.route === undefined || hasValidRouteGeometry(edge.route))
+      .every(
+        (edge) =>
+          edge.route === undefined ||
+          hasValidBoardAutoOrganizeRouteGeometry(edge.route)
+      )
   );
 }
 
@@ -204,14 +209,18 @@ function hasValidNodeGeometry(node: DiagramNode): boolean {
   );
 }
 
-/** route의 path 문자열과 모든 control point가 유한한지 확인합니다. */
-function hasValidRouteGeometry(route: DiagramEdgeRoute): boolean {
+/** route 문자열, angle과 모든 control point가 유한한 geometry인지 확인합니다. */
+export function hasValidBoardAutoOrganizeRouteGeometry(
+  route: DiagramEdgeRoute
+): boolean {
   return (
     typeof route.svgPath === "string" &&
+    !NON_FINITE_SVG_PATH_PATTERN.test(route.svgPath) &&
     hasFinitePoint(route.sourcePoint) &&
     hasFinitePoint(route.targetPoint) &&
     route.waypoints.every(hasFinitePoint) &&
-    (route.labelPosition === undefined || hasFinitePoint(route.labelPosition))
+    (route.labelPosition === undefined || hasFinitePoint(route.labelPosition)) &&
+    (route.arrowAngle === undefined || Number.isFinite(route.arrowAngle))
   );
 }
 

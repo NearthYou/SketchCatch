@@ -9,7 +9,7 @@ export function isOwnedAutoFrame(node: DiagramNode): boolean {
   return isBoardAutoPresentationFrameNode(node);
 }
 
-/** 잠긴 자동 프레임과 사용자 Design을 지키면서 허용된 자동 프레임만 교체합니다. */
+/** 잠긴 프레임·사용자 Design·source edge endpoint를 지키며 자동 프레임만 교체합니다. */
 export function reconcilePresentationFrames(
   sourceDiagram: DiagramJson,
   candidateDiagram: DiagramJson = sourceDiagram
@@ -44,6 +44,16 @@ export function reconcilePresentationFrames(
     .map(normalizeOwnedAutoFrame)
     .filter((node): node is DiagramNode => node !== null)
     .sort((left, right) => left.id.localeCompare(right.id));
+  const desiredFrameIds = new Set(desiredFrames.map((node) => node.id));
+  const sourceEdgeEndpointIds = new Set(
+    sourceDiagram.edges.flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId])
+  );
+  const referencedMissingFrames = [...sourceOwnedFrameById.values()].filter(
+    (node) =>
+      !node.locked &&
+      sourceEdgeEndpointIds.has(node.id) &&
+      !desiredFrameIds.has(node.id)
+  );
 
   return {
     ...structuredClone(candidateDiagram),
@@ -51,6 +61,7 @@ export function reconcilePresentationFrames(
       ...candidateNodes.map((node) => structuredClone(node)),
       ...missingUserDesignNodes.map((node) => structuredClone(node)),
       ...lockedFrames.map((node) => structuredClone(node)),
+      ...referencedMissingFrames.map((node) => structuredClone(node)),
       ...desiredFrames
     ]
   };

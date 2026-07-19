@@ -65,7 +65,7 @@ export function serializeBoardAutoOrganizeSource(diagram: DiagramJson): string {
   });
 }
 
-/** 자동 정리가 바꿀 수 없는 Resource·설정·관계 의미만 안정적으로 직렬화합니다. */
+/** 자동 정리가 바꿀 수 없는 Resource·설정·관계·presentation을 안정적으로 직렬화합니다. */
 export function serializeBoardAutoOrganizeSemantics(diagram: DiagramJson): string {
   return stableSerialize({
     nodes: sortById(diagram.nodes)
@@ -77,9 +77,9 @@ export function serializeBoardAutoOrganizeSemantics(diagram: DiagramJson): strin
     ...(diagram.variables === undefined
       ? {}
       : { variables: sortVariables(diagram.variables) }),
-    presentation: {
-      terraformSourceFingerprint: diagram.presentation?.terraformSourceFingerprint
-    }
+    ...(diagram.presentation === undefined
+      ? {}
+      : { presentation: diagram.presentation })
   });
 }
 
