@@ -29,6 +29,12 @@ export type CreateAwsImportTemplateUrlInput = {
   objectKey: string;
 };
 
+export type AwsImportTemplateClock = () => Date;
+
+export type AwsImportTemplateValidationOptions = {
+  now?: AwsImportTemplateClock | undefined;
+};
+
 const awsImportPublishedTemplateMarker = Symbol("awsImportPublishedTemplate");
 
 export type AwsImportPublishedTemplate = {
@@ -51,6 +57,7 @@ export type PublishAwsImportCloudFormationTemplateToS3Input = {
   contractVersion: string;
   templateBody: string;
   expiresInSeconds: number;
+  now?: AwsImportTemplateClock | undefined;
   s3Client?: S3Client | undefined;
   signTemplateUrl?:
     | ((input: {
@@ -151,6 +158,7 @@ export async function publishAwsImportCloudFormationTemplateToS3({
   contractVersion,
   templateBody,
   expiresInSeconds,
+  now = systemAwsImportTemplateClock,
   s3Client = getS3Client(),
   signTemplateUrl = defaultSignAwsImportTemplateUrl
 }: PublishAwsImportCloudFormationTemplateToS3Input): Promise<AwsImportPublishedTemplate> {
@@ -194,7 +202,7 @@ export async function publishAwsImportCloudFormationTemplateToS3({
     baseUrl,
     expiresInSeconds
   });
-  assertAwsImportPresignedTemplateUrl({ baseUrl, templateUrl, expiresInSeconds, region });
+  assertAwsImportPresignedTemplateUrl({ baseUrl, templateUrl, expiresInSeconds, region, now });
 
   return Object.freeze({
     connectionId,
@@ -215,6 +223,7 @@ export function assertAwsImportPresignedTemplateUrl(input: {
   templateUrl: string;
   expiresInSeconds: number;
   region: string;
+  now?: AwsImportTemplateClock | undefined;
 }): void {
   if (
     !Number.isInteger(input.expiresInSeconds) ||
@@ -264,6 +273,8 @@ export function assertAwsImportPresignedTemplateUrl(input: {
   }
 
   const credential = params.get("X-Amz-Credential") ?? "";
+  const signatureDate = params.get("X-Amz-Date") ?? "";
+  const signatureTime = parseAwsSigV4Date(signatureDate);
   const credentialPattern = new RegExp(
     `^[^/]+/\\d{8}/${escapeRegularExpression(input.region)}/s3/aws4_request$`,
     "u"
@@ -273,7 +284,7 @@ export function assertAwsImportPresignedTemplateUrl(input: {
     params.get("X-Amz-Algorithm") !== "AWS4-HMAC-SHA256" ||
     params.get("X-Amz-Content-Sha256") !== "UNSIGNED-PAYLOAD" ||
     !credentialPattern.test(credential) ||
-    !/^\d{8}T\d{6}Z$/u.test(params.get("X-Amz-Date") ?? "") ||
+    signatureTime === undefined ||
     params.get("X-Amz-Expires") !== String(input.expiresInSeconds) ||
     !/^[a-f0-9]{64}$/u.test(params.get("X-Amz-Signature") ?? "") ||
     params.get("X-Amz-SignedHeaders") !== "host" ||
@@ -282,6 +293,21 @@ export function assertAwsImportPresignedTemplateUrl(input: {
     (params.has("X-Amz-Security-Token") && !params.get("X-Amz-Security-Token"))
   ) {
     throw new Error("AWS import presigned template query values are invalid");
+  }
+
+  const nowTime = (input.now ?? systemAwsImportTemplateClock)().getTime();
+  if (!Number.isFinite(nowTime)) {
+    throw new Error("AWS import presigned template validation clock is invalid");
+  }
+
+  // gg: 서명 host보다 API clock이 최대 5분 빠른 경우만 발급 직후 clock skew로 허용합니다.
+  const maximumFutureClockSkewMilliseconds = 5 * 60 * 1000;
+  if (signatureTime > nowTime + maximumFutureClockSkewMilliseconds) {
+    throw new Error("AWS import presigned template signature date is too far in the future");
+  }
+
+  if (signatureTime + input.expiresInSeconds * 1000 <= nowTime) {
+    throw new Error("AWS import presigned template URL has expired");
   }
 }
 
@@ -342,7 +368,8 @@ export function assertAwsImportPublishedTemplateMatches(
     objectKey: string;
     baseUrl: string;
     region: string;
-  }
+  },
+  options: AwsImportTemplateValidationOptions = {}
 ): void {
   if (
     !published ||
@@ -361,7 +388,8 @@ export function assertAwsImportPublishedTemplateMatches(
     baseUrl: expected.baseUrl,
     templateUrl: published.templateUrl,
     expiresInSeconds: published.expiresInSeconds,
-    region: expected.region
+    region: expected.region,
+    now: options.now
   });
 }
 
@@ -372,6 +400,27 @@ async function defaultSignAwsImportTemplateUrl(input: {
   expiresInSeconds: number;
 }): Promise<string> {
   return getSignedUrl(input.s3Client, input.command, { expiresIn: input.expiresInSeconds });
+}
+
+/** gg: 기본 검증 clock은 호출 시점의 실제 시간을 읽고 테스트에서는 같은 seam을 주입합니다. */
+function systemAwsImportTemplateClock(): Date {
+  return new Date();
+}
+
+/** gg: SigV4 basic timestamp를 calendar rollover 없이 epoch millisecond로 바꿉니다. */
+function parseAwsSigV4Date(value: string): number | undefined {
+  const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/u.exec(value);
+  if (!match) return undefined;
+
+  const isoTimestamp =
+    `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}.000Z`;
+  const milliseconds = Date.parse(isoTimestamp);
+  if (!Number.isFinite(milliseconds)) return undefined;
+
+  const normalized = new Date(milliseconds)
+    .toISOString()
+    .replace(/[-:]|\.000/gu, "");
+  return normalized === value ? milliseconds : undefined;
 }
 
 /** gg: 조건부 Put 충돌만 immutable object 재검증 경로로 보냅니다. */

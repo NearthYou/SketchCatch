@@ -5,7 +5,8 @@ import {
   createAwsImportTemplateObjectKey,
   createAwsImportTemplateUrl,
   getAwsImportPresignedTemplateUrlPatterns,
-  type AwsImportPublishedTemplate
+  type AwsImportPublishedTemplate,
+  type AwsImportTemplateValidationOptions
 } from "./aws-connection-template-storage.js";
 import {
   createAwsImportPolicyContract,
@@ -245,9 +246,10 @@ export function createAwsImportManagerContract(
 /** gg: Policy Stack 최초 생성은 고정 URL·Role·tag와 IAM capability만 전달합니다. */
 export function createAwsImportPolicyStackCreateInput(
   contract: AwsImportManagerContract,
-  publishedPolicyTemplate: AwsImportPublishedTemplate
+  publishedPolicyTemplate: AwsImportPublishedTemplate,
+  validationOptions: AwsImportTemplateValidationOptions = {}
 ): CreateStackInput {
-  assertPublishedPolicyTemplate(contract, publishedPolicyTemplate);
+  assertPublishedPolicyTemplate(contract, publishedPolicyTemplate, validationOptions);
 
   return {
     StackName: contract.policyStackName,
@@ -261,9 +263,10 @@ export function createAwsImportPolicyStackCreateInput(
 /** gg: Policy Stack 갱신도 TemplateBody나 ResourceTypes 우회 없이 같은 제한값만 사용합니다. */
 export function createAwsImportPolicyStackUpdateInput(
   contract: AwsImportManagerContract,
-  publishedPolicyTemplate: AwsImportPublishedTemplate
+  publishedPolicyTemplate: AwsImportPublishedTemplate,
+  validationOptions: AwsImportTemplateValidationOptions = {}
 ): UpdateStackInput {
-  assertPublishedPolicyTemplate(contract, publishedPolicyTemplate);
+  assertPublishedPolicyTemplate(contract, publishedPolicyTemplate, validationOptions);
 
   return {
     StackName: contract.policyStackName,
@@ -334,20 +337,25 @@ function createControlPolicyDocument(input: {
 /** gg: Create/Update builder는 storage가 발급하고 이 contract와 일치한 Policy Template만 받습니다. */
 function assertPublishedPolicyTemplate(
   contract: AwsImportManagerContract,
-  publishedPolicyTemplate: AwsImportPublishedTemplate
+  publishedPolicyTemplate: AwsImportPublishedTemplate,
+  validationOptions: AwsImportTemplateValidationOptions
 ): void {
-  assertAwsImportPublishedTemplateMatches(publishedPolicyTemplate, {
-    connectionId: contract.connectionId,
-    kind: "policy",
-    contractVersion: contract.policyContractVersion,
-    sha256: contract.policyTemplateSha256,
-    objectKey: contract.policyTemplateObjectKey,
-    baseUrl: contract.policyTemplateBaseUrl,
-    region: contract.region
-  });
+  assertAwsImportPublishedTemplateMatches(
+    publishedPolicyTemplate,
+    {
+      connectionId: contract.connectionId,
+      kind: "policy",
+      contractVersion: contract.policyContractVersion,
+      sha256: contract.policyTemplateSha256,
+      objectKey: contract.policyTemplateObjectKey,
+      baseUrl: contract.policyTemplateBaseUrl,
+      region: contract.region
+    },
+    validationOptions
+  );
 }
 
-/** gg: CloudFormation service Role은 읽기 Policy 하나와 기존 Role 연결 수명주기만 관리합니다. */
+/** gg: ManagedPolicy handler union만 허용하며 CreatePolicyVersion이 default 갱신까지 수행합니다. */
 function createServiceRolePolicyDocument(input: {
   readManagedPolicyArn: string;
   targetRoleArn: string;
@@ -361,11 +369,11 @@ function createServiceRolePolicyDocument(input: {
         Action: [
           "iam:CreatePolicy",
           "iam:CreatePolicyVersion",
-          "iam:SetDefaultPolicyVersion",
           "iam:DeletePolicyVersion",
           "iam:DeletePolicy",
           "iam:GetPolicy",
           "iam:GetPolicyVersion",
+          "iam:ListEntitiesForPolicy",
           "iam:ListPolicyVersions"
         ],
         Resource: input.readManagedPolicyArn

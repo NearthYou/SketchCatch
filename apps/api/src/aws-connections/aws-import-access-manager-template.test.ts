@@ -18,6 +18,8 @@ const connectionFixture = {
   templateBucketName: "sketchcatch-private-templates"
 } as const;
 
+const signedWindowClock = () => new Date("2026-07-19T12:05:00.000Z");
+
 type PolicyStatement = {
   Sid: string;
   Effect: string;
@@ -90,11 +92,16 @@ test("policy stack create and update inputs accept only the internally published
     contractVersion: contract.policyContractVersion,
     templateBody: contract.policyTemplateBody,
     expiresInSeconds: 600,
+    now: signedWindowClock,
     s3Client: { async send() { return {}; } } as unknown as S3Client,
     signTemplateUrl: async ({ baseUrl }) => createValidPresignedUrl(baseUrl)
   });
-  const createInput = createAwsImportPolicyStackCreateInput(contract, published);
-  const updateInput = createAwsImportPolicyStackUpdateInput(contract, published);
+  const createInput = createAwsImportPolicyStackCreateInput(contract, published, {
+    now: signedWindowClock
+  });
+  const updateInput = createAwsImportPolicyStackUpdateInput(contract, published, {
+    now: signedWindowClock
+  });
 
   for (const input of [createInput, updateInput]) {
     assert.equal(input.StackName, contract.policyStackName);
@@ -107,12 +114,41 @@ test("policy stack create and update inputs accept only the internally published
   }
 });
 
+test("policy stack create and update reject an internally published expired URL", async () => {
+  const contract = createAwsImportManagerContract(connectionFixture);
+  const published = await publishAwsImportCloudFormationTemplateToS3({
+    bucketName: connectionFixture.templateBucketName,
+    region: connectionFixture.region,
+    connectionId: connectionFixture.connectionId,
+    kind: "policy",
+    contractVersion: contract.policyContractVersion,
+    templateBody: contract.policyTemplateBody,
+    expiresInSeconds: 600,
+    now: signedWindowClock,
+    s3Client: { async send() { return {}; } } as unknown as S3Client,
+    signTemplateUrl: async ({ baseUrl }) => createValidPresignedUrl(baseUrl)
+  });
+  const expiredClock = () => new Date("2026-07-19T12:10:00.000Z");
+
+  assert.throws(
+    () => createAwsImportPolicyStackCreateInput(contract, published, { now: expiredClock }),
+    /expired/u
+  );
+  assert.throws(
+    () => createAwsImportPolicyStackUpdateInput(contract, published, { now: expiredClock }),
+    /expired/u
+  );
+});
+
 test("manager template owns only the service Role and its control and cleanup Policies", () => {
   const contract = createAwsImportManagerContract(connectionFixture);
   const template = JSON.parse(contract.templateBody) as {
     Resources: Record<string, Record<string, unknown>>;
   };
   const serviceStatements = contract.serviceRolePolicyDocument.Statement as PolicyStatement[];
+  const managePolicy = serviceStatements.find(
+    (statement) => statement.Sid === "ManageExactReadManagedPolicy"
+  );
   const manageAttachment = serviceStatements.find(
     (statement) => statement.Sid === "ManageExactTargetRoleAttachment"
   );
@@ -154,6 +190,21 @@ test("manager template owns only the service Role and its control and cleanup Po
       );
     })
   );
+  assert.deepEqual(managePolicy, {
+    Sid: "ManageExactReadManagedPolicy",
+    Effect: "Allow",
+    Action: [
+      "iam:CreatePolicy",
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicyVersion",
+      "iam:DeletePolicy",
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:ListEntitiesForPolicy",
+      "iam:ListPolicyVersions"
+    ],
+    Resource: contract.readManagedPolicyArn
+  });
   assert.deepEqual(manageAttachment, {
     Sid: "ManageExactTargetRoleAttachment",
     Effect: "Allow",

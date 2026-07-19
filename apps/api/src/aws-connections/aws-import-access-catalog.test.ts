@@ -7,7 +7,7 @@ import {
   getAwsImportPolicyFingerprint
 } from "./aws-import-access-catalog.js";
 
-test("import catalog produces one read-only policy and shared probe plan", () => {
+test("import catalog produces the read-only policy Task 4 gateway and probes will share", () => {
   const catalogActions = AWS_IMPORT_READERS.flatMap((reader) => reader.actions);
   const normalizedActions = [...new Set(catalogActions)].sort();
   const policy = createAwsImportReadPolicyDocument();
