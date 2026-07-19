@@ -62,6 +62,13 @@ Short English-only working log for the current agent context. Older records are 
 - No database migration, cloud mutation, deployment, or dependency change was made.
 
 
+### 2026-07-19 - Isolate the desktop AI Orbit from the conversation
+
+- Rendered all three desktop Orbit layers as circles and constrained the decorative canvas to the space right of the active conversation panel.
+- Preserved the existing mobile ellipse geometry, Orbit motion and convergence, and final Preview behavior.
+- The 43 Workspace AI checks, root lint/typecheck/build, harness, and diff checks pass. Browser measurements at 1024x768 and 1440x900 show circular rings outside the conversation boundary; 390x844 retains the existing mobile scales with no console warnings or errors.
+- The broader `pnpm test` remains red outside this change: API application integration checks cannot start in the isolated environment, and the existing Resource Catalog contracts fail three assertions before later Web tests are cancelled. None of those failing files changed here.
+
 ### 2026-07-19 - Separate AWS OAuth status from Repository verification
 
 - Changed an `AVAILABLE` AWS CodeConnection from a permanent Repository warning to a connected success state that explains project save/validation performs the actual checkout verification.
@@ -145,16 +152,24 @@ Short English-only working log for the current agent context. Older records are 
 - Direct ECS rollback now deregisters the exact application-created Task Definition revision after the trusted runtime restore, with account/region/ARN validation and a revision-scoped STS session policy.
 - Deregistered the three unused demo revisions (`5`, `7`, and `9`). Exact AWS inventory verification returned `CLEANUP_RESULT remaining=0`; the browser shows `DESTROYED`, 36 resources removed, and zero remaining Resources or Outputs.
 - Focused API tests pass 11/11 and the Web regression passes 24/24. Affected ESLint and direct API/Web typechecks pass; final root harness, lint, typecheck, build, and diff checks are recorded by the finishing verification run.
+### 2026-07-19 - Tighten Workspace AI conversation spacing
+
+- Expanded the desktop transcript, suggestion, composer, and composer metadata widths so the conversation panel uses its available space consistently.
+- Let the selected-option trail extend to an 18px right inset, and size its heading column to its content instead of reserving a wide empty column. The existing mobile layout remains unchanged.
+- Browser checks pass at 390×844, 1024×768, 1440×900, and 1920×900 with no horizontal overflow or console errors. Workspace AI tests pass 43/43; harness, lint, typecheck, build, and diff checks pass.
+
 ### 2026-07-19 - Distinguish daily traffic from concurrent users
 
 - Traffic clarification matching now interprets daily visitors and concurrent users as separate dimensions before numeric option matching.
 - `일일 500명` maps to the medium option while `동시 접속자 500명` remains large; `스프링부트 썼어` reuses the existing complex business logic option instead of creating a custom option.
 - Focused Web/API regressions and the harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
+
 ### 2026-07-19 - Advance AI diagram generation progress sooner
 
 - Reduced the staged diagram-generation interval from 3 seconds to 1.5 seconds and added a final draft preparation stage.
 - The first visible transition now occurs after 1.5 seconds, and the progress card continues through five stages while the AI response is pending.
 - The focused Web status regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
+
 ### 2026-07-19 - Remove the selected text from AI Start choices
 
 - Removed the visible `선택됨` suffix from selected `/workspace/ai` answer buttons while retaining `aria-pressed` and selected-button styling.
@@ -171,12 +186,14 @@ Short English-only working log for the current agent context. Older records are 
 - Replaced the terminal requirements-unsatisfied 422 path with a dedicated Amazon Q conflict-diagnosis request after generation and repair both fail validation.
 - Amazon Q receives the original requirement, accepted answers, decision space, normalized requirement, and exact validation issues; its question and preserve-versus-relax choices are returned unchanged through the existing clarification flow.
 - The focused API regression and API typecheck pass. No database migration, deployment, cloud mutation, or push was performed.
+
 ### 2026-07-19 - Route conflict diagnosis through the real Amazon Q provider
 
 - Fixed the production Amazon Q Business provider, which previously ignored the conflict prompt and always returned another locally generated canonical plan, causing the replacement HTTP 502.
 - Conflict requests now call Amazon Q Business ChatSync with the exact validation failures and user requirement. JSON and plain-text/numbered Q answers both become the existing clarification question and choices without server-side trade-off selection.
 - Workspace AI draft failures now keep full diagnostics in the browser console and show one short transcript message instead of duplicated developer diagnostics.
 - Focused API provider/parser and Web presentation regressions pass; API/Web typechecks pass. No database migration, deployment, cloud mutation, or push was performed.
+
 ### 2026-07-19 - Classify natural-language technology stack answers
 
 - Added one shared frontend/backend technology-stack classifier used by API answer validation, canonical prompt context, architecture profiles, and Web selection presentation.
