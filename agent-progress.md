@@ -4,10 +4,10 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- The current branch applies the self-hosted Pretendard variable font across Web typography surfaces and keeps presentation typography tokens as the design baseline.
-- The automatic Board organization result remains compact while preserving the incoming `dev` comparison session and original/organized view selection.
-- Incoming `dev` API, deployment, Git/CI/CD, AWS connection, Reverse Engineering, and data-contract changes remain accepted as the backend baseline.
-- The merge resolution is complete and ready for the merge commit.
+- `Fix/jh/490-배포` includes the latest `origin/dev` and the Direct Deployment Plan response, durable worker preparation, failure reconciliation, approval transition, and build-readiness fixes.
+- The reported CloudWatch Logs failure is a DNS lookup failure from the local macOS `local_process` worker; production uses an ECS/Fargate one-off worker with configured public egress.
+- Focused API checks pass 106/106 and focused Web checks pass 56/56. Root harness, lint, typecheck, build, and diff checks pass.
+- No DB migration, dependency change, Terraform Apply/Destroy, or AWS mutation is owned by this workstream.
 
 ## Session Record
 
@@ -129,29 +129,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Review PR #491 after CI and merge it into `dev` when approved.
-- Keep real ECS scale-out acceptance blocked until a newly approved non-production Plan/Apply/traffic/Destroy cycle.
+- Publish the verified branch and open the approved PR to `dev`, linked to issue #490.
+- Keep production deployment execution outside this PR; the DNS incident does not authorize a cloud rerun.
 
-### 2026-07-19 - Complete the dev deployment and clarify operational guidance
-
-- Approved the exact pending AWS CodeConnection `sketchcatch-ee0c1542-github`, verified the `jh-9999/audience-live-check` checkout, approved a `+36` Terraform Plan, and completed Direct Deployment release `v20260718-163748-496-af663e` in 9m03s. The public CloudFront URL rendered the `Live Check-In` application before cleanup.
-- Fixed progress presentation so `preflight`, `application_release`, and `rollback` no longer show misleading Plan/Apply copy. Pending GitHub authorization now identifies the exact generated AWS connection name and `Update pending connection` action.
-- The user completed Destroy after the successful verification. The former public URL now returns HTTP 403 and no longer serves the application; exact AWS inventory cleanup could not be independently enumerated because the local AWS CLI has no credentials.
-- Focused Web regressions pass 21/21. `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass. The full `pnpm test` remains red on unrelated existing suites: three resource-catalog expectations, one Workspace external-link source-pattern test, and one API artifact-registry heartbeat timer cancellation.
-
-### 2026-07-19 - Make CodeBuild preparation concurrency-safe
-
-- Recovered managed CodeBuild `ResourceAlreadyExistsException` races by re-reading ownership and reconciling the project created by the competing request.
-- Made preparation start and completion atomic so stale starts and late failures cannot replace a successful `ready` state for the same runtime fingerprint. Moved ECS build preparation plus exact Repository checkout verification behind the Plan API, where concurrent requests for the same Deployment now join one RUNNING Plan sequence.
-- Focused API regressions pass 107/107; lint, typecheck, build, harness, and diff checks pass. Production ECS run `29655224723` succeeded from pushed `dev` SHA `3d0c8ee2`; root, API health, and DB health returned HTTP 200. Full tests retain the documented unrelated baseline failures.
-- Settings now refreshes CodeConnection from AWS and opens GitHub's installed-app settings for AWS Connector permission recovery; focused tests pass 12/12.
-
-### 2026-07-19 - Recover transient Destroy refresh and remove ECS release revisions
-
-- Traced the reported `/releases` HTTP 500 to a transient non-JSON local Web/API proxy interruption; successful snapshot refresh now clears only errors owned by the recoverable deployment snapshot path.
-- Direct ECS rollback now deregisters the exact application-created Task Definition revision after the trusted runtime restore, with account/region/ARN validation and a revision-scoped STS session policy.
-- Deregistered the three unused demo revisions (`5`, `7`, and `9`). Exact AWS inventory verification returned `CLEANUP_RESULT remaining=0`; the browser shows `DESTROYED`, 36 resources removed, and zero remaining Resources or Outputs.
-- Focused API tests pass 11/11 and the Web regression passes 24/24. Affected ESLint and direct API/Web typechecks pass; final root harness, lint, typecheck, build, and diff checks are recorded by the finishing verification run.
 ### 2026-07-19 - Tighten Workspace AI conversation spacing
 
 - Expanded the desktop transcript, suggestion, composer, and composer metadata widths so the conversation panel uses its available space consistently.
