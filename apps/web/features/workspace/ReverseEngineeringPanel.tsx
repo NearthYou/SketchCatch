@@ -216,12 +216,18 @@ export function ReverseEngineeringPanel({
       result: selectedCandidateResult
     });
   }, [previewSourceDiagram, selectedCandidateResult]);
-  const selectedOrganizationCandidate = organizationCandidates?.replace.candidates.find(
-    (candidate) => candidate.id === selectedOrganizationCandidateId
-  ) ?? null;
-  const selectedAppendOrganizationCandidate = organizationCandidates?.append?.candidates.find(
-    (candidate) => candidate.id === selectedOrganizationCandidateId
-  ) ?? organizationCandidates?.append?.candidates[0] ?? null;
+  const selectedOrganizationCandidateIndex =
+    organizationCandidates?.replace.candidates.findIndex(
+      (candidate) => candidate.id === selectedOrganizationCandidateId
+    ) ?? -1;
+  const selectedOrganizationCandidate =
+    selectedOrganizationCandidateIndex >= 0
+      ? (organizationCandidates?.replace.candidates[selectedOrganizationCandidateIndex] ?? null)
+      : null;
+  const selectedAppendOrganizationCandidate =
+    selectedOrganizationCandidateIndex >= 0
+      ? (organizationCandidates?.append?.candidates[selectedOrganizationCandidateIndex] ?? null)
+      : null;
   const selectedCandidateApplication = useMemo(() => {
     if (!selectedCandidateResult || !originalCandidateApplication) {
       return null;
@@ -490,8 +496,6 @@ export function ReverseEngineeringPanel({
 
     setApplyState("saving");
     setApplyMessage(null);
-    context.applyDiagramJson(diagramToApply);
-    setPreviewBaseDiagram(diagramToApply);
 
     try {
       const targetProject = createProjectOnApply
@@ -499,17 +503,27 @@ export function ReverseEngineeringPanel({
         : null;
       const targetProjectId = targetProject?.id ?? projectId;
 
-      if (targetProject) {
-        await invalidateProjectQueries(queryClient, user?.id);
-      }
-
       if (createProjectOnApply && targetProject) {
-        await saveProjectDraft({
+        await invalidateProjectQueries(queryClient, user?.id);
+        const response = await saveProjectDraft({
           projectId: targetProject.id,
           diagramJson: diagramToApply,
           expectedRevision: null
         });
+
+        if (!response.draft) {
+          throw new Error("프로젝트 Board 저장 결과가 비어 있습니다.");
+        }
+
+        context.applyDiagramJson(diagramToApply);
+      } else {
+        if (!context.persistAndApplyDiagramJson) {
+          throw new Error("Board 서버 저장이 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.");
+        }
+
+        await context.persistAndApplyDiagramJson(diagramToApply);
       }
+      setPreviewBaseDiagram(diagramToApply);
 
       await createArchitectureSnapshot({
         projectId: targetProjectId,

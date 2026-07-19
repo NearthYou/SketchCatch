@@ -142,6 +142,39 @@ test("Project Workspace commits Board history only after the dedicated apply API
   assert.match(workspaceApiSource, /draft\/auto-organize\/apply/);
 });
 
+test("panel의 일반 Diagram 적용도 서버 CAS 성공 뒤에만 Board와 History를 바꾼다", () => {
+  const panelApplySource = getSourceSection(
+    diagramEditorSource,
+    "const persistAndApplyDiagramJson = useCallback",
+    "const previewAutomaticOrganization = useCallback"
+  );
+  const managerRequestSource = getSourceSection(
+    projectManagerSource,
+    "const handlePersistedDiagramApplyRequest = useCallback",
+    "const handleBoardAutoOrganizeApplyRequest = useCallback"
+  );
+
+  assert.match(diagramEditorTypesSource, /persistAndApplyDiagramJson\?:/);
+  assert.match(panelApplySource, /await onPersistedDiagramApplyRequest\(/);
+  assert.match(panelApplySource, /if \(!response\.draft\)/);
+  assert.ok(
+    panelApplySource.indexOf("await onPersistedDiagramApplyRequest(") <
+      panelApplySource.indexOf("commitDiagramUpdate("),
+    "server CAS save must finish before the one local Board/History commit"
+  );
+  assert.match(managerRequestSource, /saveProjectDraft\(/);
+  assert.match(managerRequestSource, /expectedRevision: request\.expectedRevision/);
+  assert.match(managerRequestSource, /getProjectDraftConflict\(error\)/);
+  assert.match(
+    projectManagerSource,
+    /onPersistedDiagramApplyRequest=\{handlePersistedDiagramApplyRequest\}/
+  );
+  assert.match(
+    projectManagerSource,
+    /onPersistedDiagramApplied=\{handlePersistedDiagramApplied\}/
+  );
+});
+
 test("pending Board apply locks Resource, Diagram, History, save, and Terraform mutation seams", () => {
   const replaceDiagramSource = getSourceSection(
     diagramEditorSource,

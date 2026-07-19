@@ -248,6 +248,15 @@ type DiagramEditorAutoOrganizeProps = DiagramEditorProps & {
   readonly onBoardAutoOrganizeApplyRequest?:
     | ((request: BoardAutoOrganizeApplyRequest) => Promise<ProjectDraftResponse>)
     | undefined;
+  readonly onPersistedDiagramApplied?:
+    | ((input: { readonly diagramJson: DiagramJson; readonly draft: ProjectDraft }) => void)
+    | undefined;
+  readonly onPersistedDiagramApplyRequest?:
+    | ((request: {
+        readonly diagramJson: DiagramJson;
+        readonly expectedRevision: number;
+      }) => Promise<ProjectDraftResponse>)
+    | undefined;
   readonly projectDraftRevision?: number | null | undefined;
 };
 
@@ -281,6 +290,8 @@ function DiagramEditorInner({
   onBoardReady,
   onBoardAutoOrganizeApplied,
   onBoardAutoOrganizeApplyRequest,
+  onPersistedDiagramApplied,
+  onPersistedDiagramApplyRequest,
   onDiagramChange,
   onDiagramSaveRequest,
   onWorkspacePanelOpen,
@@ -1072,6 +1083,57 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  /** panel Diagram은 서버 CAS 저장이 성공한 뒤에만 한 번의 Board/History 변경으로 적용합니다. */
+  const persistAndApplyDiagramJson = useCallback<
+    NonNullable<DiagramEditorPanelContext["persistAndApplyDiagramJson"]>
+  >(
+    async (nextDiagram) => {
+      if (autoOrganizeApplyInFlightRef.current) {
+        throw new Error("다른 Board 적용이 진행 중입니다.");
+      }
+      if (!onPersistedDiagramApplyRequest || projectDraftRevision === null) {
+        throw new Error("Board 서버 저장 경계가 준비되지 않았습니다.");
+      }
+
+      const diagramToApply = normalizeDiagramResourceNodeGeometry(cloneDiagram(nextDiagram));
+      autoOrganizeApplyInFlightRef.current = true;
+      setAutoOrganizeApplyPending(true);
+
+      try {
+        const response = await onPersistedDiagramApplyRequest({
+          diagramJson: cloneDiagram(diagramToApply),
+          expectedRevision: projectDraftRevision
+        });
+
+        if (!response.draft) {
+          throw new Error("Board 서버 저장 결과가 비어 있습니다.");
+        }
+
+        autoOrganizeApplyInFlightRef.current = false;
+        shouldApplySourceViewportRef.current = true;
+        commitDiagramUpdate(() => cloneDiagram(diagramToApply));
+        onPersistedDiagramApplied?.({
+          diagramJson: cloneDiagram(diagramToApply),
+          draft: response.draft
+        });
+        setPreviewDiagram(null);
+        setInspectedNodeId(null);
+        setSelectedNodeIds([]);
+        setSelectedEdgeIds([]);
+      } finally {
+        autoOrganizeApplyInFlightRef.current = false;
+        setAutoOrganizeApplyPending(false);
+      }
+    },
+    [
+      commitDiagramUpdate,
+      onPersistedDiagramApplied,
+      onPersistedDiagramApplyRequest,
+      projectDraftRevision,
+      setPreviewDiagram
+    ]
+  );
+
   /** 현재 Board를 바꾸지 않고 Task 6의 안전한 후보 전체로 preview session을 엽니다. */
   const previewAutomaticOrganization = useCallback(() => {
     try {
@@ -1350,6 +1412,10 @@ function DiagramEditorInner({
       nodes: diagram.nodes,
       edges: diagram.edges,
       applyDiagramJson,
+      persistAndApplyDiagramJson:
+        onPersistedDiagramApplyRequest && projectDraftRevision !== null
+          ? persistAndApplyDiagramJson
+          : undefined,
       closeInspectedNode: () => setInspectedNodeId(null),
       commitTerraformSourceAuthority,
       focusResourceNode,
@@ -1374,8 +1440,11 @@ function DiagramEditorInner({
       isPreviewActive,
       isRightPanelOpen,
       onDiagramSaveRequest,
+      onPersistedDiagramApplyRequest,
+      persistAndApplyDiagramJson,
       previewAnnotations,
       previewDiagram,
+      projectDraftRevision,
       requestTerraformRefresh,
       setPreviewDiagram,
       selectResourceNode,

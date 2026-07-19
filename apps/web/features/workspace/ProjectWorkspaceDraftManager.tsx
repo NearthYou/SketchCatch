@@ -19,7 +19,8 @@ import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import {
   applyProjectDraftBoardAutoOrganize,
   getProject,
-  listSourceRepositories
+  listSourceRepositories,
+  saveProjectDraft
 } from "./api";
 import { buildBoardTemplateDiagram } from "../resource-settings/template-library";
 import {
@@ -786,6 +787,41 @@ function ProjectWorkspaceDraftManagerState({
     [clearLocalSaveTimer, localSaveDebounceMs, persistLocalDraftNow]
   );
 
+  /** panel이 요청한 Diagram을 현재 revision과 Terraform 파일로 CAS 저장합니다. */
+  const handlePersistedDiagramApplyRequest = useCallback(
+    async (request: {
+      readonly diagramJson: DiagramJson;
+      readonly expectedRevision: number;
+    }): Promise<ProjectDraftResponse> => {
+      try {
+        const response = await saveProjectDraft({
+          projectId,
+          diagramJson: request.diagramJson,
+          expectedRevision: request.expectedRevision,
+          terraformFiles: latestTerraformFilesRef.current.map((file) => ({ ...file }))
+        });
+
+        if (!response.draft) {
+          throw new Error("Board 저장 결과가 비어 있습니다.");
+        }
+
+        return response;
+      } catch (error) {
+        const conflict = getProjectDraftConflict(error);
+
+        if (conflict) {
+          serverConflictRef.current = true;
+          setDraftConflict(conflict);
+          setDraftReloadError(null);
+          setServerSaveState("server-conflict");
+        }
+
+        throw error;
+      }
+    },
+    [projectId]
+  );
+
   /** 정리안 요청에 현재 Terraform working files를 붙여 전용 서버 검증 API만 호출합니다. */
   const handleBoardAutoOrganizeApplyRequest = useCallback(
     async (request: BoardAutoOrganizeApplyRequest): Promise<ProjectDraftResponse> => {
@@ -886,6 +922,8 @@ function ProjectWorkspaceDraftManagerState({
     },
     [clearLocalSaveTimer, localCacheWorkspaceId, projectId, setCurrentLocalDraft]
   );
+  // 일반 panel 저장도 같은 로컬 draft·thumbnail 동기화 경계를 재사용합니다.
+  const handlePersistedDiagramApplied = handleBoardAutoOrganizeApplied;
 
   const handleBoardReady = useCallback((element: HTMLElement): void => {
     boardElementRef.current = element;
@@ -1021,6 +1059,8 @@ function ProjectWorkspaceDraftManagerState({
         onBoardReady={handleBoardReady}
         onBoardAutoOrganizeApplied={handleBoardAutoOrganizeApplied}
         onBoardAutoOrganizeApplyRequest={handleBoardAutoOrganizeApplyRequest}
+        onPersistedDiagramApplied={handlePersistedDiagramApplied}
+        onPersistedDiagramApplyRequest={handlePersistedDiagramApplyRequest}
         onDiagramChange={handleDiagramChange}
         onDiagramSaveRequest={() => flushDraftToServer("manual")}
         onWorkspacePanelOpen={closeAiChat}
