@@ -835,7 +835,10 @@ test("toFlowEdges preserves non-empty labels independently of selection", () => 
   const [labeledFlowEdge, blankFlowEdge] = toFlowEdges([labeled, blank], []);
 
   assert.equal(labeledFlowEdge?.label, "publishes");
-  assert.equal(labeledFlowEdge?.labelStyle?.fontWeight, 600);
+  assert.equal(
+    labeledFlowEdge?.labelStyle?.fontWeight,
+    "calc(600 - var(--presentation-font-weight-reduction))"
+  );
   assert.equal(labeledFlowEdge?.labelStyle?.fill, "#172033");
   assert.equal(labeledFlowEdge?.labelBgStyle?.fill, "#f8fbff");
   assert.equal(labeledFlowEdge?.labelBgStyle?.stroke, "#9fb2c8");
