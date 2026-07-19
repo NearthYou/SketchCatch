@@ -11,9 +11,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-19 - Reduce marked Workspace panel labels
+### 2026-07-19 - Reduce Workspace panel labels
 
-- Reduced the marked AWS provider version, Resource panel eyebrow, Resource count badge, and Terraform Resource address by exactly three pixels while preserving their containers and neighboring typography.
+- Reduced the marked AWS provider version, Resource panel eyebrow, Resource count badge, and Terraform Resource address by exactly three pixels, then reduced the provider-version dropdown options by six pixels while preserving their containers and neighboring typography.
 - No test suite was run at the user's request. Harness, lint, typecheck, build, source review, and diff checks pass; the dev server remains active with no known risk or follow-up action.
 
 ### 2026-07-19 - Reduce Workspace resource tile labels
