@@ -252,7 +252,7 @@
   color: var(--workspace-muted);
   cursor: pointer;
   font: inherit;
-  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-size: calc(11px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   height: 34px;
   padding: 0 10px;
@@ -349,7 +349,7 @@
 }
 
 .leftRail :global(.providerVersionValue) {
-  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-size: calc(10px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
 }
 
@@ -402,7 +402,7 @@
   align-items: center;
   color: var(--workspace-text);
   display: grid;
-  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-size: calc(10px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   justify-items: center;
   line-height: 1;
@@ -443,7 +443,7 @@
   border: 0;
   color: var(--workspace-text);
   font: inherit;
-  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-size: calc(11px + var(--presentation-font-size-increase));
   min-width: 0;
   outline: none;
   width: 100%;

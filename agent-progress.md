@@ -202,3 +202,8 @@ Short English-only working log for the current agent context. Older records are 
 - Restored the pre-presentation `SFMono-Regular`/Consolas monospace stack only for Terraform editor line numbers/code and Direct Deployment logs; all surrounding UI remains on LINE Seed Sans KR.
 - Kept the current presentation font sizing unchanged and narrowed the typography audit exception to those two surfaces.
 - The focused typography test passes 4/4; `pnpm harness:check` and `git diff --check` pass. No broad test suite was run.
+
+### 2026-07-19 - Reduce marked workspace labels
+
+- Reduced the marked Resources/Templates tabs, AWS/version controls, Terraform resource search, Terraform file picker, and issue-panel title/empty-state text by 2px without changing control dimensions or Terraform code sizing.
+- The focused typography test passes 4/4. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no spec or code-standard issue after verification, with no known risk or follow-up required.

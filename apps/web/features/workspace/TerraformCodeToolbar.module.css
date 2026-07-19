@@ -50,7 +50,7 @@
 }
 
 .terraformFileButton {
-  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-size: calc(11px + var(--presentation-font-size-increase));
   gap: 8px;
   height: 36px;
   max-width: min(220px, 48vw);
