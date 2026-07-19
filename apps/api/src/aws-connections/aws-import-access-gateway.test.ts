@@ -856,6 +856,11 @@ test("cleanup reports lingering read Policy artifacts after the Policy Stack is 
   assert.equal(exact.policy.readPolicy.status, "owned_present");
   assert.equal(exact.policy.targetAttachment.status, "owned_present");
   assert.equal(exact.manager.stack.status, "owned_present");
+  assert.deepEqual(exact.verifiedManagerIdentity, {
+    stackId: "manager-stack-id",
+    contractVersion: contract.contractVersion,
+    templateSha256: contract.templateSha256
+  });
 });
 
 test("cleanup keeps checking exact Manager artifacts after its Stack is absent", async () => {
@@ -901,6 +906,7 @@ test("cleanup rejects a replacement Stack that differs from the stored exact ide
 
   assert.equal(exact.verified, false);
   assert.equal(exact.manager.stack.status, "drifted");
+  assert.equal(exact.verifiedManagerIdentity, undefined);
 });
 
 test("cleanup keeps an unrelated later AccessDenied retryable despite the prior Manager marker", async () => {
@@ -952,6 +958,7 @@ test("cleanup keeps an unrelated later AccessDenied retryable despite the prior 
   assert.equal(result.reason, "retry");
   assert.equal(result.manager.serviceRole.status, "unknown");
   assert.equal(result.completionEvidence, undefined);
+  assert.equal(result.verifiedManagerIdentity, undefined);
   assert.doesNotMatch(JSON.stringify(result), /private-request-id|AccessDenied/iu);
 });
 
@@ -1083,6 +1090,11 @@ test("gateway exposes no DeleteStack operation", () => {
 type ExactCleanupStatus = "absent" | "owned_present" | "drifted" | "unknown";
 type ExactCleanupResult = {
   verified: boolean;
+  verifiedManagerIdentity?: {
+    stackId: string;
+    contractVersion: string;
+    templateSha256: string;
+  };
   completionEvidence?: "direct" | "prior_exact_marker_access_denied";
   reason?: "drifted" | "retry";
   policy: {

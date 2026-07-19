@@ -461,6 +461,7 @@ export function createAwsImportAccessService(
         now: now(),
         changes: {
           ...contractFields(contract),
+          ...trustedCleanupInspectionFields(inspection),
           status: cleanup.status,
           operationId,
           operationKind: "prepare_cleanup",
@@ -503,6 +504,7 @@ export function createAwsImportAccessService(
         connectionId: input.connectionId,
         now: now(),
         changes: {
+          ...trustedCleanupInspectionFields(inspection),
           status: cleanup.status,
           operationId,
           operationKind: "check_cleanup",
@@ -676,6 +678,23 @@ function trustedInspectionFields(
     policyFingerprint: policyTrusted
       ? inspection.policyFingerprint
       : policyAbsent ? null : current.policyFingerprint
+  };
+}
+
+/** gg: cleanup이 전체 검증한 owned Manager identity만 다음 final-sentinel expected state로 저장합니다. */
+function trustedCleanupInspectionFields(inspection: CleanupInspection) {
+  const identity = inspection.verifiedManagerIdentity;
+  if (
+    !inspection.verified ||
+    inspection.manager.stack.status !== "owned_present" ||
+    !identity
+  ) {
+    return {};
+  }
+  return {
+    managerStackId: identity.stackId,
+    managerContractVersion: identity.contractVersion,
+    managerTemplateHash: identity.templateSha256
   };
 }
 

@@ -375,6 +375,65 @@ test("cleanup opens the exact owned Policy Stack and never a caller-selected sta
   assert.doesNotMatch(result.consoleUrl ?? "", /stack=policy(?:&|$)/u);
 });
 
+test("cleanup from an early row persists exact Manager identity before the final sentinel", async () => {
+  const fixture = createImportAccessServiceFixture();
+  await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  const verifiedManagerIdentity = {
+    stackId: "discovered-manager-stack-id",
+    contractVersion: "discovered-manager-contract",
+    templateSha256: "d".repeat(64)
+  };
+  let inspections = 0;
+  fixture.gateway.inspectCleanup = async (input) => {
+    inspections += 1;
+    if (inspections === 1) {
+      assert.equal(input.expectedCurrent?.manager, undefined);
+      assert.equal(input.priorManagerCleanupVerified, false);
+      return createVerifiedManagerCleanupInspection(verifiedManagerIdentity);
+    }
+    assert.deepEqual(input.expectedCurrent?.manager, verifiedManagerIdentity);
+    assert.equal(input.priorManagerCleanupVerified, true);
+    return createCompletedCleanupInspection();
+  };
+
+  const prepared = await fixture.service.prepareCleanup(fixture.ownerInput);
+
+  assert.equal(prepared.state.status, "cleanup_manager_required");
+  assert.equal(fixture.getRecord()?.managerStackId, verifiedManagerIdentity.stackId);
+  assert.equal(
+    fixture.getRecord()?.managerContractVersion,
+    verifiedManagerIdentity.contractVersion
+  );
+  assert.equal(fixture.getRecord()?.managerTemplateHash, verifiedManagerIdentity.templateSha256);
+
+  const completed = await fixture.service.checkCleanup(fixture.ownerInput);
+
+  assert.equal(inspections, 2);
+  assert.equal(completed.state.status, "cleanup_complete");
+});
+
+test("checkCleanup persists exact Manager identity when it is the first discovery path", async () => {
+  const fixture = createImportAccessServiceFixture();
+  await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  const verifiedManagerIdentity = {
+    stackId: "check-discovered-manager-stack-id",
+    contractVersion: "check-discovered-manager-contract",
+    templateSha256: "e".repeat(64)
+  };
+  fixture.gateway.inspectCleanup = async () =>
+    createVerifiedManagerCleanupInspection(verifiedManagerIdentity);
+
+  const result = await fixture.service.checkCleanup(fixture.ownerInput);
+
+  assert.equal(result.state.status, "cleanup_manager_required");
+  assert.equal(fixture.getRecord()?.managerStackId, verifiedManagerIdentity.stackId);
+  assert.equal(
+    fixture.getRecord()?.managerContractVersion,
+    verifiedManagerIdentity.contractVersion
+  );
+  assert.equal(fixture.getRecord()?.managerTemplateHash, verifiedManagerIdentity.templateSha256);
+});
+
 test("cleanup keeps check_cleanup when a deleted Policy Stack leaves exact artifacts", async () => {
   const fixture = createImportAccessServiceFixture();
   fixture.gateway.inspectCleanup = async () => ({
@@ -898,6 +957,54 @@ function createProbeResult(
     serviceResults,
     limitedServiceLabels: [],
     safeErrorCode: null
+  };
+}
+
+function createVerifiedManagerCleanupInspection(identity: {
+  stackId: string;
+  contractVersion: string;
+  templateSha256: string;
+}) {
+  return {
+    verified: true,
+    verifiedManagerIdentity: identity,
+    managerStackExists: true,
+    policyStackExists: false,
+    policy: {
+      stack: { status: "absent" },
+      readPolicy: { status: "absent" },
+      targetAttachment: { status: "absent" }
+    },
+    manager: {
+      stack: { status: "owned_present" },
+      serviceRole: { status: "owned_present" },
+      controlPolicy: { status: "owned_present" },
+      controlAttachment: { status: "owned_present" },
+      cleanupPolicy: { status: "owned_present" },
+      cleanupAttachment: { status: "owned_present" }
+    }
+  } as const;
+}
+
+function createCompletedCleanupInspection() {
+  return {
+    verified: true,
+    managerStackExists: false,
+    policyStackExists: false,
+    completionEvidence: "prior_exact_marker_access_denied" as const,
+    policy: {
+      stack: { status: "absent" as const },
+      readPolicy: { status: "absent" as const },
+      targetAttachment: { status: "absent" as const }
+    },
+    manager: {
+      stack: { status: "absent" as const },
+      serviceRole: { status: "absent" as const },
+      controlPolicy: { status: "absent" as const },
+      controlAttachment: { status: "absent" as const },
+      cleanupPolicy: { status: "absent" as const },
+      cleanupAttachment: { status: "absent" as const }
+    }
   };
 }
 

@@ -146,6 +146,24 @@
   rows `true`, and `cleanup_complete=false` without weakening the deletion guard.
 - Follow-up focused gateway/service/deletion/import-route suite — 81/81 passed.
 
+### Liveness re-review follow-up
+
+- RED: the combined gateway/service suite was 49/52. Cleanup verified an existing exact Manager
+  from an early persisted row, but the gateway dropped its identity and both cleanup commands left
+  the three stored Manager identity fields null. The next check therefore had a prior status marker
+  without `expectedCurrent.manager`, so the strict final sentinel could never run.
+- GREEN: `CleanupInspection.verifiedManagerIdentity` is emitted only when the full inspection is
+  verified and the Manager Stack is exact `owned_present`. Drifted and unknown results expose no
+  identity.
+- `prepareCleanup` and `checkCleanup` copy that trusted identity into the same atomic command save
+  that publishes the cleanup status. They never clear a prior identity after Stack absence and
+  ignore any unverified/non-owned identity.
+- The regression now executes the full early-row path: discover exact Manager, persist identity and
+  `cleanup_manager_required`, observe deletion with the persisted expected-current contract, and
+  complete through the unchanged exact final sentinel.
+- Latest focused gateway/service/deletion/import-route suite — 83/83 passed. API typecheck/lint,
+  Types typecheck, and `git diff --check` also passed.
+
 ## Final verification
 
 - Focused Task 4 suite (probe, import gateway/service, deletion service, reverse gateway, and both
@@ -168,6 +186,7 @@
 - `c13b7864` — complete EC2/RDS Query, S3, and AMI pagination.
 - `dca5737a` — stop repeated pagination tokens safely.
 - `a395a60d` — make state GET read-only and map operation-specific retries.
+- `26607de6` — narrow final AccessDenied to the exact sentinel and expose cleanup availability.
 
 ## Cross-seam cleanup contract
 

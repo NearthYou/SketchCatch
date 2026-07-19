@@ -90,6 +90,7 @@ export type CleanupArtifactInspection = {
 
 export type CleanupInspection = {
   verified: boolean;
+  verifiedManagerIdentity?: ExpectedManagerStackState;
   managerStackExists: boolean;
   policyStackExists: boolean;
   policy: {
@@ -477,8 +478,21 @@ export function createAwsImportAccessGateway(
         const hasDrift = artifacts.some((artifact) => artifact.status === "drifted") ||
           !policyPresentCoherent || !managerPresentCoherent || !stackOrderCoherent;
         const verified = !hasUnknown && !hasDrift;
+        const verifiedManagerIdentity =
+          verified &&
+          managerStackArtifact.status === "owned_present" &&
+          inspectedManagerStack.stackId &&
+          inspectedManagerStack.contractVersion &&
+          inspectedManagerStack.templateSha256
+            ? {
+                stackId: inspectedManagerStack.stackId,
+                contractVersion: inspectedManagerStack.contractVersion,
+                templateSha256: inspectedManagerStack.templateSha256
+              }
+            : undefined;
         return {
           verified,
+          ...(verifiedManagerIdentity ? { verifiedManagerIdentity } : {}),
           managerStackExists: Boolean(managerStack),
           policyStackExists: Boolean(policyStack),
           policy: {
