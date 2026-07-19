@@ -7,7 +7,7 @@ import {
 
 export const generatedArchitectureBoardKnowledgeArtifact = {
   version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
-  hash: "fnv1a-05f1e382",
+  hash: "fnv1a-70c93cd1",
   cases: [
     {
       "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -38,7 +38,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 527.632,
       "meanNodeHeight": 402.162,
       "meanAspectRatio": 1.729,
-      "meanCaptionWidth": 106.474,
+      "meanCaptionWidth": 134.105,
       "meanZIndex": 9,
       "meanEdgeLength": 261.009,
       "meanEdgeWaypointCount": 4,
@@ -78,7 +78,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 331.402,
       "meanNodeHeight": 235.294,
       "meanAspectRatio": 1.519,
-      "meanCaptionWidth": 91.412,
+      "meanCaptionWidth": 130.529,
       "meanZIndex": 8,
       "meanEdgeLength": 191.519,
       "meanEdgeWaypointCount": 3.714,
@@ -106,7 +106,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 175,
       "meanNodeHeight": 159,
       "meanAspectRatio": 1.029,
-      "meanCaptionWidth": 113.4,
+      "meanCaptionWidth": 179.2,
       "meanZIndex": 2,
       "meanEdgeLength": 0,
       "meanEdgeWaypointCount": 0,
@@ -146,7 +146,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 136.333,
       "meanNodeHeight": 106.667,
       "meanAspectRatio": 1.039,
-      "meanCaptionWidth": 126.467,
+      "meanCaptionWidth": 197.4,
       "meanZIndex": 7,
       "meanEdgeLength": 254.286,
       "meanEdgeWaypointCount": 3.714,
@@ -215,7 +215,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 425,
       "meanNodeHeight": 325.5,
       "meanAspectRatio": 1.133,
-      "meanCaptionWidth": 102.2,
+      "meanCaptionWidth": 115.5,
       "meanZIndex": 4.5,
       "meanEdgeLength": 271.25,
       "meanEdgeWaypointCount": 2,
@@ -252,7 +252,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 340.333,
       "meanNodeHeight": 280,
       "meanAspectRatio": 1.332,
-      "meanCaptionWidth": 140.467,
+      "meanCaptionWidth": 156.333,
       "meanZIndex": 7,
       "meanEdgeLength": 230,
       "meanEdgeWaypointCount": 2,
@@ -295,7 +295,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 315.333,
       "meanNodeHeight": 300.5,
       "meanAspectRatio": 1.149,
-      "meanCaptionWidth": 93.1,
+      "meanCaptionWidth": 110.833,
       "meanZIndex": 14.5,
       "meanEdgeLength": 206.667,
       "meanEdgeWaypointCount": 4,
@@ -328,7 +328,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 223,
       "meanNodeHeight": 153,
       "meanAspectRatio": 1.126,
-      "meanCaptionWidth": 103.6,
+      "meanCaptionWidth": 163.8,
       "meanZIndex": 4.5,
       "meanEdgeLength": 249.227,
       "meanEdgeWaypointCount": 4.143,
@@ -374,7 +374,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 246.136,
       "meanNodeHeight": 177.614,
       "meanAspectRatio": 1.113,
-      "meanCaptionWidth": 135.068,
+      "meanCaptionWidth": 182,
       "meanZIndex": 21.5,
       "meanEdgeLength": 406.25,
       "meanEdgeWaypointCount": 4.167,
@@ -414,7 +414,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 292.273,
       "meanNodeHeight": 239.545,
       "meanAspectRatio": 1.039,
-      "meanCaptionWidth": 106.273,
+      "meanCaptionWidth": 142.864,
       "meanZIndex": 10.5,
       "meanEdgeLength": 435,
       "meanEdgeWaypointCount": 5.429,
@@ -451,7 +451,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 475.769,
       "meanNodeHeight": 482.692,
       "meanAspectRatio": 0.956,
-      "meanCaptionWidth": 105,
+      "meanCaptionWidth": 124.385,
       "meanZIndex": 6,
       "meanEdgeLength": 250,
       "meanEdgeWaypointCount": 3.5,
@@ -484,7 +484,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 304.643,
       "meanNodeHeight": 257.857,
       "meanAspectRatio": 1.171,
-      "meanCaptionWidth": 82.25,
+      "meanCaptionWidth": 93.75,
       "meanZIndex": 13.5,
       "meanEdgeLength": 630,
       "meanEdgeWaypointCount": 4,
@@ -554,7 +554,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 512.273,
       "meanNodeHeight": 483.182,
       "meanAspectRatio": 1.087,
-      "meanCaptionWidth": 110.091,
+      "meanCaptionWidth": 124.091,
       "meanZIndex": 5,
       "meanEdgeLength": 284.167,
       "meanEdgeWaypointCount": 4,
@@ -589,7 +589,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 225.427,
       "meanNodeHeight": 162.5,
       "meanAspectRatio": 1.464,
-      "meanCaptionWidth": 100.8,
+      "meanCaptionWidth": 137.2,
       "meanZIndex": 4.5,
       "meanEdgeLength": 226,
       "meanEdgeWaypointCount": 3.2,
@@ -626,7 +626,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 140.938,
       "meanNodeHeight": 139.375,
       "meanAspectRatio": 1.001,
-      "meanCaptionWidth": 138.688,
+      "meanCaptionWidth": 161.875,
       "meanZIndex": 7.5,
       "meanEdgeLength": 527.818,
       "meanEdgeWaypointCount": 5.097,
@@ -664,7 +664,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 146.25,
       "meanNodeHeight": 125,
       "meanAspectRatio": 1.025,
-      "meanCaptionWidth": 107.917,
+      "meanCaptionWidth": 162.167,
       "meanZIndex": 5.5,
       "meanEdgeLength": 292.5,
       "meanEdgeWaypointCount": 4.4,
@@ -707,7 +707,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 117.857,
       "meanNodeHeight": 116.429,
       "meanAspectRatio": 1.001,
-      "meanCaptionWidth": 125.333,
+      "meanCaptionWidth": 165.333,
       "meanZIndex": 10,
       "meanEdgeLength": 322.472,
       "meanEdgeWaypointCount": 4.318,
@@ -755,7 +755,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 257.25,
       "meanNodeHeight": 261.25,
       "meanAspectRatio": 1.434,
-      "meanCaptionWidth": 87.5,
+      "meanCaptionWidth": 112.175,
       "meanZIndex": 19.5,
       "meanEdgeLength": 355.019,
       "meanEdgeWaypointCount": 5.316,
@@ -793,7 +793,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 322.143,
       "meanNodeHeight": 281.667,
       "meanAspectRatio": 1.094,
-      "meanCaptionWidth": 106,
+      "meanCaptionWidth": 113,
       "meanZIndex": 10,
       "meanEdgeLength": 247.22,
       "meanEdgeWaypointCount": 4,
@@ -823,7 +823,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 343.333,
       "meanNodeHeight": 211.667,
       "meanAspectRatio": 1.659,
-      "meanCaptionWidth": 123.667,
+      "meanCaptionWidth": 138.833,
       "meanZIndex": 2.833,
       "meanEdgeLength": 195,
       "meanEdgeWaypointCount": 2,
@@ -863,7 +863,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 296.591,
       "meanNodeHeight": 242.045,
       "meanAspectRatio": 1.037,
-      "meanCaptionWidth": 106.273,
+      "meanCaptionWidth": 142.864,
       "meanZIndex": 10.5,
       "meanEdgeLength": 409,
       "meanEdgeWaypointCount": 5.8,
@@ -910,7 +910,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 315.077,
       "meanNodeHeight": 177.846,
       "meanAspectRatio": 1.489,
-      "meanCaptionWidth": 110.385,
+      "meanCaptionWidth": 127.615,
       "meanZIndex": 0.846,
       "meanEdgeLength": 392.865,
       "meanEdgeWaypointCount": 0,
@@ -952,7 +952,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 389,
       "meanNodeHeight": 257.667,
       "meanAspectRatio": 1.511,
-      "meanCaptionWidth": 113.167,
+      "meanCaptionWidth": 135.625,
       "meanZIndex": 0.792,
       "meanEdgeLength": 420.85,
       "meanEdgeWaypointCount": 0,
@@ -998,7 +998,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 218.308,
       "meanNodeHeight": 240.615,
       "meanAspectRatio": 1.074,
-      "meanCaptionWidth": 92.077,
+      "meanCaptionWidth": 124.923,
       "meanZIndex": 0.615,
       "meanEdgeLength": 419.135,
       "meanEdgeWaypointCount": 0,
@@ -1039,7 +1039,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 232.8,
       "meanNodeHeight": 204.267,
       "meanAspectRatio": 1.219,
-      "meanCaptionWidth": 93.333,
+      "meanCaptionWidth": 135.333,
       "meanZIndex": 0.8,
       "meanEdgeLength": 323.653,
       "meanEdgeWaypointCount": 0,
@@ -1073,7 +1073,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 159,
       "meanNodeHeight": 138,
       "meanAspectRatio": 1.219,
-      "meanCaptionWidth": 98.875,
+      "meanCaptionWidth": 137.375,
       "meanZIndex": 0.75,
       "meanEdgeLength": 220.539,
       "meanEdgeWaypointCount": 0,
@@ -1118,7 +1118,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 308.471,
       "meanNodeHeight": 277.882,
       "meanAspectRatio": 1.25,
-      "meanCaptionWidth": 113.647,
+      "meanCaptionWidth": 145.353,
       "meanZIndex": 0.882,
       "meanEdgeLength": 417.026,
       "meanEdgeWaypointCount": 0,
@@ -1180,7 +1180,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-ecs-fargate-container-app-log-group",
           "kind": "resource",
-          "label": "ECS Task 로그 저장",
+          "label": "ECS Task Log Group",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-definition-ops-group"
@@ -1268,7 +1268,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-ecs-fargate-container-app-repository",
           "kind": "resource",
-          "label": "애플리케이션 ECR Repository",
+          "label": "Application ECR Repository",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-definition-ops-group"
@@ -1297,7 +1297,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-ecs-fargate-container-app-task",
           "kind": "resource",
-          "label": "애플리케이션 ECS Task Definition",
+          "label": "Application ECS Task Definition",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-definition-ops-group"
@@ -1428,7 +1428,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "nodes": [
         {
           "id": "13f9d1bb-7e57-4f23-a141-d99ebc4d39e2",
-          "label": "영상 처리 ECS Cluster",
+          "label": "Video Processing ECS Cluster",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
@@ -1456,7 +1456,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "5069c2b1-c725-4588-8c24-bb96be01ffd9",
-          "label": "영상 처리 ECS Task Definition",
+          "label": "Video Processing ECS Task Definition",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
@@ -1484,7 +1484,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "50a96af0-1d2d-46fd-a526-01a847c44613",
-          "label": "영상 처리 ECS Service",
+          "label": "Video Processing ECS Service",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
@@ -1624,7 +1624,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "nodes": [
         {
           "id": "1c28c7ec-2e94-4ac1-95ed-09370ec23e35",
-          "label": "사용자 IAM Group",
+          "label": "User IAM Group",
           "locked": false,
           "position": {
             "x": 0,
@@ -1649,7 +1649,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "76efa2d0-4ef5-414c-af9b-7e5467b8adb1",
-          "label": "IAM User 계정",
+          "label": "IAM User Account",
           "locked": false,
           "position": {
             "x": 728.257,
@@ -1674,7 +1674,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "b80b763b-bc6e-47c3-bdbd-ac5fe8bf37f7",
-          "label": "IAM User Group 연결",
+          "label": "IAM User Group Membership",
           "locked": false,
           "position": {
             "x": 488.257,
@@ -1828,7 +1828,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "d67cbec1-5217-44ea-95e8-93c2bae28504",
-          "label": "웹 Classic Load Balancer",
+          "label": "Web Classic Load Balancer",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c"
@@ -1856,7 +1856,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "d75efaba-a405-4bf0-9cf0-929116e2c267",
-          "label": "웹 ASG",
+          "label": "Web Auto Scaling Group",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c"
@@ -1884,7 +1884,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "f5024a0a-d5e3-4403-a70f-d07a5402a90c",
-          "label": "웹 VPC",
+          "label": "Web VPC",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "c8302f50-a584-4e73-bf3f-efca40fae066"
@@ -1974,7 +1974,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-app-route-a",
           "kind": "resource",
-          "label": "애플리케이션 Route 연결 A",
+          "label": "Application Route Association A",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
@@ -2003,7 +2003,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-app-route-b",
           "kind": "resource",
-          "label": "애플리케이션 Route 연결 B",
+          "label": "Application Route Association B",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
@@ -2032,7 +2032,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-app-route-table",
           "kind": "resource",
-          "label": "애플리케이션 Private Route Table",
+          "label": "Application Private Route Table",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-vpc"
@@ -2066,7 +2066,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-app-subnet-a",
           "kind": "resource",
-          "label": "애플리케이션 Private Subnet A",
+          "label": "Application Private Subnet A",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
@@ -2096,7 +2096,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-app-subnet-b",
           "kind": "resource",
-          "label": "애플리케이션 Private Subnet B",
+          "label": "Application Private Subnet B",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
@@ -2126,7 +2126,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-db-route-a",
           "kind": "resource",
-          "label": "데이터베이스 Route 연결 A",
+          "label": "Database Route Association A",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
@@ -2155,7 +2155,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-db-route-b",
           "kind": "resource",
-          "label": "데이터베이스 Route 연결 B",
+          "label": "Database Route Association B",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
@@ -2184,7 +2184,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-db-route-table",
           "kind": "resource",
-          "label": "데이터베이스 Isolated Route Table",
+          "label": "Database Isolated Route Table",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-vpc"
@@ -2212,7 +2212,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-db-subnet-a",
           "kind": "resource",
-          "label": "데이터베이스 Isolated Subnet A",
+          "label": "Database Isolated Subnet A",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
@@ -2242,7 +2242,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-db-subnet-b",
           "kind": "resource",
-          "label": "데이터베이스 Isolated Subnet B",
+          "label": "Database Isolated Subnet B",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
@@ -2416,7 +2416,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-public-route-a",
           "kind": "resource",
-          "label": "Public Route 연결 A",
+          "label": "Public Route Association A",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
@@ -2445,7 +2445,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-public-route-b",
           "kind": "resource",
-          "label": "Public Route 연결 B",
+          "label": "Public Route Association B",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
@@ -2846,7 +2846,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "f5024a0a-d5e3-4403-a70f-d07a5402a90c",
-          "label": "웹 VPC",
+          "label": "Web VPC",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "c8302f50-a584-4e73-bf3f-efca40fae066"
@@ -2986,7 +2986,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-app-security-group",
           "kind": "resource",
-          "label": "애플리케이션 SG",
+          "label": "Application Security Group",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-vpc"
@@ -3075,7 +3075,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-db-security-group",
           "kind": "resource",
-          "label": "데이터베이스 SG",
+          "label": "Database Security Group",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-vpc"
@@ -3125,7 +3125,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-db-subnet-a",
           "kind": "resource",
-          "label": "데이터베이스 Isolated Subnet A",
+          "label": "Database Isolated Subnet A",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
@@ -3155,7 +3155,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-db-subnet-b",
           "kind": "resource",
-          "label": "데이터베이스 Isolated Subnet B",
+          "label": "Database Isolated Subnet B",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
@@ -3363,7 +3363,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "nodes": [
         {
           "id": "372d8cce-6e53-4d81-a7d5-5337d826b75b",
-          "label": "웹사이트 S3 Bucket",
+          "label": "Website S3 Bucket",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
@@ -3391,7 +3391,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "3afa58d4-2389-47e3-af6d-197aa176ca4a",
-          "label": "웹사이트 Versioning",
+          "label": "Website S3 Versioning",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
@@ -3526,7 +3526,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "nodes": [
         {
           "id": "30b41b95-ecec-400f-95b4-d47d7debfcea",
-          "label": "영상 API /videos Resource",
+          "label": "Video API /videos Resource",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
@@ -3554,7 +3554,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "6c4d1286-6d25-4835-8637-4d392c54de45",
-          "label": "영상 API Lambda 통합",
+          "label": "Video API Lambda Integration",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
@@ -3582,7 +3582,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "9ea9ad58-0146-4a72-b2bb-a08d51f00503",
-          "label": "영상 API POST Method",
+          "label": "Video API POST Method",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
@@ -3630,7 +3630,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "be541b7f-676c-46ae-992e-e7f31d3baf48",
-          "label": "영상 처리 Lambda",
+          "label": "Video Processing Lambda Function",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
@@ -3658,7 +3658,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "cc70890f-c0f2-4f54-bf31-4017ea652dc6",
-          "label": "영상 처리 REST API",
+          "label": "Video Processing REST API",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
@@ -4035,7 +4035,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-static-web-hosting-bucket",
           "kind": "resource",
-          "label": "정적 웹 S3 Bucket",
+          "label": "Static Website S3 Bucket",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-static-web-hosting-presentation-region"
@@ -4063,7 +4063,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-static-web-hosting-bucket-policy",
           "kind": "resource",
-          "label": "CloudFront S3 읽기 허용",
+          "label": "CloudFront S3 Read Policy",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-static-web-hosting-presentation-region"
@@ -4092,7 +4092,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-static-web-hosting-distribution",
           "kind": "resource",
-          "label": "정적 웹 CloudFront Distribution",
+          "label": "Static Website CloudFront Distribution",
           "locked": false,
           "parameters": {
             "resourceType": "aws_cloudfront_distribution",
@@ -4205,7 +4205,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-static-web-hosting-public-access",
           "kind": "resource",
-          "label": "S3 공개 접근 차단",
+          "label": "S3 Public Access Block",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-static-web-hosting-presentation-region"
