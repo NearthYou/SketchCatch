@@ -90,6 +90,182 @@ test("approval expires after ten minutes and is bound to the inspected manager",
   assert.equal(fixture.gateway.policyMutations.length, 0);
 });
 
+test("apply consumes approval before re-inspecting AWS and drifted state cannot restore it", async () => {
+  const fixture = createImportAccessServiceFixture();
+  const preview = await fixture.service.previewPolicy(fixture.ownerInput);
+  const events: string[] = [];
+  const claimPolicyApply = fixture.repository.claimPolicyApply.bind(fixture.repository);
+  fixture.repository.claimPolicyApply = async (input) => {
+    events.push("claim");
+    return claimPolicyApply(input);
+  };
+  fixture.gateway.inspectManager = async () => {
+    events.push("inspect");
+    return {
+      verified: false,
+      managerStatus: "invalid",
+      managerStackId: "replacement-manager-stack-id",
+      managerContractVersion: null,
+      managerTemplateSha256: null,
+      policyStatus: "absent",
+      policyStackId: null,
+      policyStackExists: false,
+      policyContractVersion: null,
+      policyTemplateSha256: null,
+      policyFingerprint: null,
+      reason: "drifted"
+    };
+  };
+
+  await assert.rejects(
+    fixture.service.applyPolicy({
+      ...fixture.ownerInput,
+      approvalId: preview.approvalId,
+      operationId: preview.operationId
+    }),
+    AwsImportAccessApprovalError
+  );
+
+  assert.deepEqual(events, ["claim", "inspect"]);
+  assert(fixture.getRecord()?.approvalConsumedAt);
+  assert.equal(fixture.gateway.policyMutations.length, 0);
+
+  fixture.gateway.inspectManager = async (input) => ({
+    verified: true,
+    managerStatus: "target",
+    managerStackId: fixture.gateway.managerStackId,
+    managerContractVersion: input.contract.contractVersion,
+    managerTemplateSha256: input.contract.templateSha256,
+    policyStatus: "absent",
+    policyStackId: null,
+    policyStackExists: false,
+    policyContractVersion: null,
+    policyTemplateSha256: null,
+    policyFingerprint: null
+  });
+  await assert.rejects(
+    fixture.service.applyPolicy({
+      ...fixture.ownerInput,
+      approvalId: preview.approvalId,
+      operationId: randomUUID()
+    }),
+    AwsImportAccessApprovalError
+  );
+  assert.equal(fixture.gateway.policyMutations.length, 0);
+});
+
+test("preparing an already-current Manager is a read-only no-op", async () => {
+  const fixture = createImportAccessServiceFixture();
+  let prepareCalls = 0;
+  fixture.gateway.prepareManager = async () => {
+    prepareCalls += 1;
+    return { consoleUrl: "https://example.invalid/should-not-open" };
+  };
+
+  const result = await fixture.service.prepareManager(fixture.ownerInput);
+
+  assert.equal(prepareCalls, 0);
+  assert.equal(result.consoleUrl, undefined);
+  assert.equal(result.state.status, "policy_approval_required");
+});
+
+test("Manager preparation uses Quick Create only when absent and exact update when owned older", async () => {
+  for (const scenario of ["absent", "owned_older"] as const) {
+    const fixture = createImportAccessServiceFixture();
+    await fixture.service.getState(fixture.ownerInput);
+    const record = fixture.getRecord()!;
+    if (scenario === "owned_older") {
+      record.managerStackId = "manager-stack-id";
+      record.managerContractVersion = "0";
+      record.managerTemplateHash = "1".repeat(64);
+    }
+    fixture.gateway.inspectManager = async () => scenario === "absent"
+      ? {
+          verified: false,
+          managerStatus: "absent",
+          managerStackId: null,
+          managerContractVersion: null,
+          managerTemplateSha256: null,
+          policyStatus: "absent",
+          policyStackId: null,
+          policyStackExists: false,
+          policyContractVersion: null,
+          policyTemplateSha256: null,
+          policyFingerprint: null,
+          reason: "not_found"
+        }
+      : {
+          verified: false,
+          managerStatus: "owned_older",
+          managerStackId: "manager-stack-id",
+          managerContractVersion: "0",
+          managerTemplateSha256: "1".repeat(64),
+          policyStatus: "absent",
+          policyStackId: null,
+          policyStackExists: false,
+          policyContractVersion: null,
+          policyTemplateSha256: null,
+          policyFingerprint: null,
+          reason: "drifted"
+        };
+    const modes: unknown[] = [];
+    fixture.gateway.prepareManager = async (input) => {
+      modes.push(input.mode);
+      return { consoleUrl: "https://console.example/manager" };
+    };
+
+    const result = await fixture.service.prepareManager(fixture.ownerInput);
+
+    assert.deepEqual(
+      modes,
+      scenario === "absent"
+        ? [{ kind: "create" }]
+        : [{ kind: "update", stackId: "manager-stack-id" }]
+    );
+    assert.equal(result.state.status, "manager_approval_required");
+    assert.equal(result.consoleUrl, "https://console.example/manager");
+  }
+});
+
+test("preview and apply preserve an owned older Policy as the exact expected current Stack", async () => {
+  const fixture = createImportAccessServiceFixture();
+  const oldPolicy = {
+    stackId: "policy-stack-id",
+    contractVersion: "0",
+    templateSha256: "2".repeat(64),
+    policyFingerprint: "3".repeat(64)
+  };
+  fixture.gateway.inspectManager = async (input) => ({
+    verified: true,
+    managerStatus: "target",
+    managerStackId: fixture.gateway.managerStackId,
+    managerContractVersion: input.contract.contractVersion,
+    managerTemplateSha256: input.contract.templateSha256,
+    policyStatus: "owned_older",
+    policyStackId: oldPolicy.stackId,
+    policyStackExists: true,
+    policyContractVersion: oldPolicy.contractVersion,
+    policyTemplateSha256: oldPolicy.templateSha256,
+    policyFingerprint: oldPolicy.policyFingerprint
+  });
+  const expectedPolicies: unknown[] = [];
+  fixture.gateway.createOrUpdatePolicyStack = async (input) => {
+    expectedPolicies.push(input.expectedPolicy);
+    fixture.gateway.policyMutations.push(input.operationId);
+    return { policyStackId: oldPolicy.stackId, status: "accepted" };
+  };
+
+  const preview = await fixture.service.previewPolicy(fixture.ownerInput);
+  await fixture.service.applyPolicy({
+    ...fixture.ownerInput,
+    approvalId: preview.approvalId,
+    operationId: preview.operationId
+  });
+
+  assert.deepEqual(expectedPolicies, [{ kind: "present", ...oldPolicy }]);
+  assert.equal(fixture.getRecord()?.policyTemplateHash, oldPolicy.templateSha256);
+});
+
 test("preview approval is issued atomically and cannot replace an active operation lease", async () => {
   const fixture = createImportAccessServiceFixture();
   let atomicIssueCalls = 0;
@@ -263,9 +439,16 @@ function createImportAccessServiceFixture(
     async inspectManager(input) {
       return {
         verified: true,
+        managerStatus: "target",
         managerStackId: this.managerStackId,
-        policyStackId: input.contract.policyStackArn,
-        policyStackExists: false
+        managerContractVersion: input.contract.contractVersion,
+        managerTemplateSha256: input.contract.templateSha256,
+        policyStatus: "absent",
+        policyStackId: null,
+        policyStackExists: false,
+        policyContractVersion: null,
+        policyTemplateSha256: null,
+        policyFingerprint: null
       };
     },
     async createOrUpdatePolicyStack(input) {
@@ -292,6 +475,7 @@ function createImportAccessServiceFixture(
     gateway,
     repository,
     service,
+    getRecord: () => record,
     ownerInput: { connectionId, accessContext: ownerAccessContext }
   };
 }
@@ -335,6 +519,7 @@ function createRecord(id: string, now: Date): AwsImportAccessRecord {
     policyStackName: null,
     policyStackId: null,
     policyContractVersion: null,
+    policyTemplateHash: null,
     targetRoleArn: null,
     serviceRoleArn: null,
     readPolicyArn: null,

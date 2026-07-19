@@ -536,6 +536,7 @@ export const awsImportAccess = pgTable(
     policyStackName: varchar("policy_stack_name", { length: 128 }),
     policyStackId: text("policy_stack_id"),
     policyContractVersion: varchar("policy_contract_version", { length: 32 }),
+    policyTemplateHash: varchar("policy_template_hash", { length: 64 }),
     targetRoleArn: text("target_role_arn"),
     serviceRoleArn: text("service_role_arn"),
     readPolicyArn: text("read_policy_arn"),

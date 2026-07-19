@@ -271,19 +271,33 @@ export function createAwsImportPolicyStackUpdateInput(
   contract: AwsImportManagerContract,
   publishedPolicyTemplate: AwsImportPublishedTemplate,
   validationOptions: AwsImportTemplateValidationOptions = {},
-  clientRequestToken?: string
+  clientRequestToken?: string,
+  expectedStackId?: string
 ): UpdateStackInput {
   assertPublishedPolicyTemplate(contract, publishedPolicyTemplate, validationOptions);
   assertClientRequestToken(clientRequestToken);
+  assertExpectedPolicyStackId(contract, expectedStackId);
 
   return {
-    StackName: contract.policyStackName,
+    StackName: expectedStackId ?? contract.policyStackName,
     TemplateURL: publishedPolicyTemplate.templateUrl,
     RoleARN: contract.serviceRoleArn,
     Capabilities: ["CAPABILITY_NAMED_IAM"],
     Tags: contract.ownershipTags.map((tag) => ({ ...tag })),
     ...(clientRequestToken ? { ClientRequestToken: clientRequestToken } : {})
   };
+}
+
+/** gg: 갱신은 preview에서 승인한 exact Stack ARN만 대상으로 삼습니다. */
+function assertExpectedPolicyStackId(
+  contract: AwsImportManagerContract,
+  expectedStackId: string | undefined
+): void {
+  if (expectedStackId === undefined) return;
+  const prefix = contract.policyStackArn.slice(0, -1);
+  if (!expectedStackId.startsWith(prefix) || expectedStackId.length <= prefix.length) {
+    throw new Error("AWS import Policy Stack identity is invalid");
+  }
 }
 
 /** gg: AWS 중복 방지 token도 서버가 만든 operation UUID만 허용합니다. */

@@ -13,6 +13,8 @@ import type {
 import type {
   AwsImportAccessGateway,
   CleanupInspection,
+  ExpectedCurrentImportAccessState,
+  ExpectedPolicyStackState,
   ManagerInspection
 } from "./aws-import-access-gateway.js";
 import { createAwsImportManagerContract } from "./aws-import-access-manager-template.js";
@@ -86,33 +88,72 @@ export function createAwsImportAccessService(
       const connection = await requireOwnedConnection(input, options.connectionRepository);
       const contract = createContract(connection, options.templateBucketName);
       const operationId = generateOperationId();
-      const prepared = await options.gateway.prepareManager({ connection, contract });
-      await options.repository.getOrCreate({
+      const current = await options.repository.getOrCreate({
         connectionId: input.connectionId,
         now: now()
       });
+      const inspection = await options.gateway.inspectManager({
+        connection,
+        contract,
+        expectedCurrent: createExpectedCurrentState(current)
+      });
+      const managerReady = inspection.verified && inspection.managerStatus === "target";
+      const canCreate = inspection.managerStatus === "absent" &&
+        inspection.policyStatus === "absent";
+      const canUpdate = inspection.managerStatus === "owned_older" &&
+        inspection.managerStackId !== null && inspection.policyStatus !== "invalid";
+      const prepared = canCreate
+        ? await options.gateway.prepareManager({
+            connection,
+            contract,
+            mode: { kind: "create" }
+          })
+        : canUpdate
+          ? await options.gateway.prepareManager({
+              connection,
+              contract,
+              mode: { kind: "update", stackId: inspection.managerStackId! }
+            })
+          : undefined;
+      const status: AwsImportAccessStatus = managerReady
+        ? "policy_approval_required"
+        : inspection.reason === "retry" || (!canCreate && !canUpdate)
+          ? "retry_required"
+          : "manager_approval_required";
       const next = await saveCommandOrThrow(options.repository, {
         connectionId: input.connectionId,
         now: now(),
         changes: {
           ...contractFields(contract),
-          status: "manager_approval_required",
+          ...trustedInspectionFields(current, inspection),
+          status,
           operationId,
           operationKind: "prepare_manager",
-          safeErrorCode: null,
-          safeErrorSummary: "AWS Console에서 Manager 준비를 확인해 주세요."
+          safeErrorCode: managerReady || prepared ? null : inspection.reason ?? "manager_drifted",
+          safeErrorSummary: managerReady
+            ? "가져오기 권한 추가를 확인해 주세요."
+            : prepared
+              ? "AWS Console에서 Manager 준비를 확인해 주세요."
+              : "Manager 준비 상태를 다시 확인해 주세요."
         }
       });
-      return toCommandResponse(next, operationId, prepared.consoleUrl);
+      return toCommandResponse(next, operationId, prepared?.consoleUrl);
     },
 
     // gg: Manager는 tag/output만이 아니라 exact Template hash까지 확인한 뒤에만 승인 단계로 갑니다.
     async checkManager(input) {
       const connection = await requireOwnedConnection(input, options.connectionRepository);
       const contract = createContract(connection, options.templateBucketName);
-      await options.repository.getOrCreate({ connectionId: input.connectionId, now: now() });
+      const current = await options.repository.getOrCreate({
+        connectionId: input.connectionId,
+        now: now()
+      });
       const operationId = generateOperationId();
-      const inspection = await options.gateway.inspectManager({ connection, contract });
+      const inspection = await options.gateway.inspectManager({
+        connection,
+        contract,
+        expectedCurrent: createExpectedCurrentState(current)
+      });
       const status: AwsImportAccessStatus = inspection.verified
         ? "policy_approval_required"
         : inspection.reason === "retry"
@@ -123,8 +164,7 @@ export function createAwsImportAccessService(
         now: now(),
         changes: {
           ...contractFields(contract),
-          managerStackId: inspection.managerStackId,
-          policyStackId: inspection.policyStackId,
+          ...trustedInspectionFields(current, inspection),
           status,
           operationId,
           operationKind: "check_manager",
@@ -142,19 +182,29 @@ export function createAwsImportAccessService(
     async previewPolicy(input) {
       const connection = await requireOwnedConnection(input, options.connectionRepository);
       const contract = createContract(connection, options.templateBucketName);
-      await options.repository.getOrCreate({
+      const current = await options.repository.getOrCreate({
         connectionId: input.connectionId,
         now: now()
       });
-      const inspection = await options.gateway.inspectManager({ connection, contract });
-      if (!inspection.verified || !inspection.managerStackId) {
+      const inspection = await options.gateway.inspectManager({
+        connection,
+        contract,
+        expectedCurrent: createExpectedCurrentState(current)
+      });
+      if (
+        !inspection.verified ||
+        inspection.managerStatus !== "target" ||
+        !inspection.managerStackId ||
+        !inspection.managerContractVersion ||
+        !inspection.managerTemplateSha256
+      ) {
         throw new AwsImportAccessApprovalError("Manager 상태를 다시 확인해 주세요.");
       }
       const approvalId = generateApprovalSecret();
       const operationId = generateOperationId();
       const approvalFingerprint = createApprovalFingerprint(
         approvalId,
-        createApprovalBinding(connection, contract, inspection)
+        createApprovalBinding(connection, contract, approvalStateFromInspection(inspection))
       );
       const issuedAt = now();
       const issued = await options.repository.issueApproval({
@@ -162,8 +212,7 @@ export function createAwsImportAccessService(
         now: issuedAt,
         changes: {
           ...contractFields(contract),
-          managerStackId: inspection.managerStackId,
-          policyStackId: inspection.policyStackId,
+          ...trustedInspectionFields(current, inspection),
           status: "policy_approval_required",
           approvalFingerprint,
           approvalExpiresAt: new Date(issuedAt.getTime() + approvalTtlMs),
@@ -193,13 +242,9 @@ export function createAwsImportAccessService(
       }
 
       const contract = createContract(connection, options.templateBucketName);
-      const inspection = await options.gateway.inspectManager({ connection, contract });
-      if (!inspection.verified || !inspection.managerStackId) {
-        throw new AwsImportAccessApprovalError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
-      }
       const approvalFingerprint = createApprovalFingerprint(
         input.approvalId,
-        createApprovalBinding(connection, contract, inspection)
+        createApprovalBinding(connection, contract, approvalStateFromRecord(current))
       );
       if (
         !current.approvalFingerprint ||
@@ -225,13 +270,38 @@ export function createAwsImportAccessService(
       if (claim.kind === "rejected") {
         throw new AwsImportAccessApprovalError("승인이 만료되었거나 이미 사용되었습니다.");
       }
+      if (claim.kind !== "claimed") {
+        throw new AwsImportAccessApprovalError("승인 상태를 다시 확인해 주세요.");
+      }
+
+      const inspection = await options.gateway.inspectManager({
+        connection,
+        contract,
+        expectedCurrent: createExpectedCurrentState(claim.record)
+      });
+      if (!inspectionMatchesApprovedState(claim.record, inspection)) {
+        await options.repository.finishPolicyApply({
+          connectionId: input.connectionId,
+          operationId: input.operationId,
+          now: now(),
+          changes: {
+            status: "policy_approval_required",
+            leaseExpiresAt: null,
+            safeErrorCode: "approval_state_changed",
+            safeErrorSummary: "AWS 상태가 달라졌습니다. 다시 확인해 주세요."
+          }
+        });
+        throw new AwsImportAccessApprovalError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
+      }
+      const expectedPolicy = expectedPolicyStateFromRecord(claim.record);
 
       let result;
       try {
         result = await options.gateway.createOrUpdatePolicyStack({
           connection,
           contract,
-          operationId: input.operationId
+          operationId: input.operationId,
+          expectedPolicy
         });
       } catch {
         await options.repository.finishPolicyApply({
@@ -429,48 +499,213 @@ type ImportContract = ReturnType<typeof createContract>;
 function contractFields(contract: ImportContract) {
   return {
     managerStackName: contract.managerStackName,
-    managerContractVersion: contract.contractVersion,
-    managerTemplateHash: contract.templateSha256,
     policyStackName: contract.policyStackName,
-    policyContractVersion: contract.policyContractVersion,
     targetRoleArn: contract.targetRoleArn,
     serviceRoleArn: contract.serviceRoleArn,
     readPolicyArn: contract.readManagedPolicyArn,
     controlPolicyArn: contract.controlPolicyArn,
-    cleanupVerificationPolicyArn: contract.cleanupVerificationPolicyArn,
-    policyFingerprint: contract.policyFingerprint
+    cleanupVerificationPolicyArn: contract.cleanupVerificationPolicyArn
   };
 }
+
+type ApprovalCurrentState = {
+  managerStackId: string;
+  managerContractVersion: string;
+  managerTemplateSha256: string;
+  policyStackId: string | null;
+  policyContractVersion: string | null;
+  policyTemplateSha256: string | null;
+  policyFingerprint: string | null;
+};
 
 /** gg: approval은 두 Stack identity, 두 Role, contract version과 hash 전체에 묶습니다. */
 function createApprovalBinding(
   connection: AwsConnectionRecord & { accountId: string; roleArn: string },
   contract: ImportContract,
-  inspection: ManagerInspection
+  current: ApprovalCurrentState
 ): string {
   return JSON.stringify({
     connectionId: connection.id,
-    managerStackIdentity: inspection.managerStackId,
-    policyStackIdentity: inspection.policyStackId ?? contract.policyStackArn,
+    managerStackIdentity: current.managerStackId,
+    policyStackIdentity: current.policyStackId,
     targetRoleArn: contract.targetRoleArn,
     serviceRoleArn: contract.serviceRoleArn,
-    currentManagerContractVersion: contract.contractVersion,
+    currentManagerContractVersion: current.managerContractVersion,
     targetManagerContractVersion: contract.contractVersion,
-    currentManagerTemplateSha256: contract.templateSha256,
+    currentManagerTemplateSha256: current.managerTemplateSha256,
     targetManagerTemplateSha256: contract.templateSha256,
-    currentPolicyContractVersion: inspection.policyStackExists
-      ? contract.policyContractVersion
-      : null,
+    currentPolicyContractVersion: current.policyContractVersion,
     targetPolicyContractVersion: contract.policyContractVersion,
-    currentPolicyTemplateSha256: inspection.policyStackExists
-      ? contract.policyTemplateSha256
-      : null,
+    currentPolicyTemplateSha256: current.policyTemplateSha256,
     targetPolicyTemplateSha256: contract.policyTemplateSha256,
-    currentPolicyFingerprint: inspection.policyStackExists
-      ? contract.policyFingerprint
-      : null,
+    currentPolicyFingerprint: current.policyFingerprint,
     targetPolicyFingerprint: contract.policyFingerprint
   });
+}
+
+/** gg: trusted inspection metadata만 current-state columns에 기록해 target 값으로 덮지 않습니다. */
+function trustedInspectionFields(
+  current: AwsImportAccessRecord,
+  inspection: ManagerInspection
+) {
+  const managerTrusted = inspection.managerStatus === "target" ||
+    inspection.managerStatus === "owned_older";
+  const managerAbsent = inspection.managerStatus === "absent";
+  const policyTrusted = inspection.policyStatus === "target" ||
+    inspection.policyStatus === "owned_older";
+  const policyAbsent = inspection.policyStatus === "absent";
+  return {
+    managerStackId: managerTrusted
+      ? inspection.managerStackId
+      : managerAbsent ? null : current.managerStackId,
+    managerContractVersion: managerTrusted
+      ? inspection.managerContractVersion
+      : managerAbsent ? null : current.managerContractVersion,
+    managerTemplateHash: managerTrusted
+      ? inspection.managerTemplateSha256
+      : managerAbsent ? null : current.managerTemplateHash,
+    policyStackId: policyTrusted
+      ? inspection.policyStackId
+      : policyAbsent ? null : current.policyStackId,
+    policyContractVersion: policyTrusted
+      ? inspection.policyContractVersion
+      : policyAbsent ? null : current.policyContractVersion,
+    policyTemplateHash: policyTrusted
+      ? inspection.policyTemplateSha256
+      : policyAbsent ? null : current.policyTemplateHash,
+    policyFingerprint: policyTrusted
+      ? inspection.policyFingerprint
+      : policyAbsent ? null : current.policyFingerprint
+  };
+}
+
+/** gg: DB의 prior verified identity만 older Stack 분류에 제공하며 incomplete 값은 신뢰하지 않습니다. */
+function createExpectedCurrentState(
+  record: AwsImportAccessRecord
+): ExpectedCurrentImportAccessState {
+  return {
+    ...(record.managerStackId && record.managerContractVersion && record.managerTemplateHash
+      ? {
+          manager: {
+            stackId: record.managerStackId,
+            contractVersion: record.managerContractVersion,
+            templateSha256: record.managerTemplateHash
+          }
+        }
+      : {}),
+    ...(record.policyStackId && record.policyContractVersion && record.policyTemplateHash &&
+        record.policyFingerprint
+      ? {
+          policy: {
+            kind: "present" as const,
+            stackId: record.policyStackId,
+            contractVersion: record.policyContractVersion,
+            templateSha256: record.policyTemplateHash,
+            policyFingerprint: record.policyFingerprint
+          }
+        }
+      : {})
+  };
+}
+
+function approvalStateFromInspection(inspection: ManagerInspection): ApprovalCurrentState {
+  if (
+    !inspection.managerStackId ||
+    !inspection.managerContractVersion ||
+    !inspection.managerTemplateSha256
+  ) {
+    throw new AwsImportAccessApprovalError("Manager 상태를 다시 확인해 주세요.");
+  }
+  if (inspection.policyStatus === "absent") {
+    return {
+      managerStackId: inspection.managerStackId,
+      managerContractVersion: inspection.managerContractVersion,
+      managerTemplateSha256: inspection.managerTemplateSha256,
+      policyStackId: null,
+      policyContractVersion: null,
+      policyTemplateSha256: null,
+      policyFingerprint: null
+    };
+  }
+  if (
+    !inspection.policyStackId ||
+    !inspection.policyContractVersion ||
+    !inspection.policyTemplateSha256 ||
+    !inspection.policyFingerprint
+  ) {
+    throw new AwsImportAccessApprovalError("Policy 상태를 다시 확인해 주세요.");
+  }
+  return {
+    managerStackId: inspection.managerStackId,
+    managerContractVersion: inspection.managerContractVersion,
+    managerTemplateSha256: inspection.managerTemplateSha256,
+    policyStackId: inspection.policyStackId,
+    policyContractVersion: inspection.policyContractVersion,
+    policyTemplateSha256: inspection.policyTemplateSha256,
+    policyFingerprint: inspection.policyFingerprint
+  };
+}
+
+function approvalStateFromRecord(record: AwsImportAccessRecord): ApprovalCurrentState {
+  if (!record.managerStackId || !record.managerContractVersion || !record.managerTemplateHash) {
+    throw new AwsImportAccessApprovalError("승인 정보를 다시 확인해 주세요.");
+  }
+  const expectedPolicy = expectedPolicyStateFromRecord(record);
+  return {
+    managerStackId: record.managerStackId,
+    managerContractVersion: record.managerContractVersion,
+    managerTemplateSha256: record.managerTemplateHash,
+    policyStackId: expectedPolicy.kind === "present" ? expectedPolicy.stackId : null,
+    policyContractVersion: expectedPolicy.kind === "present"
+      ? expectedPolicy.contractVersion
+      : null,
+    policyTemplateSha256: expectedPolicy.kind === "present"
+      ? expectedPolicy.templateSha256
+      : null,
+    policyFingerprint: expectedPolicy.kind === "present"
+      ? expectedPolicy.policyFingerprint
+      : null
+  };
+}
+
+function expectedPolicyStateFromRecord(
+  record: AwsImportAccessRecord
+): ExpectedPolicyStackState {
+  if (
+    record.policyStackId === null &&
+    record.policyContractVersion === null &&
+    record.policyTemplateHash === null &&
+    record.policyFingerprint === null
+  ) return { kind: "absent" };
+  if (
+    record.policyStackId &&
+    record.policyContractVersion &&
+    record.policyTemplateHash &&
+    record.policyFingerprint
+  ) {
+    return {
+      kind: "present",
+      stackId: record.policyStackId,
+      contractVersion: record.policyContractVersion,
+      templateSha256: record.policyTemplateHash,
+      policyFingerprint: record.policyFingerprint
+    };
+  }
+  throw new AwsImportAccessApprovalError("승인 정보를 다시 확인해 주세요.");
+}
+
+/** gg: claim 뒤 재검사 결과가 승인 시 current identity와 exact 일치할 때만 AWS mutation으로 갑니다. */
+function inspectionMatchesApprovedState(
+  record: AwsImportAccessRecord,
+  inspection: ManagerInspection
+): boolean {
+  if (!inspection.verified || inspection.managerStatus !== "target") return false;
+  try {
+    return JSON.stringify(approvalStateFromInspection(inspection)) ===
+      JSON.stringify(approvalStateFromRecord(record));
+  } catch {
+    return false;
+  }
 }
 
 /** gg: raw secret과 bound contract를 함께 hash해 DB fingerprint를 만듭니다. */

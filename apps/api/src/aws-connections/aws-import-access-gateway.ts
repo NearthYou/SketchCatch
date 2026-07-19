@@ -28,24 +28,60 @@ import {
   type AwsImportPublishedTemplate
 } from "./aws-connection-template-storage.js";
 import {
+  AWS_IMPORT_CONTRACT_VERSION_TAG_KEY,
   createAwsImportPolicyStackCreateInput,
   createAwsImportPolicyStackUpdateInput,
   type AwsImportManagerContract
 } from "./aws-import-access-manager-template.js";
-import { createAwsImportReadPolicyDocument } from "./aws-import-access-catalog.js";
+import {
+  AWS_IMPORT_READERS,
+  createAwsImportReadPolicyDocument
+} from "./aws-import-access-catalog.js";
+
+export type ExpectedManagerStackState = {
+  stackId: string;
+  contractVersion: string;
+  templateSha256: string;
+};
+
+export type ExpectedCurrentImportAccessState = {
+  manager?: ExpectedManagerStackState;
+  policy?: Extract<ExpectedPolicyStackState, { kind: "present" }>;
+};
 
 export type ManagerInspection = {
   verified: boolean;
+  managerStatus: "absent" | "target" | "owned_older" | "invalid";
   managerStackId: string | null;
+  managerContractVersion: string | null;
+  managerTemplateSha256: string | null;
+  policyStatus: "absent" | "target" | "owned_older" | "invalid";
   policyStackId: string | null;
   policyStackExists: boolean;
+  policyContractVersion: string | null;
+  policyTemplateSha256: string | null;
+  policyFingerprint: string | null;
   reason?: "not_found" | "drifted" | "retry";
 };
 
 export type PolicyStackResult = {
   policyStackId: string;
-  status: "accepted";
+  status: "accepted" | "already_current";
 };
+
+export type ExpectedPolicyStackState =
+  | { kind: "absent" }
+  | {
+      kind: "present";
+      stackId: string;
+      contractVersion: string;
+      templateSha256: string;
+      policyFingerprint: string;
+    };
+
+export type ManagerPreparationMode =
+  | { kind: "create" }
+  | { kind: "update"; stackId: string };
 
 export type CleanupInspection = {
   verified: boolean;
@@ -58,15 +94,18 @@ export type AwsImportAccessGateway = {
   prepareManager(input: {
     connection: AwsConnectionRecord;
     contract: AwsImportManagerContract;
+    mode: ManagerPreparationMode;
   }): Promise<{ consoleUrl: string }>;
   inspectManager(input: {
     connection: AwsConnectionRecord;
     contract: AwsImportManagerContract;
+    expectedCurrent?: ExpectedCurrentImportAccessState;
   }): Promise<ManagerInspection>;
   createOrUpdatePolicyStack(input: {
     connection: AwsConnectionRecord;
     contract: AwsImportManagerContract;
     operationId: string;
+    expectedPolicy: ExpectedPolicyStackState;
   }): Promise<PolicyStackResult>;
   inspectCleanup(input: {
     connection: AwsConnectionRecord;
@@ -109,7 +148,8 @@ export function createAwsImportAccessGateway(
 
   return {
     // gg: Manager 준비는 SketchCatch private S3에 immutable Template을 올리고 Console만 엽니다.
-    async prepareManager({ connection, contract }) {
+    async prepareManager({ connection, contract, mode }) {
+      if (mode.kind === "update") assertExpectedManagerStackId(contract, mode.stackId);
       const published = await publishTemplate({
         bucketName: options.templateBucketName ?? getBucketName(contract.templateBaseUrl),
         region: connection.region,
@@ -120,20 +160,26 @@ export function createAwsImportAccessGateway(
         expiresInSeconds: 600,
         now
       });
-      const query = new URLSearchParams({
-        templateURL: published.templateUrl,
-        stackName: contract.managerStackName,
-        capabilities: "CAPABILITY_NAMED_IAM"
-      });
+      const query = new URLSearchParams(mode.kind === "create"
+        ? {
+            templateURL: published.templateUrl,
+            stackName: contract.managerStackName,
+            capabilities: "CAPABILITY_NAMED_IAM"
+          }
+        : {
+            stackId: mode.stackId,
+            templateURL: published.templateUrl,
+            capabilities: "CAPABILITY_NAMED_IAM"
+          });
       return {
         consoleUrl:
           `https://console.aws.amazon.com/cloudformation/home?region=${connection.region}` +
-          `#/stacks/quickcreate?${query.toString()}`
+          `#/stacks/${mode.kind === "create" ? "quickcreate" : "update/template"}?${query.toString()}`
       };
     },
 
     // gg: exact Template hash가 맞으면 trust·Policy·attachment도 같은 계약으로 검증된 것입니다.
-    async inspectManager({ connection, contract }) {
+    async inspectManager({ connection, contract, expectedCurrent }) {
       try {
         const clients = await createConnectionClients(
           connection,
@@ -142,58 +188,111 @@ export function createAwsImportAccessGateway(
           assumeConnectionRole
         );
         const manager = await describeStack(clients.cloudFormation, contract.managerStackName);
-        if (!manager) {
-          return {
-            verified: false,
-            managerStackId: null,
-            policyStackId: null,
-            policyStackExists: false,
-            reason: "not_found"
-          };
-        }
-        const managerTemplate = await getStackTemplate(
-          clients.cloudFormation,
-          manager.StackId ?? contract.managerStackName
-        );
-        const managerContractVerified = verifyManagerStack(manager, managerTemplate, contract);
         const policy = await describeStack(clients.cloudFormation, contract.policyStackName);
+        const managerTemplate = manager
+          ? await getStackTemplate(
+              clients.cloudFormation,
+              manager.StackId ?? contract.managerStackName
+            )
+          : null;
         const policyTemplate = policy
           ? await getStackTemplate(
               clients.cloudFormation,
               policy.StackId ?? contract.policyStackName
             )
           : null;
-        const policyVerified = policy
-          ? verifyPolicyStack(policy, policyTemplate, contract)
-          : true;
-
-        const iamVerified = managerContractVerified
-          ? await verifyManagerIamResources(clients.iam, contract, Boolean(policy))
+        const managerInspection = inspectManagerStack(
+          manager,
+          managerTemplate,
+          contract,
+          expectedCurrent
+        );
+        const policyInspection = inspectPolicyStack(
+          policy,
+          policyTemplate,
+          contract,
+          expectedCurrent
+        );
+        const iamVerified = managerInspection.status === "target" &&
+          policyInspection.status !== "invalid"
+          ? await verifyManagerIamResources(
+              clients.iam,
+              contract,
+              policyInspection.policyDocument
+            )
           : false;
+        const verified = managerInspection.status === "target" &&
+          policyInspection.status !== "invalid" && iamVerified;
         return {
-          verified: managerContractVerified && policyVerified && iamVerified,
-          managerStackId: manager.StackId ?? null,
-          policyStackId: policy?.StackId ?? null,
-          policyStackExists: Boolean(policy),
-          ...(!managerContractVerified || !policyVerified || !iamVerified
-            ? { reason: "drifted" as const }
+          verified,
+          managerStatus: managerInspection.status,
+          managerStackId: managerInspection.stackId,
+          managerContractVersion: managerInspection.contractVersion,
+          managerTemplateSha256: managerInspection.templateSha256,
+          policyStatus: policyInspection.status,
+          policyStackId: policyInspection.stackId,
+          policyStackExists: policyInspection.status !== "absent",
+          policyContractVersion: policyInspection.contractVersion,
+          policyTemplateSha256: policyInspection.templateSha256,
+          policyFingerprint: policyInspection.policyFingerprint,
+          ...(!verified
+            ? {
+                reason: managerInspection.status === "absent" &&
+                    policyInspection.status === "absent"
+                  ? "not_found" as const
+                  : "drifted" as const
+              }
             : {})
         };
       } catch {
         return {
           verified: false,
+          managerStatus: "invalid",
           managerStackId: null,
+          managerContractVersion: null,
+          managerTemplateSha256: null,
+          policyStatus: "invalid",
           policyStackId: null,
           policyStackExists: false,
+          policyContractVersion: null,
+          policyTemplateSha256: null,
+          policyFingerprint: null,
           reason: "retry"
         };
       }
     },
 
     // gg: caller 입력에서 Template URL·Role·tag를 받지 않고 내부 publisher 결과만 사용합니다.
-    async createOrUpdatePolicyStack({ connection, contract, operationId }) {
+    async createOrUpdatePolicyStack({ connection, contract, operationId, expectedPolicy }) {
       const client = await createConnectionClient(connection, createClient, assumeConnectionRole);
-      const current = await describeStack(client, contract.policyStackName);
+      const current = await describeStack(
+        client,
+        expectedPolicy.kind === "present" ? expectedPolicy.stackId : contract.policyStackName
+      );
+      if (expectedPolicy.kind === "absent" && current) {
+        throw new AwsImportAccessGatewayError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
+      }
+      if (expectedPolicy.kind === "present") {
+        if (
+          !current ||
+          current.StackId !== expectedPolicy.stackId ||
+          !verifyExpectedPolicyStack(
+            current,
+            await getStackTemplate(client, expectedPolicy.stackId),
+            contract,
+            expectedPolicy
+          )
+        ) {
+          throw new AwsImportAccessGatewayError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
+        }
+        if (
+          expectedPolicy.contractVersion === contract.policyContractVersion &&
+          expectedPolicy.templateSha256 === contract.policyTemplateSha256 &&
+          expectedPolicy.policyFingerprint === contract.policyFingerprint
+        ) {
+          return { policyStackId: expectedPolicy.stackId, status: "already_current" };
+        }
+      }
       const published = await publishTemplate({
         bucketName: options.templateBucketName ?? getBucketName(contract.policyTemplateBaseUrl),
         region: connection.region,
@@ -204,13 +303,20 @@ export function createAwsImportAccessGateway(
         expiresInSeconds: 600,
         now
       });
-      const request = current
-        ? createAwsImportPolicyStackUpdateInput(contract, published, { now }, operationId)
+      const request = expectedPolicy.kind === "present"
+        ? createAwsImportPolicyStackUpdateInput(
+            contract,
+            published,
+            { now },
+            operationId,
+            expectedPolicy.stackId
+          )
         : createAwsImportPolicyStackCreateInput(contract, published, { now }, operationId);
-      const response = current
+      const response = expectedPolicy.kind === "present"
         ? await client.send(new UpdateStackCommand(request))
         : await client.send(new CreateStackCommand(request));
-      const stackId = getStackId(response) ?? current?.StackId;
+      const stackId = getStackId(response) ??
+        (expectedPolicy.kind === "present" ? expectedPolicy.stackId : undefined);
       if (!stackId) throw new AwsImportAccessGatewayError("Policy Stack 작업을 시작하지 못했습니다.");
       return { policyStackId: stackId, status: "accepted" };
     },
@@ -255,7 +361,11 @@ export function createAwsImportAccessGateway(
             )
           : true;
         const iamVerified = manager
-          ? await verifyManagerIamResources(clients.iam, contract, Boolean(policy))
+          ? await verifyManagerIamResources(
+              clients.iam,
+              contract,
+              policy ? createAwsImportReadPolicyDocument() : null
+            )
           : true;
         return {
           verified: managerVerified && policyVerified && iamVerified,
@@ -412,11 +522,262 @@ function verifyPolicyStack(
   );
 }
 
+type InspectedManagerStack = {
+  status: ManagerInspection["managerStatus"];
+  stackId: string | null;
+  contractVersion: string | null;
+  templateSha256: string | null;
+};
+
+type InspectedPolicyStack = {
+  status: ManagerInspection["policyStatus"];
+  stackId: string | null;
+  contractVersion: string | null;
+  templateSha256: string | null;
+  policyFingerprint: string | null;
+  policyDocument: unknown | null;
+};
+
+/** gg: Manager target validity와 이전에 검증한 owned Stack identity를 분리합니다. */
+function inspectManagerStack(
+  stack: Stack | null,
+  templateBody: string | null,
+  contract: AwsImportManagerContract,
+  expectedCurrent: ExpectedCurrentImportAccessState | undefined
+): InspectedManagerStack {
+  if (!stack) {
+    return {
+      status: "absent",
+      stackId: null,
+      contractVersion: null,
+      templateSha256: null
+    };
+  }
+  if (verifyManagerStack(stack, templateBody, contract)) {
+    return {
+      status: "target",
+      stackId: stack.StackId ?? null,
+      contractVersion: contract.contractVersion,
+      templateSha256: contract.templateSha256
+    };
+  }
+  const expected = expectedCurrent?.manager;
+  if (
+    expected &&
+    (expected.contractVersion !== contract.contractVersion ||
+      expected.templateSha256 !== contract.templateSha256) &&
+    verifyExpectedManagerStack(
+      stack,
+      templateBody,
+      contract,
+      expected,
+      expectedCurrent?.policy
+    )
+  ) {
+    return {
+      status: "owned_older",
+      stackId: expected.stackId,
+      contractVersion: expected.contractVersion,
+      templateSha256: expected.templateSha256
+    };
+  }
+  return {
+    status: "invalid",
+    stackId: null,
+    contractVersion: null,
+    templateSha256: null
+  };
+}
+
+/** gg: Policy target 여부와 승인 가능한 owned older current state를 독립적으로 분류합니다. */
+function inspectPolicyStack(
+  stack: Stack | null,
+  templateBody: string | null,
+  contract: AwsImportManagerContract,
+  expectedCurrent: ExpectedCurrentImportAccessState | undefined
+): InspectedPolicyStack {
+  if (!stack) {
+    return {
+      status: "absent",
+      stackId: null,
+      contractVersion: null,
+      templateSha256: null,
+      policyFingerprint: null,
+      policyDocument: null
+    };
+  }
+  if (verifyPolicyStack(stack, templateBody, contract)) {
+    return {
+      status: "target",
+      stackId: stack.StackId ?? null,
+      contractVersion: contract.policyContractVersion,
+      templateSha256: contract.policyTemplateSha256,
+      policyFingerprint: contract.policyFingerprint,
+      policyDocument: createAwsImportReadPolicyDocument()
+    };
+  }
+  const expected = expectedCurrent?.policy;
+  if (
+    expected &&
+    (expected.contractVersion !== contract.policyContractVersion ||
+      expected.templateSha256 !== contract.policyTemplateSha256 ||
+      expected.policyFingerprint !== contract.policyFingerprint) &&
+    verifyExpectedPolicyStack(stack, templateBody, contract, expected)
+  ) {
+    const policyDocument = extractSafeOwnedPolicyDocument(templateBody, contract, expected);
+    if (policyDocument !== null) {
+      return {
+        status: "owned_older",
+        stackId: expected.stackId,
+        contractVersion: expected.contractVersion,
+        templateSha256: expected.templateSha256,
+        policyFingerprint: expected.policyFingerprint,
+        policyDocument
+      };
+    }
+  }
+  return {
+    status: "invalid",
+    stackId: null,
+    contractVersion: null,
+    templateSha256: null,
+    policyFingerprint: null,
+    policyDocument: null
+  };
+}
+
+/** gg: 저장해 둔 exact prior Manager identity가 실제 owned Stack과 계속 일치할 때만 갱신 URL을 허용합니다. */
+function verifyExpectedManagerStack(
+  stack: Stack,
+  templateBody: string | null,
+  contract: AwsImportManagerContract,
+  expectedManager: ExpectedManagerStackState,
+  expectedPolicy: Extract<ExpectedPolicyStackState, { kind: "present" }> | undefined
+): boolean {
+  const outputs = keyValueRecord(stack.Outputs, "OutputKey", "OutputValue");
+  const tags = keyValueRecord(stack.Tags, "Key", "Value");
+  const contractTag = tags[AWS_IMPORT_CONTRACT_VERSION_TAG_KEY];
+  return (
+    stack.StackId === expectedManager.stackId &&
+    stack.StackName === contract.managerStackName &&
+    isCompleteStackStatus(stack.StackStatus) &&
+    Object.keys(tags).length === 2 &&
+    tags.SketchCatchConnectionId === contract.connectionId &&
+    typeof contractTag === "string" && /^[A-Za-z0-9._-]{1,32}$/u.test(contractTag) &&
+    outputs.SketchCatchConnectionId === contract.connectionId &&
+    outputs.TemplateContractVersion === expectedManager.contractVersion &&
+    outputs.TargetRoleArn === contract.targetRoleArn &&
+    outputs.CloudFormationServiceRoleArn === contract.serviceRoleArn &&
+    outputs.PolicyStackName === contract.policyStackName &&
+    outputs.PolicyStackArnPattern === contract.policyStackArn &&
+    outputs.ControlPolicyArn === contract.controlPolicyArn &&
+    outputs.CleanupVerificationPolicyArn === contract.cleanupVerificationPolicyArn &&
+    (expectedPolicy
+      ? outputs.PolicyTemplateSha256 === expectedPolicy.templateSha256 &&
+        outputs.PolicyFingerprint === expectedPolicy.policyFingerprint
+      : isSha256(outputs.PolicyTemplateSha256) && isSha256(outputs.PolicyFingerprint)) &&
+    Object.keys(outputs).length === 10 &&
+    templateBody !== null &&
+    sha256(templateBody) === expectedManager.templateSha256
+  );
+}
+
+/** gg: older Policy는 현재 reader catalog의 action 부분집합인 단일 ManagedPolicy Template만 허용합니다. */
+function extractSafeOwnedPolicyDocument(
+  templateBody: string | null,
+  contract: AwsImportManagerContract,
+  expected: Extract<ExpectedPolicyStackState, { kind: "present" }>
+): unknown | null {
+  if (templateBody === null) return null;
+  try {
+    const template = JSON.parse(templateBody) as Record<string, unknown>;
+    if (!hasExactKeys(template, [
+      "AWSTemplateFormatVersion",
+      "Description",
+      "Resources",
+      "Outputs"
+    ])) return null;
+    const resources = asRecord(template.Resources);
+    if (!resources || !hasExactKeys(resources, ["ImportReadManagedPolicy"])) return null;
+    const resource = asRecord(resources.ImportReadManagedPolicy);
+    if (!resource || !hasExactKeys(resource, ["Type", "Properties"]) ||
+      resource.Type !== "AWS::IAM::ManagedPolicy") return null;
+    const properties = asRecord(resource.Properties);
+    if (!properties || !hasExactKeys(properties, [
+      "ManagedPolicyName",
+      "Description",
+      "PolicyDocument",
+      "Roles"
+    ])) return null;
+    if (
+      properties.ManagedPolicyName !== contract.readManagedPolicyName ||
+      JSON.stringify(properties.Roles) !== JSON.stringify([contract.targetRoleName])
+    ) return null;
+    const policy = asRecord(properties.PolicyDocument);
+    if (!policy || !hasExactKeys(policy, ["Version", "Statement"]) ||
+      policy.Version !== "2012-10-17" || !Array.isArray(policy.Statement) ||
+      policy.Statement.length !== 1) return null;
+    const statement = asRecord(policy.Statement[0]);
+    if (!statement || !hasExactKeys(statement, ["Sid", "Effect", "Action", "Resource"]) ||
+      statement.Sid !== "ReadImportedArchitecture" || statement.Effect !== "Allow" ||
+      statement.Resource !== "*" || !Array.isArray(statement.Action) ||
+      statement.Action.length === 0) return null;
+    const allowedActions = new Set(AWS_IMPORT_READERS.flatMap((reader) => reader.actions));
+    const actions = statement.Action;
+    if (
+      actions.some((action) => typeof action !== "string" || !allowedActions.has(action)) ||
+      new Set(actions).size !== actions.length
+    ) return null;
+    if (sha256(JSON.stringify(policy)) !== expected.policyFingerprint) return null;
+    const outputs = asRecord(template.Outputs);
+    const expectedOutputs = {
+      SketchCatchConnectionId: { Value: contract.connectionId },
+      TemplateContractVersion: { Value: expected.contractVersion },
+      TargetRoleArn: { Value: contract.targetRoleArn },
+      ReadManagedPolicyArn: { Value: contract.readManagedPolicyArn },
+      PolicyFingerprint: { Value: expected.policyFingerprint }
+    };
+    if (!outputs || stableJson(outputs) !== stableJson(expectedOutputs)) return null;
+    return policy;
+  } catch {
+    return null;
+  }
+}
+
+/** gg: apply 직전에는 승인 시점의 current Policy identity를 target 계약과 별도로 확인합니다. */
+function verifyExpectedPolicyStack(
+  stack: Stack,
+  templateBody: string | null,
+  contract: AwsImportManagerContract,
+  expected: Extract<ExpectedPolicyStackState, { kind: "present" }>
+): boolean {
+  const expectedOutputs = {
+    SketchCatchConnectionId: contract.connectionId,
+    TemplateContractVersion: expected.contractVersion,
+    TargetRoleArn: contract.targetRoleArn,
+    ReadManagedPolicyArn: contract.readManagedPolicyArn,
+    PolicyFingerprint: expected.policyFingerprint
+  };
+  const expectedTags = contract.ownershipTags.map((tag) => tag.Key ===
+      AWS_IMPORT_CONTRACT_VERSION_TAG_KEY
+    ? { ...tag, Value: expected.contractVersion }
+    : { ...tag });
+  return (
+    stack.StackId === expected.stackId &&
+    stack.StackName === contract.policyStackName &&
+    isCompleteStackStatus(stack.StackStatus) &&
+    sameKeyValues(stack.Tags, expectedTags, "Key", "Value") &&
+    sameKeyValues(stack.Outputs, objectEntries(expectedOutputs), "OutputKey", "OutputValue") &&
+    templateBody !== null &&
+    sha256(templateBody) === expected.templateSha256
+  );
+}
+
 /** gg: 실제 trust·inline permission·관리 Policy·target attachment를 Task 2 contract와 비교합니다. */
 async function verifyManagerIamResources(
   iam: IamClientLike,
   contract: AwsImportManagerContract,
-  policyStackExists: boolean
+  readPolicyDocument: unknown | null
 ): Promise<boolean> {
   const role = (await iam.send(new GetRoleCommand({ RoleName: contract.serviceRoleName }))) as {
     Role?: { AssumeRolePolicyDocument?: unknown };
@@ -433,13 +794,24 @@ async function verifyManagerIamResources(
 
   const inlineNames = (await iam.send(new ListRolePoliciesCommand({
     RoleName: contract.serviceRoleName
-  }))) as { PolicyNames?: string[] };
-  if (!(inlineNames.PolicyNames ?? []).includes(contract.serviceRoleInlinePolicyName)) return false;
+  }))) as { PolicyNames?: string[]; IsTruncated?: boolean };
+  if (
+    inlineNames.IsTruncated === true ||
+    stableJson(inlineNames.PolicyNames ?? []) !== stableJson([contract.serviceRoleInlinePolicyName])
+  ) return false;
   const inline = (await iam.send(new GetRolePolicyCommand({
     RoleName: contract.serviceRoleName,
     PolicyName: contract.serviceRoleInlinePolicyName
   }))) as { PolicyDocument?: unknown };
   if (!samePolicyDocument(inline.PolicyDocument, contract.serviceRolePolicyDocument)) return false;
+
+  const serviceAttachments = (await iam.send(new ListAttachedRolePoliciesCommand({
+    RoleName: contract.serviceRoleName
+  }))) as { AttachedPolicies?: Array<{ PolicyArn?: string }>; IsTruncated?: boolean };
+  if (
+    serviceAttachments.IsTruncated === true ||
+    (serviceAttachments.AttachedPolicies ?? []).length !== 0
+  ) return false;
 
   if (!await managedPolicyMatches(iam, contract.controlPolicyArn, contract.controlPolicyDocument)) {
     return false;
@@ -452,11 +824,11 @@ async function verifyManagerIamResources(
     return false;
   }
   if (
-    policyStackExists &&
+    readPolicyDocument !== null &&
     !await managedPolicyMatches(
       iam,
       contract.readManagedPolicyArn,
-      createAwsImportReadPolicyDocument()
+      readPolicyDocument
     )
   ) {
     return false;
@@ -464,12 +836,13 @@ async function verifyManagerIamResources(
 
   const attachments = (await iam.send(new ListAttachedRolePoliciesCommand({
     RoleName: contract.targetRoleName
-  }))) as { AttachedPolicies?: Array<{ PolicyArn?: string }> };
+  }))) as { AttachedPolicies?: Array<{ PolicyArn?: string }>; IsTruncated?: boolean };
+  if (attachments.IsTruncated === true) return false;
   const attachedArns = new Set(
     (attachments.AttachedPolicies ?? []).flatMap((item) => item.PolicyArn ? [item.PolicyArn] : [])
   );
   const required = [contract.controlPolicyArn, contract.cleanupVerificationPolicyArn];
-  if (policyStackExists) required.push(contract.readManagedPolicyArn);
+  if (readPolicyDocument !== null) required.push(contract.readManagedPolicyArn);
   return required.every((arn) => attachedArns.has(arn));
 }
 
@@ -537,6 +910,36 @@ function sameKeyValues(
   return JSON.stringify(normalize(actual)) === JSON.stringify(normalize(expected));
 }
 
+/** gg: exact tag/output set 검증 후 이름별 값을 안전하게 조회합니다. */
+function keyValueRecord(
+  items: readonly unknown[] | undefined,
+  key: string,
+  value: string
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const item of items ?? []) {
+    const record = item as Record<string, unknown>;
+    if (typeof record[key] !== "string" || typeof record[value] !== "string") return {};
+    if (record[key] in result) return {};
+    result[record[key]] = record[value];
+  }
+  return result;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: string[]): boolean {
+  return stableJson(Object.keys(value).sort()) === stableJson([...keys].sort());
+}
+
+function isSha256(value: string | undefined): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/u.test(value);
+}
+
 /** gg: expected output map을 AWS SDK output shape로 바꿉니다. */
 function objectEntries(values: Record<string, string>): Array<Record<string, unknown>> {
   return Object.entries(values).map(([OutputKey, OutputValue]) => ({ OutputKey, OutputValue }));
@@ -566,6 +969,17 @@ function getBucketName(baseUrl: string): string {
   const suffixIndex = url.hostname.indexOf(".s3.");
   if (suffixIndex > 0) return url.hostname.slice(0, suffixIndex);
   throw new AwsImportAccessGatewayError("Template 저장소 설정을 확인해 주세요.");
+}
+
+/** gg: Manager 갱신 URL도 connection-scoped exact Stack ARN만 허용합니다. */
+function assertExpectedManagerStackId(
+  contract: AwsImportManagerContract,
+  stackId: string
+): void {
+  const prefix = contract.managerStackArn.slice(0, -1);
+  if (!stackId.startsWith(prefix) || stackId.length <= prefix.length) {
+    throw new AwsImportAccessGatewayError("Manager Stack 상태를 다시 확인해 주세요.");
+  }
 }
 
 /** gg: CloudFormation Template 본문은 Task 2와 같은 SHA-256 표현으로 비교합니다. */

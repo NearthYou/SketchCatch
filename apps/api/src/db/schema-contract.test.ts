@@ -520,6 +520,7 @@ test("AWS import access storage is connection-scoped and blocks premature deleti
     )
   );
   assert(findColumn(config.columns, "manager_template_hash"));
+  assert(findColumn(config.columns, "policy_template_hash"));
   assert(findColumn(config.columns, "policy_fingerprint"));
   assert(findColumn(config.columns, "operation_id"));
   assert(findColumn(config.columns, "lease_expires_at"));
@@ -534,6 +535,7 @@ test("AWS import access migration is additive and keeps cleanup metadata", () =>
   );
 
   assert.match(migration, /CREATE TABLE "aws_import_access"/);
+  assert.match(migration, /"policy_template_hash" varchar\(64\)/);
   assert.match(migration, /ON DELETE restrict/);
   assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i);
 });

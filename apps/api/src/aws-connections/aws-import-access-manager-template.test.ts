@@ -114,6 +114,43 @@ test("policy stack create and update inputs accept only the internally published
   }
 });
 
+test("policy stack update targets only the exact approved Stack ID", async () => {
+  const contract = createAwsImportManagerContract(connectionFixture);
+  const published = await publishAwsImportCloudFormationTemplateToS3({
+    bucketName: connectionFixture.templateBucketName,
+    region: connectionFixture.region,
+    connectionId: connectionFixture.connectionId,
+    kind: "policy",
+    contractVersion: contract.policyContractVersion,
+    templateBody: contract.policyTemplateBody,
+    expiresInSeconds: 600,
+    now: signedWindowClock,
+    s3Client: { async send() { return {}; } } as unknown as S3Client,
+    signTemplateUrl: async ({ baseUrl }) => createValidPresignedUrl(baseUrl)
+  });
+  const exactStackId = `${contract.policyStackArn.slice(0, -1)}existing-id`;
+
+  const input = createAwsImportPolicyStackUpdateInput(
+    contract,
+    published,
+    { now: signedWindowClock },
+    undefined,
+    exactStackId
+  );
+
+  assert.equal(input.StackName, exactStackId);
+  assert.throws(
+    () => createAwsImportPolicyStackUpdateInput(
+      contract,
+      published,
+      { now: signedWindowClock },
+      undefined,
+      "arn:aws:cloudformation:ap-northeast-2:123456789012:stack/foreign/id"
+    ),
+    /identity is invalid/u
+  );
+});
+
 test("policy stack create and update reject an internally published expired URL", async () => {
   const contract = createAwsImportManagerContract(connectionFixture);
   const published = await publishAwsImportCloudFormationTemplateToS3({
