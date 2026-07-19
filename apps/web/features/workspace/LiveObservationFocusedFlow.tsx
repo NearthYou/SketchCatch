@@ -12,9 +12,15 @@ import { createLiveObservationArchitectureModel } from "./live-observation-archi
 import {
   createLiveObservationDiagramModel,
   getLiveObservationDiagramSegmentCount,
+  type LiveObservationCapacityUnit,
   type LiveObservationDiagramNodeState,
   type LiveObservationPresentationRole
 } from "./live-observation-diagram";
+import {
+  LIVE_OBSERVATION_CAPACITY_EXIT_MS,
+  reconcileLiveObservationCapacityUnits,
+  settleLiveObservationCapacityUnits
+} from "./live-observation-capacity-transitions";
 import {
   getLiveObservationDiagramBurstLifetimeMs,
   getLiveObservationDiagramParticleDelayMs,
@@ -30,6 +36,8 @@ import styles from "./workspace.module.css";
 type SequencedTrafficBurst = LiveObservationRequestBurst & {
   readonly sequence: number;
 };
+
+const EMPTY_CAPACITY_UNITS: readonly LiveObservationCapacityUnit[] = [];
 
 export function LiveObservationFocusedFlow({
   architecture,
@@ -49,6 +57,23 @@ export function LiveObservationFocusedFlow({
   const previousTrafficRef = useRef(getLiveObservationTrafficCursor(snapshot));
   const burstSequenceRef = useRef(0);
   const [burst, setBurst] = useState<SequencedTrafficBurst | null>(null);
+  const modelCapacityUnits = model.status === "ready"
+    ? model.capacityUnits
+    : EMPTY_CAPACITY_UNITS;
+  const [presentedCapacityUnits, setPresentedCapacityUnits] = useState(() =>
+    settleLiveObservationCapacityUnits(modelCapacityUnits)
+  );
+
+  useEffect(() => {
+    setPresentedCapacityUnits((current) =>
+      reconcileLiveObservationCapacityUnits(current, modelCapacityUnits)
+    );
+    const timer = window.setTimeout(
+      () => setPresentedCapacityUnits(settleLiveObservationCapacityUnits(modelCapacityUnits)),
+      LIVE_OBSERVATION_CAPACITY_EXIT_MS
+    );
+    return () => window.clearTimeout(timer);
+  }, [modelCapacityUnits]);
 
   useEffect(() => {
     const nextBurst = getLiveObservationTrafficBurst(previousTrafficRef.current, snapshot);
@@ -90,7 +115,7 @@ export function LiveObservationFocusedFlow({
   const minimumWidth = Math.max(
     760,
     model.stages.length * 144 +
-      model.capacityUnits.length * 94 +
+      presentedCapacityUnits.length * 94 +
       (model.hiddenCapacityCount > 0 ? 64 : 0) +
       80
   );
@@ -158,11 +183,12 @@ export function LiveObservationFocusedFlow({
             <li className={styles.liveObservationCapacityStage}>
               <span className={styles.liveObservationCapacityLabel}>ECS FARGATE TASKS</span>
               <div className={styles.liveObservationCapacityUnits}>
-                {model.capacityUnits.map((unit, index) => (
+                {presentedCapacityUnits.map((unit, index) => (
                   <article
                     aria-label={`${unit.node.label}: ${getCapacityStateLabel(unit.observationState)}`}
                     className={styles.liveObservationCapacityUnit}
                     data-observation-state={unit.observationState}
+                    data-transition={unit.transition}
                     key={unit.node.id}
                   >
                     <div className={styles.liveObservationPresentationNode}>
