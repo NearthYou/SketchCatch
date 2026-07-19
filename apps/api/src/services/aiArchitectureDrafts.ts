@@ -670,32 +670,54 @@ async function createRequirementConflictClarification(input: {
   readonly validationIssues: readonly string[];
 }): Promise<ArchitectureDraftClarification> {
   const provider = input.conflictClarificationProvider;
-  if (provider === undefined) return createRequirementConflictFallbackClarification(input.validationIssues, input.request, input.billingMode);
+
+  if (provider === undefined) {
+    return createRequirementConflictFallbackClarification(input.validationIssues, input.request, input.billingMode);
+  }
+
   const payload = maskSecretsForAi({
     architectureDecisionSpace: input.architectureDecisionSpace,
-    ...(input.request.clarificationAnswers === undefined ? {} : { clarificationAnswers: input.request.clarificationAnswers }),
+    ...(input.request.clarificationAnswers === undefined
+      ? {}
+      : { clarificationAnswers: input.request.clarificationAnswers }),
     fixedTemplateSelection: input.fixedTemplateSelection,
-    ...(input.failedArchitectureJson === undefined ? {} : { failedArchitectureJson: input.failedArchitectureJson }),
+    ...(input.failedArchitectureJson === undefined
+      ? {}
+      : { failedArchitectureJson: input.failedArchitectureJson }),
     normalizedRequirement: input.normalizedRequirement,
     prompt: input.request.prompt,
     repositoryEvidence: input.request.repositoryEvidence,
     task: "requirement_conflict_clarification",
     validationIssues: input.validationIssues
   });
+
   try {
     const response = await generateArchitectureDraftProviderResponse(provider, {
       target: ARCHITECTURE_DRAFT_TARGET,
       instructions: createOpenAiRequirementConflictInstructions(),
-      prompt: createOpenAiRequirementConflictPrompt(input.request.prompt, input.architectureDecisionSpace, input.normalizedRequirement, input.fixedTemplateSelection, input.validationIssues, input.failedArchitectureJson),
+      prompt: createOpenAiRequirementConflictPrompt(
+        input.request.prompt,
+        input.architectureDecisionSpace,
+        input.normalizedRequirement,
+        input.fixedTemplateSelection,
+        input.validationIssues,
+        input.failedArchitectureJson
+      ),
       payload
     });
     const parsedResponse = parseRequirementConflictClarification(response.text);
+
     return {
       status: "needs_clarification",
       questionId: createRequirementConflictClarificationQuestionId(parsedResponse.question),
       question: parsedResponse.question,
       suggestions: [...(parsedResponse.suggestions ?? [])],
-      providerMetadata: createAiProviderMetadata({ provider, billingMode: input.billingMode, payload, outputCharacters: response.outputCharacters ?? response.text.length })
+      providerMetadata: createAiProviderMetadata({
+        provider,
+        billingMode: input.billingMode,
+        payload,
+        outputCharacters: response.outputCharacters ?? response.text.length
+      })
     };
   } catch {
     return createRequirementConflictFallbackClarification(input.validationIssues, input.request, input.billingMode);
@@ -784,13 +806,24 @@ function parseRequirementConflictClarification(
     suggestions
   };
 }
-function createRequirementConflictFallbackClarification(validationIssues: readonly string[], request: CreateArchitectureDraftRequest, billingMode: AiBillingMode): ArchitectureDraftClarification {
+function createRequirementConflictFallbackClarification(
+  validationIssues: readonly string[],
+  request: CreateArchitectureDraftRequest,
+  billingMode: AiBillingMode
+): ArchitectureDraftClarification {
   const issueSummary = validationIssues.slice(0, 2).join(" ").trim();
+
   return {
     status: "needs_clarification",
     questionId: "architecture_validation_conflict",
-    question: issueSummary.length > 0 ? `현재 요구사항과 선택한 설계 조건을 함께 만족시키지 못했습니다. ${issueSummary} 어떤 조건을 우선할까요?` : "현재 요구사항과 선택한 설계 조건을 함께 만족시키지 못했습니다. 어떤 조건을 우선할까요?",
-    suggestions: ["선택한 템플릿을 유지하고 Repository 제한 조건을 다시 확인", "Repository 제한 조건을 유지하고 템플릿 또는 운영 조건을 조정", "요구사항을 유지한 채 지원 가능한 표현으로 다시 시도"],
+    question: issueSummary.length > 0
+      ? `현재 요구사항과 선택한 설계 조건을 함께 만족시키지 못했습니다. ${issueSummary} 어떤 조건을 우선할까요?`
+      : "현재 요구사항과 선택한 설계 조건을 함께 만족시키지 못했습니다. 어떤 조건을 우선할까요?",
+    suggestions: [
+      "선택한 템플릿을 유지하고 Repository 제한 조건을 다시 확인",
+      "Repository 제한 조건을 유지하고 템플릿 또는 운영 조건을 조정",
+      "요구사항을 유지한 채 지원 가능한 표현으로 다시 시도"
+    ],
     providerMetadata: createFallbackProviderMetadata(request, billingMode)
   };
 }

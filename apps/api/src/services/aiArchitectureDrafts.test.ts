@@ -3723,7 +3723,13 @@ test("createAmazonQArchitectureDraftResponse asks OpenAI to resolve repeated val
   const conflictCalls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
     amazonQCalls.push(request);
-    return JSON.stringify({ status: "plan", title: "Unsupported Quantity Plan", requiredResources: ["IAM_ROLE"], resourceQuantities: { IAM_ROLE: 3 } });
+
+    return JSON.stringify({
+      status: "plan",
+      title: "Unsupported Quantity Plan",
+      requiredResources: ["IAM_ROLE"],
+      resourceQuantities: { IAM_ROLE: 3 }
+    });
   });
   const conflictClarificationProvider: AiTextProvider = {
     provider: "openai",
@@ -3731,25 +3737,47 @@ test("createAmazonQArchitectureDraftResponse asks OpenAI to resolve repeated val
     model: "fake-openai-conflict-resolver",
     generate: async (request) => {
       conflictCalls.push(request);
-      const text = JSON.stringify({
-        status: "needs_clarification",
-        question: "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 조건을 우선할까요?",
-        suggestions: ["IAM 역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도", "현재 지원 범위를 유지하고 IAM 역할을 2개 이하로 통합"]
-      });
-      return { text, outputCharacters: text.length };
+
+      return {
+        text: JSON.stringify({
+          status: "needs_clarification",
+          question: "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 조건을 우선할까요?",
+          suggestions: [
+            "IAM 역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도",
+            "현재 지원 범위를 유지하고 IAM 역할을 2개 이하로 통합"
+          ]
+        }),
+        outputCharacters: 180
+      };
     }
   };
+
   const response = await createAmazonQArchitectureDraftResponse(
     { prompt: createDynamicWebDeploymentSelectionPrompt() },
     { provider, conflictClarificationProvider, creditPolicy: confirmedCreditPolicy }
   );
+
   assert.equal(amazonQCalls.length, 2);
   assert.equal(conflictCalls.length, 1);
   assert.match(conflictCalls[0]?.prompt ?? "", /OpenAI resolving a structured SketchCatch architecture validation failure/u);
   assert.match(conflictCalls[0]?.prompt ?? "", /IAM_ROLE/u);
-  assert.equal((conflictCalls[0]?.payload as { task?: string }).task, "requirement_conflict_clarification");
-  if (!("status" in response)) assert.fail("Expected an OpenAI clarification response");
+  assert.equal(
+    (conflictCalls[0]?.payload as { task?: string }).task,
+    "requirement_conflict_clarification"
+  );
+
+  if (!("status" in response)) {
+    assert.fail("Expected an OpenAI clarification response");
+  }
   assert.equal(response.status, "needs_clarification");
+  assert.equal(
+    response.question,
+    "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 조건을 우선할까요?"
+  );
+  assert.deepEqual(response.suggestions, [
+    "IAM 역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도",
+    "현재 지원 범위를 유지하고 IAM 역할을 2개 이하로 통합"
+  ]);
   assert.equal(response.providerMetadata.provider, "openai");
 });
 
