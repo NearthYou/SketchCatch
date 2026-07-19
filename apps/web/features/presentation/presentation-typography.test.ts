@@ -8,6 +8,7 @@ const webRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const sizeIncreaseToken = "var(--presentation-font-size-increase)";
 const regularWeightToken = "var(--presentation-font-weight-regular)";
 const boldWeightToken = "var(--presentation-font-weight-bold)";
+const legacyCodeFontStack = '"SFMono-Regular", Consolas, "Liberation Mono", monospace';
 
 function collectFiles(directory: string, extensions: readonly string[]): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -144,7 +145,7 @@ test("explicit text weights use the regular and bold LINE Seed presentation scal
   }
 });
 
-test("all web typography resolves to the supplied local LINE Seed Sans KR files", () => {
+test("web typography uses LINE Seed except for Terraform code and Deployment logs", () => {
   const layout = readFileSync(join(webRoot, "app", "layout.tsx"), "utf8");
   const globalStyles = readFileSync(join(webRoot, "app", "globals.css"), "utf8");
   const packageJson = readFileSync(join(webRoot, "package.json"), "utf8");
@@ -164,6 +165,14 @@ test("all web typography resolves to the supplied local LINE Seed Sans KR files"
   );
   const aiWorkbenchStyles = readFileSync(
     join(webRoot, "features", "workspace", "workspace-ai-workbench.module.css"),
+    "utf8"
+  );
+  const terraformEditorStyles = readFileSync(
+    join(webRoot, "features", "workspace", "TerraformCodeEditorSurface.module.css"),
+    "utf8"
+  );
+  const workspaceStyles = readFileSync(
+    join(webRoot, "features", "workspace", "workspace.module.css"),
     "utf8"
   );
   const templateLibrarySource = readFileSync(
@@ -209,6 +218,26 @@ test("all web typography resolves to the supplied local LINE Seed Sans KR files"
     globalStyles,
     /button,[\s\S]*input,[\s\S]*select,[\s\S]*textarea\s*\{[^}]*font:\s*inherit;/s
   );
+  assert.equal(
+    [
+      ...terraformEditorStyles.matchAll(
+        /font-family\s*:\s*"SFMono-Regular", Consolas, "Liberation Mono", monospace;/g
+      )
+    ].length,
+    3
+  );
+  assert.equal(
+    [
+      ...workspaceStyles.matchAll(
+        /font-family\s*:\s*"SFMono-Regular", Consolas, "Liberation Mono", monospace;/g
+      )
+    ].length,
+    1
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentLogList\s*\{[^}]*font-family:\s*"SFMono-Regular", Consolas, "Liberation Mono", monospace;/s
+  );
 
   const forbiddenFallbacks =
     /Inter|Geist|SFMono|Consolas|Liberation Mono|ui-monospace|monospace|Noto Sans KR|Pretendard|Spoqa/;
@@ -221,11 +250,20 @@ test("all web typography resolves to the supplied local LINE Seed Sans KR files"
     const declarations = styles.matchAll(/font-family\s*:\s*([^;}]+)(?=[;}])/g);
 
     for (const declaration of declarations) {
-      const value = declaration[1] ?? "";
+      const value = (declaration[1] ?? "").trim();
+
+      if (
+        value === legacyCodeFontStack &&
+        (cssFile.endsWith("TerraformCodeEditorSurface.module.css") ||
+          cssFile.endsWith("workspace.module.css"))
+      ) {
+        continue;
+      }
+
       assert.doesNotMatch(
         value,
         forbiddenFallbacks,
-        `${cssFile}: font-family must resolve to LINE Seed Sans KR: ${declaration[0]}`
+        `${cssFile}: font-family must resolve to LINE Seed Sans KR or the scoped legacy code stack: ${declaration[0]}`
       );
     }
   }

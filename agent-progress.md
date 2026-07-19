@@ -196,3 +196,9 @@ Short English-only working log for the current agent context. Older records are 
 - Direct ECS rollback now deregisters the exact application-created Task Definition revision after the trusted runtime restore, with account/region/ARN validation and a revision-scoped STS session policy.
 - Deregistered the three unused demo revisions (`5`, `7`, and `9`). Exact AWS inventory verification returned `CLEANUP_RESULT remaining=0`; the browser shows `DESTROYED`, 36 resources removed, and zero remaining Resources or Outputs.
 - Focused API tests pass 11/11 and the Web regression passes 24/24. Affected ESLint and direct API/Web typechecks pass; final root harness, lint, typecheck, build, and diff checks are recorded by the finishing verification run.
+
+### 2026-07-19 - Restore code typography for Terraform and Deployment logs
+
+- Restored the pre-presentation `SFMono-Regular`/Consolas monospace stack only for Terraform editor line numbers/code and Direct Deployment logs; all surrounding UI remains on LINE Seed Sans KR.
+- Kept the current presentation font sizing unchanged and narrowed the typography audit exception to those two surfaces.
+- The focused typography test passes 4/4; `pnpm harness:check` and `git diff --check` pass. No broad test suite was run.
