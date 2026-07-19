@@ -5,6 +5,11 @@ import {
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { ListDistributionsCommand } from "@aws-sdk/client-cloudfront";
 import {
+  GetDefaultViewCommand,
+  GetViewCommand,
+  SearchCommand
+} from "@aws-sdk/client-resource-explorer-2";
+import {
   DescribeClustersCommand,
   DescribeServicesCommand,
   DescribeTaskDefinitionCommand,
@@ -14,12 +19,14 @@ import {
 import type { TerraformAwsCredentialEnv } from "../aws-connections/aws-connection-runtime-credentials.js";
 import type { AwsDiscoveredResourceRecord, AwsProviderScanInput } from "./aws-provider-adapter.js";
 import {
+  collectAwsPages,
   createAwsReverseEngineeringReaderPlan,
   deduplicateReverseEngineeringScanErrors,
   isReverseEngineeringPromotedResourceArn,
   listApplicationLoadBalancers,
   listCloudFrontDistributions,
   readEcsResourcesWithDiagnostics,
+  readResourceExplorerResourcesWithDiagnostics,
   resolveCloudFrontOriginRelationships
 } from "./aws-reverse-engineering-gateway.js";
 
@@ -32,6 +39,52 @@ const credentials: TerraformAwsCredentialEnv = {
 function scanInput(resourceTypes: AwsProviderScanInput["resourceTypes"]): AwsProviderScanInput {
   return { provider: "aws", region: "ap-northeast-2", resourceTypes };
 }
+
+test("later page failure preserves prior items and exposes only a safe outcome", async () => {
+  const result = await collectAwsPages(async (token) => {
+    if (token === undefined) {
+      return { items: [{ id: "first-page" }], nextToken: "page-2" };
+    }
+    throw new Error(
+      "InternalServerException RequestId private-request-id " +
+      "arn:aws:iam::123456789012:role/private"
+    );
+  });
+
+  assert.deepEqual(result.items, [{ id: "first-page" }]);
+  assert.equal(result.failure?.outcome, "transient");
+  assert.doesNotMatch(
+    JSON.stringify(result.failure),
+    /RequestId|private-request-id|arn:aws|123456789012|AccessDenied/iu
+  );
+});
+
+test("Resource Explorer resolves the default view before searching it", async () => {
+  const viewArn =
+    "arn:aws:resource-explorer-2:ap-northeast-2:123456789012:view/default/example";
+  const commands: object[] = [];
+  const result = await readResourceExplorerResourcesWithDiagnostics(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        commands.push(command);
+        if (command instanceof GetDefaultViewCommand) return { ViewArn: viewArn };
+        if (command instanceof GetViewCommand) return { View: { ViewArn: viewArn } };
+        if (command instanceof SearchCommand) return { Resources: [] };
+        throw new Error(`Unexpected Resource Explorer command: ${command.constructor.name}`);
+      }
+    })
+  );
+
+  assert.deepEqual(result, { records: [], scanErrors: [] });
+  assert.deepEqual(
+    commands.map((command) => command.constructor),
+    [GetDefaultViewCommand, GetViewCommand, SearchCommand]
+  );
+  assert.equal((commands[1] as GetViewCommand).input.ViewArn, viewArn);
+  assert.equal((commands[2] as SearchCommand).input.ViewArn, viewArn);
+});
 
 test("ALB와 CloudFront reader 선택은 ALL 및 직접 선택에만 한 번씩 포함한다", () => {
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["ALL"])), {
@@ -311,6 +364,110 @@ test("ECS reader는 cluster/service pagination과 공유 Task Definition dedupe�
   assert.doesNotMatch(JSON.stringify(result), /must-not-leak|must-not-copy|\$metadata/);
 });
 
+test("ECS cluster later-page failure keeps and describes accumulated cluster ARNs", async () => {
+  const clusterArn = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
+  const commands: object[] = [];
+  const result = await readEcsResourcesWithDiagnostics(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        commands.push(command);
+        if (command instanceof ListClustersCommand) {
+          if (command.input.nextToken) {
+            throw new Error("InternalServerException RequestId private-request-id");
+          }
+          return { clusterArns: [clusterArn], nextToken: "page-2" };
+        }
+        if (command instanceof DescribeClustersCommand) {
+          return { clusters: [{ clusterArn, clusterName: "orders", status: "ACTIVE" }] };
+        }
+        if (command instanceof ListServicesCommand) return { serviceArns: [] };
+        throw new Error(`Unexpected ECS command: ${command.constructor.name}`);
+      }
+    })
+  );
+
+  assert.deepEqual(result.records.map((record) => record.providerResourceId), [clusterArn]);
+  assert.deepEqual(
+    commands
+      .filter(
+        (command): command is DescribeClustersCommand =>
+          command instanceof DescribeClustersCommand
+      )
+      .map((command) => command.input.clusters),
+    [[clusterArn]]
+  );
+  assert.equal(result.scanErrors.length, 1);
+  assert.equal(result.scanErrors[0]?.resourceType, "ECS_CLUSTER");
+  assert.doesNotMatch(JSON.stringify(result.scanErrors), /RequestId|private-request-id/iu);
+});
+
+test("ECS service later-page failure keeps describing accumulated services and task definitions", async () => {
+  const clusterArn = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
+  const serviceArn = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api";
+  const taskDefinitionArn =
+    "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:1";
+  const commands: object[] = [];
+  const result = await readEcsResourcesWithDiagnostics(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        commands.push(command);
+        if (command instanceof ListClustersCommand) return { clusterArns: [clusterArn] };
+        if (command instanceof DescribeClustersCommand) {
+          return { clusters: [{ clusterArn, clusterName: "orders", status: "ACTIVE" }] };
+        }
+        if (command instanceof ListServicesCommand) {
+          if (command.input.nextToken) {
+            throw new Error("InternalServerException RequestId private-service-request");
+          }
+          return { serviceArns: [serviceArn], nextToken: "page-2" };
+        }
+        if (command instanceof DescribeServicesCommand) {
+          return {
+            services: [{
+              serviceArn,
+              serviceName: "api",
+              clusterArn,
+              taskDefinition: taskDefinitionArn
+            }]
+          };
+        }
+        if (command instanceof DescribeTaskDefinitionCommand) {
+          return {
+            taskDefinition: {
+              taskDefinitionArn,
+              family: "orders",
+              revision: 1,
+              containerDefinitions: []
+            }
+          };
+        }
+        throw new Error(`Unexpected ECS command: ${command.constructor.name}`);
+      }
+    })
+  );
+
+  assert.deepEqual(
+    result.records.map((record) => record.providerResourceId),
+    [clusterArn, serviceArn, taskDefinitionArn]
+  );
+  assert.deepEqual(
+    commands
+      .filter(
+        (command): command is DescribeServicesCommand =>
+          command instanceof DescribeServicesCommand
+      )
+      .map((command) => command.input.services),
+    [[serviceArn]]
+  );
+  assert.equal(result.scanErrors.length, 1);
+  assert.equal(result.scanErrors[0]?.resourceType, "ECS_SERVICE");
+  assert.doesNotMatch(JSON.stringify(result.scanErrors), /RequestId|private-service-request/iu);
+});
+
 test("한 Cluster의 service 조회 실패는 다른 ECS 결과를 유지하고 하위 group scanError로 남긴다", async () => {
   const healthyCluster = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/healthy";
   const deniedCluster = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/denied";
@@ -441,6 +598,40 @@ test("ALB reader는 pagination을 끝까지 읽고 실제 VPC, Security Group, S
       ]
     }
   ]);
+});
+
+test("ALB later-page failure returns earlier records with one safe diagnostic outcome", async () => {
+  const failures: Array<{ outcome: string }> = [];
+  let calls = 0;
+  const records = await listApplicationLoadBalancers(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(): Promise<unknown> {
+        calls += 1;
+        if (calls === 2) {
+          throw new Error(
+            "InternalServerException RequestId private-request " +
+            "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/private"
+          );
+        }
+        return {
+          LoadBalancers: [{
+            LoadBalancerArn:
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
+            LoadBalancerName: "orders",
+            Type: "application"
+          }],
+          NextMarker: "page-2"
+        };
+      }
+    }),
+    (failure) => failures.push(failure)
+  );
+
+  assert.equal(records.length, 1);
+  assert.deepEqual(failures, [{ outcome: "transient" }]);
+  assert.doesNotMatch(JSON.stringify(failures), /RequestId|private-request|arn:aws/iu);
 });
 
 test("CloudFront reader는 distribution ID와 생성에 필요한 응답 구조만 보존한다", async () => {
