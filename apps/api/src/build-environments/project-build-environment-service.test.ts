@@ -770,7 +770,7 @@ test("build environment fingerprint changes when the approved frontend build sna
   assert.notEqual(first.runtimeFingerprint, second.runtimeFingerprint);
 });
 
-test("build environment fingerprint changes when the confirmed repository commit changes", () => {
+test("build environment fingerprint stays stable when only the confirmed commit changes", () => {
   const base = createContext();
   assert.ok(base.sourceRepository);
   assert.ok(base.awsConnection);
@@ -798,7 +798,7 @@ test("build environment fingerprint changes when the confirmed repository commit
     }
   });
 
-  assert.notEqual(first.runtimeFingerprint, second.runtimeFingerprint);
+  assert.equal(first.runtimeFingerprint, second.runtimeFingerprint);
 });
 
 test("build environment deletion removes verified AWS resources before its database record", async () => {
