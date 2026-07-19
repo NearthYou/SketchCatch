@@ -100,7 +100,7 @@ export function LiveObservationFocusedFlow({
     return (
       <section
         aria-label="프로젝트 다이어그램 기반 실시간 관측"
-        className={styles.liveObservationDiagramMap}
+        className={`${styles.liveObservationDiagramMap} ${styles.liveObservationFocusedFlow}`}
       >
         <div className={styles.liveObservationPresentationEmpty} role="status">
           <Box aria-hidden="true" size={22} />
@@ -124,7 +124,7 @@ export function LiveObservationFocusedFlow({
   return (
     <section
       aria-label="프로젝트 다이어그램에서 분석한 메인 트래픽 경로"
-      className={styles.liveObservationDiagramMap}
+      className={`${styles.liveObservationDiagramMap} ${styles.liveObservationFocusedFlow}`}
       data-flowing={burst !== null}
       data-pressure-level={model.pressureLevel}
       data-testid="live-observation-focused-flow"
