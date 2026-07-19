@@ -3439,54 +3439,40 @@ test("createAmazonQArchitectureDraftResponse rejects when Amazon Q returns an in
   );
 });
 
-test("createAmazonQArchitectureDraftResponse asks Amazon Q which requirement to relax after repeated validation failures", async () => {
-  const calls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+test("createAmazonQArchitectureDraftResponse asks OpenAI to resolve repeated validation failures", async () => {
+  const amazonQCalls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const conflictCalls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
-    calls.push(request);
-
-    if (calls.length < 3) {
-      return JSON.stringify({
-        status: "plan",
-        title: "Unsupported Quantity Plan",
-        requiredResources: ["IAM_ROLE"],
-        resourceQuantities: { IAM_ROLE: 3 }
-      });
-    }
-
-    return [
-      "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 요구를 유지할까요?",
-      "1. 역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도",
-      "2. 현재 지원 범위를 유지하고 역할을 2개 이하로 통합"
-    ].join("\n");
+    amazonQCalls.push(request);
+    return JSON.stringify({ status: "plan", title: "Unsupported Quantity Plan", requiredResources: ["IAM_ROLE"], resourceQuantities: { IAM_ROLE: 3 } });
   });
-
+  const conflictClarificationProvider: AiTextProvider = {
+    provider: "openai",
+    service: "openai_responses",
+    model: "fake-openai-conflict-resolver",
+    generate: async (request) => {
+      conflictCalls.push(request);
+      const text = JSON.stringify({
+        status: "needs_clarification",
+        question: "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 조건을 우선할까요?",
+        suggestions: ["IAM 역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도", "현재 지원 범위를 유지하고 IAM 역할을 2개 이하로 통합"]
+      });
+      return { text, outputCharacters: text.length };
+    }
+  };
   const response = await createAmazonQArchitectureDraftResponse(
     { prompt: createDynamicWebDeploymentSelectionPrompt() },
-    { provider, creditPolicy: confirmedCreditPolicy }
+    { provider, conflictClarificationProvider, creditPolicy: confirmedCreditPolicy }
   );
-
-  assert.equal(calls.length, 3);
-  assert.match(calls[2]?.prompt ?? "", /diagnosing why SketchCatch could not produce a valid architecture/u);
-  assert.match(calls[2]?.prompt ?? "", /IAM_ROLE/u);
-  assert.equal(
-    (calls[2]?.payload as { task?: string }).task,
-    "requirement_conflict_clarification"
-  );
-  if (!("status" in response)) {
-    assert.fail("Expected an Amazon Q clarification response");
-  }
+  assert.equal(amazonQCalls.length, 2);
+  assert.equal(conflictCalls.length, 1);
+  assert.match(conflictCalls[0]?.prompt ?? "", /OpenAI resolving a structured SketchCatch architecture validation failure/u);
+  assert.match(conflictCalls[0]?.prompt ?? "", /IAM_ROLE/u);
+  assert.equal((conflictCalls[0]?.payload as { task?: string }).task, "requirement_conflict_clarification");
+  if (!("status" in response)) assert.fail("Expected an OpenAI clarification response");
   assert.equal(response.status, "needs_clarification");
-  assert.equal(
-    response.question,
-    "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 요구를 유지할까요?"
-  );
-  assert.deepEqual(response.suggestions, [
-    "역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도",
-    "현재 지원 범위를 유지하고 역할을 2개 이하로 통합"
-  ]);
-  assert.equal(response.providerMetadata.provider, "amazon_q");
-});
-test("createAmazonQArchitectureDraftResponse retries once when a compact plan fails materialization", async () => {
+  assert.equal(response.providerMetadata.provider, "openai");
+});test("createAmazonQArchitectureDraftResponse retries once when a compact plan fails materialization", async () => {
   const calls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
     calls.push(request);

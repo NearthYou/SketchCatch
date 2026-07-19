@@ -27,6 +27,7 @@ import {
   parseArchitectureIntentPlan,
   type ArchitectureIntentPlan
 } from "./aiArchitectureRequirementNormalizer.js";
+import { createOpenAiArchitectureConflictResolverProviderFromEnv } from "./aiArchitectureConflictResolver.js";
 import {
   createArchitectureResourceDeploymentConfig,
   SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG,
@@ -219,6 +220,7 @@ export type CreateArchitectureDraftResponseFactory = (
 
 export type CreateAmazonQArchitectureDraftResponseOptions = {
   readonly provider?: AiTextProvider | undefined;
+  readonly conflictClarificationProvider?: AiTextProvider | undefined;
   readonly requirementNormalizerProvider?: AiTextProvider | undefined;
   readonly creditPolicy?: AiCreditPolicy | undefined;
   readonly onProgress?: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined;
@@ -310,6 +312,8 @@ export function createConfiguredAmazonQArchitectureDraftResponse(input: {
         });
   const requirementNormalizerProvider =
     process.env.NODE_ENV === "test" ? undefined : createOpenAiRequirementNormalizerProviderFromEnv();
+  const conflictClarificationProvider =
+    process.env.NODE_ENV === "test" ? undefined : createOpenAiArchitectureConflictResolverProviderFromEnv();
 
   if (
     provider !== undefined
@@ -323,6 +327,7 @@ export function createConfiguredAmazonQArchitectureDraftResponse(input: {
   return (request, operationOptions) =>
     createAmazonQArchitectureDraftResponse(request, {
       provider,
+      conflictClarificationProvider,
       requirementNormalizerProvider,
       creditPolicy,
       onProgress: operationOptions?.onProgress
@@ -505,7 +510,7 @@ export async function createAmazonQArchitectureDraftResponse(
               creditPolicy.billingMode
             );
           }
-          throw createRequirementsUnsatisfiedError(retryValidationIssues);
+          throw createRequirementsUnsatisfiedError(retryValidationIssues, parsedResponse.architectureJson);
         }
       }
     }
@@ -623,12 +628,13 @@ export async function createAmazonQArchitectureDraftResponse(
       error instanceof ArchitectureDraftGenerationError &&
       error.kind === "requirements_unsatisfied"
     ) {
-      return createAmazonQRequirementConflictClarification({
+      return createRequirementConflictClarification({
         architectureDecisionSpace,
         billingMode: creditPolicy.billingMode,
+        conflictClarificationProvider: options.conflictClarificationProvider,
+        failedArchitectureJson: readFailedArchitectureJson(error),
         fixedTemplateSelection,
         normalizedRequirement,
-        provider,
         request,
         validationIssues: error.issues
       });
@@ -642,60 +648,56 @@ export async function createAmazonQArchitectureDraftResponse(
   }
 }
 
-async function createAmazonQRequirementConflictClarification(input: {
+function readFailedArchitectureJson(error: ArchitectureDraftGenerationError): ArchitectureJson | undefined {
+  const cause = (error as Error & { readonly cause?: unknown }).cause;
+
+  return isObject(cause) && Array.isArray(cause.nodes) && Array.isArray(cause.edges)
+    ? cause as ArchitectureJson
+    : undefined;
+}
+
+async function createRequirementConflictClarification(input: {
   readonly architectureDecisionSpace: ArchitectureDecisionSpace;
   readonly billingMode: AiBillingMode;
+  readonly conflictClarificationProvider?: AiTextProvider | undefined;
+  readonly failedArchitectureJson?: ArchitectureJson | undefined;
   readonly fixedTemplateSelection: FixedTemplateSelection | null;
   readonly normalizedRequirement: ArchitectureIntentPlan | null;
-  readonly provider: AiTextProvider;
   readonly request: CreateArchitectureDraftRequest;
   readonly validationIssues: readonly string[];
 }): Promise<ArchitectureDraftClarification> {
+  const provider = input.conflictClarificationProvider;
+  if (provider === undefined) return createRequirementConflictFallbackClarification(input.validationIssues, input.request, input.billingMode);
   const payload = maskSecretsForAi({
     architectureDecisionSpace: input.architectureDecisionSpace,
-    ...(input.request.clarificationAnswers === undefined
-      ? {}
-      : { clarificationAnswers: input.request.clarificationAnswers }),
+    ...(input.request.clarificationAnswers === undefined ? {} : { clarificationAnswers: input.request.clarificationAnswers }),
     fixedTemplateSelection: input.fixedTemplateSelection,
+    ...(input.failedArchitectureJson === undefined ? {} : { failedArchitectureJson: input.failedArchitectureJson }),
     normalizedRequirement: input.normalizedRequirement,
     prompt: input.request.prompt,
+    repositoryEvidence: input.request.repositoryEvidence,
     task: "requirement_conflict_clarification",
     validationIssues: input.validationIssues
   });
-  const response = await generateArchitectureDraftProviderResponse(input.provider, {
-    target: ARCHITECTURE_DRAFT_TARGET,
-    instructions: createAmazonQRequirementConflictInstructions(),
-    prompt: createAmazonQRequirementConflictPrompt(
-      input.request.prompt,
-      input.architectureDecisionSpace,
-      input.normalizedRequirement,
-      input.fixedTemplateSelection,
-      input.validationIssues
-    ),
-    payload
-  });
-  const parsedResponse = parseAmazonQRequirementConflictClarification(response.text);
-
-  if (parsedResponse.status !== "needs_clarification") {
-    throw createProviderResponseInvalidError(
-      new Error("Amazon Q must return a requirement conflict clarification")
-    );
+  try {
+    const response = await generateArchitectureDraftProviderResponse(provider, {
+      target: ARCHITECTURE_DRAFT_TARGET,
+      instructions: createOpenAiRequirementConflictInstructions(),
+      prompt: createOpenAiRequirementConflictPrompt(input.request.prompt, input.architectureDecisionSpace, input.normalizedRequirement, input.fixedTemplateSelection, input.validationIssues, input.failedArchitectureJson),
+      payload
+    });
+    const parsedResponse = parseRequirementConflictClarification(response.text);
+    return {
+      status: "needs_clarification",
+      questionId: createRequirementConflictClarificationQuestionId(parsedResponse.question),
+      question: parsedResponse.question,
+      suggestions: [...(parsedResponse.suggestions ?? [])],
+      providerMetadata: createAiProviderMetadata({ provider, billingMode: input.billingMode, payload, outputCharacters: response.outputCharacters ?? response.text.length })
+    };
+  } catch {
+    return createRequirementConflictFallbackClarification(input.validationIssues, input.request, input.billingMode);
   }
-
-  return {
-    status: "needs_clarification",
-    questionId: createProviderClarificationQuestionId(parsedResponse.question),
-    question: parsedResponse.question,
-    suggestions: [...(parsedResponse.suggestions ?? [])],
-    providerMetadata: createAiProviderMetadata({
-      provider: input.provider,
-      billingMode: input.billingMode,
-      payload,
-      outputCharacters: response.outputCharacters ?? response.text.length
-    })
-  };
 }
-
 async function generateArchitectureDraftProviderResponse(
   provider: AiTextProvider,
   input: Parameters<AiTextProvider["generate"]>[0]
@@ -711,7 +713,7 @@ async function generateArchitectureDraftProviderResponse(
   }
 }
 
-function parseAmazonQRequirementConflictClarification(
+function parseRequirementConflictClarification(
   text: string
 ): AmazonQArchitectureDraftClarification {
   const normalizedText = text.trim();
@@ -732,7 +734,7 @@ function parseAmazonQRequirementConflictClarification(
 
     if (isObject(parsed) && typeof parsed.status === "string") {
       throw createProviderResponseInvalidError(
-        new Error("Amazon Q requirement conflict response did not include a clarification question")
+        new Error("Requirement conflict response did not include a clarification question")
       );
     }
   } catch (error) {
@@ -759,7 +761,7 @@ function parseAmazonQRequirementConflictClarification(
   const question = questionLines.join(" ").trim();
   if (question.length === 0) {
     throw createProviderResponseInvalidError(
-      new Error("Amazon Q requirement conflict diagnosis was empty")
+      new Error("Requirement conflict diagnosis was empty")
     );
   }
 
@@ -767,6 +769,16 @@ function parseAmazonQRequirementConflictClarification(
     status: "needs_clarification",
     question,
     suggestions
+  };
+}
+function createRequirementConflictFallbackClarification(validationIssues: readonly string[], request: CreateArchitectureDraftRequest, billingMode: AiBillingMode): ArchitectureDraftClarification {
+  const issueSummary = validationIssues.slice(0, 2).join(" ").trim();
+  return {
+    status: "needs_clarification",
+    questionId: "architecture_validation_conflict",
+    question: issueSummary.length > 0 ? `현재 요구사항과 선택한 설계 조건을 함께 만족시키지 못했습니다. ${issueSummary} 어떤 조건을 우선할까요?` : "현재 요구사항과 선택한 설계 조건을 함께 만족시키지 못했습니다. 어떤 조건을 우선할까요?",
+    suggestions: ["선택한 템플릿을 유지하고 Repository 제한 조건을 다시 확인", "Repository 제한 조건을 유지하고 템플릿 또는 운영 조건을 조정", "요구사항을 유지한 채 지원 가능한 표현으로 다시 시도"],
+    providerMetadata: createFallbackProviderMetadata(request, billingMode)
   };
 }
 function parseArchitectureDraftProviderResponse(text: string): AmazonQArchitectureDraftResponse {
@@ -1435,6 +1447,14 @@ function hasPromptTerm(prompt: string, terms: readonly string[]): boolean {
   return terms.some((term) => normalizedPrompt.includes(term.normalize("NFKC").toLowerCase()));
 }
 
+function createRequirementConflictClarificationQuestionId(question: string): string {
+  let hash = 2_166_136_261;
+  for (const character of question.normalize("NFKC")) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return `architecture_conflict_${(hash >>> 0).toString(36)}`;
+}
 function createProviderClarificationQuestionId(question: string): string {
   let hash = 2_166_136_261;
   for (const character of question.normalize("NFKC")) {
@@ -2238,9 +2258,9 @@ function createAmazonQArchitectureDraftPrompt(
   ].join("\n\n");
 }
 
-function createAmazonQRequirementConflictInstructions(): string {
+function createOpenAiRequirementConflictInstructions(): string {
   return [
-    "You are Amazon Q diagnosing why SketchCatch could not produce a valid architecture.",
+    "You are OpenAI resolving a structured SketchCatch architecture validation failure.",
     "Return JSON only in the needs_clarification shape. Do not wrap the response in markdown.",
     "Write every user-facing string in Korean. AWS service names and technical identifiers may remain in English.",
     "Use only the supplied original requirement, accepted answers, and SketchCatch validation issues as evidence.",
@@ -2253,21 +2273,24 @@ function createAmazonQRequirementConflictInstructions(): string {
   ].join("\n");
 }
 
-function createAmazonQRequirementConflictPrompt(
+function createOpenAiRequirementConflictPrompt(
   prompt: string,
   architectureDecisionSpace: ArchitectureDecisionSpace,
   normalizedRequirement: ArchitectureIntentPlan | null,
   fixedTemplateSelection: FixedTemplateSelection | null,
-  validationIssues: readonly string[]
+  validationIssues: readonly string[],
+  failedArchitectureJson: ArchitectureJson | undefined
 ): string {
   return [
-    createAmazonQRequirementConflictInstructions(),
+    createOpenAiRequirementConflictInstructions(),
     "Original user requirement prompt:",
     prompt,
     createNormalizedArchitectureIntentPlanPromptSection(normalizedRequirement),
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
     createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    "Failed ArchitectureJson from the final validation attempt:",
+    failedArchitectureJson === undefined ? "Not available." : JSON.stringify(failedArchitectureJson, null, 2),
     "SketchCatch validation issues from the failed architecture attempts:",
     ...validationIssues.map((issue) => `- ${issue}`)
   ].join("\n\n");

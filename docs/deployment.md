@@ -57,6 +57,7 @@ Architecture Draft에서 Anonymous Amazon Q 패턴 검색을 활성화할 때는
 
 ```text
 AI_ARCHITECTURE_REQUIREMENT_NORMALIZER=openai
+OPENAI_ARCHITECTURE_CONFLICT_MODEL=<optional-openai-model>
 AMAZON_Q_ENABLED=true
 AMAZON_Q_REGION=ap-southeast-2
 AMAZON_Q_CREDIT_CONFIRMED=true
