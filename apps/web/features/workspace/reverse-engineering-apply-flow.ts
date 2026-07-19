@@ -11,7 +11,8 @@ export type ReverseEngineeringApplyPreview = {
 
 export type ExistingReverseEngineeringApplyOutcome =
   | { readonly status: "stale" }
-  | { readonly status: "saved" };
+  | { readonly status: "saved" }
+  | { readonly status: "saved_without_snapshot" };
 
 /** Reverse 미리보기가 시작된 순간의 저장 revision과 Board 내용을 함께 고정합니다. */
 export function createReverseEngineeringApplyPreview({
@@ -55,7 +56,12 @@ export async function applyExistingReverseEngineeringPreview({
   }
 
   await persistAndApply(structuredClone(diagramToApply), preview.sourceDraftRevision);
-  await saveSnapshot();
+
+  try {
+    await saveSnapshot();
+  } catch {
+    return { status: "saved_without_snapshot" };
+  }
 
   return { status: "saved" };
 }

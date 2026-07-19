@@ -46,6 +46,8 @@ import type {
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
   CreateProjectRequest,
+  CreateReverseEngineeringProjectRequest,
+  CreateReverseEngineeringProjectResponse,
   CreateReverseEngineeringScanRequest,
   DeleteProjectRequest,
   DisconnectAwsCodeConnectionRequest,
@@ -201,6 +203,16 @@ export async function createProject(input: CreateProjectRequest): Promise<Projec
   });
 
   return response.project;
+}
+
+export async function createReverseEngineeringProject(
+  input: CreateReverseEngineeringProjectRequest
+): Promise<CreateReverseEngineeringProjectResponse> {
+  return apiFetch<CreateReverseEngineeringProjectResponse>("/projects/reverse-engineering", {
+    auth: true,
+    method: "POST",
+    body: input
+  });
 }
 
 export async function listProjects(): Promise<Project[]> {

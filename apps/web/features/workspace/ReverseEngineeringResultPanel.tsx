@@ -20,7 +20,7 @@ import {
 } from "./reverse-engineering-presentation";
 import styles from "./reverse-engineering.module.css";
 
-export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "error";
+export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "partial" | "error";
 export type ReverseEngineeringResultPanelProps = {
   readonly applyMessage: string | null;
   readonly applyState: ReverseEngineeringApplyState;
@@ -234,7 +234,13 @@ export function ReverseEngineeringResultPanel({
         ) : null}
         {applyMessage ? (
           <p
-            className={applyState === "error" ? styles.error : styles.success}
+            className={
+              applyState === "error"
+                ? styles.error
+                : applyState === "partial"
+                  ? styles.warning
+                  : styles.success
+            }
             role={applyState === "error" ? "alert" : "status"}
           >
             {applyMessage}

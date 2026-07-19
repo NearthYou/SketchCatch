@@ -20,13 +20,12 @@ import { invalidateProjectQueries } from "../../components/query/dashboard-query
 import {
   cancelReverseEngineeringScan,
   createArchitectureSnapshot,
-  createProject,
+  createReverseEngineeringProject,
   createReverseEngineeringPreviewScan,
   createReverseEngineeringScan,
   deleteReverseEngineeringScan,
   getReverseEngineeringScan,
-  listReverseEngineeringScanLogs,
-  saveProjectDraft
+  listReverseEngineeringScanLogs
 } from "./api";
 import {
   applyExistingReverseEngineeringPreview,
@@ -508,85 +507,90 @@ export function ReverseEngineeringPanel({
     setApplyState("saving");
     setApplyMessage(null);
 
-    try {
-      const targetProject = createProjectOnApply
-        ? await createProject({ name: projectName })
-        : null;
-      const targetProjectId = targetProject?.id ?? projectId;
+    if (createProjectOnApply) {
+      let targetProject: Project;
 
-      if (createProjectOnApply && targetProject) {
-        await invalidateProjectQueries(queryClient, user?.id);
-        const response = await saveProjectDraft({
-          projectId: targetProject.id,
+      try {
+        const created = await createReverseEngineeringProject({
+          name: projectName,
           diagramJson: diagramToApply,
-          expectedRevision: null
+          architectureJson: convertReverseEngineeringBoardToArchitectureJson(
+            diagramToApply,
+            result,
+            application.sourceOwnership
+          )
         });
-
-        if (!response.draft) {
-          throw new Error("프로젝트 Board 저장 결과가 비어 있습니다.");
-        }
-
-        context.applyDiagramJson(diagramToApply);
-      } else {
-        if (!context.persistAndApplyDiagramJson) {
-          throw new Error("Board 서버 저장이 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.");
-        }
-
-        if (!previewBase) {
-          throw new Error("적용할 Reverse Engineering 미리보기를 찾지 못했습니다.");
-        }
-
-        const outcome = await applyExistingReverseEngineeringPreview({
-          currentDiagram: context.diagram,
-          currentDraftRevision: context.projectDraftRevision,
-          diagramToApply,
-          persistAndApply: (diagram, expectedRevision) =>
-            context.persistAndApplyDiagramJson?.(diagram, expectedRevision) ??
-            Promise.reject(new Error("Board 서버 저장 경계가 준비되지 않았습니다.")),
-          preview: previewBase,
-          saveSnapshot: async () => {
-            await createArchitectureSnapshot({
-              projectId: targetProjectId,
-              source: "imported",
-              reverseEngineering: {
-                sourceScanId: result.scan.id,
-                draftId: result.reverseEngineeringDraft.id
-              },
-              architectureJson: convertReverseEngineeringBoardToArchitectureJson(
-                diagramToApply,
-                result
-              )
-            });
-          }
-        });
-
-        if (outcome.status === "stale") {
-          setApplyState("error");
-          setApplyMessage("보드가 변경되었습니다. 다시 스캔해 주세요.");
-          return;
-        }
-      }
-      setPreviewBase(
-        createReverseEngineeringApplyPreview({
-          diagram: diagramToApply,
-          draftRevision: createProjectOnApply ? null : context.projectDraftRevision
-        })
-      );
-
-      if (createProjectOnApply) {
-        await createArchitectureSnapshot({
-          projectId: targetProjectId,
-          source: "imported",
-          architectureJson: convertReverseEngineeringBoardToArchitectureJson(diagramToApply, result)
-        });
-      }
-      setApplyState("saved");
-      if (createProjectOnApply && targetProject) {
-        router.push(createWorkspaceProjectUrl(targetProject, "reverse"));
-        setApplyMessage("프로젝트를 만들고 선택한 후보를 보드에 저장했습니다.");
+        targetProject = created.project;
+      } catch (error) {
+        setApplyState("error");
+        setApplyMessage(toErrorMessage(error));
         return;
       }
 
+      context.applyDiagramJson(diagramToApply);
+      setPreviewBase(null);
+      setApplyState("saved");
+      setApplyMessage("프로젝트를 만들고 선택한 후보를 보드에 저장했습니다.");
+      void invalidateProjectQueries(queryClient, user?.id).catch(() => undefined);
+      router.push(createWorkspaceProjectUrl(targetProject, "reverse"));
+      return;
+    }
+
+    if (!context.persistAndApplyDiagramJson) {
+      setApplyState("error");
+      setApplyMessage("Board 서버 저장이 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.");
+      return;
+    }
+
+    if (!previewBase) {
+      setApplyState("error");
+      setApplyMessage("적용할 Reverse Engineering 미리보기를 찾지 못했습니다.");
+      return;
+    }
+
+    try {
+      const outcome = await applyExistingReverseEngineeringPreview({
+        currentDiagram: context.diagram,
+        currentDraftRevision: context.projectDraftRevision,
+        diagramToApply,
+        persistAndApply: (diagram, expectedRevision) =>
+          context.persistAndApplyDiagramJson?.(diagram, expectedRevision) ??
+          Promise.reject(new Error("Board 서버 저장 경계가 준비되지 않았습니다.")),
+        preview: previewBase,
+        saveSnapshot: async () => {
+          await createArchitectureSnapshot({
+            projectId,
+            source: "imported",
+            reverseEngineering: {
+              sourceScanId: result.scan.id,
+              draftId: result.reverseEngineeringDraft.id
+            },
+            architectureJson: convertReverseEngineeringBoardToArchitectureJson(
+              diagramToApply,
+              result,
+              application.sourceOwnership
+            )
+          });
+        }
+      });
+
+      if (outcome.status === "stale") {
+        setApplyState("error");
+        setApplyMessage("보드가 변경되었습니다. 다시 스캔해 주세요.");
+        return;
+      }
+
+      setPreviewBase(null);
+
+      if (outcome.status === "saved_without_snapshot") {
+        setApplyState("partial");
+        setApplyMessage(
+          "보드는 저장했습니다. imported Architecture Snapshot은 저장하지 못했습니다. 저장된 보드는 그대로 유지됩니다."
+        );
+        return;
+      }
+
+      setApplyState("saved");
       setApplyMessage("보드에 반영했고, imported Architecture Snapshot도 저장했습니다.");
     } catch (error) {
       setApplyState("error");
@@ -596,11 +600,18 @@ export function ReverseEngineeringPanel({
 
   // gg: 사용자가 눌렀을 때만 shared visual-only 후보를 만들고 첫 정리안을 미리봅니다.
   function previewAutomaticOrganization(): void {
-    if (!originalCandidateApplication) {
+    if (!originalCandidateApplication || !selectedCandidateResponse?.result) {
       return;
     }
 
-    const replace = createBoardAutoOrganizeCandidates(originalCandidateApplication.diagram);
+    const replace = createBoardAutoOrganizeCandidates(
+      originalCandidateApplication.diagram,
+      convertReverseEngineeringBoardToArchitectureJson(
+        originalCandidateApplication.diagram,
+        selectedCandidateResponse.result,
+        originalCandidateApplication.sourceOwnership
+      )
+    );
     const firstCandidate = replace.candidates[0];
 
     if (!firstCandidate) {
@@ -610,7 +621,14 @@ export function ReverseEngineeringPanel({
     }
 
     const append = originalCandidateAppendApplication
-      ? createBoardAutoOrganizeCandidates(originalCandidateAppendApplication.diagram)
+      ? createBoardAutoOrganizeCandidates(
+          originalCandidateAppendApplication.diagram,
+          convertReverseEngineeringBoardToArchitectureJson(
+            originalCandidateAppendApplication.diagram,
+            selectedCandidateResponse.result,
+            originalCandidateAppendApplication.sourceOwnership
+          )
+        )
       : null;
 
     setApplyState("idle");

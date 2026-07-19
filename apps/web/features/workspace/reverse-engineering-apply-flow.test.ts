@@ -94,12 +94,40 @@ test("a server 409 after Reverse preflight produces zero local and snapshot writ
   });
 });
 
-function createWriteTracker(options: { readonly conflict?: boolean } = {}) {
+test("a Snapshot failure after Board CAS reports partial success without rolling back local writes", async () => {
+  const source = createDiagram();
+  const writes = createWriteTracker({ snapshotFailure: true });
+
+  const outcome = await applyExistingReverseEngineeringPreview({
+    currentDiagram: source,
+    currentDraftRevision: 7,
+    diagramToApply: moveDiagram(source),
+    persistAndApply: writes.persistAndApply,
+    preview: createReverseEngineeringApplyPreview({ diagram: source, draftRevision: 7 }),
+    saveSnapshot: writes.saveSnapshot
+  });
+
+  assert.equal(outcome.status, "saved_without_snapshot");
+  assert.deepEqual(writes.expectedRevisions, [7]);
+  assert.deepEqual(writes.counts(), {
+    board: 1,
+    history: 1,
+    localSave: 1,
+    server: 1,
+    snapshot: 0,
+    snapshotAttempt: 1
+  });
+});
+
+function createWriteTracker(
+  options: { readonly conflict?: boolean; readonly snapshotFailure?: boolean } = {}
+) {
   let boardWrites = 0;
   let historyWrites = 0;
   let localSaveWrites = 0;
   let serverWrites = 0;
   let snapshotWrites = 0;
+  let snapshotAttempts = 0;
   const expectedRevisions: number[] = [];
 
   return {
@@ -117,6 +145,12 @@ function createWriteTracker(options: { readonly conflict?: boolean } = {}) {
       localSaveWrites += 1;
     },
     saveSnapshot: async () => {
+      snapshotAttempts += 1;
+
+      if (options.snapshotFailure) {
+        throw new Error("snapshot unavailable");
+      }
+
       snapshotWrites += 1;
     },
     counts: () => ({
@@ -124,7 +158,8 @@ function createWriteTracker(options: { readonly conflict?: boolean } = {}) {
       history: historyWrites,
       localSave: localSaveWrites,
       server: serverWrites,
-      snapshot: snapshotWrites
+      snapshot: snapshotWrites,
+      ...(options.snapshotFailure ? { snapshotAttempt: snapshotAttempts } : {})
     })
   };
 }

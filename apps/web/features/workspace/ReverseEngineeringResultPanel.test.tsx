@@ -182,6 +182,18 @@ test("배치 변경과 적용 오류를 보조 기술에 알린다", () => {
   assert.match(html, /role="alert"[^>]*>보드 저장에 실패했습니다/);
 });
 
+test("Board 저장 뒤 Snapshot만 실패하면 저장 성공을 유지한 채 부분 성공으로 알린다", () => {
+  const html = renderPanel("original", {
+    applyMessage:
+      "보드는 저장했습니다. imported Architecture Snapshot은 저장하지 못했습니다. 저장된 보드는 그대로 유지됩니다.",
+    applyState: "partial"
+  });
+
+  assert.match(html, /role="status"/);
+  assert.match(html, /보드는 저장했습니다/);
+  assert.doesNotMatch(html, /class="[^"]*error[^"]*"/);
+});
+
 test("자동 정리는 여러 정리안과 쉬운 설명만 보여주고 내부 점수를 숨긴다", () => {
   const html = renderPanel("compiled", { organizationCandidates });
 

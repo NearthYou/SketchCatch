@@ -358,6 +358,17 @@ export type CreateProjectRequest = {
   description?: string | undefined;
 };
 
+export type CreateReverseEngineeringProjectRequest = CreateProjectRequest & {
+  diagramJson: DiagramJson;
+  architectureJson: ArchitectureJson;
+};
+
+export type CreateReverseEngineeringProjectResponse = {
+  project: Project;
+  draft: ProjectDraft;
+  architecture: ArchitectureSnapshot;
+};
+
 export type ProjectDeletePreviewMode =
   | "plain"
   | "planned"

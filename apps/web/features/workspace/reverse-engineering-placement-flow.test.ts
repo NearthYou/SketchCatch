@@ -64,6 +64,23 @@ test("자동 정리 후보는 사용자가 자동 정리 해보기를 누른 뒤
   assert.match(panelSource, /onKeepOriginalPlacement=\{previewOriginalPlacement\}/);
 });
 
+test("Reverse 자동 정리는 replace와 append 모두 AWS source-exact Architecture를 Compiler에 넘긴다", () => {
+  const organizationPreview = getSourceBlock(
+    panelSource,
+    "function previewAutomaticOrganization(",
+    "function selectOrganizationCandidate("
+  );
+
+  assert.equal(organizationPreview.match(/createBoardAutoOrganizeCandidates\(/gu)?.length, 2);
+  assert.equal(
+    organizationPreview.match(/convertReverseEngineeringBoardToArchitectureJson\(/gu)?.length,
+    2
+  );
+  assert.equal(organizationPreview.match(/selectedCandidateResponse\.result/gu)?.length, 2);
+  assert.match(organizationPreview, /originalCandidateApplication\.sourceOwnership/);
+  assert.match(organizationPreview, /originalCandidateAppendApplication\.sourceOwnership/);
+});
+
 test("최종 replace와 append 적용은 각 검토에 사용한 application을 그대로 사용한다", () => {
   const applyFlow = getSourceBlock(
     panelSource,
@@ -125,6 +142,36 @@ test("기존 프로젝트 적용은 서버 저장 성공 전 실제 Board를 바
       applyFlow.indexOf("createArchitectureSnapshot("),
     "persisted Diagram apply must complete before snapshot creation"
   );
+});
+
+test("새 프로젝트 적용은 Project, Draft, Snapshot을 하나의 서버 요청으로 만든다", () => {
+  const applyFlow = getSourceBlock(
+    panelSource,
+    "async function applyScanResult(",
+    "function previewAutomaticOrganization("
+  );
+  const createProjectFlow = getSourceBlock(
+    applyFlow,
+    "if (createProjectOnApply)",
+    "if (!context.persistAndApplyDiagramJson)"
+  );
+
+  assert.match(createProjectFlow, /await createReverseEngineeringProject\(/);
+  assert.match(createProjectFlow, /application\.sourceOwnership/);
+  assert.doesNotMatch(
+    createProjectFlow,
+    /createProject\(|saveProjectDraft\(|createArchitectureSnapshot\(/
+  );
+});
+
+test("기존 프로젝트 Snapshot도 선택한 replace 또는 append의 source ownership만 저장한다", () => {
+  const applyFlow = getSourceBlock(
+    panelSource,
+    "async function applyScanResult(",
+    "function previewAutomaticOrganization("
+  );
+
+  assert.equal(applyFlow.match(/application\.sourceOwnership/gu)?.length, 2);
 });
 
 test("Reverse preview가 생성 당시 Board fingerprint와 draft revision으로만 적용한다", () => {

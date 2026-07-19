@@ -13,6 +13,7 @@ import {
   deploymentPlanArtifacts,
   deployments,
   projectAssets,
+  projectDrafts,
   projects,
   users
 } from "../db/schema.js";
@@ -33,6 +34,7 @@ const ACTIVE_ARCHITECTURE_ID = "55555555-5555-4555-8555-555555555555";
 type UserRow = typeof users.$inferSelect;
 type ProjectRow = typeof projects.$inferSelect;
 type ArchitectureRow = typeof architectures.$inferSelect;
+type ProjectDraftRow = typeof projectDrafts.$inferSelect;
 type ProjectAssetRow = typeof projectAssets.$inferSelect;
 type DeploymentRow = typeof deployments.$inferSelect;
 type DeployedResourceRow = typeof deployedResources.$inferSelect;
@@ -109,6 +111,70 @@ test("POST /api/projects creates a project for the active user", async () => {
   assert.equal(response.statusCode, 201);
   assert.equal(response.json().project.userId, ACTIVE_USER_ID);
   assert.equal(fakeDb.projectRows[0]?.userId, ACTIVE_USER_ID);
+
+  await app.close();
+});
+
+test("POST /api/projects/reverse-engineering atomically creates Project, Draft, and Snapshot", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: createReverseEngineeringProjectPayload()
+  });
+
+  assert.equal(response.statusCode, 201, response.body);
+  assert.equal(fakeDb.projectRows.length, 1);
+  assert.equal(fakeDb.projectDraftRows.length, 1);
+  assert.equal(fakeDb.architectureRows.length, 1);
+  assert.equal(fakeDb.projectDraftRows[0]?.projectId, fakeDb.projectRows[0]?.id);
+  assert.equal(fakeDb.projectDraftRows[0]?.revision, 1);
+  assert.equal(fakeDb.architectureRows[0]?.projectId, fakeDb.projectRows[0]?.id);
+  assert.equal(fakeDb.architectureRows[0]?.source, "imported");
+  assert.equal(response.json().draft.revision, 1);
+  assert.equal(response.json().architecture.source, "imported");
+
+  await app.close();
+});
+
+test("POST /api/projects/reverse-engineering rolls back every row and retries without duplicates", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    failArchitectureInsert: true,
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+  const request = {
+    method: "POST" as const,
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: createReverseEngineeringProjectPayload()
+  };
+
+  const failedResponse = await app.inject(request);
+
+  assert.equal(failedResponse.statusCode, 500, failedResponse.body);
+  assert.equal(fakeDb.projectRows.length, 0);
+  assert.equal(fakeDb.projectDraftRows.length, 0);
+  assert.equal(fakeDb.architectureRows.length, 0);
+
+  fakeDb.failArchitectureInsert = false;
+  const retryResponse = await app.inject(request);
+
+  assert.equal(retryResponse.statusCode, 201, retryResponse.body);
+  assert.equal(fakeDb.projectRows.length, 1);
+  assert.equal(fakeDb.projectDraftRows.length, 1);
+  assert.equal(fakeDb.architectureRows.length, 1);
 
   await app.close();
 });
@@ -1029,6 +1095,39 @@ function makeArchitecture(overrides: Partial<ArchitectureRow> = {}): Architectur
   };
 }
 
+function makeProjectDraft(overrides: Partial<ProjectDraftRow> = {}): ProjectDraftRow {
+  return {
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    projectId: ACTIVE_PROJECT_ID,
+    diagramJson: {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    terraformFiles: null,
+    revision: 1,
+    serverSavedAt: new Date("2026-06-24T00:00:00.000Z"),
+    createdAt: new Date("2026-06-24T00:00:00.000Z"),
+    updatedAt: new Date("2026-06-24T00:00:00.000Z"),
+    ...overrides
+  };
+}
+
+function createReverseEngineeringProjectPayload() {
+  return {
+    name: "Imported AWS project",
+    diagramJson: {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    architectureJson: {
+      nodes: [],
+      edges: []
+    }
+  };
+}
+
 function makeProjectAsset(overrides: Partial<ProjectAssetRow> = {}): ProjectAssetRow {
   return {
     architectureId: null,
@@ -1125,6 +1224,7 @@ class ProjectRouteFakeDb {
   requestedProjectId: string | undefined;
   userRows: UserRow[];
   projectRows: ProjectRow[];
+  projectDraftRows: ProjectDraftRow[];
   architectureRows: ArchitectureRow[];
   projectAssetRows: ProjectAssetRow[];
   deploymentRows: DeploymentRow[];
@@ -1134,6 +1234,7 @@ class ProjectRouteFakeDb {
     Pick<DeploymentRow, "approvedPlanArtifactId" | "currentPlanArtifactId" | "id">
   >;
   operationLog: string[];
+  failArchitectureInsert: boolean;
   client: DatabaseClient;
 
   constructor(data: {
@@ -1142,17 +1243,20 @@ class ProjectRouteFakeDb {
     requestedProjectId?: string;
     users?: UserRow[];
     projects?: ProjectRow[];
+    projectDrafts?: ProjectDraftRow[];
     architectures?: ArchitectureRow[];
     projectAssets?: ProjectAssetRow[];
     deployments?: DeploymentRow[];
     deployedResources?: DeployedResourceRow[];
     deploymentPlanArtifacts?: DeploymentPlanArtifactRow[];
+    failArchitectureInsert?: boolean;
   }) {
     this.activeUserId = data.activeUserId;
     this.requestedProjectAssetId = data.requestedProjectAssetId;
     this.requestedProjectId = data.requestedProjectId;
     this.userRows = data.users ?? [];
     this.projectRows = data.projects ?? [];
+    this.projectDraftRows = data.projectDrafts ?? [];
     this.architectureRows = data.architectures ?? [];
     this.projectAssetRows = data.projectAssets ?? [];
     this.deploymentRows = data.deployments ?? [];
@@ -1160,6 +1264,7 @@ class ProjectRouteFakeDb {
     this.deploymentPlanArtifactRows = data.deploymentPlanArtifacts ?? [];
     this.clearedDeploymentPlanPointers = [];
     this.operationLog = [];
+    this.failArchitectureInsert = data.failArchitectureInsert ?? false;
     this.client = {
       db: this.createDb() as Database,
       pool: {
@@ -1174,7 +1279,13 @@ class ProjectRouteFakeDb {
         from: (table: unknown) => new SelectQuery(() => this.selectRows(table, selection))
       }),
       insert: (table: unknown) => ({
-        values: (values: Partial<ArchitectureRow> | Partial<ProjectAssetRow> | Partial<ProjectRow>) => ({
+        values: (
+          values:
+            | Partial<ArchitectureRow>
+            | Partial<ProjectAssetRow>
+            | Partial<ProjectDraftRow>
+            | Partial<ProjectRow>
+        ) => ({
           returning: async () => {
             if (table === projects) {
               const project = makeProject(values as Partial<ProjectRow>);
@@ -1184,10 +1295,21 @@ class ProjectRouteFakeDb {
             }
 
             if (table === architectures) {
+              if (this.failArchitectureInsert) {
+                throw new Error("architecture insert failed");
+              }
+
               const architecture = makeArchitecture(values as Partial<ArchitectureRow>);
               this.architectureRows.push(architecture);
 
               return [architecture];
+            }
+
+            if (table === projectDrafts) {
+              const draft = makeProjectDraft(values as Partial<ProjectDraftRow>);
+              this.projectDraftRows.push(draft);
+
+              return [draft];
             }
 
             if (table === projectAssets) {
@@ -1349,7 +1471,20 @@ class ProjectRouteFakeDb {
           return [];
         }
       }),
-      transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(this.createDb())
+      transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
+        const projectRows = [...this.projectRows];
+        const projectDraftRows = [...this.projectDraftRows];
+        const architectureRows = [...this.architectureRows];
+
+        try {
+          return await callback(this.createDb());
+        } catch (error) {
+          this.projectRows = projectRows;
+          this.projectDraftRows = projectDraftRows;
+          this.architectureRows = architectureRows;
+          throw error;
+        }
+      }
     };
   }
 
@@ -1374,6 +1509,12 @@ class ProjectRouteFakeDb {
       return this.architectureRows.filter(
         (architecture) =>
           !this.requestedProjectId || architecture.projectId === this.requestedProjectId
+      );
+    }
+
+    if (table === projectDrafts) {
+      return this.projectDraftRows.filter(
+        (draft) => !this.requestedProjectId || draft.projectId === this.requestedProjectId
       );
     }
 

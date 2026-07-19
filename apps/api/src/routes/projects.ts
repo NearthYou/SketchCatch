@@ -43,6 +43,7 @@ import {
 } from "../modules/projects/board-auto-organize-apply-service.js";
 import {
   boardAutoOrganizeApplyBodySchema,
+  diagramJsonSchema,
   saveProjectDraftBodySchema
 } from "./project-draft-schemas.js";
 
@@ -96,6 +97,11 @@ const createArchitectureBodySchema = z.object({
   version: z.number().int().positive().optional(),
   source: z.string().min(1).max(64).default("manual"),
   reverseEngineering: reverseEngineeringSourceSchema.optional(),
+  architectureJson: architectureJsonSchema
+});
+
+const createReverseEngineeringProjectBodySchema = createProjectBodySchema.extend({
+  diagramJson: diagramJsonSchema,
   architectureJson: architectureJsonSchema
 });
 
@@ -224,6 +230,58 @@ export async function registerProjectRoutes(
     return reply.status(201).send({
       project
     });
+  });
+
+  // 새 Reverse Engineering Board는 Project·Draft·Snapshot을 하나의 DB 경계에서 만듭니다.
+  app.post("/projects/reverse-engineering", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const body = createReverseEngineeringProjectBodySchema.parse(request.body);
+    const { db } = getProjectDatabaseClient();
+
+    const created = await db.transaction(async (tx) => {
+      const projectId = randomUUID();
+      const [project] = await tx
+        .insert(projects)
+        .values({
+          id: projectId,
+          userId: currentUserId,
+          name: body.name,
+          description: body.description ?? null
+        })
+        .returning();
+      const [draft] = await tx
+        .insert(projectDrafts)
+        .values({
+          id: randomUUID(),
+          projectId,
+          diagramJson: body.diagramJson,
+          terraformFiles: null,
+          revision: 1
+        })
+        .returning();
+      const [architecture] = await tx
+        .insert(architectures)
+        .values({
+          id: randomUUID(),
+          projectId,
+          version: 1,
+          source: "imported",
+          architectureJson: body.architectureJson
+        })
+        .returning();
+
+      if (!project || !draft || !architecture) {
+        throw new Error("Reverse Engineering project transaction returned an empty row");
+      }
+
+      return {
+        project,
+        draft: toProjectDraft(draft),
+        architecture
+      };
+    });
+
+    return reply.status(201).send(created);
   });
 
   app.get("/projects/:id/delete-preview", async (request) => {
