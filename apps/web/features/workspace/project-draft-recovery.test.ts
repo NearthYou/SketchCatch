@@ -54,7 +54,7 @@ test("project draft recovery covers panel arrows and keeps both actions readable
   );
   assert.match(
     workspaceStyles,
-    /\.projectDraftRecoveryDialog \.terraformDialog(?:Secondary|Primary)Button[\s\S]*?font-size:[^;]*- 3px/
+    /\.projectDraftRecoveryDialog \.terraformDialogSecondaryButton,\s*\.projectDraftRecoveryDialog \.terraformDialogPrimaryButton\s*\{[\s\S]*?font-size:[^;]*- 3px/
   );
   assert.match(
     workspaceStyles,

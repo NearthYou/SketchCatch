@@ -4,16 +4,16 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- `Fix/jh/490-배포` includes the latest `origin/dev` and the Direct Deployment Plan response, durable worker preparation, failure reconciliation, approval transition, and build-readiness fixes.
-- The reported CloudWatch Logs failure is a DNS lookup failure from the local macOS `local_process` worker; production uses an ECS/Fargate one-off worker with configured public egress.
-- Focused API checks pass 106/106 and focused Web checks pass 56/56. Root harness, lint, typecheck, build, and diff checks pass.
-- No DB migration, dependency change, Terraform Apply/Destroy, or AWS mutation is owned by this workstream.
+- Current deployment and recovery work remains verified; production uses ECS/Fargate.
+- Focused checks and root harness/lint/typecheck/build pass; no DB, dependency, Terraform, or AWS mutation is owned here.
 
 ## Session Record
 
 ### 2026-07-19 - Compact UI metadata and modal
 
-- Reduced minor UI text, compacted the recovery modal, and relabeled Project timestamps. Checks pass.
+- Reduced minor UI text, compacted the recovery modal, and relabeled Project timestamps.
+- Verification: focused recovery test, `pnpm harness:check`, `pnpm lint`, `pnpm build`, `pnpm typecheck`, and `git diff --check` pass.
+- Known risks: none. Next: visually confirm the modal and Project card in the running app.
 
 ### 2026-07-19 - Restore the focused Live Observation traffic presentation
 
