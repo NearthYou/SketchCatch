@@ -24,6 +24,7 @@ export function planPracticeArchitecture(
   const nodes: ArchitectureJson["nodes"] = [];
   const edges: ArchitectureJson["edges"] = [];
   const context: DraftBuildContext = {
+    awsRegion: resolution.awsRegion,
     edges,
     factSet,
     explicitResourceDefinitions: resolution.explicitResourceDefinitions,
@@ -61,6 +62,7 @@ export function planPracticeArchitecture(
   }
 
   addPurposeSpecificResources(context);
+  addExplicitResourceDependencies(context);
   addExplicitResourceNodes(context);
   addCrossResourceEdges(context);
 
@@ -86,6 +88,7 @@ export function createDraftFromRequirementFacts(
 }
 
 type DraftBuildContext = {
+  readonly awsRegion: ArchitectureRequirementResolution["awsRegion"];
   readonly edges: ArchitectureJson["edges"];
   readonly explicitResourceDefinitions: readonly ExplicitResourceDefinition[];
   readonly explicitResourceTypes: readonly ResourceType[];
@@ -95,6 +98,13 @@ type DraftBuildContext = {
   readonly resourceQuantities: ArchitectureResourceQuantities;
   readonly servicePurpose: ArchitectureServicePurpose;
 };
+
+function getAvailabilityZone(
+  context: DraftBuildContext,
+  suffix: "a" | "b"
+): string {
+  return `${context.awsRegion}${suffix}`;
+}
 
 type DraftPurposeProfile = {
   readonly title: string;
@@ -350,7 +360,7 @@ function addMinimalNetworkBoundary(context: DraftBuildContext): void {
     positionY: 520,
     config: {
       cidrBlock: "10.0.1.0/24",
-      availabilityZone: "ap-northeast-2a",
+      availabilityZone: getAvailabilityZone(context, "a"),
       mapPublicIpOnLaunch: true,
       vpcId: "aws_vpc.vpc_main.id"
     }
@@ -557,7 +567,7 @@ function addNetworkBoundary(
       positionY: 620,
       config: {
         cidrBlock: "10.0.11.0/24",
-        availabilityZone: "ap-northeast-2a",
+        availabilityZone: getAvailabilityZone(context, "a"),
         mapPublicIpOnLaunch: false,
         vpcId: "aws_vpc.vpc_main.id"
       }
@@ -574,7 +584,7 @@ function addNetworkBoundary(
       positionY: 760,
       config: {
         cidrBlock: "10.0.12.0/24",
-        availabilityZone: "ap-northeast-2b",
+        availabilityZone: getAvailabilityZone(context, "b"),
         mapPublicIpOnLaunch: false,
         vpcId: "aws_vpc.vpc_main.id"
       }
@@ -675,7 +685,7 @@ function addDatabase(context: DraftBuildContext): void {
     positionX: 150,
     positionY: 940,
     config: {
-      availabilityZone: "ap-northeast-2a",
+      availabilityZone: getAvailabilityZone(context, "a"),
       cidrBlock: "10.0.21.0/24",
       mapPublicIpOnLaunch: false,
       vpcId: "aws_vpc.vpc_main.id"
@@ -688,7 +698,7 @@ function addDatabase(context: DraftBuildContext): void {
     positionX: 370,
     positionY: 940,
     config: {
-      availabilityZone: "ap-northeast-2b",
+      availabilityZone: getAvailabilityZone(context, "b"),
       cidrBlock: "10.0.22.0/24",
       mapPublicIpOnLaunch: false,
       vpcId: "aws_vpc.vpc_main.id"
@@ -1074,6 +1084,48 @@ function addCrossResourceEdges(context: DraftBuildContext): void {
     for (const uploadBucketId of uploadBucketIds) {
       addEdge(context, `lambda-function-to-${uploadBucketId}`, "lambda-function", uploadBucketId, "stores files");
     }
+  }
+}
+
+const VPC_DEPENDENT_EXPLICIT_RESOURCE_TYPES = new Set<ResourceType>([
+  "SUBNET",
+  "INTERNET_GATEWAY",
+  "ROUTE_TABLE",
+  "ROUTE_TABLE_ASSOCIATION",
+  "NETWORK_ACL",
+  "NETWORK_ACL_RULE",
+  "VPC_PEERING_CONNECTION",
+  "NAT_GATEWAY",
+  "EC2",
+  "AUTO_SCALING_GROUP",
+  "LAUNCH_TEMPLATE",
+  "EFS_MOUNT_TARGET",
+  "RDS",
+  "RDS_READ_REPLICA",
+  "RDS_CLUSTER",
+  "RDS_CLUSTER_INSTANCE",
+  "ELASTICACHE_REDIS",
+  "ELASTICACHE_SUBNET_GROUP",
+  "SECURITY_GROUP",
+  "LOAD_BALANCER",
+  "LOAD_BALANCER_LISTENER",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "DB_SUBNET_GROUP",
+  "VPC_ENDPOINT",
+  "ECS_SERVICE",
+  "EKS_CLUSTER",
+  "EKS_NODE_GROUP",
+  "EKS_FARGATE_PROFILE"
+]);
+
+function addExplicitResourceDependencies(context: DraftBuildContext): void {
+  if (
+    context.explicitResourceTypes.some((resourceType) =>
+      VPC_DEPENDENT_EXPLICIT_RESOURCE_TYPES.has(resourceType)
+    ) &&
+    !context.nodes.some((node) => node.type === "VPC")
+  ) {
+    addNetworkBoundary(context, { appSubnetCount: 1 });
   }
 }
 
