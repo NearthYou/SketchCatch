@@ -161,20 +161,13 @@ export function createAwsImportAccessGateway(
         now
       });
       const query = new URLSearchParams(mode.kind === "create"
-        ? {
-            templateURL: published.templateUrl,
-            stackName: contract.managerStackName,
-            capabilities: "CAPABILITY_NAMED_IAM"
-          }
-        : {
-            stackId: mode.stackId,
-            templateURL: published.templateUrl,
-            capabilities: "CAPABILITY_NAMED_IAM"
-          });
+        ? { templateURL: published.templateUrl, stackName: contract.managerStackName }
+        : { stackId: mode.stackId });
       return {
         consoleUrl:
-          `https://console.aws.amazon.com/cloudformation/home?region=${connection.region}` +
-          `#/stacks/${mode.kind === "create" ? "quickcreate" : "update/template"}?${query.toString()}`
+          `https://${connection.region}.console.aws.amazon.com/cloudformation/home?` +
+          `region=${connection.region}#/stacks/` +
+          `${mode.kind === "create" ? "create/review" : "stackinfo"}?${query.toString()}`
       };
     },
 

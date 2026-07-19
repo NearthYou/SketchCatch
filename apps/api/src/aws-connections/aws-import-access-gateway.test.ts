@@ -94,7 +94,7 @@ test("policy stack creation uses only Task 2 exact request builders", async () =
   assert(!("ResourceTypes" in mutation.input));
 });
 
-test("manager preparation returns the exact CloudFormation Quick Create URL", async () => {
+test("manager preparation returns the official regional CloudFormation Create Review URL", async () => {
   const gateway = createAwsImportAccessGateway({
     publishTemplate: async () => ({
       templateUrl: "https://private.example/template?X-Amz-Signature=secret"
@@ -109,13 +109,14 @@ test("manager preparation returns the exact CloudFormation Quick Create URL", as
 
   assert.equal(
     result.consoleUrl,
-    "https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-2#/stacks/quickcreate?" +
+    "https://ap-northeast-2.console.aws.amazon.com/cloudformation/home?" +
+      "region=ap-northeast-2#/stacks/create/review?" +
       "templateURL=https%3A%2F%2Fprivate.example%2Ftemplate%3FX-Amz-Signature%3Dsecret&" +
-      `stackName=${contract.managerStackName}&capabilities=CAPABILITY_NAMED_IAM`
+      `stackName=${contract.managerStackName}`
   );
 });
 
-test("manager preparation opens an exact existing-stack update URL", async () => {
+test("manager update preparation opens the exact existing Stack info fallback", async () => {
   const managerStackId =
     `arn:aws:cloudformation:${connection.region}:${connection.accountId}:stack/` +
     `${contract.managerStackName}/existing-id`;
@@ -131,10 +132,12 @@ test("manager preparation opens an exact existing-stack update URL", async () =>
     mode: { kind: "update", stackId: managerStackId }
   } as never);
 
-  assert.match(result.consoleUrl, /#\/stacks\/update\/template\?/u);
-  assert.match(result.consoleUrl, new RegExp(encodeURIComponent(managerStackId), "u"));
-  assert.doesNotMatch(result.consoleUrl, /quickcreate/u);
-  assert.doesNotMatch(result.consoleUrl, /stackName=/u);
+  assert.equal(
+    result.consoleUrl,
+    "https://ap-northeast-2.console.aws.amazon.com/cloudformation/home?" +
+      `region=ap-northeast-2#/stacks/stackinfo?stackId=${encodeURIComponent(managerStackId)}`
+  );
+  assert.doesNotMatch(result.consoleUrl, /templateURL|update\/template|create\/review/u);
 });
 
 test("already-current Policy apply is an idempotent no-op", async () => {
