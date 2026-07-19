@@ -367,7 +367,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6273bc80-9064-4f64-802d-e03902cbc52d",
       domOrder: 19,
-      label: "S3 Bucket 1 공개 차단",
+      label: "S3 Bucket 1 Public Access Block",
       position: {
         x: 820,
         y: 1470
@@ -385,7 +385,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c0943882-2bf4-415b-83ab-21c7bb692b08",
       domOrder: 20,
-      label: "VPC Log S3 공개 차단",
+      label: "VPC Log S3 Public Access Block",
       position: {
         x: 0,
         y: 1470
@@ -493,7 +493,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "54dcd23d-fd8e-4f8f-bc56-a81fcde34c8e",
       domOrder: 26,
-      label: "S3 Bucket 1 버전 관리",
+      label: "S3 Bucket 1 Versioning",
       position: {
         x: 820,
         y: 1630
@@ -511,7 +511,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c256a91a-8093-495c-b853-e52691c9d8c4",
       domOrder: 27,
-      label: "VPC Log S3 버전 관리",
+      label: "VPC Log S3 Versioning",
       position: {
         x: 0,
         y: 1630
@@ -529,7 +529,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "364622cd-cd1c-483a-98b0-60f51b5ecdc9",
       domOrder: 28,
-      label: "S3 Bucket 1 암호화",
+      label: "S3 Bucket 1 Server-Side Encryption",
       position: {
         x: 630,
         y: 1630
@@ -547,7 +547,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8142cb9b-82c4-4772-a377-7d0162045d7b",
       domOrder: 29,
-      label: "VPC Log S3 암호화",
+      label: "VPC Log S3 Server-Side Encryption",
       position: {
         x: -190,
         y: 1630

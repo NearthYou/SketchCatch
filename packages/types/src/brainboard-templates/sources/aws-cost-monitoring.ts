@@ -43,7 +43,7 @@ export const awsCostMonitoringSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "40a8b4ea-aefa-4353-a717-96958029031e",
       domOrder: 1,
-      label: "전체 월간 비용 Budget",
+      label: "Total Monthly Cost Budget",
       position: {
         x: 530,
         y: 270
@@ -61,7 +61,7 @@ export const awsCostMonitoringSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "cbaf89e8-4fb7-45c6-8b27-dd90bca3a555",
       domOrder: 2,
-      label: "EC2 월간 비용 Budget",
+      label: "EC2 Monthly Cost Budget",
       position: {
         x: 530,
         y: 450
@@ -79,7 +79,7 @@ export const awsCostMonitoringSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "1943248e-7456-4588-a76b-1b8a92a5522c",
       domOrder: 3,
-      label: "S3 월간 사용량 Budget",
+      label: "S3 Monthly Usage Budget",
       position: {
         x: 830,
         y: 270
@@ -97,7 +97,7 @@ export const awsCostMonitoringSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "821379fd-a325-4e2e-a3bb-565d3dcea13d",
       domOrder: 4,
-      label: "RI 사용률 Budget",
+      label: "Reserved Instance Utilization Budget",
       position: {
         x: 830,
         y: 450

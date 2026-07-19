@@ -133,7 +133,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f005a130-edd2-4747-8956-e1d409272c67",
       domOrder: 6,
-      label: "ECS Task 실행 권한 연결",
+      label: "ECS Task Execution Policy Attachment",
       position: {
         x: 1690.1519485675817,
         y: 754.4040637628045

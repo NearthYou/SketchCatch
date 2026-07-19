@@ -331,7 +331,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fa46f093-d66a-4f84-8568-a3c04fdc2c44",
       domOrder: 17,
-      label: "Master Main Route 연결",
+      label: "Main Route Table Association - Master",
       position: {
         x: 60,
         y: 765
@@ -367,7 +367,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "cac8d6c9-02a8-4984-8a5d-c398d6c7e50a",
       domOrder: 19,
-      label: "Worker Main Route 연결",
+      label: "Main Route Table Association - Worker",
       position: {
         x: 1930,
         y: 770
@@ -385,7 +385,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "4fd77125-9a08-4a94-8900-6d00c4037415",
       domOrder: 20,
-      label: "ALB HTTPS 인바운드 허용",
+      label: "Security Group Rule - ALB HTTPS Ingress",
       position: {
         x: 295,
         y: 435
@@ -403,7 +403,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "cd3c4233-a339-4f9a-b03f-a60ade2ce25c",
       domOrder: 21,
-      label: "ALB HTTP 인바운드 허용",
+      label: "Security Group Rule - ALB HTTP Ingress",
       position: {
         x: 385,
         y: 545
@@ -421,7 +421,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f4ae7e8a-8781-4991-a258-6bc4fdeebb62",
       domOrder: 22,
-      label: "Master SSH 인바운드 허용",
+      label: "Security Group Rule - Master SSH Ingress",
       position: {
         x: 260,
         y: 765
@@ -439,7 +439,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "322e3f91-de14-40e9-95e7-d2961ebe5add",
       domOrder: 23,
-      label: "Jenkins 8080 인바운드 허용",
+      label: "Security Group Rule - Jenkins 8080 Ingress",
       position: {
         x: 260,
         y: 895
@@ -457,7 +457,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "66ebe038-ae86-4ec6-8f43-6ddddf3a1f9d",
       domOrder: 24,
-      label: "Worker SSH 인바운드 허용",
+      label: "Security Group Rule - Worker SSH Ingress",
       position: {
         x: 2600,
         y: 450
@@ -475,7 +475,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ec1ee03a-b434-450d-83f4-a3c881aca9e9",
       domOrder: 25,
-      label: "ALB 전체 아웃바운드 허용",
+      label: "Security Group Rule - ALB All Egress",
       position: {
         x: 485,
         y: 435
@@ -493,7 +493,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "7e0371f7-989e-4443-81f4-ba9507600c5b",
       domOrder: 26,
-      label: "Master 전체 아웃바운드 허용",
+      label: "Security Group Rule - Master All Egress",
       position: {
         x: 470,
         y: 755
@@ -511,7 +511,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "a0bc45ed-9de6-4e39-acaf-669b0ece77ea",
       domOrder: 27,
-      label: "Worker Subnet 인바운드 허용",
+      label: "Security Group Rule - Worker Subnet Ingress",
       position: {
         x: 470,
         y: 895
@@ -529,7 +529,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "054d907a-9682-42cd-a2fe-58e6c2d8bff7",
       domOrder: 28,
-      label: "Master Subnet 인바운드 허용",
+      label: "Security Group Rule - Master Subnet Ingress",
       position: {
         x: 2690,
         y: 560
@@ -547,7 +547,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "69b98bc5-0d94-4536-839a-fc59f824e62c",
       domOrder: 29,
-      label: "Worker 전체 아웃바운드 허용",
+      label: "Security Group Rule - Worker All Egress",
       position: {
         x: 2770,
         y: 450
@@ -637,7 +637,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "a9e9123e-b88b-49c5-8266-81e77ef12a9a",
       domOrder: 34,
-      label: "ACM 검증 Route 53 Record",
+      label: "Route 53 Record - ACM Validation",
       position: {
         x: -320,
         y: 90
@@ -673,7 +673,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "08d05e4d-826e-4c51-a218-ed4448ecb8a2",
       domOrder: 36,
-      label: "Worker VPC Peering 수락",
+      label: "VPC Peering Accepter - Worker",
       position: {
         x: 1590,
         y: 910
@@ -763,7 +763,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "89e6ed9b-46d3-475c-a1fb-33c2d9abfae4",
       domOrder: 41,
-      label: "Jenkins Master Target 연결",
+      label: "Target Group Attachment - Jenkins Master",
       position: {
         x: 645,
         y: 220
@@ -799,7 +799,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c0387977-4047-43de-ae43-6edc8dbd91d9",
       domOrder: 43,
-      label: "Jenkins ACM Certificate 검증",
+      label: "ACM Certificate Validation - Jenkins",
       position: {
         x: 1275,
         y: -50

@@ -259,7 +259,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3657c666-e254-4beb-9895-baef2c9ff360",
       domOrder: 13,
-      label: "Public Route 연결 B",
+      label: "Route Table Association - Public B",
       position: {
         x: 920,
         y: 660
@@ -277,7 +277,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5ffcf553-4f13-488e-9f55-675ad24b98fe",
       domOrder: 14,
-      label: "Public Route 연결 A",
+      label: "Route Table Association - Public A",
       position: {
         x: 330,
         y: 660

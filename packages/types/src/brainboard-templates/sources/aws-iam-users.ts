@@ -43,7 +43,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fc0d1fe3-09ac-4ee4-a83f-c04900b17d19",
       domOrder: 1,
-      label: "변수 기반 사용자 계정",
+      label: "Variable-Based User Accounts",
       position: {
         x: 1095,
         y: -715
@@ -61,7 +61,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "1c28c7ec-2e94-4ac1-95ed-09370ec23e35",
       domOrder: 2,
-      label: "사용자 IAM Group",
+      label: "User IAM Group",
       position: {
         x: 715,
         y: -415
@@ -79,7 +79,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "38a919c0-d6ae-430e-ba56-5a42ddda95d4",
       domOrder: 3,
-      label: "MFA 필수 IAM Policy",
+      label: "MFA Required IAM Policy",
       position: {
         x: 595,
         y: -815
@@ -97,7 +97,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8f00e827-caf6-40fd-9677-c8484b42f94c",
       domOrder: 4,
-      label: "비밀번호 변경 권한 연결",
+      label: "Password Change Policy Attachment",
       position: {
         x: 835,
         y: -635
@@ -115,7 +115,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b1fc8d2d-aa45-40dd-b38c-780b160f02e2",
       domOrder: 5,
-      label: "비밀번호 변경 Managed Policy",
+      label: "Password Change Managed IAM Policy",
       position: {
         x: 835,
         y: -815
@@ -133,7 +133,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f1b74bf3-c510-4da8-baaa-d199ffaa6267",
       domOrder: 6,
-      label: "MFA 필수 권한 연결",
+      label: "MFA Required Policy Attachment",
       position: {
         x: 595,
         y: -635
@@ -151,7 +151,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "76efa2d0-4ef5-414c-af9b-7e5467b8adb1",
       domOrder: 7,
-      label: "IAM User 계정",
+      label: "IAM User Account",
       position: {
         x: 1443.2571075439453,
         y: -641.3308456420898
@@ -169,7 +169,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b80b763b-bc6e-47c3-bdbd-ac5fe8bf37f7",
       domOrder: 8,
-      label: "IAM User Group 연결",
+      label: "IAM User Group Membership",
       position: {
         x: 1203.2571075439453,
         y: -641.3308456420898

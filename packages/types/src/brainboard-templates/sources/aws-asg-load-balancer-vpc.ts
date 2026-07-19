@@ -61,7 +61,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f5024a0a-d5e3-4403-a70f-d07a5402a90c",
       domOrder: 2,
-      label: "웹 VPC",
+      label: "Web VPC",
       position: {
         x: 515,
         y: 3070
@@ -115,7 +115,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "dedbf41c-255d-4b77-b246-a9ba0de7d9fe",
       domOrder: 5,
-      label: "웹 공용 SG",
+      label: "Web Public Security Group",
       position: {
         x: 542.5,
         y: 3919.066238679101
@@ -151,7 +151,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "cd499b89-a918-4f50-a93a-2b865f961e60",
       domOrder: 7,
-      label: "웹 Launch Configuration",
+      label: "Web Launch Configuration",
       position: {
         x: 1127.3114276037932,
         y: 4031.0385590190112
@@ -169,7 +169,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d75efaba-a405-4bf0-9cf0-929116e2c267",
       domOrder: 8,
-      label: "웹 ASG",
+      label: "Web Auto Scaling Group",
       position: {
         x: 693.2370052628482,
         y: 3597.5030857498527
@@ -242,7 +242,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d67cbec1-5217-44ea-95e8-93c2bae28504",
       domOrder: 12,
-      label: "웹 Classic Load Balancer",
+      label: "Web Classic Load Balancer",
       position: {
         x: 1244.6867490439472,
         y: 3933.163290451488
@@ -260,7 +260,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "30a33276-f2ed-4578-90f4-3fd2ee58da38",
       domOrder: 13,
-      label: "Public Route 연결 A",
+      label: "Route Table Association - Public A",
       position: {
         x: 826.3702764744684,
         y: 3471.0155158741018
@@ -350,7 +350,7 @@ export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "e2bbe386-707f-478f-8d80-25a84ae7df25",
       domOrder: 18,
-      label: "Public Route 연결 B",
+      label: "Route Table Association - Public B",
       position: {
         x: 1685,
         y: 3470

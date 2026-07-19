@@ -169,7 +169,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "25376bca-5df7-479f-a809-cf06e64b7ca7",
       domOrder: 8,
-      label: "Worker Node 권한 연결",
+      label: "Worker Node Policy Attachment",
       position: {
         x: 560,
         y: 755
@@ -187,7 +187,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2d045230-f49c-49bc-87b8-88f700f6781a",
       domOrder: 9,
-      label: "EKS Cluster 권한 연결",
+      label: "EKS Cluster Policy Attachment",
       position: {
         x: 2300,
         y: 405
@@ -223,7 +223,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6f7256c8-2659-4d8d-865d-796e54991c87",
       domOrder: 11,
-      label: "CNI 권한 연결",
+      label: "CNI Policy Attachment",
       position: {
         x: 560,
         y: 405
@@ -259,7 +259,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c5930055-9371-4053-8473-91274baf223e",
       domOrder: 13,
-      label: "ECR 읽기 권한 연결",
+      label: "ECR Read Policy Attachment",
       position: {
         x: 560,
         y: 575
@@ -277,7 +277,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "cb3135b3-a5b2-4d99-a025-049c131c7ab1",
       domOrder: 14,
-      label: "VPC Controller 권한 연결",
+      label: "VPC Controller Policy Attachment",
       position: {
         x: 2300,
         y: 735
@@ -349,7 +349,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c34dd495-8609-4ac1-9a14-ee10979fd664",
       domOrder: 18,
-      label: "Cluster API HTTPS 허용",
+      label: "Security Group Rule - Cluster API HTTPS",
       position: {
         x: 1445,
         y: 1300
@@ -385,7 +385,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "228e33c2-8279-40e1-ad69-745eebcae150",
       domOrder: 20,
-      label: "Public Route 연결 A",
+      label: "Route Table Association - Public A",
       position: {
         x: 1080,
         y: 1030
@@ -403,7 +403,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fa115f68-d3a4-433f-9f23-acba35012866",
       domOrder: 21,
-      label: "Public Route 연결 B",
+      label: "Route Table Association - Public B",
       position: {
         x: 1820,
         y: 1030

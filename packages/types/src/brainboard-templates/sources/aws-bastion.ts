@@ -151,7 +151,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "80489bad-1f77-4035-97ed-0939be2815cf",
       domOrder: 7,
-      label: "Bastion Route 연결",
+      label: "Route Table Association - Bastion",
       position: {
         x: 910,
         y: 470
@@ -205,7 +205,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "decc2f66-4950-4338-89fa-7eda35c53e60",
       domOrder: 10,
-      label: "허용 IP 전체 인바운드",
+      label: "Security Group Rule - Allowed CIDR Ingress",
       position: {
         x: 1240,
         y: 680
@@ -223,7 +223,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "202d02a1-538d-45fe-b8e5-26aa1753d5d1",
       domOrder: 11,
-      label: "SG 내부 SSH 허용",
+      label: "Security Group Rule - Internal SSH",
       position: {
         x: 1380,
         y: 680
@@ -241,7 +241,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "941b992f-e911-4533-baff-396fed3cd614",
       domOrder: 12,
-      label: "전체 아웃바운드 허용",
+      label: "Security Group Rule - All Egress",
       position: {
         x: 1510,
         y: 680
@@ -313,7 +313,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ff83642d-55bb-4725-9972-e3eef3b98077",
       domOrder: 16,
-      label: "승인된 사용자",
+      label: "Approved User",
       position: {
         x: 270,
         y: 470
