@@ -139,6 +139,73 @@ test("observes fixed Fargate capacity without inventing a scaling maximum", asyn
   });
 });
 
+test("keeps current metrics and capacity when the first CloudWatch point is delayed", async () => {
+  const delayedNowMs = Date.parse("2026-07-16T05:02:30.000Z");
+  const delayedPeriodStart = new Date("2026-07-16T05:00:00.000Z");
+  const provider = createAwsLiveObservationSnapshotProvider({
+    now: () => delayedNowMs,
+    prepareCredentials: async () => ({
+      accessKeyId: "test-access-key",
+      secretAccessKey: "test-secret-key",
+      sessionToken: "test-session-token"
+    }),
+    cloudWatchClientFactory: () => ({
+      async getMetricData() {
+        return {
+          metricDataResults: [
+            metric("responses_2xx", 9, delayedPeriodStart),
+            metric("responses_3xx", 0, delayedPeriodStart),
+            metric("responses_4xx", 0, delayedPeriodStart),
+            metric("responses_5xx", 0, delayedPeriodStart),
+            metric("latency", 0.025, delayedPeriodStart)
+          ]
+        };
+      }
+    }),
+    autoScalingClientFactory: () => ({
+      async describeAutoScalingGroup() {
+        assert.fail("fixed Fargate observation must not read an Auto Scaling Group");
+      }
+    }),
+    ecsClientFactory: () => ({
+      async describeService() {
+        return { service: { desiredCount: 2, runningCount: 2 } };
+      }
+    }),
+    targetHealthClientFactory: () => ({
+      async describeTargetHealth() {
+        return {
+          targets: [
+            { id: "10.0.1.10", state: "healthy" },
+            { id: "10.0.2.10", state: "healthy" }
+          ]
+        };
+      }
+    }),
+    logsClientFactory: () => ({
+      async filterLogEvents() {
+        return { events: [] };
+      }
+    })
+  });
+
+  const snapshot = await provider.observe(
+    FIXED_TARGET,
+    "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+  );
+
+  assert.deepEqual(snapshot, {
+    requests: 9,
+    errorRate: 0,
+    p95LatencyMs: 25,
+    availability: 100,
+    capacity: { desired: 2, running: 2, healthy: 2, max: null },
+    logs: [],
+    observedAt: "2026-07-16T05:01:00.000Z",
+    state: "delayed"
+  });
+});
+
 test("reuses expired available evidence only for delayed CloudWatch refreshes", async () => {
   let nowMs = NOW_MS;
   let metricReadCount = 0;

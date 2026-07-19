@@ -502,7 +502,7 @@ export function LiveObservationModal({
             >
               <Radio size={15} aria-hidden="true" />
               <span>{getSessionStatusLabel(selectedSnapshot, remainingSeconds)}</span>
-              {selectedSession ? <strong>{formatRemainingTime(remainingSeconds)}</strong> : null}
+              {isSessionActive ? <strong>{formatRemainingTime(remainingSeconds)}</strong> : null}
             </div>
             <div className={styles.liveObservationTargetActions}>
               <button

@@ -7505,29 +7505,6 @@
   min-width: 0;
 }
 
-.liveObservationDeveloperActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.liveObservationDeveloperPreviewButton {
-  background: #ffffff;
-  border: 1px solid #b9c9e5;
-  border-radius: 6px;
-  color: #315f9d;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 800;
-  padding: 5px 8px;
-}
-
-.liveObservationDeveloperPreviewButton:hover {
-  background: #eff6ff;
-  border-color: #7da2da;
-}
-
 .liveObservationBurstMeter {
   animation: liveObservationBurstMeter 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
   background: #fff4e8;

@@ -71,23 +71,15 @@ test("adds the capacity fleet only when tasks exist and adapts the whole path to
   assert.match(styles, /transition:[^;]*width[^;]*height/);
 });
 
-test("offers a development-only visual traffic preview without calling an API", () => {
-  assert.match(source, /process\.env\.NODE_ENV === "development"/);
-  assert.match(source, /DEV 트래픽 \{DEVELOPMENT_TRAFFIC_STEPS/);
-  assert.match(source, /function previewTrafficAnimation\(\)/);
-  assert.doesNotMatch(source, /fetch\(/);
-  assert.match(source, /const DEVELOPMENT_TRAFFIC_STEPS = \[2, 25, 120\] as const/);
+test("keeps developer preview controls out of the live observation header", () => {
+  assert.doesNotMatch(source, /DEVELOPMENT_TRAFFIC_STEPS/);
+  assert.doesNotMatch(source, /DEVELOPMENT_CAPACITY_STEPS/);
+  assert.doesNotMatch(source, /previewTrafficAnimation/);
+  assert.doesNotMatch(source, /previewNextCapacity/);
+  assert.doesNotMatch(source, /DEV 트래픽|DEV 예상 Task/);
+  assert.doesNotMatch(styles, /liveObservationDeveloperPreviewButton/);
   assert.match(source, /data-traffic-intensity=\{trafficIntensity\}/);
   assert.match(source, /liveObservationBurstMeter/);
-});
-
-test("cycles development-only task capacity through representative layouts", () => {
-  assert.match(source, /const DEVELOPMENT_CAPACITY_STEPS = \[0, 1, 3, 5, 10\] as const/);
-  assert.match(source, /function previewNextCapacity\(\)/);
-  assert.match(source, /DEV 예상 Task/);
-  assert.match(source, /const previewProjection = useMemo/);
-  assert.match(source, /실제 \$\{modelCapacityUnits\.length\} · 예상 \$\{previewCapacityCount\}/);
-  assert.match(source, /--predicted-capacity-/);
 });
 
 test("focused flow sizes to content and animates task removal", () => {

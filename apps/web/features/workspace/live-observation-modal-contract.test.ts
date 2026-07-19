@@ -279,6 +279,20 @@ test("session creation locks Deployment selection and observation evidence stays
   assert.match(deploymentSelectionHandler, /onSnapshotChange\(null\)/);
 });
 
+test("shows the countdown only while the selected session is active", () => {
+  const sessionStatus = getSourceBlock(
+    modalSource,
+    "className={styles.liveObservationSessionStatus}",
+    "</div>"
+  );
+
+  assert.match(
+    sessionStatus,
+    /\{isSessionActive \? <strong>\{formatRemainingTime\(remainingSeconds\)\}<\/strong> : null\}/
+  );
+  assert.doesNotMatch(sessionStatus, /\{selectedSession \? <strong>/);
+});
+
 test("capacity analysis renders provider-derived mode and operational values", () => {
   const evidenceBlock = getSourceBlock(
     modalSource,

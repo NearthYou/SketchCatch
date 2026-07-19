@@ -42,8 +42,6 @@ type SequencedTrafficBurst = LiveObservationRequestBurst & {
 };
 
 const EMPTY_CAPACITY_UNITS: readonly LiveObservationCapacityUnit[] = [];
-const DEVELOPMENT_CAPACITY_STEPS = [0, 1, 3, 5, 10] as const;
-const DEVELOPMENT_TRAFFIC_STEPS = [2, 25, 120] as const;
 
 export function LiveObservationFocusedFlow({
   architecture,
@@ -66,34 +64,16 @@ export function LiveObservationFocusedFlow({
   );
   const previousTrafficRef = useRef(getLiveObservationTrafficCursor(snapshot));
   const burstSequenceRef = useRef(0);
-  const previewTimerRef = useRef<number | null>(null);
   const [burst, setBurst] = useState<SequencedTrafficBurst | null>(null);
-  const [previewTrafficStep, setPreviewTrafficStep] = useState(0);
-  const [previewCapacityCount, setPreviewCapacityCount] = useState<number | null>(null);
   const modelCapacityUnits = model.status === "ready"
     ? model.capacityUnits
     : EMPTY_CAPACITY_UNITS;
-  const previewProjection = useMemo<LiveObservationCapacityProjection | null>(() => {
-    if (previewCapacityCount === null) return null;
-    const actualCount = modelCapacityUnits.length;
-    return {
-      actualCount,
-      direction:
-        previewCapacityCount > actualCount
-          ? "scale_out"
-          : previewCapacityCount < actualCount
-            ? "scale_in"
-            : "steady",
-      maxCapacity: DEVELOPMENT_CAPACITY_STEPS.at(-1) ?? 10,
-      predictedCount: previewCapacityCount,
-      targetRequestsPerTaskPerMinute: capacityProjection?.targetRequestsPerTaskPerMinute ?? 0
-    };
-  }, [capacityProjection?.targetRequestsPerTaskPerMinute, modelCapacityUnits.length, previewCapacityCount]);
-  const displayedProjection = previewProjection ?? capacityProjection;
+  const displayedProjection = capacityProjection;
   const displayedCapacityUnits = useMemo(() => {
     if (model.status !== "ready") return modelCapacityUnits;
-    const predictedCount = previewProjection?.predictedCount ??
-      (snapshot?.status === "active" ? capacityProjection?.predictedCount ?? null : null);
+    const predictedCount = snapshot?.status === "active"
+      ? capacityProjection?.predictedCount ?? null
+      : null;
     if (predictedCount === null || predictedCount <= modelCapacityUnits.length) {
       return modelCapacityUnits;
     }
@@ -125,7 +105,6 @@ export function LiveObservationFocusedFlow({
     diagram.nodes,
     model,
     modelCapacityUnits,
-    previewProjection,
     snapshot?.status
   ]);
   const [presentedCapacityUnits, setPresentedCapacityUnits] = useState(() =>
@@ -152,11 +131,6 @@ export function LiveObservationFocusedFlow({
       return;
     }
 
-    if (previewTimerRef.current !== null) {
-      window.clearTimeout(previewTimerRef.current);
-      previewTimerRef.current = null;
-    }
-
     burstSequenceRef.current += 1;
     const sequencedBurst = { ...nextBurst, sequence: burstSequenceRef.current };
     setBurst(sequencedBurst);
@@ -168,46 +142,6 @@ export function LiveObservationFocusedFlow({
     const timer = window.setTimeout(() => setBurst(null), lifetimeMs);
     return () => window.clearTimeout(timer);
   }, [diagram, snapshot]);
-
-  useEffect(
-    () => () => {
-      if (previewTimerRef.current !== null) window.clearTimeout(previewTimerRef.current);
-    },
-    []
-  );
-
-  function previewTrafficAnimation() {
-    if (previewTimerRef.current !== null) window.clearTimeout(previewTimerRef.current);
-    burstSequenceRef.current += 1;
-    const requestCount = DEVELOPMENT_TRAFFIC_STEPS[previewTrafficStep] ?? 2;
-    const visibleParticleCount = Math.min(5, requestCount);
-    const previewBurst: SequencedTrafficBurst = {
-      overflowCount: Math.max(0, requestCount - visibleParticleCount),
-      sequence: burstSequenceRef.current,
-      visibleParticleCount
-    };
-    setBurst(previewBurst);
-    setPreviewTrafficStep((current) => (current + 1) % DEVELOPMENT_TRAFFIC_STEPS.length);
-    previewTimerRef.current = window.setTimeout(
-      () => {
-        setBurst(null);
-        previewTimerRef.current = null;
-      },
-      getLiveObservationDiagramBurstLifetimeMs(
-        getLiveObservationDiagramSegmentCount(diagram),
-        previewBurst.visibleParticleCount
-      )
-    );
-  }
-
-  function previewNextCapacity() {
-    setPreviewCapacityCount((current) => {
-      if (current === DEVELOPMENT_CAPACITY_STEPS.at(-1)) return null;
-      if (current === null) return DEVELOPMENT_CAPACITY_STEPS[0];
-      const currentIndex = DEVELOPMENT_CAPACITY_STEPS.findIndex((step) => step === current);
-      return DEVELOPMENT_CAPACITY_STEPS[currentIndex + 1] ?? null;
-    });
-  }
 
   if (model.status === "unavailable") {
     return (
@@ -284,13 +218,11 @@ export function LiveObservationFocusedFlow({
         <strong>실시간 트래픽 · 핵심 데이터 흐름</strong>
         <div className={styles.liveObservationPresentationHeaderActions}>
           <span>
-            {model.stages.length}단계 · {previewCapacityCount !== null
-              ? `실제 ${modelCapacityUnits.length} · 예상 ${previewCapacityCount}`
-              : predictedCapacityCount !== null
-                ? `실제 ${actualCapacityCount ?? "확인 중"} · 예상 ${predictedCapacityCount}`
-                : actualCapacityCount !== null
-                  ? `Task ${actualCapacityCount}개 관측`
-                  : "Task 관측 대기"}
+            {model.stages.length}단계 · {predictedCapacityCount !== null
+              ? `실제 ${actualCapacityCount ?? "확인 중"} · 예상 ${predictedCapacityCount}`
+              : actualCapacityCount !== null
+                ? `Task ${actualCapacityCount}개 관측`
+                : "Task 관측 대기"}
           </span>
           {burst ? (
             <em
@@ -298,22 +230,6 @@ export function LiveObservationFocusedFlow({
               className={styles.liveObservationBurstMeter}
               data-intensity={trafficIntensity}
             >요청 +{burstRequestCount}</em>
-          ) : null}
-          {process.env.NODE_ENV === "development" ? (
-            <div className={styles.liveObservationDeveloperActions}>
-              <button
-                className={styles.liveObservationDeveloperPreviewButton}
-                onClick={previewTrafficAnimation}
-                type="button"
-              >DEV 트래픽 {DEVELOPMENT_TRAFFIC_STEPS[previewTrafficStep] ?? 2}회</button>
-              <button
-                className={styles.liveObservationDeveloperPreviewButton}
-                onClick={previewNextCapacity}
-                type="button"
-              >{previewCapacityCount === DEVELOPMENT_CAPACITY_STEPS.at(-1)
-                ? "DEV 실제 Task로"
-                : `DEV 예상 Task ${previewCapacityCount ?? "실제"} → 다음`}</button>
-            </div>
           ) : null}
         </div>
       </header>
@@ -394,12 +310,10 @@ export function LiveObservationFocusedFlow({
               <span className={styles.liveObservationCapacityLabel}>
                 <strong>FARGATE TASK 그룹</strong>
                 <small>
-                  {previewCapacityCount !== null
-                    ? `실제 ${modelCapacityUnits.length} · 예상 ${previewCapacityCount}`
-                    : predictedCapacityCount !== null
-                      ? `실제 ${actualCapacityCount ?? "확인 중"} · 예상 ${predictedCapacityCount}`
-                      : `${activeCapacityCount}개 실행 중`}
-                  {launchingCapacityCount > 0 && previewCapacityCount === null
+                  {predictedCapacityCount !== null
+                    ? `실제 ${actualCapacityCount ?? "확인 중"} · 예상 ${predictedCapacityCount}`
+                    : `${activeCapacityCount}개 실행 중`}
+                  {launchingCapacityCount > 0
                     ? ` · ${launchingCapacityCount}개 예상`
                     : ""}
                 </small>
