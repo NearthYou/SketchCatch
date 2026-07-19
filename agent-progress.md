@@ -17,7 +17,8 @@ Short English-only working log for the current agent context. Older records are 
 
 - Rendered all three desktop Orbit layers as circles and constrained the decorative canvas to the space right of the active conversation panel.
 - Preserved the existing mobile ellipse geometry, Orbit motion and convergence, and final Preview behavior.
-- The 43 Workspace AI checks, Web lint/typecheck, root build, harness, and diff checks pass. Browser measurements at 1024x768 and 1440x900 show circular rings outside the conversation boundary; 390x844 retains the existing mobile scales with no console warnings or errors.
+- The 43 Workspace AI checks, root lint/typecheck/build, harness, and diff checks pass. Browser measurements at 1024x768 and 1440x900 show circular rings outside the conversation boundary; 390x844 retains the existing mobile scales with no console warnings or errors.
+- The broader `pnpm test` remains red outside this change: API application integration checks cannot start in the isolated environment, and the existing Resource Catalog contracts fail three assertions before later Web tests are cancelled. None of those failing files changed here.
 
 ### 2026-07-19 - Keep GitOps build environments stable across application commits
 
