@@ -12,7 +12,7 @@ export type WorkspaceAiProgressStep = {
 
 export type TerraformPreviewReviewStep = WorkspaceAiProgressStep;
 
-export const ARCHITECTURE_DRAFT_GENERATION_STEP_DURATION_MS = 3_000;
+export const ARCHITECTURE_DRAFT_GENERATION_STEP_DURATION_MS = 1_500;
 
 export const architectureDraftGenerationSteps: readonly WorkspaceAiProgressStep[] = [
   {
@@ -30,6 +30,10 @@ export const architectureDraftGenerationSteps: readonly WorkspaceAiProgressStep[
   {
     label: "아키텍처 결과 검증",
     description: "요구사항 누락과 구조 오류를 확인하고 초안을 정리하고 있습니다."
+  },
+  {
+    label: "최종 초안 정리",
+    description: "검증 결과를 반영해 다이어그램 초안을 마무리하고 있습니다."
   }
 ];
 

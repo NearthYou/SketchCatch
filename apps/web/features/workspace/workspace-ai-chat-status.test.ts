@@ -61,14 +61,15 @@ test("AI Chat 상태는 사용자의 대응이 필요하지 않으면 상태 바
 test("다이어그램 생성은 결과를 기다리는 동안 단계별 진행 상태를 제공한다", () => {
   assert.deepEqual(
     architectureDraftGenerationSteps.map((step) => step.label),
-    ["요청 의도 정리", "리소스 후보 구성", "연결 구조 설계", "아키텍처 결과 검증"]
+    ["요청 의도 정리", "리소스 후보 구성", "연결 구조 설계", "아키텍처 결과 검증", "최종 초안 정리"]
   );
   assert.equal(getArchitectureDraftGenerationProgressStep(0), 0);
-  assert.equal(getArchitectureDraftGenerationProgressStep(2_999), 0);
-  assert.equal(getArchitectureDraftGenerationProgressStep(3_000), 1);
-  assert.equal(getArchitectureDraftGenerationProgressStep(6_000), 2);
-  assert.equal(getArchitectureDraftGenerationProgressStep(9_000), 3);
-  assert.equal(getArchitectureDraftGenerationProgressStep(60_000), 3);
+  assert.equal(getArchitectureDraftGenerationProgressStep(1_499), 0);
+  assert.equal(getArchitectureDraftGenerationProgressStep(1_500), 1);
+  assert.equal(getArchitectureDraftGenerationProgressStep(3_000), 2);
+  assert.equal(getArchitectureDraftGenerationProgressStep(4_500), 3);
+  assert.equal(getArchitectureDraftGenerationProgressStep(6_000), 4);
+  assert.equal(getArchitectureDraftGenerationProgressStep(60_000), 4);
 });
 
 test("에이전트 리뷰는 Amazon Q 결과를 기다리는 동안 단계별 진행 상태를 제공한다", () => {

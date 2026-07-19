@@ -187,3 +187,8 @@ Short English-only working log for the current agent context. Older records are 
 - Traffic clarification matching now interprets daily visitors and concurrent users as separate dimensions before numeric option matching.
 - `일일 500명` maps to the medium option while `동시 접속자 500명` remains large; `스프링부트 썼어` reuses the existing complex business logic option instead of creating a custom option.
 - Focused Web/API regressions and the harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
+### 2026-07-19 - Advance AI diagram generation progress sooner
+
+- Reduced the staged diagram-generation interval from 3 seconds to 1.5 seconds and added a final draft preparation stage.
+- The first visible transition now occurs after 1.5 seconds, and the progress card continues through five stages while the AI response is pending.
+- The focused Web status regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
