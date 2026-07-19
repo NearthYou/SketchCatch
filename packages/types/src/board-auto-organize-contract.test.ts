@@ -33,6 +33,30 @@ test("Board 자동 정리 source 직렬화는 viewport와 일시 선택만 제�
   );
 });
 
+test("selected라는 Resource 설정은 일시 선택으로 오해하지 않고 의미에 남긴다", () => {
+  const source = diagram();
+  source.nodes[0]!.parameters!.values.selected = false;
+  const changedSetting = structuredClone(source);
+  changedSetting.nodes[0]!.parameters!.values.selected = true;
+  const transientlySelected = {
+    ...structuredClone(source),
+    nodes: structuredClone(source.nodes).map((node, index) => ({
+      ...node,
+      ...(index === 0 ? { selected: true } : {})
+    }))
+  } as DiagramJson;
+
+  assert.notEqual(
+    serializeBoardAutoOrganizeSource(source),
+    serializeBoardAutoOrganizeSource(changedSetting)
+  );
+  assert.equal(
+    serializeBoardAutoOrganizeSource(source),
+    serializeBoardAutoOrganizeSource(transientlySelected)
+  );
+  assert.equal(hasSameBoardAutoOrganizeSemantics(source, changedSetting), false);
+});
+
 test("Board 의미 직렬화는 허용된 화면 배치와 full-tuple 자동 프레임만 제외한다", () => {
   const source = diagram();
   const candidate = structuredClone(source);

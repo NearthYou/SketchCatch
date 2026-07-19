@@ -48,12 +48,17 @@ export function isBoardAutoPresentationFrameNode(node: DiagramNode): boolean {
 
 /** 저장된 시각 상태를 포함하되 viewport와 일시 선택만 뺀 원본을 안정적으로 직렬화합니다. */
 export function serializeBoardAutoOrganizeSource(diagram: DiagramJson): string {
-  const { viewport: _viewport, ...source } = diagram;
+  const source = omitTransientSelectionFields(diagram as unknown as Record<string, unknown>);
+  delete source.viewport;
 
   return stableSerialize({
     ...source,
-    nodes: sortById(diagram.nodes),
-    edges: sortById(diagram.edges),
+    nodes: sortById(diagram.nodes).map((node) =>
+      omitTransientSelectionFields(node as unknown as Record<string, unknown>)
+    ),
+    edges: sortById(diagram.edges).map((edge) =>
+      omitTransientSelectionFields(edge as unknown as Record<string, unknown>)
+    ),
     ...(diagram.variables === undefined
       ? {}
       : { variables: sortVariables(diagram.variables) })
@@ -65,7 +70,9 @@ export function serializeBoardAutoOrganizeSemantics(diagram: DiagramJson): strin
   return stableSerialize({
     nodes: sortById(diagram.nodes)
       .filter((node) => !isBoardAutoPresentationFrameNode(node))
-      .map(({ position: _position, size: _size, ...node }) => node),
+      .map(({ position: _position, size: _size, ...node }) =>
+        omitTransientSelectionFields(node as unknown as Record<string, unknown>)
+      ),
     edges: sortById(diagram.edges).map(toSemanticEdge),
     ...(diagram.variables === undefined
       ? {}
@@ -98,7 +105,9 @@ function toSemanticEdge(edge: DiagramEdge): unknown {
   } = edge;
 
   return {
-    ...semanticEdge,
+    ...omitTransientSelectionFields(
+      semanticEdge as unknown as Record<string, unknown>
+    ),
     ...(route?.arrowDirection === undefined
       ? {}
       : { arrowDirection: route.arrowDirection })
@@ -122,7 +131,7 @@ function sortVariables(variables: readonly DiagramVariable[]): DiagramVariable[]
   }));
 }
 
-/** 객체 key를 재귀 정렬하고 일시 선택 key를 제거해 같은 값을 같은 문자열로 만듭니다. */
+/** 객체 key를 재귀 정렬해 같은 값을 같은 문자열로 만듭니다. */
 function stableSerialize(value: unknown): string {
   return JSON.stringify(canonicalize(value));
 }
@@ -139,12 +148,20 @@ function canonicalize(value: unknown): unknown {
 
   return Object.fromEntries(
     Object.keys(value)
-      .filter((key) => !TRANSIENT_SELECTION_KEYS.has(key))
       .sort((left, right) => left.localeCompare(right))
       .flatMap((key) => {
         const entry = value[key];
         return entry === undefined ? [] : [[key, canonicalize(entry)]];
       })
+  );
+}
+
+/** Diagram, node, edge의 직접 UI 선택 필드만 빼고 Resource 내부 설정은 유지합니다. */
+function omitTransientSelectionFields(
+  value: Readonly<Record<string, unknown>>
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => !TRANSIENT_SELECTION_KEYS.has(key))
   );
 }
 
