@@ -13,6 +13,12 @@ import {
   saveProjectDraftRevision,
   type SaveProjectDraftRevisionResult
 } from "./project-draft-save-service.js";
+import {
+  BoardAutoOrganizeSemanticMismatchError,
+  recomposeBoardAutoOrganizeDiagram
+} from "./board-auto-organize-visual-policy.js";
+
+export { BoardAutoOrganizeSemanticMismatchError } from "./board-auto-organize-visual-policy.js";
 
 type BoardAutoOrganizeApplyInput = {
   readonly candidateDiagram: DiagramJson;
@@ -69,12 +75,21 @@ export async function applyBoardAutoOrganizeDraft(
     throw new BoardAutoOrganizeSemanticMismatchError();
   }
 
+  const diagramToSave = recomposeBoardAutoOrganizeDiagram(
+    persistedDraft.diagramJson,
+    input.candidateDiagram
+  );
+
+  if (!hasSameBoardAutoOrganizeSemantics(persistedDraft.diagramJson, diagramToSave)) {
+    throw new BoardAutoOrganizeSemanticMismatchError();
+  }
+
   const saveDraftRevision = dependencies.saveDraftRevision ?? saveProjectDraftRevision;
 
   return saveDraftRevision({
     db: input.db,
     input: {
-      diagramJson: input.candidateDiagram,
+      diagramJson: diagramToSave,
       expectedRevision: input.expectedRevision,
       ...(persistedDraft.terraformFiles !== null
         ? { terraformFiles: persistedDraft.terraformFiles.map((file) => ({ ...file })) }
@@ -124,14 +139,5 @@ export class BoardAutoOrganizeSourceMismatchError extends Error {
   constructor() {
     super("미리보기를 만든 뒤 프로젝트 초안이 바뀌었습니다.");
     this.name = "BoardAutoOrganizeSourceMismatchError";
-  }
-}
-
-/** Resource·설정·연결 의미를 바꾼 후보를 저장 경계에서 거부합니다. */
-export class BoardAutoOrganizeSemanticMismatchError extends Error {
-  /** 사용자에게 Compiler 세부 정보가 없는 안전한 오류를 만듭니다. */
-  constructor() {
-    super("화면 정리 범위를 벗어난 변경은 적용할 수 없습니다.");
-    this.name = "BoardAutoOrganizeSemanticMismatchError";
   }
 }

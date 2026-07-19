@@ -204,6 +204,246 @@ test("server rejects Terraform changes instead of saving them through visual-onl
   assert.equal(saveCalls, 0);
 });
 
+test("server rejects direct requests that move or resize a locked Resource", async () => {
+  const sourceDiagram = createDiagram();
+  sourceDiagram.nodes[0]!.locked = true;
+  const movedCandidate = structuredClone(sourceDiagram);
+  movedCandidate.nodes[0]!.position = { x: 320, y: 180 };
+  const resizedCandidate = structuredClone(sourceDiagram);
+  resizedCandidate.nodes[0]!.size = { width: 640, height: 480 };
+  let saveCalls = 0;
+
+  for (const candidateDiagram of [movedCandidate, resizedCandidate]) {
+    await assert.rejects(
+      () =>
+        applyBoardAutoOrganizeDraft(
+          {
+            candidateDiagram,
+            db: {} as Database,
+            expectedRevision: 7,
+            projectId: PROJECT_ID,
+            sourceDiagram,
+            sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(sourceDiagram),
+            terraformFiles: [],
+            userId: USER_ID
+          },
+          {
+            readDraft: async () => ({
+              ...createDraftRow(sourceDiagram, []),
+              revision: 7
+            }),
+            saveDraftRevision: async () => {
+              saveCalls += 1;
+              return { status: "saved", draft: createDraftRow(candidateDiagram, []) };
+            }
+          }
+        ),
+      BoardAutoOrganizeSemanticMismatchError
+    );
+  }
+
+  assert.equal(saveCalls, 0);
+});
+
+test("server rejects direct requests that change or delete a locked auto frame", async () => {
+  const sourceDiagram = createDiagram();
+  const lockedFrame = createAutoFrame("board-auto-frame:locked", true);
+  sourceDiagram.nodes.push(lockedFrame);
+  const changedCandidate = structuredClone(sourceDiagram);
+  changedCandidate.nodes.find((node) => node.id === lockedFrame.id)!.position.x += 120;
+  const deletedCandidate = structuredClone(sourceDiagram);
+  deletedCandidate.nodes = deletedCandidate.nodes.filter((node) => node.id !== lockedFrame.id);
+  let saveCalls = 0;
+
+  for (const candidateDiagram of [changedCandidate, deletedCandidate]) {
+    await assert.rejects(
+      () =>
+        applyBoardAutoOrganizeDraft(
+          {
+            candidateDiagram,
+            db: {} as Database,
+            expectedRevision: 7,
+            projectId: PROJECT_ID,
+            sourceDiagram,
+            sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(sourceDiagram),
+            terraformFiles: [],
+            userId: USER_ID
+          },
+          {
+            readDraft: async () => ({
+              ...createDraftRow(sourceDiagram, []),
+              revision: 7
+            }),
+            saveDraftRevision: async () => {
+              saveCalls += 1;
+              return { status: "saved", draft: createDraftRow(candidateDiagram, []) };
+            }
+          }
+        ),
+      BoardAutoOrganizeSemanticMismatchError
+    );
+  }
+
+  assert.equal(saveCalls, 0);
+});
+
+test("server rebuilds new auto frames from safe presentation fields and preserves viewport", async () => {
+  const sourceDiagram = createDiagram();
+  const candidateDiagram = structuredClone(sourceDiagram);
+  candidateDiagram.viewport = { x: 9_000, y: -8_000, zoom: 0.25 };
+  candidateDiagram.nodes.push({
+    ...createAutoFrame("board-auto-frame:new", false),
+    zIndex: 99,
+    style: { borderColor: "#94a3b8", borderStyle: "dashed", textColor: "#334155" },
+    metadata: {
+      parentAreaNodeId: "node-vpc",
+      presentationCatalogItemId: "design-group"
+    },
+    parameters: {
+      resourceType: "aws_instance",
+      resourceName: "must-not-persist",
+      fileName: "main",
+      values: { instanceType: "m7i.large" }
+    }
+  });
+  const savedDiagrams: DiagramJson[] = [];
+
+  const result = await applyBoardAutoOrganizeDraft(
+    {
+      candidateDiagram,
+      db: {} as Database,
+      expectedRevision: 7,
+      projectId: PROJECT_ID,
+      sourceDiagram,
+      sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(sourceDiagram),
+      terraformFiles: [],
+      userId: USER_ID
+    },
+    {
+      readDraft: async () => ({
+        ...createDraftRow(sourceDiagram, []),
+        revision: 7
+      }),
+      saveDraftRevision: async (input) => {
+        savedDiagrams.push(input.input.diagramJson);
+        return { status: "saved", draft: createDraftRow(input.input.diagramJson, []) };
+      }
+    }
+  );
+
+  const savedDiagram = savedDiagrams[0];
+  assert.equal(result.status, "saved");
+  assert(savedDiagram);
+  assert.deepEqual(savedDiagram.viewport, sourceDiagram.viewport);
+  assert.deepEqual(
+    savedDiagram.nodes.find((node) => node.id === "board-auto-frame:new"),
+    {
+      ...createAutoFrame("board-auto-frame:new", false),
+      zIndex: 0,
+      style: { borderColor: "#94a3b8", borderStyle: "dashed", textColor: "#334155" }
+    }
+  );
+});
+
+test("server rejects node geometry outside Board and Editor bounds", async () => {
+  const sourceDiagram = createDiagram();
+  const outsideBoard = structuredClone(sourceDiagram);
+  outsideBoard.nodes[0]!.position.x = 1_000_001;
+  const belowEditorMinimum = structuredClone(sourceDiagram);
+  belowEditorMinimum.nodes[0]!.size = { width: 119, height: 80 };
+  const outsideBoardSize = structuredClone(sourceDiagram);
+  outsideBoardSize.nodes[0]!.size = { width: 1_000_001, height: 80 };
+  let saveCalls = 0;
+
+  for (const candidateDiagram of [outsideBoard, belowEditorMinimum, outsideBoardSize]) {
+    await assert.rejects(
+      () =>
+        applyBoardAutoOrganizeDraft(
+          {
+            candidateDiagram,
+            db: {} as Database,
+            expectedRevision: 7,
+            projectId: PROJECT_ID,
+            sourceDiagram,
+            sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(sourceDiagram),
+            terraformFiles: [],
+            userId: USER_ID
+          },
+          {
+            readDraft: async () => ({
+              ...createDraftRow(sourceDiagram, []),
+              revision: 7
+            }),
+            saveDraftRevision: async () => {
+              saveCalls += 1;
+              return { status: "saved", draft: createDraftRow(candidateDiagram, []) };
+            }
+          }
+        ),
+      BoardAutoOrganizeSemanticMismatchError
+    );
+  }
+
+  assert.equal(saveCalls, 0);
+});
+
+test("server rejects non-finite, malformed, and out-of-bounds SVG route paths", async () => {
+  const sourceDiagram = createDiagram();
+  sourceDiagram.edges.push({
+    id: "edge-loop",
+    sourceNodeId: "node-vpc",
+    targetNodeId: "node-vpc",
+    route: {
+      svgPath: "M 40 60 L 360 300",
+      sourcePoint: { x: 40, y: 60 },
+      targetPoint: { x: 360, y: 300 },
+      waypoints: []
+    }
+  });
+  const unsafePaths = [
+    "M NaN 0 L 10 10",
+    "M 0 0 L 10",
+    "not-a-path",
+    "M 0 0 L 1000001 10",
+    "M 1000000 0 l 1000000 0"
+  ];
+  let saveCalls = 0;
+
+  for (const svgPath of unsafePaths) {
+    const candidateDiagram = structuredClone(sourceDiagram);
+    candidateDiagram.edges[0]!.route!.svgPath = svgPath;
+
+    await assert.rejects(
+      () =>
+        applyBoardAutoOrganizeDraft(
+          {
+            candidateDiagram,
+            db: {} as Database,
+            expectedRevision: 7,
+            projectId: PROJECT_ID,
+            sourceDiagram,
+            sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(sourceDiagram),
+            terraformFiles: [],
+            userId: USER_ID
+          },
+          {
+            readDraft: async () => ({
+              ...createDraftRow(sourceDiagram, []),
+              revision: 7
+            }),
+            saveDraftRevision: async () => {
+              saveCalls += 1;
+              return { status: "saved", draft: createDraftRow(candidateDiagram, []) };
+            }
+          }
+        ),
+      BoardAutoOrganizeSemanticMismatchError
+    );
+  }
+
+  assert.equal(saveCalls, 0);
+});
+
 /** 테스트마다 같은 Resource 의미를 가진 source Diagram을 만듭니다. */
 function createDiagram(): DiagramJson {
   return {
@@ -228,6 +468,21 @@ function createDiagram(): DiagramJson {
     ],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+/** 서버 경계에서 자동 소유권과 잠금 상태를 검증할 표시 프레임을 만듭니다. */
+function createAutoFrame(id: string, locked: boolean): DiagramJson["nodes"][number] {
+  return {
+    id,
+    type: "design_group",
+    kind: "design",
+    position: { x: 20, y: 20 },
+    size: { width: 220, height: 140 },
+    label: "자동 표시 영역",
+    locked,
+    zIndex: 0,
+    metadata: { presentationCatalogItemId: "design-group" }
   };
 }
 
