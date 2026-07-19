@@ -2,6 +2,7 @@ import {
   hasSameBoardAutoOrganizeSemantics,
   isBoardAutoPresentationFrameNode,
   serializeBoardAutoOrganizeSource,
+  type ArchitectureJson,
   type BoardAutoOrganizeCandidate,
   type BoardAutoOrganizeCandidateSet,
   type BoardAutoOrganizeVisualDiff,
@@ -38,13 +39,16 @@ type RankedCandidate = {
 
 /** 현재 Board를 바꾸지 않고 서로 다른 안전한 정리안을 최대 세 개 만듭니다. */
 export function createBoardAutoOrganizeCandidates(
-  diagram: DiagramJson
+  diagram: DiagramJson,
+  architectureOverride?: ArchitectureJson
 ): BoardAutoOrganizeCandidateSet {
   const sourceDiagram = structuredClone(diagram);
   const serializedSource = serializeBoardAutoOrganizeSource(sourceDiagram);
   const sourceFingerprint = createFingerprint(serializedSource);
   const proposals = compileArchitectureBoardCandidates({
-    architecture: convertDiagramJsonToArchitectureJson(sourceDiagram),
+    architecture: architectureOverride
+      ? structuredClone(architectureOverride)
+      : convertDiagramJsonToArchitectureJson(sourceDiagram),
     currentDiagram: sourceDiagram,
     trigger: "board-auto-organize"
   });

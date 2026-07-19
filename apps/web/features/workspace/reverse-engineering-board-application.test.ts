@@ -16,7 +16,6 @@ import {
   TASK9_REVIEW_ONLY_RESOURCE_IDS,
   TASK9_SUPPORTED_RESOURCE_IDS
 } from "./reverse-engineering-final-regression.fixture";
-import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 
 const currentDiagram: DiagramJson = {
   nodes: [],
@@ -221,7 +220,13 @@ test("Reverse Engineering 자동 정리는 원본 의미를 지킨 shared 후보
     placement: "original",
     result: overlappingResult
   });
-  const candidateSet = createBoardAutoOrganizeCandidates(originalApplication.diagram);
+  const candidateSet = createBoardAutoOrganizeCandidates(
+    originalApplication.diagram,
+    convertReverseEngineeringBoardToArchitectureJson(
+      originalApplication.diagram,
+      overlappingResult
+    )
+  );
   const candidate = candidateSet.candidates[0];
 
   assert.ok(candidate);
@@ -276,7 +281,26 @@ test("Reverse Engineering 원래 배치는 Compiler 없이 현재 Board에 추�
       makeResourceNode("current-bucket", "aws_s3_bucket", "current_bucket", "bucket-current", 0)
     ],
     edges: [],
-    viewport: { x: 12, y: 24, zoom: 1.2 }
+    viewport: { x: 12, y: 24, zoom: 1.2 },
+    variables: [
+      {
+        id: "variable-current-region",
+        name: "aws_region",
+        type: "string",
+        value: "ap-northeast-2",
+        bindings: [
+          {
+            nodeId: "current-bucket",
+            parameterKey: "region"
+          }
+        ],
+        source: "user"
+      }
+    ],
+    presentation: {
+      geometryPolicy: "catalog-normalized",
+      terraformSourceFingerprint: "terraform-source-before-reverse"
+    }
   };
   const application = createReverseEngineeringBoardApplication({
     currentDiagram: currentBoard,
@@ -291,6 +315,8 @@ test("Reverse Engineering 원래 배치는 Compiler 없이 현재 Board에 추�
     new Set(["current-bucket", "vpc-1"])
   );
   assert.deepEqual(application.diagram.viewport, currentBoard.viewport);
+  assert.deepEqual(application.diagram.variables, currentBoard.variables);
+  assert.deepEqual(application.diagram.presentation, currentBoard.presentation);
 });
 
 test("Reverse Engineering 자동 정리는 scan 진단을 보드 의미 정보에 섞지 않는다", () => {
@@ -443,7 +469,9 @@ test("최종 혼합 fixture의 정식 지원 ALB, CloudFront, ECS는 Board에서
           });
     const nodeById = new Map(application.diagram.nodes.map((node) => [node.id, node]));
     const appliedArchitectureById = new Map(
-      convertDiagramJsonToArchitectureJson(application.diagram).nodes.map((node) => [node.id, node])
+      convertReverseEngineeringBoardToArchitectureJson(application.diagram, result).nodes.map(
+        (node) => [node.id, node]
+      )
     );
 
     for (const resourceId of TASK9_SUPPORTED_RESOURCE_IDS) {
@@ -614,7 +642,10 @@ test("과거 스캔에서 보정된 Lambda는 원래 배치에서도 짧은 확�
     result
   });
   const lambda = application.diagram.nodes.find((node) => node.id === "legacy-lambda");
-  const appliedArchitecture = convertDiagramJsonToArchitectureJson(application.diagram);
+  const appliedArchitecture = convertReverseEngineeringBoardToArchitectureJson(
+    application.diagram,
+    result
+  );
   const appliedLambda = appliedArchitecture.nodes.find((node) => node.id === "legacy-lambda");
 
   assert.equal(application.compilation, null);

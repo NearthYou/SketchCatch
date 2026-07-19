@@ -133,24 +133,33 @@ export function convertReverseEngineeringBoardToArchitectureJson(
   const converted = convertDiagramJsonToArchitectureJson(diagram);
   const sourceNodeById = new Map(result.architectureJson.nodes.map((node) => [node.id, node]));
   const sourceEdgeById = new Map(result.architectureJson.edges.map((edge) => [edge.id, edge]));
+  const convertedNodeById = new Map(converted.nodes.map((node) => [node.id, node]));
+  const convertedEdgeById = new Map(converted.edges.map((edge) => [edge.id, edge]));
 
   return {
-    nodes: converted.nodes.map((node) => {
-      const sourceNode = sourceNodeById.get(node.id);
+    nodes: diagram.nodes.flatMap((diagramNode) => {
+      const sourceNode = sourceNodeById.get(diagramNode.id);
+      const convertedNode = convertedNodeById.get(diagramNode.id);
 
       return sourceNode
-        ? {
-            ...node,
-            type: sourceNode.type,
-            label: sourceNode.label,
-            config: structuredClone(sourceNode.config)
-          }
-        : node;
+        ? [{
+            ...structuredClone(sourceNode),
+            positionX: diagramNode.position.x,
+            positionY: diagramNode.position.y
+          }]
+        : convertedNode
+          ? [structuredClone(convertedNode)]
+          : [];
     }),
-    edges: converted.edges.map((edge) => {
-      const sourceEdge = sourceEdgeById.get(edge.id);
+    edges: diagram.edges.flatMap((diagramEdge) => {
+      const sourceEdge = sourceEdgeById.get(diagramEdge.id);
+      const convertedEdge = convertedEdgeById.get(diagramEdge.id);
 
-      return sourceEdge ? structuredClone(sourceEdge) : edge;
+      return sourceEdge
+        ? [structuredClone(sourceEdge)]
+        : convertedEdge
+          ? [structuredClone(convertedEdge)]
+          : [];
     })
   };
 }
@@ -302,6 +311,7 @@ function appendAdditionsToCurrentDiagram(
   const nodeIdsAfterAppend = new Set([...currentNodeIds, ...additionNodeIds]);
 
   return {
+    ...currentDiagram,
     edges: [
       ...currentDiagram.edges,
       ...previewDiagram.edges.filter((edge) =>
