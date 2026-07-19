@@ -32,8 +32,8 @@
         }
       },
       "diagrams": {
-        "sourceFingerprint": "sha256:992d4950ebb210fddf9cb8513ea8a8356828a37155687d8be857737ea85d22fb",
-        "compiledFingerprint": "sha256:59cbd9ca3472ec821fa783e374a3954a40799def48deabc36d32c5da1ebc0eb8"
+        "sourceFingerprint": "sha256:f64a49e3cc226b99fd10faa1c08de7b197736978b3ba25ede3f92dc753045552",
+        "compiledFingerprint": "sha256:df565ceaad89714441138beb5a479736a9949d04df08270aa3d9caaf8acd8218"
       },
       "proposal": {
         "compilerVersion": "architecture-board-compiler/v3",
@@ -75,8 +75,8 @@
           }
         },
         "after": {
-          "score": 1803262863.720385,
-          "visualPenalty": 1803254740.615385,
+          "score": 1809602863.720385,
+          "visualPenalty": 1809594740.615385,
           "structuralPenalty": 540,
           "semanticDiagnosticPenalty": 6440,
           "metrics": {
@@ -99,8 +99,8 @@
             "mainFlowContinuityError": 36,
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
-            "repeatAlignmentError": 144,
-            "score": 1803254740.615385,
+            "repeatAlignmentError": 778,
+            "score": 1809594740.615385,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
@@ -109,7 +109,7 @@
           }
         },
         "compilationDistance": 984,
-        "scoreDelta": -3857514951.995592
+        "scoreDelta": -3851174951.995592
       },
       "review": {
         "status": "pending",
@@ -133,8 +133,8 @@
         }
       },
       "diagrams": {
-        "sourceFingerprint": "sha256:aff2ca8c14b20154b0bcc209a9907a88c161277c0e473226bebca8280787b357",
-        "compiledFingerprint": "sha256:c7c7d980228084d791d468f5e5886617c479dca8c908641cf1626ece29063384"
+        "sourceFingerprint": "sha256:54d9324a96a8f02f91fbb188a5a7b266851f1be96aecde0f671c6f9e8ea92d55",
+        "compiledFingerprint": "sha256:ccdaae636509d68a8e2aec2d02fa3102409775de29691f81113b541d77bcc001"
       },
       "proposal": {
         "compilerVersion": "architecture-board-compiler/v3",
@@ -234,8 +234,8 @@
         }
       },
       "diagrams": {
-        "sourceFingerprint": "sha256:6fce0354218b3f3aa48734d833b1c9d6200f2e1f06ddba22f68c69b3cf13b70b",
-        "compiledFingerprint": "sha256:ccd13c1f1fddff06be8832bfc8fb49f7ead50e0e142aa372a9ddb63013f73e58"
+        "sourceFingerprint": "sha256:2a581ee234d1a3aaca7c264374d114337a83a6fe922fbc6dbdf7d2be35a97c0a",
+        "compiledFingerprint": "sha256:1c5362ed5c5668b7ac889d87109fe5d8497cc0881b4c003db4b2f5c23cceaaa1"
       },
       "proposal": {
         "compilerVersion": "architecture-board-compiler/v3",
@@ -335,8 +335,8 @@
         }
       },
       "diagrams": {
-        "sourceFingerprint": "sha256:207287c197908810993b556d3860a118c208a3f9f8f9da24b30854029b4cffd5",
-        "compiledFingerprint": "sha256:a0e0f5b2e1ad37c0c575942b8e757d8d6a42411098283c5e85780b15fa0a3d8d"
+        "sourceFingerprint": "sha256:45afba520e9036c00fd4a8b2edf95a9025636c17f6e905e11d1100b78d741db7",
+        "compiledFingerprint": "sha256:ebecf940222c3c95a4a79217e0b1cda6efd2b1486abca544a9fec5aeff37f8e2"
       },
       "proposal": {
         "compilerVersion": "architecture-board-compiler/v3",
@@ -436,8 +436,8 @@
         }
       },
       "diagrams": {
-        "sourceFingerprint": "sha256:1b0ed9cc405a73d266502335cee73734c3e8071a577a9e7ed6a8c7c1137a6303",
-        "compiledFingerprint": "sha256:b1889ec3f773369e0dc1d7494f81f9ff920ce74503ca7a2662af0a10e5aad1c7"
+        "sourceFingerprint": "sha256:e1219572f5384a19a2b52d75648fd25aa77c2a0a43f300444e31e8294811b5c4",
+        "compiledFingerprint": "sha256:60d607c40928a5c110484dec2e97d089dfecb3e92bedbb4ff8d5399c51d5aa3b"
       },
       "proposal": {
         "compilerVersion": "architecture-board-compiler/v3",
@@ -537,8 +537,8 @@
         }
       },
       "diagrams": {
-        "sourceFingerprint": "sha256:e210e8b72f7dc24da8e5a3e5277df7e9cf86f9c8ba4d9725fa39fc9420832dd5",
-        "compiledFingerprint": "sha256:76984c5ab7a7533d1fa937745d95fb7aa3acd1322956deca61985db836f92cb7"
+        "sourceFingerprint": "sha256:fc484bb6dfae1fe34eaba6b52e2075d5df02ad8e09dc73ac8dc844c3c5d2a382",
+        "compiledFingerprint": "sha256:1050d53fb148800f21b755653d0b831670ef4b555ac166ac0d3986419e257b1e"
       },
       "proposal": {
         "compilerVersion": "architecture-board-compiler/v3",
@@ -546,8 +546,8 @@
       },
       "metrics": {
         "before": {
-          "score": 2681687072.1054,
-          "visualPenalty": 2681687072.1054,
+          "score": 2683637072.1054,
+          "visualPenalty": 2683637072.1054,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
@@ -570,8 +570,8 @@
             "mainFlowContinuityError": 0,
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 2,
-            "repeatAlignmentError": 140,
-            "score": 2681687072.1054,
+            "repeatAlignmentError": 335,
+            "score": 2683637072.1054,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 4,
@@ -580,8 +580,8 @@
           }
         },
         "after": {
-          "score": 606393019.35422,
-          "visualPenalty": 606391624.58822,
+          "score": 604373019.35422,
+          "visualPenalty": 604371624.58822,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
@@ -604,8 +604,8 @@
             "mainFlowContinuityError": 969.333333,
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
-            "repeatAlignmentError": 404,
-            "score": 606391624.58822,
+            "repeatAlignmentError": 202,
+            "score": 604371624.58822,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
@@ -614,7 +614,7 @@
           }
         },
         "compilationDistance": 1206,
-        "scoreDelta": -2075294052.751179
+        "scoreDelta": -2079264052.751179
       },
       "review": {
         "status": "pending",
@@ -638,8 +638,8 @@
         }
       },
       "diagrams": {
-        "sourceFingerprint": "sha256:dd7ebc8beff3e37700337f4935c012247868e482755584535a4ff06d154cc6d6",
-        "compiledFingerprint": "sha256:0ecedea3728ce12ac21544c4dfe83b23475fd8e46597fa9d11faf261cb2cae38"
+        "sourceFingerprint": "sha256:90df73f5ffb72dc48c24036fe8f7da27b748d9e335b3609a5f609d046183ebb6",
+        "compiledFingerprint": "sha256:583c75811f6e4d0878b4a1aa1e3818bb5bc8981aab38a2217fcb83ebecc8540a"
       },
       "proposal": {
         "compilerVersion": "architecture-board-compiler/v3",
@@ -739,8 +739,8 @@
         }
       },
       "diagrams": {
-        "sourceFingerprint": "sha256:6dd00a412aa2b06fb31f14abff7141a19b5a129dc2de0ecc4b6047ff497cd64c",
-        "compiledFingerprint": "sha256:d4c24fccd2b6fa29af95e7f9b427ce9617cafa7e4d5c9bb4f82b210b0619627d"
+        "sourceFingerprint": "sha256:3c073ec990065890b684af3fbadf60fc3109f74b750326b6c8784e78e8777666",
+        "compiledFingerprint": "sha256:6ba11ae453a190d42524ce96344b5321bd0ea06c47927d17cef2ce2839246f38"
       },
       "proposal": {
         "compilerVersion": "architecture-board-compiler/v3",
@@ -748,8 +748,8 @@
       },
       "metrics": {
         "before": {
-          "score": 1290143031.810806,
-          "visualPenalty": 1290143031.810806,
+          "score": 1050143031.810806,
+          "visualPenalty": 1050143031.810806,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
@@ -773,17 +773,17 @@
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 0,
-            "score": 1290143031.810806,
+            "score": 1050143031.810806,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 1,
-            "supportLaneIntrusionCount": 8,
+            "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 0,
             "totalEdgeLength": 2112.587953
           }
         },
         "after": {
-          "score": 182072946.631084,
-          "visualPenalty": 182072508.319084,
+          "score": 182069424.614084,
+          "visualPenalty": 182068988.319084,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
@@ -799,7 +799,7 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 0,
             "knowledgeEdgeLength": 249.227,
-            "knowledgePenalty": 252.312,
+            "knowledgePenalty": 250.295,
             "knowledgeReferenceSimilarity": 0.827,
             "knowledgeSiblingGap": 104.806,
             "knowledgeViewportAspectRatio": 1.741,
@@ -807,16 +807,16 @@
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 0,
-            "score": 182072508.319084,
+            "score": 182068988.319084,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 0,
-            "totalEdgeLength": 2200
+            "totalEdgeLength": 2024
           }
         },
         "compilationDistance": 186,
-        "scoreDelta": -1108070085.179722
+        "scoreDelta": -868073607.196722
       },
       "review": {
         "status": "pending",
