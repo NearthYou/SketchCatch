@@ -219,6 +219,22 @@ test("full-stack validation checks the confirmed target and opens its setup surf
   assert.match(deploymentShellSource, /onOpenDeliverySetup=\{\(\) => selectScreen\("cicd"\)\}/);
 });
 
+test("deployment actions preserve detailed preparation errors", () => {
+  const runActionStart = directDeploymentSource.indexOf("async function runAction");
+  const refreshDetailsStart = directDeploymentSource.indexOf(
+    "function refreshDeploymentDetails",
+    runActionStart
+  );
+  const runActionSource = directDeploymentSource.slice(runActionStart, refreshDetailsStart);
+
+  assert.ok(runActionStart > -1);
+  assert.ok(refreshDetailsStart > runActionStart);
+  assert.match(
+    runActionSource,
+    /setErrorMessage\(getDeploymentPreparationErrorMessage\(error, fallbackMessage\)\)/
+  );
+});
+
 test("changed drafts keep cleanup available beside save and validation", () => {
   const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
   const validationStart = directDeploymentSource.indexOf(

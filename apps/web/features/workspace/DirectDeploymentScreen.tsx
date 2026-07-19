@@ -79,6 +79,7 @@ import {
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { PreparedWorkspaceDeploymentArtifacts } from "./workspace-deployment-artifacts";
 import {
+  getDeploymentPreparationErrorMessage,
   getDeploymentTargetPrerequisite,
   type DeploymentTargetPrerequisite
 } from "./deployment-preparation-error";
@@ -774,7 +775,7 @@ export function DirectDeploymentScreen({
       setRequestState("error");
       setFailedActionStepId(stepId);
       setSelectedDirectStepId(stepId);
-      setErrorMessage(getApiErrorMessage(error, fallbackMessage));
+      setErrorMessage(getDeploymentPreparationErrorMessage(error, fallbackMessage));
       return null;
     } finally {
       actionInFlightRef.current = false;

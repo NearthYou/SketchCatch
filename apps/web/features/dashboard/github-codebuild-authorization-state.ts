@@ -13,23 +13,23 @@ export type GitHubCodeBuildAuthorizationTarget =
       readonly installation: GitHubInstallationConnection;
     };
 
-export type AwsCodeConnectionRepositoryAccessState = Readonly<{
+export type AwsCodeConnectionConnectedState = Readonly<{
   actionHref: string;
   actionLabel: string;
   description: string;
-  status: "repository_access_unverified";
+  status: "connected";
   title: string;
 }>;
 
-export function deriveAwsCodeConnectionRepositoryAccessState(
+export function deriveAwsCodeConnectionConnectedState(
   status: AwsCodeConnectionStatus
-): AwsCodeConnectionRepositoryAccessState | null {
+): AwsCodeConnectionConnectedState | null {
   if (status !== "AVAILABLE") return null;
   return {
     actionHref: "https://github.com/settings/installations",
     actionLabel: "AWS Connector 권한 관리",
-    description: "Repository 접근은 아직 확인되지 않았습니다",
-    status: "repository_access_unverified",
+    description: "Repository 접근은 프로젝트 저장·검증에서 확인합니다",
+    status: "connected",
     title: "AWS OAuth 연결됨"
   };
 }
