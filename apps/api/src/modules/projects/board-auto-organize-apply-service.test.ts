@@ -387,6 +387,35 @@ test("server rejects node geometry outside Board and Editor bounds", async () =>
   assert.equal(saveCalls, 0);
 });
 
+test("server preserves a legacy area size without allowing it to shrink further", async () => {
+  const legacySource = createDiagram();
+  legacySource.nodes[0]!.size = { width: 112, height: 108 };
+
+  for (const width of [112, 116, 120]) {
+    const candidate = structuredClone(legacySource);
+    candidate.nodes[0]!.position = { x: 180, y: 120 };
+    candidate.nodes[0]!.size.width = width;
+
+    await assert.doesNotReject(() => applyCandidateForTest(legacySource, candidate));
+  }
+
+  const legacyShrink = structuredClone(legacySource);
+  legacyShrink.nodes[0]!.size.width = 111;
+  await assert.rejects(
+    () => applyCandidateForTest(legacySource, legacyShrink),
+    BoardAutoOrganizeSemanticMismatchError
+  );
+
+  const currentSource = createDiagram();
+  currentSource.nodes[0]!.size = { width: 120, height: 108 };
+  const currentShrink = structuredClone(currentSource);
+  currentShrink.nodes[0]!.size.width = 119;
+  await assert.rejects(
+    () => applyCandidateForTest(currentSource, currentShrink),
+    BoardAutoOrganizeSemanticMismatchError
+  );
+});
+
 test("server rejects non-finite, malformed, and out-of-bounds SVG route paths", async () => {
   const sourceDiagram = createDiagram();
   sourceDiagram.edges.push({
@@ -503,4 +532,30 @@ function createDraftRow(
     createdAt: savedAt,
     updatedAt: savedAt
   };
+}
+
+/** geometry 경계 회귀가 실제 저장 경로의 서버 재조립을 통과하는지 확인합니다. */
+async function applyCandidateForTest(
+  sourceDiagram: DiagramJson,
+  candidateDiagram: DiagramJson
+): Promise<void> {
+  await applyBoardAutoOrganizeDraft(
+    {
+      candidateDiagram,
+      db: {} as Database,
+      expectedRevision: 7,
+      projectId: PROJECT_ID,
+      sourceDiagram,
+      sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(sourceDiagram),
+      terraformFiles: [],
+      userId: USER_ID
+    },
+    {
+      readDraft: async () => ({ ...createDraftRow(sourceDiagram, []), revision: 7 }),
+      saveDraftRevision: async () => ({
+        status: "saved",
+        draft: createDraftRow(candidateDiagram, [])
+      })
+    }
+  );
 }

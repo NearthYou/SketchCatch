@@ -103,7 +103,7 @@ export function recomposeBoardAutoOrganizeDiagram(
         continue;
       }
 
-      assertValidNodeGeometry(candidateNode);
+      assertValidNodeGeometry(candidateNode, sourceNode);
       nodes.push(normalizeBoardAutoPresentationFrame(candidateNode));
       continue;
     }
@@ -119,7 +119,7 @@ export function recomposeBoardAutoOrganizeDiagram(
     }
 
     if (geometryChanged) {
-      assertValidNodeGeometry(candidateNode);
+      assertValidNodeGeometry(candidateNode, sourceNode);
     }
 
     nodes.push({
@@ -234,21 +234,30 @@ function hasSameNodeGeometry(left: DiagramNode, right: DiagramNode): boolean {
 }
 
 /** Board 좌표 한계와 Editor의 node 종류별 resize 범위를 서버에서도 강제합니다. */
-function assertValidNodeGeometry(node: DiagramNode): void {
+function assertValidNodeGeometry(node: DiagramNode, sourceNode?: DiagramNode): void {
   const bounds = getNodeResizeBounds(node);
+  const minWidth = getEffectiveResizeMinimum(bounds.minWidth, sourceNode?.size.width);
+  const minHeight = getEffectiveResizeMinimum(bounds.minHeight, sourceNode?.size.height);
   const isValid =
     isBoardCoordinate(node.position.x) &&
     isBoardCoordinate(node.position.y) &&
     Number.isFinite(node.size.width) &&
     Number.isFinite(node.size.height) &&
-    node.size.width >= bounds.minWidth &&
+    node.size.width >= minWidth &&
     node.size.width <= bounds.maxWidth &&
-    node.size.height >= bounds.minHeight &&
+    node.size.height >= minHeight &&
     node.size.height <= bounds.maxHeight;
 
   if (!isValid) {
     throw new BoardAutoOrganizeSemanticMismatchError();
   }
+}
+
+/** 이미 저장된 작은 legacy 크기는 보존하되 그 값보다 더 줄이는 후보는 거부합니다. */
+function getEffectiveResizeMinimum(editorMinimum: number, sourceValue: number | undefined): number {
+  return sourceValue !== undefined && Number.isFinite(sourceValue) && sourceValue > 0
+    ? Math.min(editorMinimum, sourceValue)
+    : editorMinimum;
 }
 
 /** Web Editor의 resize 범위에 서버 안전 상한을 더한 node 종류별 최소·최대값입니다. */
