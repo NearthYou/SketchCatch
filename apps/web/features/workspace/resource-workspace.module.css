@@ -74,7 +74,7 @@
 
 .resourceListTitle span {
   color: var(--workspace-muted, #60646c);
-  font-size: calc(9px + var(--presentation-font-size-increase));
+  font-size: calc(6px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   line-height: 1.4;
   text-transform: uppercase;
@@ -89,7 +89,7 @@
 .resourceListTitle > strong {
   background: var(--workspace-surface-strong, #f0f0f3);
   border-radius: 9999px;
-  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-size: calc(9px + var(--presentation-font-size-increase));
   min-width: 36px;
   padding: 5px 9px;
   text-align: center;
@@ -203,7 +203,7 @@
 .resourceListAddress {
   color: var(--workspace-muted, #60646c);
   font-family: var(--font-sans);
-  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-size: calc(9px + var(--presentation-font-size-increase));
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
