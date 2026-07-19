@@ -157,7 +157,10 @@ test("Template label 불필요 수식어 금지", () => {
             (template.id === "ecs-fargate-container-app" && node.label === "Application Target Group") ||
             (template.id === "brainboard-aws-ecs-fargate" &&
               (node.label === "ECS Task IAM Role" ||
-                node.label === "ECS Task Execution Policy Attachment"))
+                node.label === "ECS Task Execution Policy Attachment")) ||
+            (template.id === "brainboard-aws-asg-lb-vpc-subnets" &&
+              (node.label === "Web Auto Scaling Group" ||
+                node.label === "Web Classic Load Balancer"))
         )
         .map((node) => `${template.id}/${node.id}: ${node.label}`)
     );
