@@ -15,7 +15,105 @@ const ECS_SERVICE_ARN = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/
 const ECS_TASK_DEFINITION_ARN =
   "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
 
-test("ALB와 CloudFront를 supported ResourceType 및 안정적인 Terraform import로 변환한다", async () => {
+test("공개 Reverse Engineering 결과에는 ARN과 환경 비밀값을 남기지 않는다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      providerResourceId: ALB_ARN,
+      displayName: "shared-entry",
+      config: {
+        arn: ALB_ARN,
+        name: "shared-entry",
+        type: "application",
+        ipAddressType: "ipv4",
+        scheme: "internet-facing",
+        subnetIds: ["subnet-a"]
+      }
+    }),
+    cloudFrontRecord(CLOUDFRONT_ARN_A, "EDISTRIBUTIONA"),
+    record({
+      providerResourceType: "AWS::ECS::Cluster",
+      providerResourceId: ECS_CLUSTER_ARN,
+      displayName: "orders",
+      config: { arn: ECS_CLUSTER_ARN, name: "orders" }
+    }),
+    record({
+      providerResourceType: "AWS::ECS::Service",
+      providerResourceId: ECS_SERVICE_ARN,
+      displayName: "api",
+      config: {
+        arn: ECS_SERVICE_ARN,
+        name: "api",
+        clusterArn: ECS_CLUSTER_ARN,
+        clusterName: "orders",
+        taskDefinitionArn: ECS_TASK_DEFINITION_ARN,
+        desiredCount: 1,
+        launchType: "FARGATE",
+        networkConfiguration: {
+          awsvpcConfiguration: { subnets: ["subnet-a"], securityGroups: ["sg-api"] }
+        }
+      },
+      relationships: [
+        { type: "depends_on", targetProviderResourceId: ECS_CLUSTER_ARN },
+        { type: "depends_on", targetProviderResourceId: ECS_TASK_DEFINITION_ARN }
+      ]
+    }),
+    record({
+      providerResourceType: "AWS::ECS::TaskDefinition",
+      providerResourceId: ECS_TASK_DEFINITION_ARN,
+      displayName: "orders:7",
+      config: {
+        arn: ECS_TASK_DEFINITION_ARN,
+        family: "orders",
+        networkMode: "awsvpc",
+        requiresCompatibilities: ["FARGATE"],
+        cpu: "512",
+        memory: "1024",
+        containerDefinitions: [
+          {
+            name: "api",
+            image: "example.invalid/orders:stable",
+            environment: [{ name: "API_TOKEN", value: "synthetic-api-token-never-public" }],
+            secrets: [
+              {
+                name: "DATABASE_URL",
+                valueFrom: "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:db"
+              }
+            ]
+          }
+        ]
+      }
+    }),
+    record({
+      providerResourceType: "AWS::S3::Bucket",
+      providerResourceId: "arn:aws:s3:::private-bucket",
+      displayName: "private-bucket",
+      config: { bucketName: "private-bucket" }
+    })
+  ]);
+
+  assert.doesNotMatch(JSON.stringify(result), /arn:aws/i);
+  assert.doesNotMatch(JSON.stringify(result), /synthetic-api-token-never-public/iu);
+  assert.ok(
+    result.discoveredResources.every((resource) =>
+      resource.providerResourceId.startsWith("aws-ref-")
+    )
+  );
+
+  const service = result.discoveredResources[3];
+  assert.ok(service);
+  assert.deepEqual(
+    (service.relationships ?? []).map((relationship) => relationship.targetResourceId),
+    [result.discoveredResources[2]?.id, result.discoveredResources[4]?.id]
+  );
+
+  for (const index of [0, 2, 4, 5]) {
+    assert.equal(result.importSuggestions[index]?.handoffReady, false);
+    assert.equal(result.importSuggestions[index]?.importCommand, undefined);
+  }
+});
+
+test("ALB와 CloudFront를 supported ResourceType으로 변환하고 공개 가능한 import만 만든다", async () => {
   const result = await scan([
     record({
       providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
@@ -59,7 +157,7 @@ test("ALB와 CloudFront를 supported ResourceType 및 안정적인 Terraform imp
 
   const [albImport, cloudFrontImportA, cloudFrontImportB, lambdaImport, iamRoleImport] =
     result.importSuggestions;
-  assertReadyImport(albImport, "aws_lb", ALB_ARN);
+  assertManualImportWithoutCommand(albImport, "aws_lb");
   assertReadyImport(cloudFrontImportA, "aws_cloudfront_distribution", "EDISTRIBUTIONA");
   assertReadyImport(cloudFrontImportB, "aws_cloudfront_distribution", "EDISTRIBUTIONB");
   assert.notEqual(cloudFrontImportA?.terraformAddress, cloudFrontImportB?.terraformAddress);
@@ -74,6 +172,43 @@ test("ALB와 CloudFront를 supported ResourceType 및 안정적인 Terraform imp
     assert.equal(suggestion?.handoffReady, false);
     assert.equal(suggestion?.importCommand, undefined);
   }
+});
+
+test("AWS 원본 config에는 Terraform 추론을 섞지 않고 handoff 결과에만 둔다", async () => {
+  const sourceConfig = {
+    arn: ALB_ARN,
+    name: "source-exact-alb",
+    type: "application",
+    ipAddressType: "ipv4",
+    scheme: "internet-facing",
+    subnetIds: ["subnet-a"]
+  };
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      providerResourceId: ALB_ARN,
+      displayName: "source-exact-alb",
+      config: sourceConfig
+    })
+  ]);
+
+  const { arn: _sourceArn, ...publicSourceConfig } = sourceConfig;
+  assert.deepEqual(result.discoveredResources[0]?.config, publicSourceConfig);
+  assert.deepEqual(result.architectureJson.nodes[0]?.config, {
+    ...publicSourceConfig,
+    providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    providerResourceId: result.discoveredResources[0]?.providerResourceId,
+    analysisExcluded: false
+  });
+  assert.equal(
+    result.reverseEngineeringDraft.protectedValueKeys.includes("terraformResourceName"),
+    false
+  );
+  assert.equal(
+    result.reverseEngineeringDraft.protectedValueKeys.includes("terraformResourceType"),
+    false
+  );
+  assert.match(result.importSuggestions[0]?.terraformAddress ?? "", /^aws_lb\./);
 });
 
 test("IpAddressType 증거가 없는 ALB는 supported 상태를 유지하지만 handoff-ready가 아니다", async () => {
@@ -99,15 +234,15 @@ test("IpAddressType 증거가 없는 ALB는 supported 상태를 유지하지만 
 
   assert.equal(resource?.resourceType, "LOAD_BALANCER");
   assert.equal(resource?.analysisExcluded ?? false, false);
-  assert.equal(resource?.config["sketchcatchReferenceTerraform"], true);
-  assert.deepEqual(resource?.config["terraformValidationMissingFields"], ["ipAddressType"]);
+  assert.equal(resource?.config["sketchcatchReferenceTerraform"], undefined);
+  assert.equal(resource?.config["terraformValidationMissingFields"], undefined);
   assert.equal(suggestion?.status, "manual_review");
   assert.equal(suggestion?.handoffReady, false);
   assert.match(suggestion?.reason ?? "", /ipAddressType/);
   assert.match(finding?.description ?? "", /ipAddressType/);
 });
 
-test("ECS Cluster Service Task Definition을 known type과 provider import identity로 변환한다", async () => {
+test("ECS Cluster Service Task Definition을 known type과 공개 가능한 handoff로 변환한다", async () => {
   const result = await scan([
     record({
       providerResourceType: "AWS::ECS::Cluster",
@@ -187,20 +322,24 @@ test("ECS Cluster Service Task Definition을 known type과 provider import ident
     result.discoveredResources.slice(0, 3).map((resource) =>
       resource.config["terraformResourceType"]
     ),
-    ["aws_ecs_cluster", "aws_ecs_service", "aws_ecs_task_definition"]
+    [undefined, undefined, undefined]
   );
   assert.deepEqual(
     result.architectureJson.nodes.map((node) => node.type),
     ["ECS_CLUSTER", "ECS_SERVICE", "ECS_TASK_DEFINITION"]
   );
-  assertReadyImport(result.importSuggestions[0], "aws_ecs_cluster", ECS_CLUSTER_ARN);
-  assertReadyImport(result.importSuggestions[1], "aws_ecs_service", "orders/api");
-  assertReadyImport(
+  assertManualImportWithoutCommand(result.importSuggestions[0], "aws_ecs_cluster");
+  assert.equal(result.importSuggestions[1]?.status, "manual_review");
+  assert.equal(result.importSuggestions[1]?.handoffReady, false);
+  assert.equal(result.importSuggestions[1]?.importCommand?.split(" ").at(-1), "orders/api");
+  assertManualImportWithoutCommand(
     result.importSuggestions[2],
-    "aws_ecs_task_definition",
-    ECS_TASK_DEFINITION_ARN
+    "aws_ecs_task_definition"
   );
-  assert.deepEqual(result.findings, []);
+  assert.deepEqual(result.findings.map((finding) => finding.resourceId), [
+    result.discoveredResources[1]?.id,
+    result.discoveredResources[2]?.id
+  ]);
 
   for (const resource of result.discoveredResources.slice(3)) {
     assert.equal(resource.analysisExcluded, true);
@@ -243,11 +382,8 @@ test("불완전한 ECS Service loadBalancer evidence는 supported 상태지만 h
 
   assert.equal(resource?.resourceType, "ECS_SERVICE");
   assert.equal(resource?.analysisExcluded ?? false, false);
-  assert.equal(resource?.config["sketchcatchReferenceTerraform"], true);
-  assert.deepEqual(resource?.config["terraformValidationMissingFields"], [
-    "loadBalancers.containerName",
-    "loadBalancers.containerPort"
-  ]);
+  assert.equal(resource?.config["sketchcatchReferenceTerraform"], undefined);
+  assert.equal(resource?.config["terraformValidationMissingFields"], undefined);
   assert.equal(suggestion?.status, "manual_review");
   assert.equal(suggestion?.handoffReady, false);
   assert.match(suggestion?.reason ?? "", /loadBalancers\.containerName.*loadBalancers\.containerPort/);
@@ -294,16 +430,14 @@ test("ECS import name 또는 Terraform 생성 입력이 부족하면 import와 �
   assert.equal(serviceImport?.handoffReady, false);
   assert.equal(serviceImport?.importCommand, undefined);
   assert.match(serviceImport?.reason ?? "", /cluster.*service.*name/i);
-  assert.equal(service?.config["sketchcatchReferenceTerraform"], true);
-  assert.deepEqual(service?.config["terraformValidationMissingFields"], ["name"]);
+  assert.equal(service?.config["sketchcatchReferenceTerraform"], undefined);
+  assert.equal(service?.config["terraformValidationMissingFields"], undefined);
 
   assert.equal(taskDefinitionImport?.status, "manual_review");
   assert.equal(taskDefinitionImport?.handoffReady, false);
   assert.match(taskDefinitionImport?.reason ?? "", /containerDefinitions\.environment/);
-  assert.equal(taskDefinition?.config["sketchcatchReferenceTerraform"], true);
-  assert.deepEqual(taskDefinition?.config["terraformValidationMissingFields"], [
-    "containerDefinitions.environment"
-  ]);
+  assert.equal(taskDefinition?.config["sketchcatchReferenceTerraform"], undefined);
+  assert.equal(taskDefinition?.config["terraformValidationMissingFields"], undefined);
   assert.deepEqual(
     result.findings.map((finding) => finding.resourceId),
     [service?.id, taskDefinition?.id]
@@ -380,7 +514,8 @@ test("loadBalancerType application 정규화 값도 ALB 지원과 생성 가능�
   assert.equal(result.discoveredResources[0]?.resourceType, "LOAD_BALANCER");
   assert.equal(result.discoveredResources[0]?.config["sketchcatchReferenceTerraform"], undefined);
   assert.deepEqual(result.findings, []);
-  assert.equal(result.importSuggestions[0]?.handoffReady, true);
+  assert.equal(result.importSuggestions[0]?.handoffReady, false);
+  assert.equal(result.importSuggestions[0]?.importCommand, undefined);
 });
 
 test("ALB ARN 또는 CloudFront distribution ID가 없으면 빈 import command 대신 수동 검토 이유를 반환한다", async () => {
@@ -437,8 +572,8 @@ test("생성 필수값이 부족한 supported Resource는 Board에 남되 handof
       referenceOnly: resource.config["sketchcatchReferenceTerraform"]
     })),
     [
-      { resourceType: "LOAD_BALANCER", analysisExcluded: false, referenceOnly: true },
-      { resourceType: "CLOUDFRONT", analysisExcluded: false, referenceOnly: true }
+      { resourceType: "LOAD_BALANCER", analysisExcluded: false, referenceOnly: undefined },
+      { resourceType: "CLOUDFRONT", analysisExcluded: false, referenceOnly: undefined }
     ]
   );
   assert.equal(result.architectureJson.nodes.length, 2);
@@ -488,8 +623,8 @@ test("CloudFront VPC origin은 import identity를 보존하지만 reference-only
 
   assert.equal(resource?.resourceType, "CLOUDFRONT");
   assert.equal(resource?.analysisExcluded ?? false, false);
-  assert.equal(resource?.config["sketchcatchReferenceTerraform"], true);
-  assert.deepEqual(resource?.config["terraformValidationMissingFields"], ["origin.vpcOriginConfig"]);
+  assert.equal(resource?.config["sketchcatchReferenceTerraform"], undefined);
+  assert.equal(resource?.config["terraformValidationMissingFields"], undefined);
   assert.equal(suggestion?.status, "manual_review");
   assert.equal(suggestion?.handoffReady, false);
   assert.equal(suggestion?.importCommand?.split(" ").at(-1), "EDISTRIBUTIONA");
@@ -516,7 +651,8 @@ test("ALB subnet_mapping은 subnets 대신 새 Terraform 생성 위치 정보로
 
   assert.equal(result.discoveredResources[0]?.config["sketchcatchReferenceTerraform"], undefined);
   assert.deepEqual(result.findings, []);
-  assert.equal(result.importSuggestions[0]?.handoffReady, true);
+  assert.equal(result.importSuggestions[0]?.handoffReady, false);
+  assert.equal(result.importSuggestions[0]?.importCommand, undefined);
 });
 
 async function scan(records: AwsDiscoveredResourceRecord[]): Promise<ReverseEngineeringScanResult> {
@@ -578,6 +714,16 @@ function assertReadyImport(
     new RegExp(`^resource "${terraformType}" "[a-z0-9_]+" \\{\\}$`)
   );
   assert.equal(suggestion?.importCommand?.split(" ").at(-1), importId);
+}
+
+function assertManualImportWithoutCommand(
+  suggestion: ReverseEngineeringScanResult["importSuggestions"][number] | undefined,
+  terraformType: string
+): void {
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.match(suggestion?.terraformAddress ?? "", new RegExp(`^${terraformType}\\.`));
+  assert.equal(suggestion?.importCommand, undefined);
 }
 
 function record(input: {

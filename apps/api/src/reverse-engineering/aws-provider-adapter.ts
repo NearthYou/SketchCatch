@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   ArchitectureJson,
   CheckFinding,
@@ -98,11 +99,135 @@ const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
   "providerResourceId",
   "providerResourceType",
   "region",
-  "accountId",
-  "terraformResourceName",
-  "terraformResourceType"
+  "accountId"
 ];
 const REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS = ["displayName", "description"];
+const OPAQUE_PUBLIC_ID_RESOURCE_TYPES = new Set([
+  "AWS::Lambda::Function",
+  "AWS::Lambda::Permission",
+  "AWS::IAM::Role",
+  "AWS::IAM::Policy",
+  "AWS::IAM::InstanceProfile"
+]);
+const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>([
+  [
+    "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    new Set([
+      "availabilityZones",
+      "dnsName",
+      "ipAddressType",
+      "loadBalancerType",
+      "name",
+      "scheme",
+      "securityGroupIds",
+      "subnetIds",
+      "subnetMapping",
+      "type",
+      "vpcId"
+    ])
+  ],
+  [
+    "AWS::CloudFront::Distribution",
+    new Set([
+      "comment",
+      "defaultCacheBehavior",
+      "enabled",
+      "id",
+      "origin",
+      "restrictions",
+      "viewerCertificate"
+    ])
+  ],
+  [
+    "AWS::ECS::Cluster",
+    new Set(["capacityProviders", "configuration", "name", "status"])
+  ],
+  [
+    "AWS::ECS::Service",
+    new Set([
+      "capacityProviderStrategy",
+      "clusterName",
+      "desiredCount",
+      "launchType",
+      "loadBalancers",
+      "name",
+      "networkConfiguration"
+    ])
+  ],
+  [
+    "AWS::ECS::TaskDefinition",
+    new Set([
+      "containerDefinitions",
+      "cpu",
+      "family",
+      "memory",
+      "networkMode",
+      "requiresCompatibilities",
+      "requiresManualEnvironmentInput",
+      "revision"
+    ])
+  ],
+  [
+    "AWS::Lambda::Function",
+    new Set([
+      "architectures",
+      "codeSize",
+      "ephemeralStorageSize",
+      "functionName",
+      "handler",
+      "lastModified",
+      "lastUpdateStatus",
+      "memorySize",
+      "packageType",
+      "runtime",
+      "securityGroupIds",
+      "state",
+      "subnetIds",
+      "timeout",
+      "tracingMode",
+      "version",
+      "vpcId"
+    ])
+  ],
+  [
+    "AWS::Lambda::Permission",
+    new Set(["effect", "functionName", "hasCondition", "permissionIndex"])
+  ],
+  [
+    "AWS::IAM::Role",
+    new Set([
+      "createdAt",
+      "description",
+      "hasPermissionsBoundary",
+      "hasTrustPolicy",
+      "lastUsedAt",
+      "lastUsedRegion",
+      "maxSessionDuration",
+      "path",
+      "roleName",
+      "scanRegion"
+    ])
+  ],
+  [
+    "AWS::IAM::Policy",
+    new Set([
+      "attachmentCount",
+      "createdAt",
+      "description",
+      "isAttachable",
+      "path",
+      "permissionsBoundaryUsageCount",
+      "policyName",
+      "scanRegion",
+      "updatedAt"
+    ])
+  ],
+  [
+    "AWS::IAM::InstanceProfile",
+    new Set(["createdAt", "instanceProfileName", "path", "roleNames", "scanRegion"])
+  ]
+]);
+const OMIT_PUBLIC_VALUE = Symbol("omit-public-value");
 
 // Provider Adapter의 공개 진입점입니다. AWS 원본 목록을 보드 설계도와 분석 재료로 바꿉니다.
 export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsProviderAdapter {
@@ -115,7 +240,14 @@ export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsPr
       const idMap = createResourceIdMap(records);
       const displayNameMap = createAwsResourceDisplayNameMap(records);
       const discoveredResources = records.map((record) =>
-        toDiscoveredResource(record, idMap, displayNameMap.get(record.providerResourceId) ?? record.displayName)
+        toDiscoveredResource(
+          record,
+          idMap,
+          createAwsPublicDisplayName(
+            record,
+            displayNameMap.get(record.providerResourceId) ?? record.displayName
+          )
+        )
       );
       const architectureJson = createReverseEngineeringArchitectureJson(discoveredResources);
       const scan = createEmptyScan(input);
@@ -193,27 +325,12 @@ function toDiscoveredResource(
   displayName: string
 ): DiscoveredResource {
   const resourceType = resolveAwsResourceType(record);
-  const terraformResourceType = terraformResourceTypeMap.get(resourceType);
-  const terraformResourceName = createTerraformResourceName(record.providerResourceId);
-  const missingTerraformFields = getMissingTerraformCreationFields(resourceType, record.config);
-  const config = REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES.has(resourceType)
-    ? {
-        ...record.config,
-        terraformResourceName,
-        terraformResourceType,
-        ...(missingTerraformFields.length > 0
-          ? {
-              sketchcatchReferenceTerraform: true,
-              terraformValidationMissingFields: missingTerraformFields
-            }
-          : {})
-      }
-    : record.config;
+  const config = createAwsPublicResourceConfig(record);
   const baseResource: DiscoveredResource = {
     id: createNodeId(record),
     provider: "aws",
     providerResourceType: record.providerResourceType,
-    providerResourceId: record.providerResourceId,
+    providerResourceId: createAwsPublicProviderResourceId(record),
     region: record.region,
     displayName,
     resourceType,
@@ -316,6 +433,10 @@ function createImportSuggestions(
     const terraformAddress = `${terraformResourceType}.${terraformResourceName}`;
     const terraformBlockDraft = `resource "${terraformResourceType}" "${terraformResourceName}" {}`;
     const importId = getStableTerraformImportId(resource);
+    const missingTerraformFields = getMissingTerraformCreationFields(
+      resource.resourceType,
+      resource.config
+    );
 
     if (!importId) {
       return {
@@ -324,14 +445,14 @@ function createImportSuggestions(
         status: "manual_review",
         terraformAddress,
         terraformBlockDraft,
-        reason: createMissingImportIdReason(resource.resourceType),
+        reason:
+          missingTerraformFields.length > 0
+            ? `${createMissingImportIdReason(resource.resourceType)} 새 Terraform 생성에는 ${missingTerraformFields.join(", ")} 값이 필요합니다.`
+            : createMissingImportIdReason(resource.resourceType),
         handoffReady: false
       };
     }
 
-    const missingTerraformFields = getStringArray(
-      resource.config["terraformValidationMissingFields"]
-    );
     if (missingTerraformFields.length > 0) {
       return {
         id: `import-${resource.id}`,
@@ -383,6 +504,10 @@ function getStableTerraformImportId(resource: DiscoveredResource): string | null
     return isEcsTaskDefinitionArn(providerResourceId) ? providerResourceId : null;
   }
 
+  if (/^aws-ref-[a-f0-9]{24}$/u.test(resource.providerResourceId)) {
+    return null;
+  }
+
   return getNonEmptyString(resource.providerResourceId);
 }
 
@@ -390,13 +515,13 @@ function createMissingImportIdReason(resourceType: ResourceType): string {
   return resourceType === "CLOUDFRONT"
     ? "Terraform import에 필요한 CloudFront distribution ID가 없습니다."
     : resourceType === "LOAD_BALANCER"
-      ? "Terraform import에 필요한 ALB ARN이 없습니다."
+      ? "보안상 ALB의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
       : resourceType === "ECS_CLUSTER"
-        ? "Terraform import에 필요한 ECS Cluster ARN이 없습니다."
+        ? "보안상 ECS Cluster의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
         : resourceType === "ECS_SERVICE"
           ? "Terraform import에 필요한 ECS cluster name과 service name이 없습니다."
           : resourceType === "ECS_TASK_DEFINITION"
-            ? "Terraform import에 필요한 ECS Task Definition ARN이 없습니다."
+            ? "보안상 ECS Task Definition의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
       : "Terraform import에 필요한 provider Resource ID가 없습니다.";
 }
 
@@ -444,7 +569,10 @@ function createTerraformCreationValidationFindings(
       return [];
     }
 
-    const missingFields = getStringArray(resource.config["terraformValidationMissingFields"]);
+    const missingFields = getMissingTerraformCreationFields(
+      resource.resourceType,
+      resource.config
+    );
     if (missingFields.length === 0) {
       return [];
     }
@@ -705,7 +833,194 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function createNodeId(record: AwsDiscoveredResourceRecord): string {
-  return `resource-${sanitizeIdPart(record.providerResourceId)}`;
+  return `resource-${sanitizeIdPart(createAwsPublicProviderResourceId(record))}`;
+}
+
+// gg: raw SDK snapshot은 공개 config에서 공통 제거하고 민감한 Resource는 명시 allowlist만 통과시킵니다.
+export function createAwsPublicResourceConfig(
+  record: Pick<AwsDiscoveredResourceRecord, "providerResourceType" | "config">
+): Record<string, unknown> {
+  const allowedKeys = PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE.get(record.providerResourceType);
+
+  const publicConfig = Object.fromEntries(
+    Object.entries(record.config).flatMap(([key, value]) => {
+      if (
+        key === "providerParameters" ||
+        value === undefined ||
+        (allowedKeys !== undefined && !allowedKeys.has(key))
+      ) {
+        return [];
+      }
+
+      const publicValue = sanitizePublicConfigValue(value);
+      return publicValue === OMIT_PUBLIC_VALUE ? [] : [[key, publicValue]];
+    })
+  );
+
+  return record.providerResourceType === "AWS::ECS::TaskDefinition"
+    ? sanitizePublicEcsTaskDefinitionConfig(publicConfig, record.config)
+    : publicConfig;
+}
+
+function sanitizePublicEcsTaskDefinitionConfig(
+  publicConfig: Record<string, unknown>,
+  sourceConfig: Record<string, unknown>
+): Record<string, unknown> {
+  const sourceContainers = Array.isArray(sourceConfig["containerDefinitions"])
+    ? sourceConfig["containerDefinitions"]
+    : [];
+  const requiresManualEnvironmentInput = sourceContainers.some(
+    (container) =>
+      isRecord(container) &&
+      ((Array.isArray(container["environment"]) && container["environment"].length > 0) ||
+        (Array.isArray(container["secrets"]) && container["secrets"].length > 0))
+  );
+
+  return {
+    ...publicConfig,
+    ...(Object.prototype.hasOwnProperty.call(publicConfig, "containerDefinitions")
+      ? {
+          containerDefinitions: sanitizePublicEcsContainerDefinitions(
+            publicConfig["containerDefinitions"]
+          )
+        }
+      : {}),
+    ...(requiresManualEnvironmentInput ? { requiresManualEnvironmentInput: true } : {})
+  };
+}
+
+function sanitizePublicEcsContainerDefinitions(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((container) => {
+    if (!isRecord(container)) {
+      return [];
+    }
+
+    const publicContainer = pickPublicObjectKeys(container, [
+      "cpu",
+      "essential",
+      "image",
+      "memory",
+      "memoryReservation",
+      "name",
+      "readonlyRootFilesystem",
+      "user",
+      "workingDirectory"
+    ]);
+    const portMappings = Array.isArray(container["portMappings"])
+      ? container["portMappings"].flatMap((portMapping) =>
+          isRecord(portMapping)
+            ? [
+                pickPublicObjectKeys(portMapping, [
+                  "appProtocol",
+                  "containerPort",
+                  "hostPort",
+                  "name",
+                  "protocol"
+                ])
+              ]
+            : []
+        )
+      : [];
+    const secretNames = Array.isArray(container["secrets"])
+      ? container["secrets"].flatMap((secret) =>
+          isRecord(secret) && getNonEmptyString(secret["name"])
+            ? [{ name: getNonEmptyString(secret["name"]) }]
+            : []
+        )
+      : [];
+
+    return [
+      {
+        ...publicContainer,
+        ...(portMappings.length > 0 ? { portMappings } : {}),
+        ...(secretNames.length > 0 ? { secrets: secretNames } : {})
+      }
+    ];
+  });
+}
+
+function pickPublicObjectKeys(
+  value: Record<string, unknown>,
+  keys: readonly string[]
+): Record<string, unknown> {
+  return Object.fromEntries(
+    keys.flatMap((key) =>
+      value[key] === undefined ? [] : [[key, value[key]]]
+    )
+  );
+}
+
+// gg: raw ARN은 내부 관계 결합에만 쓰고 공개 결과에는 안정적인 불투명 ID만 남깁니다.
+export function createAwsPublicProviderResourceId(
+  record: Pick<AwsDiscoveredResourceRecord, "providerResourceType" | "providerResourceId">
+): string {
+  if (/^aws-ref-[a-f0-9]{24}$/u.test(record.providerResourceId)) {
+    return record.providerResourceId;
+  }
+
+  if (
+    !OPAQUE_PUBLIC_ID_RESOURCE_TYPES.has(record.providerResourceType) &&
+    !containsAwsArn(record.providerResourceId)
+  ) {
+    return record.providerResourceId;
+  }
+
+  return createOpaquePublicId(record.providerResourceType, record.providerResourceId);
+}
+
+function createOpaquePublicId(providerResourceType: string, providerResourceId: string): string {
+  return `aws-ref-${createHash("sha256")
+    .update(`${providerResourceType}\0${providerResourceId}`)
+    .digest("hex")
+    .slice(0, 24)}`;
+}
+
+export function createAwsPublicDisplayName(
+  record: Pick<AwsDiscoveredResourceRecord, "providerResourceType" | "providerResourceId">,
+  displayName: string
+): string {
+  if (!containsAwsArn(displayName)) {
+    return displayName;
+  }
+
+  const resourceLabel = record.providerResourceType.split("::").at(-1) || "AWS Resource";
+  return `${resourceLabel} · ${createAwsPublicProviderResourceId(record).slice(-7)}`;
+}
+
+function sanitizePublicConfigValue(value: unknown): unknown | typeof OMIT_PUBLIC_VALUE {
+  if (typeof value === "string") {
+    return containsAwsArn(value) ? OMIT_PUBLIC_VALUE : value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => {
+      const publicItem = sanitizePublicConfigValue(item);
+      return publicItem === OMIT_PUBLIC_VALUE ? [] : [publicItem];
+    });
+  }
+
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).flatMap(([key, nestedValue]) => {
+        if (containsAwsArn(key)) {
+          return [];
+        }
+
+        const publicValue = sanitizePublicConfigValue(nestedValue);
+        return publicValue === OMIT_PUBLIC_VALUE ? [] : [[key, publicValue]];
+      })
+    );
+  }
+
+  return value === undefined ? OMIT_PUBLIC_VALUE : value;
+}
+
+export function containsAwsArn(value: string): boolean {
+  return /(?:^|[^a-z0-9])arn:aws(?:-[a-z0-9-]+)?:/iu.test(value);
 }
 
 function createTerraformResourceName(providerResourceId: string): string {

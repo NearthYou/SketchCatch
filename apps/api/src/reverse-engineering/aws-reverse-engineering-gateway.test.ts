@@ -20,8 +20,15 @@ import {
   ListClustersCommand,
   ListServicesCommand
 } from "@aws-sdk/client-ecs";
+import { ListRolesCommand } from "@aws-sdk/client-iam";
+import { GetPolicyCommand, ListFunctionsCommand } from "@aws-sdk/client-lambda";
+import type { ReverseEngineeringScanResult } from "@sketchcatch/types";
 import type { TerraformAwsCredentialEnv } from "../aws-connections/aws-connection-runtime-credentials.js";
-import type { AwsDiscoveredResourceRecord, AwsProviderScanInput } from "./aws-provider-adapter.js";
+import {
+  createAwsProviderAdapter,
+  type AwsDiscoveredResourceRecord,
+  type AwsProviderScanInput
+} from "./aws-provider-adapter.js";
 import { sendAwsQuery } from "./aws-reverse-engineering-query.js";
 import {
   collectAwsPages,
@@ -39,6 +46,9 @@ import {
   listApplicationLoadBalancers,
   listBucketsWithDetails,
   listCloudFrontDistributions,
+  listIamRolesAsUnknown,
+  listLambdaFunctionsAsUnknown,
+  listLambdaPermissionsAsUnknown,
   readEcsResourcesWithDiagnostics,
   readResourceExplorerResourcesWithDiagnostics,
   resolveCloudFrontOriginRelationships
@@ -50,6 +60,43 @@ const credentials: TerraformAwsCredentialEnv = {
   AWS_SECRET_ACCESS_KEY: "fixture-secret-key",
   AWS_REGION: "ap-northeast-2"
 };
+
+async function scanGatewayRecords(
+  records: AwsDiscoveredResourceRecord[]
+): Promise<ReverseEngineeringScanResult> {
+  return createAwsProviderAdapter({
+    async discoverResources() {
+      return records;
+    }
+  }).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
+}
+
+function safeRecord(
+  providerResourceType: string,
+  providerResourceId: string,
+  displayName: string
+): AwsDiscoveredResourceRecord {
+  return {
+    providerResourceType,
+    providerResourceId,
+    displayName,
+    region: "ap-northeast-2",
+    config: {},
+    relationships: []
+  };
+}
+
+function assertSerializedValuesAbsent(value: unknown, forbiddenValues: readonly string[]): void {
+  const serialized = JSON.stringify(value);
+
+  for (const forbiddenValue of forbiddenValues) {
+    assert.equal(
+      serialized.includes(forbiddenValue),
+      false,
+      `public Reverse Engineering result must not contain ${forbiddenValue}`
+    );
+  }
+}
 
 function scanInput(resourceTypes: AwsProviderScanInput["resourceTypes"]): AwsProviderScanInput {
   return { provider: "aws", region: "ap-northeast-2", resourceTypes };
@@ -153,6 +200,201 @@ test("later page failure preserves prior items and exposes only a safe outcome",
     JSON.stringify(result.failure),
     /RequestId|private-request-id|arn:aws|123456789012|AccessDenied/iu
   );
+});
+
+test("Lambda 함수는 환경 비밀값과 실행 Role ARN 없이 안전한 설정만 남긴다", async () => {
+  const functionArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler";
+  const secretToken = "synthetic-api-token-do-not-store";
+  const roleArn = "arn:aws:iam::123456789012:role/synthetic-lambda-role";
+  const kmsKeyArn = "arn:aws:kms:ap-northeast-2:123456789012:key/synthetic-key";
+  const layerArn = "arn:aws:lambda:ap-northeast-2:123456789012:layer:synthetic-layer:1";
+  const [record] = await listLambdaFunctionsAsUnknown(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command) {
+        assert.ok(command instanceof ListFunctionsCommand);
+        return {
+          Functions: [
+            {
+              FunctionName: "orders-handler",
+              FunctionArn: functionArn,
+              Runtime: "nodejs22.x",
+              Handler: "index.handler",
+              MemorySize: 512,
+              Timeout: 30,
+              Role: roleArn,
+              KMSKeyArn: kmsKeyArn,
+              Layers: [{ Arn: layerArn, CodeSize: 10 }],
+              Environment: { Variables: { API_TOKEN: secretToken } },
+              VpcConfig: {
+                VpcId: "vpc-safe",
+                SubnetIds: ["subnet-safe"],
+                SecurityGroupIds: ["sg-safe"]
+              }
+            }
+          ]
+        };
+      }
+    })
+  );
+
+  assert.ok(record);
+  assert.equal(record.config["functionName"], "orders-handler");
+  assert.equal(record.config["runtime"], "nodejs22.x");
+  assert.deepEqual(record.config["subnetIds"], ["subnet-safe"]);
+  assert.deepEqual(record.relationships, [
+    { type: "depends_on", targetProviderResourceId: "vpc-safe" },
+    { type: "attached_to", targetProviderResourceId: "subnet-safe" },
+    { type: "attached_to", targetProviderResourceId: "sg-safe" }
+  ]);
+  assertSerializedValuesAbsent(record.config, [
+    secretToken,
+    roleArn,
+    kmsKeyArn,
+    layerArn,
+    "API_TOKEN",
+    "providerParameters"
+  ]);
+
+  const result = await scanGatewayRecords([
+    record,
+    safeRecord("AWS::EC2::VPC", "vpc-safe", "VPC"),
+    safeRecord("AWS::EC2::Subnet", "subnet-safe", "Subnet"),
+    safeRecord("AWS::EC2::SecurityGroup", "sg-safe", "Security Group")
+  ]);
+  assertSerializedValuesAbsent(
+    { architectureJson: result.architectureJson, discoveredResources: result.discoveredResources },
+    [functionArn, secretToken, roleArn, kmsKeyArn, layerArn, "API_TOKEN", "providerParameters"]
+  );
+});
+
+test("Lambda permission은 AWS Action과 Principal과 Policy JSON 대신 안전한 요약만 남긴다", async () => {
+  const functionArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler";
+  const principalArn = "arn:aws:iam::123456789012:role/synthetic-invoker";
+  const awsAction = "lambda:InvokeFunction";
+  const policy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Sid: "SyntheticPermission",
+        Effect: "Allow",
+        Action: awsAction,
+        Principal: { AWS: principalArn },
+        Resource: functionArn,
+        Condition: { ArnLike: { "AWS:SourceArn": "arn:aws:execute-api:region:account:api" } }
+      }
+    ]
+  });
+  const lambdaFunction = { FunctionName: "orders-handler", FunctionArn: functionArn };
+  const records = await listLambdaPermissionsAsUnknown(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command) {
+        if (command instanceof ListFunctionsCommand) {
+          return { Functions: [lambdaFunction] };
+        }
+        assert.ok(command instanceof GetPolicyCommand);
+        return { Policy: policy };
+      }
+    })
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.config["effect"], "allow");
+  assert.equal(records[0]?.config["hasCondition"], true);
+  assert.deepEqual(Object.keys(records[0]?.config ?? {}).sort(), [
+    "effect",
+    "functionName",
+    "hasCondition",
+    "permissionIndex"
+  ]);
+  assertSerializedValuesAbsent(records[0]?.config, [
+    awsAction,
+    principalArn,
+    functionArn,
+    policy,
+    "providerParameters"
+  ]);
+
+  const functionRecords = await listLambdaFunctionsAsUnknown(
+    "ap-northeast-2",
+    credentials,
+    () => ({ async send() { return { Functions: [lambdaFunction] }; } })
+  );
+  const result = await scanGatewayRecords([...functionRecords, ...records]);
+  assert.equal(result.discoveredResources[1]?.relationships?.length, 1);
+  assert.equal(result.architectureJson.edges.length, 1);
+  assertSerializedValuesAbsent(
+    { architectureJson: result.architectureJson, discoveredResources: result.discoveredResources },
+    [functionArn, awsAction, principalArn, policy]
+  );
+});
+
+test("IAM Role은 trust policy와 ARN 대신 연결에 필요한 안전한 요약만 남긴다", async () => {
+  const roleArn = "arn:aws:iam::123456789012:role/synthetic-role";
+  const principalArn = "arn:aws:iam::210987654321:root";
+  const boundaryArn = "arn:aws:iam::123456789012:policy/synthetic-boundary";
+  const trustPolicy = encodeURIComponent(JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{ Effect: "Allow", Action: "sts:AssumeRole", Principal: { AWS: principalArn } }]
+  }));
+  const [record] = await listIamRolesAsUnknown(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command) {
+        assert.ok(command instanceof ListRolesCommand);
+        return {
+          Roles: [
+            {
+              Path: "/service-role/",
+              RoleName: "synthetic-role",
+              RoleId: "SYNTHETICROLEID",
+              Arn: roleArn,
+              CreateDate: new Date("2026-01-01T00:00:00.000Z"),
+              AssumeRolePolicyDocument: trustPolicy,
+              PermissionsBoundary: {
+                PermissionsBoundaryType: "Policy",
+                PermissionsBoundaryArn: boundaryArn
+              },
+              Tags: [{ Key: "API_TOKEN", Value: "synthetic-tag-secret" }]
+            }
+          ]
+        };
+      }
+    })
+  );
+
+  assert.ok(record);
+  assert.equal(record.config["roleName"], "synthetic-role");
+  assert.equal(record.config["hasTrustPolicy"], true);
+  assert.equal(record.config["hasPermissionsBoundary"], true);
+  assertSerializedValuesAbsent(record.config, [
+    trustPolicy,
+    roleArn,
+    principalArn,
+    boundaryArn,
+    "sts:AssumeRole",
+    "AssumeRolePolicyDocument",
+    "API_TOKEN",
+    "synthetic-tag-secret",
+    "providerParameters"
+  ]);
+
+  const result = await scanGatewayRecords([record]);
+  assertSerializedValuesAbsent(result.discoveredResources, [
+    trustPolicy,
+    roleArn,
+    principalArn,
+    boundaryArn,
+    "sts:AssumeRole",
+    "AssumeRolePolicyDocument",
+    "API_TOKEN",
+    "synthetic-tag-secret",
+    "providerParameters"
+  ]);
 });
 
 test("page failure classification uses SDK error name and code without exposing either error", async () => {

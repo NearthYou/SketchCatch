@@ -313,6 +313,7 @@ export type AwsCloudWatchReadClientFactory = (
 type LambdaPolicyStatement = {
   readonly Sid?: string;
   readonly Action?: unknown;
+  readonly Condition?: unknown;
   readonly Effect?: unknown;
   readonly Principal?: unknown;
   readonly Resource?: unknown;
@@ -2140,37 +2141,27 @@ function toUnknownLambdaFunctionRecord(
     {
       providerResourceType: "AWS::Lambda::Function",
       providerResourceId: arn,
-      displayName: lambdaFunction.FunctionName ?? arn,
+      displayName: lambdaFunction.FunctionName ?? "Lambda 함수",
       region: parseAwsArn(arn).region || fallbackRegion,
-      config: {
+      config: compactRecord({
         architectures: lambdaFunction.Architectures,
-        codeSha256: lambdaFunction.CodeSha256,
         codeSize: lambdaFunction.CodeSize,
-        description: lambdaFunction.Description,
-        ephemeralStorage: lambdaFunction.EphemeralStorage,
-        functionArn: arn,
+        ephemeralStorageSize: lambdaFunction.EphemeralStorage?.Size,
         functionName: lambdaFunction.FunctionName,
         handler: lambdaFunction.Handler,
-        kmsKeyArn: lambdaFunction.KMSKeyArn,
         lastModified: lambdaFunction.LastModified,
         lastUpdateStatus: lambdaFunction.LastUpdateStatus,
-        layers: lambdaFunction.Layers,
         memorySize: lambdaFunction.MemorySize,
         packageType: lambdaFunction.PackageType,
-        providerParameters: toProviderParameterSnapshot(lambdaFunction),
-        role: lambdaFunction.Role,
         runtime: lambdaFunction.Runtime,
-        signingJobArn: lambdaFunction.SigningJobArn,
-        signingProfileVersionArn: lambdaFunction.SigningProfileVersionArn,
+        securityGroupIds,
         state: lambdaFunction.State,
-        stateReason: lambdaFunction.StateReason,
         subnetIds,
         timeout: lambdaFunction.Timeout,
-        tracingConfig: lambdaFunction.TracingConfig,
+        tracingMode: lambdaFunction.TracingConfig?.Mode,
         version: lambdaFunction.Version,
-        vpcConfig: lambdaFunction.VpcConfig,
         vpcId
-      },
+      }),
       relationships
     }
   ];
@@ -2224,23 +2215,19 @@ function toUnknownLambdaPermissionRecord(
   fallbackRegion: string
 ): AwsDiscoveredResourceRecord {
   const functionArn = lambdaFunction.FunctionArn ?? lambdaFunction.FunctionName ?? "lambda-function";
-  const sid = statement.Sid && statement.Sid.length > 0 ? statement.Sid : `statement-${index + 1}`;
-  const providerResourceId = `${functionArn}:permission:${sid}`;
+  const permissionIndex = index + 1;
+  const providerResourceId = `${functionArn}:permission:${permissionIndex}`;
 
   return {
     providerResourceType: "AWS::Lambda::Permission",
     providerResourceId,
-    displayName: `${lambdaFunction.FunctionName ?? functionArn} permission ${sid}`,
+    displayName: `${lambdaFunction.FunctionName ?? "Lambda 함수"} permission ${permissionIndex}`,
     region: parseAwsArn(functionArn).region || fallbackRegion,
     config: {
-      action: statement.Action,
-      effect: statement.Effect,
-      functionArn,
+      effect: normalizePolicyEffect(statement.Effect),
       functionName: lambdaFunction.FunctionName,
-      principal: statement.Principal,
-      providerParameters: toProviderParameterSnapshot(statement),
-      resource: statement.Resource,
-      sid
+      hasCondition: isRecordValue(statement.Condition),
+      permissionIndex
     },
     relationships: [{ type: "depends_on", targetProviderResourceId: functionArn }]
   };
@@ -2445,23 +2432,20 @@ function toUnknownIamRoleRecord(role: Role, fallbackRegion: string): AwsDiscover
     {
       providerResourceType: "AWS::IAM::Role",
       providerResourceId: arn,
-      displayName: role.RoleName ?? arn,
+      displayName: role.RoleName ?? "IAM Role",
       region: "global",
-      config: {
-        arn,
-        assumeRolePolicyDocument: role.AssumeRolePolicyDocument,
+      config: compactRecord({
         createdAt: role.CreateDate?.toISOString(),
         description: role.Description,
+        hasPermissionsBoundary: role.PermissionsBoundary !== undefined,
+        hasTrustPolicy: isNonEmptyString(role.AssumeRolePolicyDocument),
+        lastUsedAt: role.RoleLastUsed?.LastUsedDate?.toISOString(),
+        lastUsedRegion: role.RoleLastUsed?.Region,
         maxSessionDuration: role.MaxSessionDuration,
         path: role.Path,
-        permissionsBoundary: role.PermissionsBoundary,
-        providerParameters: toProviderParameterSnapshot(role),
-        roleId: role.RoleId,
-        roleLastUsed: role.RoleLastUsed,
         roleName: role.RoleName,
-        scanRegion: fallbackRegion,
-        tags: role.Tags
-      },
+        scanRegion: fallbackRegion
+      }),
       relationships: []
     }
   ];
@@ -2481,24 +2465,19 @@ function toUnknownIamPolicyRecord(
     {
       providerResourceType: "AWS::IAM::Policy",
       providerResourceId: arn,
-      displayName: policy.PolicyName ?? arn,
+      displayName: policy.PolicyName ?? "IAM Policy",
       region: "global",
-      config: {
-        arn,
+      config: compactRecord({
         attachmentCount: policy.AttachmentCount,
         createdAt: policy.CreateDate?.toISOString(),
-        defaultVersionId: policy.DefaultVersionId,
         description: policy.Description,
         isAttachable: policy.IsAttachable,
         path: policy.Path,
         permissionsBoundaryUsageCount: policy.PermissionsBoundaryUsageCount,
-        policyId: policy.PolicyId,
         policyName: policy.PolicyName,
-        providerParameters: toProviderParameterSnapshot(policy),
         scanRegion: fallbackRegion,
-        tags: policy.Tags,
         updatedAt: policy.UpdateDate?.toISOString()
-      },
+      }),
       relationships: []
     }
   ];
@@ -2518,19 +2497,17 @@ function toUnknownIamInstanceProfileRecord(
     {
       providerResourceType: "AWS::IAM::InstanceProfile",
       providerResourceId: arn,
-      displayName: profile.InstanceProfileName ?? arn,
+      displayName: profile.InstanceProfileName ?? "IAM Instance Profile",
       region: "global",
-      config: {
-        arn,
+      config: compactRecord({
         createdAt: profile.CreateDate?.toISOString(),
-        instanceProfileId: profile.InstanceProfileId,
         instanceProfileName: profile.InstanceProfileName,
         path: profile.Path,
-        providerParameters: toProviderParameterSnapshot(profile),
-        roles: profile.Roles,
+        roleNames: (profile.Roles ?? []).flatMap((role) =>
+          role.RoleName ? [role.RoleName] : []
+        ),
         scanRegion: fallbackRegion,
-        tags: profile.Tags
-      },
+      }),
       relationships: (profile.Roles ?? []).flatMap((role) =>
         role.Arn ? [{ type: "depends_on" as const, targetProviderResourceId: role.Arn }] : []
       )
@@ -3055,6 +3032,13 @@ function compactRecord(values: Record<string, unknown>): Record<string, unknown>
 
 function isRecordValue(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// gg: Policy 원문은 버리고 permission의 허용·거부 여부만 안전한 소문자 요약으로 남깁니다.
+function normalizePolicyEffect(value: unknown): "allow" | "deny" | "unknown" {
+  if (value === "Allow") return "allow";
+  if (value === "Deny") return "deny";
+  return "unknown";
 }
 
 function toAwsSdkCredentials(credentials: TerraformAwsCredentialEnv) {
