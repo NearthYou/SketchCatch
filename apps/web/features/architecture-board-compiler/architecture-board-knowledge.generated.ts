@@ -7,7 +7,7 @@ import {
 
 export const generatedArchitectureBoardKnowledgeArtifact = {
   version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
-  hash: "fnv1a-d18c7535",
+  hash: "fnv1a-7e91a33f",
   cases: [
     {
       "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -877,6 +877,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "id": "repository:ecs-fargate-container-app",
       "nodeTypes": [
         "aws-region",
+        "aws_appautoscaling_policy",
+        "aws_appautoscaling_target",
         "aws_cloudwatch_log_group",
         "aws_ecr_repository",
         "aws_ecs_cluster",
@@ -896,26 +898,26 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         "design-user-client",
         "design_group"
       ],
-      "nodeCount": 24,
-      "edgeCount": 18,
+      "nodeCount": 26,
+      "edgeCount": 20,
       "areaCount": 9,
-      "parentedNodeCount": 22,
+      "parentedNodeCount": 24,
       "maxContainmentDepth": 3,
-      "meanAreaChildDensity": 2.444,
-      "meanAreaPadding": 80.364,
-      "meanSiblingGap": 85.217,
-      "meanVerticalGap": 27.826,
-      "meanNodeWidth": 317.667,
-      "meanNodeHeight": 184.667,
-      "meanAspectRatio": 1.479,
-      "meanCaptionWidth": 107.917,
-      "meanZIndex": 0.833,
-      "meanEdgeLength": 385.653,
+      "meanAreaChildDensity": 2.667,
+      "meanAreaPadding": 78,
+      "meanSiblingGap": 84.8,
+      "meanVerticalGap": 25.6,
+      "meanNodeWidth": 308.923,
+      "meanNodeHeight": 177.846,
+      "meanAspectRatio": 1.472,
+      "meanCaptionWidth": 111.731,
+      "meanZIndex": 0.846,
+      "meanEdgeLength": 392.865,
       "meanEdgeWaypointCount": 0,
       "routedEdgeRatio": 0,
-      "horizontalFlowRatio": 0.889,
-      "supportNodeRatio": 0.208,
-      "viewportAspectRatio": 2.619,
+      "horizontalFlowRatio": 0.9,
+      "supportNodeRatio": 0.231,
+      "viewportAspectRatio": 2.81,
       "whitespaceRatio": 0
     },
     {
@@ -1257,7 +1259,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "y": 0
           },
           "size": {
-            "width": 560,
+            "width": 720,
             "height": 840
           },
           "type": "aws-region",

@@ -233,7 +233,7 @@ const EXPECTED_SEMANTIC_HASHES = {
   "minimal-serverless-api": "04ab9553ed1ac0e98d9443fd2249304e90048f8093bb8d2fba2c588d02cb040a",
   "full-serverless-web-app": "35109a6ad167cdf89e870f66f00eb86deaae947fdf2d442949c9dbec7132f272",
   "three-tier-web-app": "540426b2ed372783ece7398052d6bd8bed9c560fcb7bc7eb02f3660818e9df19",
-  "ecs-fargate-container-app": "bc9722caa649d36f4cd1e27a147e5a30f581665338ec3265bec52f623dd40041",
+  "ecs-fargate-container-app": "3906b43b977199ff25ab43e6dcb42d00119bfe746b94625e807c3b3d681f817f",
   "eks-container-app": "c96f7c03a1dc8dd12a6648d1c5227b1bcba8e320bf411b4b08a8fd379250c7dd"
 } as const satisfies Record<RepositoryTemplateId, string>;
 

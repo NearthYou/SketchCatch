@@ -3,35 +3,35 @@
   "compilerVersion": "architecture-board-compiler/v3",
   "summary": {
     "availableTemplateCount": 29,
-    "totalChangeCount": 2583,
-    "diagnosticCount": 183,
+    "totalChangeCount": 2593,
+    "diagnosticCount": 192,
     "changesByKind": {
       "resource": 0,
       "relationship": 0,
       "configuration": 0,
-      "containment": 419,
-      "presentation": 574,
-      "geometry": 1282,
-      "edge-routing": 308
+      "containment": 420,
+      "presentation": 576,
+      "geometry": 1287,
+      "edge-routing": 310
     },
     "diagnosticsByLevel": {
       "error": 0,
-      "warning": 133,
-      "info": 50
+      "warning": 140,
+      "info": 52
     },
-    "meanBeforeScore": 3325650508.741006,
-    "meanAfterScore": 272268660.944038,
-    "meanScoreDelta": -3053381847.796967,
+    "meanBeforeScore": 3399799490.495702,
+    "meanAfterScore": 272322764.827412,
+    "meanScoreDelta": -3127476725.668289,
     "visualAnomalies": {
       "before": {
-        "nodeOverlapCount": 51,
+        "nodeOverlapCount": 52,
         "siblingAreaOverlapCount": 1,
-        "parentBoundaryViolationCount": 34,
-        "edgeCrossingCount": 30,
+        "parentBoundaryViolationCount": 35,
+        "edgeCrossingCount": 31,
         "edgeNodeIntersectionCount": 22,
-        "edgeAreaTitleIntersectionCount": 49,
+        "edgeAreaTitleIntersectionCount": 50,
         "backwardEdgeCount": 49,
-        "supportLaneIntrusionCount": 59
+        "supportLaneIntrusionCount": 60
       },
       "after": {
         "nodeOverlapCount": 1,
@@ -3353,26 +3353,26 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above-reversed",
       "diagramFingerprints": {
-        "source": "sha256:2a581ee234d1a3aaca7c264374d114337a83a6fe922fbc6dbdf7d2be35a97c0a",
-        "compiled": "sha256:1c5362ed5c5668b7ac889d87109fe5d8497cc0881b4c003db4b2f5c23cceaaa1"
+        "source": "sha256:6626a7ba2b1845b7768e8a1829d0c58e9edc841cebd91cd11647b86b9a358e58",
+        "compiled": "sha256:70cf6ce2a7a9f39a11ec65ca0772e24a4a79a3965711b6ec818d221982386fcb"
       },
       "changes": {
-        "total": 120,
+        "total": 130,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
-          "containment": 18,
-          "presentation": 24,
-          "geometry": 59,
-          "edge-routing": 19
+          "containment": 19,
+          "presentation": 26,
+          "geometry": 64,
+          "edge-routing": 21
         },
         "groups": [
           {
             "action": "modify",
             "kind": "containment",
-            "count": 18,
-            "totalCost": 216
+            "count": 19,
+            "totalCost": 228
           },
           {
             "action": "remove",
@@ -3383,14 +3383,14 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 20,
-            "totalCost": 160
+            "count": 22,
+            "totalCost": 176
           },
           {
             "action": "modify",
             "kind": "geometry",
-            "count": 59,
-            "totalCost": 138
+            "count": 64,
+            "totalCost": 150
           },
           {
             "action": "add",
@@ -3407,108 +3407,124 @@
           {
             "action": "modify",
             "kind": "edge-routing",
-            "count": 15,
-            "totalCost": 90
+            "count": 17,
+            "totalCost": 102
           }
         ]
       },
       "diagnostics": {
-        "total": 36,
+        "total": 45,
         "byLevel": {
           "error": 0,
-          "warning": 25,
-          "info": 11
+          "warning": 32,
+          "info": 13
         },
         "items": [
+          {
+            "code": "compiler.legacy_terraform_reference",
+            "level": "warning",
+            "summary": "legacy Terraform interpolation",
+            "sampleMessage": "Resource 10 requests / target의 ${...} 참조를 modern Terraform reference로 정규화할 수 있습니다.",
+            "count": 1,
+            "penalty": 120
+          },
           {
             "code": "compiler.missing_terraform_relationship",
             "level": "warning",
             "summary": "Terraform 참조 관계 미표현",
-            "sampleMessage": "Resource ALB SG의 Terraform 참조 대상 ECS VPC 관계를 proposal로 추가할 수 있습니다.",
-            "count": 25,
-            "penalty": 3500
+            "sampleMessage": "Resource 10 requests / target의 Terraform 참조 대상 Fargate Task Capacity 1–3 관계를 proposal로 추가할 수 있습니다.",
+            "count": 31,
+            "penalty": 4340
           },
           {
             "code": "compiler.inferred_containment",
             "level": "info",
             "summary": "비-Security Group containment 추론",
             "sampleMessage": "contains/hosts 관계 또는 Terraform 참조로 ALB SG를 ECS VPC에 소속시켰습니다.",
-            "count": 11,
+            "count": 12,
+            "penalty": 0
+          },
+          {
+            "code": "compiler.presentation_area_inferred",
+            "level": "info",
+            "summary": "시각 Area 표현 제안",
+            "sampleMessage": "Resource ECS Cluster를 자식 Resource를 묶는 presentation Area로 표시합니다.",
+            "count": 1,
             "penalty": 0
           }
         ]
       },
       "quality": {
         "before": {
-          "score": 3490281317.142857,
-          "visualPenalty": 3490274777.142857,
-          "structuralPenalty": 3040,
-          "semanticDiagnosticPenalty": 3500,
+          "score": 5640601788.029056,
+          "visualPenalty": 5640594108.029056,
+          "structuralPenalty": 3220,
+          "semanticDiagnosticPenalty": 4460,
           "metrics": {
             "backwardEdgeCount": 0,
-            "canvasArea": 1848000,
+            "canvasArea": 1982400,
             "canvasAspectRatioPenalty": 0,
             "compilationDistance": 0,
             "containmentMismatchCount": 2,
-            "edgeAreaTitleIntersectionCount": 3,
-            "edgeCrossingCount": 2,
+            "edgeAreaTitleIntersectionCount": 4,
+            "edgeCrossingCount": 3,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.908571,
+            "emptySpaceRatio": 0.90276,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 3,
-            "knowledgeEdgeLength": 385.653,
+            "knowledgeEdgeLength": 392.865,
             "knowledgePenalty": 0,
             "knowledgeReferenceSimilarity": 1,
-            "knowledgeSiblingGap": 85.217,
-            "knowledgeViewportAspectRatio": 2.619,
-            "mainFlowContinuityError": 24,
-            "nodeOverlapCount": 2,
-            "parentBoundaryViolationCount": 1,
+            "knowledgeSiblingGap": 84.8,
+            "knowledgeViewportAspectRatio": 2.81,
+            "mainFlowContinuityError": 172,
+            "nodeOverlapCount": 3,
+            "parentBoundaryViolationCount": 2,
             "repeatAlignmentError": 0,
-            "score": 3490274777.142857,
+            "score": 5640594108.029056,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
-            "supportLaneIntrusionCount": 6,
-            "terraformReferenceContainmentMismatchCount": 14,
-            "totalEdgeLength": 6334
+            "supportLaneIntrusionCount": 7,
+            "terraformReferenceContainmentMismatchCount": 15,
+            "totalEdgeLength": 7496
           }
         },
         "after": {
-          "score": 380518924.908177,
-          "visualPenalty": 380514008.210177,
+          "score": 382087937.526019,
+          "visualPenalty": 382081994.592019,
           "structuralPenalty": 540,
-          "semanticDiagnosticPenalty": 3500,
+          "semanticDiagnosticPenalty": 4460,
           "metrics": {
             "backwardEdgeCount": 0,
             "canvasArea": 1078560,
             "canvasAspectRatioPenalty": 0.061508,
-            "compilationDistance": 660,
+            "compilationDistance": 712,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 4,
             "edgeCrossingCount": 2,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.967957,
+            "emptySpaceRatio": 0.965821,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 3,
-            "knowledgeEdgeLength": 385.653,
-            "knowledgePenalty": 216.698,
-            "knowledgeReferenceSimilarity": 0.822,
-            "knowledgeSiblingGap": 85.217,
-            "knowledgeViewportAspectRatio": 2.619,
-            "mainFlowContinuityError": 0,
+            "knowledgeEdgeLength": 392.865,
+            "knowledgePenalty": 230.934,
+            "knowledgeReferenceSimilarity": 0.841,
+            "knowledgeSiblingGap": 84.8,
+            "knowledgeViewportAspectRatio": 2.81,
+            "mainFlowContinuityError": 752,
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 0,
-            "score": 380514008.210177,
+            "score": 382081994.592019,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 3,
-            "totalEdgeLength": 5214
+            "totalEdgeLength": 8424
           }
         },
-        "compilationDistance": 660,
-        "scoreDelta": -3109762392.23468
+        "compilationDistance": 712,
+        "scoreDelta": -5258513850.503036
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-kubernetes-native-cnis",
