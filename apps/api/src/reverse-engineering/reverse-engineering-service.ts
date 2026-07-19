@@ -240,11 +240,18 @@ function createReadCompatibilityPublicResourceIdMap(
   const publicIdsByProviderResourceId = new Map<string, Set<string>>();
 
   for (const resource of resources) {
-    const publicResourceId = sanitizePublicResourceReference(
-      resource.id,
-      new Map<string, string>(),
-      resource.providerResourceType
-    );
+    const publicProviderResourceId = createAwsPublicProviderResourceId({
+      providerResourceType: resource.providerResourceType,
+      providerResourceId: resource.providerResourceId
+    });
+    const publicResourceId =
+      publicProviderResourceId !== resource.providerResourceId
+        ? `resource-${publicProviderResourceId}`
+        : sanitizePublicStructuredId(
+            resource.id,
+            resource.providerResourceType,
+            "resource"
+          );
     publicResourceIdMap.set(resource.id, publicResourceId);
 
     const publicIds = publicIdsByProviderResourceId.get(resource.providerResourceId) ?? new Set();
@@ -335,7 +342,12 @@ function sanitizeReadCompatibilityArchitecture(
   const edges = architectureJson.edges.map((edge) => {
     const publicEdge = {
       ...edge,
-      id: sanitizePublicStructuredId(edge.id, "AWS::Architecture::Edge", "edge"),
+      id: sanitizePublicStructuredId(
+        edge.id,
+        "AWS::Architecture::Edge",
+        "edge",
+        publicResourceIdMap
+      ),
       sourceId: sanitizePublicResourceReference(edge.sourceId, publicResourceIdMap),
       targetId: sanitizePublicResourceReference(edge.targetId, publicResourceIdMap),
       ...(edge.label && containsSensitiveAwsProviderText(edge.label)
@@ -380,7 +392,8 @@ function sanitizePublicImportSuggestions(
     const publicId = sanitizePublicStructuredId(
       suggestion.id,
       "AWS::ReverseEngineering::ImportSuggestion",
-      "import"
+      "import",
+      publicResourceIdMap
     );
     const publicResourceId = sanitizePublicResourceReference(
       suggestion.resourceId,
@@ -418,7 +431,8 @@ function sanitizePublicFindings(
     id: sanitizePublicStructuredId(
       finding.id,
       "AWS::ReverseEngineering::Finding",
-      "finding"
+      "finding",
+      publicResourceIdMap
     ),
     ...(finding.resourceId
       ? {
@@ -449,7 +463,8 @@ function sanitizePublicAnalysisExclusions(
     id: sanitizePublicStructuredId(
       exclusion.id,
       "AWS::ReverseEngineering::AnalysisExclusion",
-      "analysis-exclusion"
+      "analysis-exclusion",
+      publicResourceIdMap
     ),
     resourceId: sanitizePublicResourceReference(exclusion.resourceId, publicResourceIdMap),
     message:
@@ -495,16 +510,38 @@ function sanitizePublicResourceReference(
 function sanitizePublicStructuredId(
   value: string,
   providerResourceType: string,
-  prefix: string
+  prefix: string,
+  publicResourceIdMap: ReadonlyMap<string, string> = new Map()
 ): string {
-  if (!containsAwsArn(value)) {
-    return value;
+  const rewrittenValue = rewriteStructuredPublicResourceReferences(
+    value,
+    publicResourceIdMap
+  );
+
+  if (!containsAwsArn(rewrittenValue)) {
+    return rewrittenValue;
   }
 
   return `${prefix}-${createAwsPublicProviderResourceId({
     providerResourceType,
-    providerResourceId: value
+    providerResourceId: rewrittenValue
   })}`;
+}
+
+function rewriteStructuredPublicResourceReferences(
+  value: string,
+  publicResourceIdMap: ReadonlyMap<string, string>
+): string {
+  let rewrittenValue = value;
+  const replacements = [...publicResourceIdMap.entries()]
+    .filter(([privateValue, publicValue]) => privateValue.length > 0 && privateValue !== publicValue)
+    .sort(([left], [right]) => right.length - left.length);
+
+  for (const [privateValue, publicValue] of replacements) {
+    rewrittenValue = rewrittenValue.replaceAll(privateValue, publicValue);
+  }
+
+  return rewrittenValue;
 }
 
 type ReadCompatibilityNormalizationContext = {

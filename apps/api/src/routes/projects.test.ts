@@ -74,6 +74,208 @@ test("GET /api/projects/:id/draft restores the active user's diagramJson", async
   await app.close();
 });
 
+test("GET /api/projects/:id/draft 공개 응답은 과거 AWS 원본을 정리하고 일반 Board를 유지한다", async () => {
+  const legacyLambdaArn =
+    "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler";
+  const legacyNodeId =
+    "resource-arn-aws-lambda-ap-northeast-2-123456789012-function-orders-handler";
+  const ordinaryNode: DiagramJson["nodes"][number] = {
+    id: "design-client",
+    type: "client",
+    kind: "design",
+    position: { x: 320, y: 0 },
+    size: { width: 112, height: 108 },
+    label: "Client",
+    locked: false,
+    zIndex: 2
+  };
+  const legacyDiagram: DiagramJson = {
+    nodes: [
+      {
+        id: legacyNodeId,
+        type: "unknown",
+        kind: "resource",
+        position: { x: 0, y: 0 },
+        size: { width: 112, height: 108 },
+        label: "orders-handler",
+        locked: false,
+        zIndex: 1,
+        metadata: {
+          reverseEngineering: {
+            source: "aws_scan",
+            protectedValueKeys: ["providerResourceId", "providerResourceType"],
+            editableValueKeys: ["displayName"]
+          }
+        },
+        parameters: {
+          resourceType: "unknown",
+          resourceName:
+            "resource_arn_aws_lambda_ap_northeast_2_123456789012_function_orders_handler",
+          fileName: "main",
+          invalid: true,
+          values: {
+            providerResourceType: "AWS::Lambda::Function",
+            providerResourceId: legacyLambdaArn,
+            functionName: "orders-handler",
+            Environment: { Variables: { DATABASE_URL: "postgres://private" } },
+            Role: "arn:aws:iam::123456789012:role/orders-runtime",
+            KMSKeyArn: "arn:aws:kms:ap-northeast-2:123456789012:key/private",
+            Layers: [{ Arn: "arn:aws:lambda:ap-northeast-2:123456789012:layer:private:1" }],
+            analysisExcluded: true,
+            reverseEngineeringSourceScanId: "scan-legacy",
+            reverseEngineeringDraftId: "draft-legacy",
+            reverseEngineeringSourceKind: "saved_scan"
+          }
+        }
+      },
+      ordinaryNode
+    ],
+    edges: [
+      {
+        id: `edge-${legacyNodeId}-design-client-uses`,
+        sourceNodeId: legacyNodeId,
+        targetNodeId: ordinaryNode.id,
+        label: "uses"
+      }
+    ],
+    variables: [
+      {
+        id: "lambda-binding",
+        name: "lambda_binding",
+        type: "string",
+        value: "safe",
+        source: "user",
+        bindings: [{ nodeId: legacyNodeId, parameterKey: "functionName" }]
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const storedDiagram = structuredClone(legacyDiagram);
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    drafts: [makeProjectDraft({ diagramJson: legacyDiagram, revision: 4 })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+  const responseDiagram = response.json().draft.diagramJson as DiagramJson;
+  const lambda = responseDiagram.nodes[0];
+
+  assert.equal(response.statusCode, 200);
+  assert.match(lambda?.id ?? "", /^resource-aws-ref-[a-f0-9]{24}$/u);
+  assert.match(
+    String(lambda?.parameters?.values["providerResourceId"]),
+    /^aws-ref-[a-f0-9]{24}$/u
+  );
+  assert.equal(lambda?.parameters?.values["functionName"], "orders-handler");
+  assert.equal(lambda?.parameters?.values["Environment"], undefined);
+  assert.equal(lambda?.parameters?.values["Role"], undefined);
+  assert.equal(lambda?.parameters?.values["KMSKeyArn"], undefined);
+  assert.equal(lambda?.parameters?.values["Layers"], undefined);
+  assert.equal(
+    responseDiagram.edges[0]?.sourceNodeId,
+    lambda?.id
+  );
+  assert.match(responseDiagram.edges[0]?.id ?? "", new RegExp(lambda?.id ?? "never"));
+  assert.equal(responseDiagram.variables?.[0]?.bindings[0]?.nodeId, lambda?.id);
+  assert.deepEqual(responseDiagram.nodes[1], ordinaryNode);
+  assert.doesNotMatch(
+    JSON.stringify(responseDiagram),
+    /123456789012|resource-arn-aws-lambda|postgres:\/\/private/iu
+  );
+  assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, storedDiagram);
+
+  await app.close();
+});
+
+test("공개 정리된 과거 AWS Draft로도 Board 자동 정리를 저장할 수 있다", async () => {
+  const legacyNodeId =
+    "resource-arn-aws-lambda-ap-northeast-2-123456789012-function-orders-handler";
+  const legacyDiagram: DiagramJson = {
+    nodes: [
+      {
+        id: legacyNodeId,
+        type: "unknown",
+        kind: "resource",
+        position: { x: 0, y: 0 },
+        size: { width: 112, height: 108 },
+        label: "orders-handler",
+        locked: false,
+        zIndex: 1,
+        metadata: {
+          reverseEngineering: {
+            source: "aws_scan",
+            protectedValueKeys: ["providerResourceId", "providerResourceType"],
+            editableValueKeys: ["displayName"]
+          }
+        },
+        parameters: {
+          resourceType: "unknown",
+          resourceName:
+            "resource_arn_aws_lambda_ap_northeast_2_123456789012_function_orders_handler",
+          fileName: "main",
+          invalid: true,
+          values: {
+            providerResourceType: "AWS::Lambda::Function",
+            providerResourceId:
+              "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler",
+            functionName: "orders-handler",
+            Environment: { Variables: { TOKEN: "private" } },
+            analysisExcluded: true,
+            reverseEngineeringSourceScanId: "scan-legacy"
+          }
+        }
+      }
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    drafts: [makeProjectDraft({ diagramJson: legacyDiagram, revision: 4 })]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+  const readResponse = await app.inject({
+    method: "GET",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+  const sourceDiagram = readResponse.json().draft.diagramJson as DiagramJson;
+  const candidateDiagram = structuredClone(sourceDiagram);
+  candidateDiagram.nodes[0]!.position = { x: 360, y: 180 };
+
+  assert.match(sourceDiagram.nodes[0]?.id ?? "", /^resource-aws-ref-[a-f0-9]{24}$/u);
+
+  const applyResponse = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft/auto-organize/apply`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      sessionId: "legacy-aws-auto-organize",
+      candidateId: "arrangement-1",
+      sourceDiagram,
+      sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(sourceDiagram),
+      candidateDiagram,
+      expectedRevision: 4,
+      terraformFiles: []
+    }
+  });
+
+  assert.equal(applyResponse.statusCode, 200, applyResponse.body);
+  assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, candidateDiagram);
+  assert.equal(fakeDb.draftRows[0]?.revision, 5);
+
+  await app.close();
+});
+
 test("PUT /api/projects/:id/draft upserts the active user's latest diagramJson", async () => {
   const authoritativeDiagram: DiagramJson = {
     ...draftDiagram,

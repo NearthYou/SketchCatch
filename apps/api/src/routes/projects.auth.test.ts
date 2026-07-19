@@ -238,6 +238,91 @@ test("GET /api/projects/:id returns 404 for another user's project", async () =>
   await app.close();
 });
 
+test("GET /api/projects/:id 공개 응답은 과거 AWS Snapshot을 정리하고 일반 Architecture를 유지한다", async () => {
+  const legacyLambdaArn =
+    "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler";
+  const legacyNodeId =
+    "resource-arn-aws-lambda-ap-northeast-2-123456789012-function-orders-handler";
+  const ordinaryNode = {
+    id: "design-client",
+    type: "UNKNOWN" as const,
+    label: "Client",
+    positionX: 320,
+    positionY: 0,
+    config: { diagramKind: "design", note: "ordinary architecture stays exact" }
+  };
+  const legacyArchitecture = makeArchitecture({
+    source: "imported",
+    architectureJson: {
+      nodes: [
+        {
+          id: legacyNodeId,
+          type: "LAMBDA",
+          label: "orders-handler",
+          positionX: 0,
+          positionY: 0,
+          config: {
+            providerResourceType: "AWS::Lambda::Function",
+            providerResourceId: legacyLambdaArn,
+            functionName: "orders-handler",
+            Environment: { Variables: { TOKEN: "private-token" } },
+            Role: "arn:aws:iam::123456789012:role/orders-runtime",
+            analysisExcluded: true,
+            reverseEngineeringSourceScanId: "scan-legacy",
+            reverseEngineeringDraftId: "draft-legacy",
+            reverseEngineeringSourceKind: "saved_scan"
+          }
+        },
+        ordinaryNode
+      ],
+      edges: [
+        {
+          id: `edge-${legacyNodeId}-design-client-uses`,
+          sourceId: legacyNodeId,
+          targetId: ordinaryNode.id,
+          label: "uses"
+        }
+      ]
+    }
+  });
+  const storedArchitecture = structuredClone(legacyArchitecture.architectureJson);
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    architectures: [legacyArchitecture]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+  const responseArchitecture = response.json().architectures[0].architectureJson;
+  const lambda = responseArchitecture.nodes[0];
+
+  assert.equal(response.statusCode, 200);
+  assert.match(lambda.id, /^resource-aws-ref-[a-f0-9]{24}$/u);
+  assert.match(lambda.config.providerResourceId, /^aws-ref-[a-f0-9]{24}$/u);
+  assert.equal(lambda.config.functionName, "orders-handler");
+  assert.equal(lambda.config.Environment, undefined);
+  assert.equal(lambda.config.Role, undefined);
+  assert.equal(responseArchitecture.edges[0].sourceId, lambda.id);
+  assert.match(responseArchitecture.edges[0].id, new RegExp(lambda.id));
+  assert.deepEqual(responseArchitecture.nodes[1], ordinaryNode);
+  assert.doesNotMatch(
+    JSON.stringify(responseArchitecture),
+    /123456789012|resource-arn-aws-lambda|private-token/iu
+  );
+  assert.deepEqual(fakeDb.architectureRows[0]?.architectureJson, storedArchitecture);
+
+  await app.close();
+});
+
 test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and draft source", async () => {
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,

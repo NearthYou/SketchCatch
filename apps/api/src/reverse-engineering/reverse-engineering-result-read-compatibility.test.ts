@@ -200,13 +200,77 @@ test("과거 raw ARN 내부 ID와 진단 참조도 하나의 공개 ID로 다시
   );
 });
 
+test("과거 ARN 정규화 ID와 파생 참조도 raw provider ID 기준의 canonical 공개 ID로 바꾼다", () => {
+  const legacyResult = createLegacyResult();
+  const legacyResourceId =
+    "resource-arn-aws-lambda-ap-northeast-2-123456789012-function-orders-handler";
+  legacyResult.discoveredResources[0]!.id = legacyResourceId;
+  legacyResult.discoveredResources[1]!.relationships = [
+    { type: "depends_on", targetResourceId: legacyResourceId }
+  ];
+  legacyResult.architectureJson = {
+    nodes: [
+      { ...legacyResult.architectureJson.nodes[0]!, id: legacyResourceId },
+      legacyResult.architectureJson.nodes[1]!
+    ],
+    edges: [
+      {
+        id: `edge-${legacyResourceId}-legacy-safe-bucket-node-depends-on`,
+        sourceId: legacyResourceId,
+        targetId: "legacy-safe-bucket-node",
+        label: "depends_on"
+      }
+    ]
+  };
+  legacyResult.findings = [
+    {
+      id: `finding-${legacyResourceId}`,
+      category: "permission",
+      severity: "medium",
+      resourceId: legacyResourceId,
+      title: "확인이 필요합니다.",
+      description: "가져온 Resource를 확인해 주세요.",
+      recommendation: "설정을 확인해 주세요."
+    }
+  ];
+  legacyResult.analysisExclusions[0] = {
+    ...legacyResult.analysisExclusions[0]!,
+    id: `analysis-exclusion-${legacyResourceId}`,
+    resourceId: legacyResourceId
+  };
+  legacyResult.importSuggestions[0] = {
+    ...legacyResult.importSuggestions[0]!,
+    id: `import-${legacyResourceId}`,
+    resourceId: legacyResourceId
+  };
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const lambda = result.discoveredResources[0];
+
+  assert.ok(lambda);
+  assert.match(lambda.id, /^resource-aws-ref-[a-f0-9]{24}$/u);
+  assert.equal(result.architectureJson.nodes[0]?.id, lambda.id);
+  assert.equal(result.architectureJson.edges[0]?.sourceId, lambda.id);
+  assert.match(result.architectureJson.edges[0]?.id ?? "", new RegExp(lambda.id));
+  assert.equal(result.discoveredResources[1]?.relationships?.[0]?.targetResourceId, lambda.id);
+  assert.equal(result.findings[0]?.resourceId, lambda.id);
+  assert.match(result.findings[0]?.id ?? "", new RegExp(lambda.id));
+  assert.equal(result.analysisExclusions[0]?.resourceId, lambda.id);
+  assert.match(result.analysisExclusions[0]?.id ?? "", new RegExp(lambda.id));
+  assert.equal(result.importSuggestions[0]?.resourceId, lambda.id);
+  assert.match(result.importSuggestions[0]?.id ?? "", new RegExp(lambda.id));
+  assert.doesNotMatch(JSON.stringify(result), /123456789012|resource-arn-aws-lambda/iu);
+});
+
 test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호환 draft를 만든다", () => {
   const legacyResult = createLegacyResult();
   const persistedArchitectureBeforeRead = structuredClone(legacyResult.architectureJson);
   const persistedLambdaBeforeRead = structuredClone(legacyResult.discoveredResources[0]);
 
   const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
-  const lambdaNode = result.architectureJson.nodes.find((node) => node.id === "legacy-lambda");
+  const publicLambdaId = result.discoveredResources[0]?.id;
+  assert.ok(publicLambdaId);
+  const lambdaNode = result.architectureJson.nodes.find((node) => node.id === publicLambdaId);
   const bucketNode = result.architectureJson.nodes.find(
     (node) => node.id === "legacy-safe-bucket-node"
   );
@@ -266,7 +330,7 @@ test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호�
     ]),
     [
       {
-        nodeId: "legacy-lambda",
+        nodeId: publicLambdaId,
         resourceAddress: "aws_lambda_function.orders_handler",
         excludedResourceAddress: "aws_lambda_function"
       }

@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { projectDrafts } from "../../db/schema.js";
 import type { ProjectDraftRow } from "./project-drafts.js";
+import { sanitizeAwsProjectDiagramRead } from "../../reverse-engineering/aws-project-read-sanitizer.js";
 import {
   saveProjectDraftRevision,
   type SaveProjectDraftRevisionResult
@@ -58,29 +59,34 @@ export async function applyBoardAutoOrganizeDraft(
     return { status: "conflict", currentDraft: persistedDraft };
   }
 
+  const publicPersistedDraft = {
+    ...persistedDraft,
+    diagramJson: sanitizeAwsProjectDiagramRead(persistedDraft.diagramJson)
+  };
+
   if (
-    serializeBoardAutoOrganizeSource(persistedDraft.diagramJson) !== serializedRequestSource ||
-    !hasSameBoardAutoOrganizeSemantics(persistedDraft.diagramJson, input.sourceDiagram)
+    serializeBoardAutoOrganizeSource(publicPersistedDraft.diagramJson) !== serializedRequestSource ||
+    !hasSameBoardAutoOrganizeSemantics(publicPersistedDraft.diagramJson, input.sourceDiagram)
   ) {
     throw new BoardAutoOrganizeSourceMismatchError();
   }
 
-  if (!isDeepStrictEqual(persistedDraft.terraformFiles ?? [], input.terraformFiles)) {
+  if (!isDeepStrictEqual(publicPersistedDraft.terraformFiles ?? [], input.terraformFiles)) {
     throw new BoardAutoOrganizeSourceMismatchError();
   }
 
   if (
-    !hasSameBoardAutoOrganizeSemantics(persistedDraft.diagramJson, input.candidateDiagram)
+    !hasSameBoardAutoOrganizeSemantics(publicPersistedDraft.diagramJson, input.candidateDiagram)
   ) {
     throw new BoardAutoOrganizeSemanticMismatchError();
   }
 
   const diagramToSave = recomposeBoardAutoOrganizeDiagram(
-    persistedDraft.diagramJson,
+    publicPersistedDraft.diagramJson,
     input.candidateDiagram
   );
 
-  if (!hasSameBoardAutoOrganizeSemantics(persistedDraft.diagramJson, diagramToSave)) {
+  if (!hasSameBoardAutoOrganizeSemantics(publicPersistedDraft.diagramJson, diagramToSave)) {
     throw new BoardAutoOrganizeSemanticMismatchError();
   }
 
@@ -91,8 +97,8 @@ export async function applyBoardAutoOrganizeDraft(
     input: {
       diagramJson: diagramToSave,
       expectedRevision: input.expectedRevision,
-      ...(persistedDraft.terraformFiles !== null
-        ? { terraformFiles: persistedDraft.terraformFiles.map((file) => ({ ...file })) }
+      ...(publicPersistedDraft.terraformFiles !== null
+        ? { terraformFiles: publicPersistedDraft.terraformFiles.map((file) => ({ ...file })) }
         : {})
     },
     projectId: input.projectId,

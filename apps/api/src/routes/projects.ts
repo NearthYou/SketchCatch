@@ -43,6 +43,10 @@ import {
   BoardAutoOrganizeSourceMismatchError
 } from "../modules/projects/board-auto-organize-apply-service.js";
 import {
+  sanitizeAwsProjectArchitectureRead,
+  sanitizeAwsProjectDiagramRead
+} from "../reverse-engineering/aws-project-read-sanitizer.js";
+import {
   boardAutoOrganizeApplyBodySchema,
   diagramJsonSchema,
   saveProjectDraftBodySchema
@@ -345,7 +349,12 @@ export async function registerProjectRoutes(
 
     return {
       project,
-      architectures: projectArchitectures,
+      architectures: projectArchitectures.map((architecture) => ({
+        ...architecture,
+        architectureJson: sanitizeAwsProjectArchitectureRead(architecture.architectureJson, {
+          source: architecture.source
+        })
+      })),
       assets
     };
   });
@@ -467,8 +476,15 @@ export async function registerProjectRoutes(
       .from(projectDrafts)
       .where(eq(projectDrafts.projectId, params.id));
 
+    const publicDraft = draft ? toProjectDraft(draft) : null;
+
     return reply.header("Cache-Control", "private, no-store").send({
-      draft: draft ? toProjectDraft(draft) : null
+      draft: publicDraft
+        ? {
+            ...publicDraft,
+            diagramJson: sanitizeAwsProjectDiagramRead(publicDraft.diagramJson)
+          }
+        : null
     });
   });
 
