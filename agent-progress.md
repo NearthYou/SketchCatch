@@ -11,6 +11,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Reduce Workspace resource tile labels
+
+- Reduced only the Workspace Resource palette tile-label base size from 12px to 9px, producing the requested three-pixel decrease while preserving card, icon, category, and section typography.
+- No test suite was run at the user's request. Harness, lint, typecheck, build, source review, and diff checks pass; the dev server remains active with no known risk or follow-up action.
+
 ### 2026-07-19 - Extend reduced auth typography and loosen Dashboard navigation
 
 - Extended the six-pixel typography reduction from centered Login and Signup screens to all AuthShell routes, including both Password Reset screens.
@@ -207,10 +212,3 @@ Short English-only working log for the current agent context. Older records are 
 - The Plan route now returns its accepted Deployment after durable dispatch, while the worker runs build-environment preparation inside the Plan execution lease and heartbeat boundary. Preparation failures remain recorded as `build_environment` failures.
 - The reported Deployment `eae903e0-926c-46d7-b819-99b124246373` completed despite the proxy error and produced a pending `36 create / 0 update / 0 delete` Plan with no failure stage or error summary.
 - Focused API regressions pass 106/106; root lint, typecheck, build, final harness, and diff checks are recorded by the finishing verification run. No DB migration, dependency change, AWS mutation by Codex, Terraform Apply/Destroy, deployment rerun, or direct push to `dev` was performed.
-
-### 2026-07-19 - Advance approved Plans and refresh durable build readiness
-
-- Fixed Direct Deployment so a successful Plan approval selects the deployment step instead of leaving the user on the disabled approval panel.
-- Added Project Build Environment hydration to durable Plan polling, preventing an early HTTP 202 response from leaving `ready + verified` infrastructure displayed as `준비 필요`.
-- The reported Deployment `8eb279cb-cea8-417f-88af-d31cd21926d0` is pending with matching current/approved Plan artifacts; its build environment is `ready + verified`. The live browser now shows step 3, `Repository 검증 완료`, and the deployment action without console errors.
-- TDD regressions passed RED then GREEN; focused Web checks pass 56/56. Root lint, typecheck, build, final harness, and diff checks are recorded by the finishing verification run. No deployment execution, approval revocation, AWS mutation, DB migration, dependency change, or direct push to `dev` was performed.
