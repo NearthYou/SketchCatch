@@ -22,6 +22,7 @@ const REGRESSION_FINDINGS: readonly {
   readonly label: string;
 }[] = [
   { key: "nodeOverlapCount", label: "Resource 겹침" },
+  { key: "siblingAreaOverlapCount", label: "같은 단계 영역 겹침" },
   { key: "parentBoundaryViolationCount", label: "영역 경계 이탈" },
   { key: "edgeNodeIntersectionCount", label: "Resource를 지나는 연결선" },
   { key: "edgeAreaTitleIntersectionCount", label: "영역 제목을 지나는 연결선" },
@@ -51,7 +52,9 @@ function createRegressionExplanations(
     const increase = Math.max(0, after - before);
 
     return increase > 0
-      ? [`${label}가 ${formatPlaceCount(increase)} 늘었습니다. 원본과 비교해 주세요.`]
+      ? [
+          `${label}${getKoreanSubjectParticle(label)} ${formatPlaceCount(increase)} 늘었습니다. 원본과 비교해 주세요.`
+        ]
       : [];
   });
 }
@@ -108,6 +111,19 @@ function readFinding(findings: BoardAutoOrganizeFindingSnapshot, key: string): n
 /** 사용자 문장에서 1은 곳, 그 밖의 수는 곳 단위로 짧게 표시합니다. */
 function formatPlaceCount(count: number): string {
   return `${count}곳`;
+}
+
+/** 마지막 한글의 받침 여부에 맞춰 사용자 문장의 `이/가`를 고릅니다. */
+function getKoreanSubjectParticle(label: string): "이" | "가" {
+  const lastCharacter = label.trim().at(-1);
+
+  if (!lastCharacter) {
+    return "가";
+  }
+
+  const codePoint = lastCharacter.codePointAt(0)!;
+  const isHangulSyllable = codePoint >= 0xac00 && codePoint <= 0xd7a3;
+  return isHangulSyllable && (codePoint - 0xac00) % 28 !== 0 ? "이" : "가";
 }
 
 /** 빈 label 대신 쉬운 일반 이름을 사용해 내부 ID 노출을 막습니다. */

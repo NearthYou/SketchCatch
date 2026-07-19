@@ -26,6 +26,9 @@ export function reconcilePresentationFrames(
     (node) => isOwnedAutoFrame(node) && node.locked
   );
   const reservedIds = new Set([
+    ...sourceDiagram.nodes
+      .filter((node) => !isOwnedAutoFrame(node))
+      .map((node) => node.id),
     ...protectedUserDesignById.keys(),
     ...lockedFrames.map((node) => node.id)
   ]);
