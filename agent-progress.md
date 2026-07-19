@@ -13,7 +13,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-19 - Compact UI metadata and modal
 
-- Reduced minor UI text, compacted the recovery modal, and relabeled Project timestamps. Checks pass.
+- Reduced minor UI text, fixed recovery modal stacking/actions, and relabeled Project timestamps. Checks pass.
 
 ### 2026-07-19 - Restore the focused Live Observation traffic presentation
 
