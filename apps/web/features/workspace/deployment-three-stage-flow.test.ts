@@ -170,18 +170,29 @@ test("deployment commands stop their failure boundary before secondary hydration
   assert.match(directDeploymentSource, /actionInFlightRef/);
 });
 
-test("Direct Deployment uses the approved executive validation layout", () => {
-  assert.match(directDeploymentSource, /deploymentExecutiveHeader/);
-  assert.match(directDeploymentSource, /deploymentExecutiveMetrics/);
-  assert.match(directDeploymentSource, /현재 상태/);
-  assert.match(directDeploymentSource, /예상 변경 수/);
+test("Direct Deployment validation removes duplicated executive and readiness summaries", () => {
+  const contentStart = directDeploymentSource.indexOf("function renderDirectStepContent");
+  const validationStart = directDeploymentSource.indexOf(
+    'if (stepId === "validation")',
+    contentStart
+  );
+  const approvalStart = directDeploymentSource.indexOf(
+    'if (stepId === "approval")',
+    validationStart
+  );
+  const validationSource = directDeploymentSource.slice(validationStart, approvalStart);
+
+  assert.doesNotMatch(directDeploymentSource, /deploymentExecutiveHeader/);
+  assert.doesNotMatch(directDeploymentSource, /deploymentExecutiveMetrics/);
+  assert.doesNotMatch(directDeploymentSource, /function DeploymentMetric/);
+  assert.doesNotMatch(validationSource, /deploymentPlanSnapshot/);
+  assert.doesNotMatch(validationSource, /label="변경 내용"/);
+  assert.doesNotMatch(validationSource, /label="실행 준비"/);
+  assert.doesNotMatch(validationSource, /<PlanSummaryRows/);
+  assert.equal(validationSource.match(/<DeploymentValidationSummaryCard/g)?.length, 2);
+  assert.match(validationSource, /label="설정 상태"/);
+  assert.match(validationSource, /label="빌드 환경"/);
   assert.match(deploymentProgressSource, /deploymentExecutionPanel/);
-  assert.match(directDeploymentSource, /deploymentSettingsLayout/);
-  assert.match(directDeploymentSource, /deploymentValidationCards/);
-  assert.match(directDeploymentSource, /설정 상태/);
-  assert.match(directDeploymentSource, /실행 준비/);
-  assert.match(workspaceStyles, /--deployment-blue:\s*#1267f4/);
-  assert.match(workspaceStyles, /--deployment-navy:\s*#071a36/);
 });
 
 test("deployment review delegates build preparation and repository verification to the Plan API", () => {
@@ -344,29 +355,19 @@ test("setup removes the duplicate recent result card", () => {
   assert.doesNotMatch(setupSource, /최근 실행 결과|마지막 완료 단계/);
 });
 
-test("deployment actions stay next to the heading after the recent result is removed", () => {
+test("the stepper is the only heading before workspace actions", () => {
   const setupStart = directDeploymentSource.indexOf("const renderSetupSection");
   const historyStart = directDeploymentSource.indexOf("const renderResultsSection", setupStart);
   const setupSource = directDeploymentSource.slice(setupStart, historyStart);
-  const headingIndex = setupSource.lastIndexOf("styles.deploymentStepHeading");
+  const stepperIndex = setupSource.lastIndexOf("styles.deploymentStepNavigation");
   const actionsIndex = setupSource.lastIndexOf("renderDirectStepActions(selectedStep.id)");
   const workspaceIndex = setupSource.lastIndexOf("styles.deploymentStepWorkspace");
 
-  assert.ok(actionsIndex > headingIndex);
+  assert.ok(stepperIndex > -1);
+  assert.ok(actionsIndex > stepperIndex);
   assert.ok(workspaceIndex > actionsIndex);
-  assert.match(workspaceStyles, /"heading actions"\s*"workspace workspace"/s);
-  assert.match(
-    workspaceStyles,
-    /\.deploymentConsoleGrid > \.deploymentStepActionBar\s*\{[^}]*border:\s*0;[^}]*grid-area:\s*actions;/s
-  );
-  assert.match(
-    workspaceStyles,
-    /\.deploymentConsoleGrid > \.deploymentStepActionBar \.deploymentValidationActions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*nowrap;/s
-  );
-  assert.match(
-    workspaceStyles,
-    /\.deploymentConsoleGrid > \.deploymentStepActionBar \.deploymentPrimaryButton,[\s\S]*?white-space:\s*nowrap;[\s\S]*?width:\s*152px;/
-  );
+  assert.doesNotMatch(setupSource, /styles\.deploymentStepHeading/);
+  assert.match(workspaceStyles, /"steps"\s*"workspace"\s*"actions"/s);
 });
 
 test("deployment action buttons use one size and fill only while active", () => {
