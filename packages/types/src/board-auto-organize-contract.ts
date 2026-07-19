@@ -94,13 +94,12 @@ export function hasSameBoardAutoOrganizeSemantics(
   );
 }
 
-/** route 좌표와 handle은 빼고 관계 방향을 포함한 나머지 edge 의미를 남깁니다. */
+/** route 좌표와 handle은 빼고 관계 방향·화면 층을 포함한 나머지 edge 의미를 남깁니다. */
 function toSemanticEdge(edge: DiagramEdge): unknown {
   const {
     route,
     sourceHandleId: _sourceHandleId,
     targetHandleId: _targetHandleId,
-    zIndex: _zIndex,
     ...semanticEdge
   } = edge;
 

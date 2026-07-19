@@ -41,21 +41,21 @@ export function constrainBoardAutoOrganizeProposal(
       ...currentDiagram.nodes
         .filter((sourceNode) => !isBoardAutoPresentationFrameNode(sourceNode))
         .map((sourceNode) => {
-      const candidateNode = candidateNodesById.get(sourceNode.id);
+          const candidateNode = candidateNodesById.get(sourceNode.id);
 
-      if (!candidateNode) {
-        return structuredClone(sourceNode);
-      }
+          if (!candidateNode) {
+            return structuredClone(sourceNode);
+          }
 
-      return {
-        ...structuredClone(sourceNode),
-        position: isFinitePoint(candidateNode.position)
-          ? structuredClone(candidateNode.position)
-          : structuredClone(sourceNode.position),
-        size: isValidSize(candidateNode.size)
-          ? structuredClone(candidateNode.size)
-          : structuredClone(sourceNode.size)
-      };
+          return {
+            ...structuredClone(sourceNode),
+            position: isFinitePoint(candidateNode.position)
+              ? structuredClone(candidateNode.position)
+              : structuredClone(sourceNode.position),
+            size: isValidSize(candidateNode.size)
+              ? structuredClone(candidateNode.size)
+              : structuredClone(sourceNode.size)
+          };
         }),
       ...proposal.diagram.nodes
         .filter(isBoardAutoPresentationFrameNode)
