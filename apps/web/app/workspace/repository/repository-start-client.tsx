@@ -14,7 +14,6 @@ import {
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
-  CreateArchitectureDraftRequest,
   GitHubAppAvailability,
   GitHubInstallationConnection,
   GitHubInstalledRepositoryCandidate,
@@ -25,7 +24,6 @@ import type {
   DiagramJson,
   SourceRepositoryAnalysisResult,
   SourceRepository,
-  TemplateId
 } from "@sketchcatch/types";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import { ProductState } from "../../../components/ui/ProductState";
@@ -35,7 +33,6 @@ import {
   analyzePublicSourceRepository,
   analyzeSourceRepository,
   connectGitHubSourceRepository,
-  createAiArchitectureDraft,
   createGitHubSourceRepositoryInstallUrl,
   getProjectDraft,
   listGitHubAccountInstallations,
@@ -51,16 +48,12 @@ import {
 } from "../../projects/[projectId]/repository/project-source-repository-state";
 import { buildBoardTemplateDiagram } from "../../../features/resource-settings/template-library";
 import {
-  createPublicRepositoryArchitectureDraftRequest,
   createPublicRepositoryRecommendation,
   getPublicRepositoryDeploymentDefault,
-  getPublicRepositoryTemplateDeploymentType,
-  isBuiltInTemplateId,
   localizePublicRepositoryQuestion,
   shouldAskPublicRepositoryDeploymentType,
   type PublicRepositoryTemplateId
 } from "../../../features/workspace/public-repository-recommendation";
-import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
 import { createWorkspaceAiStartHref } from "../../../features/workspace/workspace-ai-start-entry";
 import { RepositoryArchitecturePreview } from "./repository-architecture-preview";
 import { getRepositoryDraftBlockingIssue } from "./repository-draft-readiness";
@@ -80,6 +73,11 @@ import {
 import styles from "./repository-start.module.css";
 
 type RequestState = "idle" | "loading" | "error";
+type PublicAnalysisState =
+  | "idle"
+  | "loading"
+  | "repository_error"
+  | "architecture_error";
 type PublicRecommendationStage = "configuration" | "questions";
 type RepositoryQuestionView = Pick<
   RepositoryAnalysisQuestion,
@@ -121,7 +119,8 @@ export function RepositoryStartClient({
   const [candidates, setCandidates] = useState<GitHubInstalledRepositoryCandidate[]>([]);
   const [installationState, setInstallationState] = useState("");
   const [actionState, setActionState] = useState<RequestState>("idle");
-  const [publicAnalysisState, setPublicAnalysisState] = useState<RequestState>("idle");
+  const [publicAnalysisState, setPublicAnalysisState] =
+    useState<PublicAnalysisState>("idle");
   const [repositoryUrl, setRepositoryUrl] = useState(initialRepositoryUrl);
   const [defaultBranch, setDefaultBranch] = useState(initialDefaultBranch);
   const [publicAnalysis, setPublicAnalysis] = useState<SourceRepositoryAnalysisResult | null>(null);
@@ -182,7 +181,7 @@ export function RepositoryStartClient({
   }, [initialDefaultBranch, initialRepositoryUrl, initialResumeKey, projectId]);
 
   useEffect(() => {
-    if (publicAnalysisState !== "error") return;
+    if (publicAnalysisState !== "repository_error") return;
     const recheckPermissions = () => void loadCandidates();
     window.addEventListener("focus", recheckPermissions);
     return () => window.removeEventListener("focus", recheckPermissions);
@@ -371,7 +370,7 @@ export function RepositoryStartClient({
       );
       setPublicAnalysisState("idle");
     } catch (error) {
-      setPublicAnalysisState("error");
+      setPublicAnalysisState("repository_error");
       setErrorMessage(
         getApiErrorMessage(
           error,
@@ -408,55 +407,18 @@ export function RepositoryStartClient({
       return;
     }
 
-    const effectiveDeploymentType = shouldAskPublicRepositoryDeploymentType(publicAnalysis)
-      ? deploymentType
-      : getPublicRepositoryTemplateDeploymentType(templateId);
     setPublicAnalysisState("loading");
     setErrorMessage("");
 
     try {
-      if (!isBuiltInTemplateId(templateId)) {
-        await saveTemplateBoard(templateId, publicAnalysis);
-        setPublicAnalysisState("idle");
-        return;
-      }
-
-      const draft = await createAiArchitectureDraft(
-        createPublicRepositoryArchitectureDraftRequest({
-          analysis: publicAnalysis,
-          answers,
-          deploymentType: effectiveDeploymentType,
-          templateId,
-          usesCiCd: false
-        })
-      );
-
-      if ("status" in draft) {
-        setPublicAnalysisState("error");
-        setErrorMessage(`Amazon Q가 추가 확인을 요청했습니다: ${draft.question}`);
-        return;
-      }
-
-      if (draft.metadata.source !== "amazon_q") {
-        setPublicAnalysisState("error");
-        setErrorMessage(
-          "Amazon Q가 현재 다이어그램을 생성하지 못했습니다. AWS 인증과 Amazon Q 설정을 확인해주세요."
-        );
-        return;
-      }
-
-      const diagram = getDiagramJsonForArchitectureDraft(draft);
-      await saveRepositoryBoard(diagram, {
-        analysis: publicAnalysis,
-        templateId
-      });
+      await saveTemplateBoard(templateId, publicAnalysis);
       setPublicAnalysisState("idle");
     } catch (error) {
-      setPublicAnalysisState("error");
+      setPublicAnalysisState("architecture_error");
       setErrorMessage(
         error instanceof RepositoryAnalysisRecordPersistenceError
           ? "보드는 저장했지만 Repository 정보를 저장하지 못했습니다. 보드 생성을 다시 누르면 안전하게 재시도합니다."
-          : getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다.")
+          : getApiErrorMessage(error, "선택한 Fixed Template 보드를 생성하지 못했습니다. Template 구성을 확인해 주세요.")
       );
     }
   }
@@ -470,41 +432,16 @@ export function RepositoryStartClient({
     setErrorMessage("");
 
     try {
-      if (!isBuiltInTemplateId(templateId)) {
-        await saveTemplateBoard(
-          templateId,
-          createConnectedRepositoryAnalysisResult(activeRepository, templateId),
-          activeRepository.analysis.analyzedAt
-        );
-        setActionState("idle");
-        return;
-      }
-
-      const draft = await createAiArchitectureDraft(
-        createConnectedRepositoryArchitectureDraftRequest({
-          projectId,
-          repository: activeRepository,
-          templateId
-        })
+      await saveTemplateBoard(
+        templateId,
+        createConnectedRepositoryAnalysisResult(activeRepository, templateId),
+        activeRepository.analysis.analyzedAt
       );
-
-      if ("status" in draft) {
-        setActionState("error");
-        setErrorMessage(`Amazon Q가 추가 확인을 요청했습니다: ${draft.question}`);
-        return;
-      }
-
-      const diagram = getDiagramJsonForArchitectureDraft(draft);
-      await saveRepositoryBoard(diagram, {
-        analysis: createConnectedRepositoryAnalysisResult(activeRepository, templateId),
-        analyzedAt: activeRepository.analysis.analyzedAt,
-        templateId
-      });
       setActionState("idle");
     } catch (error) {
       setActionState("error");
       setErrorMessage(
-        getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다.")
+        getApiErrorMessage(error, "선택한 Fixed Template 보드를 생성하지 못했습니다. Template 구성을 확인해 주세요.")
       );
     }
   }
@@ -700,6 +637,8 @@ export function RepositoryStartClient({
                         if (nextRepositoryUrl !== publicAnalysis?.repositoryUrl) {
                           setPublicAnalysis(null);
                           setDefaultBranch("");
+                          setPublicAnalysisState("idle");
+                          setErrorMessage("");
                         }
                       }}
                       placeholder="https://github.com/owner/repository"
@@ -770,39 +709,38 @@ export function RepositoryStartClient({
                 stage={publicRecommendationStage}
               />
             ) : null}
-            {publicAnalysisState === "error" && !pendingAnalysisRecord ? (
-              publicAnalysis ? (
-                <ProductState
-                  action={(
-                    <button
-                      disabled={isPublicAnalysisBusy}
-                      onClick={() => void createPublicRepositoryBoard()}
-                      type="button"
-                    >
-                      다시 생성
-                    </button>
-                  )}
-                  compact
-                  description={errorMessage}
-                  kind="error"
-                  title="AI 아키텍처를 생성할 수 없습니다"
-                />
-              ) : (
-                <RepositoryAnalysisRecovery
-                  action={recoveryAction}
-                  connectionSetupAvailability={githubAppAvailability?.connectionSetup}
-                  errorMessage={errorMessage}
-                  isBusy={actionState === "loading" || isPublicAnalysisBusy}
-                  onAddPermission={(managementUrl) => {
-                    window.open(managementUrl, "_blank", "noopener,noreferrer");
-                  }}
-                  onAnalyzeConnected={() => void analyzeRepository()}
-                  onConnect={(candidate) => void connectRepository(candidate)}
-                  onConnectGitHub={() => void openGitHubConnection()}
-                  onRetry={() => void analyzePublicRepositoryUrl(repositoryUrl, defaultBranch)}
-                  onVerifyPermission={() => void loadCandidates()}
-                />
-              )
+            {publicAnalysisState === "architecture_error" && !pendingAnalysisRecord ? (
+              <ProductState
+                action={(
+                  <button
+                    disabled={isPublicAnalysisBusy}
+                    onClick={() => void createPublicRepositoryBoard()}
+                    type="button"
+                  >
+                    다시 생성
+                  </button>
+                )}
+                compact
+                description={errorMessage}
+                kind="error"
+                title="Fixed Template 보드를 생성할 수 없습니다"
+              />
+            ) : null}
+            {publicAnalysisState === "repository_error" && !pendingAnalysisRecord ? (
+              <RepositoryAnalysisRecovery
+                action={recoveryAction}
+                connectionSetupAvailability={githubAppAvailability?.connectionSetup}
+                errorMessage={errorMessage}
+                isBusy={actionState === "loading" || isPublicAnalysisBusy}
+                onAddPermission={(managementUrl) => {
+                  window.open(managementUrl, "_blank", "noopener,noreferrer");
+                }}
+                onAnalyzeConnected={() => void analyzeRepository()}
+                onConnect={(candidate) => void connectRepository(candidate)}
+                onConnectGitHub={() => void openGitHubConnection()}
+                onRetry={() => void analyzePublicRepositoryUrl(repositoryUrl, defaultBranch)}
+                onVerifyPermission={() => void loadCandidates()}
+              />
             ) : null}
           </section>
         ) : null}
@@ -891,7 +829,11 @@ export function RepositoryStartClient({
           </section>
         ) : null}
 
-        {errorMessage && (publicAnalysisState !== "error" || pendingAnalysisRecord) ? (
+        {errorMessage && (
+          (publicAnalysisState !== "repository_error" &&
+            publicAnalysisState !== "architecture_error") ||
+          pendingAnalysisRecord
+        ) ? (
           <ProductState
             action={pendingAnalysisRecord ? (
               <button
@@ -1286,72 +1228,4 @@ function createRepositoryPreviewDiagram(projectName: string, repository: SourceR
       shortId: repository.id.slice(0, 8)
     }) ?? null
   );
-}
-
-function createConnectedRepositoryArchitectureDraftRequest({
-  projectId,
-  repository,
-  templateId
-}: {
-  readonly projectId: string;
-  readonly repository: SourceRepository;
-  readonly templateId: TemplateId;
-}): CreateArchitectureDraftRequest {
-  const analysis = repository.analysis;
-  const handoff = analysis?.aiHandoff;
-  const architectureFacts = handoff?.architectureFacts ?? [];
-  const architectureFactLines = architectureFacts.map(
-    (fact) => `- ${fact.kind}: ${fact.value} (source: ${fact.sourcePath})`
-  );
-  const applicationUnitLines = (handoff?.applicationUnits ?? []).map(
-    (unit) =>
-      `- ${unit.kind} at ${unit.rootPath || "."}; frameworks: ${unit.frameworks.join(", ") || "unknown"}`
-  );
-  const evidenceLines = (handoff?.evidence ?? []).map(
-    (evidence) =>
-      `- ${evidence.kind}: ${evidence.path}; signals: ${evidence.signals.join(", ") || "none"}`
-  );
-  const repositoryName = repository.repositoryUrl ?? `${repository.owner}/${repository.name}`;
-
-  return {
-    templateId,
-    ...(architectureFacts.length > 0
-      ? {
-          repositoryEvidence: {
-            mode: "strict" as const,
-            facts: architectureFacts,
-            repositoryName
-          }
-        }
-      : {}),
-    repositoryAnalysis: {
-      projectId,
-      sourceRepositoryId: repository.id
-    },
-    prompt: [
-      "Generate a production-quality Practice Architecture for this connected source repository.",
-      "Priority rules:",
-      "1. The selected Template is the highest-priority constraint. Keep its core service and deployment model.",
-      "2. Use Repository Analysis evidence to refine runtime boundaries and resource connections without replacing the selected Template.",
-      "3. Rebuild the final Board through the Architecture Draft conversion path so AI diagram layout and resource rules apply.",
-      `Selected Template: ${templateId}.`,
-      `Repository: ${repositoryName} at ${repository.defaultBranch}.`,
-      `Repository revision: ${analysis?.repositoryRevision ?? "unknown"}.`,
-      "Detected application units:",
-      ...(applicationUnitLines.length > 0 ? applicationUnitLines : ["- none"]),
-      "Repository evidence:",
-      ...(evidenceLines.length > 0 ? evidenceLines : ["- none"]),
-      "Repository architecture facts (authoritative; do not replace with generic production assumptions):",
-      ...(architectureFactLines.length > 0 ? architectureFactLines : ["- none"]),
-      "Required Components:",
-      `- Preserve every core resource and relationship from ${templateId}.`,
-      "- Add only the supporting resources required by Repository Analysis.",
-      "Architecture Flow:",
-      "- Keep the selected Template traffic and deployment flow, then connect repository-driven resources to the appropriate workload.",
-      "Validation Checklist:",
-      "- The selected Template core remains visible and connected.",
-      "- Every repository architecture fact is reflected or documented as a Template conflict assumption.",
-      "Generate a connected, readable diagram with only supported resource types. Avoid unrelated resources and duplicate nodes."
-    ].join("\n")
-  };
 }
