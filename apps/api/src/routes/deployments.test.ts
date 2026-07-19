@@ -2683,6 +2683,47 @@ test("POST plan prepares and verifies an ECS project build environment before st
   await app.close();
 });
 
+test("POST plan dispatches durable work without waiting for build environment preparation", async () => {
+  const repository = new FakeDeploymentRepository();
+  const jobRepository = new FakeDeploymentJobRepository();
+  const dispatcher = new FakeDeploymentWorkerDispatcher();
+  let prepareCalls = 0;
+  let verifyCalls = 0;
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  const app = await buildDeploymentTestApp(repository, {
+    createDeploymentJobRepository: () => jobRepository,
+    workerDispatcher: dispatcher,
+    workerDispatchMode: "ecs",
+    prepareProjectBuildEnvironment: async () => {
+      prepareCalls += 1;
+    },
+    verifyProjectRepositoryAccess: async () => {
+      verifyCalls += 1;
+      return {
+        buildEnvironment: {
+          repositoryVerificationStatus: "verified",
+          repositoryVerificationStatusReason: null
+        }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  assert.equal(dispatcher.dispatchCalls.length, 1);
+  assert.equal(prepareCalls, 0);
+  assert.equal(verifyCalls, 0);
+  await app.close();
+});
+
 test("concurrent POST plan requests share one build preparation and repository verification", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createDeploymentRecord(deploymentId, {
@@ -2694,8 +2735,12 @@ test("concurrent POST plan requests share one build preparation and repository v
   let planCalls = 0;
   let releasePreparation: (() => void) | undefined;
   let markPreparationStarted: (() => void) | undefined;
+  let markPlanCompleted: (() => void) | undefined;
   const preparationStarted = new Promise<void>((resolve) => {
     markPreparationStarted = resolve;
+  });
+  const planCompleted = new Promise<void>((resolve) => {
+    markPlanCompleted = resolve;
   });
   const app = await buildDeploymentTestApp(repository, {
     prepareProjectBuildEnvironment: async () => {
@@ -2717,6 +2762,7 @@ test("concurrent POST plan requests share one build preparation and repository v
     },
     runDeploymentPlan: async (input) => {
       planCalls += 1;
+      markPlanCompleted?.();
       return {
         deployment: createDeploymentRecord(input.deploymentId, {
           scope: "full_stack",
@@ -2742,6 +2788,7 @@ test("concurrent POST plan requests share one build preparation and repository v
   });
   releasePreparation?.();
   const firstResponse = await firstRequest;
+  await planCompleted;
 
   assert.equal(firstResponse.statusCode, 202);
   assert.equal(secondResponse.statusCode, 202);
@@ -2751,7 +2798,7 @@ test("concurrent POST plan requests share one build preparation and repository v
   await app.close();
 });
 
-test("POST plan records build preparation failures instead of leaving the deployment running", async () => {
+test("POST plan accepts background build preparation and records its failure", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createDeploymentRecord(deploymentId, {
     scope: "full_stack",
@@ -2769,13 +2816,14 @@ test("POST plan records build preparation failures instead of leaving the deploy
     headers: await authHeaders()
   });
 
-  assert.equal(response.statusCode, 500);
+  assert.equal(response.statusCode, 202);
+  await waitForTestCondition(() => repository.deployment?.status === "FAILED");
   assert.equal(repository.deployment.status, "FAILED");
   assert.equal(repository.deployment.failureStage, "build_environment");
   await app.close();
 });
 
-test("POST plan does not start Terraform when repository checkout verification fails", async () => {
+test("POST plan accepts background repository verification and stops before Terraform on failure", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createDeploymentRecord(deploymentId, {
     scope: "full_stack",
@@ -2806,13 +2854,21 @@ test("POST plan does not start Terraform when repository checkout verification f
     headers: await authHeaders()
   });
 
-  assert.equal(response.statusCode, 409);
-  assert.equal(response.json().error, "REPOSITORY_ACCESS_VERIFICATION_REQUIRED");
+  assert.equal(response.statusCode, 202);
+  await waitForTestCondition(() => repository.deployment?.status === "FAILED");
   assert.equal(planCalls, 0);
   assert.equal(repository.deployment.status, "FAILED");
   assert.equal(repository.deployment.failureStage, "build_environment");
   await app.close();
 });
+
+async function waitForTestCondition(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (condition()) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.fail("Timed out waiting for the background deployment condition");
+}
 
 test("POST frontend retry runs the owner-scoped frontend-only release operation", async () => {
   const repository = new FakeDeploymentRepository();
@@ -2870,6 +2926,35 @@ test("POST frontend retry dispatches a durable ECS worker job by default", async
   assert.equal(activeJob?.startedFromStatus, "PARTIALLY_FAILED");
   assert.equal(activeJob?.startedFromFailureStage, "application_release");
   assert.equal(dispatcher.dispatchCalls.length, 1);
+
+  await app.close();
+});
+
+test("POST plan shapes its accepted response before dispatching durable work", async () => {
+  const repository = new FakeDeploymentRepository();
+  const jobRepository = new FakeDeploymentJobRepository();
+  const dispatcher = new FakeDeploymentWorkerDispatcher();
+  repository.deployment = {
+    ...createDeploymentRecord(deploymentId),
+    createdAt: "invalid-date" as never
+  };
+  repository.deployments = [repository.deployment];
+  const app = await buildDeploymentTestApp(repository, {
+    createDeploymentJobRepository: () => jobRepository,
+    workerDispatcher: dispatcher,
+    workerDispatchMode: "ecs"
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 500);
+  assert.equal(dispatcher.dispatchCalls.length, 0);
+  assert.equal(await jobRepository.findActiveDeploymentJob(deploymentId), undefined);
+  assert.equal(repository.deployment.status, "FAILED");
 
   await app.close();
 });

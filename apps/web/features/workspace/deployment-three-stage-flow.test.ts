@@ -124,7 +124,7 @@ test("Direct Deployment uses prepare, approve, and execute with three external p
   assert.match(directDeploymentSource, /stepId === "approval"/);
 });
 
-test("deployment polling owns snapshot feedback and cannot clear an action failure", () => {
+test("deployment polling keeps unrelated failures but reconciles its accepted Plan", () => {
   const refreshStart = directDeploymentSource.indexOf("async function refreshSnapshot");
   const intervalStart = directDeploymentSource.indexOf("const intervalId", refreshStart);
   const refreshSource = directDeploymentSource.slice(refreshStart, intervalStart);
@@ -137,6 +137,12 @@ test("deployment polling owns snapshot feedback and cannot clear an action failu
   assert.match(refreshSource, /setSnapshotErrorMessage\(\s*getApiErrorMessage/);
   assert.doesNotMatch(refreshSource, /setRequestState\(/);
   assert.doesNotMatch(refreshSource, /setErrorMessage\(/);
+  assert.match(
+    directDeploymentSource,
+    /pendingAutoAdvanceDeploymentIdRef\.current === selectedDeployment\.id/
+  );
+  assert.match(directDeploymentSource, /reconciledRequestState/);
+  assert.match(directDeploymentSource, /currentPlanArtifactId/);
 });
 
 test("deployment commands stop their failure boundary before secondary hydration", () => {
@@ -186,7 +192,29 @@ test("deployment review delegates build preparation and repository verification 
   assert.doesNotMatch(reviewSource, /runDeploymentInit|queuedApplyPlan/);
 });
 
-test("Plan responses immediately refresh the Repository verification status", () => {
+test("durable Plan polling refreshes Repository verification after worker completion", () => {
+  const runtimeLoadStart = directDeploymentSource.indexOf(
+    "const loadDeploymentRuntimeSnapshot"
+  );
+  const runtimeApplyStart = directDeploymentSource.indexOf(
+    "const applyDeploymentRuntimeSnapshot",
+    runtimeLoadStart
+  );
+  const panelLoadStart = directDeploymentSource.indexOf(
+    "const loadDeploymentPanelSnapshot",
+    runtimeApplyStart
+  );
+  const runtimeLoadSource = directDeploymentSource.slice(runtimeLoadStart, runtimeApplyStart);
+  const runtimeApplySource = directDeploymentSource.slice(runtimeApplyStart, panelLoadStart);
+
+  assert.ok(runtimeLoadStart > -1);
+  assert.ok(runtimeApplyStart > runtimeLoadStart);
+  assert.ok(panelLoadStart > runtimeApplyStart);
+  assert.match(runtimeLoadSource, /getProjectBuildEnvironment\(projectId\)/);
+  assert.match(runtimeApplySource, /setBuildEnvironment\(snapshot\.buildEnvironment\)/);
+});
+
+test("Plan responses request an immediate Repository verification refresh", () => {
   const reviewStart = directDeploymentSource.indexOf("async function startDeploymentReview");
   const retryStart = directDeploymentSource.indexOf("async function startTerraformPlan", reviewStart);
   const approveStart = directDeploymentSource.indexOf("async function approveCurrentPlan", retryStart);
@@ -202,6 +230,20 @@ test("Plan responses immediately refresh the Repository verification status", ()
     directDeploymentSource,
     /function refreshBuildEnvironmentAfterPlan[\s\S]*getProjectBuildEnvironment\(projectId\)[\s\S]*\.then\(setBuildEnvironment\)/
   );
+});
+
+test("successful Plan approval selects deployment and refreshes its build environment", () => {
+  const approveStart = directDeploymentSource.indexOf("async function approveCurrentPlan");
+  const revokeStart = directDeploymentSource.indexOf(
+    "async function revokeCurrentPlanApproval",
+    approveStart
+  );
+  const approveSource = directDeploymentSource.slice(approveStart, revokeStart);
+
+  assert.ok(approveStart > -1);
+  assert.ok(revokeStart > approveStart);
+  assert.match(approveSource, /setSelectedDirectStepId\("deployment"\)/);
+  assert.match(approveSource, /refreshBuildEnvironmentAfterPlan\(deployment\)/);
 });
 
 test("full-stack validation checks the confirmed target and opens its setup surface", () => {
