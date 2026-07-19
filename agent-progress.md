@@ -13,12 +13,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-19 - Replace Pretendard with Regular and Bold LINE Seed Sans KR typography
-
-- Replaced all active Web and smoke-page Pretendard usage with the supplied LINE Seed Sans KR Thin, Regular, and Bold WOFF2 files and the official licensing notice; removed the obsolete Pretendard and intermediate Spoqa assets.
-- Set the service body baseline to Regular 400 and mapped existing emphasis to Bold 700, avoiding synthetic intermediate weights.
-- Focused typography and Diagram checks pass 126/126; browser QA found only computed 400 and 700 weights with no unexpected values. Harness, lint, typecheck, production build, and diff checks pass. The unnecessary broad test run stopped on one unrelated existing Git/CI/CD readiness contract failure in `packages/types`; no further broad test was run. No dependency, lockfile, database, deployment, cloud, or Git handoff change was made.
-
 ### 2026-07-19 - Keep GitOps build environments stable across application commits
 
 - Removed the per-release `confirmedCommitSha` from the reusable Project Build Environment fingerprint while retaining exact commit checkout and resolved-SHA verification.
@@ -213,3 +207,9 @@ Short English-only working log for the current agent context. Older records are 
 - Removed the marked deployed-architecture label/resource count and pre-session observation intro card, while preserving the right-aligned map guidance and all Deployment controls.
 - Reduced only the `Live Observation` eyebrow from 18px to 12px; the Korean modal title remains unchanged.
 - Focused Live Observation and typography tests pass 26/26. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no standards issue; a spec concern about the right-side guidance size was disproved by the pre-existing later CSS override, with no known risk or follow-up required.
+
+### 2026-07-19 - Compact Live Observation resources
+
+- Replaced Board-size-derived observation cards with compact fixed 148x104px cards and 184x124px detail cards, reducing the icon, name, type, detail, and state-badge typography proportionally.
+- Replaced the state badge's tight fixed line-height with a 12px proportional line-height so Korean status text remains centered without touching its border.
+- TDD reproduced the previous oversized contract with 2 expected failures; the final focused Live Observation and typography suite passes 26/26. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no standards or spec issue; browser-rendered visual balance remains a manual confirmation, with refresh-and-review as the only next action.

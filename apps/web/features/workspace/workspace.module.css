@@ -7028,11 +7028,11 @@
   border-radius: 8px;
   box-shadow: 0 8px 20px -16px rgb(23 23 23 / 42%);
   display: grid;
-  gap: 3px;
-  grid-template-rows: minmax(28px, 1fr) auto auto auto auto;
+  gap: 2px;
+  grid-template-rows: minmax(24px, 1fr) auto auto auto auto;
   justify-items: center;
   overflow: hidden;
-  padding: 8px 7px 7px;
+  padding: 7px 6px 6px;
 }
 
 .liveObservationArchitectureResourceIcon {
@@ -7060,19 +7060,19 @@
 
 .liveObservationArchitectureResourceNode > strong {
   color: var(--workspace-text, #171717);
-  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-size: calc(9px + var(--presentation-font-size-increase));
 }
 
 .liveObservationArchitectureResourceNode > small {
   color: var(--workspace-muted, #60646c);
-  font-size: calc(10px + var(--presentation-font-size-increase));
+  font-size: calc(7px + var(--presentation-font-size-increase));
 }
 
 .liveObservationArchitectureResourceDetail {
   background: #f4f6f8;
   border-radius: 4px;
   color: #364152;
-  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-size: calc(7px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   line-height: 1.35;
   max-width: 100%;
@@ -7086,12 +7086,12 @@
   border-radius: 999px;
   box-sizing: border-box;
   display: inline-block;
-  font-size: calc(10px + var(--presentation-font-size-increase));
+  font-size: calc(6px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
-  line-height: 17px;
+  line-height: 1.25;
   max-width: 100%;
   overflow: hidden;
-  padding: 0 6px;
+  padding: 1px 5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
