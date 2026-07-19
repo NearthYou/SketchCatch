@@ -6,6 +6,9 @@
 
 ## 갱신 절차
 
+개발 서버를 실행한 뒤 `pnpm template-thumbnails:generate`를 실행하면 아래 계약으로 사용 가능한
+Template 29개를 모두 staging에 캡처하고, 전체 성공 후 기존 asset을 한 번에 교체한다.
+
 1. `/workspace/new?mode=template&templateId={templateId}`에서 Template을 실제 Board로 연다.
 2. Board viewport를 `1280 × 720`, device scale factor를 `1`로 고정한다. 좌우 panel을 접고
    `Fit view`를 한 번 실행한다.
@@ -14,7 +17,7 @@
 4. `[data-architecture-board-capture-source="true"]`인 ReactFlow root만 캡처한다. 브라우저 chrome,
    sidebar, 임시 selection, hover, tooltip은 포함하지 않는다.
 5. `board-thumbnail-capture-contract.ts`와 동일하게 `1280 × 720`, `#f8fafc`, WebP로 저장한다.
-6. 카드와 큰 미리보기에서 여섯 장을 확인한 다음 manifest의 해당 `diagramHash`를 현재
+6. 카드와 큰 미리보기에서 29장을 확인한 다음 manifest의 해당 `diagramHash`를 현재
    materialized `DiagramJson` SHA-256으로 갱신한다.
 
 Template 전용 자동 회귀 테스트는 유지하지 않는다. 갱신 시 위 계약을 수동으로 확인하고
