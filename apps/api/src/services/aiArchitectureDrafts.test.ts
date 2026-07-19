@@ -3437,28 +3437,56 @@ test("createAmazonQArchitectureDraftResponse rejects when Amazon Q returns an in
   );
 });
 
-test("createAmazonQArchitectureDraftResponse rejects when compact plan quantities cannot be materialized", async () => {
-  const provider = createFakeAmazonQProvider(() =>
-    JSON.stringify({
-      status: "plan",
-      title: "Unsupported Quantity Plan",
-      requiredResources: ["IAM_ROLE"],
-      resourceQuantities: { IAM_ROLE: 3 }
-    })
+test("createAmazonQArchitectureDraftResponse asks Amazon Q which requirement to relax after repeated validation failures", async () => {
+  const calls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    calls.push(request);
+
+    if (calls.length < 3) {
+      return JSON.stringify({
+        status: "plan",
+        title: "Unsupported Quantity Plan",
+        requiredResources: ["IAM_ROLE"],
+        resourceQuantities: { IAM_ROLE: 3 }
+      });
+    }
+
+    return JSON.stringify({
+      status: "needs_clarification",
+      question: "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 요구를 유지할까요?",
+      suggestions: [
+        "역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도",
+        "현재 지원 범위를 유지하고 역할을 2개 이하로 통합"
+      ]
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createDynamicWebDeploymentSelectionPrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
   );
 
-  await assert.rejects(
-    createAmazonQArchitectureDraftResponse(
-      { prompt: createDynamicWebDeploymentSelectionPrompt() },
-      { provider, creditPolicy: confirmedCreditPolicy }
-    ),
-    (error: unknown) =>
-      error instanceof ArchitectureDraftGenerationError &&
-      error.kind === "requirements_unsatisfied" &&
-      error.statusCode === 422
+  assert.equal(calls.length, 3);
+  assert.match(calls[2]?.prompt ?? "", /diagnosing why SketchCatch could not produce a valid architecture/u);
+  assert.match(calls[2]?.prompt ?? "", /IAM_ROLE/u);
+  assert.equal(
+    (calls[2]?.payload as { task?: string }).task,
+    "requirement_conflict_clarification"
   );
+  if (!("status" in response)) {
+    assert.fail("Expected an Amazon Q clarification response");
+  }
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(
+    response.question,
+    "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 요구를 유지할까요?"
+  );
+  assert.deepEqual(response.suggestions, [
+    "역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도",
+    "현재 지원 범위를 유지하고 역할을 2개 이하로 통합"
+  ]);
+  assert.equal(response.providerMetadata.provider, "amazon_q");
 });
-
 test("createAmazonQArchitectureDraftResponse retries once when a compact plan fails materialization", async () => {
   const calls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {

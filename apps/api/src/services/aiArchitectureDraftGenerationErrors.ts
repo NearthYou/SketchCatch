@@ -35,17 +35,20 @@ const ERROR_CONTRACT = {
 export class ArchitectureDraftGenerationError extends Error {
   readonly errorCode: ApiErrorCode;
   readonly exposeMessage = true;
+  readonly issues: readonly string[];
   readonly kind: ArchitectureDraftGenerationErrorKind;
   readonly statusCode: number;
 
   constructor(
     cause: unknown,
-    kind: ArchitectureDraftGenerationErrorKind = "provider_unavailable"
+    kind: ArchitectureDraftGenerationErrorKind = "provider_unavailable",
+    issues: readonly string[] = []
   ) {
     const contract = ERROR_CONTRACT[kind];
     super(contract.message, { cause });
     this.name = "ArchitectureDraftGenerationError";
     this.errorCode = contract.errorCode;
+    this.issues = [...issues];
     this.kind = kind;
     this.statusCode = contract.statusCode;
   }
@@ -57,7 +60,8 @@ export function createRequirementsUnsatisfiedError(
 ): ArchitectureDraftGenerationError {
   return new ArchitectureDraftGenerationError(
     cause ?? new Error(issues.join(" ")),
-    "requirements_unsatisfied"
+    "requirements_unsatisfied",
+    issues
   );
 }
 

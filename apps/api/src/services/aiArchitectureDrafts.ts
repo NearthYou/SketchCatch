@@ -616,12 +616,81 @@ export async function createAmazonQArchitectureDraftResponse(
       request
     );
   } catch (error) {
+    if (
+      error instanceof ArchitectureDraftGenerationError &&
+      error.kind === "requirements_unsatisfied"
+    ) {
+      return createAmazonQRequirementConflictClarification({
+        architectureDecisionSpace,
+        billingMode: creditPolicy.billingMode,
+        fixedTemplateSelection,
+        normalizedRequirement,
+        provider,
+        request,
+        validationIssues: error.issues
+      });
+    }
+
     if (error instanceof ArchitectureDraftGenerationError) {
       throw error;
     }
 
     throw createInternalArchitectureGenerationError(error);
   }
+}
+
+async function createAmazonQRequirementConflictClarification(input: {
+  readonly architectureDecisionSpace: ArchitectureDecisionSpace;
+  readonly billingMode: AiBillingMode;
+  readonly fixedTemplateSelection: FixedTemplateSelection | null;
+  readonly normalizedRequirement: ArchitectureIntentPlan | null;
+  readonly provider: AiTextProvider;
+  readonly request: CreateArchitectureDraftRequest;
+  readonly validationIssues: readonly string[];
+}): Promise<ArchitectureDraftClarification> {
+  const payload = maskSecretsForAi({
+    architectureDecisionSpace: input.architectureDecisionSpace,
+    ...(input.request.clarificationAnswers === undefined
+      ? {}
+      : { clarificationAnswers: input.request.clarificationAnswers }),
+    fixedTemplateSelection: input.fixedTemplateSelection,
+    normalizedRequirement: input.normalizedRequirement,
+    prompt: input.request.prompt,
+    task: "requirement_conflict_clarification",
+    validationIssues: input.validationIssues
+  });
+  const response = await generateArchitectureDraftProviderResponse(input.provider, {
+    target: ARCHITECTURE_DRAFT_TARGET,
+    instructions: createAmazonQRequirementConflictInstructions(),
+    prompt: createAmazonQRequirementConflictPrompt(
+      input.request.prompt,
+      input.architectureDecisionSpace,
+      input.normalizedRequirement,
+      input.fixedTemplateSelection,
+      input.validationIssues
+    ),
+    payload
+  });
+  const parsedResponse = parseArchitectureDraftProviderResponse(response.text);
+
+  if (parsedResponse.status !== "needs_clarification") {
+    throw createProviderResponseInvalidError(
+      new Error("Amazon Q must return a requirement conflict clarification")
+    );
+  }
+
+  return {
+    status: "needs_clarification",
+    questionId: createProviderClarificationQuestionId(parsedResponse.question),
+    question: parsedResponse.question,
+    suggestions: [...(parsedResponse.suggestions ?? [])],
+    providerMetadata: createAiProviderMetadata({
+      provider: input.provider,
+      billingMode: input.billingMode,
+      payload,
+      outputCharacters: response.outputCharacters ?? response.text.length
+    })
+  };
 }
 
 async function generateArchitectureDraftProviderResponse(
@@ -2083,6 +2152,41 @@ function createAmazonQArchitectureDraftPrompt(
     createCandidateExclusionPromptSection(candidateExclusions),
     "User requirement prompt:",
     prompt
+  ].join("\n\n");
+}
+
+function createAmazonQRequirementConflictInstructions(): string {
+  return [
+    "You are Amazon Q diagnosing why SketchCatch could not produce a valid architecture.",
+    "Return JSON only in the needs_clarification shape. Do not wrap the response in markdown.",
+    "Write every user-facing string in Korean. AWS service names and technical identifiers may remain in English.",
+    "Use only the supplied original requirement, accepted answers, and SketchCatch validation issues as evidence.",
+    "Do not invent a conflict or decide which requirement to discard on the user's behalf.",
+    "Explain the concrete requirements that conflict, or explicitly say when the evidence only proves an implementation or representation failure rather than a logical conflict.",
+    "Ask exactly one question that lets the user choose which requirement to preserve.",
+    "Return 2 to 4 suggestions. Each suggestion must state what will be preserved and what will be relaxed or retried.",
+    "Do not generate an architecture, plan, deployment action, or explanatory fields outside the clarification shape.",
+    'The required JSON shape is: {"status":"needs_clarification","question":"string","suggestions":["string"]}'
+  ].join("\n");
+}
+
+function createAmazonQRequirementConflictPrompt(
+  prompt: string,
+  architectureDecisionSpace: ArchitectureDecisionSpace,
+  normalizedRequirement: ArchitectureIntentPlan | null,
+  fixedTemplateSelection: FixedTemplateSelection | null,
+  validationIssues: readonly string[]
+): string {
+  return [
+    createAmazonQRequirementConflictInstructions(),
+    "Original user requirement prompt:",
+    prompt,
+    createNormalizedArchitectureIntentPlanPromptSection(normalizedRequirement),
+    "ArchitectureDecisionSpace:",
+    JSON.stringify(architectureDecisionSpace, null, 2),
+    createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    "SketchCatch validation issues from the failed architecture attempts:",
+    ...validationIssues.map((issue) => `- ${issue}`)
   ].join("\n\n");
 }
 

@@ -86,3 +86,9 @@ Short English-only working log for the current agent context. Older records are 
 - Moved `/workspace/ai` diagram-generation step ownership from the conditional progress card into the persistent conversation transcript.
 - The card now receives a controlled step, so rerenders or remounts cannot reset the visible progress to requirement analysis; the shared Workspace dock retains its local fallback timer.
 - The focused Web regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
+
+### 2026-07-19 - Ask Amazon Q to resolve unsatisfied architecture requirements
+
+- Replaced the terminal requirements-unsatisfied 422 path with a dedicated Amazon Q conflict-diagnosis request after generation and repair both fail validation.
+- Amazon Q receives the original requirement, accepted answers, decision space, normalized requirement, and exact validation issues; its question and preserve-versus-relax choices are returned unchanged through the existing clarification flow.
+- The focused API regression and API typecheck pass. No database migration, deployment, cloud mutation, or push was performed.
