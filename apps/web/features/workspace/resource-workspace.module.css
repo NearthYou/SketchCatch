@@ -224,18 +224,19 @@
 
 .resourceListValueRow span,
 .resourceListValueRow strong {
-  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-size: calc(10px + var(--presentation-font-size-increase));
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .resourceListValueRow span {
   color: var(--workspace-muted, #60646c);
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .resourceListValueRow strong {
   color: var(--workspace-text, #171717);
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: var(--presentation-font-weight-regular);
 }
 
 .resourceListConfigToggle {

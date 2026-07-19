@@ -11,6 +11,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Refine Resource parameter typography
+
+- Reduced Resource summary row text from an 18px to 16px computed size, made parameter labels bold, and changed values from bold to regular weight.
+- Root lint, typecheck, build, harness, and diff checks pass. No broad test suite was run at the user's request.
+
 ### 2026-07-19 - Merge latest dev into PR #491
 
 - Merged `origin/dev` at `2ae411aa`, preserving the branch presentation typography while accepting the current AWS connection state model and removal of the AI choice-selected label.
