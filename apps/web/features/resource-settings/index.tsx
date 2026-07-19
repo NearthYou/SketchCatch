@@ -313,7 +313,7 @@ export function ResourceSettingsPanel({
         <>
 
           <label className="searchBox">
-            <Search size={18} aria-hidden="true" />
+            <Search size={16} aria-hidden="true" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}

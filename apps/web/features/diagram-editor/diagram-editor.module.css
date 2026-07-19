@@ -443,7 +443,7 @@
   border: 0;
   color: var(--workspace-text);
   font: inherit;
-  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-size: calc(9px + var(--presentation-font-size-increase));
   min-width: 0;
   outline: none;
   width: 100%;
