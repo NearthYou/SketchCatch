@@ -11,6 +11,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Merge the Live Observation ECS Template update
+
+- Resolved the progress-log conflict while preserving the incoming CloudFront/ALB/ECS Template work and all recent UI typography records; two older AI records moved to the monthly archive.
+- Focused Template checks pass 25/25, and lint, typecheck, build, harness, and diff checks pass. No cloud mutation was performed; no merge-owned risk remains, with CI review as the next action.
+
 ### 2026-07-19 - Reduce the Terraform Resource search text
 
 - Reduced only the `Search TF resources` text and icon by 2px while preserving the search control dimensions and Resource category layout.
@@ -31,6 +36,13 @@ Short English-only working log for the current agent context. Older records are 
 - Reduced Resource summary row text from an 18px to 16px computed size, made parameter labels bold, and changed values from bold to regular weight.
 - Reduced only the uppercase `RESOURCES` eyebrow by 3px while preserving the panel title and count size.
 - Root lint, typecheck, build, harness, and diff checks pass. No broad test suite was run at the user's request. No known functional risk remains; refresh the Resource panel for final visual confirmation.
+
+### 2026-07-19 - Make the ECS Template Live Observation-ready
+
+- Added a CloudFront HTTPS entry point in front of the ECS Fargate Template ALB while retaining the bounded request-based Service Auto Scaling contract (`min=1`, `max=3`, `ALBRequestCountPerTarget=10`). The authored presentation now keeps User, CloudFront, and ALB on the primary traffic path and contains all scaling resources inside Definition / Ops.
+- Added Template graph and rendered Terraform regressions for the CloudFront origin, HTTPS redirect, public Outputs, and scaling blocks. Focused Type/API tests, Terraform init/validate, lint, typecheck, and build pass.
+- In the approved non-production account `614935468487` / `ap-northeast-2`, the refreshed local project Plan passed at `+36 ~0 -0` and remains unapproved. No AWS Apply, load generation, or Destroy was performed in this step.
+- The full test command reaches the Types suite and retains one unrelated baseline Git/CI readiness assertion failure (`null !== 0`); all Template contract failures introduced by the intentional graph change are resolved.
 
 ### 2026-07-19 - Merge latest dev into PR #491
 
@@ -196,21 +208,9 @@ Short English-only working log for the current agent context. Older records are 
 - Removed the visible `선택됨` suffix from selected `/workspace/ai` answer buttons while retaining `aria-pressed` and selected-button styling.
 - Removed the unused label style and added a source regression for the route-specific transcript.
 - The focused Web regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
+
 ### 2026-07-19 - Keep AI Start progress moving across card remounts
 
 - Moved `/workspace/ai` diagram-generation step ownership from the conditional progress card into the persistent conversation transcript.
 - The card now receives a controlled step, so rerenders or remounts cannot reset the visible progress to requirement analysis; the shared Workspace dock retains its local fallback timer.
 - The focused Web regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
-
-### 2026-07-19 - Ask Amazon Q to resolve unsatisfied architecture requirements
-
-- Replaced the terminal requirements-unsatisfied 422 path with a dedicated Amazon Q conflict-diagnosis request after generation and repair both fail validation.
-- Amazon Q receives the original requirement, accepted answers, decision space, normalized requirement, and exact validation issues; its question and preserve-versus-relax choices are returned unchanged through the existing clarification flow.
-- The focused API regression and API typecheck pass. No database migration, deployment, cloud mutation, or push was performed.
-
-### 2026-07-19 - Route conflict diagnosis through the real Amazon Q provider
-
-- Fixed the production Amazon Q Business provider, which previously ignored the conflict prompt and always returned another locally generated canonical plan, causing the replacement HTTP 502.
-- Conflict requests now call Amazon Q Business ChatSync with the exact validation failures and user requirement. JSON and plain-text/numbered Q answers both become the existing clarification question and choices without server-side trade-off selection.
-- Workspace AI draft failures now keep full diagnostics in the browser console and show one short transcript message instead of duplicated developer diagnostics.
-- Focused API provider/parser and Web presentation regressions pass; API/Web typechecks pass. No database migration, deployment, cloud mutation, or push was performed.
