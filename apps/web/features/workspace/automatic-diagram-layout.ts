@@ -1749,7 +1749,9 @@ function compareRepeatedNodes(left: DiagramNode, right: DiagramNode): number {
 }
 
 function createRepeatKey(node: DiagramNode): string {
-  return `${node.parameters?.resourceType ?? node.type}:${node.label}`
+  const stableName = node.parameters?.resourceName?.trim() || node.label;
+
+  return `${node.parameters?.resourceType ?? node.type}:${stableName}`
     .toLowerCase()
     .replace(/(?:^|[\s_-])(?:az|zone)?[\s_-]?[a-z0-9]+$/u, "")
     .replace(/[\s_-]+/gu, " ")

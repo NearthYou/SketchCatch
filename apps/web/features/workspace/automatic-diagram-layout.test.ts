@@ -6,6 +6,10 @@ import {
   layoutAutomaticDiagram
 } from "./automatic-diagram-layout";
 import { getAutomaticDiagramSemanticRole } from "./automatic-diagram-layout-provider-mapping";
+import {
+  convertArchitectureJsonToDiagramJson,
+  convertDiagramJsonToArchitectureJson
+} from "./workspace-ai-diagram-adapter";
 
 test("layoutAutomaticDiagram arranges the primary request flow from left to right", () => {
   const nodes = [
@@ -383,6 +387,39 @@ test("layoutAutomaticDiagram aligns repeated subnet Areas by tier and availabili
       assert.equal(overlaps(subnets[leftIndex]!, subnets[rightIndex]!), false);
     }
   }
+});
+
+test("layoutAutomaticDiagram keeps Template geometry stable when repeated Area labels change", () => {
+  const diagram = buildTemplateDiagramJson("three-tier-web-app", {
+    projectSlug: "label-layout-regression",
+    shortId: "label-layout-regression"
+  });
+  const legacyLabelsByResourceName: Readonly<Record<string, string>> = {
+    app_subnet_a: "App Subnet A",
+    app_subnet_b: "App Subnet B",
+    db_subnet_a: "DB Subnet A",
+    db_subnet_b: "DB Subnet B"
+  };
+  const legacyNodes = diagram.nodes.map((node) => ({
+    ...node,
+    label: legacyLabelsByResourceName[node.parameters?.resourceName ?? ""] ?? node.label
+  }));
+  const materialize = (nodes: readonly DiagramNode[]) => {
+    const architecture = convertDiagramJsonToArchitectureJson({ ...diagram, nodes: [...nodes] });
+    return {
+      edges: architecture.edges,
+      nodes: convertArchitectureJsonToDiagramJson(architecture).nodes
+    };
+  };
+  const friendlyInput = materialize(diagram.nodes);
+  const legacyInput = materialize(legacyNodes);
+  const projectGeometry = (layoutNodes: readonly DiagramNode[]) =>
+    layoutNodes.map(({ id, position, size }) => ({ id, position, size }));
+
+  assert.deepEqual(
+    projectGeometry(layoutAutomaticDiagram(friendlyInput).nodes),
+    projectGeometry(layoutAutomaticDiagram(legacyInput).nodes)
+  );
 });
 
 test("layoutAutomaticDiagram preserves protected manual layout while placing new nodes", () => {
