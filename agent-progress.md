@@ -11,6 +11,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-20 - Add Resource card detail disclosures
+
+- Replaced the Resource card ellipsis menu with an accessible per-card chevron disclosure. Resource titles and Terraform addresses remain visible while all parameter rows below the address start collapsed and can be expanded independently; only the Resource title opens its settings view.
+- Kept disclosure clicks independent from Board selection so selecting a new node cannot remount the panel and immediately discard the expanded state.
+- Removed the obsolete card-menu component, its now-unused duplicate/delete actions, and the old five-row secondary expansion control. Focused disclosure regressions pass 2/2; root lint, typecheck, build, harness, and diff checks passed before the dead-code-only cleanup and were not repeated per user direction. The full suite was intentionally skipped.
+- Known risks: automated visual reload was blocked by the in-app browser localhost policy. Next: visually confirm the disclosure animation and density in the signed-in Workspace.
+- No DB schema, dependency, Terraform, AWS, deployment, or Git/CI/CD mutation was performed.
+
 ### 2026-07-20 - Reduce the Terraform Preview label
 
 - Reduced only the Workspace `Terraform preview` toolbar label by 3px while preserving the file picker and surrounding panel typography.
