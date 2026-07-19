@@ -942,7 +942,7 @@ test("cleanup rejects a replacement Stack that differs from the stored exact ide
   assert.equal(exact.verifiedManagerIdentity, undefined);
 });
 
-test("cleanup keeps an unrelated later AccessDenied retryable despite the prior Manager marker", async () => {
+test("cleanup keeps an unrelated later AccessDenied retryable", async () => {
   const denied = Object.assign(new Error("AccessDenied private-request-id"), {
     name: "AccessDenied"
   });
@@ -983,8 +983,7 @@ test("cleanup keeps an unrelated later AccessDenied retryable despite the prior 
         contractVersion: contract.contractVersion,
         templateSha256: contract.templateSha256
       }
-    },
-    priorManagerCleanupVerified: true
+    }
   } as never) as unknown as ExactCleanupResult;
 
   assert.equal(result.verified, false);
@@ -1013,7 +1012,7 @@ test("cleanup does not treat the final Policy AccessDenied as proof that every a
           command instanceof GetPolicyCommand &&
           command.input.PolicyArn === contract.cleanupVerificationPolicyArn
         ) {
-          events.push("exact-final-policy-sentinel");
+          events.push("exact-cleanup-policy-read");
           throw denied;
         }
         events.push("unrelated-iam-read");
@@ -1036,8 +1035,7 @@ test("cleanup does not treat the final Policy AccessDenied as proof that every a
         contractVersion: contract.contractVersion,
         templateSha256: contract.templateSha256
       }
-    },
-    priorManagerCleanupVerified: true
+    }
   } as never) as unknown as ExactCleanupResult;
 
   assert.deepEqual(events, ["unrelated-cloudformation-read"]);
@@ -1048,7 +1046,7 @@ test("cleanup does not treat the final Policy AccessDenied as proof that every a
   assert.doesNotMatch(JSON.stringify(result), /private-request-id|AccessDenied/iu);
 });
 
-test("cleanup cannot accept the exact final Policy sentinel AccessDenied without a marker", async () => {
+test("cleanup cannot accept an exact Policy AccessDenied as absence proof", async () => {
   const denied = Object.assign(new Error("AccessDenied private-request-id"), {
     name: "AccessDenied"
   });
@@ -1129,7 +1127,7 @@ type ExactCleanupResult = {
     contractVersion: string;
     templateSha256: string;
   };
-  completionEvidence?: "direct" | "prior_exact_marker_access_denied";
+  completionEvidence?: "direct";
   reason?: "drifted" | "retry";
   policy: {
     stack: { status: ExactCleanupStatus };

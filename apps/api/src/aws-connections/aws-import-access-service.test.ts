@@ -477,7 +477,59 @@ test("cleanup_complete is an idempotent no-read terminal state", async () => {
   }
 });
 
-test("cleanup from an early row persists exact Manager identity before the final sentinel", async () => {
+test("cleanup claim preserves a completion that wins after the initial snapshot", async () => {
+  for (const command of ["prepareCleanup", "checkCleanup"] as const) {
+    const fixture = createImportAccessServiceFixture();
+    const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+    record.status = "cleanup_required";
+    const getOrCreate = fixture.repository.getOrCreate;
+    fixture.repository.getOrCreate = async (input) => ({ ...await getOrCreate(input) });
+    const claimCleanupInspection = fixture.repository.claimCleanupInspection;
+    fixture.repository.claimCleanupInspection = async (input) => {
+      Object.assign(fixture.getRecord()!, {
+        status: "cleanup_complete",
+        operationId: "newer-completed-operation",
+        operationKind: "check_cleanup",
+        leaseExpiresAt: null,
+        safeErrorSummary: "더 최신 정리 완료 상태"
+      });
+      return claimCleanupInspection(input);
+    };
+    let awsCalls = 0;
+    fixture.gateway.inspectCleanup = async () => {
+      awsCalls += 1;
+      return createCompletedCleanupInspection();
+    };
+
+    const result = await fixture.service[command](fixture.ownerInput);
+
+    assert.equal(result.state.status, "cleanup_complete", command);
+    assert.equal(result.operationId, "newer-completed-operation", command);
+    assert.equal(fixture.getRecord()?.operationId, "newer-completed-operation", command);
+    assert.equal(awsCalls, 0, command);
+  }
+});
+
+test("checkCleanup rejects a setup source state before reading AWS", async () => {
+  const fixture = createImportAccessServiceFixture();
+  const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  assert.equal(record.status, "check_required");
+  let awsCalls = 0;
+  fixture.gateway.inspectCleanup = async () => {
+    awsCalls += 1;
+    return createCompletedCleanupInspection();
+  };
+
+  await assert.rejects(
+    fixture.service.checkCleanup(fixture.ownerInput),
+    AwsImportAccessLeaseError
+  );
+
+  assert.equal(fixture.getRecord()?.status, "check_required");
+  assert.equal(awsCalls, 0);
+});
+
+test("cleanup from an early row persists exact Manager identity for the next check", async () => {
   const fixture = createImportAccessServiceFixture();
   await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
   const verifiedManagerIdentity = {
@@ -490,11 +542,9 @@ test("cleanup from an early row persists exact Manager identity before the final
     inspections += 1;
     if (inspections === 1) {
       assert.equal(input.expectedCurrent?.manager, undefined);
-      assert.equal(input.priorManagerCleanupVerified, false);
       return createVerifiedManagerCleanupInspection(verifiedManagerIdentity);
     }
     assert.deepEqual(input.expectedCurrent?.manager, verifiedManagerIdentity);
-    assert.equal(input.priorManagerCleanupVerified, true);
     return createCompletedCleanupInspection();
   };
 
@@ -516,7 +566,8 @@ test("cleanup from an early row persists exact Manager identity before the final
 
 test("checkCleanup persists exact Manager identity when it is the first discovery path", async () => {
   const fixture = createImportAccessServiceFixture();
-  await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  record.status = "cleanup_required";
   const verifiedManagerIdentity = {
     stackId: "check-discovered-manager-stack-id",
     contractVersion: "check-discovered-manager-contract",
@@ -538,6 +589,8 @@ test("checkCleanup persists exact Manager identity when it is the first discover
 
 test("cleanup keeps check_cleanup when a deleted Policy Stack leaves exact artifacts", async () => {
   const fixture = createImportAccessServiceFixture();
+  const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  record.status = "cleanup_required";
   fixture.gateway.inspectCleanup = async () => ({
     verified: true,
     managerStackExists: true,
@@ -567,6 +620,8 @@ test("cleanup keeps check_cleanup when a deleted Policy Stack leaves exact artif
 
 test("cleanup does not complete while an exact Manager artifact remains", async () => {
   const fixture = createImportAccessServiceFixture();
+  const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  record.status = "cleanup_required";
   fixture.gateway.inspectCleanup = async () => ({
     verified: true,
     managerStackExists: false,
@@ -594,7 +649,7 @@ test("cleanup does not complete while an exact Manager artifact remains", async 
   assert.equal(fixture.getRecord()?.safeErrorCode, "cleanup_manager_artifact_pending");
 });
 
-test("cleanup forwards stored Stack identities and only a prior exact Manager marker", async () => {
+test("cleanup forwards stored Stack identities", async () => {
   const fixture = createImportAccessServiceFixture();
   await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
   Object.assign(fixture.getRecord()!, {
@@ -614,7 +669,7 @@ test("cleanup forwards stored Stack identities and only a prior exact Manager ma
       verified: true,
       managerStackExists: false,
       policyStackExists: false,
-      completionEvidence: "prior_exact_marker_access_denied",
+      completionEvidence: "direct",
       policy: {
         stack: { status: "absent" },
         readPolicy: { status: "absent" },
@@ -633,7 +688,6 @@ test("cleanup forwards stored Stack identities and only a prior exact Manager ma
 
   const result = await fixture.service.checkCleanup(fixture.ownerInput);
 
-  assert.equal(received?.priorManagerCleanupVerified, true);
   assert.equal(received?.expectedCurrent?.manager?.stackId, "stored-manager-stack-id");
   assert.equal(received?.expectedCurrent?.policy?.stackId, "stored-policy-stack-id");
   assert.equal(result.state.status, "cleanup_complete");
@@ -947,6 +1001,21 @@ function createImportAccessServiceFixture(
       return { kind: "saved", record };
     },
     async claimCleanupInspection(input) {
+      if (record?.status === "cleanup_complete") {
+        return { kind: "complete", record };
+      }
+      if (
+        input.operationKind === "check_cleanup" &&
+        record?.status !== "cleanup_policy_required" &&
+        record?.status !== "cleanup_manager_required" &&
+        record?.status !== "cleanup_required" &&
+        !(
+          (record?.status === "cleanup_checking" || record?.status === "retry_required") &&
+          (record.operationKind === "prepare_cleanup" || record.operationKind === "check_cleanup")
+        )
+      ) {
+        return { kind: "rejected" };
+      }
       if (record?.leaseExpiresAt && record.leaseExpiresAt.getTime() > input.now.getTime()) {
         return { kind: "leased" };
       }
@@ -1124,7 +1193,7 @@ function createCompletedCleanupInspection() {
     verified: true,
     managerStackExists: false,
     policyStackExists: false,
-    completionEvidence: "prior_exact_marker_access_denied" as const,
+    completionEvidence: "direct" as const,
     policy: {
       stack: { status: "absent" as const },
       readPolicy: { status: "absent" as const },

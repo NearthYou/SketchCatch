@@ -104,7 +104,6 @@ export function createAwsImportAccessService(
     if (current.status === "cleanup_complete") {
       return toCommandResponse(current, current.operationId ?? operationId);
     }
-    const priorManagerCleanupVerified = current.status === "cleanup_manager_required";
     const claim = await options.repository.claimCleanupInspection({
       connectionId: input.connectionId,
       operationId,
@@ -115,12 +114,17 @@ export function createAwsImportAccessService(
     if (claim.kind === "leased") {
       throw new AwsImportAccessLeaseError("다른 정리 확인이 진행 중입니다.");
     }
+    if (claim.kind === "rejected") {
+      throw new AwsImportAccessLeaseError("정리 상태가 변경되었습니다.");
+    }
+    if (claim.kind === "complete") {
+      return toCommandResponse(claim.record, claim.record.operationId ?? operationId);
+    }
 
     const inspection = await options.gateway.inspectCleanup({
       connection,
       contract,
-      expectedCurrent: createExpectedCurrentState(claim.record),
-      priorManagerCleanupVerified
+      expectedCurrent: createExpectedCurrentState(claim.record)
     });
     const cleanup = deriveCleanupState(inspection);
     const completion = await options.repository.finishCleanupInspection({
@@ -702,7 +706,7 @@ function trustedInspectionFields(
   };
 }
 
-/** gg: cleanup이 전체 검증한 owned Manager identity만 다음 final-sentinel expected state로 저장합니다. */
+/** gg: cleanup이 전체 검증한 owned Manager identity만 다음 exact-state 확인에 저장합니다. */
 function trustedCleanupInspectionFields(inspection: CleanupInspection) {
   const identity = inspection.verifiedManagerIdentity;
   if (

@@ -106,7 +106,7 @@ export type CleanupInspection = {
     cleanupPolicy: CleanupArtifactInspection;
     cleanupAttachment: CleanupArtifactInspection;
   };
-  completionEvidence?: "direct" | "prior_exact_marker_access_denied";
+  completionEvidence?: "direct";
   reason?: "drifted" | "retry";
 };
 
@@ -131,7 +131,6 @@ export type AwsImportAccessGateway = {
     connection: AwsConnectionRecord;
     contract: AwsImportManagerContract;
     expectedCurrent?: ExpectedCurrentImportAccessState;
-    priorManagerCleanupVerified?: boolean;
   }): Promise<CleanupInspection>;
 };
 

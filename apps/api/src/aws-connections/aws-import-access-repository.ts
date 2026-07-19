@@ -39,7 +39,9 @@ export type AwsImportCleanupInspectionOperationKind =
 
 export type ClaimAwsImportCleanupInspectionResult =
   | { kind: "claimed"; record: AwsImportAccessRecord }
-  | { kind: "leased" };
+  | { kind: "complete"; record: AwsImportAccessRecord }
+  | { kind: "leased" }
+  | { kind: "rejected" };
 
 export type FinishAwsImportCleanupInspectionResult =
   | { kind: "saved"; record: AwsImportAccessRecord }
@@ -316,6 +318,15 @@ export function createPostgresAwsImportAccessRepository(
           .where(eq(awsImportAccess.awsConnectionId, input.connectionId))
           .for("update");
         if (!current) throw new Error("AWS import access state was not found");
+        if (current.status === "cleanup_complete") {
+          return { kind: "complete", record: current } as const;
+        }
+        if (
+          input.operationKind === "check_cleanup" &&
+          !isCleanupCheckSource(current)
+        ) {
+          return { kind: "rejected" } as const;
+        }
         if (
           current.leaseExpiresAt !== null &&
           current.leaseExpiresAt.getTime() > input.now.getTime()
@@ -357,4 +368,20 @@ export function createPostgresAwsImportAccessRepository(
         : { kind: "stale" } as const;
     }
   };
+}
+
+/** gg: 확인 command는 이미 시작된 cleanup 흐름만 이어가고 setup 상태를 건너뛰지 않습니다. */
+function isCleanupCheckSource(record: AwsImportAccessRecord): boolean {
+  switch (record.status) {
+    case "cleanup_policy_required":
+    case "cleanup_manager_required":
+    case "cleanup_required":
+      return true;
+    case "cleanup_checking":
+    case "retry_required":
+      return record.operationKind === "prepare_cleanup" ||
+        record.operationKind === "check_cleanup";
+    default:
+      return false;
+  }
 }
