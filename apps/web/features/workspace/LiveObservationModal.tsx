@@ -73,6 +73,7 @@ export function LiveObservationModal({
   const [qrState, setQrState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [copied, setCopied] = useState(false);
   const [audienceUtilityOpen, setAudienceUtilityOpen] = useState(true);
+  const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const queries = useLiveObservationQueries({
     deploymentId: selectedDeploymentId,
@@ -574,15 +575,21 @@ export function LiveObservationModal({
                 key={`focused-${selectedDeploymentId}`}
                 snapshot={selectedSnapshot}
               />
-              <details className={styles.liveObservationArchitectureDisclosure}>
+              <details
+                className={styles.liveObservationArchitectureDisclosure}
+                onToggle={(event) => setIsArchitectureOpen(event.currentTarget.open)}
+                open={isArchitectureOpen}
+              >
                 <summary>전체 Architecture 보기</summary>
-                <LiveObservationDiagramMap
-                  architecture={selectedArchitecture}
-                  initialViewport={initialViewport}
-                  key={selectedDeploymentId}
-                  onViewportChange={onViewportChange}
-                  snapshot={selectedSnapshot}
-                />
+                {isArchitectureOpen ? (
+                  <LiveObservationDiagramMap
+                    architecture={selectedArchitecture}
+                    initialViewport={initialViewport}
+                    key={selectedDeploymentId}
+                    onViewportChange={onViewportChange}
+                    snapshot={selectedSnapshot}
+                  />
+                ) : null}
               </details>
             </>
           ) : null}

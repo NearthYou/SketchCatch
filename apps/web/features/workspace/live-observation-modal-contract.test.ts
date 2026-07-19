@@ -97,6 +97,21 @@ test("restores the focused traffic path as the default observation view", () => 
   );
 });
 
+test("mounts the full Architecture map only after its disclosure opens", () => {
+  assert.match(
+    modalSource,
+    /const \[isArchitectureOpen, setIsArchitectureOpen\] = useState\(false\)/
+  );
+  assert.match(
+    modalSource,
+    /<details[\s\S]*?onToggle=\{\(event\) => setIsArchitectureOpen\(event\.currentTarget\.open\)\}[\s\S]*?open=\{isArchitectureOpen\}/
+  );
+  assert.match(
+    modalSource,
+    /\{isArchitectureOpen \? \([\s\S]*?<LiveObservationDiagramMap[\s\S]*?\) : null\}/
+  );
+});
+
 test("renders Architecture state only when it belongs to the selected Deployment", () => {
   assert.match(
     modalSource,
