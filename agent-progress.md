@@ -13,37 +13,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-19 - Reduce marked Workspace panel labels
 
-- Reduced the marked AWS provider version, Resource panel eyebrow, Resource count badge, and Terraform Resource address by exactly three pixels while preserving their containers and neighboring typography.
-- No test suite was run at the user's request. Harness, lint, typecheck, build, source review, and diff checks pass; the dev server remains active with no known risk or follow-up action.
-
-### 2026-07-19 - Reduce Workspace resource tile labels
-
-- Reduced only the Workspace Resource palette tile-label base size from 12px to 9px, producing the requested three-pixel decrease while preserving card, icon, category, and section typography.
-- No test suite was run at the user's request. Harness, lint, typecheck, build, source review, and diff checks pass; the dev server remains active with no known risk or follow-up action.
-
-### 2026-07-19 - Extend reduced auth typography and loosen Dashboard navigation
-
-- Extended the six-pixel typography reduction from centered Login and Signup screens to all AuthShell routes, including both Password Reset screens.
-- Increased only the Dashboard sidebar navigation gap from 4px to 8px, preserving item height, typography, sidebar width, and all other spacing.
-- No test suite was run at the user's request. Harness, lint, typecheck, build, source review, and diff checks pass; the existing dev server remains active with no known risk or follow-up action.
-
-### 2026-07-19 - Reduce public and centered auth typography
-
-- Reduced the Root page and its session state by the six-pixel presentation increase, including inherited text.
-- Applied the same reduction only to centered AuthShell routes and the Signup legal-document portal, limiting the change to Login and Signup while leaving Password Reset unchanged.
-- No test suite was run following the user's explicit request to avoid unnecessary tests. Harness, lint, typecheck, build, and the two-axis source review pass; the existing dev server remains active with no known risk or follow-up action.
-
-### 2026-07-19 - Merge latest dev into PR #491
-
-- Merged `origin/dev` at `2ae411aa`, preserving the branch presentation typography while accepting the current AWS connection state model and removal of the AI choice-selected label.
-- Resolved five textual conflicts and repaired two semantic typography regressions introduced by auto-merged Workspace CSS. Imported migration `0053` and deployment safety changes remain unchanged from `dev`.
-- Conflict-focused Web tests pass 31/31, deployment API tests pass 166/166, migration compatibility and Terraform formatting pass, and the full harness lint/typecheck/build sequence passes. No AWS mutation, Terraform execution, or deployment occurred.
-
-### 2026-07-19 - Resolve Live Observation PR feedback
-
-- Lazily mounts the full React Flow Architecture map only while its controlled disclosure is open, preventing zero-sized hidden-container viewport initialization. Added a focused source-contract regression.
-- Declined two defensive optional-chaining suggestions because the shared v2 contract requires both `latestObservation.payload` and `payload.capacity`; only their quantitative members are nullable.
-- Focused Web checks pass 11/11, and root harness, lint, typecheck, build, and diff checks pass. PR #491 remains based on the existing `fix/ys/479-uiux-수정` branch; no AWS mutation or DB migration occurred.
+- Reduced minor UI text, fixed recovery modal stacking/actions, and relabeled Project timestamps. Checks pass.
 
 ### 2026-07-19 - Restore the focused Live Observation traffic presentation
 
