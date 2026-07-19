@@ -15,6 +15,63 @@ const rightPanelSource = readFileSync(
   fileURLToPath(new URL("./WorkspaceRightPanel.tsx", import.meta.url)),
   "utf8"
 );
+const deploymentOutputLinksSource = readFileSync(
+  fileURLToPath(new URL("./DeploymentOutputLinks.tsx", import.meta.url)),
+  "utf8"
+);
+const workspaceStyles = readFileSync(
+  fileURLToPath(new URL("./workspace.module.css", import.meta.url)),
+  "utf8"
+);
+const aiWorkbenchStyles = readFileSync(
+  fileURLToPath(new URL("./workspace-ai-workbench.module.css", import.meta.url)),
+  "utf8"
+);
+const aiLauncherStyles = readFileSync(
+  fileURLToPath(new URL("./workspace-ai-chat-launcher.module.css", import.meta.url)),
+  "utf8"
+);
+const diagramEditorStyles = readFileSync(
+  fileURLToPath(new URL("../diagram-editor/diagram-editor.module.css", import.meta.url)),
+  "utf8"
+);
+const deploymentNotificationStyles = readFileSync(
+  fileURLToPath(
+    new URL(
+      "../../components/notifications/deployment-notification-center.module.css",
+      import.meta.url
+    )
+  ),
+  "utf8"
+);
+
+test("Live Observation stays above non-blocking Workspace surfaces and below recovery", () => {
+  const liveObservationZIndex = getRuleZIndex(workspaceStyles, ".liveObservationOverlay");
+  const projectDraftRecoveryZIndex = getRuleZIndex(
+    workspaceStyles,
+    ".projectDraftRecoveryBackdrop"
+  );
+  const competingZIndexes = [
+    getRuleZIndex(workspaceStyles, ".workspaceNotificationHost"),
+    getRuleZIndex(aiWorkbenchStyles, ".overlay"),
+    getRuleZIndex(aiWorkbenchStyles, ".workWindow"),
+    getRuleZIndex(aiLauncherStyles, ".launcher"),
+    getRuleZIndex(deploymentNotificationStyles, ".center"),
+    getRuleZIndex(
+      diagramEditorStyles,
+      ".floatingPanelSlot:has([data-workspace-ai-chat-overlay])"
+    )
+  ];
+
+  assert.ok(
+    competingZIndexes.every((zIndex) => liveObservationZIndex > zIndex),
+    `Live Observation z-index ${liveObservationZIndex} must exceed non-blocking Workspace surfaces (${competingZIndexes.join(", ")})`
+  );
+  assert.ok(
+    projectDraftRecoveryZIndex > liveObservationZIndex,
+    `ProjectDraft recovery z-index ${projectDraftRecoveryZIndex} must remain above Live Observation ${liveObservationZIndex}`
+  );
+});
 
 test("modal re-entry restores the selected Deployment and diagram viewport", () => {
   assert.match(rightPanelSource, /createLiveObservationViewState\(projectId\)/);
@@ -44,6 +101,28 @@ test("Deployment selection effect notifies the parent only when the target chang
   assert.match(
     modalSource,
     /const fallbackDeploymentId =[\s\S]*?if \(fallbackDeploymentId !== selectedDeploymentId\) \{[\s\S]*?onSelectedDeploymentIdChange\(fallbackDeploymentId\);[\s\S]*?\}/
+  );
+});
+
+test("empty Deployment picker cannot open a blank native menu", () => {
+  const deploymentPickerSource = getSourceBlock(modalSource, "<select", "</select>");
+
+  assert.match(
+    deploymentPickerSource,
+    /disabled=\{[\s\S]*?eligibleDeployments\.length === 0/
+  );
+  assert.match(deploymentPickerSource, /<option disabled value="">/);
+  assert.match(deploymentPickerSource, /관측 가능한 성공 배포가 없습니다\./);
+});
+
+test("Direct Deployment opens Live Observation without leaking the click event as a selection", () => {
+  assert.match(
+    deploymentOutputLinksSource,
+    /onClick=\{\(\) => onOpenLiveObservation\(\)\}/
+  );
+  assert.doesNotMatch(
+    deploymentOutputLinksSource,
+    /onClick=\{onOpenLiveObservation\}/
   );
 });
 
@@ -227,4 +306,12 @@ function getSourceBlock(source: string, startMarker: string, endMarker: string):
   assert.notEqual(start, -1, `Missing source marker: ${startMarker}`);
   assert.notEqual(end, -1, `Missing source marker: ${endMarker}`);
   return source.slice(start, end + endMarker.length);
+}
+
+function getRuleZIndex(source: string, selector: string): number {
+  const rule = getSourceBlock(source, `${selector} {`, "}");
+  const match = rule.match(/z-index:\s*(\d+)/);
+
+  assert.ok(match, `Missing z-index for ${selector}`);
+  return Number(match[1]);
 }

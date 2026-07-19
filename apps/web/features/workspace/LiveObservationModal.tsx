@@ -432,6 +432,7 @@ export function LiveObservationModal({
               <span>Deployment</span>
               <select
                 disabled={
+                  eligibleDeployments.length === 0 ||
                   Boolean(selection) ||
                   requestState === "loading" ||
                   isSessionActive ||
@@ -440,6 +441,13 @@ export function LiveObservationModal({
                 onChange={(event) => selectDeployment(event.target.value)}
                 value={selectedDeploymentId}
               >
+                {eligibleDeployments.length === 0 ? (
+                  <option disabled value="">
+                    {listState === "loading"
+                      ? "배포 기록 불러오는 중..."
+                      : "관측 가능한 성공 배포가 없습니다."}
+                  </option>
+                ) : null}
                 {eligibleDeployments.map((deployment) => (
                   <option key={deployment.id} value={deployment.id}>
                     {formatDeploymentOption(deployment)}

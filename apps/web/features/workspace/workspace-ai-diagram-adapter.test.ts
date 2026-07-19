@@ -434,6 +434,92 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and hides contain
   assert.deepEqual(diagramJson.viewport, { x: 0, y: 0, zoom: 1 });
 });
 
+test("convertArchitectureJsonToDiagramJson keeps catalog defaults when AI parameters are blank", () => {
+  const createVpcDiagram = (
+    config: ArchitectureJson["nodes"][number]["config"]
+  ): DiagramJson =>
+    convertArchitectureJsonToDiagramJson({
+      nodes: [
+        {
+          id: "vpc-main",
+          type: "VPC",
+          label: "Main VPC",
+          positionX: 120,
+          positionY: 80,
+          config
+        }
+      ],
+      edges: []
+    });
+
+  const blankDiagram = createVpcDiagram({ enableDnsSupport: "", instanceTenancy: "" });
+  const selectedDiagram = createVpcDiagram({ enableDnsSupport: false, instanceTenancy: "dedicated" });
+
+  const blankValues = blankDiagram.nodes[0]?.parameters?.values;
+  const selectedValues = selectedDiagram.nodes[0]?.parameters?.values;
+
+  assert.equal(blankValues?.enableDnsSupport, true);
+  assert.equal(blankValues?.instanceTenancy, "default");
+  assert.equal(selectedValues?.enableDnsSupport, false);
+  assert.equal(selectedValues?.instanceTenancy, "dedicated");
+});
+
+test("convertArchitectureJsonToDiagramJson supplies CloudFront required nested blocks as lists", () => {
+  const diagramJson = convertArchitectureJsonToDiagramJson({
+    nodes: [
+      {
+        id: "cdn-site",
+        type: "CLOUDFRONT",
+        label: "Site CDN",
+        positionX: 120,
+        positionY: 80,
+        config: {
+          origin: {
+            domainName: "assets.example.com",
+            originId: "static-assets",
+            originPath: "   ",
+            optionalValue: null,
+            omittedValue: undefined
+          },
+          defaultCacheBehavior: {
+            allowedMethods: ["GET", "HEAD"],
+            cachedMethods: ["GET", "HEAD"],
+            targetOriginId: "static-assets",
+            viewerProtocolPolicy: "redirect-to-https"
+          },
+          restrictions: {
+            geoRestriction: [{ restrictionType: "none" }]
+          },
+          viewerCertificate: {
+            cloudfrontDefaultCertificate: true
+          }
+        }
+      }
+    ],
+    edges: []
+  });
+
+  const values = diagramJson.nodes[0]?.parameters?.values;
+
+  assert.deepEqual(values?.origin, [
+    { domainName: "assets.example.com", originId: "static-assets" }
+  ]);
+  assert.deepEqual(values?.defaultCacheBehavior, [
+    {
+      allowedMethods: ["GET", "HEAD"],
+      cachedMethods: ["GET", "HEAD"],
+      targetOriginId: "static-assets",
+      viewerProtocolPolicy: "redirect-to-https"
+    }
+  ]);
+  assert.deepEqual(values?.restrictions, [
+    { geoRestriction: [{ restrictionType: "none" }] }
+  ]);
+  assert.deepEqual(values?.viewerCertificate, [
+    { cloudfrontDefaultCertificate: true }
+  ]);
+});
+
 test("convertArchitectureJsonToDiagramJson keeps RDS read replicas separate from general RDS defaults", () => {
   const diagramJson = convertArchitectureJsonToDiagramJson({
     nodes: [

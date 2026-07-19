@@ -75,7 +75,7 @@ export function DeploymentOutputLinks({
             <a href={link.url} target="_blank" rel="noreferrer">사이트 열기</a>
             <button type="button" onClick={() => void copyUrl(link.url)}>URL 복사</button>
             {link.kind === "web" && onOpenLiveObservation ? (
-              <button type="button" onClick={onOpenLiveObservation}>
+              <button type="button" onClick={() => onOpenLiveObservation()}>
                 QR 보기 · Live Observation
               </button>
             ) : null}
