@@ -11,48 +11,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-19 - Address PR #497 CloudFront review feedback
+### 2026-07-19 - Reduce marked Workspace panel labels
 
-- Removed the redundant `/api/*` ordered cache behavior because the default CloudFront behavior already forwards every method with zero TTL and full request forwarding.
-- Preserved the HTTPS `api_base_url` by recognizing a default behavior that allows all API write methods as an API-capable CloudFront entry point; static GET-only distributions remain excluded.
-- Focused API and Template checks pass 65/65. Final harness, lint, typecheck, build, and diff checks are recorded by the merge finishing run; no cloud mutation or deployment occurred.
-
-### 2026-07-19 - Merge latest dev into PR #497
-
-- Merged `origin/dev` at `75c46ce7` into `fix/sw/495-live-observation-template`, preserving the Live Observation Template, reopened approval dialog fix, and combined Live Observation Design Analysis while accepting the latest shared UI and deployment-target work.
-- Resolved two documentation conflicts by retaining both workstreams and archived older progress records to restore the harness size limits.
-- Focused checks pass 60/60. Root harness, lint, typecheck, build, and diff checks pass; no AWS mutation, Terraform execution, Deployment, traffic generation, dependency change, or DB migration was performed.
-
-### 2026-07-19 - Combine Design Analysis with Live Observation
-
-- Removed the standalone Workspace right-panel Design Analysis mode and placed the same current-Board analysis at the bottom of the Live Observation modal.
-- Preserved the explicit read-only analysis action and all runtime observation, Deployment selection, QR, and session controls without AWS or traffic mutation.
-- Focused checks pass 33/33. Web and root lint/typecheck/build, harness, diff checks, browser rendering/order QA, and independent standards/spec review pass with no findings.
-
-### 2026-07-19 - Restore Design Analysis in the active Workspace
-
-- Added a dedicated Workspace right-panel view that runs Design Simulation and the deterministic Pre-Deployment Check against the current Board without mutating infrastructure.
-- The result presents bottlenecks, failure scenarios, security findings, estimated cost, and combined improvement recommendations; stale Board results are marked for rerun, and Live Observation remains a separate runtime-evidence view.
-- Focused checks pass 4/4. Web lint/typecheck, Web production build, root lint/typecheck, harness, and diff checks pass. HTTPS 3000 and API 4000 both remain healthy; no AWS mutation, Terraform execution, dependency, migration, push, or PR occurred.
-
-### 2026-07-19 - Make the ECS Template Live Observation-ready
-
-- Added a CloudFront HTTPS entry point in front of the ECS Fargate Template ALB while retaining the bounded request-based Service Auto Scaling contract (`min=1`, `max=3`, `ALBRequestCountPerTarget=10`). The authored presentation now keeps User, CloudFront, and ALB on the primary traffic path and contains all scaling resources inside Definition / Ops.
-- Added Template graph and rendered Terraform regressions for the CloudFront origin, HTTPS redirect, public Outputs, and scaling blocks. Focused Type/API tests, Terraform init/validate, lint, typecheck, and build pass.
-- In the approved non-production account `614935468487` / `ap-northeast-2`, the refreshed local project Plan passed at `+36 ~0 -0` and remains unapproved. No AWS Apply, load generation, or Destroy was performed in this step.
-- The full test command reaches the Types suite and retains one unrelated baseline Git/CI readiness assertion failure (`null !== 0`); all Template contract failures introduced by the intentional graph change are resolved.
-
-### 2026-07-19 - Merge latest dev into PR #491
-
-- Merged `origin/dev` at `2ae411aa`, preserving the branch presentation typography while accepting the current AWS connection state model and removal of the AI choice-selected label.
-- Resolved five textual conflicts and repaired two semantic typography regressions introduced by auto-merged Workspace CSS. Imported migration `0053` and deployment safety changes remain unchanged from `dev`.
-- Conflict-focused Web tests pass 31/31, deployment API tests pass 166/166, migration compatibility and Terraform formatting pass, and the full harness lint/typecheck/build sequence passes. No AWS mutation, Terraform execution, or deployment occurred.
-
-### 2026-07-19 - Resolve Live Observation PR feedback
-
-- Lazily mounts the full React Flow Architecture map only while its controlled disclosure is open, preventing zero-sized hidden-container viewport initialization. Added a focused source-contract regression.
-- Declined two defensive optional-chaining suggestions because the shared v2 contract requires both `latestObservation.payload` and `payload.capacity`; only their quantitative members are nullable.
-- Focused Web checks pass 11/11, and root harness, lint, typecheck, build, and diff checks pass. PR #491 remains based on the existing `fix/ys/479-uiux-수정` branch; no AWS mutation or DB migration occurred.
+- Reduced minor UI text, fixed recovery modal stacking/actions, and relabeled Project timestamps. Checks pass.
 
 ### 2026-07-19 - Restore the focused Live Observation traffic presentation
 
@@ -145,6 +106,24 @@ Short English-only working log for the current agent context. Older records are 
 - General AWS connection deletion excludes GitHub CodeConnection; the dedicated GitHub build disconnect remains its only deletion path.
 - Reverse Engineering scan history remains preserved when an AWS connection is deleted through the imported `dev` migration and API changes.
 
+### 2026-07-18 - Preserve current branch presentation adjustments
+
+- Live Observation guidance keeps its original wording and width while using the requested smaller text size.
+- AI Workbench desktop navigation remains icon-only with mode-specific titles.
+- Automatic organization results remain minimal and omit change summaries, review lists, and technical details.
+
+## Broken Or Unverified
+
+- No merge-owned check is failing.
+- Broad test suites were not run because the user requested avoiding unnecessary tests; focused conflict regressions and all required repository checks passed.
+- Previously documented environment-specific or unrelated broad-suite failures remain recorded in Git history and `docs/agent-history/2026-07.md`.
+- No live AWS mutation, Terraform apply/destroy, Deployment, GitHub mutation, or Git handoff is authorized or performed by this merge resolution.
+
+## Next Action
+
+- Publish the verified branch and open the approved PR to `dev`, linked to issue #490.
+- Keep production deployment execution outside this PR; the DNS incident does not authorize a cloud rerun.
+
 ### 2026-07-19 - Tighten Workspace AI conversation spacing
 
 - Expanded the desktop transcript, suggestion, composer, and composer metadata widths so the conversation panel uses its available space consistently.
@@ -187,3 +166,24 @@ Short English-only working log for the current agent context. Older records are 
 - Conflict requests now call Amazon Q Business ChatSync with the exact validation failures and user requirement. JSON and plain-text/numbered Q answers both become the existing clarification question and choices without server-side trade-off selection.
 - Workspace AI draft failures now keep full diagnostics in the browser console and show one short transcript message instead of duplicated developer diagnostics.
 - Focused API provider/parser and Web presentation regressions pass; API/Web typechecks pass. No database migration, deployment, cloud mutation, or push was performed.
+
+### 2026-07-19 - Classify natural-language technology stack answers
+
+- Added one shared frontend/backend technology-stack classifier used by API answer validation, canonical prompt context, architecture profiles, and Web selection presentation.
+- React/Vue/Svelte-style SPA stacks, Next/Nuxt/Remix-style SSR stacks, Flutter/React Native mobile stacks, simple API frameworks, complex backend frameworks, and microservice stacks now reuse their existing answer option instead of creating a custom choice.
+- Database product names do not infer data volume because the technology alone does not answer that question.
+- Three shared classifier regressions, focused API/Web integrations, cross-package typechecks, and the harness pass. No database migration, deployment, cloud mutation, or push was performed.
+
+### 2026-07-19 - Reconcile durable Plan acceptance after an HTTP response failure
+
+- Shaped the Plan API's accepted Deployment response before creating or dispatching durable worker work, so response serialization failures cannot leave an unacknowledged worker running.
+- Reconciled a validation request error only when polling observes the exact pending Deployment still running or carrying its Plan artifact; unrelated foreground failures remain visible.
+- Focused API checks pass 70/70 and focused Web checks pass 52/52. Root lint, typecheck, and production build pass; the final harness and diff checks are recorded by the finishing verification run.
+- No DB migration, dependency change, AWS mutation, Terraform Apply/Destroy, deployment, or direct push to `dev` was performed.
+
+### 2026-07-19 - Move Plan build preparation behind durable worker acceptance
+
+- Traced the reported Plan HTTP 500 to Next.js development proxy's 30-second timeout: the API spent about 34 seconds preparing CodeBuild and verifying Repository access before it created the durable worker job.
+- The Plan route now returns its accepted Deployment after durable dispatch, while the worker runs build-environment preparation inside the Plan execution lease and heartbeat boundary. Preparation failures remain recorded as `build_environment` failures.
+- The reported Deployment `eae903e0-926c-46d7-b819-99b124246373` completed despite the proxy error and produced a pending `36 create / 0 update / 0 delete` Plan with no failure stage or error summary.
+- Focused API regressions pass 106/106; root lint, typecheck, build, final harness, and diff checks are recorded by the finishing verification run. No DB migration, dependency change, AWS mutation by Codex, Terraform Apply/Destroy, deployment rerun, or direct push to `dev` was performed.

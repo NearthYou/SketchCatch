@@ -6,6 +6,7 @@ import { ProjectArchitectureThumbnail } from "./project-architecture-thumbnail";
 
 export type ApiProjectCardProps = {
   readonly actions?: ReactNode;
+  readonly compactTimestamp?: boolean;
   readonly isDeleting?: boolean;
   readonly onDelete?: ((project: Project) => void) | undefined;
   readonly project: Project;
@@ -16,6 +17,7 @@ export type ApiProjectCardProps = {
 
 export function ApiProjectCard({
   actions,
+  compactTimestamp = false,
   isDeleting = false,
   onDelete,
   project,
@@ -45,7 +47,14 @@ export function ApiProjectCard({
         <div className="projectCardMeta">
           <span>
             <DashboardIcon name="clock" />
-            <time className="projectCardTimestamp" dateTime={timestampValue}>
+            <time
+              className={
+                compactTimestamp
+                  ? "projectCardTimestamp projectCardTimestampCompact"
+                  : "projectCardTimestamp"
+              }
+              dateTime={timestampValue}
+            >
               {timestampLabel} {formatProjectDate(timestampValue)}
             </time>
           </span>
