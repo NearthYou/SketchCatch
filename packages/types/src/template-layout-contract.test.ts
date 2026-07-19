@@ -233,12 +233,12 @@ const EXPECTED_ROUTING = {
 } as const satisfies Record<RepositoryTemplateId, Readonly<Record<string, EdgeRoutingExpectation>>>;
 
 const EXPECTED_SEMANTIC_HASHES = {
-  "static-web-hosting": "cdcf727ee30e0183e901740d4604d3c3ec3beceb9c0be5e708eb88df0b9aee8c",
-  "minimal-serverless-api": "04ab9553ed1ac0e98d9443fd2249304e90048f8093bb8d2fba2c588d02cb040a",
-  "full-serverless-web-app": "35109a6ad167cdf89e870f66f00eb86deaae947fdf2d442949c9dbec7132f272",
-  "three-tier-web-app": "540426b2ed372783ece7398052d6bd8bed9c560fcb7bc7eb02f3660818e9df19",
-  "ecs-fargate-container-app": "2348ea417f1785a1dcd07d9625249f4ce46d9778fa956b9cd708ea4a7df90c91",
-  "eks-container-app": "c96f7c03a1dc8dd12a6648d1c5227b1bcba8e320bf411b4b08a8fd379250c7dd"
+  "static-web-hosting": "4e85bf89001a4d19444f232dca3127751cc0fd1a592a6fad82cbd30d27500987",
+  "minimal-serverless-api": "f4a555474884830020690cfc0a182a4826a8829e60ca1d32fa392374867f04e4",
+  "full-serverless-web-app": "f491ee46e9a1a0db6a67c212b24e6fe2c10ef57531be822f5edf7200dce3ee61",
+  "three-tier-web-app": "6b78785744969d30a8172d917987d7831ae9d1ec5336660aa8ba3817f0f3c80e",
+  "ecs-fargate-container-app": "a97686c693950593aa0c218d38b2ceecda6284e0fd6d0d0eb3a32b72200c9f04",
+  "eks-container-app": "f6e0e5c7d00cfd2f6a38bfa41e0eb9f9676c8ffe6f7728e573433e7701f65839"
 } as const satisfies Record<RepositoryTemplateId, string>;
 
 test("six deployable templates keep their semantic graph while adopting the PNG layout contract", () => {
@@ -366,11 +366,11 @@ test("ECS Fargate support groups contain their grid-laid resources without overl
   const pairs = [
     [
       "Definition / Ops",
-      ["애플리케이션 ECR Repository", "애플리케이션 ECS Task Definition", "ECS Task 로그 저장"]
+      ["Application ECR Repository", "Application ECS Task Definition", "ECS Task Log Group"]
     ],
     [
       "Global IAM",
-      ["ECS Task Execution IAM Role", "ECS Task 실행 권한 연결", "ECS Task IAM Role"]
+      ["ECS Task Execution IAM Role", "ECS Task Execution Policy Attachment", "ECS Task IAM Role"]
     ]
   ] as const;
 
