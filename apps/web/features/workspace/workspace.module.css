@@ -6697,6 +6697,16 @@
   overflow: auto;
 }
 
+.liveObservationDesignAnalysis {
+  background: #ffffff;
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  color: #172033;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 14px;
+  padding: 20px 18px 24px;
+}
+
 .liveObservationMessage,
 .liveObservationIntro,
 .liveObservationError {

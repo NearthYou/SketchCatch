@@ -87,10 +87,13 @@ export function WorkspaceDesignAnalysisPanel({ context }: WorkspaceDesignAnalysi
   }
 
   return (
-    <div className={styles.aiPanel}>
+    <section
+      aria-labelledby="live-observation-design-analysis-title"
+      className={styles.liveObservationDesignAnalysis}
+    >
       <header className={styles.aiPanelHeader}>
         <span>DESIGN REVIEW</span>
-        <h2>설계 분석</h2>
+        <h2 id="live-observation-design-analysis-title">설계 분석</h2>
         <p className={styles.aiHint}>
           현재 Board를 기준으로 배포 전에 예상되는 병목, 장애, 보안 위험과 비용을 검토합니다.
         </p>
@@ -119,7 +122,7 @@ export function WorkspaceDesignAnalysisPanel({ context }: WorkspaceDesignAnalysi
           </p>
         )}
       </section>
-    </div>
+    </section>
   );
 }
 

@@ -12,6 +12,7 @@ import QRCode from "qrcode";
 import { createPortal } from "react-dom";
 import { copyTextToClipboard } from "../../lib/clipboard";
 import { ApiClientError, getApiErrorMessage } from "../../lib/api-client";
+import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   createLiveObservation,
   stopLiveObservation,
@@ -29,9 +30,11 @@ import { useLiveObservationQueries } from "./live-observation-queries";
 import type { LiveObservationViewport } from "./live-observation-view-state";
 import { LiveObservationDiagramMap } from "./LiveObservationDiagramMap";
 import { LiveObservationFocusedFlow } from "./LiveObservationFocusedFlow";
+import { WorkspaceDesignAnalysisPanel } from "./WorkspaceDesignAnalysisPanel";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
+  readonly diagramContext: DiagramEditorPanelContext;
   readonly initialViewport: LiveObservationViewport | null;
   readonly onClose: () => void;
   readonly onSessionChange: (session: LiveObservationV2Session | null) => void;
@@ -46,6 +49,7 @@ export type LiveObservationModalProps = {
 };
 
 export function LiveObservationModal({
+  diagramContext,
   initialViewport,
   onClose,
   onSessionChange,
@@ -657,6 +661,7 @@ export function LiveObservationModal({
               </ol>
             </details>
           ) : null}
+          <WorkspaceDesignAnalysisPanel context={diagramContext} />
         </main>
 
         {selectedSession ? (

@@ -4,15 +4,15 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch `fix/sw/495-live-observation-template` now restores a dedicated Design Analysis entry in the active Workspace right panel. It combines current-Board Design Simulation results with Pre-Deployment security findings and recommendations while keeping Live Observation runtime-only.
-- Focused Design Analysis checks pass 4/4; Web lint/typecheck/build, root lint/typecheck, harness, and diff checks pass. HTTPS 3000 and API 4000 return 200.
+- Branch `fix/sw/495-live-observation-template` now places Design Analysis at the bottom of Live Observation instead of exposing a separate Workspace right-panel mode. It combines current-Board Design Simulation results with Pre-Deployment security findings and recommendations without changing runtime observation controls.
+- Focused integration checks pass 33/33; browser QA verifies the actual combined rendering order. Web and root lint/typecheck/build, harness, and diff checks pass. HTTPS 3000 and API 4000 return 200.
 - Branch `fix/ck/477-ai-chatting-bug-fix` includes committed all-question validation, both-chat selection synchronization, clarification probes, diagram patch probes, and complete resource alias coverage.
 - The running Web-to-API path repeats the frontend question for the reported daily-user-count phrase and the region question for the reported Spring Boot phrase, with explicit unrelated-answer feedback.
 - The branch includes the committed Architecture Draft Korean-explanation, `다음 행동` cleanup, and fresh-draft routing fix.
 
 ## Changes This Session
 
-- Restored the orphaned Design Simulation capability through the active Workspace composition instead of remounting the legacy all-in-one AI panel.
+- Restored the orphaned Design Simulation capability inside Live Observation instead of a separate right-panel mode or the legacy all-in-one AI panel.
 - Added one user-triggered, read-only analysis action for bottlenecks, failures, security risks, estimated cost, and recommendations, including stale-Board feedback.
 - Expanded database storage, country-level region, and conversational photo-upload clarification semantics.
 - Verified EC2 sizing, RDS removal, S3 addition, EC2-to-Lambda replacement, and connected CloudFront addition against proposed graph outcomes.
@@ -35,7 +35,7 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Broken Or Unverified
 
-- Design Analysis browser interaction was not rerun; verification is focused because the user requested limited testing.
+- A populated Board analysis run was not repeated; the integrated empty-Board presentation and enabled action were verified in the browser.
 
 ## Best Next Action
 

@@ -11,6 +11,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Combine Design Analysis with Live Observation
+
+- Removed the standalone Workspace right-panel Design Analysis mode and placed the same current-Board analysis at the bottom of the Live Observation modal.
+- Preserved the explicit read-only analysis action and all runtime observation, Deployment selection, QR, and session controls without AWS or traffic mutation.
+- Focused checks pass 33/33. Web and root lint/typecheck/build, harness, diff checks, browser rendering/order QA, and independent standards/spec review pass with no findings.
+
 ### 2026-07-19 - Restore Design Analysis in the active Workspace
 
 - Added a dedicated Workspace right-panel view that runs Design Simulation and the deterministic Pre-Deployment Check against the current Board without mutating infrastructure.

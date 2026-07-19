@@ -24,7 +24,6 @@ import {
   Activity,
   Code2,
   GalleryVerticalEnd,
-  Gauge,
   PanelRightClose,
   PanelRightOpen,
   Rocket
@@ -36,7 +35,6 @@ import {
   type DeploymentPreDeploymentCheckState
 } from "./DeploymentPanel";
 import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
-import { WorkspaceDesignAnalysisPanel } from "./WorkspaceDesignAnalysisPanel";
 import {
   TerraformCodePanel,
   type TerraformFilesReplacementRequest,
@@ -1010,6 +1008,7 @@ export function WorkspaceRightPanel({
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
     <LiveObservationModal
+      diagramContext={context}
       initialViewport={retainedLiveObservationView.viewport}
       onClose={() => {
         setIsLiveObservationOpen(false);
@@ -1049,14 +1048,6 @@ export function WorkspaceRightPanel({
             type="button"
           >
             <GalleryVerticalEnd size={18} aria-hidden="true" />
-          </button>
-          <button
-            className={styles.collapsedPanelButton}
-            onClick={() => openCollapsedView("analysis")}
-            title="설계 분석"
-            type="button"
-          >
-            <Gauge size={18} aria-hidden="true" />
           </button>
           <button
             className={styles.collapsedPanelButton}
@@ -1144,17 +1135,6 @@ export function WorkspaceRightPanel({
               </span>
             </button>
             <button
-              aria-pressed={activeView === "analysis"}
-              className={
-                activeView === "analysis" ? styles.panelModeButtonActive : styles.panelModeButton
-              }
-              onClick={() => requestView("analysis")}
-              title="설계 분석"
-              type="button"
-            >
-              <Gauge size={16} aria-hidden="true" />
-            </button>
-            <button
               aria-label="Live Observation"
               className={styles.panelModeButton}
               onClick={() => openLiveObservation()}
@@ -1172,9 +1152,6 @@ export function WorkspaceRightPanel({
             onViewChange={handleResourceWorkspaceViewChange}
             view={resourceWorkspaceView}
           />
-        </div>
-        <div className={styles.rightPanelView} hidden={activeView !== "analysis"}>
-          <WorkspaceDesignAnalysisPanel context={context} />
         </div>
         <div
           ref={terraformViewRef}

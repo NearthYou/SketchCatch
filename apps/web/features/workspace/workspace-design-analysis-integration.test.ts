@@ -10,21 +10,25 @@ const rightPanelSource = readFileSync(
   new URL("./WorkspaceRightPanel.tsx", import.meta.url),
   "utf8"
 );
+const liveObservationModalSource = readFileSync(
+  new URL("./LiveObservationModal.tsx", import.meta.url),
+  "utf8"
+);
 const rightPanelTypesSource = readFileSync(
   new URL("./workspace-right-panel.types.ts", import.meta.url),
   "utf8"
 );
 
-test("현재 Workspace 오른쪽 패널에서 설계 분석을 직접 열 수 있다", () => {
-  assert.match(rightPanelTypesSource, /"analysis"/);
-  assert.match(rightPanelSource, /WorkspaceDesignAnalysisPanel/);
-  assert.match(rightPanelSource, /requestView\("analysis"\)/);
-  assert.match(rightPanelSource, /openCollapsedView\("analysis"\)/);
-  assert.match(rightPanelSource, /activeView === "analysis"/);
-  assert.match(rightPanelSource, /title="설계 분석"/);
+test("설계 분석은 별도 오른쪽 패널 없이 Live Observation 본문 아래에서 제공된다", () => {
+  assert.doesNotMatch(rightPanelTypesSource, /"analysis"/);
+  assert.doesNotMatch(rightPanelSource, /requestView\("analysis"\)/);
+  assert.doesNotMatch(rightPanelSource, /openCollapsedView\("analysis"\)/);
+  assert.doesNotMatch(rightPanelSource, /activeView === "analysis"/);
+  assert.doesNotMatch(rightPanelSource, /title="설계 분석"/);
+  assert.match(rightPanelSource, /<LiveObservationModal[\s\S]*?diagramContext=\{context\}/);
   assert.match(
-    rightPanelSource,
-    /hidden=\{activeView !== "analysis"\}[\s\S]*?<WorkspaceDesignAnalysisPanel context=\{context\}/
+    liveObservationModalSource,
+    /<WorkspaceDesignAnalysisPanel context=\{diagramContext\} \/>[\s\S]*?<\/main>/
   );
 });
 
@@ -37,7 +41,7 @@ test("설계 분석은 현재 Board로 시뮬레이션과 보안 점검을 함�
   assert.match(analysisPanelSource, /보드 변경됨 · 다시 실행 필요/);
 });
 
-test("Live Observation은 설계 분석과 분리된 런타임 관측 진입점으로 유지한다", () => {
+test("Live Observation은 런타임 관측과 사전 설계 분석을 한 화면에 제공한다", () => {
   assert.match(rightPanelSource, /onClick=\{\(\) => openLiveObservation\(\)\}/);
-  assert.doesNotMatch(analysisPanelSource, /LiveObservation|openLiveObservation/);
+  assert.match(liveObservationModalSource, /WorkspaceDesignAnalysisPanel/);
 });
