@@ -172,6 +172,20 @@ test("page failure classification uses SDK error name and code without exposing 
   }
 });
 
+test("page collector stops a repeated token with accumulated items and one safe transient failure", async () => {
+  let calls = 0;
+  const result = await collectAwsPages(async () => {
+    calls += 1;
+    if (calls > 2) throw new Error("collector did not stop the repeated private-token");
+    return { items: [{ page: calls }], nextToken: "private-repeated-token" };
+  });
+
+  assert.equal(calls, 2);
+  assert.deepEqual(result.items, [{ page: 1 }, { page: 2 }]);
+  assert.deepEqual(result.failure, { outcome: "transient" });
+  assert.doesNotMatch(JSON.stringify(result.failure), /private-repeated-token/iu);
+});
+
 test("AWS Query signs only allowlisted pagination parameters and encodes opaque tokens", async () => {
   let body = "";
   let fetchCalls = 0;
@@ -363,6 +377,7 @@ test("AMI pagination preserves page-one images and reports one safe later failur
 
   assert.deepEqual(records.map((record) => record.providerResourceId), ["ami-kept"]);
   assert.equal(commands.length, 2);
+  assert.equal(commands[0]?.input.MaxResults, 1_000);
   assert.equal(commands[1]?.input.NextToken, "page-2");
   assert.deepEqual(failures, [{ outcome: "transient" }]);
   assert.deepEqual(Object.keys(failures[0] ?? {}), ["outcome"]);

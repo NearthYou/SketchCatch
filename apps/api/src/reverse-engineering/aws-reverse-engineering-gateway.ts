@@ -168,22 +168,28 @@ export type AwsPageResult<T> = {
   failure?: AwsPageFailure;
 };
 
-/** gg: 뒤 page가 실패해도 이미 읽은 item과 원문 없는 실패 분류를 함께 보존합니다. */
+/** gg: 뒤 page 실패·반복 token에서도 이미 읽은 item과 원문 없는 실패 분류를 보존합니다. */
 export async function collectAwsPages<T>(
   readPage: (
     nextToken: string | undefined
   ) => Promise<{ items: readonly T[]; nextToken?: string | null | undefined }>
 ): Promise<AwsPageResult<T>> {
   const items: T[] = [];
+  const seenTokens = new Set<string>();
   let nextToken: string | undefined;
 
   do {
     try {
       const page = await readPage(nextToken);
       items.push(...page.items);
-      nextToken = typeof page.nextToken === "string" && page.nextToken.length > 0
+      const candidateToken = typeof page.nextToken === "string" && page.nextToken.length > 0
         ? page.nextToken
         : undefined;
+      if (candidateToken && seenTokens.has(candidateToken)) {
+        return { items, failure: { outcome: "transient" } };
+      }
+      if (candidateToken) seenTokens.add(candidateToken);
+      nextToken = candidateToken;
     } catch (error) {
       return {
         items,
@@ -1635,7 +1641,7 @@ export async function listAmiImagesAsUnknown(
   const result = await collectAwsPages(async (nextToken) => {
     const response = await sendEc2Command<DescribeImagesCommandOutput>(
       client,
-      new DescribeImagesCommand({ Owners: ["self"], NextToken: nextToken })
+      new DescribeImagesCommand({ Owners: ["self"], MaxResults: 1_000, NextToken: nextToken })
     );
     return {
       items: (response.Images ?? []).flatMap((image) =>
