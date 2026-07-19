@@ -56,6 +56,32 @@ test("preview panel shows candidate thumbnails and a responsive original-arrange
   assert.equal(html.includes("Compiler"), false);
 });
 
+test("original and selected comparison share one union viewBox while thumbnails keep individual fit", async () => {
+  const { BoardAutoOrganizePreviewPanel } = await import("./BoardAutoOrganizePreviewPanel");
+  const source = createDiagram();
+  const candidateSet = createCandidateSet(source);
+
+  for (const node of candidateSet.candidates[0]!.diagram.nodes) {
+    node.position = { x: node.position.x + 1_000, y: node.position.y + 500 };
+  }
+
+  const html = renderToStaticMarkup(
+    createElement(BoardAutoOrganizePreviewPanel, {
+      session: createBoardAutoOrganizePreviewSession(source, candidateSet, 7),
+      onKeepOriginal() {},
+      onSelectCandidate() {},
+      onSelectView() {},
+      onUseOrganized() {}
+    })
+  );
+  const originalComparisonViewBox = getSvgViewBox(html, "원본");
+  const organizedComparisonViewBox = getSvgViewBox(html, "선택한 정리안");
+  const candidateThumbnailViewBox = getSvgViewBox(html, "정리안 1");
+
+  assert.equal(originalComparisonViewBox, organizedComparisonViewBox);
+  assert.notEqual(candidateThumbnailViewBox, organizedComparisonViewBox);
+});
+
 test("responsive preview lets only the thumbnail strip scroll horizontally", () => {
   const candidateStrip = getCssBlock(".autoOrganizeCandidateStrip");
   const comparison = getCssBlock(".autoOrganizeComparison");
@@ -93,6 +119,15 @@ function getCssBlock(selector: string): string {
   assert.notEqual(start, -1, `${selector} must exist`);
   assert.notEqual(end, -1, `${selector} block must close`);
   return diagramEditorStyles.slice(start, end + 2);
+}
+
+/** 접근성 label로 특정 preview SVG의 viewBox를 읽습니다. */
+function getSvgViewBox(html: string, label: string): string {
+  const svg = html.match(new RegExp(`<svg[^>]*aria-label="${label} 그림"[^>]*>`))?.[0];
+  const viewBox = svg?.match(/viewBox="([^"]+)"/)?.[1];
+
+  assert.ok(viewBox, `${label} SVG must expose a viewBox`);
+  return viewBox;
 }
 
 /** 패널 SVG에 표시할 작은 Diagram을 만듭니다. */

@@ -26,6 +26,11 @@ export function BoardAutoOrganizePreviewPanel({
     return null;
   }
 
+  const comparisonLayout = getDiagramThumbnailLayout([
+    session.originalDiagram,
+    selectedCandidate.diagram
+  ]);
+
   return (
     <section
       aria-label="자동 정리 미리보기"
@@ -95,6 +100,7 @@ export function BoardAutoOrganizePreviewPanel({
             <BoardAutoOrganizeDiagramThumbnail
               diagram={session.originalDiagram}
               label="원본"
+              layout={comparisonLayout}
             />
             <figcaption>원본</figcaption>
           </figure>
@@ -102,6 +108,7 @@ export function BoardAutoOrganizePreviewPanel({
             <BoardAutoOrganizeDiagramThumbnail
               diagram={selectedCandidate.diagram}
               label="선택한 정리안"
+              layout={comparisonLayout}
             />
             <figcaption>선택한 정리안</figcaption>
           </figure>
@@ -161,12 +168,14 @@ export function BoardAutoOrganizeFailurePanel({
 /** 실제 Board 좌표를 작은 SVG 안에 맞춰 후보 모양만 안전하게 보여줍니다. */
 function BoardAutoOrganizeDiagramThumbnail({
   diagram,
-  label
+  label,
+  layout: sharedLayout
 }: {
   readonly diagram: DiagramJson;
   readonly label: string;
+  readonly layout?: DiagramThumbnailLayout;
 }) {
-  const layout = getDiagramThumbnailLayout(diagram);
+  const layout = sharedLayout ?? getDiagramThumbnailLayout([diagram]);
   const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
 
   return (
@@ -231,22 +240,26 @@ function BoardAutoOrganizeDiagramThumbnail({
   );
 }
 
-/** node 전체를 감싸는 여백 포함 SVG viewBox를 계산합니다. */
-function getDiagramThumbnailLayout(diagram: DiagramJson): {
+type DiagramThumbnailLayout = {
   readonly height: number;
   readonly viewBox: string;
   readonly width: number;
   readonly x: number;
   readonly y: number;
-} {
-  if (diagram.nodes.length === 0) {
+};
+
+/** 하나 이상의 Diagram node 전체를 감싸는 공통 여백 포함 SVG viewBox를 계산합니다. */
+function getDiagramThumbnailLayout(diagrams: readonly DiagramJson[]): DiagramThumbnailLayout {
+  const nodes = diagrams.flatMap((diagram) => diagram.nodes);
+
+  if (nodes.length === 0) {
     return { x: 0, y: 0, width: 320, height: 180, viewBox: "0 0 320 180" };
   }
 
-  const minX = Math.min(...diagram.nodes.map((node) => node.position.x));
-  const minY = Math.min(...diagram.nodes.map((node) => node.position.y));
-  const maxX = Math.max(...diagram.nodes.map((node) => node.position.x + node.size.width));
-  const maxY = Math.max(...diagram.nodes.map((node) => node.position.y + node.size.height));
+  const minX = Math.min(...nodes.map((node) => node.position.x));
+  const minY = Math.min(...nodes.map((node) => node.position.y));
+  const maxX = Math.max(...nodes.map((node) => node.position.x + node.size.width));
+  const maxY = Math.max(...nodes.map((node) => node.position.y + node.size.height));
   const padding = Math.max(24, Math.max(maxX - minX, maxY - minY) * 0.08);
   const x = minX - padding;
   const y = minY - padding;
