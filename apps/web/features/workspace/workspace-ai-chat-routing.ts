@@ -74,6 +74,51 @@ export function resolvePendingPreviewChatAction(input: {
   });
 }
 
+export function shouldStartFreshDraftDuringPatchClarification(prompt: string): boolean {
+  const normalizedPrompt = normalizeChatPrompt(prompt);
+
+  if (isExistingBoardReorganizationRequest(normalizedPrompt)) {
+    return false;
+  }
+
+  if (
+    [
+      "처음부터",
+      "기존 무시",
+      "전체 교체",
+      "from scratch",
+      "start over",
+      "ignore existing",
+      "replace all"
+    ].some((keyword) => normalizedPrompt.includes(keyword))
+  ) {
+    return true;
+  }
+
+  const hasFreshDraftTarget = [
+    "다이어그램",
+    "아키텍처",
+    "새 서비스",
+    "새 웹서비스",
+    "새 웹사이트",
+    "새 사이트",
+    "새 앱",
+    "new diagram",
+    "new architecture",
+    "new service",
+    "new website"
+  ].some((keyword) => normalizedPrompt.includes(keyword));
+  const hasFreshDraftVerb = [
+    "생성하고 싶",
+    "만들고 싶",
+    "새로 만들",
+    "create",
+    "build"
+  ].some((keyword) => normalizedPrompt.includes(keyword));
+
+  return hasFreshDraftTarget && hasFreshDraftVerb;
+}
+
 function hasArchitecturePromptSignal(normalizedPrompt: string): boolean {
   const hasArchitectureTarget = ARCHITECTURE_TARGET_KEYWORDS.some((keyword) =>
     matchesChatKeyword(normalizedPrompt, keyword)

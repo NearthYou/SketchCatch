@@ -50,6 +50,24 @@ test("runDeploymentWorkerJob executes a running job with validated access contex
   assert.equal(finalJob.completedAt, fixedNow);
 });
 
+test("runDeploymentWorkerJob forwards its cancellation signal to the operation", async () => {
+  const repository = new FakeDeploymentJobRepository();
+  const controller = new AbortController();
+  let receivedSignal: AbortSignal | undefined;
+  repository.add(createJob());
+
+  await runDeploymentWorkerJob(
+    { jobId, abortSignal: controller.signal },
+    repository,
+    async (input) => {
+      receivedSignal = input.abortSignal;
+      return { status: "PENDING", errorSummary: null };
+    }
+  );
+
+  assert.equal(receivedSignal, controller.signal);
+});
+
 test("runDeploymentWorkerJob rejects a job that is not running", async () => {
   const repository = new FakeDeploymentJobRepository();
   let operationCalls = 0;

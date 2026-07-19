@@ -19,6 +19,10 @@ import type {
 } from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { createArchitectureResourceDeploymentConfig } from "./aiArchitectureResourceCatalog.js";
+import {
+  getNaturalLanguageResourceAliases,
+  RESOURCE_TYPE_KOREAN_NAMES
+} from "./architectureResourceAliases.js";
 import { createNormalizedAiCacheKey, estimateAiUsage } from "./aiProviderSafety.js";
 import {
   createBedrockTextProvider,
@@ -444,12 +448,21 @@ const RESOURCE_DEFINITION_KEYWORDS = resourceDefinitions
     label: formatGeneratedResourceLabel(definition.id)
   }));
 
+const NATURAL_LANGUAGE_RESOURCE_KEYWORDS = (
+  Object.keys(RESOURCE_TYPE_KOREAN_NAMES) as Exclude<ResourceType, "UNKNOWN">[]
+).map((resourceType) => ({
+  resourceType,
+  keywords: getNaturalLanguageResourceAliases(resourceType),
+  label: RESOURCE_TYPE_KOREAN_NAMES[resourceType]
+}));
+
 const RESOURCE_KEYWORDS: readonly {
   readonly resourceType: ResourceType;
   readonly keywords: readonly string[];
   readonly label: string;
 }[] = [
   ...MANUAL_RESOURCE_KEYWORDS,
+  ...NATURAL_LANGUAGE_RESOURCE_KEYWORDS,
   ...RESOURCE_DEFINITION_KEYWORDS.map((item) => ({
     resourceType: item.definition.resourceType,
     keywords: item.keywords,
@@ -2643,7 +2656,8 @@ function resolveTarget(
     intent.connectionTargetResourceId === undefined &&
     intent.skipConnection !== true &&
     architectureJson.nodes.length > 0 &&
-    !hasAddResourcePurpose(intent)
+    !hasAddResourcePurpose(intent) &&
+    !hasUnambiguousLoadBalancerTarget(architectureJson, intent)
   ) {
     return {
       status: "needs_clarification",
@@ -2739,6 +2753,19 @@ function nodeSearchAliases(node: ResourceNode): string[] {
 
 function getAddResourcePurposeSuggestions(resourceType: ResourceType): readonly string[] {
   return ADD_RESOURCE_PURPOSE_SUGGESTIONS[resourceType] ?? GENERIC_ADD_RESOURCE_PURPOSE_SUGGESTIONS;
+}
+
+function hasUnambiguousLoadBalancerTarget(
+  architectureJson: ArchitectureJson,
+  intent: ArchitecturePatchIntent
+): boolean {
+  if (intent.resourceType !== "LOAD_BALANCER") {
+    return false;
+  }
+
+  return architectureJson.nodes.filter((node) =>
+    ["EC2", "ECS_SERVICE", "LAMBDA", "AUTO_SCALING_GROUP"].includes(node.type)
+  ).length === 1;
 }
 
 function hasAddResourcePurpose(intent: ArchitecturePatchIntent): boolean {
@@ -3360,6 +3387,17 @@ function inferConnection(
     const sourceNode = existingNodes.find((node) => node.id === intent.connectionTargetResourceId);
 
     return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
+  }
+
+  if (newNode.type === "LOAD_BALANCER") {
+    const targetNode = findBestNode(existingNodes, [
+      "EC2",
+      "ECS_SERVICE",
+      "LAMBDA",
+      "AUTO_SCALING_GROUP"
+    ]);
+
+    return targetNode ? { sourceNode: newNode, targetNode } : undefined;
   }
 
   if (

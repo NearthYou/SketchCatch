@@ -153,6 +153,10 @@ export type CreateDeploymentPlanArtifactRecordInput = {
   sha256: string;
   accountId: string;
   region: string;
+  stateBaselineDeploymentId?: string | null;
+  stateObjectKey?: string | null;
+  stateLineageSha256?: string | null;
+  stateSerial?: number | null;
 };
 
 export type SaveDeploymentPlanInput = {
@@ -216,6 +220,11 @@ export type SaveDeploymentApplyStateInput = Pick<
   SaveDeploymentApplyResultsInput,
   "stateObjectKey" | "resultWarningSummary"
 >;
+
+export type DeploymentPersistenceFenceInput = {
+  leaseFence?: LeaseFence;
+  fenceCheckedAt?: Date;
+};
 
 export type CompleteDeploymentDestroyInput = {
   resultWarningSummary: string | null;
@@ -333,11 +342,13 @@ export type DeploymentRepository = {
   ) => Promise<DeploymentRecord | undefined>;
   saveDeploymentApplyResults(
     deploymentId: string,
-    input: SaveDeploymentApplyResultsInput
+    input: SaveDeploymentApplyResultsInput,
+    fence?: DeploymentPersistenceFenceInput
   ): Promise<DeploymentRecord | undefined>;
   saveDeploymentApplyState?(
     deploymentId: string,
-    input: SaveDeploymentApplyStateInput
+    input: SaveDeploymentApplyStateInput,
+    fence?: DeploymentPersistenceFenceInput
   ): Promise<DeploymentRecord | undefined>;
   synchronizeDeploymentTargetAfterApply?(input: {
     projectId: string;
@@ -1055,57 +1066,73 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       return deployment;
     },
 
-    async saveDeploymentApplyResults(deploymentId, input) {
-      return db.transaction(async (tx) => {
-        await tx.delete(deployedResources).where(eq(deployedResources.deploymentId, deploymentId));
-        await tx.delete(terraformOutputs).where(eq(terraformOutputs.deploymentId, deploymentId));
+    async saveDeploymentApplyResults(deploymentId, input, fence = {}) {
+      return runWithOptionalDeploymentFence(
+        db,
+        fence.leaseFence,
+        fence.fenceCheckedAt ?? new Date(),
+        (executor) =>
+          executor.transaction(async (tx) => {
+            await tx
+              .delete(deployedResources)
+              .where(eq(deployedResources.deploymentId, deploymentId));
+            await tx
+              .delete(terraformOutputs)
+              .where(eq(terraformOutputs.deploymentId, deploymentId));
 
-        if (input.resources.length > 0) {
-          await tx.insert(deployedResources).values(input.resources);
-        }
+            if (input.resources.length > 0) {
+              await tx.insert(deployedResources).values(input.resources);
+            }
 
-        if (input.outputs.length > 0) {
-          await tx.insert(terraformOutputs).values(input.outputs);
-        }
+            if (input.outputs.length > 0) {
+              await tx.insert(terraformOutputs).values(input.outputs);
+            }
 
-        const [deployment] = await tx
-          .update(deployments)
-          .set({
-            stateObjectKey: input.stateObjectKey,
-            resultWarningSummary: input.resultWarningSummary,
-            ...touchUpdatedAt
+            const [deployment] = await tx
+              .update(deployments)
+              .set({
+                stateObjectKey: input.stateObjectKey,
+                resultWarningSummary: input.resultWarningSummary,
+                ...touchUpdatedAt
+              })
+              .where(eq(deployments.id, deploymentId))
+              .returning();
+
+            if (!deployment) {
+              throw new Error("Deployment apply results could not be saved");
+            }
+
+            await clearOlderTerraformStateOwnership(tx as unknown as Database, deployment);
+
+            return deployment;
           })
-          .where(eq(deployments.id, deploymentId))
-          .returning();
-
-        if (!deployment) {
-          throw new Error("Deployment apply results could not be saved");
-        }
-
-        await clearOlderTerraformStateOwnership(tx as unknown as Database, deployment);
-
-        return deployment;
-      });
+      );
     },
 
-    async saveDeploymentApplyState(deploymentId, input) {
-      return db.transaction(async (tx) => {
-        const [deployment] = await tx
-          .update(deployments)
-          .set({
-            stateObjectKey: input.stateObjectKey,
-            resultWarningSummary: input.resultWarningSummary,
-            ...touchUpdatedAt
+    async saveDeploymentApplyState(deploymentId, input, fence = {}) {
+      return runWithOptionalDeploymentFence(
+        db,
+        fence.leaseFence,
+        fence.fenceCheckedAt ?? new Date(),
+        (executor) =>
+          executor.transaction(async (tx) => {
+            const [deployment] = await tx
+              .update(deployments)
+              .set({
+                stateObjectKey: input.stateObjectKey,
+                resultWarningSummary: input.resultWarningSummary,
+                ...touchUpdatedAt
+              })
+              .where(eq(deployments.id, deploymentId))
+              .returning();
+
+            if (deployment) {
+              await clearOlderTerraformStateOwnership(tx as unknown as Database, deployment);
+            }
+
+            return deployment;
           })
-          .where(eq(deployments.id, deploymentId))
-          .returning();
-
-        if (deployment) {
-          await clearOlderTerraformStateOwnership(tx as unknown as Database, deployment);
-        }
-
-        return deployment;
-      });
+      );
     },
 
     async completeDeploymentApply(deploymentId, input = {}) {

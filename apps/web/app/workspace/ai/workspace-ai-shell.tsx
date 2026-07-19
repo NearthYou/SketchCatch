@@ -99,6 +99,15 @@ export function WorkspaceAiShell({
     if (!showFinalPreview) setMobilePreviewRequested(false);
   }, [showFinalPreview]);
 
+  useEffect(() => {
+    const acceptedSelection = workflow.acceptedClarificationSelection;
+    if (acceptedSelection === null) return;
+    const result = appendSelectedAssistantOption(selectionsRef.current, acceptedSelection);
+    if (!result.didAppend) return;
+    selectionsRef.current = result.selections;
+    setSelections(result.selections);
+  }, [workflow.acceptedClarificationSelection]);
+
   function handleSuggestionSelect(message: AiStartMessage, suggestion: string): void {
     if (
       workflow.approvalState === "loading" ||

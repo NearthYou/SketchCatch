@@ -13,6 +13,43 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Merge dev while preserving dashboard typography
+
+- Resolved the dashboard CSS conflict by keeping the incoming AWS OAuth `Ready` state and the branch's LINE Seed presentation tokens.
+- Normalized the incoming AI Workbench choice labels to the same typography contract. Focused checks pass 18/18; lint, typecheck, build, harness, and diff checks pass.
+
+### 2026-07-19 - Harden Direct Deployment Apply recovery boundaries
+
+- Bound approved Plans to the exact Terraform state baseline (deployment, object key, lineage hash, and serial) and added migration `0053`; Apply blocks stale state before AWS credentials or mutation.
+- Fenced no-change release and post-Apply persistence, preserved partial/cancelled outcomes, added graceful worker cancellation with a 120-second ECS stop timeout, checkpointed state before optional result persistence, and classified release failures as `application_release`.
+- Focused Plan/Apply/worker regressions pass 65/65. Migration compatibility, infrastructure structure, Terraform formatting, lint, typecheck, build, harness, and diff checks pass. The full suite was intentionally skipped; no cloud mutation or deployment was performed.
+
+### 2026-07-19 - Document Direct Deployment Apply audit improvements
+
+- Added a Korean implementation plan under `docs/jh/07.19` for five Apply audit findings: Plan/Apply state identity drift, no-change release fencing/outcome handling, ECS worker cancellation, post-Apply evidence persistence, and application release failure-stage classification.
+- The plan defines safety invariants, implementation slices, focused regressions, completion criteria, and deployment stop conditions without changing runtime behavior.
+- Harness and diff checks pass. No API contract, DB migration, dependency, Terraform execution, AWS mutation, deployment, Git handoff, commit, or push was performed.
+
+### 2026-07-19 - Restore detailed Direct Deployment preparation errors
+
+- Routed foreground deployment action failures through the existing preparation-aware error formatter so save, Terraform preparation, architecture snapshot, and artifact upload failures retain their specific safe guidance.
+- Added a caller-level regression that failed against the generic fallback and passed after reconnecting the formatter; focused Direct Deployment checks pass 31/31.
+- Harness, lint, typecheck, production build, and diff checks pass. No API contract, DB migration, dependency, AWS mutation, Terraform execution, deployment, commit, or push was performed.
+
+### 2026-07-19 - Address PR #485 review findings
+
+- Fixed the chat suggestion selection fallback and guarded clarification response shape checks before using the in operator.
+- Focused Web tests pass 7/7; harness, lint, typecheck, build, and diff checks pass.
+- No database migration, cloud mutation, deployment, or dependency change was made.
+
+
+### 2026-07-19 - Separate AWS OAuth status from Repository verification
+
+- Changed an `AVAILABLE` AWS CodeConnection from a permanent Repository warning to a connected success state that explains project save/validation performs the actual checkout verification.
+- Preserved AWS Connector permission management, status refresh, and disconnect actions while renaming the presentation helper so it no longer models project Repository access.
+- TDD focused checks pass 14/14; harness, lint, typecheck, build, and diff checks pass. The Web suite remains at the existing 914/917 because of three unrelated Resource Catalog contract failures; the root suite additionally retains the existing artifact heartbeat cancellation. Independent standards/spec review reported no findings.
+- No API, shared contract, DB migration, dependency, AWS mutation, Terraform execution, deployment, or push was performed.
+
 ### 2026-07-19 - Keep GitOps build environments stable across application commits
 
 - Removed the per-release `confirmedCommitSha` from the reusable Project Build Environment fingerprint while retaining exact commit checkout and resolved-SHA verification.
@@ -45,121 +82,6 @@ Short English-only working log for the current agent context. Older records are 
 - CI/CD uses Board-provenance Repository, monitoring, and readiness data without substituting an unrelated active Repository.
 - The redundant Delivery source card was removed while permission and readiness gates remain intact.
 
-### 2026-07-19 - Preserve deployment and AWS connection safety changes
-
-- Pre-deployment safety details start collapsed and remain keyboard accessible.
-- General AWS connection deletion excludes GitHub CodeConnection; the dedicated GitHub build disconnect remains its only deletion path.
-- Reverse Engineering scan history remains preserved when an AWS connection is deleted through the imported `dev` migration and API changes.
-
-### 2026-07-18 - Preserve current branch presentation adjustments
-
-- Live Observation guidance keeps its original wording and width while using the requested smaller text size.
-- AI Workbench desktop navigation remains icon-only with mode-specific titles.
-- Automatic organization results remain minimal and omit change summaries, review lists, and technical details.
-
-## Broken Or Unverified
-
-- No merge-owned check is failing.
-- Broad test suites were not run because the user requested avoiding unnecessary tests; focused conflict regressions and all required repository checks passed.
-- Previously documented environment-specific or unrelated broad-suite failures remain recorded in Git history and `docs/agent-history/2026-07.md`.
-- No live AWS mutation, Terraform apply/destroy, Deployment, GitHub mutation, or Git handoff is authorized or performed by this merge resolution.
-
-## Next Action
-
-- Resolved the contradiction where the final self-managed server choice required EC2 while the Amazon Q plan still forbade the EC2 runtime, without overriding an explicit EC2 opt-out.
-- Treated current single-region deployments with future multi-region expansion as roadmap notes in both Korean and English.
-- Replayed the reported questionnaire in the local browser; the real preview contains the EC2 fleet, Launch Template, Auto Scaling Group, target group, and load balancer with no new browser errors.
-- The complete AI Architecture Draft suite passes 79/79, related Workspace AI tests pass 9/9, and lint, typecheck, build, harness, and diff checks pass.
-
-### 2026-07-18 - Remove the post-analysis Delivery card
-
-- Removed the post-analysis Delivery card and preload; error recovery remains. Risk: no browser QA.
-- Focused 7/7, Web lint/typecheck/build, harness, and diff checks pass. Next: review and push; no deployment or migration.
-
-### 2026-07-18 - Preserve Reverse Engineering history during AWS connection deletion
-
-- Fixed AWS connection deletion for connections referenced by Reverse Engineering scans by making the reference nullable with `ON DELETE SET NULL` in migration `0051`; scan results now remain available with a deleted-connection label.
-- Added the preserved scan count to the deletion preview and kept the deletion modal open on failure with a user summary, retry path, and separate diagnostic disclosure.
-- The original live HTTP reproduction now returns 204 with `connection=0, scan=1, detached=1`; focused API tests pass 26/26 and focused Web tests pass 6/6. Migration compatibility, harness, lint, typecheck, and build pass; lint retains one unrelated existing unused-import warning.
-- Restored the project-deletion modal's 40px close control and visible 18px X icon; the focused deletion-flow suite passes 14/14.
-- GitHub build disconnect now treats remote cleanup as best-effort, detaches local metadata with HTTP 204, and logs incomplete cleanup; focused API tests pass 26/26. The broad API run has unrelated failures (1370 pass, 3 fail, 1 cancelled).
-- Applied migration `0051` only to the local development database. No AWS mutation, Terraform apply/destroy, Deployment, Git handoff, push, or secret output occurred. No continuation handoff is required; the next action is review and commit of the implementation changes.
-
-### 2026-07-17 - Harden Terraform module validation and palette audit
-
-- Prevented duplicate module-level `required_providers`, retained per-file syntax boundaries, and made final merged deployment artifacts pass validation before persistence.
-- Provider refresh now merges missing requirements while preserving user-owned default and aliased provider blocks; SketchCatch-managed EKS runtime provider blocks remain refreshable.
-- Provider-schema validation passes all 155 enabled managed resources and all 5 enabled data sources. Direct Deployment safety remains unchanged: 61 resource types are plan-allowed and 94 stay blocked by the existing allowlist.
-- Focused regressions pass (API 28/28, Web 23/23, Types 5/5). `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass on the latest merged `dev`.
-- No Terraform apply/destroy, AWS mutation, credential access, or DB migration was performed for this work.
-
-### 2026-07-18 - Merge current dev into Delivery integration
-
-- Preserved public Repository analysis without GitHub, ProjectDraft revision fencing, Workspace Delivery ownership, exact private Repository recovery, and confirmed GitHub build cleanup while merging `origin/dev` through `04dc1c8f`.
-- Kept dev migration 0049 and renumbered Repository Analysis Record migration to 0050 with the journal and migration contract updated.
-- Focused API tests pass 49/49 and Web tests pass 50/50; lint, typecheck, build, harness, and diff checks pass. No live GitHub, AWS, deployment, or Terraform mutation was performed.
-
-### 2026-07-18 - Restore Workspace AI and integration setup
-
-- Moved deterministic Architecture Draft clarification ahead of the Amazon Q availability gate, kept clarification provenance rule-based, blocked warm-up before credit approval, and gave Q Business its supported default region.
-- Split GitHub installation read capability from new-connection setup capability, preserving existing installations during partial configuration while blocking unavailable OAuth starts across Settings, Repository, and CI/CD consumers.
-- Verified the running local stack directly: the AI stream returns four clarification options, a complete real Amazon Q request returns an `amazon_q_business` Preview, GitHub Settings returns explicit non-error availability, and the AWS connection setup reached its CloudFormation handoff without applying it. Postgres and Redis remain healthy; no cloud mutation, deployment, or Terraform apply/destroy was performed.
-- Focused regressions pass 93/93 API and 155/155 Web; `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass. The broader existing suite still has unrelated schema/zstd/repository and resource-catalog failures (API 4 failures with 2 cancelled; Web 3 failures).
-
-### 2026-07-18 - Integrate Delivery into the CI/CD deployment modal
-
-- Moved the complete project Delivery workflow into the existing deployment modal's CI/CD tab and removed the duplicate Workspace right-panel entry and summary-only handoff.
-- Added a responsive, token-aligned connection, pipeline configuration, readiness, and execution layout; legacy Delivery bookmarks now open the CI/CD modal directly.
-- Focused Delivery tests pass 34/34; Impeccable detection, browser desktop/mobile checks, harness, lint, typecheck, build, and diff checks pass. No deployment, Git handoff, cloud mutation, or DB migration was performed.
-
-### 2026-07-18 - Accept the safe pre-cache CodeBuild boundary
-
-- Build-environment verification now accepts the exact legacy logs and CodeConnections permissions boundary used before optional ECR build caching, while continuing to reject all other boundary drift.
-- The focused gateway suite passes 17/17; formatting, API lint/typecheck, root lint/typecheck/build, harness, and diff checks pass. Live dev verification and Terraform Plan completed successfully and stopped before Apply.
-- No Terraform Apply, deployment, Git commit, push, or DB migration was performed. Existing environments can use the cold Docker-build fallback; the next action is user approval only if Apply is intended.
-
-### 2026-07-18 - Gate full-stack preparation on a confirmed deployment target
-
-- Direct Deployment now checks the current project deployment target before saving or preparing a Full Stack/Application run and links missing setup to the existing CI/CD Delivery surface.
-- Deployment prepare conflicts now explain the Source Repository, build configuration, and AWS connection prerequisites and identify the failure as target selection before any worker starts.
-- Focused Web tests pass 32/32; root lint, typecheck, build, harness, and diff checks pass. No Deployment, Terraform execution, AWS mutation, Git handoff, push, or DB migration was performed.
-
-### 2026-07-18 - Separate GitHub login from Repository authorization
-
-- GitHub OAuth remains a SketchCatch login mechanism only; Git/CI/CD Repository settings now use the connected GitHub App installation token with no user OAuth fallback endpoints or UI.
-- Removed the legacy public OAuth-required handoff state, replaced the permission recovery code with `github_app_permission_required`, and documented the required GitHub App user-authorization credentials.
-- Focused API tests pass 18/18 and focused Web tests pass 37/37. Root harness, lint, typecheck, build, and diff checks pass.
-- The legacy physical `github_oauth_required` database column remains mapped under an internal compatibility name, while new handoffs write `false`; no migration, GitHub mutation, cloud mutation, commit, or push was performed.
-
-### 2026-07-18 - Update the GitHub authorization branch from dev
-
-- Fast-forwarded local `dev` and `codex/fix-github-auth-boundary` to `origin/dev` at `ba5bb2ec` while preserving the branch's staged work and separate unstaged UI changes.
-- Kept the newer dev AWS connection envelope and client compatibility fix where it superseded the branch-local duplicate; harness, typecheck, and staged/unstaged diff checks pass.
-- No commit or push was performed.
-
-### 2026-07-18 - Keep CI/CD Repository connection project-scoped
-
-- Replaced the Delivery card's new-project analysis link with the shared `select_repository` navigation so users select a GitHub App Repository for the current project and return to CI/CD afterward.
-- The focused Repository navigation regressions pass 27/27. Root lint and typecheck pass, and the Web and API production builds complete successfully.
-- No Repository connection, GitHub mutation, deployment, DB migration, commit, or push was performed.
-
-### 2026-07-18 - Keep deployment target persistence synchronized
-
-- Board ECS synchronization and Terraform output reconciliation now persist `runtimeConfig`, canonical `runtimeTarget`, and `deploymentTargetFingerprint` together using the locked project's AWS account and region.
-- Both paths repair stale target identity even when the runtime configuration is already current; development diagnostics now point fingerprint preflight failures to the persisted target fields instead of CodeBuild logs.
-- Focused regressions pass 33/33 and the runtime identity contract passes 8/8. Root lint and typecheck pass; direct API and Web production builds exit successfully. No database migration, deployment, cloud mutation, commit, or push was performed.
-
-### 2026-07-18 - Synchronize the prepared release after Terraform outputs
-
-- Terraform output reconciliation now locks and updates the pending ApplicationRelease together with the Project Deployment Target, including both target and ECS coordinate fingerprints.
-- A partially synchronized or failed full-stack retry repairs the prepared release only when its previous target matches the reconstructed pre-Terraform target in the same AWS account, region, health path, and ECS coordinates; real target drift remains blocked.
-- Latest focused API regressions pass 20/20 and failure-presentation tests pass 10/10. API/Web typechecks, changed-file API lint, API bundling, harness, and diff checks pass. No database migration, deployment retry, cloud mutation, commit, or push was performed.
-
-### 2026-07-18 - Remove the demo deployment from AWS
-
-- Removed the user-approved 36-resource `audience-live-check` deployment from account `724702275121`; exact-ID verification reported `CLEANUP_RESULT remaining=0`.
-- Removed the CloudShell helper files. Repository and Git state were unchanged.
-
 ### 2026-07-19 - Complete the dev deployment and clarify operational guidance
 
 - Approved the exact pending AWS CodeConnection `sketchcatch-ee0c1542-github`, verified the `jh-9999/audience-live-check` checkout, approved a `+36` Terraform Plan, and completed Direct Deployment release `v20260718-163748-496-af663e` in 9m03s. The public CloudFront URL rendered the `Live Check-In` application before cleanup.
@@ -181,35 +103,46 @@ Short English-only working log for the current agent context. Older records are 
 - Deregistered the three unused demo revisions (`5`, `7`, and `9`). Exact AWS inventory verification returned `CLEANUP_RESULT remaining=0`; the browser shows `DESTROYED`, 36 resources removed, and zero remaining Resources or Outputs.
 - Focused API tests pass 11/11 and the Web regression passes 24/24. Affected ESLint and direct API/Web typechecks pass; final root harness, lint, typecheck, build, and diff checks are recorded by the finishing verification run.
 
-### 2026-07-19 - Restore code typography for Terraform and Deployment logs
+### 2026-07-19 - Distinguish daily traffic from concurrent users
 
-- Restored the pre-presentation `SFMono-Regular`/Consolas monospace stack only for Terraform editor line numbers/code and Direct Deployment logs; all surrounding UI remains on LINE Seed Sans KR.
-- Kept the current presentation font sizing unchanged and narrowed the typography audit exception to those two surfaces.
-- The focused typography test passes 4/4; `pnpm harness:check` and `git diff --check` pass. No broad test suite was run.
+- Traffic clarification matching now interprets daily visitors and concurrent users as separate dimensions before numeric option matching.
+- `일일 500명` maps to the medium option while `동시 접속자 500명` remains large; `스프링부트 썼어` reuses the existing complex business logic option instead of creating a custom option.
+- Focused Web/API regressions and the harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
 
-### 2026-07-19 - Reduce marked workspace labels
+### 2026-07-19 - Advance AI diagram generation progress sooner
 
-- Reduced the marked Resources/Templates tabs, AWS/version controls, Terraform resource search, Terraform file picker, and issue-panel title/empty-state text by 2px without changing control dimensions or Terraform code sizing.
-- The focused typography test passes 4/4. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no spec or code-standard issue after verification, with no known risk or follow-up required.
+- Reduced the staged diagram-generation interval from 3 seconds to 1.5 seconds and added a final draft preparation stage.
+- The first visible transition now occurs after 1.5 seconds, and the progress card continues through five stages while the AI response is pending.
+- The focused Web status regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
 
-### 2026-07-19 - Reduce module card supporting text
+### 2026-07-19 - Remove the selected text from AI Start choices
 
-- Reduced only the marked module description, provider/resource/relationship metadata, and resource-summary text from 18px to 15px; the module title, section heading, add button, and card geometry remain unchanged.
-- Focused typography and module-preview tests pass 10/10. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no CSS or spec issue after the verification record was completed, with no known risk or follow-up required.
+- Removed the visible `선택됨` suffix from selected `/workspace/ai` answer buttons while retaining `aria-pressed` and selected-button styling.
+- Removed the unused label style and added a source regression for the route-specific transcript.
+- The focused Web regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
 
-### 2026-07-19 - Tighten issue-panel empty-state spacing
+### 2026-07-19 - Keep AI Start progress moving across card remounts
 
-- Reduced only the empty-state top padding shared by the Terraform validation and Architecture issue panels, decreasing the title-to-message gap from 32px to 24px while preserving typography and all outer spacing.
-- The focused typography test passes 4/4. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no CSS or spec issue after the verification record was completed, with no known risk or follow-up required.
+- Moved `/workspace/ai` diagram-generation step ownership from the conditional progress card into the persistent conversation transcript.
+- The card now receives a controlled step, so rerenders or remounts cannot reset the visible progress to requirement analysis; the shared Workspace dock retains its local fallback timer.
+- The focused Web regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
 
-### 2026-07-19 - Simplify Live Observation framing
+### 2026-07-19 - Ask Amazon Q to resolve unsatisfied architecture requirements
 
-- Removed the marked deployed-architecture label/resource count and pre-session observation intro card, while preserving the right-aligned map guidance and all Deployment controls.
-- Reduced only the `Live Observation` eyebrow from 18px to 12px; the Korean modal title remains unchanged.
-- Focused Live Observation and typography tests pass 26/26. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no standards issue; a spec concern about the right-side guidance size was disproved by the pre-existing later CSS override, with no known risk or follow-up required.
+- Replaced the terminal requirements-unsatisfied 422 path with a dedicated Amazon Q conflict-diagnosis request after generation and repair both fail validation.
+- Amazon Q receives the original requirement, accepted answers, decision space, normalized requirement, and exact validation issues; its question and preserve-versus-relax choices are returned unchanged through the existing clarification flow.
+- The focused API regression and API typecheck pass. No database migration, deployment, cloud mutation, or push was performed.
 
-### 2026-07-19 - Compact Live Observation resources
+### 2026-07-19 - Route conflict diagnosis through the real Amazon Q provider
 
-- Replaced Board-size-derived observation cards with compact fixed 148x104px cards and 184x124px detail cards, reducing the icon, name, type, detail, and state-badge typography proportionally.
-- Replaced the state badge's tight fixed line-height with a 12px proportional line-height so Korean status text remains centered without touching its border.
-- TDD reproduced the previous oversized contract with 2 expected failures; the final focused Live Observation and typography suite passes 26/26. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no standards or spec issue; browser-rendered visual balance remains a manual confirmation, with refresh-and-review as the only next action.
+- Fixed the production Amazon Q Business provider, which previously ignored the conflict prompt and always returned another locally generated canonical plan, causing the replacement HTTP 502.
+- Conflict requests now call Amazon Q Business ChatSync with the exact validation failures and user requirement. JSON and plain-text/numbered Q answers both become the existing clarification question and choices without server-side trade-off selection.
+- Workspace AI draft failures now keep full diagnostics in the browser console and show one short transcript message instead of duplicated developer diagnostics.
+- Focused API provider/parser and Web presentation regressions pass; API/Web typechecks pass. No database migration, deployment, cloud mutation, or push was performed.
+
+### 2026-07-19 - Classify natural-language technology stack answers
+
+- Added one shared frontend/backend technology-stack classifier used by API answer validation, canonical prompt context, architecture profiles, and Web selection presentation.
+- React/Vue/Svelte-style SPA stacks, Next/Nuxt/Remix-style SSR stacks, Flutter/React Native mobile stacks, simple API frameworks, complex backend frameworks, and microservice stacks now reuse their existing answer option instead of creating a custom choice.
+- Database product names do not infer data volume because the technology alone does not answer that question.
+- Three shared classifier regressions, focused API/Web integrations, cross-package typechecks, and the harness pass. No database migration, deployment, cloud mutation, or push was performed.

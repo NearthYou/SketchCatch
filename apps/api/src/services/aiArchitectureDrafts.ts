@@ -14,7 +14,10 @@ import type {
   TemplateDefinition,
   TemplateId
 } from "@sketchcatch/types";
-import { getTemplateDefinitionById } from "@sketchcatch/types";
+import {
+  getTemplateDefinitionById,
+  resolveArchitectureTechnologyStackCategory
+} from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import type { RuntimeCache } from "../runtime-cache/index.js";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
@@ -337,30 +340,33 @@ export async function createAmazonQArchitectureDraftResponse(
   input: string | CreateArchitectureDraftRequest,
   options: CreateAmazonQArchitectureDraftResponseOptions = {}
 ): Promise<CreateArchitectureDraftResponse> {
-  const request = authorizeArchitectureDraftRequest(
+  let request = authorizeArchitectureDraftRequest(
     normalizeArchitectureDraftRequest(input)
   );
   const creditPolicy = options.creditPolicy ?? readAiCreditPolicyFromEnv();
   const provider = options.provider;
   const progressReporter = createArchitectureDraftProgressReporter(request, options.onProgress);
 
-  const missingQuestion = findMissingRequiredQuestion(request.prompt);
+  const missingQuestion = findMissingRequiredQuestion(request);
 
   if (missingQuestion !== null) {
     return createArchitectureDraftClarification(
-      missingQuestion,
+      missingQuestion.question,
       request,
-      creditPolicy.billingMode
+      creditPolicy.billingMode,
+      missingQuestion.invalidAnswer
     );
   }
 
+  request = withAcceptedArchitectureClarificationAnswers(request);
   const conditionalQuestion = findConditionalArchitectureQuestion(request.prompt);
 
   if (conditionalQuestion !== null) {
     return createArchitectureDraftClarification(
       conditionalQuestion,
       request,
-      creditPolicy.billingMode
+      creditPolicy.billingMode,
+      request.clarificationAnswers?.some((answer) => answer.questionId === conditionalQuestion.id) ?? false
     );
   }
 
@@ -396,6 +402,9 @@ export async function createAmazonQArchitectureDraftResponse(
   const payload = maskSecretsForAi({
     architectureBrief,
     architectureDecisionSpace,
+    ...(request.clarificationAnswers === undefined
+      ? {}
+      : { clarificationAnswers: request.clarificationAnswers }),
     ...(request.candidateExclusions === undefined
       ? {}
       : { candidateExclusions: request.candidateExclusions }),
@@ -511,6 +520,7 @@ export async function createAmazonQArchitectureDraftResponse(
     if (parsedResponse.status === "needs_clarification") {
       return {
         status: "needs_clarification",
+        questionId: createProviderClarificationQuestionId(parsedResponse.question),
         question: parsedResponse.question,
         suggestions: [...(parsedResponse.suggestions ?? [])],
         providerMetadata
@@ -609,12 +619,81 @@ export async function createAmazonQArchitectureDraftResponse(
       request
     );
   } catch (error) {
+    if (
+      error instanceof ArchitectureDraftGenerationError &&
+      error.kind === "requirements_unsatisfied"
+    ) {
+      return createAmazonQRequirementConflictClarification({
+        architectureDecisionSpace,
+        billingMode: creditPolicy.billingMode,
+        fixedTemplateSelection,
+        normalizedRequirement,
+        provider,
+        request,
+        validationIssues: error.issues
+      });
+    }
+
     if (error instanceof ArchitectureDraftGenerationError) {
       throw error;
     }
 
     throw createInternalArchitectureGenerationError(error);
   }
+}
+
+async function createAmazonQRequirementConflictClarification(input: {
+  readonly architectureDecisionSpace: ArchitectureDecisionSpace;
+  readonly billingMode: AiBillingMode;
+  readonly fixedTemplateSelection: FixedTemplateSelection | null;
+  readonly normalizedRequirement: ArchitectureIntentPlan | null;
+  readonly provider: AiTextProvider;
+  readonly request: CreateArchitectureDraftRequest;
+  readonly validationIssues: readonly string[];
+}): Promise<ArchitectureDraftClarification> {
+  const payload = maskSecretsForAi({
+    architectureDecisionSpace: input.architectureDecisionSpace,
+    ...(input.request.clarificationAnswers === undefined
+      ? {}
+      : { clarificationAnswers: input.request.clarificationAnswers }),
+    fixedTemplateSelection: input.fixedTemplateSelection,
+    normalizedRequirement: input.normalizedRequirement,
+    prompt: input.request.prompt,
+    task: "requirement_conflict_clarification",
+    validationIssues: input.validationIssues
+  });
+  const response = await generateArchitectureDraftProviderResponse(input.provider, {
+    target: ARCHITECTURE_DRAFT_TARGET,
+    instructions: createAmazonQRequirementConflictInstructions(),
+    prompt: createAmazonQRequirementConflictPrompt(
+      input.request.prompt,
+      input.architectureDecisionSpace,
+      input.normalizedRequirement,
+      input.fixedTemplateSelection,
+      input.validationIssues
+    ),
+    payload
+  });
+  const parsedResponse = parseAmazonQRequirementConflictClarification(response.text);
+
+  if (parsedResponse.status !== "needs_clarification") {
+    throw createProviderResponseInvalidError(
+      new Error("Amazon Q must return a requirement conflict clarification")
+    );
+  }
+
+  return {
+    status: "needs_clarification",
+    questionId: createProviderClarificationQuestionId(parsedResponse.question),
+    question: parsedResponse.question,
+    suggestions: [...(parsedResponse.suggestions ?? [])],
+    providerMetadata: createAiProviderMetadata({
+      provider: input.provider,
+      billingMode: input.billingMode,
+      payload,
+      outputCharacters: response.outputCharacters ?? response.text.length
+    })
+  };
 }
 
 async function generateArchitectureDraftProviderResponse(
@@ -632,6 +711,64 @@ async function generateArchitectureDraftProviderResponse(
   }
 }
 
+function parseAmazonQRequirementConflictClarification(
+  text: string
+): AmazonQArchitectureDraftClarification {
+  const normalizedText = text.trim();
+
+  try {
+    const parsed = JSON.parse(extractJsonObject(normalizedText)) as unknown;
+    if (
+      isObject(parsed) &&
+      typeof parsed.question === "string" &&
+      parsed.question.trim().length > 0
+    ) {
+      return {
+        status: "needs_clarification",
+        question: parsed.question.trim(),
+        suggestions: readStringArray(parsed.suggestions)
+      };
+    }
+
+    if (isObject(parsed) && typeof parsed.status === "string") {
+      throw createProviderResponseInvalidError(
+        new Error("Amazon Q requirement conflict response did not include a clarification question")
+      );
+    }
+  } catch (error) {
+    if (error instanceof ArchitectureDraftGenerationError) {
+      throw error;
+    }
+  }
+
+  const questionLines: string[] = [];
+  const suggestions: string[] = [];
+  for (const rawLine of normalizedText.split(/\r?\n/u)) {
+    const line = rawLine.trim();
+    if (line.length === 0 || /^```/u.test(line)) continue;
+
+    const suggestionMatch = line.match(/^(?:[-*•]|\d+[.)])\s+(.+)$/u);
+    if (suggestionMatch?.[1]) {
+      suggestions.push(suggestionMatch[1].trim());
+      continue;
+    }
+    if (/^(?:선택지|options?)\s*:?$/iu.test(line)) continue;
+    questionLines.push(line);
+  }
+
+  const question = questionLines.join(" ").trim();
+  if (question.length === 0) {
+    throw createProviderResponseInvalidError(
+      new Error("Amazon Q requirement conflict diagnosis was empty")
+    );
+  }
+
+  return {
+    status: "needs_clarification",
+    question,
+    suggestions
+  };
+}
 function parseArchitectureDraftProviderResponse(text: string): AmazonQArchitectureDraftResponse {
   try {
     return parseAmazonQArchitectureDraftResponse(text);
@@ -912,11 +1049,15 @@ function createAmazonQDraftResult(
   response: AmazonQArchitectureDraftPreview,
   providerMetadata: AiProviderMetadata
 ): AiArchitectureDraftResult {
-  const highlights = [...(response.highlights ?? response.explanations ?? [])].slice(0, 5);
+  const title = createKoreanArchitectureDraftTitle(response.title, response.architectureJson);
+  const highlights = createKoreanArchitectureDraftHighlights(
+    response.highlights ?? response.explanations ?? [],
+    response.architectureJson
+  );
   const nextActions = [...(response.nextActions ?? [])].slice(0, 5);
   const llmExplanation: LlmExplanation = {
     target: ARCHITECTURE_DRAFT_TARGET,
-    summary: response.summary ?? `${response.title} Architecture Draft를 생성했습니다.`,
+    summary: createKoreanArchitectureDraftSummary(response.summary, title),
     highlights,
     nextActions,
     fallbackUsed: false,
@@ -925,7 +1066,7 @@ function createAmazonQDraftResult(
 
   return {
     architectureJson: response.architectureJson,
-    title: response.title,
+    title,
     metadata: {
       source: "amazon_q",
       confidence: "medium",
@@ -934,6 +1075,83 @@ function createAmazonQDraftResult(
     },
     llmExplanation
   };
+}
+
+function createKoreanArchitectureDraftTitle(
+  title: string,
+  _architectureJson: ArchitectureJson
+): string {
+  const localizedArchitectureDraft = title
+    .trim()
+    .replace(/\bArchitecture\s+Draft\b/giu, "아키텍처 초안");
+
+  return localizedArchitectureDraft || "클라우드 아키텍처 초안";
+}
+
+function createKoreanArchitectureDraftSummary(
+  summary: string | undefined,
+  localizedTitle: string
+): string {
+  const trimmedSummary = summary?.trim();
+  if (
+    trimmedSummary
+    && !/\bArchitecture\s+Draft\b/iu.test(trimmedSummary)
+    && (
+      /[가-힣]/u.test(trimmedSummary)
+      || !/[가-힣]/u.test(localizedTitle)
+    )
+  ) {
+    return trimmedSummary;
+  }
+
+  return `${localizedTitle}을 생성했습니다.`;
+}
+
+function createKoreanArchitectureDraftHighlights(
+  highlights: readonly string[],
+  architectureJson: ArchitectureJson
+): string[] {
+  const localizedHighlights = highlights.flatMap((highlight) => {
+    const trimmedHighlight = highlight.trim();
+    const selectedPattern = trimmedHighlight.match(
+      /^Verified pattern selected:\s*(.+?)\.?$/iu
+    )?.[1];
+
+    if (selectedPattern) {
+      return [`검증된 아키텍처 패턴을 선택했습니다: ${selectedPattern}.`];
+    }
+    if (/^Security guardrail:/iu.test(trimmedHighlight)) {
+      return [
+        "보안 기준: 최소 권한 IAM, 지원되는 리소스의 프라이빗 배치, 저장 데이터 암호화, 비밀 관리형 자격 증명과 제한된 로그 보존 기간을 적용합니다."
+      ];
+    }
+    if (/^Cost guardrail:/iu.test(trimmedHighlight)) {
+      return [
+        "비용 기준: 트래픽, 가용성, 보안 또는 명시적인 요구사항에 필요한 경우에만 이중화와 유료 보안 서비스를 추가합니다."
+      ];
+    }
+    if (/^Terminate public traffic with an ACM-managed TLS certificate/iu.test(trimmedHighlight)) {
+      return [
+        "공개 트래픽은 ACM 관리형 TLS 인증서에서 종료하고 배포 전에 인증서를 검증합니다."
+      ];
+    }
+    if (/[가-힣]/u.test(trimmedHighlight)) {
+      return [trimmedHighlight];
+    }
+
+    return [];
+  });
+
+  if (localizedHighlights.length > 0) {
+    return localizedHighlights.slice(0, 5);
+  }
+
+  const resourceTypes = [...new Set(architectureJson.nodes.map(({ type }) => type))].slice(0, 6);
+  return [
+    resourceTypes.length > 0
+      ? `요구사항을 반영해 ${resourceTypes.join(", ")} 리소스 중심의 아키텍처를 구성했습니다.`
+      : "입력한 요구사항을 반영해 클라우드 아키텍처를 구성했습니다."
+  ];
 }
 
 function createFallbackArchitectureDraftResponse(
@@ -1130,6 +1348,7 @@ function isMobileAppPrompt(prompt: string): boolean {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
 
   return (
+    resolveArchitectureTechnologyStackCategory("frontend", normalizedPrompt) === "frontend_mobile" ||
     /(?:mobile\s+app|app\s+store|play\s*store|google\s*play|모바일\s*앱|네이티브|웹뷰|플레이스토어|구글\s*플레이|앱\s*스토어)/iu.test(
       normalizedPrompt
     ) || hasStandaloneMobileAppCreationPrompt(normalizedPrompt)
@@ -1157,7 +1376,7 @@ function isDatabaseAnswered(prompt: string): boolean {
 }
 
 function isFrontendAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["frontend", "html", "css", "javascript", " js", "react", "vue", "angular", "next.js", "nuxt", "ssr", "프론트엔드", "순수 웹", "모바일", "웹뷰", "네이티브", "?꾨줎", "?쒖닔", "?밸럭"]);
+  return resolveArchitectureTechnologyStackCategory("frontend", prompt) !== null || hasPromptTerm(prompt, ["frontend", "html", "css", "javascript", " js", "react", "vue", "angular", "next.js", "nuxt", "ssr", "프론트엔드", "순수 웹", "모바일", "웹뷰", "네이티브", "?꾨줎", "?쒖닔", "?밸럭"]);
 }
 
 function isBackendAnswered(prompt: string): boolean {
@@ -1216,13 +1435,353 @@ function hasPromptTerm(prompt: string, terms: readonly string[]): boolean {
   return terms.some((term) => normalizedPrompt.includes(term.normalize("NFKC").toLowerCase()));
 }
 
-function findMissingRequiredQuestion(prompt: string): RequiredArchitectureQuestion | null {
-  if (hasExplicitArchitectureBrief(prompt)) {
-    return null;
+function createProviderClarificationQuestionId(question: string): string {
+  let hash = 2_166_136_261;
+  for (const character of question.normalize("NFKC")) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return `amazon_q_follow_up_${(hash >>> 0).toString(36)}`;
+}
+
+function withAcceptedArchitectureClarificationAnswers(
+  request: CreateArchitectureDraftRequest
+): CreateArchitectureDraftRequest {
+  const answers = request.clarificationAnswers;
+  if (answers === undefined || answers.length === 0) return request;
+  return {
+    ...request,
+    prompt: `${request.prompt}\n\nAccepted architecture clarification answers:\n${answers
+      .map((answer) => `- ${answer.questionId}: ${formatAcceptedArchitectureClarificationAnswer(answer)}`)
+      .join("\n")}`
+  };
+}
+
+function formatAcceptedArchitectureClarificationAnswer(
+  answer: NonNullable<CreateArchitectureDraftRequest["clarificationAnswers"]>[number]
+): string {
+  const trimmedAnswer = answer.answer.trim();
+  const canonicalSuggestion = findCanonicalClarificationSuggestion(
+    answer.questionId,
+    trimmedAnswer
+  );
+  if (canonicalSuggestion !== undefined) return canonicalSuggestion;
+  if (answer.questionId !== "budget") return trimmedAnswer;
+
+  const monthlyBudgetManwon = resolveConversationalMonthlyBudgetManwon(trimmedAnswer);
+  if (monthlyBudgetManwon === undefined || /(?:원|만원|krw|usd|달러)/iu.test(trimmedAnswer)) {
+    return trimmedAnswer;
   }
 
-  return REQUIRED_ARCHITECTURE_QUESTIONS.find((question) => !isRequiredArchitectureQuestionAnswered(question, prompt)) ?? null;
+  return `${trimmedAnswer} (월 ${monthlyBudgetManwon}만원으로 해석)`;
 }
+
+function findCanonicalClarificationSuggestion(
+  questionId: string,
+  answer: string
+): string | undefined {
+  const question = REQUIRED_ARCHITECTURE_QUESTIONS.find(({ id }) => id === questionId);
+  if (question === undefined) return undefined;
+
+  const normalizedAnswer = answer.normalize("NFKC").trim().toLowerCase();
+  const exactSuggestion = question.suggestions.find(
+    (suggestion) => suggestion.normalize("NFKC").trim().toLowerCase() === normalizedAnswer
+  );
+  if (exactSuggestion !== undefined) return exactSuggestion;
+
+  const stackCategory = resolveArchitectureTechnologyStackCategory(questionId, normalizedAnswer);
+  if (stackCategory !== null) {
+    const stackPatternByCategory: Record<typeof stackCategory, RegExp> = {
+      frontend_static: /(?:html|css|javascript|순수\s*웹)/iu,
+      frontend_spa: /(?:spa|react|vue|angular|프레임워크)/iu,
+      frontend_ssr: /(?:next|nuxt|ssr)/iu,
+      frontend_mobile: /(?:모바일|웹뷰|네이티브)/iu,
+      backend_simple_api: /(?:간단한\s*api|node|python\s*flask)/iu,
+      backend_complex: /(?:복잡한\s*비즈니스\s*로직|spring\s*boot|django)/iu,
+      backend_microservices: /(?:microservice|마이크로서비스)/iu
+    };
+    return question.suggestions.find((suggestion) =>
+      stackPatternByCategory[stackCategory].test(suggestion)
+    );
+  }
+
+  if (questionId === "traffic") {
+    const trafficProfile = resolveExplicitTrafficProfile(normalizedAnswer);
+    if (trafficProfile !== undefined) {
+      const profilePattern = trafficProfile === "small"
+        ? /(?:small|소규모)/iu
+        : trafficProfile === "medium"
+          ? /(?:medium|중간\s*규모)/iu
+          : /(?:large|대규모)/iu;
+      return question.suggestions.find((suggestion) => profilePattern.test(suggestion));
+    }
+  }
+  if (questionId === "backend" && /(?:spring\s*boot|스프링\s*부트|django|장고)/iu.test(normalizedAnswer)) {
+    return question.suggestions.find((suggestion) =>
+      /(?:complex\s*business|복잡한\s*비즈니스\s*로직)/iu.test(suggestion)
+    );
+  }
+  if (questionId === "region" && /(?:hong\s*kong|홍콩)/iu.test(normalizedAnswer)) {
+    return question.suggestions.find((suggestion) =>
+      /(?:asia\s*pacific|아시아\s*태평양)/iu.test(suggestion)
+    );
+  }
+  if (
+    questionId === "website_size"
+    && /(?:간단|단순)(?:한)?\s*(?:웹)?사이트/u.test(normalizedAnswer)
+  ) {
+    return question.suggestions.find((suggestion) => /10mb\s*미만/iu.test(suggestion));
+  }
+  if (
+    (questionId === "file_upload" || questionId === "realtime")
+    && isNaturalNegativeClarificationAnswer(normalizedAnswer)
+  ) {
+    return question.suggestions.find((suggestion) =>
+      /^(?:없음|필요\s*없음)/u.test(suggestion)
+    );
+  }
+
+  return undefined;
+}
+
+type MissingRequiredArchitectureQuestion = {
+  readonly question: RequiredArchitectureQuestion;
+  readonly invalidAnswer: boolean;
+};
+
+function findMissingRequiredQuestion(
+  request: CreateArchitectureDraftRequest
+): MissingRequiredArchitectureQuestion | null {
+  if (hasExplicitArchitectureBrief(request.prompt)) return null;
+  const answersByQuestionId = new Map(
+    (request.clarificationAnswers ?? []).map((answer) => [answer.questionId, answer.answer])
+  );
+  for (const question of REQUIRED_ARCHITECTURE_QUESTIONS) {
+    if (isRequiredArchitectureQuestionAnswered(question, request.prompt)) continue;
+    const answer = answersByQuestionId.get(question.id);
+    if (answer !== undefined && isClarificationAnswerValid(question, answer)) continue;
+    return { question, invalidAnswer: answer !== undefined };
+  }
+  return null;
+}
+
+function isClarificationAnswerValid(
+  question: RequiredArchitectureQuestion,
+  answer: string
+): boolean {
+  const normalizedAnswer = answer.normalize("NFKC").trim().toLowerCase();
+  if (normalizedAnswer.length === 0 || isClearlyUnrelatedClarificationAnswer(normalizedAnswer)) {
+    return false;
+  }
+  if (question.suggestions.some(
+    (suggestion) => suggestion.normalize("NFKC").trim().toLowerCase() === normalizedAnswer
+  )) {
+    return true;
+  }
+  if (isClarificationInformationRequest(normalizedAnswer)) {
+    return false;
+  }
+  if (
+    resolveArchitectureTechnologyStackCategory(question.id, normalizedAnswer) !== null
+  ) {
+    return true;
+  }
+  if (question.id === "backend") {
+    return isBackendClarificationAnswerValid(normalizedAnswer);
+  }
+  switch (question.id) {
+    case "website_type":
+      return hasPromptTerm(normalizedAnswer, [
+        "static", "dynamic", "single page", "spa", "api server", "api 서버",
+        "정적", "동적", "블로그", "포트폴리오", "회사 소개", "웹 애플리케이션",
+        "쇼핑", "커머스", "마켓", "포털", "검색", "커뮤니티", "소셜", "예약",
+        "배달", "교육", "강의", "스트리밍", "대시보드", "관리자", "saas",
+        "네이버", "쿠팡", "당근", "카카오", "유튜브"
+      ]);
+    case "traffic":
+      return hasTrafficClarificationEvidence(normalizedAnswer);
+    case "database":
+      return isNaturalBooleanAnswer(normalizedAnswer) || hasPromptTerm(normalizedAnswer, [
+        "database", "postgres", "postgresql", "mysql", "dynamodb", "rds", "db를", "db가",
+        "데이터베이스", "사용자 정보", "회원가입", "회원 정보", "주문 내역", "결제 내역",
+        "데이터 저장", "저장해야", "게시글"
+      ]);
+    case "ssl":
+      return isNaturalBooleanAnswer(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, ["ssl", "https", "http", "인증서", "도메인"])
+        || /보안(?:이|은|을| 때문에)?\s*(?:중요|필수|필요)/u.test(normalizedAnswer);
+    case "file_upload":
+      return isNaturalBooleanAnswer(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, [
+          "file upload", "upload", "파일 업로드", "이미지 업로드", "문서 업로드", "동영상 업로드",
+          "대용량 파일", "텍스트만", "프로필 사진", "사진을 올", "파일을 올", "문서를 올",
+          "영상을 올", "첨부"
+        ]);
+    case "realtime":
+      return isNaturalBooleanAnswer(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, ["realtime", "real-time", "실시간", "채팅", "알림", "websocket", "sse", "데이터 업데이트"]);
+    case "frontend":
+      return hasPromptTerm(normalizedAnswer, [
+        "html", "css", "javascript", "react", "vue", "angular", "next.js", "nuxt",
+        "리액트", "뷰", "앵귤러", "넥스트", "일반 웹", "순수 자바스크립트",
+        "모바일 앱", "웹뷰", "네이티브"
+      ]) || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "region":
+      return hasPromptTerm(normalizedAnswer, [
+        "국내", "해외", "전 세계", "전세계", "가까운 곳", "한국", "서울", "일본", "도쿄",
+        "싱가포르", "홍콩", "hong kong", "중국", "미국", "유럽", "아시아"
+      ])
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "budget":
+      return hasBudgetClarificationEvidence(normalizedAnswer)
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "management_preference":
+      return hasPromptTerm(normalizedAnswer, [
+        "managed", "serverless", "완전 관리", "반관리", "서버리스", "관리 맡",
+        "운영 맡", "관리 신경", "운영 신경", "직접 관리", "직접 운영", "서버 직접"
+      ]) || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "page_loading_time":
+      return hasPageLoadingClarificationEvidence(normalizedAnswer)
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "website_size":
+      return hasWebsiteSizeClarificationEvidence(normalizedAnswer)
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "traffic_pattern":
+      return hasPromptTerm(normalizedAnswer, [
+        "traffic pattern", "steady", "time of day", "event spike", "unpredictable",
+        "트래픽 패턴", "일정", "낮에", "낮 시간", "밤에", "저녁에", "주말",
+        "이벤트", "특정 시기", "몰려", "예측 불가"
+      ]) || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "downtime_tolerance":
+      return hasDowntimeClarificationEvidence(normalizedAnswer)
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    default:
+      return false;
+  }
+}
+
+function hasTrafficClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "traffic", "concurrent", "daily", "트래픽", "소규모", "중간 규모", "대규모",
+    "급변동", "동시 사용자", "동접", "방문자", "사용자가 적", "이용자가 적",
+    "적게", "적은", "많지", "보통", "많은", "몰릴", "초기", "처음"
+  ]) || /\d[\d,]*\s*(?:명|users?|visitors?|requests?)/iu.test(answer);
+}
+
+function hasBudgetClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "budget", "cost", "monthly", "예산", "비용", "월 비용", "저렴", "싸게",
+    "최소 비용", "넉넉한 예산", "비용은 보통", "적당한 비용"
+  ])
+    || /(?:\$\s*\d|\d[\d,.]*\s*(?:원|만원|달러|usd|krw))/iu.test(answer)
+    || resolveConversationalMonthlyBudgetManwon(answer) !== undefined;
+}
+
+function resolveConversationalMonthlyBudgetManwon(answer: string): number | undefined {
+  const normalizedAnswer = answer.normalize("NFKC").toLowerCase();
+  const monthlyAmountPattern = /(?:한\s*달|매달|매월|월간|월)(?:에|마다)?(?:\s*(?:예산|비용)(?:은|이|을|으로)?)?\s*(?:약|한)?\s*(\d+(?:[,.]\d+)?)/giu;
+
+  for (const match of normalizedAnswer.matchAll(monthlyAmountPattern)) {
+    if (match.index === undefined) continue;
+    const amountText = match[1];
+    if (amountText === undefined) continue;
+    const trailingText = normalizedAnswer.slice(match.index + match[0].length);
+    if (/^\s*(?:명|사용자|시간|분|초|일|회|건|gb|mb|tb|%|퍼센트)/iu.test(trailingText)) {
+      continue;
+    }
+
+    const amount = Number(amountText.replaceAll(",", ""));
+    if (Number.isFinite(amount) && amount >= 0) return amount;
+  }
+
+  return undefined;
+}
+
+function hasPageLoadingClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "loading", "load time", "로딩", "페이지 속도", "페이지가 빠", "빠르게 열",
+    "빨랐", "느려도", "즉시 열"
+  ]) || /\d+(?:\.\d+)?\s*(?:초|seconds?|ms|milliseconds?)(?:\s*이내)?/iu.test(answer);
+}
+
+function hasWebsiteSizeClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "website size", "site size", "웹사이트 크기", "사이트 크기", "사이트 용량",
+    "콘텐츠 용량", "작은 사이트", "간단한 사이트", "간단한 웹사이트", "단순한 사이트",
+    "크지 않은 사이트", "이미지가 많", "사진이 많",
+    "동영상이 많", "영상이 많", "콘텐츠가 많"
+  ]) || /\d+(?:\.\d+)?\s*(?:kb|mb|gb|tb)\b/iu.test(answer);
+}
+
+function hasDowntimeClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "downtime", "availability", "서비스 중단", "중단 허용", "가용성", "무중단",
+    "중단되면 안", "중단되면 큰일", "잠깐 중단", "중단돼도", "중단되어도"
+  ]) || /(?:99(?:\.\d+)?\s*%|(?:월|한 달)\s*\d+\s*시간)/u.test(answer);
+}
+
+function isClarificationInformationRequest(answer: string): boolean {
+  return /(?:무엇인지|뭐야|뭔지|무슨 뜻|설명(?:해|해줘|해주세요)|알려\s*(?:줘|주세요)|what\s+is|tell\s+me|explain)/iu.test(answer);
+}
+function isBackendClarificationAnswerValid(answer: string): boolean {
+  if (hasUncertainPreferenceAnswer(answer)) {
+    return true;
+  }
+
+  if (/(?:무엇인지|뭐야|뭔지|알려 *줘|설명해|what +is|tell +me|explain)/iu.test(answer)) {
+    return false;
+  }
+
+  if (isNaturalBooleanAnswer(answer)) {
+    return true;
+  }
+
+  if (hasPromptTerm(answer, [
+    "no backend",
+    "backend not required",
+    "static site",
+    "simple api",
+    "complex business logic",
+    "microservice",
+    "node.js",
+    "nodejs",
+    "python flask",
+    "spring boot",
+    "스프링 boot",
+    "스프링 부트",
+    "스프링부트",
+    "django",
+    "백엔드 필요 없음",
+    "정적 사이트",
+    "간단한 api",
+    "복잡한 비즈니스 로직",
+    "마이크로서비스"
+  ])) {
+    return true;
+  }
+
+  const hasBackendSubject = hasPromptTerm(answer, ["backend", "api", "server", "백엔드", "서버"]);
+  const hasBackendDecision = /(?:필요|사용|쓰|선택|구현|만들|넣|빼|제외|없이|원해|해 *줘)/u.test(answer);
+  return hasBackendSubject && hasBackendDecision;
+}
+
+function isNaturalBooleanAnswer(answer: string): boolean {
+  return /^(?:(?:네|예|응|맞아|맞아요)(?:[\s,.!]|$)|(?:아니|아니요)(?:[\s,.!]|$)|(?:필요(?:해|해요|합니다|하지\s*않(?:아|아요)?|없(?:어|어요)?)|안\s*필요(?:해|해요)?|없어|없어요|있어|있어요|있음|없음)(?:[\s,.!]|$))/u.test(answer)
+    || hasUncertainPreferenceAnswer(answer);
+}
+
+function isNaturalNegativeClarificationAnswer(answer: string): boolean {
+  return /^(?:(?:아니|아니요)|(?:필요\s*)?없(?:어|어요|음)|안\s*필요(?:해|해요)?)(?:[\s,.!]|$)/u.test(answer);
+}
+
+function hasUncertainPreferenceAnswer(answer: string): boolean {
+  return /^(?:(?:잘\s*)?모르겠|추천(?:해\s*줘|해주세요|해줘)?|상관\s*없|아무거나)(?:[\s,.!]|$)/u.test(answer);
+}
+
+function isClearlyUnrelatedClarificationAnswer(answer: string): boolean {
+  return hasPromptTerm(answer, ["김치찌개", "된장찌개", "부대찌개", "날씨", "점심 메뉴"]);
+}
+
 
 function findConditionalArchitectureQuestion(prompt: string): RequiredArchitectureQuestion | null {
   if (hasExplicitArchitectureBrief(prompt)) {
@@ -1316,12 +1875,20 @@ function isRequiredArchitectureQuestionAnswered(question: RequiredArchitectureQu
 function createArchitectureDraftClarification(
   question: RequiredArchitectureQuestion,
   request: CreateArchitectureDraftRequest,
-  billingMode: AiBillingMode
+  billingMode: AiBillingMode,
+  invalidAnswer = false
 ): ArchitectureDraftClarification {
   return {
     status: "needs_clarification",
     question: question.question,
+    questionId: question.id,
     suggestions: question.suggestions,
+    ...(invalidAnswer
+      ? {
+          validationMessage:
+            "입력하신 답변이 현재 질문과 관련이 없어 반영하지 않았어요. 질문에 맞게 다시 답해주세요."
+        }
+      : {}),
     providerMetadata: createFallbackProviderMetadata(request, billingMode)
   };
 }
@@ -1616,6 +2183,8 @@ function createAmazonQArchitectureDraftInstructions(): string {
   return [
     "You are Amazon Q assisting SketchCatch, an IaC operations service.",
     "Return JSON only. Do not wrap the response in markdown.",
+    "Write every user-facing string in Korean, including title, question, suggestions, summary, highlights, nextActions, assumptions, explanations, and requirementCoverage prose.",
+    "Technical identifiers and AWS service names may remain in English, but explanatory sentences must be Korean.",
     "Choose a cost- and security-conscious Practice Architecture from the provided ArchitectureDecisionSpace.",
     "SketchCatch is provider-neutral, AWS-first for the MVP, and Terraform-first.",
     "Do not perform deployment, apply, update, delete, or destroy actions.",
@@ -1666,6 +2235,41 @@ function createAmazonQArchitectureDraftPrompt(
     createCandidateExclusionPromptSection(candidateExclusions),
     "User requirement prompt:",
     prompt
+  ].join("\n\n");
+}
+
+function createAmazonQRequirementConflictInstructions(): string {
+  return [
+    "You are Amazon Q diagnosing why SketchCatch could not produce a valid architecture.",
+    "Return JSON only in the needs_clarification shape. Do not wrap the response in markdown.",
+    "Write every user-facing string in Korean. AWS service names and technical identifiers may remain in English.",
+    "Use only the supplied original requirement, accepted answers, and SketchCatch validation issues as evidence.",
+    "Do not invent a conflict or decide which requirement to discard on the user's behalf.",
+    "Explain the concrete requirements that conflict, or explicitly say when the evidence only proves an implementation or representation failure rather than a logical conflict.",
+    "Ask exactly one question that lets the user choose which requirement to preserve.",
+    "Return 2 to 4 suggestions. Each suggestion must state what will be preserved and what will be relaxed or retried.",
+    "Do not generate an architecture, plan, deployment action, or explanatory fields outside the clarification shape.",
+    'The required JSON shape is: {"status":"needs_clarification","question":"string","suggestions":["string"]}'
+  ].join("\n");
+}
+
+function createAmazonQRequirementConflictPrompt(
+  prompt: string,
+  architectureDecisionSpace: ArchitectureDecisionSpace,
+  normalizedRequirement: ArchitectureIntentPlan | null,
+  fixedTemplateSelection: FixedTemplateSelection | null,
+  validationIssues: readonly string[]
+): string {
+  return [
+    createAmazonQRequirementConflictInstructions(),
+    "Original user requirement prompt:",
+    prompt,
+    createNormalizedArchitectureIntentPlanPromptSection(normalizedRequirement),
+    "ArchitectureDecisionSpace:",
+    JSON.stringify(architectureDecisionSpace, null, 2),
+    createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    "SketchCatch validation issues from the failed architecture attempts:",
+    ...validationIssues.map((issue) => `- ${issue}`)
   ].join("\n\n");
 }
 
@@ -4344,10 +4948,11 @@ function createAmazonQPlanDraftResult(
     createDeterministicArchitectureAssumptions(request.prompt)
   );
   const explanations = [...(response.explanations ?? [])];
+  const title = createKoreanArchitectureDraftTitle(response.title, architectureJson);
 
   return {
     architectureJson,
-    title: response.title,
+    title,
     metadata: {
       ...requestDraft.metadata,
       source: "amazon_q",
@@ -4356,8 +4961,8 @@ function createAmazonQPlanDraftResult(
     },
     llmExplanation: {
       target: ARCHITECTURE_DRAFT_TARGET,
-      summary: `${response.title} Architecture Draft를 생성했습니다.`,
-      highlights: explanations.slice(0, 5),
+      summary: `${title}을 생성했습니다.`,
+      highlights: createKoreanArchitectureDraftHighlights(explanations, architectureJson),
       nextActions: ["Terraform IaC Preview에서 생성 가능한 설정과 참조를 검토하세요."],
       fallbackUsed: false,
       providerMetadata
@@ -8893,22 +9498,66 @@ function resolveTrafficProfile(normalizedPrompt: string): ArchitectureAnswerProf
     return "bursty";
   }
 
-  if (/(large\s+traffic|10,?000|500\+|대규모|일\s*10,?000|동시\s*500)/iu.test(normalizedPrompt)) {
-    return "large";
-  }
+  if (/(large\s+traffic|대규모)/iu.test(normalizedPrompt)) return "large";
+  if (/(medium\s+traffic|중간\s*규모)/iu.test(normalizedPrompt)) return "medium";
+  if (/(small\s+traffic|소규모)/iu.test(normalizedPrompt)) return "small";
 
-  if (/(medium\s+traffic|1,?000|concurrent\s+50|중간\s*규모|일\s*1,?000|동시\s*50|동접자?\s*1000)/iu.test(normalizedPrompt)) {
-    return "medium";
-  }
+  const explicitTrafficProfile = resolveExplicitTrafficProfile(normalizedPrompt);
+  if (explicitTrafficProfile !== undefined) return explicitTrafficProfile;
 
-  if (/(small\s+traffic|under\s+10|100명\s*미만|소규모|동시\s*10명\s*미만)/iu.test(normalizedPrompt)) {
-    return "small";
-  }
+  if (/(10,?000|500\+|일\s*10,?000|동시\s*500)/iu.test(normalizedPrompt)) return "large";
+  if (/(1,?000|concurrent\s+50|일\s*1,?000|동시\s*50|동접자?\s*1000)/iu.test(normalizedPrompt)) return "medium";
+  if (/(under\s+10|100명\s*미만|동시\s*10명\s*미만)/iu.test(normalizedPrompt)) return "small";
 
   return undefined;
 }
 
+function resolveExplicitTrafficProfile(
+  value: string
+): Exclude<ArchitectureAnswerProfile["traffic"], "bursty" | undefined> | undefined {
+  const dailyCount = extractTrafficCount(
+    value,
+    /(?:일일|하루|daily|일(?=\s*\d))[^\d]{0,20}(\d[\d,]*)(?:\s*명)?(?:\s*(미만|이하|이상|\+))?/iu
+  );
+  const concurrentCount = extractTrafficCount(
+    value,
+    /(?:동시|동접|concurrent)[^\d]{0,20}(\d[\d,]*)(?:\s*명)?(?:\s*(미만|이하|이상|\+))?/iu
+  );
+  const profiles = [
+    dailyCount === undefined ? undefined : classifyTrafficCount(dailyCount, 100, 10_000),
+    concurrentCount === undefined ? undefined : classifyTrafficCount(concurrentCount, 10, 500)
+  ].filter((profile): profile is "small" | "medium" | "large" => profile !== undefined);
+
+  if (profiles.includes("large")) return "large";
+  if (profiles.includes("medium")) return "medium";
+  return profiles.includes("small") ? "small" : undefined;
+}
+
+function extractTrafficCount(value: string, pattern: RegExp): number | undefined {
+  const match = value.match(pattern);
+  const countText = match?.[1];
+  if (countText === undefined) return undefined;
+  const count = Number(countText.replaceAll(",", ""));
+  if (!Number.isFinite(count)) return undefined;
+  return match?.[2] === "미만" || match?.[2] === "이하" ? Math.max(0, count - 1) : count;
+}
+
+function classifyTrafficCount(
+  count: number,
+  smallUpperBound: number,
+  largeLowerBound: number
+): "small" | "medium" | "large" {
+  if (count < smallUpperBound) return "small";
+  return count < largeLowerBound ? "medium" : "large";
+}
+
 function resolveFrontendProfile(normalizedPrompt: string): ArchitectureAnswerProfile["frontend"] {
+  const stackCategory = resolveArchitectureTechnologyStackCategory("frontend", normalizedPrompt);
+  if (stackCategory === "frontend_mobile") return "mobile";
+  if (stackCategory === "frontend_ssr") return "ssr";
+  if (stackCategory === "frontend_spa") return "spa";
+  if (stackCategory === "frontend_static") return "static";
+
   if (isMobileAppPrompt(normalizedPrompt)) {
     return "mobile";
   }
@@ -8932,6 +9581,11 @@ function resolveBackendProfile(normalizedPrompt: string): ArchitectureAnswerProf
   if (requiresNoBackend(normalizedPrompt)) {
     return "none";
   }
+
+  const stackCategory = resolveArchitectureTechnologyStackCategory("backend", normalizedPrompt);
+  if (stackCategory === "backend_microservices") return "microservices";
+  if (stackCategory === "backend_complex") return "complex";
+  if (stackCategory === "backend_simple_api") return "simple_api";
 
   if (/(microservice|마이크로서비스)/iu.test(normalizedPrompt)) {
     return "microservices";
@@ -8965,7 +9619,7 @@ function resolveRegionProfile(normalizedPrompt: string): ArchitectureAnswerProfi
     return "global";
   }
 
-  if (/(asia\s*pacific|apac|tokyo|singapore|아시아\s*태평양|도쿄|싱가포르)/iu.test(normalizedPrompt)) {
+  if (/(asia\s*pacific|apac|tokyo|singapore|hong\s*kong|아시아\s*태평양|도쿄|싱가포르|홍콩)/iu.test(normalizedPrompt)) {
     return "apac";
   }
 
@@ -9105,6 +9759,14 @@ function resolveAvailabilityProfile(normalizedPrompt: string): ArchitectureAnswe
 }
 
 function resolveBudgetProfile(normalizedPrompt: string): ArchitectureAnswerProfile["budget"] {
+  const conversationalMonthlyBudgetManwon = resolveConversationalMonthlyBudgetManwon(normalizedPrompt);
+  if (conversationalMonthlyBudgetManwon !== undefined) {
+    if (conversationalMonthlyBudgetManwon < 10) return "low";
+    if (conversationalMonthlyBudgetManwon <= 50) return "normal";
+    if (conversationalMonthlyBudgetManwon < 200) return "high";
+    return "enterprise";
+  }
+
   if (hasLowMonthlyBudget(normalizedPrompt) || /(minimum\s+cost|very\s+low|10만원\s*미만|최소\s*비용)/iu.test(normalizedPrompt)) {
     return "low";
   }
@@ -9359,7 +10021,8 @@ function requiresInferredSimpleBackend(normalizedPrompt: string): boolean {
 }
 
 function requiresSpaFrontend(normalizedPrompt: string): boolean {
-  return /(spa|single\s*page|react|vue|angular)/iu.test(normalizedPrompt);
+  return resolveArchitectureTechnologyStackCategory("frontend", normalizedPrompt) === "frontend_spa"
+    || /(spa|single\s*page|react|vue|angular)/iu.test(normalizedPrompt);
 }
 
 function requiresSsrFrontend(normalizedPrompt: string): boolean {
@@ -9373,7 +10036,8 @@ function requiresUploadStorage(normalizedPrompt: string): boolean {
 }
 
 function requiresComplexBackend(normalizedPrompt: string): boolean {
-  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
+  const stackCategory = resolveArchitectureTechnologyStackCategory("backend", normalizedPrompt);
+  return stackCategory === "backend_complex" || stackCategory === "backend_microservices" || /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
     normalizedPrompt
   );
 }
@@ -9506,7 +10170,8 @@ function hasExplicitDatabaseMarker(normalizedPrompt: string): boolean {
 }
 
 function hasExplicitComplexBackendMarker(normalizedPrompt: string): boolean {
-  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
+  const stackCategory = resolveArchitectureTechnologyStackCategory("backend", normalizedPrompt);
+  return stackCategory === "backend_complex" || stackCategory === "backend_microservices" || /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
     normalizedPrompt
   );
 }

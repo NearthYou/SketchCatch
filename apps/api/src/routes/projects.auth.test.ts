@@ -1059,6 +1059,10 @@ function makeDeploymentPlanArtifact(
     sha256: "a".repeat(64),
     terraformArtifactId: "77777777-7777-4777-8777-777777777777",
     terraformArtifactSha256: "b".repeat(64),
+    stateBaselineDeploymentId: null,
+    stateObjectKey: null,
+    stateLineageSha256: null,
+    stateSerial: null,
     ...overrides
   };
 }

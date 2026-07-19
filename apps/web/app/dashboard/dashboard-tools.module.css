@@ -411,16 +411,13 @@
 .rowActions button { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 10px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: var(--presentation-font-weight-regular); }
 .rowActions button[data-danger="true"] { border-color: var(--color-error); color: var(--color-error); }
 .buildConnectionReady,
-.buildConnectionUnverified,
 .buildConnectionPending { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); font-weight: var(--presentation-font-weight-regular); }
 .buildConnectionReady { color: var(--color-success); }
-.buildConnectionUnverified { color: var(--color-warning); }
 .buildConnectionReady button,
-.buildConnectionUnverified button,
 .buildConnectionPending button { min-height: 36px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 11px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-weight: var(--presentation-font-weight-regular); }
-.buildConnectionUnverified > span,
+.buildConnectionReady > span { border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-success-surface); color: var(--color-success); }
 .buildConnectionPending > span { border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-warning-surface); color: var(--color-warning); }
-.buildConnectionUnverified a,
+.buildConnectionReady a,
 .buildConnectionPending a { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border-radius: var(--radius-control); padding: 0 11px; background: var(--color-ink); color: var(--color-on-primary); text-decoration: none; }
 
 .modalBackdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(13 17 23 / 46%); z-index: 100; }

@@ -385,6 +385,10 @@
 }
 
 .choiceButton {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: space-between;
   background: var(--ai-workbench-surface);
   border: 1px solid var(--ai-workbench-line-strong);
   color: var(--ai-workbench-text);
@@ -397,6 +401,17 @@
   background: var(--ai-workbench-accent);
   border-color: var(--ai-workbench-accent);
   color: var(--ai-workbench-accent-contrast);
+}
+
+.choiceButtonSelected:disabled {
+  opacity: 1;
+}
+
+.choiceSelectionState {
+  flex: 0 0 auto;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .choiceSubmit {
@@ -540,12 +555,12 @@
 }
 
 .approvalTray {
-  align-items: center;
+  align-items: stretch;
   background: var(--ai-workbench-surface-muted);
   border-top: 1px solid var(--ai-workbench-line);
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   padding: 12px 14px;
 }
 
@@ -571,7 +586,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .issueSelect {
@@ -758,6 +773,21 @@
   padding-top: 11px;
 }
 
+.reviewProgressFooter {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.reviewProgressFooter .reviewProgressNotice {
+  flex: 1 1 220px;
+}
+
+.reviewProgressFooter .cancelButton {
+  flex: 0 0 auto;
+}
+
 @keyframes review-progress-spin {
   to {
     transform: rotate(360deg);
@@ -832,7 +862,6 @@
   margin: 0;
   white-space: pre-line;
 }
-
 
 .explanation {
   background: var(--ai-workbench-info-surface);
@@ -961,7 +990,6 @@
 .checkList p + p {
   color: var(--ai-workbench-text);
 }
-
 
 .reviewCheckList {
   display: grid;
@@ -1172,7 +1200,6 @@
   border-top: 1px solid var(--ai-workbench-line);
 }
 
-
 .technicalSection {
   border-top: 1px solid var(--ai-workbench-line);
   display: grid;
@@ -1250,7 +1277,6 @@
 .technicalDetailsBody .codeDiff section:last-child pre {
   border-left: 3px solid var(--ai-workbench-success);
 }
-
 
 .composer {
   align-items: end;
@@ -1524,4 +1550,26 @@
   color: #172033;
   font-size: calc(12px + var(--presentation-font-size-increase));
   overflow-wrap: anywhere;
+}
+.acceptedAnswer {
+  align-items: baseline;
+  background: var(--ai-workbench-info-surface);
+  border: 1px solid var(--ai-workbench-info);
+  border-radius: 8px;
+  display: flex;
+  gap: 7px;
+  margin-top: 7px;
+  padding: 7px 9px;
+}
+
+.acceptedAnswer span {
+  color: var(--ai-workbench-info);
+  flex: 0 0 auto;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.acceptedAnswer strong {
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  line-height: 1.45;
 }

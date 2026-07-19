@@ -188,12 +188,13 @@ resource "aws_ecs_task_definition" "worker" {
 
   container_definitions = jsonencode([
     {
-      name      = local.worker_container_name
-      image     = "${aws_ecr_repository.service["api"].repository_url}:${var.image_tag}"
-      essential = true
-      cpu       = var.worker_task_cpu
-      memory    = var.worker_task_memory
-      command   = local.worker_command
+      name        = local.worker_container_name
+      image       = "${aws_ecr_repository.service["api"].repository_url}:${var.image_tag}"
+      essential   = true
+      cpu         = var.worker_task_cpu
+      memory      = var.worker_task_memory
+      stopTimeout = 120
+      command     = local.worker_command
       environment = [
         for name, value in local.worker_environment : {
           name  = name

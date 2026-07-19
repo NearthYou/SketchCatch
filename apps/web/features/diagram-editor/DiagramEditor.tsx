@@ -475,6 +475,12 @@ function DiagramEditorInner({
 
   const replaceDiagram = useCallback(
     (nextDiagram: DiagramJson, notifyChange = true) => {
+      if (areDiagramsEqual(diagramRef.current, nextDiagram)) {
+        diagramRef.current = nextDiagram;
+        setDiagram(nextDiagram);
+        return;
+      }
+
       diagramRevisionRef.current += 1;
       diagramRef.current = nextDiagram;
       setDiagram(nextDiagram);
