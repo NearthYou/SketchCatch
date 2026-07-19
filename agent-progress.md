@@ -11,9 +11,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-19 - Reduce compact metadata
+### 2026-07-19 - Compact UI metadata and modal
 
-- Reduced Template services, Resource values, and Terraform counts by 3px; labels and containers are unchanged. Checks pass.
+- Reduced minor UI text, compacted the recovery modal, and relabeled Project timestamps. Checks pass.
 
 ### 2026-07-19 - Restore the focused Live Observation traffic presentation
 

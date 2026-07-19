@@ -15,6 +15,11 @@ const terraformPanelSource = readFileSync(
   new URL("./TerraformCodePanel.tsx", import.meta.url),
   "utf8"
 );
+const workspaceStyles = readFileSync(new URL("./workspace.module.css", import.meta.url), "utf8");
+const diagramEditorStyles = readFileSync(
+  new URL("../diagram-editor/diagram-editor.module.css", import.meta.url),
+  "utf8"
+);
 
 test("project draft recovery warns before replacing a newer local recovery draft", () => {
   assert.equal(PROJECT_DRAFT_RECOVERY_COPY.title, "서버에 반영되지 않은 로컬 변경사항이 있습니다");
@@ -31,6 +36,44 @@ test("project draft recovery traps focus until the user chooses a source", () =>
   assert.match(dialogSource, /event\.key !== "Tab"/);
   assert.match(dialogSource, /previousFocusRef\.current\?\.focus/);
 });
+
+test("project draft recovery covers panel arrows and keeps both actions readable", () => {
+  const backdropZIndex = readRuleNumber(
+    workspaceStyles,
+    ".projectDraftRecoveryBackdrop",
+    "z-index"
+  );
+  const panelArrowZIndex = readRuleNumber(diagramEditorStyles, ".panelEdgeHandle", "z-index");
+
+  assert.ok(backdropZIndex > panelArrowZIndex);
+  assert.match(dialogSource, /projectDraftRecoveryBackdrop/);
+  assert.match(dialogSource, /projectDraftRecoveryDialog/);
+  assert.match(
+    workspaceStyles,
+    /\.projectDraftRecoveryDialog \.terraformDialogActions\s*\{[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/
+  );
+  assert.match(
+    workspaceStyles,
+    /\.projectDraftRecoveryDialog \.terraformDialog(?:Secondary|Primary)Button[\s\S]*?font-size:[^;]*- 3px/
+  );
+  assert.match(
+    workspaceStyles,
+    /\.projectDraftRecoveryDialog > p:not\(\.terraformDialogError\)[\s\S]*?font-size:[^;]*- 3px/
+  );
+});
+
+function readRuleNumber(source: string, selector: string, property: string): number {
+  const selectorStart = source.indexOf(`\n${selector} {`);
+  assert.ok(selectorStart > -1);
+
+  const ruleStart = selectorStart + 1;
+  const ruleEnd = source.indexOf("}", ruleStart);
+  const declaration = source.slice(ruleStart, ruleEnd).match(new RegExp(`${property}:\\s*(\\d+)`));
+
+  assert.ok(ruleEnd > ruleStart);
+  assert.ok(declaration?.[1]);
+  return Number(declaration[1]);
+}
 
 test("server recovery replaces the mounted Terraform editor files", () => {
   const reloadStart = managerSource.indexOf("const reloadLatestProjectDraft");

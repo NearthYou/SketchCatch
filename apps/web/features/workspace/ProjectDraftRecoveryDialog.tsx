@@ -41,11 +41,14 @@ export function ProjectDraftRecoveryDialog({
   }, []);
 
   return (
-    <div className={styles.terraformDialogBackdrop} role="presentation">
+    <div
+      className={`${styles.terraformDialogBackdrop} ${styles.projectDraftRecoveryBackdrop}`}
+      role="presentation"
+    >
       <section
         aria-labelledby="project-draft-recovery-title"
         aria-modal="true"
-        className={styles.terraformDialog}
+        className={`${styles.terraformDialog} ${styles.projectDraftRecoveryDialog}`}
         ref={dialogRef}
         role="dialog"
         tabIndex={-1}
