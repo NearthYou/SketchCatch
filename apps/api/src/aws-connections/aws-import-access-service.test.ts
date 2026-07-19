@@ -375,6 +375,108 @@ test("cleanup opens the exact owned Policy Stack and never a caller-selected sta
   assert.doesNotMatch(result.consoleUrl ?? "", /stack=policy(?:&|$)/u);
 });
 
+test("cleanup inspection claims before AWS and an active lease blocks every cleanup read", async () => {
+  for (const command of ["prepareCleanup", "checkCleanup"] as const) {
+    const fixture = createImportAccessServiceFixture();
+    const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+    Object.assign(record, {
+      status: "cleanup_required",
+      operationId: "active-cleanup-operation",
+      operationKind: "check_cleanup",
+      leaseExpiresAt: new Date(fixedNow.getTime() + 60_000)
+    });
+    let awsCalls = 0;
+    fixture.gateway.inspectCleanup = async () => {
+      awsCalls += 1;
+      return createCompletedCleanupInspection();
+    };
+
+    await assert.rejects(
+      fixture.service[command](fixture.ownerInput),
+      AwsImportAccessLeaseError,
+      command
+    );
+    assert.equal(awsCalls, 0, command);
+  }
+});
+
+test("late cleanup inspection cannot overwrite a newer operation or cleanup_complete", async () => {
+  const cases = [
+    { command: "prepareCleanup", replaceOperationId: true },
+    { command: "checkCleanup", replaceOperationId: false }
+  ] as const;
+
+  for (const { command, replaceOperationId } of cases) {
+    const fixture = createImportAccessServiceFixture();
+    const initial = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+    initial.status = "cleanup_required";
+    fixture.gateway.inspectCleanup = async () => {
+      const claimed = fixture.getRecord()!;
+      Object.assign(claimed, {
+        status: "cleanup_complete",
+        operationId: replaceOperationId ? "newer-operation" : claimed.operationId,
+        operationKind: "check_reads",
+        leaseExpiresAt: null,
+        safeErrorSummary: "더 최신 정리 완료 상태"
+      });
+      return createVerifiedManagerCleanupInspection({
+        stackId: "stale-manager-stack",
+        contractVersion: "stale-manager-contract",
+        templateSha256: "a".repeat(64)
+      });
+    };
+
+    await assert.rejects(
+      fixture.service[command](fixture.ownerInput),
+      AwsImportAccessLeaseError,
+      command
+    );
+    assert.equal(fixture.getRecord()?.status, "cleanup_complete", command);
+    assert.equal(fixture.getRecord()?.operationKind, "check_reads", command);
+    assert.equal(fixture.getRecord()?.safeErrorSummary, "더 최신 정리 완료 상태", command);
+  }
+});
+
+test("expired cleanup inspection lease can be reclaimed after a crashed request", async () => {
+  const fixture = createImportAccessServiceFixture();
+  const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  Object.assign(record, {
+    status: "cleanup_required",
+    operationId: "crashed-operation",
+    operationKind: "check_cleanup",
+    leaseExpiresAt: fixedNow
+  });
+  let awsCalls = 0;
+  fixture.gateway.inspectCleanup = async () => {
+    awsCalls += 1;
+    return createCompletedCleanupInspection();
+  };
+
+  const result = await fixture.service.checkCleanup(fixture.ownerInput);
+
+  assert.equal(awsCalls, 1);
+  assert.equal(result.state.status, "cleanup_complete");
+  assert.equal(fixture.getRecord()?.leaseExpiresAt, null);
+});
+
+test("cleanup_complete is an idempotent no-read terminal state", async () => {
+  for (const command of ["prepareCleanup", "checkCleanup"] as const) {
+    const fixture = createImportAccessServiceFixture();
+    const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+    record.status = "cleanup_complete";
+    let awsCalls = 0;
+    fixture.gateway.inspectCleanup = async () => {
+      awsCalls += 1;
+      throw new Error("terminal cleanup must not read AWS again");
+    };
+
+    const result = await fixture.service[command](fixture.ownerInput);
+
+    assert.equal(result.state.status, "cleanup_complete", command);
+    assert.equal(awsCalls, 0, command);
+  }
+});
+
 test("cleanup from an early row persists exact Manager identity before the final sentinel", async () => {
   const fixture = createImportAccessServiceFixture();
   await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
@@ -842,6 +944,37 @@ function createImportAccessServiceFixture(
         return { kind: "stale" };
       }
       record = { ...record, ...input.changes, updatedAt: input.now };
+      return { kind: "saved", record };
+    },
+    async claimCleanupInspection(input) {
+      if (record?.leaseExpiresAt && record.leaseExpiresAt.getTime() > input.now.getTime()) {
+        return { kind: "leased" };
+      }
+      record = {
+        ...record!,
+        status: "cleanup_checking",
+        operationId: input.operationId,
+        operationKind: input.operationKind,
+        leaseExpiresAt: input.leaseExpiresAt,
+        safeErrorCode: null,
+        safeErrorSummary: "AWS 권한 정리 상태를 확인하고 있습니다.",
+        updatedAt: input.now
+      };
+      return { kind: "claimed", record };
+    },
+    async finishCleanupInspection(input) {
+      if (
+        record?.operationId !== input.operationId ||
+        record.operationKind !== input.operationKind
+      ) {
+        return { kind: "stale" };
+      }
+      record = {
+        ...record,
+        ...input.changes,
+        leaseExpiresAt: null,
+        updatedAt: input.now
+      };
       return { kind: "saved", record };
     }
   };

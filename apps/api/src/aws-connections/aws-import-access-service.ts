@@ -20,7 +20,8 @@ import type {
 import { createAwsImportManagerContract } from "./aws-import-access-manager-template.js";
 import type {
   AwsImportAccessRecord,
-  AwsImportAccessRepository
+  AwsImportAccessRepository,
+  AwsImportCleanupInspectionOperationKind
 } from "./aws-import-access-repository.js";
 import { AWS_IMPORT_READERS } from "./aws-import-access-catalog.js";
 import {
@@ -82,6 +83,80 @@ export function createAwsImportAccessService(
     options.generateApprovalSecret ?? (() => randomBytes(32).toString("base64url"));
   const generateOperationId = options.generateOperationId ?? randomUUID;
   const probeImportAccess = options.probeImportAccess ?? probeAwsImportAccess;
+
+  /** gg: cleanup read는 AWS 호출 전에 lease를 claim하고 같은 operation CAS로만 결과를 저장합니다. */
+  async function runCleanupInspection(
+    input: AwsImportAccessOwnerInput,
+    operationKind: AwsImportCleanupInspectionOperationKind
+  ): Promise<AwsImportAccessCommandResponse> {
+    const connection = await requireOwnedConnection(input, options.connectionRepository);
+    const contract = createContract(
+      connection,
+      options.templateBucketName,
+      options.templateStorageRegion
+    );
+    const commandNow = now();
+    const current = await options.repository.getOrCreate({
+      connectionId: input.connectionId,
+      now: commandNow
+    });
+    const operationId = generateOperationId();
+    if (current.status === "cleanup_complete") {
+      return toCommandResponse(current, current.operationId ?? operationId);
+    }
+    const priorManagerCleanupVerified = current.status === "cleanup_manager_required";
+    const claim = await options.repository.claimCleanupInspection({
+      connectionId: input.connectionId,
+      operationId,
+      operationKind,
+      now: commandNow,
+      leaseExpiresAt: new Date(commandNow.getTime() + operationLeaseTtlMs)
+    });
+    if (claim.kind === "leased") {
+      throw new AwsImportAccessLeaseError("다른 정리 확인이 진행 중입니다.");
+    }
+
+    const inspection = await options.gateway.inspectCleanup({
+      connection,
+      contract,
+      expectedCurrent: createExpectedCurrentState(claim.record),
+      priorManagerCleanupVerified
+    });
+    const cleanup = deriveCleanupState(inspection);
+    const completion = await options.repository.finishCleanupInspection({
+      connectionId: input.connectionId,
+      operationId,
+      operationKind,
+      now: now(),
+      changes: {
+        ...(operationKind === "prepare_cleanup" ? contractFields(contract) : {}),
+        ...trustedCleanupInspectionFields(inspection),
+        status: cleanup.status,
+        operationId,
+        operationKind,
+        ...(operationKind === "prepare_cleanup"
+          ? { cleanupStartedAt: commandNow }
+          : { lastCheckedAt: commandNow }),
+        safeErrorCode: cleanup.errorCode,
+        safeErrorSummary: cleanup.summary
+      }
+    });
+    if (completion.kind === "stale") {
+      throw new AwsImportAccessLeaseError("정리 확인 상태가 변경되었습니다.");
+    }
+    return toCommandResponse(
+      completion.record,
+      operationId,
+      cleanup.stackName
+        ? createStackConsoleUrl(
+            connection.region,
+            cleanup.stackName === "policy"
+              ? contract.policyStackName
+              : contract.managerStackName
+          )
+        : undefined
+    );
+  }
 
   return {
     // gg: 상태 조회는 소유권만 확인하고 row가 없으면 공개 초기 상태를 합성해 삭제를 막지 않습니다.
@@ -463,97 +538,12 @@ export function createAwsImportAccessService(
 
     // gg: 정리 준비는 exact Stack 존재만 확인하고 고객 대신 삭제하지 않습니다.
     async prepareCleanup(input) {
-      const connection = await requireOwnedConnection(input, options.connectionRepository);
-      const contract = createContract(
-        connection,
-        options.templateBucketName,
-        options.templateStorageRegion
-      );
-      const current = await options.repository.getOrCreate({
-        connectionId: input.connectionId,
-        now: now()
-      });
-      const operationId = generateOperationId();
-      const inspection = await options.gateway.inspectCleanup({
-        connection,
-        contract,
-        expectedCurrent: createExpectedCurrentState(current),
-        priorManagerCleanupVerified: current.status === "cleanup_manager_required"
-      });
-      const cleanup = deriveCleanupState(inspection);
-      const saved = await saveCommandOrThrow(options.repository, {
-        connectionId: input.connectionId,
-        now: now(),
-        changes: {
-          ...contractFields(contract),
-          ...trustedCleanupInspectionFields(inspection),
-          status: cleanup.status,
-          operationId,
-          operationKind: "prepare_cleanup",
-          cleanupStartedAt: now(),
-          safeErrorCode: cleanup.errorCode,
-          safeErrorSummary: cleanup.summary
-        }
-      });
-      return toCommandResponse(
-        saved,
-        operationId,
-        cleanup.stackName
-          ? createStackConsoleUrl(
-              connection.region,
-              cleanup.stackName === "policy"
-                ? contract.policyStackName
-                : contract.managerStackName
-            )
-          : undefined
-      );
+      return runCleanupInspection(input, "prepare_cleanup");
     },
 
     // gg: 정리 확인도 read-only이며 Policy Stack 다음 Manager Stack 순서를 유지합니다.
     async checkCleanup(input) {
-      const connection = await requireOwnedConnection(input, options.connectionRepository);
-      const contract = createContract(
-        connection,
-        options.templateBucketName,
-        options.templateStorageRegion
-      );
-      const current = await options.repository.getOrCreate({
-        connectionId: input.connectionId,
-        now: now()
-      });
-      const operationId = generateOperationId();
-      const inspection = await options.gateway.inspectCleanup({
-        connection,
-        contract,
-        expectedCurrent: createExpectedCurrentState(current),
-        priorManagerCleanupVerified: current.status === "cleanup_manager_required"
-      });
-      const cleanup = deriveCleanupState(inspection);
-      const saved = await saveCommandOrThrow(options.repository, {
-        connectionId: input.connectionId,
-        now: now(),
-        changes: {
-          ...trustedCleanupInspectionFields(inspection),
-          status: cleanup.status,
-          operationId,
-          operationKind: "check_cleanup",
-          lastCheckedAt: now(),
-          safeErrorCode: cleanup.errorCode,
-          safeErrorSummary: cleanup.summary
-        }
-      });
-      return toCommandResponse(
-        saved,
-        operationId,
-        cleanup.stackName
-          ? createStackConsoleUrl(
-              connection.region,
-              cleanup.stackName === "policy"
-                ? contract.policyStackName
-                : contract.managerStackName
-            )
-          : undefined
-      );
+      return runCleanupInspection(input, "check_cleanup");
     }
   };
 }

@@ -33,6 +33,18 @@ export type FinishAwsImportAccessReadsResult =
   | { kind: "saved"; record: AwsImportAccessRecord }
   | { kind: "stale" };
 
+export type AwsImportCleanupInspectionOperationKind =
+  | "prepare_cleanup"
+  | "check_cleanup";
+
+export type ClaimAwsImportCleanupInspectionResult =
+  | { kind: "claimed"; record: AwsImportAccessRecord }
+  | { kind: "leased" };
+
+export type FinishAwsImportCleanupInspectionResult =
+  | { kind: "saved"; record: AwsImportAccessRecord }
+  | { kind: "stale" };
+
 export type AwsImportAccessRepository = {
   find(connectionId: string): Promise<AwsImportAccessRecord | undefined>;
   getOrCreate(input: { connectionId: string; now: Date }): Promise<AwsImportAccessRecord>;
@@ -71,6 +83,20 @@ export type AwsImportAccessRepository = {
     changes: AwsImportAccessRecordChanges;
     now: Date;
   }): Promise<FinishAwsImportAccessReadsResult>;
+  claimCleanupInspection(input: {
+    connectionId: string;
+    operationId: string;
+    operationKind: AwsImportCleanupInspectionOperationKind;
+    now: Date;
+    leaseExpiresAt: Date;
+  }): Promise<ClaimAwsImportCleanupInspectionResult>;
+  finishCleanupInspection(input: {
+    connectionId: string;
+    operationId: string;
+    operationKind: AwsImportCleanupInspectionOperationKind;
+    changes: AwsImportAccessRecordChanges;
+    now: Date;
+  }): Promise<FinishAwsImportCleanupInspectionResult>;
 };
 
 /** gg: 가져오기 상태는 배포 연결 row와 분리하고 connection별 한 row만 만듭니다. */
@@ -274,6 +300,56 @@ export function createPostgresAwsImportAccessRepository(
           eq(awsImportAccess.awsConnectionId, input.connectionId),
           eq(awsImportAccess.operationId, input.operationId),
           eq(awsImportAccess.operationKind, "check_reads")
+        ))
+        .returning();
+      return saved
+        ? { kind: "saved", record: saved } as const
+        : { kind: "stale" } as const;
+    },
+
+    // gg: cleanup AWS read도 row lease를 먼저 가져 중복 호출과 늦은 overwrite를 막습니다.
+    async claimCleanupInspection(input) {
+      return db.transaction(async (transaction) => {
+        const [current] = await transaction
+          .select()
+          .from(awsImportAccess)
+          .where(eq(awsImportAccess.awsConnectionId, input.connectionId))
+          .for("update");
+        if (!current) throw new Error("AWS import access state was not found");
+        if (
+          current.leaseExpiresAt !== null &&
+          current.leaseExpiresAt.getTime() > input.now.getTime()
+        ) {
+          return { kind: "leased" } as const;
+        }
+
+        const [claimed] = await transaction
+          .update(awsImportAccess)
+          .set({
+            status: "cleanup_checking" satisfies AwsImportAccessStatus,
+            operationId: input.operationId,
+            operationKind: input.operationKind,
+            leaseExpiresAt: input.leaseExpiresAt,
+            safeErrorCode: null,
+            safeErrorSummary: "AWS 권한 정리 상태를 확인하고 있습니다.",
+            updatedAt: input.now
+          })
+          .where(eq(awsImportAccess.awsConnectionId, input.connectionId))
+          .returning();
+        if (!claimed) throw new Error("AWS import cleanup inspection could not be claimed");
+        return { kind: "claimed", record: claimed } as const;
+      });
+    },
+
+    // gg: AWS read 결과는 같은 operation ID와 kind를 claim한 row에만 CAS 저장합니다.
+    async finishCleanupInspection(input) {
+      const [saved] = await db
+        .update(awsImportAccess)
+        .set({ ...input.changes, leaseExpiresAt: null, updatedAt: input.now })
+        .where(and(
+          eq(awsImportAccess.awsConnectionId, input.connectionId),
+          eq(awsImportAccess.operationId, input.operationId),
+          eq(awsImportAccess.operationKind, input.operationKind)
         ))
         .returning();
       return saved
