@@ -212,3 +212,8 @@ Short English-only working log for the current agent context. Older records are 
 
 - Reduced only the marked module description, provider/resource/relationship metadata, and resource-summary text from 18px to 15px; the module title, section heading, add button, and card geometry remain unchanged.
 - Focused typography and module-preview tests pass 10/10. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no CSS or spec issue after the verification record was completed, with no known risk or follow-up required.
+
+### 2026-07-19 - Tighten issue-panel empty-state spacing
+
+- Reduced only the empty-state top padding shared by the Terraform validation and Architecture issue panels, decreasing the title-to-message gap from 32px to 24px while preserving typography and all outer spacing.
+- The focused typography test passes 4/4. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no CSS or spec issue after the verification record was completed, with no known risk or follow-up required.
