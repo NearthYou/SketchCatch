@@ -80,6 +80,11 @@ import {
 import styles from "./repository-start.module.css";
 
 type RequestState = "idle" | "loading" | "error";
+type PublicAnalysisState =
+  | "idle"
+  | "loading"
+  | "repository_error"
+  | "architecture_error";
 type PublicRecommendationStage = "configuration" | "questions";
 type RepositoryQuestionView = Pick<
   RepositoryAnalysisQuestion,
@@ -121,7 +126,8 @@ export function RepositoryStartClient({
   const [candidates, setCandidates] = useState<GitHubInstalledRepositoryCandidate[]>([]);
   const [installationState, setInstallationState] = useState("");
   const [actionState, setActionState] = useState<RequestState>("idle");
-  const [publicAnalysisState, setPublicAnalysisState] = useState<RequestState>("idle");
+  const [publicAnalysisState, setPublicAnalysisState] =
+    useState<PublicAnalysisState>("idle");
   const [repositoryUrl, setRepositoryUrl] = useState(initialRepositoryUrl);
   const [defaultBranch, setDefaultBranch] = useState(initialDefaultBranch);
   const [publicAnalysis, setPublicAnalysis] = useState<SourceRepositoryAnalysisResult | null>(null);
@@ -182,7 +188,7 @@ export function RepositoryStartClient({
   }, [initialDefaultBranch, initialRepositoryUrl, initialResumeKey, projectId]);
 
   useEffect(() => {
-    if (publicAnalysisState !== "error") return;
+    if (publicAnalysisState !== "repository_error") return;
     const recheckPermissions = () => void loadCandidates();
     window.addEventListener("focus", recheckPermissions);
     return () => window.removeEventListener("focus", recheckPermissions);
@@ -371,7 +377,7 @@ export function RepositoryStartClient({
       );
       setPublicAnalysisState("idle");
     } catch (error) {
-      setPublicAnalysisState("error");
+      setPublicAnalysisState("repository_error");
       setErrorMessage(
         getApiErrorMessage(
           error,
@@ -432,13 +438,15 @@ export function RepositoryStartClient({
       );
 
       if ("status" in draft) {
-        setPublicAnalysisState("error");
-        setErrorMessage(`Amazon Q가 추가 확인을 요청했습니다: ${draft.question}`);
+        setPublicAnalysisState("architecture_error");
+        setErrorMessage(
+          "선택한 템플릿과 Repository 조건을 자동으로 조정하지 못했습니다. 템플릿 또는 분석 조건을 다시 확인해주세요."
+        );
         return;
       }
 
       if (draft.metadata.source !== "amazon_q") {
-        setPublicAnalysisState("error");
+        setPublicAnalysisState("architecture_error");
         setErrorMessage(
           "Amazon Q가 현재 다이어그램을 생성하지 못했습니다. AWS 인증과 Amazon Q 설정을 확인해주세요."
         );
@@ -452,7 +460,7 @@ export function RepositoryStartClient({
       });
       setPublicAnalysisState("idle");
     } catch (error) {
-      setPublicAnalysisState("error");
+      setPublicAnalysisState("architecture_error");
       setErrorMessage(
         error instanceof RepositoryAnalysisRecordPersistenceError
           ? "보드는 저장했지만 Repository 정보를 저장하지 못했습니다. 보드 생성을 다시 누르면 안전하게 재시도합니다."
@@ -490,7 +498,9 @@ export function RepositoryStartClient({
 
       if ("status" in draft) {
         setActionState("error");
-        setErrorMessage(`Amazon Q가 추가 확인을 요청했습니다: ${draft.question}`);
+        setErrorMessage(
+          "선택한 템플릿과 Repository 조건을 자동으로 조정하지 못했습니다. 템플릿 또는 분석 조건을 다시 확인해주세요."
+        );
         return;
       }
 
@@ -700,6 +710,8 @@ export function RepositoryStartClient({
                         if (nextRepositoryUrl !== publicAnalysis?.repositoryUrl) {
                           setPublicAnalysis(null);
                           setDefaultBranch("");
+                          setPublicAnalysisState("idle");
+                          setErrorMessage("");
                         }
                       }}
                       placeholder="https://github.com/owner/repository"
@@ -770,39 +782,38 @@ export function RepositoryStartClient({
                 stage={publicRecommendationStage}
               />
             ) : null}
-            {publicAnalysisState === "error" && !pendingAnalysisRecord ? (
-              publicAnalysis ? (
-                <ProductState
-                  action={(
-                    <button
-                      disabled={isPublicAnalysisBusy}
-                      onClick={() => void createPublicRepositoryBoard()}
-                      type="button"
-                    >
-                      다시 생성
-                    </button>
-                  )}
-                  compact
-                  description={errorMessage}
-                  kind="error"
-                  title="AI 아키텍처를 생성할 수 없습니다"
-                />
-              ) : (
-                <RepositoryAnalysisRecovery
-                  action={recoveryAction}
-                  connectionSetupAvailability={githubAppAvailability?.connectionSetup}
-                  errorMessage={errorMessage}
-                  isBusy={actionState === "loading" || isPublicAnalysisBusy}
-                  onAddPermission={(managementUrl) => {
-                    window.open(managementUrl, "_blank", "noopener,noreferrer");
-                  }}
-                  onAnalyzeConnected={() => void analyzeRepository()}
-                  onConnect={(candidate) => void connectRepository(candidate)}
-                  onConnectGitHub={() => void openGitHubConnection()}
-                  onRetry={() => void analyzePublicRepositoryUrl(repositoryUrl, defaultBranch)}
-                  onVerifyPermission={() => void loadCandidates()}
-                />
-              )
+            {publicAnalysisState === "architecture_error" && !pendingAnalysisRecord ? (
+              <ProductState
+                action={(
+                  <button
+                    disabled={isPublicAnalysisBusy}
+                    onClick={() => void createPublicRepositoryBoard()}
+                    type="button"
+                  >
+                    다시 생성
+                  </button>
+                )}
+                compact
+                description={errorMessage}
+                kind="error"
+                title="AI 아키텍처를 생성할 수 없습니다"
+              />
+            ) : null}
+            {publicAnalysisState === "repository_error" && !pendingAnalysisRecord ? (
+              <RepositoryAnalysisRecovery
+                action={recoveryAction}
+                connectionSetupAvailability={githubAppAvailability?.connectionSetup}
+                errorMessage={errorMessage}
+                isBusy={actionState === "loading" || isPublicAnalysisBusy}
+                onAddPermission={(managementUrl) => {
+                  window.open(managementUrl, "_blank", "noopener,noreferrer");
+                }}
+                onAnalyzeConnected={() => void analyzeRepository()}
+                onConnect={(candidate) => void connectRepository(candidate)}
+                onConnectGitHub={() => void openGitHubConnection()}
+                onRetry={() => void analyzePublicRepositoryUrl(repositoryUrl, defaultBranch)}
+                onVerifyPermission={() => void loadCandidates()}
+              />
             ) : null}
           </section>
         ) : null}
@@ -891,7 +902,11 @@ export function RepositoryStartClient({
           </section>
         ) : null}
 
-        {errorMessage && (publicAnalysisState !== "error" || pendingAnalysisRecord) ? (
+        {errorMessage && (
+          (publicAnalysisState !== "repository_error" &&
+            publicAnalysisState !== "architecture_error") ||
+          pendingAnalysisRecord
+        ) ? (
           <ProductState
             action={pendingAnalysisRecord ? (
               <button

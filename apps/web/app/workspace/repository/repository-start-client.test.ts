@@ -58,15 +58,30 @@ test("connected Repository board generation uses the AI Architecture Draft path"
 test("public Repository AI draft failures do not masquerade as Repository access failures", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
   const publicErrorBody = source.slice(
-    source.indexOf('{publicAnalysisState === "error" && !pendingAnalysisRecord ? ('),
-    source.indexOf("{activeRepository && !publicAnalysis ? (")
+    source.indexOf('{publicAnalysisState === "architecture_error" && !pendingAnalysisRecord ? ('),
+    source.indexOf('{publicAnalysisState === "repository_error" && !pendingAnalysisRecord ? (')
   );
 
-  assert.match(publicErrorBody, /publicAnalysis \? \(/);
+  assert.ok(publicErrorBody.length > 0);
   assert.match(publicErrorBody, /title="AI 아키텍처를 생성할 수 없습니다"/);
   assert.match(publicErrorBody, /onClick=\{\(\) => void createPublicRepositoryBoard\(\)\}/);
   assert.match(publicErrorBody, />\s*다시 생성\s*</);
-  assert.match(publicErrorBody, /<RepositoryAnalysisRecovery/);
+  assert.doesNotMatch(publicErrorBody, /<RepositoryAnalysisRecovery/);
+});
+
+test("public Repository errors keep analysis and architecture failures distinct", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.match(source, /publicAnalysisState === "repository_error"/);
+  assert.match(source, /publicAnalysisState === "architecture_error"/);
+  assert.doesNotMatch(source, /draft\.question/);
+  const repositoryErrorBody = source.slice(
+    source.indexOf('{publicAnalysisState === "repository_error" && !pendingAnalysisRecord ? ('),
+    source.indexOf("{activeRepository && !publicAnalysis ? (")
+  );
+
+  assert.match(repositoryErrorBody, /<RepositoryAnalysisRecovery/);
+  assert.doesNotMatch(repositoryErrorBody, /createPublicRepositoryBoard/);
 });
 
 test("Repository start screen selects a fetched branch before reanalysis", () => {
