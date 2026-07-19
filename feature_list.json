@@ -1015,11 +1015,14 @@
           "pnpm typecheck",
           "pnpm build",
           "pnpm harness:check",
-          "git diff --check"
+          "git diff --check",
+          "GitHub Actions Deploy Production ECS run 29700391499 at app SHA 2da6ba32d28e98afcbfad0e9f591915a48b5b461",
+          "GitHub Actions Run Production Database Migrations run 29700681495",
+          "HTTPS GET https://sketchcatch.net/, /health, /health/db"
         ],
-        "notes": "Focused API checks pass 130/130 and focused Web checks pass 29/29. Migration compatibility, lint, typecheck, build, harness, and diff checks pass. The full API suite still exposes 12 unrelated existing failures and one cancelled artifact timer test outside this workstream."
+        "notes": "Focused API checks pass 130/130 and focused merged Web checks pass 31/31. Migration compatibility, lint, serial typecheck, build, harness, and diff checks pass. Production ECS run 29700391499 deployed the compatible API, Web, and worker image before migration run 29700681495 created snapshot sketchcatch-production-pre-migration-29700681495 and completed the one-off ECS migration task with exit code 0. All three HTTPS health checks return 200. The full API suite still exposes unrelated existing failures outside this workstream."
       },
-      "notes": "Migration 0054 changes apps/api/drizzle/meta/_journal.json. No production migration, cloud mutation, Terraform apply/destroy, deployment, or Git/CI/CD handoff was performed."
+      "notes": "Migration 0054 changes apps/api/drizzle/meta/_journal.json and is applied in production. No Terraform apply/destroy or user Git/CI/CD handoff was performed."
     }
   ]
 }
