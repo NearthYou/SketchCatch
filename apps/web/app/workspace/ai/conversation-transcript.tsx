@@ -207,7 +207,7 @@ export function ConversationTranscript({
           </div>
         ) : null}
 
-        {requestState === "loading" && progressSnapshot !== null ? (
+        {requestState === "loading" ? (
           <WorkspaceAiWorkbenchDraftProgress onCancel={onCancelRequest} />
         ) : null}
 

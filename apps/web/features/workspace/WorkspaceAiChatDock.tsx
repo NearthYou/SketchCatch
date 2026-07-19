@@ -349,7 +349,6 @@ export function WorkspaceAiChatDock({
     readonly string[]
   >([]);
   const [draftState, setDraftState] = useState<AiRequestState>("idle");
-  const [draftGenerationProgressVisible, setDraftGenerationProgressVisible] = useState(false);
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
   const repositoryTemplate = useMemo(
     () =>
@@ -635,12 +634,10 @@ export function WorkspaceAiChatDock({
     (activeChatTab === "preview" && terraformPreviewExplanationIsStale);
   const chatDockStatus =
     activeChatTab === "draft" && activeRequestState === "loading"
-      ? draftGenerationProgressVisible
-        ? {
-            description: "아래에서 현재 다이어그램 생성 단계를 확인할 수 있습니다.",
-            label: "다이어그램 생성 중"
-          }
-        : null
+      ? {
+          description: "아래에서 현재 다이어그램 생성 단계를 확인할 수 있습니다.",
+          label: "다이어그램 생성 중"
+        }
       : getWorkspaceAiChatDockStatus({
           hasPendingApproval: activeHasPendingApproval,
           isStale: activeProposalIsStale,
@@ -1637,7 +1634,6 @@ export function WorkspaceAiChatDock({
     const controller = requestRegistryRef.current.begin("draft");
 
     setDraftState("loading");
-    setDraftGenerationProgressVisible(false);
     setDraftErrorMessage("");
     setDraft(null);
     setPatchPreviewModel(null);
@@ -1808,7 +1804,6 @@ export function WorkspaceAiChatDock({
     const controller = requestRegistryRef.current.begin("draft");
 
     setDraftState("loading");
-    setDraftGenerationProgressVisible(false);
     setDraftErrorMessage("");
     setDraft(null);
     setPatchPreviewModel(null);
@@ -1826,12 +1821,7 @@ export function WorkspaceAiChatDock({
         normalizedDraftRequest.repositoryAnalysis || normalizedDraftRequest.repositoryEvidence
           ? await createAiArchitectureDraft(normalizedDraftRequest, { signal: controller.signal })
           : await createAiArchitectureDraftStream(normalizedDraftRequest, {
-              signal: controller.signal,
-              onProgress: () => {
-                if (requestRegistryRef.current.isActive("draft", controller)) {
-                  setDraftGenerationProgressVisible(true);
-                }
-              }
+              signal: controller.signal
             });
 
       if (!requestRegistryRef.current.isActive("draft", controller)) {
@@ -2400,9 +2390,7 @@ export function WorkspaceAiChatDock({
 
       {activeChatTab === "draft" ? (
         draftState === "loading" ? (
-          draftGenerationProgressVisible ? (
-            <WorkspaceAiWorkbenchDraftProgress />
-          ) : null
+          <WorkspaceAiWorkbenchDraftProgress />
         ) : (
           <WorkspaceAiWorkbenchRequestMessage state={draftState} message={draftErrorMessage} />
         )
@@ -2620,9 +2608,7 @@ export function WorkspaceAiChatDock({
             </div>
             <p>{draft.architectureJson.nodes.length}개 리소스</p>
           </header>
-          <div className={styles.artifactBody}>
-            <WorkspaceAiWorkbenchExplanation explanation={draft.llmExplanation} />
-          </div>
+
           {draftSafetyWarnings.length > 0 ? (
             <div className={styles.notice} role="status">
               {draftSafetyWarnings.map((warning) => (

@@ -87,10 +87,24 @@ test("두 다이어그램 생성 채팅은 같은 자연어 답변 검증과 선
   assert.match(workspaceDockSource, /markChatMessageSuggestionsSelected/);
   assert.doesNotMatch(aiStartTranscriptSource, /반영된 답변/);
   assert.doesNotMatch(workspaceDockSource, /반영된 답변/);
-  assert.match(aiStartTranscriptSource, /WorkspaceAiWorkbenchDraftProgress/);
-  assert.match(aiStartTranscriptSource, /progressSnapshot !== null/);
-  assert.match(workspaceDockSource, /WorkspaceAiWorkbenchDraftProgress/);
-  assert.match(workspaceDockSource, /draftGenerationProgressVisible/);
+  assert.match(aiStartTranscriptSource, /requestState === "loading"[\s\S]*WorkspaceAiWorkbenchDraftProgress/);
+  assert.doesNotMatch(aiStartTranscriptSource, /progressSnapshot !== null/);
+  assert.match(workspaceDockSource, /draftState === "loading"[\s\S]*WorkspaceAiWorkbenchDraftProgress/);
+  assert.doesNotMatch(workspaceDockSource, /draftGenerationProgressVisible/);
+});
+
+test("설계 제안은 Amazon Q 설명 없이 승인 경계만 표시한다", () => {
+  const workspaceDockSource = readFileSync(
+    join(currentDir, "../../../features/workspace/WorkspaceAiChatDock.tsx"),
+    "utf8"
+  );
+  const draftProposalSource = workspaceDockSource.slice(
+    workspaceDockSource.indexOf('activeChatTab === "draft" && draft !== null'),
+    workspaceDockSource.indexOf('activeChatTab === "draft" && patchPreviewModel !== null')
+  );
+
+  assert.doesNotMatch(draftProposalSource, /WorkspaceAiWorkbenchExplanation/);
+  assert.match(draftProposalSource, /Board 변경 승인/);
 });
 
 test("두 다이어그램 생성 채팅은 같은 수정 재질문과 신규 초안 라우팅을 사용한다", () => {
