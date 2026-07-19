@@ -33,6 +33,10 @@ import {
   normalizeDiagramResourceNodeGeometry,
   RESOURCE_NODE_DEFAULT_SIZE
 } from "../diagram-editor/resource-node-geometry";
+import {
+  terraformParameterCatalog,
+  type ParameterCatalogDefinition
+} from "../parameter-input/catalog";
 import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-visual-footprint";
 import { fitSecurityGroupScopesToTargets } from "../diagram-editor/security-group-scope";
 import { resourceCatalog } from "../resource-settings/catalog";
@@ -1182,21 +1186,75 @@ function createDiagramNodeParameters(
       DEFAULT_TERRAFORM_BLOCK_TYPE,
     values: {
       ...(shouldInheritBaseValues ? (baseParameters?.values ?? {}) : {}),
-      ...getTerraformParameterConfigValues(config)
+      ...getTerraformParameterConfigValues(config, terraformResourceType)
     }
   };
 }
 
-function getTerraformParameterConfigValues(config: ResourceConfig): ResourceConfig {
+function getTerraformParameterConfigValues(
+  config: ResourceConfig,
+  terraformResourceType: string
+): ResourceConfig {
   const values: ResourceConfig = {};
+  const definitionByName = new Map(
+    (terraformParameterCatalog.resources[terraformResourceType] ?? []).map((definition) => [
+      definition.name,
+      definition
+    ])
+  );
 
   for (const [key, value] of Object.entries(config)) {
-    if (!DIAGRAM_ONLY_CONFIG_KEYS.has(key)) {
-      values[key] = value;
+    if (!DIAGRAM_ONLY_CONFIG_KEYS.has(key) && isMeaningfulGeneratedParameterValue(value)) {
+      values[key] = normalizeGeneratedParameterValue(value, definitionByName.get(key));
     }
   }
 
   return values;
+}
+
+function normalizeGeneratedParameterValue(
+  value: unknown,
+  definition: ParameterCatalogDefinition | undefined
+): unknown {
+  if (definition?.inputKind !== "nested-block" || !definition.children) {
+    return value;
+  }
+
+  if (definition.type === "list" || definition.type === "set") {
+    const blocks = Array.isArray(value) ? value : isRecord(value) ? [value] : value;
+
+    return Array.isArray(blocks)
+      ? blocks.map((block) => normalizeGeneratedNestedBlock(block, definition.children ?? []))
+      : blocks;
+  }
+
+  return normalizeGeneratedNestedBlock(value, definition.children);
+}
+
+function normalizeGeneratedNestedBlock(
+  value: unknown,
+  children: readonly ParameterCatalogDefinition[]
+): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  const childByName = new Map(children.map((child) => [child.name, child]));
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, childValue]) => [
+      key,
+      normalizeGeneratedParameterValue(childValue, childByName.get(key))
+    ])
+  );
+}
+
+function isMeaningfulGeneratedParameterValue(value: unknown): boolean {
+  return (
+    value !== null &&
+    value !== undefined &&
+    (typeof value !== "string" || value.trim().length > 0)
+  );
 }
 
 function readTerraformBlockType(value: unknown): TerraformBlockType | undefined {
