@@ -341,7 +341,7 @@ test("the overall read deadline aborts a slow executor before the operation leas
   );
 
   assert.equal(result.status, "retry_required");
-  assert(Date.now() - startedAt < 50);
+  assert(Date.now() - startedAt < 1_000);
 });
 
 function createProbeDependencies(

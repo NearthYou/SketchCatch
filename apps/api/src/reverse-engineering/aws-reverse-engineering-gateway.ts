@@ -132,6 +132,7 @@ import type {
   AwsProviderScanInput
 } from "./aws-provider-adapter.js";
 import {
+  parseAwsQueryPaginationToken,
   parseInstancesFromXml,
   parseInternetGatewaysFromXml,
   parseRdsInstancesFromXml,
@@ -196,8 +197,13 @@ export async function collectAwsPages<T>(
 
 /** gg: provider 원문은 버리고 기존 scan reason만 page-level 안전 분류로 좁힙니다. */
 function classifyAwsPageFailureOutcome(error: unknown): AwsPageFailure["outcome"] {
-  const message = error instanceof Error ? error.message : "";
-  const reason = classifyScanErrorReason(message);
+  const details = error && typeof error === "object"
+    ? error as { name?: unknown; code?: unknown; Code?: unknown; message?: unknown }
+    : {};
+  const classifierText = [details.name, details.code, details.Code, details.message]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+  const reason = classifyScanErrorReason(classifierText);
   return reason === "provider_error" || reason === "unknown" ? "transient" : reason;
 }
 
@@ -323,20 +329,30 @@ export function createAwsReverseEngineeringGateway(
       const fetchXml = options.fetchXml ?? fetch;
       const readerPlan = createAwsReverseEngineeringReaderPlan(input);
       const resourceGroups = await Promise.all([
-        readResourceGroup(input, "VPC", () => describeVpcs(input.region, credentials, fetchXml)),
-        readResourceGroup(input, "SUBNET", () => describeSubnets(input.region, credentials, fetchXml)),
-        readResourceGroup(input, "INTERNET_GATEWAY", () =>
-          describeInternetGateways(input.region, credentials, fetchXml)
+        readResourceGroup(input, "VPC", (reportPageFailure) =>
+          describeVpcs(input.region, credentials, fetchXml, reportPageFailure)
         ),
-        readResourceGroup(input, "ROUTE_TABLE", () =>
-          describeRouteTables(input.region, credentials, fetchXml)
+        readResourceGroup(input, "SUBNET", (reportPageFailure) =>
+          describeSubnets(input.region, credentials, fetchXml, reportPageFailure)
         ),
-        readResourceGroup(input, "SECURITY_GROUP", () =>
-          describeSecurityGroups(input.region, credentials, fetchXml)
+        readResourceGroup(input, "INTERNET_GATEWAY", (reportPageFailure) =>
+          describeInternetGateways(input.region, credentials, fetchXml, reportPageFailure)
         ),
-        readResourceGroup(input, "EC2", () => describeInstances(input.region, credentials, fetchXml)),
-        readResourceGroup(input, "RDS", () => describeRdsInstances(input.region, credentials, fetchXml)),
-        readResourceGroup(input, "S3", () => listBucketsWithDetails(input.region, credentials)),
+        readResourceGroup(input, "ROUTE_TABLE", (reportPageFailure) =>
+          describeRouteTables(input.region, credentials, fetchXml, reportPageFailure)
+        ),
+        readResourceGroup(input, "SECURITY_GROUP", (reportPageFailure) =>
+          describeSecurityGroups(input.region, credentials, fetchXml, reportPageFailure)
+        ),
+        readResourceGroup(input, "EC2", (reportPageFailure) =>
+          describeInstances(input.region, credentials, fetchXml, reportPageFailure)
+        ),
+        readResourceGroup(input, "RDS", (reportPageFailure) =>
+          describeRdsInstances(input.region, credentials, fetchXml, reportPageFailure)
+        ),
+        readResourceGroup(input, "S3", (reportPageFailure) =>
+          listBucketsWithDetails(input.region, credentials, undefined, reportPageFailure)
+        ),
         ...(readerPlan.loadBalancers
           ? [
               readResourceGroup(input, "LOAD_BALANCER", (reportPageFailure) =>
@@ -444,133 +460,196 @@ function shouldReadEcsResourceGroup(input: AwsProviderScanInput): boolean {
   );
 }
 
-async function describeVpcs(
+type AwsQueryResourceReaderInput = {
+  service: "ec2" | "rds";
+  action: string;
+  version: string;
+  requestToken: "NextToken" | "Marker";
+  responseToken: "nextToken" | "Marker";
+  parse: (xml: string, region: string) => AwsDiscoveredResourceRecord[];
+};
+
+/** gg: EC2/RDS Query reader도 공통 collector로 앞 page와 safe failure를 함께 보존합니다. */
+async function readAwsQueryResourcePages(
+  input: AwsQueryResourceReaderInput,
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  const result = await collectAwsPages(async (nextToken) => {
+    const parameters = nextToken === undefined
+      ? undefined
+      : input.requestToken === "NextToken"
+        ? { NextToken: nextToken }
+        : { Marker: nextToken };
+    const xml = await sendAwsQuery({
+      service: input.service,
+      region,
+      action: input.action,
+      version: input.version,
+      credentials,
+      ...(parameters ? { parameters } : {})
+    }, fetchXml);
+    return {
+      items: input.parse(xml, region),
+      nextToken: parseAwsQueryPaginationToken(xml, input.responseToken)
+    };
+  });
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
+}
+
+/** gg: VPC Query pagination은 EC2 nextToken을 그대로 다음 signed request에만 전달합니다. */
+export async function describeVpcs(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
+): Promise<AwsDiscoveredResourceRecord[]> {
+  return readAwsQueryResourcePages({
     service: "ec2",
-    region,
     action: "DescribeVpcs",
     version: "2016-11-15",
-    credentials
-  }, fetchXml);
-
-  return parseVpcsFromXml(xml, region);
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseVpcsFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-async function describeSubnets(
+/** gg: Subnet Query pagination도 첫 page records를 later failure와 분리합니다. */
+export async function describeSubnets(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  return readAwsQueryResourcePages({
     service: "ec2",
-    region,
     action: "DescribeSubnets",
     version: "2016-11-15",
-    credentials
-  }, fetchXml);
-
-  return parseSubnetsFromXml(xml, region);
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseSubnetsFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-async function describeSecurityGroups(
+/** gg: Security Group Query pagination도 동일한 bounded token 계약을 사용합니다. */
+export async function describeSecurityGroups(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  return readAwsQueryResourcePages({
     service: "ec2",
-    region,
     action: "DescribeSecurityGroups",
     version: "2016-11-15",
-    credentials
-  }, fetchXml);
-
-  return parseSecurityGroupsFromXml(xml, region);
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseSecurityGroupsFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-async function describeInstances(
+/** gg: Instance Query pagination은 누적 instance records를 later failure에도 유지합니다. */
+export async function describeInstances(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  return readAwsQueryResourcePages({
     service: "ec2",
-    region,
     action: "DescribeInstances",
     version: "2016-11-15",
-    credentials
-  }, fetchXml);
-
-  return parseInstancesFromXml(xml, region);
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseInstancesFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-// EC2 Query API에서 Internet Gateway 목록을 읽습니다.
-async function describeInternetGateways(
+/** gg: Internet Gateway Query pagination도 EC2 nextToken만 allowlist로 서명합니다. */
+export async function describeInternetGateways(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  return readAwsQueryResourcePages({
     service: "ec2",
-    region,
     action: "DescribeInternetGateways",
     version: "2016-11-15",
-    credentials
-  }, fetchXml);
-
-  return parseInternetGatewaysFromXml(xml, region);
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseInternetGatewaysFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-// EC2 Query API에서 Route Table 목록을 읽습니다.
-async function describeRouteTables(
+/** gg: Route Table Query pagination도 page별 XML을 즉시 records로 축소합니다. */
+export async function describeRouteTables(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  return readAwsQueryResourcePages({
     service: "ec2",
-    region,
     action: "DescribeRouteTables",
     version: "2016-11-15",
-    credentials
-  }, fetchXml);
-
-  return parseRouteTablesFromXml(xml, region);
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseRouteTablesFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-async function describeRdsInstances(
+/** gg: RDS Query pagination은 대소문자가 다른 Marker 계약을 명시적으로 유지합니다. */
+export async function describeRdsInstances(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  return readAwsQueryResourcePages({
     service: "rds",
-    region,
     action: "DescribeDBInstances",
     version: "2014-10-31",
-    credentials
-  }, fetchXml);
-
-  return parseRdsInstancesFromXml(xml, region);
+    requestToken: "Marker",
+    responseToken: "Marker",
+    parse: parseRdsInstancesFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-// S3는 bucket 목록만으로 설정을 알 수 없어서 read-only 세부 조회를 추가로 실행합니다.
+/** gg: S3 bucket page마다 read-only 세부 정보를 축소하고 later failure에는 앞 page를 보존합니다. */
 export async function listBucketsWithDetails(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsS3ReadClientFactory = createDefaultS3ReadClient
+  createClient: AwsS3ReadClientFactory = createDefaultS3ReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const response = await sendS3Command<ListBucketsCommandOutput>(client, new ListBucketsCommand({}));
-  const bucketRecords = await Promise.all(
-    (response.Buckets ?? []).map((bucket) => createS3BucketRecord(bucket.Name, bucket.CreationDate, region, client))
-  );
+  const result = await collectAwsPages(async (continuationToken) => {
+    const response = await sendS3Command<ListBucketsCommandOutput>(
+      client,
+      new ListBucketsCommand({
+        MaxBuckets: 1_000,
+        ...(continuationToken ? { ContinuationToken: continuationToken } : {})
+      })
+    );
+    const bucketRecords = await Promise.all(
+      (response.Buckets ?? []).map((bucket) =>
+        createS3BucketRecord(bucket.Name, bucket.CreationDate, region, client)
+      )
+    );
+    return {
+      items: bucketRecords.filter(
+        (record): record is AwsDiscoveredResourceRecord => record !== null
+      ),
+      nextToken: response.ContinuationToken
+    };
+  });
 
-  return bucketRecords.filter((record): record is AwsDiscoveredResourceRecord => record !== null);
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 function createDefaultS3ReadClient(
@@ -846,8 +925,8 @@ async function listUnknownResources(
           reportPageFailure
         )
       ),
-      readUnknownResourceRecords("UNKNOWN", "ec2", () =>
-        listAmiImagesAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "ec2", (reportPageFailure) =>
+        listAmiImagesAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
       readUnknownResourceRecords("UNKNOWN", "iam", (reportPageFailure) =>
         listIamPoliciesAsUnknown(input.region, credentials, undefined, reportPageFailure)
@@ -876,8 +955,8 @@ async function listUnknownResources(
 
   if (input.resourceTypes.includes("AMI")) {
     reads.push(
-      readUnknownResourceRecords("AMI", "ec2", () =>
-        listAmiImagesAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("AMI", "ec2", (reportPageFailure) =>
+        listAmiImagesAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
@@ -1545,18 +1624,29 @@ export async function listCloudFrontDistributions(
   return result.items;
 }
 
+/** gg: AMI NextToken pagination도 앞 page UNKNOWN records와 safe failure를 함께 유지합니다. */
 export async function listAmiImagesAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsEc2ReadClientFactory = createDefaultEc2ReadClient
+  createClient: AwsEc2ReadClientFactory = createDefaultEc2ReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const response = await sendEc2Command<DescribeImagesCommandOutput>(
-    client,
-    new DescribeImagesCommand({ Owners: ["self"] })
-  );
+  const result = await collectAwsPages(async (nextToken) => {
+    const response = await sendEc2Command<DescribeImagesCommandOutput>(
+      client,
+      new DescribeImagesCommand({ Owners: ["self"], NextToken: nextToken })
+    );
+    return {
+      items: (response.Images ?? []).flatMap((image) =>
+        toUnknownAmiImageRecord(image, region)
+      ),
+      nextToken: response.NextToken
+    };
+  });
 
-  return (response.Images ?? []).flatMap((image) => toUnknownAmiImageRecord(image, region));
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 export async function listIamRolesAsUnknown(

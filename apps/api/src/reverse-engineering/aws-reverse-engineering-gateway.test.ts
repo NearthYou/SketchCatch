@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  DescribeImagesCommand
+} from "@aws-sdk/client-ec2";
+import {
   DescribeLoadBalancersCommand
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { ListDistributionsCommand } from "@aws-sdk/client-cloudfront";
+import { ListBucketsCommand } from "@aws-sdk/client-s3";
 import {
   GetDefaultViewCommand,
   GetViewCommand,
@@ -18,17 +22,28 @@ import {
 } from "@aws-sdk/client-ecs";
 import type { TerraformAwsCredentialEnv } from "../aws-connections/aws-connection-runtime-credentials.js";
 import type { AwsDiscoveredResourceRecord, AwsProviderScanInput } from "./aws-provider-adapter.js";
+import { sendAwsQuery } from "./aws-reverse-engineering-query.js";
 import {
   collectAwsPages,
   createAwsReverseEngineeringReaderPlan,
   deduplicateReverseEngineeringScanErrors,
+  describeInstances,
+  describeInternetGateways,
+  describeRdsInstances,
+  describeRouteTables,
+  describeSecurityGroups,
+  describeSubnets,
+  describeVpcs,
   isReverseEngineeringPromotedResourceArn,
+  listAmiImagesAsUnknown,
   listApplicationLoadBalancers,
+  listBucketsWithDetails,
   listCloudFrontDistributions,
   readEcsResourcesWithDiagnostics,
   readResourceExplorerResourcesWithDiagnostics,
   resolveCloudFrontOriginRelationships
 } from "./aws-reverse-engineering-gateway.js";
+import { parseAwsQueryPaginationToken } from "./aws-reverse-engineering-parsers.js";
 
 const credentials: TerraformAwsCredentialEnv = {
   AWS_ACCESS_KEY_ID: "fixture-access-key",
@@ -38,6 +53,87 @@ const credentials: TerraformAwsCredentialEnv = {
 
 function scanInput(resourceTypes: AwsProviderScanInput["resourceTypes"]): AwsProviderScanInput {
   return { provider: "aws", region: "ap-northeast-2", resourceTypes };
+}
+
+const awsQueryReaderScenarios = [
+  { name: "VPC", kind: "vpc", idPrefix: "vpc", requestToken: "NextToken", read: describeVpcs },
+  {
+    name: "Subnet",
+    kind: "subnet",
+    idPrefix: "subnet",
+    requestToken: "NextToken",
+    read: describeSubnets
+  },
+  {
+    name: "Internet Gateway",
+    kind: "internet_gateway",
+    idPrefix: "igw",
+    requestToken: "NextToken",
+    read: describeInternetGateways
+  },
+  {
+    name: "Route Table",
+    kind: "route_table",
+    idPrefix: "rtb",
+    requestToken: "NextToken",
+    read: describeRouteTables
+  },
+  {
+    name: "Security Group",
+    kind: "security_group",
+    idPrefix: "sg",
+    requestToken: "NextToken",
+    read: describeSecurityGroups
+  },
+  {
+    name: "EC2 Instance",
+    kind: "instance",
+    idPrefix: "i",
+    requestToken: "NextToken",
+    read: describeInstances
+  },
+  {
+    name: "RDS DB Instance",
+    kind: "rds",
+    idPrefix: "database",
+    requestToken: "Marker",
+    read: describeRdsInstances
+  }
+] as const;
+
+function createAwsQueryPageXml(
+  kind: typeof awsQueryReaderScenarios[number]["kind"],
+  id: string,
+  nextToken: string | undefined
+): string {
+  const token = nextToken === undefined
+    ? ""
+    : kind === "rds"
+      ? `<Marker>${escapeXml(nextToken)}</Marker>`
+      : `<nextToken>${escapeXml(nextToken)}</nextToken>`;
+  switch (kind) {
+    case "vpc":
+      return `<DescribeVpcsResponse><vpcSet><item><vpcId>${id}</vpcId></item></vpcSet>${token}</DescribeVpcsResponse>`;
+    case "subnet":
+      return `<DescribeSubnetsResponse><subnetSet><item><subnetId>${id}</subnetId></item></subnetSet>${token}</DescribeSubnetsResponse>`;
+    case "internet_gateway":
+      return `<DescribeInternetGatewaysResponse><internetGatewaySet><item><internetGatewayId>${id}</internetGatewayId></item></internetGatewaySet>${token}</DescribeInternetGatewaysResponse>`;
+    case "route_table":
+      return `<DescribeRouteTablesResponse><routeTableSet><item><routeTableId>${id}</routeTableId></item></routeTableSet>${token}</DescribeRouteTablesResponse>`;
+    case "security_group":
+      return `<DescribeSecurityGroupsResponse><securityGroupInfo><item><groupId>${id}</groupId></item></securityGroupInfo>${token}</DescribeSecurityGroupsResponse>`;
+    case "instance":
+      return `<DescribeInstancesResponse><reservationSet><item><instancesSet><item><instanceId>${id}</instanceId></item></instancesSet></item></reservationSet>${token}</DescribeInstancesResponse>`;
+    case "rds":
+      return `<DescribeDBInstancesResponse><DescribeDBInstancesResult><DBInstances><DBInstance><DBInstanceIdentifier>${id}</DBInstanceIdentifier></DBInstance></DBInstances>${token}</DescribeDBInstancesResult></DescribeDBInstancesResponse>`;
+  }
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 test("later page failure preserves prior items and exposes only a safe outcome", async () => {
@@ -57,6 +153,219 @@ test("later page failure preserves prior items and exposes only a safe outcome",
     JSON.stringify(result.failure),
     /RequestId|private-request-id|arn:aws|123456789012|AccessDenied/iu
   );
+});
+
+test("page failure classification uses SDK error name and code without exposing either error", async () => {
+  for (const error of [
+    Object.assign(new Error("generic provider failure"), { name: "AccessDeniedException" }),
+    Object.assign(new Error("generic provider failure"), { code: "ExpiredToken" })
+  ]) {
+    const result = await collectAwsPages(async () => {
+      throw error;
+    });
+
+    assert.equal(
+      result.failure?.outcome,
+      "code" in error ? "expired_credential" : "permission_denied"
+    );
+    assert.deepEqual(Object.keys(result.failure ?? {}), ["outcome"]);
+  }
+});
+
+test("AWS Query signs only allowlisted pagination parameters and encodes opaque tokens", async () => {
+  let body = "";
+  let fetchCalls = 0;
+  const fetchXml = (async (_url: string | URL | Request, init?: RequestInit) => {
+    fetchCalls += 1;
+    body = String(init?.body ?? "");
+    return new Response("<DescribeVpcsResponse />", { status: 200 });
+  }) as typeof fetch;
+
+  await sendAwsQuery({
+    service: "ec2",
+    region: "ap-northeast-2",
+    action: "DescribeVpcs",
+    version: "2016-11-15",
+    credentials,
+    parameters: { NextToken: "opaque +/&= token" }
+  } as never, fetchXml);
+
+  const parameters = new URLSearchParams(body);
+  assert.equal(parameters.get("Action"), "DescribeVpcs");
+  assert.equal(parameters.get("Version"), "2016-11-15");
+  assert.equal(parameters.get("NextToken"), "opaque +/&= token");
+
+  await assert.rejects(
+    sendAwsQuery({
+      service: "ec2",
+      region: "ap-northeast-2",
+      action: "DescribeVpcs",
+      version: "2016-11-15",
+      credentials,
+      parameters: { Action: "DeleteEverything" }
+    } as never, fetchXml),
+    /pagination parameter/iu
+  );
+  assert.equal(fetchCalls, 1);
+});
+
+test("AWS Query parses EC2 nextToken and RDS Marker without retaining response XML", () => {
+  assert.equal(
+    parseAwsQueryPaginationToken(
+      "<DescribeVpcsResponse><nextToken>opaque&amp;token</nextToken></DescribeVpcsResponse>",
+      "nextToken"
+    ),
+    "opaque&token"
+  );
+  assert.equal(
+    parseAwsQueryPaginationToken(
+      "<DescribeDBInstancesResponse><Marker>rds-marker</Marker></DescribeDBInstancesResponse>",
+      "Marker"
+    ),
+    "rds-marker"
+  );
+  assert.equal(
+    parseAwsQueryPaginationToken("<DescribeVpcsResponse />", "nextToken"),
+    undefined
+  );
+});
+
+test("all six EC2 Query readers and RDS follow their response pagination token", async () => {
+  for (const scenario of awsQueryReaderScenarios) {
+    const bodies: string[] = [];
+    let page = 0;
+    const failures: Array<{ outcome: string }> = [];
+    const records = await scenario.read(
+      "ap-northeast-2",
+      credentials,
+      (async (_url: string | URL | Request, init?: RequestInit) => {
+        bodies.push(String(init?.body ?? ""));
+        page += 1;
+        return new Response(
+          createAwsQueryPageXml(scenario.kind, `${scenario.idPrefix}-${page}`, page === 1
+            ? "opaque +/&= token"
+            : undefined),
+          { status: 200 }
+        );
+      }) as typeof fetch,
+      (failure) => failures.push(failure)
+    );
+
+    assert.deepEqual(
+      records.map((record) => record.providerResourceId),
+      [`${scenario.idPrefix}-1`, `${scenario.idPrefix}-2`],
+      scenario.name
+    );
+    assert.equal(bodies.length, 2, scenario.name);
+    assert.equal(
+      new URLSearchParams(bodies[1]).get(scenario.requestToken),
+      "opaque +/&= token",
+      scenario.name
+    );
+    assert.deepEqual(failures, [], scenario.name);
+  }
+});
+
+test("all EC2 and RDS Query readers preserve page one with one safe later-page diagnostic", async () => {
+  for (const scenario of awsQueryReaderScenarios) {
+    let page = 0;
+    const failures: Array<{ outcome: string }> = [];
+    const records = await scenario.read(
+      "ap-northeast-2",
+      credentials,
+      (async () => {
+        page += 1;
+        if (page === 1) {
+          return new Response(
+            createAwsQueryPageXml(scenario.kind, `${scenario.idPrefix}-kept`, "page-2"),
+            { status: 200 }
+          );
+        }
+        return new Response(
+          "<Error><Code>AccessDeniedException</Code>" +
+            "<Message>private-request-id arn:aws:iam::123456789012:role/private</Message></Error>",
+          { status: 403 }
+        );
+      }) as typeof fetch,
+      (failure) => failures.push(failure)
+    );
+
+    assert.deepEqual(
+      records.map((record) => record.providerResourceId),
+      [`${scenario.idPrefix}-kept`],
+      scenario.name
+    );
+    assert.deepEqual(failures, [{ outcome: "permission_denied" }], scenario.name);
+    assert.doesNotMatch(
+      JSON.stringify(failures),
+      /private-request-id|arn:aws|123456789012|AccessDenied/iu,
+      scenario.name
+    );
+  }
+});
+
+test("S3 ListBuckets pagination preserves detailed page-one buckets on a later failure", async () => {
+  const listCommands: ListBucketsCommand[] = [];
+  const failures: Array<{ outcome: string }> = [];
+  const records = await listBucketsWithDetails(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        if (command instanceof ListBucketsCommand) {
+          listCommands.push(command);
+          if (command.input.ContinuationToken) {
+            throw Object.assign(new Error("generic provider failure"), {
+              name: "AccessDeniedException"
+            });
+          }
+          return {
+            Buckets: [{ Name: "kept-bucket", CreationDate: new Date("2026-07-20T00:00:00Z") }],
+            ContinuationToken: "page-2"
+          };
+        }
+        return {};
+      }
+    }),
+    (failure) => failures.push(failure)
+  );
+
+  assert.deepEqual(records.map((record) => record.providerResourceId), ["kept-bucket"]);
+  assert.equal(listCommands.length, 2);
+  assert.equal(listCommands[0]?.input.MaxBuckets, 1_000);
+  assert.equal(listCommands[1]?.input.ContinuationToken, "page-2");
+  assert.deepEqual(failures, [{ outcome: "permission_denied" }]);
+});
+
+test("AMI pagination preserves page-one images and reports one safe later failure", async () => {
+  const commands: DescribeImagesCommand[] = [];
+  const failures: Array<{ outcome: string }> = [];
+  const records = await listAmiImagesAsUnknown(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        assert(command instanceof DescribeImagesCommand);
+        commands.push(command);
+        if (command.input.NextToken) {
+          throw Object.assign(new Error("generic provider failure"), {
+            code: "RequestTimeout"
+          });
+        }
+        return {
+          Images: [{ ImageId: "ami-kept", Name: "kept-image", State: "available" }],
+          NextToken: "page-2"
+        };
+      }
+    }),
+    (failure) => failures.push(failure)
+  );
+
+  assert.deepEqual(records.map((record) => record.providerResourceId), ["ami-kept"]);
+  assert.equal(commands.length, 2);
+  assert.equal(commands[1]?.input.NextToken, "page-2");
+  assert.deepEqual(failures, [{ outcome: "transient" }]);
+  assert.deepEqual(Object.keys(failures[0] ?? {}), ["outcome"]);
 });
 
 test("Resource Explorer resolves the default view before searching it", async () => {
