@@ -144,9 +144,6 @@ export function ConversationTranscript({
                         type="button"
                       >
                         <span>{suggestion}</span>
-                        {selected ? (
-                          <span className={styles.suggestionSelected}>선택됨</span>
-                        ) : null}
                       </button>
                     );
                   })}
