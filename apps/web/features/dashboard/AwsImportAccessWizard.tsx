@@ -103,11 +103,19 @@ export function AwsImportAccessWizard({
     setConsoleUrl(null);
     setManagerTemplateUrl(null);
     try {
-      const result = await runAwsImportAccessCommand({
-        api: AWS_IMPORT_ACCESS_COMMAND_API,
-        approval,
-        command,
-        connectionId
+      const result = await runAwsImportAccessCommandWithFailureRefresh({
+        connectionId,
+        execute: () => runAwsImportAccessCommand({
+          api: AWS_IMPORT_ACCESS_COMMAND_API,
+          approval,
+          command,
+          connectionId
+        }),
+        refreshState: (selectedConnectionId) => invalidateAwsImportAccessQueries(
+          queryClient,
+          user?.id,
+          selectedConnectionId
+        )
       });
       setApproval(result.approval);
       const nextConsoleUrl = result.response.consoleUrl ?? null;
@@ -184,6 +192,24 @@ export function AwsImportAccessWizard({
       {...(onContinue ? { onContinue } : {})}
     />
   );
+}
+
+/** gg: command 실패 뒤 같은 연결을 한 번 다시 읽고 원래 오류는 안전한 UI 경계로 전달합니다. */
+export async function runAwsImportAccessCommandWithFailureRefresh<Result>(input: {
+  readonly connectionId: string;
+  readonly execute: () => Promise<Result>;
+  readonly refreshState: (connectionId: string) => Promise<void>;
+}): Promise<Result> {
+  try {
+    return await input.execute();
+  } catch (error) {
+    try {
+      await input.refreshState(input.connectionId);
+    } catch {
+      // gg: 상태 재조회 실패가 원래 command 오류를 덮거나 raw 진단을 노출하지 않게 합니다.
+    }
+    throw error;
+  }
 }
 
 /** gg: provider 원문과 request 진단을 버린 뒤 공용 사용자 오류 번역만 적용합니다. */

@@ -280,6 +280,68 @@ test("policy preview never applies automatically and apply requires the same in-
   );
 });
 
+test("failed prepare refreshes the same connection and reveals persisted cleanup without reload", async () => {
+  const {
+    AwsImportAccessWizardView,
+    runAwsImportAccessCommand,
+    runAwsImportAccessCommandWithFailureRefresh
+  } = await import("./AwsImportAccessWizard");
+  let visibleState = state({
+    status: "check_required",
+    nextAction: "prepare_manager",
+    cleanupAvailable: false
+  });
+  const persistedState = state({
+    status: "check_required",
+    nextAction: "prepare_manager",
+    cleanupAvailable: true
+  });
+  let providerState = visibleState;
+  let commandCalls = 0;
+  const refreshedConnectionIds: string[] = [];
+  const api = {
+    async prepareManager() {
+      commandCalls += 1;
+      providerState = persistedState;
+      throw new Error("provider raw failure");
+    },
+    async checkManager() { throw new Error("unexpected"); },
+    async previewPolicy() { throw new Error("unexpected"); },
+    async applyPolicy() { throw new Error("unexpected"); },
+    async checkReads() { throw new Error("unexpected"); },
+    async prepareCleanup() { throw new Error("unexpected"); },
+    async checkCleanup() { throw new Error("unexpected"); }
+  };
+
+  await assert.rejects(
+    () => runAwsImportAccessCommandWithFailureRefresh({
+      connectionId: "connection-1",
+      execute: () => runAwsImportAccessCommand({
+        api,
+        approval: null,
+        command: "prepare_manager",
+        connectionId: "connection-1"
+      }),
+      async refreshState(connectionId: string) {
+        refreshedConnectionIds.push(connectionId);
+        visibleState = providerState;
+      }
+    }),
+    /provider raw failure/u
+  );
+
+  assert.equal(commandCalls, 1);
+  assert.deepEqual(refreshedConnectionIds, ["connection-1"]);
+  const html = renderToStaticMarkup(
+    createElement(AwsImportAccessWizardView, {
+      connectionStatus: "verified",
+      state: visibleState,
+      onCommand() {}
+    })
+  );
+  assert.match(html, />가져오기 권한 정리<\/button>/u);
+});
+
 test("cleanup Stack states offer Console opening and a separate completion check", async () => {
   const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
   const html = renderToStaticMarkup(
