@@ -422,7 +422,9 @@ test("renders application delivery outputs for a single-task Fargate topology", 
     nodes: [
       createLiveObservationNode("aws_s3_bucket", "web_assets", {}),
       createLiveObservationNode("aws_cloudfront_distribution", "web", {
-        orderedCacheBehavior: [{ pathPattern: "/api/*" }]
+        defaultCacheBehavior: [{
+          allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+        }]
       }),
       createLiveObservationNode("aws_ecr_repository", "api_image", {}),
       createLiveObservationNode("aws_lb", "demo", {}),

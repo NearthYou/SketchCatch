@@ -261,12 +261,30 @@ function cloudFrontRoutesApiTraffic(node: InfrastructureGraphNode): boolean {
   const behaviorValue = node.config["orderedCacheBehavior"];
   const behaviors = Array.isArray(behaviorValue) ? behaviorValue : [behaviorValue];
 
-  return behaviors.some(
+  if (behaviors.some(
     (behavior) =>
       isRecord(behavior) &&
       typeof behavior["pathPattern"] === "string" &&
       behavior["pathPattern"].startsWith("/api/")
-  );
+  )) {
+    return true;
+  }
+
+  const defaultBehaviorValue = node.config["defaultCacheBehavior"];
+  const defaultBehaviors = Array.isArray(defaultBehaviorValue)
+    ? defaultBehaviorValue
+    : [defaultBehaviorValue];
+  const apiWriteMethods = ["DELETE", "PATCH", "POST", "PUT"];
+
+  return defaultBehaviors.some((behavior) => {
+    if (!isRecord(behavior) || !Array.isArray(behavior["allowedMethods"])) return false;
+    const allowedMethods = new Set(
+      behavior["allowedMethods"]
+        .filter((method): method is string => typeof method === "string")
+        .map((method) => method.toUpperCase())
+    );
+    return apiWriteMethods.every((method) => allowedMethods.has(method));
+  });
 }
 
 function renderCompanionBlocks(node: InfrastructureGraphNode): string[] {

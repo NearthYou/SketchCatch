@@ -373,6 +373,7 @@ test("each template contains the resources required by its deployable default", 
     "aws_lb",
     "aws_lb_target_group",
     "aws_lb_listener",
+    "aws_cloudfront_distribution",
     "aws_ecr_repository",
     "aws_cloudwatch_log_group",
     "aws_appautoscaling_target",
@@ -382,6 +383,9 @@ test("each template contains the resources required by its deployable default", 
   }
 
   const ecsDefinition = definitions.get("ecs-fargate-container-app");
+  assert.ok(ecsDefinition?.description.includes("실시간 관측"));
+  assert.ok(ecsDefinition?.tags.includes("CloudFront"));
+  assert.ok(ecsDefinition?.tags.includes("Auto Scaling"));
   const ecsTask = ecsDefinition?.resources.find((resource) => resource.id === "task");
   const ecsContainer = JSON.parse(String(ecsTask?.values.containerDefinitions))[0] as {
     image?: string;
@@ -408,6 +412,9 @@ test("each template contains the resources required by its deployable default", 
   );
   const builtScalingPolicy = builtEcs.nodes.find(
     (node) => node.parameters?.resourceType === "aws_appautoscaling_policy"
+  );
+  const builtCloudFront = builtEcs.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_cloudfront_distribution"
   );
   const builtContainerDefinitions = String(builtTask?.parameters?.values.containerDefinitions);
   const builtContainer = JSON.parse(builtContainerDefinitions)[0] as {
@@ -449,6 +456,38 @@ test("each template contains the resources required by its deployable default", 
         } | undefined
     )?.predefinedMetricSpecification?.[0]?.resourceLabel,
     "${aws_lb.load_balancer.arn_suffix}/${aws_lb_target_group.target_group.arn_suffix}"
+  );
+  assert.equal(
+    (
+      builtCloudFront?.parameters?.values.origin as
+        | Array<{ domainName?: string; originId?: string }>
+        | undefined
+    )?.[0]?.domainName,
+    "aws_lb.load_balancer.dns_name"
+  );
+  assert.equal(
+    (
+      builtCloudFront?.parameters?.values.defaultCacheBehavior as
+        | Array<{ targetOriginId?: string; viewerProtocolPolicy?: string }>
+        | undefined
+    )?.[0]?.targetOriginId,
+    "fargate-alb"
+  );
+  assert.equal(
+    (
+      builtCloudFront?.parameters?.values.defaultCacheBehavior as
+        | Array<{ viewerProtocolPolicy?: string }>
+        | undefined
+    )?.[0]?.viewerProtocolPolicy,
+    "redirect-to-https"
+  );
+  assert.equal(builtCloudFront?.parameters?.values.orderedCacheBehavior, undefined);
+  assert.ok(
+    builtEcs.edges.some(
+      (edge) =>
+        edge.sourceNodeId.endsWith("-distribution") &&
+        edge.targetNodeId.endsWith("-load-balancer")
+    )
   );
 
   const eksTypes = resourceTypes("eks-container-app");
