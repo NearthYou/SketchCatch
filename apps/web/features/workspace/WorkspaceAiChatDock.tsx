@@ -3129,7 +3129,7 @@ function markChatMessageSuggestionsSelected(
   messages: readonly WorkspaceAiChatMessage[],
   selection: WorkspaceAiChatSuggestionSelection
 ): WorkspaceAiChatMessage[] {
-  const selectedSuggestions = Array.from(new Set(selection.suggestions));
+  const selectedSuggestions = Array.from(new Set(selection.suggestions ?? []));
 
   if (selectedSuggestions.length === 0) {
     return [...messages];

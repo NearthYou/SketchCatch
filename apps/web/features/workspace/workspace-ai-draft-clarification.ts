@@ -52,8 +52,11 @@ export function resolveAcceptedArchitectureDraftClarificationSelection(
   response: CreateArchitectureDraftResponse
 ): AcceptedArchitectureDraftClarificationSelection | null {
   if (
-    "status" in response && response.status === "needs_clarification"
-    && response.questionId === clarification.questionId
+    response &&
+    typeof response === "object" &&
+    "status" in response &&
+    response.status === "needs_clarification" &&
+    response.questionId === clarification.questionId
   ) return null;
   const answer = answerText.trim();
   if (answer.length === 0) return null;

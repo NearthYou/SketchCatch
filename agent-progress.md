@@ -11,7 +11,12 @@ Short English-only working log for the current agent context. Older records are 
 - The deleted progress card, requirement list, history panel, mobile tabs, route-only summary, and other unused presentation/progress contracts remain deleted.
 - Cancellation, stale-response rejection, retry, candidate exclusion/undo, clarification, Compiler, explicit approval, and save boundaries remain in functional code.
 
-## Session Record
+## Session Record`r`n`r`n### 2026-07-19 - Address PR #485 review findings
+
+- Fixed the chat suggestion selection fallback and guarded clarification response shape checks before using the in operator.
+- Focused Web tests pass 7/7; harness, lint, typecheck, build, and diff checks pass.
+- No database migration, cloud mutation, deployment, or dependency change was made.
+
 
 ### 2026-07-19 - Keep GitOps build environments stable across application commits
 
