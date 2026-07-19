@@ -581,7 +581,7 @@ function createDeploymentRecord(
     awsAccountIdSnapshot: "123456789012",
     awsRegionSnapshot: "ap-northeast-2",
     awsConnectionNameSnapshot: "123456789012",
-    liveProfile: "practice",
+    liveProfile: "demo_web_service",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",

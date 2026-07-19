@@ -87,7 +87,6 @@ export const deploymentStatusEnum = pgEnum("deployment_status", [
 ]);
 
 export const deploymentLiveProfileEnum = pgEnum("deployment_live_profile", [
-  "practice",
   "demo_web_service",
   "demo_web_service_with_rds"
 ]);
@@ -803,7 +802,7 @@ export const deployments = pgTable(
     liveProfile: deploymentLiveProfileEnum("live_profile")
       .$type<DeploymentLiveProfile>()
       .notNull()
-      .default("practice"),
+      .default("demo_web_service"),
     scope: varchar("scope", { length: 32 })
       .$type<DeploymentScope>()
       .notNull()

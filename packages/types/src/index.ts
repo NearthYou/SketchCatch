@@ -2424,7 +2424,7 @@ export type PrepareDeploymentRequest = {
   scope: DeploymentScope | "auto";
 };
 
-export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";
+export type DeploymentLiveProfile = "demo_web_service" | "demo_web_service_with_rds";
 
 export type DeploymentLiveObservationAwsAdapterV1 = {
   kind: "aws-live-observation";

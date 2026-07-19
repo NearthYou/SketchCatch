@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-19",
+  "lastUpdated": "2026-07-20",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -991,6 +991,35 @@
         "notes": "All 26 planned implementation commits were verified before commit. Follow-ups remove the redundant top-bar panel toggles and keep manual Fit View's automatic viewport move out of ProjectDraft dirty state while preserving accessible edge handles, panel preferences, and direct user viewport persistence. Presentation typography now adds an auditable 6px to every explicit Web text size, resolves UI/code text to bundled Pretendard 1.3.9 through one shared token path, applies the same font/size/weight rules to the generated standalone S3 audience page, and reduces explicit text weights above 400 by one 100-point step; focused dependent tests pass 135/135 and the strengthened font audit passes 4/4. The focused dirty and cost regressions pass 77/77; harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 786/790, with four unrelated existing generated Architecture Board artifact line-ending and Resource catalog contract failures. Signed-in localhost QA confirmed cost tab, period, users, usage range, connection, direct URL entry, and browser history restoration."
       },
       "notes": "No DB schema, Drizzle migration, cloud mutation, deployment, or Git/CI/CD handoff was performed."
+    },
+    {
+      "id": "DEPLOYMENT-LIVE-PROFILE-REMOVAL-001",
+      "priority": 1,
+      "area": "direct-deployment",
+      "title": "Legacy practice live profile removal",
+      "user_visible_behavior": "Direct Deployment는 별도 practice 실행 프로필 없이 demo_web_service를 기본으로 사용하고 기존 Deployment 기록도 같은 프로필로 안전하게 전환한다.",
+      "status": "passing",
+      "verification": [
+        "공유 타입과 생성 API가 demo_web_service 또는 demo_web_service_with_rds만 허용한다.",
+        "기존 practice DB 행은 demo_web_service로 변환된 뒤 PostgreSQL enum에서 제거된다.",
+        "호환 API/worker가 migration 전 기존 practice 행을 demo_web_service로 처리한다.",
+        "기본 live apply 프로필이 ECS Application Auto Scaling Target과 Policy를 허용한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-20",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/db/deployment-live-profile-migration.test.ts src/deployments/deployment-preparation-service.test.ts src/deployments/terraform-artifact-safety.test.ts src/routes/deployments.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check"
+        ],
+        "notes": "Focused API checks pass 130/130 and focused Web checks pass 29/29. Migration compatibility, lint, typecheck, build, harness, and diff checks pass. The full API suite still exposes 12 unrelated existing failures and one cancelled artifact timer test outside this workstream."
+      },
+      "notes": "Migration 0054 changes apps/api/drizzle/meta/_journal.json. No production migration, cloud mutation, Terraform apply/destroy, deployment, or Git/CI/CD handoff was performed."
     }
   ]
 }

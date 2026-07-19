@@ -1403,7 +1403,7 @@ export async function createDeployment(
     awsRegionSnapshot: awsConnection.region,
     awsConnectionNameSnapshot:
       awsConnection.accountId ?? awsConnection.roleArn ?? awsConnection.id,
-    liveProfile: input.liveProfile ?? "practice",
+    liveProfile: input.liveProfile ?? "demo_web_service",
     scope: input.scope ?? "infrastructure",
     targetKind: input.targetKind ?? null,
     source: input.source ?? "direct",

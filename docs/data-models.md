@@ -1367,7 +1367,7 @@ type Deployment = {
   awsAccountIdSnapshot: string | null;
   awsRegionSnapshot: string | null;
   awsConnectionNameSnapshot: string | null;
-  liveProfile: "practice" | "demo_web_service" | "demo_web_service_with_rds";
+  liveProfile: "demo_web_service" | "demo_web_service_with_rds";
   scope: "infrastructure" | "application" | "full_stack";
   targetKind: RuntimeTargetKind | null;
   source: "direct" | "gitops";
@@ -1438,6 +1438,10 @@ type Deployment = {
   updatedAt: IsoDateTimeString;
 };
 ```
+
+`DeploymentLiveProfile`은 `demo_web_service`와 `demo_web_service_with_rds`만 사용한다.
+`demo_web_service`가 신규 Deployment의 기본값이며, `0054_remove_practice_live_profile.sql`은
+기존 `practice` 값을 `demo_web_service`로 변환한 뒤 PostgreSQL enum에서 제거한다.
 
 Direct Deployment의 외부 상태는 `validation`, `approval`, `deployment` 세 단계만 사용한다. 저장,
 Pre-Deployment Check, `terraform init`, `terraform plan`은 `validation` 내부 작업이며 실제 실행과
