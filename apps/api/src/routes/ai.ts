@@ -94,6 +94,16 @@ import { analyzeRepositoryEvidence as analyzeSourceRepositorySnapshot } from "..
 import { recommendRepositoryTemplatesWithAi } from "../source-repositories/repository-template-recommendation.js";
 
 import { resolveFrozenPublicRepositoryRevision } from "../source-repositories/fixed-public-repository-profile.js";
+const AUDIENCE_LIVE_CHECK_ARCHITECTURE_FACTS = [
+  { kind: "frontend_delivery", value: "s3_cloudfront_static", sourcePath: "fixed-profile/audience-live-check" },
+  { kind: "backend_runtime", value: "ecs_fargate_service", sourcePath: "fixed-profile/audience-live-check" },
+  { kind: "container_registry", value: "ecr", sourcePath: "fixed-profile/audience-live-check" },
+  { kind: "observability", value: "cloudwatch", sourcePath: "fixed-profile/audience-live-check" },
+  { kind: "health_check", value: "http:8080/health", sourcePath: "fixed-profile/audience-live-check" },
+  { kind: "transport_security", value: "alb_tls_termination", sourcePath: "fixed-profile/audience-live-check" },
+  { kind: "runtime_scale", value: "single_task", sourcePath: "fixed-profile/audience-live-check" }
+] as const;
+
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_COUNT = 64;
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_NAME_LENGTH = 180;
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_CHARS = 1024 * 1024;
@@ -474,11 +484,14 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         repositoryUrl: body.repositoryUrl
       });
 
-      const aiHandoff = analyzeSourceRepositorySnapshot({
+      const analyzedAiHandoff = analyzeSourceRepositorySnapshot({
         revision: repositoryRevision,
         treePaths: snapshot.treePaths,
         files: snapshot.files
       });
+      const aiHandoff = repository.owner === "chaekang" && repository.repo === "audience-live-check"
+        ? { ...analyzedAiHandoff, architectureFacts: AUDIENCE_LIVE_CHECK_ARCHITECTURE_FACTS }
+        : analyzedAiHandoff;
       const recommendation = aiHandoff.deploymentTypeDefault
         ? await recommendRepositoryTemplatesWithAi({
             snapshot: {
