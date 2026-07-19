@@ -207,3 +207,8 @@ Short English-only working log for the current agent context. Older records are 
 
 - Reduced the marked Resources/Templates tabs, AWS/version controls, Terraform resource search, Terraform file picker, and issue-panel title/empty-state text by 2px without changing control dimensions or Terraform code sizing.
 - The focused typography test passes 4/4. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no spec or code-standard issue after verification, with no known risk or follow-up required.
+
+### 2026-07-19 - Reduce module card supporting text
+
+- Reduced only the marked module description, provider/resource/relationship metadata, and resource-summary text from 18px to 15px; the module title, section heading, add button, and card geometry remain unchanged.
+- Focused typography and module-preview tests pass 10/10. `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass; no broad test suite was run. Two-axis review found no CSS or spec issue after the verification record was completed, with no known risk or follow-up required.

@@ -32,7 +32,7 @@
 .moduleCatalogMetadata,
 .moduleCatalogResourceSummary p {
   color: var(--workspace-muted);
-  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-size: calc(9px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
 }
