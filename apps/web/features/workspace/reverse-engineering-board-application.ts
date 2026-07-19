@@ -5,10 +5,7 @@ import type {
   DiagramNode,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
-import {
-  createBoardAutoOrganizeProposal,
-  type ArchitectureBoardCompilationProposal
-} from "../architecture-board-compiler";
+import { hasSameBoardAutoOrganizeSemantics } from "../architecture-board-compiler";
 import {
   convertDiagramJsonToArchitectureJson
 } from "./workspace-ai-diagram-adapter";
@@ -48,7 +45,7 @@ const UNKNOWN_RESOURCE_STYLE = {
 } as const;
 
 export type ReverseEngineeringBoardApplication = {
-  readonly compilation: ArchitectureBoardCompilationProposal | null;
+  readonly compilation: null;
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly diagram: DiagramJson;
   readonly previewDiagram: DiagramJson;
@@ -57,6 +54,7 @@ export type ReverseEngineeringBoardApplication = {
 export type CreateReverseEngineeringBoardApplicationInput = {
   readonly currentDiagram: DiagramJson;
   readonly mode: ReverseEngineeringBoardApplicationMode;
+  readonly organizedDiagram?: DiagramJson | undefined;
   readonly placement: ReverseEngineeringPlacement;
   readonly result: ReverseEngineeringScanResult;
 };
@@ -74,16 +72,18 @@ export function createReverseEngineeringBoardApplication(
   const comparison = compareDiagrams(input.currentDiagram, originalPreview.diagram);
 
   if (input.mode === "replace") {
-    const preview =
-      input.placement === "compiled"
-        ? createCompiledReverseEngineeringPreview(input.result, originalPreview.diagram)
-        : originalPreview;
+    const diagram = input.placement === "compiled"
+      ? useSelectedReverseEngineeringOrganization(
+          originalPreview.diagram,
+          input.organizedDiagram
+        )
+      : originalPreview.diagram;
 
     return {
-      compilation: preview.compilation,
+      compilation: null,
       comparison,
-      diagram: preview.diagram,
-      previewDiagram: preview.diagram
+      diagram,
+      previewDiagram: diagram
     };
   }
 
@@ -102,16 +102,16 @@ export function createReverseEngineeringBoardApplication(
     };
   }
 
-  const compilation = compileReverseEngineeringAppendArchitecture(
+  const diagram = useSelectedReverseEngineeringOrganization(
     appendDiagram,
-    new Set(comparison.additions.map((item) => item.nodeId))
+    input.organizedDiagram
   );
 
   return {
-    compilation,
+    compilation: null,
     comparison,
-    diagram: compilation.diagram,
-    previewDiagram: compilation.diagram
+    diagram,
+    previewDiagram: diagram
   };
 }
 
@@ -168,49 +168,20 @@ function createOriginalReverseEngineeringPreview(result: ReverseEngineeringScanR
   };
 }
 
-function createCompiledReverseEngineeringPreview(
-  result: ReverseEngineeringScanResult,
-  rawDiagram: DiagramJson
-): {
-  readonly compilation: ArchitectureBoardCompilationProposal;
-  readonly diagram: DiagramJson;
-} {
-  const compilation = compileReverseEngineeringArchitectureFromRaw(result, rawDiagram);
-  const diagram = markReverseEngineeringDiagram(compilation.diagram);
+// gg: shared 후보가 원본 의미를 보존한 경우에만 사용자가 고른 시각 배치를 채택합니다.
+function useSelectedReverseEngineeringOrganization(
+  sourceDiagram: DiagramJson,
+  organizedDiagram: DiagramJson | undefined
+): DiagramJson {
+  if (!organizedDiagram) {
+    throw new Error("선택한 Board 정리안을 찾지 못했습니다.");
+  }
 
-  return {
-    compilation: { ...compilation, diagram },
-    diagram
-  };
-}
+  if (!hasSameBoardAutoOrganizeSemantics(sourceDiagram, organizedDiagram)) {
+    throw new Error("Board 정리안이 가져온 AWS 원본을 변경했습니다.");
+  }
 
-// append는 원본 보드와 안전한 scan 추가분을 합친 뒤에만 Compiler에 넘깁니다.
-// 그래야 proposal의 quality/diff와 실제 승인·저장할 Board가 같은 상태를 가리킵니다.
-function compileReverseEngineeringAppendArchitecture(
-  appendDiagram: DiagramJson,
-  reverseEngineeringNodeIds: ReadonlySet<string>
-): ArchitectureBoardCompilationProposal {
-  const compilation = createBoardAutoOrganizeProposal(appendDiagram);
-
-  return {
-    ...compilation,
-    diagram: markReverseEngineeringDiagram(compilation.diagram, reverseEngineeringNodeIds)
-  };
-}
-
-export function compileReverseEngineeringArchitecture(
-  result: ReverseEngineeringScanResult
-): ArchitectureBoardCompilationProposal {
-  const rawDiagram = createOriginalReverseEngineeringPreview(result).diagram;
-
-  return compileReverseEngineeringArchitectureFromRaw(result, rawDiagram);
-}
-
-function compileReverseEngineeringArchitectureFromRaw(
-  _result: ReverseEngineeringScanResult,
-  rawDiagram: DiagramJson
-): ArchitectureBoardCompilationProposal {
-  return createBoardAutoOrganizeProposal(rawDiagram);
+  return structuredClone(organizedDiagram);
 }
 
 // AWS에서 가져온 노드에 보호해야 하는 원본 값 목록을 남깁니다.

@@ -1,5 +1,5 @@
 import type {
-  ArchitectureBoardCompilationProposal,
+  BoardAutoOrganizeCandidate,
   DiscoveredResource,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResponse,
@@ -12,9 +12,6 @@ import type {
   ReverseEngineeringPlacement
 } from "./reverse-engineering-board-application";
 import type { ReverseEngineeringBoardCandidate } from "./reverse-engineering-board-candidates";
-import {
-  createReverseEngineeringCompilationReview
-} from "./reverse-engineering-compilation-review";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
 import {
   presentReverseEngineeringResource,
@@ -27,9 +24,7 @@ export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "error"
 export type ReverseEngineeringResultPanelProps = {
   readonly applyMessage: string | null;
   readonly applyState: ReverseEngineeringApplyState;
-  readonly appendCompilation: ArchitectureBoardCompilationProposal | null;
   readonly boardCandidates: readonly ReverseEngineeringBoardCandidate[];
-  readonly compilation: ArchitectureBoardCompilationProposal | null;
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly createProjectOnApply: boolean;
   readonly hasCurrentBoardResources: boolean;
@@ -39,9 +34,12 @@ export type ReverseEngineeringResultPanelProps = {
   readonly onKeepOriginalPlacement: () => void;
   readonly onOpenAsNewBoard: () => void;
   readonly onRetryScan: () => void;
+  readonly onSelectOrganizationCandidate: (candidateId: string) => void;
+  readonly organizationCandidates: readonly BoardAutoOrganizeCandidate[];
   readonly permissionRecoveryHref: string;
   readonly response: ReverseEngineeringScanResponse;
   readonly selectedCandidateId: string;
+  readonly selectedOrganizationCandidateId: string | null;
   readonly placement: ReverseEngineeringPlacement;
 };
 
@@ -49,8 +47,6 @@ export type ReverseEngineeringResultPanelProps = {
 export function ReverseEngineeringResultPanel({
   applyMessage,
   applyState,
-  appendCompilation,
-  compilation,
   comparison,
   createProjectOnApply,
   hasCurrentBoardResources,
@@ -59,9 +55,12 @@ export function ReverseEngineeringResultPanel({
   onKeepOriginalPlacement,
   onOpenAsNewBoard,
   onRetryScan,
+  onSelectOrganizationCandidate,
+  organizationCandidates,
   permissionRecoveryHref,
   placement,
-  response
+  response,
+  selectedOrganizationCandidateId
 }: ReverseEngineeringResultPanelProps) {
   const result = response.result;
 
@@ -142,7 +141,7 @@ export function ReverseEngineeringResultPanel({
           className={styles.placementDecisionHeader}
         >
           <span className={styles.placementBadge}>
-            {placement === "compiled" ? "정리 결과" : "원본"}
+            {placement === "compiled" ? "정리안" : "원본"}
           </span>
           <h3>
             {placement === "compiled" ? "자동 정리 미리보기" : "AWS에서 가져온 원본"}
@@ -160,7 +159,7 @@ export function ReverseEngineeringResultPanel({
             onClick={onCompilePlacement}
             type="button"
           >
-            자동 정리
+            자동 정리 해보기
           </button>
           <button
             aria-pressed={placement === "original"}
@@ -171,31 +170,39 @@ export function ReverseEngineeringResultPanel({
             원본 보기
           </button>
         </div>
+        {organizationCandidates.length > 0 ? (
+          <div
+            aria-label="Board 정리안 선택"
+            className={styles.organizationCandidates}
+            role="list"
+          >
+            {organizationCandidates.map((candidate, index) => (
+              <button
+                aria-pressed={candidate.id === selectedOrganizationCandidateId}
+                key={candidate.id}
+                onClick={() => onSelectOrganizationCandidate(candidate.id)}
+                role="listitem"
+                type="button"
+              >
+                <strong>정리안 {index + 1}</strong>
+                <span>
+                  {candidate.explanations[0] ??
+                    "Resource 위치와 연결선을 보기 좋게 정리합니다."}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
         <p className={styles.placementSaveBoundary}>
           원본과 정리 결과를 전환해도 저장되지 않습니다. 마지막 적용 버튼을 눌러야 보드에
           반영됩니다.
         </p>
       </section>
 
-      {placement === "compiled" && compilation ? (
-        <section className={styles.compilationReview} aria-label="배치 컴파일러 검토">
-          <ReverseEngineeringCompilationModeReview
-            proposal={compilation}
-            title={hasCurrentBoardResources ? "새 보드로 열 때" : primaryApplyLabel}
-          />
-          {hasCurrentBoardResources && appendCompilation ? (
-            <ReverseEngineeringCompilationModeReview
-              proposal={appendCompilation}
-              title="현재 보드에 추가할 때"
-            />
-          ) : null}
-        </section>
-      ) : null}
-
       <section className={styles.section} aria-label="선택한 배치 적용">
         <h3>선택한 배치 적용</h3>
         <p className={styles.sectionDescription}>
-          {placement === "compiled" ? "정리 결과" : "가져온 원본"}을 확인한 뒤 원하는 적용
+          {placement === "compiled" ? "선택한 정리안" : "가져온 원본"}을 확인한 뒤 원하는 적용
           방식을 선택하세요.
         </p>
         <div className={styles.buttonRow}>
@@ -263,56 +270,6 @@ export function ReverseEngineeringResultPanel({
       </ReverseEngineeringDetailGroup>
 
     </>
-  );
-}
-
-function ReverseEngineeringCompilationModeReview({
-  proposal,
-  title
-}: {
-  readonly proposal: ArchitectureBoardCompilationProposal;
-  readonly title: string;
-}) {
-  const review = createReverseEngineeringCompilationReview(proposal);
-
-  return (
-    <article className={styles.compilationModeReview} aria-label={`${title} 배치 결과`}>
-      <div className={styles.compilationReviewHeader}>
-        <div>
-          <span>{title}</span>
-          <h3>{review.outcome.headline}</h3>
-        </div>
-        <strong>{review.changeCount}개 변경</strong>
-      </div>
-      <p className={styles.compilationReviewSummary}>{review.outcome.reviewSummary}</p>
-      {review.outcome.items.length > 0 ? (
-        <ul className={styles.compilationOutcomes}>
-          {review.outcome.items.map((item) => (
-            <li data-tone={item.tone} key={item.key}>
-              <span>{item.label}</span>
-              <strong>{item.summary}</strong>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className={styles.compilationHint}>추적 지표에서 표시할 배치 문제가 없습니다.</p>
-      )}
-      {review.diagnostics.length > 0 ? (
-        <ul className={styles.compilationDiagnostics}>
-          {review.diagnostics.map((presentation) => (
-            <li key={presentation.key} data-level={presentation.level}>
-              <strong>{presentation.summary}</strong>
-              <span>{presentation.message}</span>
-            </li>
-          ))}
-          {review.hiddenDiagnosticCount > 0 ? (
-            <li className={styles.compilationDiagnosticRemainder}>
-              확인 항목 {review.hiddenDiagnosticCount}개 더 있음
-            </li>
-          ) : null}
-        </ul>
-      ) : null}
-    </article>
   );
 }
 
