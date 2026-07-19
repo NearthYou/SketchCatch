@@ -4,12 +4,20 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- `Fix/jh/490-배포` includes the latest `origin/dev` and the Direct Deployment Plan response, durable worker preparation, failure reconciliation, approval transition, and build-readiness fixes.
-- The reported CloudWatch Logs failure is a DNS lookup failure from the local macOS `local_process` worker; production uses an ECS/Fargate one-off worker with configured public egress.
-- Focused API checks pass 106/106 and focused Web checks pass 56/56. Root harness, lint, typecheck, build, and diff checks pass.
-- No DB migration, dependency change, Terraform Apply/Destroy, or AWS mutation is owned by this workstream.
+- `fix/ck/494-parameter-bug-fix` includes the latest `origin/dev` merge and the Repository/Fixed Template corrections prepared for the next `dev` merge.
+- Repository board creation now saves the selected Fixed Template directly, without Amazon Q/OpenAI validation or clarification; Repository analysis provenance is still persisted.
+- Built-in Template references, ECS layout/presentation, Template Terraform safety, NAT/Security Group dependencies, and focused Repository behavior tests pass.
+- Scoped Types/API/Web lint, typecheck, and production builds pass. No DB migration, dependency change, Terraform Apply/Destroy, AWS mutation, or production deployment was performed.
 
 ## Session Record
+
+### 2026-07-19 - Use Fixed Templates directly for Repository boards
+
+- Removed the Amazon Q Architecture Draft and conflict-clarification path from public and connected Repository board creation; the selected Fixed Template is now saved directly while Repository analysis provenance remains recorded.
+- Completed explicit NAT Gateway drafts with the referenced Elastic IP and made strict Repository validation exempt only Template-owned nodes.
+- Updated the ECS autoscaling Template layout, routing, presentation parents, and semantic hash contracts.
+- Focused verification passed: Repository 9/9, Template contracts 22/22, Template Terraform safety 2/2, Fixed Template/Repository API 6/6, NAT dependency 1/1, scoped lint/typecheck/build for Types/API/Web, harness, and diff checks.
+- No broad unrelated test suite, DB migration, dependency change, cloud mutation, deployment, push, or PR was performed.
 
 ### 2026-07-19 - Separate Repository access and Architecture Draft failures
 
@@ -19,18 +27,6 @@ Short English-only working log for the current agent context. Older records are 
 - Focused Repository checks pass 15/15. Harness, lint, typecheck, and production build pass.
 - The broad Web suite runs the new checks successfully but retains three unrelated existing Resource/Module knowledge and Workspace AI CSS contract failures.
 - No API contract, dependency, lockfile, DB migration, cloud mutation, deployment, commit, or push was performed.
-
-### 2026-07-19 - Document Direct Deployment Apply audit improvements
-
-- Added a Korean implementation plan under `docs/jh/07.19` for five Apply audit findings: Plan/Apply state identity drift, no-change release fencing/outcome handling, ECS worker cancellation, post-Apply evidence persistence, and application release failure-stage classification.
-- The plan defines safety invariants, implementation slices, focused regressions, completion criteria, and deployment stop conditions without changing runtime behavior.
-- Harness and diff checks pass. No API contract, DB migration, dependency, Terraform execution, AWS mutation, deployment, Git handoff, commit, or push was performed.
-
-### 2026-07-19 - Restore detailed Direct Deployment preparation errors
-
-- Routed foreground deployment action failures through the existing preparation-aware error formatter so save, Terraform preparation, architecture snapshot, and artifact upload failures retain their specific safe guidance.
-- Added a caller-level regression that failed against the generic fallback and passed after reconnecting the formatter; focused Direct Deployment checks pass 31/31.
-- Harness, lint, typecheck, production build, and diff checks pass. No API contract, DB migration, dependency, AWS mutation, Terraform execution, deployment, commit, or push was performed.
 
 ### 2026-07-19 - Address PR #485 review findings
 
@@ -99,15 +95,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Broken Or Unverified
 
-- No merge-owned check is failing.
-- Broad test suites were not run because the user requested avoiding unnecessary tests; focused conflict regressions and all required repository checks passed.
-- Previously documented environment-specific or unrelated broad-suite failures remain recorded in Git history and `docs/agent-history/2026-07.md`.
-- No live AWS mutation, Terraform apply/destroy, Deployment, GitHub mutation, or Git handoff is authorized or performed by this merge resolution.
+- No check related to Repository Fixed Template selection or Template deployment generation is failing.
+- Broad unrelated test suites were intentionally not run at the user's request.
+- A deployed `dev` smoke test has not been performed in this session; no cloud or production mutation was authorized.
 
 ## Next Action
 
-- Publish the verified branch and open the approved PR to `dev`, linked to issue #490.
-- Keep production deployment execution outside this PR; the DNS incident does not authorize a cloud rerun.
+- Merge the verified branch into `dev` through the normal review path and deploy it.
+- After deployment, smoke-test Repository analysis by selecting a Fixed Template and confirming the Board opens without any clarification step.
 
 ### 2026-07-19 - Tighten Workspace AI conversation spacing
 
