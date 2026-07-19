@@ -11,6 +11,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Restore Design Analysis in the active Workspace
+
+- Added a dedicated Workspace right-panel view that runs Design Simulation and the deterministic Pre-Deployment Check against the current Board without mutating infrastructure.
+- The result presents bottlenecks, failure scenarios, security findings, estimated cost, and combined improvement recommendations; stale Board results are marked for rerun, and Live Observation remains a separate runtime-evidence view.
+- Focused checks pass 4/4. Web lint/typecheck, Web production build, root lint/typecheck, harness, and diff checks pass. HTTPS 3000 and API 4000 both remain healthy; no AWS mutation, Terraform execution, dependency, migration, push, or PR occurred.
+
 ### 2026-07-19 - Make the ECS Template Live Observation-ready
 
 - Added a CloudFront HTTPS entry point in front of the ECS Fargate Template ALB while retaining the bounded request-based Service Auto Scaling contract (`min=1`, `max=3`, `ALBRequestCountPerTarget=10`). The authored presentation now keeps User, CloudFront, and ALB on the primary traffic path and contains all scaling resources inside Definition / Ops.
@@ -190,12 +196,3 @@ Short English-only working log for the current agent context. Older records are 
 - Added Project Build Environment hydration to durable Plan polling, preventing an early HTTP 202 response from leaving `ready + verified` infrastructure displayed as `준비 필요`.
 - The reported Deployment `8eb279cb-cea8-417f-88af-d31cd21926d0` is pending with matching current/approved Plan artifacts; its build environment is `ready + verified`. The live browser now shows step 3, `Repository 검증 완료`, and the deployment action without console errors.
 - TDD regressions passed RED then GREEN; focused Web checks pass 56/56. Root lint, typecheck, build, final harness, and diff checks are recorded by the finishing verification run. No deployment execution, approval revocation, AWS mutation, DB migration, dependency change, or direct push to `dev` was performed.
-
-### 2026-07-19 - Split and exercise the Live Observation Fargate template
-
-- Moved the CloudFront -> ALB -> ECS Fargate template and bounded 1-3 Task scaling change to linked issue #495, branch `fix/sw/495-live-observation-template`, and Draft PR #497. PR #493 now keeps only its prior UI work.
-- Fixed reopened deployment overlays so an old confirmation-dismiss request does not hide an already approved Apply confirmation; the focused regression passed RED then GREEN (2/2).
-- Approved sandbox Deployment `49911285-260e-4fce-a645-a4ca9efa098f` started the exact `+36` Plan in account `614935468487`, region `ap-northeast-2`, then failed at `application-autoscaling:RegisterScalableTarget` because `SketchCatchTerraformExecutionRole` lacks that action.
-- No load was generated. The partial-state Destroy Plan deleted 34 resources successfully. Direct AWS inventory checks returned zero target VPC, ALB, ECS cluster, CloudFront distribution, ECR repository, log group, and generated web bucket; the control bucket and execution Role were preserved.
-- Live scale-out remains blocked until the execution Role receives the Application Auto Scaling actions and the account has `AWSServiceRoleForApplicationAutoScaling_ECSService`, followed by a newly approved Plan/Apply/bounded-traffic/Destroy cycle.
-- The focused Web regression passes 2/2; harness, lint, typecheck, build, and diff checks pass. No DB migration or dependency change was made.

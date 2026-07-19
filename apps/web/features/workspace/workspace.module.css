@@ -2771,6 +2771,10 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.designAnalysisGrid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .aiSimulationCard {
   background: #ffffff;
   border: 1px solid var(--workspace-line, #f0f0f3);

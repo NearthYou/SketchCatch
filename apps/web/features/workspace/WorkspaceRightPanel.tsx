@@ -24,6 +24,7 @@ import {
   Activity,
   Code2,
   GalleryVerticalEnd,
+  Gauge,
   PanelRightClose,
   PanelRightOpen,
   Rocket
@@ -35,6 +36,7 @@ import {
   type DeploymentPreDeploymentCheckState
 } from "./DeploymentPanel";
 import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
+import { WorkspaceDesignAnalysisPanel } from "./WorkspaceDesignAnalysisPanel";
 import {
   TerraformCodePanel,
   type TerraformFilesReplacementRequest,
@@ -557,7 +559,11 @@ export function WorkspaceRightPanel({
     (nextView: WorkspaceRightPanelView): void => {
       if (nextView === activeView) {
         onPanelOpenRequest();
-        onTerraformAiInteraction(nextView === "terraform" ? "preview" : "draft");
+        if (nextView === "terraform") {
+          onTerraformAiInteraction("preview");
+        } else if (nextView === "resource") {
+          onTerraformAiInteraction("draft");
+        }
         return;
       }
 
@@ -574,7 +580,9 @@ export function WorkspaceRightPanel({
 
       onPanelOpenRequest();
       setActiveView(nextView);
-      onTerraformAiInteraction("draft");
+      if (nextView === "resource") {
+        onTerraformAiInteraction("draft");
+      }
     },
     [activeView, onPanelOpenRequest, onTerraformAiInteraction, requestTerraformLeave]
   );
@@ -805,7 +813,9 @@ export function WorkspaceRightPanel({
 
     context.setRightPanelOpen(true);
     setActiveView(nextView);
-    onTerraformAiInteraction("draft");
+    if (nextView === "resource") {
+      onTerraformAiInteraction("draft");
+    }
   }
 
   function requestRightPanelClose(): void {
@@ -1042,6 +1052,14 @@ export function WorkspaceRightPanel({
           </button>
           <button
             className={styles.collapsedPanelButton}
+            onClick={() => openCollapsedView("analysis")}
+            title="설계 분석"
+            type="button"
+          >
+            <Gauge size={18} aria-hidden="true" />
+          </button>
+          <button
+            className={styles.collapsedPanelButton}
             data-terraform-editor-navigation
             onClick={() => openCollapsedView("terraform")}
             title="Terraform code"
@@ -1126,6 +1144,17 @@ export function WorkspaceRightPanel({
               </span>
             </button>
             <button
+              aria-pressed={activeView === "analysis"}
+              className={
+                activeView === "analysis" ? styles.panelModeButtonActive : styles.panelModeButton
+              }
+              onClick={() => requestView("analysis")}
+              title="설계 분석"
+              type="button"
+            >
+              <Gauge size={16} aria-hidden="true" />
+            </button>
+            <button
               aria-label="Live Observation"
               className={styles.panelModeButton}
               onClick={() => openLiveObservation()}
@@ -1143,6 +1172,9 @@ export function WorkspaceRightPanel({
             onViewChange={handleResourceWorkspaceViewChange}
             view={resourceWorkspaceView}
           />
+        </div>
+        <div className={styles.rightPanelView} hidden={activeView !== "analysis"}>
+          <WorkspaceDesignAnalysisPanel context={context} />
         </div>
         <div
           ref={terraformViewRef}

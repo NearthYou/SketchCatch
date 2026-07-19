@@ -4,12 +4,16 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
+- Branch `fix/sw/495-live-observation-template` now restores a dedicated Design Analysis entry in the active Workspace right panel. It combines current-Board Design Simulation results with Pre-Deployment security findings and recommendations while keeping Live Observation runtime-only.
+- Focused Design Analysis checks pass 4/4; Web lint/typecheck/build, root lint/typecheck, harness, and diff checks pass. HTTPS 3000 and API 4000 return 200.
 - Branch `fix/ck/477-ai-chatting-bug-fix` includes committed all-question validation, both-chat selection synchronization, clarification probes, diagram patch probes, and complete resource alias coverage.
 - The running Web-to-API path repeats the frontend question for the reported daily-user-count phrase and the region question for the reported Spring Boot phrase, with explicit unrelated-answer feedback.
 - The branch includes the committed Architecture Draft Korean-explanation, `다음 행동` cleanup, and fresh-draft routing fix.
 
 ## Changes This Session
 
+- Restored the orphaned Design Simulation capability through the active Workspace composition instead of remounting the legacy all-in-one AI panel.
+- Added one user-triggered, read-only analysis action for bottlenecks, failures, security risks, estimated cost, and recommendations, including stale-Board feedback.
 - Expanded database storage, country-level region, and conversational photo-upload clarification semantics.
 - Verified EC2 sizing, RDS removal, S3 addition, EC2-to-Lambda replacement, and connected CloudFront addition against proposed graph outcomes.
 - Added Korean names and generated aliases for every supported resource type, with common service terms and abbreviations. `로드 밸런서 넣어줘` now creates a connected load balancer when one compute target is unambiguous.
@@ -31,7 +35,7 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Broken Or Unverified
 
-- Browser interaction was not rerun; verification is focused because the user requested limited testing.
+- Design Analysis browser interaction was not rerun; verification is focused because the user requested limited testing.
 
 ## Best Next Action
 
