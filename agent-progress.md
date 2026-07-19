@@ -11,6 +11,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-20 - Reduce the Terraform Preview label
+
+- Reduced only the Workspace `Terraform preview` toolbar label by 3px while preserving the file picker and surrounding panel typography.
+- Root harness, lint, typecheck, build, and diff checks pass. The full test suite was intentionally skipped for this CSS-only change.
+- Local PostgreSQL and Redis remain healthy, database migrations are applied, and the Web/API development servers were restarted. No DB schema, dependency, Terraform, AWS, or deployment mutation was performed.
+- Known risks: none. Next: visually confirm the compact label at the target Workspace viewport.
+
 ### 2026-07-19 - Reduce marked Workspace panel labels
 
 - Reduced minor UI text, fixed recovery modal stacking/actions, and relabeled Project timestamps. Checks pass.
