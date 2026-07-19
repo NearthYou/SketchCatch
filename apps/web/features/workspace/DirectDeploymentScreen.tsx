@@ -1482,11 +1482,7 @@ export function DirectDeploymentScreen({
               data-has-output-links={deploymentOutputLinks.length > 0}
             >
               <InfoRow label="상태" value={selectedDeployment?.status ?? "대기"} />
-              <InfoRow label="범위" value={selectedDeployment?.scope ?? "대기"} />
               <InfoRow label="현재 작업" value={primaryDeploymentStepStatus} />
-              {selectedDeployment?.planSummary ? (
-                <PlanSummaryRows deployment={selectedDeployment} />
-              ) : null}
               <OptionalInfoRow
                 label="릴리즈"
                 value={
@@ -1525,7 +1521,7 @@ export function DirectDeploymentScreen({
           ) : null}
           {showApplyConfirmation && selectedDeployment ? (
             <div className={styles.deploymentApplyConfirm}>
-              <h3>배포 실행 확인</h3>
+              <h3>최종 실행 대상</h3>
               <InfoRow
                 label="AWS account"
                 value={selectedDeployment.approvedAwsAccountId ?? "없음"}

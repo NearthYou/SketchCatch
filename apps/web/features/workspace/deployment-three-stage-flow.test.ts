@@ -136,6 +136,20 @@ test("Direct Deployment uses prepare, approve, and execute with three external p
   assert.match(directDeploymentSource, /stepId === "approval"/);
 });
 
+test("approval owns the Plan summary while execution keeps final target confirmation", () => {
+  assert.equal(directDeploymentSource.match(/<PlanSummaryRows/g)?.length, 1);
+  assert.equal(directDeploymentSource.match(/<InfoRow label="범위"/g)?.length, 1);
+  assert.match(directDeploymentSource, /<InfoRow label="상태"/);
+  assert.match(directDeploymentSource, /<InfoRow label="현재 작업"/);
+  assert.match(directDeploymentSource, /<h3>최종 실행 대상<\/h3>/);
+  assert.match(directDeploymentSource, /approvedAwsAccountId/);
+  assert.match(directDeploymentSource, /approvedAwsRegion/);
+  assert.match(
+    directDeploymentSource,
+    /승인된 Plan과 프로젝트 스냅샷이 일치할 때만 실행됩니다/
+  );
+});
+
 test("deployment polling keeps unrelated failures but reconciles its accepted Plan", () => {
   const refreshStart = directDeploymentSource.indexOf("async function refreshSnapshot");
   const intervalStart = directDeploymentSource.indexOf("const intervalId", refreshStart);
