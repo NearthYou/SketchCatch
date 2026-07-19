@@ -248,10 +248,10 @@ Reverse Engineering은 권한을 변경하지 않는다.
 5. 제한된 read probe도 다시 실행해 결과를 정리 기록에 남긴다. 다른 Policy가 같은 읽기 권한을 주더라도 정확한 소유 artifact가 제거됐으면 Policy Stack 정리를 막지 않는다.
 6. Policy Stack 소유 artifact가 제거됐을 때만 Manager Stack 삭제를 안내한다.
 7. 사용자가 AWS Console에서 Manager Stack을 삭제한다.
-8. 기존 Role 접속은 계속 성공해야 한다. 정리 확인 Policy가 남아 있으면 정확한 Manager Stack·service Role·제어 Policy의 부재를 직접 확인하고, 확인 Policy가 계획대로 마지막에 제거돼 해당 제한 조회가 AccessDenied가 되면 그 사실을 삭제 완료 신호로 사용한다.
+8. 기존 Role 접속은 계속 성공해야 한다. 정리 확인 Policy가 남아 있으면 정확한 Manager Stack·service Role·제어 Policy의 부재를 직접 확인한다. 확인 Policy가 제거된 뒤의 AccessDenied만으로는 삭제 완료를 단정하지 않는다.
 9. 소유 artifact 제거를 확인하면 가져오기 권한 metadata 정리를 완료한다.
 
-정리 확인 Policy는 삭제 전에 전체 contract와 attachment를 검증한 경우에만 마지막 AccessDenied를 완료 신호로 사용할 수 있다. 예상하지 못한 권한 문서 변경, 일시 오류, Role 접속 실패, 일부 소유 artifact 잔존은 성공으로 처리하지 않는다. 판단할 수 없으면 연결을 비활성 `AWS 권한 정리 필요` 상태로 유지하고 같은 단계에서 재시도한다.
+예상하지 못한 권한 문서 변경, 일시 오류, Role 접속 실패, AccessDenied, 일부 소유 artifact 잔존은 성공으로 처리하지 않는다. 모든 소유 항목의 부재를 직접 확인할 수 없으면 연결을 비활성 `AWS 권한 정리 필요` 상태로 유지한다. Manager 밖에서 삭제 완료를 증명하는 독립 verifier는 후속 제품·보안 설계로 진행한다.
 
 SketchCatch 서버는 `DeleteStack`을 호출하지 않는다. Manager Stack을 Policy Stack보다 먼저 삭제하도록 안내하지 않는다.
 
