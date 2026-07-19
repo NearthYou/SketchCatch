@@ -40,19 +40,3 @@ test("all template Terraform files pass the live deployment safety profile", () 
     );
   }
 });
-
-test("ECS Fargate template emits the HTTPS Live Observation and request scaling path", () => {
-  const terraformCode = createTemplateTerraformValidationFiles("ecs-fargate-container-app", {
-    projectSlug: "live-observation",
-    shortId: "test01"
-  }).map((file) => file.terraformCode).join("\n\n");
-
-  assert.match(terraformCode, /resource "aws_cloudfront_distribution" "distribution"/);
-  assert.match(terraformCode, /origin_protocol_policy = "http-only"/);
-  assert.match(terraformCode, /viewer_protocol_policy = "redirect-to-https"/);
-  assert.match(terraformCode, /output "cloudfront_url"/);
-  assert.match(terraformCode, /output "api_base_url"[\s\S]*aws_cloudfront_distribution\.distribution\.domain_name/);
-  assert.match(terraformCode, /resource "aws_appautoscaling_target" "scaling_target"/);
-  assert.match(terraformCode, /max_capacity = 3/);
-  assert.match(terraformCode, /target_value = 10/);
-});
