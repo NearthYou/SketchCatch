@@ -81,3 +81,8 @@ Short English-only working log for the current agent context. Older records are 
 - Removed the visible `선택됨` suffix from selected `/workspace/ai` answer buttons while retaining `aria-pressed` and selected-button styling.
 - Removed the unused label style and added a source regression for the route-specific transcript.
 - The focused Web regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
+### 2026-07-19 - Keep AI Start progress moving across card remounts
+
+- Moved `/workspace/ai` diagram-generation step ownership from the conditional progress card into the persistent conversation transcript.
+- The card now receives a controlled step, so rerenders or remounts cannot reset the visible progress to requirement analysis; the shared Workspace dock retains its local fallback timer.
+- The focused Web regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.

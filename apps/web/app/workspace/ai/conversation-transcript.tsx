@@ -1,8 +1,12 @@
 "use client";
 
 import { RotateCcw } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WorkspaceAiWorkbenchDraftProgress } from "../../../features/workspace/WorkspaceAiWorkbenchResults";
+import {
+  ARCHITECTURE_DRAFT_GENERATION_STEP_DURATION_MS,
+  architectureDraftGenerationSteps
+} from "../../../features/workspace/workspace-ai-chat-status";
 import type { AiStartMessage } from "./ai-start-model";
 import type { SelectedAssistantOption } from "./selected-option-model";
 import {
@@ -40,7 +44,23 @@ export function ConversationTranscript({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const shouldFollowRef = useRef(true);
   const forcedFollowTargetMessageCountRef = useRef<number | null>(null);
+  const [draftProgressStep, setDraftProgressStep] = useState(0);
   const retryRequestLabel = getRetryRequestLabel(requestState);
+
+  useEffect(() => {
+    if (requestState !== "loading") {
+      setDraftProgressStep(0);
+      return;
+    }
+
+    const timerId = window.setInterval(() => {
+      setDraftProgressStep((currentStep) =>
+        Math.min(currentStep + 1, architectureDraftGenerationSteps.length - 1)
+      );
+    }, ARCHITECTURE_DRAFT_GENERATION_STEP_DURATION_MS);
+
+    return () => window.clearInterval(timerId);
+  }, [requestState]);
 
   useEffect(() => {
     const scrollElement = scrollRef.current;
@@ -154,7 +174,10 @@ export function ConversationTranscript({
         })}
 
         {requestState === "loading" ? (
-          <WorkspaceAiWorkbenchDraftProgress onCancel={onCancelRequest} />
+          <WorkspaceAiWorkbenchDraftProgress
+            currentStep={draftProgressStep}
+            onCancel={onCancelRequest}
+          />
         ) : null}
 
         {retryRequestLabel ? (

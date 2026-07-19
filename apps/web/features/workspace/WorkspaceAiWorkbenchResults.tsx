@@ -51,15 +51,18 @@ export function WorkspaceAiWorkbenchRequestMessage({
 }
 
 export function WorkspaceAiWorkbenchDraftProgress({
+  currentStep,
   onCancel
 }: {
+  readonly currentStep?: number | undefined;
   readonly onCancel?: (() => void) | undefined;
 }) {
-  const elapsedMs = useWorkspaceAiProgressElapsed();
+  const elapsedMs = useWorkspaceAiProgressElapsed(currentStep === undefined);
+  const resolvedCurrentStep = currentStep ?? getArchitectureDraftGenerationProgressStep(elapsedMs);
 
   return (
     <WorkspaceAiWorkbenchProgress
-      currentStep={getArchitectureDraftGenerationProgressStep(elapsedMs)}
+      currentStep={resolvedCurrentStep}
       notice="AI 응답이 도착하면 검증된 다이어그램 초안을 바로 표시합니다."
       onCancel={onCancel}
       steps={architectureDraftGenerationSteps}
@@ -135,17 +138,18 @@ function WorkspaceAiWorkbenchProgress({
   );
 }
 
-function useWorkspaceAiProgressElapsed(): number {
+function useWorkspaceAiProgressElapsed(enabled = true): number {
   const [elapsedMs, setElapsedMs] = useState(0);
 
   useEffect(() => {
+    if (!enabled) return;
     const startedAt = Date.now();
     const timerId = window.setInterval(() => {
       setElapsedMs(Date.now() - startedAt);
     }, 500);
 
     return () => window.clearInterval(timerId);
-  }, []);
+  }, [enabled]);
 
   return elapsedMs;
 }

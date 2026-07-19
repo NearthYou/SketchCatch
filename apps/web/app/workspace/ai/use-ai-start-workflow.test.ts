@@ -89,6 +89,8 @@ test("두 다이어그램 생성 채팅은 같은 자연어 답변 검증과 선
   assert.doesNotMatch(aiStartTranscriptSource, /suggestionSelected|>선택됨</);
   assert.doesNotMatch(workspaceDockSource, /반영된 답변/);
   assert.match(aiStartTranscriptSource, /requestState === "loading"[\s\S]*WorkspaceAiWorkbenchDraftProgress/);
+  assert.match(aiStartTranscriptSource, /setDraftProgressStep\(\(currentStep\)[\s\S]*currentStep=\{draftProgressStep\}/);
+  assert.match(aiStartTranscriptSource, /ARCHITECTURE_DRAFT_GENERATION_STEP_DURATION_MS/);
   assert.doesNotMatch(aiStartTranscriptSource, /progressSnapshot !== null/);
   assert.match(workspaceDockSource, /draftState === "loading"[\s\S]*WorkspaceAiWorkbenchDraftProgress/);
   assert.doesNotMatch(workspaceDockSource, /draftGenerationProgressVisible/);
