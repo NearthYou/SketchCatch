@@ -86,6 +86,18 @@ test("모든 available Template Resource는 enabled Palette item과 실제 icon 
   assert.ok(resourceCount > 0);
 });
 
+test("모든 available Template node 이름은 영어만 사용한다", () => {
+  const koreanLabelNodes = listBoardTemplates()
+    .filter(isBoardTemplateAvailable)
+    .flatMap((template) =>
+      template.diagramJson.nodes
+        .filter((node) => /[가-힣]/.test(node.label))
+        .map((node) => `${template.id}/${node.id}: ${node.label}`)
+    );
+
+  assert.deepEqual(koreanLabelNodes, []);
+});
+
 // 캡처한 계정 Group은 실제 Palette Area로 유지하고 썸네일도 같은 Diagram을 가리켜야 한다.
 test("Cross-account Template은 원본의 Group 영역과 세 S3 Resource만 사용한다", () => {
   const capturedAccountGroup = {
