@@ -328,10 +328,13 @@ test("PUT /api/projects/:id/draft does not overwrite a draft created during the 
 test("POST /api/projects/:id/draft/auto-organize/apply saves one visual-only candidate", async () => {
   const candidateDiagram = structuredClone(draftDiagram);
   candidateDiagram.nodes[0]!.position = { x: 360, y: 180 };
+  const terraformFiles = [
+    { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "vpc" {}' }
+  ];
   const fakeDb = new ProjectDraftRouteFakeDb({
     users: [makeUser()],
     projects: [makeProject()],
-    drafts: [makeProjectDraft({ revision: 4 })]
+    drafts: [makeProjectDraft({ revision: 4, terraformFiles })]
   });
   const app = buildApp({ getDatabaseClient: () => fakeDb.client });
 
@@ -346,9 +349,7 @@ test("POST /api/projects/:id/draft/auto-organize/apply saves one visual-only can
       sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(draftDiagram),
       candidateDiagram,
       expectedRevision: 4,
-      terraformFiles: [
-        { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "vpc" {}' }
-      ]
+      terraformFiles
     }
   });
 
@@ -425,6 +426,48 @@ test("POST /api/projects/:id/draft/auto-organize/apply rejects a forged source a
   assert.equal(response.statusCode, 409);
   assert.equal(fakeDb.draftRows[0]?.revision, 4);
   assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, draftDiagram);
+  assert.equal(fakeDb.projectUpdated, false);
+
+  await app.close();
+});
+
+test("POST /api/projects/:id/draft/auto-organize/apply cannot change Terraform files", async () => {
+  const candidateDiagram = structuredClone(draftDiagram);
+  candidateDiagram.nodes[0]!.position = { x: 360, y: 180 };
+  const originalDraft = makeProjectDraft({
+    revision: 4,
+    terraformFiles: [
+      { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "vpc" {}' }
+    ]
+  });
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    drafts: [originalDraft]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft/auto-organize/apply`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      sessionId: "board-auto-session:source",
+      candidateId: "arrangement-1",
+      sourceDiagram: draftDiagram,
+      sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(draftDiagram),
+      candidateDiagram,
+      expectedRevision: 4,
+      terraformFiles: [
+        { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "changed" {}' }
+      ]
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(fakeDb.draftRows[0]?.revision, 4);
+  assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, draftDiagram);
+  assert.deepEqual(fakeDb.draftRows[0]?.terraformFiles, originalDraft.terraformFiles);
   assert.equal(fakeDb.projectUpdated, false);
 
   await app.close();

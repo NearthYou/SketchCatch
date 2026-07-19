@@ -159,6 +159,51 @@ test("server rejects a source fingerprint that was not created from the request 
   assert.equal(saveCalls, 0);
 });
 
+test("server rejects Terraform changes instead of saving them through visual-only apply", async () => {
+  const sourceDiagram = createDiagram();
+  const candidateDiagram = structuredClone(sourceDiagram);
+  candidateDiagram.nodes[0]!.position = { x: 320, y: 180 };
+  const persistedTerraformFiles: TerraformSyncFileInput[] = [
+    { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "main" {}' }
+  ];
+  const changedTerraformFiles: TerraformSyncFileInput[] = [
+    { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "changed" {}' }
+  ];
+  let saveCalls = 0;
+
+  await assert.rejects(
+    () =>
+      applyBoardAutoOrganizeDraft(
+        {
+          candidateDiagram,
+          db: {} as Database,
+          expectedRevision: 7,
+          projectId: PROJECT_ID,
+          sourceDiagram,
+          sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(sourceDiagram),
+          terraformFiles: changedTerraformFiles,
+          userId: USER_ID
+        },
+        {
+          readDraft: async () => ({
+            ...createDraftRow(sourceDiagram, persistedTerraformFiles),
+            revision: 7
+          }),
+          saveDraftRevision: async () => {
+            saveCalls += 1;
+            return {
+              status: "saved",
+              draft: createDraftRow(candidateDiagram, changedTerraformFiles)
+            };
+          }
+        }
+      ),
+    BoardAutoOrganizeSourceMismatchError
+  );
+
+  assert.equal(saveCalls, 0);
+});
+
 /** 테스트마다 같은 Resource 의미를 가진 source Diagram을 만듭니다. */
 function createDiagram(): DiagramJson {
   return {

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   hasSameBoardAutoOrganizeSemantics,
   serializeBoardAutoOrganizeSource,
@@ -58,6 +59,10 @@ export async function applyBoardAutoOrganizeDraft(
     throw new BoardAutoOrganizeSourceMismatchError();
   }
 
+  if (!isDeepStrictEqual(persistedDraft.terraformFiles ?? [], input.terraformFiles)) {
+    throw new BoardAutoOrganizeSourceMismatchError();
+  }
+
   if (
     !hasSameBoardAutoOrganizeSemantics(persistedDraft.diagramJson, input.candidateDiagram)
   ) {
@@ -71,7 +76,9 @@ export async function applyBoardAutoOrganizeDraft(
     input: {
       diagramJson: input.candidateDiagram,
       expectedRevision: input.expectedRevision,
-      terraformFiles: input.terraformFiles
+      ...(persistedDraft.terraformFiles !== null
+        ? { terraformFiles: persistedDraft.terraformFiles.map((file) => ({ ...file })) }
+        : {})
     },
     projectId: input.projectId,
     userId: input.userId
@@ -115,7 +122,7 @@ function createFingerprint(value: string): string {
 export class BoardAutoOrganizeSourceMismatchError extends Error {
   /** 사용자에게 내부 fingerprint를 노출하지 않는 고정 오류를 만듭니다. */
   constructor() {
-    super("미리보기를 만든 뒤 보드가 바뀌었습니다.");
+    super("미리보기를 만든 뒤 프로젝트 초안이 바뀌었습니다.");
     this.name = "BoardAutoOrganizeSourceMismatchError";
   }
 }
