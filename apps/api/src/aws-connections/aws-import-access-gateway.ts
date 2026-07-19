@@ -258,26 +258,8 @@ export function createAwsImportAccessGateway(
     // gg: caller 입력에서 Template URL·Role·tag를 받지 않고 내부 publisher 결과만 사용합니다.
     async createOrUpdatePolicyStack({ connection, contract, operationId, expectedPolicy }) {
       const client = await createConnectionClient(connection, createClient, assumeConnectionRole);
-      const current = await describeStack(
-        client,
-        expectedPolicy.kind === "present" ? expectedPolicy.stackId : contract.policyStackName
-      );
-      if (expectedPolicy.kind === "absent" && current) {
-        throw new AwsImportAccessGatewayError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
-      }
+      await assertExpectedPolicyStackState(client, contract, expectedPolicy);
       if (expectedPolicy.kind === "present") {
-        if (
-          !current ||
-          current.StackId !== expectedPolicy.stackId ||
-          !verifyExpectedPolicyStack(
-            current,
-            await getStackTemplate(client, expectedPolicy.stackId),
-            contract,
-            expectedPolicy
-          )
-        ) {
-          throw new AwsImportAccessGatewayError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
-        }
         if (
           expectedPolicy.contractVersion === contract.policyContractVersion &&
           expectedPolicy.templateSha256 === contract.policyTemplateSha256 &&
@@ -296,6 +278,7 @@ export function createAwsImportAccessGateway(
         expiresInSeconds: 600,
         now
       });
+      await assertExpectedPolicyStackState(client, contract, expectedPolicy);
       const request = expectedPolicy.kind === "present"
         ? createAwsImportPolicyStackUpdateInput(
             contract,
@@ -462,6 +445,31 @@ async function getStackTemplate(
     new GetTemplateCommand({ StackName: stackName, TemplateStage: "Original" })
   )) as { TemplateBody?: string };
   return response.TemplateBody ?? null;
+}
+
+/** gg: publication network window 양쪽에서 승인한 Policy current state를 똑같이 확인합니다. */
+async function assertExpectedPolicyStackState(
+  client: CloudFormationClientLike,
+  contract: AwsImportManagerContract,
+  expected: ExpectedPolicyStackState
+): Promise<void> {
+  const current = await describeStack(
+    client,
+    expected.kind === "present" ? expected.stackId : contract.policyStackName
+  );
+  const valid = expected.kind === "absent"
+    ? current === null
+    : current !== null &&
+      current.StackId === expected.stackId &&
+      verifyExpectedPolicyStack(
+        current,
+        await getStackTemplate(client, expected.stackId),
+        contract,
+        expected
+      );
+  if (!valid) {
+    throw new AwsImportAccessGatewayError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
+  }
 }
 
 /** gg: Manager Stack의 이름·상태·tag·output·전체 Template을 한 계약으로 확인합니다. */

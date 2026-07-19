@@ -247,6 +247,94 @@ test("Policy apply consumes exact expected absence or identity before any public
   }
 });
 
+test("Policy apply rechecks approved current state after publication before mutation", async () => {
+  const oldPolicy = createOlderPolicyTemplate();
+  const policyStackId =
+    `arn:aws:cloudformation:${connection.region}:${connection.accountId}:stack/` +
+    `${contract.policyStackName}/expected-id`;
+
+  for (const scenario of ["absent_appeared", "present_drifted"] as const) {
+    let published = false;
+    let mutationCalls = 0;
+    const commands: unknown[] = [];
+    const gateway = createAwsImportAccessGateway({
+      createCloudFormationClient: () => ({
+        async send(command: unknown) {
+          commands.push(command);
+          if (command instanceof DescribeStacksCommand) {
+            if (scenario === "absent_appeared" && !published) {
+              throw Object.assign(new Error("not found"), { name: "ValidationError" });
+            }
+            return {
+              Stacks: [scenario === "absent_appeared"
+                ? createPolicyStack(policyStackId)
+                : createPolicyStackForState(
+                    policyStackId,
+                    oldPolicy.contractVersion,
+                    oldPolicy.policyFingerprint
+                  )]
+            };
+          }
+          if (command instanceof GetTemplateCommand) {
+            return {
+              TemplateBody: published
+                ? `${oldPolicy.templateBody} `
+                : oldPolicy.templateBody
+            };
+          }
+          if (command instanceof CreateStackCommand || command instanceof UpdateStackCommand) {
+            mutationCalls += 1;
+            return { StackId: policyStackId };
+          }
+          return {};
+        }
+      }),
+      assumeConnectionRole: async () => ({
+        accessKeyId: "access-key",
+        secretAccessKey: "secret-key",
+        sessionToken: "session-token"
+      }),
+      publishTemplate: async (input) => {
+        published = true;
+        return publishAwsImportCloudFormationTemplateToS3({
+          ...input,
+          s3Client: { async send() { return {}; } } as unknown as S3Client,
+          signTemplateUrl: async ({ baseUrl }) => createPresignedUrl(baseUrl)
+        });
+      },
+      now: () => new Date("2026-07-19T12:05:00.000Z")
+    });
+    const expectedPolicy = scenario === "absent_appeared"
+      ? { kind: "absent" as const }
+      : {
+          kind: "present" as const,
+          stackId: policyStackId,
+          contractVersion: oldPolicy.contractVersion,
+          templateSha256: oldPolicy.templateSha256,
+          policyFingerprint: oldPolicy.policyFingerprint
+        };
+
+    await assert.rejects(gateway.createOrUpdatePolicyStack({
+      connection,
+      contract,
+      operationId: "33333333-3333-4333-8333-333333333333",
+      expectedPolicy
+    }));
+
+    assert.equal(mutationCalls, 0, scenario);
+    assert.equal(
+      commands.filter((command) => command instanceof DescribeStacksCommand).length,
+      2,
+      scenario
+    );
+    assert.equal(
+      commands.filter((command) => command instanceof GetTemplateCommand).length,
+      scenario === "present_drifted" ? 2 : 0,
+      scenario
+    );
+  }
+});
+
 test("manager inspection checks exact template hash, tags and outputs", async () => {
   const commands: unknown[] = [];
   const gateway = createAwsImportAccessGateway({
@@ -508,6 +596,28 @@ function createPolicyStack(stackId: string) {
       TargetRoleArn: contract.targetRoleArn,
       ReadManagedPolicyArn: contract.readManagedPolicyArn,
       PolicyFingerprint: contract.policyFingerprint
+    }).map(([OutputKey, OutputValue]) => ({ OutputKey, OutputValue }))
+  };
+}
+
+function createPolicyStackForState(
+  stackId: string,
+  contractVersion: string,
+  policyFingerprint: string
+) {
+  return {
+    ...createPolicyStack(stackId),
+    Tags: contract.ownershipTags.map((tag) =>
+      tag.Key === "SketchCatchImportContractVersion"
+        ? { ...tag, Value: contractVersion }
+        : { ...tag }
+    ),
+    Outputs: Object.entries({
+      SketchCatchConnectionId: contract.connectionId,
+      TemplateContractVersion: contractVersion,
+      TargetRoleArn: contract.targetRoleArn,
+      ReadManagedPolicyArn: contract.readManagedPolicyArn,
+      PolicyFingerprint: policyFingerprint
     }).map(([OutputKey, OutputValue]) => ({ OutputKey, OutputValue }))
   };
 }
