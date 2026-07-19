@@ -1320,6 +1320,16 @@ button.rightRailResizeHandle {
   visibility: visible;
 }
 
+.canvasPanelResourceNamesHidden .resourceNodeLabel {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.canvasPanelResourceNamesVisible .resourceNodeLabel {
+  opacity: 1;
+  visibility: visible;
+}
+
 .canvasPanel :global(.react-flow__node:focus-visible) .nodeShell {
   box-shadow: 0 0 0 2px var(--board-primary-soft), 0 0 0 4px var(--board-primary);
   outline: none;

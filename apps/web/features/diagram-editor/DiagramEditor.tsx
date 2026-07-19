@@ -32,6 +32,8 @@ import type {
 import {
   ChevronLeft,
   ChevronRight,
+  Eye,
+  EyeOff,
   Expand,
   Maximize2,
   MousePointer2,
@@ -87,6 +89,10 @@ import {
   readAutoExpandAreasEnabled,
   writeAutoExpandAreasEnabled
 } from "./area-auto-expand-preference";
+import {
+  readResourceNamesVisible,
+  writeResourceNamesVisible
+} from "./resource-name-visibility-preference";
 import {
   findAreaBlankInteractionNodeAtPoint,
   findInnermostAreaDropTarget,
@@ -317,6 +323,9 @@ function DiagramEditorInner({
   const [rightPanelWidth, setRightPanelWidth] = useState(readStoredRightPanelWidth);
   const [autoExpandAreasEnabled, setAutoExpandAreasEnabled] = useState(() =>
     readAutoExpandAreasEnabled(typeof window === "undefined" ? null : window.localStorage)
+  );
+  const [resourceNamesVisible, setResourceNamesVisible] = useState(() =>
+    readResourceNamesVisible(typeof window === "undefined" ? null : window.localStorage)
   );
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>(() =>
     normalizeSelectedNodeIds(diagram.nodes, initialSelectedNodeIds ?? [])
@@ -820,6 +829,18 @@ function DiagramEditorInner({
         nextEnabled
       );
       return nextEnabled;
+    });
+  }, []);
+
+  const toggleResourceNamesVisible = useCallback(() => {
+    setResourceNamesVisible((currentVisible) => {
+      const nextVisible = !currentVisible;
+
+      writeResourceNamesVisible(
+        typeof window === "undefined" ? null : window.localStorage,
+        nextVisible
+      );
+      return nextVisible;
     });
   }, []);
 
@@ -3089,6 +3110,7 @@ function DiagramEditorInner({
   const canvasPanelClassName = [
     styles.canvasPanel,
     showAllEdgeLabels ? styles.canvasPanelEdgeLabelsVisible : styles.canvasPanelEdgeLabelsCompact,
+    resourceNamesVisible ? styles.canvasPanelResourceNamesVisible : styles.canvasPanelResourceNamesHidden,
     isPreviewActive ? styles.canvasPanelPreviewing : undefined,
     isAreaBlankDragging ? styles.canvasPanelAreaBlankDragging : undefined,
     isSnapAnimating ? styles.canvasPanelSnapAnimating : undefined,
@@ -3231,6 +3253,20 @@ function DiagramEditorInner({
                   type="button"
                 >
                   <Expand aria-hidden="true" size={16} />
+                </button>
+                <button
+                  aria-label="리소스 이름 표시"
+                  aria-pressed={resourceNamesVisible}
+                  className={resourceNamesVisible ? styles.iconButtonSelected : styles.iconButton}
+                  onClick={toggleResourceNamesVisible}
+                  title={resourceNamesVisible ? "리소스 이름 표시 켜짐" : "리소스 이름 표시 꺼짐"}
+                  type="button"
+                >
+                  {resourceNamesVisible ? (
+                    <Eye aria-hidden="true" size={16} />
+                  ) : (
+                    <EyeOff aria-hidden="true" size={16} />
+                  )}
                 </button>
               </div>
 

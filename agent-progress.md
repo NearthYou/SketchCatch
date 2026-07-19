@@ -201,3 +201,11 @@ Short English-only working log for the current agent context. Older records are 
 - Added Project Build Environment hydration to durable Plan polling, preventing an early HTTP 202 response from leaving `ready + verified` infrastructure displayed as `준비 필요`.
 - The reported Deployment `8eb279cb-cea8-417f-88af-d31cd21926d0` is pending with matching current/approved Plan artifacts; its build environment is `ready + verified`. The live browser now shows step 3, `Repository 검증 완료`, and the deployment action without console errors.
 - TDD regressions passed RED then GREEN; focused Web checks pass 56/56. Root lint, typecheck, build, final harness, and diff checks are recorded by the finishing verification run. No deployment execution, approval revocation, AWS mutation, DB migration, dependency change, or direct push to `dev` was performed.
+
+
+### 2026-07-19 - Add a persistent Resource Name visibility toggle
+
+- Added a canvas toolbar Eye/EyeOff control that keeps resource names hidden by default and lets each user reveal them without changing board data; Area headers and accessibility labels remain available.
+- The preference is stored locally under sketchcatch.diagramEditor.resourceNameVisibility.brainboardV1 and has focused unit coverage.
+- Focused unit test, root harness, lint, and typecheck pass. The full Web suite and root build were started in the approved environment but exceeded the 120-second command limit; no test failure was reported after process spawning was permitted.
+- No DB migration, dependency change, cloud mutation, Terraform execution, deployment, or Git handoff was performed.
