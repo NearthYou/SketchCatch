@@ -10,6 +10,53 @@ import {
 
 export const AWS_IMPORT_POLICY_CONTRACT_VERSION = "1";
 
+export type AwsImportIssuedPolicyActionRegistry = Readonly<
+  Record<string, readonly string[]>
+>;
+
+/** gg: 이미 발급한 Policy contract별 exact action set만 수동으로 보존합니다. */
+export const AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION = {
+  "1": [
+    "apigateway:GET",
+    "cloudfront:ListDistributions",
+    "cloudwatch:DescribeAlarms",
+    "ec2:DescribeImages",
+    "ec2:DescribeInstances",
+    "ec2:DescribeInternetGateways",
+    "ec2:DescribeRouteTables",
+    "ec2:DescribeSecurityGroups",
+    "ec2:DescribeSubnets",
+    "ec2:DescribeVpcs",
+    "ecs:DescribeClusters",
+    "ecs:DescribeServices",
+    "ecs:DescribeTaskDefinition",
+    "ecs:ListClusters",
+    "ecs:ListServices",
+    "elasticloadbalancing:DescribeLoadBalancers",
+    "iam:ListInstanceProfiles",
+    "iam:ListPolicies",
+    "iam:ListRoles",
+    "kms:DescribeKey",
+    "kms:ListKeys",
+    "lambda:GetPolicy",
+    "lambda:ListFunctions",
+    "logs:DescribeLogGroups",
+    "rds:DescribeDBInstances",
+    "resource-explorer-2:GetDefaultView",
+    "resource-explorer-2:GetView",
+    "resource-explorer-2:Search",
+    "s3:GetBucketLocation",
+    "s3:GetBucketPolicyStatus",
+    "s3:GetBucketPublicAccessBlock",
+    "s3:GetBucketTagging",
+    "s3:GetBucketVersioning",
+    "s3:GetBucketWebsite",
+    "s3:GetEncryptionConfiguration",
+    "s3:ListAllMyBuckets",
+    "tag:GetResources"
+  ]
+} as const satisfies AwsImportIssuedPolicyActionRegistry;
+
 export type AwsImportPolicyContractInput = {
   connectionId: string;
   accountId: string;

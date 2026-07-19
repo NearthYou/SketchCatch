@@ -34,6 +34,10 @@ import {
   type AwsImportManagerContract
 } from "./aws-import-access-manager-template.js";
 import { createAwsImportReadPolicyDocument } from "./aws-import-access-catalog.js";
+import {
+  AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION,
+  type AwsImportIssuedPolicyActionRegistry
+} from "./aws-import-access-policy-template.js";
 
 export type ExpectedManagerStackState = {
   stackId: string;
@@ -126,6 +130,7 @@ export type AwsImportAccessGatewayOptions = {
   publishTemplate?: (
     input: Parameters<typeof publishAwsImportCloudFormationTemplateToS3>[0]
   ) => Promise<AwsImportPublishedTemplate>;
+  issuedPolicyActionsByVersion?: AwsImportIssuedPolicyActionRegistry;
   now?: () => Date;
 };
 
@@ -141,6 +146,8 @@ export function createAwsImportAccessGateway(
     options.createIamClient ?? ((config: IAMClientConfig) => new IAMClient(config));
   const publishTemplate =
     options.publishTemplate ?? publishAwsImportCloudFormationTemplateToS3;
+  const issuedPolicyActionsByVersion =
+    options.issuedPolicyActionsByVersion ?? AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION;
   const now = options.now ?? (() => new Date());
 
   return {
@@ -202,7 +209,8 @@ export function createAwsImportAccessGateway(
           policy,
           policyTemplate,
           contract,
-          expectedCurrent
+          expectedCurrent,
+          issuedPolicyActionsByVersion
         );
         const iamVerified = managerInspection.status === "target" &&
           policyInspection.status !== "invalid"
@@ -261,7 +269,12 @@ export function createAwsImportAccessGateway(
         createIamClient,
         assumeConnectionRole
       );
-      await assertExpectedPolicyAndIamState(clients, contract, expectedPolicy);
+      await assertExpectedPolicyAndIamState(
+        clients,
+        contract,
+        expectedPolicy,
+        issuedPolicyActionsByVersion
+      );
       if (expectedPolicy.kind === "present") {
         if (
           expectedPolicy.contractVersion === contract.policyContractVersion &&
@@ -281,7 +294,12 @@ export function createAwsImportAccessGateway(
         expiresInSeconds: 600,
         now
       });
-      await assertExpectedPolicyAndIamState(clients, contract, expectedPolicy);
+      await assertExpectedPolicyAndIamState(
+        clients,
+        contract,
+        expectedPolicy,
+        issuedPolicyActionsByVersion
+      );
       const request = expectedPolicy.kind === "present"
         ? createAwsImportPolicyStackUpdateInput(
             contract,
@@ -443,12 +461,14 @@ async function getStackTemplate(
 async function assertExpectedPolicyAndIamState(
   clients: { cloudFormation: CloudFormationClientLike; iam: IamClientLike },
   contract: AwsImportManagerContract,
-  expected: ExpectedPolicyStackState
+  expected: ExpectedPolicyStackState,
+  issuedPolicyActionsByVersion: AwsImportIssuedPolicyActionRegistry
 ): Promise<void> {
   const policyDocument = await assertExpectedPolicyStackState(
     clients.cloudFormation,
     contract,
-    expected
+    expected,
+    issuedPolicyActionsByVersion
   );
   if (!await verifyManagerIamResources(clients.iam, contract, policyDocument)) {
     throw new AwsImportAccessGatewayError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
@@ -459,7 +479,8 @@ async function assertExpectedPolicyAndIamState(
 async function assertExpectedPolicyStackState(
   client: CloudFormationClientLike,
   contract: AwsImportManagerContract,
-  expected: ExpectedPolicyStackState
+  expected: ExpectedPolicyStackState,
+  issuedPolicyActionsByVersion: AwsImportIssuedPolicyActionRegistry
 ): Promise<unknown | null> {
   const current = await describeStack(
     client,
@@ -484,7 +505,12 @@ async function assertExpectedPolicyStackState(
   ) {
     return createAwsImportReadPolicyDocument();
   }
-  const policyDocument = extractSafeOwnedPolicyDocument(templateBody, contract, expected);
+  const policyDocument = extractSafeOwnedPolicyDocument(
+    templateBody,
+    contract,
+    expected,
+    issuedPolicyActionsByVersion
+  );
   if (policyDocument === null) {
     throw new AwsImportAccessGatewayError("AWS 상태가 달라졌습니다. 다시 확인해 주세요.");
   }
@@ -614,7 +640,8 @@ function inspectPolicyStack(
   stack: Stack | null,
   templateBody: string | null,
   contract: AwsImportManagerContract,
-  expectedCurrent: ExpectedCurrentImportAccessState | undefined
+  expectedCurrent: ExpectedCurrentImportAccessState | undefined,
+  issuedPolicyActionsByVersion: AwsImportIssuedPolicyActionRegistry
 ): InspectedPolicyStack {
   if (!stack) {
     return {
@@ -644,7 +671,12 @@ function inspectPolicyStack(
       expected.policyFingerprint !== contract.policyFingerprint) &&
     verifyExpectedPolicyStack(stack, templateBody, contract, expected)
   ) {
-    const policyDocument = extractSafeOwnedPolicyDocument(templateBody, contract, expected);
+    const policyDocument = extractSafeOwnedPolicyDocument(
+      templateBody,
+      contract,
+      expected,
+      issuedPolicyActionsByVersion
+    );
     if (policyDocument !== null) {
       return {
         status: "owned_older",
@@ -702,11 +734,12 @@ function verifyExpectedManagerStack(
   );
 }
 
-/** gg: older Policy는 exact stored identity와 read-only verb인 단일 ManagedPolicy만 허용합니다. */
+/** gg: older Policy는 exact stored identity와 발급 당시 등록된 단일 ManagedPolicy만 허용합니다. */
 function extractSafeOwnedPolicyDocument(
   templateBody: string | null,
   contract: AwsImportManagerContract,
-  expected: Extract<ExpectedPolicyStackState, { kind: "present" }>
+  expected: Extract<ExpectedPolicyStackState, { kind: "present" }>,
+  issuedPolicyActionsByVersion: AwsImportIssuedPolicyActionRegistry
 ): unknown | null {
   if (templateBody === null) return null;
   try {
@@ -743,10 +776,8 @@ function extractSafeOwnedPolicyDocument(
       statement.Resource !== "*" || !Array.isArray(statement.Action) ||
       statement.Action.length === 0) return null;
     const actions = statement.Action;
-    if (
-      actions.some((action) => !isReadOnlyIamAction(action)) ||
-      new Set(actions).size !== actions.length
-    ) return null;
+    const issuedActions = issuedPolicyActionsByVersion[expected.contractVersion];
+    if (!hasExactActionSet(actions, issuedActions)) return null;
     if (sha256(JSON.stringify(policy)) !== expected.policyFingerprint) return null;
     const outputs = asRecord(template.Outputs);
     const expectedOutputs = {
@@ -763,16 +794,16 @@ function extractSafeOwnedPolicyDocument(
   }
 }
 
-/** gg: catalog 변화와 독립적으로 AWS read verb만 허용하고 wildcard와 write verb를 거절합니다. */
-function isReadOnlyIamAction(action: unknown): action is string {
-  if (typeof action !== "string") return false;
-  const match = /^[a-z0-9-]+:([A-Za-z0-9]+)$/u.exec(action);
-  if (!match) return false;
-  const operation = match[1]!;
-  return operation === "GET" ||
-    /^(?:BatchGet|Describe|Get|Head|List|Lookup|Search|Select)(?:[A-Z0-9].*)?$/u.test(
-      operation
-    );
+/** gg: action 순서는 무시하되 누락·추가·중복·미등록 contract는 모두 거절합니다. */
+function hasExactActionSet(
+  actions: readonly unknown[],
+  issuedActions: readonly string[] | undefined
+): boolean {
+  if (!issuedActions || issuedActions.length === 0) return false;
+  if (actions.some((action) => typeof action !== "string")) return false;
+  if (new Set(actions).size !== actions.length) return false;
+  if (new Set(issuedActions).size !== issuedActions.length) return false;
+  return stableJson([...actions].sort()) === stableJson([...issuedActions].sort());
 }
 
 /** gg: apply 직전에는 승인 시점의 current Policy identity를 target 계약과 별도로 확인합니다. */

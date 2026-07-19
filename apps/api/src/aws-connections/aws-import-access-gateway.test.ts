@@ -20,6 +20,7 @@ import { publishAwsImportCloudFormationTemplateToS3 } from "./aws-connection-tem
 import { createAwsImportReadPolicyDocument } from "./aws-import-access-catalog.js";
 import { createAwsImportManagerContract } from "./aws-import-access-manager-template.js";
 import { createAwsImportAccessGateway } from "./aws-import-access-gateway.js";
+import { AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION } from "./aws-import-access-policy-template.js";
 
 const connection = {
   id: "11111111-2222-4333-8444-555555555555",
@@ -42,6 +43,14 @@ const contract = createAwsImportManagerContract({
   region: connection.region,
   targetRoleArn: connection.roleArn,
   templateBucketName: "sketchcatch-private-templates"
+});
+
+test("default registry pins the exact issued Policy v1 action set", () => {
+  assert.deepEqual(Object.keys(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION), ["1"]);
+  assert.deepEqual(
+    [...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["1"]].sort(),
+    [...createAwsImportReadPolicyDocument().Statement[0].Action].sort()
+  );
 });
 
 test("policy stack creation uses only Task 2 exact request builders", async () => {
@@ -312,6 +321,7 @@ test("Policy apply rechecks approved current state after publication before muta
         driftKind: "trust",
         readPolicyDocument: oldPolicy.policyDocument
       }),
+      issuedPolicyActionsByVersion: createIssuedRegistryFor(oldPolicy),
       assumeConnectionRole: async () => ({
         accessKeyId: "access-key",
         secretAccessKey: "secret-key",
@@ -402,6 +412,7 @@ test("Policy publication rechecks the full exact IAM state before UpdateStack", 
         driftKind,
         readPolicyDocument: oldPolicy.policyDocument
       }),
+      issuedPolicyActionsByVersion: createIssuedRegistryFor(oldPolicy),
       assumeConnectionRole: async () => ({
         accessKeyId: "access-key",
         secretAccessKey: "secret-key",
@@ -619,7 +630,8 @@ test("manager inspection accepts a previously verified owned older Policy contra
     policyContractVersion: oldPolicy.contractVersion,
     policyTemplateBody: oldPolicy.templateBody,
     policyFingerprint: oldPolicy.policyFingerprint,
-    readPolicyDocument: oldPolicy.policyDocument
+    readPolicyDocument: oldPolicy.policyDocument,
+    issuedPolicyActionsByVersion: createIssuedRegistryFor(oldPolicy)
   });
 
   const result = await fixture.gateway.inspectManager({
@@ -678,7 +690,27 @@ test("manager inspection accepts a previously verified owned older Policy contra
   assert.equal(replacement.policyStatus, "invalid");
 });
 
-test("owned older Policy accepts an exact stored read action removed from the current catalog", async () => {
+test("owned older Policy accepts an exact registered action set removed from the current catalog", async () => {
+  const oldPolicy = createOlderPolicyTemplate("route53:GetHostedZone");
+  const fixture = createInspectionGateway({
+    policyContractVersion: oldPolicy.contractVersion,
+    policyTemplateBody: oldPolicy.templateBody,
+    policyFingerprint: oldPolicy.policyFingerprint,
+    readPolicyDocument: oldPolicy.policyDocument,
+    issuedPolicyActionsByVersion: createIssuedRegistryFor(oldPolicy)
+  });
+
+  const result = await fixture.gateway.inspectManager({
+    connection,
+    contract,
+    expectedCurrent: createExpectedCurrentForOlderPolicy(oldPolicy)
+  });
+
+  assert.equal(result.verified, true);
+  assert.equal(result.policyStatus, "owned_older");
+});
+
+test("owned older Policy rejects an unregistered version even when every action looks read-only", async () => {
   const oldPolicy = createOlderPolicyTemplate("route53:GetHostedZone");
   const fixture = createInspectionGateway({
     policyContractVersion: oldPolicy.contractVersion,
@@ -693,11 +725,11 @@ test("owned older Policy accepts an exact stored read action removed from the cu
     expectedCurrent: createExpectedCurrentForOlderPolicy(oldPolicy)
   });
 
-  assert.equal(result.verified, true);
-  assert.equal(result.policyStatus, "owned_older");
+  assert.equal(result.verified, false);
+  assert.equal(result.policyStatus, "invalid");
 });
 
-test("owned older Policy rejects an exact stored write action", async () => {
+test("owned older Policy rejects an unregistered write action", async () => {
   const oldPolicy = createOlderPolicyTemplate("s3:PutObject");
   const fixture = createInspectionGateway({
     policyContractVersion: oldPolicy.contractVersion,
@@ -710,6 +742,27 @@ test("owned older Policy rejects an exact stored write action", async () => {
     connection,
     contract,
     expectedCurrent: createExpectedCurrentForOlderPolicy(oldPolicy)
+  });
+
+  assert.equal(result.verified, false);
+  assert.equal(result.policyStatus, "invalid");
+});
+
+test("owned older Policy rejects deceptive Get-named write actions outside its registered set", async () => {
+  const registeredPolicy = createOlderPolicyTemplate("route53:GetHostedZone");
+  const deceptivePolicy = createOlderPolicyTemplate("sts:GetWebIdentityToken");
+  const fixture = createInspectionGateway({
+    policyContractVersion: deceptivePolicy.contractVersion,
+    policyTemplateBody: deceptivePolicy.templateBody,
+    policyFingerprint: deceptivePolicy.policyFingerprint,
+    readPolicyDocument: deceptivePolicy.policyDocument,
+    issuedPolicyActionsByVersion: createIssuedRegistryFor(registeredPolicy)
+  });
+
+  const result = await fixture.gateway.inspectManager({
+    connection,
+    contract,
+    expectedCurrent: createExpectedCurrentForOlderPolicy(deceptivePolicy)
   });
 
   assert.equal(result.verified, false);
@@ -906,6 +959,7 @@ function createInspectionGateway(options: {
   readPolicyDocument?: unknown;
   inlinePolicyNames?: string[];
   serviceAttachedPolicyArns?: string[];
+  issuedPolicyActionsByVersion?: Readonly<Record<string, readonly string[]>>;
 } = {}) {
   const managerContractVersion = options.managerContractVersion ?? contract.contractVersion;
   const managerTemplateBody = options.managerTemplateBody ?? contract.templateBody;
@@ -1034,7 +1088,10 @@ function createInspectionGateway(options: {
       accessKeyId: "access-key",
       secretAccessKey: "secret-key",
       sessionToken: "session-token"
-    })
+    }),
+    ...(options.issuedPolicyActionsByVersion !== undefined
+      ? { issuedPolicyActionsByVersion: options.issuedPolicyActionsByVersion }
+      : {})
   });
   return { gateway, commands };
 }
@@ -1082,6 +1139,16 @@ function createExpectedCurrentForOlderPolicy(
       templateSha256: oldPolicy.templateSha256,
       policyFingerprint: oldPolicy.policyFingerprint
     }
+  };
+}
+
+function createIssuedRegistryFor(
+  oldPolicy: ReturnType<typeof createOlderPolicyTemplate>
+): Readonly<Record<string, readonly string[]>> {
+  return {
+    [oldPolicy.contractVersion]: [
+      ...oldPolicy.policyDocument.Statement[0]!.Action
+    ]
   };
 }
 
