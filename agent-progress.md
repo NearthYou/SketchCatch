@@ -11,6 +11,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Reduce Module card detail typography
+
+- Reduced only the highlighted Module metadata and configuration summary by 3px, preserving the card title, description, and add button.
+- Root lint, typecheck, build, harness, and diff checks pass. No broad test suite was run at the user's request; refresh the Module panel for final visual confirmation.
+
 ### 2026-07-19 - Refine Resource panel typography
 
 - Reduced Resource summary row text from an 18px to 16px computed size, made parameter labels bold, and changed values from bold to regular weight.
