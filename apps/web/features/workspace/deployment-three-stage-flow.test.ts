@@ -137,17 +137,81 @@ test("Direct Deployment uses prepare, approve, and execute with three external p
 });
 
 test("approval owns the Plan summary while execution keeps final target confirmation", () => {
-  assert.equal(directDeploymentSource.match(/<PlanSummaryRows/g)?.length, 1);
-  assert.equal(directDeploymentSource.match(/<InfoRow label="범위"/g)?.length, 1);
-  assert.match(directDeploymentSource, /<InfoRow label="상태"/);
-  assert.match(directDeploymentSource, /<InfoRow label="현재 작업"/);
-  assert.match(directDeploymentSource, /<h3>최종 실행 대상<\/h3>/);
-  assert.match(directDeploymentSource, /approvedAwsAccountId/);
-  assert.match(directDeploymentSource, /approvedAwsRegion/);
+  const contentStart = directDeploymentSource.indexOf("function renderDirectStepContent");
+  const approvalStart = directDeploymentSource.indexOf(
+    'if (stepId === "approval")',
+    contentStart
+  );
+  const executionStart = directDeploymentSource.indexOf("\n      return (", approvalStart);
+  const executionEnd = directDeploymentSource.indexOf(
+    "function renderDirectStepActions",
+    executionStart
+  );
+  const approvalSource = directDeploymentSource.slice(approvalStart, executionStart);
+  const executionSource = directDeploymentSource.slice(executionStart, executionEnd);
+
+  assert.ok(approvalStart > contentStart);
+  assert.ok(executionStart > approvalStart);
+  assert.ok(executionEnd > executionStart);
+  assert.match(approvalSource, /<InfoRow label="범위"/);
+  assert.match(approvalSource, /label="차단"/);
+  assert.match(approvalSource, /<PlanSummaryRows/);
+  assert.match(approvalSource, /실행 대상과 스냅샷/);
+  assert.match(approvalSource, /selectedAwsConnection\?\.accountId/);
+  assert.match(approvalSource, /selectedAwsConnection\?\.region/);
+  assert.match(approvalSource, /preparedSnapshotHash/);
+  assert.doesNotMatch(executionSource, /<InfoRow label="범위"/);
+  assert.doesNotMatch(executionSource, /<PlanSummaryRows/);
+  assert.match(executionSource, /<InfoRow label="상태"/);
+  assert.match(executionSource, /<InfoRow label="현재 작업"/);
+  assert.match(executionSource, /<h3>최종 실행 대상<\/h3>/);
+  assert.match(executionSource, /approvedAwsAccountId/);
+  assert.match(executionSource, /approvedAwsRegion/);
   assert.match(
-    directDeploymentSource,
+    executionSource,
     /승인된 Plan과 프로젝트 스냅샷이 일치할 때만 실행됩니다/
   );
+});
+
+test("the execution stage owns current logs before Deployment History exists", () => {
+  const contentStart = directDeploymentSource.indexOf("function renderDirectStepContent");
+  const approvalStart = directDeploymentSource.indexOf(
+    'if (stepId === "approval")',
+    contentStart
+  );
+  const executionStart = directDeploymentSource.indexOf("\n      return (", approvalStart);
+  const executionEnd = directDeploymentSource.indexOf(
+    "function renderDirectStepActions",
+    executionStart
+  );
+  const executionSource = directDeploymentSource.slice(executionStart, executionEnd);
+
+  assert.match(executionSource, /deploymentLogView\.source === "current"/);
+  assert.match(executionSource, /현재 실행 로그/);
+  assert.match(executionSource, /<DeploymentLogList logs=\{deploymentLogs\}/);
+});
+
+test("history keeps selected-version logs separate from current execution logs", () => {
+  const logsStart = directDeploymentSource.indexOf("const renderLogsSection");
+  const historyStart = directDeploymentSource.indexOf(
+    "const renderDeploymentHistory",
+    logsStart
+  );
+  const historyViewStart = directDeploymentSource.indexOf(
+    "const renderHistoryView",
+    historyStart
+  );
+  const historyViewEnd = directDeploymentSource.indexOf(
+    "const deploymentContent",
+    historyViewStart
+  );
+  const logsSource = directDeploymentSource.slice(logsStart, historyStart);
+  const historyViewSource = directDeploymentSource.slice(historyViewStart, historyViewEnd);
+
+  assert.match(logsSource, /<DeploymentLogList logs=\{loadedHistoryDeploymentLogs\}/);
+  assert.doesNotMatch(logsSource, /deploymentLogView/);
+  assert.match(historyViewSource, /loadedHistoryDeploymentLogs\.length/);
+  assert.doesNotMatch(historyViewSource, /deploymentLogView/);
 });
 
 test("deployment polling keeps unrelated failures but reconciles its accepted Plan", () => {
@@ -534,10 +598,25 @@ test("Deployment History hides inactive controls when no successful version exis
 });
 
 test("selected history detail does not repeat scope and change columns", () => {
-  assert.doesNotMatch(directDeploymentSource, /<dt>실행 범위<\/dt>/);
-  assert.doesNotMatch(directDeploymentSource, /<dt>변경 내용<\/dt>/);
-  assert.match(directDeploymentSource, /<dt>버전 ID<\/dt>/);
-  assert.match(directDeploymentSource, /<dt>실행 시간<\/dt>/);
+  const detailStart = directDeploymentSource.indexOf("deploymentHistoryDetailPanel");
+  const detailEnd = directDeploymentSource.indexOf("const renderHistoryView", detailStart);
+  const detailSource = directDeploymentSource.slice(detailStart, detailEnd);
+
+  assert.ok(detailStart > -1);
+  assert.ok(detailEnd > detailStart);
+  assert.doesNotMatch(detailSource, /<dt>실행 범위<\/dt>/);
+  assert.doesNotMatch(detailSource, /<dt>변경 내용<\/dt>/);
+  assert.doesNotMatch(
+    detailSource,
+    /formatDeploymentHistoryResult|formatDeploymentScope|formatDeploymentChangeSummary/
+  );
+  assert.match(detailSource, /\{status\.label\}/);
+  assert.match(detailSource, /<time dateTime=\{deployment\.createdAt\}>/);
+  assert.match(detailSource, /<dt>앱 릴리즈<\/dt>/);
+  assert.match(detailSource, /<dt>버전 ID<\/dt>/);
+  assert.match(detailSource, /<dt>실행 시간<\/dt>/);
+  assert.match(detailSource, /<dt>요청자<\/dt>/);
+  assert.match(detailSource, /<summary>기술 정보<\/summary>/);
 });
 
 test("expanded history details do not repeat their disclosure titles", () => {

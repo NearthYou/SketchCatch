@@ -354,7 +354,6 @@ export function DirectDeploymentScreen({
     historyIsLoading: historyDetailsIsLoading,
     historyLogs: loadedHistoryDeploymentLogs
   });
-  const historyDeploymentLogs = deploymentLogView.logs;
   const historyDeploymentOutputLinks = useMemo(
     () => getSafeDeploymentLinks(historyTerraformOutputs),
     [historyTerraformOutputs]
@@ -1501,6 +1500,22 @@ export function DirectDeploymentScreen({
               />
             ) : null}
           </div>
+          {deploymentLogView.source === "current" ? (
+            <details className={styles.deploymentDisclosure}>
+              <summary>
+                <span>현재 실행 로그</span>
+                <small>{deploymentLogs.length}줄</small>
+              </summary>
+              <div className={styles.deploymentDisclosureBody}>
+                <section
+                  aria-label="현재 실행 로그 세부 내용"
+                  className={styles.deploymentSection}
+                >
+                  <DeploymentLogList logs={deploymentLogs} />
+                </section>
+              </div>
+            </details>
+          ) : null}
           {selectedDeployment?.status === "PARTIALLY_FAILED" &&
           selectedApplicationRelease?.status === "partially_failed" ? (
             <div className={styles.deploymentPartialFailureCallout} role="alert">
@@ -1938,7 +1953,7 @@ export function DirectDeploymentScreen({
   };
 
   const renderLogsSection = () => {
-    if (deploymentLogView.isLoading) {
+    if (historyDetailsIsLoading) {
       return (
         <section
           aria-busy="true"
@@ -1952,11 +1967,11 @@ export function DirectDeploymentScreen({
       );
     }
 
-    if (deploymentLogView.errorMessage) {
+    if (historyDetailsErrorMessage) {
       return (
         <section aria-label="전체 로그 세부 내용" className={styles.deploymentSection}>
           <p className={styles.deploymentRecentResultError} role="alert">
-            {deploymentLogView.errorMessage}
+            {historyDetailsErrorMessage}
           </p>
         </section>
       );
@@ -1964,7 +1979,7 @@ export function DirectDeploymentScreen({
 
     return (
       <section aria-label="전체 로그 세부 내용" className={styles.deploymentSection}>
-        <DeploymentLogList logs={deploymentLogView.logs} />
+        <DeploymentLogList logs={loadedHistoryDeploymentLogs} />
       </section>
     );
   };
@@ -2126,9 +2141,6 @@ export function DirectDeploymentScreen({
                     <h4>
                       {deployment.status === "DESTROYED" ? "정리 완료된 버전" : "배포 완료된 버전"}
                     </h4>
-                    <p className={styles.deploymentHistoryResultSentence}>
-                      {formatDeploymentHistoryResult(deployment)}
-                    </p>
                   </div>
                 </div>
                 <div className={styles.deploymentHistoryDetailContent}>
@@ -2261,11 +2273,11 @@ export function DirectDeploymentScreen({
           <summary>
             <span>전체 로그</span>
             <small>
-              {deploymentLogView.isLoading
+              {historyDetailsIsLoading
                 ? "불러오는 중"
-                : deploymentLogView.errorMessage
+                : historyDetailsErrorMessage
                   ? "불러오기 실패"
-                  : `${historyDeploymentLogs.length}줄`}
+                  : `${loadedHistoryDeploymentLogs.length}줄`}
             </small>
           </summary>
           <div className={styles.deploymentDisclosureBody}>{renderLogsSection()}</div>
@@ -2900,22 +2912,6 @@ function formatDeploymentChangeSummary(summary: Deployment["planSummary"]): stri
     .map(([label, count]) => `${label} ${count}개`);
 
   return changes.length > 0 ? changes.join(" · ") : "변경 없음";
-}
-
-function formatDeploymentHistoryResult(deployment: Deployment): string {
-  const scope = formatDeploymentScope(deployment.scope);
-
-  if (deployment.status === "DESTROYED") {
-    const deleteCount = deployment.planSummary?.deleteCount ?? 0;
-    return deleteCount > 0
-      ? `${scope}에서 리소스 ${deleteCount}개를 정상적으로 정리했습니다.`
-      : `${scope} 리소스 정리를 완료했습니다.`;
-  }
-
-  const changes = formatDeploymentChangeSummary(deployment.planSummary);
-  return changes === "변경 없음" || changes === "변경 정보 없음"
-    ? `${scope} 배포를 완료했습니다.`
-    : `${scope} 배포를 완료했습니다. ${changes}.`;
 }
 
 function formatDeploymentScope(scope: DeploymentScope): string {
