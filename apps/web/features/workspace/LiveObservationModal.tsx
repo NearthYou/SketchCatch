@@ -12,7 +12,6 @@ import QRCode from "qrcode";
 import { createPortal } from "react-dom";
 import { copyTextToClipboard } from "../../lib/clipboard";
 import { ApiClientError, getApiErrorMessage } from "../../lib/api-client";
-import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   createLiveObservation,
   stopLiveObservation,
@@ -27,20 +26,14 @@ import {
 } from "./live-observation";
 import { getLiveObservationCapacityMode } from "./live-observation-architecture";
 import { useLiveObservationQueries } from "./live-observation-queries";
-import type { LiveObservationViewport } from "./live-observation-view-state";
-import { LiveObservationDiagramMap } from "./LiveObservationDiagramMap";
 import { LiveObservationFocusedFlow } from "./LiveObservationFocusedFlow";
-import { WorkspaceDesignAnalysisPanel } from "./WorkspaceDesignAnalysisPanel";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
-  readonly diagramContext: DiagramEditorPanelContext;
-  readonly initialViewport: LiveObservationViewport | null;
   readonly onClose: () => void;
   readonly onSessionChange: (session: LiveObservationV2Session | null) => void;
   readonly onSelectedDeploymentIdChange: (deploymentId: string) => void;
   readonly onSnapshotChange: (snapshot: LiveObservationV2Snapshot | null) => void;
-  readonly onViewportChange: (viewport: LiveObservationViewport) => void;
   readonly projectId: string;
   readonly selectedDeploymentId: string;
   readonly session: LiveObservationV2Session | null;
@@ -49,13 +42,10 @@ export type LiveObservationModalProps = {
 };
 
 export function LiveObservationModal({
-  diagramContext,
-  initialViewport,
   onClose,
   onSessionChange,
   onSelectedDeploymentIdChange,
   onSnapshotChange,
-  onViewportChange,
   projectId,
   selectedDeploymentId,
   session,
@@ -77,7 +67,6 @@ export function LiveObservationModal({
   const [qrState, setQrState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [copied, setCopied] = useState(false);
   const [audienceUtilityOpen, setAudienceUtilityOpen] = useState(true);
-  const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const queries = useLiveObservationQueries({
     deploymentId: selectedDeploymentId,
@@ -581,29 +570,11 @@ export function LiveObservationModal({
             </div>
           ) : null}
           {selectedArchitectureState === "ready" && selectedArchitecture ? (
-            <>
-              <LiveObservationFocusedFlow
-                architecture={selectedArchitecture}
-                key={`focused-${selectedDeploymentId}`}
-                snapshot={selectedSnapshot}
-              />
-              <details
-                className={styles.liveObservationArchitectureDisclosure}
-                onToggle={(event) => setIsArchitectureOpen(event.currentTarget.open)}
-                open={isArchitectureOpen}
-              >
-                <summary>전체 Architecture 보기</summary>
-                {isArchitectureOpen ? (
-                  <LiveObservationDiagramMap
-                    architecture={selectedArchitecture}
-                    initialViewport={initialViewport}
-                    key={selectedDeploymentId}
-                    onViewportChange={onViewportChange}
-                    snapshot={selectedSnapshot}
-                  />
-                ) : null}
-              </details>
-            </>
+            <LiveObservationFocusedFlow
+              architecture={selectedArchitecture}
+              key={`focused-${selectedDeploymentId}`}
+              snapshot={selectedSnapshot}
+            />
           ) : null}
 
           {selectedSnapshot ? (
@@ -659,7 +630,6 @@ export function LiveObservationModal({
               </ol>
             </details>
           ) : null}
-          <WorkspaceDesignAnalysisPanel context={diagramContext} />
         </main>
 
         {selectedSession ? (

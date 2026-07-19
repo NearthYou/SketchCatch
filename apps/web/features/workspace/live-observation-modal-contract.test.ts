@@ -7,10 +7,6 @@ const modalSource = readFileSync(
   fileURLToPath(new URL("./LiveObservationModal.tsx", import.meta.url)),
   "utf8"
 );
-const diagramMapSource = readFileSync(
-  fileURLToPath(new URL("./LiveObservationDiagramMap.tsx", import.meta.url)),
-  "utf8"
-);
 const rightPanelSource = readFileSync(
   fileURLToPath(new URL("./WorkspaceRightPanel.tsx", import.meta.url)),
   "utf8"
@@ -73,24 +69,16 @@ test("Live Observation stays above non-blocking Workspace surfaces and below rec
   );
 });
 
-test("modal re-entry restores the selected Deployment and diagram viewport", () => {
+test("modal re-entry restores the selected Deployment without a secondary diagram viewport", () => {
   assert.match(rightPanelSource, /createLiveObservationViewState\(projectId\)/);
   assert.match(
     rightPanelSource,
     /selectedDeploymentId=\{retainedLiveObservationView\.selectedDeploymentId\}/
   );
-  assert.match(
-    rightPanelSource,
-    /initialViewport=\{retainedLiveObservationView\.viewport\}/
-  );
-  assert.match(
-    modalSource,
-    /<LiveObservationDiagramMap[\s\S]*?key=\{selectedDeploymentId\}/
-  );
   assert.match(modalSource, /onSelectedDeploymentIdChange\(nextDeploymentId\)/);
-  assert.match(diagramMapSource, /defaultViewport=\{initialViewport \?\?/);
-  assert.match(diagramMapSource, /fitView=\{initialViewport === null\}/);
-  assert.match(diagramMapSource, /onMoveEnd=\{\(_event, viewport\) => onViewportChange\(viewport\)\}/);
+  assert.doesNotMatch(modalSource, /LiveObservationDiagramMap/);
+  assert.doesNotMatch(rightPanelSource, /initialViewport=\{/);
+  assert.doesNotMatch(rightPanelSource, /onViewportChange=\{/);
 });
 
 test("Deployment selection effect notifies the parent only when the target changes", () => {
@@ -144,20 +132,20 @@ test("modal re-entry restores only the selected, unexpired active session and ab
 });
 
 test("selected Deployment independently loads and renders its immutable Architecture", () => {
-  const mapIndex = modalSource.indexOf("<LiveObservationDiagramMap");
+  const focusedFlowIndex = modalSource.indexOf("<LiveObservationFocusedFlow");
   const evidenceIndex = modalSource.indexOf(
     '<section className={styles.liveObservationEvidenceRail}'
   );
 
   assert.match(modalSource, /useLiveObservationQueries\(\{/);
   assert.match(modalSource, /deploymentId: selectedDeploymentId/);
-  assert.match(modalSource, /LiveObservationDiagramMap/);
+  assert.match(modalSource, /LiveObservationFocusedFlow/);
   assert.match(
     modalSource,
     /const selectedArchitecture = queries\.architecture\.data\?\.architecture \?\? null;/
   );
-  assert.ok(mapIndex >= 0);
-  assert.ok(evidenceIndex > mapIndex, "Architecture map must render before the evidence rail");
+  assert.ok(focusedFlowIndex >= 0);
+  assert.ok(evidenceIndex > focusedFlowIndex, "Focused flow must render before the evidence rail");
 });
 
 test("restores the focused traffic path as the default observation view", () => {
@@ -176,19 +164,11 @@ test("restores the focused traffic path as the default observation view", () => 
   );
 });
 
-test("mounts the full Architecture map only after its disclosure opens", () => {
-  assert.match(
-    modalSource,
-    /const \[isArchitectureOpen, setIsArchitectureOpen\] = useState\(false\)/
-  );
-  assert.match(
-    modalSource,
-    /<details[\s\S]*?onToggle=\{\(event\) => setIsArchitectureOpen\(event\.currentTarget\.open\)\}[\s\S]*?open=\{isArchitectureOpen\}/
-  );
-  assert.match(
-    modalSource,
-    /\{isArchitectureOpen \? \([\s\S]*?<LiveObservationDiagramMap[\s\S]*?\) : null\}/
-  );
+test("keeps Live Observation focused on the traffic path", () => {
+  assert.doesNotMatch(modalSource, /LiveObservationDiagramMap/);
+  assert.doesNotMatch(modalSource, /WorkspaceDesignAnalysisPanel/);
+  assert.doesNotMatch(modalSource, /전체 Architecture 보기/);
+  assert.doesNotMatch(modalSource, /설계 분석/);
 });
 
 test("renders Architecture state only when it belongs to the selected Deployment", () => {
@@ -210,7 +190,7 @@ test("renders Architecture state only when it belongs to the selected Deployment
   );
   assert.match(
     modalSource,
-    /<LiveObservationDiagramMap[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
+    /<LiveObservationFocusedFlow[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
   assert.match(
     modalSource,
@@ -275,7 +255,7 @@ test("session creation locks Deployment selection and observation evidence stays
   assert.match(modalSource, /const selectedSnapshot = selectedSession \? snapshot : null;/);
   assert.match(
     modalSource,
-    /<LiveObservationDiagramMap[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
+    /<LiveObservationFocusedFlow[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
   assert.match(evidenceBlock, /selectedSnapshot\.live\.acceptedEventCount/);
   assert.match(deploymentSelectionHandler, /session\.deploymentId !== nextDeploymentId/);
