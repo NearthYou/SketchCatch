@@ -566,7 +566,9 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
         [
           layoutInSupportGrid(1840, 480, 0, 0, "definition-ops-group"),
           layoutInSupportGrid(1840, 480, 1, 0, "definition-ops-group"),
-          layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group")
+          layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group"),
+          layoutInSupportGrid(1840, 480, 1, 1, "definition-ops-group"),
+          layoutInSupportGrid(1840, 480, 2, 0, "definition-ops-group")
         ],
         "region"
       ),
@@ -1463,14 +1465,14 @@ export const templateDefinitions = [
         },
         dependsOn: ["@address:listener"]
       }),
-      resource("scaling-target", "Fargate Task Capacity 1–3", "aws", "aws_appautoscaling_target", 1100, 660, {
+      resource("scaling-target", "ECS Scaling Target", "aws", "aws_appautoscaling_target", 1100, 660, {
         minCapacity: 1,
         maxCapacity: 3,
         resourceId: "service/${@ref:cluster.name}/${@ref:service.name}",
         scalableDimension: "ecs:service:DesiredCount",
         serviceNamespace: "ecs"
       }),
-      resource("scaling-policy", "10 requests / target", "aws", "aws_appautoscaling_policy", 1300, 660, {
+      resource("scaling-policy", "Request Scaling Policy", "aws", "aws_appautoscaling_policy", 1300, 660, {
         name: "${@ref:service.name}-requests",
         policyType: "TargetTrackingScaling",
         resourceId: "@ref:scaling-target.resource_id",

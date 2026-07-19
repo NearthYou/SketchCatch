@@ -234,17 +234,17 @@
         }
       },
       "diagrams": {
-        "sourceFingerprint": "sha256:6626a7ba2b1845b7768e8a1829d0c58e9edc841cebd91cd11647b86b9a358e58",
-        "compiledFingerprint": "sha256:70cf6ce2a7a9f39a11ec65ca0772e24a4a79a3965711b6ec818d221982386fcb"
+        "sourceFingerprint": "sha256:c31850b2328fe2c2b44fc9fc3ed3e231719d8f0cdffa29e5564a0f1a11c351c1",
+        "compiledFingerprint": "sha256:b45a547f90b1c087e54053e241adbef71e772eb9b2e35297a2d8c2835d948546"
       },
       "proposal": {
         "compilerVersion": "architecture-board-compiler/v3",
-        "candidateId": "compiled:presentation:support-above-reversed"
+        "candidateId": "compiled:presentation:support-above"
       },
       "metrics": {
         "before": {
-          "score": 5640601788.029056,
-          "visualPenalty": 5640594108.029056,
+          "score": 4610305788.029056,
+          "visualPenalty": 4610298108.029056,
           "structuralPenalty": 3220,
           "semanticDiagnosticPenalty": 4460,
           "metrics": {
@@ -264,54 +264,54 @@
             "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 84.8,
             "knowledgeViewportAspectRatio": 2.81,
-            "mainFlowContinuityError": 172,
+            "mainFlowContinuityError": 24,
             "nodeOverlapCount": 3,
-            "parentBoundaryViolationCount": 2,
+            "parentBoundaryViolationCount": 1,
             "repeatAlignmentError": 0,
-            "score": 5640594108.029056,
+            "score": 4610298108.029056,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
-            "supportLaneIntrusionCount": 7,
+            "supportLaneIntrusionCount": 6,
             "terraformReferenceContainmentMismatchCount": 15,
             "totalEdgeLength": 7496
           }
         },
         "after": {
-          "score": 382087937.526019,
-          "visualPenalty": 382081994.592019,
+          "score": 522826465.552744,
+          "visualPenalty": 522820483.439744,
           "structuralPenalty": 540,
           "semanticDiagnosticPenalty": 4460,
           "metrics": {
             "backwardEdgeCount": 0,
-            "canvasArea": 1078560,
-            "canvasAspectRatioPenalty": 0.061508,
+            "canvasArea": 1530144,
+            "canvasAspectRatioPenalty": 0.505952,
             "compilationDistance": 712,
             "containmentMismatchCount": 0,
-            "edgeAreaTitleIntersectionCount": 4,
+            "edgeAreaTitleIntersectionCount": 6,
             "edgeCrossingCount": 2,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.965821,
+            "emptySpaceRatio": 0.975908,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 3,
             "knowledgeEdgeLength": 392.865,
-            "knowledgePenalty": 230.934,
+            "knowledgePenalty": 270.113,
             "knowledgeReferenceSimilarity": 0.841,
             "knowledgeSiblingGap": 84.8,
             "knowledgeViewportAspectRatio": 2.81,
-            "mainFlowContinuityError": 752,
+            "mainFlowContinuityError": 0,
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 0,
-            "score": 382081994.592019,
+            "score": 522820483.439744,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 3,
-            "totalEdgeLength": 8424
+            "totalEdgeLength": 9274
           }
         },
         "compilationDistance": 712,
-        "scoreDelta": -5258513850.503036
+        "scoreDelta": -4087479322.476311
       },
       "review": {
         "status": "pending",

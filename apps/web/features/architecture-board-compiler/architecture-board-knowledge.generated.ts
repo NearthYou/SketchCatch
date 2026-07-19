@@ -7,7 +7,7 @@ import {
 
 export const generatedArchitectureBoardKnowledgeArtifact = {
   version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
-  hash: "fnv1a-7e91a33f",
+  hash: "fnv1a-05f1e382",
   cases: [
     {
       "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -904,13 +904,13 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "parentedNodeCount": 24,
       "maxContainmentDepth": 3,
       "meanAreaChildDensity": 2.667,
-      "meanAreaPadding": 78,
+      "meanAreaPadding": 81.333,
       "meanSiblingGap": 84.8,
       "meanVerticalGap": 25.6,
-      "meanNodeWidth": 308.923,
+      "meanNodeWidth": 315.077,
       "meanNodeHeight": 177.846,
-      "meanAspectRatio": 1.472,
-      "meanCaptionWidth": 111.731,
+      "meanAspectRatio": 1.489,
+      "meanCaptionWidth": 110.385,
       "meanZIndex": 0.846,
       "meanEdgeLength": 392.865,
       "meanEdgeWaypointCount": 0,
@@ -1259,7 +1259,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "y": 0
           },
           "size": {
-            "width": 720,
+            "width": 560,
             "height": 840
           },
           "type": "aws-region",

@@ -11,7 +11,7 @@ export type TemplateThumbnailAsset = {
 const TEMPLATE_THUMBNAIL_VERSION = `v${BOARD_THUMBNAIL_CAPTURE_CONTRACT.version}`;
 
 const TEMPLATE_DIAGRAM_HASHES: Record<TemplateId, string> = {
-  "ecs-fargate-container-app": "da0ba2240a316ba5472d54820d88977122cff3533027ce888cbdb73ead098edc",
+  "ecs-fargate-container-app": "f223557a8a9f7f169a46e06a7c05bad6e33e89542983cfb16ed87827a20d8ccf",
   "eks-container-app": "2161c0261e624d7d515b0d703b17bb7f500003b4d4c62056c225fbcffdb55021",
   "full-serverless-web-app": "e8fc3ef3ee7b8264ec80bd2aacec75d5035973e945cf08a28ca61221cb65baec",
   "minimal-serverless-api": "7be15b51fc305b4c71d22e938e148ad3ee9e024f33b3a6f271613447477aabf2",
