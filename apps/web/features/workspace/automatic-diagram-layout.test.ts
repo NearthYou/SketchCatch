@@ -3,7 +3,8 @@ import test from "node:test";
 import { buildTemplateDiagramJson, type DiagramNode } from "@sketchcatch/types";
 import {
   evaluateAutomaticDiagramLayout,
-  layoutAutomaticDiagram
+  layoutAutomaticDiagram,
+  layoutAutomaticDiagramCandidates
 } from "./automatic-diagram-layout";
 import { getAutomaticDiagramSemanticRole } from "./automatic-diagram-layout-provider-mapping";
 import {
@@ -49,6 +50,27 @@ test("layoutAutomaticDiagram은 선택 profile마다 기존 후보군을 확장�
 
   assert.equal(result.candidateCount, 12);
   assert.deepEqual(layoutAutomaticDiagram(input), result);
+});
+
+test("layout 후보 목록은 기존 단일 선택을 첫 결과로 유지하고 결정론적으로 정렬한다", () => {
+  const nodes = [
+    makeNode("browser", "actor_browser", 0, 0, "design"),
+    makeNode("service", "aws_ecs_service", 0, 0),
+    makeNode("bucket", "aws_s3_bucket", 0, 0)
+  ];
+  const edges = [
+    { id: "browser-service", sourceId: "browser", targetId: "service" },
+    { id: "service-bucket", sourceId: "service", targetId: "bucket" }
+  ];
+  const input = { edges, nodes };
+
+  const selected = layoutAutomaticDiagram(input);
+  const candidates = layoutAutomaticDiagramCandidates(input);
+
+  assert(candidates.length > 0);
+  assert.deepEqual(candidates[0], selected);
+  assert.deepEqual(layoutAutomaticDiagramCandidates(input), candidates);
+  assert.equal(new Set(candidates.map((candidate) => candidate.candidateId)).size, candidates.length);
 });
 
 test("knowledge spacing profile은 baseline보다 edge/node/containment 이상치를 늘리면 선택하지 않는다", () => {

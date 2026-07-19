@@ -20,7 +20,9 @@ import {
 import {
   evaluateAutomaticDiagramLayout,
   layoutAutomaticDiagram,
+  layoutAutomaticDiagramCandidates,
   type AutomaticDiagramLayoutCandidateProfile,
+  type AutomaticDiagramLayoutResult,
   type AutomaticDiagramLayoutQuality
 } from "../workspace/automatic-diagram-layout";
 import {
@@ -303,6 +305,110 @@ export function compileArchitectureBoard(
       ])
     }
   };
+}
+
+/** Board 비교용으로만 단일 Compiler 결과를 여러 결정론적 layout 전략으로 펼칩니다. */
+export function compileArchitectureBoardCandidates(
+  input: ArchitectureBoardCompilationInput
+): readonly ArchitectureBoardCompilationProposal[] {
+  const selected = compileArchitectureBoard(input);
+  const protectedNodeIds = new Set(
+    selected.diagram.nodes.filter((node) => node.locked).map((node) => node.id)
+  );
+  const layoutProfiles = deriveArchitectureBoardKnowledgeLayoutProfiles(
+    selected.diagram,
+    architectureBoardKnowledge
+  );
+  const layouts = layoutAutomaticDiagramCandidates({
+    candidateProfiles: layoutProfiles,
+    edges: createDiagramLayoutEdges(selected.diagram),
+    nodes: selected.diagram.nodes,
+    protectedNodeIds
+  });
+  const beforeDiagram = input.currentDiagram
+    ? cloneDiagram(input.currentDiagram)
+    : convertArchitectureJsonToDiagramJson(input.architecture);
+  const beforeArchitecture = convertDiagramJsonToArchitectureJson(beforeDiagram);
+
+  return layouts.map((layout) =>
+    createBoardVisualLayoutProposal(
+      selected,
+      layout,
+      beforeArchitecture,
+      beforeDiagram
+    )
+  );
+}
+
+/** 한 layout 전략을 기존 proposal 모양과 품질 finding으로 다시 감쌉니다. */
+function createBoardVisualLayoutProposal(
+  selected: ArchitectureBoardCompilationProposal,
+  layout: AutomaticDiagramLayoutResult,
+  beforeArchitecture: ArchitectureJson,
+  beforeDiagram: DiagramJson
+): ArchitectureBoardCompilationProposal {
+  const diagram = routeAndLayerDiagram(
+    {
+      ...cloneDiagram(selected.diagram),
+      nodes: restoreLockedNodeGeometry(layout.nodes, selected.diagram.nodes)
+    },
+    beforeDiagram
+  );
+  const changes = compareCompilationChanges(
+    beforeArchitecture,
+    beforeDiagram,
+    selected.architecture,
+    diagram
+  );
+  const compilationDistance = changes.reduce((total, change) => total + change.cost, 0);
+  const fixedPenalty =
+    selected.quality.after.score -
+    selected.quality.after.visualPenalty -
+    selected.quality.compilationDistance;
+
+  return {
+    ...structuredClone(selected),
+    architecture: cloneArchitecture(selected.architecture),
+    diagram,
+    changes,
+    quality: {
+      before: structuredClone(selected.quality.before),
+      after: {
+        ...structuredClone(selected.quality.after),
+        score: fixedPenalty + layout.quality.score + compilationDistance,
+        visualPenalty: layout.quality.score,
+        metrics: {
+          ...structuredClone(selected.quality.after.metrics),
+          ...layout.quality,
+          compilationDistance
+        }
+      },
+      compilationDistance
+    },
+    provenance: {
+      ...structuredClone(selected.provenance),
+      candidateId: `${selected.provenance.candidateId}:layout:${layout.candidateId}`
+    }
+  };
+}
+
+/** Diagram edge를 provider-neutral layout 입력 모양으로 옮깁니다. */
+function createDiagramLayoutEdges(
+  diagram: DiagramJson
+): readonly {
+  readonly id: string;
+  readonly sourceId: string;
+  readonly targetId: string;
+  readonly label?: string | undefined;
+  readonly metadata?: DiagramEdge["metadata"];
+}[] {
+  return diagram.edges.map((edge) => ({
+    id: edge.id,
+    sourceId: edge.sourceNodeId,
+    targetId: edge.targetNodeId,
+    ...(edge.label === undefined ? {} : { label: edge.label }),
+    ...(edge.metadata === undefined ? {} : { metadata: structuredClone(edge.metadata) })
+  }));
 }
 
 function createModulePatternCandidate(
