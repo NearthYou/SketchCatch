@@ -16,7 +16,7 @@ export function TerraformCodeStatus({ state }: { readonly state: TerraformCodeSt
         <span className={state.isSynced ? styles.terraformStatusSynced : styles.terraformStatusEdited}>
           {state.statusMessage}
         </span>
-        <span>{state.previewSummary}</span>
+        <span className={styles.terraformPreviewSummary}>{state.previewSummary}</span>
       </div>
 
       {state.saveBanner ? (

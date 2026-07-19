@@ -45,8 +45,12 @@ const deploymentNotificationStyles = readFileSync(
   "utf8"
 );
 
-test("Live Observation stays above every Workspace floating panel", () => {
+test("Live Observation stays above non-blocking Workspace surfaces and below recovery", () => {
   const liveObservationZIndex = getRuleZIndex(workspaceStyles, ".liveObservationOverlay");
+  const projectDraftRecoveryZIndex = getRuleZIndex(
+    workspaceStyles,
+    ".projectDraftRecoveryBackdrop"
+  );
   const competingZIndexes = [
     getRuleZIndex(workspaceStyles, ".workspaceNotificationHost"),
     getRuleZIndex(aiWorkbenchStyles, ".overlay"),
@@ -61,7 +65,11 @@ test("Live Observation stays above every Workspace floating panel", () => {
 
   assert.ok(
     competingZIndexes.every((zIndex) => liveObservationZIndex > zIndex),
-    `Live Observation z-index ${liveObservationZIndex} must exceed Workspace floating panels (${competingZIndexes.join(", ")})`
+    `Live Observation z-index ${liveObservationZIndex} must exceed non-blocking Workspace surfaces (${competingZIndexes.join(", ")})`
+  );
+  assert.ok(
+    projectDraftRecoveryZIndex > liveObservationZIndex,
+    `ProjectDraft recovery z-index ${projectDraftRecoveryZIndex} must remain above Live Observation ${liveObservationZIndex}`
   );
 });
 
