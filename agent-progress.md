@@ -187,3 +187,9 @@ Short English-only working log for the current agent context. Older records are 
 - The Plan route now returns its accepted Deployment after durable dispatch, while the worker runs build-environment preparation inside the Plan execution lease and heartbeat boundary. Preparation failures remain recorded as `build_environment` failures.
 - The reported Deployment `eae903e0-926c-46d7-b819-99b124246373` completed despite the proxy error and produced a pending `36 create / 0 update / 0 delete` Plan with no failure stage or error summary.
 - Focused API regressions pass 106/106; root lint, typecheck, build, final harness, and diff checks are recorded by the finishing verification run. No DB migration, dependency change, AWS mutation by Codex, Terraform Apply/Destroy, deployment rerun, or direct push to `dev` was performed.
+
+### 2026-07-20 - Remove duplicate Direct Deployment UI summaries
+
+- Verified the committed Direct Deployment UI deduplication with six focused Web files: 81/81 tests passed. The dead-summary search returned zero matches (exit 1), and `<PlanSummaryRows` has one approval-stage call at `DirectDeploymentScreen.tsx:1457`.
+- Root `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed. No API, shared contract, DB migration, dependency, Terraform execution, AWS mutation, Deployment, Git/CI/CD handoff, or push was performed.
+- Read-only browser QA started the isolated branch at `http://127.0.0.1:3001`; 1863x970, 1440x900, 1024x768, and 390x844 all redirected `/workspace` to login because no authenticated fixture/session was available. The Direct Deployment modal criteria remain unverified; blocker screenshots are under `output/playwright/deployment-modal-ui-dedup/`. The local server and browser were stopped.
