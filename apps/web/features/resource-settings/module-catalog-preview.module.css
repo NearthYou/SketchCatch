@@ -23,7 +23,7 @@
 .moduleCatalogCopy h3,
 .moduleCatalogResourceSummary strong {
   color: var(--workspace-text);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.35;
   margin: 0;
 }
@@ -32,13 +32,13 @@
 .moduleCatalogMetadata,
 .moduleCatalogResourceSummary p {
   color: var(--workspace-muted);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
 }
 
 .moduleCatalogMetadata {
-  font-weight: 650;
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
 }
 
 .moduleCatalogResourceSummary {
@@ -53,8 +53,8 @@
   color: var(--workspace-surface);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   min-height: 36px;
   width: 100%;
 }

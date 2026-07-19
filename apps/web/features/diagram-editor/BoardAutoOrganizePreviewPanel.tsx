@@ -51,21 +51,6 @@ export function BoardAutoOrganizePreviewPanel({
         </div>
       </div>
 
-      <div className={styles.compilerPreviewDetails}>
-        <div className={styles.compilerPreviewDetail}>
-          <span>달라진 점</span>
-          <strong>{session.summary.whatChanged}</strong>
-        </div>
-        <div className={styles.compilerPreviewReview}>
-          <span>확인할 점</span>
-          <ul>
-            {session.summary.reviewItems.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
       <div className={styles.compilerPreviewActions}>
         <button onClick={onKeepOriginal} type="button">
           원본 유지

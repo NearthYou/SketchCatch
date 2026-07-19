@@ -323,7 +323,7 @@ test("deployment action buttons use one size and fill only while active", () => 
   );
   assert.match(
     workspaceStyles,
-    /\.deploymentConsoleGrid > \.deploymentStepActionBar > button,[\s\S]*?font-size:\s*14px;[\s\S]*?height:\s*44px;[\s\S]*?justify-content:\s*center;[\s\S]*?justify-self:\s*start;[\s\S]*?min-width:\s*152px;[\s\S]*?width:\s*152px;/
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar > button,[\s\S]*?font-size:\s*calc\(14px \+ var\(--presentation-font-size-increase\)\);[\s\S]*?height:\s*44px;[\s\S]*?justify-content:\s*center;[\s\S]*?justify-self:\s*start;[\s\S]*?min-width:\s*152px;[\s\S]*?width:\s*152px;/
   );
   assert.match(
     workspaceStyles,
@@ -412,10 +412,13 @@ test("Deployment History selects one successful version and renders only its det
     workspaceStyles,
     /\.deploymentHistorySection\s*\{[^}]*border:\s*1px solid var\(--workspace-line-strong[^}]*border-radius:\s*20px;[^}]*box-shadow:/s
   );
-  assert.match(workspaceStyles, /\.deploymentHistoryHeader h3\s*\{[^}]*font-size:\s*34px;/s);
   assert.match(
     workspaceStyles,
-    /\.deploymentHistoryTable td\s*\{[^}]*font-size:\s*17px;[^}]*height:\s*88px;/s
+    /\.deploymentHistoryHeader h3\s*\{[^}]*font-size:\s*calc\(22px \+ var\(--presentation-font-size-increase\)\);/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentHistoryTable td\s*\{[^}]*font-size:\s*calc\(17px \+ var\(--presentation-font-size-increase\)\);[^}]*height:\s*88px;/s
   );
 });
 

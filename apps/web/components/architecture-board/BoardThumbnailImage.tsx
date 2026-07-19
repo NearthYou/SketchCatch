@@ -59,7 +59,7 @@ export function BoardThumbnailImage({
         <span
           style={{
             color: "#73777f",
-            fontSize: 12,
+            fontSize: "calc(12px + var(--presentation-font-size-increase))",
             lineHeight: 1.5,
             maxWidth: 240,
             padding: 24,

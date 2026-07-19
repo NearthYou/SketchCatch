@@ -333,18 +333,29 @@ test("keeps the initial map readable while preserving pan, zoom, and MiniMap exp
     /fitViewOptions=\{\{ maxZoom: 1\.2, minZoom: 0\.8, padding: 0\.16 \}\}/
   );
   assert.match(diagramMapSource, /panOnDrag/);
-  assert.match(diagramMapSource, /미니맵과 드래그로 이동/);
   assert.match(
-    workspaceCssSource,
-    /\.liveObservationArchitectureResourceNode > strong\s*\{[^}]*font-size:\s*13px;/s
+    diagramMapSource,
+    /지원 Resource에는 AWS 세션의\s+집계 상태를 표시합니다\. 개별 Resource API 성공을 의미하지 않습니다\. 전체 구조는\s+미니맵과 드래그로 이동하고 \+\/-로 확대·축소할 수 있습니다\./
   );
   assert.match(
     workspaceCssSource,
-    /\.liveObservationArchitectureResourceDetail\s*\{[^}]*font-size:\s*11px;/s
+    /\.liveObservationArchitectureHeader p\s*\{[^}]*font-size:\s*calc\(6px \+ var\(--presentation-font-size-increase\)\);[^}]*max-width:\s*610px;/s
+  );
+  assert.doesNotMatch(
+    workspaceCssSource,
+    /\.liveObservationArchitectureHeader p\s*\{[^}]*line-clamp:/s
   );
   assert.match(
     workspaceCssSource,
-    /\.liveObservationArchitectureStateBadge\s*\{[^}]*font-size:\s*10px;/s
+    /\.liveObservationArchitectureResourceNode > strong\s*\{[^}]*font-size:\s*calc\(13px \+ var\(--presentation-font-size-increase\)\);/s
+  );
+  assert.match(
+    workspaceCssSource,
+    /\.liveObservationArchitectureResourceDetail\s*\{[^}]*font-size:\s*calc\(11px \+ var\(--presentation-font-size-increase\)\);/s
+  );
+  assert.match(
+    workspaceCssSource,
+    /\.liveObservationArchitectureStateBadge\s*\{[^}]*font-size:\s*calc\(10px \+ var\(--presentation-font-size-increase\)\);/s
   );
 });
 

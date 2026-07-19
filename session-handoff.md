@@ -35,5 +35,25 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- No follow-up is required for this task; continue with the next reported AI chat issue.
-- No DB migration, cloud mutation, deployment, or Terraform execution is involved.
+1. Review PR #491 after CI and merge it into `dev` when approved.
+2. Keep real Live Observation scale-out acceptance blocked until a newly approved non-production Plan/Apply/traffic/Destroy cycle.
+3. Merge the production runtime drift-review PR only after a current review-only Plan passes; never use a targeted Apply.
+
+## Production Runtime Plan Review
+
+- Review-only production runtime Plan 29498864502 at `c8b107d3` succeeded with 3 add, 7 change, and 2 task-definition replacement destroys. It injects the GitHub App Secret into API and worker and preserves the Live Observation capability Secret; no Secret value was recorded.
+- Branch `fix/sw/production-runtime-plan-drift` stores the existing capability ARN as a dedicated production-infra-plan Environment Secret and overlays it into the runtime tfvars without replacing `PRODUCTION_INFRA_RUNTIME_TFVARS_JSON`.
+
+## PR #439 Follow-up Review
+
+- Pending follow-up branch scopes the static Secret checks to their declared Terraform sets, selects the named worker container in the Terraform test, and removes an unnecessary `tolist` conversion.
+- The nullable worker Secret list is normalized with `try(..., [])` so the test remains safe when `secrets` is absent or null.
+- Harness, structure check, Terraform formatting, lint, typecheck, build, and diff check pass. Local Terraform validate/test cannot load the uncached AWS provider 6.54.0; no cloud mutation was performed.
+
+## Live Observation Sandbox Run
+
+- Approved sandbox Deployment `0225dcbf-64a0-49e6-afa0-02eefddd4141` is `DESTROYED`; direct AWS checks found no remaining `liveobs-7cccab4b` resources. Preserve `sketchcatch-control-614935468487-apne2-7cccab4b` and `SketchCatchTerraformExecutionRole`.
+- `apps/api/src/live-observations/aws-live-observation-snapshot-provider.ts` shortens the STS session prefix from `sketchcatch-live-observation-` to `sketchcatch-live-obs-`; focused tests and all required root checks pass.
+- The Live Observation changes are assigned to `fix/ys/479-uiux-수정`; `apps/web/next-env.d.ts` matches the index, and the requested local servers remain on HTTPS 3000 and HTTP 4000.
+- The focused linear Live Observation UI is restored on top of v2: accepted requests and fresh CloudWatch ALB request snapshots trigger particles, while provider `running/desired/max` drives Fargate Task slots. The full immutable Architecture map remains available in a collapsed disclosure.
+- The built-in ECS Fargate Template now emits bounded Application Auto Scaling (`min=1`, `max=3`, `ALBRequestCountPerTarget=10`); focused UI/type tests and template Terraform validate pass. Do not claim live scale-out until a new approved sandbox Plan/Apply/traffic/Destroy cycle proves it.

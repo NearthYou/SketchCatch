@@ -303,7 +303,7 @@
         "desktop/mobile/reduced-motion 브라우저 흐름이 실제 snapshot 값과 lifecycle cleanup을 검증한다.",
         "실제 AWS apply/destroy는 별도 명시 승인이 있을 때만 수행한다."
       ],
-      "notes": "Implementation and automated verification merged in PR #382. External acceptance is deferred to issue #378 because the in-app browser blocks localhost and the current environment has no reachable AWS STS credentials. The feature flag remains false until credentialed Chromium and an approved AWS sandbox provide evidence."
+      "notes": "Implementation merged in PR #382. On 2026-07-19 the approved non-production sandbox verified real CloudFront/ALB/ECS traffic and clean Destroy, and the local authenticated modal opened successfully. The focused linear flow, CloudWatch-triggered particles, v2 Fargate capacity slots, and a bounded 1-3 Task / 10 requests-per-target Template contract are now covered by automated tests. Status remains blocked until a newly approved sandbox Deployment proves actual ECS scale-out and cleanup with this low threshold; no cloud mutation was performed for the UI restoration."
     },
     {
       "id": "PROJECT-RELEASE-LEDGER-001",
@@ -968,6 +968,8 @@
         "lastVerified": "2026-07-18",
         "commands": [
           "per-commit focused Web contract and state tests for commits 1-26",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/presentation/presentation-typography.test.ts features/diagram-editor/DiagramNodeView.test.ts features/diagram-editor/diagram-editor-layout.test.ts features/workspace/live-observation-architecture.test.ts features/workspace/deployment-three-stage-flow.test.ts features/workspace/workspace-ai-workbench-contract.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/presentation/presentation-typography.test.ts",
           "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts",
           "pnpm --filter @sketchcatch/web test",
           "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts features/diagram-editor/diagram-editor-viewer-policy.test.ts features/diagram-editor/workspace-panel-preferences.test.ts",
@@ -978,7 +980,7 @@
           "pnpm build",
           "git diff --check"
         ],
-        "notes": "All 26 planned implementation commits were verified before commit. Follow-ups remove the redundant top-bar panel toggles and keep manual Fit View's automatic viewport move out of ProjectDraft dirty state while preserving accessible edge handles, panel preferences, and direct user viewport persistence. The focused dirty and cost regressions pass 77/77; harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 786/790, with four unrelated existing generated Architecture Board artifact line-ending and Resource catalog contract failures. Signed-in localhost QA confirmed cost tab, period, users, usage range, connection, direct URL entry, and browser history restoration."
+        "notes": "All 26 planned implementation commits were verified before commit. Follow-ups remove the redundant top-bar panel toggles and keep manual Fit View's automatic viewport move out of ProjectDraft dirty state while preserving accessible edge handles, panel preferences, and direct user viewport persistence. Presentation typography now adds an auditable 6px to every explicit Web text size, resolves UI/code text to bundled Pretendard 1.3.9 through one shared token path, applies the same font/size/weight rules to the generated standalone S3 audience page, and reduces explicit text weights above 400 by one 100-point step; focused dependent tests pass 135/135 and the strengthened font audit passes 4/4. The focused dirty and cost regressions pass 77/77; harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 786/790, with four unrelated existing generated Architecture Board artifact line-ending and Resource catalog contract failures. Signed-in localhost QA confirmed cost tab, period, users, usage range, connection, direct URL entry, and browser history restoration."
       },
       "notes": "No DB schema, Drizzle migration, cloud mutation, deployment, or Git/CI/CD handoff was performed."
     }

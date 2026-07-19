@@ -22,16 +22,16 @@
 .dashboardSectionHeader > div > p {
   margin: 0;
   color: #60646c;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1.5;
   text-transform: uppercase;
 }
 
 .dashboardPageHeader h1 {
   margin: 8px 0 0;
-  font-size: 32px;
-  font-weight: 700;
+  font-size: calc(32px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1.2;
   letter-spacing: 0;
 }
@@ -40,7 +40,7 @@
   max-width: 680px;
   margin: 10px 0 0;
   color: #55585f;
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   line-height: 1.65;
 }
 
@@ -75,7 +75,7 @@
   padding: 0;
   background: transparent;
   color: #171717;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   outline: 0;
 }
 
@@ -100,7 +100,7 @@
   padding: 13px 14px;
   background: #fff8eb;
   color: #8a4b08;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.6;
 }
 
@@ -158,13 +158,13 @@
 
 .dashboardMetric > span {
   color: #60646c;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
 }
 
 .dashboardMetricValue {
   overflow: hidden;
-  font-size: 22px;
+  font-size: calc(22px + var(--presentation-font-size-increase));
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -185,7 +185,7 @@
 .dashboardMetric p {
   margin: 0;
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
 }
 
@@ -225,7 +225,7 @@
 .dashboardSectionHeader h2,
 .dashboardPanelHeader h2 {
   margin: 4px 0 0;
-  font-size: 17px;
+  font-size: calc(17px + var(--presentation-font-size-increase));
   line-height: 1.4;
 }
 
@@ -234,8 +234,8 @@
   align-items: center;
   gap: 5px;
   color: #0d74ce;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   text-decoration: none;
 }
 
@@ -279,7 +279,7 @@ a.dashboardActivityRow:hover {
 .dashboardProjectRow strong,
 .dashboardActivityRow strong {
   overflow: hidden;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -289,7 +289,7 @@ a.dashboardActivityRow:hover {
 .dashboardActivityRow span {
   overflow: hidden;
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -323,7 +323,7 @@ a.dashboardActivityRow:hover {
   margin: 0;
   padding: 28px 0;
   color: #60646c;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.6;
 }
 
@@ -332,8 +332,8 @@ a.dashboardActivityRow:hover {
   align-items: center;
   gap: 6px;
   color: #0d74ce;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   text-decoration: none;
   white-space: nowrap;
 }
@@ -354,7 +354,7 @@ a.dashboardActivityRow:hover {
 .dashboardEmptyState h2,
 .dashboardStateBand strong {
   margin: 0;
-  font-size: 20px;
+  font-size: calc(20px + var(--presentation-font-size-increase));
 }
 
 .dashboardEmptyState p,
@@ -362,7 +362,7 @@ a.dashboardActivityRow:hover {
   max-width: 560px;
   margin: 0 0 6px;
   color: #55585f;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.65;
 }
 
@@ -429,14 +429,14 @@ a.dashboardActivityRow:hover {
 
 .dashboardFactStrip dt {
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .dashboardFactStrip dd {
   margin: 0;
   overflow: hidden;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -480,8 +480,8 @@ a.dashboardActivityRow:hover {
   min-width: 0;
   gap: 7px;
   color: var(--color-body);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .dashboardCardGrid {
@@ -604,7 +604,7 @@ a.dashboardActivityRow:hover {
 .projectCardTitle h3 {
   margin: 0;
   overflow: hidden;
-  font-size: 15px;
+  font-size: calc(15px + var(--presentation-font-size-increase));
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -614,7 +614,7 @@ a.dashboardActivityRow:hover {
   display: -webkit-box;
   margin: 0;
   color: #55585f;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.6;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -628,15 +628,15 @@ a.dashboardActivityRow:hover {
   border-radius: 999px;
   padding: 4px 7px;
   color: #55585f;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .projectCardMeta {
   min-width: 0;
   margin-top: 2px;
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.2;
 }
 
@@ -713,8 +713,8 @@ a.dashboardActivityRow:hover {
   background: transparent;
   color: #171717;
   font: inherit;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   line-height: 1.35;
   text-decoration: none;
 }
@@ -779,7 +779,7 @@ a.dashboardActivityRow:hover {
 
 .projectDeleteDialogHeader h3 {
   margin: 4px 0 0;
-  font-size: 20px;
+  font-size: calc(20px + var(--presentation-font-size-increase));
 }
 
 .projectDeleteDialogIconButton {
@@ -805,7 +805,7 @@ a.dashboardActivityRow:hover {
 
 .projectDeleteDialogText {
   color: #55585f;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.65;
 }
 .projectDeleteDialogConfirmation {
@@ -820,13 +820,13 @@ a.dashboardActivityRow:hover {
 
 .projectDeleteDialogConfirmation strong {
   color: var(--color-ink, #171717);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
 .projectDeleteDialogConfirmation p {
   margin: 0;
   color: var(--color-body, #55585f);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.6;
 }
 
@@ -847,14 +847,14 @@ a.dashboardActivityRow:hover {
 
 .projectDeleteDialogProgressHeader strong {
   color: var(--color-ink, #171717);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
 .projectDeleteDialogProgressHeader span {
   color: var(--color-body, #55585f);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .projectDeleteDialogProgressTrack {
@@ -875,7 +875,7 @@ a.dashboardActivityRow:hover {
 .projectDeleteDialogProgress p {
   margin: 0;
   color: var(--color-body, #55585f);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.55;
 }
 
@@ -894,13 +894,13 @@ a.dashboardActivityRow:hover {
 
 .projectDeleteDialogFacts dt {
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .projectDeleteDialogFacts dd {
   margin: 5px 0 0;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: calc(15px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .projectDeleteDialogActions {
@@ -910,7 +910,7 @@ a.dashboardActivityRow:hover {
 
 .integrationPanel > p {
   color: #55585f;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.65;
 }
 
@@ -959,12 +959,12 @@ a.dashboardActivityRow:hover {
 
 .settingsInfoGrid span {
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .settingsInfoGrid strong {
   overflow: hidden;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -983,8 +983,8 @@ a.dashboardActivityRow:hover {
   padding: 16px;
   background: #171717;
   color: #f7f8fa;
-  font-family: "Geist Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.6;
   overflow: auto;
 }
@@ -1013,15 +1013,15 @@ a.dashboardActivityRow:hover {
 .templateCardHeader span {
   margin: 0;
   color: #60646c;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   text-transform: uppercase;
 }
 
 .dashboardTemplateCard h2,
 .templateCard h3 {
   margin: 5px 0 0;
-  font-size: 17px;
+  font-size: calc(17px + var(--presentation-font-size-increase));
   line-height: 1.4;
 }
 
@@ -1030,7 +1030,7 @@ a.dashboardActivityRow:hover {
   display: block;
   margin-top: 8px;
   color: #55585f;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.65;
 }
 
@@ -1048,13 +1048,13 @@ a.dashboardActivityRow:hover {
 
 .dashboardTemplateCard dt {
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .dashboardTemplateCard dd {
   margin: 4px 0 0;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .dashboardTemplateCard > a {
@@ -1062,8 +1062,8 @@ a.dashboardActivityRow:hover {
   align-items: center;
   gap: 6px;
   color: #0d74ce;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   text-decoration: none;
 }
 
@@ -1136,7 +1136,7 @@ a.dashboardActivityRow:hover {
 
 @media (max-width: 520px) {
   .dashboardPageHeader h1 {
-    font-size: 28px;
+    font-size: calc(28px + var(--presentation-font-size-increase));
   }
 
   .dashboardPageHeader .dashboardPrimaryAction span {

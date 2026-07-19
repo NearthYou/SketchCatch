@@ -24,8 +24,8 @@
   align-items: center;
   gap: 6px;
   color: var(--color-text-link);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   text-decoration: none;
 }
 
@@ -54,12 +54,12 @@
 }
 
 .connectedRepository strong {
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .connectedRepository span {
   color: var(--color-body);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .requiredSummary {
@@ -68,8 +68,8 @@
 
 .requiredSummary span {
   color: var(--color-body);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .requiredSummary span[data-saved="true"] {
@@ -119,14 +119,14 @@
 }
 
 .completionText strong {
-  font-size: 15px;
+  font-size: calc(15px + var(--presentation-font-size-increase));
   line-height: 1.4;
 }
 
 .completionText p {
   margin: 0;
   color: var(--color-body);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.5;
 }
 
@@ -149,7 +149,7 @@
 
 .completionError span {
   color: var(--color-ink);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.45;
 }
 
@@ -166,8 +166,8 @@
   color: var(--color-on-primary);
   cursor: pointer;
   font: inherit;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   grid-column: 2;
   grid-row: 1 / span 2;
   gap: 8px;
@@ -206,8 +206,8 @@
 
 .heading span {
   color: var(--color-muted);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   text-transform: uppercase;
 }
 
@@ -218,13 +218,13 @@
 }
 
 .heading h1 {
-  font-size: 34px;
+  font-size: calc(34px + var(--presentation-font-size-increase));
   line-height: 1.2;
 }
 
 .heading p {
   color: var(--color-body);
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .progress,
@@ -253,14 +253,14 @@
 .progress strong,
 .errorState strong,
 .emptyState strong {
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .progress span,
 .errorState span,
 .emptyState span {
   color: var(--color-body);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.45;
 }
 
@@ -282,8 +282,8 @@
 
 .listHeader > span {
   color: var(--color-body);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .listHeader button {
@@ -298,8 +298,8 @@
   color: var(--color-ink);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .repositoryList {
@@ -352,16 +352,16 @@
 }
 
 .repositoryList strong {
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .repositoryList small {
   color: var(--color-body);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .repositoryList b {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 @keyframes spin {
@@ -372,7 +372,7 @@
   .page { padding: 8px; }
   .topbar { min-height: 56px; padding: 0 12px; }
   .content { padding: 48px 8px 72px; }
-  .heading h1 { font-size: 30px; }
+  .heading h1 { font-size: calc(30px + var(--presentation-font-size-increase)); }
   .errorState { flex-wrap: wrap; }
   .errorState a { width: 100%; margin-left: 30px; }
   .requiredSummary { align-items: flex-start; flex-direction: column; }

@@ -41,7 +41,7 @@
 
 .dialog p {
   color: #55585f;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.65;
 }
 

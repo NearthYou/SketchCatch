@@ -1,17 +1,41 @@
 # Agent Progress
 
-Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
+Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/` and remain available in Git history.
 
 ## Current Verified State
 
-- `/workspace/ai` is rebuilt as a new conversation surface with a selected-option trail, a decorative AWS Resource Orbit, and a Compiler-authoritative final Preview.
-- Clicked assistant options are semantic, current-session selections; direct input, voice input, retry, and candidate exclusion remain separate concerns.
-- The Orbit uses deterministic presentation-only selections from the actual AWS Resource icon catalog and does not restore or depend on backend progress stages.
-- A final Preview appears only from a successful Architecture Board Compiler proposal and renders that proposal's Diagram read-only until explicit Board application.
-- The deleted progress card, requirement list, history panel, mobile tabs, route-only summary, and other unused presentation/progress contracts remain deleted.
-- Cancellation, stale-response rejection, retry, candidate exclusion/undo, clarification, Compiler, explicit approval, and save boundaries remain in functional code.
+- The current branch applies the self-hosted Pretendard variable font across Web typography surfaces and keeps presentation typography tokens as the design baseline.
+- The automatic Board organization result remains compact while preserving the incoming `dev` comparison session and original/organized view selection.
+- Incoming `dev` API, deployment, Git/CI/CD, AWS connection, Reverse Engineering, and data-contract changes remain accepted as the backend baseline.
+- The merge resolution is complete and ready for the merge commit.
 
 ## Session Record
+
+### 2026-07-19 - Merge latest dev into PR #491
+
+- Merged `origin/dev` at `2ae411aa`, preserving the branch presentation typography while accepting the current AWS connection state model and removal of the AI choice-selected label.
+- Resolved five textual conflicts and repaired two semantic typography regressions introduced by auto-merged Workspace CSS. Imported migration `0053` and deployment safety changes remain unchanged from `dev`.
+- Conflict-focused Web tests pass 31/31, deployment API tests pass 166/166, migration compatibility and Terraform formatting pass, and the full harness lint/typecheck/build sequence passes. No AWS mutation, Terraform execution, or deployment occurred.
+
+### 2026-07-19 - Resolve Live Observation PR feedback
+
+- Lazily mounts the full React Flow Architecture map only while its controlled disclosure is open, preventing zero-sized hidden-container viewport initialization. Added a focused source-contract regression.
+- Declined two defensive optional-chaining suggestions because the shared v2 contract requires both `latestObservation.payload` and `payload.capacity`; only their quantitative members are nullable.
+- Focused Web checks pass 11/11, and root harness, lint, typecheck, build, and diff checks pass. PR #491 remains based on the existing `fix/ys/479-uiux-수정` branch; no AWS mutation or DB migration occurred.
+
+### 2026-07-19 - Restore the focused Live Observation traffic presentation
+
+- Traced the regression to `8f0c7b54`, which replaced the focused linear traffic renderer with the full immutable Architecture map. Restored the focused path as the default while retaining the full map in a collapsed disclosure and preserving all v2 session, Output URL, and AWS verification gates.
+- Fresh public-request or CloudWatch ALB evidence now triggers bounded particles, and v2 `running/desired/max` evidence renders Fargate Task slots as RUNNING/STARTING/AVAILABLE. The ECS Fargate Template adds bounded Service Auto Scaling at 1-3 Tasks with an intentionally low 10 requests-per-target target; Terraform init/validate passes.
+- Focused regressions pass 31/31, the ECS Template passes Terraform init/validate, and root harness, lint, typecheck, build, and diff checks pass. Authenticated local browser QA opens the modal; the local test Workspace had no Deployment Architecture, so final visual replay with real capacity remains pending a newly approved sandbox Deployment. No AWS mutation, traffic generation, Deployment, dependency, migration, commit, or push occurred.
+
+### 2026-07-19 - Verify Live Observation traffic in the approved AWS sandbox
+
+- Used only approved non-production account `614935468487` in `ap-northeast-2`; the production-denylisted account was never used. Applied the exact approved 34-create Terraform Plan, verified CloudFront HTTPS, ALB, and ECS 1/1 healthy, and preserved the shared control bucket and fixed execution Role.
+- Fixed the Live Observation STS failure caused by a 65-character `RoleSessionName` by shortening the session prefix. The focused snapshot-provider suite passes 6/6, and a fresh session reached `available` with zero errors and fixed Fargate capacity 1/1/1.
+- Ran the bounded traffic plan with 3 manual audience requests plus 957 automatic HTTPS GET requests: 60 at 1 RPS and 897 at 5 RPS. All 960 requests returned 200, 5xx remained zero, CloudWatch peaked at 300 target 2xx responses per minute, and ALB p95 peaked at 1.734 ms.
+- The exact 34-address Destroy Plan matched the saved Deployment state with no additions or omissions. Destroy started within 30 minutes of Apply success and finished `34 destroyed`; API resources/outputs are zero, tagged `liveobs-7cccab4b` inventory is empty, application IAM Roles are absent, and the ECS service/cluster are `INACTIVE` with zero tasks.
+- `pnpm harness:check`, focused tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass. The repository was externally switched to `codex/docs-progressive-delivery-journey` during the run, so the one-line fix remains uncommitted there; `apps/web/next-env.d.ts` matches the tracked content again. No secret was printed, no production mutation occurred, and no commit or push was performed.
 
 ### 2026-07-19 - Harden Direct Deployment Apply recovery boundaries
 
@@ -60,23 +84,46 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-19 - Use the current Board source automatically for Deployment
 
-- Generic Deploy now opens Direct Deployment for the selected project instead of restoring a previously active CI/CD tab; explicit CI/CD entry still opens CI/CD.
-- CI/CD now loads the Board-provenance Repository, monitoring config, and readiness atomically from `ProjectDeliveryProfile`; it never substitutes another active Repository when the current Board has no source provenance.
-- Removed the redundant Source Repository card and its stale-freshness helper from Delivery while preserving GitHub permission and readiness gates. Focused Web tests pass 10/10, Delivery Profile API tests pass 4/4, and harness, lint, typecheck, build, and diff checks pass.
-- The maintained Web suite remains at 906/910 with four unrelated existing failures: three Resource Catalog contracts and one stale Workspace external-link source assertion. Browser automation reached only the login gate, so the authenticated modal was not visually replayed. No deployment, cloud mutation, DB migration, dependency, lockfile, commit, or push was performed.
+- Resolved Web conflicts with the current branch as the design authority and `dev` as the API/backend authority.
+- Preserved both sides where compatible, including the new Board auto-organize comparison state, deployment history structure, AI Orbit behavior, and current branch typography and compact result presentation.
+- Retained the imported `dev` API and migration changes without editing their implementation.
+- Verification passed: focused auto-organize and deployment regressions 25/25, the broader focused merge set 91/92 before its single stale typography assertion was corrected, Pretendard typography audit 4/4, harness, lint, typecheck, production build, and diff check.
 
-### 2026-07-19 - Collapse pre-deployment safety details by default
+### 2026-07-19 - Self-host the supplied Pretendard variable font
 
-- Replaced the pre-deployment safety result container with a native `details` disclosure: severity and title stay visible, while the summary, Trivy state, metrics, and findings start collapsed and remain keyboard accessible.
-- Added a focused source/style regression for the closed default, semantic summary, focus state, chevron state, and reduced motion; the focused 2/2 check, harness, lint, typecheck, build, and diff checks pass.
-- The full maintained test command still fails on the existing artifact heartbeat cancellation plus four existing Web failures (three Resource Catalog contracts and one external-link contract). Browser automation reached only the unauthenticated landing, so the signed-in deployment result was not visually replayed. No deployment, cloud mutation, DB migration, dependency, lockfile, or Git handoff was performed.
+- Replaced the package-backed Pretendard dynamic subset with the supplied Pretendard 1.3.9 variable WOFF2 and bundled its license.
+- Authenticated browser QA previously covered 26 public and signed-in views; all 7,153 visible HTML elements resolved to `Pretendard, sans-serif` with zero exceptions.
+- Focused typography audit, runtime font response, lint, typecheck, production build, and diff checks previously passed.
 
-### 2026-07-19 - Exclude CodeConnection from AWS connection deletion
+### 2026-07-19 - Preserve current Board deployment provenance
 
-- Removed GitHub CodeConnection from the general AWS connection deletion preview, confirmation fingerprint, and remote cleanup input; only the explicit GitHub build disconnect path may delete it.
-- A connection with no CodeBuild resources now skips AWS cleanup even when CodeConnection metadata exists, allowing local AWS connection deletion to continue without the reported CodeConnections failure.
-- Replaced the misleading AWS Connector Marketplace checkout link with the official direct GitHub App installation and Repository permission URL.
-- Focused API tests pass 46/46 and focused Web tests pass 13/13; lint, typecheck, production build, harness, and browser console checks pass. The broader Web suite remains at 904/908 with three unrelated Resource Catalog failures and one existing Workspace external-link contract failure. The direct GitHub App path reaches Repository permission selection without Marketplace billing. No AWS mutation, GitHub App installation, DB migration, deployment, Git handoff, commit, or push was performed.
+- Generic Deploy opens Direct Deployment for the selected project, while explicit CI/CD entry remains separate.
+- CI/CD uses Board-provenance Repository, monitoring, and readiness data without substituting an unrelated active Repository.
+- The redundant Delivery source card was removed while permission and readiness gates remain intact.
+
+### 2026-07-19 - Preserve deployment and AWS connection safety changes
+
+- Pre-deployment safety details start collapsed and remain keyboard accessible.
+- General AWS connection deletion excludes GitHub CodeConnection; the dedicated GitHub build disconnect remains its only deletion path.
+- Reverse Engineering scan history remains preserved when an AWS connection is deleted through the imported `dev` migration and API changes.
+
+### 2026-07-18 - Preserve current branch presentation adjustments
+
+- Live Observation guidance keeps its original wording and width while using the requested smaller text size.
+- AI Workbench desktop navigation remains icon-only with mode-specific titles.
+- Automatic organization results remain minimal and omit change summaries, review lists, and technical details.
+
+## Broken Or Unverified
+
+- No merge-owned check is failing.
+- Broad test suites were not run because the user requested avoiding unnecessary tests; focused conflict regressions and all required repository checks passed.
+- Previously documented environment-specific or unrelated broad-suite failures remain recorded in Git history and `docs/agent-history/2026-07.md`.
+- No live AWS mutation, Terraform apply/destroy, Deployment, GitHub mutation, or Git handoff is authorized or performed by this merge resolution.
+
+## Next Action
+
+- Review PR #491 after CI and merge it into `dev` when approved.
+- Keep real ECS scale-out acceptance blocked until a newly approved non-production Plan/Apply/traffic/Destroy cycle.
 
 ### 2026-07-19 - Complete the dev deployment and clarify operational guidance
 

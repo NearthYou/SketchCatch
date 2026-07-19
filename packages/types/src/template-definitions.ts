@@ -503,7 +503,9 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       "target-group": layoutAt(1080, 360, "vpc"),
       listener: layoutAt(880, 360, "vpc"),
       task: layoutInSupportGrid(1840, 480, 1, 0, "definition-ops-group"),
-      service: layoutAt(1400, 360, "cluster")
+      service: layoutAt(1400, 360, "cluster"),
+      "scaling-target": layoutInSupportGrid(1840, 480, 1, 1, "definition-ops-group"),
+      "scaling-policy": layoutInSupportGrid(1840, 480, 2, 0, "definition-ops-group")
     },
     routing: {
       "vpc-igw": layoutRoute("handle-left", "handle-right"),
@@ -518,6 +520,8 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       "target-group-service": layoutRoute("handle-right", "handle-left"),
       "cluster-service": layoutRoute("handle-right", "handle-left"),
       "service-task": layoutRoute("handle-right", "handle-left"),
+      "service-scaling-target": layoutRoute("handle-right", "handle-left"),
+      "scaling-target-policy": layoutRoute("handle-right", "handle-left"),
       "repository-task": layoutRoute("handle-bottom", "handle-top"),
       "task-log-group": layoutRoute("handle-right", "handle-left"),
       "task-role": layoutRoute("handle-top", "handle-bottom")
@@ -535,7 +539,9 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
           [
             layoutInSupportGrid(1840, 480, 0, 0, "definition-ops-group"),
             layoutInSupportGrid(1840, 480, 1, 0, "definition-ops-group"),
-            layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group")
+            layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group"),
+            layoutInSupportGrid(1840, 480, 1, 1, "definition-ops-group"),
+            layoutInSupportGrid(1840, 480, 2, 0, "definition-ops-group")
           ],
           "region"
         ),
@@ -1456,6 +1462,32 @@ export const templateDefinitions = [
           containerPort: 80
         },
         dependsOn: ["@address:listener"]
+      }),
+      resource("scaling-target", "Fargate Task Capacity 1–3", "aws", "aws_appautoscaling_target", 1100, 660, {
+        minCapacity: 1,
+        maxCapacity: 3,
+        resourceId: "service/${@ref:cluster.name}/${@ref:service.name}",
+        scalableDimension: "ecs:service:DesiredCount",
+        serviceNamespace: "ecs"
+      }),
+      resource("scaling-policy", "10 requests / target", "aws", "aws_appautoscaling_policy", 1300, 660, {
+        name: "${@ref:service.name}-requests",
+        policyType: "TargetTrackingScaling",
+        resourceId: "@ref:scaling-target.resource_id",
+        scalableDimension: "@ref:scaling-target.scalable_dimension",
+        serviceNamespace: "@ref:scaling-target.service_namespace",
+        targetTrackingScalingPolicyConfiguration: {
+          targetValue: 10,
+          scaleInCooldown: 60,
+          scaleOutCooldown: 30,
+          predefinedMetricSpecification: [
+            {
+              predefinedMetricType: "ALBRequestCountPerTarget",
+              resourceLabel:
+                "${@ref:load-balancer.arn_suffix}/${@ref:target-group.arn_suffix}"
+            }
+          ]
+        }
       })
     ],
     relationships: [
@@ -1473,6 +1505,8 @@ export const templateDefinitions = [
       relationship("target-group-service", "target-group", "service", "routes"),
       relationship("cluster-service", "cluster", "service", "runs"),
       relationship("service-task", "service", "task", "uses"),
+      relationship("service-scaling-target", "service", "scaling-target", "scales"),
+      relationship("scaling-target-policy", "scaling-target", "scaling-policy", "tracks requests"),
       // The zero-step default stays on the public nginx image until an image is pushed to this ECR repository.
       relationship("repository-task", "repository", "task", "optional image source"),
       relationship("task-log-group", "task", "log-group", "writes logs"),

@@ -17,21 +17,21 @@
 .detail > span,
 .metrics dt {
   color: var(--color-muted, #73777f);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   letter-spacing: 0.035em;
   text-transform: uppercase;
 }
 
 .heading > strong {
-  font-size: 16px;
+  font-size: calc(16px + var(--presentation-font-size-increase));
   line-height: 1.35;
 }
 
 .heading > p,
 .emptyOutcome {
   color: var(--color-muted, #73777f);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
 }
@@ -66,11 +66,11 @@
 
 .outcomes span {
   color: var(--color-muted, #73777f);
-  font-size: 11px;
+  font-size: calc(11px + var(--presentation-font-size-increase));
 }
 
 .outcomes strong {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.4;
 }
 
@@ -91,8 +91,8 @@
 }
 
 .detail strong {
-  font-size: 12px;
-  font-weight: 650;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -100,13 +100,13 @@
 .technical {
   border-top: 1px solid color-mix(in srgb, var(--color-hairline, #e7e8eb) 74%, transparent);
   color: var(--color-muted, #73777f);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   padding-top: 2px;
 }
 
 .technical > summary {
   cursor: pointer;
-  font-weight: 700;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   min-height: 38px;
   padding-top: 11px;
 }
@@ -145,8 +145,8 @@
 
 .metrics dd {
   color: var(--color-ink, #171717);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   margin: 0;
 }
 

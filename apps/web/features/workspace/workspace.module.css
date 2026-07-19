@@ -3,7 +3,7 @@
   background: #ffffff;
   color: #171717;
   display: flex;
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
   min-height: 100vh;
   padding: 32px;
 }
@@ -37,7 +37,7 @@
 
 .workspaceLoadingProjectBar strong {
   color: #60646c;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
 .workspaceLoadingLeftPanel,
@@ -184,7 +184,7 @@
   color: var(--workspace-muted, #60646c);
   cursor: pointer;
   font: inherit;
-  font-weight: 700;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   padding: 9px 16px;
 }
 
@@ -257,7 +257,7 @@
   cursor: pointer;
   text-align: left;
   font: inherit;
-  font-weight: 800;
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   color: #9a6700;
   background: #fff8c5;
 }
@@ -268,7 +268,7 @@
   display: grid;
   gap: 8px;
   color: var(--workspace-text, #171717);
-  font-weight: 700;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .cicdRunSelect select,
@@ -304,14 +304,14 @@
 
 .cicdOverviewPaths dt {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .cicdOverviewPaths dd {
   margin-top: 6px;
   color: var(--workspace-text, #171717);
-  font-weight: 800;
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
 }
 
 .cicdRepositorySummary,
@@ -346,14 +346,14 @@
 
 .cicdReleaseSummary dt {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .cicdReleaseSummary dd {
   margin: 4px 0 0;
   overflow-wrap: anywhere;
-  font-weight: 700;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .cicdStageList,
@@ -380,7 +380,7 @@
   border-radius: 8px;
   background: #111827;
   color: #e5e7eb;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-sans);
 }
 
 .cicdLogList li {
@@ -422,7 +422,7 @@
 
 .cicdPathField legend {
   padding: 0 6px;
-  font-weight: 800;
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
 }
 
 .cicdPathField label {
@@ -479,15 +479,15 @@
 }
 
 .projectHeader h1 {
-  font-size: 24px;
+  font-size: calc(24px + var(--presentation-font-size-increase));
   line-height: 1.2;
   margin: 0;
 }
 
 .projectEyebrow {
   color: #60646c;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -500,8 +500,8 @@
 
 .field span {
   color: #171717;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .field input,
@@ -532,7 +532,7 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-weight: 700;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   justify-content: center;
   min-height: 42px;
   padding: 0 16px;
@@ -546,7 +546,7 @@
 
 .errorText {
   color: #b42318;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   margin: 0;
 }
 
@@ -568,8 +568,8 @@
 
 .draftStatusLabel {
   color: #60646c;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1.2;
   text-transform: uppercase;
 }
@@ -579,8 +579,8 @@
   border: 1px solid #f0f0f3;
   border-radius: 6px;
   color: #171717;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   line-height: 1.2;
   padding: 5px 8px;
 }
@@ -603,8 +603,8 @@
 
 .thumbnailFailureText {
   color: #9f2a1d;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
 }
 
 .thumbnailRetryButton {
@@ -614,8 +614,8 @@
   color: #9f2a1d;
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   padding: 4px 8px;
 }
 
@@ -633,8 +633,8 @@
   background: var(--workspace-surface, #ffffff);
   color: var(--workspace-text, #171717);
   display: grid;
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   grid-template-rows: auto auto minmax(0, 1fr);
   height: 100%;
   max-width: 100%;
@@ -653,7 +653,7 @@
   box-shadow: 0 14px 32px rgba(23, 23, 23, 0.1);
   display: flex;
   flex-direction: row;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   gap: 6px;
   height: auto;
   padding: 6px;
@@ -765,8 +765,8 @@
   display: inline-flex;
   flex: 0 0 auto;
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   gap: 5px;
   height: 24px;
   justify-content: center;
@@ -860,8 +860,8 @@
   align-items: center;
   border-radius: 999px;
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   height: 16px;
   justify-content: center;
   min-width: 16px;
@@ -892,7 +892,7 @@
   background: var(--workspace-surface-muted, #fafafa);
   color: var(--workspace-text, #171717);
   display: grid;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   padding-top: 4px;
@@ -925,8 +925,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 7px;
   min-height: 32px;
   padding: 0 10px;
@@ -1020,8 +1020,8 @@
   border-radius: 5px;
   color: #5d6b80;
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   min-width: 0;
   overflow: hidden;
 }
@@ -1052,8 +1052,8 @@
 
 .resourceListAddress {
   color: #64748b;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow-wrap: anywhere;
   white-space: normal;
 }
@@ -1074,15 +1074,15 @@
 
 .resourceListValueRow span {
   color: #243044;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .resourceListValueRow strong {
   color: #516178;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   line-height: 1.35;
   overflow-wrap: anywhere;
   white-space: normal;
@@ -1098,8 +1098,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   gap: 8px;
   justify-self: start;
   margin-top: 3px;
@@ -1115,7 +1115,7 @@
 
 .resourceListConfigToggle span {
   color: inherit;
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   line-height: 1;
 }
 
@@ -1142,8 +1142,8 @@
   cursor: pointer;
   display: grid;
   font: inherit;
-  font-size: 13px;
-  font-weight: 720;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(720 - var(--presentation-font-weight-reduction));
   gap: 10px;
   grid-template-columns: 20px minmax(0, 1fr) auto;
   min-height: 40px;
@@ -1182,7 +1182,7 @@
   background: #f8fafc;
   border-radius: 6px;
   color: #64748b;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   padding: 9px 10px;
 }
 
@@ -1198,11 +1198,11 @@
 
 .resourceListEmpty strong {
   color: #172033;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .resourceListEmpty span {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .terraformPanel {
@@ -1312,8 +1312,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   gap: 5px;
   height: 30px;
   max-width: 132px;
@@ -1356,7 +1356,7 @@
   border-radius: 5px;
   color: #172033;
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   min-height: 34px;
   min-width: 0;
   padding: 7px 9px;
@@ -1382,7 +1382,7 @@
   color: #111827;
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   min-height: 32px;
   padding: 6px 10px;
   text-align: left;
@@ -1391,7 +1391,7 @@
 .terraformFileOptionActive {
   background: var(--workspace-accent-soft, #f0f0f3);
   color: var(--workspace-accent, #000000);
-  font-weight: 850;
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
 }
 
 .terraformFileOption:hover,
@@ -1404,7 +1404,7 @@
 
 .terraformFileEmpty {
   color: #64748b;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   padding: 8px 12px;
 }
 
@@ -1413,8 +1413,8 @@
   border: 1px solid #e2e8f0;
   border-radius: 999px;
   color: #64748b;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   padding: 5px 8px;
   white-space: nowrap;
 }
@@ -1434,8 +1434,8 @@
   align-items: center;
   color: #172033;
   display: inline-flex;
-  font-size: 13px;
-  font-weight: 900;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   gap: 7px;
   min-width: 0;
 }
@@ -1496,8 +1496,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   gap: 5px;
   min-height: 31px;
   padding: 0 9px;
@@ -1524,8 +1524,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   gap: 5px;
   justify-content: center;
   line-height: 1.2;
@@ -1551,8 +1551,8 @@
   border-bottom: 1px solid #dce3ee;
   color: #64748b;
   display: flex;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   gap: 10px;
   justify-content: space-between;
   min-height: 30px;
@@ -1592,8 +1592,8 @@
   border-right: 1px solid #3a3a3a;
   box-sizing: border-box;
   color: #9aa4b2;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   height: 100%;
   line-height: 1.6;
   list-style: none;
@@ -1606,7 +1606,7 @@
 
 .terraformLineNumberError {
   color: #fca5a5;
-  font-weight: 900;
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
 }
 
 .terraformSyntaxHighlightLayer {
@@ -1623,8 +1623,8 @@
 .terraformSyntaxHighlightCode {
   box-sizing: border-box;
   color: #d7e4f7;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   left: 0;
   line-height: 1.6;
   margin: 0;
@@ -1689,8 +1689,8 @@
   box-sizing: border-box;
   caret-color: #d7e4f7;
   color: transparent;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   height: 100%;
   line-height: 1.6;
   max-height: 100%;
@@ -1744,14 +1744,14 @@
 
 .terraformPreviewExplanationHeader strong {
   color: #243044;
-  font-size: 12px;
-  font-weight: 950;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(950 - var(--presentation-font-weight-reduction));
 }
 
 .terraformPreviewExplanationHeader span {
   color: #64748b;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1773,8 +1773,8 @@
   display: inline-flex;
   flex: 0 0 auto;
   font: inherit;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   gap: 5px;
   min-height: 28px;
   padding: 0 8px;
@@ -1801,7 +1801,7 @@
 .terraformPreviewExplanationNotice,
 .terraformPreviewExplanationError,
 .terraformPreviewExplanationResult p {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
@@ -1812,7 +1812,7 @@
   border: 1px solid #bfdbfe;
   border-radius: 6px;
   color: #1d4ed8;
-  font-weight: 800;
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   padding: 7px 8px;
 }
 
@@ -1821,7 +1821,7 @@
   border: 1px solid #ffd1cc;
   border-radius: 6px;
   color: #9f2a1d;
-  font-weight: 800;
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   padding: 7px 8px;
 }
 
@@ -1837,7 +1837,7 @@
 
 .terraformPreviewExplanationResult p {
   color: #172033;
-  font-weight: 800;
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
 }
 
 .terraformPreviewExplanationResult ul {
@@ -1865,14 +1865,14 @@
 
 .terraformPreviewExplanationResult li strong {
   color: #243044;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .terraformPreviewExplanationResult li span {
   color: #64748b;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -1888,8 +1888,8 @@
   background: #eef2ff;
   border-radius: 999px;
   color: #3730a3;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   padding: 4px 7px;
 }
 
@@ -1920,8 +1920,8 @@
 .terraformSaveBannerError {
   align-items: center;
   display: flex;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   gap: 6px;
   justify-content: space-between;
   line-height: 1.2;
@@ -1954,7 +1954,7 @@
   color: inherit;
   cursor: pointer;
   font: inherit;
-  font-weight: 900;
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   flex: 0 0 auto;
   padding: 0;
   text-decoration: underline;
@@ -2005,15 +2005,15 @@
 }
 
 .terraformDiagnosticsHeader h3 {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   margin: 0;
 }
 
 .terraformIssueCount,
 .terraformIssueCountError {
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   margin-left: auto;
   min-width: 24px;
   padding: 3px 7px;
@@ -2034,7 +2034,7 @@
 .terraformNotice,
 .terraformError {
   border-radius: 6px;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
   padding: 9px 10px;
@@ -2050,14 +2050,14 @@
   background: #eff6ff;
   border: 1px solid #bfdbfe;
   color: #1d4ed8;
-  font-weight: 800;
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
 }
 
 .terraformError {
   background: #fff7ed;
   border: 1px solid #fed7aa;
   color: #9a3412;
-  font-weight: 800;
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
 }
 
 .terraformDiagnosticList {
@@ -2092,12 +2092,12 @@
 
 .terraformDiagnosticList strong {
   color: #172033;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .terraformDiagnosticList span {
   color: #475569;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
 }
 
@@ -2113,8 +2113,8 @@
 .terraformDiagnosticStale,
 .terraformDiagnosticMeta span {
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   padding: 3px 6px;
   white-space: nowrap;
 }
@@ -2167,14 +2167,14 @@
 }
 
 .terraformDialog h2 {
-  font-size: 18px;
+  font-size: calc(18px + var(--presentation-font-size-increase));
   line-height: 1.25;
   margin: 0;
 }
 
 .terraformDialog p {
   color: #1f2937;
-  font-size: 15px;
+  font-size: calc(15px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
 }
@@ -2182,7 +2182,7 @@
 .terraformDialogStatus,
 .terraformDialogError {
   border-radius: 7px;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   padding: 10px 12px;
 }
 
@@ -2211,8 +2211,8 @@
   border-radius: 7px;
   cursor: pointer;
   font: inherit;
-  font-weight: 850;
-  font-size: 12px;
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
+  font-size: calc(12px + var(--presentation-font-size-increase));
   min-height: 34px;
   padding: 0 12px;
 }
@@ -2286,15 +2286,15 @@
 
 .aiPanelHeader span {
   color: var(--workspace-accent, #000000);
-  font-size: 12px;
-  font-weight: 950;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(950 - var(--presentation-font-weight-reduction));
   letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .aiPanelHeader h2 {
   color: #172033;
-  font-size: 18px;
+  font-size: calc(18px + var(--presentation-font-size-increase));
   line-height: 1.2;
   margin: 0;
 }
@@ -2320,8 +2320,8 @@
 .aiField {
   color: #334155;
   display: grid;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   gap: 6px;
 }
 
@@ -2362,8 +2362,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   gap: 6px;
   justify-content: center;
   min-height: 34px;
@@ -2433,7 +2433,7 @@
 .aiResultHeader h3,
 .aiActionHeader h3 {
   color: #172033;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.25;
   margin: 0;
 }
@@ -2443,8 +2443,8 @@
   background: var(--workspace-accent-soft, #f0f0f3);
   border-radius: 999px;
   color: var(--workspace-accent, #000000);
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   padding: 4px 7px;
   white-space: nowrap;
 }
@@ -2469,8 +2469,8 @@
 .aiWarning strong,
 .aiListBlock strong {
   color: #172033;
-  font-size: 12px;
-  font-weight: 950;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(950 - var(--presentation-font-weight-reduction));
 }
 
 .aiExplanation p,
@@ -2479,7 +2479,7 @@
 .aiNotice,
 .aiError,
 .aiStaleNotice {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
 }
@@ -2507,16 +2507,16 @@
 
 .terraformIssueCodeFrame strong {
   color: #172033;
-  font-size: 12px;
-  font-weight: 950;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(950 - var(--presentation-font-weight-reduction));
 }
 
 .terraformIssueCodeFrame pre {
   background: var(--workspace-surface-dark, #171717);
   border-radius: 12px;
   color: #ffffff;
-  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
   min-width: 0;
@@ -2537,16 +2537,16 @@
 
 .terraformIssueCodePreview strong {
   color: #172033;
-  font-size: 12px;
-  font-weight: 950;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(950 - var(--presentation-font-weight-reduction));
 }
 
 .terraformIssueCodePreview pre {
   background: var(--workspace-surface-dark, #171717);
   border-radius: 12px;
   color: #ffffff;
-  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
   min-width: 0;
@@ -2571,7 +2571,7 @@
   border: 1px solid #bfdbfe;
   border-radius: 6px;
   color: #1d4ed8;
-  font-weight: 800;
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   padding: 9px 10px;
 }
 
@@ -2586,7 +2586,7 @@
   border: 1px solid #ffd1cc;
   border-radius: 6px;
   color: #9f2a1d;
-  font-weight: 800;
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   padding: 9px 10px;
 }
 
@@ -2612,13 +2612,13 @@
 
 .aiWarning span {
   color: #9a3412;
-  font-size: 12px;
-  font-weight: 950;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(950 - var(--presentation-font-weight-reduction));
 }
 
 .aiWarning p {
   color: #7c2d12;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
 }
@@ -2655,8 +2655,8 @@
 
 .aiSafetyFindingHeader span {
   color: #9a3412;
-  font-size: 12px;
-  font-weight: 950;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(950 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
 }
 
@@ -2674,7 +2674,7 @@
 
 .aiSafetyFindingHeader h3 {
   color: #172033;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.35;
   margin: 0;
   overflow-wrap: anywhere;
@@ -2691,8 +2691,8 @@
   border: 1px solid #dce3ee;
   border-radius: 999px;
   color: #526174;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   padding: 4px 7px;
 }
 
@@ -2709,13 +2709,13 @@
 
 .aiSafetyFindingDetails dt {
   color: #475569;
-  font-size: 12px;
-  font-weight: 950;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(950 - var(--presentation-font-weight-reduction));
 }
 
 .aiSafetyFindingDetails dd {
   color: #172033;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
@@ -2731,7 +2731,7 @@
 
 .aiSafetyFindingSteps li {
   color: #475569;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.4;
 }
 
@@ -2751,7 +2751,7 @@
 .aiListBlock li {
   border-top: 1px solid #dce3ee;
   color: #475569;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   padding-top: 5px;
 }
@@ -2783,8 +2783,8 @@
 
 .aiSimulationCard > strong {
   color: var(--workspace-accent, #000000);
-  font-size: 12px;
-  font-weight: 950;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(950 - var(--presentation-font-weight-reduction));
 }
 
 .aiSimulationCard ul {
@@ -2809,14 +2809,14 @@
 
 .aiSimulationCard li span {
   color: var(--workspace-text, #171717);
-  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
-  font-weight: 900;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
 }
 
 .aiSimulationCard li p {
   color: #4a5d72;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.48;
   margin: 0;
 }
@@ -2833,8 +2833,8 @@
   border: 1px solid #c9ddf3;
   border-radius: 999px;
   color: var(--workspace-accent, #000000);
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   padding: 4px 7px;
 }
 
@@ -2849,8 +2849,8 @@
 
 .aiSafetyNotice p {
   color: #7c2d12;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   line-height: 1.45;
   margin: 0;
 }
@@ -2908,15 +2908,15 @@
 
 .deploymentHeader h2 {
   color: #172033;
-  font-size: 18px;
+  font-size: calc(18px + var(--presentation-font-size-increase));
   line-height: 1.2;
   margin: 0;
 }
 
 .deploymentHeader span {
   color: #68758b;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentExpandButton {
@@ -2950,7 +2950,7 @@
 
 .deploymentSection h3 {
   color: #172033;
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   margin: 0;
 }
 
@@ -2991,8 +2991,8 @@
 
 .deploymentActionItem p {
   color: #52657f;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   line-height: 1.45;
   margin: 0;
 }
@@ -3044,8 +3044,8 @@
   border-radius: 999px;
   color: #172033;
   display: inline-flex;
-  font-size: 22px;
-  font-weight: 900;
+  font-size: calc(22px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   height: 64px;
   justify-content: center;
   position: relative;
@@ -3055,16 +3055,16 @@
 
 .deploymentStageLabel {
   color: #172033;
-  font-size: 16px;
-  font-weight: 900;
+  font-size: calc(16px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   line-height: 1.25;
   min-width: 0;
 }
 
 .deploymentStageStepStatus {
   color: #526174;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   line-height: 1.35;
   min-height: 15px;
   min-width: 0;
@@ -3143,16 +3143,16 @@
 
 .deploymentStageBody h3 {
   color: #172033;
-  font-size: 24px;
-  font-weight: 900;
+  font-size: calc(24px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   line-height: 1.18;
   margin: 0;
 }
 
 .deploymentStageStatus {
   color: #526174;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   line-height: 1.35;
   margin: 0;
   min-height: 0;
@@ -3181,16 +3181,16 @@
 
 .deploymentStageSummaryPanel h3 {
   color: #171717;
-  font-size: 18px;
-  font-weight: 900;
+  font-size: calc(18px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   line-height: 1.25;
   margin: 0 0 8px;
 }
 
 .deploymentStageSummaryPanel p {
   color: #60646c;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   line-height: 1.45;
   margin: 0;
 }
@@ -3212,15 +3212,15 @@
 
 .deploymentStageSummaryRows span {
   color: #60646c;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   min-width: 0;
 }
 
 .deploymentStageSummaryRows strong {
   color: #171717;
-  font-size: 13px;
-  font-weight: 900;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   line-height: 1.35;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -3232,8 +3232,8 @@
   border: 1px solid #bfdbfe;
   border-radius: 10px;
   color: #1e3a8a;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   line-height: 1.45;
   padding: 12px 14px;
 }
@@ -3264,8 +3264,8 @@
   color: #172033;
   cursor: pointer;
   display: inline-flex;
-  font-size: 13px;
-  font-weight: 900;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   justify-content: center;
   min-height: 38px;
   min-width: 118px;
@@ -3290,8 +3290,8 @@
   border: 1px solid #f87171;
   border-radius: 8px;
   color: #991b1b;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   line-height: 1.45;
   margin: 0;
   min-height: 38px;
@@ -3306,7 +3306,7 @@
   }
 
   .deploymentStageDot {
-    font-size: 18px;
+    font-size: calc(18px + var(--presentation-font-size-increase));
     height: 52px;
     width: 52px;
   }
@@ -3366,8 +3366,8 @@
 .deploymentField {
   color: #334155;
   display: grid;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   gap: 6px;
 }
 
@@ -3379,8 +3379,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   gap: 5px;
   justify-content: center;
   line-height: 1.25;
@@ -3447,7 +3447,7 @@
 
 .deploymentHint {
   color: #64748b;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
 }
@@ -3457,8 +3457,8 @@
   border: 1px solid #fed7aa;
   border-radius: 6px;
   color: #9a3412;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   line-height: 1.45;
   margin: 0;
   padding: 8px 10px;
@@ -3474,7 +3474,7 @@
 
 .deploymentPreflightSummary p {
   color: var(--workspace-muted, #60646c);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
   word-break: keep-all;
@@ -3508,8 +3508,8 @@
 
 .deploymentGateHeader > strong {
   color: var(--workspace-text, #171717);
-  font-size: 16px;
-  font-weight: 700;
+  font-size: calc(16px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
 }
 
@@ -3548,8 +3548,8 @@
   color: var(--workspace-text, #171717);
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   letter-spacing: 0.04em;
   line-height: 1.4;
   padding: 4px 8px;
@@ -3586,8 +3586,8 @@
   border-radius: var(--radius-control);
   color: var(--workspace-muted, #60646c);
   display: grid;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 4px;
   min-width: 0;
   padding: 12px 16px;
@@ -3595,7 +3595,7 @@
 
 .deploymentPreflightStats strong {
   color: var(--workspace-text, #171717);
-  font-size: 20px;
+  font-size: calc(20px + var(--presentation-font-size-increase));
   line-height: 1.2;
 }
 
@@ -3642,8 +3642,8 @@
   border-radius: var(--radius-card);
   color: var(--color-warning);
   flex: 0 0 auto;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   letter-spacing: 0.04em;
   line-height: 1.4;
   padding: 4px 8px;
@@ -3666,8 +3666,8 @@
 
 .deploymentFindingHeader > strong {
   color: var(--workspace-text, #171717);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1.45;
   min-width: 0;
   word-break: keep-all;
@@ -3683,9 +3683,9 @@
 
 .deploymentFindingMeta > em {
   color: var(--workspace-muted, #60646c);
-  font-family: Inter, Geist, sans-serif;
-  font-size: 12px;
-  font-weight: 500;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
   font-style: normal;
   overflow-wrap: anywhere;
 }
@@ -3713,7 +3713,7 @@
 
 .deploymentPreflightAiList li {
   color: #475569;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.4;
 }
 
@@ -3729,8 +3729,8 @@
 
 .deploymentFindingAiExplanation p {
   color: var(--workspace-muted, #60646c);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
   line-height: 1.5;
   margin: 0;
   word-break: keep-all;
@@ -3749,13 +3749,13 @@
 
 .deploymentFindingAiExplanation dt {
   color: #475569;
-  font-size: 12px;
-  font-weight: 950;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(950 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentFindingAiExplanation dd {
   color: #172033;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
@@ -3771,7 +3771,7 @@
 
 .deploymentFindingAiExplanation li {
   color: #475569;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.4;
 }
 
@@ -3784,8 +3784,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 6px;
   min-height: 40px;
   padding: 0 16px;
@@ -3798,8 +3798,8 @@
   color: var(--workspace-text, #171717);
   cursor: pointer;
   font: inherit;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   min-height: 40px;
   padding: 0 16px;
 }
@@ -3830,8 +3830,8 @@
 .reverseAdvancedSummary {
   color: #334155;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   line-height: 1.3;
 }
 
@@ -3853,8 +3853,8 @@
   border-radius: 6px;
   color: #243044;
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   gap: 7px;
   min-height: 34px;
   min-width: 0;
@@ -3893,7 +3893,7 @@
 .reverseResultItem strong,
 .reverseLogList strong {
   color: #172033;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -3901,7 +3901,7 @@
 .reverseResultItem span,
 .reverseLogList span {
   color: #64748b;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -3941,22 +3941,22 @@
 
 .reverseCandidateCard strong {
   color: #172033;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .reverseCandidateCard span {
   color: #475569;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
 .reverseCandidateCard small {
   color: #64748b;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   line-height: 1.35;
 }
 
@@ -3971,8 +3971,8 @@
 
 .reverseResultDetails summary {
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   line-height: 1.35;
   list-style: none;
   padding: 12px;
@@ -3986,8 +3986,8 @@
   color: #64748b;
   content: "펼치기";
   float: right;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
 }
 
 .reverseResultDetails[open] summary {
@@ -4027,8 +4027,8 @@
   border: 1px solid #263449;
   border-radius: 6px;
   color: #e2e8f0;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
   max-height: 260px;
@@ -4064,13 +4064,13 @@
 
 .deploymentSummary span {
   color: #68758b;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentSummary strong {
   color: #172033;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow-wrap: anywhere;
 }
 
@@ -4090,12 +4090,12 @@
 
 .deploymentSafetyBlock strong {
   color: #991b1b;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .deploymentSafetyBlock p {
   color: #7f1d1d;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
@@ -4114,8 +4114,8 @@
   border: 1px solid #fecaca;
   border-radius: 5px;
   color: #991b1b;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   line-height: 1.35;
   overflow-wrap: anywhere;
   padding: 6px 8px;
@@ -4144,13 +4144,13 @@
 
 .deploymentWarnings em {
   color: #991b1b;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   font-style: normal;
 }
 
 .deploymentWarnings p {
   color: #334155;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
@@ -4161,7 +4161,7 @@
   color: #334155;
   display: flex;
   gap: 6px;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.35;
 }
 
@@ -4183,7 +4183,7 @@
 
 .deploymentFailureExplanation > p {
   color: #334155;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
   overflow-wrap: anywhere;
@@ -4200,15 +4200,15 @@
   background: #9a3412;
   border-radius: 4px;
   color: #ffffff;
-  font-size: 12px;
-  font-weight: 950;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(950 - var(--presentation-font-weight-reduction));
   line-height: 1;
   padding: 4px 5px;
 }
 
 .deploymentFailureHeader strong {
   color: #172033;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
 .deploymentFailureMeta {
@@ -4231,13 +4231,13 @@
 .deploymentFailureMeta span,
 .deploymentFailureBody strong {
   color: #9a3412;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentFailureMeta strong {
   color: #172033;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow-wrap: anywhere;
 }
 
@@ -4250,7 +4250,7 @@
 .deploymentFailureBody p,
 .deploymentFailureBody li {
   color: #334155;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
@@ -4261,8 +4261,8 @@
   border: 1px solid #fed7aa;
   border-radius: 5px;
   color: #172033;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
   overflow-wrap: anywhere;
   padding: 7px;
@@ -4292,7 +4292,7 @@
 
 .deploymentApplyConfirm h3,
 .deploymentDestroyConfirm h3 {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   margin: 0;
 }
 
@@ -4306,21 +4306,21 @@
 .deploymentApplyConfirm span,
 .deploymentDestroyConfirm span {
   color: #68758b;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentApplyConfirm strong,
 .deploymentDestroyConfirm strong {
   color: #172033;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow-wrap: anywhere;
 }
 
 .deploymentApplyConfirm p,
 .deploymentDestroyConfirm p {
   color: #334155;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
 }
@@ -4365,21 +4365,21 @@
 
 .deploymentResultRow strong {
   color: #172033;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow-wrap: anywhere;
 }
 
 .deploymentResultMeta,
 .deploymentResultValue {
   color: #526174;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow-wrap: anywhere;
 }
 
 .deploymentResultMeta {
   color: #64748b;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .deploymentExpandedOverlay {
@@ -4445,25 +4445,25 @@
 }
 
 .deploymentExpandedBody .deploymentSection h3 {
-  font-size: 15px;
+  font-size: calc(15px + var(--presentation-font-size-increase));
 }
 
 .deploymentExpandedBody .deploymentField {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   gap: 7px;
 }
 
 .deploymentExpandedBody .deploymentPrimaryButton,
 .deploymentExpandedBody .deploymentSecondaryButton,
 .deploymentExpandedBody .deploymentDangerButton {
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   gap: 7px;
   min-height: 40px;
   padding: 8px 12px;
 }
 
 .deploymentExpandedBody .deploymentRefreshButton {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .deploymentExpandedBody .deploymentSummary {
@@ -4472,11 +4472,11 @@
 }
 
 .deploymentExpandedBody .deploymentSummary span {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .deploymentExpandedBody .deploymentSummary strong {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.4;
 }
 
@@ -4498,8 +4498,8 @@
   color: #243044;
   cursor: pointer;
   display: flex;
-  font-size: 13px;
-  font-weight: 900;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   gap: 10px;
   justify-content: space-between;
   line-height: 1.35;
@@ -4513,8 +4513,8 @@
 
 .deploymentDisclosure small {
   color: #64748b;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   white-space: nowrap;
 }
 
@@ -4572,14 +4572,14 @@
 
 .deploymentModalHeader h3 {
   color: #172033;
-  font-size: 20px;
+  font-size: calc(20px + var(--presentation-font-size-increase));
   line-height: 1.2;
   margin: 0;
 }
 
 .deploymentModalText {
   color: #526071;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.55;
   margin: 0;
 }
@@ -4617,14 +4617,14 @@
 }
 
 .githubRepositoryChoice span {
-  font-size: 14px;
-  font-weight: 850;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   overflow-wrap: anywhere;
 }
 
 .githubRepositoryChoice strong {
   color: #64748b;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow-wrap: anywhere;
 }
 
@@ -4642,8 +4642,8 @@
   border-radius: 6px;
   color: #d9e4f5;
   display: block;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.55;
   list-style: none;
   margin: 0;
@@ -4719,8 +4719,8 @@
 .deploymentNotice,
 .deploymentError {
   border-radius: 6px;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   line-height: 1.45;
   margin: 0;
   padding: 10px;
@@ -4789,7 +4789,7 @@
 .rightPanelShell {
   background: var(--workspace-surface, #ffffff);
   color: var(--workspace-text, #171717);
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
 }
 
 .rightPanelToolbar,
@@ -4811,19 +4811,19 @@
 .deploymentPanel {
   background: var(--workspace-surface-muted, #fafafa);
   color: var(--workspace-text, #171717);
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
 }
 
 .terraformPanel {
   background: var(--workspace-surface-muted, #fafafa);
   color: var(--workspace-text, #171717);
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
 }
 
 .issuesPanel {
   background: var(--workspace-surface-muted, #fafafa);
   color: var(--workspace-text, #171717);
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
 }
 
 .issuesPanel .terraformDiagnosticList strong {
@@ -4870,8 +4870,8 @@
 .deploymentStageNextButton {
   border-radius: 8px;
   color: var(--workspace-text, #171717);
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
-  font-weight: 700;
+  font-family: var(--font-sans);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .panelModeButtonActive,
@@ -5006,9 +5006,9 @@
 .deploymentHeader > span,
 .deploymentHeaderTop span {
   color: var(--workspace-muted, #60646c);
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
-  font-size: 12px;
-  font-weight: 700;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   letter-spacing: 0;
   text-transform: none;
 }
@@ -5018,7 +5018,7 @@
 .deploymentHeader h2,
 .deploymentSection h3 {
   color: var(--workspace-text, #171717);
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
   letter-spacing: 0;
 }
 
@@ -5136,8 +5136,8 @@
 
 .aiResultContext {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
   margin: 0;
 }
@@ -5149,8 +5149,8 @@
 
 .aiTerraformIssueSelect span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .aiTerraformIssueSelect select {
@@ -5167,14 +5167,14 @@
 .aiTerraformIssueProgress,
 .aiTerraformFixHint,
 .aiTerraformFixUnavailable {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
 }
 
 .aiTerraformIssueProgress {
   color: var(--workspace-muted, #60646c);
-  font-weight: 700;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .aiTerraformFixHint {
@@ -5203,7 +5203,7 @@
 
 .aiResultLead h3 {
   color: var(--workspace-text, #171717);
-  font-size: 18px;
+  font-size: calc(18px + var(--presentation-font-size-increase));
   line-height: 1.4;
   margin: 0;
   overflow-wrap: anywhere;
@@ -5211,8 +5211,8 @@
 
 .aiResultLead p {
   color: var(--workspace-text, #171717);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   line-height: 1.6;
   margin: 0;
   overflow-wrap: anywhere;
@@ -5243,7 +5243,7 @@
 
 .aiReviewSummaryList strong {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.4;
 }
 
@@ -5256,8 +5256,8 @@
 }
 
 .aiReviewSummaryList p {
-  font-size: 14px;
-  font-weight: 550;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(550 - var(--presentation-font-weight-reduction));
   line-height: 1.55;
 }
 .aiResultSection {
@@ -5281,7 +5281,7 @@
 }
 
 .aiResultSectionTitle h4 {
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   line-height: 1.4;
   margin: 0;
 }
@@ -5344,7 +5344,7 @@
 
 .aiResultCheckList strong {
   color: var(--workspace-text, #171717);
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   line-height: 1.4;
 }
 
@@ -5359,8 +5359,8 @@
   background: #f4f4f5;
   border-radius: 999px;
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
   padding: 2px 7px;
 }
@@ -5393,15 +5393,15 @@
 
 .aiResultCheckDetails dt {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
   margin: 0;
 }
 
 .aiResultCheckDetails dd {
   color: var(--workspace-text, #171717);
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   line-height: 1.6;
   margin: 0;
   overflow-wrap: anywhere;
@@ -5417,8 +5417,8 @@
   color: var(--workspace-text, #171717);
   cursor: pointer;
   display: flex;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 8px;
   list-style: none;
   min-height: 44px;
@@ -5432,7 +5432,7 @@
 .aiTechnicalDetails summary::after {
   color: var(--workspace-muted, #60646c);
   content: "+";
-  font-size: 18px;
+  font-size: calc(18px + var(--presentation-font-size-increase));
   font-weight: 400;
   margin-left: auto;
 }
@@ -5473,14 +5473,14 @@
 .aiTechnicalMeta dt,
 .aiTechnicalList > strong {
   color: var(--workspace-text, #171717);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .aiTechnicalMeta dd,
 .aiTechnicalList li {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.55;
   margin: 0;
   overflow-wrap: anywhere;
@@ -5551,8 +5551,8 @@
   border-bottom: 2px solid transparent;
   border-radius: 0;
   color: var(--workspace-muted, #60646c);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   min-height: 44px;
   min-width: 88px;
   padding: 10px 18px 8px;
@@ -5562,7 +5562,7 @@
   background: var(--workspace-surface-muted, #fafafa);
   border-bottom-color: var(--workspace-accent, #000000);
   color: var(--workspace-text, #171717);
-  font-weight: 850;
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentConsoleHeader .deploymentConsoleScreenNavigation button:hover,
@@ -5657,20 +5657,20 @@
 }
 
 .deploymentStepButton strong {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
 .deploymentStepButton small {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .deploymentStepButton:not([data-selected="true"]) small {
   color: var(--workspace-muted, #60646c);
-  font-weight: 600;
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentStepIndex {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   height: 32px;
   width: 32px;
 }
@@ -5687,20 +5687,20 @@
 }
 
 .deploymentStepHeading > span {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   letter-spacing: 0;
   text-transform: none;
 }
 
 .deploymentStepHeading h3 {
-  font-size: 32px;
+  font-size: calc(32px + var(--presentation-font-size-increase));
   letter-spacing: -0.025em;
   line-height: 40px;
 }
 
 .deploymentStepHeading p {
-  font-size: 15px;
+  font-size: calc(15px + var(--presentation-font-size-increase));
   line-height: 22px;
   max-width: 70ch;
 }
@@ -5726,7 +5726,7 @@
 .deploymentValidationSummary h3,
 .deploymentHistorySection h3 {
   color: var(--workspace-text, #171717);
-  font-size: 19px;
+  font-size: calc(19px + var(--presentation-font-size-increase));
   line-height: 1.4;
   margin: 0;
 }
@@ -5744,8 +5744,8 @@
 .deploymentLabeledField label,
 .deploymentField label {
   color: var(--workspace-text, #171717);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 20px;
 }
 
@@ -5755,7 +5755,7 @@
 
 .deploymentLabeledField > p {
   color: var(--workspace-muted, #60646c);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 20px;
   margin: 0;
   max-width: 72ch;
@@ -5783,8 +5783,8 @@
 
 .deploymentValidationSummaryItem > span:first-child {
   color: var(--workspace-muted, #60646c);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentValidationError {
@@ -5816,7 +5816,7 @@
   color: inherit;
   display: inline-flex;
   font: inherit;
-  font-weight: 700;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   min-height: 38px;
   padding: 7px 11px;
   text-decoration: none;
@@ -5829,8 +5829,8 @@
   border-radius: 999px;
   color: var(--workspace-text, #171717);
   display: inline-flex;
-  font-size: 13px;
-  font-weight: 750;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   gap: 6px;
   justify-self: start;
   line-height: 20px;
@@ -5867,8 +5867,8 @@
   border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 6px;
   color: var(--workspace-text, #171717);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
   justify-self: start;
   max-width: 100%;
   overflow: hidden;
@@ -5910,6 +5910,49 @@
   min-width: 88px;
 }
 
+.deploymentRecentResultCard {
+  align-self: start;
+  display: grid;
+  gap: 20px;
+  position: sticky;
+  top: 24px;
+}
+
+.deploymentRecentResultFacts {
+  display: grid;
+  margin: 0;
+}
+
+.deploymentRecentResultFacts > div {
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  gap: 6px;
+  padding: 12px 0;
+}
+
+.deploymentRecentResultFacts > div:first-child {
+  padding-top: 0;
+}
+
+.deploymentRecentResultFacts > div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.deploymentRecentResultFacts dt {
+  color: var(--workspace-muted, #60646c);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+}
+
+.deploymentRecentResultFacts dd {
+  color: var(--workspace-text, #171717);
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  line-height: 20px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 .deploymentRecentResultError {
   align-items: start;
   background: var(--color-error-surface, #fff3f2);
@@ -5917,7 +5960,7 @@
   border-radius: 8px;
   color: var(--color-error, #b42318);
   display: flex;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   gap: 8px;
   line-height: 20px;
   margin: 0;
@@ -5931,7 +5974,7 @@
 
 .deploymentHistoryEmpty p {
   color: var(--workspace-muted, #60646c);
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   line-height: 22px;
   margin: 0;
 }
@@ -5963,7 +6006,7 @@
 
 .deploymentHistoryEmpty strong {
   color: var(--workspace-text, #171717);
-  font-size: 15px;
+  font-size: calc(15px + var(--presentation-font-size-increase));
 }
 
 .deploymentHistorySecondary {
@@ -6046,12 +6089,12 @@
   }
 
   .deploymentStepHeading h3 {
-    font-size: 28px;
+    font-size: calc(28px + var(--presentation-font-size-increase));
     line-height: 36px;
   }
 
   .deploymentStepHeading p {
-    font-size: 14px;
+    font-size: calc(14px + var(--presentation-font-size-increase));
   }
 
   .deploymentSettingsCard,
@@ -6128,8 +6171,8 @@
   color: var(--workspace-text, #171717);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   justify-self: end;
   padding: 8px 12px;
 }
@@ -6139,7 +6182,7 @@
   border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 8px;
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   margin: 0;
   padding: 8px 10px;
 }
@@ -6169,7 +6212,7 @@
 
 .workspaceNotificationHost li span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow-wrap: anywhere;
 }
 
@@ -6192,13 +6235,13 @@
 
 .deploymentOutputLinks article > span:first-child {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   text-transform: uppercase;
 }
 
 .deploymentOutputLinks article > strong {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow-wrap: anywhere;
 }
 
@@ -6217,8 +6260,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   min-height: 32px;
   padding: 6px 10px;
   text-decoration: none;
@@ -6226,7 +6269,7 @@
 
 .deploymentOutputLinks article > span:last-child {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   min-height: 15px;
 }
 
@@ -6345,14 +6388,14 @@
   border-radius: 8px;
   box-shadow: 0 24px 70px rgba(23, 23, 23, 0.16);
   color: var(--workspace-text, #171717);
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
 }
 
 .deploymentExpandedCloseButton {
   background: var(--workspace-surface, #ffffff);
   border: 1px solid var(--workspace-line, #f0f0f3);
   color: var(--workspace-text, #171717);
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
 }
 
 .deploymentExpandedCloseButton:hover,
@@ -6385,7 +6428,7 @@
   color: var(--workspace-text, #171717);
   display: flex;
   flex-direction: column;
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
   height: auto;
   max-height: min(1080px, calc(100dvh - 24px));
   max-width: 1800px;
@@ -6435,14 +6478,14 @@
 }
 
 .liveObservationHeader h2 {
-  font-size: 17px;
+  font-size: calc(17px + var(--presentation-font-size-increase));
   line-height: 1.25;
   margin-top: 2px;
 }
 
 .liveObservationHeader p {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.35;
   margin-top: 2px;
   overflow: hidden;
@@ -6453,8 +6496,8 @@
 .liveObservationEyebrow,
 .liveObservationSectionLabel {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   letter-spacing: 0.06em;
   line-height: 1.3;
   text-transform: uppercase;
@@ -6504,8 +6547,8 @@
 
 .liveObservationTargetBar label > span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .liveObservationTargetBar select {
@@ -6514,7 +6557,7 @@
   border-radius: 8px;
   color: var(--workspace-text, #171717);
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   height: 36px;
   min-width: 0;
   padding: 0 32px 0 10px;
@@ -6531,7 +6574,7 @@
   border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 8px;
   display: inline-flex;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   gap: 6px;
   height: 36px;
   padding: 0 10px;
@@ -6576,13 +6619,13 @@
 
 .liveObservationAudienceUtility strong {
   display: block;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   margin-top: 4px;
 }
 
 .liveObservationAudienceUtility p {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
   margin-top: 3px;
 }
@@ -6608,8 +6651,8 @@
   align-items: center;
   color: var(--workspace-link, #0d74ce);
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 4px;
   text-decoration: none;
 }
@@ -6638,7 +6681,7 @@
 
 .liveObservationQr span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .liveObservationBody {
@@ -6656,7 +6699,7 @@
   border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 10px;
   flex: 0 0 auto;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   margin: 16px;
   padding: 16px;
 }
@@ -6713,8 +6756,8 @@
 
 .liveObservationEvidenceRail span {
   color: #334155;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   grid-column: 1;
   grid-row: 1;
   line-height: 1.3;
@@ -6722,7 +6765,7 @@
 
 .liveObservationEvidenceRail strong {
   color: #0f172a;
-  font-size: 20px;
+  font-size: calc(20px + var(--presentation-font-size-increase));
   font-variant-numeric: tabular-nums;
   grid-column: 2;
   grid-row: 1 / span 2;
@@ -6733,7 +6776,7 @@
 .liveObservationEvidenceRail p,
 .liveObservationEvidenceRail small {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.35;
   margin: 0;
   min-width: 0;
@@ -6760,8 +6803,8 @@
 
 .liveObservationLogs summary {
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .liveObservationLogs ol {
@@ -6781,7 +6824,7 @@
 
 .liveObservationLogs time {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .liveObservationLogs code {
@@ -6844,12 +6887,12 @@
 
 .liveObservationDesignSimulation > header > strong {
   color: var(--workspace-text, #171717);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
 .liveObservationDesignSimulation > header > span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .liveObservationSimulationToggle {
@@ -6900,7 +6943,7 @@
 .liveObservationArchitectureHeader strong,
 .liveObservationArchitectureHeader span,
 .liveObservationArchitectureHeader p {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.45;
 }
 
@@ -6914,6 +6957,7 @@
 }
 
 .liveObservationArchitectureHeader p {
+  font-size: calc(6px + var(--presentation-font-size-increase));
   margin: 0;
   max-width: 610px;
   text-align: right;
@@ -6945,9 +6989,9 @@
 
 .liveObservationArchitectureCanvas :global(.react-flow__edge-text) {
   fill: var(--workspace-muted, #60646c);
-  font-family: "Pretendard", "Noto Sans KR", sans-serif;
-  font-size: 11px;
-  font-weight: 600;
+  font-family: var(--font-sans);
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
 }
 
 .liveObservationArchitectureAreaNode,
@@ -6982,7 +7026,7 @@
 .liveObservationArchitectureAreaHeader strong,
 .liveObservationArchitectureAreaHeader small,
 .liveObservationArchitectureAreaHeader em {
-  font-size: 11px;
+  font-size: calc(11px + var(--presentation-font-size-increase));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6994,8 +7038,8 @@
 
 .liveObservationArchitectureAreaResourceType {
   color: var(--workspace-muted, #60646c);
-  font-size: 9px !important;
-  font-weight: 700;
+  font-size: calc(9px + var(--presentation-font-size-increase)) !important;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .liveObservationArchitectureAreaHeader em {
@@ -7042,20 +7086,20 @@
 
 .liveObservationArchitectureResourceNode > strong {
   color: var(--workspace-text, #171717);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
 .liveObservationArchitectureResourceNode > small {
   color: var(--workspace-muted, #60646c);
-  font-size: 10px;
+  font-size: calc(10px + var(--presentation-font-size-increase));
 }
 
 .liveObservationArchitectureResourceDetail {
   background: #f4f6f8;
   border-radius: 4px;
   color: #364152;
-  font-size: 11px;
-  font-weight: 750;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   line-height: 1.35;
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -7068,8 +7112,8 @@
   border-radius: 999px;
   box-sizing: border-box;
   display: inline-block;
-  font-size: 10px;
-  font-weight: 700;
+  font-size: calc(10px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 17px;
   max-width: 100%;
   overflow: hidden;
@@ -7116,6 +7160,25 @@
   border-color: #e9a29c;
 }
 
+.liveObservationArchitectureDisclosure {
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.liveObservationArchitectureDisclosure > summary {
+  background: var(--workspace-surface-muted, #fafafa);
+  color: var(--workspace-muted, #60646c);
+  cursor: pointer;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  padding: 10px 14px;
+}
+
+.liveObservationArchitectureDisclosure[open] > summary {
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+}
+
 .liveObservationPresentationHeader {
   align-items: center;
   background: var(--workspace-surface-muted, #fafafa);
@@ -7133,7 +7196,7 @@
 
 .liveObservationPresentationHeader strong,
 .liveObservationPresentationHeader span {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   letter-spacing: 0;
 }
 
@@ -7160,8 +7223,8 @@
   background: #fcfcfd;
   color: #7657d6;
   content: "LIVE TRAFFIC PATH";
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   left: 14px;
   padding: 0 7px;
   position: absolute;
@@ -7225,7 +7288,7 @@
 .liveObservationPresentationStage > strong,
 .liveObservationCapacityUnit > strong {
   color: var(--workspace-text, #171717);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.25;
   margin-top: 11px;
   max-width: calc(100% - 12px);
@@ -7246,7 +7309,7 @@
 .liveObservationPresentationStage > span,
 .liveObservationCapacityUnit > span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   margin-top: 4px;
 }
 
@@ -7353,7 +7416,7 @@
   background: var(--workspace-surface, #ffffff);
   border: 1px solid var(--workspace-line, #f0f0f3);
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   left: 28px;
   padding: 3px 5px;
   position: absolute;
@@ -7420,8 +7483,8 @@
   border: 1px dashed var(--workspace-line-strong, #dcdee0);
   color: var(--workspace-muted, #60646c);
   display: flex;
-  font-size: 13px;
-  font-weight: 800;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   height: 64px;
   justify-content: center;
   width: 52px;
@@ -7441,11 +7504,11 @@
 
 .liveObservationPresentationEmpty strong {
   color: var(--workspace-text, #171717);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
 .liveObservationPresentationEmpty span {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 @keyframes liveObservationConnectorFlow {
@@ -7620,13 +7683,13 @@
 
 .liveObservationSignalOverflow {
   fill: #e0f2fe;
-  font-size: 14px;
-  font-weight: 800;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
 }
 
 .liveObservationSignalOverflow[data-signal-variant="mobile"] {
   /* ui-legibility-exception: shape; a11y: the signal-map section announces the hidden overflow count. */
-  font-size: 4px;
+  font-size: calc(4px + var(--presentation-font-size-increase));
 }
 
 .liveObservationSignalNode {
@@ -7658,7 +7721,7 @@
 
 .liveObservationSignalNode strong {
   color: #f8fafc;
-  font-size: clamp(13px, 1.15vw, 19px);
+  font-size: calc(clamp(13px, 1.15vw, 19px) + var(--presentation-font-size-increase));
   grid-column: 2;
   line-height: 1.15;
   min-width: 0;
@@ -7666,7 +7729,7 @@
 
 .liveObservationSignalNode span {
   color: #cbd5e1;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   grid-column: 2;
   line-height: 1.3;
   min-width: 0;
@@ -7744,7 +7807,7 @@
 
 .liveObservationControlActivity > strong {
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .liveObservationControlActivity > div {
@@ -7767,7 +7830,7 @@
 .liveObservationControlActivity > div p,
 .liveObservationControlActivity > div time,
 .liveObservationMuted {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .liveObservationControlActivity > div p,
@@ -7794,12 +7857,12 @@
 }
 
 .liveObservationBoostSummary strong {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .liveObservationBoostSummary span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   margin-top: 2px;
 }
 
@@ -7817,8 +7880,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 5px;
   height: 36px;
   justify-content: center;
@@ -7920,11 +7983,11 @@
   }
 
   .liveObservationSignalNode strong {
-    font-size: 12px;
+    font-size: calc(12px + var(--presentation-font-size-increase));
   }
 
   .liveObservationSignalNode span {
-    font-size: 12px;
+    font-size: calc(12px + var(--presentation-font-size-increase));
   }
 
   .liveObservationControlRail {
@@ -8042,11 +8105,11 @@
   }
 
   .liveObservationSignalNode strong {
-    font-size: 15px;
+    font-size: calc(15px + var(--presentation-font-size-increase));
   }
 
   .liveObservationSignalNode span {
-    font-size: 12px;
+    font-size: calc(12px + var(--presentation-font-size-increase));
   }
 
   .liveObservationSignalNode[data-node-kind="ec2"] {
@@ -8164,9 +8227,9 @@
   color: var(--workspace-muted, #60646c);
   cursor: pointer;
   display: inline-flex;
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
-  font-size: 13px;
-  font-weight: 750;
+  font-family: var(--font-sans);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   min-height: 52px;
   padding: 2px 0 0;
 }
@@ -8174,7 +8237,7 @@
 .deploymentConsoleTab[aria-selected="true"] {
   border-bottom-color: var(--workspace-accent, #000000);
   color: var(--workspace-text, #171717);
-  font-weight: 900;
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentConsoleTab:hover,
@@ -8247,7 +8310,7 @@
   color: var(--workspace-text, #171717);
   cursor: pointer;
   display: grid;
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
   gap: 7px;
   grid-template-rows: 40px auto;
   justify-items: center;
@@ -8292,15 +8355,15 @@
 }
 
 .deploymentStepButton strong {
-  font-size: 12.5px;
-  font-weight: 850;
+  font-size: calc(12.5px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   line-height: 1.25;
 }
 
 .deploymentStepButton small {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
@@ -8312,8 +8375,8 @@
   border-radius: 999px;
   color: var(--workspace-muted, #60646c);
   display: inline-flex;
-  font-size: 13px;
-  font-weight: 900;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   height: 40px;
   justify-content: center;
   width: 40px;
@@ -8363,15 +8426,15 @@
 .deploymentStepHeading > span,
 .deploymentProjectGate > span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 900;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .deploymentStepHeading h3 {
   color: var(--workspace-text, #171717);
-  font-size: clamp(24px, 2.4vw, 34px);
+  font-size: calc(clamp(24px, 2.4vw, 34px) + var(--presentation-font-size-increase));
   letter-spacing: -0.035em;
   line-height: 1.15;
   margin: 0;
@@ -8382,7 +8445,7 @@
 .deploymentStepActionBar p,
 .deploymentProjectGate p {
   color: var(--workspace-muted, #60646c);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.55;
   margin: 0;
 }
@@ -8461,13 +8524,13 @@
 }
 
 .deploymentPartialFailureCallout p {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.55;
 }
 
 .deploymentStepCallout strong {
   color: var(--workspace-text, #171717);
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .deploymentStepSummary > div:not(.deploymentWarnings) {
@@ -8487,13 +8550,13 @@
 
 .deploymentStepSummary span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentStepSummary strong {
   color: var(--workspace-text, #171717);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow-wrap: anywhere;
   text-align: right;
 }
@@ -8551,7 +8614,7 @@
 
 .deploymentProjectGate h3 {
   color: var(--workspace-text, #171717);
-  font-size: clamp(24px, 3vw, 36px);
+  font-size: calc(clamp(24px, 3vw, 36px) + var(--presentation-font-size-increase));
   letter-spacing: -0.035em;
   margin: 0;
 }
@@ -8570,7 +8633,7 @@
   background: var(--workspace-surface, #ffffff);
   border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 16px;
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
 }
 
 .deploymentExpandedBody {
@@ -8596,7 +8659,7 @@
 }
 
 .deploymentExpandedBody .deploymentConsoleScreenNavigation button {
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   min-height: 44px;
   min-width: 112px;
   padding: 10px 20px;
@@ -8815,15 +8878,15 @@
 }
 
 .deploymentStepButton strong {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
 .deploymentStepButton small {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .deploymentStepIndex {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   height: 32px;
   width: 32px;
 }
@@ -8840,20 +8903,20 @@
 }
 
 .deploymentStepHeading > span {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   letter-spacing: 0;
   text-transform: none;
 }
 
 .deploymentStepHeading h3 {
-  font-size: 32px;
+  font-size: calc(32px + var(--presentation-font-size-increase));
   letter-spacing: -0.025em;
   line-height: 40px;
 }
 
 .deploymentStepHeading p {
-  font-size: 15px;
+  font-size: calc(15px + var(--presentation-font-size-increase));
   line-height: 22px;
 }
 
@@ -8940,7 +9003,7 @@
   }
 
   .deploymentStepHeading h3 {
-    font-size: 28px;
+    font-size: calc(28px + var(--presentation-font-size-increase));
     line-height: 36px;
   }
 
@@ -8982,16 +9045,16 @@
 
 .deploymentProgress > strong {
   color: var(--workspace-text, #171717);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 16px;
   white-space: nowrap;
 }
 
 .deploymentProgress > output {
   color: var(--workspace-text, #171717);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   font-variant-numeric: tabular-nums;
-  font-weight: 800;
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   line-height: 16px;
   text-align: right;
 }
@@ -9057,16 +9120,16 @@
 
 .deploymentHistoryHeader h3 {
   color: var(--workspace-text, #171717);
-  font-size: 34px;
-  font-weight: 780;
-  letter-spacing: -0.035em;
-  line-height: 1.15;
+  font-size: calc(22px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  letter-spacing: -0.015em;
+  line-height: 1.3;
   margin: 0;
 }
 
 .deploymentHistoryHeader p {
   color: var(--workspace-muted, #60646c);
-  font-size: 17px;
+  font-size: calc(17px + var(--presentation-font-size-increase));
   line-height: 1.55;
   margin: 0;
 }
@@ -9079,8 +9142,8 @@
   color: var(--workspace-muted, #60646c);
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   gap: 6px;
   min-height: 42px;
   padding: 8px 15px;
@@ -9088,7 +9151,7 @@
 
 .deploymentHistoryCount strong {
   color: var(--workspace-text, #171717);
-  font-size: 17px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .deploymentHistoryBody {
@@ -9125,8 +9188,8 @@
   background: var(--workspace-surface-muted, #fafafa);
   border-bottom: 1px solid var(--workspace-line, #f0f0f3);
   color: var(--workspace-muted, #60646c);
-  font-size: 14px;
-  font-weight: 750;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   height: 54px;
   letter-spacing: -0.01em;
   padding: 0 18px;
@@ -9136,8 +9199,8 @@
 .deploymentHistoryTable td {
   border-bottom: 1px solid var(--workspace-line, #f0f0f3);
   color: var(--workspace-text, #171717);
-  font-size: 17px;
-  font-weight: 650;
+  font-size: calc(17px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   height: 88px;
   line-height: 1.45;
   padding: 0 18px;
@@ -9183,7 +9246,7 @@
 .deploymentHistoryTable time {
   color: var(--workspace-muted, #60646c);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentHistoryTable td:last-child {
@@ -9197,8 +9260,8 @@
   color: var(--workspace-text, #171717);
   cursor: pointer;
   font: inherit;
-  font-size: 15px;
-  font-weight: 750;
+  font-size: calc(15px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   min-height: 42px;
   padding: 8px 13px;
   white-space: nowrap;
@@ -9225,11 +9288,11 @@
   color: var(--color-success, #067647);
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 14px;
-  font-weight: 750;
-  gap: 6px;
-  min-height: 36px;
-  padding: 6px 11px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 9px;
 }
 
 .deploymentHistoryStatus[data-tone="neutral"] {
@@ -9256,7 +9319,7 @@
 
 .deploymentHistoryDetailHeader time {
   color: var(--workspace-muted, #60646c);
-  font-size: 15px;
+  font-size: calc(15px + var(--presentation-font-size-increase));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -9268,13 +9331,14 @@
 
 .deploymentHistoryDetailIntro > span {
   color: var(--workspace-muted, #60646c);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentHistoryDetailIntro h4 {
   color: var(--workspace-text, #171717);
-  font-size: 28px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   letter-spacing: -0.03em;
   line-height: 1.25;
   margin: 0;
@@ -9282,7 +9346,7 @@
 
 .deploymentHistoryResultSentence {
   color: var(--workspace-text, #171717);
-  font-size: 17px;
+  font-size: calc(17px + var(--presentation-font-size-increase));
   line-height: 1.65;
   margin: 4px 0 0;
 }
@@ -9304,14 +9368,14 @@
 
 .deploymentHistoryDetailFacts dt {
   color: var(--workspace-muted, #60646c);
-  font-size: 15px;
-  font-weight: 650;
+  font-size: calc(15px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentHistoryDetailFacts dd {
   color: var(--workspace-text, #171717);
-  font-size: 16px;
-  font-weight: 720;
+  font-size: calc(16px + var(--presentation-font-size-increase));
+  font-weight: calc(720 - var(--presentation-font-weight-reduction));
   line-height: 1.5;
   margin: 0;
   min-width: 0;
@@ -9320,25 +9384,54 @@
 .deploymentHistoryDetailFacts code,
 .deploymentHistoryTechnical code {
   display: block;
-  font-family: var(--font-code, "SFMono-Regular", Consolas, monospace);
-  font-size: 13px;
+  font-family: var(--font-sans);
+  font-size: calc(13px + var(--presentation-font-size-increase));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.deploymentHistoryRelease {
+  align-items: baseline;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  gap: 4px 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 14px 20px;
+}
+
+.deploymentHistoryRelease > span {
+  color: var(--workspace-muted, #60646c);
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  grid-column: 1 / -1;
+  text-transform: uppercase;
+}
+
+.deploymentHistoryRelease strong {
+  color: var(--workspace-text, #171717);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+}
+
+.deploymentHistoryRelease small,
+.deploymentHistoryRevision {
+  color: var(--workspace-muted, #60646c);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+}
+
+.deploymentHistoryRevision,
 .deploymentHistoryOutputLink {
-  align-items: center;
-  background: var(--workspace-text, #171717);
-  border: 1px solid var(--workspace-text, #171717);
-  border-radius: 10px;
-  color: #ffffff;
-  display: inline-flex;
-  font-size: 15px;
-  font-weight: 750;
-  justify-self: start;
-  min-height: 44px;
-  padding: 9px 15px;
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  overflow-wrap: anywhere;
+  padding: 12px 20px;
+}
+
+.deploymentHistoryOutputLink {
+  color: var(--color-text-link, #0d74ce);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   text-decoration: none;
 }
 
@@ -9356,8 +9449,8 @@
 .deploymentHistoryTechnical summary {
   color: var(--workspace-text, #171717);
   cursor: pointer;
-  font-size: 16px;
-  font-weight: 750;
+  font-size: calc(16px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   list-style-position: inside;
 }
 
@@ -9375,13 +9468,13 @@
 
 .deploymentHistoryTechnical dt {
   color: var(--workspace-muted, #60646c);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentHistoryTechnical dd {
   color: var(--workspace-text, #171717);
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   margin: 0;
   min-width: 0;
 }
@@ -9411,11 +9504,11 @@
   }
 
   .deploymentHistoryHeader h3 {
-    font-size: 30px;
+    font-size: calc(30px + var(--presentation-font-size-increase));
   }
 
   .deploymentHistoryHeader p {
-    font-size: 16px;
+    font-size: calc(16px + var(--presentation-font-size-increase));
   }
 
   .deploymentHistoryDetailPanel {
@@ -9429,7 +9522,7 @@
   }
 
   .deploymentHistoryDetailIntro h4 {
-    font-size: 25px;
+    font-size: calc(25px + var(--presentation-font-size-increase));
   }
 
   .deploymentHistoryDetailFacts > div,
@@ -9480,7 +9573,7 @@
 .deploymentConsoleGrid > .deploymentStepActionBar > p {
   color: var(--workspace-muted, #60646c);
   display: block;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
 }
@@ -9546,7 +9639,7 @@
   color: var(--workspace-text, #171717);
   display: inline-flex;
   flex: 0 0 152px;
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   height: 44px;
   justify-content: center;
   justify-self: start;
@@ -9660,18 +9753,18 @@
 
 .deploymentExecutiveTitle .deploymentStepHeading > span {
   color: var(--deployment-blue-dark);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentExecutiveTitle .deploymentStepHeading h3 {
-  font-size: 22px;
+  font-size: calc(22px + var(--presentation-font-size-increase));
   line-height: 30px;
 }
 
 .deploymentExecutiveTitle .deploymentStepHeading p {
   color: #52657f;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 20px;
 }
 
@@ -9698,14 +9791,14 @@
 
 .deploymentExecutiveMetrics dt {
   color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentExecutiveMetrics dd {
   color: #1d2b43;
-  font-size: 15px;
-  font-weight: 850;
+  font-size: calc(15px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   line-height: 20px;
   margin: 0;
   min-width: 0;
@@ -9809,13 +9902,13 @@
 
 .deploymentExecutionBody strong {
   color: #ffffff;
-  font-size: 15px;
+  font-size: calc(15px + var(--presentation-font-size-increase));
   line-height: 21px;
 }
 
 .deploymentExecutionBody p {
   color: #c7d8ef;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 18px;
   margin: 0;
 }
@@ -9830,9 +9923,9 @@
 
 .deploymentExecutionPanel output {
   color: #ffffff;
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   font-variant-numeric: tabular-nums;
-  font-weight: 850;
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   text-align: right;
 }
 
@@ -9846,7 +9939,7 @@
 .deploymentSettingsSection h3,
 .deploymentValidationSection h3 {
   color: #1d2b43;
-  font-size: 16px;
+  font-size: calc(16px + var(--presentation-font-size-increase));
   line-height: 22px;
   margin: 0;
 }
@@ -9870,13 +9963,13 @@
 
 .deploymentSettingsControl label {
   color: #24344d;
-  font-size: 13px;
-  font-weight: 750;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentSettingsControl > p {
   color: #52657f;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 19px;
   margin: 0;
 }
@@ -9905,12 +9998,12 @@
 
 .deploymentPlanSnapshot span {
   color: #64748b;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .deploymentPlanSnapshot strong {
   color: #1d2b43;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   text-align: right;
 }
 
@@ -9938,13 +10031,13 @@
 
 .deploymentValidationCards > article > span:first-child {
   color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentValidationCards p {
   color: #52657f;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 18px;
   margin: 0;
 }
@@ -10050,12 +10143,12 @@
 
 .deploymentHistoryHeader h3 {
   color: #1d2b43;
-  font-size: 26px;
+  font-size: calc(26px + var(--presentation-font-size-increase));
 }
 
 .deploymentHistoryHeader p {
   color: #52657f;
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .deploymentHistoryMetrics {
@@ -10094,15 +10187,15 @@
 
 .deploymentHistoryMetrics dt > span:last-child {
   color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   grid-column: 2;
 }
 
 .deploymentHistoryMetrics dd {
   color: #1d2b43;
-  font-size: 17px;
-  font-weight: 850;
+  font-size: calc(17px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   grid-column: 2;
   margin: 0;
   overflow-wrap: anywhere;
@@ -10122,8 +10215,8 @@
   color: #52657f;
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
-  font-weight: 750;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   min-height: 44px;
   padding: 9px 16px;
 }
@@ -10167,13 +10260,13 @@
 
 .deploymentHistoryFilteredEmpty strong {
   color: #1d2b43;
-  font-size: 15px;
+  font-size: calc(15px + var(--presentation-font-size-increase));
 }
 
 .deploymentHistoryFilteredEmpty span {
   color: #52657f;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
 }
 
 .deploymentHistoryDetailPanel {

@@ -124,16 +124,16 @@
 
 .selectMenuOptionLabel {
   flex: 0 1 auto;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   min-width: 0;
 }
 
 .selectMenuOptionDetail {
   color: #64748b;
   flex: 1 1 auto;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   min-width: 0;
   text-align: right;
 }
@@ -144,7 +144,7 @@
 }
 
 .compact .selectMenuTrigger {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   min-height: 30px;
   padding: 5px 8px;
 }
@@ -164,7 +164,7 @@
 }
 
 .large .selectMenuTrigger {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   min-height: 42px;
   padding: 10px 12px;
 }
@@ -180,8 +180,8 @@
   border-radius: var(--radius-control);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
   line-height: 1.5;
   min-height: 42px;
   padding: 0 12px;
@@ -238,8 +238,8 @@
 
 .surfaceTone .selectMenuOptionLabel {
   font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
   line-height: 1.45;
   overflow: visible;
   text-overflow: clip;
@@ -247,7 +247,7 @@
 }
 
 .surfaceTone .selectMenuOptionSelected .selectMenuOptionLabel {
-  font-weight: 600;
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
 }
 
 .surfaceTone .selectMenuOptionSelected svg {

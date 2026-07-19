@@ -527,8 +527,14 @@ test("area node header uses a rounded icon without a bottom divider", () => {
   assert.match(areaBlock, /background:\s*var\(--area-body-background\);/);
   assert.match(areaBlock, /border-radius:\s*10px;/);
   assert.match(headerBlock, /height:\s*34px;/);
-  assert.match(headerBlock, /font-size:\s*14px;/);
-  assert.match(headerBlock, /font-weight:\s*650;/);
+  assert.match(
+    headerBlock,
+    /font-size:\s*calc\(14px \+ var\(--presentation-font-size-increase\)\);/
+  );
+  assert.match(
+    headerBlock,
+    /font-weight:\s*calc\(650 - var\(--presentation-font-weight-reduction\)\);/
+  );
   assert.match(headerBlock, /left:\s*0;/);
   assert.match(headerBlock, /top:\s*0;/);
   assert.match(
@@ -603,7 +609,7 @@ test("edge labels use a quantized 75 percent canvas LOD", () => {
   assert.match(compactTextRule, /visibility:\s*hidden;/);
   assert.match(
     diagramEditorStyles,
-    /\.canvasPanelEdgeLabelsCompact :global\(\.react-flow__edge-text\)\s*\{[^}]*font-size:\s*calc\(12px \* var\(--board-lod-label-scale\)\) !important;/s
+    /\.canvasPanelEdgeLabelsCompact :global\(\.react-flow__edge-text\)\s*\{[^}]*font-size:\s*calc\(calc\(12px \* var\(--board-lod-label-scale\)\) \+ var\(--presentation-font-size-increase\)\) !important;/s
   );
   assert.match(compactBackgroundRule, /opacity:\s*0;/);
   assert.match(compactBackgroundRule, /visibility:\s*hidden;/);
@@ -937,22 +943,33 @@ test("Area auto expansion is a persistent pressed toolbar preference after canva
   assert.match(diagramEditorSource, /<Expand aria-hidden="true" size=\{16\} \/>/);
 });
 
-test("canvas tools dock vertically along the left center", () => {
+test("canvas tools dock vertically along the left center without overlapping panel handles", () => {
   const canvasToolbarRule = getCssBlock(".canvasToolbar");
+  const viewerCanvasToolbarRule = getCssBlock(".editorShellViewer .canvasToolbar");
+  const panelEdgeHandleRule = getCssBlock(".panelEdgeHandle");
   const toolbarGroupRule = getCssBlock(".toolbarGroup");
 
   assert.match(canvasToolbarRule, /display:\s*flex;/);
   assert.match(canvasToolbarRule, /flex-direction:\s*column;/);
-  assert.match(canvasToolbarRule, /left:\s*16px;/);
+  assert.match(
+    canvasToolbarRule,
+    /left:\s*calc\(var\(--panel-edge-handle-width\) \+ 12px\);/
+  );
   assert.match(canvasToolbarRule, /top:\s*50%;/);
   assert.match(canvasToolbarRule, /transform:\s*translateY\(-50%\);/);
   assert.doesNotMatch(canvasToolbarRule, /bottom:/);
   assert.doesNotMatch(canvasToolbarRule, /translateX/);
+  assert.match(panelEdgeHandleRule, /width:\s*var\(--panel-edge-handle-width\);/);
+  assert.match(viewerCanvasToolbarRule, /left:\s*16px;/);
   assert.match(toolbarGroupRule, /display:\s*inline-flex;/);
   assert.match(toolbarGroupRule, /flex-direction:\s*column;/);
   assert.match(
     diagramEditorStyles,
-    /@media \(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*\{[^}]*left:\s*10px;[^}]*max-height:\s*calc\(100% - 20px\);/s
+    /@media \(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*\{[^}]*left:\s*calc\(var\(--panel-edge-handle-width\) \+ 10px\);[^}]*max-height:\s*calc\(100% - 20px\);/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /@media \(max-width:\s*640px\)[\s\S]*?\.editorShellViewer \.canvasToolbar\s*\{[^}]*left:\s*10px;/s
   );
 });
 

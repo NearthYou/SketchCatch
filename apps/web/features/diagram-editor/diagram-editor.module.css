@@ -1,7 +1,8 @@
 .editorShell {
   --left-panel-width: 346px;
+  --panel-edge-handle-width: 24px;
   --right-panel-width: 440px;
-  --workspace-font: "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif;
+  --workspace-font: var(--font-sans);
   --workspace-page: #ffffff;
   --workspace-surface: #ffffff;
   --workspace-surface-muted: #fafafa;
@@ -117,14 +118,14 @@
 
 .projectBarContext strong {
   color: var(--workspace-text);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .projectBarContext span {
   color: var(--workspace-muted);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
 }
 
 .projectBarActions {
@@ -138,8 +139,8 @@
   align-items: center;
   color: var(--workspace-muted);
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   gap: 6px;
   min-width: 0;
   padding: 0 6px;
@@ -251,8 +252,8 @@
   color: var(--workspace-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   height: 34px;
   padding: 0 10px;
 }
@@ -348,8 +349,8 @@
 }
 
 .leftRail :global(.providerVersionValue) {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .leftRail :global(.providerVersionChevron) {
@@ -383,8 +384,8 @@
   color: var(--workspace-text);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   min-height: 32px;
   padding: 0 8px;
   text-align: left;
@@ -401,8 +402,8 @@
   align-items: center;
   color: var(--workspace-text);
   display: grid;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   justify-items: center;
   line-height: 1;
   width: 34px;
@@ -442,7 +443,7 @@
   border: 0;
   color: var(--workspace-text);
   font: inherit;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   min-width: 0;
   outline: none;
   width: 100%;
@@ -507,8 +508,8 @@
 }
 
 .leftRail :global(.resourceAreaLabel) {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -537,8 +538,8 @@
   align-items: center;
   color: var(--workspace-muted);
   display: flex;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   justify-content: space-between;
   margin: 2px 2px 7px;
 }
@@ -602,14 +603,14 @@
   background: var(--workspace-surface-muted);
   border-radius: 6px;
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   justify-content: center;
 }
 
 .leftRail :global(.resourceTileLabel) {
-  font-size: 12px;
-  font-weight: 650;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   line-height: 1.25;
   min-width: 0;
   overflow: hidden;
@@ -625,7 +626,7 @@
 .leftRail :global(.emptyPanelState) {
   color: var(--workspace-muted);
   display: grid;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   gap: 7px;
   line-height: 1.45;
   padding: 10px 4px 4px;
@@ -640,8 +641,8 @@
   color: var(--workspace-text);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   min-height: 36px;
   padding: 0 12px;
 }
@@ -654,8 +655,8 @@
 
 .leftRail :global(.sectionCaption) {
   color: var(--workspace-muted);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   margin: 2px 2px 10px;
 }
 
@@ -697,8 +698,8 @@
   color: var(--workspace-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   min-height: 30px;
 }
 
@@ -733,7 +734,7 @@
   border: 0;
   color: var(--workspace-text);
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   min-width: 0;
   outline: none;
   width: 100%;
@@ -757,8 +758,8 @@
   align-items: center;
   color: var(--workspace-text);
   display: flex;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 7px;
   justify-content: space-between;
   padding: 0 2px;
@@ -768,7 +769,7 @@
   background: var(--workspace-surface-muted);
   border-radius: 999px;
   color: var(--workspace-muted);
-  font-size: 11px;
+  font-size: calc(11px + var(--presentation-font-size-increase));
   min-width: 20px;
   padding: 2px 6px;
   text-align: center;
@@ -808,15 +809,15 @@
 .leftRail :global(.moduleCatalogCard span),
 .leftRail :global(.templateCatalogCard span) {
   color: var(--workspace-muted);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .leftRail :global(.templateCatalogCard strong) {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .leftRail :global(.moduleCatalogCard strong) {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.3;
 }
 
@@ -827,8 +828,8 @@
 
 .leftRail :global(.moduleCatalogCard small) {
   color: var(--workspace-muted);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .leftRail :global(.templateLibraryOpenCard) {
@@ -974,7 +975,7 @@ button.rightRailResizeHandle {
     color 140ms ease,
     left 160ms ease,
     right 160ms ease;
-  width: 24px;
+  width: var(--panel-edge-handle-width);
   z-index: 44;
 }
 
@@ -1027,7 +1028,7 @@ button.rightRailResizeHandle {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  left: 16px;
+  left: calc(var(--panel-edge-handle-width) + 12px);
   max-height: calc(100% - 32px);
   padding: 5px;
   position: absolute;
@@ -1035,6 +1036,10 @@ button.rightRailResizeHandle {
   transform: translateY(-50%);
   width: fit-content;
   z-index: 12;
+}
+
+.editorShellViewer .canvasToolbar {
+  left: 16px;
 }
 
 .toolbarGroup {
@@ -1194,8 +1199,8 @@ button.rightRailResizeHandle {
 .edgePatchBadge text {
   fill: currentColor;
   font-family: var(--workspace-font);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .edgePatchBadge[data-preview-state="added"] {
@@ -1302,7 +1307,7 @@ button.rightRailResizeHandle {
 }
 
 .canvasPanelEdgeLabelsCompact :global(.react-flow__edge-text) {
-  font-size: calc(12px * var(--board-lod-label-scale)) !important;
+  font-size: calc(calc(12px * var(--board-lod-label-scale)) + var(--presentation-font-size-increase)) !important;
 }
 
 .canvasPanelEdgeLabelsCompact :global(.react-flow__edge:hover .react-flow__edge-text),
@@ -1347,8 +1352,8 @@ button.rightRailResizeHandle {
   border-radius: 7px;
   box-shadow: 0 12px 28px rgba(31, 41, 55, 0.1);
   color: #7a4d00;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
   left: 50%;
   line-height: 1.35;
   max-width: min(520px, calc(100% - 32px));
@@ -1370,17 +1375,17 @@ button.rightRailResizeHandle {
   bottom: 16px;
   color: var(--board-ink);
   flex-direction: column;
-  font-weight: 500;
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
   left: 16px;
   max-height: min(480px, calc(100% - 32px));
-  max-width: min(480px, calc(100% - 48px));
+  max-width: calc(100% - 48px);
   overflow-y: auto;
-  padding: 14px;
+  padding: 12px;
   right: auto;
   text-align: left;
   top: auto;
   transform: none;
-  width: 440px;
+  width: 520px;
 }
 
 .compilerPreviewHeader {
@@ -1399,14 +1404,14 @@ button.rightRailResizeHandle {
 
 .compilerPreviewHeader strong {
   color: var(--board-ink);
-  font-size: 15px;
-  font-weight: 800;
+  font-size: calc(15px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
 }
 
 .compilerPreviewHeader span {
   color: var(--board-muted);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
 }
 
 .compilerPreviewViewToggle {
@@ -1426,8 +1431,8 @@ button.rightRailResizeHandle {
   color: var(--board-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   min-height: 28px;
   padding: 0 10px;
 }
@@ -1463,8 +1468,8 @@ button.rightRailResizeHandle {
   color: var(--board-ink);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   line-height: 1;
   min-height: 32px;
   padding: 0 10px;
@@ -1484,62 +1489,6 @@ button.rightRailResizeHandle {
   color: #ffffff;
 }
 
-.compilerPreviewDetails {
-  border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
-  display: grid;
-  gap: 8px 14px;
-  grid-template-columns: minmax(0, 1fr);
-  padding-top: 10px;
-}
-
-.compilerPreviewDetail {
-  align-items: baseline;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: 68px minmax(0, 1fr);
-  min-width: 0;
-}
-
-.compilerPreviewDetail > span {
-  color: var(--board-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.compilerPreviewDetail strong {
-  color: var(--board-ink);
-  font-size: 11px;
-  font-weight: 700;
-  min-width: 0;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.compilerPreviewReview {
-  align-items: start;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: 68px minmax(0, 1fr);
-}
-
-.compilerPreviewReview > span {
-  color: var(--board-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.compilerPreviewReview ul {
-  color: var(--board-ink);
-  display: grid;
-  font-size: 11px;
-  font-weight: 650;
-  gap: 3px;
-  line-height: 1.45;
-  list-style-position: inside;
-  margin: 0;
-  padding: 0;
-}
-
 .emptyState {
   align-items: center;
   background: rgba(255, 255, 255, 0.88);
@@ -1548,7 +1497,7 @@ button.rightRailResizeHandle {
   color: #6f778c;
   display: flex;
   flex-direction: column;
-  font-size: 0.85rem;
+  font-size: calc(0.85rem + var(--presentation-font-size-increase));
   gap: 4px;
   left: 50%;
   padding: 14px 18px;
@@ -1561,7 +1510,7 @@ button.rightRailResizeHandle {
 
 .emptyState strong {
   color: #171c2f;
-  font-size: 0.95rem;
+  font-size: calc(0.95rem + var(--presentation-font-size-increase));
 }
 
 .panelHeader {
@@ -1571,8 +1520,8 @@ button.rightRailResizeHandle {
 
 .panelKicker {
   color: #727d91;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   letter-spacing: 0;
   margin: 0 0 3px;
   text-transform: uppercase;
@@ -1580,7 +1529,7 @@ button.rightRailResizeHandle {
 
 .panelTitle {
   color: #171c2f;
-  font-size: 1rem;
+  font-size: calc(1rem + var(--presentation-font-size-increase));
   line-height: 1.2;
   margin: 0;
 }
@@ -1597,8 +1546,8 @@ button.rightRailResizeHandle {
   align-items: center;
   color: #727d91;
   display: flex;
-  font-size: 0.78rem;
-  font-weight: 800;
+  font-size: calc(0.78rem + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   gap: 6px;
   margin: 0 0 8px 4px;
 }
@@ -1660,13 +1609,13 @@ button.rightRailResizeHandle {
 
 .paletteItemName {
   color: #171c2f;
-  font-size: 0.84rem;
-  font-weight: 800;
+  font-size: calc(0.84rem + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
 }
 
 .paletteItemType {
   color: #778196;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1887,8 +1836,8 @@ button.rightRailResizeHandle {
   border-radius: 9px 9px 0 0;
   box-shadow: none;
   display: flex;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   gap: 6px;
   height: 34px;
   left: 0;
@@ -1973,8 +1922,8 @@ button.rightRailResizeHandle {
   border-radius: 6px;
   color: var(--board-primary);
   flex: 0 1 auto;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   line-height: 14px;
   max-width: 120px;
   min-width: 0;
@@ -1991,8 +1940,8 @@ button.rightRailResizeHandle {
   border-radius: 8px;
   color: var(--board-primary);
   display: flex;
-  font-size: 0.9rem;
-  font-weight: 900;
+  font-size: calc(0.9rem + var(--presentation-font-size-increase));
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
   height: 38px;
   justify-content: center;
   width: 38px;
@@ -2013,19 +1962,19 @@ button.rightRailResizeHandle {
 
 .nodeType {
   color: var(--board-muted);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   text-transform: uppercase;
 }
 
 .nodeLabel {
-  font-size: 0.92rem;
-  font-weight: 850;
+  font-size: calc(0.92rem + var(--presentation-font-size-increase));
+  font-weight: calc(850 - var(--presentation-font-weight-reduction));
 }
 
 .nodeSubtitle {
   color: var(--board-muted);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2082,8 +2031,8 @@ button.rightRailResizeHandle {
   box-sizing: border-box;
   color: var(--board-ink);
   display: -webkit-box;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   left: 50%;
   line-height: 15px;
   max-height: 30px;
@@ -2139,8 +2088,8 @@ button.rightRailResizeHandle {
   border: 1px solid currentColor;
   border-radius: 5px;
   display: flex;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   justify-content: center;
   line-height: 14px;
   min-height: 18px;
@@ -2179,13 +2128,13 @@ button.rightRailResizeHandle {
   .lockBadge,
   .stateBadge {
     border-radius: 3px;
-    font-size: 12px;
-    height: 12px;
-    line-height: 10px;
-    min-height: 12px;
-    min-width: 12px;
+    font-size: calc(12px + var(--presentation-font-size-increase));
+    height: 18px;
+    line-height: 16px;
+    min-height: 18px;
+    min-width: 18px;
     padding: 0;
-    width: 12px;
+    width: 18px;
   }
 
   .lockBadge {
@@ -2213,7 +2162,7 @@ button.rightRailResizeHandle {
 
   .stateBadgePreview::after {
     content: "P";
-    font-size: 12px;
+    font-size: calc(12px + var(--presentation-font-size-increase));
   }
 }
 
@@ -2288,8 +2237,8 @@ button.rightRailResizeHandle {
   color: #ffffff;
   content: "+";
   /* ui-legibility-exception: shape; a11y: DiagramNodeView gives each connection handle an aria-label. */
-  font-size: calc(9px * var(--board-control-scale));
-  font-weight: 700;
+  font-size: calc(calc(9px * var(--board-control-scale)) + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1;
 }
 
@@ -2405,8 +2354,8 @@ button.rightRailResizeHandle {
   border-top: 1px solid var(--board-border);
   color: var(--board-body);
   display: flex;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   justify-content: space-between;
   margin-top: 3px;
   padding-top: 6px;
@@ -2464,8 +2413,8 @@ button.rightRailResizeHandle {
 
 .edgeToolbarPanelLabel {
   color: var(--board-body);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   line-height: 16px;
 }
 
@@ -3010,8 +2959,12 @@ button.rightRailResizeHandle {
   }
 
   .canvasToolbar {
-    left: 10px;
+    left: calc(var(--panel-edge-handle-width) + 10px);
     max-height: calc(100% - 20px);
+  }
+
+  .editorShellViewer .canvasToolbar {
+    left: 10px;
   }
 
   .compilerPreviewNotice {
@@ -3031,9 +2984,6 @@ button.rightRailResizeHandle {
     margin-left: auto;
   }
 
-  .compilerPreviewDetails {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
