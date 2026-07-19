@@ -4,21 +4,56 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { BOARD_THUMBNAIL_CAPTURE_CONTRACT } from "../apps/web/components/architecture-board/board-thumbnail-capture-contract";
 import {
-  MODULE_THUMBNAIL_MODULE_IDS,
-  type ModuleThumbnailId
-} from "../apps/web/features/resource-settings/module-thumbnail-manifest";
+  AVAILABLE_BRAINBOARD_TEMPLATE_IDS,
+  TEMPLATE_IDS,
+  type AvailableBrainboardTemplateId,
+  type TemplateId
+} from "../packages/types/src";
+import { getBrainboardTemplateThumbnailAsset } from "../apps/web/features/resource-settings/brainboard-template-thumbnail-manifest";
+import { getTemplateThumbnailAsset } from "../apps/web/features/resource-settings/template-thumbnail-manifest";
+import { decodeWebpDataUrl } from "./generate-module-thumbnails";
 
-const baseUrl = process.env.MODULE_THUMBNAIL_BASE_URL ?? "http://127.0.0.1:3000";
+const baseUrl = process.env.TEMPLATE_THUMBNAIL_BASE_URL ?? "http://127.0.0.1:3000";
 const chromeBin =
   process.env.CHROME_BIN ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const outputDirectory = join(
   dirname(fileURLToPath(import.meta.url)),
-  "../apps/web/public/module-thumbnails/v1"
+  "../apps/web/public/template-thumbnails"
 );
 const CAPTURE_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 250;
+const TEMPLATE_THUMBNAIL_PUBLIC_PREFIX = "/template-thumbnails/";
+
+export type TemplateThumbnailCaptureId = TemplateId | AvailableBrainboardTemplateId;
+
+export type TemplateThumbnailCaptureTarget = {
+  readonly relativeOutputPath: string;
+  readonly templateId: TemplateThumbnailCaptureId;
+};
+
+export const TEMPLATE_THUMBNAIL_CAPTURE_TARGETS: readonly TemplateThumbnailCaptureTarget[] = [
+  ...TEMPLATE_IDS.map(
+    (templateId): TemplateThumbnailCaptureTarget => ({
+      relativeOutputPath: toRelativeOutputPath(
+        getTemplateThumbnailAsset(templateId).src,
+        templateId
+      ),
+      templateId
+    })
+  ),
+  ...AVAILABLE_BRAINBOARD_TEMPLATE_IDS.map((templateId): TemplateThumbnailCaptureTarget => {
+    const asset = getBrainboardTemplateThumbnailAsset(templateId);
+    if (asset.kind !== "board-capture") {
+      throw new Error(`${templateId} does not have a Board capture asset`);
+    }
+
+    return {
+      relativeOutputPath: toRelativeOutputPath(asset.src, templateId),
+      templateId
+    };
+  })
+];
 
 type CaptureState = {
   readonly error: boolean;
@@ -61,9 +96,7 @@ class CdpConnection {
       socket.addEventListener(
         "error",
         () => reject(new Error("Chrome DevTools connection failed")),
-        {
-          once: true
-        }
+        { once: true }
       );
     });
 
@@ -110,17 +143,17 @@ class CdpConnection {
 }
 
 async function main(): Promise<void> {
-  const profileDirectory = await mkdtemp(join(tmpdir(), "module-thumbnails-"));
+  const profileDirectory = await mkdtemp(join(tmpdir(), "template-thumbnails-"));
   let chrome: ChildProcessWithoutNullStreams | undefined;
   let cdp: CdpConnection | undefined;
 
   try {
     chrome = await launchChrome(profileDirectory);
     cdp = await CdpConnection.connect(await readDevToolsEndpoint(chrome));
-    await captureModuleThumbnailBatch({
-      capture: (moduleId) => captureModuleThumbnail(cdp as CdpConnection, moduleId),
-      moduleIds: MODULE_THUMBNAIL_MODULE_IDS,
-      outputDirectory
+    await captureTemplateThumbnailBatch({
+      capture: (target) => captureTemplateThumbnail(cdp as CdpConnection, target.templateId),
+      outputDirectory,
+      targets: TEMPLATE_THUMBNAIL_CAPTURE_TARGETS
     });
   } finally {
     cdp?.close();
@@ -129,42 +162,63 @@ async function main(): Promise<void> {
   }
 }
 
-export async function captureModuleThumbnailBatch({
+export async function captureTemplateThumbnailBatch({
   capture,
-  moduleIds,
-  outputDirectory
+  outputDirectory,
+  targets
 }: {
-  readonly capture: (moduleId: ModuleThumbnailId) => Promise<Buffer>;
-  readonly moduleIds: readonly ModuleThumbnailId[];
+  readonly capture: (target: TemplateThumbnailCaptureTarget) => Promise<Buffer>;
   readonly outputDirectory: string;
+  readonly targets: readonly TemplateThumbnailCaptureTarget[];
 }): Promise<void> {
-  const stagingParent = dirname(outputDirectory);
-  await mkdir(stagingParent, { recursive: true });
-  const stagingDirectory = await mkdtemp(join(stagingParent, ".module-thumbnails-staging-"));
+  const stagingDirectory = await mkdtemp(
+    join(dirname(outputDirectory), ".template-thumbnails-staging-")
+  );
   const stagedCaptures: Array<{
     readonly imageLength: number;
-    readonly moduleId: ModuleThumbnailId;
+    readonly outputPath: string;
     readonly stagingPath: string;
+    readonly templateId: TemplateThumbnailCaptureId;
   }> = [];
 
   try {
-    for (const moduleId of moduleIds) {
-      const image = await capture(moduleId);
-      const stagingPath = join(stagingDirectory, `${moduleId}.webp`);
+    for (const target of targets) {
+      const image = await capture(target);
+      const stagingPath = join(stagingDirectory, target.relativeOutputPath);
+      const outputPath = join(outputDirectory, target.relativeOutputPath);
 
+      await mkdir(dirname(stagingPath), { recursive: true });
       await writeFile(stagingPath, image);
-      stagedCaptures.push({ imageLength: image.length, moduleId, stagingPath });
+      stagedCaptures.push({
+        imageLength: image.length,
+        outputPath,
+        stagingPath,
+        templateId: target.templateId
+      });
     }
 
-    await mkdir(outputDirectory, { recursive: true });
-    for (const { imageLength, moduleId, stagingPath } of stagedCaptures) {
-      const outputPath = join(outputDirectory, `${moduleId}.webp`);
+    for (const { imageLength, outputPath, stagingPath, templateId } of stagedCaptures) {
+      await mkdir(dirname(outputPath), { recursive: true });
       await rename(stagingPath, outputPath);
-      console.log(`wrote ${outputPath} (${imageLength} bytes)`);
+      console.log(`wrote ${outputPath} (${imageLength} bytes, ${templateId})`);
     }
   } finally {
     await rm(stagingDirectory, { force: true, recursive: true });
   }
+}
+
+export function decodeTemplateWebpDataUrl(dataUrl: string, templateId: string): Buffer {
+  return decodeWebpDataUrl(dataUrl, templateId);
+}
+
+function toRelativeOutputPath(src: string, templateId: string): string {
+  if (!src.startsWith(TEMPLATE_THUMBNAIL_PUBLIC_PREFIX)) {
+    throw new Error(
+      `${templateId} thumbnail path must start with ${TEMPLATE_THUMBNAIL_PUBLIC_PREFIX}`
+    );
+  }
+
+  return src.slice(TEMPLATE_THUMBNAIL_PUBLIC_PREFIX.length);
 }
 
 function launchChrome(profileDirectory: string): Promise<ChildProcessWithoutNullStreams> {
@@ -213,9 +267,9 @@ function readDevToolsEndpoint(chrome: ChildProcessWithoutNullStreams): Promise<s
   });
 }
 
-async function captureModuleThumbnail(
+async function captureTemplateThumbnail(
   cdp: CdpConnection,
-  moduleId: ModuleThumbnailId
+  templateId: TemplateThumbnailCaptureId
 ): Promise<Buffer> {
   const target = await cdp.send("Target.createTarget", { url: "about:blank" });
   const targetId = requireString(target.targetId, "Chrome did not create a target");
@@ -223,8 +277,8 @@ async function captureModuleThumbnail(
   try {
     const attached = await cdp.send("Target.attachToTarget", { flatten: true, targetId });
     const sessionId = requireString(attached.sessionId, "Chrome did not attach to the target");
-    const url = new URL("/dev/module-thumbnail", baseUrl);
-    url.searchParams.set("moduleId", moduleId);
+    const url = new URL("/dev/template-thumbnail", baseUrl);
+    url.searchParams.set("templateId", templateId);
 
     await cdp.send("Page.enable", {}, sessionId);
     await cdp.send("Runtime.enable", {}, sessionId);
@@ -235,17 +289,17 @@ async function captureModuleThumbnail(
       const state = await getCaptureState(cdp, sessionId);
 
       if (state.error) {
-        throw new Error(`${moduleId} capture page reported data-module-thumbnail-error`);
+        throw new Error(`${templateId} capture page reported data-template-thumbnail-error`);
       }
       if (state.ready && state.src) {
-        return decodeWebpDataUrl(state.src, moduleId);
+        return decodeTemplateWebpDataUrl(state.src, templateId);
       }
 
       await delay(POLL_INTERVAL_MS);
     }
 
     throw new Error(
-      `${moduleId} capture timed out after ${CAPTURE_TIMEOUT_MS}ms without a ready marker`
+      `${templateId} capture timed out after ${CAPTURE_TIMEOUT_MS}ms without a ready marker`
     );
   } finally {
     await cdp.send("Target.closeTarget", { targetId }).catch(() => undefined);
@@ -257,8 +311,8 @@ async function getCaptureState(cdp: CdpConnection, sessionId: string): Promise<C
     "Runtime.evaluate",
     {
       expression: `(() => {
-        const error = document.querySelector('[data-module-thumbnail-error="true"]');
-        const image = document.querySelector('img[data-module-thumbnail-ready="true"]');
+        const error = document.querySelector('[data-template-thumbnail-error="true"]');
+        const image = document.querySelector('img[data-template-thumbnail-ready="true"]');
         return { error: Boolean(error), ready: Boolean(image), src: image?.getAttribute("src") ?? null };
       })()`,
       returnByValue: true
@@ -269,7 +323,7 @@ async function getCaptureState(cdp: CdpConnection, sessionId: string): Promise<C
   const value = remoteResult?.value;
 
   if (!value || typeof value !== "object") {
-    throw new Error("Chrome did not return a module thumbnail capture state");
+    throw new Error("Chrome did not return a Template thumbnail capture state");
   }
 
   const state = value as Partial<CaptureState>;
@@ -278,78 +332,6 @@ async function getCaptureState(cdp: CdpConnection, sessionId: string): Promise<C
     ready: state.ready === true,
     src: typeof state.src === "string" ? state.src : null
   };
-}
-
-export function decodeWebpDataUrl(dataUrl: string, moduleId: string): Buffer {
-  const encoded = /^data:image\/webp;base64,([A-Za-z0-9+/=]+)$/i.exec(dataUrl)?.[1];
-  if (!encoded) {
-    throw new Error(`${moduleId} ready marker does not contain a WebP data URL`);
-  }
-
-  const image = Buffer.from(encoded, "base64");
-  if (
-    image.subarray(0, 4).toString("ascii") !== "RIFF" ||
-    image.subarray(8, 12).toString("ascii") !== "WEBP"
-  ) {
-    throw new Error(`${moduleId} ready marker did not contain a RIFF/WEBP image`);
-  }
-
-  const dimensions = readWebpDimensions(image, moduleId);
-  if (
-    dimensions.width !== BOARD_THUMBNAIL_CAPTURE_CONTRACT.width ||
-    dimensions.height !== BOARD_THUMBNAIL_CAPTURE_CONTRACT.height
-  ) {
-    throw new Error(
-      `${moduleId} ready marker expected ${BOARD_THUMBNAIL_CAPTURE_CONTRACT.width} × ${BOARD_THUMBNAIL_CAPTURE_CONTRACT.height}, received ${dimensions.width} × ${dimensions.height}`
-    );
-  }
-
-  return image;
-}
-
-function readWebpDimensions(
-  image: Buffer,
-  moduleId: string
-): { readonly height: number; readonly width: number } {
-  let chunkOffset = 12;
-
-  while (chunkOffset + 8 <= image.length) {
-    const chunkType = image.subarray(chunkOffset, chunkOffset + 4).toString("ascii");
-    const chunkSize = image.readUInt32LE(chunkOffset + 4);
-    const dataOffset = chunkOffset + 8;
-    const chunkEnd = dataOffset + chunkSize;
-    if (chunkEnd > image.length) break;
-
-    if (chunkType === "VP8X" && chunkSize >= 10) {
-      return {
-        height: image.readUIntLE(dataOffset + 7, 3) + 1,
-        width: image.readUIntLE(dataOffset + 4, 3) + 1
-      };
-    }
-
-    if (
-      chunkType === "VP8 " &&
-      chunkSize >= 10 &&
-      image.subarray(dataOffset + 3, dataOffset + 6).equals(Buffer.from([0x9d, 0x01, 0x2a]))
-    ) {
-      return {
-        height: image.readUInt16LE(dataOffset + 8) & 0x3fff,
-        width: image.readUInt16LE(dataOffset + 6) & 0x3fff
-      };
-    }
-
-    if (chunkType === "VP8L" && chunkSize >= 5 && image[dataOffset] === 0x2f) {
-      const sizeBits = image.readUInt32LE(dataOffset + 1);
-      return {
-        height: ((sizeBits >>> 14) & 0x3fff) + 1,
-        width: (sizeBits & 0x3fff) + 1
-      };
-    }
-
-    chunkOffset = chunkEnd + (chunkSize % 2);
-  }
-
-  throw new Error(`${moduleId} ready marker did not contain readable WebP dimensions`);
 }
 
 function requireString(value: unknown, message: string): string {
