@@ -671,7 +671,7 @@ async function createAmazonQRequirementConflictClarification(input: {
     ),
     payload
   });
-  const parsedResponse = parseArchitectureDraftProviderResponse(response.text);
+  const parsedResponse = parseAmazonQRequirementConflictClarification(response.text);
 
   if (parsedResponse.status !== "needs_clarification") {
     throw createProviderResponseInvalidError(
@@ -708,6 +708,64 @@ async function generateArchitectureDraftProviderResponse(
   }
 }
 
+function parseAmazonQRequirementConflictClarification(
+  text: string
+): AmazonQArchitectureDraftClarification {
+  const normalizedText = text.trim();
+
+  try {
+    const parsed = JSON.parse(extractJsonObject(normalizedText)) as unknown;
+    if (
+      isObject(parsed) &&
+      typeof parsed.question === "string" &&
+      parsed.question.trim().length > 0
+    ) {
+      return {
+        status: "needs_clarification",
+        question: parsed.question.trim(),
+        suggestions: readStringArray(parsed.suggestions)
+      };
+    }
+
+    if (isObject(parsed) && typeof parsed.status === "string") {
+      throw createProviderResponseInvalidError(
+        new Error("Amazon Q requirement conflict response did not include a clarification question")
+      );
+    }
+  } catch (error) {
+    if (error instanceof ArchitectureDraftGenerationError) {
+      throw error;
+    }
+  }
+
+  const questionLines: string[] = [];
+  const suggestions: string[] = [];
+  for (const rawLine of normalizedText.split(/\r?\n/u)) {
+    const line = rawLine.trim();
+    if (line.length === 0 || /^```/u.test(line)) continue;
+
+    const suggestionMatch = line.match(/^(?:[-*•]|\d+[.)])\s+(.+)$/u);
+    if (suggestionMatch?.[1]) {
+      suggestions.push(suggestionMatch[1].trim());
+      continue;
+    }
+    if (/^(?:선택지|options?)\s*:?$/iu.test(line)) continue;
+    questionLines.push(line);
+  }
+
+  const question = questionLines.join(" ").trim();
+  if (question.length === 0) {
+    throw createProviderResponseInvalidError(
+      new Error("Amazon Q requirement conflict diagnosis was empty")
+    );
+  }
+
+  return {
+    status: "needs_clarification",
+    question,
+    suggestions
+  };
+}
 function parseArchitectureDraftProviderResponse(text: string): AmazonQArchitectureDraftResponse {
   try {
     return parseAmazonQArchitectureDraftResponse(text);

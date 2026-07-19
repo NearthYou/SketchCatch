@@ -3451,14 +3451,11 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q which requirement to 
       });
     }
 
-    return JSON.stringify({
-      status: "needs_clarification",
-      question: "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 요구를 유지할까요?",
-      suggestions: [
-        "역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도",
-        "현재 지원 범위를 유지하고 역할을 2개 이하로 통합"
-      ]
-    });
+    return [
+      "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 요구를 유지할까요?",
+      "1. 역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도",
+      "2. 현재 지원 범위를 유지하고 역할을 2개 이하로 통합"
+    ].join("\n");
   });
 
   const response = await createAmazonQArchitectureDraftResponse(

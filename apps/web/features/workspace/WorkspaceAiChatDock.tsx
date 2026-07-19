@@ -1884,11 +1884,10 @@ export function WorkspaceAiChatDock({
         return;
       }
 
-      const message = getApiErrorMessage(error, "아키텍처 초안 생성 중 오류가 발생했습니다.");
-
-      setDraftState("error");
-      setDraftErrorMessage(message);
-      appendAssistantMessage("error", message);
+      console.error("Workspace AI draft request failed", error);
+      setDraftState("idle");
+      setDraftErrorMessage("");
+      appendAssistantMessage("error", "AI 초안을 만들지 못했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       requestRegistryRef.current.complete("draft", controller);
     }

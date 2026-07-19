@@ -380,6 +380,22 @@ export function createAmazonQArchitectureDraftProvider(input: {
 
       await verifyPatterns(patternIds, normalizedRequirement);
 
+      if (isRequirementConflictClarificationRequest(request.payload)) {
+        const diagnosis = await sendArchitectureRequirementConflictDiagnosis(
+          retrievalClient,
+          input.retrievalApplicationId,
+          patternIds,
+          request.payload
+        );
+        const text = diagnosis.systemMessage?.trim();
+
+        if (!text) {
+          throw new Error("Amazon Q did not return a requirement conflict diagnosis");
+        }
+
+        return { text, outputCharacters: text.length };
+      }
+
       const plan = createCanonicalArchitecturePlan(patternIds, normalizedRequirement);
       const governanceNotes = createSecurityAndCostNotes(normalizedRequirement);
       const text = JSON.stringify({
@@ -419,6 +435,51 @@ export async function warmAmazonQArchitectureDraftProvider(
   });
 }
 
+async function sendArchitectureRequirementConflictDiagnosis(
+  retrievalClient: AmazonQBusinessArchitectureClient,
+  applicationId: string,
+  patternIds: readonly ArchitecturePatternId[],
+  payload: unknown
+): Promise<Pick<ChatSyncOutput, "systemMessage" | "sourceAttributions">> {
+  return retrievalClient.send(
+    new ChatSyncCommand({
+      applicationId,
+      chatMode: "RETRIEVAL_MODE",
+      attributeFilter: createPatternAttributeFilter(patternIds),
+      userMessage: createArchitectureRequirementConflictPrompt(payload)
+    })
+  );
+}
+
+function createArchitectureRequirementConflictPrompt(payload: unknown): string {
+  const record = isRecord(payload) ? payload : {};
+  const userRequirement = typeof record.prompt === "string" ? record.prompt : "";
+  const validationIssues = Array.isArray(record.validationIssues)
+    ? record.validationIssues.filter((issue): issue is string => typeof issue === "string")
+    : [];
+  const clarificationAnswers = Array.isArray(record.clarificationAnswers)
+    ? record.clarificationAnswers
+    : [];
+
+  return fitText(
+    [
+      "SketchCatch 아키텍처 생성이 검증을 통과하지 못했습니다.",
+      "아래 검증 실패와 검색된 아키텍처 패턴 문서에 근거해서만 답하세요. 충돌을 추측하거나 사용자를 대신해 조건을 포기하지 마세요.",
+      `검증 실패: ${JSON.stringify(validationIssues)}`,
+      `원래 요구사항: ${userRequirement}`,
+      `이미 확정한 답변: ${JSON.stringify(clarificationAnswers)}`,
+      "논리적으로 충돌하는 조건이 있다면 그 두 조건을 구체적으로 밝히고 무엇을 유지할지 한 번만 질문하세요.",
+      "실제 조건 충돌이 아니라 현재 지원 범위나 표현 한계라면 그 사실을 그대로 밝히세요.",
+      "사용자가 선택할 2~4개 선택지는 각각 유지할 조건과 완화할 조건을 함께 적으세요.",
+      '한국어 JSON만 반환하세요: {"status":"needs_clarification","question":"Amazon Q가 확인한 사실과 질문","suggestions":["유지/완화 선택지"]}'
+    ].join("\n"),
+    AMAZON_Q_MESSAGE_MAX_LENGTH
+  );
+}
+
+function isRequirementConflictClarificationRequest(payload: unknown): boolean {
+  return isRecord(payload) && payload.task === "requirement_conflict_clarification";
+}
 async function sendArchitectureKnowledgeRetrieval(
   retrievalClient: AmazonQBusinessArchitectureClient,
   applicationId: string,
