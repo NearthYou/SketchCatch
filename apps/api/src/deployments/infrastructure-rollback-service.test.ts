@@ -191,6 +191,7 @@ function deployment(overrides: Partial<DeploymentRecord> = {}): DeploymentRecord
     projectId: "project-1",
     architectureId: "architecture-current",
     terraformArtifactId: "artifact-current",
+    preparationKey: null,
     awsConnectionId: "connection-1",
     awsAccountIdSnapshot: "123456789012",
     awsRegionSnapshot: "ap-northeast-2",

@@ -24,6 +24,7 @@ export type DeploymentPreparationTarget = {
   connectionId: string;
   runtimeTargetKind: RuntimeTargetKind;
   confirmedBuildConfig: ConfirmedBuildConfig | null;
+  deploymentTargetFingerprint: string | null;
 };
 
 export type DeploymentPreparationRepository = {
@@ -46,6 +47,7 @@ export type ResolvedDeploymentPreparation = {
   liveProfile: DeploymentLiveProfile;
   scope: DeploymentScope;
   targetKind: RuntimeTargetKind | null;
+  deploymentTargetFingerprint: string | null;
   preparedDraftRevision: number;
   preparedSnapshotHash: string;
 };
@@ -98,6 +100,8 @@ export async function resolveDeploymentPreparation(
     liveProfile: getRecommendedLiveApplyProfile(getDraftResourceTypes(draft)),
     scope,
     targetKind: scope === "infrastructure" ? null : target?.runtimeTargetKind ?? null,
+    deploymentTargetFingerprint:
+      scope === "infrastructure" ? null : target?.deploymentTargetFingerprint ?? null,
     preparedDraftRevision: draft.revision,
     preparedSnapshotHash: createPreparedDraftSnapshotHash(draft)
   };
@@ -183,6 +187,18 @@ export function createPreparedReleaseSnapshotHash(input: {
       })
     )
     .digest("hex");
+}
+
+export function createDeploymentPreparationKey(input: {
+  awsConnectionId: string;
+  deploymentTargetFingerprint: string | null;
+  preparedDraftRevision: number;
+  preparedSnapshotHash: string;
+  projectId: string;
+  scope: DeploymentScope;
+  targetKind: RuntimeTargetKind | null;
+}): string {
+  return createHash("sha256").update(canonicalJson(input)).digest("hex");
 }
 
 export function getDeploymentConsolePhase(deployment: {

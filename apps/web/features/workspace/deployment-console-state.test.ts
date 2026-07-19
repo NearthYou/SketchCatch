@@ -7,6 +7,7 @@ import {
   getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
   hasDeploymentDraftChanges,
+  resolveSelectedDirectDeploymentStepId,
   shouldShowDeploymentValidationActions,
   requiresProjectBuildEnvironment,
   type DirectDeploymentFlowInput
@@ -30,6 +31,7 @@ function createInput(
   return {
     actions: idleActions,
     deployment: null,
+    failedStepId: null,
     hasUnsavedBaseline: false,
     preflightState: "idle",
     requestState: "idle",
@@ -62,6 +64,12 @@ test("Direct Deployment exposes exactly validation, approval, and deployment", (
   assert.equal(flow.activeStepId, "validation");
   assert.equal(flow.steps[0]?.state, "active");
   assert.equal(flow.steps[1]?.state, "idle");
+});
+
+test("an idle selected step falls back to the active Direct Deployment step", () => {
+  const flow = getDirectDeploymentFlow(createInput({ hasUnsavedBaseline: true }));
+
+  assert.equal(resolveSelectedDirectDeploymentStepId(flow, "deployment"), "validation");
 });
 
 test("a never-run Preflight step is neutral and active after save", () => {
@@ -226,6 +234,48 @@ test("a persisted plan resumes at approval after the local preflight state reset
   );
 
   assert.equal(flow.activeStepId, "approval");
+  assert.equal(flow.steps[1]?.state, "active");
+});
+
+test("a failed foreground request does not auto-advance when polling finds a plan", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: { ...idleActions, canApprovePlan: true, shouldShowApprovePlanButton: true },
+      deployment: {
+        approvedAt: null,
+        currentPlanArtifactId: "plan-from-polling",
+        currentPlanOperation: "apply",
+        status: "PENDING"
+      },
+      preflightState: "passed",
+      requestState: "error",
+      failedStepId: "validation"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "validation");
+  assert.equal(flow.steps[0]?.state, "error");
+});
+
+test("an accepted durable Plan resumes approval after its HTTP response fails", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: { ...idleActions, canApprovePlan: true, shouldShowApprovePlanButton: true },
+      deployment: {
+        approvedAt: null,
+        currentPlanArtifactId: "plan-from-accepted-worker",
+        currentPlanOperation: "apply",
+        status: "PENDING"
+      },
+      preflightState: "passed",
+      requestState: "error",
+      failedStepId: "validation",
+      reconciledRequestState: "idle"
+    } as Partial<DirectDeploymentFlowInput>)
+  );
+
+  assert.equal(flow.activeStepId, "approval");
+  assert.equal(flow.steps[0]?.state, "done");
   assert.equal(flow.steps[1]?.state, "active");
 });
 

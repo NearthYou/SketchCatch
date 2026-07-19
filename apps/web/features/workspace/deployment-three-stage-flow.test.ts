@@ -124,6 +124,40 @@ test("Direct Deployment uses prepare, approve, and execute with three external p
   assert.match(directDeploymentSource, /stepId === "approval"/);
 });
 
+test("deployment polling keeps unrelated failures but reconciles its accepted Plan", () => {
+  const refreshStart = directDeploymentSource.indexOf("async function refreshSnapshot");
+  const intervalStart = directDeploymentSource.indexOf("const intervalId", refreshStart);
+  const refreshSource = directDeploymentSource.slice(refreshStart, intervalStart);
+
+  assert.ok(refreshStart > -1);
+  assert.ok(intervalStart > refreshStart);
+  assert.doesNotMatch(directDeploymentSource, /recoverableSnapshotRequestErrorRef/);
+  assert.match(directDeploymentSource, /snapshotErrorMessage/);
+  assert.match(refreshSource, /setSnapshotErrorMessage\(""\)/);
+  assert.match(refreshSource, /setSnapshotErrorMessage\(\s*getApiErrorMessage/);
+  assert.doesNotMatch(refreshSource, /setRequestState\(/);
+  assert.doesNotMatch(refreshSource, /setErrorMessage\(/);
+  assert.match(
+    directDeploymentSource,
+    /pendingAutoAdvanceDeploymentIdRef\.current === selectedDeployment\.id/
+  );
+  assert.match(directDeploymentSource, /reconciledRequestState/);
+  assert.match(directDeploymentSource, /currentPlanArtifactId/);
+});
+
+test("deployment commands stop their failure boundary before secondary hydration", () => {
+  const reviewStart = directDeploymentSource.indexOf("async function startDeploymentReview");
+  const retryStart = directDeploymentSource.indexOf("async function startTerraformPlan", reviewStart);
+  const reviewSource = directDeploymentSource.slice(reviewStart, retryStart);
+  const planIndex = reviewSource.indexOf("await runDeploymentPlan(preparedDeployment.id)");
+  const detailsIndex = reviewSource.indexOf("refreshDeploymentDetails", planIndex);
+
+  assert.ok(planIndex > -1);
+  assert.ok(detailsIndex > planIndex);
+  assert.doesNotMatch(reviewSource.slice(planIndex, detailsIndex), /listDeploymentLogs|listDeploymentResources|listTerraformOutputs/);
+  assert.match(directDeploymentSource, /actionInFlightRef/);
+});
+
 test("Direct Deployment uses the approved executive validation layout", () => {
   assert.match(directDeploymentSource, /deploymentExecutiveHeader/);
   assert.match(directDeploymentSource, /deploymentExecutiveMetrics/);
@@ -138,7 +172,7 @@ test("Direct Deployment uses the approved executive validation layout", () => {
   assert.match(workspaceStyles, /--deployment-navy:\s*#071a36/);
 });
 
-test("deployment review starts one Plan worker without a competing init prewarm", () => {
+test("deployment review delegates build preparation and repository verification to the Plan API", () => {
   const reviewStart = directDeploymentSource.indexOf("async function startDeploymentReview");
   const planActionStart = directDeploymentSource.indexOf(
     "async function startTerraformPlan",
@@ -146,15 +180,70 @@ test("deployment review starts one Plan worker without a competing init prewarm"
   );
   const reviewSource = directDeploymentSource.slice(reviewStart, planActionStart);
   const prepareIndex = reviewSource.indexOf("await prepareDeployment({");
-  const repositoryCheckIndex = reviewSource.indexOf("await verifyRepositoryAccessForPlan({");
-  const planIndex = reviewSource.indexOf("await runDeploymentPlan(deployment.id)");
+  const planIndex = reviewSource.indexOf("await runDeploymentPlan(preparedDeployment.id)");
 
   assert.ok(reviewStart > -1);
   assert.ok(planActionStart > reviewStart);
   assert.ok(prepareIndex > -1);
-  assert.ok(repositoryCheckIndex > prepareIndex);
-  assert.ok(planIndex > repositoryCheckIndex);
+  assert.ok(planIndex > prepareIndex);
+  assert.doesNotMatch(reviewSource, /prepareProjectBuildEnvironment/);
+  assert.doesNotMatch(reviewSource, /verifyProjectRepositoryAccess/);
+  assert.doesNotMatch(reviewSource, /verifyRepositoryAccessForPlan/);
   assert.doesNotMatch(reviewSource, /runDeploymentInit|queuedApplyPlan/);
+});
+
+test("durable Plan polling refreshes Repository verification after worker completion", () => {
+  const runtimeLoadStart = directDeploymentSource.indexOf(
+    "const loadDeploymentRuntimeSnapshot"
+  );
+  const runtimeApplyStart = directDeploymentSource.indexOf(
+    "const applyDeploymentRuntimeSnapshot",
+    runtimeLoadStart
+  );
+  const panelLoadStart = directDeploymentSource.indexOf(
+    "const loadDeploymentPanelSnapshot",
+    runtimeApplyStart
+  );
+  const runtimeLoadSource = directDeploymentSource.slice(runtimeLoadStart, runtimeApplyStart);
+  const runtimeApplySource = directDeploymentSource.slice(runtimeApplyStart, panelLoadStart);
+
+  assert.ok(runtimeLoadStart > -1);
+  assert.ok(runtimeApplyStart > runtimeLoadStart);
+  assert.ok(panelLoadStart > runtimeApplyStart);
+  assert.match(runtimeLoadSource, /getProjectBuildEnvironment\(projectId\)/);
+  assert.match(runtimeApplySource, /setBuildEnvironment\(snapshot\.buildEnvironment\)/);
+});
+
+test("Plan responses request an immediate Repository verification refresh", () => {
+  const reviewStart = directDeploymentSource.indexOf("async function startDeploymentReview");
+  const retryStart = directDeploymentSource.indexOf("async function startTerraformPlan", reviewStart);
+  const approveStart = directDeploymentSource.indexOf("async function approveCurrentPlan", retryStart);
+  const reviewSource = directDeploymentSource.slice(reviewStart, retryStart);
+  const retrySource = directDeploymentSource.slice(retryStart, approveStart);
+
+  assert.match(reviewSource, /await runDeploymentPlan\(preparedDeployment\.id\)/);
+  assert.match(reviewSource, /preparedDeployment\.currentPlanOperation === "apply"/);
+  assert.match(reviewSource, /refreshBuildEnvironmentAfterPlan\(plannedDeployment\)/);
+  assert.match(retrySource, /runDeploymentPlan\(selectedDeployment\.id\)/);
+  assert.match(retrySource, /refreshBuildEnvironmentAfterPlan\(deployment\)/);
+  assert.match(
+    directDeploymentSource,
+    /function refreshBuildEnvironmentAfterPlan[\s\S]*getProjectBuildEnvironment\(projectId\)[\s\S]*\.then\(setBuildEnvironment\)/
+  );
+});
+
+test("successful Plan approval selects deployment and refreshes its build environment", () => {
+  const approveStart = directDeploymentSource.indexOf("async function approveCurrentPlan");
+  const revokeStart = directDeploymentSource.indexOf(
+    "async function revokeCurrentPlanApproval",
+    approveStart
+  );
+  const approveSource = directDeploymentSource.slice(approveStart, revokeStart);
+
+  assert.ok(approveStart > -1);
+  assert.ok(revokeStart > approveStart);
+  assert.match(approveSource, /setSelectedDirectStepId\("deployment"\)/);
+  assert.match(approveSource, /refreshBuildEnvironmentAfterPlan\(deployment\)/);
 });
 
 test("full-stack validation checks the confirmed target and opens its setup surface", () => {
@@ -167,9 +256,29 @@ test("full-stack validation checks the confirmed target and opens its setup surf
   assert.ok(targetCheckIndex > -1);
   assert.ok(artifactPreparationIndex > targetCheckIndex);
   assert.match(directDeploymentSource, /getDeploymentTargetPrerequisite/);
-  assert.match(directDeploymentSource, /Repository와 배포 타깃 설정/);
+  assert.match(directDeploymentSource, /CI\/CD 설정으로 이동/);
   assert.match(directDeploymentSource, /onOpenDeliverySetup/);
-  assert.match(deploymentShellSource, /onOpenDeliverySetup=\{\(\) => selectScreen\("cicd"\)\}/);
+  assert.match(directDeploymentSource, /deploymentTargetSavedRevision/);
+  assert.match(
+    deploymentShellSource,
+    /deploymentTargetSavedRevision=\{deploymentTargetSavedRevision\}/
+  );
+});
+
+test("deployment actions preserve detailed preparation errors", () => {
+  const runActionStart = directDeploymentSource.indexOf("async function runAction");
+  const refreshDetailsStart = directDeploymentSource.indexOf(
+    "function refreshDeploymentDetails",
+    runActionStart
+  );
+  const runActionSource = directDeploymentSource.slice(runActionStart, refreshDetailsStart);
+
+  assert.ok(runActionStart > -1);
+  assert.ok(refreshDetailsStart > runActionStart);
+  assert.match(
+    runActionSource,
+    /setErrorMessage\(getDeploymentPreparationErrorMessage\(error, fallbackMessage\)\)/
+  );
 });
 
 test("changed drafts keep cleanup available beside save and validation", () => {
@@ -260,7 +369,7 @@ test("deployment action buttons use one size and fill only while active", () => 
   );
   assert.match(
     workspaceStyles,
-    /\.deploymentConsoleGrid > \.deploymentStepActionBar > button,[\s\S]*?font-size:\s*14px;[\s\S]*?height:\s*44px;[\s\S]*?justify-content:\s*center;[\s\S]*?justify-self:\s*start;[\s\S]*?min-width:\s*152px;[\s\S]*?width:\s*152px;/
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar > button,[\s\S]*?font-size:\s*calc\(14px \+ var\(--presentation-font-size-increase\)\);[\s\S]*?height:\s*44px;[\s\S]*?justify-content:\s*center;[\s\S]*?justify-self:\s*start;[\s\S]*?min-width:\s*152px;[\s\S]*?width:\s*152px;/
   );
   assert.match(
     workspaceStyles,
@@ -349,10 +458,13 @@ test("Deployment History selects one successful version and renders only its det
     workspaceStyles,
     /\.deploymentHistorySection\s*\{[^}]*border:\s*1px solid var\(--workspace-line-strong[^}]*border-radius:\s*20px;[^}]*box-shadow:/s
   );
-  assert.match(workspaceStyles, /\.deploymentHistoryHeader h3\s*\{[^}]*font-size:\s*34px;/s);
   assert.match(
     workspaceStyles,
-    /\.deploymentHistoryTable td\s*\{[^}]*font-size:\s*17px;[^}]*height:\s*88px;/s
+    /\.deploymentHistoryHeader h3\s*\{[^}]*font-size:\s*calc\(22px \+ var\(--presentation-font-size-increase\)\);/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentHistoryTable td\s*\{[^}]*font-size:\s*calc\(17px \+ var\(--presentation-font-size-increase\)\);[^}]*height:\s*88px;/s
   );
 });
 

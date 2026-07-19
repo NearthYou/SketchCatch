@@ -58,6 +58,7 @@ import {
   DeploymentConflictError,
   DeploymentNotFoundError,
   getDeployment,
+  selectDeploymentStateBaseline,
   type DeploymentRecord,
   type DeploymentRepository,
   type ProjectAccessContext
@@ -99,6 +100,7 @@ import {
   type LeaseFence,
   type ProjectExecutionLeaseRepository
 } from "../releases/project-execution-lease-service.js";
+import { ProjectBuildEnvironmentError } from "../build-environments/project-build-environment-service.js";
 
 const defaultPlanFileName = "tfplan";
 
@@ -131,6 +133,12 @@ export type RunDeploymentPlanOptions = {
     abortSignal?: AbortSignal;
     repository: DeploymentRepository;
   }) => Promise<PreparedApplicationReleaseSummary | null>;
+  prepareBuildEnvironment?: (input: {
+    deployment: DeploymentRecord;
+    accessContext: ProjectAccessContext;
+    abortSignal?: AbortSignal;
+    repository: DeploymentRepository;
+  }) => Promise<void>;
   writeApplicationPlanFile?: (filePath: string, content: string) => Promise<void>;
   rollbackStateStorage?: Pick<DeploymentApplyArtifactStorage, "downloadDeploymentState">;
   projectExecutionLeaseRepository?: ProjectExecutionLeaseRepository;
@@ -215,6 +223,7 @@ async function runDeploymentPlanOnce(
   const readTerraformArtifactFile = options.readTerraformArtifactFile ?? readFile;
   const prepareApplicationArtifact =
     options.prepareApplicationArtifact ?? defaultPrepareApplicationArtifact;
+  const prepareBuildEnvironment = options.prepareBuildEnvironment;
   const writeApplicationPlanFile = options.writeApplicationPlanFile ?? writeFile;
   const readTerraformLockFile = options.readTerraformLockFile ?? readFile;
   const readTerraformStateFile = options.readTerraformStateFile ?? readFile;
@@ -292,7 +301,15 @@ async function runDeploymentPlanOnce(
     let preparedApplicationRelease = null;
     if (deployment.scope !== "infrastructure") {
       await repository.markDeploymentActiveStage?.(deployment.id, "preflight");
+      let applicationPreparationStage: "build_environment" | "preflight" = "build_environment";
       try {
+        await prepareBuildEnvironment?.({
+          deployment,
+          accessContext: input.accessContext,
+          repository,
+          ...(executionSignal ? { abortSignal: executionSignal } : {})
+        });
+        applicationPreparationStage = "preflight";
         preparedApplicationRelease = await prepareApplicationArtifact({
           deployment,
           accessContext: input.accessContext,
@@ -308,7 +325,9 @@ async function runDeploymentPlanOnce(
           failureRecorded = true;
           throw error;
         }
-        const failureStage = isBuildEnvironmentPreparationFailure(error)
+        const failureStage =
+          applicationPreparationStage === "build_environment" ||
+          isBuildEnvironmentPreparationFailure(error)
           ? "build_environment"
           : "preflight";
         await repository
@@ -358,7 +377,13 @@ async function runDeploymentPlanOnce(
       ]);
     workspace = preparedWorkspace;
 
-    if (deployment.rollbackOfDeploymentId || deployment.rollbackTargetDeploymentId) {
+    const projectDeployments = await repository.listDeploymentsByProject(deployment.projectId);
+    const stateBaseline = selectDeploymentStateBaseline(deployment, projectDeployments);
+    const isRollbackPlan = Boolean(
+      deployment.rollbackOfDeploymentId || deployment.rollbackTargetDeploymentId
+    );
+
+    if (isRollbackPlan) {
       await restoreInfrastructureRollbackState({
         deployment,
         repository,
@@ -449,10 +474,11 @@ async function runDeploymentPlanOnce(
         storage: planArtifactStorage
       }),
       restoreTerraformStateForPlan({
-        deployment,
+        stateBaseline,
         workspace: preparedWorkspace,
         planArtifactStorage,
-        writeTerraformStateFile
+        writeTerraformStateFile,
+        alreadyRestored: isRollbackPlan
       })
     ]);
 
@@ -811,7 +837,11 @@ async function runDeploymentPlanOnce(
               objectKey: uploadedPlan.objectKey,
               sha256: uploadedPlan.sha256,
               accountId: awsCredentials.accountId,
-              region: awsCredentials.region
+              region: awsCredentials.region,
+              stateBaselineDeploymentId: stateBaseline?.id ?? null,
+              stateObjectKey: stateBaseline?.stateObjectKey ?? null,
+              stateLineageSha256: desiredStateIdentity.stateLineageSha256,
+              stateSerial: desiredStateIdentity.stateSerial
             },
             planSummary,
             isBlocked: false,
@@ -1163,14 +1193,17 @@ async function evaluateDeploymentPlanReuse(input: {
 }
 
 async function restoreTerraformStateForPlan(input: {
-  deployment: DeploymentRecord;
+  stateBaseline: DeploymentRecord | null;
   workspace: PreparedTerraformWorkspace;
   planArtifactStorage: DeploymentPlanArtifactStorage;
   writeTerraformStateFile: (filePath: string, content: Buffer) => Promise<void>;
+  alreadyRestored?: boolean;
 }): Promise<boolean> {
-  if (!input.deployment.stateObjectKey) {
+  if (!input.stateBaseline?.stateObjectKey) {
     return false;
   }
+
+  if (input.alreadyRestored) return true;
 
   const downloadDeploymentState = input.planArtifactStorage.downloadDeploymentState;
 
@@ -1179,8 +1212,8 @@ async function restoreTerraformStateForPlan(input: {
   }
 
   const stateContent = await downloadDeploymentState.call(input.planArtifactStorage, {
-    deploymentId: input.deployment.id,
-    objectKey: input.deployment.stateObjectKey
+    deploymentId: input.stateBaseline.id,
+    objectKey: input.stateBaseline.stateObjectKey
   });
   await input.writeTerraformStateFile(
     join(input.workspace.workdir, "terraform.tfstate"),
@@ -1631,9 +1664,10 @@ function summarizeUnexpectedPlanFailure(error: unknown): string {
 
 function isBuildEnvironmentPreparationFailure(error: unknown): boolean {
   return (
-    error instanceof DirectApplicationReleaseError &&
-    typeof error.code === "string" &&
-    error.code.startsWith("BUILD_ENVIRONMENT_")
+    error instanceof ProjectBuildEnvironmentError ||
+    (error instanceof DirectApplicationReleaseError &&
+      typeof error.code === "string" &&
+      error.code.startsWith("BUILD_ENVIRONMENT_"))
   );
 }
 

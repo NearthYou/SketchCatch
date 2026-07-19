@@ -137,7 +137,7 @@ export function getDeploymentProgress(
     detail,
     operation,
     percent: Math.min(98, Math.max(progressWindow.minimum, percent)),
-    title: OPERATION_TITLES[operation]
+    title: getStageTitle(operation, activeStage)
   };
 }
 
@@ -258,6 +258,18 @@ function getStageDetail(
       : "생성·수정·삭제될 리소스를 계산하고 있습니다.";
   }
 
+  if (activeStage === "preflight") {
+    return "배포 전 안전 검사와 Repository 실행 조건을 확인하고 있습니다.";
+  }
+
+  if (activeStage === "application_release") {
+    return "애플리케이션 Artifact를 만들고 배포 상태를 확인하고 있습니다.";
+  }
+
+  if (activeStage === "rollback") {
+    return "실패한 변경을 이전 상태로 되돌리고 있습니다.";
+  }
+
   const baseDetail =
     activeStage === "destroy"
       ? "승인된 리소스를 안전하게 정리하고 있습니다."
@@ -268,4 +280,14 @@ function getStageDetail(
   }
 
   return `${baseDetail} ${resourceProgress.completedCount}/${resourceProgress.expectedCount}개 완료`;
+}
+
+function getStageTitle(
+  operation: DeploymentProgressOperation,
+  activeStage: DeploymentStage
+): string {
+  if (activeStage === "preflight") return "배포 전 안전 검사 중";
+  if (activeStage === "application_release") return "애플리케이션 릴리즈 중";
+  if (activeStage === "rollback") return "배포 롤백 중";
+  return OPERATION_TITLES[operation];
 }

@@ -59,6 +59,7 @@ export type DeploymentWorkerOperationInput = {
   accessContext: ProjectAccessContext;
   startedFromStatus: DeploymentStatus;
   startedFromFailureStage: DeploymentFailureStage | null;
+  abortSignal?: AbortSignal;
 };
 
 export type DeploymentWorkerOperationResult = {
@@ -118,7 +119,7 @@ export function requireDeploymentWorkerJobId(env: NodeJS.ProcessEnv): string {
 }
 
 export async function runDeploymentWorkerJob(
-  input: { jobId: string },
+  input: { jobId: string; abortSignal?: AbortSignal },
   jobRepository: DeploymentJobRepository,
   runOperation: RunDeploymentWorkerOperation,
   options: {
@@ -155,7 +156,7 @@ export async function runDeploymentWorkerJob(
   let operationInput: DeploymentWorkerOperationInput;
 
   try {
-    operationInput = createOperationInput(job);
+    operationInput = createOperationInput(job, input.abortSignal);
   } catch (error) {
     return failRunningJob(job, error, jobRepository);
   }
@@ -173,14 +174,19 @@ export async function runDeploymentWorkerJob(
 
 export function createDeploymentWorkerOperationRunner(
   deploymentRepository: DeploymentRepository,
-  services: DeploymentWorkerServices = defaultDeploymentWorkerServices
+  serviceOverrides: Partial<DeploymentWorkerServices> = {}
 ): RunDeploymentWorkerOperation {
+  const services: DeploymentWorkerServices = {
+    ...defaultDeploymentWorkerServices,
+    ...serviceOverrides
+  };
   return async (input) => {
     const commonInput = {
       deploymentId: input.deploymentId,
       accessContext: input.accessContext,
       startedFromStatus: input.startedFromStatus,
-      ...(input.workerTaskArn ? { workerTaskArn: input.workerTaskArn } : {})
+      ...(input.workerTaskArn ? { workerTaskArn: input.workerTaskArn } : {}),
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
     };
 
     let result: { deployment: DeploymentRecord };
@@ -224,7 +230,10 @@ export function createDeploymentWorkerOperationRunner(
   };
 }
 
-function createOperationInput(job: DeploymentJobRecord): DeploymentWorkerOperationInput {
+function createOperationInput(
+  job: DeploymentJobRecord,
+  abortSignal?: AbortSignal
+): DeploymentWorkerOperationInput {
   const accessContextResult = workerAccessContextSchema.safeParse(job.accessContext);
 
   if (!accessContextResult.success) {
@@ -243,7 +252,8 @@ function createOperationInput(job: DeploymentJobRecord): DeploymentWorkerOperati
     workerTaskArn: job.ecsTaskArn,
     accessContext: accessContextResult.data,
     startedFromStatus: job.startedFromStatus,
-    startedFromFailureStage: job.startedFromFailureStage
+    startedFromFailureStage: job.startedFromFailureStage,
+    ...(abortSignal ? { abortSignal } : {})
   };
 }
 

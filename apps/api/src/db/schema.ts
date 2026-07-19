@@ -557,9 +557,10 @@ export const reverseEngineeringScans = pgTable(
     projectId: varchar("project_id", { length: 36 })
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    awsConnectionId: varchar("aws_connection_id", { length: 36 })
-      .notNull()
-      .references(() => awsConnections.id, { onDelete: "restrict" }),
+    awsConnectionId: varchar("aws_connection_id", { length: 36 }).references(
+      () => awsConnections.id,
+      { onDelete: "set null" }
+    ),
     provider: varchar("provider", { length: 32 }).notNull().default("aws"),
     region: varchar("region", { length: 32 }).notNull(),
     resourceTypes: jsonb("resource_types").$type<ReverseEngineeringResourceSelection[]>().notNull(),
@@ -829,6 +830,7 @@ export const deployments = pgTable(
     }).references((): AnyPgColumn => deployments.id, { onDelete: "set null" }),
     preparedDraftRevision: integer("prepared_draft_revision"),
     preparedSnapshotHash: varchar("prepared_snapshot_hash", { length: 64 }),
+    preparationKey: varchar("preparation_key", { length: 64 }),
     approvedPreparedSnapshotHash: varchar("approved_prepared_snapshot_hash", { length: 64 }),
     currentPlanArtifactId: varchar("current_plan_artifact_id", { length: 36 }),
     stateObjectKey: text("state_object_key"),
@@ -872,6 +874,11 @@ export const deployments = pgTable(
       table.projectId,
       table.preparedDraftRevision
     ),
+    uniqueIndex("deployments_project_preparation_active_unique")
+      .on(table.projectId, table.preparationKey)
+      .where(
+        sql`${table.preparationKey} is not null and ${table.status} in ('PENDING', 'RUNNING') and ${table.approvedAt} is null`
+      ),
     uniqueIndex("deployments_release_id_unique")
       .on(table.releaseId)
       .where(sql`${table.releaseId} is not null`),
@@ -895,6 +902,10 @@ export const deployments = pgTable(
     check(
       "deployments_approved_prepared_snapshot_hash_check",
       sql`${table.approvedPreparedSnapshotHash} is null or ${table.approvedPreparedSnapshotHash} ~ '^[0-9a-f]{64}$'`
+    ),
+    check(
+      "deployments_preparation_key_check",
+      sql`${table.preparationKey} is null or ${table.preparationKey} ~ '^[0-9a-f]{64}$'`
     ),
     uniqueIndex("deployments_project_running_unique")
       .on(table.projectId)
@@ -1642,11 +1653,23 @@ export const deploymentPlanArtifacts = pgTable(
     sha256: varchar("sha256", { length: 64 }).notNull(),
     accountId: varchar("account_id", { length: 12 }).notNull(),
     region: varchar("region", { length: 32 }).notNull(),
+    stateBaselineDeploymentId: varchar("state_baseline_deployment_id", { length: 36 }),
+    stateObjectKey: text("state_object_key"),
+    stateLineageSha256: varchar("state_lineage_sha256", { length: 64 }),
+    stateSerial: integer("state_serial"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
     index("deployment_plan_artifacts_deployment_id_idx").on(table.deploymentId),
-    uniqueIndex("deployment_plan_artifacts_object_key_unique").on(table.objectKey)
+    uniqueIndex("deployment_plan_artifacts_object_key_unique").on(table.objectKey),
+    check(
+      "deployment_plan_artifacts_state_serial_check",
+      sql`${table.stateSerial} IS NULL OR ${table.stateSerial} >= 0`
+    ),
+    check(
+      "deployment_plan_artifacts_state_identity_check",
+      sql`(${table.stateBaselineDeploymentId} IS NULL AND ${table.stateObjectKey} IS NULL AND ${table.stateLineageSha256} IS NULL AND ${table.stateSerial} IS NULL) OR (${table.stateBaselineDeploymentId} IS NOT NULL AND ${table.stateObjectKey} IS NOT NULL AND ${table.stateLineageSha256} IS NOT NULL AND ${table.stateSerial} IS NOT NULL)`
+    )
   ]
 );
 

@@ -16,14 +16,12 @@ import {
   applyGitCicdRepositorySettings,
   createGitCicdHandoff,
   getProjectDeliveryProfile,
-  getGitCicdMonitoringConfig,
   getGitCicdPipelineRun,
   listGitHubAccountInstallations,
   listDeployments,
   listGitCicdHandoffs,
   listGitCicdPipelineLogs,
   listGitCicdPipelineRuns,
-  listSourceRepositories,
   refreshProjectGitCicdPipelineRuns,
   retryGitCicdFrontendRelease
 } from "./api";
@@ -309,6 +307,20 @@ export function CicdConsoleScreen({
     [refreshHandoffs]
   );
 
+  const loadDeliveryState = useCallback(async () => {
+    const profile = await getProjectDeliveryProfile(projectId);
+    const githubInstallationAccess = profile.sourceRepository
+      ? null
+      : deriveGitHubInstallationAccessState(await listGitHubAccountInstallations());
+
+    return {
+      repository: profile.sourceRepository,
+      monitoringConfig: profile.monitoringConfig,
+      readiness: profile.readiness,
+      githubInstallationAccess
+    };
+  }, [projectId]);
+
   useEffect(() => {
     if (!isVisible) {
       return;
@@ -331,45 +343,26 @@ export function CicdConsoleScreen({
       }
 
       async function loadConsoleData(): Promise<{
-        readonly activeRepository: SourceRepository | null;
-        readonly githubInstallationAccess: GitHubInstallationAccessState | null;
         readonly initialRuns: Awaited<ReturnType<typeof listGitCicdPipelineRuns>>;
         readonly loadedDeployments: Deployment[];
         readonly loadedHandoffs: GitCicdHandoff[];
-        readonly monitoringConfig: GitCicdMonitoringConfig | null;
       }> {
-        const [repositories, initialRuns, loadedDeployments, loadedHandoffs] = await Promise.all([
-          listSourceRepositories(projectId),
+        const [initialRuns, loadedDeployments, loadedHandoffs] = await Promise.all([
           listGitCicdPipelineRuns(projectId, { limit: 50 }),
           listDeployments(projectId),
           listGitCicdHandoffs(projectId)
         ]);
-        const activeRepository =
-          repositories.find((item) => item.provider === "github" && item.status === "active") ??
-          null;
-        let githubInstallationAccess: GitHubInstallationAccessState | null = null;
-        if (!activeRepository) {
-          githubInstallationAccess = deriveGitHubInstallationAccessState(
-            await listGitHubAccountInstallations()
-          );
-        }
-        const monitoringConfig = activeRepository
-          ? await getGitCicdMonitoringConfig(projectId, activeRepository.id)
-          : null;
 
         return {
-          activeRepository,
-          githubInstallationAccess,
           initialRuns,
           loadedDeployments,
-          loadedHandoffs,
-          monitoringConfig
+          loadedHandoffs
         };
       }
 
-      const [consoleResult, readinessResult] = await Promise.allSettled([
+      const [consoleResult, deliveryResult] = await Promise.allSettled([
         loadConsoleData(),
-        getProjectDeliveryProfile(projectId).then((profile) => profile.readiness)
+        loadDeliveryState()
       ]);
       if (
         cancelled ||
@@ -378,12 +371,15 @@ export function CicdConsoleScreen({
         return;
       }
 
-      if (readinessResult.status === "fulfilled") {
-        setReadiness(readinessResult.value);
+      if (deliveryResult.status === "fulfilled") {
+        setRepository(deliveryResult.value.repository);
+        setGitHubInstallationAccess(deliveryResult.value.githubInstallationAccess);
+        setConfig(deliveryResult.value.monitoringConfig);
+        setReadiness(deliveryResult.value.readiness);
       } else {
         setReadinessErrorMessage(
           getApiErrorMessage(
-            readinessResult.reason,
+            deliveryResult.reason,
             "배포 PR 준비 상태를 갱신하지 못했습니다."
           )
         );
@@ -391,16 +387,10 @@ export function CicdConsoleScreen({
 
       if (consoleResult.status === "fulfilled") {
         const {
-          activeRepository,
-          githubInstallationAccess,
           initialRuns,
           loadedDeployments,
-          loadedHandoffs,
-          monitoringConfig
+          loadedHandoffs
         } = consoleResult.value;
-        setRepository(activeRepository);
-        setGitHubInstallationAccess(githubInstallationAccess);
-        setConfig(monitoringConfig);
         setDeployments(loadedDeployments);
         setHandoffs(loadedHandoffs);
         setSelectedHandoffId((selected) =>
@@ -410,7 +400,9 @@ export function CicdConsoleScreen({
         );
         hasExplicitRunSelectionRef.current = false;
         applyRuns(initialRuns.runs);
-        setConsoleDataFreshKey(consoleRequestKey);
+        setConsoleDataFreshKey(
+          deliveryResult.status === "fulfilled" ? consoleRequestKey : null
+        );
         dispatchRequestState({ type: "success", scope: "list" });
       } else {
         setConsoleDataFreshKey(null);
@@ -441,7 +433,7 @@ export function CicdConsoleScreen({
       setIsRefreshing(false);
       setIsReadinessRefreshing(false);
     };
-  }, [applyRuns, consoleRequestKey, isVisible, projectId]);
+  }, [applyRuns, consoleRequestKey, isVisible, loadDeliveryState, projectId]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -498,23 +490,26 @@ export function CicdConsoleScreen({
     setIsReadinessRefreshing(true);
     setConsoleDataFreshKey(null);
     setReadinessErrorMessage("");
-    const [consoleResult, readinessResult] = await Promise.allSettled([
+    const [consoleResult, deliveryResult] = await Promise.allSettled([
       Promise.all([
         refreshProjectGitCicdPipelineRuns(projectId),
         listDeployments(projectId),
         listGitCicdHandoffs(projectId)
       ]),
-      getProjectDeliveryProfile(projectId).then((profile) => profile.readiness)
+      loadDeliveryState()
     ]);
 
     if (!isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)) return;
 
-    if (readinessResult.status === "fulfilled") {
-      setReadiness(readinessResult.value);
+    if (deliveryResult.status === "fulfilled") {
+      setRepository(deliveryResult.value.repository);
+      setGitHubInstallationAccess(deliveryResult.value.githubInstallationAccess);
+      setConfig(deliveryResult.value.monitoringConfig);
+      setReadiness(deliveryResult.value.readiness);
     } else {
       setReadinessErrorMessage(
         getApiErrorMessage(
-          readinessResult.reason,
+          deliveryResult.reason,
           "배포 PR 준비 상태를 갱신하지 못했습니다."
         )
       );
@@ -530,7 +525,9 @@ export function CicdConsoleScreen({
           ? selected
           : (loadedHandoffs[0]?.id ?? null)
       );
-      setConsoleDataFreshKey(consoleRequestKey);
+      setConsoleDataFreshKey(
+        deliveryResult.status === "fulfilled" ? consoleRequestKey : null
+      );
       dispatchRequestState({ type: "success", scope: "refresh" });
       const errorMessage = result.targets.find((target) => target.errorMessage)?.errorMessage;
       if (errorMessage) {
@@ -566,6 +563,7 @@ export function CicdConsoleScreen({
     isReadinessRefreshing,
     isRefreshing,
     isVisible,
+    loadDeliveryState,
     projectId
   ]);
 

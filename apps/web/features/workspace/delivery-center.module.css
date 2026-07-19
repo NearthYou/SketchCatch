@@ -38,15 +38,15 @@
 .titleBlock p,
 .groupHeading p {
   color: #60646c;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
   margin: 0 0 4px;
 }
 
 .titleBlock h2 {
   color: #171717;
-  font-size: 24px;
+  font-size: calc(24px + var(--presentation-font-size-increase));
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0;
@@ -55,7 +55,7 @@
 .titleBlock > div > span {
   color: #60646c;
   display: block;
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   line-height: 1.55;
   margin-top: 7px;
   max-width: 620px;
@@ -107,8 +107,8 @@
   border-radius: 999px;
   color: var(--color-warning);
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   gap: 6px;
   line-height: 1;
   padding: 8px 10px;
@@ -141,8 +141,8 @@
   border-radius: var(--radius-control);
   color: #60646c;
   flex: 0 0 auto;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   padding: 8px 12px;
   text-decoration: none;
   transition:
@@ -172,7 +172,7 @@
 
 .groupHeading h3 {
   color: #171717;
-  font-size: 18px;
+  font-size: calc(18px + var(--presentation-font-size-increase));
   letter-spacing: -0.01em;
   line-height: 1.4;
   margin: 0;
@@ -181,7 +181,7 @@
 
 .groupHeading > span {
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
   max-width: 400px;
   text-align: right;
@@ -191,7 +191,7 @@
 .connectionGrid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .card,
@@ -216,7 +216,7 @@
 
 .cardHeading h4 {
   color: #171717;
-  font-size: 15px;
+  font-size: calc(15px + var(--presentation-font-size-increase));
   line-height: 1.4;
   margin: 0;
 }
@@ -227,7 +227,7 @@
 
 .card > p {
   color: #60646c;
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.55;
   margin: 10px 0 0;
 }
@@ -259,8 +259,8 @@
 
 .accountList li > span {
   color: #171717;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   overflow-wrap: anywhere;
 }
 
@@ -269,8 +269,8 @@
   align-items: center;
   color: var(--color-text-link);
   display: inline-flex;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 6px;
   text-decoration: none;
 }
@@ -304,13 +304,13 @@
 
 .definitionList dt {
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .definitionList dd {
   color: #171717;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   margin: 0;
   overflow-wrap: anywhere;
   text-align: right;
@@ -326,16 +326,15 @@
 }
 
 .warning strong {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .warning p {
   color: var(--color-warning);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 4px 0 0;
 }
-
 .settingsStack {
   display: grid;
   gap: 16px;
@@ -361,7 +360,7 @@
 }
 
 .editorSection :global(.integrationHeader h2) {
-  font-size: 16px;
+  font-size: calc(16px + var(--presentation-font-size-increase));
   letter-spacing: -0.01em;
 }
 
@@ -382,6 +381,40 @@
   margin-bottom: 0;
 }
 
+.readinessList {
+  border-top: 1px solid #f0f0f3;
+  margin-top: 18px;
+}
+
+.readinessList li {
+  align-items: center;
+  border-bottom: 1px solid #f0f0f3;
+  color: var(--color-warning);
+  display: grid;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  gap: 10px;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  min-height: 48px;
+}
+
+.readinessList li[data-ready="true"] {
+  color: var(--color-success);
+}
+
+.readinessList li > span {
+  color: var(--color-ink);
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+}
+
+.readinessList li > strong {
+  font-size: calc(12px + var(--presentation-font-size-increase));
+}
+
+.readinessSection > p {
+  color: #60646c;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  margin: 14px 0 0;
+}
 .execution {
   overflow: hidden;
 }
@@ -401,7 +434,7 @@
 .error,
 .message {
   border-radius: var(--radius-card);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 18px 0 0;
   padding: 14px;
@@ -425,7 +458,7 @@
   color: #ffffff;
   cursor: pointer;
   font: inherit;
-  font-weight: 700;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   margin-top: 10px;
   min-height: 38px;
   padding: 8px 14px;
@@ -476,7 +509,7 @@
   }
 
   .titleBlock h2 {
-    font-size: 21px;
+    font-size: calc(21px + var(--presentation-font-size-increase));
   }
 
   .overallStatus {
@@ -497,15 +530,6 @@
   .execution {
     border-radius: var(--radius-card);
     padding: 16px;
-  }
-
-  .definitionList > div {
-    gap: 4px;
-    grid-template-columns: 1fr;
-  }
-
-  .definitionList dd {
-    text-align: left;
   }
 
   .execution > .groupHeading {

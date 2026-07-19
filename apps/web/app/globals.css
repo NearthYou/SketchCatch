@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Pretendard";
+  font-style: normal;
+  font-weight: 45 920;
+  font-display: swap;
+  src: url("/fonts/pretendard-variable/PretendardVariable.woff2") format("woff2-variations");
+}
+
 :root {
   --color-canvas: #ffffff;
   --color-ink: #171717;
@@ -22,8 +30,10 @@
   --color-success-surface: #ecfdf3;
   --color-warning: #8a4b08;
   --color-warning-surface: #fff8eb;
-  --font-sans: "Pretendard", "Noto Sans KR", "Inter", "Geist", sans-serif;
-  --font-code: "Geist", "Inter", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-sans: "Pretendard", sans-serif;
+  --font-code: var(--font-sans);
+  --presentation-font-size-increase: 6px;
+  --presentation-font-weight-reduction: 100;
   --radius-control: 8px;
   --radius-card: 12px;
   --radius-frame: 16px;
@@ -56,10 +66,57 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  font-size: calc(16px + var(--presentation-font-size-increase));
   letter-spacing: 0;
   word-break: keep-all;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-size: calc(32px + var(--presentation-font-size-increase));
+}
+
+h2 {
+  font-size: calc(24px + var(--presentation-font-size-increase));
+}
+
+h3 {
+  font-size: calc(18.72px + var(--presentation-font-size-increase));
+}
+
+h4 {
+  font-size: calc(16px + var(--presentation-font-size-increase));
+}
+
+h5 {
+  font-size: calc(13.28px + var(--presentation-font-size-increase));
+}
+
+h6 {
+  font-size: calc(10.72px + var(--presentation-font-size-increase));
+}
+
+small {
+  font-size: calc(13.33px + var(--presentation-font-size-increase));
+}
+
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+strong,
+b {
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 button,
@@ -140,7 +197,7 @@ textarea:focus-visible {
 
 .designCostViewNote {
   color: var(--dashboard-design-muted);
-  font-size: 0.78rem;
+  font-size: calc(0.78rem + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
   text-align: right;
@@ -166,8 +223,8 @@ textarea:focus-visible {
   color: var(--dashboard-design-body);
   display: inline-flex;
   font-family: inherit;
-  font-size: 0.86rem;
-  font-weight: 700;
+  font-size: calc(0.86rem + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 7px;
   justify-content: center;
   min-height: 40px;
@@ -207,7 +264,7 @@ textarea:focus-visible {
 .designCostPage .costPanelTitle h2,
 .designCostPage .costAwsConnectionHeader h3 {
   color: var(--dashboard-design-ink);
-  font-size: 1rem;
+  font-size: calc(1rem + var(--presentation-font-size-increase));
   letter-spacing: 0;
   line-height: 1.4;
 }
@@ -220,8 +277,8 @@ textarea:focus-visible {
 
 .designCostPage .dashboardPanelKicker {
   color: var(--dashboard-design-muted);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   letter-spacing: 0.04em;
 }
 
@@ -250,8 +307,8 @@ textarea:focus-visible {
 .designCostPage .costField {
   color: var(--dashboard-design-body);
   display: grid;
-  font-size: 0.76rem;
-  font-weight: 700;
+  font-size: calc(0.76rem + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 7px;
 }
 
@@ -276,8 +333,8 @@ textarea:focus-visible {
   color: #ffffff;
   display: inline-flex;
   font-family: inherit;
-  font-size: 0.86rem;
-  font-weight: 700;
+  font-size: calc(0.86rem + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 7px;
   justify-content: center;
   min-height: 40px;
@@ -291,7 +348,7 @@ textarea:focus-visible {
   border-radius: 8px;
   color: var(--dashboard-design-ink);
   font-family: inherit;
-  font-weight: 700;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   min-height: 40px;
 }
 
@@ -313,7 +370,7 @@ textarea:focus-visible {
 
 .designCostPage .costSummaryAmount strong {
   color: var(--dashboard-design-ink);
-  font-size: 2rem;
+  font-size: calc(2rem + var(--presentation-font-size-increase));
   letter-spacing: 0;
   line-height: 1.1;
 }
@@ -324,8 +381,8 @@ textarea:focus-visible {
   border: 0;
   border-radius: 999px;
   color: var(--dashboard-design-body);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   padding: 5px 9px;
 }
 
@@ -386,12 +443,12 @@ textarea:focus-visible {
 
 .designCostPage .costMetricCard span {
   color: var(--dashboard-design-muted);
-  font-size: 0.76rem;
+  font-size: calc(0.76rem + var(--presentation-font-size-increase));
 }
 
 .designCostPage .costMetricCard strong {
   color: var(--dashboard-design-ink);
-  font-size: 1.5rem;
+  font-size: calc(1.5rem + var(--presentation-font-size-increase));
   letter-spacing: 0;
 }
 
@@ -576,8 +633,8 @@ textarea:focus-visible {
   align-items: center;
   color: var(--dashboard-design-muted);
   display: flex;
-  font-size: 0.76rem;
-  font-weight: 700;
+  font-size: calc(0.76rem + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 12px;
   justify-content: space-between;
   margin-top: 18px;
@@ -604,7 +661,7 @@ textarea:focus-visible {
   border: 0;
   color: var(--dashboard-design-ink);
   font: inherit;
-  font-weight: 700;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   min-height: 38px;
   outline: 0;
   padding: 0 10px 0 4px;
@@ -655,7 +712,7 @@ textarea:focus-visible {
   align-items: center;
   color: var(--dashboard-design-body);
   display: inline-flex;
-  font-size: 0.82rem;
+  font-size: calc(0.82rem + var(--presentation-font-size-increase));
   gap: 6px;
   line-height: 1.45;
 }
@@ -664,8 +721,8 @@ textarea:focus-visible {
   align-items: center;
   color: var(--dashboard-design-link);
   display: inline-flex;
-  font-size: 0.84rem;
-  font-weight: 700;
+  font-size: calc(0.84rem + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 4px;
   justify-content: flex-end;
   white-space: nowrap;

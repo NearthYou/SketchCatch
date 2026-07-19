@@ -182,6 +182,7 @@ test("development errors include the failed demo stage, safe server cause, and c
   assert.match(message, /실패 단계: AWS 빌드 환경 준비/u);
   assert.match(message, /SketchCatchCodeBuild-demo cannot be found/u);
   assert.match(message, /CodeBuild project와 service role/u);
+  assert.match(message, /AWS Connector for GitHub/u);
   assert.match(message, /요청 ID req-build-env/u);
 });
 

@@ -374,7 +374,9 @@ test("each template contains the resources required by its deployable default", 
     "aws_lb_target_group",
     "aws_lb_listener",
     "aws_ecr_repository",
-    "aws_cloudwatch_log_group"
+    "aws_cloudwatch_log_group",
+    "aws_appautoscaling_target",
+    "aws_appautoscaling_policy"
   ]) {
     assert.ok(ecsTypes.includes(requiredType), `ecs-fargate-container-app: ${requiredType}`);
   }
@@ -401,6 +403,12 @@ test("each template contains the resources required by its deployable default", 
   const builtTask = builtEcs.nodes.find(
     (node) => node.parameters?.resourceType === "aws_ecs_task_definition"
   );
+  const builtScalingTarget = builtEcs.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_appautoscaling_target"
+  );
+  const builtScalingPolicy = builtEcs.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_appautoscaling_policy"
+  );
   const builtContainerDefinitions = String(builtTask?.parameters?.values.containerDefinitions);
   const builtContainer = JSON.parse(builtContainerDefinitions)[0] as {
     logConfiguration?: { options?: Record<string, string> };
@@ -419,6 +427,28 @@ test("each template contains the resources required by its deployable default", 
   assert.equal(
     builtEcs.edges.find((edge) => edge.id.endsWith("-task-log-group"))?.metadata?.presentationRole,
     "detail"
+  );
+  assert.equal(builtScalingTarget?.parameters?.values.minCapacity, 1);
+  assert.equal(builtScalingTarget?.parameters?.values.maxCapacity, 3);
+  assert.equal(
+    builtScalingTarget?.parameters?.values.resourceId,
+    "service/${aws_ecs_cluster.cluster.name}/${aws_ecs_service.service.name}"
+  );
+  assert.equal(
+    (
+      builtScalingPolicy?.parameters?.values
+        .targetTrackingScalingPolicyConfiguration as { targetValue?: number } | undefined
+    )?.targetValue,
+    10
+  );
+  assert.equal(
+    (
+      builtScalingPolicy?.parameters?.values
+        .targetTrackingScalingPolicyConfiguration as {
+          predefinedMetricSpecification?: Array<{ resourceLabel?: string }>;
+        } | undefined
+    )?.predefinedMetricSpecification?.[0]?.resourceLabel,
+    "${aws_lb.load_balancer.arn_suffix}/${aws_lb_target_group.target_group.arn_suffix}"
   );
 
   const eksTypes = resourceTypes("eks-container-app");

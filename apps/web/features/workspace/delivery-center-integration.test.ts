@@ -28,11 +28,10 @@ const githubCallbackSource = readFileSync(
 
 test("CI/CD Delivery owns the project delivery configuration sections", () => {
   assert.match(panelSource, /GitHub 연결/);
-  assert.match(panelSource, /Source Repository/);
   assert.match(panelSource, /ProjectCicdMonitoringSettingsClient/);
   assert.match(panelSource, /ProjectDeploymentTargetEditor/);
   assert.match(panelSource, /initialProfile=\{profile\}/);
-  assert.match(panelSource, /onSaved=\{reload\}/);
+  assert.match(panelSource, /onSaved=\{handleDeploymentTargetSaved\}/);
   assert.doesNotMatch(
     panelSource,
     /app\/projects\/\[projectId\]\/settings\/project-deployment-target-settings-client/
@@ -40,10 +39,25 @@ test("CI/CD Delivery owns the project delivery configuration sections", () => {
   assert.match(panelSource, /Pull Request와 Pipeline을 관리하세요/);
 });
 
-test("CI/CD Repository 연결은 새 분석 화면이 아니라 현재 프로젝트 선택 화면을 연다", () => {
-  assert.match(panelSource, /createGitCicdReadinessNavigation/);
-  assert.match(panelSource, /readinessAction:\s*"select_repository"/);
-  assert.doesNotMatch(panelSource, /return `\/workspace\/repository\?/);
+test("일반 배포 진입은 이전 CI/CD 탭 대신 현재 Board 배포를 연다", () => {
+  assert.match(
+    rightPanelSource,
+    /initialActiveScreen=\{initialView === "deployment" \? "cicd" : "deployment"\}/
+  );
+});
+
+test("Delivery는 Board Repository를 다시 선택하는 카드를 표시하지 않는다", () => {
+  assert.doesNotMatch(panelSource, /delivery-repository-title/);
+  assert.doesNotMatch(panelSource, /Repository 다시 분석/);
+  assert.doesNotMatch(panelSource, /readinessAction:\s*"select_repository"/);
+});
+
+test("CI/CD는 별도 Repository 목록 대신 Board Delivery Profile을 사용한다", () => {
+  assert.doesNotMatch(cicdConsoleSource, /listSourceRepositories/);
+  assert.doesNotMatch(cicdConsoleSource, /getGitCicdMonitoringConfig/);
+  assert.match(cicdConsoleSource, /profile\.sourceRepository/);
+  assert.match(cicdConsoleSource, /profile\.monitoringConfig/);
+  assert.match(cicdConsoleSource, /profile\.readiness/);
 });
 
 test("CI/CD Delivery shows readiness once beside the PR action", () => {
@@ -75,6 +89,13 @@ test("target save refreshes Delivery without starting deployment or Git handoff"
     editorSource,
     /createGitCicdPullRequest|startGitCicdPipelineRun|startDirectDeployment/
   );
+});
+
+test("saved deployment target invalidates the stale Direct Deployment prerequisite", () => {
+  assert.match(panelSource, /onDeploymentTargetSaved/);
+  assert.match(panelSource, /onSaved=\{handleDeploymentTargetSaved\}/);
+  assert.match(shellSource, /deploymentTargetSavedRevision/);
+  assert.match(shellSource, /onDeploymentTargetSaved=\{\(\) =>/);
 });
 
 test("GitHub callback follows the canonical source-only continuation instead of owning target state", () => {

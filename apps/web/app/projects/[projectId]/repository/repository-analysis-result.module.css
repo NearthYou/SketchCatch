@@ -26,7 +26,7 @@
 .unit span,
 .evidence span {
   color: var(--dashboard-design-body);
-  font-size: 0.78rem;
+  font-size: calc(0.78rem + var(--presentation-font-size-increase));
 }
 
 .summary strong,
@@ -41,7 +41,7 @@
 }
 
 .section h3 {
-  font-size: 0.92rem;
+  font-size: calc(0.92rem + var(--presentation-font-size-increase));
   margin: 0;
 }
 
@@ -70,7 +70,7 @@
   background: var(--dashboard-design-surface-strong);
   border-radius: 999px;
   color: var(--dashboard-design-body);
-  font-size: 0.76rem;
+  font-size: calc(0.76rem + var(--presentation-font-size-increase));
   padding: 5px 10px;
 }
 

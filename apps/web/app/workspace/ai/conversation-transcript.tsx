@@ -1,7 +1,12 @@
 "use client";
 
-import { RotateCcw, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { RotateCcw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { WorkspaceAiWorkbenchDraftProgress } from "../../../features/workspace/WorkspaceAiWorkbenchResults";
+import {
+  ARCHITECTURE_DRAFT_GENERATION_STEP_DURATION_MS,
+  architectureDraftGenerationSteps
+} from "../../../features/workspace/workspace-ai-chat-status";
 import type { AiStartMessage } from "./ai-start-model";
 import type { SelectedAssistantOption } from "./selected-option-model";
 import {
@@ -39,7 +44,23 @@ export function ConversationTranscript({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const shouldFollowRef = useRef(true);
   const forcedFollowTargetMessageCountRef = useRef<number | null>(null);
+  const [draftProgressStep, setDraftProgressStep] = useState(0);
   const retryRequestLabel = getRetryRequestLabel(requestState);
+
+  useEffect(() => {
+    if (requestState !== "loading") {
+      setDraftProgressStep(0);
+      return;
+    }
+
+    const timerId = window.setInterval(() => {
+      setDraftProgressStep((currentStep) =>
+        Math.min(currentStep + 1, architectureDraftGenerationSteps.length - 1)
+      );
+    }, ARCHITECTURE_DRAFT_GENERATION_STEP_DURATION_MS);
+
+    return () => window.clearInterval(timerId);
+  }, [requestState]);
 
   useEffect(() => {
     const scrollElement = scrollRef.current;
@@ -103,6 +124,13 @@ export function ConversationTranscript({
           const selectedForQuestion = selections.find(
             ({ questionMessageId }) => questionMessageId === message.id
           );
+          const visibleSuggestions = [...(message.suggestions ?? [])];
+          if (
+            selectedForQuestion !== undefined &&
+            !visibleSuggestions.includes(selectedForQuestion.label)
+          ) {
+            visibleSuggestions.push(selectedForQuestion.label);
+          }
 
           return (
             <article
@@ -117,9 +145,9 @@ export function ConversationTranscript({
                 <p>{message.content}</p>
               </div>
 
-              {message.role === "assistant" && message.suggestions?.length ? (
+              {message.role === "assistant" && visibleSuggestions.length > 0 ? (
                 <div aria-label="답변 선택지" className={styles.suggestionList} role="group">
-                  {message.suggestions.map((suggestion) => {
+                  {visibleSuggestions.map((suggestion) => {
                     const selected = selectedForQuestion?.label === suggestion;
                     return (
                       <button
@@ -136,9 +164,6 @@ export function ConversationTranscript({
                         type="button"
                       >
                         <span>{suggestion}</span>
-                        {selected ? (
-                          <span className={styles.suggestionSelected}>선택됨</span>
-                        ) : null}
                       </button>
                     );
                   })}
@@ -149,13 +174,10 @@ export function ConversationTranscript({
         })}
 
         {requestState === "loading" ? (
-          <div className={styles.requestStatus} role="status">
-            <span className={styles.requestStatusDot} />
-            <span>응답 생성 중</span>
-            <button onClick={onCancelRequest} type="button">
-              <X aria-hidden="true" size={14} /> 요청 취소
-            </button>
-          </div>
+          <WorkspaceAiWorkbenchDraftProgress
+            currentStep={draftProgressStep}
+            onCancel={onCancelRequest}
+          />
         ) : null}
 
         {retryRequestLabel ? (

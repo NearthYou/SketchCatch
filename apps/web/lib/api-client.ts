@@ -451,7 +451,7 @@ function getDeveloperErrorArea(path: string | undefined): DeveloperErrorArea {
     return {
       stage: "AWS 빌드 환경 준비",
       check:
-        "AWS에서 CodeBuild project와 service role이 존재하는지, Role trust/policy와 Permissions Boundary, CodeConnections 상태를 확인하세요."
+        "AWS에서 CodeBuild project와 service role이 존재하는지, Role trust/policy와 Permissions Boundary, CodeConnections 상태, AWS Connector for GitHub 설치 및 대상 Repository 권한을 확인하세요."
     };
   }
 

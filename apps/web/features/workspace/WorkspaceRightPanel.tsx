@@ -972,7 +972,7 @@ export function WorkspaceRightPanel({
         fullScreenOnly
         hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
         initialCicdReturnCommand={initialCicdReturnCommand}
-        initialActiveScreen={initialView === "deployment" ? "cicd" : undefined}
+        initialActiveScreen={initialView === "deployment" ? "cicd" : "deployment"}
         initialExpanded
         onInitialCicdReturnCommandReady={onInitialCicdReturnCommandReady}
         onExpandedClose={() => setIsDeploymentConsoleOpen(false)}

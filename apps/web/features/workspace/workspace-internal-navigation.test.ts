@@ -28,6 +28,7 @@ test("Workspace deployment output and GitHub links remain external anchors", () 
   );
   assert.match(
     directDeploymentSource,
-    /<a href=\{selectedApplicationRelease\.outputUrl\} rel="noreferrer" target="_blank">/
+    /href=\{outputUrl\}[\s\S]{0,80}rel="noreferrer"[\s\S]{0,80}target="_blank"/
   );
+  assert.match(directDeploymentSource, /getSafeReleaseOutputUrl\(release\?\.outputUrl/);
 });

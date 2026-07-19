@@ -55,8 +55,10 @@ export type DirectDeploymentSummary = Pick<
 export type DirectDeploymentFlowInput = {
   readonly actions: DirectDeploymentActionState;
   readonly deployment: DirectDeploymentSummary | null;
+  readonly failedStepId: DirectDeploymentStepId | null;
   readonly hasUnsavedBaseline: boolean;
   readonly preflightState: DirectDeploymentPreflightState;
+  readonly reconciledRequestState?: RequestState;
   readonly requestState: RequestState;
 };
 
@@ -179,9 +181,13 @@ function isBlockingPreDeploymentFinding(finding: CheckFinding | undefined): bool
 
 export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): DirectDeploymentFlow {
   const deployment = input.deployment;
+  const requestState = input.reconciledRequestState ?? input.requestState;
   const usesSavedCleanupSnapshot =
     input.actions.shouldShowDestroyPlanButton || input.actions.shouldShowDestroyButton;
-  const validation = getValidationStep(input);
+  const validation = getValidationStep({ ...input, requestState });
+  if (requestState === "error" && input.failedStepId) {
+    return createFailedFlow(input.failedStepId, validation);
+  }
   const hasUnsavedApplyBaseline =
     input.hasUnsavedBaseline && input.deployment?.currentPlanOperation !== "destroy";
   if (
@@ -209,9 +215,9 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
       step("approval", "idle", "Destroy Plan 후 진행", "Destroy Plan을 먼저 생성하세요."),
       step(
         "deployment",
-        input.requestState === "loading" ? "running" : "active",
-        input.requestState === "loading" ? "Destroy Plan 생성 중" : "Destroy Plan 필요",
-        input.actions.canRunDestroyPlan || input.requestState === "loading"
+        requestState === "loading" ? "running" : "active",
+        requestState === "loading" ? "Destroy Plan 생성 중" : "Destroy Plan 필요",
+        input.actions.canRunDestroyPlan || requestState === "loading"
           ? null
           : "저장된 배포 state를 확인하세요."
       )
@@ -224,15 +230,15 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
       completedValidation,
       step(
         "approval",
-        input.requestState === "loading" ? "running" : "active",
-        input.requestState === "loading" ? "승인 처리 중" : "승인 필요",
+        requestState === "loading" ? "running" : "active",
+        requestState === "loading" ? "승인 처리 중" : "승인 필요",
         input.actions.canApprovePlan ? null : "Plan과 승인 조건을 확인하세요."
       ),
       idleDeployment()
     );
   }
 
-  const finalState = getDeploymentState(deployment.status, input.requestState);
+  const finalState = getDeploymentState(deployment.status, requestState);
   return createFlow(
     "deployment",
     completedValidation,
@@ -245,6 +251,42 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
         ? null
         : "승인 snapshot과 실행 대상을 확인하세요."
     )
+  );
+}
+
+export function resolveSelectedDirectDeploymentStepId(
+  flow: DirectDeploymentFlow,
+  selectedStepId: DirectDeploymentStepId
+): DirectDeploymentStepId {
+  const selectedStep = flow.steps.find((step) => step.id === selectedStepId);
+  return selectedStep && selectedStep.state !== "idle" ? selectedStep.id : flow.activeStepId;
+}
+
+function createFailedFlow(
+  failedStepId: DirectDeploymentStepId,
+  validation: DirectDeploymentStep
+): DirectDeploymentFlow {
+  if (failedStepId === "validation") {
+    return createFlow(
+      "validation",
+      step("validation", "error", "검증 요청 실패"),
+      idleApproval(),
+      idleDeployment()
+    );
+  }
+  if (failedStepId === "approval") {
+    return createFlow(
+      "approval",
+      step("validation", "done", "검증 완료"),
+      step("approval", "error", "승인 요청 실패"),
+      idleDeployment()
+    );
+  }
+  return createFlow(
+    "deployment",
+    validation.state === "done" ? validation : step("validation", "done", "검증 완료"),
+    step("approval", "done", "승인됨"),
+    step("deployment", "error", "실행 요청 실패")
   );
 }
 

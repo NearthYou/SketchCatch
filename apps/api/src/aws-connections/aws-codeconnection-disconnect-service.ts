@@ -19,7 +19,7 @@ export async function disconnectAwsCodeConnection(
     deletionReservationTtlMs?: number;
     now?: () => Date;
   } = {}
-): Promise<void> {
+): Promise<{ managedCleanupCompleted: boolean }> {
   if (!input.confirmedManagedCleanup) {
     throw new AwsCodeConnectionError(
       "CODECONNECTION_DELETE_CONFIRMATION_REQUIRED",
@@ -27,14 +27,6 @@ export async function disconnectAwsCodeConnection(
       400
     );
   }
-  if (!options.cleanupManagedResources) {
-    throw new AwsCodeConnectionError(
-      "CODECONNECTION_DELETE_FAILED",
-      "GitHub 빌드 연결 정리 기능을 사용할 수 없습니다.",
-      503
-    );
-  }
-
   const connection = await repository.findVerifiedConnection(input.connectionId, input.userId);
   if (!connection) {
     throw new AwsCodeConnectionError(
@@ -75,9 +67,19 @@ export async function disconnectAwsCodeConnection(
     );
   }
 
+  let managedCleanupCompleted = false;
   try {
-    const resources = await repository.findManagedResources(connection.id);
-    await options.cleanupManagedResources({ connection, resources });
+    if (options.cleanupManagedResources) {
+      const resources = await repository.findManagedResources(connection.id);
+      await options.cleanupManagedResources({ connection, resources });
+      managedCleanupCompleted = true;
+    }
+  } catch {
+    // Remote AWS cleanup is best-effort. The user must still be able to detach
+    // the local build connection when AWS rejects or cannot complete cleanup.
+  }
+
+  try {
     if (
       !(await repository.completeDeletion({
         id: existing.id,
@@ -100,4 +102,6 @@ export async function disconnectAwsCodeConnection(
       502
     );
   }
+
+  return { managedCleanupCompleted };
 }

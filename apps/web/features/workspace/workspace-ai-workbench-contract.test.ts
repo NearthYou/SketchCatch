@@ -7,6 +7,7 @@ const controllerSource = read("WorkspaceAiChatDock.tsx");
 const conversationSource = read("workspace-ai-chat-conversation.ts");
 const diagramEditorSource = read("../diagram-editor/DiagramEditor.tsx");
 const launcherSource = read("WorkspaceAiChatLauncher.tsx");
+const panelPiecesSource = read("WorkspaceAiPanelPieces.tsx");
 const launcherStyles = read("workspace-ai-chat-launcher.module.css");
 const projectManagerSource = read("ProjectWorkspaceDraftManager.tsx");
 const resultSource = read("WorkspaceAiWorkbenchResults.tsx");
@@ -36,6 +37,16 @@ test("AI Workbench exposes the desktop mode rail and active work panel accessibl
   assert.match(workbenchSource, /aria-labelledby=\{`workspace-ai-chat-tab-/);
 });
 
+test("desktop AI Workbench navigation is icon-only and names the active mode in the header", () => {
+  assert.match(workbenchSource, /className=\{styles\.mobileTabList\}[\s\S]*?showLabels=\{true\}/);
+  assert.match(workbenchSource, /className=\{styles\.desktopModeRail\}[\s\S]*?showLabels=\{false\}/);
+  assert.match(workbenchSource, /aria-label=\{label\}/);
+  assert.match(workbenchSource, /title=\{label\}/);
+  assert.match(workbenchSource, /\{showLabels \? <span>\{label\}<\/span> : null\}/);
+  assert.match(workbenchSource, /<h2 id="workspace-ai-chat-title">\{activeScopeLabel\}<\/h2>/);
+  assert.match(workbenchStyles, /\.workWindow\s*\{[^}]*grid-template-columns:\s*48px minmax\(0, 1fr\);/s);
+});
+
 test("AI Workbench owns status, transcript, footer, and nonmodal desktop pointer behavior", () => {
   assert.match(workbenchSource, /aria-live="polite"/);
   assert.match(workbenchSource, /role="status"/);
@@ -53,7 +64,11 @@ test("AI Workbench shell uses only its dedicated visual token vocabulary", () =>
   assert.doesNotMatch(workbenchStyles, /gradient\(/);
   assert.doesNotMatch(workbenchStyles, /(?:text-shadow|filter:\s*drop-shadow|--[^:]*glow)/i);
 
-  const pixelFontSizes = [...workbenchStyles.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)].map(
+  const pixelFontSizes = [
+    ...workbenchStyles.matchAll(
+      /font-size:\s*calc\((\d+(?:\.\d+)?)px \+ var\(--presentation-font-size-increase\)\)/g
+    )
+  ].map(
     ([, size]) => Number(size)
   );
   assert.ok(pixelFontSizes.length > 0);
@@ -75,6 +90,11 @@ test("AI chat controller uses only the new Workbench transcript and workflow pre
   assert.match(controllerSource, /styles\.composer/);
 });
 
+test("Board approval actions keep their explanation readable in the chat panel", () => {
+  assert.doesNotMatch(workbenchStyles, /\.approvalTray\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;/s);
+  assert.doesNotMatch(workbenchStyles, /\.approvalActions\s*\{[^}]*justify-content:\s*flex-end;/s);
+});
+
 test("AI Workbench owns dedicated result primitives and code-diff presentation", () => {
   assert.match(resultSource, /createTerraformPreviewPresentation/);
   assert.match(resultSource, /createTerraformIssuePresentation/);
@@ -82,6 +102,22 @@ test("AI Workbench owns dedicated result primitives and code-diff presentation",
   assert.match(resultSource, /styles\.technicalDetails/);
   assert.match(resultSource, /styles\.codeDiff/);
   assert.doesNotMatch(resultSource, /WorkspaceAiPanelPieces|workspace\.module\.css/);
+});
+
+test("다이어그램 AI 설명은 다음 행동을 별도 섹션으로 표시하지 않는다", () => {
+  const legacyExplanationSource = panelPiecesSource.slice(
+    panelPiecesSource.indexOf("export function WorkspaceAiExplanation"),
+    panelPiecesSource.indexOf("export function WorkspaceAiGuardrailWarnings")
+  );
+
+  assert.doesNotMatch(
+    legacyExplanationSource,
+    /<WorkspaceAiTextList title="다음 행동"/
+  );
+  assert.doesNotMatch(
+    resultSource,
+    /<WorkspaceAiWorkbenchTechnicalList items=\{explanation\.nextActions\} title="다음 행동"/
+  );
 });
 
 test("에이전트 리뷰는 Amazon Q 응답 전에도 단계별 진행 상태를 표시한다", () => {
@@ -243,6 +279,10 @@ test("mobile focus trap ignores roving tabs that are not keyboard focusable", ()
 });
 
 test("transcript follows new content only while the reader is near the bottom", () => {
+  assert.match(
+    controllerSource,
+    /suggestionSelection !== undefined[\s\S]*?transcriptShouldFollowRef\.current = true;[\s\S]*?setMessages\(nextMessages\)/
+  );
   assert.match(workbenchSource, /onScroll=\{onTranscriptScroll\}/);
   assert.match(controllerSource, /transcriptShouldFollowRef/);
   assert.match(controllerSource, /isWorkspaceAiTranscriptNearBottom/);

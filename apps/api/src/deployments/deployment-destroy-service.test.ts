@@ -676,6 +676,7 @@ function createApprovedDestroyDeploymentRecord(
     projectId,
     architectureId,
     terraformArtifactId,
+    preparationKey: null,
     awsConnectionId,
     awsAccountIdSnapshot: "123456789012",
     awsRegionSnapshot: "ap-northeast-2",
@@ -741,6 +742,10 @@ function createDestroyPlanArtifactRecord(
     sha256: tfplanSha256,
     accountId: "123456789012",
     region: "ap-northeast-2",
+    stateBaselineDeploymentId: null,
+    stateObjectKey: null,
+    stateLineageSha256: null,
+    stateSerial: null,
     createdAt: fixedNow,
     ...overrides
   };

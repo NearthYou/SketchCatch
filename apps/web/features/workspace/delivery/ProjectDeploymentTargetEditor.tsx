@@ -46,26 +46,26 @@ const runtimeLabels: Record<RuntimeTargetKind, string> = {
 
 const missingFieldLabels: Record<MissingDeploymentTargetFieldKey, string> = {
   aws_connection: "AWS 연결",
-  source_root: "Source root",
-  build_evidence_path: "Build evidence path",
-  confirmed_commit_sha: "Confirmed commit SHA",
-  health_check_path: "Health check path",
-  install_preset: "Package install",
-  codebuild_project: "CodeBuild project",
-  ecr_repository: "ECR repository",
-  ecs_cluster: "ECS cluster",
-  ecs_service: "ECS service",
-  container: "Container",
-  lambda_function_logical_id: "SAM function logical ID",
-  lambda_function: "Lambda function",
+  source_root: "소스 시작 폴더",
+  build_evidence_path: "빌드 기준 파일",
+  confirmed_commit_sha: "확정 commit",
+  health_check_path: "Health Check 경로",
+  install_preset: "패키지 설치 방식",
+  codebuild_project: "CodeBuild 프로젝트",
+  ecr_repository: "ECR 저장소",
+  ecs_cluster: "ECS 클러스터",
+  ecs_service: "ECS 서비스",
+  container: "ECS 컨테이너",
+  lambda_function_logical_id: "SAM 함수 logical ID",
+  lambda_function: "Lambda 함수",
   lambda_alias: "Lambda alias",
-  codedeploy_application: "CodeDeploy application",
-  codedeploy_deployment_group: "CodeDeploy deployment group",
-  auto_scaling_group: "Auto Scaling group",
-  hosting_bucket: "Versioned hosting bucket",
+  codedeploy_application: "CodeDeploy 애플리케이션",
+  codedeploy_deployment_group: "CodeDeploy 배포 그룹",
+  auto_scaling_group: "Auto Scaling 그룹",
+  hosting_bucket: "버전 관리 Hosting bucket",
   cloudfront_distribution: "CloudFront distribution ID",
   cloudfront_origin: "CloudFront origin ID",
-  output_url: "Output URL"
+  output_url: "공개 URL"
 };
 
 function getRuntimeTargetSummary(draft: ProjectDeploymentTargetDraft): string {
@@ -169,6 +169,19 @@ export const ProjectDeploymentTargetEditor = forwardRef<
     () => getMissingDeploymentTargetFieldKeys(draft, connections),
     [connections, draft]
   );
+  const missingAdvancedFieldKeys = useMemo(
+    () => missingFieldKeys.filter((key) => key !== "aws_connection"),
+    [missingFieldKeys]
+  );
+  const missingFieldMessage = useMemo(() => {
+    const keys =
+      missingAdvancedFieldKeys.length > 0 ? missingAdvancedFieldKeys : missingFieldKeys;
+    const prefix =
+      missingAdvancedFieldKeys.length > 0
+        ? "자동 입력되지 않은 설정을 확인하세요"
+        : "필수 항목을 확인하세요";
+    return `${prefix}: ${keys.map((key) => missingFieldLabels[key]).join(", ")}`;
+  }, [missingAdvancedFieldKeys, missingFieldKeys]);
   const canSave =
     requestState !== "loading" && requestState !== "saving" && missingFieldKeys.length === 0;
 
@@ -276,9 +289,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
 
   async function saveTarget(): Promise<boolean> {
     if (!canSave) {
-      setMessage(
-        `저장 전 확인이 필요합니다: ${missingFieldKeys.map((key) => missingFieldLabels[key]).join(", ")}`
-      );
+      setMessage(missingFieldMessage);
       return false;
     }
     setRequestState("saving");
@@ -323,7 +334,9 @@ export const ProjectDeploymentTargetEditor = forwardRef<
           <h3>필수 확인</h3>
           <p>계정과 실행 방식이 맞으면 나머지 값은 그대로 저장할 수 있습니다.</p>
         </div>
-        <span className={styles.requiredBadge}>2개 항목</span>
+        <span className={styles.requiredBadge}>
+          {missingAdvancedFieldKeys.length > 0 ? "자동 입력 확인 필요" : "2개 항목"}
+        </span>
       </div>
 
       <div className={styles.decisionGrid}>
@@ -411,6 +424,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
       <ProjectDeploymentTargetAdvancedSettings
         draft={draft}
         lockedSystemFields={lockedSystemFields}
+        revealMissingFields={requestState === "idle" && missingAdvancedFieldKeys.length > 0}
         updateDraft={updateDraft}
       />
 
@@ -426,7 +440,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
       ) : null}
       {missingFieldKeys.length > 0 && requestState === "idle" ? (
         <p className="dashboardMessage" role="status">
-          저장 전 확인: {missingFieldKeys.map((key) => missingFieldLabels[key]).join(", ")}
+          {missingFieldMessage}
         </p>
       ) : null}
       {message ? (

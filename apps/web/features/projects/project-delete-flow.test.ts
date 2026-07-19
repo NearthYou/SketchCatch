@@ -11,6 +11,24 @@ import {
 } from "./project-delete-flow";
 
 const projectsClientSource = readProjectFile("../../app/projects/projects-client.tsx");
+const dashboardContentStyles = readProjectFile(
+  "../../components/dashboard/dashboard-content.css"
+);
+
+test("project delete dialog renders a visible close icon", () => {
+  assert.match(
+    projectsClientSource,
+    /className="dashboardSecondaryButton projectDeleteDialogIconButton"[\s\S]*<DashboardIcon name="close" \/>/u
+  );
+  assert.match(
+    dashboardContentStyles,
+    /\.projectDeleteDialogIconButton\s*\{[^}]*width:\s*40px;[^}]*height:\s*40px;[^}]*padding:\s*0;/u
+  );
+  assert.match(
+    dashboardContentStyles,
+    /\.projectDeleteDialogIconButton \.dashboardIcon\s*\{[^}]*width:\s*18px;[^}]*height:\s*18px;/u
+  );
+});
 
 test("project delete dialog close clears the deleting project lock", () => {
   const closeDialogSource = getSourceBetween(

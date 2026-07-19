@@ -303,7 +303,7 @@
         "desktop/mobile/reduced-motion 브라우저 흐름이 실제 snapshot 값과 lifecycle cleanup을 검증한다.",
         "실제 AWS apply/destroy는 별도 명시 승인이 있을 때만 수행한다."
       ],
-      "notes": "Implementation and automated verification merged in PR #382. External acceptance is deferred to issue #378 because the in-app browser blocks localhost and the current environment has no reachable AWS STS credentials. The feature flag remains false until credentialed Chromium and an approved AWS sandbox provide evidence."
+      "notes": "Implementation merged in PR #382. On 2026-07-19 the approved non-production sandbox verified real CloudFront/ALB/ECS traffic and clean Destroy, and the local authenticated modal opened successfully. The focused linear flow, CloudWatch-triggered particles, v2 Fargate capacity slots, and a bounded 1-3 Task / 10 requests-per-target Template contract are now covered by automated tests. Status remains blocked until a newly approved sandbox Deployment proves actual ECS scale-out and cleanup with this low threshold; no cloud mutation was performed for the UI restoration."
     },
     {
       "id": "PROJECT-RELEASE-LEDGER-001",
@@ -349,8 +349,10 @@
         "Direct Deployment UI가 정확히 세 단계와 summary-first 운영 정보를 표시한다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-18",
+        "lastVerified": "2026-07-19",
         "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/build-environments/aws-project-build-environment-gateway.test.ts src/build-environments/project-build-environment-service.test.ts src/routes/deployments.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-three-stage-flow.test.ts features/workspace/repository-access-recovery.test.ts",
           "DEPLOYMENT_WORKER_MODE=in_process pnpm --dir apps/api exec tsx --test src/build-environments/project-build-environment-service.test.ts \"src/deployments/**/*.test.ts\" \"src/git-cicd/**/*.test.ts\" src/routes/deployments.test.ts src/routes/git-cicd-handoffs.test.ts src/routes/git-cicd-infrastructure-runs.test.ts src/routes/git-cicd-readiness.test.ts src/routes/git-cicd-release-runs.test.ts",
           "pnpm --dir apps/web exec node --import ./test-css-register.mjs --import tsx --test features/workspace/deployment-actions.test.ts features/workspace/deployment-preparation-error.test.ts features/workspace/deployment-presentation.test.ts features/workspace/deployment-three-stage-flow.test.ts",
           "pnpm lint",
@@ -358,7 +360,7 @@
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "The CI deployment matrix passed 589/589 checks: 523 API deployment/GitOps/build-target/route transitions and 66 Web actions/presentation transitions. Direct review now starts one Plan worker instead of racing a separate init prewarm, and repeat Init/Plan/Apply/Destroy/Frontend retry requests join the matching durable job while different operations remain blocked. Terraform-managed Task Definition, IAM role, ALB/Target Group, S3, CloudFront, and derived URL replacements are accepted only after approved state inventory verification; stable prepared ECR, cluster, service, container, and port coordinates remain fail-closed. Full-stack target and pending ApplicationRelease metadata reconcile atomically, including target-only partial-write recovery and legacy metadata upgrade. Direct and GitOps rollback baselines must match the current deployment target fingerprint. Typecheck and focused CI-equivalent checks passed; no cloud mutation was performed."
+        "notes": "CodeBuild project reconciliation now recovers a managed ResourceAlreadyExists race. Preparation start and completion are atomic, so stale starts and late failures cannot replace a successful ready state for the same runtime fingerprint. Direct Deployment delegates build preparation and exact Repository checkout verification to the Plan API, and concurrent requests for the same Deployment join the one RUNNING Plan sequence before Terraform. Focused API and Web regressions, lint, typecheck, and build pass. Full pnpm test retains unrelated baseline failures in artifact heartbeat cleanup, Git/CI/CD schema expectations, resource-catalog expectations, and one external-link source-pattern test."
       },
       "notes": "Implemented in issue #372 on branch feature/sw/372-direct-deploy-three-stage. No cloud mutation was performed."
     },
@@ -562,9 +564,12 @@
         "Workspace AI는 클릭한 option만 의미 기록으로 누적하고 실제 Resource icon Orbit과 Compiler Diagram 최종 Preview를 분리하며 승인 전 Board를 변경하지 않는다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-17",
+        "lastVerified": "2026-07-19",
         "commands": [
           "pnpm harness:check",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts src/routes/ai-architecture-draft-stream.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test --test-name-pattern \"does not answer the backend choice\" src/services/aiArchitectureDrafts.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-draft-clarification.test.ts features/workspace/workspace-ai-draft-stream.test.ts app/workspace/ai/use-ai-start-workflow.test.ts",
           "pnpm architecture-board-knowledge:check",
           "pnpm architecture-board-evidence:check",
           "pnpm architecture-board-evidence-review:check",
@@ -575,9 +580,27 @@
           "pnpm lint",
           "pnpm typecheck",
           "pnpm build",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern natural-language apps/api/src/services/aiArchitectureDrafts.test.ts",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test apps/api/src/services/aiArchitecturePatchPreview.test.ts",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test apps/api/src/services/architectureResourceAliases.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test apps/web/features/workspace/workspace-ai-draft-clarification.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test apps/web/app/workspace/ai/use-ai-start-workflow.test.ts apps/web/app/workspace/ai/selected-option-model.test.ts apps/web/app/workspace/ai/workspace-ai-presentation.test.ts apps/web/features/workspace/workspace-ai-chat-suggestion-submission.test.ts",
+          ".\\node_modules\\.bin\\tsc.CMD --noEmit -p apps/api/tsconfig.json",
+          ".\\node_modules\\.bin\\tsc.CMD --noEmit -p apps/web/tsconfig.json",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern \"forwards accepted natural-language answers|understands natural-language clarification examples\" apps/api/src/services/aiArchitectureDrafts.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test apps/web/features/workspace/workspace-ai-chat-status.test.ts",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern \"which requirement to relax\" apps/api/src/services/aiArchitectureDrafts.test.ts",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test apps/api/src/services/aiArchitectureQBusiness.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern \"draft failures\" apps/web/features/workspace/workspace-ai-chat-consolidation.test.ts",
+          "pnpm --filter @sketchcatch/api --filter @sketchcatch/web typecheck",
+          "pnpm --filter @sketchcatch/api typecheck",
+          ".\\packages\\types\\node_modules\\.bin\\tsx.CMD --test packages/types/src/architecture-technology-stack.test.ts",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern \"structured Amazon Q context\" apps/api/src/services/aiArchitectureDrafts.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern \"common natural-language answers\" apps/web/features/workspace/workspace-ai-draft-clarification.test.ts",
+          "pnpm --filter @sketchcatch/types --filter @sketchcatch/api --filter @sketchcatch/web typecheck",
           "git diff --check"
         ],
-        "notes": "000 Compiler implementation remains complete: the checked-in 29+1 knowledge artifact expands bounded geometry candidates, keeps source/requested-original/presentation/semantic selection explicit, forwards Reverse Engineering diagnostics, and fingerprint-gates visual-only Template variants. `/workspace/ai` was rebuilt from the cleanup baseline with a semantic clicked-option trail, deterministic presentation-only Orbit sourced only from actual `/Resource-Icons_07312025/` catalog entries, and a Compiler-authoritative read-only final Diagram. The deleted progress card, requirement list, history panel, mobile tabs, and unused backend progress features remain absent. Focused Workspace AI/Compiler tests passed 94/94, full Web regression passed 545/545, and harness/lint/typecheck/build/diff checks passed. Browser QA covered desktop, breakpoint, tablet, and 390x844 mobile layouts, continuous Orbit response motion, the independent final reveal, pan/zoom, zero horizontal overflow, and zero new console errors or warnings after the viewer-anchor fix; Board application was not used. The aggregate feature remains in_progress only for the separately owned Compiler evidence and human-review queue."
+        "notes": "000 Compiler implementation remains complete: the checked-in 29+1 knowledge artifact expands bounded geometry candidates, keeps source/requested-original/presentation/semantic selection explicit, forwards Reverse Engineering diagnostics, and fingerprint-gates visual-only Template variants. `/workspace/ai` was rebuilt from the cleanup baseline with a semantic clicked-option trail, deterministic presentation-only Orbit sourced only from actual `/Resource-Icons_07312025/` catalog entries, and a Compiler-authoritative read-only final Diagram. The deleted progress card, requirement list, history panel, mobile tabs, and unused backend progress features remain absent. Focused Workspace AI/Compiler tests passed 94/94, full Web regression passed 545/545, and harness/lint/typecheck/build/diff checks passed. Browser QA covered desktop, breakpoint, tablet, and 390x844 mobile layouts, continuous Orbit response motion, the independent final reveal, pan/zoom, zero horizontal overflow, and zero new console errors or warnings after the viewer-anchor fix; Board application was not used. The aggregate feature remains in_progress only for the separately owned Compiler evidence and human-review queue. Natural-language clarification answers are now validated against their current question, rejected answers repeat that question, and accepted structured answers are forwarded to Amazon Q without question-text contamination; focused API tests passed 81/81 and focused Web tests passed 12/12. The backend clarification follow-up now rejects both unrelated recipe requests and API information requests that do not express a backend decision; the focused regression, live Web-to-API request, and API typecheck pass. All 15 required clarification questions now reject explanation-only answers, and both Workspace chat surfaces render an accepted natural-language answer as a disabled selected existing option or a new custom option; focused API tests pass 5/5, focused Web tests pass 6/6, and API/Web typechecks pass. Five additional clarification expressions now pass after expanding database, region, and upload semantics; five additional diagram patch instructions also produce the requested Preview graphs. Every supported resource type now has Korean natural-language aliases and generated variants, with complete alias coverage at 2/2 and patch regressions at 3/3. Cross-question free-form answers now require category-specific evidence across all 15 required questions, and rejected answers explain why before repeating the question; four focused API regressions, focused Web feedback/selection checks, and API/Web typechecks pass. Both chat surfaces show the accepted natural-language value in a dedicated row while disabling the answered question options. Traffic clarification now distinguishes daily visitor counts from concurrent-user counts, so daily 500 maps to medium while concurrent 500 maps to large; Spring Boot wording also reuses the existing complex business logic option. Diagram-generation progress now advances every 1.5 seconds through a fifth finalization stage instead of holding the intent step for 3 seconds. The `/workspace/ai` selected answer keeps its pressed styling without rendering a redundant selected-text suffix. Its generation progress step is owned by the persistent transcript and passed into the conditional card, preventing visible resets to the first stage. Repeated Amazon Q architecture validation failures now trigger a dedicated Amazon Q conflict-diagnosis call; its question and preserve-versus-relax suggestions are returned unchanged through the existing clarification flow instead of an HTTP 422. The production Amazon Q Business provider now sends that diagnosis through ChatSync instead of returning another local canonical plan, accepts both JSON and plain-text Q answers, and the Workspace dock shows only one short user error while keeping diagnostics in the console. Frontend and backend clarification answers now share a technology-stack classifier across types, API, and Web, so common framework names map to the existing static/SPA/SSR/mobile and simple/complex/microservices choices without inventing a new option; ambiguous database products do not infer data size."
       },
       "notes": "Compiler proposals may diagnose but do not hard-reject requirement, deployment, Provider, or Terraform conflicts; application remains user-accepted and Deployment safety remains unchanged."
     },
@@ -945,6 +968,8 @@
         "lastVerified": "2026-07-18",
         "commands": [
           "per-commit focused Web contract and state tests for commits 1-26",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/presentation/presentation-typography.test.ts features/diagram-editor/DiagramNodeView.test.ts features/diagram-editor/diagram-editor-layout.test.ts features/workspace/live-observation-architecture.test.ts features/workspace/deployment-three-stage-flow.test.ts features/workspace/workspace-ai-workbench-contract.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/presentation/presentation-typography.test.ts",
           "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts",
           "pnpm --filter @sketchcatch/web test",
           "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts features/diagram-editor/diagram-editor-viewer-policy.test.ts features/diagram-editor/workspace-panel-preferences.test.ts",
@@ -955,7 +980,7 @@
           "pnpm build",
           "git diff --check"
         ],
-        "notes": "All 26 planned implementation commits were verified before commit. Follow-ups remove the redundant top-bar panel toggles and keep manual Fit View's automatic viewport move out of ProjectDraft dirty state while preserving accessible edge handles, panel preferences, and direct user viewport persistence. The focused dirty and cost regressions pass 77/77; harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 786/790, with four unrelated existing generated Architecture Board artifact line-ending and Resource catalog contract failures. Signed-in localhost QA confirmed cost tab, period, users, usage range, connection, direct URL entry, and browser history restoration."
+        "notes": "All 26 planned implementation commits were verified before commit. Follow-ups remove the redundant top-bar panel toggles and keep manual Fit View's automatic viewport move out of ProjectDraft dirty state while preserving accessible edge handles, panel preferences, and direct user viewport persistence. Presentation typography now adds an auditable 6px to every explicit Web text size, resolves UI/code text to bundled Pretendard 1.3.9 through one shared token path, applies the same font/size/weight rules to the generated standalone S3 audience page, and reduces explicit text weights above 400 by one 100-point step; focused dependent tests pass 135/135 and the strengthened font audit passes 4/4. The focused dirty and cost regressions pass 77/77; harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 786/790, with four unrelated existing generated Architecture Board artifact line-ending and Resource catalog contract failures. Signed-in localhost QA confirmed cost tab, period, users, usage range, connection, direct URL entry, and browser history restoration."
       },
       "notes": "No DB schema, Drizzle migration, cloud mutation, deployment, or Git/CI/CD handoff was performed."
     }

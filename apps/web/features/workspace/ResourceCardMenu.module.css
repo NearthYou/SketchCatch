@@ -20,8 +20,8 @@
   cursor: pointer;
   display: grid;
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   gap: 10px;
   grid-template-columns: 18px minmax(0, 1fr);
   min-height: 40px;

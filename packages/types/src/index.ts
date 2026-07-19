@@ -31,6 +31,7 @@ export type ApiErrorCode =
   | "PUBLIC_REPOSITORY_BRANCH_UNAVAILABLE"
   | "PUBLIC_REPOSITORY_RATE_LIMITED"
   | "PUBLIC_REPOSITORY_PROVIDER_UNAVAILABLE"
+  | "CODECONNECTION_REPOSITORY_ACCESS_REQUIRED"
   | "REPOSITORY_ACCESS_VERIFICATION_REQUIRED"
   | "LIVE_OBSERVATION_DISABLED"
   | "LIVE_OBSERVATION_CACHE_UNAVAILABLE"
@@ -2121,6 +2122,10 @@ export type DeploymentPlanArtifact = {
   sha256: string;
   accountId: string;
   region: string;
+  stateBaselineDeploymentId: string | null;
+  stateObjectKey: string | null;
+  stateLineageSha256: string | null;
+  stateSerial: number | null;
   createdAt: IsoDateTimeString;
 };
 
@@ -2145,9 +2150,11 @@ export type AwsConnectionDeletionPreviewResponse = {
       serviceRoleName: string;
       logGroupName: string;
     }>;
-    codeConnection: boolean;
   };
   preservedResources: ["CloudFormation Stack", "Terraform Execution Role"];
+  preservedRecords: {
+    reverseEngineeringScans: number;
+  };
   confirmationToken: string;
 };
 
@@ -2270,7 +2277,7 @@ export type ReverseEngineeringScanLogLevel = "INFO" | "WARN" | "ERROR";
 export type ReverseEngineeringScan = {
   id: string;
   projectId: string;
-  awsConnectionId: string;
+  awsConnectionId: string | null;
   provider: CloudProvider;
   region: string;
   resourceTypes: ReverseEngineeringResourceSelection[];
@@ -3335,8 +3342,14 @@ export type ArchitectureDraftCandidateExclusion = {
   label: string;
 };
 
+export type ArchitectureDraftClarificationAnswer = {
+  questionId: string;
+  answer: string;
+};
+
 export type CreateArchitectureDraftRequest = {
   prompt: string;
+  clarificationAnswers?: readonly ArchitectureDraftClarificationAnswer[] | undefined;
   candidateExclusions?: readonly ArchitectureDraftCandidateExclusion[] | undefined;
   templateId?: TemplateId | undefined;
   repositoryEvidence?:
@@ -3370,8 +3383,10 @@ export type AiArchitectureDraftResult = {
 
 export type ArchitectureDraftClarification = {
   status: "needs_clarification";
+  questionId: string;
   question: string;
   suggestions: string[];
+  validationMessage?: string | undefined;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -4284,4 +4299,5 @@ export type TerraformSyncToDiagramResponse = {
   proposals?: TerraformDiagramChangeProposal[] | undefined;
 };
 
+export * from "./architecture-technology-stack.ts";
 export * from "./runtime-convergence.ts";

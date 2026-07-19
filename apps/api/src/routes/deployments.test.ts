@@ -554,6 +554,23 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   }
 
+  async findReusablePreparedDeployment(
+    candidateProjectId: string,
+    candidatePreparationKey: string
+  ) {
+    const candidate = this.deployment;
+    if (
+      !candidate ||
+      candidate.projectId !== candidateProjectId ||
+      candidate.preparationKey !== candidatePreparationKey ||
+      candidate.approvedAt !== null ||
+      !["PENDING", "RUNNING"].includes(candidate.status)
+    ) {
+      return undefined;
+    }
+    return candidate;
+  }
+
   async findDeploymentById(candidateDeploymentId: string) {
     this.calls.push({
       name: "findDeploymentById",
@@ -650,7 +667,8 @@ class FakeDeploymentRepository implements DeploymentRepository {
   };
 
   markDeploymentPlanRunning: DeploymentRepository["markDeploymentPlanRunning"] = async (
-    candidateDeploymentId
+    candidateDeploymentId,
+    operation = "apply"
   ) => {
     this.calls.push({
       name: "markDeploymentPlanRunning",
@@ -669,6 +687,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
       ...this.deployment,
       status: "RUNNING",
       activeStage: "plan",
+      preparationKey: operation === "destroy" ? null : this.deployment.preparationKey,
       failureStage: null,
       errorSummary: null,
       ...clearDeploymentApprovalSnapshot()
@@ -1183,6 +1202,16 @@ type DeploymentRouteTestOptions = {
     projectId: string;
     userId: string;
   }) => Promise<void>;
+  verifyProjectRepositoryAccess?: (input: {
+    db: DatabaseClient["db"];
+    projectId: string;
+    userId: string;
+  }) => Promise<{
+    buildEnvironment: {
+      repositoryVerificationStatus: "not_checked" | "verified" | "failed";
+      repositoryVerificationStatusReason: string | null;
+    } | null;
+  }>;
   retryApplicationFrontendRelease?: (input: {
     db: DatabaseClient["db"];
     deploymentId: string;
@@ -1243,6 +1272,9 @@ async function buildDeploymentTestApp(
     ...(routeOptions.prepareProjectBuildEnvironment
       ? { prepareProjectBuildEnvironment: routeOptions.prepareProjectBuildEnvironment }
       : {}),
+    ...(routeOptions.verifyProjectRepositoryAccess
+      ? { verifyProjectRepositoryAccess: routeOptions.verifyProjectRepositoryAccess }
+      : {}),
     ...(routeOptions.retryApplicationFrontendRelease
       ? { retryApplicationFrontendRelease: routeOptions.retryApplicationFrontendRelease }
       : {}),
@@ -1294,6 +1326,7 @@ function createDeploymentRecord(
     rollbackTargetDeploymentId: null,
     preparedDraftRevision: null,
     preparedSnapshotHash: null,
+    preparationKey: null,
     currentPlanArtifactId: null,
     stateObjectKey: null,
     resultWarningSummary: null,
@@ -1400,6 +1433,10 @@ function createDeploymentPlanArtifactRecord(
     sha256: "a".repeat(64),
     accountId: "123456789012",
     region: "ap-northeast-2",
+    stateBaselineDeploymentId: null,
+    stateObjectKey: null,
+    stateLineageSha256: null,
+    stateSerial: null,
     createdAt: fixedNow,
     ...overrides
   };
@@ -1648,6 +1685,7 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
         source: "direct",
         preparedDraftRevision: null,
         preparedSnapshotHash: null,
+        preparationKey: null,
         rollbackOfDeploymentId: null,
         rollbackTargetDeploymentId: null,
         status: "PENDING"
@@ -1686,6 +1724,80 @@ test("POST /api/projects/:projectId/deployments/prepare locks the saved draft re
     assert.equal(createCall.input.preparedDraftRevision, 7);
     assert.equal(createCall.input.preparedSnapshotHash, body.deployment.preparedSnapshotHash);
   }
+
+  await app.close();
+});
+
+test("POST prepare reuses one active Deployment for the same saved snapshot", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository);
+  const request = {
+    method: "POST" as const,
+    url: `/api/projects/${projectId}/deployments/prepare`,
+    headers: await authHeaders(),
+    payload: {
+      architectureId,
+      terraformArtifactId,
+      awsConnectionId,
+      draftRevision: 7,
+      scope: "auto"
+    }
+  };
+
+  const firstResponse = await app.inject(request);
+  const secondResponse = await app.inject(request);
+
+  assert.equal(firstResponse.statusCode, 201);
+  assert.equal(secondResponse.statusCode, 201);
+  assert.equal(
+    firstResponse.json<DeploymentResponse>().deployment.id,
+    secondResponse.json<DeploymentResponse>().deployment.id
+  );
+  const createCalls = repository.calls.filter((call) => call.name === "createDeployment");
+  assert.equal(createCalls.length, 1);
+  if (createCalls[0]?.name === "createDeployment") {
+    assert.match(
+      "preparationKey" in createCalls[0].input &&
+        typeof createCalls[0].input.preparationKey === "string"
+        ? createCalls[0].input.preparationKey
+        : "",
+      /^[0-9a-f]{64}$/
+    );
+  }
+
+  await app.close();
+});
+
+test("POST prepare never reuses a Deployment carrying a destroy Plan", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository);
+  const request = {
+    method: "POST" as const,
+    url: `/api/projects/${projectId}/deployments/prepare`,
+    headers: await authHeaders(),
+    payload: {
+      architectureId,
+      terraformArtifactId,
+      awsConnectionId,
+      draftRevision: 7,
+      scope: "auto"
+    }
+  };
+
+  await app.inject(request);
+  repository.deployment = {
+    ...repository.deployment!,
+    currentPlanArtifactId: planArtifactId
+  };
+  repository.planArtifact = createDeploymentPlanArtifactRecord({ operation: "destroy" });
+
+  const response = await app.inject(request);
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(
+    repository.calls.filter((call) => call.name === "createDeployment").length,
+    2
+  );
 
   await app.close();
 });
@@ -1837,7 +1949,10 @@ test("POST /api/projects/:projectId/deployments/prepare blocks Terraform matchin
 
   assert.equal(response.statusCode, 409);
   assert.match(response.json().message, /analysis-excluded resource/i);
-  assert.equal(repository.calls.some((call) => call.name === "createDeployment"), false);
+  assert.equal(
+    repository.calls.some((call) => call.name === "createDeployment"),
+    false
+  );
 
   await app.close();
 });
@@ -2511,7 +2626,7 @@ test("POST /api/deployments/:deploymentId/plan starts Terraform plan in the back
   await app.close();
 });
 
-test("POST plan prepares an ECS project build environment before starting preflight and Terraform", async () => {
+test("POST plan prepares and verifies an ECS project build environment before starting Terraform", async () => {
   const repository = new FakeDeploymentRepository();
   const calls: string[] = [];
   repository.deployment = createDeploymentRecord(deploymentId, {
@@ -2524,6 +2639,17 @@ test("POST plan prepares an ECS project build environment before starting prefli
       assert.equal(input.projectId, projectId);
       assert.equal(input.userId, userId);
       calls.push("prepare_build_environment");
+    },
+    verifyProjectRepositoryAccess: async (input) => {
+      assert.equal(input.projectId, projectId);
+      assert.equal(input.userId, userId);
+      calls.push("verify_repository_access");
+      return {
+        buildEnvironment: {
+          repositoryVerificationStatus: "verified",
+          repositoryVerificationStatusReason: null
+        }
+      };
     },
     runDeploymentPlan: async (input) => {
       calls.push("preflight_and_plan");
@@ -2549,9 +2675,200 @@ test("POST plan prepares an ECS project build environment before starting prefli
   });
 
   assert.equal(response.statusCode, 202);
-  assert.deepEqual(calls, ["prepare_build_environment", "preflight_and_plan"]);
+  assert.deepEqual(calls, [
+    "prepare_build_environment",
+    "verify_repository_access",
+    "preflight_and_plan"
+  ]);
   await app.close();
 });
+
+test("POST plan dispatches durable work without waiting for build environment preparation", async () => {
+  const repository = new FakeDeploymentRepository();
+  const jobRepository = new FakeDeploymentJobRepository();
+  const dispatcher = new FakeDeploymentWorkerDispatcher();
+  let prepareCalls = 0;
+  let verifyCalls = 0;
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  const app = await buildDeploymentTestApp(repository, {
+    createDeploymentJobRepository: () => jobRepository,
+    workerDispatcher: dispatcher,
+    workerDispatchMode: "ecs",
+    prepareProjectBuildEnvironment: async () => {
+      prepareCalls += 1;
+    },
+    verifyProjectRepositoryAccess: async () => {
+      verifyCalls += 1;
+      return {
+        buildEnvironment: {
+          repositoryVerificationStatus: "verified",
+          repositoryVerificationStatusReason: null
+        }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  assert.equal(dispatcher.dispatchCalls.length, 1);
+  assert.equal(prepareCalls, 0);
+  assert.equal(verifyCalls, 0);
+  await app.close();
+});
+
+test("concurrent POST plan requests share one build preparation and repository verification", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  let prepareCalls = 0;
+  let verifyCalls = 0;
+  let planCalls = 0;
+  let releasePreparation: (() => void) | undefined;
+  let markPreparationStarted: (() => void) | undefined;
+  let markPlanCompleted: (() => void) | undefined;
+  const preparationStarted = new Promise<void>((resolve) => {
+    markPreparationStarted = resolve;
+  });
+  const planCompleted = new Promise<void>((resolve) => {
+    markPlanCompleted = resolve;
+  });
+  const app = await buildDeploymentTestApp(repository, {
+    prepareProjectBuildEnvironment: async () => {
+      prepareCalls += 1;
+      if (prepareCalls > 1) return;
+      markPreparationStarted?.();
+      await new Promise<void>((resolve) => {
+        releasePreparation = resolve;
+      });
+    },
+    verifyProjectRepositoryAccess: async () => {
+      verifyCalls += 1;
+      return {
+        buildEnvironment: {
+          repositoryVerificationStatus: "verified",
+          repositoryVerificationStatusReason: null
+        }
+      };
+    },
+    runDeploymentPlan: async (input) => {
+      planCalls += 1;
+      markPlanCompleted?.();
+      return {
+        deployment: createDeploymentRecord(input.deploymentId, {
+          scope: "full_stack",
+          targetKind: "ecs_fargate",
+          status: "PENDING"
+        }),
+        optimization: { outcome: "execute", reason: "initial_plan" },
+        terraform: { init: null, validate: null, plan: null, showJson: null }
+      };
+    }
+  });
+
+  const firstRequest = app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+  await preparationStarted;
+  const secondResponse = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+  releasePreparation?.();
+  const firstResponse = await firstRequest;
+  await planCompleted;
+
+  assert.equal(firstResponse.statusCode, 202);
+  assert.equal(secondResponse.statusCode, 202);
+  assert.equal(prepareCalls, 1);
+  assert.equal(verifyCalls, 1);
+  assert.equal(planCalls, 1);
+  await app.close();
+});
+
+test("POST plan accepts background build preparation and records its failure", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  const app = await buildDeploymentTestApp(repository, {
+    prepareProjectBuildEnvironment: async () => {
+      throw new Error("build preparation failed");
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  await waitForTestCondition(() => repository.deployment?.status === "FAILED");
+  assert.equal(repository.deployment.status, "FAILED");
+  assert.equal(repository.deployment.failureStage, "build_environment");
+  await app.close();
+});
+
+test("POST plan accepts background repository verification and stops before Terraform on failure", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  let planCalls = 0;
+  const app = await buildDeploymentTestApp(repository, {
+    prepareProjectBuildEnvironment: async () => undefined,
+    verifyProjectRepositoryAccess: async () => ({
+      buildEnvironment: {
+        repositoryVerificationStatus: "failed",
+        repositoryVerificationStatusReason: "Confirmed commit checkout did not match"
+      }
+    }),
+    runDeploymentPlan: async (input) => {
+      planCalls += 1;
+      return {
+        deployment: createDeploymentRecord(input.deploymentId),
+        optimization: { outcome: "execute", reason: "initial_plan" },
+        terraform: { init: null, validate: null, plan: null, showJson: null }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  await waitForTestCondition(() => repository.deployment?.status === "FAILED");
+  assert.equal(planCalls, 0);
+  assert.equal(repository.deployment.status, "FAILED");
+  assert.equal(repository.deployment.failureStage, "build_environment");
+  await app.close();
+});
+
+async function waitForTestCondition(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (condition()) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.fail("Timed out waiting for the background deployment condition");
+}
 
 test("POST frontend retry runs the owner-scoped frontend-only release operation", async () => {
   const repository = new FakeDeploymentRepository();
@@ -2609,6 +2926,35 @@ test("POST frontend retry dispatches a durable ECS worker job by default", async
   assert.equal(activeJob?.startedFromStatus, "PARTIALLY_FAILED");
   assert.equal(activeJob?.startedFromFailureStage, "application_release");
   assert.equal(dispatcher.dispatchCalls.length, 1);
+
+  await app.close();
+});
+
+test("POST plan shapes its accepted response before dispatching durable work", async () => {
+  const repository = new FakeDeploymentRepository();
+  const jobRepository = new FakeDeploymentJobRepository();
+  const dispatcher = new FakeDeploymentWorkerDispatcher();
+  repository.deployment = {
+    ...createDeploymentRecord(deploymentId),
+    createdAt: "invalid-date" as never
+  };
+  repository.deployments = [repository.deployment];
+  const app = await buildDeploymentTestApp(repository, {
+    createDeploymentJobRepository: () => jobRepository,
+    workerDispatcher: dispatcher,
+    workerDispatchMode: "ecs"
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 500);
+  assert.equal(dispatcher.dispatchCalls.length, 0);
+  assert.equal(await jobRepository.findActiveDeploymentJob(deploymentId), undefined);
+  assert.equal(repository.deployment.status, "FAILED");
 
   await app.close();
 });
@@ -3039,9 +3385,6 @@ test("POST /api/deployments/:deploymentId/revoke-approval clears the apply appro
   await app.close();
 });
 
-
-
-
 test("POST /api/deployments/:deploymentId/approve exposes Terraform safety conflicts instead of returning 500", async () => {
   const repository = new FakeDeploymentRepository();
   const app = await buildDeploymentTestApp(repository, {
@@ -3287,6 +3630,7 @@ test("POST /api/deployments/:deploymentId/apply rejects failed deployments until
   const repository = new FakeDeploymentRepository();
   repository.deployment = createDeploymentRecord(deploymentId, {
     status: "FAILED",
+    preparationKey: "a".repeat(64),
     currentPlanArtifactId: planArtifactId,
     planSummary: {
       createCount: 1,
@@ -3392,6 +3736,7 @@ test("POST /api/deployments/:deploymentId/destroy/plan starts cleanup destroy pl
   assert.equal(body.deployment.status, "RUNNING");
   assert.equal(body.deployment.activeStage, "plan");
   assert.equal(body.deployment.failureStage, null);
+  assert.equal(repository.deployment.preparationKey, null);
   assert.equal(destroyPlanCalls.length, 1);
   const { abortSignal: destroyPlanAbortSignal, ...destroyPlanCall } = destroyPlanCalls[0]!;
   assert.equal(destroyPlanAbortSignal instanceof AbortSignal, true);

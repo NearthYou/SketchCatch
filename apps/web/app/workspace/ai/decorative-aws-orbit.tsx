@@ -12,7 +12,7 @@ const ORBIT_LAYER_GEOMETRY = [
   { aspect: 1.55, layer: 2, tilt: 8 }
 ] as const;
 
-/** 실제 AWS icon을 원본 목업의 비원형 궤도 위에서 장식적으로 공전시킵니다. */
+/** 실제 AWS icon을 데스크톱 원형·모바일 타원 궤도 위에서 장식적으로 공전시킵니다. */
 export function DecorativeAwsOrbit({
   composition,
   convergenceLevel,
@@ -72,6 +72,7 @@ export function DecorativeAwsOrbit({
       {ORBIT_LAYER_GEOMETRY.map(({ aspect, layer, tilt }) => (
         <span
           className={styles.orbitLayerFrame}
+          data-desktop-orbit-shape="circle"
           data-layer={layer}
           data-orbit-aspect={aspect}
           data-orbit-tilt={tilt}
@@ -79,9 +80,9 @@ export function DecorativeAwsOrbit({
           key={layer}
           style={
             {
-              "--orbit-tilt": `${tilt}deg`,
-              "--orbit-y-scale": 1 / aspect,
-              "--orbit-y-scale-inverse": aspect
+              "--orbit-ellipse-tilt": `${tilt}deg`,
+              "--orbit-ellipse-y-scale": 1 / aspect,
+              "--orbit-ellipse-y-scale-inverse": aspect
             } as CSSProperties
           }
         >

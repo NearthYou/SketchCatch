@@ -690,8 +690,35 @@ async function reconcileCodeBuildProject(
     await codeBuild.send(new UpdateProjectCommand(project));
     return false;
   }
-  await createCodeBuildProjectWithPropagationRetry(codeBuild, project);
-  return true;
+  try {
+    await createCodeBuildProjectWithPropagationRetry(codeBuild, project);
+    return true;
+  } catch (error) {
+    if (!isCodeBuildProjectAlreadyExists(error)) throw error;
+    await reconcileConcurrentlyCreatedCodeBuildProject(codeBuild, input, project, error);
+    return false;
+  }
+}
+
+async function reconcileConcurrentlyCreatedCodeBuildProject(
+  codeBuild: AwsCommandClient,
+  input: DesiredProjectBuildEnvironment,
+  project: ReturnType<typeof createCodeBuildProjectInput>,
+  creationError: unknown
+): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    const observed = await getCodeBuildProject(codeBuild, input.codeBuildProjectName);
+    if (observed) {
+      if (!hasOwnershipTags(observed.tags, input.projectId)) {
+        throw new Error("Refusing to update an unmanaged CodeBuild project");
+      }
+      await codeBuild.send(new UpdateProjectCommand(project));
+      return;
+    }
+    const retryDelayMs = iamPropagationRetryDelaysMs[attempt];
+    if (retryDelayMs === undefined) throw creationError;
+    await delay(retryDelayMs);
+  }
 }
 
 async function createCodeBuildProjectWithPropagationRetry(
@@ -1235,4 +1262,9 @@ function isCodeBuildRolePropagationError(error: unknown): boolean {
   return error.message
     .toLowerCase()
     .includes("codebuild is not authorized to perform: sts:assumerole on service role");
+}
+
+function isCodeBuildProjectAlreadyExists(error: unknown): boolean {
+  const name = getAwsErrorName(error);
+  return name === "ResourceAlreadyExists" || name === "ResourceAlreadyExistsException";
 }

@@ -50,8 +50,6 @@ import {
   listTerraformOutputs,
   prepareDeployment,
   prepareInfrastructureRollback,
-  prepareProjectBuildEnvironment,
-  verifyProjectRepositoryAccess,
   retryDeploymentFrontend,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
@@ -85,7 +83,6 @@ import {
   getDeploymentTargetPrerequisite,
   type DeploymentTargetPrerequisite
 } from "./deployment-preparation-error";
-import { verifyRepositoryAccessForPlan } from "./repository-access-verification";
 import type { RequestState } from "./workspace-right-panel.types";
 import { canLoadDeploymentData, type DeploymentAvailability } from "./deployment-availability";
 import {
@@ -93,6 +90,7 @@ import {
   getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
   hasDeploymentDraftChanges,
+  resolveSelectedDirectDeploymentStepId,
   shouldShowDeploymentValidationActions,
   requiresProjectBuildEnvironment,
   type DirectDeploymentStepId
@@ -127,6 +125,7 @@ import {
 import styles from "./workspace.module.css";
 
 type DeploymentRuntimeSnapshot = {
+  readonly buildEnvironment: ProjectBuildEnvironment | null;
   readonly deployments: Deployment[];
   readonly releases: ApplicationRelease[];
   readonly logs: DeploymentLog[];
@@ -155,6 +154,7 @@ export const initialPreDeploymentCheckState: DeploymentPreDeploymentCheckState =
 export type DirectDeploymentScreenProps = {
   readonly confirmationDismissRequestId?: number | undefined;
   readonly deploymentAvailability: DeploymentAvailability;
+  readonly deploymentTargetSavedRevision?: number | undefined;
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
   readonly onConfirmationStateChange?: ((isOpen: boolean) => void) | undefined;
@@ -178,6 +178,7 @@ export type DirectDeploymentScreenProps = {
 export function DirectDeploymentScreen({
   confirmationDismissRequestId = 0,
   deploymentAvailability,
+  deploymentTargetSavedRevision = 0,
   diagramJson,
   hasUnsavedDeploymentBaseline,
   onApplyPlanApproved,
@@ -219,6 +220,14 @@ export function DirectDeploymentScreen({
     useState(false);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [failedActionStepId, setFailedActionStepId] =
+    useState<DirectDeploymentStepId | null>(null);
+  const [snapshotErrorMessage, setSnapshotErrorMessage] = useState("");
+  const [detailErrorMessage, setDetailErrorMessage] = useState("");
+  const [isInitialSnapshotLoading, setIsInitialSnapshotLoading] = useState(false);
+  const actionInFlightRef = useRef(false);
+  const pendingAutoAdvanceDeploymentIdRef = useRef("");
+  const latestDetailsDeploymentIdRef = useRef("");
   const [deploymentTargetPrerequisite, setDeploymentTargetPrerequisite] =
     useState<DeploymentTargetPrerequisite | null>(null);
   const [activeProgress, setActiveProgress] = useState<{
@@ -236,7 +245,7 @@ export function DirectDeploymentScreen({
 
   useEffect(() => {
     setDeploymentTargetPrerequisite(null);
-  }, [projectId, selectedAwsConnectionId, selectedScope]);
+  }, [deploymentTargetSavedRevision, projectId, selectedAwsConnectionId, selectedScope]);
 
   const verifiedAwsConnections = useMemo(
     () => awsConnections.filter((connection) => connection.status === "verified"),
@@ -348,9 +357,27 @@ export function DirectDeploymentScreen({
     () => getSafeDeploymentLinks(historyTerraformOutputs),
     [historyTerraformOutputs]
   );
-  const canStartDeploymentReview = selectedAwsConnectionId.length > 0 && requestState !== "loading";
+  const canStartDeploymentReview =
+    selectedAwsConnectionId.length > 0 &&
+    requestState !== "loading" &&
+    !isInitialSnapshotLoading;
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
-  const deploymentActions = getDeploymentActionState(selectedDeployment, requestState);
+  const canReconcileAcceptedPlan = Boolean(
+    requestState === "error" &&
+      failedActionStepId === "validation" &&
+      selectedDeployment &&
+      pendingAutoAdvanceDeploymentIdRef.current === selectedDeployment.id &&
+      (selectedDeployment.status === "RUNNING" || selectedDeployment.currentPlanArtifactId)
+  );
+  const reconciledRequestState: RequestState = canReconcileAcceptedPlan
+    ? selectedDeployment?.status === "RUNNING"
+      ? "loading"
+      : "idle"
+    : requestState;
+  const deploymentActions = getDeploymentActionState(
+    selectedDeployment,
+    reconciledRequestState
+  );
 
   const cleanupActionTargets = cleanupDeployments.map((deployment) => ({
     actions: getDeploymentActionState(deployment, requestState),
@@ -389,13 +416,15 @@ export function DirectDeploymentScreen({
   const directDeploymentFlow = getDirectDeploymentFlow({
     actions: deploymentActions,
     deployment: selectedDeployment,
+    failedStepId: failedActionStepId,
     hasUnsavedBaseline: hasCurrentDeploymentChanges,
     preflightState: directPreflightState,
+    reconciledRequestState,
     requestState
   });
   const deploymentProgressIsStarting = Boolean(
     activeProgress &&
-    (requestState === "loading" ||
+    (reconciledRequestState === "loading" ||
       preDeploymentState === "loading" ||
       (selectedDeployment?.status === "PENDING" && !selectedDeployment.currentPlanArtifactId))
   );
@@ -407,8 +436,19 @@ export function DirectDeploymentScreen({
   const needsBuildEnvironment = requiresProjectBuildEnvironment(selectedDeployment);
 
   useEffect(() => {
-    setSelectedDirectStepId(directDeploymentFlow.activeStepId);
-  }, [directDeploymentFlow.activeStepId]);
+    if (
+      reconciledRequestState === "idle" &&
+      selectedDeployment &&
+      pendingAutoAdvanceDeploymentIdRef.current === selectedDeployment.id &&
+      directDeploymentFlow.activeStepId === "approval"
+    ) {
+      pendingAutoAdvanceDeploymentIdRef.current = "";
+      setRequestState("idle");
+      setFailedActionStepId(null);
+      setErrorMessage("");
+      setSelectedDirectStepId("approval");
+    }
+  }, [directDeploymentFlow.activeStepId, reconciledRequestState, selectedDeployment]);
 
   useEffect(() => {
     if (
@@ -452,8 +492,15 @@ export function DirectDeploymentScreen({
 
   const loadDeploymentRuntimeSnapshot =
     useCallback(async (): Promise<DeploymentRuntimeSnapshot> => {
-      const [nextDeployments, nextReleases, nextLogs, nextResources, nextOutputs] =
-        await Promise.all([
+      const [
+        nextBuildEnvironment,
+        nextDeployments,
+        nextReleases,
+        nextLogs,
+        nextResources,
+        nextOutputs
+      ] = await Promise.all([
+          getProjectBuildEnvironment(projectId),
           listDeployments(projectId),
           listApplicationReleases(projectId),
           selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([]),
@@ -464,6 +511,7 @@ export function DirectDeploymentScreen({
         ]);
 
       return {
+        buildEnvironment: nextBuildEnvironment,
         deployments: nextDeployments,
         releases: nextReleases,
         logs: nextLogs,
@@ -475,6 +523,7 @@ export function DirectDeploymentScreen({
 
   const applyDeploymentRuntimeSnapshot = useCallback(
     (snapshot: DeploymentRuntimeSnapshot): void => {
+      setBuildEnvironment(snapshot.buildEnvironment);
       setDeployments(snapshot.deployments);
       setApplicationReleases(snapshot.releases);
       setDeploymentLogs(snapshot.logs);
@@ -493,18 +542,25 @@ export function DirectDeploymentScreen({
   );
 
   const loadDeploymentPanelSnapshot = useCallback(async (): Promise<DeploymentPanelSnapshot> => {
-    const [nextConnections, nextBuildEnvironment, runtimeSnapshot] = await Promise.all([
-      listAwsConnections(),
-      getProjectBuildEnvironment(projectId),
-      loadDeploymentRuntimeSnapshot()
-    ]);
+    const [nextConnections, nextBuildEnvironment, nextDeployments, nextReleases] =
+      await Promise.all([
+        listAwsConnections(),
+        getProjectBuildEnvironment(projectId),
+        listDeployments(projectId),
+        listApplicationReleases(projectId)
+      ]);
 
     return {
-      ...runtimeSnapshot,
       awsConnections: nextConnections,
-      buildEnvironment: nextBuildEnvironment
+      buildEnvironment: nextBuildEnvironment,
+      deployments: nextDeployments,
+      releases: nextReleases,
+      logs: [],
+      resources: [],
+      outputs: [],
+      outputsDeploymentId: null
     };
-  }, [loadDeploymentRuntimeSnapshot, projectId]);
+  }, [projectId]);
 
   const applyDeploymentPanelSnapshot = useCallback(
     (snapshot: DeploymentPanelSnapshot): void => {
@@ -526,31 +582,38 @@ export function DirectDeploymentScreen({
 
   useEffect(() => {
     if (!canLoadDeploymentData(deploymentAvailability)) {
-      setErrorMessage("");
-      setRequestState("idle");
+      setSnapshotErrorMessage("");
+      setIsInitialSnapshotLoading(false);
       return;
     }
 
     let cancelled = false;
 
     async function loadDeploymentData(): Promise<void> {
-      await runRequest(async () => {
+      setIsInitialSnapshotLoading(true);
+      setSnapshotErrorMessage("");
+      try {
         const snapshot = await loadDeploymentPanelSnapshot();
-
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         applyDeploymentPanelSnapshot(snapshot);
-
         const latestVerifiedConnection = snapshot.awsConnections.find(
           (connection) => connection.status === "verified"
         );
         const latestDeployment = snapshot.deployments[0];
 
-        setSelectedAwsConnectionId((currentId) => currentId || latestVerifiedConnection?.id || "");
+        setSelectedAwsConnectionId(
+          (currentId) => currentId || latestVerifiedConnection?.id || ""
+        );
         setSelectedDeploymentId((currentId) => currentId || latestDeployment?.id || "");
-      }, "배포 정보를 불러오지 못했습니다.");
+        setSelectedDirectStepId(latestDeployment?.consolePhase ?? "validation");
+      } catch (error) {
+        if (!cancelled) {
+          setSnapshotErrorMessage(getApiErrorMessage(error, "배포 정보를 불러오지 못했습니다."));
+        }
+      } finally {
+        if (!cancelled) setIsInitialSnapshotLoading(false);
+      }
     }
 
     void loadDeploymentData();
@@ -573,24 +636,30 @@ export function DirectDeploymentScreen({
     dispatchTerraformOutputState({ type: "clear", deploymentId: selectedDeploymentId });
 
     async function loadApplyDetails(): Promise<void> {
-      await runRequest(async () => {
+      setDetailErrorMessage("");
+      try {
         const [logs, resources, outputs] = await Promise.all([
           listDeploymentLogs(selectedDeploymentId),
           listDeploymentResources(selectedDeploymentId),
           listTerraformOutputs(selectedDeploymentId)
         ]);
 
+        if (cancelled) return;
+        setDeploymentLogs(logs);
+        setDeploymentResources(resources);
+        dispatchTerraformOutputState({
+          type: "loaded",
+          deploymentId: selectedDeploymentId,
+          outputs
+        });
+        setShowApplyConfirmation(false);
+      } catch (error) {
         if (!cancelled) {
-          setDeploymentLogs(logs);
-          setDeploymentResources(resources);
-          dispatchTerraformOutputState({
-            type: "loaded",
-            deploymentId: selectedDeploymentId,
-            outputs
-          });
-          setShowApplyConfirmation(false);
+          setDetailErrorMessage(
+            getApiErrorMessage(error, "배포 세부정보를 불러오지 못했습니다.")
+          );
         }
-      }, "배포 로그를 불러오지 못했습니다.");
+      }
     }
 
     void loadApplyDetails();
@@ -659,7 +728,9 @@ export function DirectDeploymentScreen({
       }
     }).catch((error) => {
       if (!controller.signal.aborted) {
-        setErrorMessage(getApiErrorMessage(error, "Deployment 로그 스트림 연결에 실패했습니다."));
+        setDetailErrorMessage(
+          getApiErrorMessage(error, "Deployment 로그 스트림 연결에 실패했습니다.")
+        );
       }
     });
 
@@ -688,10 +759,13 @@ export function DirectDeploymentScreen({
 
         if (!cancelled) {
           applyDeploymentRuntimeSnapshot(snapshot);
+          setSnapshotErrorMessage("");
         }
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(getApiErrorMessage(error, "Deployment 상태 자동 갱신에 실패했습니다."));
+          setSnapshotErrorMessage(
+            getApiErrorMessage(error, "Deployment 상태 자동 갱신에 실패했습니다.")
+          );
         }
       } finally {
         isRefreshing = false;
@@ -714,19 +788,71 @@ export function DirectDeploymentScreen({
     shouldAutoRefreshSelectedDeployment
   ]);
 
-  async function runRequest(request: () => Promise<void>, fallbackMessage: string): Promise<void> {
+  async function runAction<T>(
+    stepId: DirectDeploymentStepId,
+    request: () => Promise<T>,
+    fallbackMessage: string
+  ): Promise<T | null> {
+    if (actionInFlightRef.current) return null;
+    actionInFlightRef.current = true;
     setRequestState("loading");
     setErrorMessage("");
+    setFailedActionStepId(null);
 
     try {
-      await request();
+      const result = await request();
       setRequestState("idle");
+      return result;
     } catch (error) {
       setRequestState("error");
-      setErrorMessage(getApiErrorMessage(error, fallbackMessage));
+      setFailedActionStepId(stepId);
+      setSelectedDirectStepId(stepId);
+      setErrorMessage(getDeploymentPreparationErrorMessage(error, fallbackMessage));
+      return null;
     } finally {
+      actionInFlightRef.current = false;
       setActiveProgress(null);
     }
+  }
+
+  function refreshDeploymentDetails(deploymentId: string): void {
+    latestDetailsDeploymentIdRef.current = deploymentId;
+    setDetailErrorMessage("");
+    void Promise.all([
+      listDeploymentLogs(deploymentId),
+      listDeploymentResources(deploymentId),
+      listTerraformOutputs(deploymentId)
+    ])
+      .then(([logs, resources, outputs]) => {
+        if (latestDetailsDeploymentIdRef.current !== deploymentId) return;
+        setDeploymentLogs(logs);
+        setDeploymentResources(resources);
+        dispatchTerraformOutputState({ type: "loaded", deploymentId, outputs });
+      })
+      .catch((error) => {
+        if (latestDetailsDeploymentIdRef.current === deploymentId) {
+          setDetailErrorMessage(
+            getApiErrorMessage(
+              error,
+              "작업은 접수됐지만 최신 로그와 Output을 불러오지 못했습니다."
+            )
+          );
+        }
+      });
+  }
+
+  function refreshBuildEnvironmentAfterPlan(deployment: Deployment): void {
+    if (!requiresProjectBuildEnvironment(deployment)) return;
+    void getProjectBuildEnvironment(projectId)
+      .then(setBuildEnvironment)
+      .catch((error) => {
+        setDetailErrorMessage(
+          getApiErrorMessage(
+            error,
+            "Plan은 접수됐지만 빌드 환경 상태를 다시 불러오지 못했습니다."
+          )
+        );
+      });
   }
 
   async function runPreDeploymentCheck(
@@ -840,17 +966,13 @@ export function DirectDeploymentScreen({
   }
 
   async function runDeploymentReviewStep(): Promise<void> {
-    if (!canRunDeploymentReviewStep) {
+    if (!canRunDeploymentReviewStep || actionInFlightRef.current) {
       return;
     }
 
     setActiveProgress({ operation: "plan", requestedAtMs: Date.now() });
-    setRequestState("loading");
-    setErrorMessage("");
     setDeploymentTargetPrerequisite(null);
-    let preparedArtifacts: PreparedWorkspaceDeploymentArtifacts;
-
-    try {
+    await runAction("validation", async () => {
       const target = await getProjectDeploymentTarget(projectId);
       const prerequisite = getDeploymentTargetPrerequisite({
         awsConnectionId: selectedAwsConnectionId,
@@ -860,83 +982,58 @@ export function DirectDeploymentScreen({
       });
       if (prerequisite) {
         setDeploymentTargetPrerequisite(prerequisite);
-        setRequestState("idle");
-        setActiveProgress(null);
         return;
       }
 
-      preparedArtifacts = await onPrepareDeploymentArtifacts();
-      setRequestState("idle");
-    } catch (error) {
-      setRequestState("error");
-      const fallbackMessage = getApiErrorMessage(
-        error,
-        "프로젝트 저장과 배포 준비에 실패했습니다."
-      );
-      setErrorMessage(getDeploymentPreparationErrorMessage(error, fallbackMessage));
-      return;
-    }
+      const preparedArtifacts = await onPrepareDeploymentArtifacts();
+      const checkPassed = await runPreDeploymentCheck(preparedArtifacts);
+      if (!checkPassed) return;
 
-    const checkPassed = await runPreDeploymentCheck(preparedArtifacts);
-
-    if (!checkPassed) {
-      return;
-    }
-
-    await startDeploymentReview(preparedArtifacts);
+      await startDeploymentReview(preparedArtifacts);
+    }, "프로젝트 저장·검증과 Terraform Plan을 시작하지 못했습니다.");
   }
 
   async function startDeploymentReview(
     savedArtifacts: PreparedWorkspaceDeploymentArtifacts
-  ): Promise<void> {
-    if (!canStartDeploymentReview) {
-      return;
-    }
-
+  ): Promise<Deployment> {
     dispatchTerraformOutputState({ type: "clear", deploymentId: null });
-    await runRequest(async () => {
-      const snapshot = await loadDeploymentPanelSnapshot();
+    const preparedDeployment = await prepareDeployment({
+      projectId,
+      architectureId: savedArtifacts.architecture.id,
+      terraformArtifactId: savedArtifacts.terraformArtifact.id,
+      awsConnectionId: selectedAwsConnectionId,
+      draftRevision: savedArtifacts.preparedDraftRevision,
+      scope: selectedScope
+    });
+    setDeployments((currentDeployments) => [
+      preparedDeployment,
+      ...currentDeployments.filter((deployment) => deployment.id !== preparedDeployment.id)
+    ]);
+    setSelectedDeploymentId(preparedDeployment.id);
+    pendingAutoAdvanceDeploymentIdRef.current = preparedDeployment.id;
 
-      applyDeploymentPanelSnapshot(snapshot);
-      setSelectedDeploymentId("");
-
-      const deployment = await prepareDeployment({
-        projectId,
-        architectureId: savedArtifacts.architecture.id,
-        terraformArtifactId: savedArtifacts.terraformArtifact.id,
-        awsConnectionId: selectedAwsConnectionId,
-        draftRevision: savedArtifacts.preparedDraftRevision,
-        scope: selectedScope
-      });
-      if (requiresProjectBuildEnvironment(deployment)) {
-        await verifyRepositoryAccessForPlan({
-          currentBuildEnvironment: buildEnvironment,
-          onBuildEnvironmentChange: setBuildEnvironment,
-          prepare: () => prepareProjectBuildEnvironment(projectId),
-          verify: () => verifyProjectRepositoryAccess(projectId)
-        });
-      }
-      const plannedDeployment = await runDeploymentPlan(deployment.id);
-      setDeployments((currentDeployments) => [plannedDeployment, ...currentDeployments]);
-      setSelectedDeploymentId(plannedDeployment.id);
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(plannedDeployment.id),
-        listDeploymentResources(plannedDeployment.id),
-        listTerraformOutputs(plannedDeployment.id)
-      ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({
-        type: "loaded",
-        deploymentId: plannedDeployment.id,
-        outputs
-      });
-      setShowApplyConfirmation(false);
-    }, "배포 검토를 시작하지 못했습니다.");
+    const plannedDeployment =
+      preparedDeployment.currentPlanArtifactId &&
+      preparedDeployment.currentPlanOperation === "apply"
+      ? preparedDeployment
+      : await runDeploymentPlan(preparedDeployment.id);
+    setDeployments((currentDeployments) => [
+      plannedDeployment,
+      ...currentDeployments.filter((deployment) => deployment.id !== plannedDeployment.id)
+    ]);
+    setSelectedDeploymentId(plannedDeployment.id);
+    if (plannedDeployment.consolePhase === "approval") {
+      pendingAutoAdvanceDeploymentIdRef.current = "";
+      setSelectedDirectStepId("approval");
+    }
+    refreshBuildEnvironmentAfterPlan(plannedDeployment);
+    refreshDeploymentDetails(plannedDeployment.id);
+    setShowApplyConfirmation(false);
+    return plannedDeployment;
   }
 
   async function startTerraformPlan(): Promise<void> {
-    if (!selectedDeployment || !canRunPlan) {
+    if (!selectedDeployment || !canRunPlan || actionInFlightRef.current) {
       return;
     }
 
@@ -946,32 +1043,23 @@ export function DirectDeploymentScreen({
       type: "clear",
       deploymentId: selectedDeployment.id
     });
-    await runRequest(async () => {
-      if (requiresProjectBuildEnvironment(selectedDeployment)) {
-        await verifyRepositoryAccessForPlan({
-          currentBuildEnvironment: buildEnvironment,
-          onBuildEnvironmentChange: setBuildEnvironment,
-          prepare: () => prepareProjectBuildEnvironment(projectId),
-          verify: () => verifyProjectRepositoryAccess(projectId)
-        });
-      }
-      const deployment = await runDeploymentPlan(selectedDeployment.id);
+    pendingAutoAdvanceDeploymentIdRef.current = selectedDeployment.id;
+    const deployment = await runAction(
+      "validation",
+      () => runDeploymentPlan(selectedDeployment.id),
+      "Terraform Plan을 시작하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
         )
       );
       setSelectedDeploymentId(deployment.id);
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(deployment.id),
-        listDeploymentResources(deployment.id),
-        listTerraformOutputs(deployment.id)
-      ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
+      refreshBuildEnvironmentAfterPlan(deployment);
+      refreshDeploymentDetails(deployment.id);
       setShowApplyConfirmation(false);
-    }, "Terraform Plan을 시작하지 못했습니다.");
+    }
   }
 
   async function approveCurrentPlan(): Promise<void> {
@@ -984,26 +1072,25 @@ export function DirectDeploymentScreen({
       type: "clear",
       deploymentId: selectedDeployment.id
     });
-    await runRequest(async () => {
-      const deployment = await approveDeploymentPlan(selectedDeployment.id);
+    const deployment = await runAction(
+      "approval",
+      () => approveDeploymentPlan(selectedDeployment.id),
+      "Terraform Plan을 승인하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
         )
       );
       setSelectedDeploymentId(deployment.id);
+      setSelectedDirectStepId("deployment");
       if (deployment.currentPlanOperation === "apply") {
         onApplyPlanApproved?.(deployment);
       }
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(deployment.id),
-        listDeploymentResources(deployment.id),
-        listTerraformOutputs(deployment.id)
-      ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
-    }, "Terraform Plan을 승인하지 못했습니다.");
+      refreshBuildEnvironmentAfterPlan(deployment);
+      refreshDeploymentDetails(deployment.id);
+    }
   }
 
   async function revokeCurrentPlanApproval(): Promise<void> {
@@ -1016,8 +1103,12 @@ export function DirectDeploymentScreen({
       type: "clear",
       deploymentId: selectedDeployment.id
     });
-    await runRequest(async () => {
-      const deployment = await revokeDeploymentApproval(selectedDeployment.id);
+    const deployment = await runAction(
+      "approval",
+      () => revokeDeploymentApproval(selectedDeployment.id),
+      "Plan 승인을 취소하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -1026,15 +1117,8 @@ export function DirectDeploymentScreen({
       setSelectedDeploymentId(deployment.id);
       setSelectedDirectStepId("approval");
       setShowApplyConfirmation(false);
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(deployment.id),
-        listDeploymentResources(deployment.id),
-        listTerraformOutputs(deployment.id)
-      ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
-    }, "Plan 승인을 취소하지 못했습니다.");
+      refreshDeploymentDetails(deployment.id);
+    }
   }
 
   async function startTerraformApply(): Promise<void> {
@@ -1048,8 +1132,12 @@ export function DirectDeploymentScreen({
       deploymentId: selectedDeployment.id
     });
     completionCandidateDeploymentIdsRef.current.add(selectedDeployment.id);
-    await runRequest(async () => {
-      const deployment = await executeDeployment(selectedDeployment.id);
+    const deployment = await runAction(
+      "deployment",
+      () => executeDeployment(selectedDeployment.id),
+      "Terraform Apply를 시작하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -1057,21 +1145,14 @@ export function DirectDeploymentScreen({
       );
       setSelectedDeploymentId(deployment.id);
       setShowApplyConfirmation(false);
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(deployment.id),
-        listDeploymentResources(deployment.id),
-        listTerraformOutputs(deployment.id)
-      ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
+      refreshDeploymentDetails(deployment.id);
       if (
         deployment.status === "SUCCESS" &&
         completionCandidateDeploymentIdsRef.current.delete(deployment.id)
       ) {
         onDeploymentSucceeded?.(deployment);
       }
-    }, "Terraform Apply를 시작하지 못했습니다.");
+    }
   }
 
   async function startTerraformDestroyPlan(targetDeployment: Deployment): Promise<void> {
@@ -1086,8 +1167,13 @@ export function DirectDeploymentScreen({
       type: "clear",
       deploymentId: targetDeployment.id
     });
-    await runRequest(async () => {
-      const deployment = await runDeploymentDestroyPlan(targetDeployment.id);
+    pendingAutoAdvanceDeploymentIdRef.current = targetDeployment.id;
+    const deployment = await runAction(
+      "validation",
+      () => runDeploymentDestroyPlan(targetDeployment.id),
+      "Terraform Destroy Plan을 시작하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -1095,15 +1181,8 @@ export function DirectDeploymentScreen({
       );
       setSelectedDeploymentId(deployment.id);
       setShowApplyConfirmation(false);
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(deployment.id),
-        listDeploymentResources(deployment.id),
-        listTerraformOutputs(deployment.id)
-      ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
-    }, "Terraform Destroy Plan을 시작하지 못했습니다.");
+      refreshDeploymentDetails(deployment.id);
+    }
   }
 
   async function startTerraformDestroy(targetDeployment: Deployment): Promise<void> {
@@ -1117,8 +1196,12 @@ export function DirectDeploymentScreen({
       type: "clear",
       deploymentId: targetDeployment.id
     });
-    await runRequest(async () => {
-      const deployment = await runDeploymentDestroy(targetDeployment.id);
+    const deployment = await runAction(
+      "deployment",
+      () => runDeploymentDestroy(targetDeployment.id),
+      "Terraform Destroy를 시작하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -1126,15 +1209,8 @@ export function DirectDeploymentScreen({
       );
       setSelectedDeploymentId(deployment.id);
       setShowApplyConfirmation(false);
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(deployment.id),
-        listDeploymentResources(deployment.id),
-        listTerraformOutputs(deployment.id)
-      ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
-    }, "Terraform Destroy를 시작하지 못했습니다.");
+      refreshDeploymentDetails(deployment.id);
+    }
   }
 
   async function startInfrastructureRollbackPlan(): Promise<void> {
@@ -1143,7 +1219,7 @@ export function DirectDeploymentScreen({
     }
 
     dispatchTerraformOutputState({ type: "clear", deploymentId: null });
-    await runRequest(async () => {
+    const planned = await runAction("validation", async () => {
       const prepared = await prepareInfrastructureRollback(selectedDeployment.id);
       setDeployments((currentDeployments) => [
         prepared,
@@ -1154,22 +1230,18 @@ export function DirectDeploymentScreen({
       setDeploymentResources([]);
       setShowInfrastructureRollbackConfirmation(false);
       setShowApplyConfirmation(false);
+      pendingAutoAdvanceDeploymentIdRef.current = prepared.id;
 
-      const planned = await runDeploymentPlan(prepared.id);
+      return runDeploymentPlan(prepared.id);
+    }, "이전 인프라 버전의 Terraform Plan을 생성하지 못했습니다.");
+    if (planned) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((deployment) =>
           deployment.id === planned.id ? planned : deployment
         )
       );
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(planned.id),
-        listDeploymentResources(planned.id),
-        listTerraformOutputs(planned.id)
-      ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({ type: "loaded", deploymentId: planned.id, outputs });
-    }, "이전 인프라 버전의 Terraform Plan을 생성하지 못했습니다.");
+      refreshDeploymentDetails(planned.id);
+    }
   }
 
   async function cancelSelectedDeployment(): Promise<void> {
@@ -1181,17 +1253,20 @@ export function DirectDeploymentScreen({
       type: "clear",
       deploymentId: selectedDeployment.id
     });
-    await runRequest(async () => {
-      const deployment = await cancelDeploymentRun(selectedDeployment.id);
+    const deployment = await runAction(
+      directDeploymentFlow.activeStepId,
+      () => cancelDeploymentRun(selectedDeployment.id),
+      "Deployment 실행 취소를 요청하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
         )
       );
       setSelectedDeploymentId(deployment.id);
-      const logs = await listDeploymentLogs(deployment.id);
-      setDeploymentLogs(logs);
-    }, "Deployment 실행 취소를 요청하지 못했습니다.");
+      refreshDeploymentDetails(deployment.id);
+    }
   }
 
   async function retrySelectedDeploymentFrontend(): Promise<void> {
@@ -1202,10 +1277,26 @@ export function DirectDeploymentScreen({
     ) {
       return;
     }
-    await runRequest(async () => {
-      await retryDeploymentFrontend(selectedDeployment.id);
-      applyDeploymentRuntimeSnapshot(await loadDeploymentRuntimeSnapshot());
-    }, "웹 배포를 다시 시도하지 못했습니다.");
+    const retried = await runAction(
+      "deployment",
+      async () => {
+        await retryDeploymentFrontend(selectedDeployment.id);
+        return true;
+      },
+      "웹 배포를 다시 시도하지 못했습니다."
+    );
+    if (retried) {
+      void loadDeploymentRuntimeSnapshot()
+        .then((snapshot) => {
+          applyDeploymentRuntimeSnapshot(snapshot);
+          setSnapshotErrorMessage("");
+        })
+        .catch((error) => {
+          setSnapshotErrorMessage(
+            getApiErrorMessage(error, "재시도는 접수됐지만 최신 상태를 불러오지 못했습니다.")
+          );
+        });
+    }
   }
 
   function selectDeploymentHistoryFilter(filter: DeploymentHistoryFilter): void {
@@ -1218,8 +1309,12 @@ export function DirectDeploymentScreen({
   }
 
   const renderSetupSection = () => {
+    const resolvedSelectedDirectStepId = resolveSelectedDirectDeploymentStepId(
+      directDeploymentFlow,
+      selectedDirectStepId
+    );
     const selectedStep =
-      directDeploymentFlow.steps.find((step) => step.id === selectedDirectStepId) ??
+      directDeploymentFlow.steps.find((step) => step.id === resolvedSelectedDirectStepId) ??
       directDeploymentFlow.steps[0]!;
     const activeStepIndex = directDeploymentFlow.steps.findIndex(
       (step) => step.id === directDeploymentFlow.activeStepId
@@ -1230,10 +1325,13 @@ export function DirectDeploymentScreen({
     const requestError =
       selectedStep.id === "validation" && preDeploymentState === "error"
         ? preDeploymentErrorMessage
-        : requestState === "error"
+        : reconciledRequestState === "error"
           ? errorMessage
-          : "";
-    const validationIsBusy = requestState === "loading" || preDeploymentState === "loading";
+          : detailErrorMessage || snapshotErrorMessage;
+    const validationIsBusy =
+      isInitialSnapshotLoading ||
+      reconciledRequestState === "loading" ||
+      preDeploymentState === "loading";
     const requiresApprovedPlanRevalidation = Boolean(
       hasCurrentDeploymentChanges && selectedDeployment?.approvedAt
     );
@@ -1851,7 +1949,7 @@ export function DirectDeploymentScreen({
               {onOpenDeliverySetup ? (
                 <div className={styles.deploymentValidationActions}>
                   <button onClick={onOpenDeliverySetup} type="button">
-                    Repository와 배포 타깃 설정
+                    CI/CD 설정으로 이동
                   </button>
                 </div>
               ) : null}
@@ -2320,51 +2418,54 @@ function DeploymentPreDeploymentSummary({
   const gateLevel = getPreDeploymentGateLevel(analysis);
 
   return (
-    <div className={styles.deploymentPreflightSummary} data-level={gateLevel}>
-      <div className={styles.deploymentGateHeader}>
+    <details className={styles.deploymentPreflightSummary} data-level={gateLevel}>
+      <summary className={styles.deploymentGateHeader}>
         <span className={styles.deploymentGateBadge}>{gateLevel.toUpperCase()}</span>
         <strong>배포 안전성 검사 결과</strong>
+        <span className={styles.deploymentPreflightChevron} aria-hidden="true" />
+      </summary>
+      <div className={styles.deploymentPreflightBody}>
+        <p>{analysis.summary}</p>
+        {analysis.deepScan ? (
+          <p className={styles.deploymentHint} data-testid="pre-deployment-deep-scan-status">
+            {analysis.deepScan.status === "running"
+              ? "핵심 안전검사 완료 · Trivy 심층검사 진행 중"
+              : analysis.deepScan.status === "complete"
+                ? "핵심 안전검사 및 Trivy 심층검사 완료 · 결과 병합됨"
+                : analysis.deepScan.status === "failed"
+                  ? (analysis.deepScan.message ?? "Trivy 심층검사를 완료하지 못했습니다.")
+                  : "핵심 안전검사 완료"}
+          </p>
+        ) : null}
+        <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
+          <span>
+            <strong>{analysis.findings.length}</strong>
+            발견 항목
+          </span>
+          <span>
+            <strong>{failCount}</strong>
+            실패
+          </span>
+          <span>
+            <strong>{warningCount}</strong>
+            주의
+          </span>
+        </div>
+        {analysis.findings.length > 0 ? (
+          <ul className={styles.deploymentPreflightFindings}>
+            {analysis.findings.map((finding) => (
+              <DeploymentPreDeploymentFindingItem
+                finding={finding}
+                key={finding.id}
+                onOpenFindingTerraformSource={onOpenFindingTerraformSource}
+              />
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.deploymentHint}>표시할 Check Finding이 없습니다.</p>
+        )}
       </div>
-      <p>{analysis.summary}</p>
-      {analysis.deepScan ? (
-        <p className={styles.deploymentHint} data-testid="pre-deployment-deep-scan-status">
-          {analysis.deepScan.status === "running"
-            ? "핵심 안전검사 완료 · Trivy 심층검사 진행 중"
-            : analysis.deepScan.status === "complete"
-              ? "핵심 안전검사 및 Trivy 심층검사 완료 · 결과 병합됨"
-              : analysis.deepScan.status === "failed"
-                ? (analysis.deepScan.message ?? "Trivy 심층검사를 완료하지 못했습니다.")
-                : "핵심 안전검사 완료"}
-        </p>
-      ) : null}
-      <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
-        <span>
-          <strong>{analysis.findings.length}</strong>
-          발견 항목
-        </span>
-        <span>
-          <strong>{failCount}</strong>
-          실패
-        </span>
-        <span>
-          <strong>{warningCount}</strong>
-          주의
-        </span>
-      </div>
-      {analysis.findings.length > 0 ? (
-        <ul className={styles.deploymentPreflightFindings}>
-          {analysis.findings.map((finding) => (
-            <DeploymentPreDeploymentFindingItem
-              finding={finding}
-              key={finding.id}
-              onOpenFindingTerraformSource={onOpenFindingTerraformSource}
-            />
-          ))}
-        </ul>
-      ) : (
-        <p className={styles.deploymentHint}>표시할 Check Finding이 없습니다.</p>
-      )}
-    </div>
+    </details>
   );
 }
 

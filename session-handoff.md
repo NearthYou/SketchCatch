@@ -4,31 +4,40 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Epic #432 remains ordered as merged PR 1 / issue #434, current PR 2 / issue #433, then PR 3 / issue #435.
-- `feature/sw/433-application-artifact-reuse` is based on merged PR 1 commit `207a979f` and implements only PR 2.
-- Direct Deployment and GitOps share a provider-neutral `ApplicationArtifact` Registry with canonical fingerprinting, provider revalidation, persistent build claims, and project isolation.
-- PR #438 review hardening rejects malformed or delimiter-obfuscated build inputs, streams S3 digest verification, and releases failed renewal heartbeats immediately.
-- `ApplicationRelease.artifactId` is nullable for legacy/v1 fallback, while a composite project foreign key blocks cross-project links.
-- Migration `0045_application_artifact_registry.sql` avoids `0044`, which another branch reserved. `_journal.json` changes.
+- Branch `fix/ck/477-ai-chatting-bug-fix` includes committed all-question validation, both-chat selection synchronization, clarification probes, diagram patch probes, and complete resource alias coverage.
+- The running Web-to-API path repeats the frontend question for the reported daily-user-count phrase and the region question for the reported Spring Boot phrase, with explicit unrelated-answer feedback.
+- The branch includes the committed Architecture Draft Korean-explanation, `다음 행동` cleanup, and fresh-draft routing fix.
 
 ## Changes This Session
 
-- Added all seven artifact kinds, canonical identity, strict v2 evidence, the Postgres Registry/lease boundary, read-only AWS verification, and the authenticated project artifact list.
-- Integrated verified reuse with Direct Deployment and GitOps while preserving v1 release evidence and legacy releases.
-- Updated product, data model, architecture, deployment, harness, and continuation documentation. PR 3 was not started.
+- Expanded database storage, country-level region, and conversational photo-upload clarification semantics.
+- Verified EC2 sizing, RDS removal, S3 addition, EC2-to-Lambda replacement, and connected CloudFront addition against proposed graph outcomes.
+- Added Korean names and generated aliases for every supported resource type, with common service terms and abbreviations. `로드 밸런서 넣어줘` now creates a connected load balancer when one compute target is unambiguous.
+- Tightened all required-question free-form validation so numeric and generic words cannot satisfy an unrelated category; rejected answers explain why before repeating the question.
+- Both chat surfaces keep the answered question options disabled and selected, without adding standalone accepted-answer receipt messages.
+- Shared staged progress appears only after all clarification questions are complete and the server begins generating the final Architecture Draft.
+- `한달에 한 30정도로` is accepted as a monthly 30만원 budget and mapped to the normal budget profile; answers with time, traffic, size, or percentage units remain excluded.
+- Equal Board prop replacements keep the proposal revision stable; real Board content changes continue to invalidate proposals.
+- Board approval copy and actions use separate rows in the narrow Workbench.
+- Diagram AI results no longer render a separate `다음 행동` section in either chat surface.
+- Amazon Q is instructed to return Korean user-facing prose; English `Architecture Draft` suffixes and known English highlights are normalized, while unknown English-only highlights fall back to a Korean resource summary.
+- Focused API tests pass 86/86, Workbench contract tests pass 22/22, and API/Web typechecks pass.
+- A pending patch clarification no longer captures explicit fresh-draft requests such as `다이어그램 생성하고 싶어`; resource answers such as `서버 만들고 싶어` remain patch answers.
+- Focused fresh-draft routing tests pass 2/2 and Web typecheck passes.
+- Selecting a chat option re-enables transcript following so the newly appended question scrolls into view without changing manual scroll preservation for other updates.
+- Workbench contract tests pass 22/22 and Web typecheck passes.
+- Both diagram-generation chats now use one patch-clarification matcher and option presenter, plus the same fresh-draft routing and special-answer handling.
+- Focused routing/clarification tests pass 13/13, including five shared examples; Web typecheck passes.
 
 ## Broken Or Unverified
 
-- Pass: focused PR 2 tests 59/59, `pnpm harness:check`, migration compatibility, lint, typecheck, and build.
-- API full suite: 666/669; only three Windows symlink-creation tests fail with `EPERM`.
-- Workspace `test:core` stops on three pre-existing three-tier Template contract failures unrelated to PR 2.
-- No real credential, live AWS mutation, Terraform apply/destroy, user deployment, or Git handoff was executed.
+- Browser interaction was not rerun; verification is focused because the user requested limited testing.
 
 ## Best Next Action
 
-1. Review and merge the Ready PR into `dev` after CI.
-2. Keep PR 3 / issue #435 blocked until PR 2 is merged.
-3. Merge the production runtime drift-review PR after a current review-only Plan passes, then execute the explicitly approved full-runtime Apply only from that merged revision. Do not use a targeted apply.
+1. Review PR #491 after CI and merge it into `dev` when approved.
+2. Keep real Live Observation scale-out acceptance blocked until a newly approved non-production Plan/Apply/traffic/Destroy cycle.
+3. Merge the production runtime drift-review PR only after a current review-only Plan passes; never use a targeted Apply.
 
 ## Production Runtime Plan Review
 
@@ -40,3 +49,11 @@ Use this file only for compact continuation context. Write it in English.
 - Pending follow-up branch scopes the static Secret checks to their declared Terraform sets, selects the named worker container in the Terraform test, and removes an unnecessary `tolist` conversion.
 - The nullable worker Secret list is normalized with `try(..., [])` so the test remains safe when `secrets` is absent or null.
 - Harness, structure check, Terraform formatting, lint, typecheck, build, and diff check pass. Local Terraform validate/test cannot load the uncached AWS provider 6.54.0; no cloud mutation was performed.
+
+## Live Observation Sandbox Run
+
+- Approved sandbox Deployment `0225dcbf-64a0-49e6-afa0-02eefddd4141` is `DESTROYED`; direct AWS checks found no remaining `liveobs-7cccab4b` resources. Preserve `sketchcatch-control-614935468487-apne2-7cccab4b` and `SketchCatchTerraformExecutionRole`.
+- `apps/api/src/live-observations/aws-live-observation-snapshot-provider.ts` shortens the STS session prefix from `sketchcatch-live-observation-` to `sketchcatch-live-obs-`; focused tests and all required root checks pass.
+- The Live Observation changes are assigned to `fix/ys/479-uiux-수정`; `apps/web/next-env.d.ts` matches the index, and the requested local servers remain on HTTPS 3000 and HTTP 4000.
+- The focused linear Live Observation UI is restored on top of v2: accepted requests and fresh CloudWatch ALB request snapshots trigger particles, while provider `running/desired/max` drives Fargate Task slots. The full immutable Architecture map remains available in a collapsed disclosure.
+- The built-in ECS Fargate Template now emits bounded Application Auto Scaling (`min=1`, `max=3`, `ALBRequestCountPerTarget=10`); focused UI/type tests and template Terraform validate pass. Do not claim live scale-out until a new approved sandbox Plan/Apply/traffic/Destroy cycle proves it.
