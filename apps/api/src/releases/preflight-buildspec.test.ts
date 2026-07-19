@@ -85,6 +85,44 @@ test("preflight installs monorepo dependencies beside the approved root lockfile
   assert.doesNotMatch(buildspec, /npm --prefix "\$\{SKETCHCATCH_FRONTEND_SOURCE_ROOT\}" ci/);
 });
 
+test("preflight supplies isolated placeholders for required runtime secrets", () => {
+  const config = createBuildConfig();
+  const buildspec = renderPreflightBuildspec({
+    ...config,
+    ecsWeb: {
+      ...config.ecsWeb!,
+      api: {
+        ...config.ecsWeb!.api,
+        requiredRuntimeSecrets: ["CHECK_IN_SIGNING_SECRET"]
+      }
+    }
+  });
+
+  assert.match(
+    buildspec,
+    /--env "CHECK_IN_SIGNING_SECRET=sketchcatch-preflight-only-[^"]+"/
+  );
+  assert.doesNotMatch(buildspec, /valueFrom|secretsmanager|get-secret-value/iu);
+});
+
+test("preflight rejects unsafe runtime secret environment names", () => {
+  const config = createBuildConfig();
+
+  assert.throws(
+    () => renderPreflightBuildspec({
+      ...config,
+      ecsWeb: {
+        ...config.ecsWeb!,
+        api: {
+          ...config.ecsWeb!.api,
+          requiredRuntimeSecrets: ["CHECK_IN_SIGNING_SECRET=$(whoami)"]
+        }
+      }
+    }),
+    /runtime secret environment name/iu
+  );
+});
+
 function createBuildConfig(): ConfirmedBuildConfig {
   return {
     sourceRoot: ".",

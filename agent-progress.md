@@ -12,9 +12,19 @@ Short English-only working log for the current agent context. Older records are 
 - The failed observation acceptance triggered approved immediate cleanup. All `liveobs-7cccab4b` AWS resources were verified absent in account `614935468487`, region `ap-northeast-2`.
 - Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` is `DESTROYED` with cleared state and current-plan pointers.
 - Verification passes: `pnpm harness:check`, API Live Observation tests 64/64, Web Live Observation tests 71/71, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+- Repository ECS delivery now carries runtime Secret names from analysis into an isolated preflight placeholder, generates `CHECK_IN_SIGNING_SECRET` during approved Terraform Apply, maps its Secrets Manager ARN into every ECS Task, and leaves `INSTANCE_ID` unset for hostname-based instance observation.
+- Runtime Secret, 1-to-3 scale, preflight, release cloning, Terraform provider/safety, and delivery-target focused tests pass. `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass.
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
+
+### 2026-07-20 - Add repository runtime-secret delivery contract
+
+- Added names-only `runtime_secret` Repository Analysis evidence and preserved the stateless 1-to-3 Fargate scaling contract.
+- Added an isolated preflight-only placeholder without granting CodeBuild Secrets Manager access or reading runtime Secret values.
+- Added Terraform-generated signing material, Secrets Manager storage, exact ECS execution-role read policy, and Task Definition `secrets` mapping; application releases preserve the approved mapping while replacing only the image.
+- Removed the fixed `INSTANCE_ID=fargate` Task environment so the application hostname fallback can distinguish Fargate Tasks.
+- No AWS resources, credentials, or runtime Secret values were read or changed.
 
 ### 2026-07-20 - Exercise and fail closed the Live Observation traffic run
 
@@ -41,9 +51,10 @@ Short English-only working log for the current agent context. Older records are 
 - Live animation and scale-out remain unaccepted end-to-end. The bounded requests reached CloudFront, but the active UI session missed them before the delayed-snapshot fix; no provider-confirmed scale-out occurred before cleanup.
 - The internal deployment-state bucket did not grant the sandbox operator read access, so automatic Destroy Plan could not restore Terraform state. Manual cleanup completed and AWS absence was verified, but the orphaned internal state object remains for normal storage pruning.
 - Root `pnpm test` still stops at the pre-existing `packages/types/src/git-cicd-readiness-contract.test.ts:117` assertion (`null !== 0`); the focused Live Observation suite passes and this file is unchanged.
+- Root `pnpm test` was rerun and still stops at that unchanged readiness-contract assertion before API/Web package suites. Focused tests for this change pass.
 
 ## Next Action
 
-1. Run the required repository checks and commit the Live Observation fixes without pushing.
+1. Re-analyze `audience-live-check` after its stateless-session change and confirm the preview contains the generated Secret mapping and Fargate capacity 1–3.
 2. Before any future Apply, make the internal state-storage read path available to the approved cleanup operator without broadening target-account permissions.
 3. Re-run end-to-end observation only under a new explicit Apply, traffic, and cleanup approval.

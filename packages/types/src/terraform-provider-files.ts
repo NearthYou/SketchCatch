@@ -21,6 +21,11 @@ const ARCHIVE_REQUIRED_PROVIDER = `    archive = {
       version = "~> 2.0"
     }`;
 
+const RANDOM_REQUIRED_PROVIDER = `    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }`;
+
 // Provider files follow the same resource-plus-parameters boundary as Terraform graph generation.
 export function createTerraformProviderFiles(
   diagramJson: DiagramJson
@@ -31,18 +36,20 @@ export function createTerraformProviderFiles(
   const usesKubernetes = [...resourceTypes].some((resourceType) =>
     resourceType.startsWith("kubernetes_")
   );
+  const usesRandom = resourceTypes.has("random_password");
   const usesArchive = deployableNodes.some((node) =>
     getTerraformResourceType(node) === "aws_lambda_function" &&
     typeof node.parameters?.values?.inlineSource === "string"
   );
 
-  if (!usesAws && !usesKubernetes) {
+  if (!usesAws && !usesKubernetes && !usesRandom) {
     return [];
   }
 
   const requiredProviders = [
     ...(usesAws ? [AWS_REQUIRED_PROVIDER] : []),
     ...(usesArchive ? [ARCHIVE_REQUIRED_PROVIDER] : []),
+    ...(usesRandom ? [RANDOM_REQUIRED_PROVIDER] : []),
     ...(usesKubernetes ? [KUBERNETES_REQUIRED_PROVIDER] : [])
   ].join("\n");
   const eksCluster = usesKubernetes

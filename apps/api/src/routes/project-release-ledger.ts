@@ -52,7 +52,11 @@ const ecsWebBuildConfigSchema = z
           .string()
           .trim()
           .regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/)
-          .max(512)
+          .max(512),
+        requiredRuntimeSecrets: z
+          .array(z.literal("CHECK_IN_SIGNING_SECRET"))
+          .max(32)
+          .optional()
       })
       .strict(),
     frontend: z

@@ -56,6 +56,23 @@ test("Terraform deployment boundaries exclude reference-only and unsupported Res
   assert.deepEqual(createTerraformProviderFiles(diagramJson), []);
 });
 
+test("createTerraformProviderFiles includes the random provider for generated runtime secrets", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode("runtime-secret-material", "resource", "random_password", true),
+      makeNode("runtime-secret", "resource", "aws_secretsmanager_secret", true)
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const providerCode = createTerraformProviderFiles(diagramJson)[0]?.terraformCode ?? "";
+
+  assert.match(providerCode, /source\s*= "hashicorp\/aws"/);
+  assert.match(providerCode, /source\s*= "hashicorp\/random"/);
+  assert.doesNotMatch(providerCode, /provider "random"/);
+});
+
 // Provider fixtures isolate visual kind from optional Terraform identity.
 function makeNode(
   id: string,
