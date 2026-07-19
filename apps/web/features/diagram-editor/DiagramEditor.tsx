@@ -238,6 +238,7 @@ export function DiagramEditor(props: DiagramEditorProps) {
   );
 }
 
+/** Editor와 embedded viewer가 공유하는 React Flow 동작을 mode별 정책으로 적용합니다. */
 function DiagramEditorInner({
   allowPreviewInspection = false,
   dashboardHref = "/dashboard",
@@ -260,13 +261,14 @@ function DiagramEditorInner({
   onWorkspacePanelOpen,
   onTemplateWorkspaceApply,
   onSaveAndDeployRequest,
+  panOnScroll = true,
   projectName = "프로젝트 보드",
   rightPanel,
   saveStatus = "편집 중",
   showSaveAction = true,
   workspaceUserName = "Personal workspace"
 }: DiagramEditorProps) {
-  const viewerPolicy = getDiagramEditorViewerPolicy(mode);
+  const viewerPolicy = getDiagramEditorViewerPolicy(mode, { panOnScroll });
   if (viewerPolicy.isViewer) {
     allowPreviewInspection = false;
   }
@@ -3374,7 +3376,7 @@ function DiagramEditorInner({
             nodesDraggable={interactionMode === "select" && !isPreviewActive}
             onInit={handleInit}
             panOnDrag={viewerPolicy.canPanAndZoom && (isPreviewActive || interactionMode === "pan")}
-            panOnScroll
+            panOnScroll={viewerPolicy.panOnScroll}
             panOnScrollMode={PanOnScrollMode.Free}
             proOptions={{ hideAttribution: true }}
             selectionKeyCode={["Shift", "Meta", "Control"]}

@@ -1,7 +1,6 @@
 import type {
   AiArchitectureDraftResult,
   ArchitectureBoardCompilationProposal,
-  ArchitectureDraftProgressSnapshot,
   DiagramJson
 } from "@sketchcatch/types";
 import {
@@ -22,12 +21,6 @@ export type WorkspaceAiOrbitPresentation = {
 };
 
 export const ORBIT_EXIT_DURATION_MS = 440;
-
-export type ProgressCandidateAction = {
-  readonly candidateId: string;
-  readonly label: string;
-  readonly resourceType: string;
-};
 
 export function isSuggestionDisabled(
   selections: readonly SelectedAssistantOption[],
@@ -177,29 +170,6 @@ export function shouldReleaseForcedTranscriptFollow({
     scrollHeight,
     scrollTop,
     source: "scroll"
-  });
-}
-
-export function getProgressCandidateActions(
-  snapshot: ArchitectureDraftProgressSnapshot | null
-): readonly ProgressCandidateAction[] {
-  if (snapshot === null) return [];
-
-  const nodeById = new Map(
-    snapshot.provisionalArchitectureJson.nodes.map((node) => [node.id, node])
-  );
-
-  return snapshot.excludableCandidateIds.flatMap((candidateId) => {
-    const candidate = nodeById.get(candidateId);
-    if (!candidate) return [];
-
-    return [
-      {
-        candidateId,
-        label: candidate.label?.trim() || candidate.type,
-        resourceType: candidate.type
-      }
-    ];
   });
 }
 

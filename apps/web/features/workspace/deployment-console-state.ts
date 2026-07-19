@@ -55,6 +55,7 @@ export type DirectDeploymentSummary = Pick<
 export type DirectDeploymentFlowInput = {
   readonly actions: DirectDeploymentActionState;
   readonly deployment: DirectDeploymentSummary | null;
+  readonly failedStepId: DirectDeploymentStepId | null;
   readonly hasUnsavedBaseline: boolean;
   readonly preflightState: DirectDeploymentPreflightState;
   readonly requestState: RequestState;
@@ -72,12 +73,6 @@ export type DirectDeploymentStep = {
 export type DirectDeploymentFlow = {
   readonly activeStepId: DirectDeploymentStepId;
   readonly steps: readonly DirectDeploymentStep[];
-};
-
-export type QueuedApplyPlanInput = {
-  readonly deployment: Pick<Deployment, "currentPlanArtifactId" | "id" | "status"> | null;
-  readonly queuedDeploymentId: string;
-  readonly requestState: RequestState;
 };
 
 export type DirectDeploymentPreflightInput = {
@@ -188,6 +183,9 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
   const usesSavedCleanupSnapshot =
     input.actions.shouldShowDestroyPlanButton || input.actions.shouldShowDestroyButton;
   const validation = getValidationStep(input);
+  if (input.requestState === "error" && input.failedStepId) {
+    return createFailedFlow(input.failedStepId, validation);
+  }
   const hasUnsavedApplyBaseline =
     input.hasUnsavedBaseline && input.deployment?.currentPlanOperation !== "destroy";
   if (
@@ -254,6 +252,34 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
   );
 }
 
+function createFailedFlow(
+  failedStepId: DirectDeploymentStepId,
+  validation: DirectDeploymentStep
+): DirectDeploymentFlow {
+  if (failedStepId === "validation") {
+    return createFlow(
+      "validation",
+      step("validation", "error", "검증 요청 실패"),
+      idleApproval(),
+      idleDeployment()
+    );
+  }
+  if (failedStepId === "approval") {
+    return createFlow(
+      "approval",
+      step("validation", "done", "검증 완료"),
+      step("approval", "error", "승인 요청 실패"),
+      idleDeployment()
+    );
+  }
+  return createFlow(
+    "deployment",
+    validation.state === "done" ? validation : step("validation", "done", "검증 완료"),
+    step("approval", "done", "승인됨"),
+    step("deployment", "error", "실행 요청 실패")
+  );
+}
+
 export function shouldShowDeploymentValidationActions(
   input: DeploymentValidationActionInput
 ): boolean {
@@ -273,16 +299,6 @@ export function hasDeploymentDraftChanges(input: DeploymentDraftChangeInput): bo
     input.currentDraftRevision !== null &&
     input.preparedDraftRevision !== null &&
     input.currentDraftRevision !== input.preparedDraftRevision
-  );
-}
-
-export function shouldStartQueuedApplyPlan(input: QueuedApplyPlanInput): boolean {
-  return Boolean(
-    input.deployment &&
-    input.queuedDeploymentId === input.deployment.id &&
-    input.deployment.status === "PENDING" &&
-    !input.deployment.currentPlanArtifactId &&
-    input.requestState === "idle"
   );
 }
 

@@ -91,6 +91,7 @@
 }
 
 .headerActions button:focus-visible,
+.overallStatus:focus-visible,
 .sectionNavigation a:focus-visible,
 .actionLink:focus-visible,
 .accountList a:focus-visible {
@@ -99,7 +100,6 @@
 }
 
 .overallStatus,
-.readinessSummary,
 .cardHeading > strong {
   align-items: center;
   background: var(--color-warning-surface);
@@ -112,11 +112,11 @@
   gap: 6px;
   line-height: 1;
   padding: 8px 10px;
+  text-decoration: none;
   white-space: nowrap;
 }
 
 .overallStatus[data-ready="true"],
-.readinessSummary[data-ready="true"],
 .cardHeading > strong[data-ready="true"] {
   background: var(--color-success-surface);
   border-color: color-mix(in srgb, var(--color-success) 28%, transparent);
@@ -191,12 +191,11 @@
 .connectionGrid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .card,
 .editorSection,
-.readinessSection,
 .execution {
   background: #ffffff;
   border: 1px solid var(--color-hairline-strong);
@@ -233,8 +232,7 @@
   margin: 10px 0 0;
 }
 
-.accountList,
-.readinessList {
+.accountList {
   display: grid;
   list-style: none;
   margin: 16px 0 0;
@@ -287,57 +285,6 @@
   margin-top: 16px;
 }
 
-.definitionList {
-  display: grid;
-  margin: 14px 0 0;
-}
-
-.definitionList > div {
-  border-top: 1px solid #f0f0f3;
-  display: grid;
-  gap: 14px;
-  grid-template-columns: 104px minmax(0, 1fr);
-  padding: 10px 0;
-}
-
-.definitionList > div:first-child {
-  border-top: 0;
-}
-
-.definitionList dt {
-  color: #60646c;
-  font-size: 12px;
-}
-
-.definitionList dd {
-  color: #171717;
-  font-size: 12px;
-  font-weight: 650;
-  margin: 0;
-  overflow-wrap: anywhere;
-  text-align: right;
-}
-
-.warning {
-  background: var(--color-warning-surface);
-  border: 1px solid color-mix(in srgb, var(--color-warning) 36%, transparent);
-  border-radius: var(--radius-control);
-  color: var(--color-warning);
-  margin-top: 14px;
-  padding: 12px;
-}
-
-.warning strong {
-  font-size: 12px;
-}
-
-.warning p {
-  color: var(--color-warning);
-  font-size: 12px;
-  line-height: 1.5;
-  margin: 4px 0 0;
-}
-
 .settingsStack {
   display: grid;
   gap: 16px;
@@ -375,50 +322,13 @@
   padding: 18px 0 0;
 }
 
-.readinessSection,
 .execution {
   padding: 22px;
 }
 
-.readinessSection > .groupHeading,
 .execution > .groupHeading {
   align-items: center;
   margin-bottom: 0;
-}
-
-.readinessList {
-  border-top: 1px solid #f0f0f3;
-  margin-top: 18px;
-}
-
-.readinessList li {
-  align-items: center;
-  border-bottom: 1px solid #f0f0f3;
-  color: var(--color-warning);
-  display: grid;
-  font-size: 13px;
-  gap: 10px;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  min-height: 48px;
-}
-
-.readinessList li[data-ready="true"] {
-  color: var(--color-success);
-}
-
-.readinessList li > span {
-  color: var(--color-ink);
-  font-weight: 600;
-}
-
-.readinessList li > strong {
-  font-size: 12px;
-}
-
-.readinessSection > p {
-  color: #60646c;
-  font-size: 12px;
-  margin: 14px 0 0;
 }
 
 .execution {
@@ -533,22 +443,11 @@
 
   .card,
   .editorSection,
-  .readinessSection,
   .execution {
     border-radius: var(--radius-card);
     padding: 16px;
   }
 
-  .definitionList > div {
-    gap: 4px;
-    grid-template-columns: 1fr;
-  }
-
-  .definitionList dd {
-    text-align: left;
-  }
-
-  .readinessSection > .groupHeading,
   .execution > .groupHeading {
     align-items: flex-start;
   }

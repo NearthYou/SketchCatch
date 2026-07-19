@@ -14,18 +14,14 @@ import { copyTextToClipboard } from "../../lib/clipboard";
 import {
   applyGitCicdAwsRoleDiff,
   applyGitCicdRepositorySettings,
-  applyGitCicdRepositorySettingsWithGitHubOAuth,
-  createGitCicdGitHubOAuthStartUrl,
   createGitCicdHandoff,
   getProjectDeliveryProfile,
-  getGitCicdMonitoringConfig,
   getGitCicdPipelineRun,
   listGitHubAccountInstallations,
   listDeployments,
   listGitCicdHandoffs,
   listGitCicdPipelineLogs,
   listGitCicdPipelineRuns,
-  listSourceRepositories,
   refreshProjectGitCicdPipelineRuns,
   retryGitCicdFrontendRelease
 } from "./api";
@@ -311,23 +307,19 @@ export function CicdConsoleScreen({
     [refreshHandoffs]
   );
 
-  const startGitHubOAuth = useCallback(async (): Promise<void> => {
-    if (!currentHandoff) {
-      return;
-    }
+  const loadDeliveryState = useCallback(async () => {
+    const profile = await getProjectDeliveryProfile(projectId);
+    const githubInstallationAccess = profile.sourceRepository
+      ? null
+      : deriveGitHubInstallationAccessState(await listGitHubAccountInstallations());
 
-    setIsHandoffBusy(true);
-    setHandoffErrorMessage("");
-    try {
-      const result = await createGitCicdGitHubOAuthStartUrl(currentHandoff.id);
-      window.location.assign(result.authorizationUrl);
-    } catch (error) {
-      setHandoffErrorMessage(
-        getApiErrorMessage(error, "GitHub OAuth 승인 화면을 열지 못했습니다.")
-      );
-      setIsHandoffBusy(false);
-    }
-  }, [currentHandoff]);
+    return {
+      repository: profile.sourceRepository,
+      monitoringConfig: profile.monitoringConfig,
+      readiness: profile.readiness,
+      githubInstallationAccess
+    };
+  }, [projectId]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -351,45 +343,26 @@ export function CicdConsoleScreen({
       }
 
       async function loadConsoleData(): Promise<{
-        readonly activeRepository: SourceRepository | null;
-        readonly githubInstallationAccess: GitHubInstallationAccessState | null;
         readonly initialRuns: Awaited<ReturnType<typeof listGitCicdPipelineRuns>>;
         readonly loadedDeployments: Deployment[];
         readonly loadedHandoffs: GitCicdHandoff[];
-        readonly monitoringConfig: GitCicdMonitoringConfig | null;
       }> {
-        const [repositories, initialRuns, loadedDeployments, loadedHandoffs] = await Promise.all([
-          listSourceRepositories(projectId),
+        const [initialRuns, loadedDeployments, loadedHandoffs] = await Promise.all([
           listGitCicdPipelineRuns(projectId, { limit: 50 }),
           listDeployments(projectId),
           listGitCicdHandoffs(projectId)
         ]);
-        const activeRepository =
-          repositories.find((item) => item.provider === "github" && item.status === "active") ??
-          null;
-        let githubInstallationAccess: GitHubInstallationAccessState | null = null;
-        if (!activeRepository) {
-          githubInstallationAccess = deriveGitHubInstallationAccessState(
-            await listGitHubAccountInstallations()
-          );
-        }
-        const monitoringConfig = activeRepository
-          ? await getGitCicdMonitoringConfig(projectId, activeRepository.id)
-          : null;
 
         return {
-          activeRepository,
-          githubInstallationAccess,
           initialRuns,
           loadedDeployments,
-          loadedHandoffs,
-          monitoringConfig
+          loadedHandoffs
         };
       }
 
-      const [consoleResult, readinessResult] = await Promise.allSettled([
+      const [consoleResult, deliveryResult] = await Promise.allSettled([
         loadConsoleData(),
-        getProjectDeliveryProfile(projectId).then((profile) => profile.readiness)
+        loadDeliveryState()
       ]);
       if (
         cancelled ||
@@ -398,12 +371,15 @@ export function CicdConsoleScreen({
         return;
       }
 
-      if (readinessResult.status === "fulfilled") {
-        setReadiness(readinessResult.value);
+      if (deliveryResult.status === "fulfilled") {
+        setRepository(deliveryResult.value.repository);
+        setGitHubInstallationAccess(deliveryResult.value.githubInstallationAccess);
+        setConfig(deliveryResult.value.monitoringConfig);
+        setReadiness(deliveryResult.value.readiness);
       } else {
         setReadinessErrorMessage(
           getApiErrorMessage(
-            readinessResult.reason,
+            deliveryResult.reason,
             "배포 PR 준비 상태를 갱신하지 못했습니다."
           )
         );
@@ -411,16 +387,10 @@ export function CicdConsoleScreen({
 
       if (consoleResult.status === "fulfilled") {
         const {
-          activeRepository,
-          githubInstallationAccess,
           initialRuns,
           loadedDeployments,
-          loadedHandoffs,
-          monitoringConfig
+          loadedHandoffs
         } = consoleResult.value;
-        setRepository(activeRepository);
-        setGitHubInstallationAccess(githubInstallationAccess);
-        setConfig(monitoringConfig);
         setDeployments(loadedDeployments);
         setHandoffs(loadedHandoffs);
         setSelectedHandoffId((selected) =>
@@ -430,7 +400,9 @@ export function CicdConsoleScreen({
         );
         hasExplicitRunSelectionRef.current = false;
         applyRuns(initialRuns.runs);
-        setConsoleDataFreshKey(consoleRequestKey);
+        setConsoleDataFreshKey(
+          deliveryResult.status === "fulfilled" ? consoleRequestKey : null
+        );
         dispatchRequestState({ type: "success", scope: "list" });
       } else {
         setConsoleDataFreshKey(null);
@@ -461,7 +433,7 @@ export function CicdConsoleScreen({
       setIsRefreshing(false);
       setIsReadinessRefreshing(false);
     };
-  }, [applyRuns, consoleRequestKey, isVisible, projectId]);
+  }, [applyRuns, consoleRequestKey, isVisible, loadDeliveryState, projectId]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -518,23 +490,26 @@ export function CicdConsoleScreen({
     setIsReadinessRefreshing(true);
     setConsoleDataFreshKey(null);
     setReadinessErrorMessage("");
-    const [consoleResult, readinessResult] = await Promise.allSettled([
+    const [consoleResult, deliveryResult] = await Promise.allSettled([
       Promise.all([
         refreshProjectGitCicdPipelineRuns(projectId),
         listDeployments(projectId),
         listGitCicdHandoffs(projectId)
       ]),
-      getProjectDeliveryProfile(projectId).then((profile) => profile.readiness)
+      loadDeliveryState()
     ]);
 
     if (!isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)) return;
 
-    if (readinessResult.status === "fulfilled") {
-      setReadiness(readinessResult.value);
+    if (deliveryResult.status === "fulfilled") {
+      setRepository(deliveryResult.value.repository);
+      setGitHubInstallationAccess(deliveryResult.value.githubInstallationAccess);
+      setConfig(deliveryResult.value.monitoringConfig);
+      setReadiness(deliveryResult.value.readiness);
     } else {
       setReadinessErrorMessage(
         getApiErrorMessage(
-          readinessResult.reason,
+          deliveryResult.reason,
           "배포 PR 준비 상태를 갱신하지 못했습니다."
         )
       );
@@ -550,7 +525,9 @@ export function CicdConsoleScreen({
           ? selected
           : (loadedHandoffs[0]?.id ?? null)
       );
-      setConsoleDataFreshKey(consoleRequestKey);
+      setConsoleDataFreshKey(
+        deliveryResult.status === "fulfilled" ? consoleRequestKey : null
+      );
       dispatchRequestState({ type: "success", scope: "refresh" });
       const errorMessage = result.targets.find((target) => target.errorMessage)?.errorMessage;
       if (errorMessage) {
@@ -586,6 +563,7 @@ export function CicdConsoleScreen({
     isReadinessRefreshing,
     isRefreshing,
     isVisible,
+    loadDeliveryState,
     projectId
   ]);
 
@@ -810,7 +788,11 @@ export function CicdConsoleScreen({
           설치합니다. PR merge만으로 최초 앱 배포를 시작하지 않습니다.
         </p>
 
-        <div className={handoffStyles.readiness} aria-label="CI/CD PR 준비 상태">
+        <div
+          className={handoffStyles.readiness}
+          id="cicd-pr-readiness"
+          aria-label="CI/CD PR 준비 상태"
+        >
           <div className={handoffStyles.readinessHeader}>
             <div>
               <strong>배포 PR 준비</strong>
@@ -839,6 +821,10 @@ export function CicdConsoleScreen({
                 상태 새로고침
               </button>
             </div>
+          ) : readiness?.ready ? (
+            <p className={handoffStyles.readinessComplete} role="status">
+              모든 필수 항목 완료
+            </p>
           ) : (
             <ul className={handoffStyles.readinessList}>
               {readinessItems.map((item) => (
@@ -1005,30 +991,6 @@ export function CicdConsoleScreen({
                 >
                   Repository 설정 적용
                 </button>
-              ) : null}
-              {currentHandoff.githubOAuthRequired ? (
-                <>
-                  <button
-                    className={styles.deploymentSecondaryButton}
-                    disabled={isHandoffBusy}
-                    onClick={() => void startGitHubOAuth()}
-                    type="button"
-                  >
-                    GitHub OAuth 승인
-                  </button>
-                  <button
-                    className={styles.deploymentSecondaryButton}
-                    disabled={isHandoffBusy}
-                    onClick={() =>
-                      void runHandoffAction(() =>
-                        applyGitCicdRepositorySettingsWithGitHubOAuth(currentHandoff.id)
-                      )
-                    }
-                    type="button"
-                  >
-                    승인 후 Repository 설정 재적용
-                  </button>
-                </>
               ) : null}
               {currentHandoff.awsRoleDiff && !currentHandoff.awsRoleDiff.applied ? (
                 <button

@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ProjectDeliveryProfile } from "@sketchcatch/types";
 import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
-  GitBranch,
   RefreshCw,
   Settings2,
   Workflow
@@ -17,7 +16,6 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import { getProjectDeliveryProfile } from "./api";
 import { CicdConsoleScreen } from "./CicdConsoleScreen";
 import { ProjectDeploymentTargetEditor } from "./delivery/ProjectDeploymentTargetEditor";
-import { getDeliveryRepositoryFreshness } from "./delivery-repository-freshness";
 import type { LiveObservationSelection } from "./live-observation";
 import styles from "./delivery-center.module.css";
 
@@ -59,20 +57,7 @@ export function DeliveryCenterPanel({
     return () => {
       cancelled = true;
     };
-  }, [projectId, reloadKey]);
-
-  const repositoryHref = useMemo(() => {
-    const params = new URLSearchParams({ projectId });
-    if (profile?.repositoryAnalysisTarget) {
-      params.set("repositoryUrl", profile.repositoryAnalysisTarget.repositoryUrl);
-      params.set("defaultBranch", profile.repositoryAnalysisTarget.branch);
-    }
-    return `/workspace/repository?${params.toString()}`;
-  }, [profile?.repositoryAnalysisTarget, projectId]);
-  const freshness = getDeliveryRepositoryFreshness(
-    profile?.repositoryAnalysisTarget ?? null,
-    profile?.sourceRepository ?? null
-  );
+  }, [projectId, readinessRefreshRequestId, reloadKey]);
 
   if (!profile && loadState === "loading") {
     return (
@@ -106,7 +91,12 @@ export function DeliveryCenterPanel({
           </div>
         </div>
         <div className={styles.headerActions}>
-          <strong className={styles.overallStatus} data-ready={profile.readiness.ready}>
+          <a
+            aria-label={`${profile.readiness.ready ? "배포 준비 완료" : `${profile.readiness.requiredActionCount}개 확인 필요`} — 배포 PR 준비로 이동`}
+            className={styles.overallStatus}
+            data-ready={profile.readiness.ready}
+            href="#cicd-pr-readiness"
+          >
             {profile.readiness.ready ? (
               <CheckCircle2 aria-hidden="true" size={15} />
             ) : (
@@ -115,7 +105,7 @@ export function DeliveryCenterPanel({
             {profile.readiness.ready
               ? "배포 준비 완료"
               : `${profile.readiness.requiredActionCount}개 확인 필요`}
-          </strong>
+          </a>
           <button aria-label="Delivery 정보 새로고침" onClick={reload} type="button">
             <RefreshCw aria-hidden="true" size={16} />
           </button>
@@ -125,7 +115,6 @@ export function DeliveryCenterPanel({
       <nav className={styles.sectionNavigation} aria-label="CI/CD Delivery 섹션">
         <a href="#delivery-connections">연결</a>
         <a href="#delivery-configuration">Pipeline 설정</a>
-        <a href="#delivery-readiness">준비 상태</a>
         <a href="#delivery-execution">실행 기록</a>
       </nav>
 
@@ -145,7 +134,7 @@ export function DeliveryCenterPanel({
             <p>연결</p>
             <h3 id="delivery-connections-title">코드와 계정을 연결하세요</h3>
           </div>
-          <span>PR과 Pipeline이 사용할 정확한 Repository를 확인합니다.</span>
+          <span>PR과 Pipeline에 필요한 GitHub App 권한을 확인합니다.</span>
         </div>
 
         <div className={styles.connectionGrid}>
@@ -180,54 +169,6 @@ export function DeliveryCenterPanel({
             )}
           </article>
 
-          <article className={styles.card} aria-labelledby="delivery-repository-title">
-            <div className={styles.cardHeading}>
-              <h4 id="delivery-repository-title">Source Repository</h4>
-              <strong data-ready={Boolean(profile.sourceRepository)}>
-                {profile.sourceRepository ? "연결됨" : "선택 필요"}
-              </strong>
-            </div>
-            {profile.repositoryAnalysisTarget ? (
-              <dl className={styles.definitionList}>
-                <div>
-                  <dt>분석 출처</dt>
-                  <dd>
-                    {profile.repositoryAnalysisTarget.owner}/{profile.repositoryAnalysisTarget.name}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Branch · SHA</dt>
-                  <dd>
-                    {profile.repositoryAnalysisTarget.branch} ·{" "}
-                    {shortSha(profile.repositoryAnalysisTarget.repositoryRevision)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>배포 Repository</dt>
-                  <dd>
-                    {profile.sourceRepository
-                      ? `${profile.sourceRepository.owner}/${profile.sourceRepository.name}`
-                      : "아직 연결되지 않음"}
-                  </dd>
-                </div>
-              </dl>
-            ) : (
-              <p>이 Board에 저장된 Repository 분석 출처가 없습니다.</p>
-            )}
-            {freshness.status === "changed" ? (
-              <div className={styles.warning} role="status">
-                <strong>최근 인증 분석과 Board의 분석 SHA가 다릅니다.</strong>
-                <p>
-                  최근 인증 분석 SHA는 {shortSha(freshness.currentRevision)}입니다. Board는 자동으로
-                  변경되지 않습니다.
-                </p>
-              </div>
-            ) : null}
-            <Link className={styles.actionLink} href={repositoryHref}>
-              <GitBranch aria-hidden="true" size={15} />
-              {profile.sourceRepository ? "Repository 다시 분석" : "Repository 연결"}
-            </Link>
-          </article>
         </div>
       </section>
 
@@ -258,42 +199,6 @@ export function DeliveryCenterPanel({
       </section>
 
       <section
-        className={`${styles.sectionGroup} ${styles.readinessSection}`}
-        id="delivery-readiness"
-        aria-labelledby="delivery-readiness-title"
-      >
-        <div className={styles.groupHeading}>
-          <div>
-            <p>준비 상태</p>
-            <h3 id="delivery-readiness-title">실행 전 필수 항목을 확인하세요</h3>
-          </div>
-          <strong className={styles.readinessSummary} data-ready={profile.readiness.ready}>
-            {profile.readiness.ready
-              ? "준비됨"
-              : `${profile.readiness.requiredActionCount}개 확인 필요`}
-          </strong>
-        </div>
-        <ul className={styles.readinessList}>
-          {profile.readiness.items.map((item) => (
-            <li key={item.key} data-ready={item.status === "ready"}>
-              {item.status === "ready" ? (
-                <CheckCircle2 aria-hidden="true" size={18} />
-              ) : (
-                <AlertCircle aria-hidden="true" size={18} />
-              )}
-              <span>{item.label}</span>
-              <strong>{item.status === "ready" ? "완료" : "확인 필요"}</strong>
-            </li>
-          ))}
-        </ul>
-        {profile.environmentName ? (
-          <p>
-            GitHub Environment: <strong>{profile.environmentName}</strong>
-          </p>
-        ) : null}
-      </section>
-
-      <section
         className={`${styles.sectionGroup} ${styles.execution}`}
         id="delivery-execution"
         aria-labelledby="delivery-execution-title"
@@ -317,8 +222,4 @@ export function DeliveryCenterPanel({
       </section>
     </div>
   );
-}
-
-function shortSha(value: string): string {
-  return `${value.slice(0, 10)}…`;
 }

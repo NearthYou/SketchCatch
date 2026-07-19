@@ -99,6 +99,44 @@ test("new build environment creates and verifies its project cache repository", 
   assert.equal(calls.includes("ecr:GetLifecyclePolicyCommand"), true);
 });
 
+test("concurrent CodeBuild project creation reuses the managed project created by another request", async () => {
+  const calls: string[] = [];
+  let projectCreatedByCompetingRequest = false;
+  const gateway = createGatewayImplementation({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createEcrClient: () => createEcrClient(calls, { repositoryExists: true }),
+    createIamClient: () => createVerifiedIamClient({ includeConnectionTokenAccess: true }),
+    createCodeBuildClient: () => ({
+      async send(command: unknown): Promise<Record<string, unknown>> {
+        const name = (command as { constructor: { name: string } }).constructor.name;
+        calls.push(`codebuild:${name}`);
+        if (name === "BatchGetProjectsCommand") {
+          if (!projectCreatedByCompetingRequest) return { projects: [] };
+          return createVerifiedCodeBuildClient().send(command);
+        }
+        if (name === "CreateProjectCommand") {
+          projectCreatedByCompetingRequest = true;
+          throw Object.assign(new Error("Project already exists"), {
+            name: "ResourceAlreadyExistsException"
+          });
+        }
+        return {};
+      },
+      destroy() {}
+    })
+  });
+
+  assert.deepEqual(await gateway.reconcile(desired), {
+    verified: true,
+    statusReason: null
+  });
+  assert.equal(calls.includes("codebuild:UpdateProjectCommand"), true);
+});
+
 test("failed build role creation removes only the cache repository created by this request", async () => {
   const calls: string[] = [];
   const gateway = createGatewayImplementation({

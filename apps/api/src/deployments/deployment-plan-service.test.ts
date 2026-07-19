@@ -40,6 +40,8 @@ import {
   type DeploymentPlanOptimizationEvidence
 } from "./deployment-optimization.js";
 
+delete process.env.S3_BUCKET_NAME;
+
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
 const terraformArtifactId = "33333333-3333-4333-8333-333333333333";
@@ -574,6 +576,7 @@ function createDeploymentRecord(
     projectId,
     architectureId,
     terraformArtifactId,
+    preparationKey: null,
     awsConnectionId,
     awsAccountIdSnapshot: "123456789012",
     awsRegionSnapshot: "ap-northeast-2",

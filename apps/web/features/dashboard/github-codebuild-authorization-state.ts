@@ -1,4 +1,5 @@
 import type {
+  AwsCodeConnectionStatus,
   GitHubAppAvailability,
   GitHubInstallationConnection
 } from "@sketchcatch/types";
@@ -11,6 +12,31 @@ export type GitHubCodeBuildAuthorizationTarget =
       readonly status: "ready";
       readonly installation: GitHubInstallationConnection;
     };
+
+export type AwsCodeConnectionRepositoryAccessState = Readonly<{
+  actionHref: string;
+  actionLabel: string;
+  description: string;
+  status: "repository_access_unverified";
+  title: string;
+}>;
+
+export function deriveAwsCodeConnectionRepositoryAccessState(
+  status: AwsCodeConnectionStatus
+): AwsCodeConnectionRepositoryAccessState | null {
+  if (status !== "AVAILABLE") return null;
+  return {
+    actionHref: "https://github.com/settings/installations",
+    actionLabel: "AWS Connector 권한 관리",
+    description: "Repository 접근은 아직 확인되지 않았습니다",
+    status: "repository_access_unverified",
+    title: "AWS OAuth 연결됨"
+  };
+}
+
+export function getAwsCodeConnectionDisplayName(awsConnectionId: string): string {
+  return `sketchcatch-${awsConnectionId.replaceAll("-", "").slice(0, 8)}-github`;
+}
 
 // AWS 승인 전에 사용자가 기대해야 할 GitHub 계정을 하나로 확정합니다.
 export function deriveGitHubCodeBuildAuthorizationTarget(

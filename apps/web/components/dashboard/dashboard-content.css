@@ -782,6 +782,27 @@ a.dashboardActivityRow:hover {
   font-size: 20px;
 }
 
+.projectDeleteDialogIconButton {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  flex: 0 0 40px;
+  padding: 0;
+  color: #171717;
+}
+
+.projectDeleteDialogIconButton .dashboardIcon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+.projectDeleteDialogIconButton:focus-visible {
+  outline: 2px solid #171717;
+  outline-offset: 2px;
+}
+
 .projectDeleteDialogText {
   color: #55585f;
   font-size: 13px;

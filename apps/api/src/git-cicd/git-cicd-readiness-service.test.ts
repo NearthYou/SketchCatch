@@ -240,6 +240,51 @@ test("requires a current successful Direct application release in addition to in
     assert.equal(result.initialApplicationReleaseId, "release-1");
   });
 
+  await t.test("rejects a frontend marker for a different release candidate", async () => {
+    const state = createRepositoryState({ readyContext: true });
+    const result = await createGitCicdReadinessService({
+      repository: createRepository({
+        state,
+        createRelease: (target) =>
+          createEligibleRelease(target, { releaseCandidateId: "candidate-2" })
+      }),
+      planVerifier: createPlanVerifier()
+    }).refresh({ projectId: "project-1", userId: "user-1" });
+
+    assert.equal(result.initialApplicationReleaseId, null);
+    assert.equal(
+      getReadinessItem(result, "initial_application_release").status,
+      "action_required"
+    );
+  });
+
+  await t.test("rejects a bare commit SHA without its release candidate", async () => {
+    const state = createRepositoryState({ readyContext: true });
+    const result = await createGitCicdReadinessService({
+      repository: createRepository({
+        state,
+        createRelease: (target) => {
+          const release = createEligibleRelease(target);
+          assert.ok(release.frontendEvidence);
+          return {
+            ...release,
+            frontendEvidence: {
+              ...release.frontendEvidence,
+              commitMarker: release.commitSha
+            }
+          };
+        }
+      }),
+      planVerifier: createPlanVerifier()
+    }).refresh({ projectId: "project-1", userId: "user-1" });
+
+    assert.equal(result.initialApplicationReleaseId, null);
+    assert.equal(
+      getReadinessItem(result, "initial_application_release").status,
+      "action_required"
+    );
+  });
+
   await t.test("application-only recovery keeps the older infrastructure evidence", async () => {
     const infrastructure = createDeployment({ id: "infra-1", scope: "infrastructure" });
     const application = createDeployment({
@@ -428,6 +473,42 @@ test("propagates a transient S3 plan download failure as a readiness refresh err
   );
 });
 
+test("inspect keeps Delivery readable when the Apply Plan artifact download is unavailable", async () => {
+  const transient = Object.assign(new Error("socket timeout"), {
+    name: "TimeoutError",
+    $metadata: { httpStatusCode: 503 }
+  });
+  const planVerifier = createDeploymentPlanArtifactVerifier({
+    async downloadDeploymentPlanArtifact() {
+      throw transient;
+    }
+  });
+
+  const result = await createGitCicdReadinessService({
+    repository: createRepository(),
+    planVerifier
+  }).inspect({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(result.approvedApplyPlanArtifactId, null);
+  assert.equal(getReadinessItem(result, "approved_apply_plan").status, "action_required");
+});
+
+test("inspect still propagates an unexpected Apply Plan verifier defect", async () => {
+  const unexpected = new Error("unexpected verifier defect");
+
+  await assert.rejects(
+    createGitCicdReadinessService({
+      repository: createRepository(),
+      planVerifier: {
+        async verify() {
+          throw unexpected;
+        }
+      }
+    }).inspect({ projectId: "project-1", userId: "user-1" }),
+    (error: unknown) => error === unexpected
+  );
+});
+
 test("integration refresh reconciles a missing target from the latest Direct deployment's older verified Apply", async () => {
   const successfulDeploymentId = "latest-successful-direct-deployment";
   const destroyPlanId = "current-approved-destroy-plan";
@@ -602,6 +683,70 @@ test("refresh is idempotent for the same reconciled target", async () => {
   assert.deepEqual(second, first);
   assert.equal(state.targetRows.size, 1);
   assert.equal(state.targetRows.get("project-1")?.projectId, "project-1");
+});
+
+test("inspect accepts a canonical persisted target without rewriting it", async () => {
+  const state = createRepositoryState({ readyContext: true });
+  const service = createGitCicdReadinessService({
+    repository: createRepository({ state }),
+    planVerifier: createPlanVerifier(),
+    now: () => new Date("2026-07-17T04:00:00.000Z")
+  });
+  await service.refresh({ projectId: "project-1", userId: "user-1" });
+  assert.equal(state.savedTargets.length, 1);
+
+  const result = await service.inspect({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(getReadinessItem(result, "deployment_target").status, "ready");
+  assert.equal(state.savedTargets.length, 1);
+});
+
+test("inspect rejects a persisted target whose canonical fingerprint no longer matches", async () => {
+  const state = createRepositoryState({ readyContext: true });
+  const service = createGitCicdReadinessService({
+    repository: createRepository({ state }),
+    planVerifier: createPlanVerifier()
+  });
+  await service.refresh({ projectId: "project-1", userId: "user-1" });
+  const target = state.targetRows.get("project-1");
+  assert.ok(target);
+  target.deploymentTargetFingerprint = "f".repeat(64);
+
+  const result = await service.inspect({ projectId: "project-1", userId: "user-1" });
+
+  const targetItem = getReadinessItem(result, "deployment_target");
+  assert.ok(targetItem.missingKeys.includes("runtime_config"));
+  assert.ok(targetItem.missingKeys.includes("output_url"));
+});
+
+test("accepts and repairs legacy ECS web evidence derived from the confirmed paths", async () => {
+  const state = createRepositoryState({ readyContext: true });
+  const service = createGitCicdReadinessService({
+    repository: createRepository({ state }),
+    planVerifier: createPlanVerifier(),
+    now: () => new Date("2026-07-17T04:00:00.000Z")
+  });
+  await service.refresh({ projectId: "project-1", userId: "user-1" });
+  const target = state.targetRows.get("project-1");
+  assert.ok(target?.confirmedBuildConfig);
+  target.confirmedBuildConfig = {
+    ...target.confirmedBuildConfig,
+    evidence: target.confirmedBuildConfig.evidence.filter(
+      (evidence) => evidence.kind === "dockerfile"
+    )
+  };
+
+  const inspected = await service.inspect({ projectId: "project-1", userId: "user-1" });
+  assert.equal(getReadinessItem(inspected, "deployment_target").status, "ready");
+  assert.equal(state.savedTargets.length, 1);
+
+  const refreshed = await service.refresh({ projectId: "project-1", userId: "user-1" });
+  assert.equal(getReadinessItem(refreshed, "deployment_target").status, "ready");
+  assert.equal(state.savedTargets.length, 2);
+  assert.deepEqual(
+    state.savedTargets.at(-1)?.confirmedBuildConfig.evidence,
+    createConfirmedBuildConfig().evidence
+  );
 });
 
 test("retries a repeatable-read serialization conflict after locking the project row", async () => {
@@ -1457,7 +1602,7 @@ function createEligibleRelease(
       indexObjectKey: "index.html",
       indexVersionId: "index-version-1",
       invalidationId: "invalidation-1",
-      commitMarker: commitSha
+      commitMarker: `${commitSha}:candidate-1`
     },
     completedAt: new Date("2026-07-17T04:00:00Z"),
     deploymentScope: "full_stack",

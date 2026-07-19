@@ -1,16 +1,11 @@
 "use client";
 
-import { RotateCcw, Undo2 } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { RotateCcw } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { WorkspaceAiWorkbenchDraftProgress } from "../../../features/workspace/WorkspaceAiWorkbenchResults";
-import type {
-  ArchitectureDraftCandidateExclusion,
-  ArchitectureDraftProgressSnapshot
-} from "@sketchcatch/types";
 import type { AiStartMessage } from "./ai-start-model";
 import type { SelectedAssistantOption } from "./selected-option-model";
 import {
-  getProgressCandidateActions,
   getRetryRequestLabel,
   isSuggestionDisabled,
   shouldAutoFollowTranscript,
@@ -23,40 +18,28 @@ export function ConversationTranscript({
   hasFinalPreview,
   isInteractionLocked,
   isSuggestionInputBlocked,
-  lastExclusion,
   messages,
   onCancelRequest,
-  onExcludeCandidate,
   onOpenPreview,
   onRetry,
   onSuggestionSelect,
-  onUndoExclusion,
-  progressSnapshot,
   requestState,
   selections
 }: {
   readonly hasFinalPreview: boolean;
   readonly isInteractionLocked: boolean;
   readonly isSuggestionInputBlocked: boolean;
-  readonly lastExclusion: ArchitectureDraftCandidateExclusion | null;
   readonly messages: readonly AiStartMessage[];
   readonly onCancelRequest: () => void;
-  readonly onExcludeCandidate: (candidateId: string) => void;
   readonly onOpenPreview: () => void;
   readonly onRetry: () => Promise<void>;
   readonly onSuggestionSelect: (message: AiStartMessage, suggestion: string) => void;
-  readonly onUndoExclusion: () => void;
-  readonly progressSnapshot: ArchitectureDraftProgressSnapshot | null;
   readonly requestState: WorkspaceAiRequestState;
   readonly selections: readonly SelectedAssistantOption[];
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const shouldFollowRef = useRef(true);
   const forcedFollowTargetMessageCountRef = useRef<number | null>(null);
-  const candidateActions = useMemo(
-    () => getProgressCandidateActions(progressSnapshot),
-    [progressSnapshot]
-  );
   const retryRequestLabel = getRetryRequestLabel(requestState);
 
   useEffect(() => {
@@ -79,7 +62,7 @@ export function ConversationTranscript({
     ) {
       forcedFollowTargetMessageCountRef.current = null;
     }
-  }, [candidateActions.length, hasFinalPreview, messages, requestState, selections.length]);
+  }, [hasFinalPreview, messages, requestState, selections.length]);
 
   function handleScroll(): void {
     const scrollElement = scrollRef.current;
@@ -172,40 +155,6 @@ export function ConversationTranscript({
             </article>
           );
         })}
-
-        {candidateActions.length > 0 ? (
-          <section aria-labelledby="candidate-action-heading" className={styles.candidateActions}>
-            <div>
-              <h3 id="candidate-action-heading">추천 후보 제외</h3>
-            </div>
-            <ul>
-              {candidateActions.map((candidate) => (
-                <li key={candidate.candidateId}>
-                  <span>
-                    <strong>{candidate.label}</strong>
-                    <small>{candidate.resourceType}</small>
-                  </span>
-                  <button
-                    disabled={isInteractionLocked}
-                    onClick={() => onExcludeCandidate(candidate.candidateId)}
-                    type="button"
-                  >
-                    제외
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {lastExclusion ? (
-          <div className={styles.exclusionUndo} role="status">
-            <span>{lastExclusion.label} 제외됨</span>
-            <button disabled={isInteractionLocked} onClick={onUndoExclusion} type="button">
-              <Undo2 aria-hidden="true" size={14} /> 되돌리기
-            </button>
-          </div>
-        ) : null}
 
         {requestState === "loading" ? (
           <WorkspaceAiWorkbenchDraftProgress onCancel={onCancelRequest} />

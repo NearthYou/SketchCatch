@@ -224,7 +224,7 @@ API refresh는 GitHub Actions, job, commit file과 마스킹된 log를 read-only
 
 각 provider snapshot은 workflow run ID, attempt, execution kind, 갱신 시각으로 만든 `upstreamOrderingToken`과 로그 소유권을 나타내는 별도 `logRevision`을 가진다. RDS conditional upsert는 더 오래된 token과 같은 revision의 terminal-to-non-terminal 역행을 원자적으로 거부하고, 거부 시 stage/log write도 수행하지 않는다. 따라서 늦게 도착한 refresh가 완료 상태나 rerun log를 과거 상태로 되돌리지 않는다.
 
-모니터링 설정 변경에는 `userAcceptedChangeId`가 필요하며, enabled 상태는 branch와 app/infra path가 GitHub에서 검증되어야 한다. Pipeline refresh와 조회는 Git commit, workflow 설정, repository settings, AWS Resource를 변경하지 않는다. Git/CI/CD handoff, repository settings 적용, GitHub OAuth 보강, AWS role diff 적용은 각각 기존의 명시적 사용자 승인 경계를 유지한다.
+모니터링 설정 변경에는 `userAcceptedChangeId`가 필요하며, enabled 상태는 branch와 app/infra path가 GitHub에서 검증되어야 한다. Pipeline refresh와 조회는 Git commit, workflow 설정, repository settings, AWS Resource를 변경하지 않는다. Git/CI/CD handoff, GitHub App 기반 repository settings 적용, AWS role diff 적용은 각각 기존의 명시적 사용자 승인 경계를 유지한다. 로그인용 GitHub OAuth credential은 Repository 작업에 전달하지 않는다.
 
 `POST /api/projects/:projectId/git-cicd/readiness/refresh`는 RDS의 Deployment, Source Repository,
 monitoring 설정, Terraform Output과 S3의 승인 Plan artifact를 읽어 현재 준비 상태를 계산한다. 검증된

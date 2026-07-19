@@ -25,6 +25,7 @@
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   min-width: 0;
   padding: 0 20px;
+  position: relative;
 }
 
 .topBarBrand,
@@ -55,7 +56,7 @@
   justify-content: flex-end;
 }
 
-.topBarState > span {
+.topBarState > .stageBadge {
   align-items: center;
   background: var(--ai-surface);
   border: 1px solid var(--ai-line);
@@ -68,7 +69,7 @@
   padding: 6px 10px;
 }
 
-.topBarState > span::before {
+.topBarState > .stageBadge::before {
   background: #171717;
   border-radius: 50%;
   content: "";
@@ -103,6 +104,45 @@
   display: none;
 }
 
+.topBarState > .mobileBackToConversation {
+  display: none;
+}
+
+.topBarState > .topBarApply {
+  align-items: center;
+  background: #171717;
+  color: #ffffff;
+  display: inline-flex;
+  font-weight: 700;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.topBarState > .topBarApply:hover,
+.topBarState > .topBarApply:focus-visible {
+  background: #303030;
+  color: #ffffff;
+}
+
+.topBarApplyShortLabel {
+  display: none;
+}
+
+.topBarApplyError {
+  background: #fff5f3;
+  border: 1px solid #efc9c2;
+  border-radius: 9px;
+  color: #8d2f25;
+  font-size: 11px;
+  line-height: 1.45;
+  max-width: min(360px, calc(100vw - 28px));
+  padding: 8px 10px;
+  position: absolute;
+  right: 20px;
+  top: 54px;
+  z-index: 30;
+}
+
 .splitLayout {
   isolation: isolate;
   min-height: 0;
@@ -111,6 +151,12 @@
 }
 
 .splitLayoutConversation {
+  --conversation-dock-left: 18px;
+  --conversation-dock-width: min(calc(100% - 36px), clamp(640px, 64vw, 960px));
+  --conversation-side-gap: 16px;
+  --orbit-center-x: calc(
+    var(--conversation-dock-left) + var(--conversation-dock-width) + clamp(88px, 9vw, 148px)
+  );
   display: block;
 }
 
@@ -137,11 +183,11 @@
   border-radius: 16px;
   bottom: 18px;
   box-shadow: 0 18px 48px rgba(23, 23, 23, 0.1);
-  left: 18px;
+  left: var(--conversation-dock-left);
   overflow: hidden;
   position: absolute;
   top: 18px;
-  width: clamp(520px, 56vw, 780px);
+  width: var(--conversation-dock-width);
 }
 
 .conversationPanelFinal {
@@ -149,8 +195,7 @@
   position: relative;
 }
 
-.selectionTrailHeader p,
-.candidateActions > div > p {
+.selectionTrailHeader p {
   color: var(--ai-muted);
   font-size: 10px;
   font-weight: 750;
@@ -277,59 +322,7 @@
   font-weight: 700;
 }
 
-.candidateActions {
-  background: var(--ai-canvas);
-  border: 1px solid var(--ai-line);
-  border-radius: 12px;
-  padding: 14px;
-}
-
-.candidateActions h3 {
-  font-size: 13px;
-  margin: 0;
-}
-
-.candidateActions ul {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-}
-
-.candidateActions li {
-  align-items: center;
-  background: var(--ai-surface);
-  border: 1px solid var(--ai-line);
-  border-radius: 9px;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 9px 10px;
-}
-
-.candidateActions li > span {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.candidateActions strong {
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.candidateActions small {
-  color: var(--ai-muted);
-  font-size: 10px;
-}
-
-.candidateActions button,
-.exclusionUndo button,
+.requestStatus button,
 .retryButton,
 .previewArrival button {
   align-items: center;
@@ -348,14 +341,12 @@
   text-decoration: none;
 }
 
-.candidateActions button:disabled,
-.exclusionUndo button:disabled,
 .retryButton:disabled {
   cursor: default;
   opacity: 0.4;
 }
 
-.exclusionUndo,
+.requestStatus,
 .previewArrival {
   align-items: center;
   border: 1px solid var(--ai-line);
@@ -366,6 +357,19 @@
   gap: 10px;
   justify-content: space-between;
   padding: 10px 12px;
+}
+
+.requestStatusDot {
+  animation: requestPulse 1.4s ease-in-out infinite;
+  background: #171717;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  height: 6px;
+  width: 6px;
+}
+
+.requestStatus > span:nth-child(2) {
+  margin-right: auto;
 }
 
 .retryButton {
@@ -509,7 +513,8 @@
 
 .visualStageFinal {
   display: block;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 24px clamp(24px, 3vw, 48px) 24px;
   position: relative;
 }
@@ -524,20 +529,20 @@
 }
 
 .stageCanvas {
-  align-items: center;
-  display: flex;
-  justify-content: center;
   min-height: 0;
-  padding: 30px 0 110px 18vw;
+  position: relative;
 }
 
 .orbitScene {
   aspect-ratio: 1;
+  left: var(--orbit-center-x);
   max-height: min(70vh, 650px);
   max-width: 650px;
   pointer-events: none;
-  position: relative;
-  width: min(100%, 650px);
+  position: absolute;
+  top: calc(50% - 40px);
+  translate: -50% -50%;
+  width: min(64vw, 650px);
 }
 
 .orbitSceneReacting {
@@ -587,10 +592,13 @@
 
 .orbitLayerFrame {
   --orbit-kick: 18deg;
+  --orbit-tilt: 0deg;
+  --orbit-y-scale: 1;
+  --orbit-y-scale-inverse: 1;
   left: 50%;
   position: absolute;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) rotate(var(--orbit-tilt));
   transition:
     height 680ms cubic-bezier(0.22, 1, 0.36, 1),
     width 680ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -621,6 +629,7 @@
   animation: orbitSpin 38s linear infinite;
   inset: 0;
   position: absolute;
+  transform: scaleY(var(--orbit-y-scale));
 }
 
 .orbitLayerFrame[data-layer="1"] .orbitLayer {
@@ -637,6 +646,7 @@
   border-radius: 50%;
   inset: 0;
   position: absolute;
+  transform: scaleY(var(--orbit-y-scale));
   transition:
     opacity 520ms ease,
     transform 680ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -644,7 +654,7 @@
 
 .orbitLayerFrame[data-ring-visible="false"] .orbitRing {
   opacity: 0;
-  transform: scale(0.82);
+  transform: scaleY(var(--orbit-y-scale)) scale(0.82);
 }
 
 .orbitScene[data-convergence="1"] .orbitLayerFrame[data-layer="1"] {
@@ -697,7 +707,8 @@
   left: 100%;
   position: absolute;
   top: 50%;
-  transform: translate(-50%, -50%) rotate(calc(-1 * var(--glyph-angle))) scale(var(--glyph-scale));
+  transform: translate(-50%, -50%) rotate(calc(-1 * var(--glyph-angle)))
+    scaleY(var(--orbit-y-scale-inverse)) scale(var(--glyph-scale));
 }
 
 .orbitLayerFrame[data-layer="1"] .orbitGlyphCounter {
@@ -757,11 +768,21 @@
   border: 1px solid var(--ai-line);
   border-radius: 14px;
   bottom: 22px;
+  left: calc(
+    var(--conversation-dock-left) + var(--conversation-dock-width) +
+      var(--conversation-side-gap)
+  );
   max-width: 600px;
   padding: 14px;
   position: absolute;
-  right: 24px;
-  width: min(38vw, 600px);
+  width: min(
+    38vw,
+    600px,
+    calc(
+      100% - var(--conversation-dock-left) - var(--conversation-dock-width) -
+        var(--conversation-side-gap) - 24px
+    )
+  );
 }
 
 .selectionTrailHeader h2 {
@@ -845,6 +866,8 @@
   grid-template-rows: minmax(420px, 1fr) auto;
   height: auto;
   min-height: 100%;
+  min-width: 0;
+  width: 100%;
 }
 
 .previewFrame {
@@ -853,89 +876,28 @@
   border-radius: 16px;
   box-shadow: 0 12px 32px rgba(23, 23, 23, 0.07);
   min-height: 360px;
+  min-width: 0;
   overflow: hidden;
-}
-
-.previewActions {
-  align-items: center;
-  background: var(--ai-canvas);
-  border-top: 1px solid var(--ai-line);
-  display: flex;
-  gap: 8px;
-  justify-content: space-between;
-  padding-top: 16px;
-}
-
-.previewActionsGroup {
-  display: flex;
-  gap: 8px;
-}
-
-.previewApprovalBoundary {
-  color: var(--ai-muted);
-  font-size: 11px;
-  line-height: 1.45;
-  margin-right: auto;
-}
-
-.previewApplyError {
-  color: #9b3328;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.previewSecondary,
-.previewPrimary,
-.backToConversation {
-  align-items: center;
-  border-radius: 9px;
-  cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  gap: 6px;
-  min-height: 40px;
-  padding: 8px 13px;
-  text-decoration: none;
-}
-
-.previewSecondary,
-.backToConversation {
-  background: #ffffff;
-  border: 1px solid var(--ai-line-strong);
-  color: var(--ai-text);
-}
-
-.previewPrimary {
-  background: #171717;
-  border: 1px solid #171717;
-  color: #ffffff;
-}
-
-.previewPrimary:disabled,
-.previewSecondary:disabled {
-  cursor: default;
-  opacity: 0.36;
-}
-
-.backToConversation {
-  display: none;
+  width: 100%;
 }
 
 @keyframes orbitSpin {
+  from {
+    transform: scaleY(var(--orbit-y-scale)) rotate(0turn);
+  }
   to {
-    transform: rotate(1turn);
+    transform: scaleY(var(--orbit-y-scale)) rotate(1turn);
   }
 }
 
 @keyframes orbitLayerKick {
   0%,
   100% {
-    transform: translate(-50%, -50%) rotate(0deg);
+    transform: translate(-50%, -50%) rotate(var(--orbit-tilt));
   }
   44% {
-    transform: translate(-50%, -50%) rotate(var(--orbit-kick));
+    transform: translate(-50%, -50%)
+      rotate(calc(var(--orbit-tilt) + var(--orbit-kick)));
   }
 }
 
@@ -1017,6 +979,13 @@
   }
 }
 
+@keyframes requestPulse {
+  50% {
+    opacity: 0.3;
+    transform: scale(0.78);
+  }
+}
+
 @media (max-width: 959px) {
   .page {
     display: grid;
@@ -1037,9 +1006,14 @@
     gap: 4px;
   }
 
+  .topBarBrand {
+    max-width: 130px;
+    overflow: hidden;
+  }
+
   .topBarProjectName,
   .topBarTitle,
-  .topBarState span {
+  .topBarState > .stageBadge {
     display: none;
   }
 
@@ -1049,11 +1023,45 @@
     font-weight: 650;
   }
 
+  .topBarState > .mobileBackToConversation {
+    align-items: center;
+    border: 1px solid var(--ai-line-strong);
+    display: inline-flex;
+    font-weight: 650;
+    gap: 4px;
+  }
+
+  .topBarState > .topBarApply {
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+
+  .topBarApplyFullLabel {
+    display: none;
+  }
+
+  .topBarApplyShortLabel {
+    display: inline;
+  }
+
+  .topBarState > .topBarApply svg {
+    display: none;
+  }
+
+  .topBarApplyError {
+    right: 14px;
+    top: 50px;
+  }
+
   .splitLayout {
     display: block;
     height: 100%;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .splitLayoutConversation {
+    --orbit-center-x: 64%;
   }
 
   .conversationPanelActive,
@@ -1103,7 +1111,6 @@
   .stageCanvas {
     height: 100%;
     min-height: 0;
-    padding: 22px 0 120px 28vw;
   }
 
   .orbitScene {
@@ -1150,7 +1157,8 @@
     display: block;
     inset: 0;
     min-height: 0;
-    overflow: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
     padding: 18px 14px max(18px, env(safe-area-inset-bottom));
     position: absolute;
     z-index: 8;
@@ -1170,31 +1178,6 @@
     min-height: 390px;
   }
 
-  .previewActions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .previewApprovalBoundary {
-    margin: 0;
-    order: -1;
-  }
-
-  .previewActionsGroup {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .previewSecondary,
-  .previewPrimary,
-  .backToConversation {
-    justify-content: center;
-    min-height: 44px;
-  }
-
-  .backToConversation {
-    display: inline-flex;
-  }
 }
 
 @media (max-width: 420px) {
@@ -1210,7 +1193,7 @@
     justify-content: flex-end;
   }
 
-  .exclusionUndo,
+  .requestStatus,
   .previewArrival,
   .voiceConfirmation {
     align-items: flex-start;
@@ -1225,7 +1208,8 @@
   .orbitGlyphCounter,
   .orbitGlyphPlate,
   .orbitCore,
-  .previewShell {
+  .previewShell,
+  .requestStatusDot {
     animation: none !important;
   }
 
@@ -1248,27 +1232,4 @@
   .suggestionButton:focus-visible:not(:disabled) {
     transform: none;
   }
-}
-.acceptedAnswer {
-  align-items: baseline;
-  background: #f3f7f3;
-  border: 1px solid #b7c8b8;
-  border-radius: 9px;
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-  padding: 8px 10px;
-  width: min(100%, 440px);
-}
-
-.acceptedAnswer span {
-  color: var(--ai-muted);
-  flex: 0 0 auto;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.acceptedAnswer strong {
-  font-size: 12px;
-  line-height: 1.45;
 }

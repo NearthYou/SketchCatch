@@ -9,7 +9,6 @@ import {
   hasDeploymentDraftChanges,
   shouldShowDeploymentValidationActions,
   requiresProjectBuildEnvironment,
-  shouldStartQueuedApplyPlan,
   type DirectDeploymentFlowInput
 } from "./deployment-console-state";
 
@@ -31,6 +30,7 @@ function createInput(
   return {
     actions: idleActions,
     deployment: null,
+    failedStepId: null,
     hasUnsavedBaseline: false,
     preflightState: "idle",
     requestState: "idle",
@@ -228,6 +228,26 @@ test("a persisted plan resumes at approval after the local preflight state reset
 
   assert.equal(flow.activeStepId, "approval");
   assert.equal(flow.steps[1]?.state, "active");
+});
+
+test("a failed foreground request does not auto-advance when polling finds a plan", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: { ...idleActions, canApprovePlan: true, shouldShowApprovePlanButton: true },
+      deployment: {
+        approvedAt: null,
+        currentPlanArtifactId: "plan-from-polling",
+        currentPlanOperation: "apply",
+        status: "PENDING"
+      },
+      preflightState: "passed",
+      requestState: "error",
+      failedStepId: "validation"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "validation");
+  assert.equal(flow.steps[0]?.state, "error");
 });
 
 test("running apply reports a running final step", () => {
@@ -469,45 +489,6 @@ test("approved destroy cleanup keeps the execution step open when the current Bo
   assert.equal(flow.activeStepId, "deployment");
   assert.equal(flow.steps[0]?.state, "done");
   assert.equal(flow.steps[2]?.state, "error");
-});
-
-test("a queued deployment starts its apply plan after init returns to PENDING", () => {
-  assert.equal(
-    shouldStartQueuedApplyPlan({
-      deployment: {
-        id: "deployment-1",
-        currentPlanArtifactId: null,
-        status: "PENDING"
-      },
-      queuedDeploymentId: "deployment-1",
-      requestState: "idle"
-    }),
-    true
-  );
-  assert.equal(
-    shouldStartQueuedApplyPlan({
-      deployment: {
-        id: "deployment-1",
-        currentPlanArtifactId: "plan-1",
-        status: "PENDING"
-      },
-      queuedDeploymentId: "deployment-1",
-      requestState: "idle"
-    }),
-    false
-  );
-  assert.equal(
-    shouldStartQueuedApplyPlan({
-      deployment: {
-        id: "deployment-1",
-        currentPlanArtifactId: null,
-        status: "RUNNING"
-      },
-      queuedDeploymentId: "deployment-1",
-      requestState: "idle"
-    }),
-    false
-  );
 });
 
 function createPreDeploymentAnalysis(

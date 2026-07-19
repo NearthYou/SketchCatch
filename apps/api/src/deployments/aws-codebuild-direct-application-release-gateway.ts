@@ -9,6 +9,7 @@ import {
 } from "@aws-sdk/client-codebuild";
 import { and, desc, eq, or } from "drizzle-orm";
 import {
+  DeregisterTaskDefinitionCommand,
   DescribeServicesCommand,
   DescribeTaskDefinitionCommand,
   ECSClient,
@@ -303,6 +304,8 @@ export function createAwsCodeBuildDirectApplicationReleaseGateway(
           context,
           artifact,
           release,
+          assumeRole,
+          createEcsClient,
           ...(retainProjectLease ? { retainProjectLease: true } : {}),
           ...(abortSignal ? { abortSignal } : {})
         });
@@ -573,18 +576,24 @@ async function deployEcsWebTrustedRelease(input: {
       "APPLICATION_RELEASE_CANDIDATE_MISMATCH"
     );
   }
-  const [baseline] = await db
-    .select()
-    .from(applicationReleases)
-    .where(
-      and(
-        eq(applicationReleases.projectId, release.projectId),
-        eq(applicationReleases.runtimeTargetKind, release.runtimeTargetKind),
-        eq(applicationReleases.status, "succeeded")
-      )
-    )
-    .orderBy(desc(applicationReleases.completedAt), desc(applicationReleases.createdAt))
-    .limit(1);
+  const [baseline] = release.deploymentTargetFingerprint
+    ? await db
+        .select()
+        .from(applicationReleases)
+        .where(
+          and(
+            eq(applicationReleases.projectId, release.projectId),
+            eq(applicationReleases.runtimeTargetKind, release.runtimeTargetKind),
+            eq(
+              applicationReleases.deploymentTargetFingerprint,
+              release.deploymentTargetFingerprint
+            ),
+            eq(applicationReleases.status, "succeeded")
+          )
+        )
+        .orderBy(desc(applicationReleases.completedAt), desc(applicationReleases.createdAt))
+        .limit(1)
+    : [];
   const activationBaselineReleaseId = baseline?.id ?? null;
   if (release.baselineReleaseId !== activationBaselineReleaseId) {
     await db
@@ -621,7 +630,8 @@ async function deployEcsWebTrustedRelease(input: {
   const persistedBaseline = resolvePersistedEcsReleaseBaseline({
     baselineReleaseId: activationBaselineReleaseId,
     baseline,
-    projectId: input.context.deployment.projectId
+    projectId: input.context.deployment.projectId,
+    deploymentTargetFingerprint: release.deploymentTargetFingerprint
   });
   const trustedContext = {
     projectId: input.context.deployment.projectId,
@@ -878,6 +888,8 @@ async function rollbackEcsWebTrustedRelease(input: {
   context: DirectApplicationReleaseContext;
   artifact: DirectApplicationArtifact;
   release: DirectApplicationReleaseRecord;
+  assumeRole: AssumeDirectReleaseRole;
+  createEcsClient: CreateEcsClient;
   abortSignal?: AbortSignal;
   retainProjectLease?: boolean;
 }) {
@@ -931,7 +943,8 @@ async function rollbackEcsWebTrustedRelease(input: {
   const persistedBaseline = resolvePersistedEcsReleaseBaseline({
     baselineReleaseId: release.baselineReleaseId,
     baseline,
-    projectId: input.context.deployment.projectId
+    projectId: input.context.deployment.projectId,
+    deploymentTargetFingerprint: release.deploymentTargetFingerprint
   });
   if (!persistedBaseline) {
     throw new DirectApplicationReleaseError(
@@ -959,6 +972,16 @@ async function rollbackEcsWebTrustedRelease(input: {
       ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
     }
   );
+  await deregisterRolledBackEcsTaskDefinition({
+    taskDefinitionArn: rolledBackFromTaskDefinitionArn,
+    accountId: input.context.connection.accountId,
+    region: input.context.connection.region,
+    roleArn: input.context.connection.roleArn,
+    externalId: input.context.connection.externalId,
+    assumeRole: input.assumeRole,
+    createEcsClient: input.createEcsClient,
+    ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+  });
   const outputUrl = trustedContext.runtime.outputUrl;
   return {
     providerRevision: {
@@ -978,6 +1001,83 @@ async function rollbackEcsWebTrustedRelease(input: {
     rollbackEvidence: result.rollbackEvidence,
     status: "rolled_back" as const
   };
+}
+
+export async function deregisterRolledBackEcsTaskDefinition(input: {
+  taskDefinitionArn: string;
+  accountId: string;
+  region: string;
+  roleArn: string;
+  externalId: string;
+  assumeRole: AssumeDirectReleaseRole;
+  createEcsClient: CreateEcsClient;
+  abortSignal?: AbortSignal;
+}): Promise<void> {
+  const arnMatch =
+    /^arn:[a-z0-9-]+:ecs:([^:]+):([0-9]{12}):task-definition\/[A-Za-z0-9_-]+:([1-9][0-9]*)$/u.exec(
+      input.taskDefinitionArn
+    );
+  if (!arnMatch || arnMatch[1] !== input.region || arnMatch[2] !== input.accountId) {
+    throw new DirectApplicationReleaseError(
+      "The rolled-back ECS Task Definition is outside the approved AWS target"
+    );
+  }
+
+  const roleSessionSuffix = input.taskDefinitionArn.slice(-24).replace(/[^A-Za-z0-9+=,.@-]/gu, "-");
+  const credentials = await input.assumeRole({
+    roleArn: input.roleArn,
+    externalId: input.externalId,
+    region: input.region,
+    roleSessionName: `sketchcatch-taskdef-cleanup-${roleSessionSuffix}`,
+    durationSeconds: 900,
+    policy: JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: ["ecs:DescribeTaskDefinition", "ecs:DeregisterTaskDefinition"],
+          Resource: input.taskDefinitionArn
+        }
+      ]
+    }),
+    ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+  });
+  const client = input.createEcsClient({ region: input.region, credentials });
+
+  try {
+    const described = await client.send(
+      new DescribeTaskDefinitionCommand({ taskDefinition: input.taskDefinitionArn }),
+      input.abortSignal ? { abortSignal: input.abortSignal } : undefined
+    );
+    if (described.taskDefinition?.taskDefinitionArn !== input.taskDefinitionArn) {
+      throw new DirectApplicationReleaseError(
+        "ECS described a different Task Definition during rollback cleanup"
+      );
+    }
+    if (described.taskDefinition.status === "INACTIVE") {
+      return;
+    }
+    if (described.taskDefinition.status !== "ACTIVE") {
+      throw new DirectApplicationReleaseError(
+        "The rolled-back ECS Task Definition has an unexpected status"
+      );
+    }
+
+    const deregistered = await client.send(
+      new DeregisterTaskDefinitionCommand({ taskDefinition: input.taskDefinitionArn }),
+      input.abortSignal ? { abortSignal: input.abortSignal } : undefined
+    );
+    if (
+      deregistered.taskDefinition?.taskDefinitionArn !== input.taskDefinitionArn ||
+      deregistered.taskDefinition.status !== "INACTIVE"
+    ) {
+      throw new DirectApplicationReleaseError(
+        "ECS did not confirm the released Task Definition was deregistered"
+      );
+    }
+  } finally {
+    client.destroy();
+  }
 }
 
 function createTrustedReleaseContext(input: {
@@ -1087,11 +1187,13 @@ export function resolvePersistedEcsReleaseBaseline(input: {
         id: string;
         projectId: string;
         runtimeTargetKind: RuntimeTargetKind;
+        deploymentTargetFingerprint: string | null;
         status: ApplicationReleaseStatus;
         providerRevision: ApplicationReleaseProviderRevision | null;
       }
     | undefined;
   projectId: string;
+  deploymentTargetFingerprint: string | null;
 }): TrustedReleaseContext["baseline"] {
   if (!input.baselineReleaseId) return null;
   const baseline = input.baseline;
@@ -1106,6 +1208,15 @@ export function resolvePersistedEcsReleaseBaseline(input: {
   ) {
     throw new DirectApplicationReleaseError(
       "The persisted rollback baseline is missing or no longer valid",
+      "APPLICATION_RELEASE_BASELINE_INVALID"
+    );
+  }
+  if (
+    !input.deploymentTargetFingerprint ||
+    baseline.deploymentTargetFingerprint !== input.deploymentTargetFingerprint
+  ) {
+    throw new DirectApplicationReleaseError(
+      "The persisted rollback baseline belongs to a different deployment target",
       "APPLICATION_RELEASE_BASELINE_INVALID"
     );
   }
@@ -1563,7 +1674,6 @@ export async function verifyCurrentProjectBuildEnvironment(
     }
   });
   if (
-    desired.runtimeFingerprint !== environment.runtimeFingerprint ||
     desired.codeBuildProjectName !== environment.codeBuildProjectName ||
     desired.codeBuildServiceRoleArn !== environment.codeBuildServiceRoleArn ||
     desired.permissionsBoundaryArn !== environment.permissionsBoundaryArn ||

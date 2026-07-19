@@ -3,13 +3,11 @@ import test from "node:test";
 import type {
   AiArchitectureDraftResult,
   ArchitectureBoardCompilationProposal,
-  ArchitectureDraftProgressSnapshot,
   DiagramJson
 } from "@sketchcatch/types";
 import {
   createWorkspaceAiOrbitReactionKey,
   getComposerEnterAction,
-  getProgressCandidateActions,
   getRetryRequestLabel,
   getWorkspaceAiErrorMessage,
   getWorkspaceAiOrbitPresentation,
@@ -236,38 +234,6 @@ test("option 응답을 따라가는 중에도 사용자가 과거 대화로 올�
     }),
     true
   );
-});
-
-test("candidate action은 server snapshot의 실제 excludable ID와 label만 노출한다", () => {
-  const snapshot = {
-    excludableCandidateIds: ["candidate-rds", "stale-id"],
-    provisionalArchitectureJson: {
-      edges: [],
-      nodes: [
-        {
-          id: "candidate-rds",
-          label: "Orders database",
-          type: "RDS",
-          config: {},
-          positionX: 0,
-          positionY: 0
-        },
-        {
-          id: "decorative-only",
-          label: "Orbit Lambda",
-          type: "LAMBDA",
-          config: {},
-          positionX: 0,
-          positionY: 0
-        }
-      ]
-    },
-    sequence: 3
-  } as ArchitectureDraftProgressSnapshot;
-
-  assert.deepEqual(getProgressCandidateActions(snapshot), [
-    { candidateId: "candidate-rds", label: "Orders database", resourceType: "RDS" }
-  ]);
 });
 
 test("final Preview는 Draft의 임의 diagramJson이 아니라 Compiler proposal diagram만 사용한다", () => {

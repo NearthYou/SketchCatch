@@ -186,7 +186,7 @@ test("common natural-language answers select the matching existing option", () =
   for (const scenario of scenarios) {
     assert.deepEqual(
       resolveAcceptedArchitectureDraftClarificationSelection(
-        { ...clarification, ...scenario },
+        { ...clarification, ...scenario, suggestions: [...scenario.suggestions] },
         scenario.answer,
         nextQuestion
       ),

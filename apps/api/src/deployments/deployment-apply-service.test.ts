@@ -486,6 +486,7 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
   const applyArtifactStorage = new FakeApplyArtifactStorage();
   const runnerStages: string[] = [];
   let cleanupCalled = false;
+  let targetSyncCalls = 0;
   let writtenPlanFile: { filePath: string; content: Buffer } | undefined;
   let restoredState: { filePath: string; content: Buffer } | undefined;
 
@@ -599,14 +600,8 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
         repository.lifecycleEvents.push("application-release");
         runnerStages.push("application-release");
       },
-      synchronizeDeploymentTargetAfterApply: async (input) => {
-        assert.deepEqual(input, {
-          projectId,
-          deploymentId,
-          accessContext: createAccessContext()
-        });
-        assert.ok(repository.savedInput);
-        repository.lifecycleEvents.push("target-sync");
+      synchronizeDeploymentTargetAfterApply: async () => {
+        targetSyncCalls += 1;
       },
       reconcileApplicationOutput: async ({ outputs }) => {
         assert.equal(
@@ -622,11 +617,11 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
   assert.deepEqual(runnerStages, ["init", "apply", "output", "show-state", "application-release"]);
   assert.deepEqual(repository.lifecycleEvents, [
     "results-save",
-    "target-sync",
     "output-reconcile",
     "application-release",
     "terminal-complete"
   ]);
+  assert.equal(targetSyncCalls, 0);
   assert.deepEqual(repository.activeStages, ["application_release"]);
   assert.equal(cleanupCalled, true);
   assert.match(writtenPlanFile?.filePath ?? "", /[\\/]tfplan$/);
@@ -1004,6 +999,67 @@ test("full-stack output reconciliation failure preserves Terraform results and s
   ]);
   assert.equal(repository.failedInput?.stateObjectKey, applyArtifactStorage.stateObjectKey);
   assert.match(repository.failedInput?.errorSummary ?? "", /DEPLOYMENT_OUTPUT_URL_CONFLICT/);
+});
+
+test("post-apply failure retries terminal persistence when the first failure update is interrupted", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  const persistFailure = repository.failDeployment.bind(repository);
+  let failureAttempts = 0;
+  repository.failDeployment = async (...args) => {
+    failureAttempts += 1;
+    if (failureAttempts === 1) {
+      throw new Error("transient terminal persistence failure");
+    }
+    return persistFailure(...args);
+  };
+
+  await assert.rejects(
+    runDeploymentApply(
+      { deploymentId, accessContext: createAccessContext() },
+      repository,
+      {
+        applyArtifactStorage,
+        readTerraformArtifactFile: async () => terraformArtifactContent,
+        writePlanFile: async () => undefined,
+        prepareTerraformWorkspace: async () => ({
+          workdir: "C:/tmp/sketchcatch-terminal-persistence-retry",
+          mainFilePath: "C:/tmp/sketchcatch-terminal-persistence-retry/main.tf",
+          terraformFiles: [],
+          cleanup: async () => undefined
+        }),
+        prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+        runTerraformInit: async () => createRunnerResult("init"),
+        runTerraformApply: async () => createRunnerResult("apply"),
+        runTerraformOutputJson: async () =>
+          createRunnerResult("output", {
+            stdout: JSON.stringify({
+              api_base_url: {
+                sensitive: false,
+                value: "https://api.example.com"
+              }
+            })
+          }),
+        runTerraformShowStateJson: async () =>
+          createRunnerResult("show", {
+            stdout: JSON.stringify({ values: { root_module: { resources: [] } } })
+          }),
+        reconcileApplicationOutput: async () => {
+          throw new Error("DEPLOYMENT_OUTPUT_URL_CONFLICT");
+        },
+        generateResultId: createSequentialIdGenerator()
+      }
+    ),
+    /transient terminal persistence failure/
+  );
+
+  assert.equal(failureAttempts, 2);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.stateObjectKey, applyArtifactStorage.stateObjectKey);
 });
 
 function createVerifiedNoChangeApplyScenario(): {
@@ -1939,6 +1995,7 @@ function createApprovedDeploymentRecord(
     projectId,
     architectureId,
     terraformArtifactId,
+    preparationKey: null,
     awsConnectionId,
     awsAccountIdSnapshot: "123456789012",
     awsRegionSnapshot: "ap-northeast-2",

@@ -73,8 +73,8 @@ export function createRuntimeCachedDeploymentRepository(input: {
 
       return deployment;
     },
-    markDeploymentPlanRunning: async (deploymentId) => {
-      const deployment = await repository.markDeploymentPlanRunning(deploymentId);
+    markDeploymentPlanRunning: async (deploymentId, operation) => {
+      const deployment = await repository.markDeploymentPlanRunning(deploymentId, operation);
 
       await cacheStatus(deployment);
 
