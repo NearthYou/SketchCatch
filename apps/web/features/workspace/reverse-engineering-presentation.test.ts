@@ -432,6 +432,38 @@ test("부분 실패는 실제 AWS 서비스별로 합치고 내부 오류 대신
   assert.doesNotMatch(JSON.stringify(errors), /AccessDenied|arn:aws|DescribeVpcs|RequestId|provider_api/);
 });
 
+test("UNKNOWN reader도 안전한 serviceKey로 서로 다른 AWS 서비스를 구분한다", () => {
+  const errors = presentReverseEngineeringScanErrors([
+    {
+      id: "legacy-unknown-reader",
+      serviceKey: "iam",
+      resourceType: "UNKNOWN",
+      stage: "provider_api",
+      reason: "permission_denied",
+      message: "raw IAM error",
+      retryable: false
+    },
+    {
+      id: "legacy-unknown-reader",
+      serviceKey: "resource-explorer",
+      resourceType: "UNKNOWN",
+      stage: "provider_api",
+      reason: "permission_denied",
+      message: "raw Resource Explorer error",
+      retryable: false
+    }
+  ]);
+
+  assert.deepEqual(
+    errors.map(({ key, serviceName }) => ({ key, serviceName })),
+    [
+      { key: "iam", serviceName: "IAM" },
+      { key: "resource-explorer", serviceName: "Resource Explorer" }
+    ]
+  );
+  assert.doesNotMatch(JSON.stringify(errors), /raw IAM|raw Resource Explorer|provider_api/);
+});
+
 test("최종 혼합 회귀 fixture는 지원됨, 검토 전용, 읽지 못한 서비스를 분리해 사람이 이해할 수 있게 표시한다", () => {
   const { awsConnection, result } = createReverseEngineeringFinalRegressionFixture();
   const presentationById = new Map(

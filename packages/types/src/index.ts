@@ -2401,6 +2401,7 @@ export type ReverseEngineeringImportSuggestion = {
 
 export type ReverseEngineeringScanErrorReason =
   | "permission_denied"
+  | "not_configured"
   | "invalid_region"
   | "expired_credential"
   | "throttled"
@@ -2409,11 +2410,23 @@ export type ReverseEngineeringScanErrorReason =
 
 export type ReverseEngineeringScanError = {
   id: string;
+  /** Safe AWS service identifier used to group partial scan coverage. */
+  serviceKey?: string | undefined;
   resourceType: ResourceType | "UNKNOWN";
   stage: ReverseEngineeringScanStage;
   reason: ReverseEngineeringScanErrorReason;
   message: string;
   retryable: boolean;
+};
+
+export type ReverseEngineeringServiceCoverage = {
+  status: "complete" | "partial";
+  unavailableServices: Array<{
+    serviceKey: string;
+    displayName: string;
+    reason: "permission_required" | "not_configured" | "retry";
+    remedy: "open_settings" | "retry";
+  }>;
 };
 
 export type ReverseEngineeringScanLogLine = {
@@ -2435,6 +2448,8 @@ export type ReverseEngineeringScanResult = {
   analysisExclusions: ReverseEngineeringAnalysisExclusion[];
   importSuggestions: ReverseEngineeringImportSuggestion[];
   scanErrors: ReverseEngineeringScanError[];
+  /** Safe service-level coverage returned by current Reverse Engineering scans. */
+  coverage?: ReverseEngineeringServiceCoverage | undefined;
 };
 
 export type CreateReverseEngineeringScanRequest = {

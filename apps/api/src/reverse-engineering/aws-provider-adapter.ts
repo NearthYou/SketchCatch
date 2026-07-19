@@ -14,6 +14,10 @@ import type {
 import { createReverseEngineeringArchitectureJson } from "./aws-provider-architecture-layout.js";
 import { createReverseEngineeringFindings } from "./aws-reverse-engineering-findings.js";
 import { createAwsResourceDisplayNameMap } from "./aws-resource-display-name.js";
+import {
+  createReverseEngineeringPublicCoverage,
+  sanitizeReverseEngineeringScanErrors
+} from "./reverse-engineering-public-errors.js";
 
 export type AwsProviderScanInput = {
   provider: CloudProvider;
@@ -105,6 +109,8 @@ export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsPr
   return {
     async scan(input) {
       const discoveryResult = normalizeDiscoveryResult(await gateway.discoverResources(input));
+      const scanErrors = sanitizeReverseEngineeringScanErrors(discoveryResult.scanErrors);
+      const { coverage } = createReverseEngineeringPublicCoverage(scanErrors);
       const records = discoveryResult.records;
       const idMap = createResourceIdMap(records);
       const displayNameMap = createAwsResourceDisplayNameMap(records);
@@ -125,7 +131,8 @@ export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsPr
         ],
         analysisExclusions: createAnalysisExclusions(discoveredResources),
         importSuggestions: createImportSuggestions(discoveredResources),
-        scanErrors: discoveryResult.scanErrors
+        scanErrors,
+        coverage
       };
     }
   };

@@ -157,6 +157,7 @@ export type AwsReverseEngineeringReaderPlan = {
 export type AwsPageFailure = {
   outcome:
     | "permission_denied"
+    | "not_configured"
     | "expired_credential"
     | "invalid_region"
     | "throttled"
@@ -3141,8 +3142,9 @@ export function deduplicateReverseEngineeringScanErrors(
   const uniqueErrors = new Map<string, ReverseEngineeringScanError>();
 
   for (const scanError of scanErrors) {
-    if (!uniqueErrors.has(scanError.id)) {
-      uniqueErrors.set(scanError.id, scanError);
+    const key = scanError.serviceKey ?? scanError.id;
+    if (!uniqueErrors.has(key)) {
+      uniqueErrors.set(key, scanError);
     }
   }
 
@@ -3224,6 +3226,7 @@ function toScanError(
 
   return {
     id: `scan-error-service-${normalizeReverseEngineeringAwsServiceKey(serviceKey)}`,
+    serviceKey: normalizeReverseEngineeringAwsServiceKey(serviceKey),
     resourceType,
     stage: "provider_api",
     reason,
@@ -3241,6 +3244,7 @@ function toScanErrorFromPageFailure(
   const reason = failure.outcome === "transient" ? "provider_error" : failure.outcome;
   return {
     id: `scan-error-service-${normalizeReverseEngineeringAwsServiceKey(serviceKey)}`,
+    serviceKey: normalizeReverseEngineeringAwsServiceKey(serviceKey),
     resourceType,
     stage: "provider_api",
     reason,

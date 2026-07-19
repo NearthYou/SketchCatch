@@ -29,6 +29,12 @@ import {
   createAwsResourceDisplayName,
   createAwsResourceDisplayNameMap
 } from "./aws-resource-display-name.js";
+import {
+  classifyReverseEngineeringConnectionFailure,
+  createReverseEngineeringPublicCoverage,
+  sanitizeReverseEngineeringScanErrors,
+  type ReverseEngineeringConnectionFailureClassification
+} from "./reverse-engineering-public-errors.js";
 
 export type ReverseEngineeringScanRecord = typeof reverseEngineeringScans.$inferSelect;
 export type ReverseEngineeringScanLogRecord = typeof reverseEngineeringScanLogs.$inferSelect;
@@ -166,6 +172,7 @@ export function normalizeReverseEngineeringScanResult(
     normalizationContext
   );
   const persistedDraft = persistedResult.reverseEngineeringDraft;
+  const scanErrors = sanitizeReverseEngineeringScanErrors(persistedResult.scanErrors);
   const draft = isUsableReverseEngineeringDraft(persistedDraft, scan.id)
     ? normalizeReadCompatibilityDraft(persistedDraft, normalizationContext)
     : createReadCompatibilityDraft(scan, architectureJson);
@@ -175,6 +182,8 @@ export function normalizeReverseEngineeringScanResult(
     scan,
     architectureJson,
     reverseEngineeringDraft: draft,
+    scanErrors,
+    coverage: createReverseEngineeringPublicCoverage(scanErrors).coverage,
     importSuggestions: sanitizeImportSuggestions(
       normalizationContext,
       persistedResult.importSuggestions
@@ -504,9 +513,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 // 스캔 row는 있지만 Provider 호출이 실패한 경우 404와 구분하기 위해 따로 던집니다.
 export class ReverseEngineeringScanFailedError extends Error {
-  constructor(message: string) {
-    super(message);
+  readonly internalCode: ReverseEngineeringConnectionFailureClassification["internalCode"];
+  readonly publicReason: ReverseEngineeringConnectionFailureClassification["publicReason"];
+
+  // gg: 공개 Error에는 안전한 문장과 다음 행동 분류만 남깁니다.
+  constructor(classification: ReverseEngineeringConnectionFailureClassification) {
+    super(classification.publicMessage);
     this.name = "ReverseEngineeringScanFailedError";
+    this.internalCode = classification.internalCode;
+    this.publicReason = classification.publicReason;
   }
 }
 
@@ -564,11 +579,12 @@ export async function createReverseEngineeringPreviewScan(
       region: input.region,
       resourceTypes: input.resourceTypes
     });
+    const publicAdapterResult = normalizePublicAdapterResult(adapterResult);
     const result: ReverseEngineeringScanResult = {
-      ...adapterResult,
+      ...publicAdapterResult,
       scan,
       reverseEngineeringDraft: {
-        ...adapterResult.reverseEngineeringDraft,
+        ...publicAdapterResult.reverseEngineeringDraft,
         id: `draft-${scan.id}`,
         scanId: scan.id,
         createdAt: scan.completedAt ?? scan.updatedAt
@@ -580,13 +596,15 @@ export async function createReverseEngineeringPreviewScan(
       result
     };
   } catch (error) {
-    throw new ReverseEngineeringScanFailedError(toErrorSummary(error));
+    throw new ReverseEngineeringScanFailedError(
+      classifyReverseEngineeringConnectionFailure(error)
+    );
   }
 }
 
-// 알 수 없는 adapter 오류도 사용자에게 보여줄 수 있는 짧은 실패 문장으로 바꿉니다.
+// gg: 알 수 없는 adapter 오류도 저장 가능한 고정 문장으로만 바꿉니다.
 function toErrorSummary(error: unknown): string {
-  return error instanceof Error ? error.message : "Reverse Engineering scan failed";
+  return classifyReverseEngineeringConnectionFailure(error).publicMessage;
 }
 
 // 스캔 생성부터 결과 저장까지 한 번에 처리하는 서비스 진입점입니다.
@@ -689,6 +707,7 @@ async function runReverseEngineeringScanJob({
       region: input.region,
       resourceTypes: input.resourceTypes
     });
+    const publicAdapterResult = normalizePublicAdapterResult(adapterResult);
     const completedAt = now();
     const completedScan = toReverseEngineeringScan({
       ...scan,
@@ -697,10 +716,10 @@ async function runReverseEngineeringScanJob({
       updatedAt: completedAt
     });
     const result: ReverseEngineeringScanResult = {
-      ...adapterResult,
+      ...publicAdapterResult,
       scan: completedScan,
       reverseEngineeringDraft: {
-        ...adapterResult.reverseEngineeringDraft,
+        ...publicAdapterResult.reverseEngineeringDraft,
         id: `draft-${completedScan.id}`,
         scanId: completedScan.id,
         createdAt: completedScan.completedAt ?? completedScan.updatedAt
@@ -743,8 +762,23 @@ async function runReverseEngineeringScanJob({
       throw new ReverseEngineeringNotFoundError("Reverse Engineering scan not found");
     }
 
-    throw new ReverseEngineeringScanFailedError(errorSummary);
+    throw new ReverseEngineeringScanFailedError(
+      classifyReverseEngineeringConnectionFailure(error)
+    );
   }
+}
+
+// gg: 주입된 adapter와 과거 구현도 API 응답·저장 전에 같은 공개 오류 계약으로 줄입니다.
+function normalizePublicAdapterResult(
+  result: ReverseEngineeringScanResult
+): ReverseEngineeringScanResult {
+  const scanErrors = sanitizeReverseEngineeringScanErrors(result.scanErrors);
+
+  return {
+    ...result,
+    scanErrors,
+    coverage: createReverseEngineeringPublicCoverage(scanErrors).coverage
+  };
 }
 
 export function createPostgresReverseEngineeringRepository(
@@ -956,7 +990,7 @@ export function toReverseEngineeringScan(row: ReverseEngineeringScanRecord): Rev
     completedAt: row.completedAt?.toISOString() ?? null,
     cancelRequestedAt: row.cancelRequestedAt?.toISOString() ?? null,
     deletedAt: row.deletedAt?.toISOString() ?? null,
-    errorSummary: row.errorSummary
+    errorSummary: row.errorSummary ? sanitizeHistoricalErrorSummary(row.errorSummary) : null
   };
 }
 
@@ -969,9 +1003,16 @@ export function toReverseEngineeringScanLogLine(
     sequence: row.sequence,
     stage: row.stage,
     level: row.level,
-    message: row.message,
+    message: row.level === "ERROR"
+      ? "Reverse Engineering 스캔을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요."
+      : row.message,
     createdAt: row.createdAt.toISOString()
   };
+}
+
+// gg: 과거 저장 row의 원문 오류도 읽는 순간 고정 문장으로 바꿉니다.
+function sanitizeHistoricalErrorSummary(_errorSummary: string): string {
+  return "AWS에서 항목을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
 function toAwsConnection(row: typeof awsConnections.$inferSelect): AwsConnection {
