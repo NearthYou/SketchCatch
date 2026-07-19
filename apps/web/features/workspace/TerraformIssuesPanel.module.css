@@ -38,7 +38,7 @@
 .terraformDiagnosticsHeader span {
   color: var(--workspace-muted, #60646c);
   font-size: calc(10px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.4;
   text-transform: uppercase;
 }
@@ -46,7 +46,7 @@
 .terraformDiagnosticsHeader h3 {
   color: var(--workspace-text, #171717);
   font-size: calc(16px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.4;
   margin: 0;
 }
@@ -56,7 +56,7 @@
   border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 9999px;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   min-width: 28px;
   padding: 4px 8px;
   text-align: center;
@@ -156,7 +156,7 @@
 .terraformDiagnosticMeta span {
   border-radius: 9999px;
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.3;
   padding: 3px 6px;
   white-space: nowrap;
@@ -201,7 +201,7 @@
   display: inline-flex;
   font: inherit;
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   justify-self: start;
   min-height: 36px;

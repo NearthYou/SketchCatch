@@ -1,9 +1,25 @@
 @font-face {
-  font-family: "Pretendard";
+  font-family: "LINE Seed Sans KR";
   font-style: normal;
-  font-weight: 45 920;
+  font-weight: 100;
   font-display: swap;
-  src: url("/fonts/pretendard-variable/PretendardVariable.woff2") format("woff2-variations");
+  src: url("/fonts/line-seed/LINESeedKR-Th.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "LINE Seed Sans KR";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/line-seed/LINESeedKR-Rg.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "LINE Seed Sans KR";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/line-seed/LINESeedKR-Bd.woff2") format("woff2");
 }
 
 :root {
@@ -30,10 +46,11 @@
   --color-success-surface: #ecfdf3;
   --color-warning: #8a4b08;
   --color-warning-surface: #fff8eb;
-  --font-sans: "Pretendard", sans-serif;
+  --font-sans: "LINE Seed Sans KR", sans-serif;
   --font-code: var(--font-sans);
   --presentation-font-size-increase: 6px;
-  --presentation-font-weight-reduction: 100;
+  --presentation-font-weight-regular: 400;
+  --presentation-font-weight-bold: 700;
   --radius-control: 8px;
   --radius-card: 12px;
   --radius-frame: 16px;
@@ -67,6 +84,7 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: calc(16px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-regular);
   letter-spacing: 0;
   word-break: keep-all;
   text-rendering: optimizeLegibility;
@@ -116,7 +134,7 @@ h5,
 h6,
 strong,
 b {
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 button,
@@ -224,7 +242,7 @@ textarea:focus-visible {
   display: inline-flex;
   font-family: inherit;
   font-size: calc(0.86rem + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 7px;
   justify-content: center;
   min-height: 40px;
@@ -278,7 +296,7 @@ textarea:focus-visible {
 .designCostPage .dashboardPanelKicker {
   color: var(--dashboard-design-muted);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.04em;
 }
 
@@ -308,7 +326,7 @@ textarea:focus-visible {
   color: var(--dashboard-design-body);
   display: grid;
   font-size: calc(0.76rem + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 7px;
 }
 
@@ -334,7 +352,7 @@ textarea:focus-visible {
   display: inline-flex;
   font-family: inherit;
   font-size: calc(0.86rem + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 7px;
   justify-content: center;
   min-height: 40px;
@@ -348,7 +366,7 @@ textarea:focus-visible {
   border-radius: 8px;
   color: var(--dashboard-design-ink);
   font-family: inherit;
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   min-height: 40px;
 }
 
@@ -382,7 +400,7 @@ textarea:focus-visible {
   border-radius: 999px;
   color: var(--dashboard-design-body);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   padding: 5px 9px;
 }
 
@@ -634,7 +652,7 @@ textarea:focus-visible {
   color: var(--dashboard-design-muted);
   display: flex;
   font-size: calc(0.76rem + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 12px;
   justify-content: space-between;
   margin-top: 18px;
@@ -661,7 +679,7 @@ textarea:focus-visible {
   border: 0;
   color: var(--dashboard-design-ink);
   font: inherit;
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   min-height: 38px;
   outline: 0;
   padding: 0 10px 0 4px;
@@ -722,7 +740,7 @@ textarea:focus-visible {
   color: var(--dashboard-design-link);
   display: inline-flex;
   font-size: calc(0.84rem + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 4px;
   justify-content: flex-end;
   white-space: nowrap;

@@ -4,12 +4,18 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- The current branch applies the self-hosted Pretendard variable font across Web typography surfaces and keeps presentation typography tokens as the design baseline.
+- The current branch applies the supplied self-hosted LINE Seed Sans KR files across Web typography surfaces, with Regular as the body baseline and Bold for headings and emphasis.
 - The automatic Board organization result remains compact while preserving the incoming `dev` comparison session and original/organized view selection.
 - Incoming `dev` API, deployment, Git/CI/CD, AWS connection, Reverse Engineering, and data-contract changes remain accepted as the backend baseline.
 - The merge resolution is complete and ready for the merge commit.
 
 ## Session Record
+
+### 2026-07-19 - Replace Pretendard with Regular and Bold LINE Seed Sans KR typography
+
+- Replaced all active Web and smoke-page Pretendard usage with the supplied LINE Seed Sans KR Thin, Regular, and Bold WOFF2 files and the official licensing notice; removed the obsolete Pretendard and intermediate Spoqa assets.
+- Set the service body baseline to Regular 400 and mapped existing emphasis to Bold 700, avoiding synthetic intermediate weights.
+- Focused typography and Diagram checks pass 126/126; browser QA found only computed 400 and 700 weights with no unexpected values. Harness, lint, typecheck, production build, and diff checks pass. The unnecessary broad test run stopped on one unrelated existing Git/CI/CD readiness contract failure in `packages/types`; no further broad test was run. No dependency, lockfile, database, deployment, cloud, or Git handoff change was made.
 
 ### 2026-07-19 - Keep GitOps build environments stable across application commits
 

@@ -46,7 +46,7 @@
 
 .topBarTitle {
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: -0.01em;
   margin: 0;
   text-align: center;
@@ -64,7 +64,7 @@
   color: var(--ai-muted);
   display: inline-flex;
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 7px;
   padding: 6px 10px;
 }
@@ -113,7 +113,7 @@
   background: #171717;
   color: #ffffff;
   display: inline-flex;
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 5px;
   white-space: nowrap;
 }
@@ -198,7 +198,7 @@
 .selectionTrailHeader p {
   color: var(--ai-muted);
   font-size: calc(10px + var(--presentation-font-size-increase));
-  font-weight: calc(750 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.13em;
   margin: 0 0 8px;
   text-transform: uppercase;
@@ -251,7 +251,7 @@
 .messageRole {
   color: var(--ai-muted);
   font-size: calc(10px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.04em;
 }
 
@@ -334,7 +334,7 @@
   color: var(--ai-muted);
   flex: 0 0 auto;
   font-size: calc(10px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .candidateActions {
@@ -402,7 +402,7 @@
   display: inline-flex;
   font: inherit;
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 5px;
   min-height: 32px;
   padding: 6px 9px;
@@ -920,7 +920,7 @@
 .selectionTrailCompact summary {
   cursor: pointer;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .selectionTrailCompact .selectionTrailBody {
@@ -964,7 +964,7 @@
 .previewEvidence summary {
   cursor: pointer;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .previewEvidence ul {
@@ -1012,7 +1012,7 @@
   display: inline-flex;
   font: inherit;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   min-height: 40px;
   padding: 8px 13px;
@@ -1181,14 +1181,14 @@
   .topBarState > .mobilePreviewTrigger {
     border: 1px solid var(--ai-line-strong);
     display: inline-flex;
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   }
 
   .topBarState > .mobileBackToConversation {
     align-items: center;
     border: 1px solid var(--ai-line-strong);
     display: inline-flex;
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
     gap: 4px;
   }
 

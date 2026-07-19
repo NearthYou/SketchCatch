@@ -29,7 +29,7 @@
 
 .terraformLineNumberError {
   color: #fca5a5;
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .terraformSyntaxHighlightLayer {

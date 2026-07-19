@@ -39,7 +39,7 @@
 .groupHeading p {
   color: #60646c;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.4;
   margin: 0 0 4px;
 }
@@ -108,7 +108,7 @@
   color: var(--color-warning);
   display: inline-flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(750 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   line-height: 1;
   padding: 8px 10px;
@@ -142,7 +142,7 @@
   color: #60646c;
   flex: 0 0 auto;
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   padding: 8px 12px;
   text-decoration: none;
   transition:
@@ -260,7 +260,7 @@
 .accountList li > span {
   color: #171717;
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   overflow-wrap: anywhere;
 }
 
@@ -270,7 +270,7 @@
   color: var(--color-text-link);
   display: inline-flex;
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   text-decoration: none;
 }
@@ -310,7 +310,7 @@
 .definitionList dd {
   color: #171717;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   margin: 0;
   overflow-wrap: anywhere;
   text-align: right;
@@ -403,7 +403,7 @@
 
 .readinessList li > span {
   color: var(--color-ink);
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .readinessList li > strong {
@@ -458,7 +458,7 @@
   color: #ffffff;
   cursor: pointer;
   font: inherit;
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   margin-top: 10px;
   min-height: 38px;
   padding: 8px 14px;

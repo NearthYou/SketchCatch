@@ -83,7 +83,7 @@
   display: grid;
   font: inherit;
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 4px;
   justify-items: center;
   line-height: 1.2;
@@ -243,7 +243,7 @@
   flex: 0 0 auto;
   font: inherit;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   min-height: 30px;
   padding: 0 9px;
 }
@@ -287,7 +287,7 @@
 .templateContext code {
   color: var(--ai-workbench-info);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -323,7 +323,7 @@
 .messageLabel {
   color: var(--ai-workbench-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .assistantMessage {
@@ -377,7 +377,7 @@
   cursor: pointer;
   font: inherit;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .choiceButton {
@@ -474,7 +474,7 @@
 .artifactHeader span {
   color: var(--ai-workbench-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -580,7 +580,7 @@
 .composerInput > span {
   color: var(--ai-workbench-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .issueSelect select {
@@ -823,7 +823,7 @@
 .reviewSummaryList p {
   color: var(--ai-workbench-text);
   font-size: calc(14px + var(--presentation-font-size-increase));
-  font-weight: calc(550 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.55;
   margin: 0;
   white-space: pre-line;
@@ -856,7 +856,7 @@
   border-radius: 999px;
   color: var(--ai-workbench-info);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   padding: 3px 6px;
 }
 
@@ -943,7 +943,7 @@
 .checkHeading > span {
   color: var(--ai-workbench-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .checkList p,
@@ -1022,7 +1022,7 @@
   border-radius: 999px;
   color: var(--ai-workbench-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.4;
   padding: 2px 7px;
 }
@@ -1056,7 +1056,7 @@
 .reviewCheckDetails dt {
   color: var(--ai-workbench-muted);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(750 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.4;
   margin: 0;
 }
@@ -1082,7 +1082,7 @@
   cursor: pointer;
   display: inline-flex;
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   padding: 3px;
 }
@@ -1114,7 +1114,7 @@
 .codeDiff strong {
   color: var(--ai-workbench-muted);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .technicalMeta dd {
@@ -1179,7 +1179,7 @@
 .technicalSection > strong {
   color: var(--ai-workbench-muted);
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .technicalSection p {
@@ -1496,7 +1496,7 @@
   color: #334155;
   font-family: var(--font-sans);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   white-space: nowrap;
 }
 
@@ -1509,7 +1509,7 @@
 .parameterPreviewResource dd span {
   color: #64748b;
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .parameterPreviewResource dd:last-child span {

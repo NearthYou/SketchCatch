@@ -1,10 +1,15 @@
-Copyright (c) 2021, Kil Hyung-jin (https://github.com/orioncactus/pretendard),
-with Reserved Font Name Pretendard.
+LINE Seed Sans KR
+Copyright (c) LY Corporation.
+
+Official licensing notice: https://seed.line.me/index_kr.html
+All fonts are released under the SIL Open Font License, Version 1.1.
+They may be used for personal or commercial purposes. The font files themselves
+may not be sold by parties other than LY Corporation. Attribution is strongly
+recommended for commercial use.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
-https://scripts.sil.org/OFL
-
+http://scripts.sil.org/OFL
 
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
@@ -45,7 +50,7 @@ new environment.
 "Author" refers to any designer, engineer, programmer, technical
 writer or other person who contributed to the Font Software.
 
-PERMISSION & CONDITIONS
+PERMISSION AND CONDITIONS
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of the Font Software, to use, study, copy, merge, embed, modify,
 redistribute, and sell modified and unmodified copies of the Font

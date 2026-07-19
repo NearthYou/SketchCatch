@@ -89,9 +89,9 @@ const LIVE_OBSERVATION_MANAGED_USER_DATA_BASE64 =
 
 const LIVE_OBSERVATION_AUDIENCE_HTML = [
   '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
-  '<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css">',
-  "<title>SketchCatch Service</title><style>body{max-width:680px;margin:0 auto;padding:56px 24px;font:22px/1.6 Pretendard,sans-serif;color:#172033;background:#fafafa}",
-  "h1{font-size:38px;font-weight:600}main{padding:32px;border:1px solid #dcdee0;border-radius:16px;background:#fff}</style></head>",
+  '<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/npm/@kfonts/line-seed-sans-kr@0.1.0/index.css">',
+  "<title>SketchCatch Service</title><style>body{max-width:680px;margin:0 auto;padding:56px 24px;font:400 22px/1.6 'LINE Seed Sans KR',sans-serif;color:#172033;background:#fafafa}",
+  "h1{font-size:38px;font-weight:700}main{padding:32px;border:1px solid #dcdee0;border-radius:16px;background:#fff}</style></head>",
   "<body><main><h1>서비스가 준비되었습니다.</h1><p>공개 요청은 SketchCatch에서 발급한 QR 페이지를 사용해주세요.</p></main></body></html>",
 ].join("");
 
