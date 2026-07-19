@@ -11,8 +11,10 @@ import {
   AwsImportAccessLeaseError,
   AwsImportAccessNotFoundError,
   createAwsImportAccessService,
+  nextActionForRecord,
   type AwsImportAccessServiceGateway
 } from "./aws-import-access-service.js";
+import type { AwsImportProbeResult } from "./aws-import-access-probe.js";
 import type {
   AwsImportAccessRecord,
   AwsImportAccessRepository
@@ -312,7 +314,20 @@ test("cleanup opens the exact owned Policy Stack and never a caller-selected sta
   fixture.gateway.inspectCleanup = async () => ({
     verified: true,
     managerStackExists: true,
-    policyStackExists: true
+    policyStackExists: true,
+    policy: {
+      stack: { status: "owned_present" },
+      readPolicy: { status: "owned_present" },
+      targetAttachment: { status: "owned_present" }
+    },
+    manager: {
+      stack: { status: "owned_present" },
+      serviceRole: { status: "owned_present" },
+      controlPolicy: { status: "owned_present" },
+      controlAttachment: { status: "owned_present" },
+      cleanupPolicy: { status: "owned_present" },
+      cleanupAttachment: { status: "owned_present" }
+    }
   });
 
   const result = await fixture.service.prepareCleanup(fixture.ownerInput);
@@ -357,6 +372,146 @@ test("read-only and preview commands never mutate customer AWS", async () => {
   assert.equal(fixture.gateway.deleteCalls, 0);
 });
 
+test("checkImportReads persists serviceKey outcomes and maps public labels from the catalog", async () => {
+  const fixture = createImportAccessServiceFixture({
+    probeResult: createProbeResult({ iam: "permission_denied" })
+  });
+
+  const result = await fixture.service.checkImportReads(fixture.ownerInput);
+
+  assert.equal(result.state.status, "limited");
+  assert.equal(result.state.coreReady, true);
+  assert.deepEqual(result.state.limitedServiceLabels, ["IAM"]);
+  assert.deepEqual(fixture.getRecord()?.coreReadSummary, {
+    ec2: "success",
+    s3: "success"
+  });
+  assert.deepEqual(fixture.getRecord()?.expandedReadSummary, {
+    iam: "permission_denied"
+  });
+  assert.doesNotMatch(JSON.stringify(fixture.getRecord()), /AccessDenied|RequestId|arn:aws/u);
+});
+
+test("connection_required is persisted publicly with open_settings", async () => {
+  const fixture = createImportAccessServiceFixture({
+    probeResult: {
+      status: "connection_required",
+      coreReady: false,
+      serviceResults: [],
+      limitedServiceLabels: [],
+      safeErrorCode: "target_role_unavailable"
+    }
+  });
+
+  const result = await fixture.service.checkImportReads(fixture.ownerInput);
+
+  assert.equal(result.state.status, "connection_required");
+  assert.equal(result.state.nextAction, "open_settings");
+  assert.equal(fixture.getRecord()?.status, "connection_required");
+});
+
+test("retry actions follow the failed operation instead of a generic retry", () => {
+  const cases = [
+    ["apply_policy", "preview_policy"],
+    ["check_reads", "check_reads"],
+    ["prepare_manager", "prepare_manager"],
+    ["check_manager", "check_manager"],
+    ["prepare_cleanup", "check_cleanup"],
+    ["check_cleanup", "check_cleanup"]
+  ] as const;
+
+  for (const [operationKind, expected] of cases) {
+    const record = createRecord(connectionId, fixedNow);
+    record.status = "retry_required";
+    record.operationKind = operationKind;
+    assert.equal(nextActionForRecord(record), expected, operationKind);
+  }
+});
+
+test("two concurrent read checks run only one probe behind the operation lease", async () => {
+  let probeCalls = 0;
+  let releaseProbe!: () => void;
+  const probeBlocked = new Promise<void>((resolve) => { releaseProbe = resolve; });
+  let markProbeStarted!: () => void;
+  const probeStarted = new Promise<void>((resolve) => { markProbeStarted = resolve; });
+  const fixture = createImportAccessServiceFixture({
+    policyReadyForProbe: true,
+    async probeImportAccess() {
+      probeCalls += 1;
+      if (probeCalls > 1) return createProbeResult();
+      markProbeStarted();
+      await probeBlocked;
+      return createProbeResult();
+    }
+  });
+
+  const first = fixture.service.checkImportReads(fixture.ownerInput);
+  await probeStarted;
+  await assert.rejects(
+    fixture.service.checkImportReads(fixture.ownerInput),
+    AwsImportAccessLeaseError
+  );
+  releaseProbe();
+  await first;
+
+  assert.equal(probeCalls, 1);
+});
+
+test("non-target Policy finishes safely without running the import probe", async () => {
+  let probeCalls = 0;
+  const fixture = createImportAccessServiceFixture({
+    policyReadyForProbe: false,
+    async probeImportAccess() {
+      probeCalls += 1;
+      return createProbeResult();
+    }
+  });
+  await fixture.service.getState(fixture.ownerInput);
+  fixture.getRecord()!.coreReadSummary = { ec2: "success" };
+  fixture.getRecord()!.expandedReadSummary = { iam: "permission_denied" };
+
+  const result = await fixture.service.checkImportReads(fixture.ownerInput);
+
+  assert.equal(probeCalls, 0);
+  assert.equal(result.state.status, "retry_required");
+  assert.equal(result.state.nextAction, "check_reads");
+  assert.equal(result.state.coreReady, false);
+  assert.deepEqual(result.state.limitedServiceLabels, []);
+  assert.equal(fixture.getRecord()?.coreReadSummary, null);
+  assert.equal(fixture.getRecord()?.expandedReadSummary, null);
+  assert.equal(fixture.getRecord()?.leaseExpiresAt, null);
+});
+
+test("explicit target Role inspection failure opens connection settings without probing", async () => {
+  let probeCalls = 0;
+  const fixture = createImportAccessServiceFixture({
+    async probeImportAccess() {
+      probeCalls += 1;
+      return createProbeResult();
+    }
+  });
+  fixture.gateway.inspectManager = async () => ({
+    verified: false,
+    managerStatus: "invalid",
+    managerStackId: null,
+    managerContractVersion: null,
+    managerTemplateSha256: null,
+    policyStatus: "invalid",
+    policyStackId: null,
+    policyStackExists: false,
+    policyContractVersion: null,
+    policyTemplateSha256: null,
+    policyFingerprint: null,
+    reason: "connection"
+  });
+
+  const result = await fixture.service.checkImportReads(fixture.ownerInput);
+
+  assert.equal(probeCalls, 0);
+  assert.equal(result.state.status, "connection_required");
+  assert.equal(result.state.nextAction, "open_settings");
+});
+
 test("every command rejects another user's connection", async () => {
   const fixture = createImportAccessServiceFixture();
   const otherInput = {
@@ -377,6 +532,9 @@ function createImportAccessServiceFixture(
   options: {
     connectionStatus?: AwsConnectionRecord["status"];
     now?: () => Date;
+    probeResult?: AwsImportProbeResult;
+    probeImportAccess?: () => Promise<AwsImportProbeResult>;
+    policyReadyForProbe?: boolean;
   } = {}
 ) {
   const connection = createConnection(options.connectionStatus ?? "verified");
@@ -434,6 +592,31 @@ function createImportAccessServiceFixture(
       if (record?.operationId !== input.operationId) return { kind: "stale" };
       record = { ...record, ...input.changes, updatedAt: input.now };
       return { kind: "saved", record };
+    },
+    async claimImportReads(input) {
+      if (record?.leaseExpiresAt && record.leaseExpiresAt.getTime() > input.now.getTime()) {
+        return { kind: "leased" };
+      }
+      record = {
+        ...record!,
+        status: "checking_reads",
+        operationId: input.operationId,
+        operationKind: "check_reads",
+        leaseExpiresAt: input.leaseExpiresAt,
+        coreReadSummary: null,
+        expandedReadSummary: null,
+        safeErrorCode: null,
+        safeErrorSummary: "가져오기 권한을 확인하고 있습니다.",
+        updatedAt: input.now
+      };
+      return { kind: "claimed", record };
+    },
+    async finishImportReads(input) {
+      if (record?.operationId !== input.operationId || record.operationKind !== "check_reads") {
+        return { kind: "stale" };
+      }
+      record = { ...record, ...input.changes, updatedAt: input.now };
+      return { kind: "saved", record };
     }
   };
   const gateway: AwsImportAccessServiceGateway & {
@@ -448,6 +631,23 @@ function createImportAccessServiceFixture(
       return { consoleUrl: "https://ap-northeast-2.console.aws.amazon.com/cloudformation/home" };
     },
     async inspectManager(input) {
+      if (record?.operationKind === "check_reads") {
+        const policyReady = options.policyReadyForProbe !== false;
+        return {
+          verified: policyReady,
+          managerStatus: "target",
+          managerStackId: this.managerStackId,
+          managerContractVersion: input.contract.contractVersion,
+          managerTemplateSha256: input.contract.templateSha256,
+          policyStatus: policyReady ? "target" : "invalid",
+          policyStackId: policyReady ? "policy-stack-id" : null,
+          policyStackExists: policyReady,
+          policyContractVersion: policyReady ? input.contract.policyContractVersion : null,
+          policyTemplateSha256: policyReady ? input.contract.policyTemplateSha256 : null,
+          policyFingerprint: policyReady ? input.contract.policyFingerprint : null,
+          ...(!policyReady ? { reason: "retry" as const } : {})
+        };
+      }
       return {
         verified: true,
         managerStatus: "target",
@@ -467,7 +667,24 @@ function createImportAccessServiceFixture(
       return { policyStackId: "policy-stack-id", status: "accepted" };
     },
     async inspectCleanup() {
-      return { managerStackExists: false, policyStackExists: false, verified: true };
+      return {
+        managerStackExists: false,
+        policyStackExists: false,
+        verified: true,
+        policy: {
+          stack: { status: "absent" },
+          readPolicy: { status: "absent" },
+          targetAttachment: { status: "absent" }
+        },
+        manager: {
+          stack: { status: "absent" },
+          serviceRole: { status: "absent" },
+          controlPolicy: { status: "absent" },
+          controlAttachment: { status: "absent" },
+          cleanupPolicy: { status: "absent" },
+          cleanupAttachment: { status: "absent" }
+        }
+      };
     }
   };
   const connectionRepository = createConnectionRepository(connection);
@@ -476,6 +693,8 @@ function createImportAccessServiceFixture(
     repository,
     gateway,
     templateBucketName: "sketchcatch-private-templates",
+    probeImportAccess: options.probeImportAccess ??
+      (async () => options.probeResult ?? createProbeResult()),
     now: options.now ?? (() => fixedNow),
     generateApprovalSecret: () => `approval-${randomUUID()}`,
     generateOperationId: () => randomUUID()
@@ -488,6 +707,30 @@ function createImportAccessServiceFixture(
     service,
     getRecord: () => record,
     ownerInput: { connectionId, accessContext: ownerAccessContext }
+  };
+}
+
+function createProbeResult(
+  expanded: Record<string, "success" | "not_configured" | "permission_denied" | "transient"> = {}
+): AwsImportProbeResult {
+  const serviceResults: AwsImportProbeResult["serviceResults"] = [
+    { serviceKey: "ec2", displayName: "EC2 네트워크와 컴퓨팅", tier: "core", outcome: "success" },
+    { serviceKey: "s3", displayName: "S3", tier: "core", outcome: "success" },
+    ...Object.entries(expanded).map(([serviceKey, outcome]) => ({
+      serviceKey: serviceKey as "iam",
+      displayName: "ignored-untrusted-label",
+      tier: "expanded" as const,
+      outcome
+    }))
+  ];
+  return {
+    status: Object.values(expanded).some((outcome) => outcome !== "success")
+      ? "limited"
+      : "ready",
+    coreReady: true,
+    serviceResults,
+    limitedServiceLabels: [],
+    safeErrorCode: null
   };
 }
 

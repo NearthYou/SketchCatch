@@ -22,9 +22,15 @@ import type {
   AwsImportAccessRecord,
   AwsImportAccessRepository
 } from "./aws-import-access-repository.js";
+import { AWS_IMPORT_READERS } from "./aws-import-access-catalog.js";
+import {
+  probeAwsImportAccess,
+  type AwsImportProbeResult
+} from "./aws-import-access-probe.js";
 
 const approvalTtlMs = 10 * 60 * 1000;
 const operationLeaseTtlMs = 2 * 60 * 1000;
+const readOperationLeaseTtlMs = 5 * 60 * 1000;
 
 export type AwsImportAccessOwnerInput = {
   connectionId: string;
@@ -61,6 +67,9 @@ export type CreateAwsImportAccessServiceOptions = {
   now?: () => Date;
   generateApprovalSecret?: () => string;
   generateOperationId?: () => string;
+  probeImportAccess?: (
+    input: Parameters<typeof probeAwsImportAccess>[0]
+  ) => Promise<AwsImportProbeResult>;
 };
 
 /** gg: 승인·lease·상태 전이를 한 command boundary에 모아 기존 배포 연결을 건드리지 않습니다. */
@@ -71,6 +80,7 @@ export function createAwsImportAccessService(
   const generateApprovalSecret =
     options.generateApprovalSecret ?? (() => randomBytes(32).toString("base64url"));
   const generateOperationId = options.generateOperationId ?? randomUUID;
+  const probeImportAccess = options.probeImportAccess ?? probeAwsImportAccess;
 
   return {
     // gg: 상태 조회도 먼저 현재 사용자의 connection 소유권을 확인합니다.
@@ -341,24 +351,94 @@ export function createAwsImportAccessService(
       return toCommandResponse(completion.record, input.operationId);
     },
 
-    // gg: Task 4의 실제 probe가 연결될 때까지 읽기 확인 중 상태만 안전하게 기록합니다.
+    // gg: 실제 probe 결과를 allowlisted 상태와 serviceKey outcome으로만 저장합니다.
     async checkImportReads(input) {
-      await requireOwnedConnection(input, options.connectionRepository);
+      const connection = await requireOwnedConnection(input, options.connectionRepository);
       await options.repository.getOrCreate({ connectionId: input.connectionId, now: now() });
       const operationId = generateOperationId();
-      const saved = await saveCommandOrThrow(options.repository, {
+      const claimedAt = now();
+      const claim = await options.repository.claimImportReads({
         connectionId: input.connectionId,
+        operationId,
+        now: claimedAt,
+        leaseExpiresAt: new Date(claimedAt.getTime() + readOperationLeaseTtlMs)
+      });
+      if (claim.kind === "leased") {
+        throw new AwsImportAccessLeaseError("다른 권한 작업이 진행 중입니다.");
+      }
+      const contract = createContract(connection, options.templateBucketName);
+      const inspection = await options.gateway.inspectManager({
+        connection,
+        contract,
+        expectedCurrent: createExpectedCurrentState(claim.record)
+      });
+      if (
+        !inspection.verified || inspection.managerStatus !== "target" ||
+        inspection.policyStatus !== "target"
+      ) {
+        const connectionUnavailable = inspection.reason === "connection";
+        const completion = await options.repository.finishImportReads({
+          connectionId: input.connectionId,
+          operationId,
+          now: now(),
+          changes: {
+            ...trustedInspectionFields(claim.record, inspection),
+            status: connectionUnavailable ? "connection_required" : "retry_required",
+            leaseExpiresAt: null,
+            lastCheckedAt: now(),
+            safeErrorCode: connectionUnavailable ? "target_role_unavailable" : "policy_not_ready",
+            safeErrorSummary: connectionUnavailable
+              ? "AWS 연결 설정을 다시 확인해 주세요."
+              : "가져오기 Policy 준비 상태를 다시 확인해 주세요."
+          }
+        });
+        if (completion.kind === "stale") {
+          throw new AwsImportAccessLeaseError("권한 작업 상태가 변경되었습니다.");
+        }
+        return toCommandResponse(completion.record, operationId);
+      }
+      let probe: AwsImportProbeResult;
+      try {
+        probe = await probeImportAccess({ connection });
+      } catch {
+        probe = {
+          status: "retry_required",
+          coreReady: false,
+          serviceResults: [],
+          limitedServiceLabels: [],
+          safeErrorCode: "probe_retry"
+        };
+      }
+      const coreReadSummary = Object.fromEntries(
+        probe.serviceResults
+          .filter((result) => result.tier === "core")
+          .map((result) => [result.serviceKey, result.outcome])
+      );
+      const expandedReadSummary = Object.fromEntries(
+        probe.serviceResults
+          .filter((result) => result.tier === "expanded")
+          .map((result) => [result.serviceKey, result.outcome])
+      );
+      const completion = await options.repository.finishImportReads({
+        connectionId: input.connectionId,
+        operationId,
         now: now(),
         changes: {
-          status: "checking_reads",
+          status: probe.status,
           operationId,
           operationKind: "check_reads",
+          coreReadSummary,
+          expandedReadSummary,
+          leaseExpiresAt: null,
           lastCheckedAt: now(),
-          safeErrorCode: null,
-          safeErrorSummary: "가져오기 권한을 확인하고 있습니다."
+          safeErrorCode: probe.safeErrorCode,
+          safeErrorSummary: safeSummaryForProbeStatus(probe.status)
         }
       });
-      return toCommandResponse(saved, operationId);
+      if (completion.kind === "stale") {
+        throw new AwsImportAccessLeaseError("권한 작업 상태가 변경되었습니다.");
+      }
+      return toCommandResponse(completion.record, operationId);
     },
 
     // gg: 정리 준비는 exact Stack 존재만 확인하고 고객 대신 삭제하지 않습니다.
@@ -767,13 +847,16 @@ function toPublicState(record: AwsImportAccessRecord): AwsImportAccessState {
   return {
     connectionId: record.awsConnectionId,
     status: record.status,
-    nextAction: nextActionForStatus(record.status),
+    nextAction: nextActionForRecord(record),
     coreReady: Object.values(record.coreReadSummary ?? {}).every(
       (outcome) => outcome === "success"
     ) && Object.keys(record.coreReadSummary ?? {}).length > 0,
     limitedServiceLabels: Object.entries(record.expandedReadSummary ?? {})
       .filter(([, outcome]) => outcome !== "success")
-      .map(([label]) => label),
+      .flatMap(([serviceKey]) => {
+        const reader = AWS_IMPORT_READERS.find((candidate) => candidate.serviceKey === serviceKey);
+        return reader ? [reader.displayName] : [];
+      }),
     lastCheckedAt: record.lastCheckedAt?.toISOString() ?? null,
     operationId: record.operationId,
     safeSummary: record.safeErrorSummary
@@ -797,9 +880,23 @@ function toCommandResponse(
   };
 }
 
-/** gg: 상태마다 Settings가 실행할 수 있는 한 단계만 공개합니다. */
-function nextActionForStatus(status: AwsImportAccessStatus): AwsImportAccessNextAction | null {
-  switch (status) {
+/** gg: retry_required도 실패한 operation 종류에 맞는 안전한 다음 단계로 되돌립니다. */
+export function nextActionForRecord(
+  record: Pick<AwsImportAccessRecord, "status" | "operationKind">
+): AwsImportAccessNextAction | null {
+  if (record.status === "retry_required") {
+    switch (record.operationKind) {
+      case "prepare_manager": return "prepare_manager";
+      case "check_manager": return "check_manager";
+      case "preview_policy":
+      case "apply_policy": return "preview_policy";
+      case "check_reads": return "check_reads";
+      case "prepare_cleanup":
+      case "check_cleanup": return "check_cleanup";
+      default: return null;
+    }
+  }
+  switch (record.status) {
     case "check_required": return "prepare_manager";
     case "manager_approval_required": return "check_manager";
     case "manager_checking": return "check_manager";
@@ -809,12 +906,23 @@ function nextActionForStatus(status: AwsImportAccessStatus): AwsImportAccessNext
     case "ready": return null;
     case "limited": return "check_reads";
     case "update_required": return "preview_policy";
-    case "retry_required": return "retry";
+    case "connection_required": return "open_settings";
     case "cleanup_policy_required": return "delete_policy_stack";
     case "cleanup_manager_required": return "delete_manager_stack";
     case "cleanup_checking": return "check_cleanup";
     case "cleanup_required": return "check_cleanup";
     case "cleanup_complete": return null;
+  }
+}
+
+/** gg: probe status마다 provider 원문 없는 fixed Korean summary만 DB와 API에 제공합니다. */
+function safeSummaryForProbeStatus(status: AwsImportProbeResult["status"]): string {
+  switch (status) {
+    case "ready": return "AWS 가져오기 읽기 권한이 준비되었습니다.";
+    case "limited": return "일부 선택 서비스는 가져오기가 제한됩니다.";
+    case "update_required": return "핵심 서비스 읽기 권한을 업데이트해 주세요.";
+    case "retry_required": return "AWS 읽기 상태를 잠시 후 다시 확인해 주세요.";
+    case "connection_required": return "AWS 연결 설정을 다시 확인해 주세요.";
   }
 }
 

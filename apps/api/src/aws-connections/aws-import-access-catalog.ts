@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
-export type AwsImportReader = {
-  serviceKey: string;
+export type AwsImportReader<ServiceKey extends string = string> = {
+  serviceKey: ServiceKey;
   displayName: string;
   tier: "core" | "expanded";
   actions: readonly string[];
@@ -19,7 +19,7 @@ export type AwsImportReadPolicyDocument = {
   ];
 };
 
-export const AWS_IMPORT_READERS: readonly AwsImportReader[] = [
+export const AWS_IMPORT_READERS = [
   {
     serviceKey: "ec2",
     displayName: "EC2 네트워크와 컴퓨팅",
@@ -136,7 +136,9 @@ export const AWS_IMPORT_READERS: readonly AwsImportReader[] = [
     tier: "expanded",
     actions: ["ec2:DescribeImages"]
   }
-] as const;
+] as const satisfies readonly AwsImportReader[];
+
+export type AwsImportServiceKey = typeof AWS_IMPORT_READERS[number]["serviceKey"];
 
 /** gg: 실제 reader와 probe가 공유할 목록에서 읽기 Policy를 한 번만 만듭니다. */
 export function createAwsImportReadPolicyDocument(): AwsImportReadPolicyDocument {

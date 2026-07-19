@@ -2110,6 +2110,7 @@ export type AwsImportAccessStatus =
   | "limited"
   | "update_required"
   | "retry_required"
+  | "connection_required"
   | "cleanup_policy_required"
   | "cleanup_manager_required"
   | "cleanup_checking"

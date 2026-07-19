@@ -25,6 +25,14 @@ export type FinishAwsImportAccessPolicyApplyResult =
   | { kind: "saved"; record: AwsImportAccessRecord }
   | { kind: "stale" };
 
+export type ClaimAwsImportAccessReadsResult =
+  | { kind: "claimed"; record: AwsImportAccessRecord }
+  | { kind: "leased" };
+
+export type FinishAwsImportAccessReadsResult =
+  | { kind: "saved"; record: AwsImportAccessRecord }
+  | { kind: "stale" };
+
 export type AwsImportAccessRepository = {
   getOrCreate(input: { connectionId: string; now: Date }): Promise<AwsImportAccessRecord>;
   issueApproval(input: {
@@ -50,6 +58,18 @@ export type AwsImportAccessRepository = {
     now: Date;
     leaseExpiresAt: Date;
   }): Promise<ClaimAwsImportAccessPolicyApplyResult>;
+  claimImportReads(input: {
+    connectionId: string;
+    operationId: string;
+    now: Date;
+    leaseExpiresAt: Date;
+  }): Promise<ClaimAwsImportAccessReadsResult>;
+  finishImportReads(input: {
+    connectionId: string;
+    operationId: string;
+    changes: AwsImportAccessRecordChanges;
+    now: Date;
+  }): Promise<FinishAwsImportAccessReadsResult>;
 };
 
 /** gg: 가져오기 상태는 배포 연결 row와 분리하고 connection별 한 row만 만듭니다. */
@@ -201,6 +221,54 @@ export function createPostgresAwsImportAccessRepository(
           ? ({ kind: "claimed", record: claimed } as const)
           : ({ kind: "rejected" } as const);
       });
+    },
+
+    // gg: read probe operation identity와 lease를 한 row lock에서 먼저 확정합니다.
+    async claimImportReads(input) {
+      return db.transaction(async (transaction) => {
+        const [current] = await transaction
+          .select()
+          .from(awsImportAccess)
+          .where(eq(awsImportAccess.awsConnectionId, input.connectionId))
+          .for("update");
+        if (!current) throw new Error("AWS import access state was not found");
+        if (current.leaseExpiresAt && current.leaseExpiresAt.getTime() > input.now.getTime()) {
+          return { kind: "leased" } as const;
+        }
+        const [claimed] = await transaction
+          .update(awsImportAccess)
+          .set({
+            status: "checking_reads",
+            operationId: input.operationId,
+            operationKind: "check_reads",
+            leaseExpiresAt: input.leaseExpiresAt,
+            coreReadSummary: null,
+            expandedReadSummary: null,
+            safeErrorCode: null,
+            safeErrorSummary: "가져오기 권한을 확인하고 있습니다.",
+            updatedAt: input.now
+          })
+          .where(eq(awsImportAccess.awsConnectionId, input.connectionId))
+          .returning();
+        if (!claimed) throw new Error("AWS import read probe could not be claimed");
+        return { kind: "claimed", record: claimed } as const;
+      });
+    },
+
+    // gg: 늦은 probe 결과는 자신이 claim한 read operation에만 CAS 저장합니다.
+    async finishImportReads(input) {
+      const [saved] = await db
+        .update(awsImportAccess)
+        .set({ ...input.changes, updatedAt: input.now })
+        .where(and(
+          eq(awsImportAccess.awsConnectionId, input.connectionId),
+          eq(awsImportAccess.operationId, input.operationId),
+          eq(awsImportAccess.operationKind, "check_reads")
+        ))
+        .returning();
+      return saved
+        ? { kind: "saved", record: saved } as const
+        : { kind: "stale" } as const;
     }
   };
 }
