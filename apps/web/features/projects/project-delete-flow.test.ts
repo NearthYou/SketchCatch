@@ -328,7 +328,7 @@ function createDeploymentWithWarnings(
     failureStage: null,
     id: "deployment-1",
     isBlocked: true,
-    liveProfile: "practice",
+    liveProfile: "demo_web_service",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",
