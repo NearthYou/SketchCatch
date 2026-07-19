@@ -11,9 +11,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-19 - Reduce Template metadata
+### 2026-07-19 - Reduce compact metadata
 
-- Reduced only the card service line by 3px; titles and card dimensions are unchanged. Required checks pass.
+- Reduced Template service text and Resource metadata values by 3px; labels and containers are unchanged. Required checks pass.
 
 ### 2026-07-19 - Restore the focused Live Observation traffic presentation
 
