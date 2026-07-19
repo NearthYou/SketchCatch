@@ -154,6 +154,10 @@
   --conversation-dock-left: 18px;
   --conversation-dock-width: min(calc(100% - 36px), clamp(640px, 64vw, 960px));
   --conversation-side-gap: 16px;
+  --orbit-stage-left: calc(
+    var(--conversation-dock-left) + var(--conversation-dock-width) +
+      var(--conversation-side-gap)
+  );
   --orbit-center-x: calc(
     var(--conversation-dock-left) + var(--conversation-dock-width) + clamp(88px, 9vw, 148px)
   );
@@ -591,10 +595,13 @@
 }
 
 .orbitLayerFrame {
+  --orbit-ellipse-tilt: 0deg;
+  --orbit-ellipse-y-scale: 1;
+  --orbit-ellipse-y-scale-inverse: 1;
   --orbit-kick: 18deg;
-  --orbit-tilt: 0deg;
-  --orbit-y-scale: 1;
-  --orbit-y-scale-inverse: 1;
+  --orbit-tilt: var(--orbit-ellipse-tilt);
+  --orbit-y-scale: var(--orbit-ellipse-y-scale);
+  --orbit-y-scale-inverse: var(--orbit-ellipse-y-scale-inverse);
   left: 50%;
   position: absolute;
   top: 50%;
@@ -983,6 +990,28 @@
   50% {
     opacity: 0.3;
     transform: scale(0.78);
+  }
+}
+
+@media (min-width: 960px) {
+  .orbitLayerFrame {
+    --orbit-tilt: 0deg;
+    --orbit-y-scale: 1;
+    --orbit-y-scale-inverse: 1;
+  }
+
+  .stageCanvas {
+    bottom: 0;
+    left: var(--orbit-stage-left);
+    overflow: hidden;
+    position: absolute;
+    right: 0;
+    top: 0;
+  }
+
+  .orbitScene {
+    left: 50%;
+    width: min(calc(100% - 96px), 650px, calc(100vh - 190px));
   }
 }
 
