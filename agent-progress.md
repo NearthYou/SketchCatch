@@ -11,6 +11,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Reduce public and centered auth typography
+
+- Reduced the Root page and its session state by the six-pixel presentation increase, including inherited text.
+- Applied the same reduction only to centered AuthShell routes and the Signup legal-document portal, limiting the change to Login and Signup while leaving Password Reset unchanged.
+- No test suite was run following the user's explicit request to avoid unnecessary tests. Harness, lint, typecheck, build, and the two-axis source review pass; the existing dev server remains active with no known risk or follow-up action.
+
 ### 2026-07-19 - Merge latest dev into PR #491
 
 - Merged `origin/dev` at `2ae411aa`, preserving the branch presentation typography while accepting the current AWS connection state model and removal of the AI choice-selected label.
