@@ -10,9 +10,9 @@ import {
   type ArchitectureBoardCompilationProposal
 } from "../architecture-board-compiler";
 import {
-  convertArchitectureJsonToDiagramJson,
   convertDiagramJsonToArchitectureJson
 } from "./workspace-ai-diagram-adapter";
+import { createSourceExactReverseEngineeringDiagram } from "./reverse-engineering-source-exact";
 
 export type ReverseEngineeringBoardApplicationMode = "replace" | "append";
 export type ReverseEngineeringPlacement = "original" | "compiled";
@@ -71,13 +71,14 @@ export function createReverseEngineeringBoardApplication(
   input: CreateReverseEngineeringBoardApplicationInput
 ): ReverseEngineeringBoardApplication {
   const originalPreview = createOriginalReverseEngineeringPreview(input.result);
-  const preview =
-    input.placement === "compiled"
-      ? createCompiledReverseEngineeringPreview(input.result, originalPreview.diagram)
-      : originalPreview;
-  const comparison = compareDiagrams(input.currentDiagram, preview.diagram);
+  const comparison = compareDiagrams(input.currentDiagram, originalPreview.diagram);
 
   if (input.mode === "replace") {
+    const preview =
+      input.placement === "compiled"
+        ? createCompiledReverseEngineeringPreview(input.result, originalPreview.diagram)
+        : originalPreview;
+
     return {
       compilation: preview.compilation,
       comparison,
@@ -88,7 +89,7 @@ export function createReverseEngineeringBoardApplication(
 
   const appendDiagram = appendAdditionsToCurrentDiagram(
     input.currentDiagram,
-    preview.diagram,
+    originalPreview.diagram,
     comparison
   );
 
@@ -154,69 +155,16 @@ export function convertReverseEngineeringBoardToArchitectureJson(
   };
 }
 
-// AWS가 만든 Architecture 좌표와 관계를 Compiler 후보 선택 전에 Board 모델로 옮깁니다.
+// AWS가 만든 Architecture를 일반 AI 추론 없이 source-exact Board 모델로 옮깁니다.
 function createOriginalReverseEngineeringPreview(result: ReverseEngineeringScanResult): {
   readonly compilation: null;
   readonly diagram: DiagramJson;
 } {
-  const materializedDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
-  const materializedNodeById = new Map(materializedDiagram.nodes.map((node) => [node.id, node]));
-  const materializedEdgeById = new Map(materializedDiagram.edges.map((edge) => [edge.id, edge]));
-  const sourceNodeIds = new Set(result.architectureJson.nodes.map((node) => node.id));
-  const nodes = result.architectureJson.nodes.flatMap((sourceNode) => {
-    const materializedNode = materializedNodeById.get(sourceNode.id);
-
-    if (!materializedNode) {
-      return [];
-    }
-
-    const parentAreaNodeId = materializedNode.metadata?.parentAreaNodeId;
-    const metadata = parentAreaNodeId && !sourceNodeIds.has(parentAreaNodeId)
-      ? Object.fromEntries(
-          Object.entries(materializedNode.metadata ?? {}).filter(
-            ([key]) => key !== "parentAreaNodeId"
-          )
-        )
-      : materializedNode.metadata;
-
-    return [
-      {
-        ...materializedNode,
-        id: sourceNode.id,
-        type: sourceNode.type,
-        label: sourceNode.label ?? materializedNode.label,
-        position: { x: sourceNode.positionX, y: sourceNode.positionY },
-        ...(metadata && Object.keys(metadata).length > 0 ? { metadata } : { metadata: undefined }),
-        ...(materializedNode.parameters
-          ? {
-              parameters: {
-                ...materializedNode.parameters,
-                values: structuredClone(sourceNode.config)
-              }
-            }
-          : {})
-      }
-    ];
-  });
-  const edges = result.architectureJson.edges.map((sourceEdge) => {
-    const materializedEdge = materializedEdgeById.get(sourceEdge.id);
-
-    return {
-      ...(materializedEdge ?? {}),
-      id: sourceEdge.id,
-      sourceNodeId: sourceEdge.sourceId,
-      targetNodeId: sourceEdge.targetId,
-      ...(sourceEdge.label === undefined ? { label: undefined } : { label: sourceEdge.label })
-    } satisfies DiagramEdge;
-  });
-
   return {
     compilation: null,
-    diagram: markReverseEngineeringDiagram({
-      ...materializedDiagram,
-      nodes,
-      edges
-    })
+    diagram: markReverseEngineeringDiagram(
+      createSourceExactReverseEngineeringDiagram(result.architectureJson)
+    )
   };
 }
 
