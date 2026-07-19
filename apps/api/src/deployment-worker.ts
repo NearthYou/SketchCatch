@@ -23,8 +23,9 @@ import {
   retryDirectApplicationFrontendRelease
 } from "./deployments/direct-application-release-service.js";
 import { createAwsCodeBuildDirectApplicationReleaseGateway } from "./deployments/aws-codebuild-direct-application-release-gateway.js";
+import { installDeploymentWorkerSignalHandlers } from "./deployment-worker-shutdown.js";
 
-async function runDeploymentWorker(): Promise<void> {
+async function runDeploymentWorker(abortSignal: AbortSignal): Promise<void> {
   assertNoStaticAwsCredentialsForApiServer();
 
   const jobId = requireDeploymentWorkerJobId(process.env);
@@ -35,9 +36,10 @@ async function runDeploymentWorker(): Promise<void> {
   const recoverApplicationRelease = createInterruptedDirectApplicationReleaseRecovery({ db });
 
   await runDeploymentWorkerJob(
-    { jobId },
+    { jobId, abortSignal },
     jobRepository,
     async (input) => {
+      input.abortSignal?.throwIfAborted();
       if (input.operation === "retry_application_frontend") {
         await retryDirectApplicationFrontendRelease(
           { deploymentId: input.deploymentId, userId: input.accessContext.userId },
@@ -88,13 +90,16 @@ async function runDeploymentWorker(): Promise<void> {
 
 async function main(): Promise<void> {
   let exitCode = 0;
+  const shutdownController = new AbortController();
+  const removeSignalHandlers = installDeploymentWorkerSignalHandlers(shutdownController);
 
   try {
-    await runDeploymentWorker();
+    await runDeploymentWorker(shutdownController.signal);
   } catch (error) {
     reportWorkerFailure(error);
     exitCode = 1;
   } finally {
+    removeSignalHandlers();
     try {
       await closeDatabaseClient();
     } catch (error) {

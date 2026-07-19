@@ -2122,6 +2122,10 @@ export type DeploymentPlanArtifact = {
   sha256: string;
   accountId: string;
   region: string;
+  stateBaselineDeploymentId: string | null;
+  stateObjectKey: string | null;
+  stateLineageSha256: string | null;
+  stateSerial: number | null;
   createdAt: IsoDateTimeString;
 };
 

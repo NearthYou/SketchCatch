@@ -687,6 +687,63 @@ test("infrastructure rollback plan restores the current state while planning the
   assert.equal(stateWrites[0]?.content.toString("utf8"), '{"lineage":"current"}');
 });
 
+test("a new redeployment plan restores and records the latest project state baseline", async () => {
+  const previousDeploymentId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const previousStateObjectKey = `deployments/${previousDeploymentId}/state/terraform.tfstate`;
+  const previousState = Buffer.from('{"version":4,"lineage":"lineage-before-redeploy","serial":7}');
+  const repository = new FakeDeploymentRepository();
+  repository.relatedDeployments = [
+    createDeploymentRecord(previousDeploymentId, {
+      status: "SUCCESS",
+      stateObjectKey: previousStateObjectKey,
+      createdAt: new Date("2025-12-31T00:00:00.000Z")
+    })
+  ];
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  planArtifactStorage.downloadDeploymentState = async (input) => {
+    planArtifactStorage.downloadedStates.push(input);
+    return previousState;
+  };
+  const stateWrites: Buffer[] = [];
+
+  const result = await runDeploymentPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage,
+      writeTerraformStateFile: async (_filePath, content) => {
+        stateWrites.push(Buffer.from(content));
+      },
+      readTerraformStateFile: async () => previousState,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-redeployment-plan",
+        mainFilePath: "C:/tmp/sketchcatch-redeployment-plan/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformPlan: async () => createRunnerResult("plan"),
+      runTerraformShowJson: async () => createRunnerResult("show", { stdout: createPlanJson([]) })
+    }
+  );
+
+  assert.equal(result.deployment.status, "PENDING");
+  assert.deepEqual(planArtifactStorage.downloadedStates, [
+    { deploymentId: previousDeploymentId, objectKey: previousStateObjectKey }
+  ]);
+  assert.equal(stateWrites[0]?.equals(previousState), true);
+  const savedPlanArtifact = repository.savedPlans[0]?.planArtifact as unknown as
+    | Record<string, unknown>
+    | undefined;
+  assert.equal(savedPlanArtifact?.stateBaselineDeploymentId, previousDeploymentId);
+  assert.equal(savedPlanArtifact?.stateObjectKey, previousStateObjectKey);
+  assert.equal(savedPlanArtifact?.stateSerial, 7);
+});
+
 function createDeploymentPlanArtifactRecord(
   overrides: Partial<DeploymentPlanArtifactRecord> = {}
 ): DeploymentPlanArtifactRecord {
@@ -700,6 +757,10 @@ function createDeploymentPlanArtifactRecord(
     sha256: "0".repeat(64),
     accountId: "123456789012",
     region: "ap-northeast-2",
+    stateBaselineDeploymentId: null,
+    stateObjectKey: null,
+    stateLineageSha256: null,
+    stateSerial: null,
     createdAt: fixedNow,
     ...overrides
   };
@@ -997,7 +1058,11 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
     objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
     sha256: "0".repeat(64),
     accountId: "123456789012",
-    region: "ap-northeast-2"
+    region: "ap-northeast-2",
+    stateBaselineDeploymentId: null,
+    stateObjectKey: null,
+    stateLineageSha256: null,
+    stateSerial: null
   });
   assert.equal(planArtifactStorage.uploads[0]?.planFilePath.endsWith("tfplan"), true);
   const nonDurationLogs = repository.logs.filter((log) => !log.message.startsWith("[duration]"));
@@ -1100,10 +1165,7 @@ test("runDeploymentPlan cleans a prepared workspace when a parallel prerequisite
 
   await assert.rejects(
     () =>
-      runDeploymentPlan(
-        { deploymentId, accessContext: createAccessContext() },
-        repository,
-        {
+      runDeploymentPlan({ deploymentId, accessContext: createAccessContext() }, repository, {
           planArtifactStorage: new FakePlanArtifactStorage(),
           prepareTerraformWorkspace: async () => {
             await new Promise<void>((resolve) => setImmediate(resolve));
@@ -1116,8 +1178,7 @@ test("runDeploymentPlan cleans a prepared workspace when a parallel prerequisite
               }
             };
           }
-        }
-      ),
+      }),
     /connection lookup failed/
   );
 

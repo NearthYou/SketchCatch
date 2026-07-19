@@ -58,6 +58,7 @@ import {
   DeploymentConflictError,
   DeploymentNotFoundError,
   getDeployment,
+  selectDeploymentStateBaseline,
   type DeploymentRecord,
   type DeploymentRepository,
   type ProjectAccessContext
@@ -358,7 +359,13 @@ async function runDeploymentPlanOnce(
       ]);
     workspace = preparedWorkspace;
 
-    if (deployment.rollbackOfDeploymentId || deployment.rollbackTargetDeploymentId) {
+    const projectDeployments = await repository.listDeploymentsByProject(deployment.projectId);
+    const stateBaseline = selectDeploymentStateBaseline(deployment, projectDeployments);
+    const isRollbackPlan = Boolean(
+      deployment.rollbackOfDeploymentId || deployment.rollbackTargetDeploymentId
+    );
+
+    if (isRollbackPlan) {
       await restoreInfrastructureRollbackState({
         deployment,
         repository,
@@ -449,10 +456,11 @@ async function runDeploymentPlanOnce(
         storage: planArtifactStorage
       }),
       restoreTerraformStateForPlan({
-        deployment,
+        stateBaseline,
         workspace: preparedWorkspace,
         planArtifactStorage,
-        writeTerraformStateFile
+        writeTerraformStateFile,
+        alreadyRestored: isRollbackPlan
       })
     ]);
 
@@ -811,7 +819,11 @@ async function runDeploymentPlanOnce(
               objectKey: uploadedPlan.objectKey,
               sha256: uploadedPlan.sha256,
               accountId: awsCredentials.accountId,
-              region: awsCredentials.region
+              region: awsCredentials.region,
+              stateBaselineDeploymentId: stateBaseline?.id ?? null,
+              stateObjectKey: stateBaseline?.stateObjectKey ?? null,
+              stateLineageSha256: desiredStateIdentity.stateLineageSha256,
+              stateSerial: desiredStateIdentity.stateSerial
             },
             planSummary,
             isBlocked: false,
@@ -1163,14 +1175,17 @@ async function evaluateDeploymentPlanReuse(input: {
 }
 
 async function restoreTerraformStateForPlan(input: {
-  deployment: DeploymentRecord;
+  stateBaseline: DeploymentRecord | null;
   workspace: PreparedTerraformWorkspace;
   planArtifactStorage: DeploymentPlanArtifactStorage;
   writeTerraformStateFile: (filePath: string, content: Buffer) => Promise<void>;
+  alreadyRestored?: boolean;
 }): Promise<boolean> {
-  if (!input.deployment.stateObjectKey) {
+  if (!input.stateBaseline?.stateObjectKey) {
     return false;
   }
+
+  if (input.alreadyRestored) return true;
 
   const downloadDeploymentState = input.planArtifactStorage.downloadDeploymentState;
 
@@ -1179,8 +1194,8 @@ async function restoreTerraformStateForPlan(input: {
   }
 
   const stateContent = await downloadDeploymentState.call(input.planArtifactStorage, {
-    deploymentId: input.deployment.id,
-    objectKey: input.deployment.stateObjectKey
+    deploymentId: input.stateBaseline.id,
+    objectKey: input.stateBaseline.stateObjectKey
   });
   await input.writeTerraformStateFile(
     join(input.workspace.workdir, "terraform.tfstate"),

@@ -33,6 +33,10 @@ import {
   createDeploymentPlanOptimizationEvidence,
   createTerraformDesiredStateIdentity
 } from "./deployment-optimization.js";
+import type {
+  ProjectExecutionLeaseRecord,
+  ProjectExecutionLeaseRepository
+} from "../releases/project-execution-lease-service.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -63,6 +67,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   completeCalls = 0;
   completedInput: SaveDeploymentApplyResultsInput | undefined;
   savedInput: SaveDeploymentApplyResultsInput | undefined;
+  savedStateInput: SaveDeploymentApplyStateInput | undefined;
   lifecycleEvents: string[] = [];
   synchronizeDeploymentTargetAfterApply?: NonNullable<
     DeploymentRepository["synchronizeDeploymentTargetAfterApply"]
@@ -274,6 +279,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
     input: SaveDeploymentApplyStateInput
   ): Promise<DeploymentRecord | undefined> {
     this.lifecycleEvents.push("state-save");
+    this.savedStateInput = input;
     if (!this.deployment || this.deployment.id !== candidateDeploymentId) return undefined;
     this.deployment = {
       ...this.deployment,
@@ -431,7 +437,7 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
     objectKey: string;
   }): Promise<Buffer> {
     this.downloadedStates.push(input);
-    return Buffer.from('{"version":4,"serial":7}');
+    return Buffer.from('{"version":4,"lineage":"test-lineage","serial":7}');
   }
 
   async downloadDeploymentPlanOptimizationEvidence(): Promise<Buffer | undefined> {
@@ -464,6 +470,67 @@ test("selectDeploymentStateBaseline sorts serialized creation dates", () => {
   assert.equal(selectDeploymentStateBaseline(current, [previous]), current);
 });
 
+test("runDeploymentApply blocks a changed state baseline before preparing AWS credentials", async () => {
+  const plannedBaselineId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const currentBaselineId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const currentStateObjectKey = `deployments/${currentBaselineId}/state/terraform.tfstate`;
+  const repository = new FakeDeploymentRepository();
+  repository.planArtifact = Object.assign(createPlanArtifactRecord(), {
+    stateBaselineDeploymentId: plannedBaselineId,
+    stateObjectKey: `deployments/${plannedBaselineId}/state/terraform.tfstate`,
+    stateLineageSha256: createSha256("planned-lineage"),
+    stateSerial: 6
+  });
+  repository.deployments = [
+    repository.deployment!,
+    createApprovedDeploymentRecord({
+      id: currentBaselineId,
+      approvedPlanArtifactId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      currentPlanArtifactId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      stateObjectKey: currentStateObjectKey,
+      status: "SUCCESS",
+      createdAt: new Date("2025-12-31T12:00:00.000Z")
+    }),
+    createApprovedDeploymentRecord({
+      id: plannedBaselineId,
+      approvedPlanArtifactId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      currentPlanArtifactId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      stateObjectKey: `deployments/${plannedBaselineId}/state/terraform.tfstate`,
+      status: "SUCCESS",
+      createdAt: new Date("2025-12-30T12:00:00.000Z")
+    })
+  ];
+  let credentialsPrepared = false;
+  let applyRan = false;
+
+  await assert.rejects(
+    runDeploymentApply({ deploymentId, accessContext: createAccessContext() }, repository, {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-changed-state-apply",
+        mainFilePath: "C:/tmp/sketchcatch-changed-state-apply/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      writeTerraformStateFile: async () => undefined,
+      writePlanFile: async () => undefined,
+      prepareTerraformAwsCredentialEnv: async () => {
+        credentialsPrepared = true;
+        return createPreparedCredentials();
+      },
+      runTerraformApply: async () => {
+        applyRan = true;
+        return createRunnerResult("apply");
+      }
+    }),
+    /state baseline changed.*new Plan/i
+  );
+
+  assert.equal(credentialsPrepared, false);
+  assert.equal(applyRan, false);
+});
+
 test("runDeploymentApply applies the approved tfplan and stores state resources and outputs", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createApprovedDeploymentRecord({
@@ -483,6 +550,12 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
       status: "SUCCESS"
     })
   ];
+  repository.planArtifact = createPlanArtifactRecord({
+    stateBaselineDeploymentId: previousDeploymentId,
+    stateObjectKey: previousStateObjectKey,
+    stateLineageSha256: createSha256("test-lineage"),
+    stateSerial: 7
+  });
   const applyArtifactStorage = new FakeApplyArtifactStorage();
   const runnerStages: string[] = [];
   let cleanupCalled = false;
@@ -616,6 +689,7 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
 
   assert.deepEqual(runnerStages, ["init", "apply", "output", "show-state", "application-release"]);
   assert.deepEqual(repository.lifecycleEvents, [
+    "state-save",
     "results-save",
     "output-reconcile",
     "application-release",
@@ -630,7 +704,10 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
     { deploymentId: previousDeploymentId, objectKey: previousStateObjectKey }
   ]);
   assert.match(restoredState?.filePath ?? "", /[\\/]terraform\.tfstate$/);
-  assert.equal(restoredState?.content.toString(), '{"version":4,"serial":7}');
+  assert.equal(
+    restoredState?.content.toString(),
+    '{"version":4,"lineage":"test-lineage","serial":7}'
+  );
   assert.equal(result.deployment.status, "SUCCESS");
   assert.equal(result.deployment.stateObjectKey, applyArtifactStorage.stateObjectKey);
   assert.equal(result.deployment.resultWarningSummary, null);
@@ -711,10 +788,7 @@ test("runDeploymentApply cleans a full-stack workspace when plan download fails"
 
   await assert.rejects(
     () =>
-      runDeploymentApply(
-        { deploymentId, accessContext: createAccessContext() },
-        repository,
-        {
+      runDeploymentApply({ deploymentId, accessContext: createAccessContext() }, repository, {
           applyArtifactStorage,
           prepareTerraformWorkspace: async () => {
             await new Promise<void>((resolve) => setImmediate(resolve));
@@ -727,8 +801,7 @@ test("runDeploymentApply cleans a full-stack workspace when plan download fails"
               }
             };
           }
-        }
-      ),
+      }),
     /plan download failed/
   );
 
@@ -777,6 +850,7 @@ test("infrastructure ECS apply synchronizes target metadata after result storage
     { projectId, deploymentId, accessContext: createAccessContext() }
   ]);
   assert.deepEqual(repository.lifecycleEvents, [
+    "state-save",
     "results-save",
     "target-sync",
     "terminal-complete"
@@ -906,8 +980,7 @@ test("successful full-stack apply continues release when warning persistence com
       writePlanFile: async () => undefined,
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-target-sync-warning-ambiguous-commit",
-        mainFilePath:
-          "C:/tmp/sketchcatch-target-sync-warning-ambiguous-commit/main.tf",
+        mainFilePath: "C:/tmp/sketchcatch-target-sync-warning-ambiguous-commit/main.tf",
         terraformFiles: [],
         cleanup: async () => undefined
       }),
@@ -1019,10 +1092,7 @@ test("post-apply failure retries terminal persistence when the first failure upd
   };
 
   await assert.rejects(
-    runDeploymentApply(
-      { deploymentId, accessContext: createAccessContext() },
-      repository,
-      {
+    runDeploymentApply({ deploymentId, accessContext: createAccessContext() }, repository, {
         applyArtifactStorage,
         readTerraformArtifactFile: async () => terraformArtifactContent,
         writePlanFile: async () => undefined,
@@ -1052,8 +1122,7 @@ test("post-apply failure retries terminal persistence when the first failure upd
           throw new Error("DEPLOYMENT_OUTPUT_URL_CONFLICT");
         },
         generateResultId: createSequentialIdGenerator()
-      }
-    ),
+    }),
     /transient terminal persistence failure/
   );
 
@@ -1083,6 +1152,12 @@ function createVerifiedNoChangeApplyScenario(): {
     }
   });
   const applyArtifactStorage = new FakeApplyArtifactStorage();
+  repository.planArtifact = createPlanArtifactRecord({
+    stateBaselineDeploymentId: deploymentId,
+    stateObjectKey: existingStateObjectKey,
+    stateLineageSha256: createSha256("test-lineage"),
+    stateSerial: 7
+  });
   applyArtifactStorage.optimizationEvidenceContent = Buffer.from(
     JSON.stringify(
       createDeploymentPlanOptimizationEvidence({
@@ -1100,7 +1175,7 @@ function createVerifiedNoChangeApplyScenario(): {
             accountId: "123456789012",
             region: "ap-northeast-2"
           },
-          state: { lineage: null, serial: null }
+          state: { lineage: "test-lineage", serial: 7 }
         }),
         driftVerifiedAt: fixedNow.toISOString(),
         planSummary: repository.deployment.planSummary!,
@@ -1141,6 +1216,12 @@ test("no-change Apply preserves release when target sync warning storage fails",
   });
   const noChangePlanSummary = repository.deployment.planSummary!;
   const applyArtifactStorage = new FakeApplyArtifactStorage();
+  repository.planArtifact = createPlanArtifactRecord({
+    stateBaselineDeploymentId: deploymentId,
+    stateObjectKey: existingStateObjectKey,
+    stateLineageSha256: createSha256("test-lineage"),
+    stateSerial: 7
+  });
   applyArtifactStorage.optimizationEvidenceContent = Buffer.from(
     JSON.stringify(
       createDeploymentPlanOptimizationEvidence({
@@ -1158,7 +1239,7 @@ test("no-change Apply preserves release when target sync warning storage fails",
             accountId: "123456789012",
             region: "ap-northeast-2"
           },
-          state: { lineage: null, serial: null }
+          state: { lineage: "test-lineage", serial: 7 }
         }),
         driftVerifiedAt: fixedNow.toISOString(),
         planSummary: noChangePlanSummary,
@@ -1176,6 +1257,7 @@ test("no-change Apply preserves release when target sync warning storage fails",
     {
       applyArtifactStorage,
       readTerraformArtifactFile: async () => terraformArtifactContent,
+      writeTerraformStateFile: async () => undefined,
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-no-change-apply",
         mainFilePath: "C:/tmp/sketchcatch-terraform-no-change-apply/main.tf",
@@ -1223,6 +1305,50 @@ test("no-change Apply preserves release when target sync warning storage fails",
   assertContiguousDeploymentLogSequences(repository);
 });
 
+test("no-change full-stack release preserves partial failure with the active fence and signal", async () => {
+  const { repository, applyArtifactStorage } = createVerifiedNoChangeApplyScenario();
+  const leaseRepository = createApplyLeaseRepository();
+  let receivedSignal: AbortSignal | undefined;
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage,
+      projectExecutionLeaseRepository: leaseRepository,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writeTerraformStateFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-no-change-partial-release",
+        mainFilePath: "C:/tmp/sketchcatch-no-change-partial-release/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      executeApplicationRelease: async (input) => {
+        assert.deepEqual(input.leaseFence, {
+          projectId,
+          holderId: deploymentId,
+          fencingVersion: 1
+        });
+        receivedSignal = input.abortSignal;
+        assert(repository.deployment);
+        repository.deployment = {
+          ...repository.deployment,
+          status: "PARTIALLY_FAILED",
+          failureStage: "application_release",
+          errorSummary: "Application release partially failed at frontend_activation"
+        };
+        return "partially_failed";
+      },
+      now: () => fixedNow
+    }
+  );
+
+  assert.ok(receivedSignal);
+  assert.equal(result.deployment.status, "PARTIALLY_FAILED");
+  assert.equal(repository.completeCalls, 0);
+});
+
 test("no-change Apply remains successful when warning persistence commits before rejecting", async () => {
   const { repository, applyArtifactStorage, existingStateObjectKey } =
     createVerifiedNoChangeApplyScenario();
@@ -1235,6 +1361,7 @@ test("no-change Apply remains successful when warning persistence commits before
     {
       applyArtifactStorage,
       readTerraformArtifactFile: async () => terraformArtifactContent,
+      writeTerraformStateFile: async () => undefined,
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-no-change-warning-ambiguous-commit",
         mainFilePath: "C:/tmp/sketchcatch-no-change-warning-ambiguous-commit/main.tf",
@@ -1381,6 +1508,36 @@ test("application scope releases the approved artifact without Terraform init or
   assert.equal(targetSyncCalls, 0);
 });
 
+test("application release exceptions are classified as application_release failures", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate"
+  });
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-application-release-failure",
+        mainFilePath: "C:/tmp/sketchcatch-application-release-failure/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      executeApplicationRelease: async () => {
+        throw new Error("ECS service did not become healthy");
+      }
+    }
+  );
+
+  assert.equal(result.deployment.status, "FAILED");
+  assert.equal(result.deployment.failureStage, "application_release");
+  assert.match(result.deployment.errorSummary ?? "", /ECS service did not become healthy/);
+});
+
 test("application scope cleans its prepared workspace when plan download fails", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createApprovedDeploymentRecord({
@@ -1396,10 +1553,7 @@ test("application scope cleans its prepared workspace when plan download fails",
 
   await assert.rejects(
     () =>
-      runDeploymentApply(
-        { deploymentId, accessContext: createAccessContext() },
-        repository,
-        {
+      runDeploymentApply({ deploymentId, accessContext: createAccessContext() }, repository, {
           applyArtifactStorage,
           readTerraformArtifactFile: async () => terraformArtifactContent,
           prepareTerraformWorkspace: async () => {
@@ -1413,8 +1567,7 @@ test("application scope cleans its prepared workspace when plan download fails",
               }
             };
           }
-        }
-      ),
+      }),
     /plan download failed/
   );
 
@@ -1987,6 +2140,54 @@ test("runDeploymentApply keeps successful apply as success when post-apply parsi
   );
 });
 
+test("successful apply checkpoints state and stays successful when result persistence fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({ scope: "infrastructure" });
+  repository.saveDeploymentApplyResults = async () => {
+    repository.lifecycleEvents.push("results-save-failed");
+    throw new Error("temporary result transaction outage");
+  };
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-result-save-warning",
+        mainFilePath: "C:/tmp/sketchcatch-result-save-warning/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => createRunnerResult("apply"),
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", {
+          stdout: JSON.stringify({ values: { root_module: { resources: [] } } })
+        })
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(repository.failedInput, undefined);
+  assert.equal(repository.savedStateInput?.stateObjectKey, applyArtifactStorage.stateObjectKey);
+  assert.match(
+    repository.savedStateInput?.resultWarningSummary ?? "",
+    /result persistence failed after successful apply/i
+  );
+  assert.deepEqual(repository.lifecycleEvents, [
+    "state-save",
+    "results-save-failed",
+    "state-save",
+    "terminal-complete"
+  ]);
+});
+
 function createApprovedDeploymentRecord(
   overrides: Partial<DeploymentRecord> = {}
 ): DeploymentRecord {
@@ -2064,9 +2265,7 @@ function createApprovedDeploymentRecord(
   return deployment;
 }
 
-function installCommitAfterRejectingWarningPersistence(
-  repository: FakeDeploymentRepository
-): void {
+function installCommitAfterRejectingWarningPersistence(repository: FakeDeploymentRepository): void {
   const createDeploymentLogs = repository.createDeploymentLogs.bind(repository);
   repository.createDeploymentLogs = async (logs) => {
     if (
@@ -2092,9 +2291,7 @@ function installCommitAfterRejectingWarningPersistence(
   };
 }
 
-function assertContiguousDeploymentLogSequences(
-  repository: FakeDeploymentRepository
-): void {
+function assertContiguousDeploymentLogSequences(repository: FakeDeploymentRepository): void {
   const sequences = repository.logs
     .filter((log) => log.deploymentId === deploymentId)
     .map((log) => log.sequence)
@@ -2136,8 +2333,14 @@ test("infrastructure rollback apply restores the same current state used by the 
       deploymentId: sourceId,
       objectKey: `deployments/${sourceId}/state/terraform.tfstate`
     });
-    return Buffer.from('{"lineage":"current"}');
+    return Buffer.from('{"lineage":"current","serial":7}');
   };
+  repository.planArtifact = createPlanArtifactRecord({
+    stateBaselineDeploymentId: sourceId,
+    stateObjectKey: `deployments/${sourceId}/state/terraform.tfstate`,
+    stateLineageSha256: createSha256("current"),
+    stateSerial: 7
+  });
 
   const result = await runDeploymentApply(
     { deploymentId, accessContext: createAccessContext() },
@@ -2166,7 +2369,7 @@ test("infrastructure rollback apply restores the same current state used by the 
 
   assert.equal(result.deployment.status, "SUCCESS");
   assert.equal(stateWrites[0]?.filePath.endsWith("terraform.tfstate"), true);
-  assert.equal(stateWrites[0]?.content.toString("utf8"), '{"lineage":"current"}');
+  assert.equal(stateWrites[0]?.content.toString("utf8"), '{"lineage":"current","serial":7}');
 });
 
 function createReleaseCandidateRecord(): ReleaseCandidateRecord {
@@ -2215,8 +2418,50 @@ function createPlanArtifactRecord(
     sha256: tfplanSha256,
     accountId: "123456789012",
     region: "ap-northeast-2",
+    stateBaselineDeploymentId: null,
+    stateObjectKey: null,
+    stateLineageSha256: null,
+    stateSerial: null,
     createdAt: fixedNow,
     ...overrides
+  };
+}
+
+function createApplyLeaseRepository(): ProjectExecutionLeaseRepository {
+  let record: ProjectExecutionLeaseRecord | undefined;
+  return {
+    async acquire(input) {
+      record = {
+        projectId: input.projectId,
+        holderId: input.holderId,
+        source: input.source,
+        fencingVersion: 1,
+        status: "active",
+        activeCodeBuildId: null,
+        activeWorkerTaskArn: null,
+        heartbeatAt: input.now,
+        expiresAt: input.expiresAt,
+        createdAt: input.now,
+        updatedAt: input.now
+      };
+      return record;
+    },
+    async find() {
+      return record;
+    },
+    async heartbeat(input) {
+      if (!record) return undefined;
+      record = { ...record, heartbeatAt: input.now, expiresAt: input.expiresAt };
+      return record;
+    },
+    async setExecutionCoordinates() {
+      return record;
+    },
+    async release(input) {
+      if (!record) return false;
+      record = { ...record, status: "released", updatedAt: input.now };
+      return true;
+    }
   };
 }
 
