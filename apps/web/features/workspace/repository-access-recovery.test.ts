@@ -17,5 +17,8 @@ test("Direct Deployment shows exact Repository evidence and recovery actions aft
   assert.match(source, /Repository 빌드 권한 다시 확인/);
   assert.match(source, /runDeploymentPlan\(selectedDeployment\.id\)/);
   assert.doesNotMatch(source, /verifyRepositoryAccessForPlan/);
-  assert.match(source, /finally\s*{\s*setActiveProgress\(null\)/);
+  assert.match(
+    source,
+    /finally\s*{\s*actionInFlightRef\.current = false;\s*setActiveProgress\(null\)/
+  );
 });

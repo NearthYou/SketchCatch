@@ -976,6 +976,7 @@ export function createDesiredProjectBuildEnvironment(
     accountId: context.awsConnection.accountId,
     region: context.awsConnection.region
   });
+  const confirmedCommitSha = context.confirmedBuildConfig.confirmedCommitSha.toLowerCase();
   const fingerprintInput = {
     projectId: context.projectId,
     codeBuildProjectName,
@@ -986,7 +987,6 @@ export function createDesiredProjectBuildEnvironment(
     image: projectBuildImage,
     computeType: projectBuildComputeType,
     buildCache,
-    confirmedCommitSha: context.confirmedBuildConfig.confirmedCommitSha.toLowerCase(),
     buildConfig: context.confirmedBuildConfig.ecsWeb
   } as const;
   const runtimeFingerprint = createHash("sha256")
@@ -997,6 +997,7 @@ export function createDesiredProjectBuildEnvironment(
     awsConnection: context.awsConnection,
     awsCodeConnectionId: context.codeConnection.id,
     codeBuildServiceRoleName,
+    confirmedCommitSha,
     runtimeFingerprint
   };
 }

@@ -246,7 +246,10 @@ export async function runDeploymentDestroyPlan(
       deployment.status === "RUNNING" && input.startedFromStatus !== undefined;
 
     if (!wasPreMarkedRunning) {
-      const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
+      const runningDeployment = await repository.markDeploymentPlanRunning(
+        deployment.id,
+        "destroy"
+      );
 
       if (!runningDeployment) {
         throw new DeploymentConflictError("Deployment destroy plan could not be started");
@@ -547,7 +550,10 @@ async function saveApplicationCleanupPlan(input: {
     const wasPreMarkedRunning =
       input.deployment.status === "RUNNING" && input.sourceStatus !== input.deployment.status;
     if (!wasPreMarkedRunning) {
-      const running = await input.repository.markDeploymentPlanRunning(input.deployment.id);
+      const running = await input.repository.markDeploymentPlanRunning(
+        input.deployment.id,
+        "destroy"
+      );
       if (!running) {
         throw new DeploymentConflictError("Application cleanup plan could not be started");
       }

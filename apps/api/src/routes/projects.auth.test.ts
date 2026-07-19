@@ -1076,6 +1076,7 @@ function makeDeployment(overrides: Partial<DeploymentRow> = {}): DeploymentRow {
     approvedTfplanHash: null,
     approvedPreparedSnapshotHash: null,
     architectureId: "55555555-5555-4555-8555-555555555555",
+    preparationKey: null,
     awsConnectionId: null,
     awsAccountIdSnapshot: null,
     awsRegionSnapshot: null,

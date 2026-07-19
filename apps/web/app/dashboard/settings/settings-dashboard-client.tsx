@@ -410,10 +410,23 @@ export function SettingsDashboardClient() {
     let active = true;
 
     void Promise.all(
-      displayedVerifiedConnections.map(async (connection) => [
-        connection.id,
-        await getAwsCodeConnection(connection.id)
-      ] as const)
+      displayedVerifiedConnections.map(async (connection) => {
+        const savedConnection = await getAwsCodeConnection(connection.id);
+        if (!savedConnection.codeConnection) return [connection.id, savedConnection] as const;
+        try {
+          return [connection.id, await refreshAwsCodeConnection(connection.id)] as const;
+        } catch (error) {
+          if (active) {
+            setErrorMessage(
+              getApiErrorMessage(
+                error,
+                "AWS 상태를 다시 확인하지 못해 저장된 연결 상태를 표시합니다."
+              )
+            );
+          }
+          return [connection.id, savedConnection] as const;
+        }
+      })
     )
       .then((entries) => {
         if (active) setCodeConnections(Object.fromEntries(entries));

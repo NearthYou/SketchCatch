@@ -576,6 +576,7 @@ function createDeploymentRecord(
     projectId,
     architectureId,
     terraformArtifactId,
+    preparationKey: null,
     awsConnectionId,
     awsAccountIdSnapshot: "123456789012",
     awsRegionSnapshot: "ap-northeast-2",

@@ -3,6 +3,7 @@ import test from "node:test";
 import type { ConfirmedBuildConfig, DiagramJson } from "@sketchcatch/types";
 import {
   assertDraftTerraformDoesNotIncludeAnalysisExcludedResource,
+  createDeploymentPreparationKey,
   resolveDeploymentPreparation,
   type DeploymentPreparationDraft,
   type DeploymentPreparationRepository,
@@ -39,6 +40,28 @@ const excludedDiagram: DiagramJson = {
   edges: [],
   viewport: { x: 0, y: 0, zoom: 1 }
 };
+
+test("preparation idempotency follows saved content rather than generated artifact ids", () => {
+  const input = {
+    awsConnectionId: "connection-1",
+    deploymentTargetFingerprint: "c".repeat(64),
+    preparedDraftRevision: 7,
+    preparedSnapshotHash: "a".repeat(64),
+    projectId: "project-1",
+    scope: "full_stack" as const,
+    targetKind: "ecs_fargate" as const
+  };
+
+  assert.equal(createDeploymentPreparationKey(input), createDeploymentPreparationKey({ ...input }));
+  assert.notEqual(
+    createDeploymentPreparationKey(input),
+    createDeploymentPreparationKey({ ...input, preparedSnapshotHash: "b".repeat(64) })
+  );
+  assert.notEqual(
+    createDeploymentPreparationKey(input),
+    createDeploymentPreparationKey({ ...input, deploymentTargetFingerprint: "d".repeat(64) })
+  );
+});
 
 test("does not treat a commented excluded Lambda as a deployable block when a supported VPC exists", () => {
   assert.doesNotThrow(() =>
@@ -144,7 +167,8 @@ function createTarget(
   return {
     connectionId: "connection-1",
     runtimeTargetKind: "ecs_fargate",
-    confirmedBuildConfig
+    confirmedBuildConfig,
+    deploymentTargetFingerprint: "c".repeat(64)
   };
 }
 
