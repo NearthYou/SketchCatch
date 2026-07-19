@@ -84,3 +84,26 @@ test("Reverse Engineering 원본 변환은 입력 Architecture를 바꾸지 않�
 
   assert.deepEqual(source, before);
 });
+
+test("AWS 원본에 없는 Terraform 식별자와 파일 정보를 Catalog에서 추론하지 않는다", () => {
+  const diagram = createSourceExactReverseEngineeringDiagram(source);
+  const vpc = diagram.nodes.find((node) => node.id === "vpc-source");
+  const bucket = diagram.nodes.find((node) => node.id === "bucket-source");
+
+  assert.ok(vpc);
+  assert.equal(vpc.type, "VPC");
+  assert.equal(vpc.parameters?.resourceName, "source_vpc");
+  assert.equal(vpc.parameters?.resourceType, "");
+  assert.equal(vpc.parameters?.fileName, "");
+  assert.equal(vpc.parameters?.terraformBlockType, undefined);
+  assert.equal(vpc.parameters?.invalid, true);
+
+  assert.ok(bucket);
+  assert.equal(bucket.type, "S3");
+  assert.equal(bucket.parameters?.resourceName, "");
+  assert.equal(bucket.parameters?.resourceType, "");
+  assert.equal(bucket.parameters?.fileName, "");
+  assert.equal(bucket.parameters?.terraformBlockType, undefined);
+  assert.equal(bucket.parameters?.invalid, true);
+  assert.deepEqual(bucket.parameters?.values, source.nodes[1]?.config);
+});

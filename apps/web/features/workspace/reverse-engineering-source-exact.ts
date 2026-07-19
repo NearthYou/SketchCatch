@@ -38,16 +38,15 @@ function createSourceExactNode(
   const catalogItem = definition
     ? resourceCatalog.find((candidate) => candidate.id === definition.id)
     : undefined;
-  const resourceType = readNonEmptyString(node.config["terraformResourceType"])
-    ?? definition?.terraform.resourceType
-    ?? "unknown_resource";
-  const terraformBlockType = readTerraformBlockType(node.config["terraformBlockType"])
-    ?? definition?.terraform.blockType
-    ?? "resource";
+  const resourceType = readNonEmptyString(node.config["terraformResourceType"]);
+  const resourceName = readNonEmptyString(node.config["terraformResourceName"]);
+  const fileName = readNonEmptyString(node.config["terraformFileName"]);
+  const terraformBlockType = readTerraformBlockType(node.config["terraformBlockType"]);
+  const hasSourceTerraformIdentity = resourceType !== undefined && resourceName !== undefined;
 
   return {
     id: node.id,
-    type: resourceType,
+    type: resourceType ?? node.type,
     kind: "resource",
     position: { x: node.positionX, y: node.positionY },
     size: catalogItem ? { ...catalogItem.nodeDefaults.size } : { ...FALLBACK_NODE_SIZE },
@@ -56,12 +55,12 @@ function createSourceExactNode(
     locked: false,
     zIndex: index + 1,
     parameters: {
-      terraformBlockType,
-      resourceType,
-      resourceName:
-        readNonEmptyString(node.config["terraformResourceName"]) ?? createStableResourceName(node.id),
-      fileName: readNonEmptyString(node.config["terraformFileName"]) ?? "main",
-      values: structuredClone(node.config)
+      ...(terraformBlockType ? { terraformBlockType } : {}),
+      resourceType: resourceType ?? "",
+      resourceName: resourceName ?? "",
+      fileName: fileName ?? "",
+      values: structuredClone(node.config),
+      ...(!hasSourceTerraformIdentity ? { invalid: true } : {})
     }
   };
 }
@@ -74,16 +73,4 @@ function readTerraformBlockType(value: unknown): TerraformBlockType | undefined 
 /** gg: 공백뿐인 식별자는 원본 식별자로 취급하지 않습니다. */
 function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-/** gg: Terraform 편집기에 필요한 이름만 안정적으로 만들고 source config는 바꾸지 않습니다. */
-function createStableResourceName(nodeId: string): string {
-  const normalized = nodeId
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .replace(/^[0-9]/, "resource_$&");
-
-  return normalized || "resource";
 }

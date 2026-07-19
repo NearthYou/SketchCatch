@@ -131,6 +131,7 @@ import type {
   AwsProviderScanGateway,
   AwsProviderScanInput
 } from "./aws-provider-adapter.js";
+import { selectHigherPriorityReverseEngineeringScanError } from "./reverse-engineering-scan-error-priority.js";
 import {
   parseAwsQueryPaginationToken,
   parseInstancesFromXml,
@@ -3143,9 +3144,10 @@ export function deduplicateReverseEngineeringScanErrors(
 
   for (const scanError of scanErrors) {
     const key = scanError.serviceKey ?? scanError.id;
-    if (!uniqueErrors.has(key)) {
-      uniqueErrors.set(key, scanError);
-    }
+    uniqueErrors.set(
+      key,
+      selectHigherPriorityReverseEngineeringScanError(uniqueErrors.get(key), scanError)
+    );
   }
 
   return [...uniqueErrors.values()];

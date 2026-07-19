@@ -3,6 +3,7 @@ import type {
   ReverseEngineeringScanError,
   ReverseEngineeringServiceCoverage
 } from "@sketchcatch/types";
+import { selectHigherPriorityReverseEngineeringScanError } from "./reverse-engineering-scan-error-priority.js";
 
 const SERVICE_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   "api-gateway": "API Gateway",
@@ -36,30 +37,33 @@ export type ReverseEngineeringConnectionFailureClassification = {
 export function createReverseEngineeringPublicCoverage(
   scanErrors: readonly ReverseEngineeringScanError[]
 ): { readonly coverage: ReverseEngineeringServiceCoverage } {
-  const unavailableServices = new Map<
-    string,
-    ReverseEngineeringServiceCoverage["unavailableServices"][number]
-  >();
+  const strongestErrors = new Map<string, ReverseEngineeringScanError>();
 
   for (const scanError of scanErrors) {
     const serviceKey = getSafeServiceKey(scanError);
-    if (unavailableServices.has(serviceKey)) {
-      continue;
-    }
+    strongestErrors.set(
+      serviceKey,
+      selectHigherPriorityReverseEngineeringScanError(
+        strongestErrors.get(serviceKey),
+        scanError
+      )
+    );
+  }
 
+  const unavailableServices = [...strongestErrors].map(([serviceKey, scanError]) => {
     const reason = getPublicCoverageReason(scanError.reason);
-    unavailableServices.set(serviceKey, {
+    return {
       serviceKey,
       displayName: SERVICE_DISPLAY_NAMES[serviceKey] ?? "AWS 서비스",
       reason,
-      remedy: reason === "permission_required" ? "open_settings" : "retry"
-    });
-  }
+      remedy: reason === "permission_required" ? ("open_settings" as const) : ("retry" as const)
+    };
+  });
 
   return {
     coverage: {
-      status: unavailableServices.size > 0 ? "partial" : "complete",
-      unavailableServices: [...unavailableServices.values()]
+      status: unavailableServices.length > 0 ? "partial" : "complete",
+      unavailableServices
     }
   };
 }
@@ -68,26 +72,28 @@ export function createReverseEngineeringPublicCoverage(
 export function sanitizeReverseEngineeringScanErrors(
   scanErrors: readonly ReverseEngineeringScanError[]
 ): ReverseEngineeringScanError[] {
-  const safeErrors = new Map<string, ReverseEngineeringScanError>();
+  const strongestErrors = new Map<string, ReverseEngineeringScanError>();
 
   for (const scanError of scanErrors) {
     const serviceKey = getSafeServiceKey(scanError);
-    if (safeErrors.has(serviceKey)) {
-      continue;
-    }
-
-    safeErrors.set(serviceKey, {
-      id: `scan-error-service-${serviceKey}`,
+    strongestErrors.set(
       serviceKey,
-      resourceType: scanError.resourceType,
-      stage: "provider_api",
-      reason: scanError.reason,
-      message: getSafeScanErrorMessage(scanError.reason),
-      retryable: scanError.reason === "throttled" || scanError.reason === "provider_error"
-    });
+      selectHigherPriorityReverseEngineeringScanError(
+        strongestErrors.get(serviceKey),
+        scanError
+      )
+    );
   }
 
-  return [...safeErrors.values()];
+  return [...strongestErrors].map(([serviceKey, scanError]) => ({
+    id: `scan-error-service-${serviceKey}`,
+    serviceKey,
+    resourceType: scanError.resourceType,
+    stage: "provider_api",
+    reason: scanError.reason,
+    message: getSafeScanErrorMessage(scanError.reason),
+    retryable: scanError.reason === "throttled" || scanError.reason === "provider_error"
+  }));
 }
 
 /** gg: 서버 자격 증명 문제와 고객 Role 문제를 서로 다른 안전한 다음 행동으로 분리합니다. */
@@ -114,7 +120,10 @@ export function classifyReverseEngineeringConnectionFailure(
   if (
     message.includes("aws role assume permission denied") ||
     message.includes("aws role account mismatch") ||
+    message.includes("aws role trust policy") ||
+    message.includes("aws role external id requirement") ||
     message.includes("aws connection must be verified") ||
+    message.includes("aws connection region") ||
     message.includes("aws connection external id")
   ) {
     return {

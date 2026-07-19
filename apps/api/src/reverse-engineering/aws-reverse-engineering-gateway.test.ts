@@ -456,9 +456,9 @@ test("같은 AWS 서비스의 반복 실패는 사용자 결과에서 한 번만
       id: "scan-error-service-ec2",
       resourceType: "VPC",
       stage: "provider_api",
-      reason: "permission_denied",
-      message: "VPC denied",
-      retryable: false
+      reason: "provider_error",
+      message: "VPC temporary error",
+      retryable: true
     },
     {
       id: "scan-error-service-ec2",
@@ -479,10 +479,25 @@ test("같은 AWS 서비스의 반복 실패는 사용자 결과에서 한 번만
   ]);
 
   assert.deepEqual(
-    errors.map(({ id, resourceType }) => ({ id, resourceType })),
+    errors.map(({ id, reason, resourceType, retryable }) => ({
+      id,
+      reason,
+      resourceType,
+      retryable
+    })),
     [
-      { id: "scan-error-service-ec2", resourceType: "VPC" },
-      { id: "scan-error-service-ecs", resourceType: "ECS_SERVICE" }
+      {
+        id: "scan-error-service-ec2",
+        reason: "permission_denied",
+        resourceType: "SUBNET",
+        retryable: false
+      },
+      {
+        id: "scan-error-service-ecs",
+        reason: "throttled",
+        resourceType: "ECS_SERVICE",
+        retryable: true
+      }
     ]
   );
 });
