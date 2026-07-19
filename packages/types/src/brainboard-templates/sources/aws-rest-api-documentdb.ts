@@ -43,7 +43,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8cc66a70-095a-4dd1-b32d-9be569d07d43",
       domOrder: 1,
-      label: "DocumentDB API VPC",
+      label: "VPC",
       position: {
         x: 960,
         y: 340
@@ -115,7 +115,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "82fc5147-833e-4d85-a63e-7809cecbc533",
       domOrder: 5,
-      label: "DocumentDB HTTP API",
+      label: "HTTP API",
       position: {
         x: 760,
         y: 530
@@ -133,7 +133,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "9ae294ea-de55-47ee-ac40-9fdc891717fa",
       domOrder: 6,
-      label: "DocumentDB Credentials Secret",
+      label: "Credentials Secret",
       position: {
         x: 760,
         y: 710

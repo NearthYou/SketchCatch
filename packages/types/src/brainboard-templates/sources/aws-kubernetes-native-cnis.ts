@@ -43,7 +43,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "37304ca4-7959-4553-802c-96b74972173a",
       domOrder: 1,
-      label: "EKS VPC",
+      label: "VPC",
       position: {
         x: 850,
         y: 405

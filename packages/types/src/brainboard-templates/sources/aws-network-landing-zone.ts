@@ -43,7 +43,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2abe13e0-233f-4e11-9d24-05e9b3d61bdf",
       domOrder: 1,
-      label: "Landing Zone VPC",
+      label: "VPC",
       position: {
         x: -430,
         y: 170

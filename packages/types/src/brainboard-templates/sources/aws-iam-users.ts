@@ -43,7 +43,7 @@ export const awsIamUsersSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fc0d1fe3-09ac-4ee4-a83f-c04900b17d19",
       domOrder: 1,
-      label: "Variable-Based User Accounts",
+      label: "User Accounts",
       position: {
         x: 1095,
         y: -715

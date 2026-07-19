@@ -43,7 +43,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "162f4029-6160-4b56-80d0-e6de1b294c83",
       domOrder: 1,
-      label: "ECS VPC",
+      label: "VPC",
       position: {
         x: 390.1519485675814,
         y: 184.40406376280453
@@ -61,7 +61,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "1eca88fe-e8bd-4240-856e-92e7187e1114",
       domOrder: 2,
-      label: "ECS Service SG",
+      label: "Service SG",
       position: {
         x: 450.1519485675814,
         y: 374.4040637628045
@@ -97,7 +97,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5a76bfb2-b71d-4cbc-919e-3611a1b70e1e",
       domOrder: 4,
-      label: "Fargate Task Definition",
+      label: "ECS Task Definition",
       position: {
         x: 1480.1519485675817,
         y: 574.4040637628045
@@ -115,7 +115,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "aedad806-5d41-458e-82d0-58daac33cc37",
       domOrder: 5,
-      label: "ECS Task IAM Role",
+      label: "Task IAM Role",
       position: {
         x: 1480.1519485675817,
         y: 754.4040637628045
@@ -133,7 +133,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f005a130-edd2-4747-8956-e1d409272c67",
       domOrder: 6,
-      label: "ECS Task Execution Policy Attachment",
+      label: "Task Execution Policy Attachment",
       position: {
         x: 1690.1519485675817,
         y: 754.4040637628045
@@ -187,7 +187,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fd1b2a28-24e2-4d3e-a14d-6560424de9bd",
       domOrder: 9,
-      label: "Fargate Service",
+      label: "ECS Service",
       position: {
         x: 845.1519485675815,
         y: 574.4040637628045

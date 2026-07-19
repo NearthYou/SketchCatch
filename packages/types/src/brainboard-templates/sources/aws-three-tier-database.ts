@@ -61,7 +61,7 @@ export const awsThreeTierDatabaseSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "afe878e0-c406-499d-ba2c-c76a7ba9ed00",
       domOrder: 2,
-      label: "3-Tier VPC",
+      label: "VPC",
       position: {
         x: -685,
         y: 30

@@ -61,7 +61,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3a7c40fe-8ca2-429b-a762-605aed1a0a33",
       domOrder: 2,
-      label: "EKS VPC",
+      label: "VPC",
       position: {
         x: 760,
         y: 315

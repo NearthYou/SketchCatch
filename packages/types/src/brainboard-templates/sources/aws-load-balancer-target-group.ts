@@ -43,7 +43,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "595f9ca1-9786-4270-a86e-f584fd0dd78b",
       domOrder: 1,
-      label: "ALB VPC",
+      label: "VPC",
       position: {
         x: -1265,
         y: -750
@@ -187,7 +187,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "048a3f38-9205-4ca7-b6fa-5f37ce90c75f",
       domOrder: 9,
-      label: "Application EC2 Instance",
+      label: "EC2 Instance",
       position: {
         x: -640,
         y: 70
@@ -205,7 +205,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "f18c57e0-c9a1-45c1-83f4-03b84924b7c8",
       domOrder: 10,
-      label: "Target Group Attachment - Application EC2",
+      label: "Target Group Attachment",
       position: {
         x: -850,
         y: 70

@@ -43,7 +43,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "9c59c668-cb0a-4287-9087-1de1045fcb1b",
       domOrder: 1,
-      label: "2-AZ VPC",
+      label: "VPC",
       position: {
         x: 192,
         y: 195

@@ -43,7 +43,7 @@ export const awsEc2VpcSubnetSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3704567b-d0d1-49f3-9215-bf83a1df977a",
       domOrder: 1,
-      label: "EC2 VPC",
+      label: "VPC",
       position: {
         x: 467.5,
         y: 2872.5
@@ -115,7 +115,7 @@ export const awsEc2VpcSubnetSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8fbaeef4-cb2d-473e-8885-2b1fb5161e59",
       domOrder: 5,
-      label: "t3a.medium EC2 Instance",
+      label: "EC2 Instance",
       position: {
         x: 781.8345757922517,
         y: 3252.5

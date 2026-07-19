@@ -43,7 +43,7 @@ export const awsElasticBeanstalkSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d40ff46e-9c47-41ae-ac6d-94b6ee7e82a0",
       domOrder: 1,
-      label: "Elastic Beanstalk VPC",
+      label: "VPC",
       position: {
         x: 55,
         y: 340

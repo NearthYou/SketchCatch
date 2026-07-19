@@ -43,7 +43,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ac3623f0-25ad-4acb-92d8-0d35223ec63c",
       domOrder: 1,
-      label: "RDS VPC",
+      label: "VPC",
       position: {
         x: 150,
         y: -170

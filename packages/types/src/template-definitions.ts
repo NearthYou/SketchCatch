@@ -234,7 +234,7 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       "bucket-policy-bucket": layoutRoute("handle-left", "handle-right")
     },
     presentationNodes: {
-      user: presentationNode("design-user-client", "Web User", 120, 400),
+      user: presentationNode("design-user-client", "User", 120, 400),
       region: presentationNode("aws-region", "Region", 480, 240, { width: 480, height: 480 })
     },
     presentationEdges: {
@@ -321,7 +321,7 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       ),
       user: presentationNode(
         "design-user-client",
-        "Web User",
+        "User",
         160,
         640,
         undefined,
@@ -527,7 +527,7 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       "task-role": layoutRoute("handle-top", "handle-bottom")
     },
     presentationNodes: {
-      user: presentationNode("design-user-client", "Web User", 80, 360),
+      user: presentationNode("design-user-client", "User", 80, 360),
       region: presentationAreaAroundChildren("aws-region", "Asia Pacific (Seoul)", 240, 40, [
         layoutAt(400, 200, "region", { width: 1360, height: 560 }),
         layoutAt(360, 240, "region"),
@@ -778,15 +778,15 @@ export const templateDefinitions = [
     description: "API Gateway, Lambda, DynamoDB로 구성한 최소 API입니다.",
     tags: ["API Gateway", "Lambda", "DynamoDB"],
     resources: [
-      resource("api", "Items API Gateway REST API", "aws", "aws_api_gateway_rest_api", 80, 180, {
+      resource("api", "API Gateway REST API", "aws", "aws_api_gateway_rest_api", 80, 180, {
         name: "items-api"
       }),
-      resource("route", "Items API Route", "aws", "aws_api_gateway_resource", 300, 180, {
+      resource("route", "API Route", "aws", "aws_api_gateway_resource", 300, 180, {
         pathPart: "items",
         restApiId: "@ref:api.id",
         parentId: "@ref:api.root_resource_id"
       }),
-      resource("method", "Items POST Method", "aws", "aws_api_gateway_method", 500, 180, {
+      resource("method", "POST Method", "aws", "aws_api_gateway_method", 500, 180, {
         httpMethod: "POST",
         authorization: "NONE",
         restApiId: "@ref:api.id",
@@ -813,12 +813,12 @@ export const templateDefinitions = [
         triggers: { redeployment: "items-v1" },
         dependsOn: ["@address:integration"]
       }),
-      resource("stage", "Production API Stage", "aws", "aws_api_gateway_stage", 1080, 180, {
+      resource("stage", "API Stage", "aws", "aws_api_gateway_stage", 1080, 180, {
         restApiId: "@ref:api.id",
         deploymentId: "@ref:deployment.id",
         stageName: "prod"
       }),
-      resource("handler", "Items Lambda Function", "aws", "aws_lambda_function", 300, 360, {
+      resource("handler", "Lambda Function", "aws", "aws_lambda_function", 300, 360, {
         functionName: "items-handler",
         handler: "index.handler",
         runtime: "nodejs22.x",
@@ -844,7 +844,7 @@ export const templateDefinitions = [
         principal: "apigateway.amazonaws.com",
         sourceArn: "${@ref:api.execution_arn}/*/*"
       }),
-      resource("table", "Items DynamoDB Table", "aws", "aws_dynamodb_table", 560, 360, {
+      resource("table", "DynamoDB Table", "aws", "aws_dynamodb_table", 560, 360, {
         name: "items",
         billingMode: "PAY_PER_REQUEST",
         hashKey: "id",
@@ -874,22 +874,22 @@ export const templateDefinitions = [
     description: "Frontend, Cognito, API, Lambda, DynamoDB를 연결한 웹 앱입니다.",
     tags: ["Cognito", "API", "Lambda", "DynamoDB"],
     resources: [
-      resource("frontend", "Web Frontend Amplify App", "aws", "aws_amplify_app", 80, 180, {
+      resource("frontend", "Amplify App", "aws", "aws_amplify_app", 80, 180, {
         name: "serverless-web"
       }),
-      resource("user-pool", "User Cognito User Pool", "aws", "aws_cognito_user_pool", 320, 180, {
+      resource("user-pool", "Cognito User Pool", "aws", "aws_cognito_user_pool", 320, 180, {
         name: "serverless-users"
       }),
       resource(
         "user-client",
-        "Web Cognito App Client",
+        "Cognito App Client",
         "aws",
         "aws_cognito_user_pool_client",
         520,
         180,
         { name: "serverless-web-client", userPoolId: "@ref:user-pool.id" }
       ),
-      resource("api", "Application API Gateway REST API", "aws", "aws_api_gateway_rest_api", 760, 180, {
+      resource("api", "API Gateway REST API", "aws", "aws_api_gateway_rest_api", 760, 180, {
         name: "serverless-api"
       }),
       resource("authorizer", "Cognito API Authorizer", "aws", "aws_api_gateway_authorizer", 980, 180, {
@@ -899,12 +899,12 @@ export const templateDefinitions = [
         providerArns: ["@ref:user-pool.arn"],
         identitySource: "method.request.header.Authorization"
       }),
-      resource("route", "Items API Route", "aws", "aws_api_gateway_resource", 760, 340, {
+      resource("route", "API Route", "aws", "aws_api_gateway_resource", 760, 340, {
         pathPart: "items",
         restApiId: "@ref:api.id",
         parentId: "@ref:api.root_resource_id"
       }),
-      resource("method", "Authenticated Items POST Method", "aws", "aws_api_gateway_method", 980, 340, {
+      resource("method", "Authenticated POST Method", "aws", "aws_api_gateway_method", 980, 340, {
         httpMethod: "POST",
         authorization: "COGNITO_USER_POOLS",
         authorizerId: "@ref:authorizer.id",
@@ -932,12 +932,12 @@ export const templateDefinitions = [
         triggers: { redeployment: "serverless-v1" },
         dependsOn: ["@address:integration"]
       }),
-      resource("stage", "Production API Stage", "aws", "aws_api_gateway_stage", 1180, 660, {
+      resource("stage", "API Stage", "aws", "aws_api_gateway_stage", 1180, 660, {
         restApiId: "@ref:api.id",
         deploymentId: "@ref:deployment.id",
         stageName: "prod"
       }),
-      resource("handler", "Items Lambda Function", "aws", "aws_lambda_function", 360, 380, {
+      resource("handler", "Lambda Function", "aws", "aws_lambda_function", 360, 380, {
         functionName: "serverless-handler",
         handler: "index.handler",
         runtime: "nodejs22.x",
@@ -963,7 +963,7 @@ export const templateDefinitions = [
         principal: "apigateway.amazonaws.com",
         sourceArn: "${@ref:api.execution_arn}/*/*"
       }),
-      resource("table", "Items DynamoDB Table", "aws", "aws_dynamodb_table", 620, 380, {
+      resource("table", "DynamoDB Table", "aws", "aws_dynamodb_table", 620, 380, {
         name: "serverless-items",
         billingMode: "PAY_PER_REQUEST",
         hashKey: "id",
@@ -992,7 +992,7 @@ export const templateDefinitions = [
     description: "Public, application, database tier를 분리한 VPC 기반 구조입니다.",
     tags: ["VPC", "ALB", "ASG", "RDS"],
     resources: [
-      resource("vpc", "3-Tier VPC", "aws", "aws_vpc", 360, 80, {
+      resource("vpc", "VPC", "aws", "aws_vpc", 360, 80, {
         cidrBlock: "10.20.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true
@@ -1289,7 +1289,7 @@ export const templateDefinitions = [
     description: "ECS Fargate와 Application Load Balancer를 사용하는 컨테이너 앱입니다.",
     tags: ["ECS", "Fargate", "ALB"],
     resources: [
-      resource("vpc", "ECS VPC", "aws", "aws_vpc", 300, 80, {
+      resource("vpc", "VPC", "aws", "aws_vpc", 300, 80, {
         cidrBlock: "10.30.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true
@@ -1393,7 +1393,7 @@ export const templateDefinitions = [
         name: "fargate-task-role",
         assumeRolePolicy: ECS_ASSUME_ROLE_POLICY
       }),
-      resource("repository", "Application ECR Repository", "aws", "aws_ecr_repository", 900, 500, {
+      resource("repository", "ECR Repository", "aws", "aws_ecr_repository", 900, 500, {
         name: "fargate-app",
         imageTagMutability: "IMMUTABLE"
       }),
@@ -1407,7 +1407,7 @@ export const templateDefinitions = [
         subnets: ["@ref:subnet-a.id", "@ref:subnet-b.id"],
         securityGroups: ["@ref:alb-security-group.id"]
       }),
-      resource("target-group", "Application Target Group", "aws", "aws_lb_target_group", 300, 660, {
+      resource("target-group", "Target Group", "aws", "aws_lb_target_group", 300, 660, {
         name: "fargate-web",
         port: 80,
         protocol: "HTTP",
@@ -1421,7 +1421,7 @@ export const templateDefinitions = [
         protocol: "HTTP",
         defaultAction: { type: "forward", targetGroupArn: "@ref:target-group.arn" }
       }),
-      resource("task", "Application ECS Task Definition", "aws", "aws_ecs_task_definition", 700, 660, {
+      resource("task", "ECS Task Definition", "aws", "aws_ecs_task_definition", 700, 660, {
         family: "fargate-app",
         networkMode: "awsvpc",
         requiresCompatibilities: ["FARGATE"],
@@ -1446,7 +1446,7 @@ export const templateDefinitions = [
           }
         ])
       }),
-      resource("service", "Application ECS Service", "aws", "aws_ecs_service", 900, 660, {
+      resource("service", "ECS Service", "aws", "aws_ecs_service", 900, 660, {
         name: "fargate-service",
         cluster: "@ref:cluster.id",
         taskDefinition: "@ref:task.arn",
@@ -1530,7 +1530,7 @@ export const templateDefinitions = [
     description: "EKS managed node group에서 Kubernetes workload를 실행합니다.",
     tags: ["EKS", "Kubernetes", "Service"],
     resources: [
-      resource("vpc", "EKS VPC", "aws", "aws_vpc", 300, 80, {
+      resource("vpc", "VPC", "aws", "aws_vpc", 300, 80, {
         cidrBlock: "10.40.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true
@@ -1668,7 +1668,7 @@ export const templateDefinitions = [
       }),
       resource(
         "namespace",
-        "Application Kubernetes Namespace",
+        "Kubernetes Namespace",
         "kubernetes",
         "kubernetes_namespace",
         620,
@@ -1677,7 +1677,7 @@ export const templateDefinitions = [
       ),
       resource(
         "deployment",
-        "Web Kubernetes Deployment",
+        "Kubernetes Deployment",
         "kubernetes",
         "kubernetes_deployment",
         620,
@@ -1697,7 +1697,7 @@ export const templateDefinitions = [
           dependsOn: ["@address:node-group"]
         }
       ),
-      resource("service", "Web Kubernetes Service", "kubernetes", "kubernetes_service", 860, 660, {
+      resource("service", "Kubernetes Service", "kubernetes", "kubernetes_service", 860, 660, {
         metadata: { name: "web", namespace: "@ref:namespace.metadata.0.name" },
         spec: { selector: { app: "web" }, port: [{ port: 80, targetPort: 80 }], type: "ClusterIP" }
       })

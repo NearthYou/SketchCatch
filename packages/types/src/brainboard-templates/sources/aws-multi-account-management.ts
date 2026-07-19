@@ -25,7 +25,7 @@ export const awsMultiAccountManagementSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "258ffd07-ae27-412c-8c6e-192ffbbb76de",
       domOrder: 0,
-      label: "Production Environment",
+      label: "Prod",
       position: {
         x: -1120,
         y: -545
@@ -61,7 +61,7 @@ export const awsMultiAccountManagementSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "c50301f8-0517-4fb9-8a05-3123e0c7dedd",
       domOrder: 2,
-      label: "Development Environment",
+      label: "Dev",
       position: {
         x: 590,
         y: -545
@@ -79,7 +79,7 @@ export const awsMultiAccountManagementSource = defineCapturedBrainboardTemplate(
     {
       sourceNodeId: "d2ec1630-f50e-4c5f-b898-8a9a65dbb2ce",
       domOrder: 3,
-      label: "Staging Environment",
+      label: "Staging",
       position: {
         x: -265,
         y: -545

@@ -234,11 +234,11 @@ const EXPECTED_ROUTING = {
 
 const EXPECTED_SEMANTIC_HASHES = {
   "static-web-hosting": "4e85bf89001a4d19444f232dca3127751cc0fd1a592a6fad82cbd30d27500987",
-  "minimal-serverless-api": "f4a555474884830020690cfc0a182a4826a8829e60ca1d32fa392374867f04e4",
-  "full-serverless-web-app": "f491ee46e9a1a0db6a67c212b24e6fe2c10ef57531be822f5edf7200dce3ee61",
-  "three-tier-web-app": "6b78785744969d30a8172d917987d7831ae9d1ec5336660aa8ba3817f0f3c80e",
-  "ecs-fargate-container-app": "a97686c693950593aa0c218d38b2ceecda6284e0fd6d0d0eb3a32b72200c9f04",
-  "eks-container-app": "f6e0e5c7d00cfd2f6a38bfa41e0eb9f9676c8ffe6f7728e573433e7701f65839"
+  "minimal-serverless-api": "a5626d6cb29ea6cd50d66fb1b0955e079b5218178f686cb07c04ba2cbd801cf7",
+  "full-serverless-web-app": "cd37d8e9a1d43cd37b518d943f7e1cbac9807d81bc524029e0b45668787b6d67",
+  "three-tier-web-app": "52ff655776bd42cd77d1227dfde7a28475e458c530f6d90f8be5b89e1fd5f27d",
+  "ecs-fargate-container-app": "b40e35218e1872c61cefea6f82d4ea420aacd504a24c5b32efe896cbc507839e",
+  "eks-container-app": "660d3cb3429ec63f39c6fe5287cbf87e5c8d300f250011c292ba02b19fb24321"
 } as const satisfies Record<RepositoryTemplateId, string>;
 
 test("six deployable templates keep their semantic graph while adopting the PNG layout contract", () => {
@@ -366,7 +366,7 @@ test("ECS Fargate support groups contain their grid-laid resources without overl
   const pairs = [
     [
       "Definition / Ops",
-      ["Application ECR Repository", "Application ECS Task Definition", "ECS Task Log Group"]
+      ["ECR Repository", "ECS Task Definition", "ECS Task Log Group"]
     ],
     [
       "Global IAM",

@@ -43,7 +43,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "04926feb-4622-439a-b228-cfc9e415e98e",
       domOrder: 1,
-      label: "Application HTTP API",
+      label: "HTTP API",
       position: {
         x: 765,
         y: 1712.8609821992764
@@ -115,7 +115,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3e80ddec-93fc-4732-8e32-ec2d48a5956f",
       domOrder: 5,
-      label: "User Cognito User Pool",
+      label: "Cognito User Pool",
       position: {
         x: 765,
         y: 1509.0890020931467
@@ -187,7 +187,7 @@ export const awsServerlessCdnSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "913fcb3c-08dd-487b-9f34-7a0e3aded6b6",
       domOrder: 9,
-      label: "Application DynamoDB Global Table",
+      label: "DynamoDB Global Table",
       position: {
         x: 1390,
         y: 1712.8609821992764

@@ -43,7 +43,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "7912ce6d-b224-4055-84c0-e847e7ca1224",
       domOrder: 1,
-      label: "Bastion VPC",
+      label: "VPC",
       position: {
         x: 470,
         y: 180

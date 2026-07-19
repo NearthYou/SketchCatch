@@ -43,7 +43,7 @@ export const awsFsxSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "7e275d52-672d-4e38-b17a-aad1e06c04e8",
       domOrder: 1,
-      label: "FSx VPC",
+      label: "VPC",
       position: {
         x: -420,
         y: 170
