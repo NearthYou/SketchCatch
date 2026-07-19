@@ -98,6 +98,73 @@ test("모든 available Template node 이름은 영어만 사용한다", () => {
   assert.deepEqual(koreanLabelNodes, []);
 });
 
+test("Template label 불필요 수식어 금지", () => {
+  const staleLabels = new Set([
+    "Web User",
+    "Items API Gateway REST API",
+    "Items API Route",
+    "Items POST Method",
+    "Items Lambda Function",
+    "Items DynamoDB Table",
+    "Production API Stage",
+    "Web Frontend Amplify App",
+    "User Cognito User Pool",
+    "Web Cognito App Client",
+    "Application API Gateway REST API",
+    "Authenticated Items POST Method",
+    "3-Tier VPC",
+    "ECS VPC",
+    "Application ECR Repository",
+    "Application ECS Task Definition",
+    "Application ECS Service",
+    "EKS VPC",
+    "Application Kubernetes Namespace",
+    "Web Kubernetes Deployment",
+    "Web Kubernetes Service",
+    "2-AZ VPC",
+    "EC2 VPC",
+    "Web VPC",
+    "DocumentDB API VPC",
+    "Landing Zone VPC",
+    "Bastion VPC",
+    "ALB VPC",
+    "Elastic Beanstalk VPC",
+    "RDS VPC",
+    "FSx VPC",
+    "t3a.medium EC2 Instance",
+    "Web Launch Configuration",
+    "Application HTTP API",
+    "DocumentDB HTTP API",
+    "DocumentDB Credentials Secret",
+    "Application EC2 Instance",
+    "Target Group Attachment - Application EC2",
+    "ECS Service SG",
+    "Fargate Task Definition",
+    "Fargate Service",
+    "Variable-Based User Accounts",
+    "Production Environment",
+    "Development Environment",
+    "Staging Environment",
+    "Application DynamoDB Global Table"
+  ]);
+  const staleLabelNodes = listBoardTemplates()
+    .filter(isBoardTemplateAvailable)
+    .flatMap((template) =>
+      template.diagramJson.nodes
+        .filter(
+          (node) =>
+            staleLabels.has(node.label) ||
+            (template.id === "ecs-fargate-container-app" && node.label === "Application Target Group") ||
+            (template.id === "brainboard-aws-ecs-fargate" &&
+              (node.label === "ECS Task IAM Role" ||
+                node.label === "ECS Task Execution Policy Attachment"))
+        )
+        .map((node) => `${template.id}/${node.id}: ${node.label}`)
+    );
+
+  assert.deepEqual(staleLabelNodes, []);
+});
+
 // 캡처한 계정 Group은 실제 Palette Area로 유지하고 썸네일도 같은 Diagram을 가리켜야 한다.
 test("Cross-account Template은 원본의 Group 영역과 세 S3 Resource만 사용한다", () => {
   const capturedAccountGroup = {
