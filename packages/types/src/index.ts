@@ -2099,6 +2099,53 @@ export type Template = {
 
 export type AwsConnectionStatus = "pending" | "verified" | "failed";
 
+export type AwsImportAccessStatus =
+  | "check_required"
+  | "manager_approval_required"
+  | "manager_checking"
+  | "policy_approval_required"
+  | "policy_working"
+  | "checking_reads"
+  | "ready"
+  | "limited"
+  | "update_required"
+  | "retry_required"
+  | "cleanup_policy_required"
+  | "cleanup_manager_required"
+  | "cleanup_checking"
+  | "cleanup_required"
+  | "cleanup_complete";
+
+export type AwsImportAccessNextAction =
+  | "prepare_manager"
+  | "check_manager"
+  | "preview_policy"
+  | "apply_policy"
+  | "check_reads"
+  | "open_settings"
+  | "delete_policy_stack"
+  | "delete_manager_stack"
+  | "check_cleanup"
+  | "retry";
+
+export type AwsImportAccessState = {
+  connectionId: string;
+  status: AwsImportAccessStatus;
+  nextAction: AwsImportAccessNextAction | null;
+  coreReady: boolean;
+  limitedServiceLabels: string[];
+  lastCheckedAt: IsoDateTimeString | null;
+  operationId: string | null;
+  safeSummary: string | null;
+};
+
+export type AwsImportAccessCommandResponse = {
+  operationId: string;
+  state: AwsImportAccessState;
+  nextAction: AwsImportAccessNextAction | null;
+  consoleUrl?: string;
+};
+
 export type AwsConnection = {
   id: string;
   userId: string;

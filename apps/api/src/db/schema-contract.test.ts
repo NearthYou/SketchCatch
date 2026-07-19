@@ -15,6 +15,7 @@ import {
   awsCodeConnections,
   awsConnections,
   applicationReleaseSteps,
+  awsImportAccess,
   deploymentFailureStageEnum,
   deploymentLiveObservationManifests,
   deploymentLiveObservationManifestStatusEnum,
@@ -505,6 +506,38 @@ test("AWS connections store generated external ids without raw credentials", () 
   assert(hasUniqueIndex(config.indexes, "aws_connections_external_id_unique", ["external_id"]));
 });
 
+test("AWS import access storage is connection-scoped and blocks premature deletion", () => {
+  const config = getTableConfig(awsImportAccess);
+
+  assert.equal(config.primaryKeys[0]?.columns[0]?.name, "aws_connection_id");
+  assert(
+    hasForeignKey(
+      config.foreignKeys,
+      "aws_connection_id",
+      awsConnections,
+      "id",
+      "restrict"
+    )
+  );
+  assert(findColumn(config.columns, "manager_template_hash"));
+  assert(findColumn(config.columns, "policy_fingerprint"));
+  assert(findColumn(config.columns, "operation_id"));
+  assert(findColumn(config.columns, "lease_expires_at"));
+  assert.equal(findColumn(config.columns, "provider_error"), undefined);
+  assert.equal(findColumn(config.columns, "policy_json"), undefined);
+});
+
+test("AWS import access migration is additive and keeps cleanup metadata", () => {
+  const migration = readFileSync(
+    new URL("../../drizzle/0054_aws_import_access.sql", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(migration, /CREATE TABLE "aws_import_access"/);
+  assert.match(migration, /ON DELETE restrict/);
+  assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i);
+});
+
 test("Git/CI/CD handoffs store repository metadata without raw provider secrets", () => {
   const config = getTableConfig(gitCicdHandoffs);
 
@@ -656,15 +689,18 @@ function hasForeignKey(
   foreignKeys: ReturnType<typeof getTableConfig>["foreignKeys"],
   columnName: string,
   foreignTable: unknown,
-  foreignColumnName: string
+  foreignColumnName: string,
+  onDelete?: string
 ): boolean {
+  // gg 안전 경계: 저장 레코드가 부모 삭제로 조용히 사라지는 FK도 계약에서 검증한다.
   return foreignKeys.some((foreignKey) => {
     const reference = foreignKey.reference();
 
     return (
       reference.columns.some((column) => column.name === columnName) &&
       reference.foreignTable === foreignTable &&
-      reference.foreignColumns.some((column) => column.name === foreignColumnName)
+      reference.foreignColumns.some((column) => column.name === foreignColumnName) &&
+      (onDelete === undefined || foreignKey.onDelete === onDelete)
     );
   });
 }

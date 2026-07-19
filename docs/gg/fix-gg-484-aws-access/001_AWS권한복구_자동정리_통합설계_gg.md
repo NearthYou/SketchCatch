@@ -110,15 +110,12 @@ Resource·관계·설정·containment·Terraform 의미는 원본과 같고, 허
 
 Stack·Role·Policy 이름은 connection ID 기반 prefix로 결정한다. ownership tag와 Stack output에도 connection ID, 대상 Role, Template contract version을 기록한다. 이름만 같다는 이유로 Stack을 신뢰하지 않는다.
 
-기존 연결 Role의 CloudFormation 권한은 다음 조건을 모두 만족하는 요청만 허용한다.
+Policy Stack API 요청은 IAM capability와 ResourceTypes를 함께 보내지 않는다.
+대신 connection별 Stack ARN, immutable Template URL, service Role ARN, ownership tag를 제한한다.
+service Role은 정확한 Managed Policy와 대상 Role attachment만 관리한다.
+작업 뒤 GetTemplate 결과의 hash와 Stack ownership을 다시 검증한다.
 
-- 정확한 Policy Stack 이름과 ARN
-- 정확한 service Role ARN과 `cloudformation.amazonaws.com` 전달 조건
-- API가 `ResourceTypes` parameter로 명시한 `AWS::IAM::ManagedPolicy`만 허용하는 Resource type 제한
-- connection ID ownership tag와 허용된 tag key
-- 서버만 쓸 수 있는 connection별 immutable Template URL 경로
-
-`TemplateBody`를 직접 보내거나 다른 Template URL을 사용하는 요청은 허용하지 않는다. service Role도 connection 전용 읽기 Managed Policy ARN과 target Role attachment만 관리할 수 있다. 강한 Policy 내용이나 다른 Role을 넣은 임의 Template이 같은 경로를 사용할 수 없게 한다.
+IAM Resource를 포함한 정해진 Template에는 필요한 IAM capability만 사용한다. `TemplateBody`를 직접 보내거나 다른 Template URL을 사용하는 요청은 허용하지 않는다. 강한 Policy 내용이나 다른 Role을 넣은 임의 Template이 같은 경로를 사용할 수 없게 한다.
 
 정리 확인 Policy는 Manager Stack 자체와 Policy Stack, service Role, 두 Stack이 소유한 Policy만 읽을 수 있다. Manager Stack의 다른 Resource가 이 확인 Policy에 의존하도록 만들어 삭제 시 확인 Policy가 마지막에 제거되게 한다. 삭제 도중 문제가 생기면 확인 권한이 남아 정확히 어떤 소유 Resource가 남았는지 다시 확인할 수 있어야 한다.
 
