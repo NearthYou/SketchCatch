@@ -625,7 +625,7 @@ function ModuleCatalogPanel({ onModuleAdd }: { readonly onModuleAdd?: ((moduleId
           ))}
         </div>
         <label className="moduleCatalogSearch">
-          <Search aria-hidden="true" size={16} />
+          <Search aria-hidden="true" size={14} />
           <input
             aria-label="모듈 검색"
             onChange={(event) => setQuery(event.target.value)}

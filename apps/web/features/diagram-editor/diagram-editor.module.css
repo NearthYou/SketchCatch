@@ -718,10 +718,10 @@
   border-radius: 8px;
   color: var(--workspace-muted);
   display: grid;
-  gap: 7px;
-  grid-template-columns: 16px minmax(0, 1fr);
-  min-height: 36px;
-  padding: 0 10px;
+  gap: 6px;
+  grid-template-columns: 14px minmax(0, 1fr);
+  min-height: 32px;
+  padding: 0 8px;
 }
 
 .leftRail :global(.moduleCatalogSearch:focus-within) {
@@ -734,7 +734,7 @@
   border: 0;
   color: var(--workspace-text);
   font: inherit;
-  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-size: calc(9px + var(--presentation-font-size-increase));
   min-width: 0;
   outline: none;
   width: 100%;

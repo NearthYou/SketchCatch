@@ -11,6 +11,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Compact the Module search control
+
+- Reduced the Module search text by 3px and balanced the control with a 32px height, 14px icon, and tighter internal spacing; adjacent tabs and Module cards remain unchanged.
+- Root lint, typecheck, build, harness, and diff checks pass. No broad test suite was run at the user's request; refresh the Module panel for final visual confirmation.
+
 ### 2026-07-19 - Reduce Module card detail typography
 
 - Reduced only the highlighted Module metadata and configuration summary by 3px, preserving the card title, description, and add button.
