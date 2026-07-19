@@ -254,6 +254,14 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
   );
 }
 
+export function resolveSelectedDirectDeploymentStepId(
+  flow: DirectDeploymentFlow,
+  selectedStepId: DirectDeploymentStepId
+): DirectDeploymentStepId {
+  const selectedStep = flow.steps.find((step) => step.id === selectedStepId);
+  return selectedStep && selectedStep.state !== "idle" ? selectedStep.id : flow.activeStepId;
+}
+
 function createFailedFlow(
   failedStepId: DirectDeploymentStepId,
   validation: DirectDeploymentStep

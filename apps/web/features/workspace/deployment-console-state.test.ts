@@ -7,6 +7,7 @@ import {
   getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
   hasDeploymentDraftChanges,
+  resolveSelectedDirectDeploymentStepId,
   shouldShowDeploymentValidationActions,
   requiresProjectBuildEnvironment,
   type DirectDeploymentFlowInput
@@ -63,6 +64,12 @@ test("Direct Deployment exposes exactly validation, approval, and deployment", (
   assert.equal(flow.activeStepId, "validation");
   assert.equal(flow.steps[0]?.state, "active");
   assert.equal(flow.steps[1]?.state, "idle");
+});
+
+test("an idle selected step falls back to the active Direct Deployment step", () => {
+  const flow = getDirectDeploymentFlow(createInput({ hasUnsavedBaseline: true }));
+
+  assert.equal(resolveSelectedDirectDeploymentStepId(flow, "deployment"), "validation");
 });
 
 test("a never-run Preflight step is neutral and active after save", () => {

@@ -90,6 +90,7 @@ import {
   getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
   hasDeploymentDraftChanges,
+  resolveSelectedDirectDeploymentStepId,
   shouldShowDeploymentValidationActions,
   requiresProjectBuildEnvironment,
   type DirectDeploymentStepId
@@ -1308,8 +1309,12 @@ export function DirectDeploymentScreen({
   }
 
   const renderSetupSection = () => {
+    const resolvedSelectedDirectStepId = resolveSelectedDirectDeploymentStepId(
+      directDeploymentFlow,
+      selectedDirectStepId
+    );
     const selectedStep =
-      directDeploymentFlow.steps.find((step) => step.id === selectedDirectStepId) ??
+      directDeploymentFlow.steps.find((step) => step.id === resolvedSelectedDirectStepId) ??
       directDeploymentFlow.steps[0]!;
     const activeStepIndex = directDeploymentFlow.steps.findIndex(
       (step) => step.id === directDeploymentFlow.activeStepId
