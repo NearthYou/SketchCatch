@@ -45,10 +45,10 @@ const NODE_TYPES = {
   liveObservationResource: LiveObservationResourceNode
 };
 const LIVE_OBSERVATION_LAYOUT_SCALE = 2.75;
-const LIVE_OBSERVATION_RESOURCE_MIN_WIDTH = 168;
-const LIVE_OBSERVATION_RESOURCE_MIN_HEIGHT = 112;
-const LIVE_OBSERVATION_DETAIL_RESOURCE_MIN_WIDTH = 216;
-const LIVE_OBSERVATION_DETAIL_RESOURCE_MIN_HEIGHT = 124;
+const LIVE_OBSERVATION_RESOURCE_WIDTH = 148;
+const LIVE_OBSERVATION_RESOURCE_HEIGHT = 104;
+const LIVE_OBSERVATION_DETAIL_RESOURCE_WIDTH = 184;
+const LIVE_OBSERVATION_DETAIL_RESOURCE_HEIGHT = 124;
 const DEFAULT_LIVE_OBSERVATION_VIEWPORT: LiveObservationViewport = {
   x: 0,
   y: 0,
@@ -81,13 +81,6 @@ export function LiveObservationDiagramMap({
       data-testid="live-observation-architecture-map"
     >
       <header className={styles.liveObservationArchitectureHeader}>
-        <div>
-          <strong>DEPLOYED ARCHITECTURE · READ ONLY</strong>
-          <span>
-            {model.resources.length} Resources
-            {model.capacityModeLabel ? ` · ${model.capacityModeLabel}` : ""}
-          </span>
-        </div>
         <p>
           {getAggregateStateLabel(model.aggregateObservationState)} · 지원 Resource에는 AWS 세션의
           집계 상태를 표시합니다. 개별 Resource API 성공을 의미하지 않습니다. 전체 구조는
@@ -158,7 +151,7 @@ function LiveObservationResourceNode({ data }: NodeProps<LiveObservationFlowNode
     >
       <LiveObservationEdgeEndpoints />
       <span className={styles.liveObservationArchitectureResourceIcon}>
-        <ResourceIcon node={node} size={34} />
+        <ResourceIcon node={node} size={28} />
       </span>
       <strong title={label}>{label}</strong>
       <small>{resource?.resourceType ?? node.parameters?.resourceType ?? node.type}</small>
@@ -297,19 +290,13 @@ function getLiveObservationMapNodeLayout(
   }
 
   return {
-    height: Math.max(
-      node.size.height,
-      hasDetailLines
-        ? LIVE_OBSERVATION_DETAIL_RESOURCE_MIN_HEIGHT
-        : LIVE_OBSERVATION_RESOURCE_MIN_HEIGHT
-    ),
+    height: hasDetailLines
+      ? LIVE_OBSERVATION_DETAIL_RESOURCE_HEIGHT
+      : LIVE_OBSERVATION_RESOURCE_HEIGHT,
     position,
-    width: Math.max(
-      node.size.width,
-      hasDetailLines
-        ? LIVE_OBSERVATION_DETAIL_RESOURCE_MIN_WIDTH
-        : LIVE_OBSERVATION_RESOURCE_MIN_WIDTH
-    )
+    width: hasDetailLines
+      ? LIVE_OBSERVATION_DETAIL_RESOURCE_WIDTH
+      : LIVE_OBSERVATION_RESOURCE_WIDTH
   };
 }
 

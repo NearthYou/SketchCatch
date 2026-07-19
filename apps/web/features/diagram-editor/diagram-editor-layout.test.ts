@@ -533,7 +533,7 @@ test("area node header uses a rounded icon without a bottom divider", () => {
   );
   assert.match(
     headerBlock,
-    /font-weight:\s*calc\(650 - var\(--presentation-font-weight-reduction\)\);/
+    /font-weight:\s*var\(--presentation-font-weight-bold\);/
   );
   assert.match(headerBlock, /left:\s*0;/);
   assert.match(headerBlock, /top:\s*0;/);

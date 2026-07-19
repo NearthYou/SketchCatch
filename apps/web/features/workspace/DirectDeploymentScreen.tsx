@@ -90,6 +90,7 @@ import {
   getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
   hasDeploymentDraftChanges,
+  resolveSelectedDirectDeploymentStepId,
   shouldShowDeploymentValidationActions,
   requiresProjectBuildEnvironment,
   type DirectDeploymentStepId
@@ -153,6 +154,7 @@ export const initialPreDeploymentCheckState: DeploymentPreDeploymentCheckState =
 export type DirectDeploymentScreenProps = {
   readonly confirmationDismissRequestId?: number | undefined;
   readonly deploymentAvailability: DeploymentAvailability;
+  readonly deploymentTargetSavedRevision?: number | undefined;
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
   readonly onConfirmationStateChange?: ((isOpen: boolean) => void) | undefined;
@@ -176,6 +178,7 @@ export type DirectDeploymentScreenProps = {
 export function DirectDeploymentScreen({
   confirmationDismissRequestId = 0,
   deploymentAvailability,
+  deploymentTargetSavedRevision = 0,
   diagramJson,
   hasUnsavedDeploymentBaseline,
   onApplyPlanApproved,
@@ -243,7 +246,7 @@ export function DirectDeploymentScreen({
 
   useEffect(() => {
     setDeploymentTargetPrerequisite(null);
-  }, [projectId, selectedAwsConnectionId, selectedScope]);
+  }, [deploymentTargetSavedRevision, projectId, selectedAwsConnectionId, selectedScope]);
 
   const verifiedAwsConnections = useMemo(
     () => awsConnections.filter((connection) => connection.status === "verified"),
@@ -1310,8 +1313,12 @@ export function DirectDeploymentScreen({
   }
 
   const renderSetupSection = () => {
+    const resolvedSelectedDirectStepId = resolveSelectedDirectDeploymentStepId(
+      directDeploymentFlow,
+      selectedDirectStepId
+    );
     const selectedStep =
-      directDeploymentFlow.steps.find((step) => step.id === selectedDirectStepId) ??
+      directDeploymentFlow.steps.find((step) => step.id === resolvedSelectedDirectStepId) ??
       directDeploymentFlow.steps[0]!;
     const activeStepIndex = directDeploymentFlow.steps.findIndex(
       (step) => step.id === directDeploymentFlow.activeStepId
@@ -1946,7 +1953,7 @@ export function DirectDeploymentScreen({
               {onOpenDeliverySetup ? (
                 <div className={styles.deploymentValidationActions}>
                   <button onClick={onOpenDeliverySetup} type="button">
-                    Repository와 배포 타깃 설정
+                    CI/CD 설정으로 이동
                   </button>
                 </div>
               ) : null}

@@ -557,11 +557,7 @@ export function WorkspaceRightPanel({
     (nextView: WorkspaceRightPanelView): void => {
       if (nextView === activeView) {
         onPanelOpenRequest();
-        if (nextView === "terraform") {
-          onTerraformAiInteraction("preview");
-        } else if (nextView === "resource") {
-          onTerraformAiInteraction("draft");
-        }
+        onTerraformAiInteraction(nextView === "terraform" ? "preview" : "draft");
         return;
       }
 
@@ -578,9 +574,7 @@ export function WorkspaceRightPanel({
 
       onPanelOpenRequest();
       setActiveView(nextView);
-      if (nextView === "resource") {
-        onTerraformAiInteraction("draft");
-      }
+      onTerraformAiInteraction("draft");
     },
     [activeView, onPanelOpenRequest, onTerraformAiInteraction, requestTerraformLeave]
   );
@@ -811,9 +805,7 @@ export function WorkspaceRightPanel({
 
     context.setRightPanelOpen(true);
     setActiveView(nextView);
-    if (nextView === "resource") {
-      onTerraformAiInteraction("draft");
-    }
+    onTerraformAiInteraction("draft");
   }
 
   function requestRightPanelClose(): void {

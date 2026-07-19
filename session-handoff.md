@@ -4,6 +4,7 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
+- Branch `fix/sw/495-live-observation-template` includes `origin/dev` at `75c46ce7`; documentation-only merge conflicts were resolved while preserving both workstreams.
 - Branch `fix/sw/495-live-observation-template` now places Design Analysis at the bottom of Live Observation instead of exposing a separate Workspace right-panel mode. It combines current-Board Design Simulation results with Pre-Deployment security findings and recommendations without changing runtime observation controls.
 - Focused integration checks pass 33/33; browser QA verifies the actual combined rendering order. Web and root lint/typecheck/build, harness, and diff checks pass. HTTPS 3000 and API 4000 return 200.
 - Branch `fix/ck/477-ai-chatting-bug-fix` includes committed all-question validation, both-chat selection synchronization, clarification probes, diagram patch probes, and complete resource alias coverage.

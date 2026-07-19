@@ -313,7 +313,7 @@ export function ResourceSettingsPanel({
         <>
 
           <label className="searchBox">
-            <Search size={18} aria-hidden="true" />
+            <Search size={16} aria-hidden="true" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -625,7 +625,7 @@ function ModuleCatalogPanel({ onModuleAdd }: { readonly onModuleAdd?: ((moduleId
           ))}
         </div>
         <label className="moduleCatalogSearch">
-          <Search aria-hidden="true" size={16} />
+          <Search aria-hidden="true" size={14} />
           <input
             aria-label="모듈 검색"
             onChange={(event) => setQuery(event.target.value)}

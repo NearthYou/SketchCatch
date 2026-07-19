@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 
 const webRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const sizeIncreaseToken = "var(--presentation-font-size-increase)";
-const weightReductionToken = "var(--presentation-font-weight-reduction)";
+const regularWeightToken = "var(--presentation-font-weight-regular)";
+const boldWeightToken = "var(--presentation-font-weight-bold)";
+const legacyCodeFontStack = '"SFMono-Regular", Consolas, "Liberation Mono", monospace';
 
 function collectFiles(directory: string, extensions: readonly string[]): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -93,12 +95,17 @@ test("inline font sizes use the same six-pixel presentation increase", () => {
   }
 });
 
-test("explicit text weights are one Pretendard step lighter", () => {
+test("explicit text weights keep the current presentation baseline", () => {
   const globalStyles = readFileSync(join(webRoot, "app", "globals.css"), "utf8");
-  assert.match(globalStyles, /--presentation-font-weight-reduction:\s*100;/);
+  assert.match(globalStyles, /--presentation-font-weight-regular:\s*400;/);
+  assert.match(globalStyles, /--presentation-font-weight-bold:\s*700;/);
   assert.match(
     globalStyles,
-    /h1,[\s\S]*h6,[\s\S]*strong,[\s\S]*b\s*\{[^}]*font-weight:\s*calc\(700 - var\(--presentation-font-weight-reduction\)\);/s
+    /body\s*\{[^}]*font-weight:\s*var\(--presentation-font-weight-regular\);/s
+  );
+  assert.match(
+    globalStyles,
+    /h1,[\s\S]*h6,[\s\S]*strong,[\s\S]*b\s*\{[^}]*font-weight:\s*var\(--presentation-font-weight-bold\);/s
   );
 
   for (const cssFile of cssFiles) {
@@ -112,13 +119,17 @@ test("explicit text weights are one Pretendard step lighter", () => {
       const blockPrelude = styles.slice(previousBlockEnd + 1, blockStart);
       const value = declaration[1] ?? "";
 
-      if (blockPrelude.includes("@font-face") || Number.parseInt(value, 10) <= 400) {
+      if (blockPrelude.includes("@font-face")) {
         continue;
       }
 
       assert.ok(
-        value.includes(weightReductionToken),
-        `${cssFile}: font-weight must subtract ${weightReductionToken}: ${declaration[0]}`
+        value.includes(regularWeightToken) ||
+          value.includes(boldWeightToken) ||
+          /^calc\((?:500|550|600|650|700|750) - var\(--presentation-font-weight-reduction\)\)$/.test(
+            value.trim()
+          ),
+        `${cssFile}: font-weight must match the preserved presentation baseline: ${declaration[0]}`
       );
     }
   }
@@ -130,24 +141,20 @@ test("explicit text weights are one Pretendard step lighter", () => {
     for (const declaration of declarations) {
       const value = declaration[1] ?? "";
       assert.ok(
-        value.includes("--presentation-font-weight-reduction"),
-        `${sourceFile}: inline fontWeight must use the presentation reduction: ${declaration[0]}`
+        value.includes("--presentation-font-weight-regular") ||
+          value.includes("--presentation-font-weight-bold"),
+        `${sourceFile}: inline fontWeight must use the regular or bold presentation token: ${declaration[0]}`
       );
     }
   }
 });
 
-test("all web typography resolves to the supplied local Pretendard 1.3.9 variable font", () => {
+test("web typography uses Pretendard except for Terraform code and Deployment logs", () => {
   const layout = readFileSync(join(webRoot, "app", "layout.tsx"), "utf8");
   const globalStyles = readFileSync(join(webRoot, "app", "globals.css"), "utf8");
   const packageJson = readFileSync(join(webRoot, "package.json"), "utf8");
-  const localFontPath = join(
-    webRoot,
-    "public",
-    "fonts",
-    "pretendard-variable",
-    "PretendardVariable.woff2"
-  );
+  const localFontDirectory = join(webRoot, "public", "fonts", "pretendard-variable");
+  const localFontPath = join(localFontDirectory, "PretendardVariable.woff2");
   const landingStyles = readFileSync(
     join(webRoot, "features", "landing", "product-entry.module.css"),
     "utf8"
@@ -160,6 +167,14 @@ test("all web typography resolves to the supplied local Pretendard 1.3.9 variabl
     join(webRoot, "features", "workspace", "workspace-ai-workbench.module.css"),
     "utf8"
   );
+  const terraformEditorStyles = readFileSync(
+    join(webRoot, "features", "workspace", "TerraformCodeEditorSurface.module.css"),
+    "utf8"
+  );
+  const workspaceStyles = readFileSync(
+    join(webRoot, "features", "workspace", "workspace.module.css"),
+    "utf8"
+  );
   const templateLibrarySource = readFileSync(
     join(webRoot, "features", "resource-settings", "template-library.ts"),
     "utf8"
@@ -167,9 +182,13 @@ test("all web typography resolves to the supplied local Pretendard 1.3.9 variabl
 
   assert.doesNotMatch(layout, /pretendard\/dist\/web/);
   assert.doesNotMatch(packageJson, /"pretendard"\s*:/);
+  assert.equal(existsSync(join(localFontDirectory, "LICENSE.txt")), true);
   assert.equal(existsSync(localFontPath), true);
   assert.equal(statSync(localFontPath).size, 2_057_688);
-  assert.match(globalStyles, /@font-face\s*\{[^}]*font-family:\s*"Pretendard";/s);
+  assert.equal(
+    [...globalStyles.matchAll(/@font-face\s*\{[^}]*font-family:\s*"Pretendard";/gs)].length,
+    1
+  );
   assert.match(globalStyles, /font-weight:\s*45 920;/);
   assert.match(
     globalStyles,
@@ -184,8 +203,8 @@ test("all web typography resolves to the supplied local Pretendard 1.3.9 variabl
     templateLibrarySource,
     /cdn\.jsdelivr\.net\/gh\/orioncactus\/pretendard@v1\.3\.9\/dist\/web\/static\/pretendard-dynamic-subset\.min\.css/
   );
-  assert.match(templateLibrarySource, /font:22px\/1\.6 Pretendard,sans-serif/);
-  assert.match(templateLibrarySource, /h1\{font-size:38px;font-weight:600\}/);
+  assert.match(templateLibrarySource, /font:400 22px\/1\.6 Pretendard,sans-serif/);
+  assert.match(templateLibrarySource, /h1\{font-size:38px;font-weight:700\}/);
   assert.match(
     globalStyles,
     /code,[\s\S]*kbd,[\s\S]*pre,[\s\S]*samp\s*\{[^}]*font-family:\s*var\(--font-sans\);/s
@@ -194,9 +213,29 @@ test("all web typography resolves to the supplied local Pretendard 1.3.9 variabl
     globalStyles,
     /button,[\s\S]*input,[\s\S]*select,[\s\S]*textarea\s*\{[^}]*font:\s*inherit;/s
   );
+  assert.equal(
+    [
+      ...terraformEditorStyles.matchAll(
+        /font-family\s*:\s*"SFMono-Regular", Consolas, "Liberation Mono", monospace;/g
+      )
+    ].length,
+    3
+  );
+  assert.equal(
+    [
+      ...workspaceStyles.matchAll(
+        /font-family\s*:\s*"SFMono-Regular", Consolas, "Liberation Mono", monospace;/g
+      )
+    ].length,
+    1
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentLogList\s*\{[^}]*font-family:\s*"SFMono-Regular", Consolas, "Liberation Mono", monospace;/s
+  );
 
   const forbiddenFallbacks =
-    /Inter|Geist|SFMono|Consolas|Liberation Mono|ui-monospace|monospace|Noto Sans KR|font-pretendard|Pretendard Landing/;
+    /Inter|Geist|SFMono|Consolas|Liberation Mono|ui-monospace|monospace|Noto Sans KR|LINE Seed|Spoqa/;
 
   for (const cssFile of cssFiles) {
     const styles = readFileSync(cssFile, "utf8");
@@ -206,11 +245,20 @@ test("all web typography resolves to the supplied local Pretendard 1.3.9 variabl
     const declarations = styles.matchAll(/font-family\s*:\s*([^;}]+)(?=[;}])/g);
 
     for (const declaration of declarations) {
-      const value = declaration[1] ?? "";
+      const value = (declaration[1] ?? "").trim();
+
+      if (
+        value === legacyCodeFontStack &&
+        (cssFile.endsWith("TerraformCodeEditorSurface.module.css") ||
+          cssFile.endsWith("workspace.module.css"))
+      ) {
+        continue;
+      }
+
       assert.doesNotMatch(
         value,
         forbiddenFallbacks,
-        `${cssFile}: font-family must resolve to Pretendard: ${declaration[0]}`
+        `${cssFile}: font-family must resolve to Pretendard or the scoped legacy code stack: ${declaration[0]}`
       );
     }
   }

@@ -1,17 +1,11 @@
-import type {
-  BoardAutoOrganizePreviewSession,
-  BoardAutoOrganizePreviewView
-} from "../architecture-board-compiler";
+import type { BoardAutoOrganizePreviewSession } from "../architecture-board-compiler";
 import styles from "./diagram-editor.module.css";
 
 export function BoardAutoOrganizePreviewPanel({
   onKeepOriginal,
-  onSelectView,
-  onUseOrganized,
-  session
+  onUseOrganized
 }: {
   readonly onKeepOriginal: () => void;
-  readonly onSelectView: (view: BoardAutoOrganizePreviewView) => void;
   readonly onUseOrganized: () => void;
   readonly session: BoardAutoOrganizePreviewSession;
 }) {
@@ -23,31 +17,7 @@ export function BoardAutoOrganizePreviewPanel({
       <div className={styles.compilerPreviewHeader}>
         <div>
           <strong>자동 정리 미리보기</strong>
-          <span>
-            {session.activeView === "original"
-              ? "원본을 보고 있어요"
-              : "정리 결과를 보고 있어요"}
-          </span>
-        </div>
-        <div
-          aria-label="미리보기 선택"
-          className={styles.compilerPreviewViewToggle}
-          role="group"
-        >
-          <button
-            aria-pressed={session.activeView === "original"}
-            onClick={() => onSelectView("original")}
-            type="button"
-          >
-            원본
-          </button>
-          <button
-            aria-pressed={session.activeView === "organized"}
-            onClick={() => onSelectView("organized")}
-            type="button"
-          >
-            정리 결과
-          </button>
+          <span>정리 결과를 보고 있어요</span>
         </div>
       </div>
 

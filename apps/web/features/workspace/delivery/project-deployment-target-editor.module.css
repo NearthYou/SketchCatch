@@ -22,7 +22,7 @@
   margin: 4px 0 0;
   color: var(--color-body);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: 400;
+  font-weight: var(--presentation-font-weight-regular);
   line-height: 1.5;
 }
 
@@ -34,7 +34,7 @@
   background: var(--color-surface-strong);
   color: var(--color-body);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-regular);
 }
 
 .readyBadge {
@@ -58,7 +58,7 @@
   gap: 7px;
   color: #55585f;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-regular);
 }
 
 .field input,
@@ -84,7 +84,7 @@
   color: var(--color-error);
   font-size: calc(10px + var(--presentation-font-size-increase));
   font-style: normal;
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-regular);
 }
 
 .field i {
@@ -94,7 +94,7 @@
 .field small {
   color: var(--color-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: 400;
+  font-weight: var(--presentation-font-weight-regular);
   line-height: 1.45;
 }
 
@@ -142,7 +142,7 @@
   overflow: hidden;
   color: var(--color-ink);
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: calc(600 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-regular);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -172,7 +172,7 @@
   content: "+";
   color: var(--color-muted);
   font-size: calc(18px + var(--presentation-font-size-increase));
-  font-weight: 400;
+  font-weight: var(--presentation-font-weight-regular);
 }
 
 .advancedSettings[open] > summary::after {
@@ -192,7 +192,7 @@
 .advancedSettings > summary small {
   color: var(--color-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: 400;
+  font-weight: var(--presentation-font-weight-regular);
   line-height: 1.45;
 }
 

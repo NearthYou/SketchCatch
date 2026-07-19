@@ -18,7 +18,7 @@
 .metrics dt {
   color: var(--color-muted, #73777f);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.035em;
   text-transform: uppercase;
 }
@@ -92,7 +92,7 @@
 
 .detail strong {
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -106,7 +106,7 @@
 
 .technical > summary {
   cursor: pointer;
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   min-height: 38px;
   padding-top: 11px;
 }
@@ -146,7 +146,7 @@
 .metrics dd {
   color: var(--color-ink, #171717);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  font-weight: var(--presentation-font-weight-bold);
   margin: 0;
 }
 

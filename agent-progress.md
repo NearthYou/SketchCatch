@@ -11,6 +11,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Merge latest dev into PR #497
+
+- Merged `origin/dev` at `75c46ce7` into `fix/sw/495-live-observation-template`, preserving the Live Observation Template, reopened approval dialog fix, and combined Live Observation Design Analysis while accepting the latest shared UI and deployment-target work.
+- Resolved two documentation conflicts by retaining both workstreams and archived older progress records to restore the harness size limits.
+- Focused checks pass 60/60. Root harness, lint, typecheck, build, and diff checks pass; no AWS mutation, Terraform execution, Deployment, traffic generation, dependency change, or DB migration was performed.
+
 ### 2026-07-19 - Combine Design Analysis with Live Observation
 
 - Removed the standalone Workspace right-panel Design Analysis mode and placed the same current-Board analysis at the bottom of the Live Observation modal.
@@ -156,6 +162,7 @@ Short English-only working log for the current agent context. Older records are 
 - Removed the visible `선택됨` suffix from selected `/workspace/ai` answer buttons while retaining `aria-pressed` and selected-button styling.
 - Removed the unused label style and added a source regression for the route-specific transcript.
 - The focused Web regression and harness are recorded by the finishing verification run. No database migration, deployment, cloud mutation, or push was performed.
+
 ### 2026-07-19 - Keep AI Start progress moving across card remounts
 
 - Moved `/workspace/ai` diagram-generation step ownership from the conditional progress card into the persistent conversation transcript.
@@ -174,31 +181,3 @@ Short English-only working log for the current agent context. Older records are 
 - Conflict requests now call Amazon Q Business ChatSync with the exact validation failures and user requirement. JSON and plain-text/numbered Q answers both become the existing clarification question and choices without server-side trade-off selection.
 - Workspace AI draft failures now keep full diagnostics in the browser console and show one short transcript message instead of duplicated developer diagnostics.
 - Focused API provider/parser and Web presentation regressions pass; API/Web typechecks pass. No database migration, deployment, cloud mutation, or push was performed.
-
-### 2026-07-19 - Classify natural-language technology stack answers
-
-- Added one shared frontend/backend technology-stack classifier used by API answer validation, canonical prompt context, architecture profiles, and Web selection presentation.
-- React/Vue/Svelte-style SPA stacks, Next/Nuxt/Remix-style SSR stacks, Flutter/React Native mobile stacks, simple API frameworks, complex backend frameworks, and microservice stacks now reuse their existing answer option instead of creating a custom choice.
-- Database product names do not infer data volume because the technology alone does not answer that question.
-- Three shared classifier regressions, focused API/Web integrations, cross-package typechecks, and the harness pass. No database migration, deployment, cloud mutation, or push was performed.
-
-### 2026-07-19 - Reconcile durable Plan acceptance after an HTTP response failure
-
-- Shaped the Plan API's accepted Deployment response before creating or dispatching durable worker work, so response serialization failures cannot leave an unacknowledged worker running.
-- Reconciled a validation request error only when polling observes the exact pending Deployment still running or carrying its Plan artifact; unrelated foreground failures remain visible.
-- Focused API checks pass 70/70 and focused Web checks pass 52/52. Root lint, typecheck, and production build pass; the final harness and diff checks are recorded by the finishing verification run.
-- No DB migration, dependency change, AWS mutation, Terraform Apply/Destroy, deployment, or direct push to `dev` was performed.
-
-### 2026-07-19 - Move Plan build preparation behind durable worker acceptance
-
-- Traced the reported Plan HTTP 500 to Next.js development proxy's 30-second timeout: the API spent about 34 seconds preparing CodeBuild and verifying Repository access before it created the durable worker job.
-- The Plan route now returns its accepted Deployment after durable dispatch, while the worker runs build-environment preparation inside the Plan execution lease and heartbeat boundary. Preparation failures remain recorded as `build_environment` failures.
-- The reported Deployment `eae903e0-926c-46d7-b819-99b124246373` completed despite the proxy error and produced a pending `36 create / 0 update / 0 delete` Plan with no failure stage or error summary.
-- Focused API regressions pass 106/106; root lint, typecheck, build, final harness, and diff checks are recorded by the finishing verification run. No DB migration, dependency change, AWS mutation by Codex, Terraform Apply/Destroy, deployment rerun, or direct push to `dev` was performed.
-
-### 2026-07-19 - Advance approved Plans and refresh durable build readiness
-
-- Fixed Direct Deployment so a successful Plan approval selects the deployment step instead of leaving the user on the disabled approval panel.
-- Added Project Build Environment hydration to durable Plan polling, preventing an early HTTP 202 response from leaving `ready + verified` infrastructure displayed as `준비 필요`.
-- The reported Deployment `8eb279cb-cea8-417f-88af-d31cd21926d0` is pending with matching current/approved Plan artifacts; its build environment is `ready + verified`. The live browser now shows step 3, `Repository 검증 완료`, and the deployment action without console errors.
-- TDD regressions passed RED then GREEN; focused Web checks pass 56/56. Root lint, typecheck, build, final harness, and diff checks are recorded by the finishing verification run. No deployment execution, approval revocation, AWS mutation, DB migration, dependency change, or direct push to `dev` was performed.

@@ -48,14 +48,26 @@ test("desktop AI Workbench navigation is icon-only and names the active mode in 
 });
 
 test("AI Workbench owns status, transcript, footer, and nonmodal desktop pointer behavior", () => {
-  assert.match(workbenchSource, /aria-live="polite"/);
+  assert.match(workbenchSource, /\{status \? \([\s\S]*aria-live="polite"/);
   assert.match(workbenchSource, /role="status"/);
+  assert.doesNotMatch(
+    workbenchSource,
+    /readyLabel|작업 선택 가능|입력 가능|작업을 시작할 수 있습니다/
+  );
   assert.match(workbenchSource, /data-terraform-leave-guard-ignore/);
   assert.match(workbenchSource, /ref=\{transcriptRef\}/);
   assert.match(workbenchSource, /\{children\}/);
   assert.match(workbenchSource, /\{footer\}/);
   assert.match(workbenchStyles, /\.overlay\s*\{[^}]*pointer-events:\s*none;/s);
   assert.match(workbenchStyles, /\.workWindow\s*\{[^}]*pointer-events:\s*auto;/s);
+  assert.match(
+    workbenchStyles,
+    /\.workArea\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto;/s
+  );
+  assert.match(
+    workbenchStyles,
+    /\.workAreaWithStatus\s*\{[^}]*grid-template-rows:\s*auto auto minmax\(0, 1fr\) auto;/s
+  );
 });
 
 test("AI Workbench shell uses only its dedicated visual token vocabulary", () => {

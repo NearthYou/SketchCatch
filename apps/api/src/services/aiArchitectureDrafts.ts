@@ -716,6 +716,12 @@ function parseAmazonQRequirementConflictClarification(
 ): AmazonQArchitectureDraftClarification {
   const normalizedText = text.trim();
 
+  if (isAmazonQNoRelevantInformationResponse(normalizedText)) {
+    throw createProviderResponseInvalidError(
+      new Error("Amazon Q requirement conflict diagnosis did not contain relevant information")
+    );
+  }
+
   try {
     const parsed = JSON.parse(extractJsonObject(normalizedText)) as unknown;
     if (
@@ -723,10 +729,13 @@ function parseAmazonQRequirementConflictClarification(
       typeof parsed.question === "string" &&
       parsed.question.trim().length > 0
     ) {
+      const suggestions = readStringArray(parsed.suggestions);
+      requireAmazonQConflictClarificationChoices(suggestions);
+
       return {
         status: "needs_clarification",
         question: parsed.question.trim(),
-        suggestions: readStringArray(parsed.suggestions)
+        suggestions
       };
     }
 
@@ -762,6 +771,7 @@ function parseAmazonQRequirementConflictClarification(
       new Error("Amazon Q requirement conflict diagnosis was empty")
     );
   }
+  requireAmazonQConflictClarificationChoices(suggestions);
 
   return {
     status: "needs_clarification",
@@ -769,6 +779,21 @@ function parseAmazonQRequirementConflictClarification(
     suggestions
   };
 }
+
+function requireAmazonQConflictClarificationChoices(suggestions: readonly string[]): void {
+  if (suggestions.length < 2 || suggestions.length > 4) {
+    throw createProviderResponseInvalidError(
+      new Error("Amazon Q requirement conflict diagnosis must include two to four choices")
+    );
+  }
+}
+
+function isAmazonQNoRelevantInformationResponse(value: string): boolean {
+  return /(?:could not|couldn't|cannot|can't) find relevant information|not enough information/iu.test(
+    value
+  );
+}
+
 function parseArchitectureDraftProviderResponse(text: string): AmazonQArchitectureDraftResponse {
   try {
     return parseAmazonQArchitectureDraftResponse(text);
