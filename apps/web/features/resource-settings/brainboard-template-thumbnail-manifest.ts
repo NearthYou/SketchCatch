@@ -33,45 +33,45 @@ const BRAINBOARD_DIAGRAM_HASHES: Record<
   string
 > = {
   "brainboard-aws-asg-lb-vpc-subnets":
-    "b970e2afc7b61694343020f7458aa5d1f502f297b139ae8b2917ab0261823776",
-  "brainboard-aws-bastion": "e17b87bc82d942e63e986f599e89e74470180cdfc325f2044723c5a10f7e7069",
+    "7f0355abdd9dff5066cd1a7b765399384b2624b44eb9771f52be36e41cdf6e74",
+  "brainboard-aws-bastion": "42825310aa18164fab9541ec35665a75411679da0886f264a90a7cad0bf1138b",
   "brainboard-aws-costs-monitoring":
     "4a973c63dc03a18cd20d4f45023e3ca717b84ac9cc6a1522ee8da28e908f5dc5",
   "brainboard-aws-dashcam-video-pipeline":
     "bb16b489ec16cd86b03949ca567eb5e428f9499606a5aaa628e61ba58ee2f72c",
   "brainboard-aws-ec2-vpc-subnet":
-    "57a63a5e86e063c37637b87653628d4b5600b2ef57db8f4c28182fdefa53ef9d",
-  "brainboard-aws-ecs-fargate": "0a491e4712ec345dbf6eec7cd3fa2434fb3bcd1563208be4f23943227c6cd203",
+    "66798b44ef735a042ada67101064e16a5ceaae930179629bca96215d1e828756",
+  "brainboard-aws-ecs-fargate": "12cb4a0cc5973028c8a4329068e02bc3867ce522a781487a3f571b3fa3dbbe36",
   "brainboard-aws-elastic-beanstalk":
-    "6dd68ae6275d324b3694c95c909679314e95fd6d0a3fc0ae76dc10e9b3722ee3",
-  "brainboard-aws-fsx": "f1ed1d3f86a0a0e2a2ba2d1a392b84c738707568bfb3c7c625eb08fb042d3c04",
-  "brainboard-aws-iam-users": "915e6459a49c88d98ee04248a730e96e2975f148e284946bb93a509b4a838a38",
+    "471bf6fffdbdbfd3403e43eb9de143cb1f4378507f71fded12d57663806d0ff6",
+  "brainboard-aws-fsx": "9e045f25b5cf123e958e82f71e328ac3bb9206b0b55b18d917afb28b5bba7d62",
+  "brainboard-aws-iam-users": "add9a650c98d6b69e56e51db1d5e45235e39012c89c547075750c281e4a8f7e5",
   "brainboard-aws-jenkins-ec2": "a9e5d79be18c01feefcb414f5c14009127131483e9957031f79326e7bac850d1",
   "brainboard-aws-kubernetes-native-cnis":
-    "c092c896a667347d22757b5dd36129317fa3778edcbc9f506315093b1ffee673",
+    "6213435ea8c4801e79834ec86d29f92212d20f1bee124b249fdec0995b8762b5",
   "brainboard-aws-load-balancer-target-group":
-    "a9346e24c1dfe6fedd61222d0b3e93098e53f4e50572c9cf4907666eeaa987c2",
+    "eb96d6c3b12fc4d64e63d8c764ce7e50de02e738d55653e83c5d09cc51ccaab6",
   "brainboard-aws-multi-account-management":
-    "05e91488e638bc3c6d7117890cfb6bb3a74bc562b5a4e0eb4287585367d9cc5e",
+    "9ba24eb105075b45e3946668f2c97940ed207b1de88b2494f61fbd6ffedba830",
   "brainboard-aws-network-landing-zone":
-    "714302c223c7eda065bffe36053b74554d44ee28659c129bedd149c3c0cab075",
-  "brainboard-aws-rds": "b46265897dbc2892077a4520e969ca011672f2d4c5191e633013bb3152e88427",
+    "e7242e63a4944507a51ec81c88f8c3c8434c291a9307f0dd625238d33787547a",
+  "brainboard-aws-rds": "b06ff07c8367a246b5f8ad1c221570c3ba9898bb20febcd26150f177161533b4",
   "brainboard-aws-rest-api-documentdb":
-    "d888fb0d006bc7a04c73fdb70a0e9aad5b8e6d380c39715bcfc929d14ce0cc25",
+    "8434c53756c82a20f892fd2e36965dae8827ffeab48ccff9d31400e038252f8c",
   "brainboard-aws-s3-api-gateway":
     "11ce0d13017707839da486dca6dd6b04684cbe2134890e76d6ea7482fb89b6c1",
   "brainboard-aws-secure-s3-bucket":
     "adb3199c27d6dca1d1146644d796c7ebe99e8be8497d0b462cb3c73a27c60c8f",
   "brainboard-aws-serverless-cdn":
-    "2006a6484ab3bde9354f46f252124b3b3bbb73b4941f4bd8f3d2faa6030fb8bd",
+    "99db9a91634ab796761c045deca5636273fdb82e78cd1119c0ba2863c90aab77",
   "brainboard-aws-three-tier-database":
-    "144d8deb8598e038378650c6e46becf4c8f993611f0dd1c5f0d0d4bd97fb5f88",
+    "7488c04f9ac1071f1ff689afc4bdb0661735ac590deaa0f3fc01ca0a077d9729",
   "brainboard-aws-vpc-subnets-security-groups-2az":
-    "b1cc69054769ce5048f60f2d3773153ac143e33249229a153d1efab10ca78ba7",
+    "88d10829a18f30f48e44c2263efcba90317adf673c12500511582c61c58acc22",
   "brainboard-cross-account-aws-s3":
     "c252f96d3b0699ff79f580e6eb6b5179cdc04ea0e49149eeedd41f067a762112",
   "brainboard-training-aws-onboarding":
-    "f857f367e4236169a5ddfb43272563a2d674ee36bb64b19a7ad0c11fb00f97d9"
+    "0b83b296818d60ebe05965dbce9505cb168f0d44f971228410231d8c82e57af4"
 };
 
 export const BRAINBOARD_TEMPLATE_THUMBNAIL_ASSETS = Object.fromEntries(

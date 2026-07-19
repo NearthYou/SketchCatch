@@ -7,7 +7,7 @@ import {
 
 export const generatedArchitectureBoardKnowledgeArtifact = {
   version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
-  hash: "fnv1a-70c93cd1",
+  hash: "fnv1a-73bc243b",
   cases: [
     {
       "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -38,7 +38,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 527.632,
       "meanNodeHeight": 402.162,
       "meanAspectRatio": 1.729,
-      "meanCaptionWidth": 134.105,
+      "meanCaptionWidth": 128.211,
       "meanZIndex": 9,
       "meanEdgeLength": 261.009,
       "meanEdgeWaypointCount": 4,
@@ -78,7 +78,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 331.402,
       "meanNodeHeight": 235.294,
       "meanAspectRatio": 1.519,
-      "meanCaptionWidth": 130.529,
+      "meanCaptionWidth": 127.235,
       "meanZIndex": 8,
       "meanEdgeLength": 191.519,
       "meanEdgeWaypointCount": 3.714,
@@ -179,7 +179,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 615.714,
       "meanNodeHeight": 425.714,
       "meanAspectRatio": 1.743,
-      "meanCaptionWidth": 103,
+      "meanCaptionWidth": 88,
       "meanZIndex": 3,
       "meanEdgeLength": 316.723,
       "meanEdgeWaypointCount": 2,
@@ -215,7 +215,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 425,
       "meanNodeHeight": 325.5,
       "meanAspectRatio": 1.133,
-      "meanCaptionWidth": 115.5,
+      "meanCaptionWidth": 98.7,
       "meanZIndex": 4.5,
       "meanEdgeLength": 271.25,
       "meanEdgeWaypointCount": 2,
@@ -252,7 +252,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 340.333,
       "meanNodeHeight": 280,
       "meanAspectRatio": 1.332,
-      "meanCaptionWidth": 156.333,
+      "meanCaptionWidth": 147.933,
       "meanZIndex": 7,
       "meanEdgeLength": 230,
       "meanEdgeWaypointCount": 2,
@@ -295,7 +295,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 315.333,
       "meanNodeHeight": 300.5,
       "meanAspectRatio": 1.149,
-      "meanCaptionWidth": 110.833,
+      "meanCaptionWidth": 109.9,
       "meanZIndex": 14.5,
       "meanEdgeLength": 206.667,
       "meanEdgeWaypointCount": 4,
@@ -328,7 +328,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 223,
       "meanNodeHeight": 153,
       "meanAspectRatio": 1.126,
-      "meanCaptionWidth": 163.8,
+      "meanCaptionWidth": 153.3,
       "meanZIndex": 4.5,
       "meanEdgeLength": 249.227,
       "meanEdgeWaypointCount": 4.143,
@@ -414,7 +414,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 292.273,
       "meanNodeHeight": 239.545,
       "meanAspectRatio": 1.039,
-      "meanCaptionWidth": 142.864,
+      "meanCaptionWidth": 141.591,
       "meanZIndex": 10.5,
       "meanEdgeLength": 435,
       "meanEdgeWaypointCount": 5.429,
@@ -451,7 +451,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 475.769,
       "meanNodeHeight": 482.692,
       "meanAspectRatio": 0.956,
-      "meanCaptionWidth": 124.385,
+      "meanCaptionWidth": 106.077,
       "meanZIndex": 6,
       "meanEdgeLength": 250,
       "meanEdgeWaypointCount": 3.5,
@@ -484,7 +484,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 304.643,
       "meanNodeHeight": 257.857,
       "meanAspectRatio": 1.171,
-      "meanCaptionWidth": 93.75,
+      "meanCaptionWidth": 81.25,
       "meanZIndex": 13.5,
       "meanEdgeLength": 630,
       "meanEdgeWaypointCount": 4,
@@ -520,7 +520,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 371.538,
       "meanNodeHeight": 337.885,
       "meanAspectRatio": 1.1,
-      "meanCaptionWidth": 104.192,
+      "meanCaptionWidth": 100.692,
       "meanZIndex": 12.5,
       "meanEdgeLength": 345.002,
       "meanEdgeWaypointCount": 3.8,
@@ -554,7 +554,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 512.273,
       "meanNodeHeight": 483.182,
       "meanAspectRatio": 1.087,
-      "meanCaptionWidth": 124.091,
+      "meanCaptionWidth": 121.545,
       "meanZIndex": 5,
       "meanEdgeLength": 284.167,
       "meanEdgeWaypointCount": 4,
@@ -589,7 +589,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 225.427,
       "meanNodeHeight": 162.5,
       "meanAspectRatio": 1.464,
-      "meanCaptionWidth": 137.2,
+      "meanCaptionWidth": 111.3,
       "meanZIndex": 4.5,
       "meanEdgeLength": 226,
       "meanEdgeWaypointCount": 3.2,
@@ -707,7 +707,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 117.857,
       "meanNodeHeight": 116.429,
       "meanAspectRatio": 1.001,
-      "meanCaptionWidth": 165.333,
+      "meanCaptionWidth": 155.667,
       "meanZIndex": 10,
       "meanEdgeLength": 322.472,
       "meanEdgeWaypointCount": 4.318,
@@ -755,7 +755,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 257.25,
       "meanNodeHeight": 261.25,
       "meanAspectRatio": 1.434,
-      "meanCaptionWidth": 112.175,
+      "meanCaptionWidth": 110.95,
       "meanZIndex": 19.5,
       "meanEdgeLength": 355.019,
       "meanEdgeWaypointCount": 5.316,
@@ -793,7 +793,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 322.143,
       "meanNodeHeight": 281.667,
       "meanAspectRatio": 1.094,
-      "meanCaptionWidth": 113,
+      "meanCaptionWidth": 111.333,
       "meanZIndex": 10,
       "meanEdgeLength": 247.22,
       "meanEdgeWaypointCount": 4,
@@ -863,7 +863,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 296.591,
       "meanNodeHeight": 242.045,
       "meanAspectRatio": 1.037,
-      "meanCaptionWidth": 142.864,
+      "meanCaptionWidth": 141.591,
       "meanZIndex": 10.5,
       "meanEdgeLength": 409,
       "meanEdgeWaypointCount": 5.8,
@@ -910,7 +910,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 315.077,
       "meanNodeHeight": 177.846,
       "meanAspectRatio": 1.489,
-      "meanCaptionWidth": 127.615,
+      "meanCaptionWidth": 112.538,
       "meanZIndex": 0.846,
       "meanEdgeLength": 392.865,
       "meanEdgeWaypointCount": 0,
@@ -952,7 +952,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 389,
       "meanNodeHeight": 257.667,
       "meanAspectRatio": 1.511,
-      "meanCaptionWidth": 135.625,
+      "meanCaptionWidth": 128.625,
       "meanZIndex": 0.792,
       "meanEdgeLength": 420.85,
       "meanEdgeWaypointCount": 0,
@@ -998,7 +998,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 218.308,
       "meanNodeHeight": 240.615,
       "meanAspectRatio": 1.074,
-      "meanCaptionWidth": 124.923,
+      "meanCaptionWidth": 105.269,
       "meanZIndex": 0.615,
       "meanEdgeLength": 419.135,
       "meanEdgeWaypointCount": 0,
@@ -1039,7 +1039,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 232.8,
       "meanNodeHeight": 204.267,
       "meanAspectRatio": 1.219,
-      "meanCaptionWidth": 135.333,
+      "meanCaptionWidth": 116.2,
       "meanZIndex": 0.8,
       "meanEdgeLength": 323.653,
       "meanEdgeWaypointCount": 0,
@@ -1073,7 +1073,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 159,
       "meanNodeHeight": 138,
       "meanAspectRatio": 1.219,
-      "meanCaptionWidth": 137.375,
+      "meanCaptionWidth": 133.875,
       "meanZIndex": 0.75,
       "meanEdgeLength": 220.539,
       "meanEdgeWaypointCount": 0,
@@ -1118,7 +1118,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "meanNodeWidth": 308.471,
       "meanNodeHeight": 277.882,
       "meanAspectRatio": 1.25,
-      "meanCaptionWidth": 145.353,
+      "meanCaptionWidth": 143.912,
       "meanZIndex": 0.882,
       "meanEdgeLength": 417.026,
       "meanEdgeWaypointCount": 0,
@@ -1268,7 +1268,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-ecs-fargate-container-app-repository",
           "kind": "resource",
-          "label": "Application ECR Repository",
+          "label": "ECR Repository",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-definition-ops-group"
@@ -1297,7 +1297,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-ecs-fargate-container-app-task",
           "kind": "resource",
-          "label": "Application ECS Task Definition",
+          "label": "ECS Task Definition",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-definition-ops-group"
@@ -1828,7 +1828,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "d67cbec1-5217-44ea-95e8-93c2bae28504",
-          "label": "Web Classic Load Balancer",
+          "label": "Classic Load Balancer",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c"
@@ -1856,7 +1856,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "d75efaba-a405-4bf0-9cf0-929116e2c267",
-          "label": "Web Auto Scaling Group",
+          "label": "Auto Scaling Group",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c"
@@ -1884,7 +1884,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "f5024a0a-d5e3-4403-a70f-d07a5402a90c",
-          "label": "Web VPC",
+          "label": "VPC",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "c8302f50-a584-4e73-bf3f-efca40fae066"
@@ -2570,7 +2570,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-vpc",
           "kind": "resource",
-          "label": "3-Tier VPC",
+          "label": "VPC",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-region"
@@ -2846,7 +2846,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "id": "f5024a0a-d5e3-4403-a70f-d07a5402a90c",
-          "label": "Web VPC",
+          "label": "VPC",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "c8302f50-a584-4e73-bf3f-efca40fae066"
@@ -3276,7 +3276,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         {
           "id": "template-three-tier-web-app-vpc",
           "kind": "resource",
-          "label": "3-Tier VPC",
+          "label": "VPC",
           "locked": false,
           "metadata": {
             "parentAreaNodeId": "template-three-tier-web-app-presentation-region"

@@ -19,9 +19,9 @@
       "warning": 140,
       "info": 52
     },
-    "meanBeforeScore": 3368759830.573208,
-    "meanAfterScore": 278355115.549992,
-    "meanScoreDelta": -3090404715.023215,
+    "meanBeforeScore": 3367725347.814587,
+    "meanAfterScore": 278414407.048847,
+    "meanScoreDelta": -3089310940.765739,
     "visualAnomalies": {
       "before": {
         "nodeOverlapCount": 52,
@@ -31,7 +31,7 @@
         "edgeNodeIntersectionCount": 22,
         "edgeAreaTitleIntersectionCount": 50,
         "backwardEdgeCount": 50,
-        "supportLaneIntrusionCount": 62
+        "supportLaneIntrusionCount": 61
       },
       "after": {
         "nodeOverlapCount": 1,
@@ -53,8 +53,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-asg-lb-vpc-subnets:support-above-reversed",
       "diagramFingerprints": {
-        "source": "sha256:94f97b13678084b1dd9aabdd4402b633e1e6c56a841948b14e6fba3f703e2668",
-        "compiled": "sha256:120980f856bd8b7ef7988683854e82cb72576635b56b2695b9dfa548fff3a9ff"
+        "source": "sha256:a08c29bb462606f713b7a56e1ce4b76fdc78c00056f4c01230796ff6f5a46de2",
+        "compiled": "sha256:a2345097cb4ead881f1e1ae88b07dc5915c014b07395b86eb648cdd1868c1316"
       },
       "changes": {
         "total": 90,
@@ -194,8 +194,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-bastion:split-support",
       "diagramFingerprints": {
-        "source": "sha256:89276491f8e5ae3ce72a5ad5bf193bb0dc08c5596986f7be9bce3476209ab2c7",
-        "compiled": "sha256:13d1d0316b7481034fe889a9a73c7c59fbe2700d8c0d76c9daf4bcd05bde7ef1"
+        "source": "sha256:a203fc5d2a7461233199143e0a4398130c5403e3e609c8516de6bfbf2a7ecc0b",
+        "compiled": "sha256:1d086ab46ec200323235c4f0533144191b1854eefca264842c85aca3c71c4255"
       },
       "changes": {
         "total": 76,
@@ -623,8 +623,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "diagramFingerprints": {
-        "source": "sha256:e61d7c398ebf44cde1f3d2c2750f8928df3c44308511c7d18322beaadd8f5277",
-        "compiled": "sha256:d71174593dfebe2c8a471997b7e5e56b8f2842ce6a922677f45638d614926421"
+        "source": "sha256:f16e8057c3187e93e28057c629d687e141e286f0f6a4eb9c5916dbc79d4d3734",
+        "compiled": "sha256:83b1e25392620ce4a832055273f2412c10306b513b12d850c38d8ac769864a1c"
       },
       "changes": {
         "total": 25,
@@ -764,8 +764,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-ecs-fargate:split-support-reversed",
       "diagramFingerprints": {
-        "source": "sha256:14faf7e22535cf9961c287005a2b1cc7501af3965355836838cb87d7abda0a91",
-        "compiled": "sha256:ac6438b1b8aec90a070fbf9844bb5fc05cb641e0027f3f24748132e3c1ab827e"
+        "source": "sha256:9516f4623d56ef2b8283754146d58b49f029b0f21cea6419b63a4488fb80b010",
+        "compiled": "sha256:7a40163b02decf5f394980c8130f740849ea314e98f792ff362ecc47e6fdf0e1"
       },
       "changes": {
         "total": 50,
@@ -822,8 +822,8 @@
       },
       "quality": {
         "before": {
-          "score": 1170132705.55865,
-          "visualPenalty": 1170132705.55865,
+          "score": 1140132705.55865,
+          "visualPenalty": 1140132705.55865,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
@@ -847,33 +847,33 @@
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 1,
             "repeatAlignmentError": 0,
-            "score": 1170132705.55865,
+            "score": 1140132705.55865,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
-            "supportLaneIntrusionCount": 1,
+            "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 0,
             "totalEdgeLength": 1269
           }
         },
         "after": {
-          "score": 153550.699254,
-          "visualPenalty": 153074.740254,
+          "score": 1873004.166054,
+          "visualPenalty": 1872481.705054,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
             "backwardEdgeCount": 0,
-            "canvasArea": 550271.205136,
-            "canvasAspectRatioPenalty": 0,
+            "canvasArea": 489953.482568,
+            "canvasAspectRatioPenalty": 0.344992,
             "compilationDistance": 281,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.974878,
+            "emptySpaceRatio": 0.971785,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 3,
             "knowledgeEdgeLength": 271.25,
-            "knowledgePenalty": 194.959,
+            "knowledgePenalty": 241.461,
             "knowledgeReferenceSimilarity": 0.858,
             "knowledgeSiblingGap": 155.556,
             "knowledgeViewportAspectRatio": 1.445,
@@ -881,16 +881,16 @@
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 0,
-            "score": 153074.740254,
+            "score": 1872481.705054,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 0,
-            "totalEdgeLength": 2641.78
+            "totalEdgeLength": 2394.668
           }
         },
         "compilationDistance": 281,
-        "scoreDelta": -1169979154.859395
+        "scoreDelta": -1138259701.392596
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-dashcam-video-pipeline",
@@ -906,8 +906,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "diagramFingerprints": {
-        "source": "sha256:aee1fdf496f1afc4d8c2dd5c6e665f8bb7568598e063a6bcceb3d2b3fdea2134",
-        "compiled": "sha256:6830109778a187e6b838058f834bd76a461feb109944c8cd81e23c5a8fdda7c1"
+        "source": "sha256:63a02a5d66818fc0fc51686ae6df80bdcd6fe5eb6ce772404d4532e39fcf69e7",
+        "compiled": "sha256:241e829b25ca618eaa0c496cc22ee8188376219bf6120f55742a04a3d8d7923b"
       },
       "changes": {
         "total": 57,
@@ -1053,8 +1053,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "diagramFingerprints": {
-        "source": "sha256:51979e48baaa0d5d856664888a97c109a5f2458a920692d370176afaaed527c0",
-        "compiled": "sha256:acd332f24f5e022e57e6596e5ec6f60d0c228bee8ce18c879ed90eaeee646401"
+        "source": "sha256:c2175135c3e41670a56ef2719d9c75d3d05cda20d4159556e3dd95b75d35d94a",
+        "compiled": "sha256:1c0caafe0eba92463d162c353af1b9c44cd562091452b6db2906c7c3415fcbc5"
       },
       "changes": {
         "total": 133,
@@ -1203,7 +1203,7 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "diagramFingerprints": {
-        "source": "sha256:caee387b74b09c1d6933fd1d28e89ec8bacd9f76a6d20d6222667e79bd678684",
+        "source": "sha256:aa8bf008c04d0c3c665f46b8725a607fd9e10e091a64aafd81fb417ef9b08575",
         "compiled": "sha256:c76af6b76c06224ba861bbbf37aca3ca23e4225551a25efdc5a6d8daada2802e"
       },
       "changes": {
@@ -1479,8 +1479,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "diagramFingerprints": {
-        "source": "sha256:1765f7191fdf299e4934f2efddb372a24b214acefe22da76e13980d442dfd0ad",
-        "compiled": "sha256:1183c6bf46f38bafa09696a15a699d3ab1928143bd5ab47922c82ee5da03772f"
+        "source": "sha256:34308f0c33b032873f8f3a0c856fb595b32151f961c571ffe4ed1e8ecc30377b",
+        "compiled": "sha256:233e925f3e7cb6be6e9dbe297b936e14c7fad4f7d4f8c4c63b4edad14868b034"
       },
       "changes": {
         "total": 108,
@@ -1626,8 +1626,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
       "diagramFingerprints": {
-        "source": "sha256:a4c94f7c6979774273fb9a2f9a130141e13853a0b24662345928e993209651b4",
-        "compiled": "sha256:b190a2748c804e3d21f543bd0b98477ffcf3268eb14f6bd631751b5bcb84fbd2"
+        "source": "sha256:9c2cf550f6377c4a89ddec406b62b9696b317dbf4364413a9a2a33e30c6f6b3a",
+        "compiled": "sha256:56b2ed1f8c708714162b9a9d99776822f56400d0321574470afab4df42f31223"
       },
       "changes": {
         "total": 57,
@@ -1767,7 +1767,7 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
       "diagramFingerprints": {
-        "source": "sha256:28dc5ae50c482a4ef50eb2bbc6a6cb3fd2ddfe705eaf9d44fd62dc1216c8d64b",
+        "source": "sha256:bf91bbfc8ae6f9041f23e0ea4e2add55a924b380d0497bee237f0e0db96bb48b",
         "compiled": "sha256:532c940e4742a5cfe52d7849b952b16609c29bda9ad009ac6443393ff0f5a4e1"
       },
       "changes": {
@@ -1908,8 +1908,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-network-landing-zone:support-above",
       "diagramFingerprints": {
-        "source": "sha256:8e80bef7f5d77edc2a0647d70f56b45311a6f47db911b243f6e0c59ec2143769",
-        "compiled": "sha256:61af4d246c3fc4d791e506a8618a026ee202621a01357472b802adeb7215921e"
+        "source": "sha256:b7a110901fdcc10dd05f699c0d4e89232392a41edcb45bc27a8b39fcf513ae38",
+        "compiled": "sha256:3200df885453a9cad248eb0d3714c34e87197e5cae9cd60eedd3d4757e1a12d7"
       },
       "changes": {
         "total": 120,
@@ -2055,8 +2055,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-rds:support-above",
       "diagramFingerprints": {
-        "source": "sha256:1f37559ef8d4fe1058ed7cf4911fbf6be95068ca650c22b4d2f6825483a70448",
-        "compiled": "sha256:ab83419c1855fb8ad52b2a5fe75ddb8aacc3ea6fef1130405136a466af704dbe"
+        "source": "sha256:cf171b46ff6a1f9abb3dc947e758c0ec7e23d04fd27ab0a73449b1f3f4b6abba",
+        "compiled": "sha256:2eda50bc6a70f7302f65d98bcefe296e53708f1d29f669f406a26aeda1cb47f3"
       },
       "changes": {
         "total": 48,
@@ -2196,8 +2196,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "diagramFingerprints": {
-        "source": "sha256:895f677dbe260bdf5612e15437ca84b81cd8754183cb13bd9b34cd8251565f38",
-        "compiled": "sha256:a042d6f4c21dd69fb76a246504c43e481370061db87d7c5d77799a89b5e23194"
+        "source": "sha256:09e62c9f95f743bb914831ab4cd80da7bab2405883f21b5ca4e6449ee46aa767",
+        "compiled": "sha256:b447625213275b5dc6d647fb4bb4443f2eae47a0be4f64f9aa83090dd0d53aab"
       },
       "changes": {
         "total": 43,
@@ -2627,8 +2627,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "diagramFingerprints": {
-        "source": "sha256:f923527f5e362bb85c68fc16b0c7708ea758431b239a73186e57305cf4bb560d",
-        "compiled": "sha256:90fdfd0968a8752871f8ccdb6bddecad5d4cfaf1e621b9c51cb325771cf2ff4e"
+        "source": "sha256:fd26279c1130a8931605ed319555baf1ed21ca6380de17b476e5fe9eee332bee",
+        "compiled": "sha256:97ea3cec39d985228925b31498c9d9e1218dfa0f1bacae3ee5d90dac5162199c"
       },
       "changes": {
         "total": 120,
@@ -2775,8 +2775,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "diagramFingerprints": {
-        "source": "sha256:7d1cfb654b91f747bf3ea8d36c94a86579ed38a51ba4589f87ef251b1b2f9796",
-        "compiled": "sha256:20ddb88352fd50e189cddc806df6802b90d40b527df84669f47a00db1880b20b"
+        "source": "sha256:cad808ac3f58d2dbe7f5681a026f756de710150424df84d25f35c7d548ad0f0a",
+        "compiled": "sha256:dd583b0f4c4c867de2ca72ef80e9774cb830af0151f492216bbdebf2140a470a"
       },
       "changes": {
         "total": 168,
@@ -2924,8 +2924,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-vpc-subnets-security-groups-2az:split-support",
       "diagramFingerprints": {
-        "source": "sha256:5c236b8713d413cd45fb2e93cf619c087de679764d451d302b765a0dacec2156",
-        "compiled": "sha256:002f9de2b997c92e6093bd8b08f199252fe7f3af09140ed226974ffc1d479a49"
+        "source": "sha256:c97f6fc01de090cf0713ffe49f00d78a6c6198c0fa818fd2001b62a9c60ff066",
+        "compiled": "sha256:4a71f946e20b935dbeef4e1800ff74a68ff929eab443343d0e523984f3bc88f2"
       },
       "changes": {
         "total": 93,
@@ -3212,8 +3212,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "diagramFingerprints": {
-        "source": "sha256:b36e7fc5c1721c3ec47242c4accd0b9f377e8bd560815f5267fc769254fa53db",
-        "compiled": "sha256:75034a8a3d8507e3cf552f425305cb729542738aa1ec74bcdb9ae36992580599"
+        "source": "sha256:be1b138e713f68081c301a383847daab8e198c1db94b75b3e6c51b6a20439a98",
+        "compiled": "sha256:e36cd3e844c13e5be6b734c7202a8070c74532e57739d483c6d8cbcc0adf61f2"
       },
       "changes": {
         "total": 110,
@@ -3353,8 +3353,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
       "diagramFingerprints": {
-        "source": "sha256:587703eb4c28d7368fc96a351178681277fdbe76e047e506af68dd644f210752",
-        "compiled": "sha256:cb0f6c43c2266431f9f3567b143e0b7699b9238fbc91299f8abca3cfca0dd49c"
+        "source": "sha256:9d5dd489b244a849936c976db607877007d696b6ccc552cf780a4001a51ff912",
+        "compiled": "sha256:d384dd9d9f1d2bf05abec3a7ef39013c31e03690741acb5cd4fafbc79dc77098"
       },
       "changes": {
         "total": 130,
@@ -3432,7 +3432,7 @@
             "code": "compiler.missing_terraform_relationship",
             "level": "warning",
             "summary": "Terraform 참조 관계 미표현",
-            "sampleMessage": "Resource ALB SG의 Terraform 참조 대상 ECS VPC 관계를 proposal로 추가할 수 있습니다.",
+            "sampleMessage": "Resource ALB SG의 Terraform 참조 대상 VPC 관계를 proposal로 추가할 수 있습니다.",
             "count": 31,
             "penalty": 4340
           },
@@ -3440,7 +3440,7 @@
             "code": "compiler.inferred_containment",
             "level": "info",
             "summary": "비-Security Group containment 추론",
-            "sampleMessage": "contains/hosts 관계 또는 Terraform 참조로 ALB SG를 ECS VPC에 소속시켰습니다.",
+            "sampleMessage": "contains/hosts 관계 또는 Terraform 참조로 ALB SG를 VPC에 소속시켰습니다.",
             "count": 12,
             "penalty": 0
           },
@@ -3539,8 +3539,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:knowledge:repository:eks-container-app:support-above-reversed",
       "diagramFingerprints": {
-        "source": "sha256:5294e6079c7f509b3fd9d5b6ea6ed3d7ad346f255c39bf3ba067e4899498ef8d",
-        "compiled": "sha256:9484c4d2de5a8408fcc0cf5c18d413caab19fd062ae390f817c4209031c96f54"
+        "source": "sha256:142e77f644dc0b68f0a5f5d31f548ae0515f7cd5597b5beebf5f1d6777c3c706",
+        "compiled": "sha256:77f1fe774c1e954670eca1fa8166da208f0c3f7f126b6e27de3be29e576631eb"
       },
       "changes": {
         "total": 113,
@@ -3618,7 +3618,7 @@
             "code": "compiler.inferred_containment",
             "level": "info",
             "summary": "비-Security Group containment 추론",
-            "sampleMessage": "contains/hosts 관계 또는 Terraform 참조로 Application Kubernetes Namespace를 EKS Cluster에 소속시켰습니다.",
+            "sampleMessage": "contains/hosts 관계 또는 Terraform 참조로 EKS Cluster SG를 VPC에 소속시켰습니다.",
             "count": 11,
             "penalty": 0
           },
@@ -3626,7 +3626,7 @@
             "code": "compiler.presentation_area_inferred",
             "level": "info",
             "summary": "시각 Area 표현 제안",
-            "sampleMessage": "Resource Application Kubernetes Namespace를 자식 Resource를 묶는 presentation Area로 표시합니다.",
+            "sampleMessage": "Resource EKS Cluster를 자식 Resource를 묶는 presentation Area로 표시합니다.",
             "count": 2,
             "penalty": 0
           }
@@ -3717,8 +3717,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "diagramFingerprints": {
-        "source": "sha256:b8b1e6d2d4c392983dd161c9c094960ce846b4ea892cb544220b58e41aed1bba",
-        "compiled": "sha256:ad006b6173fcc28aece8792b3f045f9586424462ae56b461b750538ec04acfa7"
+        "source": "sha256:e07d3636246b0a12dc074e226d1365ead3e0c501e63ace0f408d98a29a645a3a",
+        "compiled": "sha256:8e7904bcc30ac412290ebb6c148f30388949bec4277869109360d578025e7bf4"
       },
       "changes": {
         "total": 98,
@@ -3782,7 +3782,7 @@
             "code": "compiler.missing_terraform_relationship",
             "level": "warning",
             "summary": "Terraform 참조 관계 미표현",
-            "sampleMessage": "Resource API Deployment의 Terraform 참조 대상 Application API Gateway REST API 관계를 proposal로 추가할 수 있습니다.",
+            "sampleMessage": "Resource API Deployment의 Terraform 참조 대상 API Gateway REST API 관계를 proposal로 추가할 수 있습니다.",
             "count": 19,
             "penalty": 2660
           }
@@ -3873,8 +3873,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "diagramFingerprints": {
-        "source": "sha256:c7bfebd189fa538e6ffe91235b692c52387c13c1b041fdae5e22c695e7d9caa8",
-        "compiled": "sha256:b23cf9bc704bd1e7799399f32bc6370e0d8e43ac2ac25e0c3cb0b79bcbcf312d"
+        "source": "sha256:21adad07b8e2230ac046c37177b282e0b153ac3591b77e6e19d177c580115c87",
+        "compiled": "sha256:fe0d663d2f78012dba2ef5a8c0feabf688b5ba1a67acc9f4f87a39800e2b7a54"
       },
       "changes": {
         "total": 70,
@@ -3938,7 +3938,7 @@
             "code": "compiler.missing_terraform_relationship",
             "level": "warning",
             "summary": "Terraform 참조 관계 미표현",
-            "sampleMessage": "Resource API Deployment의 Terraform 참조 대상 Items API Gateway REST API 관계를 proposal로 추가할 수 있습니다.",
+            "sampleMessage": "Resource API Deployment의 Terraform 참조 대상 API Gateway REST API 관계를 proposal로 추가할 수 있습니다.",
             "count": 14,
             "penalty": 1960
           }
@@ -4029,7 +4029,7 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:knowledge:repository:static-web-hosting:split-support",
       "diagramFingerprints": {
-        "source": "sha256:ace6215786013b1df71036fc0afaa744e73afccff96c547f1b8d42f6d52ceffa",
+        "source": "sha256:74408a243bcbf1144f27d78b7674ebc4fba59c1037bae007b0a777e04b5562fd",
         "compiled": "sha256:7b7b5327de57579299d8852d9a0fddf20eb691d55a46bd30c367cf47bf69dbdb"
       },
       "changes": {
@@ -4185,8 +4185,8 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "diagramFingerprints": {
-        "source": "sha256:806fd7c8b1f0a2a9b6e5a5648dc700e67188fa03d28409fbc8f3c88ee4cd8c8b",
-        "compiled": "sha256:73bd9a73a31eb7c566a921b8f32bf2f054688f1c1f082aa76846bb57ed40f9d0"
+        "source": "sha256:4f5e1c6cbb9658bbaf22d1298aa7c4b64cfc681eb0bc54d4ed6a785cb2d45f1a",
+        "compiled": "sha256:8da112323b983f5ee971d30c052046152aee434cff910ccb4bcd87e84015369f"
       },
       "changes": {
         "total": 179,
@@ -4256,7 +4256,7 @@
             "code": "compiler.missing_terraform_relationship",
             "level": "warning",
             "summary": "Terraform 참조 관계 미표현",
-            "sampleMessage": "Resource ALB SG의 Terraform 참조 대상 3-Tier VPC 관계를 proposal로 추가할 수 있습니다.",
+            "sampleMessage": "Resource ALB SG의 Terraform 참조 대상 VPC 관계를 proposal로 추가할 수 있습니다.",
             "count": 46,
             "penalty": 6440
           },
@@ -4264,7 +4264,7 @@
             "code": "compiler.inferred_containment",
             "level": "info",
             "summary": "비-Security Group containment 추론",
-            "sampleMessage": "contains/hosts 관계 또는 Terraform 참조로 ALB SG를 3-Tier VPC에 소속시켰습니다.",
+            "sampleMessage": "contains/hosts 관계 또는 Terraform 참조로 ALB SG를 VPC에 소속시켰습니다.",
             "count": 25,
             "penalty": 0
           },
