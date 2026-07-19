@@ -5,7 +5,7 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - The current branch applies the supplied self-hosted LINE Seed Sans KR files across Web typography surfaces, with Regular as the body baseline and Bold for headings and emphasis.
-- Board resource labels use a compact 14px computed size so long names fit more clearly within the existing two-line boundary.
+- Board resource labels use a compact 12px computed size so long names fit more clearly within the existing two-line boundary.
 - The automatic Board organization result remains compact while preserving the incoming `dev` comparison session and original/organized view selection.
 - Incoming `dev` API, deployment, Git/CI/CD, AWS connection, Reverse Engineering, and data-contract changes remain accepted as the backend baseline.
 - The merge resolution is complete and ready for the merge commit.
@@ -14,7 +14,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-19 - Reduce Board resource label size
 
-- Reduced only icon-tile Resource labels from 18px to 14px while preserving Bold weight, two-line clamping, and the full-name tooltip.
+- Reduced only icon-tile Resource labels from 18px to 12px while preserving Bold weight, two-line clamping, and the full-name tooltip.
 - The focused DiagramNodeView suite passes 25/25. No broad test suite was run.
 
 ### 2026-07-19 - Replace Pretendard with Regular and Bold LINE Seed Sans KR typography
