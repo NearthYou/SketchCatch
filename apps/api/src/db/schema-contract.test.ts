@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
   createTableRelationsHelpers,
@@ -528,16 +529,78 @@ test("AWS import access storage is connection-scoped and blocks premature deleti
   assert.equal(findColumn(config.columns, "policy_json"), undefined);
 });
 
-test("AWS import access migration is additive and keeps cleanup metadata", () => {
-  const migration = readFileSync(
+test("0054 AWS import access migration stays byte-for-byte immutable after application", () => {
+  const originalMigration = readFileSync(
     new URL("../../drizzle/0054_aws_import_access.sql", import.meta.url),
     "utf8"
   );
 
-  assert.match(migration, /CREATE TABLE "aws_import_access"/);
-  assert.match(migration, /"policy_template_hash" varchar\(64\)/);
-  assert.match(migration, /ON DELETE restrict/);
-  assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i);
+  assert.equal(
+    createHash("sha256").update(originalMigration).digest("hex"),
+    "5dfaa2119457383463b7e4e9a51365179d66143359fb49cc2ae5a483597f58a2"
+  );
+  assert.match(originalMigration, /CREATE TABLE "aws_import_access"/);
+  assert.doesNotMatch(originalMigration, /"policy_template_hash"/);
+  assert.match(originalMigration, /ON DELETE restrict/);
+  assert.doesNotMatch(
+    originalMigration,
+    /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i
+  );
+});
+
+test("0055 adds every current AWS import access column missing from original 0054", () => {
+  const originalMigration = readFileSync(
+    new URL("../../drizzle/0054_aws_import_access.sql", import.meta.url),
+    "utf8"
+  );
+  const repairMigrationUrl = new URL(
+    "../../drizzle/0055_aws_import_access_schema_repair.sql",
+    import.meta.url
+  );
+
+  assert.equal(existsSync(repairMigrationUrl), true);
+  if (!existsSync(repairMigrationUrl)) return;
+
+  const repairMigration = readFileSync(repairMigrationUrl, "utf8");
+  const originalColumns = new Set(
+    [...originalMigration.matchAll(/^\s*"([^"]+)"\s+/gmu)].map((match) => match[1])
+  );
+  const missingSchemaColumns = getTableConfig(awsImportAccess)
+    .columns.map((column) => column.name)
+    .filter((columnName) => !originalColumns.has(columnName))
+    .sort();
+  const repairedColumns = [
+    ...repairMigration.matchAll(/ADD COLUMN IF NOT EXISTS "([^"]+)"/gu)
+  ]
+    .map((match) => match[1])
+    .sort();
+
+  assert.deepEqual(repairedColumns, missingSchemaColumns);
+  assert.deepEqual(repairedColumns, ["policy_template_hash"]);
+  assert.match(
+    repairMigration,
+    /ALTER TABLE "aws_import_access" ADD COLUMN IF NOT EXISTS "policy_template_hash" varchar\(64\)/u
+  );
+  assert.doesNotMatch(
+    repairMigration,
+    /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i
+  );
+
+  const journal = JSON.parse(
+    readFileSync(new URL("../../drizzle/meta/_journal.json", import.meta.url), "utf8")
+  ) as { entries?: Array<{ idx?: number; tag?: string }> };
+  assert.deepEqual(
+    journal.entries?.find(
+      (candidate) => candidate.tag === "0055_aws_import_access_schema_repair"
+    ),
+    {
+      idx: 55,
+      version: "7",
+      when: 1784462400001,
+      tag: "0055_aws_import_access_schema_repair",
+      breakpoints: true
+    }
+  );
 });
 
 test("Git/CI/CD handoffs store repository metadata without raw provider secrets", () => {

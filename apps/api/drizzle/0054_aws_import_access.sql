@@ -8,7 +8,6 @@ CREATE TABLE "aws_import_access" (
 	"policy_stack_name" varchar(128),
 	"policy_stack_id" text,
 	"policy_contract_version" varchar(32),
-	"policy_template_hash" varchar(64),
 	"target_role_arn" text,
 	"service_role_arn" text,
 	"read_policy_arn" text,

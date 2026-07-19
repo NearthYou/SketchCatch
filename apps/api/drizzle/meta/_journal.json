@@ -386,6 +386,13 @@
       "when": 1784462400000,
       "tag": "0054_aws_import_access",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1784462400001,
+      "tag": "0055_aws_import_access_schema_repair",
+      "breakpoints": true
     }
   ]
 }
