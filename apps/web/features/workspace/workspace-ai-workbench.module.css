@@ -83,7 +83,7 @@
   display: grid;
   font: inherit;
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 4px;
   justify-items: center;
   line-height: 1.2;
@@ -112,14 +112,10 @@
 
 .workArea {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-}
-
-.workAreaWithStatus {
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
 .header {
@@ -247,7 +243,7 @@
   flex: 0 0 auto;
   font: inherit;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   min-height: 30px;
   padding: 0 9px;
 }
@@ -291,7 +287,7 @@
 .templateContext code {
   color: var(--ai-workbench-info);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -327,7 +323,7 @@
 .messageLabel {
   color: var(--ai-workbench-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .assistantMessage {
@@ -381,7 +377,7 @@
   cursor: pointer;
   font: inherit;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .choiceButton {
@@ -493,7 +489,7 @@
 .artifactHeader span {
   color: var(--ai-workbench-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -599,7 +595,7 @@
 .composerInput > span {
   color: var(--ai-workbench-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .issueSelect select {
@@ -857,7 +853,7 @@
 .reviewSummaryList p {
   color: var(--ai-workbench-text);
   font-size: calc(14px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(550 - var(--presentation-font-weight-reduction));
   line-height: 1.55;
   margin: 0;
   white-space: pre-line;
@@ -889,7 +885,7 @@
   border-radius: 999px;
   color: var(--ai-workbench-info);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   padding: 3px 6px;
 }
 
@@ -976,7 +972,7 @@
 .checkHeading > span {
   color: var(--ai-workbench-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .checkList p,
@@ -1054,7 +1050,7 @@
   border-radius: 999px;
   color: var(--ai-workbench-muted);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
   padding: 2px 7px;
 }
@@ -1088,7 +1084,7 @@
 .reviewCheckDetails dt {
   color: var(--ai-workbench-muted);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
   margin: 0;
 }
@@ -1114,7 +1110,7 @@
   cursor: pointer;
   display: inline-flex;
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 6px;
   padding: 3px;
 }
@@ -1146,7 +1142,7 @@
 .codeDiff strong {
   color: var(--ai-workbench-muted);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .technicalMeta dd {
@@ -1210,7 +1206,7 @@
 .technicalSection > strong {
   color: var(--ai-workbench-muted);
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .technicalSection p {
@@ -1526,7 +1522,7 @@
   color: #334155;
   font-family: var(--font-sans);
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   white-space: nowrap;
 }
 
@@ -1539,7 +1535,7 @@
 .parameterPreviewResource dd span {
   color: #64748b;
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .parameterPreviewResource dd:last-child span {
@@ -1566,7 +1562,7 @@
   color: var(--ai-workbench-info);
   flex: 0 0 auto;
   font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .acceptedAnswer strong {

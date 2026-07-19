@@ -139,7 +139,7 @@
   background: var(--color-surface-strong);
   color: var(--color-ink);
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-regular);
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
 }
 
 .projectCostValue,
@@ -185,7 +185,7 @@
   gap: 6px;
   color: var(--color-body);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-regular);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .controlField {
@@ -194,7 +194,7 @@
   min-width: 220px;
   color: var(--color-body);
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-regular);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .controlRow select,
@@ -217,7 +217,7 @@
 .fieldError {
   color: var(--color-error);
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-regular);
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
 }
 
@@ -232,7 +232,7 @@
   background: var(--color-primary);
   color: var(--color-on-primary);
   cursor: pointer;
-  font-weight: var(--presentation-font-weight-regular);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .primaryAction:disabled { cursor: not-allowed; opacity: 0.45; }
@@ -277,7 +277,7 @@
 
 .monthlyComparisonHeader h2 { margin: 0; color: var(--color-ink); font-size: calc(16px + var(--presentation-font-size-increase)); }
 .monthlyComparisonHeader p { margin: 5px 0 0; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); line-height: 1.5; }
-.monthlyComparisonHeader > span { flex: none; border-radius: var(--radius-pill); padding: 5px 9px; background: var(--color-surface-strong); color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: var(--presentation-font-weight-regular); }
+.monthlyComparisonHeader > span { flex: none; border-radius: var(--radius-pill); padding: 5px 9px; background: var(--color-surface-strong); color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 
 .monthlyComparisonGrid {
   display: grid;
@@ -286,7 +286,7 @@
 }
 
 .monthlySummaryCard { display: grid; gap: 8px; border: 1px solid var(--color-hairline); border-radius: var(--radius-control); padding: 14px; background: var(--color-surface); }
-.monthlySummaryCard > span { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: var(--presentation-font-weight-regular); }
+.monthlySummaryCard > span { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(600 - var(--presentation-font-weight-reduction)); }
 .monthlySummaryCard small { border-radius: var(--radius-pill); padding: 3px 6px; background: var(--color-surface-strong); color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); white-space: nowrap; }
 .monthlySummaryCard strong { color: var(--color-ink); font-size: calc(20px + var(--presentation-font-size-increase)); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; white-space: nowrap; }
 .monthlySummaryCard[data-direction="up"] strong { color: var(--color-error); }
@@ -295,12 +295,12 @@
 .monthlyChartViewport { overflow-x: auto; padding: 4px 0 2px; }
 .monthlyChart { display: grid; min-width: 520px; height: 190px; grid-template-columns: repeat(6, minmax(64px, 1fr)); gap: 12px; }
 .monthlyBar { display: grid; min-width: 0; grid-template-rows: 26px minmax(0, 1fr) 32px; gap: 5px; text-align: center; }
-.monthlyBar > strong { overflow: hidden; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-variant-numeric: tabular-nums; font-weight: var(--presentation-font-weight-regular); text-overflow: ellipsis; white-space: nowrap; }
+.monthlyBar > strong { overflow: hidden; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-variant-numeric: tabular-nums; font-weight: calc(600 - var(--presentation-font-weight-reduction)); text-overflow: ellipsis; white-space: nowrap; }
 .monthlyBarTrack { display: flex; min-height: 0; align-items: flex-end; justify-content: center; border-bottom: 1px solid var(--color-hairline-strong); background: linear-gradient(to top, transparent 49%, var(--color-hairline) 50%, transparent 51%); }
 .monthlyBarTrack i { display: block; width: min(46px, 68%); border-radius: 7px 7px 2px 2px; background: var(--color-ink); transition: height 180ms ease; }
 .monthlyBarTrack i[data-partial="true"] { background: repeating-linear-gradient(135deg, var(--color-ink) 0 6px, var(--color-body) 6px 10px); }
-.monthlyBar > span { display: grid; justify-items: center; color: var(--color-ink); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: var(--presentation-font-weight-regular); }
-.monthlyBar > span small { color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: var(--presentation-font-weight-regular); }
+.monthlyBar > span { display: grid; justify-items: center; color: var(--color-ink); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
+.monthlyBar > span small { color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(600 - var(--presentation-font-weight-reduction)); }
 .monthlyEstimateNote { margin: -4px 0 0; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); line-height: 1.5; }
 
 .chartSection,
@@ -353,7 +353,7 @@
   fill: var(--color-body);
   font-size: calc(13px + var(--presentation-font-size-increase));
   font-variant-numeric: tabular-nums;
-  font-weight: var(--presentation-font-weight-regular);
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
 }
 
 .chartLine {
@@ -378,7 +378,7 @@
 .costBar strong { color: var(--color-ink); }
 .costBar i { position: absolute; bottom: 0; left: 0; height: 3px; border-radius: var(--radius-pill); background: var(--color-ink); }
 .recommendation { display: grid; gap: 5px; border-top: 1px solid var(--color-hairline); padding-top: 10px; }
-.recommendation span { color: var(--color-warning); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: var(--presentation-font-weight-regular); }
+.recommendation span { color: var(--color-warning); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .recommendation strong { font-size: calc(13px + var(--presentation-font-size-increase)); }
 .recommendation p { margin: 0; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); line-height: 1.45; }
 .recommendation small { color: var(--color-success); font-size: calc(12px + var(--presentation-font-size-increase)); }
@@ -392,9 +392,9 @@
 .settingsSection p { margin: 3px 0 0; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); }
 .setupSection { display: grid; gap: 14px; }
 .setupSection > div { display: flex; align-items: center; gap: 10px; }
-.setupSection > div > span { display: grid; width: 24px; height: 24px; flex: none; place-items: center; border-radius: var(--radius-pill); background: var(--color-ink); color: var(--color-on-primary); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: var(--presentation-font-weight-regular); }
+.setupSection > div > span { display: grid; width: 24px; height: 24px; flex: none; place-items: center; border-radius: var(--radius-pill); background: var(--color-ink); color: var(--color-on-primary); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .setupSection p { margin: 3px 0 0; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); }
-.setupSection a { display: inline-flex; width: fit-content; align-items: center; gap: 6px; color: var(--color-text-link); font-size: calc(13px + var(--presentation-font-size-increase)); font-weight: var(--presentation-font-weight-regular); text-decoration: none; }
+.setupSection a { display: inline-flex; width: fit-content; align-items: center; gap: 6px; color: var(--color-text-link); font-size: calc(13px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); text-decoration: none; }
 .setupSection label { display: grid; gap: 6px; }
 .setupSection pre { max-height: 220px; overflow: auto; border-radius: var(--radius-card); padding: 14px; background: var(--color-surface-dark); color: var(--color-on-primary); font-family: var(--font-code); font-size: calc(12px + var(--presentation-font-size-increase)); white-space: pre-wrap; }
 
@@ -402,19 +402,19 @@
 .connectionList > article { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; border-top: 1px solid var(--color-hairline); padding: 14px 0; }
 .connectionList article strong { font-size: calc(14px + var(--presentation-font-size-increase)); }
 .connectionList article p { margin: 3px 0 0; overflow-wrap: anywhere; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); }
-.connectionStatus { display: flex; align-items: center; gap: 5px; border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-surface-strong); color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: var(--presentation-font-weight-regular); }
+.connectionStatus { display: flex; align-items: center; gap: 5px; border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-surface-strong); color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .connectionStatus[data-status="verified"] { background: var(--color-success-surface); color: var(--color-success); }
 .cleanupRetryList { border-color: var(--color-warning); background: var(--color-warning-surface); }
 .cleanupRetryList > .cleanupRetryGuidance { margin: -6px 0 8px; color: var(--color-ink); font-size: calc(13px + var(--presentation-font-size-increase)); line-height: 1.5; }
 .connectionStatus[data-status="cleanup-retry"] { background: var(--color-warning-surface); color: var(--color-warning); }
 .rowActions { display: flex; gap: 7px; }
-.rowActions button { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 10px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: var(--presentation-font-weight-regular); }
+.rowActions button { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 10px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .rowActions button[data-danger="true"] { border-color: var(--color-error); color: var(--color-error); }
 .buildConnectionReady,
-.buildConnectionPending { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); font-weight: var(--presentation-font-weight-regular); }
+.buildConnectionPending { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .buildConnectionReady { color: var(--color-success); }
 .buildConnectionReady button,
-.buildConnectionPending button { min-height: 36px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 11px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-weight: var(--presentation-font-weight-regular); }
+.buildConnectionPending button { min-height: 36px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 11px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .buildConnectionReady > span { border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-success-surface); color: var(--color-success); }
 .buildConnectionPending > span { border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-warning-surface); color: var(--color-warning); }
 .buildConnectionReady a,
@@ -427,17 +427,17 @@
 .modalCard p { margin: 0; color: var(--color-body); font-size: calc(14px + var(--presentation-font-size-increase)); line-height: 1.55; }
 .modalClose { position: absolute; top: 12px; right: 12px; display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--color-body); cursor: pointer; }
 .modalActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-.modalActions > button:not(.primaryAction) { min-height: 42px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 14px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-weight: var(--presentation-font-weight-regular); }
+.modalActions > button:not(.primaryAction) { min-height: 42px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 14px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .modalActions > .dangerAction { border-color: var(--color-error); background: var(--color-error); color: var(--color-on-primary); }
 .cleanupPreview { display: grid; gap: 8px; border: 1px solid var(--color-hairline); border-radius: var(--radius-control); padding: 14px; background: var(--color-surface-strong); }
 .cleanupPreview strong { color: var(--color-ink); font-size: calc(13px + var(--presentation-font-size-increase)); }
 .cleanupPreview ul { display: grid; gap: 4px; margin: 0; padding-left: 20px; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); line-height: 1.45; }
 .cleanupPreview p { font-size: calc(13px + var(--presentation-font-size-increase)); }
-.modalCard .cleanupBlocker { border-left: 3px solid var(--color-error); padding: 9px 10px; background: var(--color-error-surface); color: var(--color-ink); font-weight: var(--presentation-font-weight-regular); }
+.modalCard .cleanupBlocker { border-left: 3px solid var(--color-error); padding: 9px 10px; background: var(--color-error-surface); color: var(--color-ink); font-weight: calc(600 - var(--presentation-font-weight-reduction)); }
 .cleanupError { display: grid; gap: 6px; border-left: 3px solid var(--color-error); padding: 10px 12px; background: var(--color-error-surface); color: var(--color-ink); }
 .cleanupError strong { font-size: calc(13px + var(--presentation-font-size-increase)); }
 .cleanupError details { color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); }
-.cleanupError summary { cursor: pointer; font-weight: var(--presentation-font-weight-regular); }
+.cleanupError summary { cursor: pointer; font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .cleanupError details p { margin-top: 6px; overflow-wrap: anywhere; }
 
 .githubSettingsMessage {
@@ -469,7 +469,7 @@
   color: var(--color-ink);
   cursor: pointer;
   font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-regular);
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   text-decoration: none;
 }
 
