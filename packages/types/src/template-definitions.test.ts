@@ -481,6 +481,7 @@ test("each template contains the resources required by its deployable default", 
     )?.[0]?.viewerProtocolPolicy,
     "redirect-to-https"
   );
+  assert.equal(builtCloudFront?.parameters?.values.orderedCacheBehavior, undefined);
   assert.ok(
     builtEcs.edges.some(
       (edge) =>

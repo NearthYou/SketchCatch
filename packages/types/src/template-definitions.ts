@@ -1463,24 +1463,6 @@ export const templateDefinitions = [
               }
             }
           ],
-          orderedCacheBehavior: [
-            {
-              pathPattern: "/api/*",
-              allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
-              cachedMethods: ["GET", "HEAD", "OPTIONS"],
-              targetOriginId: "fargate-alb",
-              viewerProtocolPolicy: "redirect-to-https",
-              compress: true,
-              minTtl: 0,
-              defaultTtl: 0,
-              maxTtl: 0,
-              forwardedValues: {
-                queryString: true,
-                headers: ["*"],
-                cookies: { forward: "all" }
-              }
-            }
-          ],
           restrictions: [{ geoRestriction: { restrictionType: "none" } }],
           viewerCertificate: [{ cloudfrontDefaultCertificate: true }]
         }

@@ -11,6 +11,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Address PR #497 CloudFront review feedback
+
+- Removed the redundant `/api/*` ordered cache behavior because the default CloudFront behavior already forwards every method with zero TTL and full request forwarding.
+- Preserved the HTTPS `api_base_url` by recognizing a default behavior that allows all API write methods as an API-capable CloudFront entry point; static GET-only distributions remain excluded.
+- Focused API and Template checks pass 65/65. Final harness, lint, typecheck, build, and diff checks are recorded by the merge finishing run; no cloud mutation or deployment occurred.
+
 ### 2026-07-19 - Merge latest dev into PR #497
 
 - Merged `origin/dev` at `75c46ce7` into `fix/sw/495-live-observation-template`, preserving the Live Observation Template, reopened approval dialog fix, and combined Live Observation Design Analysis while accepting the latest shared UI and deployment-target work.
