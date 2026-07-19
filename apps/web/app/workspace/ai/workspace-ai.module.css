@@ -319,12 +319,6 @@
   opacity: 1;
 }
 
-.suggestionSelected {
-  color: var(--ai-muted);
-  flex: 0 0 auto;
-  font-size: 10px;
-  font-weight: 700;
-}
 
 .requestStatus button,
 .retryButton,

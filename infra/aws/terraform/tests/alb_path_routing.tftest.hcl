@@ -352,6 +352,14 @@ run "https_routes_and_enables_worker_dispatch" {
   }
 
   assert {
+    condition = one([
+      for container in jsondecode(aws_ecs_task_definition.worker.container_definitions) : container.stopTimeout
+      if container.name == "worker"
+    ]) == 120
+    error_message = "Deployment workers need the maximum ECS stop timeout to abort Terraform and persist partial state."
+  }
+
+  assert {
     condition = contains(
       local.ecs_api_secret_names,
       "LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"

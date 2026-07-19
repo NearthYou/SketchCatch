@@ -1653,11 +1653,23 @@ export const deploymentPlanArtifacts = pgTable(
     sha256: varchar("sha256", { length: 64 }).notNull(),
     accountId: varchar("account_id", { length: 12 }).notNull(),
     region: varchar("region", { length: 32 }).notNull(),
+    stateBaselineDeploymentId: varchar("state_baseline_deployment_id", { length: 36 }),
+    stateObjectKey: text("state_object_key"),
+    stateLineageSha256: varchar("state_lineage_sha256", { length: 64 }),
+    stateSerial: integer("state_serial"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
     index("deployment_plan_artifacts_deployment_id_idx").on(table.deploymentId),
-    uniqueIndex("deployment_plan_artifacts_object_key_unique").on(table.objectKey)
+    uniqueIndex("deployment_plan_artifacts_object_key_unique").on(table.objectKey),
+    check(
+      "deployment_plan_artifacts_state_serial_check",
+      sql`${table.stateSerial} IS NULL OR ${table.stateSerial} >= 0`
+    ),
+    check(
+      "deployment_plan_artifacts_state_identity_check",
+      sql`(${table.stateBaselineDeploymentId} IS NULL AND ${table.stateObjectKey} IS NULL AND ${table.stateLineageSha256} IS NULL AND ${table.stateSerial} IS NULL) OR (${table.stateBaselineDeploymentId} IS NOT NULL AND ${table.stateObjectKey} IS NOT NULL AND ${table.stateLineageSha256} IS NOT NULL AND ${table.stateSerial} IS NOT NULL)`
+    )
   ]
 );
 

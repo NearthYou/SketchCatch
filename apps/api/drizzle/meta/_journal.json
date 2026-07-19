@@ -372,6 +372,13 @@
       "when": 1784383200001,
       "tag": "0052_deployment_preparation_idempotency",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1784419200000,
+      "tag": "0053_deployment_plan_state_identity",
+      "breakpoints": true
     }
   ]
 }

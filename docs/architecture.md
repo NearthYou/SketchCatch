@@ -181,7 +181,7 @@ IaC 계층은 canonical Terraform bundle과 provider lock을 재사용하되 acc
 
 Application artifact 계층은 `application_artifacts`의 project-scoped fingerprint와 heartbeat로 갱신하는 build claim/lease로 Direct Deployment와 Git/CI/CD의 중복 build를 조정한다. 재사용 전 provider adapter가 존재 여부, exact digest, account, region, 승인된 namespace/reference, ownership scope를 read-only로 다시 확인한다. RDS row나 Redis hit만으로 재사용하지 않으며 검증 실패는 artifact를 `invalid`로 전환하고 정상 build로 fallback한다. release는 nullable `artifactId`로 artifact identity와 분리해 v1 evidence와 legacy record를 유지하고, 복합 `(artifactId, projectId)` FK로 cross-project 연결을 차단한다.
 
-Plan 준비에서는 Terraform artifact, connection, architecture, current Plan, workspace를 병렬로 읽고 정적 안전 검사를 먼저 통과한 뒤 credential, provider lock, state를 병렬로 준비한다. 검증 실패, 오래된 drift evidence, 손상된 sidecar는 정상 Plan으로 안전하게 fallback한다. 실제 Terraform Plan이 no-change를 반환하고 승인 snapshot/hash/account/region과 sidecar TTL이 다시 검증된 경우에만 Apply를 생략한다. 코드 fingerprint만으로 cloud no-change를 추론하지 않으며, 부분 최적화를 위해 `terraform apply -target`을 사용하지 않는다.
+Plan 준비에서는 Terraform artifact, connection, architecture, current Plan, workspace를 병렬로 읽고 정적 안전 검사를 먼저 통과한 뒤 credential, provider lock, 프로젝트의 최신 Terraform state baseline을 준비한다. baseline Deployment ID, S3 key, lineage hash, serial은 RDS Plan artifact에 저장하며 Apply 전에 다시 비교한다. 검증 실패, 오래된 drift evidence, 손상된 sidecar는 정상 Plan으로 안전하게 fallback한다. 실제 Terraform Plan이 no-change를 반환하고 승인 snapshot/hash/account/region과 sidecar TTL이 다시 검증된 경우에만 Terraform Apply를 생략한다. no-change `full_stack`도 일반 release와 같은 lease fence, AbortSignal, partial/cancel terminal 규칙을 사용한다. 코드 fingerprint만으로 cloud no-change를 추론하지 않으며, 부분 최적화를 위해 `terraform apply -target`을 사용하지 않는다.
 
 최적화 결과는 `execute`, `reuse`, `no_change`, `fallback_execute`, `unsupported`와 제한된 reason enum으로 기록한다. duration, provider lock/state cache hit·miss, resource address별 bounded action은 Deployment log에 남기되 credential, 변수 값, token, raw Terraform JSON은 기록하지 않는다.
 
@@ -285,7 +285,7 @@ Fastify는 route/service 분리가 쉽고, MVP API와 Zod 검증에 충분하다
 
 API와 web을 독립 Fargate service로 병렬 배포합니다. web은 permissionless task role과 별도 security group을 사용해 API의 RDS allowlist와 AWS runtime 권한에서 분리합니다. 각 service는 비용 우선으로 Application Auto Scaling `min=1`, `max=2`를 사용하고 deployment circuit breaker, `minimumHealthyPercent=100`, `maximumPercent=200`을 유지합니다. legacy ECS service와 기존 EC2/SSM/docker run 경로는 삭제되었고, 장애 복구는 암호화된 sanitized AMI와 검증 image artifact를 사용하는 cold rollback만 제공합니다.
 
-Terraform 실행은 API process가 아니라 ECS RunTask one-off worker가 담당합니다. worker는 전용 task definition, execution role, task role, no-ingress security group을 사용하고, API에는 해당 worker를 dispatch·조회·중단·tag·PassRole하는 최소 권한만 둡니다. 기존 사용자 execution role trust를 worker principal로 재검증하기 전에는 worker dispatch를 활성화하지 않습니다.
+Terraform 실행은 API process가 아니라 ECS RunTask one-off worker가 담당합니다. worker는 전용 task definition, execution role, task role, no-ingress security group을 사용하고, API에는 해당 worker를 dispatch·조회·중단·tag·PassRole하는 최소 권한만 둡니다. `SIGTERM`/`SIGINT`는 operation `AbortSignal`로 전달하고 ECS `stopTimeout=120` 동안 Terraform child 종료와 partial state checkpoint를 기다립니다. 기존 사용자 execution role trust를 worker principal로 재검증하기 전에는 worker dispatch를 활성화하지 않습니다.
 
 ### ADR-005: MVP는 Terraform 우선으로 간다
 

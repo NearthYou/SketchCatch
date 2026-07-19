@@ -132,6 +132,13 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 
 const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
   prompt: z.string().trim().min(1),
+  clarificationAnswers: z
+    .array(z.object({
+      questionId: z.string().trim().min(1).max(100),
+      answer: z.string().trim().min(1).max(2_000)
+    }))
+    .max(32)
+    .optional(),
   candidateExclusions: z
     .array(z.object({
       candidateId: z.string().trim().min(1),
