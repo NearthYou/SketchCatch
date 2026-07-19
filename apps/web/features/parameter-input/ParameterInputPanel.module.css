@@ -168,6 +168,7 @@ div.resourceIcon,
 
 .inlineEmpty {
   color: #7b8498;
+  font-size: calc(0.78rem + var(--presentation-font-size-increase) - 3px);
 }
 
 .errorText {
@@ -581,7 +582,7 @@ div.resourceIcon,
 
 .sectionHint {
   color: var(--workspace-muted, #60646c);
-  font-size: calc(0.76rem + var(--presentation-font-size-increase));
+  font-size: calc(0.76rem + var(--presentation-font-size-increase) - 3px);
   line-height: 1.5;
   margin: 0;
   max-width: 64ch;
@@ -805,7 +806,7 @@ div.resourceIcon,
 
 .parameterDescription {
   color: var(--workspace-muted, #60646c);
-  font-size: calc(0.76rem + var(--presentation-font-size-increase));
+  font-size: calc(0.76rem + var(--presentation-font-size-increase) - 3px);
   line-height: 1.45;
   max-width: 64ch;
   overflow-wrap: anywhere;

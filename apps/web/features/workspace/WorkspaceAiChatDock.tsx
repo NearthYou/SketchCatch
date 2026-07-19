@@ -2327,7 +2327,11 @@ export function WorkspaceAiChatDock({
             <span className={styles.messageLabel}>
               {message.role === "user" ? "나" : message.kind === "question" ? "질문" : "AI"}
             </span>
-            <p>{message.content}</p>
+            <p>
+              {message.kind === "question"
+                ? message.content.replace(/^질문:\s*/u, "")
+                : message.content}
+            </p>
             {message.role === "assistant" &&
             message.suggestions &&
             message.suggestions.length > 0 ? (
@@ -2857,7 +2861,7 @@ function createInitialChatMessages(): WorkspaceAiChatMessage[] {
     createChatMessage(
       "assistant",
       "question",
-      "질문: 만들고 싶은 서비스를 자연어로 말해주세요. 정보가 부족하면 제가 먼저 되물어볼게요."
+      "만들고 싶은 서비스를 자연어로 말해주세요. 정보가 부족하면 제가 먼저 되물어볼게요."
     )
   ];
 }

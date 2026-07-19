@@ -39,7 +39,6 @@ export function ResourceListPanel({
     <section className={styles.resourceListPanel} aria-label="보드 Resource 목록">
       <header className={styles.resourceListTitle}>
         <div>
-          <span>Resources</span>
           <h2>보드 Resource</h2>
         </div>
         <strong>{items.length}개</strong>

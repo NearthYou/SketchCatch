@@ -54,7 +54,6 @@ export function TerraformCodeToolbar({
   return (
     <header className={styles.terraformTopBar}>
       <div className={styles.terraformFileContext}>
-        <span className={styles.terraformToolbarLabel}>Terraform preview</span>
         <div className={styles.terraformFilePicker}>
           <button
             aria-expanded={state.isFileMenuOpen}
