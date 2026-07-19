@@ -11,13 +11,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-19 - Make the ECS Template Live Observation-ready
-
-- Added a CloudFront HTTPS entry point in front of the ECS Fargate Template ALB while retaining the bounded request-based Service Auto Scaling contract (`min=1`, `max=3`, `ALBRequestCountPerTarget=10`). The authored presentation now keeps User, CloudFront, and ALB on the primary traffic path and contains all scaling resources inside Definition / Ops.
-- Added Template graph and rendered Terraform regressions for the CloudFront origin, HTTPS redirect, public Outputs, and scaling blocks. Focused Type/API tests, Terraform init/validate, lint, typecheck, and build pass.
-- In the approved non-production account `614935468487` / `ap-northeast-2`, the refreshed local project Plan passed at `+36 ~0 -0` and remains unapproved. No AWS Apply, load generation, or Destroy was performed in this step.
-- The full test command reaches the Types suite and retains one unrelated baseline Git/CI readiness assertion failure (`null !== 0`); all Template contract failures introduced by the intentional graph change are resolved.
-
 ### 2026-07-19 - Merge latest dev into PR #491
 
 - Merged `origin/dev` at `2ae411aa`, preserving the branch presentation typography while accepting the current AWS connection state model and removal of the AI choice-selected label.

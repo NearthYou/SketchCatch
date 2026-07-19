@@ -122,14 +122,11 @@ const EXPECTED_LAYOUTS = {
     "task-role": at(1880, 320, "global-iam-group"),
     repository: at(1880, 560, "definition-ops-group"),
     "log-group": at(1880, 680, "definition-ops-group"),
-    distribution: at(240, 360),
     "load-balancer": at(640, 360, "vpc"),
     "target-group": at(1080, 360, "vpc"),
     listener: at(880, 360, "vpc"),
     task: at(2040, 560, "definition-ops-group"),
-    service: at(1400, 360, "cluster"),
-    "scaling-target": at(2040, 680, "definition-ops-group"),
-    "scaling-policy": at(2200, 560, "definition-ops-group")
+    service: at(1400, 360, "cluster")
   },
   "eks-container-app": {
     vpc: at(320, 240, "region", { width: 1480, height: 1040 }),
@@ -208,14 +205,11 @@ const EXPECTED_ROUTING = {
     "alb-sg-load-balancer": route("handle-bottom", "handle-top"),
     "alb-sg-task-sg": route("handle-bottom", "handle-top"),
     "task-sg-service": route("handle-bottom", "handle-top"),
-    "distribution-load-balancer": route("handle-right", "handle-left"),
     "load-balancer-listener": route("handle-right", "handle-left"),
     "listener-target-group": route("handle-right", "handle-left"),
     "target-group-service": route("handle-right", "handle-left"),
     "cluster-service": route("handle-right", "handle-left"),
     "service-task": route("handle-right", "handle-left"),
-    "service-scaling-target": route("handle-right", "handle-left"),
-    "scaling-target-policy": route("handle-right", "handle-left"),
     "repository-task": route("handle-bottom", "handle-top"),
     "task-log-group": route("handle-right", "handle-left"),
     "task-role": route("handle-top", "handle-bottom")
@@ -239,7 +233,7 @@ const EXPECTED_SEMANTIC_HASHES = {
   "minimal-serverless-api": "569e77bce78e3f930273b4298f6c530763e27cedb37f0d29993f7fd776581375",
   "full-serverless-web-app": "ccafb8e57b7699e867144e242f0f5fc421f7e77589abc69f32d45e8b8a8b6f84",
   "three-tier-web-app": "c3f42dd6ac1f582d57c46919c2ac01a9439b7f6f6817213dcc9872f26f4ee4ec",
-  "ecs-fargate-container-app": "ccd3543e62c2ee73f114f6cbfb73f028f35729feef0984d0ed4e1855febad14c",
+  "ecs-fargate-container-app": "2f23258ec46a5a20ee278e75de54782bf6f604dca3f16052c020dcf5f2352b88",
   "eks-container-app": "2c579e9e5d4f8f227c40c84d9ebb725e31aa7ce49c09f4f5f8b9171b35cd69d3"
 } as const satisfies Record<RepositoryTemplateId, string>;
 

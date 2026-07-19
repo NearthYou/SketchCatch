@@ -303,7 +303,7 @@
         "desktop/mobile/reduced-motion 브라우저 흐름이 실제 snapshot 값과 lifecycle cleanup을 검증한다.",
         "실제 AWS apply/destroy는 별도 명시 승인이 있을 때만 수행한다."
       ],
-      "notes": "Implementation merged in PR #382. On 2026-07-19 the approved non-production sandbox verified real CloudFront/ALB/ECS traffic and clean Destroy, and the local authenticated modal opened successfully. The focused linear flow, CloudWatch-triggered particles, v2 Fargate capacity slots, and a CloudFront HTTPS -> ALB -> ECS Template with bounded 1-3 Task / 10 requests-per-target scaling are now covered by graph and rendered Terraform tests. A refreshed +36 Plan remains unapproved. Status remains blocked until a newly approved sandbox Deployment proves actual ECS scale-out and cleanup with this low threshold."
+      "notes": "Implementation merged in PR #382. On 2026-07-19 the approved non-production sandbox verified real CloudFront/ALB/ECS traffic and clean Destroy, and the local authenticated modal opened successfully. The focused linear flow, CloudWatch-triggered particles, v2 Fargate capacity slots, and a bounded 1-3 Task / 10 requests-per-target Template contract are now covered by automated tests. Status remains blocked until a newly approved sandbox Deployment proves actual ECS scale-out and cleanup with this low threshold; no cloud mutation was performed for the UI restoration."
     },
     {
       "id": "PROJECT-RELEASE-LEDGER-001",

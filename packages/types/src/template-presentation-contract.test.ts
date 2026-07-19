@@ -51,8 +51,8 @@ const EXPECTED_PRESENTATION_NODES = {
   },
   "ecs-fargate-container-app": {
     user: node("design-user-client", 80, 360),
-    region: node("aws-region", 240, 40, undefined, { width: 2200, height: 840 }),
-    "definition-ops-group": node("design-group", 1840, 480, "region", { width: 560, height: 360 }),
+    region: node("aws-region", 240, 40, undefined, { width: 2040, height: 840 }),
+    "definition-ops-group": node("design-group", 1840, 480, "region", { width: 400, height: 360 }),
     "global-iam-group": node("design-group", 1840, 120, "region", { width: 400, height: 360 })
   },
   "eks-container-app": {
@@ -80,7 +80,7 @@ const EXPECTED_PRESENTATION_EDGES = {
     "internet-igw": edge("internet", "internet-gateway", "handle-right", "handle-left")
   },
   "ecs-fargate-container-app": {
-    "user-distribution": edge("user", "distribution", "handle-right", "handle-left")
+    "user-load-balancer": edge("user", "load-balancer", "handle-right", "handle-left")
   },
   "eks-container-app": {}
 } as const satisfies Record<RepositoryTemplateId, Readonly<Record<string, PresentationEdgeExpectation>>>;
@@ -163,8 +163,6 @@ const EXPECTED_RESOURCE_PARENTS = {
     repository: "definition-ops-group",
     task: "definition-ops-group",
     "log-group": "definition-ops-group",
-    "scaling-target": "definition-ops-group",
-    "scaling-policy": "definition-ops-group",
     "execution-role": "global-iam-group",
     "execution-policy": "global-iam-group",
     "task-role": "global-iam-group"
