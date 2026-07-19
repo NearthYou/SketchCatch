@@ -11,7 +11,13 @@ Short English-only working log for the current agent context. Older records are 
 - The deleted progress card, requirement list, history panel, mobile tabs, route-only summary, and other unused presentation/progress contracts remain deleted.
 - Cancellation, stale-response rejection, retry, candidate exclusion/undo, clarification, Compiler, explicit approval, and save boundaries remain in functional code.
 
-## Session Record`r`n`r`n### 2026-07-19 - Address PR #485 review findings
+## Session Record`r`n`r`n### 2026-07-19 - Harden Direct Deployment Apply recovery boundaries
+
+- Bound approved Plans to the exact Terraform state baseline (deployment, object key, lineage hash, and serial) and added migration `0053`; Apply blocks stale state before AWS credentials or mutation.
+- Fenced no-change release and post-Apply persistence, preserved partial/cancelled outcomes, added graceful worker cancellation with a 120-second ECS stop timeout, checkpointed state before optional result persistence, and classified release failures as `application_release`.
+- Focused Plan/Apply/worker regressions pass 65/65. Migration compatibility, infrastructure structure, Terraform formatting, lint, typecheck, build, harness, and diff checks pass. The full suite was intentionally skipped; no cloud mutation or deployment was performed.
+
+### 2026-07-19 - Address PR #485 review findings
 
 - Fixed the chat suggestion selection fallback and guarded clarification response shape checks before using the in operator.
 - Focused Web tests pass 7/7; harness, lint, typecheck, build, and diff checks pass.
