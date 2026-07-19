@@ -58,7 +58,9 @@ import {
   getAwsCodeConnectionDisplayName,
   type GitHubCodeBuildAuthorizationTarget
 } from "../../../features/dashboard/github-codebuild-authorization-state";
+import { AwsImportAccessWizard } from "../../../features/dashboard/AwsImportAccessWizard";
 import styles from "../dashboard-tools.module.css";
+import settingsStyles from "./settings-dashboard.module.css";
 import { getSettingsAwsConnectionAction } from "./settings-aws-connection-action";
 import { GitHubAccountSettings } from "./github-account-settings";
 import { getSettingsAwsRecoveryNavigation } from "./settings-aws-recovery-navigation";
@@ -69,14 +71,17 @@ const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
   { label: "도쿄", value: "ap-northeast-1" }
 ];
 
-// AWS Role 생성 안내, CloudFormation 이동, 연결 검증과 삭제를 관리합니다.
+// AWS Role 연결과 가져오기 권한, 기존 연결 삭제 흐름을 함께 관리합니다.
 export function SettingsDashboardClient() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const recoveryAwsConnectionId = getSingleSearchParam(
+    searchParams.getAll("awsConnectionId")
+  );
   const recoveryNavigation = getSettingsAwsRecoveryNavigation({
-    awsConnectionId: getSingleSearchParam(searchParams.getAll("awsConnectionId")),
+    awsConnectionId: recoveryAwsConnectionId,
     next: getSingleSearchParam(searchParams.getAll("next")),
     tab: getSingleSearchParam(searchParams.getAll("tab"))
   });
@@ -161,6 +166,7 @@ export function SettingsDashboardClient() {
     await invalidateAwsConnectionQueries(queryClient, user?.id);
   }
 
+  // 가져오기 준비가 끝난 같은 연결만 Reverse Engineering으로 돌려보냅니다.
   function returnToReverseEngineeringAfterRecovery(): void {
     if (recoveryNavigation.returnHref) {
       router.replace(recoveryNavigation.returnHref);
@@ -222,7 +228,6 @@ export function SettingsDashboardClient() {
       setCloudFormation(null);
       setAccountId("");
       await invalidateConnections();
-      returnToReverseEngineeringAfterRecovery();
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "AWS Role 검증에 실패했습니다."));
     } finally {
@@ -238,7 +243,6 @@ export function SettingsDashboardClient() {
     try {
       await testAwsConnection({ connectionId: connection.id, roleArn: connection.roleArn });
       await invalidateConnections();
-      returnToReverseEngineeringAfterRecovery();
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "AWS 연결 테스트에 실패했습니다."));
     } finally {
@@ -258,7 +262,6 @@ export function SettingsDashboardClient() {
     try {
       await verifyAwsConnection({ connectionId: connection.id, roleArn: connection.roleArn });
       await invalidateConnections();
-      returnToReverseEngineeringAfterRecovery();
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "AWS 연결을 다시 확인하지 못했습니다."));
     } finally {
@@ -630,6 +633,19 @@ export function SettingsDashboardClient() {
                       <Trash2 size={15} />삭제
                     </button>
                   </div>
+                  <div className={settingsStyles.connectionImportAccess}>
+                    <AwsImportAccessWizard
+                      connectionId={connection.id}
+                      connectionStatus={connection.status}
+                      onOpenSettings={scrollToAwsAccountConnection}
+                      {...(
+                        recoveryNavigation.returnHref &&
+                        recoveryAwsConnectionId === connection.id
+                          ? { onContinue: returnToReverseEngineeringAfterRecovery }
+                          : {}
+                      )}
+                    />
+                  </div>
                 </article>
               );
             })}
@@ -884,6 +900,14 @@ function GitHubAuthorizationTargetNotice({
 
 function scrollToGitHubAccountConnection(): void {
   document.getElementById("github-account-connection")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
+
+// 가져오기 연결 자체가 끊긴 경우 기존 AWS 연결 영역으로 이동합니다.
+function scrollToAwsAccountConnection(): void {
+  document.getElementById("aws-account-connection")?.scrollIntoView({
     behavior: "smooth",
     block: "start"
   });
