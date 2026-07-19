@@ -50,8 +50,11 @@ function getTerraformResourceDisplayName(node: DiagramNode, resourceType: string
 
 - [ ] Resource 18개와 presentation 4개의 `label`을 설계 문서의 승인표대로 바꾼다.
 - [ ] 이름이 달라진 모든 `exact-title`을 `reviewed-override`로 바꾼다. 같은 Terraform type의 다른 Resource가 `single-residual`이면 그 전제가 깨지는 항목도 `reviewed-override`로 바꾼다. 주소와 `resourceName`은 그대로 둔다.
-- [ ] Run: `pnpm --filter @sketchcatch/api exec tsx --test ../../packages/types/src/brainboard-templates/source-contract.test.ts`
-  Expected: 23개 materialized source 계약 통과.
+- [ ] 이름 수정 전에 29개 materialized Diagram에서 `label`만 제외한 projection과 23개 Brainboard source에서 `label`, `addressMapping`만 제외한 projection을 SHA-256으로 저장한다. 이 projection에는 node ID/type/config/geometry/parent, edge/route, Terraform file code/hash와 raw capture hash가 모두 포함되어야 한다.
+- [ ] Run: `pnpm --filter @sketchcatch/types exec tsx --test src/brainboard-templates/workspace-terraform-normalization.test.ts`
+  Expected: registry import 시 23개 source의 address mapping/full source validation이 실행되고 0 failures.
+- [ ] Run: `pnpm --filter @sketchcatch/web exec tsx --test features/architecture-board-compiler/architecture-board-integrations.test.ts`
+  Expected: 성공한 Brainboard 23개가 materialize되고 usable Template 29개 검토가 통과.
 - [ ] Run: `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/palette-backed-template-resources.test.ts`
   Expected: 29 available Templates, no binding/materialization failure.
 - [ ] 실제 Board에서 `EKS VPC`, `Public Subnet A/B`, `EKS Cluster IAM Role`, `ECR 읽기 권한 연결`을 확인한다. Board 영문 대문자 표시는 기존 동작이며 오류가 아니다.
@@ -87,10 +90,13 @@ function getTerraformResourceDisplayName(node: DiagramNode, resourceType: string
 
 - [ ] 아래 Appendix A의 파일별 확정 이름을 `nodes[].label`에 적용한다. 중복 label은 Appendix의 address, node ID 또는 설명으로 구분한다.
 - [ ] 이름이 달라진 `exact-title`은 모두 `reviewed-override`로 바꾼다. 각 파일에서 같은 `terraformResourceType`이 둘 이상이면 해당 type의 `single-residual`도 `reviewed-override`로 바꾼다. 기존 `reviewed-override`는 유지한다.
+- [ ] 각 Template과 `terraformResourceType`별로 mapping을 다시 집계한다. `exact-title`은 새 label과 local name이 실제로 같은 경우에만 남고, `single-residual`은 해당 type의 유일한 non-exact mapping일 때만 남아야 한다.
 - [ ] `cross-account-aws-s3`의 기존 테스트 기대값을 `Prod AWS Account`, `Test AWS Account`, `계정 간 공유 S3 Bucket`, `prod.txt S3 Object`, `test.txt S3 Object`로 갱신한다.
 - [ ] 각 Template의 Resource label에 빈 값, 줄바꿈, 중복이 없는지 임시 점검 스크립트로 확인한다. 이 스크립트는 repository에 추가하지 않는다.
-- [ ] Run: `pnpm --filter @sketchcatch/api exec tsx --test ../../packages/types/src/brainboard-templates/source-contract.test.ts`
+- [ ] Run: `pnpm --filter @sketchcatch/types exec tsx --test src/brainboard-templates/workspace-terraform-normalization.test.ts`
   Expected: 0 failures; exact-title/single-residual premise 오류 없음.
+- [ ] Run: `pnpm --filter @sketchcatch/web exec tsx --test features/architecture-board-compiler/architecture-board-integrations.test.ts`
+  Expected: 29 usable Template materialization/review 통과.
 - [ ] Run: `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/palette-backed-template-resources.test.ts features/resource-settings/template-library.test.ts`
   Expected: 0 failures.
 - [ ] 세 묶음으로 커밋한다.
@@ -114,7 +120,26 @@ function getTerraformResourceDisplayName(node: DiagramNode, resourceType: string
   Expected: 0 failures.
 - [ ] Commit: `Fix: 직접 제작 Template Resource 이름 정리`
 
-## Task 5: 생성 artifact와 Diagram hash 동기화
+## Task 5: Terraform sync와 Compiler 설명도 사용자 label을 유지
+
+**Files:**
+
+- Create: `apps/web/features/workspace/terraform-sync-proposals.test.ts`
+- Modify: `apps/web/features/workspace/terraform-sync-proposals.ts`
+- Modify: `apps/web/features/architecture-board-compiler/architecture-board-compiler.test.ts`
+- Modify: `apps/web/features/architecture-board-compiler/architecture-board-compiler.ts`
+
+- [ ] Terraform rename proposal 적용 후 `resourceName`과 address만 바뀌고 기존 `node.label`은 유지되는 실패 테스트를 먼저 추가한다.
+- [ ] Terraform create proposal은 local name 대신 `catalogResource.nodeDefaults.label`을 새 node label로 쓰며, catalog가 없을 때만 `resourceName`을 fallback으로 쓰는 실패 테스트를 추가한다.
+- [ ] `applyRenameProposal`에서 label 덮어쓰기를 제거하고 `applyCreateProposal`의 label 우선순위를 구현한다.
+- [ ] Compiler change/diagnostic 테스트에 ID가 `eks-cluster-role`, label이 `EKS Cluster IAM Role`인 node를 넣고 사용자-facing summary가 label을 primary로 쓰는 실패 테스트를 추가한다.
+- [ ] `architecture-board-compiler.ts`에 source/candidate Architecture node의 `label`을 우선하는 중앙 resolver를 두고 Resource·containment·relationship·diagnostic summary가 이를 사용하게 한다. 내부 ID는 모호성 해소가 필요한 기술 suffix로만 남긴다.
+- [ ] Terraform import/deployment 기록처럼 주소 자체가 작업 대상인 화면은 바꾸지 않는다. Board, Resource 패널, Template preview와 AI Chat은 이미 `node.label`을 사용하므로 별도 이름 복제 계층을 추가하지 않는다.
+- [ ] Run: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/architecture-board-compiler/architecture-board-compiler.test.ts features/architecture-board-compiler/architecture-board-compilation-summary.test.tsx`
+  Expected: 0 failures and user-facing summaries use friendly labels.
+- [ ] Commit: `Fix: Terraform sync와 Compiler에서 사용자 표시 이름 유지`
+
+## Task 6: 생성 artifact와 Diagram hash 동기화
 
 **Files:**
 
@@ -126,14 +151,14 @@ function getTerraformResourceDisplayName(node: DiagramNode, resourceType: string
 - [ ] Run: `pnpm architecture-board-evidence:generate`
 - [ ] Run only if the evidence review check requests it: `pnpm architecture-board-evidence-review:generate`
 - [ ] Generated diffs must be limited to Template label/caption, source fingerprint, Diagram hash and directly derived statistics. Unrelated baseline changes are reverted file-by-file with an inverse patch, never with destructive git commands.
-- [ ] 현재 `listBoardTemplates()`의 materialized Diagram JSON을 SHA-256으로 계산해 direct 6개와 Brainboard 23개의 manifest `diagramHash`를 모두 갱신한다.
+- [ ] 현재 `listBoardTemplates()`의 materialized Diagram JSON을 `sha256(JSON.stringify(template.diagramJson))` hex로 계산해 direct 6개와 Brainboard 23개의 manifest `diagramHash`를 모두 갱신한다. `sha256:` prefix를 붙이지 않는다.
 - [ ] Run: `pnpm architecture-board-knowledge:check && pnpm architecture-board-evidence:check && pnpm architecture-board-evidence-review:check`
   Expected: all checks pass, or a pre-existing unrelated blocker is recorded without silently rewriting its baseline.
 - [ ] Run: `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/palette-backed-template-resources.test.ts`
   Expected: manifest hash assertion passes.
 - [ ] Commit generated artifact and manifest changes: `Chore: Template 표시 이름 artifact 동기화`
 
-## Task 6: 29개 Board thumbnail 재캡처
+## Task 7: 29개 Board thumbnail 재캡처
 
 **Files:**
 
@@ -142,18 +167,20 @@ function getTerraformResourceDisplayName(node: DiagramNode, resourceType: string
 - Modify only if its count is stale: `apps/web/public/template-thumbnails/README.md`
 
 - [ ] `apps/web/public/template-thumbnails/README.md`의 실제 Board 캡처 계약을 읽고 dev server를 실행한다.
+- [ ] source, generated artifact와 최종 manifest hash가 모두 확정된 다음에만 캡처를 시작한다.
 - [ ] 각 Template을 `/workspace/new?mode=template&templateId=<id>`로 열어 실제 Board를 `1280 × 720` WebP로 캡처한다. static SVG/topology 대체물을 만들지 않는다.
 - [ ] 이름이 잘리거나 두 줄이 되면 label을 길게 늘리지 말고 더 짧게 다듬은 뒤 해당 Template의 source, hash와 캡처를 다시 맞춘다.
 - [ ] 29개 asset의 크기, 형식, 파일 경로를 검사한다. 일부만 성공한 상태에서는 manifest/asset pair를 커밋하지 않는다.
 - [ ] Dashboard Template 카드와 `/dashboard/templates` 큰 미리보기에서 새 캡처를 확인한다.
 - [ ] Commit: `Chore: Template Board 미리보기 갱신`
 
-## Task 7: 전체 회귀와 수동 QA
+## Task 8: 전체 회귀와 수동 QA
 
-- [ ] 적용 전후 Terraform address 목록을 비교해 29개 모두 동일한지 확인한다. `resourceName`, Terraform source 및 raw capture JSON에는 diff가 없어야 한다.
+- [ ] Task 2에서 저장한 projection을 다시 계산해 29개 Diagram과 23개 Brainboard source가 byte-for-byte 동일한지 비교한다. 허용되는 제외 키는 `label`, `addressMapping` 둘뿐이다.
+- [ ] raw capture index의 `captureSha256`, source의 `terraform.files[].sha256`/workspace seed hash와 Terraform address 목록을 적용 전후 비교한다. `resourceName`, Terraform source 및 raw capture JSON에는 diff가 없어야 한다.
 - [ ] 29개 Template을 하나씩 실제 Board로 열어 Resource가 모두 보이고, 한 줄 label이며, 연결·Area containment·배치가 바뀌지 않았는지 확인한다.
 - [ ] Resource 목록과 상세의 primary name은 authored label이고 Terraform address는 secondary 정보인지 확인한다.
-- [ ] Template 카드, 큰 미리보기, Board, 사용자-facing AI/Compiler 설명이 같은 materialized label을 쓰는지 표본과 전체 목록으로 확인한다.
+- [ ] Template 카드, 큰 미리보기, Board, 사용자-facing AI/Compiler 설명이 같은 materialized label을 쓰는지 전체 목록으로 확인한다. Compiler summary에 raw node/edge ID가 primary text로 남지 않았는지도 확인한다.
 - [ ] Run: `pnpm templates:validate`
   Expected: 성공한 Template Terraform validation 전부 통과.
 - [ ] Run: `pnpm harness:check`
