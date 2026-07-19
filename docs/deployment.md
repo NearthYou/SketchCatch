@@ -446,28 +446,29 @@ rollback도 저장된 baseline ID와 target fingerprint를 다시 대조한다.
 ```text
 1. AWS 연결 확인
 2. Terraform artifact 복원
-3. terraform init
-4. terraform plan -out=tfplan
-5. terraform show -json tfplan
-6. show-json 결과에서 Plan summary 생성
-7. Plan summary와 Pre-Deployment Check 표시
-8. 사용자 승인
-9. 승인 snapshot 재검증
-10. terraform init
-11. terraform apply tfplan
-12. terraform output -json
-13. terraform show -json
-14. terraform.tfstate S3 업로드
-15. Deployment History, TerraformOutput, DeployedResource 저장 (`RUNNING` 유지)
-16. ECS/Fargate이면 성공 Output으로 ProjectDeploymentTarget metadata best-effort 동기화
-17. full_stack이면 Apply output/resource identity와 runtime fingerprint 재검증
-18. trusted worker가 API OCI archive를 ECR에 push하고 새 ECS revision task health 확인
-19. frontend assets, index.html, CloudFront /* invalidation, public commit marker 순서로 활성화
-20. 모든 scope별 실행이 끝난 뒤 SUCCESS 또는 PARTIALLY_FAILED 표시
-21. cleanup 필요 시 terraform plan -destroy
-22. 사용자 승인
-23. destroy tfplan apply
-24. DESTROYED 상태와 cleanup 결과 확인
+3. 같은 project/connection의 최신 Terraform state baseline 선택 및 workspace 복원
+4. terraform init
+5. terraform plan -out=tfplan
+6. terraform show -json tfplan
+7. Plan summary와 state baseline identity 저장
+8. Plan summary와 Pre-Deployment Check 표시
+9. 사용자 승인
+10. 승인 snapshot과 현재 state baseline identity 재검증
+11. terraform init
+12. terraform apply tfplan
+13. terraform output -json
+14. terraform show -json
+15. terraform.tfstate S3 업로드와 fenced `stateObjectKey` checkpoint
+16. Deployment History, TerraformOutput, DeployedResource 저장 (`RUNNING` 유지)
+17. ECS/Fargate이면 성공 Output으로 ProjectDeploymentTarget metadata best-effort 동기화
+18. full_stack이면 Apply output/resource identity와 runtime fingerprint 재검증
+19. trusted worker가 API OCI archive를 ECR에 push하고 새 ECS revision task health 확인
+20. frontend assets, index.html, CloudFront /* invalidation, public commit marker 순서로 활성화
+21. 모든 scope별 실행이 끝난 뒤 SUCCESS 또는 PARTIALLY_FAILED 표시
+22. cleanup 필요 시 terraform plan -destroy
+23. 사용자 승인
+24. destroy tfplan apply
+25. DESTROYED 상태와 cleanup 결과 확인
 ```
 
 완료 기준:
@@ -479,6 +480,7 @@ rollback도 저장된 baseline ID와 target fingerprint를 다시 대조한다.
 - Apply 성공 후 사용자가 확인할 수 있는 output을 표시합니다.
 - Apply 실패 시 Deployment를 `FAILED`와 `failureStage: "apply"`로 남깁니다.
 - AWS 연결 또는 STS credential 준비 실패는 `failureStage: "aws_connection"`으로 남깁니다.
+- application output reconciliation 또는 runtime release 실패는 Terraform 결과와 state checkpoint를 보존하고 `failureStage: "application_release"`로 남깁니다.
 - Apply 성공 후 output/state/resource inventory 수집이나 저장 실패는 성공을 뒤집지 않고 경고로 남깁니다.
 - `terraform show -json` 기반 resource inventory는 Apply 완료 저장 시 `TerraformOutput`과 함께 저장합니다.
 - Resource inventory 수집이 실패하거나 취소되면 `GET /api/deployments/:deploymentId/resources`는 빈 목록을 반환할 수 있습니다.
@@ -1033,6 +1035,8 @@ Terraform 실행을 유지하고, production은 ECS `RunTask` one-off worker tas
 Phase 6부터 API image에는 `dist/deployment-worker.cjs` worker entrypoint가 포함됩니다. worker는
 `SKETCHCATCH_DEPLOYMENT_JOB_ID`로 `RUNNING` job을 조회하고, 검증된 access context로 기존 deployment service를 실행한 뒤
 job을 `SUCCEEDED`, `FAILED`, `CANCELLED` 중 하나로 종료합니다. 실패 요약과 process error log에는 기존 masking을 적용합니다.
+
+worker entrypoint는 `SIGTERM`과 `SIGINT`를 process-level `AbortController`로 변환해 Plan/Apply/Destroy와 application release에 전달합니다. signal handler는 즉시 `process.exit()`하지 않고 Terraform child 종료, partial state 업로드, fenced terminal 저장과 DB client close가 끝날 기회를 줍니다. ECS worker container의 `stopTimeout`은 ECS가 허용하는 최대 120초로 설정합니다.
 
 infra/aws/terraform은 one-off worker task definition, 전용 execution/task role, inbound 없는 worker security group과 RDS 최소 ingress를 관리합니다. API task role에는 worker family와 cluster로 제한한 dispatch 권한만 추가합니다.
 

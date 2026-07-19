@@ -330,13 +330,6 @@
   opacity: 1;
 }
 
-.suggestionSelected {
-  color: var(--ai-muted);
-  flex: 0 0 auto;
-  font-size: calc(10px + var(--presentation-font-size-increase));
-  font-weight: calc(700 - var(--presentation-font-weight-reduction));
-}
-
 .candidateActions {
   background: var(--ai-canvas);
   border: 1px solid var(--ai-line);

@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AwsConnection, DeploymentStatus } from "@sketchcatch/types";
+import type {
+  AwsConnection,
+  DeploymentFailureStage,
+  DeploymentStatus
+} from "@sketchcatch/types";
 import {
   prepareTerraformAwsCredentialEnv as defaultPrepareTerraformAwsCredentialEnv,
   type PreparedTerraformAwsCredentialEnv
@@ -197,6 +201,7 @@ export async function runDeploymentApply(
   let workspacePromise: Promise<PreparedTerraformWorkspace> | undefined;
   let deploymentId: string | undefined;
   let failureRecorded = false;
+  let activeFailureStage: DeploymentFailureStage = "apply";
   let applyLeaseFence: LeaseFence | undefined;
   let leaseHeartbeatTimer: ReturnType<typeof setInterval> | undefined;
   let leaseHeartbeatPromise: Promise<void> | undefined;
@@ -334,6 +339,32 @@ export async function runDeploymentApply(
       ...(currentReleaseCandidate ? { currentReleaseCandidate } : {})
     });
 
+    const stateBaseline = selectDeploymentStateBaseline(
+      deployment,
+      await repository.listDeploymentsByProject(deployment.projectId)
+    );
+    let restoredStateContent: Buffer | null = null;
+
+    if (stateBaseline?.stateObjectKey) {
+      restoredStateContent = await applyArtifactStorage.downloadDeploymentState({
+        deploymentId: stateBaseline.id,
+        objectKey: stateBaseline.stateObjectKey
+      });
+    }
+
+    assertDeploymentPlanStateIdentity({
+      currentPlanArtifact,
+      stateBaseline,
+      stateContent: restoredStateContent
+    });
+
+    if (restoredStateContent) {
+      await writeTerraformStateFile(
+        join(workspace.workdir, "terraform.tfstate"),
+        restoredStateContent
+      );
+    }
+
     const hasNoTerraformChanges =
       deployment.planSummary !== null && isTerraformPlanNoChange(deployment.planSummary);
     const hasVerifiedNoChangeEvidence = hasNoTerraformChanges
@@ -382,26 +413,33 @@ export async function runDeploymentApply(
         label: "no-change deployment apply result save",
         repository,
         operation: () =>
-          repository.saveDeploymentApplyResults(deployment.id, {
-            stateObjectKey: deployment.stateObjectKey,
-            resultWarningSummary: deployment.resultWarningSummary,
-            resources: existingResources.map((resource) => ({
-              id: resource.id,
-              deploymentId: resource.deploymentId,
-              terraformAddress: resource.terraformAddress,
-              terraformType: resource.terraformType,
-              providerName: resource.providerName,
-              resourceId: resource.resourceId,
-              region: resource.region
-            })),
-            outputs: existingOutputs.map((output) => ({
-              id: output.id,
-              deploymentId: output.deploymentId,
-              name: output.name,
-              value: output.value,
-              sensitive: output.sensitive
-            }))
-          })
+          repository.saveDeploymentApplyResults(
+            deployment.id,
+            {
+              stateObjectKey: deployment.stateObjectKey,
+              resultWarningSummary: deployment.resultWarningSummary,
+              resources: existingResources.map((resource) => ({
+                id: resource.id,
+                deploymentId: resource.deploymentId,
+                terraformAddress: resource.terraformAddress,
+                terraformType: resource.terraformType,
+                providerName: resource.providerName,
+                resourceId: resource.resourceId,
+                region: resource.region
+              })),
+              outputs: existingOutputs.map((output) => ({
+                id: output.id,
+                deploymentId: output.deploymentId,
+                name: output.name,
+                value: output.value,
+                sensitive: output.sensitive
+              }))
+            },
+            {
+              ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {}),
+              fenceCheckedAt: now()
+            }
+          )
       });
 
       if (!applyResultSave.result) {
@@ -418,6 +456,8 @@ export async function runDeploymentApply(
       });
 
       if (deployment.scope !== "infrastructure") {
+        activeFailureStage = "application_release";
+        await repository.markDeploymentActiveStage?.(deployment.id, "application_release");
         const releaseExecution = await runLoggedDeploymentOperation({
           deploymentId: deployment.id,
           accessContext: input.accessContext,
@@ -430,11 +470,23 @@ export async function runDeploymentApply(
               deployment,
               accessContext: input.accessContext,
               repository,
-              ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+              ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {}),
+              ...(executionSignal ? { abortSignal: executionSignal } : {})
             })
         });
         sequence = releaseExecution.sequence;
+        const releaseResult = await resolveApplicationReleaseOutcome({
+          deployment,
+          accessContext: input.accessContext,
+          outcome: releaseExecution.result,
+          repository,
+          terraform,
+          ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {})
+        });
+        if (releaseResult) return releaseResult;
       }
+
+      if (leaseHeartbeatError) throw leaseHeartbeatError;
 
       const completedDeployment = await repository.completeDeploymentApply(deployment.id, {
         ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {}),
@@ -459,19 +511,6 @@ export async function runDeploymentApply(
         reason: "cache_validation_failed",
         repository
       });
-    }
-
-    const stateBaseline = selectDeploymentStateBaseline(
-      deployment,
-      await repository.listDeploymentsByProject(deployment.projectId)
-    );
-
-    if (stateBaseline?.stateObjectKey) {
-      const state = await applyArtifactStorage.downloadDeploymentState({
-        deploymentId: stateBaseline.id,
-        objectKey: stateBaseline.stateObjectKey
-      });
-      await writeTerraformStateFile(join(workspace.workdir, "terraform.tfstate"), state);
     }
 
     const [awsCredentials] = await Promise.all([
@@ -629,7 +668,9 @@ export async function runDeploymentApply(
         sequence,
         workspace,
         applyArtifactStorage,
-        repository
+        repository,
+        now,
+        ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {})
       });
 
       return await failDeploymentApplyRun({
@@ -651,7 +692,9 @@ export async function runDeploymentApply(
         sequence,
         workspace,
         applyArtifactStorage,
-        repository
+        repository,
+        now,
+        ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {})
       });
 
       return await failDeploymentApplyRun({
@@ -745,7 +788,22 @@ export async function runDeploymentApply(
       warnings.push(summarizePostApplyWarning("Terraform state upload", error));
     }
 
-    sequence = await appendApplyWarnings({
+    if (stateObjectKey) {
+      try {
+        await saveDeploymentStateCheckpoint({
+          deployment,
+          stateObjectKey,
+          resultWarningSummary: warnings.length > 0 ? warnings.join("; ") : null,
+          repository,
+          now,
+          ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {})
+        });
+      } catch (error) {
+        warnings.push(summarizePostApplyWarning("Terraform state checkpoint", error));
+      }
+    }
+
+    sequence = await appendApplyWarningsBestEffort({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
@@ -767,18 +825,48 @@ export async function runDeploymentApply(
         ...output
       }))
     };
-    const applyResultSave = await runLoggedDeploymentOperation({
-      deploymentId: deployment.id,
-      accessContext: input.accessContext,
-      sequence,
-      stage: "apply",
-      label: "deployment apply result save",
-      repository,
-      operation: () => repository.saveDeploymentApplyResults(deployment.id, applyResults)
-    });
-    sequence = applyResultSave.sequence;
-    if (!applyResultSave.result) {
-      throw new DeploymentNotFoundError("Deployment not found");
+    try {
+      const applyResultSave = await runLoggedDeploymentOperation({
+        deploymentId: deployment.id,
+        accessContext: input.accessContext,
+        sequence,
+        stage: "apply",
+        label: "deployment apply result save",
+        repository,
+        operation: () =>
+          repository.saveDeploymentApplyResults(deployment.id, applyResults, {
+            ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {}),
+            fenceCheckedAt: now()
+          })
+      });
+      sequence = applyResultSave.sequence;
+      if (!applyResultSave.result) {
+        throw new DeploymentNotFoundError("Deployment not found");
+      }
+    } catch (error) {
+      const resultSaveWarning = summarizePostApplyWarning(
+        "Deployment result persistence",
+        error
+      );
+      warnings.push(resultSaveWarning);
+      applyResults.resultWarningSummary = warnings.join("; ");
+      sequence = await appendApplyWarningsBestEffort({
+        deploymentId: deployment.id,
+        accessContext: input.accessContext,
+        sequence,
+        warnings: [resultSaveWarning],
+        repository
+      });
+      if (stateObjectKey) {
+        await saveDeploymentStateCheckpoint({
+          deployment,
+          stateObjectKey,
+          resultWarningSummary: applyResults.resultWarningSummary,
+          repository,
+          now,
+          ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {})
+        }).catch(() => undefined);
+      }
     }
 
     sequence = await synchronizeEcsDeploymentTargetAfterApply({
@@ -815,6 +903,7 @@ export async function runDeploymentApply(
           deployment,
           repository,
           terraform,
+          failureStage: "application_release",
           stateObjectKey,
           resultWarningSummary: applyResults.resultWarningSummary,
           errorSummary: maskDeploymentMessage(
@@ -859,6 +948,7 @@ export async function runDeploymentApply(
           deployment,
           repository,
           terraform,
+          failureStage: "application_release",
           stateObjectKey,
           resultWarningSummary: applyResults.resultWarningSummary,
           errorSummary: maskDeploymentMessage(
@@ -871,29 +961,16 @@ export async function runDeploymentApply(
       }
     }
 
-    if (applicationReleaseOutcome === "partially_failed") {
-      const partialDeployment = await getDeployment(
-        { deploymentId: deployment.id, accessContext: input.accessContext },
-        repository
-      );
-      if (partialDeployment.status !== "PARTIALLY_FAILED") {
-        throw new DeploymentConflictError("Partial application release state was not persisted");
-      }
-      return { deployment: partialDeployment, terraform };
-    }
-    if (
-      applicationReleaseOutcome === "cancelled" ||
-      applicationReleaseOutcome === "partially_cancelled"
-    ) {
-      return finishCancelledApplicationRelease({
-        deployment,
-        accessContext: input.accessContext,
-        outcome: applicationReleaseOutcome,
-        repository,
-        terraform,
-        ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {})
-      });
-    }
+    const releaseResult = await resolveApplicationReleaseOutcome({
+      deployment,
+      accessContext: input.accessContext,
+      outcome: applicationReleaseOutcome,
+      repository,
+      terraform,
+      ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {})
+    });
+    if (releaseResult) return releaseResult;
+    if (leaseHeartbeatError) throw leaseHeartbeatError;
 
     const completedDeployment = await repository.completeDeploymentApply(deployment.id, {
       ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {}),
@@ -925,7 +1002,9 @@ export async function runDeploymentApply(
       await repository
         .failDeployment(deploymentId, {
           failureStage:
-            terminalError instanceof DeploymentApplyPreconditionError ? "approval" : "apply",
+            terminalError instanceof DeploymentApplyPreconditionError
+              ? "approval"
+              : activeFailureStage,
           errorSummary,
           ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {})
         })
@@ -1057,6 +1136,7 @@ async function runApplicationOnlyDeploymentApply(input: {
         deployment: input.deployment,
         repository: input.repository,
         terraform: input.terraform,
+        failureStage: "application_release",
         errorSummary: maskDeploymentMessage(
           `Application runtime release failed: ${
             error instanceof Error ? error.message : String(error)
@@ -1128,6 +1208,39 @@ async function finishCancelledApplicationRelease(input: {
     throw new DeploymentConflictError("Partial application cancellation state was not persisted");
   }
   return { deployment: partial, terraform: input.terraform };
+}
+
+async function resolveApplicationReleaseOutcome(input: {
+  deployment: DeploymentRecord;
+  accessContext: ProjectAccessContext;
+  outcome: void | "succeeded" | "partially_failed" | "cancelled" | "partially_cancelled";
+  repository: DeploymentRepository;
+  terraform: RunDeploymentApplyResult["terraform"];
+  leaseFence?: LeaseFence;
+}): Promise<RunDeploymentApplyResult | null> {
+  if (input.outcome === "partially_failed") {
+    const partialDeployment = await getDeployment(
+      { deploymentId: input.deployment.id, accessContext: input.accessContext },
+      input.repository
+    );
+    if (partialDeployment.status !== "PARTIALLY_FAILED") {
+      throw new DeploymentConflictError("Partial application release state was not persisted");
+    }
+    return { deployment: partialDeployment, terraform: input.terraform };
+  }
+
+  if (input.outcome === "cancelled" || input.outcome === "partially_cancelled") {
+    return finishCancelledApplicationRelease({
+      deployment: input.deployment,
+      accessContext: input.accessContext,
+      outcome: input.outcome,
+      repository: input.repository,
+      terraform: input.terraform,
+      ...(input.leaseFence ? { leaseFence: input.leaseFence } : {})
+    });
+  }
+
+  return null;
 }
 
 async function defaultReconcileApplicationOutput(input: {
@@ -1305,6 +1418,61 @@ async function prepareAwsCredentialsForApply(input: {
   }
 }
 
+function assertDeploymentPlanStateIdentity(input: {
+  currentPlanArtifact: Awaited<ReturnType<typeof requireCurrentPlanArtifact>>;
+  stateBaseline: DeploymentRecord | null;
+  stateContent: Buffer | null;
+}): void {
+  const plannedBaselineDeploymentId =
+    input.currentPlanArtifact.stateBaselineDeploymentId ?? null;
+  const plannedStateObjectKey = input.currentPlanArtifact.stateObjectKey ?? null;
+  const plannedStateLineageSha256 = input.currentPlanArtifact.stateLineageSha256 ?? null;
+  const plannedStateSerial = input.currentPlanArtifact.stateSerial ?? null;
+  const currentStateIdentity = parseApplyStateIdentity(input.stateContent);
+  const currentStateLineageSha256 = currentStateIdentity.lineage
+    ? createSha256(currentStateIdentity.lineage)
+    : null;
+
+  if (
+    plannedBaselineDeploymentId !== (input.stateBaseline?.id ?? null) ||
+    plannedStateObjectKey !== (input.stateBaseline?.stateObjectKey ?? null) ||
+    plannedStateLineageSha256 !== currentStateLineageSha256 ||
+    plannedStateSerial !== currentStateIdentity.serial
+  ) {
+    throw new DeploymentApplyPreconditionError(
+      "terraform_plan",
+      "The approved Terraform Plan state baseline changed; create and approve a new Plan"
+    );
+  }
+}
+
+function parseApplyStateIdentity(content: Buffer | null): {
+  lineage: string | null;
+  serial: number | null;
+} {
+  if (!content) return { lineage: null, serial: null };
+
+  try {
+    const state = JSON.parse(content.toString("utf8")) as unknown;
+    if (!state || typeof state !== "object" || Array.isArray(state)) throw new Error();
+    const lineage = "lineage" in state ? state.lineage : null;
+    const serial = "serial" in state ? state.serial : null;
+    if (
+      (lineage !== null && (typeof lineage !== "string" || lineage.length === 0)) ||
+      (serial !== null &&
+        (typeof serial !== "number" || !Number.isSafeInteger(serial) || serial < 0))
+    ) {
+      throw new Error();
+    }
+    return { lineage, serial };
+  } catch {
+    throw new DeploymentApplyPreconditionError(
+      "terraform_plan",
+      "The current Terraform state identity is invalid; create and approve a new Plan"
+    );
+  }
+}
+
 async function verifyNoChangeApplyEvidence(input: {
   deployment: DeploymentRecord;
   currentPlanArtifact: Awaited<ReturnType<typeof requireCurrentPlanArtifact>>;
@@ -1415,10 +1583,11 @@ async function failDeploymentApplyRun(input: {
   errorSummary: string;
   stateObjectKey?: string | null;
   resultWarningSummary?: string | null;
+  failureStage?: DeploymentFailureStage;
   leaseFence?: LeaseFence;
 }): Promise<RunDeploymentApplyResult> {
   const failureInput: Parameters<DeploymentRepository["failDeployment"]>[1] = {
-    failureStage: "apply",
+    failureStage: input.failureStage ?? "apply",
     errorSummary: input.errorSummary,
     ...(input.leaseFence ? { leaseFence: input.leaseFence } : {})
   };
@@ -1452,6 +1621,8 @@ async function uploadPartialStateAfterFailedApply(input: {
   workspace: PreparedTerraformWorkspace;
   applyArtifactStorage: DeploymentApplyArtifactStorage;
   repository: DeploymentRepository;
+  now: () => Date;
+  leaseFence?: LeaseFence;
 }): Promise<{ stateObjectKey: string | null; warningSummary: string | null }> {
   const warningSummary =
     "Partial Terraform state was saved after failed apply for explicit cleanup destroy.";
@@ -1496,6 +1667,10 @@ async function uploadPartialStateAfterFailedApply(input: {
     {
       stateObjectKey: stateUpload.objectKey,
       resultWarningSummary: warningSummary
+    },
+    {
+      ...(input.leaseFence ? { leaseFence: input.leaseFence } : {}),
+      fenceCheckedAt: input.now()
     }
   );
   if (!persistedDeployment) {
@@ -1607,6 +1782,54 @@ async function appendApplyWarnings(input: {
   );
 
   return input.sequence + input.warnings.length;
+}
+
+async function appendApplyWarningsBestEffort(input: {
+  deploymentId: string;
+  accessContext: ProjectAccessContext;
+  sequence: number;
+  warnings: string[];
+  repository: DeploymentRepository;
+}): Promise<number> {
+  try {
+    return await appendApplyWarnings(input);
+  } catch {
+    try {
+      return await input.repository.getNextDeploymentLogSequence(input.deploymentId);
+    } catch {
+      return input.sequence;
+    }
+  }
+}
+
+async function saveDeploymentStateCheckpoint(input: {
+  deployment: DeploymentRecord;
+  stateObjectKey: string;
+  resultWarningSummary: string | null;
+  repository: DeploymentRepository;
+  now: () => Date;
+  leaseFence?: LeaseFence;
+}): Promise<void> {
+  const saveDeploymentApplyState = input.repository.saveDeploymentApplyState;
+  if (!saveDeploymentApplyState) {
+    throw new DeploymentConflictError("Deployment apply state persistence is unavailable");
+  }
+
+  const persistedDeployment = await saveDeploymentApplyState.call(
+    input.repository,
+    input.deployment.id,
+    {
+      stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary
+    },
+    {
+      ...(input.leaseFence ? { leaseFence: input.leaseFence } : {}),
+      fenceCheckedAt: input.now()
+    }
+  );
+  if (!persistedDeployment) {
+    throw new DeploymentNotFoundError("Deployment not found");
+  }
 }
 
 async function synchronizeEcsDeploymentTargetAfterApply(input: {

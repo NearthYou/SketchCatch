@@ -2122,6 +2122,10 @@ export type DeploymentPlanArtifact = {
   sha256: string;
   accountId: string;
   region: string;
+  stateBaselineDeploymentId: string | null;
+  stateObjectKey: string | null;
+  stateLineageSha256: string | null;
+  stateSerial: number | null;
   createdAt: IsoDateTimeString;
 };
 
@@ -3338,8 +3342,14 @@ export type ArchitectureDraftCandidateExclusion = {
   label: string;
 };
 
+export type ArchitectureDraftClarificationAnswer = {
+  questionId: string;
+  answer: string;
+};
+
 export type CreateArchitectureDraftRequest = {
   prompt: string;
+  clarificationAnswers?: readonly ArchitectureDraftClarificationAnswer[] | undefined;
   candidateExclusions?: readonly ArchitectureDraftCandidateExclusion[] | undefined;
   templateId?: TemplateId | undefined;
   repositoryEvidence?:
@@ -3373,8 +3383,10 @@ export type AiArchitectureDraftResult = {
 
 export type ArchitectureDraftClarification = {
   status: "needs_clarification";
+  questionId: string;
   question: string;
   suggestions: string[];
+  validationMessage?: string | undefined;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -4287,4 +4299,5 @@ export type TerraformSyncToDiagramResponse = {
   proposals?: TerraformDiagramChangeProposal[] | undefined;
 };
 
+export * from "./architecture-technology-stack.ts";
 export * from "./runtime-convergence.ts";

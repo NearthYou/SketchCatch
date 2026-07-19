@@ -1508,6 +1508,7 @@ Apply가 성공하면 `terraform output -json`, `terraform show -json`, `terrafo
 실제 AWS Apply가 성공했다면 이 단계 중 일부가 실패해도 Deployment는 `SUCCESS`로 유지하고 apply stage 로그에 경고를 남긴다.
 
 `stateObjectKey`에는 S3에 업로드한 `terraform.tfstate` object key를 저장한다. state 업로드에 실패하면 `null`일 수 있다.
+state 업로드가 성공하면 resource/output transaction보다 먼저 project execution lease fence를 확인하며 `stateObjectKey` checkpoint를 저장한다. 이후 resource/output 저장이 실패해도 checkpoint를 유지하고 `resultWarningSummary`를 남긴 뒤 Terraform 성공을 `FAILED`로 뒤집지 않는다.
 `terraform show -json` 기반 resource inventory는 현재 `SUCCESS` 저장 전에 `TerraformOutput`과 함께 저장한다.
 
 `terraform apply tfplan`이 시작된 뒤 실패하거나 취소되면 로컬 `terraform.tfstate`를 best-effort로 S3에 저장하고,
@@ -1572,9 +1573,9 @@ type DeploymentJob = {
 
 ## DeploymentPlanArtifact
 
-`DeploymentPlanArtifact`는 사용자가 승인할 수 있는 특정 Terraform Plan 파일의 metadata다. `tfplan` 바이너리는 S3에 저장하고, RDS에는 object key와 hash, Plan 생성 시점의 Terraform artifact hash, 실행 계정/region만 저장한다. Terraform plan/show의 raw JSON 전체는 저장하지 않는다.
+`DeploymentPlanArtifact`는 사용자가 승인할 수 있는 특정 Terraform Plan 파일의 metadata다. `tfplan` 바이너리는 S3에 저장하고, RDS에는 object key와 hash, Plan 생성 시점의 Terraform artifact hash, 실행 계정/region, Plan에 사용한 state baseline identity를 저장한다. Terraform plan/show의 raw JSON 전체나 state 원문은 저장하지 않는다.
 
-apply Plan은 같은 S3 prefix에 `{planId}.optimization.json` version 1 sidecar를 둘 수 있다. sidecar는 project/deployment/plan scope, 실제 `tfplan` hash, `TerraformDesiredStateIdentity`, drift 검증 시각, Plan summary와 Pre-Deployment result의 hash, 정규화된 resource address별 bounded change action만 저장한다. raw Terraform JSON, 변수 값, credential, token, 자유 형식 metadata는 저장하지 않는다. sidecar가 없거나 schema/hash/scope/TTL 검증에 실패하면 안전한 cache miss로 처리하며 Plan artifact 삭제 시 함께 삭제한다. 이 evidence는 S3 파일 산출물이므로 새 RDS column이나 DB migration을 요구하지 않는다.
+apply Plan은 같은 S3 prefix에 `{planId}.optimization.json` version 1 sidecar를 둘 수 있다. sidecar는 project/deployment/plan scope, 실제 `tfplan` hash, `TerraformDesiredStateIdentity`, drift 검증 시각, Plan summary와 Pre-Deployment result의 hash, 정규화된 resource address별 bounded change action만 저장한다. raw Terraform JSON, 변수 값, credential, token, 자유 형식 metadata는 저장하지 않는다. sidecar가 없거나 schema/hash/scope/TTL 검증에 실패하면 안전한 cache miss로 처리하며 Plan artifact 삭제 시 함께 삭제한다. 이 sidecar는 최적화 evidence일 뿐 Apply 안전성에 필수인 state baseline identity의 durable 저장소로 사용하지 않는다.
 
 DB 기준: `deployment_plan_artifacts`
 
@@ -1589,9 +1590,15 @@ type DeploymentPlanArtifact = {
   sha256: string;
   accountId: string;
   region: string;
+  stateBaselineDeploymentId: string | null;
+  stateObjectKey: string | null;
+  stateLineageSha256: string | null;
+  stateSerial: number | null;
   createdAt: IsoDateTimeString;
 };
 ```
+
+Terraform apply Plan을 만들 때 프로젝트·AWS connection·Terraform scope가 같은 최신 state 소유 Deployment를 한 번 선택하고 state를 workspace에 복원한다. 선택한 Deployment ID와 S3 object key, state lineage hash, serial을 Plan artifact에 고정한다. Apply는 AWS credential을 준비하기 전에 현재 baseline을 다시 선택하고 네 값을 비교하며, 하나라도 다르면 기존 `tfplan`을 실행하지 않고 새 Plan과 승인을 요구한다. state가 없는 최초 Plan은 네 값이 모두 `null`이다.
 
 `terraformArtifactSha256`은 Plan 생성 시점에 복원한 Terraform artifact 내용을 기준으로 계산한다. 컬럼은 기존 row 마이그레이션을 위해 nullable이지만, 새 Plan은 반드시 값을 저장해야 하며 hash가 없는 Plan artifact는 승인할 수 없다. Approval 단계는 현재 S3 Terraform artifact hash와 이 값을 비교해 Plan 생성 이후 원본 Terraform artifact가 바뀐 경우 승인을 막는다.
 
@@ -2630,15 +2637,23 @@ type ArchitectureDraftCandidateExclusion = {
   label: string;
 };
 
+type ArchitectureDraftClarificationAnswer = {
+  questionId: string;
+  answer: string;
+};
+
 type CreateArchitectureDraftRequest = {
   prompt: string;
+  clarificationAnswers?: ArchitectureDraftClarificationAnswer[];
   candidateExclusions?: ArchitectureDraftCandidateExclusion[];
 };
 
 type ArchitectureDraftClarification = {
   status: "needs_clarification";
+  questionId: string;
   question: string;
   suggestions: string[];
+  validationMessage?: string;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -2712,6 +2727,10 @@ type ArchitectureIntent = {
   missingQuestions: string[];
 };
 ```
+
+`clarificationAnswers`는 현재 AI 대화에서 사용자가 직접 입력하거나 선택지로 고른 추가 질문 답변을 `questionId`와 분리해 전달하는 요청 계약이다. 서버는 질문 문장 전체가 아니라 해당 `answer`만 질문별 규칙으로 해석한다. 답변이 질문 문맥에 맞지 않으면 `validationMessage`와 같은 `questionId`를 반환해 같은 질문을 다시 하고, 다음 질문이나 Draft 생성으로 넘어가지 않는다.
+
+검증된 답변만 원래 Requirement Prompt 뒤의 구조화된 `Accepted architecture clarification answers` 문맥과 Amazon Q payload에 포함한다. 질문 문장 자체는 Requirement Prompt에 답변처럼 합치지 않으며, 선택지 클릭과 직접 자연어 입력은 같은 계약을 사용한다.
 
 `POST /api/ai/architecture-draft/stream`은 새 프로젝트의 첫 AI Draft 전용 newline-delimited JSON 경계다. Repository 권한을 필요로 하는 `repositoryAnalysis`와 `repositoryEvidence`는 이 경계에서 hijack 전 400으로 거부하고, 기존 JSON endpoint의 active-user·persisted Repository Analysis 해석 경로만 사용한다. `progress` event는 화면 단계나 질문 요약을 전달하지 않고, 후보 제외에 필요한 서버 발급 `provisionalArchitectureJson`과 `excludableCandidateIds`만 증가하는 `sequence`와 함께 전달한다. 해당 snapshot은 현재 요청의 이전 후보 snapshot을 완전히 대체하며, 최종 `CreateArchitectureDraftResponse`는 별도 terminal event로 전달한다. 클라이언트는 대화 원문이나 장식용 AWS icon에서 Resource 후보를 추측하지 않는다.
 

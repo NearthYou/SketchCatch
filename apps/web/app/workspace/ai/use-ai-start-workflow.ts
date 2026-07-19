@@ -33,9 +33,28 @@ import {
   type ArchitectureDraftFollowUpSession
 } from "../../../features/workspace/workspace-ai-draft-follow-up";
 import {
+  createArchitectureDraftClarificationMessage,
+  resolveAcceptedArchitectureDraftClarificationSelection,
+  withArchitectureDraftClarificationAnswer
+} from "../../../features/workspace/workspace-ai-draft-clarification";
+import {
   classifyWorkspaceAiChatPrompt,
-  createWorkspaceAiPromptGateMessage
+  createWorkspaceAiPromptGateMessage,
+  resolvePendingPreviewChatAction,
+  shouldStartFreshDraftDuringPatchClarification
 } from "../../../features/workspace/workspace-ai-chat-routing";
+import { createLatestUserRequirementPromptExcluding } from "../../../features/workspace/workspace-ai-chat-history";
+import {
+  findPatchClarificationCandidate,
+  findPatchClarificationSuggestion,
+  getPatchClarificationSuggestions,
+  isAddResourceConnectionClarification,
+  isNoResourceAdditionSuggestion,
+  isServicePurposePatchClarification,
+  isSkipConnectionSuggestion,
+  NO_RESOURCE_ADDITION_MESSAGE,
+  NO_RESOURCE_ADDITION_SUGGESTION
+} from "../../../features/workspace/workspace-ai-patch-clarification";
 import {
   isWorkspaceAiChatAbortError,
   WorkspaceAiChatRequestRegistry
@@ -45,9 +64,6 @@ import {
   createAiStartMessage,
   createDraftFromPatch,
   createPatchSummary,
-  findPatchClarificationCandidate,
-  findPatchClarificationSuggestion,
-  getPatchClarificationSuggestions,
   isArchitectureDraftClarification,
   isArchitecturePatchClarification,
   readAiStartProjectDraft,
@@ -67,7 +83,13 @@ import {
 
 type PendingDraftClarification = {
   readonly clarification: ArchitectureDraftClarification;
-  readonly prompt: string;
+  readonly questionMessageId: string;
+  readonly request: CreateArchitectureDraftRequest;
+};
+type SubmittedDraftClarificationAnswer = {
+  readonly answer: string;
+  readonly clarification: ArchitectureDraftClarification;
+  readonly questionMessageId: string;
 };
 
 type PendingPatchClarification = {
@@ -120,6 +142,11 @@ export function useAiStartWorkflow({
   const [draftClarification, setDraftClarification] = useState<PendingDraftClarification | null>(
     null
   );
+  const [acceptedClarificationSelection, setAcceptedClarificationSelection] = useState<{
+    readonly label: string;
+    readonly questionMessageId: string;
+    readonly selectedAt: string;
+  } | null>(null);
   const [patchClarification, setPatchClarification] = useState<PendingPatchClarification | null>(
     null
   );
@@ -222,6 +249,11 @@ export function useAiStartWorkflow({
     setVoiceTranscriptNeedsConfirmation(false);
 
     if (patchClarification !== null) {
+      if (shouldStartFreshDraftDuringPatchClarification(prompt)) {
+        setPatchClarification(null);
+        await requestDraft({ prompt });
+        return;
+      }
       await answerPatchClarification(prompt, patchClarification);
       return;
     }
@@ -232,9 +264,17 @@ export function useAiStartWorkflow({
     }
 
     if (draftClarification !== null) {
-      const nextPrompt = `${draftClarification.prompt}\n\n${draftClarification.clarification.question}: ${prompt}`;
+      const nextRequest = withArchitectureDraftClarificationAnswer(
+        draftClarification.request,
+        draftClarification.clarification,
+        prompt
+      );
       setDraftClarification(null);
-      await requestDraft({ prompt: nextPrompt });
+      await requestDraft(nextRequest, {
+        answer: prompt,
+        clarification: draftClarification.clarification,
+        questionMessageId: draftClarification.questionMessageId
+      });
       return;
     }
 
@@ -245,7 +285,16 @@ export function useAiStartWorkflow({
     }
 
     if (draft !== null && previewDiagram !== null) {
-      await requestPatch(prompt, previewDiagram);
+      const chatAction = resolvePendingPreviewChatAction({
+        needsDraftClarification: false,
+        prompt
+      });
+
+      if (chatAction === "patch") {
+        await requestPatch(prompt, previewDiagram);
+      } else {
+        await requestDraft({ prompt });
+      }
       return;
     }
 
@@ -270,7 +319,10 @@ export function useAiStartWorkflow({
     }
   }
 
-  async function requestDraft(request: CreateArchitectureDraftRequest): Promise<void> {
+  async function requestDraft(
+    request: CreateArchitectureDraftRequest,
+    submittedAnswer?: SubmittedDraftClarificationAnswer
+  ): Promise<void> {
     beginRequest();
 
     if (getAiStartDraftTransport(existingProjectId) === "json") {
@@ -283,6 +335,7 @@ export function useAiStartWorkflow({
         if (!requestRegistryRef.current.isActive("draft", controller)) {
           return;
         }
+        markDraftClarificationAnswerSelection(submittedAnswer, response);
         handleDraftResponse(request, response);
       } catch (error) {
         if (
@@ -324,6 +377,7 @@ export function useAiStartWorkflow({
         return;
       }
 
+      markDraftClarificationAnswerSelection(submittedAnswer, response);
       handleDraftResponse(progressRequest.request, response);
       draftProgressCoordinatorRef.current.complete(progressRequest);
     } catch (error) {
@@ -338,15 +392,42 @@ export function useAiStartWorkflow({
     }
   }
 
+  function markDraftClarificationAnswerSelection(
+    submittedAnswer: SubmittedDraftClarificationAnswer | undefined,
+    response: CreateArchitectureDraftResponse
+  ): void {
+    if (submittedAnswer === undefined) return;
+
+    const selection = resolveAcceptedArchitectureDraftClarificationSelection(
+      submittedAnswer.clarification,
+      submittedAnswer.answer,
+      response
+    );
+    if (selection !== null) {
+      setAcceptedClarificationSelection({
+        label: selection.label,
+        questionMessageId: submittedAnswer.questionMessageId,
+        selectedAt: new Date().toISOString()
+      });
+    }
+  }
+
   function handleDraftResponse(
     request: CreateArchitectureDraftRequest,
     response: CreateArchitectureDraftResponse
   ): void {
     if (isArchitectureDraftClarification(response)) {
-      setDraftClarification({ clarification: response, prompt: request.prompt });
+      const questionMessages = appendAssistantMessage(
+        "question",
+        createArchitectureDraftClarificationMessage(response),
+        response.suggestions
+      );
+      const questionMessageId = questionMessages.at(-1)?.id;
+      if (questionMessageId !== undefined) {
+        setDraftClarification({ clarification: response, questionMessageId, request });
+      }
       publishDraftProgressState(draftProgressCoordinatorRef.current.awaitInput());
       finishRequest();
-      appendAssistantMessage("question", response.question, response.suggestions);
       return;
     }
 
@@ -483,9 +564,7 @@ export function useAiStartWorkflow({
     }
 
     if (existingProjectId && existingProjectDraftRevision === undefined) {
-      failRequest(
-        "현재 프로젝트의 최신 초안을 확인하고 있어요. 잠시 후 다시 시도해 주세요."
-      );
+      failRequest("현재 프로젝트의 최신 초안을 확인하고 있어요. 잠시 후 다시 시도해 주세요.");
       return;
     }
 
@@ -605,9 +684,13 @@ export function useAiStartWorkflow({
     const suggestion = findPatchClarificationSuggestion(pending.clarification, answer);
 
     if (candidate !== undefined) {
+      const useAsConnection = isAddResourceConnectionClarification(pending.clarification);
+      const instruction = useAsConnection
+        ? pending.clarification.intent.instruction
+        : `${pending.clarification.intent.instruction}\n${answer}`;
+
       setPatchClarification(null);
-      const useAsConnection = pending.clarification.intent.requestedAction === "add_resource";
-      await requestPatch(pending.clarification.intent.instruction, pending.baseDiagram, {
+      await requestPatch(instruction, pending.baseDiagram, {
         ...(useAsConnection
           ? { connectionTargetResourceId: candidate.resourceId }
           : { selectedTargetResourceId: candidate.resourceId })
@@ -616,10 +699,31 @@ export function useAiStartWorkflow({
     }
 
     if (suggestion !== undefined) {
+      const originalInstruction = pending.clarification.intent.instruction;
       setPatchClarification(null);
-      await requestPatch(pending.clarification.intent.instruction, pending.baseDiagram, {
-        ...(suggestion === "연결하지 않기" ? { skipConnection: true } : {})
-      });
+
+      if (isNoResourceAdditionSuggestion(suggestion)) {
+        const fallbackPrompt = createLatestUserRequirementPromptExcluding(
+          messagesRef.current,
+          NO_RESOURCE_ADDITION_SUGGESTION
+        );
+
+        appendAssistantMessage("status", NO_RESOURCE_ADDITION_MESSAGE);
+        await requestDraft({ prompt: fallbackPrompt || originalInstruction });
+        return;
+      }
+
+      if (isServicePurposePatchClarification(pending.clarification)) {
+        await requestDraft({ prompt: suggestion });
+        return;
+      }
+
+      const skipConnection = isSkipConnectionSuggestion(suggestion);
+      await requestPatch(
+        skipConnection ? originalInstruction : `${originalInstruction}\n${suggestion}`,
+        pending.baseDiagram,
+        skipConnection ? { skipConnection: true } : {}
+      );
       return;
     }
 
@@ -694,6 +798,7 @@ export function useAiStartWorkflow({
   }
 
   return {
+    acceptedClarificationSelection,
     approvalError,
     approvalState,
     approveDraft,

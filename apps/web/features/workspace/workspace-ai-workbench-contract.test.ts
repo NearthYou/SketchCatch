@@ -7,6 +7,7 @@ const controllerSource = read("WorkspaceAiChatDock.tsx");
 const conversationSource = read("workspace-ai-chat-conversation.ts");
 const diagramEditorSource = read("../diagram-editor/DiagramEditor.tsx");
 const launcherSource = read("WorkspaceAiChatLauncher.tsx");
+const panelPiecesSource = read("WorkspaceAiPanelPieces.tsx");
 const launcherStyles = read("workspace-ai-chat-launcher.module.css");
 const projectManagerSource = read("ProjectWorkspaceDraftManager.tsx");
 const resultSource = read("WorkspaceAiWorkbenchResults.tsx");
@@ -89,6 +90,11 @@ test("AI chat controller uses only the new Workbench transcript and workflow pre
   assert.match(controllerSource, /styles\.composer/);
 });
 
+test("Board approval actions keep their explanation readable in the chat panel", () => {
+  assert.doesNotMatch(workbenchStyles, /\.approvalTray\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;/s);
+  assert.doesNotMatch(workbenchStyles, /\.approvalActions\s*\{[^}]*justify-content:\s*flex-end;/s);
+});
+
 test("AI Workbench owns dedicated result primitives and code-diff presentation", () => {
   assert.match(resultSource, /createTerraformPreviewPresentation/);
   assert.match(resultSource, /createTerraformIssuePresentation/);
@@ -96,6 +102,22 @@ test("AI Workbench owns dedicated result primitives and code-diff presentation",
   assert.match(resultSource, /styles\.technicalDetails/);
   assert.match(resultSource, /styles\.codeDiff/);
   assert.doesNotMatch(resultSource, /WorkspaceAiPanelPieces|workspace\.module\.css/);
+});
+
+test("다이어그램 AI 설명은 다음 행동을 별도 섹션으로 표시하지 않는다", () => {
+  const legacyExplanationSource = panelPiecesSource.slice(
+    panelPiecesSource.indexOf("export function WorkspaceAiExplanation"),
+    panelPiecesSource.indexOf("export function WorkspaceAiGuardrailWarnings")
+  );
+
+  assert.doesNotMatch(
+    legacyExplanationSource,
+    /<WorkspaceAiTextList title="다음 행동"/
+  );
+  assert.doesNotMatch(
+    resultSource,
+    /<WorkspaceAiWorkbenchTechnicalList items=\{explanation\.nextActions\} title="다음 행동"/
+  );
 });
 
 test("에이전트 리뷰는 Amazon Q 응답 전에도 단계별 진행 상태를 표시한다", () => {
@@ -257,6 +279,10 @@ test("mobile focus trap ignores roving tabs that are not keyboard focusable", ()
 });
 
 test("transcript follows new content only while the reader is near the bottom", () => {
+  assert.match(
+    controllerSource,
+    /suggestionSelection !== undefined[\s\S]*?transcriptShouldFollowRef\.current = true;[\s\S]*?setMessages\(nextMessages\)/
+  );
   assert.match(workbenchSource, /onScroll=\{onTranscriptScroll\}/);
   assert.match(controllerSource, /transcriptShouldFollowRef/);
   assert.match(controllerSource, /isWorkspaceAiTranscriptNearBottom/);

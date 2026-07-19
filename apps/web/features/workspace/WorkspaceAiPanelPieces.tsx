@@ -103,7 +103,7 @@ export function WorkspaceAiRequestMessage({
   return null;
 }
 
-// LLM 설명을 요약, 핵심, 다음 행동 순서로 한 번씩만 묶어 보여줍니다.
+// LLM 설명을 요약과 핵심으로 한 번씩만 묶어 보여줍니다.
 export function WorkspaceAiExplanation({ explanation }: { readonly explanation: LlmExplanation | undefined }) {
   if (explanation === undefined) {
     return null;
@@ -120,9 +120,6 @@ export function WorkspaceAiExplanation({ explanation }: { readonly explanation: 
         <WorkspaceAiTextList title="종합 평가" items={[explanation.wellArchitectedConclusion]} />
       ) : null}
       {explanation.highlights.length > 0 ? <WorkspaceAiTextList title="핵심" items={explanation.highlights} /> : null}
-      {explanation.nextActions.length > 0 ? (
-        <WorkspaceAiTextList title="다음 행동" items={explanation.nextActions} />
-      ) : null}
     </div>
   );
 }

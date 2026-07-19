@@ -697,6 +697,20 @@ test("diagram editor applies the shared geometry policy at every diagram entry p
   );
 });
 
+test("equivalent diagram prop replacements do not invalidate pending AI proposals", () => {
+  const replaceDiagramStart = diagramEditorSource.indexOf("const replaceDiagram = useCallback(");
+  const replaceDiagramEnd = diagramEditorSource.indexOf("const getDiagramRevision = useCallback");
+  const replaceDiagramSource = diagramEditorSource.slice(replaceDiagramStart, replaceDiagramEnd);
+
+  assert.notEqual(replaceDiagramStart, -1);
+  assert.notEqual(replaceDiagramEnd, -1);
+  assert.match(
+    replaceDiagramSource,
+    /if \(areDiagramsEqual\(diagramRef\.current, nextDiagram\)\) \{[\s\S]*?diagramRef\.current = nextDiagram;[\s\S]*?setDiagram\(nextDiagram\);[\s\S]*?return;/
+  );
+  assert.ok(replaceDiagramSource.indexOf("areDiagramsEqual") < replaceDiagramSource.indexOf("diagramRevisionRef.current += 1"));
+});
+
 test("diagram editor gives exact fixture zoom priority over initial fit-view", () => {
   assert.match(diagramEditorSource, /const normalizedInitialBoardZoom = parseBoardZoom\(initialBoardZoom\);/);
   assert.match(diagramEditorSource, /getCenteredBoardViewport\(/);
