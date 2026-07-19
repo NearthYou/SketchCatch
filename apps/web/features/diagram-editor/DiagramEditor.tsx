@@ -50,15 +50,25 @@ import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent
 } from "react";
-import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
+import type {
+  DiagramEdge,
+  DiagramJson,
+  DiagramNode,
+  ProjectDraft,
+  ProjectDraftResponse,
+  TerraformSyncFileInput
+} from "../../../../packages/types/src";
 
 import { BOARD_THUMBNAIL_CAPTURE_CONTRACT } from "../../components/architecture-board/board-thumbnail-capture-contract";
 import {
-  createBoardAutoOrganizeProposal,
+  applyBoardAutoOrganizeCandidate,
+  createBoardAutoOrganizeCandidates,
   createBoardAutoOrganizePreviewSession,
+  getBoardAutoOrganizeVisibleDiagram,
   getBoardAutoOrganizeViewportPolicy,
-  resolveBoardAutoOrganizeDecision,
+  selectBoardAutoOrganizeCandidate,
   selectBoardAutoOrganizePreviewView,
+  type BoardAutoOrganizeApplyRequest,
   type BoardAutoOrganizePreviewSession,
   type BoardAutoOrganizePreviewView
 } from "../architecture-board-compiler";
@@ -230,7 +240,19 @@ type AreaBlankDragState = {
   startNodePosition: DiagramNode["position"];
 };
 
-export function DiagramEditor(props: DiagramEditorProps) {
+type DiagramEditorAutoOrganizeProps = DiagramEditorProps & {
+  readonly boardAutoOrganizeTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
+  readonly onBoardAutoOrganizeApplied?:
+    | ((input: { readonly diagramJson: DiagramJson; readonly draft: ProjectDraft }) => void)
+    | undefined;
+  readonly onBoardAutoOrganizeApplyRequest?:
+    | ((request: BoardAutoOrganizeApplyRequest) => Promise<ProjectDraftResponse>)
+    | undefined;
+  readonly projectDraftRevision?: number | null | undefined;
+};
+
+/** Project Workspace가 제공한 서버 적용 경계를 Editor의 로컬 미리보기와 연결합니다. */
+export function DiagramEditor(props: DiagramEditorAutoOrganizeProps) {
   return (
     <ReactFlowProvider>
       <DiagramEditorInner {...props} />
@@ -241,6 +263,7 @@ export function DiagramEditor(props: DiagramEditorProps) {
 /** Editor와 embedded viewer가 공유하는 React Flow 동작을 mode별 정책으로 적용합니다. */
 function DiagramEditorInner({
   allowPreviewInspection = false,
+  boardAutoOrganizeTerraformFiles = [],
   dashboardHref = "/dashboard",
   draftStatusPanel,
   emptyBoardDescription = "왼쪽 패널에서 필요한 항목을 끌어오세요.",
@@ -256,18 +279,21 @@ function DiagramEditorInner({
   leftPanel,
   mode = "editor",
   onBoardReady,
+  onBoardAutoOrganizeApplied,
+  onBoardAutoOrganizeApplyRequest,
   onDiagramChange,
   onDiagramSaveRequest,
   onWorkspacePanelOpen,
   onTemplateWorkspaceApply,
   onSaveAndDeployRequest,
   panOnScroll = true,
+  projectDraftRevision = null,
   projectName = "프로젝트 보드",
   rightPanel,
   saveStatus = "편집 중",
   showSaveAction = true,
   workspaceUserName = "Personal workspace"
-}: DiagramEditorProps) {
+}: DiagramEditorAutoOrganizeProps) {
   const viewerPolicy = getDiagramEditorViewerPolicy(mode, { panOnScroll });
   if (viewerPolicy.isViewer) {
     allowPreviewInspection = false;
@@ -335,6 +361,7 @@ function DiagramEditorInner({
   const [isFlowReady, setFlowReady] = useState(false);
   const [boardMinimumZoom, setBoardMinimumZoom] = useState(0.25);
   const autoOrganizeMinimumZoomRef = useRef<number | null>(null);
+  const autoOrganizeApplyInFlightRef = useRef(false);
   const shouldAutoFitPreviewDiagramRef = useRef(initialPreviewDiagram != null);
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
@@ -1020,14 +1047,16 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  /** 현재 Board를 바꾸지 않고 Task 6의 안전한 후보 전체로 preview session을 엽니다. */
   const previewAutomaticOrganization = useCallback(() => {
     try {
       onWorkspacePanelOpen?.();
       const currentDiagram = diagramRef.current;
-      const proposal = createBoardAutoOrganizeProposal(currentDiagram);
+      const candidateSet = createBoardAutoOrganizeCandidates(currentDiagram);
       const session = createBoardAutoOrganizePreviewSession(
         currentDiagram,
-        proposal.diagram,
+        candidateSet,
+        projectDraftRevision,
         getFlowInstance().getViewport()
       );
       const viewportPolicy = getBoardAutoOrganizeViewportPolicy("open");
@@ -1035,7 +1064,7 @@ function DiagramEditorInner({
       autoOrganizeMinimumZoomRef.current = boardMinimumZoom;
       shouldApplySourceViewportRef.current = viewportPolicy.applySourceViewport;
       shouldAutoFitPreviewDiagramRef.current = viewportPolicy.autoFit;
-      setPreviewDiagramState(cloneDiagram(session.visibleDiagram));
+      setPreviewDiagramState(getBoardAutoOrganizeVisibleDiagram(session));
       setPreviewAnnotations(null);
       setAutoOrganizePreview(session);
       setAutoOrganizeError(false);
@@ -1047,61 +1076,110 @@ function DiagramEditorInner({
       setAutoOrganizePreview(null);
       setAutoOrganizeError(true);
     }
-  }, [boardMinimumZoom, getFlowInstance, onWorkspacePanelOpen]);
+  }, [boardMinimumZoom, getFlowInstance, onWorkspacePanelOpen, projectDraftRevision]);
 
+  /** 원본·정리안 toggle은 같은 viewport에서 보이는 preview Diagram만 바꿉니다. */
   const selectAutomaticOrganizationPreview = useCallback(
     (view: BoardAutoOrganizePreviewView) => {
-      if (autoOrganizePreview === null) return;
+      if (autoOrganizePreview === null || autoOrganizeApplyInFlightRef.current) return;
       const nextSession = selectBoardAutoOrganizePreviewView(autoOrganizePreview, view);
       const viewportPolicy = getBoardAutoOrganizeViewportPolicy("switch");
 
       shouldApplySourceViewportRef.current = viewportPolicy.applySourceViewport;
       shouldAutoFitPreviewDiagramRef.current = viewportPolicy.autoFit;
-      setPreviewDiagramState(cloneDiagram(nextSession.visibleDiagram));
+      setPreviewDiagramState(getBoardAutoOrganizeVisibleDiagram(nextSession));
       setAutoOrganizePreview(nextSession);
     },
     [autoOrganizePreview]
   );
 
-  const applyAutomaticOrganization = useCallback(() => {
-    if (autoOrganizePreview === null) return;
-    const resolution = resolveBoardAutoOrganizeDecision(
-      autoOrganizePreview,
-      "use-organized",
-      diagramRef.current
-    );
-    const diagramToApply = resolution.diagramToApply;
+  /** thumbnail 선택은 저장 없이 session과 보이는 preview만 바꿉니다. */
+  const selectAutomaticOrganizationCandidate = useCallback(
+    (candidateId: string) => {
+      if (autoOrganizePreview === null || autoOrganizeApplyInFlightRef.current) return;
+      const nextSession = selectBoardAutoOrganizeCandidate(
+        autoOrganizePreview,
+        candidateId
+      );
+      const viewportPolicy = getBoardAutoOrganizeViewportPolicy("switch");
 
-    if (resolution.isStale || diagramToApply === null) {
-      if (resolution.viewportToRestore) {
-        restoreAutoOrganizeViewport(resolution.viewportToRestore);
+      shouldApplySourceViewportRef.current = viewportPolicy.applySourceViewport;
+      shouldAutoFitPreviewDiagramRef.current = viewportPolicy.autoFit;
+      setPreviewDiagramState(getBoardAutoOrganizeVisibleDiagram(nextSession));
+      setAutoOrganizePreview(nextSession);
+    },
+    [autoOrganizePreview]
+  );
+
+  /** 전용 API 성공이 확인된 뒤에만 한 번의 Board/History 변경을 commit합니다. */
+  const applyAutomaticOrganization = useCallback(async () => {
+    if (autoOrganizePreview === null || autoOrganizeApplyInFlightRef.current) return;
+    autoOrganizeApplyInFlightRef.current = true;
+
+    try {
+      if (!onBoardAutoOrganizeApplyRequest) {
+        throw new Error("Board 정리안 서버 적용 경계가 없습니다.");
       }
+
+      const result = await applyBoardAutoOrganizeCandidate({
+        currentDiagram: diagramRef.current,
+        currentDraftRevision: projectDraftRevision,
+        save: onBoardAutoOrganizeApplyRequest,
+        session: autoOrganizePreview,
+        terraformFiles: boardAutoOrganizeTerraformFiles
+      });
+
+      if (result.status === "stale") {
+        restoreAutoOrganizeViewport(autoOrganizePreview.viewportBeforePreview);
+        setPreviewDiagramState(null);
+        setPreviewAnnotations(null);
+        setAutoOrganizePreview(null);
+        setAutoOrganizeError(true);
+        return;
+      }
+
+      autoOrganizeMinimumZoomRef.current = null;
+      shouldApplySourceViewportRef.current = false;
+      commitDiagramUpdate(() => cloneDiagram(result.diagramToApply));
+
+      if (result.saveResult.draft) {
+        onBoardAutoOrganizeApplied?.({
+          diagramJson: cloneDiagram(result.diagramToApply),
+          draft: result.saveResult.draft
+        });
+      }
+
+      setPreviewDiagramState(null);
+      setPreviewAnnotations(null);
+      setAutoOrganizePreview(null);
+      setAutoOrganizeError(false);
+      setInspectedNodeId(null);
+      setSelectedNodeIds([]);
+      setSelectedEdgeIds([]);
+    } catch (error) {
+      console.error("Board automatic organization apply failed.", error);
+      restoreAutoOrganizeViewport(autoOrganizePreview.viewportBeforePreview);
       setPreviewDiagramState(null);
       setPreviewAnnotations(null);
       setAutoOrganizePreview(null);
       setAutoOrganizeError(true);
-      return;
+    } finally {
+      autoOrganizeApplyInFlightRef.current = false;
     }
+  }, [
+    autoOrganizePreview,
+    boardAutoOrganizeTerraformFiles,
+    commitDiagramUpdate,
+    onBoardAutoOrganizeApplied,
+    onBoardAutoOrganizeApplyRequest,
+    projectDraftRevision,
+    restoreAutoOrganizeViewport
+  ]);
 
-    autoOrganizeMinimumZoomRef.current = null;
-    shouldApplySourceViewportRef.current = false;
-    commitDiagramUpdate(() => cloneDiagram(diagramToApply));
-    setPreviewDiagramState(null);
-    setPreviewAnnotations(null);
-    setAutoOrganizePreview(null);
-    setAutoOrganizeError(false);
-    setInspectedNodeId(null);
-    setSelectedNodeIds([]);
-    setSelectedEdgeIds([]);
-  }, [autoOrganizePreview, commitDiagramUpdate, restoreAutoOrganizeViewport]);
-
+  /** 취소는 원래 viewport만 복원하고 Board와 History를 그대로 둡니다. */
   const cancelAutomaticOrganization = useCallback(() => {
-    if (autoOrganizePreview === null) return;
-    const resolution = resolveBoardAutoOrganizeDecision(autoOrganizePreview, "keep-original");
-
-    if (resolution.viewportToRestore) {
-      restoreAutoOrganizeViewport(resolution.viewportToRestore);
-    }
+    if (autoOrganizePreview === null || autoOrganizeApplyInFlightRef.current) return;
+    restoreAutoOrganizeViewport(autoOrganizePreview.viewportBeforePreview);
     setPreviewDiagramState(null);
     setPreviewAnnotations(null);
     setAutoOrganizePreview(null);
@@ -3309,6 +3387,7 @@ function DiagramEditorInner({
             {autoOrganizePreview ? (
               <BoardAutoOrganizePreviewPanel
                 onKeepOriginal={cancelAutomaticOrganization}
+                onSelectCandidate={selectAutomaticOrganizationCandidate}
                 onSelectView={selectAutomaticOrganizationPreview}
                 onUseOrganized={applyAutomaticOrganization}
                 session={autoOrganizePreview}

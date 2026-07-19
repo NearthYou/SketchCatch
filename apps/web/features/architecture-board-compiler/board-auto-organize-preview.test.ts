@@ -1,15 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { DiagramJson } from "@sketchcatch/types";
+import type {
+  BoardAutoOrganizeCandidateSet,
+  DiagramJson,
+  TerraformSyncFileInput
+} from "@sketchcatch/types";
 
 import {
+  applyBoardAutoOrganizeCandidate,
   createBoardAutoOrganizePreviewSession,
+  getBoardAutoOrganizeSelectedCandidate,
   getBoardAutoOrganizeViewportPolicy,
-  resolveBoardAutoOrganizeDecision,
+  getBoardAutoOrganizeVisibleDiagram,
+  selectBoardAutoOrganizeCandidate,
   selectBoardAutoOrganizePreviewView
 } from "./board-auto-organize-preview";
 
-test("자동 정리 미리보기는 처음 한 번만 화면을 맞추고 원본 전환에서는 같은 화면을 유지한다", () => {
+test("자동 정리 미리보기는 처음 한 번만 화면을 맞추고 전환에서는 같은 화면을 유지한다", () => {
   assert.deepEqual(getBoardAutoOrganizeViewportPolicy("open"), {
     applySourceViewport: true,
     autoFit: true
@@ -20,156 +27,157 @@ test("자동 정리 미리보기는 처음 한 번만 화면을 맞추고 원본
   });
 });
 
-test("미리보기는 점수나 내부 식별자 없이 쉬운 변경점과 확인할 점만 제공한다", () => {
-  const source = diagram();
-  const organized = structuredClone(source);
-  organized.nodes[0]!.position = { x: 120, y: 80 };
-  organized.nodes[1]!.size = { width: 160, height: 100 };
-  organized.edges[0]!.route = {
-    svgPath: "M 120 80 L 360 200",
-    sourcePoint: { x: 120, y: 80 },
-    targetPoint: { x: 360, y: 200 },
-    waypoints: []
-  };
-
-  const session = createBoardAutoOrganizePreviewSession(source, organized);
-
-  assert.equal(session.summary.whatChanged, "리소스 위치 1곳, 영역 크기 1곳, 연결선 1개를 정리했어요.");
-  assert.deepEqual(session.summary.reviewItems, [
-    "리소스가 원하는 위치에 놓였는지 확인해 주세요.",
-    "영역 크기와 여백이 자연스러운지 확인해 주세요.",
-    "연결선이 리소스를 가리지 않는지 확인해 주세요."
-  ]);
-  assert.equal("quality" in session.summary, false);
-  assert.equal("candidateId" in session.summary, false);
-  assert.equal("compilerVersion" in session.summary, false);
-  assert.equal("templateId" in session.summary, false);
-  assert.equal("diagnostics" in session.summary, false);
-});
-
-test("원본과 정리 결과 전환은 같은 미리보기 안에서 보이는 Diagram만 바꾼다", () => {
-  const source = diagram();
-  const organized = structuredClone(source);
-  organized.nodes[0]!.position = { x: 280, y: 160 };
-  const sourceSnapshot = structuredClone(source);
-  const organizedSnapshot = structuredClone(organized);
-
-  const session = createBoardAutoOrganizePreviewSession(source, organized);
-  assert.equal(session.activeView, "organized");
-  assert.deepEqual(session.visibleDiagram, organized);
-
-  const originalView = selectBoardAutoOrganizePreviewView(session, "original");
-  assert.equal(originalView.activeView, "original");
-  assert.deepEqual(originalView.visibleDiagram, source);
-
-  const organizedView = selectBoardAutoOrganizePreviewView(originalView, "organized");
-  assert.deepEqual(organizedView.visibleDiagram, organized);
-  assert.deepEqual(source, sourceSnapshot);
-  assert.deepEqual(organized, organizedSnapshot);
-});
-
-test("원본 유지는 적용 없이 닫고 정리 사용만 결과 복사본을 반환한다", () => {
-  const source = diagram();
-  const organized = structuredClone(source);
-  organized.nodes[0]!.position = { x: 280, y: 160 };
-  const viewportBeforePreview = { x: 33, y: 44, zoom: 0.7 };
-  const session = createBoardAutoOrganizePreviewSession(
-    source,
-    organized,
-    viewportBeforePreview
-  );
-
-  assert.deepEqual(resolveBoardAutoOrganizeDecision(session, "keep-original"), {
-    diagramToApply: null,
-    isStale: false,
-    viewportToRestore: viewportBeforePreview
-  });
-
-  const approved = resolveBoardAutoOrganizeDecision(session, "use-organized", source);
-  assert.deepEqual(approved.diagramToApply, organized);
-  assert.notEqual(approved.diagramToApply, organized);
-  assert.equal(approved.isStale, false);
-  assert.equal(approved.viewportToRestore, null);
-});
-
-test("미리보기 중 원본 의미가 바뀌면 오래된 정리 결과를 적용하지 않는다", () => {
-  const source = diagram();
-  const organized = structuredClone(source);
-  organized.nodes[0]!.position = { x: 280, y: 160 };
-  const session = createBoardAutoOrganizePreviewSession(source, organized, {
+test("preview session keeps every safe candidate and the source draft revision", () => {
+  const source = createDiagram();
+  const candidateSet = createCandidateSet(source);
+  const session = createBoardAutoOrganizePreviewSession(source, candidateSet, 7, {
     x: 33,
     y: 44,
     zoom: 0.7
   });
-  const changedCurrent = structuredClone(source);
-  changedCurrent.nodes[0]!.metadata = { parentAreaNodeId: "new-parent" };
 
-  const resolution = resolveBoardAutoOrganizeDecision(
-    session,
-    "use-organized",
-    changedCurrent
+  assert.equal(session.sessionId, candidateSet.sessionId);
+  assert.equal(session.sourceFingerprint, candidateSet.sourceFingerprint);
+  assert.equal(session.sourceDraftRevision, 7);
+  assert.equal(session.selectedCandidateId, candidateSet.candidates[0]!.id);
+  assert.equal(session.activeView, "organized");
+  assert.deepEqual(session.viewportBeforePreview, { x: 33, y: 44, zoom: 0.7 });
+  assert.notEqual(session.originalDiagram, source);
+  assert.notEqual(session.candidates, candidateSet.candidates);
+});
+
+test("switching candidates changes only local selection and never returns a diagram to apply", () => {
+  const source = createDiagram();
+  const candidateSet = createCandidateSet(source);
+  const session = createBoardAutoOrganizePreviewSession(source, candidateSet, 7);
+  const sourceSnapshot = structuredClone(source);
+  const candidateSnapshot = structuredClone(candidateSet);
+
+  const next = selectBoardAutoOrganizeCandidate(session, candidateSet.candidates[1]!.id);
+
+  assert.equal(next.selectedCandidateId, candidateSet.candidates[1]!.id);
+  assert.equal("pendingApply" in next, false);
+  assert.equal("diagramToApply" in next, false);
+  assert.deepEqual(source, sourceSnapshot);
+  assert.deepEqual(candidateSet, candidateSnapshot);
+  assert.deepEqual(getBoardAutoOrganizeVisibleDiagram(next), candidateSet.candidates[1]!.diagram);
+});
+
+test("original and arrangement view switching keeps the selected candidate", () => {
+  const source = createDiagram();
+  const candidateSet = createCandidateSet(source);
+  const session = selectBoardAutoOrganizeCandidate(
+    createBoardAutoOrganizePreviewSession(source, candidateSet, 7),
+    candidateSet.candidates[1]!.id
   );
 
-  assert.equal(resolution.diagramToApply, null);
-  assert.equal(resolution.isStale, true);
-  assert.deepEqual(resolution.viewportToRestore, { x: 33, y: 44, zoom: 0.7 });
-});
+  const originalView = selectBoardAutoOrganizePreviewView(session, "original");
+  const organizedView = selectBoardAutoOrganizePreviewView(originalView, "organized");
 
-test("미리보기 중 Board 표시 계약이 바뀌어도 오래된 정리 결과를 적용하지 않는다", () => {
-  const source = diagram();
-  source.presentation = {
-    geometryPolicy: "source-exact",
-    terraformSourceFingerprint: "before"
-  };
-  const session = createBoardAutoOrganizePreviewSession(source, structuredClone(source));
-  const changedCurrent = structuredClone(source);
-  changedCurrent.presentation = {
-    geometryPolicy: "source-exact",
-    terraformSourceFingerprint: "after"
-  };
-
-  const resolution = resolveBoardAutoOrganizeDecision(
-    session,
-    "use-organized",
-    changedCurrent
+  assert.deepEqual(getBoardAutoOrganizeVisibleDiagram(originalView), source);
+  assert.equal(organizedView.selectedCandidateId, candidateSet.candidates[1]!.id);
+  assert.deepEqual(
+    getBoardAutoOrganizeSelectedCandidate(organizedView)?.diagram,
+    candidateSet.candidates[1]!.diagram
   );
-
-  assert.equal(resolution.diagramToApply, null);
-  assert.equal(resolution.isStale, true);
 });
 
-test("미리보기 중 관계의 화살표 방향이 바뀌어도 오래된 정리 결과를 적용하지 않는다", () => {
-  const source = diagram();
-  source.edges[0]!.route = {
-    svgPath: "M 40 40 L 240 120",
-    sourcePoint: { x: 40, y: 40 },
-    targetPoint: { x: 240, y: 120 },
-    waypoints: [],
-    arrowDirection: "source-to-target"
-  };
-  const session = createBoardAutoOrganizePreviewSession(source, structuredClone(source));
-  const changedCurrent = structuredClone(source);
-  changedCurrent.edges[0]!.route!.arrowDirection = "target-to-source";
+test("stale source revision blocks apply without calling the server save", async () => {
+  const source = createDiagram();
+  const session = createBoardAutoOrganizePreviewSession(source, createCandidateSet(source), 7);
+  let saveCalls = 0;
 
-  const resolution = resolveBoardAutoOrganizeDecision(
+  const result = await applyBoardAutoOrganizeCandidate({
+    currentDiagram: source,
+    currentDraftRevision: 8,
+    save: async () => {
+      saveCalls += 1;
+      return { revision: 9 };
+    },
     session,
-    "use-organized",
-    changedCurrent
+    terraformFiles: []
+  });
+
+  assert.equal(result.status, "stale");
+  assert.equal("diagramToApply" in result, false);
+  assert.equal(saveCalls, 0);
+});
+
+test("a source visual change blocks apply even when Resource meaning stays the same", async () => {
+  const source = createDiagram();
+  const session = createBoardAutoOrganizePreviewSession(source, createCandidateSet(source), 7);
+  const changedCurrent = structuredClone(source);
+  changedCurrent.nodes[0]!.position = { x: 99, y: 101 };
+  let saveCalls = 0;
+
+  const result = await applyBoardAutoOrganizeCandidate({
+    currentDiagram: changedCurrent,
+    currentDraftRevision: 7,
+    save: async () => {
+      saveCalls += 1;
+      return { revision: 8 };
+    },
+    session,
+    terraformFiles: []
+  });
+
+  assert.equal(result.status, "stale");
+  assert.equal(saveCalls, 0);
+});
+
+test("apply exposes the selected diagram only after the exact server request succeeds", async () => {
+  const source = createDiagram();
+  const candidateSet = createCandidateSet(source);
+  const session = selectBoardAutoOrganizeCandidate(
+    createBoardAutoOrganizePreviewSession(source, candidateSet, 7),
+    candidateSet.candidates[1]!.id
   );
+  const terraformFiles: TerraformSyncFileInput[] = [
+    { fileName: "main.tf", terraformCode: "" }
+  ];
+  let releaseSave: (() => void) | undefined;
+  const observedRequests: unknown[] = [];
+  const applyPromise = applyBoardAutoOrganizeCandidate({
+    currentDiagram: source,
+    currentDraftRevision: 7,
+    save: async (request) => {
+      observedRequests.push(request);
+      await new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+      return { revision: 8 };
+    },
+    session,
+    terraformFiles
+  });
+  let settled = false;
+  void applyPromise.then(() => {
+    settled = true;
+  });
 
-  assert.equal(resolution.diagramToApply, null);
-  assert.equal(resolution.isStale, true);
+  await Promise.resolve();
+  assert.equal(settled, false);
+  releaseSave?.();
+  const result = await applyPromise;
+
+  assert.equal(result.status, "saved");
+  assert.deepEqual(result.diagramToApply, candidateSet.candidates[1]!.diagram);
+  assert.notEqual(result.diagramToApply, candidateSet.candidates[1]!.diagram);
+  assert.deepEqual(Object.keys(observedRequests[0] as object).sort(), [
+    "candidateDiagram",
+    "candidateId",
+    "expectedRevision",
+    "sessionId",
+    "sourceDiagram",
+    "sourceFingerprint",
+    "terraformFiles"
+  ]);
+  assert.equal(JSON.stringify(observedRequests[0]).includes("compiler"), false);
+  assert.equal(JSON.stringify(observedRequests[0]).includes("quality"), false);
 });
 
-test("바뀐 배치가 없으면 원본을 그대로 사용해도 된다고 안내한다", () => {
-  const source = diagram();
-  const session = createBoardAutoOrganizePreviewSession(source, structuredClone(source));
-
-  assert.equal(session.summary.whatChanged, "정리할 부분을 찾지 못했어요.");
-  assert.deepEqual(session.summary.reviewItems, ["현재 배치를 그대로 사용해도 돼요."]);
-});
-
-function diagram(): DiagramJson {
+/** 미리보기 계약을 확인할 최소 source Diagram을 만듭니다. */
+function createDiagram(): DiagramJson {
   return {
     nodes: [
       {
@@ -177,23 +185,69 @@ function diagram(): DiagramJson {
         type: "aws_instance",
         kind: "resource",
         position: { x: 40, y: 40 },
-        size: { width: 48, height: 48 },
-        label: "EC2",
+        size: { width: 168, height: 96 },
+        label: "Web server",
         locked: false,
-        zIndex: 1
-      },
-      {
-        id: "area-a",
-        type: "aws_vpc",
-        kind: "resource",
-        position: { x: 240, y: 120 },
-        size: { width: 320, height: 240 },
-        label: "VPC",
-        locked: false,
-        zIndex: 0
+        zIndex: 1,
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_instance",
+          resourceName: "web",
+          fileName: "main",
+          values: { instanceType: "t3.micro" }
+        }
       }
     ],
-    edges: [{ id: "edge-a", sourceNodeId: "node-a", targetNodeId: "area-a" }],
+    edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+/** 서로 다른 두 시각 정리안을 Task 6 public contract 모양으로 만듭니다. */
+function createCandidateSet(source: DiagramJson): BoardAutoOrganizeCandidateSet {
+  const first = structuredClone(source);
+  first.nodes[0]!.position = { x: 240, y: 120 };
+  const second = structuredClone(source);
+  second.nodes[0]!.position = { x: 420, y: 180 };
+
+  return {
+    sessionId: "board-auto-session:1234abcd",
+    sourceFingerprint: "1234abcd",
+    candidates: [
+      {
+        id: "candidate-secret-alpha",
+        diagram: first,
+        visualDiff: {
+          movedNodeIds: ["node-a"],
+          resizedNodeIds: [],
+          reroutedEdgeIds: [],
+          addedFrameIds: [],
+          changedFrameIds: [],
+          removedFrameIds: []
+        },
+        explanations: [
+          "Web server를 보기 편한 위치로 옮겼습니다.",
+          "Resource, 설정, 연결 관계는 바뀌지 않았습니다."
+        ],
+        visualFingerprint: "visual-secret-alpha"
+      },
+      {
+        id: "candidate-secret-beta",
+        diagram: second,
+        visualDiff: {
+          movedNodeIds: ["node-a"],
+          resizedNodeIds: [],
+          reroutedEdgeIds: [],
+          addedFrameIds: [],
+          changedFrameIds: [],
+          removedFrameIds: []
+        },
+        explanations: [
+          "Web server의 흐름을 한눈에 볼 수 있게 정리했습니다.",
+          "Resource, 설정, 연결 관계는 바뀌지 않았습니다."
+        ],
+        visualFingerprint: "visual-secret-beta"
+      }
+    ]
   };
 }

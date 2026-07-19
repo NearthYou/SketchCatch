@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import type {
   DiagramJson,
+  ProjectDraft,
   ProjectDraftConflictResponse,
+  ProjectDraftResponse,
   TerraformSyncFileInput
 } from "../../../../packages/types/src";
 import { useAuth } from "../../components/auth/auth-provider";
@@ -14,7 +16,11 @@ import { queryKeys } from "../../lib/query-keys";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
-import { getProject, listSourceRepositories } from "./api";
+import {
+  applyProjectDraftBoardAutoOrganize,
+  getProject,
+  listSourceRepositories
+} from "./api";
 import { buildBoardTemplateDiagram } from "../resource-settings/template-library";
 import {
   resolveRepositoryAnalysisTemplate,
@@ -33,7 +39,13 @@ import type {
   TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
 import { EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT } from "./workspace-terraform-ai";
-import type { LocalProjectDraft } from "./project-draft-persistence";
+import {
+  createLocalProjectDraft,
+  markDraftServerSaved,
+  writeLocalProjectDraft,
+  type LocalProjectDraft
+} from "./project-draft-persistence";
+import type { BoardAutoOrganizeApplyRequest } from "../architecture-board-compiler/board-auto-organize-preview";
 import { shouldFlushProjectDraftBeforePageExit } from "./project-draft-page-exit";
 import {
   defaultProjectDraftRepository,
@@ -160,6 +172,7 @@ function ProjectWorkspaceDraftManagerCacheScope(props: ProjectWorkspaceDraftMana
   );
 }
 
+/** Project Draft의 로컬 복구, 서버 revision, Board 편집 상태를 한 경계에서 조율합니다. */
 function ProjectWorkspaceDraftManagerState({
   initialCicdReturnCommand,
   initialRightPanelView,
@@ -769,6 +782,69 @@ function ProjectWorkspaceDraftManagerState({
     [clearLocalSaveTimer, localSaveDebounceMs, persistLocalDraftNow]
   );
 
+  /** 정리안 요청에 현재 Terraform working files를 붙여 전용 서버 검증 API만 호출합니다. */
+  const handleBoardAutoOrganizeApplyRequest = useCallback(
+    async (request: BoardAutoOrganizeApplyRequest): Promise<ProjectDraftResponse> => {
+      const response = await applyProjectDraftBoardAutoOrganize({
+        ...request,
+        projectId,
+        terraformFiles: latestTerraformFilesRef.current.map((file) => ({ ...file }))
+      });
+
+      if (!response.draft) {
+        throw new Error("Board 정리안 적용 결과가 비어 있습니다.");
+      }
+
+      return response;
+    },
+    [projectId]
+  );
+
+  /** 서버 적용 뒤의 Board를 같은 revision의 로컬 복구 상태로 한 번만 맞춥니다. */
+  const handleBoardAutoOrganizeApplied = useCallback(
+    ({ diagramJson, draft }: { readonly diagramJson: DiagramJson; readonly draft: ProjectDraft }) => {
+      clearLocalSaveTimer();
+      const terraformFiles = draft.terraformFiles?.map((file) => ({ ...file })) ?? [];
+      latestDiagramRef.current = diagramJson;
+      latestTerraformFilesRef.current = terraformFiles;
+      hasPendingLocalChangesRef.current = false;
+      serverDirtyRef.current = false;
+      serverConflictRef.current = false;
+      draftRecoveryRequiredRef.current = false;
+      setProjectDraftRevision(draft.revision);
+      setDraftConflict(null);
+      setDraftRecoveryRequired(false);
+      setDraftReloadError(null);
+      setServerSaveState("server-saved");
+      setLocalSaveState("local-pending");
+
+      const localDraft = markDraftServerSaved(
+        createLocalProjectDraft({
+          workspaceId: localCacheWorkspaceId,
+          projectId,
+          diagramJson,
+          terraformFiles,
+          previousDraft: localDraftRef.current,
+          savedAt: draft.serverSavedAt
+        }),
+        draft
+      );
+      setCurrentLocalDraft(localDraft);
+
+      void writeLocalProjectDraft(localDraft).then(
+        () => setLocalSaveState("local-saved"),
+        () => setLocalSaveState("local-failed")
+      );
+
+      globalThis.setTimeout(() => {
+        void thumbnailLifecycleRef.current
+          ?.requestSavedRevision(draft.revision)
+          .catch(() => undefined);
+      }, 0);
+    },
+    [clearLocalSaveTimer, localCacheWorkspaceId, projectId, setCurrentLocalDraft]
+  );
+
   const handleBoardReady = useCallback((element: HTMLElement): void => {
     boardElementRef.current = element;
     thumbnailLifecycleRef.current?.setBoardElement(element);
@@ -866,6 +942,7 @@ function ProjectWorkspaceDraftManagerState({
   return (
     <>
       <DiagramEditor
+        boardAutoOrganizeTerraformFiles={initialTerraformFiles}
         draftStatusPanel={
           thumbnailLifecycleState === "failed" ? (
             <div className={styles.draftStatusPanel} role="status">
@@ -900,11 +977,14 @@ function ProjectWorkspaceDraftManagerState({
         initialDiagram={initialDiagram}
         isDeploymentConsoleOpen={isDeploymentConsoleOpen}
         onBoardReady={handleBoardReady}
+        onBoardAutoOrganizeApplied={handleBoardAutoOrganizeApplied}
+        onBoardAutoOrganizeApplyRequest={handleBoardAutoOrganizeApplyRequest}
         onDiagramChange={handleDiagramChange}
         onDiagramSaveRequest={() => flushDraftToServer("manual")}
         onWorkspacePanelOpen={closeAiChat}
         onTemplateWorkspaceApply={handleTemplateWorkspaceApply}
         onSaveAndDeployRequest={saveAndOpenDeployment}
+        projectDraftRevision={projectDraftRevision}
         projectName={displayProjectName}
         workspaceUserName={workspaceUserName}
         rightPanel={(context) => (

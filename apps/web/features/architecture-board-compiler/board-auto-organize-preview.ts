@@ -1,9 +1,13 @@
-import type { DiagramJson } from "@sketchcatch/types";
-import { isAreaNode } from "../diagram-editor/area-nodes";
-import { hasSameBoardAutoOrganizeSemantics } from "./board-auto-organize";
+import {
+  hasSameBoardAutoOrganizeSemantics,
+  serializeBoardAutoOrganizeSource,
+  type BoardAutoOrganizeCandidate,
+  type BoardAutoOrganizeCandidateSet,
+  type DiagramJson,
+  type TerraformSyncFileInput
+} from "@sketchcatch/types";
 
 export type BoardAutoOrganizePreviewView = "original" | "organized";
-export type BoardAutoOrganizeDecision = "keep-original" | "use-organized";
 export type BoardAutoOrganizeViewportAction = "open" | "switch";
 
 export type BoardAutoOrganizeViewportPolicy = {
@@ -11,26 +15,36 @@ export type BoardAutoOrganizeViewportPolicy = {
   readonly autoFit: boolean;
 };
 
-export type BoardAutoOrganizePreviewSummary = {
-  readonly whatChanged: string;
-  readonly reviewItems: readonly string[];
-};
-
 export type BoardAutoOrganizePreviewSession = {
-  readonly activeView: BoardAutoOrganizePreviewView;
+  readonly sessionId: string;
   readonly originalDiagram: DiagramJson;
-  readonly organizedDiagram: DiagramJson;
-  readonly visibleDiagram: DiagramJson;
+  readonly candidates: readonly BoardAutoOrganizeCandidate[];
+  readonly selectedCandidateId: string;
+  readonly activeView: BoardAutoOrganizePreviewView;
+  readonly sourceFingerprint: string;
+  readonly sourceDraftRevision: number | null;
   readonly viewportBeforePreview: DiagramJson["viewport"];
-  readonly summary: BoardAutoOrganizePreviewSummary;
 };
 
-export type BoardAutoOrganizeResolution = {
-  readonly diagramToApply: DiagramJson | null;
-  readonly isStale: boolean;
-  readonly viewportToRestore: DiagramJson["viewport"] | null;
+export type BoardAutoOrganizeApplyRequest = {
+  readonly sessionId: string;
+  readonly candidateId: string;
+  readonly sourceDiagram: DiagramJson;
+  readonly sourceFingerprint: string;
+  readonly candidateDiagram: DiagramJson;
+  readonly expectedRevision: number | null;
+  readonly terraformFiles: TerraformSyncFileInput[];
 };
 
+export type BoardAutoOrganizeApplyResult<TSaveResult> =
+  | { readonly status: "stale" }
+  | {
+      readonly status: "saved";
+      readonly diagramToApply: DiagramJson;
+      readonly saveResult: TSaveResult;
+    };
+
+/** 미리보기를 처음 열 때만 화면을 맞추고 이후 선택은 현재 viewport를 유지합니다. */
 export function getBoardAutoOrganizeViewportPolicy(
   action: BoardAutoOrganizeViewportAction
 ): BoardAutoOrganizeViewportPolicy {
@@ -39,139 +53,122 @@ export function getBoardAutoOrganizeViewportPolicy(
     : { applySourceViewport: false, autoFit: false };
 }
 
+/** Task 6 후보 전체와 생성 당시 Board revision을 독립적인 로컬 session으로 복사합니다. */
 export function createBoardAutoOrganizePreviewSession(
   originalDiagram: DiagramJson,
-  organizedDiagram: DiagramJson,
+  candidateSet: BoardAutoOrganizeCandidateSet,
+  sourceDraftRevision: number | null,
   viewportBeforePreview: DiagramJson["viewport"] = originalDiagram.viewport
 ): BoardAutoOrganizePreviewSession {
-  const original = structuredClone(originalDiagram);
-  const organized = structuredClone(organizedDiagram);
+  const candidates = structuredClone(candidateSet.candidates);
+  const selectedCandidate = candidates[0];
+
+  if (!selectedCandidate) {
+    throw new Error("표시할 Board 정리안이 없습니다.");
+  }
 
   return {
+    sessionId: candidateSet.sessionId,
+    originalDiagram: structuredClone(originalDiagram),
+    candidates,
+    selectedCandidateId: selectedCandidate.id,
     activeView: "organized",
-    originalDiagram: original,
-    organizedDiagram: organized,
-    visibleDiagram: structuredClone(organized),
-    viewportBeforePreview: structuredClone(viewportBeforePreview),
-    summary: createPreviewSummary(original, organized)
+    sourceFingerprint: candidateSet.sourceFingerprint,
+    sourceDraftRevision,
+    viewportBeforePreview: structuredClone(viewportBeforePreview)
   };
 }
 
+/** 후보 버튼 선택은 저장 payload를 만들지 않고 session의 선택값만 바꿉니다. */
+export function selectBoardAutoOrganizeCandidate(
+  session: BoardAutoOrganizePreviewSession,
+  candidateId: string
+): BoardAutoOrganizePreviewSession {
+  if (!session.candidates.some((candidate) => candidate.id === candidateId)) {
+    return session;
+  }
+
+  return {
+    ...session,
+    activeView: "organized",
+    selectedCandidateId: candidateId
+  };
+}
+
+/** 모바일 원본·정리안 전환은 선택 후보와 저장 상태를 건드리지 않습니다. */
 export function selectBoardAutoOrganizePreviewView(
   session: BoardAutoOrganizePreviewSession,
   activeView: BoardAutoOrganizePreviewView
 ): BoardAutoOrganizePreviewSession {
-  const selected = activeView === "original" ? session.originalDiagram : session.organizedDiagram;
+  return { ...session, activeView };
+}
+
+/** 현재 session에서 사용자가 고른 후보를 찾습니다. */
+export function getBoardAutoOrganizeSelectedCandidate(
+  session: BoardAutoOrganizePreviewSession
+): BoardAutoOrganizeCandidate | null {
+  return (
+    session.candidates.find((candidate) => candidate.id === session.selectedCandidateId) ?? null
+  );
+}
+
+/** 현재 toggle에 맞는 Diagram 복사본만 미리보기 canvas에 제공합니다. */
+export function getBoardAutoOrganizeVisibleDiagram(
+  session: BoardAutoOrganizePreviewSession
+): DiagramJson {
+  const selectedCandidate = getBoardAutoOrganizeSelectedCandidate(session);
+  const visibleDiagram =
+    session.activeView === "original" || !selectedCandidate
+      ? session.originalDiagram
+      : selectedCandidate.diagram;
+
+  return structuredClone(visibleDiagram);
+}
+
+/** 원본과 revision이 그대로일 때만 서버 성공 뒤 적용 가능한 Diagram을 반환합니다. */
+export async function applyBoardAutoOrganizeCandidate<TSaveResult>({
+  currentDiagram,
+  currentDraftRevision,
+  save,
+  session,
+  terraformFiles
+}: {
+  readonly currentDiagram: DiagramJson;
+  readonly currentDraftRevision: number | null;
+  readonly save: (request: BoardAutoOrganizeApplyRequest) => Promise<TSaveResult>;
+  readonly session: BoardAutoOrganizePreviewSession;
+  readonly terraformFiles: readonly TerraformSyncFileInput[];
+}): Promise<BoardAutoOrganizeApplyResult<TSaveResult>> {
+  const selectedCandidate = getBoardAutoOrganizeSelectedCandidate(session);
+  const sourceIsCurrent =
+    serializeBoardAutoOrganizeSource(currentDiagram) ===
+    serializeBoardAutoOrganizeSource(session.originalDiagram);
+
+  if (
+    !selectedCandidate ||
+    currentDraftRevision !== session.sourceDraftRevision ||
+    !sourceIsCurrent ||
+    !hasSameBoardAutoOrganizeSemantics(
+      session.originalDiagram,
+      selectedCandidate.diagram
+    )
+  ) {
+    return { status: "stale" };
+  }
+
+  const saveResult = await save({
+    sessionId: session.sessionId,
+    candidateId: selectedCandidate.id,
+    sourceDiagram: structuredClone(session.originalDiagram),
+    sourceFingerprint: session.sourceFingerprint,
+    candidateDiagram: structuredClone(selectedCandidate.diagram),
+    expectedRevision: session.sourceDraftRevision,
+    terraformFiles: terraformFiles.map((file) => ({ ...file }))
+  });
 
   return {
-    ...session,
-    activeView,
-    visibleDiagram: structuredClone(selected)
+    status: "saved",
+    diagramToApply: structuredClone(selectedCandidate.diagram),
+    saveResult
   };
-}
-
-export function resolveBoardAutoOrganizeDecision(
-  session: BoardAutoOrganizePreviewSession,
-  decision: BoardAutoOrganizeDecision,
-  currentDiagram: DiagramJson = session.originalDiagram
-): BoardAutoOrganizeResolution {
-  if (decision === "keep-original") {
-    return {
-      diagramToApply: null,
-      isStale: false,
-      viewportToRestore: structuredClone(session.viewportBeforePreview)
-    };
-  }
-
-  if (!hasSameBoardAutoOrganizeSemantics(session.originalDiagram, currentDiagram)) {
-    return {
-      diagramToApply: null,
-      isStale: true,
-      viewportToRestore: structuredClone(session.viewportBeforePreview)
-    };
-  }
-
-  return {
-    diagramToApply: structuredClone(session.organizedDiagram),
-    isStale: false,
-    viewportToRestore: null
-  };
-}
-
-function createPreviewSummary(
-  originalDiagram: DiagramJson,
-  organizedDiagram: DiagramJson
-): BoardAutoOrganizePreviewSummary {
-  const organizedNodesById = new Map(organizedDiagram.nodes.map((node) => [node.id, node]));
-  const organizedEdgesById = new Map(organizedDiagram.edges.map((edge) => [edge.id, edge]));
-  let movedNodeCount = 0;
-  let resizedAreaCount = 0;
-  let resizedResourceCount = 0;
-  let reroutedEdgeCount = 0;
-
-  for (const node of originalDiagram.nodes) {
-    const organizedNode = organizedNodesById.get(node.id);
-    if (!organizedNode) continue;
-
-    if (!samePoint(node.position, organizedNode.position)) {
-      movedNodeCount += 1;
-    }
-
-    if (!sameSize(node.size, organizedNode.size)) {
-      if (isAreaNode(node)) {
-        resizedAreaCount += 1;
-      } else {
-        resizedResourceCount += 1;
-      }
-    }
-  }
-
-  for (const edge of originalDiagram.edges) {
-    const organizedEdge = organizedEdgesById.get(edge.id);
-    if (organizedEdge && JSON.stringify(edge.route) !== JSON.stringify(organizedEdge.route)) {
-      reroutedEdgeCount += 1;
-    }
-  }
-
-  const changes = [
-    movedNodeCount > 0 ? `리소스 위치 ${movedNodeCount}곳` : null,
-    resizedAreaCount > 0 ? `영역 크기 ${resizedAreaCount}곳` : null,
-    resizedResourceCount > 0 ? `리소스 크기 ${resizedResourceCount}곳` : null,
-    reroutedEdgeCount > 0 ? `연결선 ${reroutedEdgeCount}개` : null
-  ].filter((value): value is string => value !== null);
-
-  if (changes.length === 0) {
-    return {
-      whatChanged: "정리할 부분을 찾지 못했어요.",
-      reviewItems: ["현재 배치를 그대로 사용해도 돼요."]
-    };
-  }
-
-  const reviewItems = [
-    movedNodeCount > 0 ? "리소스가 원하는 위치에 놓였는지 확인해 주세요." : null,
-    resizedAreaCount > 0 ? "영역 크기와 여백이 자연스러운지 확인해 주세요." : null,
-    resizedResourceCount > 0 ? "리소스 크기가 자연스러운지 확인해 주세요." : null,
-    reroutedEdgeCount > 0 ? "연결선이 리소스를 가리지 않는지 확인해 주세요." : null
-  ]
-    .filter((value): value is string => value !== null)
-    .slice(0, 3);
-
-  return {
-    whatChanged: `${changes.join(", ")}를 정리했어요.`,
-    reviewItems
-  };
-}
-
-function samePoint(
-  left: { readonly x: number; readonly y: number },
-  right: { readonly x: number; readonly y: number }
-): boolean {
-  return left.x === right.x && left.y === right.y;
-}
-
-function sameSize(
-  left: { readonly width: number; readonly height: number },
-  right: { readonly width: number; readonly height: number }
-): boolean {
-  return left.width === right.width && left.height === right.height;
 }

@@ -147,6 +147,7 @@ import {
   type ApiRequestContext
 } from "../../lib/api-client";
 import { readStoredAuthSession } from "../../lib/auth-storage";
+import type { BoardAutoOrganizeApplyRequest } from "../architecture-board-compiler/board-auto-organize-preview";
 
 const AI_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api").replace(/\/+$/, "");
 const API_ERROR_CODES = [
@@ -352,6 +353,23 @@ export async function saveProjectDraft({
       ...(terraformFiles !== undefined ? { terraformFiles } : {})
     }
   });
+}
+
+/** 선택한 Board 정리안을 Compiler metadata 없이 전용 서버 검증 경계로 보냅니다. */
+export async function applyProjectDraftBoardAutoOrganize({
+  projectId,
+  ...request
+}: {
+  readonly projectId: string;
+} & BoardAutoOrganizeApplyRequest): Promise<ProjectDraftResponse> {
+  return apiFetch<ProjectDraftResponse>(
+    `/projects/${encodeURIComponent(projectId)}/draft/auto-organize/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: request
+    }
+  );
 }
 
 export async function getRepositoryAnalysisRecord(
