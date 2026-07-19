@@ -173,7 +173,7 @@ test("approval owns the Plan summary while execution keeps final target confirma
   );
 });
 
-test("the execution stage owns current logs before Deployment History exists", () => {
+test("the common step workspace owns current logs before Deployment History exists", () => {
   const contentStart = directDeploymentSource.indexOf("function renderDirectStepContent");
   const approvalStart = directDeploymentSource.indexOf(
     'if (stepId === "approval")',
@@ -185,10 +185,31 @@ test("the execution stage owns current logs before Deployment History exists", (
     executionStart
   );
   const executionSource = directDeploymentSource.slice(executionStart, executionEnd);
+  const selectedContentStart = directDeploymentSource.indexOf(
+    "{renderDirectStepContent(selectedStep.id)}",
+    executionEnd
+  );
+  const commonAlertStart = directDeploymentSource.indexOf(
+    "{deploymentTargetPrerequisite ? (",
+    selectedContentStart
+  );
+  const commonWorkspaceSource = directDeploymentSource.slice(
+    selectedContentStart,
+    commonAlertStart
+  );
 
-  assert.match(executionSource, /deploymentLogView\.source === "current"/);
-  assert.match(executionSource, /현재 실행 로그/);
-  assert.match(executionSource, /<DeploymentLogList logs=\{deploymentLogs\}/);
+  assert.ok(selectedContentStart > executionEnd);
+  assert.ok(commonAlertStart > selectedContentStart);
+  assert.doesNotMatch(executionSource, /deploymentLogView\.source === "current"/);
+  assert.doesNotMatch(executionSource, /현재 실행 로그/);
+  assert.match(commonWorkspaceSource, /deploymentLogView\.source === "current"/);
+  assert.match(commonWorkspaceSource, /현재 실행 로그/);
+  assert.match(commonWorkspaceSource, /<DeploymentLogList logs=\{deploymentLogs\}/);
+  assert.equal(directDeploymentSource.match(/현재 실행 로그/g)?.length, 2);
+  assert.equal(
+    directDeploymentSource.match(/<DeploymentLogList logs=\{deploymentLogs\}/g)?.length,
+    1
+  );
 });
 
 test("history keeps selected-version logs separate from current execution logs", () => {
@@ -212,6 +233,11 @@ test("history keeps selected-version logs separate from current execution logs",
   assert.doesNotMatch(logsSource, /deploymentLogView/);
   assert.match(historyViewSource, /loadedHistoryDeploymentLogs\.length/);
   assert.doesNotMatch(historyViewSource, /deploymentLogView/);
+  assert.equal(
+    directDeploymentSource.match(/<DeploymentLogList logs=\{loadedHistoryDeploymentLogs\}/g)
+      ?.length,
+    1
+  );
 });
 
 test("deployment polling keeps unrelated failures but reconciles its accepted Plan", () => {

@@ -311,6 +311,41 @@ test("running apply reports a running final step", () => {
   assert.equal(flow.steps[2]?.state, "running");
 });
 
+test("Plan running and validation failure stay on the validation step before an artifact exists", () => {
+  const runningFlow = getDirectDeploymentFlow(
+    createInput({
+      deployment: {
+        approvedAt: null,
+        currentPlanArtifactId: null,
+        currentPlanOperation: "apply",
+        status: "RUNNING"
+      },
+      preflightState: "passed",
+      requestState: "loading"
+    })
+  );
+  const failedFlow = getDirectDeploymentFlow(
+    createInput({
+      deployment: {
+        approvedAt: null,
+        currentPlanArtifactId: null,
+        currentPlanOperation: "apply",
+        status: "FAILED"
+      },
+      failedStepId: "validation",
+      preflightState: "passed",
+      requestState: "error"
+    })
+  );
+
+  assert.equal(runningFlow.activeStepId, "validation");
+  assert.equal(runningFlow.steps[0]?.state, "running");
+  assert.equal(runningFlow.steps[2]?.state, "idle");
+  assert.equal(failedFlow.activeStepId, "validation");
+  assert.equal(failedFlow.steps[0]?.state, "error");
+  assert.equal(failedFlow.steps[2]?.state, "idle");
+});
+
 test("blocked Preflight stops the flow without using idle error color", () => {
   const flow = getDirectDeploymentFlow(createInput({ preflightState: "blocked" }));
 

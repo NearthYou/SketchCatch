@@ -1500,22 +1500,6 @@ export function DirectDeploymentScreen({
               />
             ) : null}
           </div>
-          {deploymentLogView.source === "current" ? (
-            <details className={styles.deploymentDisclosure}>
-              <summary>
-                <span>현재 실행 로그</span>
-                <small>{deploymentLogs.length}줄</small>
-              </summary>
-              <div className={styles.deploymentDisclosureBody}>
-                <section
-                  aria-label="현재 실행 로그 세부 내용"
-                  className={styles.deploymentSection}
-                >
-                  <DeploymentLogList logs={deploymentLogs} />
-                </section>
-              </div>
-            </details>
-          ) : null}
           {selectedDeployment?.status === "PARTIALLY_FAILED" &&
           selectedApplicationRelease?.status === "partially_failed" ? (
             <div className={styles.deploymentPartialFailureCallout} role="alert">
@@ -1853,6 +1837,22 @@ export function DirectDeploymentScreen({
             requestedAtMs={activeProgress?.requestedAtMs ?? null}
           />
           {renderDirectStepContent(selectedStep.id)}
+          {deploymentLogView.source === "current" ? (
+            <details className={styles.deploymentDisclosure}>
+              <summary>
+                <span>현재 실행 로그</span>
+                <small>{deploymentLogs.length}줄</small>
+              </summary>
+              <div className={styles.deploymentDisclosureBody}>
+                <section
+                  aria-label="현재 실행 로그 세부 내용"
+                  className={styles.deploymentSection}
+                >
+                  <DeploymentLogList logs={deploymentLogs} />
+                </section>
+              </div>
+            </details>
+          ) : null}
           {deploymentTargetPrerequisite ? (
             <div className={styles.deploymentValidationError} role="alert">
               <strong>{deploymentTargetPrerequisite.title}</strong>
