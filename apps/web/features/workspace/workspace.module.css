@@ -6438,7 +6438,7 @@
   justify-content: center;
   padding: 12px;
   position: fixed;
-  z-index: 140;
+  z-index: 1500;
 }
 
 .liveObservationDialog {
