@@ -29,6 +29,11 @@ import {
   saveProjectDraft
 } from "./api";
 import {
+  applyExistingReverseEngineeringPreview,
+  createReverseEngineeringApplyPreview,
+  type ReverseEngineeringApplyPreview
+} from "./reverse-engineering-apply-flow";
+import {
   convertReverseEngineeringBoardToArchitectureJson,
   createReverseEngineeringBoardApplication,
   type ReverseEngineeringBoardApplicationMode,
@@ -105,7 +110,7 @@ export function ReverseEngineeringPanel({
   const [applyState, setApplyState] = useState<ReverseEngineeringApplyState>("idle");
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
-  const [previewBaseDiagram, setPreviewBaseDiagram] = useState<DiagramJson | null>(null);
+  const [previewBase, setPreviewBase] = useState<ReverseEngineeringApplyPreview | null>(null);
   const [placement, setPlacement] = useState<ReverseEngineeringPlacement>("original");
   const [organizationCandidates, setOrganizationCandidates] =
     useState<ReverseEngineeringOrganizationCandidates | null>(null);
@@ -191,7 +196,7 @@ export function ReverseEngineeringPanel({
         }
       : null;
   // 후보 미리보기를 띄워도 원래 보드 기준이 흔들리지 않게 별도로 보관합니다.
-  const previewSourceDiagram = previewBaseDiagram ?? context.diagram;
+  const previewSourceDiagram = previewBase?.sourceDiagram ?? context.diagram;
   const originalCandidateApplication = useMemo(() => {
     if (!selectedCandidateResult) {
       return null;
@@ -351,8 +356,11 @@ export function ReverseEngineeringPanel({
     setSelectedCandidateId(null);
     setScanResponse(null);
     setLogs([]);
-    const baseDiagram = previewBaseDiagram ?? context.diagram;
-    setPreviewBaseDiagram(baseDiagram);
+    const basePreview = createReverseEngineeringApplyPreview({
+      diagram: context.diagram,
+      draftRevision: createProjectOnApply ? null : context.projectDraftRevision
+    });
+    setPreviewBase(basePreview);
     context.setPreviewDiagram(null);
 
     try {
@@ -375,7 +383,7 @@ export function ReverseEngineeringPanel({
         rememberCompletedScan(response.response.scan);
       }
       if (response.response.result) {
-        showFirstCandidatePreview(response.response.result, baseDiagram);
+        showFirstCandidatePreview(response.response.result, basePreview.sourceDiagram);
       }
       setScanState("idle");
     } catch {
@@ -419,7 +427,7 @@ export function ReverseEngineeringPanel({
         setPlacement("original");
         setOrganizationCandidates(null);
         setSelectedOrganizationCandidateId(null);
-        setPreviewBaseDiagram(null);
+        setPreviewBase(null);
         context.setPreviewDiagram(null);
       }
     } catch (error) {
@@ -436,8 +444,11 @@ export function ReverseEngineeringPanel({
     setPlacement("original");
     setOrganizationCandidates(null);
     setSelectedOrganizationCandidateId(null);
-    const baseDiagram = previewBaseDiagram ?? context.diagram;
-    setPreviewBaseDiagram(baseDiagram);
+    const basePreview = createReverseEngineeringApplyPreview({
+      diagram: context.diagram,
+      draftRevision: createProjectOnApply ? null : context.projectDraftRevision
+    });
+    setPreviewBase(basePreview);
 
     try {
       const response = await getReverseEngineeringScan({
@@ -453,10 +464,10 @@ export function ReverseEngineeringPanel({
       setActiveScanId(response.scan.id);
       setLogs(nextLogs);
       if (response.result) {
-        showFirstCandidatePreview(response.result, baseDiagram);
+        showFirstCandidatePreview(response.result, basePreview.sourceDiagram);
       } else {
         setSelectedCandidateId(null);
-        setPreviewBaseDiagram(null);
+        setPreviewBase(null);
         context.setPreviewDiagram(null);
       }
       setScanState("idle");
@@ -521,23 +532,54 @@ export function ReverseEngineeringPanel({
           throw new Error("Board 서버 저장이 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.");
         }
 
-        await context.persistAndApplyDiagramJson(diagramToApply);
-      }
-      setPreviewBaseDiagram(diagramToApply);
+        if (!previewBase) {
+          throw new Error("적용할 Reverse Engineering 미리보기를 찾지 못했습니다.");
+        }
 
-      await createArchitectureSnapshot({
-        projectId: targetProjectId,
-        source: "imported",
-        ...(createProjectOnApply
-          ? {}
-          : {
+        const outcome = await applyExistingReverseEngineeringPreview({
+          currentDiagram: context.diagram,
+          currentDraftRevision: context.projectDraftRevision,
+          diagramToApply,
+          persistAndApply: (diagram, expectedRevision) =>
+            context.persistAndApplyDiagramJson?.(diagram, expectedRevision) ??
+            Promise.reject(new Error("Board 서버 저장 경계가 준비되지 않았습니다.")),
+          preview: previewBase,
+          saveSnapshot: async () => {
+            await createArchitectureSnapshot({
+              projectId: targetProjectId,
+              source: "imported",
               reverseEngineering: {
                 sourceScanId: result.scan.id,
                 draftId: result.reverseEngineeringDraft.id
-              }
-            }),
-        architectureJson: convertReverseEngineeringBoardToArchitectureJson(diagramToApply, result)
-      });
+              },
+              architectureJson: convertReverseEngineeringBoardToArchitectureJson(
+                diagramToApply,
+                result
+              )
+            });
+          }
+        });
+
+        if (outcome.status === "stale") {
+          setApplyState("error");
+          setApplyMessage("보드가 변경되었습니다. 다시 스캔해 주세요.");
+          return;
+        }
+      }
+      setPreviewBase(
+        createReverseEngineeringApplyPreview({
+          diagram: diagramToApply,
+          draftRevision: createProjectOnApply ? null : context.projectDraftRevision
+        })
+      );
+
+      if (createProjectOnApply) {
+        await createArchitectureSnapshot({
+          projectId: targetProjectId,
+          source: "imported",
+          architectureJson: convertReverseEngineeringBoardToArchitectureJson(diagramToApply, result)
+        });
+      }
       setApplyState("saved");
       if (createProjectOnApply && targetProject) {
         router.push(createWorkspaceProjectUrl(targetProject, "reverse"));
@@ -614,7 +656,7 @@ export function ReverseEngineeringPanel({
 
     if (!nextCandidate) {
       setSelectedCandidateId(null);
-      setPreviewBaseDiagram(null);
+      setPreviewBase(null);
       context.setPreviewDiagram(null);
       return;
     }

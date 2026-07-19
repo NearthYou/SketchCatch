@@ -1087,11 +1087,11 @@ function DiagramEditorInner({
   const persistAndApplyDiagramJson = useCallback<
     NonNullable<DiagramEditorPanelContext["persistAndApplyDiagramJson"]>
   >(
-    async (nextDiagram) => {
+    async (nextDiagram, expectedRevision) => {
       if (autoOrganizeApplyInFlightRef.current) {
         throw new Error("다른 Board 적용이 진행 중입니다.");
       }
-      if (!onPersistedDiagramApplyRequest || projectDraftRevision === null) {
+      if (!onPersistedDiagramApplyRequest) {
         throw new Error("Board 서버 저장 경계가 준비되지 않았습니다.");
       }
 
@@ -1102,7 +1102,7 @@ function DiagramEditorInner({
       try {
         const response = await onPersistedDiagramApplyRequest({
           diagramJson: cloneDiagram(diagramToApply),
-          expectedRevision: projectDraftRevision
+          expectedRevision
         });
 
         if (!response.draft) {
@@ -1129,7 +1129,6 @@ function DiagramEditorInner({
       commitDiagramUpdate,
       onPersistedDiagramApplied,
       onPersistedDiagramApplyRequest,
-      projectDraftRevision,
       setPreviewDiagram
     ]
   );
@@ -1407,6 +1406,7 @@ function DiagramEditorInner({
       isRightPanelOpen: hasRightRail && isRightPanelOpen,
       previewAnnotations,
       previewDiagram,
+      projectDraftRevision,
       selectedNodeId,
       terraformRefreshRequestId,
       nodes: diagram.nodes,

@@ -94,13 +94,16 @@ export type DiagramEditorPanelContext = {
   isRightPanelOpen: boolean;
   previewAnnotations: DiagramPreviewAnnotations | null;
   previewDiagram: DiagramJson | null;
+  projectDraftRevision: number | null;
   selectedNodeId: string | null;
   terraformRefreshRequestId: number;
   nodes: readonly DiagramNode[];
   edges: readonly DiagramEdge[];
   applyDiagramJson: (diagram: DiagramJson) => void;
   /** 서버 revision 저장이 성공한 뒤에만 Diagram과 History를 함께 적용합니다. */
-  persistAndApplyDiagramJson?: ((diagram: DiagramJson) => Promise<void>) | undefined;
+  persistAndApplyDiagramJson?:
+    | ((diagram: DiagramJson, expectedRevision: number) => Promise<void>)
+    | undefined;
   closeInspectedNode: () => void;
   commitTerraformSourceAuthority: () => DiagramJson;
   focusResourceNode: (nodeId: string) => void;

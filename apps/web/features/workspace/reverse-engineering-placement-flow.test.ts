@@ -11,6 +11,18 @@ const stylesheetSource = readFileSync(
   fileURLToPath(new URL("./reverse-engineering.module.css", import.meta.url)),
   "utf8"
 );
+const diagramEditorSource = readFileSync(
+  fileURLToPath(new URL("../diagram-editor/DiagramEditor.tsx", import.meta.url)),
+  "utf8"
+);
+const diagramEditorTypesSource = readFileSync(
+  fileURLToPath(new URL("../diagram-editor/types.ts", import.meta.url)),
+  "utf8"
+);
+const applyFlowSource = readFileSync(
+  fileURLToPath(new URL("./reverse-engineering-apply-flow.ts", import.meta.url)),
+  "utf8"
+);
 
 test("새 scan과 저장된 scan은 원래 배치를 먼저 미리보기한다", () => {
   const firstPreview = getSourceBlock(
@@ -28,7 +40,10 @@ test("새 scan과 저장된 scan은 원래 배치를 먼저 미리보기한다",
   assert.match(firstPreview, /placement: "original"/);
   assert.doesNotMatch(firstPreview, /placement: "compiled"/);
   assert.match(historicalScan, /setPlacement\("original"\)/);
-  assert.match(historicalScan, /showFirstCandidatePreview\(response\.result, baseDiagram\)/);
+  assert.match(
+    historicalScan,
+    /showFirstCandidatePreview\(response\.result, basePreview\.sourceDiagram\)/
+  );
 });
 
 test("자동 정리 후보는 사용자가 자동 정리 해보기를 누른 뒤에만 만든다", () => {
@@ -104,12 +119,42 @@ test("기존 프로젝트 적용은 서버 저장 성공 전 실제 Board를 바
     "function previewAutomaticOrganization("
   );
 
-  assert.match(applyFlow, /await context\.persistAndApplyDiagramJson\(diagramToApply\)/);
+  assert.match(applyFlow, /applyExistingReverseEngineeringPreview\(/);
   assert.ok(
-    applyFlow.indexOf("await context.persistAndApplyDiagramJson(diagramToApply)") <
+    applyFlow.indexOf("await applyExistingReverseEngineeringPreview(") <
       applyFlow.indexOf("createArchitectureSnapshot("),
     "persisted Diagram apply must complete before snapshot creation"
   );
+});
+
+test("Reverse preview가 생성 당시 Board fingerprint와 draft revision으로만 적용한다", () => {
+  const applyFlow = getSourceBlock(
+    panelSource,
+    "async function applyScanResult(",
+    "function previewAutomaticOrganization("
+  );
+  const persistedApplyFlow = getSourceBlock(
+    diagramEditorSource,
+    "const persistAndApplyDiagramJson = useCallback",
+    "const previewAutomaticOrganization = useCallback"
+  );
+
+  assert.match(panelSource, /createReverseEngineeringApplyPreview\(/);
+  assert.match(applyFlowSource, /sourceDraftRevision/);
+  assert.match(applyFlowSource, /sourceFingerprint/);
+  assert.match(applyFlow, /currentDraftRevision: context\.projectDraftRevision/);
+  assert.match(applyFlow, /preview: previewBase/);
+  assert.match(
+    applyFlow,
+    /persistAndApply: \(diagram, expectedRevision\) =>\s*context\.persistAndApplyDiagramJson\?\.\(diagram, expectedRevision\)/
+  );
+  assert.match(diagramEditorTypesSource, /projectDraftRevision: number \| null/);
+  assert.match(
+    diagramEditorTypesSource,
+    /\(\(diagram: DiagramJson, expectedRevision: number\) => Promise<void>\)/
+  );
+  assert.match(persistedApplyFlow, /async \(nextDiagram, expectedRevision\)/);
+  assert.doesNotMatch(persistedApplyFlow, /expectedRevision: projectDraftRevision/);
 });
 
 test("중첩 상세 항목은 열린 바깥 항목 때문에 닫힌 표시가 바뀌지 않는다", () => {
