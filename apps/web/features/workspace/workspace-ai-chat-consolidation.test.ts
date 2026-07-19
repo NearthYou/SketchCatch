@@ -101,6 +101,23 @@ test("안전 수정은 최신 분석과 정확한 파일이 있을 때만 batch 
   assert.match(chatSource, /오류 분석에 실패했습니다\. 다시 분석한 뒤 수정안을 적용하세요/);
 });
 
+test("draft failures keep developer diagnostics out of the transcript and render only one user message", () => {
+  const start = chatSource.indexOf("async function createDraftFromRequest(");
+  const end = chatSource.indexOf("function showDraftPreview(", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const draftRequestSection = chatSource.slice(start, end);
+
+  assert.match(draftRequestSection, /console\.error\("Workspace AI draft request failed", error\)/);
+  assert.match(draftRequestSection, /setDraftState\("idle"\)/);
+  assert.match(draftRequestSection, /setDraftErrorMessage\(""\)/);
+  assert.match(
+    draftRequestSection,
+    /appendAssistantMessage\("error", "AI 초안을 만들지 못했어요\. 잠시 후 다시 시도해 주세요\."\)/
+  );
+  assert.doesNotMatch(draftRequestSection, /getApiErrorMessage/);
+  assert.doesNotMatch(draftRequestSection, /setDraftState\("error"\)/);
+});
 function read(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }

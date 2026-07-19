@@ -6,6 +6,11 @@ import type {
   ArchitecturePatchPreview
 } from "@sketchcatch/types";
 import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/workspace-ai-chat-storage";
+import {
+  findPatchClarificationCandidate as findSharedPatchClarificationCandidate,
+  findPatchClarificationSuggestion as findSharedPatchClarificationSuggestion,
+  getPatchClarificationSuggestions as getSharedPatchClarificationSuggestions
+} from "../../../features/workspace/workspace-ai-patch-clarification";
 
 const AI_START_DRAFT_STORAGE_KEY = "sketchcatch.newProjectDraft";
 const MAX_CHAT_MESSAGES = 80;
@@ -103,35 +108,21 @@ export function isArchitecturePatchClarification(
 export function getPatchClarificationSuggestions(
   clarification: ArchitecturePatchClarification
 ): readonly string[] {
-  const candidates = clarification.candidates.map(formatPatchCandidate);
-  return [...candidates, ...(clarification.suggestions ?? [])];
+  return getSharedPatchClarificationSuggestions(clarification);
 }
 
 export function findPatchClarificationCandidate(
   clarification: ArchitecturePatchClarification,
   answer: string
 ): ArchitecturePatchClarificationCandidate | undefined {
-  const normalizedAnswer = normalizeAnswer(answer);
-
-  return clarification.candidates.find((candidate) => {
-    const candidateLabel = normalizeAnswer(formatPatchCandidate(candidate));
-    return (
-      normalizedAnswer === normalizeAnswer(candidate.resourceId) ||
-      normalizedAnswer === normalizeAnswer(candidate.label) ||
-      normalizedAnswer === candidateLabel ||
-      normalizedAnswer.includes(normalizeAnswer(candidate.resourceId))
-    );
-  });
+  return findSharedPatchClarificationCandidate(clarification, answer);
 }
 
 export function findPatchClarificationSuggestion(
   clarification: ArchitecturePatchClarification,
   answer: string
 ): string | undefined {
-  const normalizedAnswer = normalizeAnswer(answer);
-  return clarification.suggestions?.find(
-    (suggestion) => normalizeAnswer(suggestion) === normalizedAnswer
-  );
+  return findSharedPatchClarificationSuggestion(clarification, answer);
 }
 
 export function createDraftFromPatch(
@@ -184,12 +175,4 @@ function createMessageId(): string {
   return typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
     : `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function formatPatchCandidate(candidate: ArchitecturePatchClarificationCandidate): string {
-  return `${candidate.label} (${candidate.resourceType})`;
-}
-
-function normalizeAnswer(value: string): string {
-  return value.trim().toLowerCase();
 }

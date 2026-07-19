@@ -75,12 +75,20 @@ test("POST /api/ai/architecture-draft/stream serializes complete replacement sna
       label: "Static Website Bucket"
     }
   ] as const;
+  const clarificationAnswers = [
+    {
+      questionId: "website_type",
+      answer: "Naver-like shopping mall"
+    }
+  ] as const;
+
   const response = await app.inject({
     method: "POST",
     url: "/api/ai/architecture-draft/stream",
     payload: {
       prompt: "정적 웹사이트를 만들어 주세요.",
-      candidateExclusions
+      candidateExclusions,
+      clarificationAnswers
     }
   });
   const events = parseNdjson(response.body);
@@ -88,6 +96,7 @@ test("POST /api/ai/architecture-draft/stream serializes complete replacement sna
   assert.equal(response.statusCode, 200);
   assert.match(String(response.headers["content-type"]), /application\/x-ndjson/u);
   assert.deepEqual(receivedRequest?.candidateExclusions, candidateExclusions);
+  assert.deepEqual(receivedRequest?.clarificationAnswers, clarificationAnswers);
   assert.equal(events.length, 3);
   assert.deepEqual(events.slice(0, 2), [
     {
