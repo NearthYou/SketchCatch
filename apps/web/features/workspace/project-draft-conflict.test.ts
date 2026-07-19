@@ -7,7 +7,10 @@ import {
   applyBoardAutoOrganizeCandidate,
   createBoardAutoOrganizePreviewSession
 } from "../architecture-board-compiler/board-auto-organize-preview";
-import { PROJECT_DRAFT_CONFLICT_COPY } from "./project-draft-conflict";
+import {
+  PROJECT_DRAFT_CONFLICT_COPY,
+  reconcileBoardAutoOrganizeTerraformFiles
+} from "./project-draft-conflict";
 
 const diagramEditorSource = readFileSync(
   fileURLToPath(new URL("../diagram-editor/DiagramEditor.tsx", import.meta.url)),
@@ -63,6 +66,27 @@ test("stale auto-organize apply causes zero local Board, History, and save write
   assert.equal(boardWrites.length, 0);
   assert.equal(historyWrites.length, 0);
   assert.equal(localSaveWrites.length, 0);
+});
+
+test("Board apply keeps Terraform edits made while the server request is in flight", () => {
+  const savedFiles = [
+    { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "saved" {}' }
+  ];
+  const currentFiles = [
+    { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "editing" {}' }
+  ];
+
+  const reconciliation = reconcileBoardAutoOrganizeTerraformFiles({
+    currentFiles,
+    savedFiles
+  });
+
+  assert.equal(reconciliation.hasUnsavedChanges, true);
+  assert.deepEqual(reconciliation.terraformFiles, currentFiles);
+  assert.notEqual(reconciliation.terraformFiles, currentFiles);
+  assert.deepEqual(savedFiles, [
+    { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "saved" {}' }
+  ]);
 });
 
 test("Project Workspace commits Board history only after the dedicated apply API succeeds", () => {

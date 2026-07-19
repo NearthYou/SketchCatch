@@ -71,6 +71,7 @@ import type { SavedServerProjectDiagramDraft } from "./project-draft-sync";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type { InitialCicdReturnCommand } from "./cicd-return-command";
 import { ProjectDraftConflictDialog } from "./ProjectDraftConflictDialog";
+import { reconcileBoardAutoOrganizeTerraformFiles } from "./project-draft-conflict";
 import { ProjectDraftRecoveryDialog } from "./ProjectDraftRecoveryDialog";
 import {
   claimProjectDraftTabCacheWorkspaceId,
@@ -804,36 +805,61 @@ function ProjectWorkspaceDraftManagerState({
   const handleBoardAutoOrganizeApplied = useCallback(
     ({ diagramJson, draft }: { readonly diagramJson: DiagramJson; readonly draft: ProjectDraft }) => {
       clearLocalSaveTimer();
-      const terraformFiles = draft.terraformFiles?.map((file) => ({ ...file })) ?? [];
+      const serverTerraformFiles = draft.terraformFiles?.map((file) => ({ ...file })) ?? [];
+      const terraformReconciliation = reconcileBoardAutoOrganizeTerraformFiles({
+        currentFiles: latestTerraformFilesRef.current,
+        savedFiles: serverTerraformFiles
+      });
+      const localWriteVersion = draftChangeVersionRef.current;
       latestDiagramRef.current = diagramJson;
-      latestTerraformFilesRef.current = terraformFiles;
-      hasPendingLocalChangesRef.current = false;
-      serverDirtyRef.current = false;
+      latestTerraformFilesRef.current = terraformReconciliation.terraformFiles;
+      hasPendingLocalChangesRef.current = terraformReconciliation.hasUnsavedChanges;
+      serverDirtyRef.current = terraformReconciliation.hasUnsavedChanges;
       serverConflictRef.current = false;
       draftRecoveryRequiredRef.current = false;
       setProjectDraftRevision(draft.revision);
       setDraftConflict(null);
       setDraftRecoveryRequired(false);
       setDraftReloadError(null);
-      setServerSaveState("server-saved");
+      setServerSaveState(
+        terraformReconciliation.hasUnsavedChanges ? "server-dirty" : "server-saved"
+      );
       setLocalSaveState("local-pending");
 
-      const localDraft = markDraftServerSaved(
+      const serverSyncedLocalDraft = markDraftServerSaved(
         createLocalProjectDraft({
           workspaceId: localCacheWorkspaceId,
           projectId,
           diagramJson,
-          terraformFiles,
+          terraformFiles: serverTerraformFiles,
           previousDraft: localDraftRef.current,
           savedAt: draft.serverSavedAt
         }),
         draft
       );
+      const localDraft = terraformReconciliation.hasUnsavedChanges
+        ? createLocalProjectDraft({
+            workspaceId: localCacheWorkspaceId,
+            projectId,
+            diagramJson,
+            terraformFiles: terraformReconciliation.terraformFiles,
+            previousDraft: serverSyncedLocalDraft,
+            savedAt: new Date().toISOString()
+          })
+        : serverSyncedLocalDraft;
       setCurrentLocalDraft(localDraft);
 
       void writeLocalProjectDraft(localDraft).then(
-        () => setLocalSaveState("local-saved"),
-        () => setLocalSaveState("local-failed")
+        () => {
+          if (draftChangeVersionRef.current !== localWriteVersion) return;
+          hasPendingLocalChangesRef.current = false;
+          setLocalSaveState("local-saved");
+        },
+        () => {
+          if (draftChangeVersionRef.current !== localWriteVersion) return;
+          hasPendingLocalChangesRef.current = true;
+          setLocalSaveState("local-failed");
+        }
       );
 
       globalThis.setTimeout(() => {
