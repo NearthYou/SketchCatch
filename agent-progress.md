@@ -193,5 +193,5 @@ Short English-only working log for the current agent context. Older records are 
 ### 2026-07-19 - Tighten Workspace AI conversation spacing
 
 - Expanded the desktop transcript, suggestion, composer, and composer metadata widths so the conversation panel uses its available space consistently.
-- Let the selected-option trail extend to an 18px right inset while preserving the existing mobile layout and avoiding overlap with the conversation panel.
+- Let the selected-option trail extend to an 18px right inset, and size its heading column to its content instead of reserving a wide empty column. The existing mobile layout remains unchanged.
 - Browser checks pass at 390×844, 1024×768, 1440×900, and 1920×900 with no horizontal overflow or console errors. Workspace AI tests pass 43/43; harness, lint, typecheck, build, and diff checks pass.

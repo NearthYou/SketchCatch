@@ -766,7 +766,7 @@
   border-top: 1px solid var(--ai-line);
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(145px, 0.36fr) minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 1fr);
   padding-top: 18px;
 }
 
