@@ -66,6 +66,19 @@ test("Direct Deployment exposes exactly validation, approval, and deployment", (
   assert.equal(flow.steps[1]?.state, "idle");
 });
 
+test("Direct Deployment keeps stable step ids while naming the final step 실행", () => {
+  const flow = getDirectDeploymentFlow(createInput({ hasUnsavedBaseline: true }));
+
+  assert.deepEqual(
+    flow.steps.map(({ id, label }) => ({ id, label })),
+    [
+      { id: "validation", label: "검증" },
+      { id: "approval", label: "승인" },
+      { id: "deployment", label: "실행" }
+    ]
+  );
+});
+
 test("an idle selected step falls back to the active Direct Deployment step", () => {
   const flow = getDirectDeploymentFlow(createInput({ hasUnsavedBaseline: true }));
 

@@ -91,6 +91,18 @@ test("workspace runtime actions use icon-only controls", () => {
   );
 });
 
+test("the modal distinguishes the Direct Deployment path from its execution step", () => {
+  const navigationStart = deploymentShellSource.indexOf(
+    '<nav className={styles.deploymentConsoleScreenNavigation}'
+  );
+  const navigationEnd = deploymentShellSource.indexOf("</nav>", navigationStart);
+  const navigationSource = deploymentShellSource.slice(navigationStart, navigationEnd);
+
+  assert.match(navigationSource, />\s*직접 배포\s*</);
+  assert.match(navigationSource, />\s*CI\/CD\s*</);
+  assert.doesNotMatch(navigationSource, />\s*배포\s*</);
+});
+
 test("deployment preparation flushes the synchronized draft before artifact creation", () => {
   const syncIndex = rightPanelSource.indexOf("prepareTerraformArtifact()");
   const saveIndex = rightPanelSource.indexOf("context.saveDiagramNow?.()", syncIndex);
