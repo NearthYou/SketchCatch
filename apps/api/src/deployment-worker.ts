@@ -24,6 +24,8 @@ import {
 } from "./deployments/direct-application-release-service.js";
 import { createAwsCodeBuildDirectApplicationReleaseGateway } from "./deployments/aws-codebuild-direct-application-release-gateway.js";
 import { installDeploymentWorkerSignalHandlers } from "./deployment-worker-shutdown.js";
+import { prepareEcsBuildEnvironmentForPlan } from "./deployments/deployment-plan-build-environment.js";
+import { runDeploymentPlan } from "./deployments/deployment-plan-service.js";
 
 async function runDeploymentWorker(abortSignal: AbortSignal): Promise<void> {
   assertNoStaticAwsCredentialsForApiServer();
@@ -32,7 +34,18 @@ async function runDeploymentWorker(abortSignal: AbortSignal): Promise<void> {
   const { db } = getDatabaseClient();
   const jobRepository = createPostgresDeploymentJobRepository(db);
   const deploymentRepository = createPostgresDeploymentRepository(db);
-  const defaultRunner = createDeploymentWorkerOperationRunner(deploymentRepository);
+  const defaultRunner = createDeploymentWorkerOperationRunner(deploymentRepository, {
+    plan: (input, repository) =>
+      runDeploymentPlan(input, repository, {
+        prepareBuildEnvironment: async ({ deployment, accessContext }) => {
+          await prepareEcsBuildEnvironmentForPlan({
+            db,
+            deployment,
+            userId: accessContext.userId
+          });
+        }
+      })
+  });
   const recoverApplicationRelease = createInterruptedDirectApplicationReleaseRecovery({ db });
 
   await runDeploymentWorkerJob(
