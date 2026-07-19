@@ -183,6 +183,63 @@ test("save project draft body preserves empty source labels and workspace-seed a
   assert.equal(parsed.diagramJson.nodes[0]?.parameters?.terraformSourceAuthority, "workspace-seed");
 });
 
+test("save project draft body accepts source-exact AWS nodes without invented Terraform identity", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          type: "VPC",
+          parameters: {
+            resourceType: "",
+            resourceName: "",
+            fileName: "",
+            values: {
+              providerResourceId: "vpc-0123456789abcdef0"
+            },
+            invalid: true
+          }
+        }
+      ],
+      presentation: sourceExactPresentation
+    }
+  });
+
+  assert.deepEqual(parsed.diagramJson.nodes[0]?.parameters, {
+    resourceType: "",
+    resourceName: "",
+    fileName: "",
+    values: {
+      providerResourceId: "vpc-0123456789abcdef0"
+    },
+    invalid: true
+  });
+});
+
+test("save project draft body still rejects empty Terraform identity on editable nodes", () => {
+  const result = saveProjectDraftBodySchema.safeParse({
+    expectedRevision: 1,
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          parameters: {
+            resourceType: "",
+            resourceName: "",
+            fileName: "",
+            values: {}
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.success, false);
+});
+
 test("save project draft body preserves Curated Module provenance metadata", () => {
   const moduleSource = {
     moduleId: "network-foundation",

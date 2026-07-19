@@ -93,15 +93,33 @@ const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
   })
   .strict();
 
-const diagramNodeParametersSchema = z.object({
-  terraformBlockType: z.enum(["resource", "data"]).optional(),
-  terraformSourceAuthority: z.literal("workspace-seed").optional(),
-  resourceType: z.string().min(1),
-  resourceName: z.string().min(1),
-  fileName: z.string().min(1),
-  values: z.record(z.string(), z.unknown()),
-  invalid: z.boolean().optional()
-});
+const diagramNodeParametersSchema = z
+  .object({
+    terraformBlockType: z.enum(["resource", "data"]).optional(),
+    terraformSourceAuthority: z.literal("workspace-seed").optional(),
+    resourceType: z.string(),
+    resourceName: z.string(),
+    fileName: z.string(),
+    values: z.record(z.string(), z.unknown()),
+    invalid: z.boolean().optional()
+  })
+  .superRefine((parameters, context) => {
+    if (parameters.invalid === true) {
+      return;
+    }
+
+    for (const key of ["resourceType", "resourceName", "fileName"] as const) {
+      if (parameters[key].trim().length > 0) {
+        continue;
+      }
+
+      context.addIssue({
+        code: "custom",
+        message: "Terraform identity is required for an editable resource.",
+        path: [key]
+      });
+    }
+  });
 
 const diagramNodeSchema = z.object({
   id: z.string().min(1),
