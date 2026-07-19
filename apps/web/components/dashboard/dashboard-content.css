@@ -661,6 +661,10 @@ a.dashboardActivityRow:hover {
   white-space: nowrap;
 }
 
+.projectCardTimestampCompact {
+  font-size: calc(12px + var(--presentation-font-size-increase) - 3px);
+}
+
 .projectCardWithActions {
   position: relative;
 }

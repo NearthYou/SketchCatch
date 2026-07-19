@@ -812,6 +812,10 @@
   font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
+.leftRail :global(.templateCatalogCard span) {
+  font-size: calc(9px + var(--presentation-font-size-increase));
+}
+
 .leftRail :global(.templateCatalogCard strong) {
   font-size: calc(12px + var(--presentation-font-size-increase));
 }

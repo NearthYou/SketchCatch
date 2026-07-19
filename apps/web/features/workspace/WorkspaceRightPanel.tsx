@@ -1000,6 +1000,7 @@ export function WorkspaceRightPanel({
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
     <LiveObservationModal
+      diagramContext={context}
       initialViewport={retainedLiveObservationView.viewport}
       onClose={() => {
         setIsLiveObservationOpen(false);

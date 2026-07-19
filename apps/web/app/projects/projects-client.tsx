@@ -768,10 +768,13 @@ export function ProjectsClient() {
                   project={project}
                 />
               }
+              compactTimestamp={sortMode !== "recent_created"}
               isDeleting={deletingProjectId === project.id}
               key={project.id}
               project={project}
-              timestampLabel={sortMode === "recent_created" ? "생성" : "작업"}
+              timestampLabel={
+                sortMode === "recent_created" ? "생성" : "마지막으로 작업한 시간:"
+              }
               timestampValue={sortMode === "recent_created" ? project.createdAt : project.updatedAt}
               variant="compact"
             />

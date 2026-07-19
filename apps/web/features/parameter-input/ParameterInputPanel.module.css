@@ -143,6 +143,11 @@ div.resourceIcon,
   width: 100%;
 }
 
+.metadataSection .input,
+.metadataSection .readonlyValue {
+  font-size: calc(0.88rem + var(--presentation-font-size-increase) - 3px);
+}
+
 .input:focus {
   border-color: var(--workspace-accent, #000000);
   box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);

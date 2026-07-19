@@ -499,6 +499,7 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       "task-role": layoutInSupportGrid(1840, 120, 0, 1, "global-iam-group"),
       repository: layoutInSupportGrid(1840, 480, 0, 0, "definition-ops-group"),
       "log-group": layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group"),
+      distribution: layoutAt(240, 360),
       "load-balancer": layoutAt(640, 360, "vpc"),
       "target-group": layoutAt(1080, 360, "vpc"),
       listener: layoutAt(880, 360, "vpc"),
@@ -515,6 +516,7 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       "alb-sg-load-balancer": layoutRoute("handle-bottom", "handle-top"),
       "alb-sg-task-sg": layoutRoute("handle-bottom", "handle-top"),
       "task-sg-service": layoutRoute("handle-bottom", "handle-top"),
+      "distribution-load-balancer": layoutRoute("handle-right", "handle-left"),
       "load-balancer-listener": layoutRoute("handle-right", "handle-left"),
       "listener-target-group": layoutRoute("handle-right", "handle-left"),
       "target-group-service": layoutRoute("handle-right", "handle-left"),
@@ -566,7 +568,9 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
         [
           layoutInSupportGrid(1840, 480, 0, 0, "definition-ops-group"),
           layoutInSupportGrid(1840, 480, 1, 0, "definition-ops-group"),
-          layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group")
+          layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group"),
+          layoutInSupportGrid(1840, 480, 1, 1, "definition-ops-group"),
+          layoutInSupportGrid(1840, 480, 2, 0, "definition-ops-group")
         ],
         "region"
       ),
@@ -584,9 +588,9 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       )
     },
     presentationEdges: {
-      "user-load-balancer": presentationEdge(
+      "user-distribution": presentationEdge(
         "user",
-        "load-balancer",
+        "distribution",
         "requests",
         "handle-right",
         "handle-left"
@@ -1284,8 +1288,9 @@ export const templateDefinitions = [
   createTemplate({
     id: "ecs-fargate-container-app",
     title: "ECS Fargate Container App",
-    description: "ECS Fargate와 Application Load Balancer를 사용하는 컨테이너 앱입니다.",
-    tags: ["ECS", "Fargate", "ALB"],
+    description:
+      "CloudFront HTTPS, Application Load Balancer, ECS Fargate, 요청 기반 Service Auto Scaling으로 실시간 관측을 검증하는 컨테이너 앱입니다.",
+    tags: ["ECS", "Fargate", "CloudFront", "Auto Scaling", "Live Observation"],
     resources: [
       resource("vpc", "VPC", "aws", "aws_vpc", 300, 80, {
         cidrBlock: "10.30.0.0/16",
@@ -1419,6 +1424,49 @@ export const templateDefinitions = [
         protocol: "HTTP",
         defaultAction: { type: "forward", targetGroupArn: "@ref:target-group.arn" }
       }),
+      resource(
+        "distribution",
+        "Live Observation HTTPS",
+        "aws",
+        "aws_cloudfront_distribution",
+        100,
+        820,
+        {
+          enabled: true,
+          priceClass: "PriceClass_100",
+          origin: [
+            {
+              domainName: "@ref:load-balancer.dns_name",
+              originId: "fargate-alb",
+              customOriginConfig: {
+                httpPort: 80,
+                httpsPort: 443,
+                originProtocolPolicy: "http-only",
+                originSslProtocols: ["TLSv1.2"]
+              }
+            }
+          ],
+          defaultCacheBehavior: [
+            {
+              allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+              cachedMethods: ["GET", "HEAD", "OPTIONS"],
+              targetOriginId: "fargate-alb",
+              viewerProtocolPolicy: "redirect-to-https",
+              compress: true,
+              minTtl: 0,
+              defaultTtl: 0,
+              maxTtl: 0,
+              forwardedValues: {
+                queryString: true,
+                headers: ["*"],
+                cookies: { forward: "all" }
+              }
+            }
+          ],
+          restrictions: [{ geoRestriction: { restrictionType: "none" } }],
+          viewerCertificate: [{ cloudfrontDefaultCertificate: true }]
+        }
+      ),
       resource("task", "ECS Task Definition", "aws", "aws_ecs_task_definition", 700, 660, {
         family: "fargate-app",
         networkMode: "awsvpc",
@@ -1501,6 +1549,7 @@ export const templateDefinitions = [
       relationship("alb-sg-task-sg", "alb-security-group", "task-security-group", "allows tcp/80"),
       relationship("task-sg-service", "task-security-group", "service", "applies to"),
       relationship("load-balancer-listener", "load-balancer", "listener", "listens"),
+      relationship("distribution-load-balancer", "distribution", "load-balancer", "HTTPS entry"),
       relationship("listener-target-group", "listener", "target-group", "forwards"),
       relationship("target-group-service", "target-group", "service", "routes"),
       relationship("cluster-service", "cluster", "service", "runs"),

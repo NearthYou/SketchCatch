@@ -161,18 +161,6 @@ Short English-only working log for the current agent context. Older records are 
 - Focused API checks pass 70/70 and focused Web checks pass 52/52. Root lint, typecheck, and production build pass; the final harness and diff checks are recorded by the finishing verification run.
 - No DB migration, dependency change, AWS mutation, Terraform Apply/Destroy, deployment, or direct push to `dev` was performed.
 
-### 2026-07-19 - Diagnose Delivery target prerequisite presentation
-
-- Reproduced the reported `전체 스택 선행 설정 필요` warning in the authenticated local `demo222` Workspace. The current Repository-derived Dockerfile, commit SHA, CodeBuild, ECR, cluster, service, and container defaults are populated, but no `ProjectDeploymentTarget` has been saved yet.
-- Confirmed the warning action only switches to the CI/CD screen and that the prior Direct Deployment warning remains visible after a screen round trip because it is not invalidated by Delivery profile reloads. The server-side gate remains fail-closed and target saving does not deploy or mutate AWS.
-- Focused Web checks pass 50/50 and focused API runtime-target checks pass 4/4. No source fix, target save, AWS mutation, Terraform execution, deployment, dependency, DB migration, commit, or push was performed.
-
-### 2026-07-19 - Synchronize saved Delivery targets with Direct Deployment
-
-- Propagated successful deployment-target saves through the Delivery console and cleared stale Direct Deployment prerequisite presentation while retaining the fresh target and AWS connection checks before Plan preparation.
-- Renamed the navigation-only setup action, scrolled it to the target editor, and revealed missing inferred settings with actionable Korean labels without auto-saving user confirmation.
-- TDD regressions passed RED then GREEN; focused Web checks pass 62/62. Harness, lint, typecheck, and the direct Web production build pass. The root Turbo build reported 5/5 successful tasks but its wrapper hung after completion and was terminated. No API contract, DB migration, dependency, Terraform execution, AWS mutation, deployment, or push was performed.
-
 ### 2026-07-19 - Move Plan build preparation behind durable worker acceptance
 
 - Traced the reported Plan HTTP 500 to Next.js development proxy's 30-second timeout: the API spent about 34 seconds preparing CodeBuild and verifying Repository access before it created the durable worker job.
