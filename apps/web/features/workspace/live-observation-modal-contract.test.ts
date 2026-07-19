@@ -81,6 +81,22 @@ test("selected Deployment independently loads and renders its immutable Architec
   assert.ok(evidenceIndex > mapIndex, "Architecture map must render before the evidence rail");
 });
 
+test("restores the focused traffic path as the default observation view", () => {
+  const focusedFlowIndex = modalSource.indexOf("<LiveObservationFocusedFlow");
+  const architectureMapIndex = modalSource.indexOf("<LiveObservationDiagramMap");
+
+  assert.match(modalSource, /LiveObservationFocusedFlow/);
+  assert.ok(focusedFlowIndex >= 0, "Focused traffic flow must render");
+  assert.ok(
+    architectureMapIndex === -1 || focusedFlowIndex < architectureMapIndex,
+    "Focused traffic flow must be the primary view"
+  );
+  assert.match(
+    modalSource,
+    /<LiveObservationFocusedFlow[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
+  );
+});
+
 test("renders Architecture state only when it belongs to the selected Deployment", () => {
   assert.match(
     modalSource,

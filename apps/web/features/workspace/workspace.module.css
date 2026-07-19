@@ -7160,6 +7160,25 @@
   border-color: #e9a29c;
 }
 
+.liveObservationArchitectureDisclosure {
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.liveObservationArchitectureDisclosure > summary {
+  background: var(--workspace-surface-muted, #fafafa);
+  color: var(--workspace-muted, #60646c);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 10px 14px;
+}
+
+.liveObservationArchitectureDisclosure[open] > summary {
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+}
+
 .liveObservationPresentationHeader {
   align-items: center;
   background: var(--workspace-surface-muted, #fafafa);

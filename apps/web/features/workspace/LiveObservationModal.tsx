@@ -28,6 +28,7 @@ import { getLiveObservationCapacityMode } from "./live-observation-architecture"
 import { useLiveObservationQueries } from "./live-observation-queries";
 import type { LiveObservationViewport } from "./live-observation-view-state";
 import { LiveObservationDiagramMap } from "./LiveObservationDiagramMap";
+import { LiveObservationFocusedFlow } from "./LiveObservationFocusedFlow";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
@@ -567,13 +568,23 @@ export function LiveObservationModal({
             </div>
           ) : null}
           {selectedArchitectureState === "ready" && selectedArchitecture ? (
-            <LiveObservationDiagramMap
-              architecture={selectedArchitecture}
-              initialViewport={initialViewport}
-              key={selectedDeploymentId}
-              onViewportChange={onViewportChange}
-              snapshot={selectedSnapshot}
-            />
+            <>
+              <LiveObservationFocusedFlow
+                architecture={selectedArchitecture}
+                key={`focused-${selectedDeploymentId}`}
+                snapshot={selectedSnapshot}
+              />
+              <details className={styles.liveObservationArchitectureDisclosure}>
+                <summary>전체 Architecture 보기</summary>
+                <LiveObservationDiagramMap
+                  architecture={selectedArchitecture}
+                  initialViewport={initialViewport}
+                  key={selectedDeploymentId}
+                  onViewportChange={onViewportChange}
+                  snapshot={selectedSnapshot}
+                />
+              </details>
+            </>
           ) : null}
 
           {selectedSnapshot ? (

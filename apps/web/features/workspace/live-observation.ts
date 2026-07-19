@@ -3,6 +3,7 @@ import type {
   LiveObservationProviderSnapshot,
   LiveObservationSnapshot,
   LiveObservationV2Session,
+  LiveObservationV2Snapshot,
   TerraformOutput
 } from "@sketchcatch/types";
 
@@ -36,6 +37,12 @@ export type LiveObservationInstanceMarker = {
 export type LiveObservationRequestBurst = {
   readonly overflowCount: number;
   readonly visibleParticleCount: number;
+};
+
+export type LiveObservationTrafficCursor = {
+  readonly acceptedEventCount: number;
+  readonly observationId: string;
+  readonly providerObservedAt: string | null;
 };
 
 export function getLiveObservationPressureLabel(
@@ -245,6 +252,43 @@ export function getLiveObservationRequestBurst(
     overflowCount: Math.max(0, delta - MAX_VISIBLE_REQUEST_PARTICLES),
     visibleParticleCount: Math.min(delta, MAX_VISIBLE_REQUEST_PARTICLES)
   };
+}
+
+export function getLiveObservationTrafficCursor(
+  snapshot: LiveObservationV2Snapshot | null
+): LiveObservationTrafficCursor | null {
+  if (!snapshot) return null;
+
+  return {
+    acceptedEventCount: snapshot.live.acceptedEventCount,
+    observationId: snapshot.observationId,
+    providerObservedAt: snapshot.latestObservation?.observedAt ?? null
+  };
+}
+
+export function getLiveObservationTrafficBurst(
+  previous: LiveObservationTrafficCursor | null,
+  snapshot: LiveObservationV2Snapshot | null
+): LiveObservationRequestBurst | null {
+  if (!previous || !snapshot || previous.observationId !== snapshot.observationId) {
+    return null;
+  }
+
+  const provider = snapshot.latestObservation;
+  const runningCount = provider?.payload.capacity.running ?? 0;
+  const acceptedDelta = Math.max(
+    0,
+    snapshot.live.acceptedEventCount - previous.acceptedEventCount
+  );
+  const providerRequestCount =
+    provider &&
+    provider.observedAt !== previous.providerObservedAt &&
+    provider.payload.state !== "unavailable"
+      ? Math.max(0, Math.floor(provider.payload.requests ?? 0))
+      : 0;
+  const detectedRequestCount = Math.max(acceptedDelta, providerRequestCount);
+
+  return getLiveObservationRequestBurst(0, detectedRequestCount, runningCount > 0);
 }
 
 export function getLiveObservationRequestTargetIndexes(
