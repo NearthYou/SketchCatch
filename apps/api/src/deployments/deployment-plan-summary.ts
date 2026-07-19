@@ -18,7 +18,7 @@ type TerraformResourceChange = {
   };
 };
 
-export const practiceLiveApplySupportedResourceTypes = new Set([
+const baselineLiveApplySupportedResourceTypes = new Set([
   "aws_vpc",
   "aws_subnet",
   "aws_internet_gateway",
@@ -58,7 +58,7 @@ export const practiceLiveApplySupportedResourceTypes = new Set([
 ]);
 
 const demoWebServiceLiveApplySupportedResourceTypes = new Set([
-  ...practiceLiveApplySupportedResourceTypes,
+  ...baselineLiveApplySupportedResourceTypes,
   "aws_appautoscaling_policy",
   "aws_appautoscaling_target",
   "aws_autoscaling_group",
@@ -132,18 +132,20 @@ const terraformPlanSupportedResourceTypes = new Set([
   ...demoWebServiceWithRdsLiveApplySupportedResourceTypes
 ]);
 
+export function normalizeDeploymentLiveProfile(value: unknown): DeploymentLiveProfile {
+  return value === "demo_web_service_with_rds"
+    ? "demo_web_service_with_rds"
+    : "demo_web_service";
+}
+
 export function getLiveApplySupportedResourceTypes(
-  liveProfile: DeploymentLiveProfile = "practice"
+  liveProfile: DeploymentLiveProfile = "demo_web_service"
 ): ReadonlySet<string> {
   if (liveProfile === "demo_web_service_with_rds") {
     return demoWebServiceWithRdsLiveApplySupportedResourceTypes;
   }
 
-  if (liveProfile === "demo_web_service") {
-    return demoWebServiceLiveApplySupportedResourceTypes;
-  }
-
-  return practiceLiveApplySupportedResourceTypes;
+  return demoWebServiceLiveApplySupportedResourceTypes;
 }
 
 export function getRecommendedLiveApplyProfile(
@@ -151,7 +153,6 @@ export function getRecommendedLiveApplyProfile(
 ): DeploymentLiveProfile {
   const requiredResourceTypes = [...new Set(resourceTypes)];
   const orderedProfiles: DeploymentLiveProfile[] = [
-    "practice",
     "demo_web_service",
     "demo_web_service_with_rds"
   ];
@@ -162,7 +163,7 @@ export function getRecommendedLiveApplyProfile(
       return requiredResourceTypes.every((resourceType) =>
         supportedResourceTypes.has(resourceType)
       );
-    }) ?? "practice"
+    }) ?? "demo_web_service"
   );
 }
 
@@ -237,7 +238,7 @@ export function createDeploymentPlanSummaryFromTerraformShowJson(
 
 export function findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
   terraformShowJson: string,
-  liveProfile: DeploymentLiveProfile = "practice"
+  liveProfile: DeploymentLiveProfile = "demo_web_service"
 ): string[] {
   const parsed = parseTerraformShowJson(terraformShowJson);
   const resourceChanges = Array.isArray(parsed.resource_changes) ? parsed.resource_changes : [];

@@ -88,6 +88,7 @@ type DeploymentResponse = {
     architectureId: string;
     terraformArtifactId: string;
     awsConnectionId: string | null;
+    liveProfile: "demo_web_service" | "demo_web_service_with_rds";
     rollbackOfDeploymentId: string | null;
     rollbackTargetDeploymentId: string | null;
     consolePhase: "validation" | "approval" | "deployment";
@@ -1316,7 +1317,7 @@ function createDeploymentRecord(
     awsAccountIdSnapshot: "123456789012",
     awsRegionSnapshot: "ap-northeast-2",
     awsConnectionNameSnapshot: "123456789012",
-    liveProfile: "practice",
+    liveProfile: "demo_web_service",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",
@@ -1679,7 +1680,7 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
         awsAccountIdSnapshot: "123456789012",
         awsRegionSnapshot: "ap-northeast-2",
         awsConnectionNameSnapshot: "123456789012",
-        liveProfile: "practice",
+        liveProfile: "demo_web_service",
         scope: "infrastructure",
         targetKind: null,
         source: "direct",
@@ -1692,6 +1693,26 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
       }
     }
   ]);
+
+  await app.close();
+});
+
+test("POST /api/projects/:projectId/deployments rejects the removed practice profile", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/deployments`,
+    headers: await authHeaders(),
+    payload: {
+      ...createDeploymentBody(),
+      liveProfile: "practice"
+    }
+  });
+
+  assert.equal(response.statusCode >= 400, true);
+  assert.deepEqual(repository.calls, []);
 
   await app.close();
 });
@@ -2060,6 +2081,27 @@ test("GET /api/deployments/:deploymentId returns a deployment", async () => {
       }
     }
   ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId normalizes a legacy practice row during migration rollout", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = {
+    ...createDeploymentRecord(deploymentId),
+    liveProfile: "practice"
+  } as unknown as DeploymentRecord;
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.liveProfile, "demo_web_service");
 
   await app.close();
 });

@@ -2428,7 +2428,7 @@ export type PrepareDeploymentRequest = {
   scope: DeploymentScope | "auto";
 };
 
-export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";
+export type DeploymentLiveProfile = "demo_web_service" | "demo_web_service_with_rds";
 
 export type DeploymentLiveObservationAwsAdapterV1 = {
   kind: "aws-live-observation";
@@ -3152,6 +3152,24 @@ export type ArchitectureDraftTrafficLevel = "small" | "normal";
 
 export type ArchitectureDraftSecurityPriority = "basic" | "high";
 
+export type ArchitectureDraftTrafficProfile = "small" | "medium" | "large" | "bursty";
+
+export type ArchitectureDraftBudgetProfile = "low" | "normal" | "high" | "enterprise";
+
+export type ArchitectureDraftDatabaseProfile = "none" | "small" | "medium" | "large";
+
+export type ArchitectureDraftManagementProfile =
+  | "fully_managed"
+  | "semi_managed"
+  | "self_managed"
+  | "unknown";
+
+export type ArchitectureDraftAvailabilityProfile = "99.99" | "99.9" | "99" | "none";
+
+export type ArchitectureDraftUploadProfile = "none" | "image" | "mixed" | "large";
+
+export type ArchitectureDraftRealtimeProfile = "none" | "chat" | "notification" | "data_updates";
+
 export type ArchitectureRequirementFact =
   | "web_frontend"
   | "static_delivery"
@@ -3170,6 +3188,13 @@ export type ArchitectureDraftOperatingProfile = {
   budgetLevel: ArchitectureDraftBudgetLevel;
   trafficLevel: ArchitectureDraftTrafficLevel;
   securityPriority: ArchitectureDraftSecurityPriority;
+  budgetProfile: ArchitectureDraftBudgetProfile;
+  trafficProfile: ArchitectureDraftTrafficProfile;
+  databaseProfile: ArchitectureDraftDatabaseProfile;
+  managementProfile: ArchitectureDraftManagementProfile;
+  availabilityProfile: ArchitectureDraftAvailabilityProfile;
+  uploadProfile: ArchitectureDraftUploadProfile;
+  realtimeProfile: ArchitectureDraftRealtimeProfile;
 };
 
 // Architecture Draft는 자연어 요구사항과 확인 질문 답변을 기준으로 결정적으로 생성한다.

@@ -6,7 +6,7 @@
   --workspace-page: #ffffff;
   --workspace-surface: #ffffff;
   --workspace-surface-muted: #fafafa;
-  --workspace-line: #f0f0f3;
+  --workspace-line: #dddfe4;
   --workspace-line-strong: #dcdee0;
   --workspace-text: #171717;
   --workspace-muted: #60646c;
@@ -21,8 +21,8 @@
   --board-canvas-raised: #ffffff;
   --board-surface: #ffffff;
   --board-surface-subtle: #f4f6fa;
-  --board-border: #d8e0ec;
-  --board-border-strong: #9aa8ba;
+  --board-border: #c1cddc;
+  --board-border-strong: #7f90a6;
   --board-ink: #172033;
   --board-body: #4b5870;
   --board-muted: #60646c;
@@ -1320,6 +1320,16 @@ button.rightRailResizeHandle {
 .canvasPanelEdgeLabelsCompact :global(.react-flow__edge.selected .react-flow__edge-textbg),
 .canvasPanelEdgeLabelsCompact :global(.react-flow__edge:focus-visible .react-flow__edge-text),
 .canvasPanelEdgeLabelsCompact :global(.react-flow__edge:focus-visible .react-flow__edge-textbg) {
+  opacity: 1;
+  visibility: visible;
+}
+
+.canvasPanelResourceNamesHidden .resourceNodeLabel {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.canvasPanelResourceNamesVisible .resourceNodeLabel {
   opacity: 1;
   visibility: visible;
 }

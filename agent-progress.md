@@ -4,57 +4,50 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch `fix/sw/live-observation-deployment-picker-layering` contains the current Live Observation work after the resolved `origin/dev` merge.
-- Live Observation renders bounded traffic motion, a task-count-responsive Fargate fleet, and a default-collapsed operational analysis. Development-only traffic and Task preview controls are no longer exposed.
-- Deployment manifest materialization accepts exactly one Terraform-style target-tracking configuration block while rejecting empty or ambiguous arrays.
-- Delayed first CloudWatch points retain request, capacity, and log evidence instead of collapsing the first session to zero. Stopped sessions no longer continue the countdown.
-- The approved sandbox run sent exactly 963 requests and received 963 HTTP 200 responses. CloudWatch initially reported 721 requests; ECS remained at running/desired `1/1` with no scale-out activity during the immediate check.
-- The failed observation acceptance triggered approved immediate cleanup. All `liveobs-7cccab4b` AWS resources were verified absent in account `614935468487`, region `ap-northeast-2`.
+- Branch `fix/sw/live-observation-deployment-picker-layering` includes `origin/dev` through `ad1464ba` after resolving the active merge conflicts.
+- The legacy `practice` Deployment profile is removed; `demo_web_service` is the default live profile, and imported migration `0054` rewrites legacy rows before removing the enum value.
+- Live Observation renders bounded traffic motion, a task-count-responsive Fargate fleet, and collapsed operational analysis without development-only traffic or Task preview controls.
+- Delayed first CloudWatch points retain request and capacity evidence, and stopped sessions no longer continue the countdown.
+- The approved sandbox traffic run sent exactly 963 requests with 963 HTTP 200 responses. The failed observation acceptance triggered approved cleanup, and the `liveobs-7cccab4b` AWS resource set was verified absent.
 - Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` is `DESTROYED` with cleared state and current-plan pointers.
-- Verification passes: `pnpm harness:check`, API Live Observation tests 64/64, Web Live Observation tests 71/71, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
-- Repository ECS delivery now carries runtime Secret names from analysis into an isolated preflight placeholder, generates `CHECK_IN_SIGNING_SECRET` during approved Terraform Apply, maps its Secrets Manager ARN into every ECS Task, and leaves `INSTANCE_ID` unset for hostname-based instance observation.
-- Runtime Secret, 1-to-3 scale, preflight, release cloning, Terraform provider/safety, and delivery-target focused tests pass. `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass.
+- Repository ECS delivery carries runtime Secret names through analysis, uses an isolated preflight placeholder, generates `CHECK_IN_SIGNING_SECRET` during approved Apply, maps its Secrets Manager ARN into every Task, and leaves `INSTANCE_ID` unset for hostname-based observation.
+- Windows subprocess, local environment isolation, generated architecture knowledge, resource catalog, typography, and Workspace source-contract regressions are repaired. Focused tests pass; final merged-result checks are pending.
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
 
+### 2026-07-20 - Integrate current dev before PR
+
+- Merged `origin/dev` through `ad1464ba`, retaining both the runtime Secret delivery contract and the removal of the legacy `practice` profile.
+- Adapted runtime Secret safety tests to the current `demo_web_service` profile without weakening generated-secret or least-privilege IAM validation.
+- Preserved the imported profile-removal migration and UI refinements without editing their migration files.
+
+### 2026-07-20 - Repair repository verification baseline
+
+- Made the shared contract test invoke `pnpm` correctly on Windows and isolated API tests from local `.env` values.
+- Regenerated Architecture Board knowledge and aligned Repository ECS, Workspace, typography, and resource-catalog tests with current behavior.
+- Kept schema-less Terraform items visible but disabled until an editable parameter contract exists.
+
 ### 2026-07-20 - Add repository runtime-secret delivery contract
 
-- Added names-only `runtime_secret` Repository Analysis evidence and preserved the stateless 1-to-3 Fargate scaling contract.
-- Added an isolated preflight-only placeholder without granting CodeBuild Secrets Manager access or reading runtime Secret values.
-- Added Terraform-generated signing material, Secrets Manager storage, exact ECS execution-role read policy, and Task Definition `secrets` mapping; application releases preserve the approved mapping while replacing only the image.
-- Removed the fixed `INSTANCE_ID=fargate` Task environment so the application hostname fallback can distinguish Fargate Tasks.
-- No AWS resources, credentials, or runtime Secret values were read or changed.
+- Added names-only runtime Secret evidence, isolated preflight placeholders, Terraform-generated signing material, Secrets Manager storage, exact execution-role read access, and ECS Task Definition secret mapping.
+- Preserved the approved Secret mapping across application releases while replacing only the image.
+- Removed the fixed `INSTANCE_ID=fargate` value so hostname fallback can identify distinct Tasks.
 
 ### 2026-07-20 - Exercise and fail closed the Live Observation traffic run
 
 - Sent the approved maximum of 963 bounded requests; all returned HTTP 200 and no additional traffic was generated.
-- Diagnosed the missing animation as delayed CloudWatch evidence being discarded before the first available snapshot, then retained current metrics, capacity, and logs in delayed snapshots with a regression test.
-- Stopped the countdown when no active session exists and removed the temporary development-only traffic and capacity buttons.
-- The automatic Destroy Plan was blocked by internal deployment-state storage access for the sandbox operator. After exact account and resource inventory checks, manually removed only the `liveobs-7cccab4b` resource set through the approved execution role.
-- Verified CloudFront, OAC, S3, ECS, Application Auto Scaling, ALB, Target Group, ECR, CloudWatch Logs, IAM workload roles, VPC, subnets, route tables, NAT/EIP, security groups, and IGW are absent, then closed the Deployment as `DESTROYED`.
-
-### 2026-07-20 - Restore Live Observation manifest eligibility
-
-- Reproduced the 409 as a persisted `manifest_invalid` record and isolated materialization before AWS topology verification.
-- Normalized exactly one Terraform-style `targetTrackingScalingPolicyConfiguration` block while continuing to reject empty or ambiguous block arrays.
-- Aligned the local and example `SKETCHCATCH_PUBLIC_BASE_URL` with the active HTTPS Web origin.
-
-### 2026-07-20 - Refine Live Observation presentation
-
-- Removed the fake empty Task slot, bounded high-volume traffic to representative particles, and added request-based capacity projection while preserving provider-confirmed Tasks as authoritative.
-- Replaced equal raw-metric cards with a default-collapsed operational analysis and aligned its typography and surfaces with Workspace tokens.
-- Kept QR closed by default and anchored its utility below the QR button.
+- Retained delayed CloudWatch evidence, stopped inactive countdowns, and removed temporary development controls.
+- Completed approved manual cleanup after automatic Destroy could not read internal Terraform state, then verified the scoped AWS resources absent.
 
 ## Known Risk
 
-- Live animation and scale-out remain unaccepted end-to-end. The bounded requests reached CloudFront, but the active UI session missed them before the delayed-snapshot fix; no provider-confirmed scale-out occurred before cleanup.
-- The internal deployment-state bucket did not grant the sandbox operator read access, so automatic Destroy Plan could not restore Terraform state. Manual cleanup completed and AWS absence was verified, but the orphaned internal state object remains for normal storage pruning.
-- Root `pnpm test` still stops at the pre-existing `packages/types/src/git-cicd-readiness-contract.test.ts:117` assertion (`null !== 0`); the focused Live Observation suite passes and this file is unchanged.
-- Root `pnpm test` was rerun and still stops at that unchanged readiness-contract assertion before API/Web package suites. Focused tests for this change pass.
+- End-to-end Live Observation animation and provider-confirmed scale-out remain unaccepted because the active UI session missed the traffic before the delayed-snapshot fix.
+- Automatic cleanup remains blocked for this credential layout until the approved cleanup operator can read the internal deployment-state object.
+- No new AWS resources or traffic may be created without a new explicit approval.
 
 ## Next Action
 
-1. Re-analyze `audience-live-check` after its stateless-session change and confirm the preview contains the generated Secret mapping and Fargate capacity 1–3.
-2. Before any future Apply, make the internal state-storage read path available to the approved cleanup operator without broadening target-account permissions.
-3. Re-run end-to-end observation only under a new explicit Apply, traffic, and cleanup approval.
+1. Complete the merged-result harness, lint, typecheck, build, and test checks.
+2. Push this focused branch and open a Korean PR against `dev`.
+3. Re-analyze `audience-live-check` only after merge; obtain separate explicit approval before any future Apply or traffic run.

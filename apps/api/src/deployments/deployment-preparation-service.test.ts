@@ -90,6 +90,29 @@ test("selects full_stack, application, and explicit infrastructure scopes", asyn
   assert.equal(await resolveScope(withTerraform, createTarget(null), "infrastructure"), "infrastructure");
 });
 
+test("uses the ECS web-service profile for a basic infrastructure draft", async () => {
+  const repository: DeploymentPreparationRepository = {
+    async findProjectDraftForPreparation() {
+      return createDraft(true);
+    },
+    async findProjectTargetForPreparation() {
+      return createTarget(null);
+    }
+  };
+
+  const preparation = await resolveDeploymentPreparation(
+    {
+      projectId: "project-1",
+      awsConnectionId: "connection-1",
+      draftRevision: 1,
+      requestedScope: "infrastructure"
+    },
+    repository
+  );
+
+  assert.equal(preparation.liveProfile, "demo_web_service");
+});
+
 test("does not silently downgrade an ECS/Fargate auto deployment when build config is missing", async () => {
   await assert.rejects(
     resolveScope(createDraft(true, true), createTarget(null), "auto"),

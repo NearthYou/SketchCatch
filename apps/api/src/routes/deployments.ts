@@ -104,6 +104,7 @@ import {
   type DeploymentWorkerDispatcher
 } from "../deployments/deployment-worker-dispatcher.js";
 import { TerraformArtifactSafetyError } from "../deployments/terraform-artifact-safety.js";
+import { normalizeDeploymentLiveProfile } from "../deployments/deployment-plan-summary.js";
 import type {
   CreateLlmExplanation,
   LlmExplanationInput
@@ -152,8 +153,8 @@ const createDeploymentBodySchema = z
     terraformArtifactId: z.uuid(),
     awsConnectionId: z.uuid(),
     liveProfile: z
-      .enum(["practice", "demo_web_service", "demo_web_service_with_rds"])
-      .default("practice"),
+      .enum(["demo_web_service", "demo_web_service_with_rds"])
+      .default("demo_web_service"),
     scope: z.enum(["infrastructure", "application", "full_stack"]).optional(),
     targetKind: z.enum(["ecs_fargate", "lambda", "ec2_asg", "static_site"]).nullable().optional(),
     source: z.enum(["direct", "gitops"]).optional()
@@ -612,7 +613,7 @@ async function toDeployment(
     awsAccountIdSnapshot: row.awsAccountIdSnapshot,
     awsRegionSnapshot: row.awsRegionSnapshot,
     awsConnectionNameSnapshot: row.awsConnectionNameSnapshot,
-    liveProfile: row.liveProfile,
+    liveProfile: normalizeDeploymentLiveProfile(row.liveProfile),
     scope: row.scope,
     targetKind: row.targetKind,
     source: row.source,

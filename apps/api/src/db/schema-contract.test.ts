@@ -369,11 +369,12 @@ test("deployments store the explicit live deployment profile", () => {
 
   assert.equal(deploymentLiveProfileEnum.enumName, "deployment_live_profile");
   assert.deepEqual(deploymentLiveProfileEnum.enumValues, [
-    "practice",
     "demo_web_service",
     "demo_web_service_with_rds"
   ]);
-  assert(findColumn(config.columns, "live_profile"));
+  const liveProfile = config.columns.find((column) => column.name === "live_profile");
+  assert(liveProfile);
+  assert.equal(liveProfile.default, "demo_web_service");
 });
 
 test("deployment Live Observation manifests are one-to-one schema v2 records without secrets", () => {

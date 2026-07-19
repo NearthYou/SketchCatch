@@ -37,6 +37,311 @@ test("GitHub Actions handoff does not imply an AWS-native CI/CD pipeline", () =>
   assert.equal(awsNativePlan?.requiredResources?.includes("CODEPIPELINE"), true);
 });
 
+test("createArchitectureDraft completes an explicitly requested Subnet with its required VPC parameters", () => {
+  const result = createArchitectureDraft({
+    prompt: "Create a Practice Architecture that explicitly includes one AWS Subnet."
+  });
+  const vpc = result.architectureJson.nodes.find((node) => node.type === "VPC");
+  const subnet = result.architectureJson.nodes.find((node) => node.type === "SUBNET");
+
+  assert.ok(vpc);
+  assert.equal(vpc.config.cidrBlock, "10.0.0.0/16");
+  assert.ok(subnet);
+  assert.match(String(subnet.config.cidrBlock ?? ""), /^10\.\d+\.\d+\.\d+\/\d+$/u);
+  assert.equal(subnet.config.availabilityZone, "ap-northeast-2a");
+  assert.equal(subnet.config.vpcId, "aws_vpc.vpc_main.id");
+});
+
+test("createArchitectureDraft fills required parameters for an explicitly requested Security Group rule", () => {
+  const result = createArchitectureDraft({
+    prompt: "Create a Practice Architecture with an AWS Security Group and Security Group rule."
+  });
+  const vpc = result.architectureJson.nodes.find((node) => node.type === "VPC");
+  const securityGroup = result.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_security_group"
+  );
+  const rule = result.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_security_group_rule"
+  );
+
+  assert.ok(vpc);
+  assert.equal(securityGroup?.config.vpcId, "aws_vpc.vpc_main.id");
+  assert.equal(rule?.config.type, "ingress");
+  assert.equal(rule?.config.securityGroupId, "aws_security_group.security_group.id");
+  assert.equal(rule?.config.protocol, "tcp");
+  assert.equal(rule?.config.fromPort, 443);
+  assert.equal(rule?.config.toPort, 443);
+  assert.deepEqual(rule?.config.cidrBlocks, ["10.0.0.0/16"]);
+});
+
+test("createArchitectureDraft completes an explicitly requested Internet Gateway with its VPC reference", () => {
+  const result = createArchitectureDraft({
+    prompt: "Create a Practice Architecture that explicitly includes one AWS Internet Gateway."
+  });
+  const vpc = result.architectureJson.nodes.find((node) => node.type === "VPC");
+  const internetGateway = result.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_internet_gateway"
+  );
+
+  assert.ok(vpc);
+  assert.equal(internetGateway?.config.vpcId, "aws_vpc.vpc_main.id");
+});
+
+test("createArchitectureDraft adds the Elastic IP referenced by an explicit NAT Gateway", () => {
+  const result = createArchitectureDraft({
+    prompt: "Create a Practice Architecture that explicitly includes one AWS NAT Gateway."
+  });
+  const elasticIp = result.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_eip"
+  );
+  const natGateway = result.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_nat_gateway"
+  );
+
+  assert.ok(elasticIp);
+  assert.ok(natGateway);
+  assert.equal(natGateway.config.allocationId, "aws_eip.nat_elastic_ip.id");
+});
+
+test("createArchitectureDraft preserves an explicitly requested Elastic IP for a NAT Gateway", () => {
+  const result = createArchitectureDraft({
+    prompt: "Create a Practice Architecture that explicitly includes one AWS NAT Gateway and one Elastic IP."
+  });
+  const elasticIps = result.architectureJson.nodes.filter(
+    (node) => node.config.terraformResourceType === "aws_eip"
+  );
+
+  assert.equal(elasticIps.length, 1);
+  assert.equal(elasticIps[0]?.id, "elastic-ip");
+});
+
+test("createArchitectureDraft keeps the required SSM Parameter data-source name", () => {
+  const result = createArchitectureDraft({
+    prompt: "Create a Practice Architecture that explicitly includes an AWS SSM Parameter data source."
+  });
+  const parameter = result.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_ssm_parameter"
+  );
+
+  assert.equal(parameter?.config.name, "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64");
+  assert.equal(parameter?.config.vpcId, undefined);
+});
+
+test("createArchitectureDraft changes Subnet parameters when the selected region changes", () => {
+  const getAvailabilityZone = (region: string): unknown =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with one AWS Subnet in ${region}.`
+    }).architectureJson.nodes.find((node) => node.type === "SUBNET")?.config.availabilityZone;
+
+  const seoulAvailabilityZone = getAvailabilityZone("Seoul ap-northeast-2");
+  const tokyoAvailabilityZone = getAvailabilityZone("Tokyo ap-northeast-1");
+
+  assert.equal(seoulAvailabilityZone, "ap-northeast-2a");
+  assert.equal(tokyoAvailabilityZone, "ap-northeast-1a");
+  assert.notEqual(seoulAvailabilityZone, tokyoAvailabilityZone);
+});
+
+test("createArchitectureDraft changes compute and database sizing when the selected traffic changes", () => {
+  const createSizedDraft = (traffic: string) =>
+    createArchitectureDraft({
+      prompt: [
+        "Create a Practice Architecture with AWS EC2 and RDS.",
+        `Expected traffic: ${traffic}.`,
+        "Monthly budget: 50-200 manwon (high performance)."
+      ].join("\n")
+    });
+  const smallDraft = createSizedDraft("small traffic (under 100 daily users and under 10 concurrent users)");
+  const largeDraft = createSizedDraft("large traffic (over 10,000 daily users and over 500 concurrent users)");
+  const smallEc2 = smallDraft.architectureJson.nodes.find((node) => node.type === "EC2");
+  const largeEc2 = largeDraft.architectureJson.nodes.find((node) => node.type === "EC2");
+  const smallRds = smallDraft.architectureJson.nodes.find((node) => node.type === "RDS");
+  const largeRds = largeDraft.architectureJson.nodes.find((node) => node.type === "RDS");
+
+  assert.ok(smallEc2);
+  assert.ok(largeEc2);
+  assert.notEqual(smallEc2.config.instanceType, largeEc2.config.instanceType);
+  assert.ok(smallRds);
+  assert.ok(largeRds);
+  assert.notEqual(smallRds.config.allocatedStorage, largeRds.config.allocatedStorage);
+  assert.notEqual(smallRds.config.instanceClass, largeRds.config.instanceClass);
+});
+
+
+test("createArchitectureDraft changes cost-sensitive parameters when the selected budget changes", () => {
+  const createBudgetDraft = (budget: string) =>
+    createArchitectureDraft({
+      prompt: [
+        "Create a Practice Architecture with AWS EC2 and CloudFront.",
+        "Expected traffic: small traffic.",
+        `Monthly budget: ${budget}.`
+      ].join("\n")
+    });
+  const lowBudgetDraft = createBudgetDraft("under 100,000 KRW (minimum cost / low budget)");
+  const enterpriseDraft = createBudgetDraft("over 2,000,000 KRW (enterprise)");
+  const lowEc2 = lowBudgetDraft.architectureJson.nodes.find((node) => node.type === "EC2");
+  const enterpriseEc2 = enterpriseDraft.architectureJson.nodes.find((node) => node.type === "EC2");
+  const lowCloudFront = lowBudgetDraft.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT");
+  const enterpriseCloudFront = enterpriseDraft.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT");
+
+  assert.equal(lowEc2?.config.instanceType, "t3.micro");
+  assert.equal(enterpriseEc2?.config.instanceType, "m7i.large");
+  assert.equal(lowCloudFront?.config.priceClass, "PriceClass_100");
+  assert.equal(enterpriseCloudFront?.config.priceClass, "PriceClass_All");
+});
+
+test("createAmazonQArchitectureDraftResponse overrides invariant provider sizing with selected budget values", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "preview",
+      title: "Static Site",
+      architectureJson: {
+        nodes: [
+          node("site-bucket", "S3", "Static Website Bucket", 120, 180),
+          configuredNode(node("cdn", "CLOUDFRONT", "CloudFront CDN", 360, 180), {
+            priceClass: "PriceClass_200",
+            originResourceId: "site-bucket",
+            origin: "",
+            defaultCacheBehavior: "",
+            restrictions: "",
+            viewerCertificate: ""
+          })
+        ],
+        edges: [{ id: "cdn-to-site", sourceId: "cdn", targetId: "site-bucket", label: "origin" }]
+      },
+      requirementCoverage: sampleRequirementCoverage(["site-bucket", "cdn"])
+    })
+  );
+  const createBudgetPreview = async (budget: string) =>
+    createAmazonQArchitectureDraftResponse(
+      {
+        prompt: [
+          "Static site with HTML/CSS/JS only.",
+          "Expected traffic: small traffic under 100 daily users.",
+          "Database: none. Backend: none.",
+          "Primary users: Korea / Seoul region.",
+          `Monthly budget: ${budget}.`,
+          "HTTPS is optional. File upload: none. Realtime: none.",
+          "Management mode: fully managed.",
+          "Page loading time: no preference. Site size: under 10MB.",
+          "Traffic pattern: steady. Availability: no preference."
+        ].join("\n")
+      },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    );
+  const lowBudgetPreview = await createBudgetPreview("under 100,000 KRW (minimum cost / low budget)");
+  const enterprisePreview = await createBudgetPreview("over 2,000,000 KRW (enterprise)");
+
+  if ("status" in lowBudgetPreview || "status" in enterprisePreview) {
+    assert.fail(`Expected provider previews: ${JSON.stringify({ lowBudgetPreview, enterprisePreview })}`);
+  }
+  assert.equal(
+    lowBudgetPreview.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT")?.config.priceClass,
+    "PriceClass_100"
+  );
+  assert.equal(
+    enterprisePreview.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT")?.config.priceClass,
+    "PriceClass_All"
+  );
+  const completedCloudFront = lowBudgetPreview.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT");
+  assert.equal(typeof completedCloudFront?.config.origin, "object");
+  assert.equal(typeof completedCloudFront?.config.defaultCacheBehavior, "object");
+  assert.equal(typeof completedCloudFront?.config.restrictions, "object");
+  assert.equal(typeof completedCloudFront?.config.viewerCertificate, "object");
+});
+
+test("createArchitectureDraft changes RDS parameters when the selected database size changes", () => {
+  const createDatabaseDraft = (database: string) =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with AWS RDS. Database size: ${database}.`
+    });
+  const smallRds = createDatabaseDraft("simple data under 10GB").architectureJson.nodes.find((node) => node.type === "RDS");
+  const largeRds = createDatabaseDraft("large database over 100GB with complex queries").architectureJson.nodes.find(
+    (node) => node.type === "RDS"
+  );
+
+  assert.equal(smallRds?.config.allocatedStorage, 20);
+  assert.equal(largeRds?.config.allocatedStorage, 200);
+  assert.equal(smallRds?.config.instanceClass, "db.t4g.small");
+  assert.equal(largeRds?.config.instanceClass, "db.r6g.large");
+});
+
+test("createArchitectureDraft changes resilience parameters when the selected availability changes", () => {
+  const createAvailabilityDraft = (availability: string) =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with AWS RDS. Availability target: ${availability}.`
+    });
+  const standardRds = createAvailabilityDraft("99%").architectureJson.nodes.find((node) => node.type === "RDS");
+  const highlyAvailableRds = createAvailabilityDraft("99.99%").architectureJson.nodes.find((node) => node.type === "RDS");
+
+  assert.equal(standardRds?.config.multiAz, false);
+  assert.equal(standardRds?.config.backupRetentionPeriod, 7);
+  assert.equal(highlyAvailableRds?.config.multiAz, true);
+  assert.equal(highlyAvailableRds?.config.backupRetentionPeriod, 14);
+});
+
+test("createArchitectureDraft changes maintenance parameters when the selected management mode changes", () => {
+  const createManagementDraft = (management: string) =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with AWS RDS. Management mode: ${management}.`
+    });
+  const selfManagedRds = createManagementDraft("self-managed / direct management").architectureJson.nodes.find(
+    (node) => node.type === "RDS"
+  );
+  const fullyManagedRds = createManagementDraft("fully managed").architectureJson.nodes.find(
+    (node) => node.type === "RDS"
+  );
+
+  assert.equal(selfManagedRds?.config.autoMinorVersionUpgrade, false);
+  assert.equal(fullyManagedRds?.config.autoMinorVersionUpgrade, true);
+});
+
+test("createArchitectureDraft changes S3 parameters when the selected upload type changes", () => {
+  const createUploadDraft = (upload: string) =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with AWS S3. File upload type: ${upload}.`
+    });
+  const imageBucket = createUploadDraft("profile image upload").architectureJson.nodes.find((node) => node.type === "S3");
+  const largeFileBucket = createUploadDraft("large file upload over 100MB").architectureJson.nodes.find(
+    (node) => node.type === "S3"
+  );
+
+  assert.equal(imageBucket?.config.bucketPrefix, "sketchcatch-image-uploads-");
+  assert.equal(largeFileBucket?.config.bucketPrefix, "sketchcatch-large-file-uploads-");
+});
+
+test("createArchitectureDraft changes Lambda parameters when the selected realtime mode changes", () => {
+  const createRealtimeDraft = (realtime: string) =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with AWS Lambda. Realtime requirement: ${realtime}.`
+    });
+  const notificationLambda = createRealtimeDraft("realtime notification").architectureJson.nodes.find(
+    (node) => node.type === "LAMBDA"
+  );
+  const dataUpdateLambda = createRealtimeDraft("realtime data updates").architectureJson.nodes.find(
+    (node) => node.type === "LAMBDA"
+  );
+
+  assert.equal(notificationLambda?.config.memorySize, 128);
+  assert.equal(notificationLambda?.config.timeout, 15);
+  assert.equal(dataUpdateLambda?.config.memorySize, 512);
+  assert.equal(dataUpdateLambda?.config.timeout, 30);
+});
+
+test("createArchitectureDraft changes public access protection when the selected security priority changes", () => {
+  const createSecurityDraft = (security: string) =>
+    createArchitectureDraft({
+      prompt: `Create a Practice Architecture with an AWS Security Group. Security requirement: ${security}.`
+    });
+  const basicSecurityGroup = createSecurityDraft("basic public content only").architectureJson.nodes.find(
+    (node) => node.type === "SECURITY_GROUP"
+  );
+  const protectedSecurityGroup = createSecurityDraft("protect private user data with encryption").architectureJson.nodes.find(
+    (node) => node.type === "SECURITY_GROUP"
+  );
+
+  assert.equal(basicSecurityGroup?.config.ingress, undefined);
+  assert.deepEqual(protectedSecurityGroup?.config.ingress, []);
+});
 test("fixed Template keeps its core resources and merges compatible answer-driven additions", () => {
   const result = createArchitectureDraft({
     prompt: [
@@ -288,8 +593,8 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.equal(countNodes("UNKNOWN"), 4);
   assert.equal(countNodes("NAT_GATEWAY"), 1);
   assert.equal(countNodes("ELASTIC_IP"), 1);
-  assert.equal(countNodes("APPLICATION_AUTO_SCALING_TARGET"), 0);
-  assert.equal(countNodes("APPLICATION_AUTO_SCALING_POLICY"), 0);
+  assert.equal(countNodes("APPLICATION_AUTO_SCALING_TARGET"), 1);
+  assert.equal(countNodes("APPLICATION_AUTO_SCALING_POLICY"), 1);
   assert.equal(countNodes("CODESTAR_CONNECTION"), 0);
   assert.equal(countNodes("CODEPIPELINE"), 0);
   assert.equal(countNodes("CODEBUILD_PROJECT"), 0);
@@ -413,6 +718,8 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.ok(edgeLabels.has("ALB SG -> Task SG: TCP 8080 only"));
   assert.ok(edgeLabels.has("application revisions pull API image from ECR"));
   assert.ok(edgeLabels.has("writes ECS container logs via awslogs"));
+  assert.ok(edgeLabels.has("scales"));
+  assert.ok(edgeLabels.has("tracks requests"));
   assert.equal(
     response.architectureJson.edges.filter(
       (edge) =>
@@ -3514,117 +3821,69 @@ test("createAmazonQArchitectureDraftResponse rejects when Amazon Q returns an in
   );
 });
 
-test("createAmazonQArchitectureDraftResponse asks Amazon Q which requirement to relax after repeated validation failures", async () => {
-  const calls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+test("createAmazonQArchitectureDraftResponse asks OpenAI to resolve repeated validation failures", async () => {
+  const amazonQCalls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const conflictCalls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
-    calls.push(request);
+    amazonQCalls.push(request);
 
-    if (calls.length < 3) {
-      return JSON.stringify({
-        status: "plan",
-        title: "Unsupported Quantity Plan",
-        requiredResources: ["IAM_ROLE"],
-        resourceQuantities: { IAM_ROLE: 3 }
-      });
-    }
-
-    return [
-      "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 요구를 유지할까요?",
-      "1. 역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도",
-      "2. 현재 지원 범위를 유지하고 역할을 2개 이하로 통합"
-    ].join("\n");
+    return JSON.stringify({
+      status: "plan",
+      title: "Unsupported Quantity Plan",
+      requiredResources: ["IAM_ROLE"],
+      resourceQuantities: { IAM_ROLE: 3 }
+    });
   });
+  const conflictClarificationProvider: AiTextProvider = {
+    provider: "openai",
+    service: "openai_responses",
+    model: "fake-openai-conflict-resolver",
+    generate: async (request) => {
+      conflictCalls.push(request);
+
+      return {
+        text: JSON.stringify({
+          status: "needs_clarification",
+          question: "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 조건을 우선할까요?",
+          suggestions: [
+            "IAM 역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도",
+            "현재 지원 범위를 유지하고 IAM 역할을 2개 이하로 통합"
+          ]
+        }),
+        outputCharacters: 180
+      };
+    }
+  };
 
   const response = await createAmazonQArchitectureDraftResponse(
     { prompt: createDynamicWebDeploymentSelectionPrompt() },
-    { provider, creditPolicy: confirmedCreditPolicy }
+    { provider, conflictClarificationProvider, creditPolicy: confirmedCreditPolicy }
   );
 
-  assert.equal(calls.length, 3);
-  assert.match(calls[2]?.prompt ?? "", /diagnosing why SketchCatch could not produce a valid architecture/u);
-  assert.match(calls[2]?.prompt ?? "", /IAM_ROLE/u);
+  assert.equal(amazonQCalls.length, 2);
+  assert.equal(conflictCalls.length, 1);
+  assert.match(conflictCalls[0]?.prompt ?? "", /OpenAI resolving a structured SketchCatch architecture validation failure/u);
+  assert.match(conflictCalls[0]?.prompt ?? "", /IAM_ROLE/u);
   assert.equal(
-    (calls[2]?.payload as { task?: string }).task,
+    (conflictCalls[0]?.payload as { task?: string }).task,
     "requirement_conflict_clarification"
   );
+
   if (!("status" in response)) {
-    assert.fail("Expected an Amazon Q clarification response");
+    assert.fail("Expected an OpenAI clarification response");
   }
   assert.equal(response.status, "needs_clarification");
   assert.equal(
     response.question,
-    "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 요구를 유지할까요?"
+    "IAM 역할 3개 요구와 현재 지원 가능한 역할 구성이 충돌합니다. 어떤 조건을 우선할까요?"
   );
   assert.deepEqual(response.suggestions, [
-    "역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도",
-    "현재 지원 범위를 유지하고 역할을 2개 이하로 통합"
+    "IAM 역할 3개 분리를 유지하고 지원 범위를 넓힌 뒤 다시 시도",
+    "현재 지원 범위를 유지하고 IAM 역할을 2개 이하로 통합"
   ]);
-  assert.equal(response.providerMetadata.provider, "amazon_q");
+  assert.equal(response.providerMetadata.provider, "openai");
 });
 
-test("createAmazonQArchitectureDraftResponse rejects Amazon Q no-relevant-information fallback as a clarification", async () => {
-  let callCount = 0;
-  const provider = createFakeAmazonQProvider(() => {
-    callCount += 1;
-
-    if (callCount < 3) {
-      return JSON.stringify({
-        status: "plan",
-        title: "Unsupported Quantity Plan",
-        requiredResources: ["IAM_ROLE"],
-        resourceQuantities: { IAM_ROLE: 3 }
-      });
-    }
-
-    return "Sorry, I could not find relevant information to complete your request.";
-  });
-
-  await assert.rejects(
-    createAmazonQArchitectureDraftResponse(
-      { prompt: createDynamicWebDeploymentSelectionPrompt() },
-      { provider, creditPolicy: confirmedCreditPolicy }
-    ),
-    (error: unknown) =>
-      error instanceof ArchitectureDraftGenerationError &&
-      error.kind === "provider_response_invalid" &&
-      error.statusCode === 502
-  );
-  assert.equal(callCount, 3);
-});
-
-test("createAmazonQArchitectureDraftResponse requires choices in an Amazon Q conflict clarification", async () => {
-  let callCount = 0;
-  const provider = createFakeAmazonQProvider(() => {
-    callCount += 1;
-
-    if (callCount < 3) {
-      return JSON.stringify({
-        status: "plan",
-        title: "Unsupported Quantity Plan",
-        requiredResources: ["IAM_ROLE"],
-        resourceQuantities: { IAM_ROLE: 3 }
-      });
-    }
-
-    return JSON.stringify({
-      status: "needs_clarification",
-      question: "어떤 요구사항을 유지할까요?",
-      suggestions: []
-    });
-  });
-
-  await assert.rejects(
-    createAmazonQArchitectureDraftResponse(
-      { prompt: createDynamicWebDeploymentSelectionPrompt() },
-      { provider, creditPolicy: confirmedCreditPolicy }
-    ),
-    (error: unknown) =>
-      error instanceof ArchitectureDraftGenerationError &&
-      error.kind === "provider_response_invalid" &&
-      error.statusCode === 502
-  );
-  assert.equal(callCount, 3);
-});
 test("createAmazonQArchitectureDraftResponse retries once when a compact plan fails materialization", async () => {
   const calls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {

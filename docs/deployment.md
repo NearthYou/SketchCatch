@@ -57,6 +57,7 @@ Architecture Draft에서 Anonymous Amazon Q 패턴 검색을 활성화할 때는
 
 ```text
 AI_ARCHITECTURE_REQUIREMENT_NORMALIZER=openai
+OPENAI_ARCHITECTURE_CONFLICT_MODEL=<optional-openai-model>
 AMAZON_Q_ENABLED=true
 AMAZON_Q_REGION=ap-southeast-2
 AMAZON_Q_CREDIT_CONFIRMED=true
@@ -75,6 +76,7 @@ Direct Deployment Path의 실제 live apply 리소스는 안정성을 위해 아
 - Security Group
 - ALB, Listener, Target Group
 - ECS Cluster, Service, Task Definition
+- ECS Application Auto Scaling Target과 Policy
 - IAM Role과 Policy Attachment
 - ECR Repository와 CloudWatch Log Group
 - S3 Bucket, Public Access Block, Object, Bucket Policy
@@ -82,7 +84,7 @@ Direct Deployment Path의 실제 live apply 리소스는 안정성을 위해 아
 - EC2
 
 Terraform Plan과 사전 `terraform init`은 안전 검사를 통과한 기본 Template Resource를 더 넓게
-분석할 수 있습니다. `practice` live apply 허용 목록 밖의 Resource는 Plan 결과에
+분석할 수 있습니다. 선택된 live apply 프로필의 허용 목록 밖에 있는 Resource는 Plan 결과에
 `UNSUPPORTED_RESOURCE` 경고로 남으며, 승인과 Apply에서는 live apply 안전 검사를 다시 적용해
 fail-closed로 차단합니다. Plan 가능 여부가 실제 배포 허용을 의미하지는 않습니다.
 
@@ -933,6 +935,11 @@ smoke report에는 bucket name, deployment id, apply 결과, destroy 결과, res
 ## 수동 마이그레이션
 
 마이그레이션은 배포 중 자동 실행하지 않습니다. GitHub Actions의 `Run Production Database Migrations` 워크플로를 수동 실행합니다. workflow는 먼저 migration compatibility guard를 통과하고 RDS snapshot을 생성한 뒤 현재 worker task definition으로 ECS one-off task를 실행합니다. `DATABASE_URL`은 worker task secret reference에서 읽습니다.
+
+`0054_remove_practice_live_profile.sql`은 기존 `practice` Deployment를 `demo_web_service`로
+변환하고 `deployment_live_profile` enum에서 `practice`를 제거하는 contract migration입니다.
+먼저 `practice`를 생성하지 않고 기존 값을 `demo_web_service`로 취급하는 API/worker image를
+배포한 뒤, production 승인과 RDS snapshot을 거쳐 migration workflow를 실행합니다.
 
 ## 배포 확인
 

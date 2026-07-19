@@ -115,7 +115,6 @@ export function WorkspaceAiWorkbench({
           <header className={styles.header}>
             <div className={styles.heading}>
               <h2 id="workspace-ai-chat-title">{activeScopeLabel}</h2>
-              <p>{isBusy ? "작업 중" : "현재 Board 기준"}</p>
             </div>
             <div className={styles.headerActions}>
               <button

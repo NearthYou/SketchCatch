@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import type { DeploymentLiveProfile } from "@sketchcatch/types";
 import {
   getLiveApplySupportedResourceTypes,
-  getTerraformPlanSupportedResourceTypes
+  getTerraformPlanSupportedResourceTypes,
+  normalizeDeploymentLiveProfile
 } from "./deployment-plan-summary.js";
 
 const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "data", "variable", "output", "locals"]);
@@ -116,7 +117,7 @@ export function assertTerraformArtifactIsSafe(
   validateDisallowedStringInterpolations(tokens);
   validateTemplateFileCalls(code);
   validateArchiveDataSourceAttributes(code);
-  const liveProfile = options.liveProfile ?? "practice";
+  const liveProfile = normalizeDeploymentLiveProfile(options.liveProfile);
   const supportedResourceTypes =
     options.resourceValidationMode === "plan"
       ? getTerraformPlanSupportedResourceTypes()
