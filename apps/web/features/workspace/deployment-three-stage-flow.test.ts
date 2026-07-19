@@ -147,14 +147,20 @@ test("deployment polling keeps unrelated failures but reconciles its accepted Pl
 
 test("deployment commands stop their failure boundary before secondary hydration", () => {
   const reviewStart = directDeploymentSource.indexOf("async function startDeploymentReview");
-  const retryStart = directDeploymentSource.indexOf("async function startTerraformPlan", reviewStart);
+  const retryStart = directDeploymentSource.indexOf(
+    "async function startTerraformPlan",
+    reviewStart
+  );
   const reviewSource = directDeploymentSource.slice(reviewStart, retryStart);
   const planIndex = reviewSource.indexOf("await runDeploymentPlan(preparedDeployment.id)");
   const detailsIndex = reviewSource.indexOf("refreshDeploymentDetails", planIndex);
 
   assert.ok(planIndex > -1);
   assert.ok(detailsIndex > planIndex);
-  assert.doesNotMatch(reviewSource.slice(planIndex, detailsIndex), /listDeploymentLogs|listDeploymentResources|listTerraformOutputs/);
+  assert.doesNotMatch(
+    reviewSource.slice(planIndex, detailsIndex),
+    /listDeploymentLogs|listDeploymentResources|listTerraformOutputs/
+  );
   assert.match(directDeploymentSource, /actionInFlightRef/);
 });
 
@@ -193,9 +199,7 @@ test("deployment review delegates build preparation and repository verification 
 });
 
 test("durable Plan polling refreshes Repository verification after worker completion", () => {
-  const runtimeLoadStart = directDeploymentSource.indexOf(
-    "const loadDeploymentRuntimeSnapshot"
-  );
+  const runtimeLoadStart = directDeploymentSource.indexOf("const loadDeploymentRuntimeSnapshot");
   const runtimeApplyStart = directDeploymentSource.indexOf(
     "const applyDeploymentRuntimeSnapshot",
     runtimeLoadStart
@@ -216,8 +220,14 @@ test("durable Plan polling refreshes Repository verification after worker comple
 
 test("Plan responses request an immediate Repository verification refresh", () => {
   const reviewStart = directDeploymentSource.indexOf("async function startDeploymentReview");
-  const retryStart = directDeploymentSource.indexOf("async function startTerraformPlan", reviewStart);
-  const approveStart = directDeploymentSource.indexOf("async function approveCurrentPlan", retryStart);
+  const retryStart = directDeploymentSource.indexOf(
+    "async function startTerraformPlan",
+    reviewStart
+  );
+  const approveStart = directDeploymentSource.indexOf(
+    "async function approveCurrentPlan",
+    retryStart
+  );
   const reviewSource = directDeploymentSource.slice(reviewStart, retryStart);
   const retrySource = directDeploymentSource.slice(retryStart, approveStart);
 
@@ -244,6 +254,25 @@ test("successful Plan approval selects deployment and refreshes its build enviro
   assert.ok(revokeStart > approveStart);
   assert.match(approveSource, /setSelectedDirectStepId\("deployment"\)/);
   assert.match(approveSource, /refreshBuildEnvironmentAfterPlan\(deployment\)/);
+});
+
+test("terminal application failures hide stale approval and remain visible from every step", () => {
+  const approvalActionsStart = directDeploymentSource.indexOf('if (stepId === "approval")');
+  const deploymentActionsStart = directDeploymentSource.indexOf("return (", approvalActionsStart);
+  const approvalActionsSource = directDeploymentSource.slice(
+    approvalActionsStart,
+    deploymentActionsStart
+  );
+
+  assert.match(approvalActionsSource, /shouldShowApprovePlanButton/);
+  assert.match(
+    directDeploymentSource,
+    /selectedDeployment\?\.status === "FAILED" \? \([\s\S]*selectedDeployment\.errorSummary/
+  );
+  assert.doesNotMatch(
+    directDeploymentSource,
+    /selectedStep\.id === "deployment" && selectedDeployment\?\.status === "FAILED"/
+  );
 });
 
 test("full-stack validation checks the confirmed target and opens its setup surface", () => {

@@ -450,7 +450,7 @@ function validateArchiveDataSourceAttributes(source: string): void {
   }
 }
 
-type TerraformResourceBlock = {
+export type TerraformResourceBlock = {
   type: string;
   name: string;
   body: string;
@@ -462,7 +462,7 @@ function validateDeploymentResourceAttributes(
   liveProfile: DeploymentLiveProfile,
   resourceValidationMode: "live_apply" | "plan"
 ): void {
-  for (const resource of extractResourceBlocks(source)) {
+  for (const resource of listTerraformResourceBlocks(source)) {
     const body = stripHclComments(resource.body);
 
     if (resourceValidationMode === "live_apply" && resource.type === "random_password") {
@@ -899,7 +899,7 @@ function findNumericAttribute(body: string, attributeName: string): number | nul
   return Number.parseInt(match[1], 10);
 }
 
-function extractResourceBlocks(source: string): TerraformResourceBlock[] {
+export function listTerraformResourceBlocks(source: string): TerraformResourceBlock[] {
   const resources: TerraformResourceBlock[] = [];
   const headerPattern = /\bresource\s+"([^"]+)"\s+"([^"]+)"\s*\{/g;
   let match: RegExpExecArray | null;

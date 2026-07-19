@@ -81,7 +81,10 @@ test("successful application releases remain cleanup targets without Terraform s
     status: "SUCCESS"
   });
 
-  assert.equal(selectDeploymentCleanupTarget([applicationDeployment])?.id, applicationDeployment.id);
+  assert.equal(
+    selectDeploymentCleanupTarget([applicationDeployment])?.id,
+    applicationDeployment.id
+  );
   assert.equal(
     getDeploymentActionState(applicationDeployment, "idle").shouldShowDestroyPlanButton,
     true
@@ -281,6 +284,21 @@ test("current apply plan hides plan regeneration and keeps approval enabled", ()
   assert.equal(state.canApprovePlan, true);
   assert.equal(state.shouldShowApplyPlanButton, false);
   assert.equal(state.canRunApplyPlan, false);
+});
+
+test("failed application release never leaves the stale Apply Plan approval available", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+      currentPlanOperation: "apply",
+      failureStage: "application_release",
+      status: "FAILED"
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApprovePlanButton, false);
+  assert.equal(state.canApprovePlan, false);
 });
 
 test("running Terraform work hides stale plan rerun actions", () => {
