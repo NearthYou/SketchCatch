@@ -134,7 +134,7 @@ test("Cross-account Template은 원본의 Group 영역과 세 S3 Resource만 사
   );
   assert.deepEqual(
     scopedNodes.map(({ label }) => label).sort(),
-    ["prod.txt S3 Object", "test.txt S3 Object", "계정 간 공유 S3 Bucket"]
+    ["Cross-Account Shared S3 Bucket", "prod.txt S3 Object", "test.txt S3 Object"]
   );
   assert.equal(
     template.diagramJson.nodes.some(

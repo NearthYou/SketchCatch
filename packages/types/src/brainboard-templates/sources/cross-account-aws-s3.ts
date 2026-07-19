@@ -79,7 +79,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5418dbae-f0eb-4864-8a8e-a9897008c92a",
       domOrder: 3,
-      label: "계정 간 공유 S3 Bucket",
+      label: "Cross-Account Shared S3 Bucket",
       position: {
         x: 90,
         y: -160

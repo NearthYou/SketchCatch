@@ -79,7 +79,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "352c51ca-9f42-4d1d-b2ea-cddba97c5f91",
       domOrder: 3,
-      label: "DocumentDB 처리 Lambda",
+      label: "DocumentDB Handler Lambda Function",
       position: {
         x: 1060,
         y: 530
@@ -97,7 +97,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "08ec8f09-61cc-4bca-aa03-bba22b030378",
       domOrder: 4,
-      label: "외부 연동 Lambda",
+      label: "External Integration Lambda Function",
       position: {
         x: 760,
         y: 360
@@ -133,7 +133,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "9ae294ea-de55-47ee-ac40-9fdc891717fa",
       domOrder: 6,
-      label: "DocumentDB 자격 증명",
+      label: "DocumentDB Credentials Secret",
       position: {
         x: 760,
         y: 710
@@ -169,7 +169,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "e350f53e-754f-421b-b01d-46f66ce0c2a4",
       domOrder: 8,
-      label: "클라이언트",
+      label: "Client",
       position: {
         x: 460,
         y: 530

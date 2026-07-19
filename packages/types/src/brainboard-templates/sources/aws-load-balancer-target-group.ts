@@ -187,7 +187,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "048a3f38-9205-4ca7-b6fa-5f37ce90c75f",
       domOrder: 9,
-      label: "애플리케이션 EC2",
+      label: "Application EC2 Instance",
       position: {
         x: -640,
         y: 70
@@ -205,7 +205,7 @@ export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate
     {
       sourceNodeId: "f18c57e0-c9a1-45c1-83f4-03b84924b7c8",
       domOrder: 10,
-      label: "EC2 Target Group 연결",
+      label: "Target Group Attachment - Application EC2",
       position: {
         x: -850,
         y: 70

@@ -43,7 +43,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f51e7972-ab44-48f6-a7e3-9cb720aa0c51",
       domOrder: 1,
-      label: "S3 전체 접근 IAM Policy",
+      label: "S3 Full Access IAM Policy",
       position: {
         x: 260,
         y: -700
@@ -79,7 +79,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "4dfe1d77-191d-4f82-94f4-153e22afac77",
       domOrder: 3,
-      label: "S3 전체 접근 권한 연결",
+      label: "S3 Full Access Policy Attachment",
       position: {
         x: -10,
         y: -700
@@ -115,7 +115,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d7f660ea-c9a7-4269-9a78-047de51122c5",
       domOrder: 5,
-      label: "폴더 API Resource",
+      label: "Folder API Gateway Resource",
       position: {
         x: 770,
         y: -640
@@ -133,7 +133,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5d9d4b38-323c-4029-b582-1ab3e2875f5e",
       domOrder: 6,
-      label: "항목 API Resource",
+      label: "Item API Gateway Resource",
       position: {
         x: 1110,
         y: -640
@@ -151,7 +151,7 @@ export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "75347de7-6fdd-43eb-affc-adda7651310c",
       domOrder: 7,
-      label: "버킷 목록 GET Method",
+      label: "List Buckets GET Method",
       position: {
         x: 770,
         y: -20

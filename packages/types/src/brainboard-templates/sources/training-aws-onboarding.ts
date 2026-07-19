@@ -151,7 +151,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "1deba4c9-a88f-4b0e-995a-2e5dc304d167",
       domOrder: 7,
-      label: "ECR 읽기 권한 연결",
+      label: "ECR Read Policy Attachment",
       position: {
         x: 470,
         y: 485
@@ -187,7 +187,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "57b6aa35-9b3d-46bd-967d-07493b8aaa5e",
       domOrder: 9,
-      label: "CNI 권한 연결",
+      label: "CNI Policy Attachment",
       position: {
         x: 470,
         y: 315
@@ -223,7 +223,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8a4bb82f-8ca2-4314-aa88-a7895bbe985d",
       domOrder: 11,
-      label: "Worker Node 권한 연결",
+      label: "Worker Node Policy Attachment",
       position: {
         x: 470,
         y: 665
@@ -241,7 +241,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b1dff648-3242-4a8f-bde8-5a30459b5d09",
       domOrder: 12,
-      label: "VPC Controller 권한 연결",
+      label: "VPC Controller Policy Attachment",
       position: {
         x: 2210,
         y: 315
@@ -259,7 +259,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "bb5eb85d-fe0a-4239-affd-f34192d53c79",
       domOrder: 13,
-      label: "EKS Cluster 권한 연결",
+      label: "EKS Cluster Policy Attachment",
       position: {
         x: 2210,
         y: 645
@@ -349,7 +349,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "78653b46-a7fb-490f-a677-70663c22cc5c",
       domOrder: 18,
-      label: "Cluster API HTTPS 허용",
+      label: "Security Group Rule - Cluster API HTTPS",
       position: {
         x: 1370,
         y: 1210
@@ -367,7 +367,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ea26b075-2ec2-4686-9450-92cebdeeee7b",
       domOrder: 19,
-      label: "Public Route 연결 A",
+      label: "Route Table Association - Public A",
       position: {
         x: 980,
         y: 945
@@ -385,7 +385,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ee8367ce-4b1b-4b45-9fca-eeec80c852dd",
       domOrder: 20,
-      label: "Public Route 연결 B",
+      label: "Route Table Association - Public B",
       position: {
         x: 1730,
         y: 940

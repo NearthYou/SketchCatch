@@ -43,7 +43,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "06c1d1a2-a280-419f-95a3-7e3cda0c3330",
       domOrder: 1,
-      label: "보안 S3 Bucket",
+      label: "Secure S3 Bucket",
       position: {
         x: 1020,
         y: -1440
@@ -61,7 +61,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "262e64a9-86bc-4bc5-b7e1-82e26ddedb06",
       domOrder: 2,
-      label: "로그 객체 생성 SNS 알림",
+      label: "Log Object SNS Notification",
       position: {
         x: 1020,
         y: -1660
@@ -79,7 +79,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2bad56b6-e6ee-4248-9659-56171ccca61c",
       domOrder: 3,
-      label: "로그 보관 Lifecycle",
+      label: "Log Retention Lifecycle Configuration",
       position: {
         x: 695,
         y: -1620
@@ -115,7 +115,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6d669ff4-d4d1-44a6-b483-d16ca60e815a",
       domOrder: 5,
-      label: "S3 KMS 암호화",
+      label: "S3 KMS Encryption Configuration",
       position: {
         x: 695,
         y: -1210
@@ -133,7 +133,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c636c16f-3b4a-4e46-bff2-70462f108900",
       domOrder: 6,
-      label: "S3 Public Access 차단",
+      label: "S3 Public Access Block",
       position: {
         x: 1335,
         y: -1440
@@ -151,7 +151,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "e06758f9-5a60-4934-8ac3-af746693a4a9",
       domOrder: 7,
-      label: "버킷 알림 SNS Topic",
+      label: "Bucket Notification SNS Topic",
       position: {
         x: 1345,
         y: -1660
@@ -187,7 +187,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ef48c7ff-a34a-49fb-94fd-ea9c35cedc11",
       domOrder: 9,
-      label: "S3 Replication 설정",
+      label: "S3 Replication Configuration",
       position: {
         x: 1280,
         y: -1210
@@ -223,7 +223,7 @@ export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fa1b482b-0830-4610-a6ac-086a532b1f3f",
       domOrder: 11,
-      label: "S3 접근 로그 수집",
+      label: "S3 Access Logging",
       position: {
         x: 695,
         y: -1440

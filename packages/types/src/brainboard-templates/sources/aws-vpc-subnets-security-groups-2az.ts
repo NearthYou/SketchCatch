@@ -205,7 +205,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "dab3e0f4-ca73-4759-985b-b2bb84bce2f3",
       domOrder: 10,
-      label: "사용자",
+      label: "User",
       position: {
         x: 1.2222235506378354,
         y: 680
@@ -295,7 +295,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "3fa3abcc-3366-4d29-a95d-a1848a4d07f6",
       domOrder: 15,
-      label: "Private Subnet A Route 연결",
+      label: "Route Table Association - Private A",
       position: {
         x: 706.0901263033724,
         y: 818.4549744589974
@@ -313,7 +313,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "4bab5c05-8edd-4533-a61a-8d2c2f8ac570",
       domOrder: 16,
-      label: "Public Subnet A Route 연결",
+      label: "Route Table Association - Public A",
       position: {
         x: 706.2835980556209,
         y: 520.4643556760001

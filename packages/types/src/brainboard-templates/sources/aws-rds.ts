@@ -205,7 +205,7 @@ export const awsRdsSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d25dcc61-c9c3-4b64-922b-cd44cb13798b",
       domOrder: 10,
-      label: "PostgreSQL 연결 로그 설정",
+      label: "PostgreSQL Connection Log Parameter Group",
       position: {
         x: 710,
         y: 850
