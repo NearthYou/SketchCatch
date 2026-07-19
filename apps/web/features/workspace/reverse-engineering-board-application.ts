@@ -49,6 +49,12 @@ export type ReverseEngineeringBoardApplication = {
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly diagram: DiagramJson;
   readonly previewDiagram: DiagramJson;
+  readonly sourceOwnership: ReverseEngineeringSourceOwnership;
+};
+
+export type ReverseEngineeringSourceOwnership = {
+  readonly nodeIds: readonly string[];
+  readonly edgeIds: readonly string[];
 };
 
 export type CreateReverseEngineeringBoardApplicationInput = {
@@ -70,6 +76,10 @@ export function createReverseEngineeringBoardApplication(
 ): ReverseEngineeringBoardApplication {
   const originalPreview = createOriginalReverseEngineeringPreview(input.result);
   const comparison = compareDiagrams(input.currentDiagram, originalPreview.diagram);
+  const replaceSourceOwnership = {
+    nodeIds: originalPreview.diagram.nodes.map((node) => node.id),
+    edgeIds: originalPreview.diagram.edges.map((edge) => edge.id)
+  } satisfies ReverseEngineeringSourceOwnership;
 
   if (input.mode === "replace") {
     const diagram = input.placement === "compiled"
@@ -83,22 +93,25 @@ export function createReverseEngineeringBoardApplication(
       compilation: null,
       comparison,
       diagram,
-      previewDiagram: diagram
+      previewDiagram: diagram,
+      sourceOwnership: replaceSourceOwnership
     };
   }
 
-  const appendDiagram = appendAdditionsToCurrentDiagram(
+  const appendResult = appendAdditionsToCurrentDiagram(
     input.currentDiagram,
     originalPreview.diagram,
     comparison
   );
+  const appendDiagram = appendResult.diagram;
 
   if (input.placement === "original") {
     return {
       compilation: null,
       comparison,
       diagram: appendDiagram,
-      previewDiagram: appendDiagram
+      previewDiagram: appendDiagram,
+      sourceOwnership: appendResult.sourceOwnership
     };
   }
 
@@ -111,7 +124,8 @@ export function createReverseEngineeringBoardApplication(
     compilation: null,
     comparison,
     diagram,
-    previewDiagram: diagram
+    previewDiagram: diagram,
+    sourceOwnership: appendResult.sourceOwnership
   };
 }
 
@@ -128,17 +142,26 @@ export function createReverseEngineeringBoardComparison(
 // Board 저장용 Architecture에도 가져온 Resource의 type·label·config·관계를 그대로 되돌립니다.
 export function convertReverseEngineeringBoardToArchitectureJson(
   diagram: DiagramJson,
-  result: ReverseEngineeringScanResult
+  result: ReverseEngineeringScanResult,
+  sourceOwnership?: ReverseEngineeringSourceOwnership
 ): ArchitectureJson {
   const converted = convertDiagramJsonToArchitectureJson(diagram);
   const sourceNodeById = new Map(result.architectureJson.nodes.map((node) => [node.id, node]));
   const sourceEdgeById = new Map(result.architectureJson.edges.map((edge) => [edge.id, edge]));
   const convertedNodeById = new Map(converted.nodes.map((node) => [node.id, node]));
   const convertedEdgeById = new Map(converted.edges.map((edge) => [edge.id, edge]));
+  const ownedSourceNodeIds = new Set(
+    sourceOwnership?.nodeIds ?? result.architectureJson.nodes.map((node) => node.id)
+  );
+  const ownedSourceEdgeIds = new Set(
+    sourceOwnership?.edgeIds ?? result.architectureJson.edges.map((edge) => edge.id)
+  );
 
   return {
     nodes: diagram.nodes.flatMap((diagramNode) => {
-      const sourceNode = sourceNodeById.get(diagramNode.id);
+      const sourceNode = ownedSourceNodeIds.has(diagramNode.id)
+        ? sourceNodeById.get(diagramNode.id)
+        : undefined;
       const convertedNode = convertedNodeById.get(diagramNode.id);
 
       return sourceNode
@@ -152,7 +175,9 @@ export function convertReverseEngineeringBoardToArchitectureJson(
           : [];
     }),
     edges: diagram.edges.flatMap((diagramEdge) => {
-      const sourceEdge = sourceEdgeById.get(diagramEdge.id);
+      const sourceEdge = ownedSourceEdgeIds.has(diagramEdge.id)
+        ? sourceEdgeById.get(diagramEdge.id)
+        : undefined;
       const convertedEdge = convertedEdgeById.get(diagramEdge.id);
 
       return sourceEdge
@@ -301,7 +326,10 @@ function appendAdditionsToCurrentDiagram(
   currentDiagram: DiagramJson,
   previewDiagram: DiagramJson,
   comparison: ReverseEngineeringBoardComparison
-): DiagramJson {
+): {
+  readonly diagram: DiagramJson;
+  readonly sourceOwnership: ReverseEngineeringSourceOwnership;
+} {
   const additionNodeIds = new Set(comparison.additions.map((item) => item.nodeId));
   const currentNodeIds = new Set(currentDiagram.nodes.map((node) => node.id));
   const nodes = [
@@ -309,17 +337,21 @@ function appendAdditionsToCurrentDiagram(
     ...previewDiagram.nodes.filter((node) => additionNodeIds.has(node.id))
   ];
   const nodeIdsAfterAppend = new Set([...currentNodeIds, ...additionNodeIds]);
+  const appendedEdges = previewDiagram.edges.filter((edge) =>
+    shouldAppendEdge(edge, currentDiagram, nodeIdsAfterAppend)
+  );
 
   return {
-    ...currentDiagram,
-    edges: [
-      ...currentDiagram.edges,
-      ...previewDiagram.edges.filter((edge) =>
-        shouldAppendEdge(edge, currentDiagram, nodeIdsAfterAppend)
-      )
-    ],
-    nodes,
-    viewport: currentDiagram.viewport
+    diagram: {
+      ...currentDiagram,
+      edges: [...currentDiagram.edges, ...appendedEdges],
+      nodes,
+      viewport: currentDiagram.viewport
+    },
+    sourceOwnership: {
+      nodeIds: [...additionNodeIds],
+      edgeIds: appendedEdges.map((edge) => edge.id)
+    }
   };
 }
 

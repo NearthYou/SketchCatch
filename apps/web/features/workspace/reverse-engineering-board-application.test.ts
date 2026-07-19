@@ -16,6 +16,7 @@ import {
   TASK9_REVIEW_ONLY_RESOURCE_IDS,
   TASK9_SUPPORTED_RESOURCE_IDS
 } from "./reverse-engineering-final-regression.fixture";
+import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 
 const currentDiagram: DiagramJson = {
   nodes: [],
@@ -706,6 +707,41 @@ test("Reverse Engineering append는 현재 Board와 새 스캔 리소스의 visu
       ?.reverseEngineering,
     undefined
   );
+});
+
+test("Reverse Engineering append Snapshot은 같은 id의 기존 Resource를 scan 원본으로 덮어쓰지 않는다", () => {
+  const existingVpc = makeResourceNode(
+    "vpc-1",
+    "aws_vpc",
+    "existing_vpc",
+    "vpc-123",
+    40
+  );
+  existingVpc.label = "사용자가 편집한 VPC";
+  existingVpc.parameters!.values = {
+    providerResourceId: "vpc-123",
+    currentOnly: "KEEP"
+  };
+  const currentBoard: DiagramJson = {
+    nodes: [existingVpc],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram: currentBoard,
+    mode: "append",
+    placement: "original",
+    result: scanResult
+  });
+  const snapshot = convertReverseEngineeringBoardToArchitectureJson(
+    application.diagram,
+    scanResult,
+    application.sourceOwnership
+  );
+  const expected = convertDiagramJsonToArchitectureJson(currentBoard);
+
+  assert.deepEqual(application.comparison.duplicates.map((item) => item.nodeId), ["vpc-1"]);
+  assert.deepEqual(snapshot, expected);
 });
 
 // 테스트 정리안은 의미 정보는 그대로 두고 첫 Resource 위치만 옮깁니다.
