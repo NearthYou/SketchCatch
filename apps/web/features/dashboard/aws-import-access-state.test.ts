@@ -11,12 +11,14 @@ import { deriveAwsImportAccessView } from "./aws-import-access-state";
 /** gg: 상태별 UI 계약만 비교할 수 있는 safe state를 만듭니다. */
 function state(
   status: AwsImportAccessStatus,
-  nextAction: AwsImportAccessNextAction | null
+  nextAction: AwsImportAccessNextAction | null,
+  cleanupAvailable: boolean
 ): AwsImportAccessState {
   return {
     connectionId: "connection-1",
     status,
     nextAction,
+    cleanupAvailable,
     coreReady: status === "ready" || status === "limited",
     limitedServiceLabels: status === "limited" ? ["IAM", "Lambda"] : [],
     lastCheckedAt: null,
@@ -31,13 +33,20 @@ function view(
   nextAction: AwsImportAccessNextAction | null,
   options: {
     connectionStatus?: AwsConnectionStatus;
+    cleanupAvailable?: boolean;
     hasPolicyApproval?: boolean;
   } = {}
 ) {
   return deriveAwsImportAccessView({
     connectionStatus: options.connectionStatus ?? "verified",
     hasPolicyApproval: options.hasPolicyApproval ?? false,
-    state: state(status, nextAction)
+    state: state(
+      status,
+      nextAction,
+      options.cleanupAvailable ?? (
+        status !== "check_required" && status !== "cleanup_complete"
+      )
+    )
   });
 }
 
@@ -223,6 +232,19 @@ test("persisted setup states offer cleanup without misclassifying synthesized or
     assert.equal(result.cleanupCommand, null, `${status}/${nextAction}`);
     assert.equal(result.cleanupAction, null, `${status}/${nextAction}`);
   }
+});
+
+test("cleanupAvailable distinguishes persisted and synthesized check_required states", () => {
+  const synthesized = view("check_required", "prepare_manager", {
+    cleanupAvailable: false
+  });
+  const persisted = view("check_required", "prepare_manager", {
+    cleanupAvailable: true
+  });
+
+  assert.equal(synthesized.cleanupCommand, null);
+  assert.equal(persisted.cleanupCommand, "prepare_cleanup");
+  assert.equal(persisted.cleanupAction, "가져오기 권한 정리");
 });
 
 test("a failed base connection can still clean up persisted import setup", () => {

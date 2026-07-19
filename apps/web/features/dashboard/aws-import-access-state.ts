@@ -112,7 +112,8 @@ export function deriveAwsImportAccessView(input: {
   const presentation = STATUS_PRESENTATION[input.state.status];
   const canStartCleanup = canStartAwsImportAccessCleanup(
     input.state.status,
-    input.state.nextAction
+    input.state.nextAction,
+    input.state.cleanupAvailable
   );
   if (
     input.connectionStatus !== "verified" &&
@@ -163,9 +164,14 @@ export function deriveAwsImportAccessView(input: {
 /** gg: persisted setup만 정리를 시작하고 합성·cleanup 상태는 기존 흐름을 유지합니다. */
 function canStartAwsImportAccessCleanup(
   status: AwsImportAccessStatus,
-  nextAction: AwsImportAccessNextAction | null
+  nextAction: AwsImportAccessNextAction | null,
+  cleanupAvailable: boolean
 ): boolean {
+  if (!cleanupAvailable) {
+    return false;
+  }
   switch (status) {
+    case "check_required":
     case "manager_approval_required":
     case "manager_checking":
     case "policy_approval_required":
@@ -178,7 +184,6 @@ function canStartAwsImportAccessCleanup(
       return true;
     case "retry_required":
       return nextAction !== "check_cleanup";
-    case "check_required":
     case "cleanup_policy_required":
     case "cleanup_manager_required":
     case "cleanup_checking":

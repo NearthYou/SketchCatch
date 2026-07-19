@@ -61,6 +61,7 @@ export function toAwsImportAccessQueryState(
       connectionId: state.connectionId,
       status: state.status,
       nextAction: state.nextAction,
+      cleanupAvailable: state.cleanupAvailable,
       coreReady: state.coreReady,
       limitedServiceLabels: [...state.limitedServiceLabels],
       lastCheckedAt: state.lastCheckedAt,

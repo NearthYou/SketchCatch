@@ -22,6 +22,7 @@ function state(overrides: Partial<AwsImportAccessState> = {}): AwsImportAccessSt
     connectionId: "connection-1",
     status: "update_required",
     nextAction: "preview_policy",
+    cleanupAvailable: true,
     coreReady: false,
     limitedServiceLabels: [],
     lastCheckedAt: null,
@@ -96,6 +97,25 @@ test("manager approval reload offers both a fresh link and a state check", async
 
   assert.match(html, /Manager 준비 확인/u);
   assert.match(html, /AWS Console 다시 열기/u);
+});
+
+test("check_required cleanup is shown only for a persisted access row", async () => {
+  const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
+  // gg: status가 같아도 API의 persisted marker만 바꿔 렌더링 경계를 비교합니다.
+  const render = (cleanupAvailable: boolean) => renderToStaticMarkup(
+    createElement(AwsImportAccessWizardView, {
+      connectionStatus: "verified",
+      state: state({
+        status: "check_required",
+        nextAction: "prepare_manager",
+        cleanupAvailable
+      }),
+      onCommand() {}
+    })
+  );
+
+  assert.doesNotMatch(render(false), />가져오기 권한 정리<\/button>/u);
+  assert.match(render(true), />가져오기 권한 정리<\/button>/u);
 });
 
 test("policy approval requires a visible confirmation before apply", async () => {
