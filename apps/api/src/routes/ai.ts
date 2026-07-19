@@ -93,6 +93,7 @@ import {
 import { analyzeRepositoryEvidence as analyzeSourceRepositorySnapshot } from "../source-repositories/repository-analysis.js";
 import { recommendRepositoryTemplatesWithAi } from "../source-repositories/repository-template-recommendation.js";
 
+import { resolveFrozenPublicRepositoryRevision } from "../source-repositories/fixed-public-repository-profile.js";
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_COUNT = 64;
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_NAME_LENGTH = 180;
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_CHARS = 1024 * 1024;
@@ -444,7 +445,12 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         branchInventory.defaultBranch,
         branchInventory.branches.map((branch) => branch.name)
       );
-      const repositoryRevision = resolvePublicRepositoryRevision(
+      const frozenRevision = resolveFrozenPublicRepositoryRevision(
+        repository,
+        requestedBranch,
+        defaultBranch
+      );
+      const repositoryRevision = frozenRevision ?? resolvePublicRepositoryRevision(
         branchInventory.branches,
         defaultBranch
       );
@@ -461,7 +467,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         defaultBranch,
         branchInventory.branches.map((branch) => branch.name)
       );
-      const snapshot = await fetchRepositoryEvidence(repository, defaultBranch);
+      const snapshot = await fetchRepositoryEvidence(repository, frozenRevision ?? defaultBranch);
       const legacyAnalysis = analyzeLegacyRepositoryEvidence({
         defaultBranch,
         evidence: snapshot.files,
@@ -515,7 +521,14 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = githubArchitectureDraftBodySchema.parse(request.body);
     const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
-    const snapshot = await fetchRepositoryEvidence(repository, body.defaultBranch ?? "main");
+    const requestedBranch = body.defaultBranch ?? "";
+    const resolvedBranch = requestedBranch || "main";
+    const frozenRevision = resolveFrozenPublicRepositoryRevision(
+      repository,
+      requestedBranch,
+      resolvedBranch
+    );
+    const snapshot = await fetchRepositoryEvidence(repository, frozenRevision ?? resolvedBranch);
     const templateContext = getRepositoryTemplateContext(body.selectedTemplateId);
     const result = createArchitectureDraftFromRepositoryEvidence(body.repositoryUrl, [
       ...snapshot.files.map((file) => file.content),
@@ -976,7 +989,7 @@ const PUBLIC_GITHUB_API_BASE_URL = "https://api.github.com";
 const MAX_PUBLIC_REPOSITORY_EVIDENCE_FILES = 24;
 const MAX_PUBLIC_REPOSITORY_BRANCH_PAGES = 50;
 const PUBLIC_GITHUB_REQUEST_TIMEOUT_MS = 10_000;
-const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v14";
+const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v15";
 const PUBLIC_REPOSITORY_ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1_000;
 
 // GitHub URL에서 owner/repo만 뽑습니다. public repository 근거 파일을 읽을 때 이 값이 필요합니다.
