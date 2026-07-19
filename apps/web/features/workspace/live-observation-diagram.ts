@@ -124,8 +124,7 @@ export function createLiveObservationDiagramModel(
   const requestedCapacityCount = Math.max(
     orderedCapacityNodes.length,
     providerCapacity?.running ?? 0,
-    desiredCount,
-    providerCapacity?.max ?? 0
+    desiredCount
   );
   const visibleCapacityCount = Math.min(
     MAX_VISIBLE_CAPACITY_UNITS,

@@ -21,7 +21,7 @@ const architecture = {
   ]
 } satisfies ArchitectureJson;
 
-test("keeps only the main traffic path and expands Fargate task slots from v2 capacity", () => {
+test("keeps only the main traffic path and renders running or desired Fargate tasks", () => {
   const snapshot = providerSnapshot({ desired: 2, max: 3, running: 1 });
   const diagram = createLiveObservationArchitectureModel(architecture, snapshot).diagram;
   const model = createLiveObservationDiagramModel(diagram, snapshot);
@@ -35,9 +35,21 @@ test("keeps only the main traffic path and expands Fargate task slots from v2 ca
   );
   assert.deepEqual(
     model.capacityUnits.map((unit) => unit.observationState),
-    ["active", "launching", "inactive"]
+    ["active", "launching"]
   );
   assert.ok(model.capacityUnits.every((unit) => unit.node.label.startsWith("Fargate Task")));
+});
+
+test("does not render inactive task slots up to the autoscaling maximum", () => {
+  const snapshot = providerSnapshot({ desired: 1, max: 3, running: 1 });
+  const diagram = createLiveObservationArchitectureModel(architecture, snapshot).diagram;
+  const model = createLiveObservationDiagramModel(diagram, snapshot);
+
+  assert.equal(model.status, "ready");
+  if (model.status !== "ready") return;
+
+  assert.equal(model.capacityUnits.length, 1);
+  assert.equal(model.capacityUnits[0]?.observationState, "active");
 });
 
 function resourceNode(
