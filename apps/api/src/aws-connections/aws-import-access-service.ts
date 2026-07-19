@@ -886,6 +886,7 @@ function toPublicState(record: AwsImportAccessRecord): AwsImportAccessState {
     connectionId: record.awsConnectionId,
     status: record.status,
     nextAction: nextActionForRecord(record),
+    cleanupAvailable: record.status !== "cleanup_complete",
     coreReady: Object.values(record.coreReadSummary ?? {}).every(
       (outcome) => outcome === "success"
     ) && Object.keys(record.coreReadSummary ?? {}).length > 0,
@@ -927,6 +928,7 @@ function createInitialStateResponse(
     connectionId,
     status: "check_required",
     nextAction: "prepare_manager",
+    cleanupAvailable: false,
     coreReady: false,
     limitedServiceLabels: [],
     lastCheckedAt: null,

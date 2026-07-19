@@ -54,6 +54,7 @@ test("all eight import-access routes require auth and expose only safe DTOs", as
     });
     assert.equal(response.statusCode, 200, `${method} ${suffix}: ${response.body}`);
     assert.equal(response.json().connectionId, connectionId);
+    assert.equal(response.json().state.cleanupAvailable, true);
     assert.equal(
       response.json().managerTemplateUrl,
       suffix === "/manager/prepare"
@@ -133,6 +134,7 @@ function createRouteService(calls: string[]): AwsImportAccessRouteService {
       connectionId,
       status: "policy_approval_required" as const,
       nextAction: "preview_policy" as const,
+      cleanupAvailable: true,
       coreReady: false,
       limitedServiceLabels: [],
       lastCheckedAt: null,

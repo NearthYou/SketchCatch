@@ -356,6 +356,16 @@ export function createAwsImportAccessGateway(
           createIamClient,
           assumeConnectionRole
         );
+        const finalCleanupPolicySentinel =
+          priorManagerCleanupVerified && expectedCurrent?.manager
+            ? await inspectFinalCleanupPolicySentinel(
+                clients.iam,
+                contract.cleanupVerificationPolicyArn
+              )
+            : undefined;
+        if (finalCleanupPolicySentinel?.kind === "access_denied") {
+          return createAssumedAbsentCleanupInspection();
+        }
         const policyStack = await describeCleanupStack(
           clients.cloudFormation,
           contract.policyStackName,
@@ -409,10 +419,11 @@ export function createAwsImportAccessGateway(
           clients.iam,
           contract.controlPolicyArn
         );
-        const cleanupPolicy = await inspectManagedPolicyPresence(
-          clients.iam,
-          contract.cleanupVerificationPolicyArn
-        );
+        const cleanupPolicy = finalCleanupPolicySentinel?.artifact ??
+          await inspectManagedPolicyPresence(
+            clients.iam,
+            contract.cleanupVerificationPolicyArn
+          );
         const serviceRole = await inspectRolePresence(clients.iam, contract.serviceRoleName);
         const attachments = await inspectTargetPolicyAttachments(
           clients.iam,
@@ -492,10 +503,7 @@ export function createAwsImportAccessGateway(
               ? { reason: "drifted" as const }
               : {})
         };
-      } catch (error) {
-        if (priorManagerCleanupVerified && isAccessDeniedError(error)) {
-          return createAssumedAbsentCleanupInspection();
-        }
+      } catch {
         return createUnknownCleanupInspection();
       }
     }
@@ -607,6 +615,26 @@ async function inspectManagedPolicyPresence(
     return response.Policy ? OWNED_PRESENT_ARTIFACT : DRIFTED_ARTIFACT;
   } catch (error) {
     if (isIamArtifactNotFound(error)) return ABSENT_ARTIFACT;
+    throw error;
+  }
+}
+
+type FinalCleanupPolicySentinel =
+  | { kind: "inspected"; artifact: CleanupArtifactInspection }
+  | { kind: "access_denied" };
+
+/** gg: prior exact Manager marker 뒤 cleanup-verification Policy 자체의 GetPolicy 거부만 마지막 신호입니다. */
+async function inspectFinalCleanupPolicySentinel(
+  iam: IamClientLike,
+  cleanupVerificationPolicyArn: string
+): Promise<FinalCleanupPolicySentinel> {
+  try {
+    return {
+      kind: "inspected",
+      artifact: await inspectManagedPolicyPresence(iam, cleanupVerificationPolicyArn)
+    };
+  } catch (error) {
+    if (isAccessDeniedError(error)) return { kind: "access_denied" };
     throw error;
   }
 }

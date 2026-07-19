@@ -106,13 +106,16 @@
 
 - Cleanup inspects stored exact Stack identities and expected artifacts in Policy-then-Manager
   order. Only the caller deletes customer Stacks; the gateway exposes no `DeleteStack` operation.
-- Stack absence with lingering Policy or Manager artifacts remains `cleanup_required`; a final
-  AccessDenied is accepted only after the persisted exact Manager-cleanup marker.
+- Stack absence with lingering Policy or Manager artifacts remains `cleanup_required`. The final
+  AccessDenied signal is accepted only for an exact `GetPolicy` sentinel on the cleanup-verification
+  Policy ARN, after both the persisted exact Manager-cleanup marker and stored Manager identity.
 - Deletion permits only no child row or `cleanup_complete`, rechecks the guard on fresh/retry claim,
   and locks/rechecks both rows in the final transaction. A `cleanup_complete` child is deleted
   atomically before its parent connection.
 - `getState` now performs a non-mutating repository lookup and synthesizes public
   `check_required` only when no row exists. Mutating commands remain the only row creators.
+- Public `cleanupAvailable` is false for that synthesized state and `cleanup_complete`, and true for
+  every persisted incomplete row, including an interrupted persisted `check_required`.
 - `retry_required` actions use `operationKind` first and a bounded safe-error-code table only as a
   legacy fallback.
 
@@ -125,7 +128,23 @@
 - `apps/api/src/aws-connections/aws-import-access-service.test.ts`
 - `apps/api/src/aws-connections/aws-connection-service.ts`
 - `apps/api/src/aws-connections/aws-connection-service.test.ts`
+- `apps/api/src/routes/aws-import-access.test.ts`
 - `apps/api/src/routes/aws-connections.test.ts`
+- `packages/types/src/index.ts`
+
+### Independent review follow-up
+
+- RED: the cleanup gateway suite was 23/25. A later `GetRole` AccessDenied with a prior marker was
+  incorrectly converted to completion, and a CloudFormation AccessDenied completed before any
+  exact final sentinel ran. The no-marker case remained safely retryable.
+- GREEN: the gateway suite is 25/25. Only the first exact
+  `GetPolicy(cleanupVerificationPolicyArn)` sentinel may consume the documented final AccessDenied;
+  readable/absent sentinel results continue full inspection, and every later CloudFormation/IAM,
+  transient, Role, or document-verification failure returns a safe retry result.
+- A second cross-seam RED showed both synthesized and persisted `check_required` omitted the UI-safe
+  discriminator. Service tests now prove no-row `cleanupAvailable=false`, persisted incomplete
+  rows `true`, and `cleanup_complete=false` without weakening the deletion guard.
+- Follow-up focused gateway/service/deletion/import-route suite — 81/81 passed.
 
 ## Final verification
 
@@ -150,9 +169,9 @@
 - `dca5737a` — stop repeated pagination tokens safely.
 - `a395a60d` — make state GET read-only and map operation-specific retries.
 
-## Remaining cross-seam note
+## Cross-seam cleanup contract
 
-- Settings must expose `prepareCleanup` for persisted setup states where a user can stop after AWS
-  artifacts exist. Task 5 owns that UI entry point and received the exact status contract;
-  synthesized/no-row `check_required` intentionally does not show cleanup.
+- Settings uses `cleanupAvailable` to expose `prepareCleanup` for persisted setup states where a
+  user can stop after AWS artifacts exist. Synthesized/no-row `check_required` remains false, while
+  a persisted interrupted `check_required` is true. Task 5 received this exact shared type contract.
 - Task 4 adds no schema, migration, dependency, generated artifact, or customer-side delete call.

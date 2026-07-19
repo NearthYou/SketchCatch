@@ -903,13 +903,31 @@ test("cleanup rejects a replacement Stack that differs from the stored exact ide
   assert.equal(exact.manager.stack.status, "drifted");
 });
 
-test("cleanup accepts a last AccessDenied only after a prior exact Manager cleanup marker", async () => {
+test("cleanup keeps an unrelated later AccessDenied retryable despite the prior Manager marker", async () => {
   const denied = Object.assign(new Error("AccessDenied private-request-id"), {
     name: "AccessDenied"
   });
   const gateway = createAwsImportAccessGateway({
-    createCloudFormationClient: () => ({ async send() { throw denied; } }),
-    createIamClient: () => ({ async send() { throw denied; } }),
+    createCloudFormationClient: () => ({
+      async send(command: unknown) {
+        if (command instanceof DescribeStacksCommand) {
+          throw Object.assign(new Error("not found"), { name: "ValidationError" });
+        }
+        return {};
+      }
+    }),
+    createIamClient: () => ({
+      async send(command: unknown) {
+        if (command instanceof GetPolicyCommand) {
+          if (command.input.PolicyArn === contract.cleanupVerificationPolicyArn) {
+            return { Policy: { Arn: contract.cleanupVerificationPolicyArn } };
+          }
+          throw noSuchEntity();
+        }
+        if (command instanceof GetRoleCommand) throw denied;
+        return {};
+      }
+    }),
     assumeConnectionRole: async () => ({
       accessKeyId: "access-key",
       secretAccessKey: "secret-key",
@@ -917,20 +935,123 @@ test("cleanup accepts a last AccessDenied only after a prior exact Manager clean
     })
   });
 
-  const withoutMarker = await gateway.inspectCleanup({ connection, contract }) as unknown as
-    ExactCleanupResult;
-  const withMarker = await gateway.inspectCleanup({
+  const result = await gateway.inspectCleanup({
     connection,
     contract,
+    expectedCurrent: {
+      manager: {
+        stackId: "manager-stack-id",
+        contractVersion: contract.contractVersion,
+        templateSha256: contract.templateSha256
+      }
+    },
     priorManagerCleanupVerified: true
   } as never) as unknown as ExactCleanupResult;
 
-  assert.equal(withoutMarker.verified, false);
-  assert.equal(withoutMarker.manager.stack.status, "unknown");
-  assert.equal(withMarker.verified, true);
-  assert.equal(withMarker.manager.stack.status, "absent");
-  assert.equal(withMarker.completionEvidence, "prior_exact_marker_access_denied");
-  assert.doesNotMatch(JSON.stringify(withMarker), /private-request-id|AccessDenied/iu);
+  assert.equal(result.verified, false);
+  assert.equal(result.reason, "retry");
+  assert.equal(result.manager.serviceRole.status, "unknown");
+  assert.equal(result.completionEvidence, undefined);
+  assert.doesNotMatch(JSON.stringify(result), /private-request-id|AccessDenied/iu);
+});
+
+test("cleanup accepts only the exact final Policy sentinel AccessDenied after the prior marker", async () => {
+  const events: string[] = [];
+  const denied = Object.assign(new Error("AccessDenied private-request-id"), {
+    name: "AccessDenied"
+  });
+  const gateway = createAwsImportAccessGateway({
+    createCloudFormationClient: () => ({
+      async send() {
+        events.push("unrelated-cloudformation-read");
+        throw denied;
+      }
+    }),
+    createIamClient: () => ({
+      async send(command: unknown) {
+        if (
+          command instanceof GetPolicyCommand &&
+          command.input.PolicyArn === contract.cleanupVerificationPolicyArn
+        ) {
+          events.push("exact-final-policy-sentinel");
+          throw denied;
+        }
+        events.push("unrelated-iam-read");
+        throw denied;
+      }
+    }),
+    assumeConnectionRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    })
+  });
+
+  const result = await gateway.inspectCleanup({
+    connection,
+    contract,
+    expectedCurrent: {
+      manager: {
+        stackId: "manager-stack-id",
+        contractVersion: contract.contractVersion,
+        templateSha256: contract.templateSha256
+      }
+    },
+    priorManagerCleanupVerified: true
+  } as never) as unknown as ExactCleanupResult;
+
+  assert.deepEqual(events, ["exact-final-policy-sentinel"]);
+  assert.equal(result.verified, true);
+  assert.equal(result.manager.stack.status, "absent");
+  assert.equal(result.completionEvidence, "prior_exact_marker_access_denied");
+  assert.doesNotMatch(JSON.stringify(result), /private-request-id|AccessDenied/iu);
+});
+
+test("cleanup cannot accept the exact final Policy sentinel AccessDenied without a marker", async () => {
+  const denied = Object.assign(new Error("AccessDenied private-request-id"), {
+    name: "AccessDenied"
+  });
+  const gateway = createAwsImportAccessGateway({
+    createCloudFormationClient: () => ({
+      async send(command: unknown) {
+        if (command instanceof DescribeStacksCommand) {
+          throw Object.assign(new Error("not found"), { name: "ValidationError" });
+        }
+        return {};
+      }
+    }),
+    createIamClient: () => ({
+      async send(command: unknown) {
+        if (command instanceof GetPolicyCommand) {
+          if (command.input.PolicyArn === contract.cleanupVerificationPolicyArn) throw denied;
+          throw noSuchEntity();
+        }
+        return {};
+      }
+    }),
+    assumeConnectionRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    })
+  });
+
+  const result = await gateway.inspectCleanup({
+    connection,
+    contract,
+    expectedCurrent: {
+      manager: {
+        stackId: "manager-stack-id",
+        contractVersion: contract.contractVersion,
+        templateSha256: contract.templateSha256
+      }
+    }
+  } as never) as unknown as ExactCleanupResult;
+
+  assert.equal(result.verified, false);
+  assert.equal(result.reason, "retry");
+  assert.equal(result.completionEvidence, undefined);
+  assert.doesNotMatch(JSON.stringify(result), /private-request-id|AccessDenied/iu);
 });
 
 test("manager inspection maps only explicit target Role errors to connection recovery", async () => {
@@ -963,6 +1084,7 @@ type ExactCleanupStatus = "absent" | "owned_present" | "drifted" | "unknown";
 type ExactCleanupResult = {
   verified: boolean;
   completionEvidence?: "direct" | "prior_exact_marker_access_denied";
+  reason?: "drifted" | "retry";
   policy: {
     stack: { status: ExactCleanupStatus };
     readPolicy: { status: ExactCleanupStatus };

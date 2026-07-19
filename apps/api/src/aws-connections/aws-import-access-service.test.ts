@@ -44,6 +44,23 @@ test("getState is read-only and synthesizes check_required when no import row ex
   assert.equal(result.state.status, "check_required");
   assert.equal(result.state.nextAction, "prepare_manager");
   assert.equal(result.state.operationId, null);
+  assert.equal(result.state.cleanupAvailable, false);
+});
+
+test("getState exposes cleanup for persisted incomplete rows but not completed cleanup", async () => {
+  for (const [status, expected] of [
+    ["check_required", true],
+    ["ready", true],
+    ["cleanup_complete", false]
+  ] as const) {
+    const fixture = createImportAccessServiceFixture();
+    const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+    record.status = status;
+
+    const result = await fixture.service.getState(fixture.ownerInput);
+
+    assert.equal(result.state.cleanupAvailable, expected, status);
+  }
 });
 
 test("policy apply consumes one approval and preserves deployment verification", async () => {

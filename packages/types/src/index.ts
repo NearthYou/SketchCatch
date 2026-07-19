@@ -2133,6 +2133,7 @@ export type AwsImportAccessState = {
   connectionId: string;
   status: AwsImportAccessStatus;
   nextAction: AwsImportAccessNextAction | null;
+  cleanupAvailable: boolean;
   coreReady: boolean;
   limitedServiceLabels: string[];
   lastCheckedAt: IsoDateTimeString | null;
