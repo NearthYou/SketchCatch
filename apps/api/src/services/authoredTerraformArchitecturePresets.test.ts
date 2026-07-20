@@ -82,7 +82,7 @@ test("the realtime deployment demo prompt keeps questions but always returns the
     }))
   };
   assert.equal(generateTerraformFromDiagramJson(catalogPresentedDiagram), expectedTerraform);
-  assert.equal(first.diagramJson.nodes.length, 40);
+  assert.equal(first.diagramJson.nodes.length, 41);
   assert.match(terraform, /resource "aws_ecs_service" "ecs_service_fixed_template_fargate_container_app"/u);
   assert.match(terraform, /resource "aws_cloudfront_distribution" "cdn_web"/u);
   assert.match(terraform, /resource "aws_secretsmanager_secret" "check_in_signing"/u);
