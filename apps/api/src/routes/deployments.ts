@@ -13,6 +13,7 @@ import type {
   DeploymentFailureExplanationResponse,
   DeploymentLiveObservationArchitectureResponse,
   DeploymentLog,
+  DeploymentProgressResponse,
   Project,
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
@@ -80,6 +81,7 @@ import {
   type DeploymentPreparationRepository
 } from "../deployments/deployment-preparation-service.js";
 import { createDeploymentFailureExplanation } from "../deployments/deployment-failure-explanation.js";
+import { createDeploymentProgressSnapshot } from "../deployments/deployment-progress-service.js";
 import { prepareInfrastructureRollback } from "../deployments/infrastructure-rollback-service.js";
 import {
   cancelTrackedDeploymentRun,
@@ -1824,6 +1826,41 @@ export async function registerDeploymentRoutes(
       return reply.status(202).send({
         deployment: await toDeployment(cancellationRequestedDeployment, repository)
       });
+    } catch (error) {
+      return handleDeploymentError(error, reply);
+    }
+  });
+
+  app.get("/deployments/:deploymentId/progress", async (request, reply) => {
+    const params = deploymentParamsSchema.parse(request.params);
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+
+    try {
+      const row = await getDeployment(
+        {
+          deploymentId: params.deploymentId,
+          accessContext
+        },
+        repository
+      );
+      const [deployment, logRows] = await Promise.all([
+        toDeployment(row, repository),
+        repository.listDeploymentLogs(params.deploymentId)
+      ]);
+
+      return reply
+        .header("Cache-Control", "private, no-store")
+        .status(200)
+        .send({
+          progress: createDeploymentProgressSnapshot({
+            deployment,
+            logs: logRows.map(toDeploymentLog)
+          })
+        } satisfies DeploymentProgressResponse);
     } catch (error) {
       return handleDeploymentError(error, reply);
     }

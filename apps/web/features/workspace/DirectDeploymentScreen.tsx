@@ -236,7 +236,6 @@ export function DirectDeploymentScreen({
     useState<DeploymentTargetPrerequisite | null>(null);
   const [activeProgress, setActiveProgress] = useState<{
     readonly operation: DeploymentProgressOperation;
-    readonly requestedAtMs: number;
   } | null>(null);
   const [selectedDirectStepId, setSelectedDirectStepId] =
     useState<DirectDeploymentStepId>("validation");
@@ -980,7 +979,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
-    setActiveProgress({ operation: "plan", requestedAtMs: Date.now() });
+    setActiveProgress({ operation: "plan" });
     setDeploymentTargetPrerequisite(null);
     await runAction("validation", async () => {
       const target = await getProjectDeploymentTarget(projectId);
@@ -1068,7 +1067,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
-    setActiveProgress({ operation: "plan", requestedAtMs: Date.now() });
+    setActiveProgress({ operation: "plan" });
 
     dispatchTerraformOutputState({
       type: "clear",
@@ -1157,7 +1156,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
-    setActiveProgress({ operation: "apply", requestedAtMs: Date.now() });
+    setActiveProgress({ operation: "apply" });
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: selectedDeployment.id
@@ -1193,7 +1192,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
-    setActiveProgress({ operation: "destroy-plan", requestedAtMs: Date.now() });
+    setActiveProgress({ operation: "destroy-plan" });
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: targetDeployment.id
@@ -1222,7 +1221,7 @@ export function DirectDeploymentScreen({
     }
 
     setSelectedDeploymentId(targetDeployment.id);
-    setActiveProgress({ operation: "destroy", requestedAtMs: Date.now() });
+    setActiveProgress({ operation: "destroy" });
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: targetDeployment.id
@@ -1863,9 +1862,7 @@ export function DirectDeploymentScreen({
           <DeploymentProgressBar
             deployment={selectedDeployment}
             isStarting={deploymentProgressIsStarting}
-            logs={deploymentLogs}
             operationHint={activeProgress?.operation ?? null}
-            requestedAtMs={activeProgress?.requestedAtMs ?? null}
           />
           {renderDirectStepContent(selectedStep.id)}
           {deploymentLogView.source === "current" ? (

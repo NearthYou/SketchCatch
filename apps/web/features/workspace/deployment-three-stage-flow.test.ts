@@ -305,6 +305,28 @@ test("Direct Deployment validation removes duplicated executive and readiness su
   assert.match(deploymentProgressSource, /deploymentExecutionPanel/);
 });
 
+test("deployment progress renders actual and stage-estimated percentages without catch-up", () => {
+  assert.match(deploymentProgressSource, /DeploymentProgressPoller/);
+  assert.match(deploymentProgressSource, /getDeploymentProgressSnapshot/);
+  assert.match(deploymentProgressSource, /getDeploymentProgressPresentation/);
+  assert.match(deploymentProgressSource, /data-estimated/);
+  assert.match(deploymentProgressSource, /aria-valuenow=/);
+  assert.doesNotMatch(deploymentProgressSource, /advanceDisplayedDeploymentProgress/);
+  assert.doesNotMatch(deploymentProgressSource, /setInterval/);
+  assert.doesNotMatch(deploymentProgressSource, /예상 진행률/);
+});
+
+test("deployment progress values reserve their content width and never wrap", () => {
+  assert.match(
+    workspaceStyles,
+    /\.deploymentExecutionPanel\s*\{[^}]*grid-template-columns:\s*52px minmax\(0, 1fr\) max-content;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentExecutionPanel output\s*\{[^}]*white-space:\s*nowrap;/s
+  );
+});
+
 test("deployment review delegates build preparation and repository verification to the Plan API", () => {
   const reviewStart = directDeploymentSource.indexOf("async function startDeploymentReview");
   const planActionStart = directDeploymentSource.indexOf(

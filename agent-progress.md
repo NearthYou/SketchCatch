@@ -21,6 +21,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-20 - Server-synchronized deployment progress
+
+- Replaced elapsed-time/log-volume Web estimates and delayed 1% catch-up with a read-only `DeploymentProgressSnapshot` contract and API backed by the existing Deployment and Terraform completion logs.
+- Apply/Destroy show unique current-attempt Resource completion capped at 99% while running. The backend keeps unmeasurable stages indeterminate, while the Web labels stage-based fallback values explicitly as `약 n%`, replaces them with measured Resource percentages, prevents the final release stage from regressing below 99%, and renders the progress output without wrapping. Only `SUCCESS`/`DESTROYED` report exact 100%. Polling is no-store, single-flight, abortable, and stale-response guarded.
+- Focused verification passed: progress service 8/8, deployment route Plan/Apply/Destroy/Cancel/progress 10/10, directly related Web checks 56/56, progress presentation 11/11, and progress source/layout contracts 2/2. Authenticated Chrome CSSOM inspection confirmed the intrinsic output column and `white-space: nowrap`. `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and all five `pnpm build` tasks succeeded; Turbo stayed alive after its success summary and was terminated.
+- Evaluator review: Accept (12/12), with no hard-fail condition. No DB migration, Terraform/AWS mutation, deployment execution, worker/approval/cancel/cleanup logic change, dependency change, commit, or push was performed.
+
 ### 2026-07-20 - Restore parked JH Workspace changes on dev
 
 - Reapplied the tracked changes from the retained `Refactor/jh/498-배포-ui-수정` WIP stash on top of current `dev`, preserving the separate Terraform reverse-sync commit and both sides of the progress-log conflict.

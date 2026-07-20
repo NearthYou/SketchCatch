@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import type { Deployment, DeploymentLog } from "@sketchcatch/types";
+import { useEffect, useState } from "react";
+import type { Deployment, DeploymentProgressSnapshot } from "@sketchcatch/types";
 import { Code2 } from "lucide-react";
+import { getDeploymentProgressSnapshot } from "./api";
+import { DeploymentProgressPoller } from "./deployment-progress-poller";
 import {
-  advanceDisplayedDeploymentProgress,
-  getDeploymentProgress,
+  getDeploymentProgressPresentation,
   type DeploymentProgressOperation
 } from "./deployment-progress";
 import styles from "./workspace.module.css";
@@ -11,82 +12,59 @@ import styles from "./workspace.module.css";
 export type DeploymentProgressBarProps = {
   readonly deployment: Deployment | null;
   readonly isStarting: boolean;
-  readonly logs: readonly DeploymentLog[];
   readonly operationHint: DeploymentProgressOperation | null;
-  readonly requestedAtMs: number | null;
 };
 
 export function DeploymentProgressBar({
   deployment,
   isStarting,
-  logs,
-  operationHint,
-  requestedAtMs
+  operationHint
 }: DeploymentProgressBarProps) {
-  const isActive = isStarting || deployment?.status === "RUNNING";
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  const [displayedProgress, setDisplayedProgress] = useState({
-    key: "",
-    percent: 0
-  });
-
-  useEffect(() => {
-    if (!isActive) return;
-
-    setNowMs(Date.now());
-    const intervalId = window.setInterval(() => setNowMs(Date.now()), 500);
-
-    return () => window.clearInterval(intervalId);
-  }, [deployment?.activeStage, deployment?.id, isActive, operationHint]);
-
-  const progress = useMemo(
-    () =>
-      getDeploymentProgress({
-        deployment,
-        isStarting,
-        logs,
-        nowMs,
-        operationHint,
-        requestedAtMs
-      }),
-    [deployment, isStarting, logs, nowMs, operationHint, requestedAtMs]
+  const [snapshot, setSnapshot] = useState<DeploymentProgressSnapshot | null>(null);
+  const [poller] = useState(
+    () => new DeploymentProgressPoller({ fetchSnapshot: getDeploymentProgressSnapshot })
   );
-  const hasProgress = progress !== null;
-  const targetPercent = progress?.percent ?? 0;
-  const progressRunKey =
-    requestedAtMs !== null
-      ? `${operationHint ?? "operation"}:${requestedAtMs}`
-      : `${deployment?.id ?? "deployment"}:${progress?.operation ?? operationHint ?? "operation"}`;
 
   useEffect(() => {
-    if (!hasProgress) {
+    if (!deployment) {
+      poller.stop();
+      setSnapshot(null);
       return;
     }
 
-    const advance = () => {
-      setDisplayedProgress((current) => {
-        const currentPercent = current.key === progressRunKey ? current.percent : 0;
-        const percent = advanceDisplayedDeploymentProgress(currentPercent, targetPercent);
+    const deploymentId = deployment.id;
 
-        if (current.key === progressRunKey && current.percent === percent) {
-          return current;
-        }
+    if (deployment.status !== "RUNNING") {
+      poller.stop();
+      setSnapshot((current) =>
+        reconcileTerminalSnapshot(current, deployment)
+      );
+      return;
+    }
 
-        return { key: progressRunKey, percent };
-      });
-    };
+    setSnapshot((current) =>
+      current?.deploymentId === deploymentId && current.status === "RUNNING"
+        ? current
+        : null
+    );
+    poller.start(deploymentId, setSnapshot, () => undefined);
 
-    advance();
-    const intervalId = window.setInterval(advance, 120);
+    return () => poller.stop();
+  }, [deployment?.id, deployment?.status, poller]);
 
-    return () => window.clearInterval(intervalId);
-  }, [hasProgress, progressRunKey, targetPercent]);
-
-  const displayedPercent = displayedProgress.key === progressRunKey ? displayedProgress.percent : 0;
+  const progress = getDeploymentProgressPresentation({
+    deployment,
+    isStarting,
+    operationHint,
+    snapshot
+  });
 
   if (!progress) {
     return null;
   }
+
+  const isEstimated = progress.mode === "estimated";
+  const progressWidth = progress.percent === null ? undefined : `${progress.percent}%`;
 
   return (
     <section className={styles.deploymentExecutionPanel} aria-live="polite">
@@ -99,18 +77,43 @@ export function DeploymentProgressBar({
           <p>{progress.detail}</p>
         </div>
         <div
-          aria-label={`${progress.title} 예상 진행률`}
+          aria-label={`${progress.title} 진행 상태`}
           aria-valuemax={100}
           aria-valuemin={0}
-          aria-valuenow={displayedPercent}
-          aria-valuetext={`${displayedPercent}% · ${progress.detail}`}
+          aria-valuenow={progress.percent ?? undefined}
+          aria-valuetext={`${progress.valueLabel} · ${progress.detail}`}
           className={styles.deploymentProgressTrack}
+          data-estimated={isEstimated ? "true" : undefined}
+          data-state={progress.mode}
           role="progressbar"
         >
-          <span style={{ width: `${displayedPercent}%` }} />
+          <span style={progressWidth ? { width: progressWidth } : undefined} />
         </div>
       </div>
-      <output aria-label="예상 진행률">{displayedPercent}%</output>
+      <output aria-label="진행 상태">{progress.valueLabel}</output>
     </section>
   );
+}
+
+function reconcileTerminalSnapshot(
+  current: DeploymentProgressSnapshot | null,
+  deployment: Deployment
+): DeploymentProgressSnapshot | null {
+  if (!current || current.deploymentId !== deployment.id) {
+    return null;
+  }
+
+  const measurement =
+    deployment.status === "SUCCESS" || deployment.status === "DESTROYED"
+      ? ({ kind: "complete", percent: 100 } as const)
+      : ({ kind: "indeterminate" } as const);
+
+  return {
+    deploymentId: deployment.id,
+    status: deployment.status,
+    activeStage: deployment.activeStage,
+    failureStage: deployment.failureStage,
+    measurement,
+    updatedAt: deployment.updatedAt
+  };
 }

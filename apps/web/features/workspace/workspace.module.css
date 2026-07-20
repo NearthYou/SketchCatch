@@ -9588,6 +9588,10 @@
   transition: width 160ms linear;
 }
 
+.deploymentProgressTrack[data-estimated="true"] > span {
+  opacity: 0.78;
+}
+
 @media (max-width: 640px) {
   .deploymentProgress {
     gap: 8px;
@@ -10262,7 +10266,7 @@
   color: #ffffff;
   display: grid;
   gap: 18px;
-  grid-template-columns: 52px minmax(0, 1fr) 48px;
+  grid-template-columns: 52px minmax(0, 1fr) max-content;
   min-width: 0;
   padding: 22px 24px;
 }
@@ -10317,6 +10321,7 @@
   font-variant-numeric: tabular-nums;
   font-weight: var(--presentation-font-weight-bold);
   text-align: right;
+  white-space: nowrap;
 }
 
 .deploymentSettingsSection,
