@@ -789,7 +789,7 @@ function verifyManagerStack(
   return (
     stack.StackName === contract.managerStackName &&
     isCompleteStackStatus(stack.StackStatus) &&
-    sameKeyValues(stack.Tags, contract.ownershipTags, "Key", "Value") &&
+    matchesOptionalManagerStackTags(stack.Tags, contract.ownershipTags) &&
     sameKeyValues(stack.Outputs, objectEntries(expectedOutputs), "OutputKey", "OutputValue") &&
     templateBody !== null &&
     sha256(templateBody) === contract.templateSha256
@@ -964,9 +964,11 @@ function verifyExpectedManagerStack(
     stack.StackId === expectedManager.stackId &&
     stack.StackName === contract.managerStackName &&
     isCompleteStackStatus(stack.StackStatus) &&
-    Object.keys(tags).length === 2 &&
-    tags.SketchCatchConnectionId === contract.connectionId &&
-    typeof contractTag === "string" && /^[A-Za-z0-9._-]{1,32}$/u.test(contractTag) &&
+    (Object.keys(tags).length === 0 || (
+      Object.keys(tags).length === 2 &&
+      tags.SketchCatchConnectionId === contract.connectionId &&
+      typeof contractTag === "string" && /^[A-Za-z0-9._-]{1,32}$/u.test(contractTag)
+    )) &&
     outputs.SketchCatchConnectionId === contract.connectionId &&
     outputs.TemplateContractVersion === expectedManager.contractVersion &&
     outputs.TargetRoleArn === contract.targetRoleArn &&
@@ -1221,6 +1223,18 @@ function sameKeyValues(
       })
       .sort();
   return JSON.stringify(normalize(actual)) === JSON.stringify(normalize(expected));
+}
+
+/**
+ * AWS Quick Create links can prefill only the Template URL, Stack name and Template parameters.
+ * Manager ownership therefore comes from the exact immutable Template, outputs and IAM contract.
+ * If the user adds Stack tags manually, they must still match the exact ownership set.
+ */
+function matchesOptionalManagerStackTags(
+  actual: readonly unknown[] | undefined,
+  expected: readonly unknown[]
+): boolean {
+  return (actual?.length ?? 0) === 0 || sameKeyValues(actual, expected, "Key", "Value");
 }
 
 /** gg: exact tag/output set 검증 후 이름별 값을 안전하게 조회합니다. */

@@ -532,6 +532,7 @@ export function createAwsImportAccessService(
         operationId,
         now: now(),
         changes: {
+          ...trustedInspectionFields(claim.record, inspection),
           status: probe.status,
           operationId,
           operationKind: "check_reads",

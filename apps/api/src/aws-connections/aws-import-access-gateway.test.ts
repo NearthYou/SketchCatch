@@ -657,6 +657,28 @@ test("manager inspection checks exact template hash, tags and outputs", async ()
   assert(commands.some((command) => command instanceof ListAttachedRolePoliciesCommand));
 });
 
+test("manager inspection accepts an exact Quick Create stack without optional stack tags", async () => {
+  const fixture = createInspectionGateway({ managerTags: [] });
+
+  const result = await fixture.gateway.inspectManager({ connection, contract });
+
+  assert.equal(result.verified, true);
+  assert.equal(result.managerStatus, "target");
+  assert.equal(result.managerStackId, "manager-stack-id");
+});
+
+test("manager inspection rejects mismatched stack tags when tags are present", async () => {
+  const fixture = createInspectionGateway({
+    managerTags: [{ Key: "SketchCatchConnectionId", Value: "another-connection" }]
+  });
+
+  const result = await fixture.gateway.inspectManager({ connection, contract });
+
+  assert.equal(result.verified, false);
+  assert.equal(result.managerStatus, "invalid");
+  assert.equal(result.reason, "drifted");
+});
+
 test("manager inspection accepts a previously verified owned older Policy contract", async () => {
   const oldPolicy = createOlderPolicyTemplate();
   const fixture = createInspectionGateway({
@@ -1399,6 +1421,7 @@ function createInspectionGateway(options: {
   inlinePolicyNames?: string[];
   serviceAttachedPolicyArns?: string[];
   issuedPolicyActionsByVersion?: Readonly<Record<string, readonly string[]>>;
+  managerTags?: Array<{ Key: string; Value: string }>;
 } = {}) {
   const managerContractVersion = options.managerContractVersion ?? contract.contractVersion;
   const managerTemplateBody = options.managerTemplateBody ?? contract.templateBody;
@@ -1439,7 +1462,7 @@ function createInspectionGateway(options: {
               StackId: "manager-stack-id",
               StackName: contract.managerStackName,
               StackStatus: "UPDATE_COMPLETE",
-              Tags: contract.ownershipTags,
+              Tags: options.managerTags ?? contract.ownershipTags,
               Outputs: Object.entries({
                 SketchCatchConnectionId: contract.connectionId,
                 TemplateContractVersion: managerContractVersion,

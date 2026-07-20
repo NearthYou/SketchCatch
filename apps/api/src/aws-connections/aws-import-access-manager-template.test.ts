@@ -48,14 +48,10 @@ test("manager control policy is bound to one immutable policy template", () => {
   );
   assert(
     contract.policyTemplateUrlPatterns.every((pattern) =>
-      pattern.startsWith(`${contract.policyTemplateBaseUrl}\${?}X-Amz-Algorithm=`)
+      pattern.startsWith(`${contract.policyTemplateBaseUrl}?X-Amz-Algorithm=`)
     )
   );
-  assert(
-    contract.policyTemplateUrlPatterns.every(
-      (pattern) => !pattern.startsWith(`${contract.policyTemplateBaseUrl}?X-Amz-Algorithm=`)
-    )
-  );
+  assert.doesNotMatch(text, /\$\{\?\}/u);
   assert.equal(
     stackMutation.Condition?.StringEquals?.["cloudformation:RoleArn"],
     contract.serviceRoleArn

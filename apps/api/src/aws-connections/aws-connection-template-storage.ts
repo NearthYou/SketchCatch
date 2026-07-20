@@ -315,7 +315,9 @@ export function assertAwsImportPresignedTemplateUrl(input: {
 export function getAwsImportPresignedTemplateUrlPatterns(baseUrl: string): string[] {
   const prefix =
     `${baseUrl}` +
-    "${?}" +
+    // IAM StringLike의 ? wildcard가 URL query separator 한 글자를 매칭합니다.
+    // ${?}는 escape 문법이 아니라 잘못된 IAM policy variable로 해석됩니다.
+    "?" +
     "X-Amz-Algorithm=AWS4-HMAC-SHA256&" +
     "X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=*&X-Amz-Date=*&X-Amz-Expires=*&";
   const suffix =

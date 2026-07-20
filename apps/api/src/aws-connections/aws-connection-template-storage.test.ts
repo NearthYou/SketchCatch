@@ -165,9 +165,10 @@ test("publisher and IAM patterns match the pinned signer for every bucket and cr
       );
       assert(
         patterns.every((pattern) =>
-          pattern.startsWith(`${expectedBaseUrl}\${?}X-Amz-Algorithm=`)
+          pattern.startsWith(`${expectedBaseUrl}?X-Amz-Algorithm=`)
         )
       );
+      assert(patterns.every((pattern) => !pattern.includes("${?}")));
       assert.match(patterns[1]!, /X-Amz-Security-Token=\*&/u);
     }
   }
