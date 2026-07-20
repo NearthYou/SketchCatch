@@ -2464,7 +2464,6 @@ export function WorkspaceAiChatDock({
               {isTerraformIssueAnalysisRunning ? (
                 <WorkspaceAiWorkbenchTerraformIssueProgress
                   completed={terraformIssueBatchProgress?.completed ?? 0}
-                  key={terraformIssueBatchProgress?.completed ?? "single"}
                   total={terraformIssueBatchProgress?.total ?? 1}
                 />
               ) : null}

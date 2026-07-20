@@ -22,7 +22,8 @@ Short English-only working log for the current agent context. Older records are 
 
 - Added a 44px circular progress gauge to the error-analysis card header with a numeric percentage and a visible estimated-state label.
 - Combined elapsed time with completed-item counts for single and batch analysis, while capping an active request below 100% until the API actually completes.
-- Added calculation, rendered accessibility, and Workbench integration regressions; all 33 focused checks pass.
+- Preserved the gauge DOM across batch-item changes and reset only its elapsed-time estimate so the stroke transition remains visible.
+- Added calculation, rendered accessibility, Workbench integration, and remount-prevention regressions; all 33 focused checks pass.
 - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass. The full Web suite was also attempted and remains non-green only on unrelated current-`dev` Architecture Board, thumbnail, Diagram Editor, and Live Observation baselines.
 - No dependency, lockfile, database migration, cloud, or deployment change was made.
 

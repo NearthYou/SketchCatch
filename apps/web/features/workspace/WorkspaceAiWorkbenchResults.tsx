@@ -90,7 +90,7 @@ export function WorkspaceAiWorkbenchTerraformIssueProgress({
   readonly completed: number;
   readonly total: number;
 }) {
-  const elapsedMs = useWorkspaceAiProgressElapsed();
+  const elapsedMs = useWorkspaceAiProgressElapsed(true, completed);
   const progress = getTerraformIssueAnalysisProgress({ completed, elapsedMs, total });
 
   return (
@@ -187,18 +187,19 @@ function WorkspaceAiWorkbenchProgress({
   );
 }
 
-function useWorkspaceAiProgressElapsed(enabled = true): number {
+function useWorkspaceAiProgressElapsed(enabled = true, resetKey?: unknown): number {
   const [elapsedMs, setElapsedMs] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
+    setElapsedMs(0);
     const startedAt = Date.now();
     const timerId = window.setInterval(() => {
       setElapsedMs(Date.now() - startedAt);
     }, 500);
 
     return () => window.clearInterval(timerId);
-  }, [enabled]);
+  }, [enabled, resetKey]);
 
   return elapsedMs;
 }

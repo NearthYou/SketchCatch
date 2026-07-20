@@ -146,6 +146,15 @@ test("오류 분석은 실행 중 카드 헤더에 작은 원형 예상 퍼센�
     controllerSource,
     /isTerraformIssueAnalysisRunning\s*\?\s*\([\s\S]*?<WorkspaceAiWorkbenchTerraformIssueProgress[\s\S]*?completed=\{terraformIssueBatchProgress\?\.completed \?\? 0\}[\s\S]*?total=\{terraformIssueBatchProgress\?\.total \?\? 1\}/
   );
+  assert.doesNotMatch(
+    controllerSource,
+    /<WorkspaceAiWorkbenchTerraformIssueProgress[^>]*\bkey=/
+  );
+  assert.match(resultSource, /useWorkspaceAiProgressElapsed\(true, completed\)/);
+  assert.match(
+    resultSource,
+    /function useWorkspaceAiProgressElapsed\(enabled = true, resetKey\?: unknown\): number \{[\s\S]*?setElapsedMs\(0\);[\s\S]*?\}, \[enabled, resetKey\]\);/
+  );
   assert.match(workbenchStyles, /\.terraformIssueProgressGauge/);
   assert.match(workbenchStyles, /\.terraformIssueProgressIndicator/);
 });
