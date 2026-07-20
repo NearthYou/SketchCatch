@@ -84,8 +84,44 @@ test("does not reuse an unrelated active Repository when current Board provenanc
   }).get({ projectId: "project-1", userId: "user-1" });
 
   assert.equal(profile.sourceRepository, null);
-  assert.equal(calls.includes("find-source"), false);
+  assert.equal(calls.includes("find-source"), true);
   assert.equal(calls.includes("find-monitoring"), false);
+});
+
+test("passes the exact Delivery source id to readiness", async () => {
+  let readinessSourceId: string | null | undefined;
+  await createProjectDeliveryProfileService({
+    store: createStore({
+      analysisTarget: { sourceRepositoryId: "source-board" } as RepositoryAnalysisRecord,
+      sourceRepository: { id: "source-board" } as SourceRepository
+    }),
+    inspectReadiness: async (input) => {
+      readinessSourceId = (
+        input as typeof input & { deliverySourceRepositoryId?: string | null }
+      ).deliverySourceRepositoryId;
+      return readiness;
+    }
+  }).get({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(readinessSourceId, "source-board");
+});
+
+test("passes null to readiness instead of a stale active Repository", async () => {
+  let readinessSourceId: string | null | undefined;
+  await createProjectDeliveryProfileService({
+    store: createStore({
+      analysisTarget: { sourceRepositoryId: null } as RepositoryAnalysisRecord,
+      sourceRepository: { id: "source-old" } as SourceRepository
+    }),
+    inspectReadiness: async (input) => {
+      readinessSourceId = (
+        input as typeof input & { deliverySourceRepositoryId?: string | null }
+      ).deliverySourceRepositoryId;
+      return readiness;
+    }
+  }).get({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(readinessSourceId, null);
 });
 
 function createStore(input: {
@@ -105,9 +141,9 @@ function createStore(input: {
     async findRepositoryAnalysisTarget() {
       return input.analysisTarget ?? null;
     },
-    async findActiveSourceRepository() {
+    async listActiveSourceRepositories() {
       calls.push("find-source");
-      return input.sourceRepository ?? null;
+      return input.sourceRepository ? [input.sourceRepository] : [];
     },
     async findMonitoringConfig(sourceRepositoryId) {
       calls.push("find-monitoring");

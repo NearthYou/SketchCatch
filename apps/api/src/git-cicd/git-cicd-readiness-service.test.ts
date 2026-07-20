@@ -5,7 +5,8 @@ import type {
   ConfirmedBuildConfig,
   GitCicdReadinessItemKey,
   GitCicdReadinessSnapshot,
-  RepositoryAnalysisAiHandoff
+  RepositoryAnalysisAiHandoff,
+  RepositoryAnalysisRecord
 } from "@sketchcatch/types";
 import {
   createDeploymentPlanArtifactVerifier,
@@ -46,6 +47,22 @@ test("inspect reads readiness without reconciling or saving a deployment target"
   assert.equal(result.sourceDeploymentId, "deployment-1");
   assert.equal(state.savedTargets.length, 0);
   assert.equal(state.targetRows.has("project-1"), false);
+});
+
+test("does not use an active Repository when Delivery explicitly selects no source", async () => {
+  const service = createGitCicdReadinessService({
+    repository: createRepository({ state: createRepositoryState({ readyContext: true }) }),
+    planVerifier: createPlanVerifier()
+  });
+
+  const result = await service.inspect({
+    projectId: "project-1",
+    userId: "user-1",
+    deliverySourceRepositoryId: null
+  } as Parameters<typeof service.inspect>[0] & { deliverySourceRepositoryId: null });
+
+  assert.equal(getReadinessItem(result, "source_repository").status, "action_required");
+  assert.equal(getReadinessItem(result, "monitoring_config").status, "action_required");
 });
 
 test("selects the currently approved apply plan before other apply artifacts", async () => {
@@ -1473,6 +1490,7 @@ function createRepository(input: {
   plans?: GitCicdReadinessPlanArtifactRecord[];
   plansByDeployment?: Map<string, GitCicdReadinessPlanArtifactRecord[]>;
   state?: TestRepositoryState;
+  repositoryAnalysisTarget?: Pick<RepositoryAnalysisRecord, "sourceRepositoryId"> | null;
 } = {}): GitCicdReadinessRepository {
   const deployments = input.deployments ?? [createDeployment()];
   const plansByDeployment =
@@ -1543,8 +1561,11 @@ function createRepository(input: {
           }
         : undefined;
     },
-    async findActiveRepositoryWithMonitoring() {
-      return state.repositoryMonitoring;
+    async findRepositoryAnalysisTarget() {
+      return input.repositoryAnalysisTarget ?? null;
+    },
+    async listActiveRepositoriesWithMonitoring() {
+      return state.repositoryMonitoring ? [state.repositoryMonitoring] : [];
     },
     async findProjectDeploymentTarget(projectId) {
       return state.targetRows.get(projectId);
