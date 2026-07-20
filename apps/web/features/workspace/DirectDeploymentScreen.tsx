@@ -467,7 +467,10 @@ export function DirectDeploymentScreen({
     const selection = resolveDeploymentHistorySelection({
       currentSelectionId: selectedHistoryDeploymentId,
       deployments,
-      previousLatestDeploymentId: previousLatestHistoryDeploymentIdRef.current
+      previousLatestDeploymentId: previousLatestHistoryDeploymentIdRef.current,
+      visibleDeploymentIds: filteredDeploymentHistoryEntries.map(
+        ({ deployment }) => deployment.id
+      )
     });
 
     previousLatestHistoryDeploymentIdRef.current = selection.latestDeploymentId;
@@ -475,7 +478,7 @@ export function DirectDeploymentScreen({
     if (selection.selectedDeploymentId !== selectedHistoryDeploymentId) {
       setSelectedHistoryDeploymentId(selection.selectedDeploymentId);
     }
-  }, [deployments, selectedHistoryDeploymentId]);
+  }, [deployments, filteredDeploymentHistoryEntries, selectedHistoryDeploymentId]);
 
   useEffect(() => {
     if (shouldShowApplyButton) {
@@ -2288,7 +2291,7 @@ export function DirectDeploymentScreen({
   const renderHistoryView = () => (
     <div className={styles.deploymentHistoryGrid}>
       {renderDeploymentHistory()}
-      {hasDeploymentHistory ? (
+      {filteredDeploymentHistoryEntries.length > 0 ? (
         <div className={styles.deploymentHistorySecondary}>
         <details className={styles.deploymentDisclosure}>
           <summary>

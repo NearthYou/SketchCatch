@@ -659,9 +659,6 @@ test("Deployment History hides inactive controls when no successful version exis
   const historyStart = directDeploymentSource.indexOf("const renderDeploymentHistory");
   const historyEnd = directDeploymentSource.indexOf("const renderHistoryView", historyStart);
   const historySource = directDeploymentSource.slice(historyStart, historyEnd);
-  const viewStart = directDeploymentSource.indexOf("const renderHistoryView", historyEnd);
-  const viewEnd = directDeploymentSource.indexOf("const deploymentContent", viewStart);
-  const viewSource = directDeploymentSource.slice(viewStart, viewEnd);
 
   assert.match(
     directDeploymentSource,
@@ -671,7 +668,17 @@ test("Deployment History hides inactive controls when no successful version exis
     historySource,
     /!hasDeploymentHistory[\s\S]*deploymentHistoryEmpty[\s\S]*hasDeploymentHistory[\s\S]*deploymentHistoryMetrics/
   );
-  assert.match(viewSource, /\{hasDeploymentHistory \? \([\s\S]*deploymentHistorySecondary/);
+});
+
+test("Deployment History hides stale secondary details when the active filter has no rows", () => {
+  const viewStart = directDeploymentSource.indexOf("const renderHistoryView");
+  const viewEnd = directDeploymentSource.indexOf("const deploymentContent", viewStart);
+  const viewSource = directDeploymentSource.slice(viewStart, viewEnd);
+
+  assert.match(
+    viewSource,
+    /\{filteredDeploymentHistoryEntries\.length > 0 \? \([\s\S]*deploymentHistorySecondary/
+  );
 });
 
 test("selected history detail does not repeat scope and change columns", () => {

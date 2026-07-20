@@ -4,7 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- The Direct Deployment presentation deduplication is integrated with `dev` at `266f0a81`; 70 focused Web tests and the root harness, lint, typecheck, and build checks pass on the merged result.
+- The Direct Deployment branch includes `origin/dev` through `fce1d6c0`, removes duplicate deployment summaries, and keeps selected history details within the active filter. Eighty-six focused Web tests and the root harness, lint, typecheck, and build checks pass.
 - Branch `codex/ai-error-analysis-progress-v2` includes the current `origin/dev` through `266f0a81` and adds compact circular estimated progress to Workspace AI Terraform error analysis.
 - The legacy `practice` Deployment profile is removed; `demo_web_service` is the default live profile, and imported migration `0054` rewrites legacy rows before removing the enum value.
 - Live Observation renders bounded traffic motion, a task-count-responsive Fargate fleet, and collapsed operational analysis without development-only traffic or Task preview controls.
@@ -18,6 +18,13 @@ Short English-only working log for the current agent context. Older records are 
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
+
+### 2026-07-20 - Keep Deployment History details aligned with filters
+
+- Reproduced the empty `변경 없음` filter retaining the previously selected version's Resource, Output, and log disclosures while the history table had no rows.
+- Added red-green regressions, constrained automatic history selection to the visible filtered version IDs, preserved a visible manual selection when a newer version is filtered out, and hid secondary details when the active filter is empty.
+- Integrated current `origin/dev` through `fce1d6c0`; the only merge conflict was the shared progress record, and both Direct Deployment and AI progress records were preserved.
+- Eighty-six focused Direct Deployment tests and 33 incoming AI progress tests pass. `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass. No API/shared contract, dependency, DB migration, Terraform execution, cloud, or deployment change was made.
 
 ### 2026-07-20 - Synchronize dev and the Direct Deployment UI branch
 
@@ -124,7 +131,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-1. Review the synchronized `Refactor/jh/498-배포-ui-수정` branch; no deployment or cloud action was performed during synchronization.
-2. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
-3. After review, publish and deploy the `dev` commit through the normal workflow; no DB migration is required.
-4. Observe the compact gauge against a real delayed error-analysis response and consider server-reported stages only if the API contract later exposes them.
+1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
+2. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for the Direct Deployment UI work.
+3. Observe the compact gauge against a real delayed error-analysis response and consider server-reported stages only if the API contract later exposes them.
