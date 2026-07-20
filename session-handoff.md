@@ -45,3 +45,17 @@ Use this file only for compact continuation context. Write it in English and ref
 
 - Use `qa` if Live Observation browser behavior changes again.
 - Use `review` before merging the PR.
+
+## Current 2026-07-21 Continuation
+
+- SketchCatch PR #515 contains one focused commit against `dev` that recovers Live Observation eligibility and the read-only observation path when saved edges are missing but Terraform references are unambiguous.
+- Audience Live Check PR #2 resolves the deployed same-Origin API URL before Ky constructs the check-in Request.
+- The app server contract is healthy at the deployed CloudFront URL; the initial client Request is the failing layer.
+- Both code paths pass focused and full required local checks. Merging PR #2 into shared `main` was rejected until the user explicitly authorizes that exact merge.
+- Actual browser acceptance still requires both PRs merged, the normal `dev` production deployment, and a new Application Release for the merged app commit.
+
+### Exact Next Actions
+
+1. Obtain explicit authorization to merge Audience Live Check PR #2 into `main` and SketchCatch PR #515 into `dev`.
+2. Run the normal reviewed SketchCatch `dev` deployment and create/retry the Application Release pinned to the merged app commit.
+3. Verify the public Participate button, then start and stop Live Observation for Deployment `3f6dbbf2-baab-4f07-b3ef-bc84e4fdea3b` without generating synthetic traffic.

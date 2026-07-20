@@ -138,3 +138,13 @@ Short English-only working log for the current agent context. Older records are 
 1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
 2. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for these changes.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
+
+### 2026-07-21 - Recover edge-less deployments and deployed check-in requests
+
+- Reproduced Deployment `3f6dbbf2-baab-4f07-b3ef-bc84e4fdea3b` with 46 saved resources and zero saved edges; Terraform references still describe the CloudFront, ALB, ECS, and Service Auto Scaling chain.
+- Added fail-closed API manifest recovery from unambiguous Terraform references, allowing an existing invalid manifest to be revalidated without a database migration.
+- Added observation-only Web edge recovery with the same ambiguity guard so the immutable traffic path and Auto Scaling details remain visible.
+- Diagnosed the deployed Audience Live Check server as healthy (same-Origin POST returned 201) and fixed the client to resolve `VITE_API_BASE_URL="/"` against the deployed origin before Ky constructs a Request.
+- Verified 19 focused API tests, 19 focused Web tests, the app's 47 tests, app typecheck/build, changed-app-file Biome checks, root harness check, root lint, root typecheck, and root build.
+- Published SketchCatch PR #515 against `dev` and Audience Live Check PR #2 against `main`; both remain unmerged pending explicit shared-branch authorization.
+- No database migration, Terraform apply/destroy, AWS mutation, traffic generation, or production deployment was performed.
