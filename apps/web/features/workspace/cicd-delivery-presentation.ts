@@ -1,3 +1,5 @@
+import type { GitCicdHandoffReadinessItem } from "./cicd-handoff";
+
 export type DeploymentTargetPresentation = {
   readonly status: "saved" | "recommended" | "dirty" | "required";
   readonly statusLabel: string;
@@ -42,5 +44,26 @@ export function getDeploymentTargetPresentation(input: {
     statusLabel: "설정 필요",
     readinessHint: "PR을 만들려면 AWS 연결을 선택하고 저장해야 합니다.",
     saveLabel: "AWS 연결 저장"
+  };
+}
+
+export function groupGitCicdReadiness(
+  items: readonly GitCicdHandoffReadinessItem[]
+): {
+  readonly required: GitCicdHandoffReadinessItem[];
+  readonly completed: GitCicdHandoffReadinessItem[];
+  readonly completedCount: number;
+  readonly remainingLabel: string;
+} {
+  const required = items.filter((item) => item.status !== "ready");
+  const completed = items.filter((item) => item.status === "ready");
+  return {
+    required,
+    completed,
+    completedCount: completed.length,
+    remainingLabel:
+      required.length === 0
+        ? "배포 PR 준비 완료"
+        : `배포 PR까지 ${required.length}개 남음`
   };
 }

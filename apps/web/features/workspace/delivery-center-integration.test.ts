@@ -95,9 +95,10 @@ test("CI/CD Delivery shows readiness once beside the PR action", () => {
     /useProjectDeliveryProfile\(projectId, readinessRefreshRequestId\)/
   );
   assert.match(handoffPanelSource, /id="cicd-pr-readiness"/);
-  assert.match(handoffPanelSource, /readiness\.ready \? \(/);
-  assert.match(handoffPanelSource, /모든 필수 항목 완료/);
-  assert.match(handoffPanelSource, /readinessItems\.map/);
+  assert.match(handoffPanelSource, /data-ready=\{readiness\.ready\}/);
+  assert.match(handoffPanelSource, /remainingLabel/);
+  assert.match(handoffPanelSource, /readinessGroup\.required\.map/);
+  assert.match(handoffPanelSource, /readinessGroup\.completed\.map/);
 });
 
 test("deployment modal renders Delivery in its existing CI/CD screen", () => {

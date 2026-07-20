@@ -304,6 +304,24 @@
   padding: 12px;
 }
 
+.completedReadiness {
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  padding-top: 10px;
+  width: 100%;
+}
+
+.completedReadiness summary {
+  color: var(--workspace-muted, #60646c);
+  cursor: pointer;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  padding: 8px 0;
+}
+
+.completedReadiness[open] summary {
+  margin-bottom: 8px;
+}
+
 .readinessError {
   align-items: center;
   background: var(--workspace-surface, #fff);

@@ -6,6 +6,7 @@ import type {
   SourceRepository
 } from "@sketchcatch/types";
 import type { GitCicdHandoffReadinessItem } from "./cicd-handoff";
+import { groupGitCicdReadiness } from "./cicd-delivery-presentation";
 import handoffStyles from "./cicd-handoff.module.css";
 import styles from "./workspace.module.css";
 
@@ -62,6 +63,8 @@ export function CicdHandoffPanel({
   readonly readinessItems: readonly GitCicdHandoffReadinessItem[];
   readonly repository: SourceRepository | null;
 }) {
+  const readinessGroup = groupGitCicdReadiness(readinessItems);
+
   return (
     <section className={handoffStyles.panel} id="cicd-handoff" aria-labelledby="cicd-handoff-title">
       <header className={handoffStyles.header}>
@@ -86,11 +89,11 @@ export function CicdHandoffPanel({
       >
         <div className={handoffStyles.readinessHeader}>
           <div>
-            <strong>배포 PR 준비</strong>
+            <strong>준비 상태</strong>
             <p>필요한 설정을 저장한 뒤 준비 상태를 다시 확인합니다.</p>
           </div>
           <span data-ready={readiness.ready}>
-            {readiness.ready ? "준비 완료" : `${readiness.requiredActionCount}개 설정 필요`}
+            {readinessGroup.remainingLabel}
           </span>
         </div>
         {isReadinessRefreshing ? (
@@ -108,13 +111,10 @@ export function CicdHandoffPanel({
               상태 새로고침
             </button>
           </div>
-        ) : readiness.ready ? (
-          <p className={handoffStyles.readinessComplete} role="status">
-            모든 필수 항목 완료
-          </p>
-        ) : (
+        ) : null}
+        {readinessGroup.required.length > 0 ? (
           <ul className={handoffStyles.readinessList}>
-            {readinessItems.map((item) => (
+            {readinessGroup.required.map((item) => (
               <ReadinessRow
                 item={item}
                 key={item.key}
@@ -122,7 +122,21 @@ export function CicdHandoffPanel({
               />
             ))}
           </ul>
-        )}
+        ) : null}
+        {readinessGroup.completedCount > 0 ? (
+          <details className={handoffStyles.completedReadiness}>
+            <summary>{readinessGroup.completedCount}개 완료</summary>
+            <ul className={handoffStyles.readinessList}>
+              {readinessGroup.completed.map((item) => (
+                <ReadinessRow
+                  item={item}
+                  key={item.key}
+                  onOpenDirectDeployment={onOpenDirectDeployment}
+                />
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </div>
 
       {handoffErrorMessage ? (
