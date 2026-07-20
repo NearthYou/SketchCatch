@@ -1971,6 +1971,8 @@ type GitCicdHandoff = {
 
 Git/CI/CD handoff도 `UserAcceptedChange` 이후에만 생성한다. v0 API는 `internal` provider boundary만 사용하며 실제 GitHub PR 생성은 별도 provider 구현에서 담당한다. 저장소 토큰, private key, deploy key, CI secret 원문은 shared type, DB, 응답, 로그에 저장하지 않는다.
 
+Handoff 생성 직전 서버는 요청한 active `SourceRepository`를 현재 Board provenance와 다시 비교한다. Board 분석 기록이 없을 때만 요청 Repository를 그대로 허용한다. Board 분석 기록이 있으면 `sourceRepositoryId`가 요청 ID와 정확히 같아야 하며, `null`이거나 다른 ID이면 provider를 호출하지 않고 HTTP 409 `GIT_CICD_SOURCE_REPOSITORY_MISMATCH`를 반환한다.
+
 `github` provider slice에서는 Terraform artifact metadata를 provider boundary로 넘겨 Source Repository PR 생성 요청 payload를 만든다.
 이 payload에는 PR title/body 초안, IaC Preview artifact 경로, plan summary, Pre-Deployment Check 확인 문구,
 리뷰 체크리스트 초안이 포함된다. provider 결과로 `pullRequestUrl`이 돌아오면 handoff record는 `status: "pr_created"`와

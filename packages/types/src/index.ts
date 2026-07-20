@@ -26,6 +26,7 @@ export type ApiErrorCode =
   | "bad_gateway"
   | "service_unavailable"
   | "internal_server_error"
+  | "GIT_CICD_SOURCE_REPOSITORY_MISMATCH"
   | "PUBLIC_REPOSITORY_INPUT_INVALID"
   | "PUBLIC_REPOSITORY_UNAVAILABLE"
   | "PUBLIC_REPOSITORY_BRANCH_UNAVAILABLE"
