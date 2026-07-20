@@ -11,6 +11,7 @@ export type WorkspaceAiProgressStep = {
 };
 
 export type TerraformPreviewReviewStep = WorkspaceAiProgressStep;
+export type TerraformIssueAnalysisProgressPhase = "hidden" | "running" | "complete";
 
 export const ARCHITECTURE_DRAFT_GENERATION_STEP_DURATION_MS = 1_500;
 
@@ -40,6 +41,7 @@ export const architectureDraftGenerationSteps: readonly WorkspaceAiProgressStep[
 export const TERRAFORM_PREVIEW_REVIEW_STEP_DURATION_MS = 3_500;
 
 export const TERRAFORM_ISSUE_ANALYSIS_ESTIMATED_DURATION_MS = 20_000;
+export const TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS = 800;
 
 export const terraformPreviewReviewSteps: readonly TerraformPreviewReviewStep[] = [
   {
@@ -97,6 +99,58 @@ export function getTerraformIssueAnalysisProgress({
     1,
     Math.min(99, Math.round((completedWithCurrentIssue / safeTotal) * 100))
   );
+}
+
+export function getTerraformIssueAnalysisProgressPresentation({
+  completed,
+  elapsedMs,
+  phase,
+  total
+}: {
+  readonly completed: number;
+  readonly elapsedMs: number;
+  readonly phase: TerraformIssueAnalysisProgressPhase;
+  readonly total: number;
+}): { readonly label: "예상" | "완료"; readonly progress: number } | null {
+  if (phase === "hidden") {
+    return null;
+  }
+
+  if (phase === "complete") {
+    return { label: "완료", progress: 100 };
+  }
+
+  return {
+    label: "예상",
+    progress: getTerraformIssueAnalysisProgress({ completed, elapsedMs, total })
+  };
+}
+
+export function getTerraformIssueAnalysisProgressTransition({
+  currentPhase,
+  didComplete,
+  isRunning
+}: {
+  readonly currentPhase: TerraformIssueAnalysisProgressPhase;
+  readonly didComplete: boolean;
+  readonly isRunning: boolean;
+}): { readonly delayMs: number; readonly phase: TerraformIssueAnalysisProgressPhase } {
+  if (isRunning) {
+    return { delayMs: 0, phase: "running" };
+  }
+
+  if (currentPhase === "hidden") {
+    return { delayMs: 0, phase: "hidden" };
+  }
+
+  if (!didComplete) {
+    return { delayMs: 0, phase: "hidden" };
+  }
+
+  return {
+    delayMs: TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS,
+    phase: "complete"
+  };
 }
 
 export function getWorkspaceAiChatDockStatus({

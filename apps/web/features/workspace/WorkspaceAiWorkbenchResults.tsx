@@ -16,9 +16,11 @@ import {
 import {
   architectureDraftGenerationSteps,
   getArchitectureDraftGenerationProgressStep,
-  getTerraformIssueAnalysisProgress,
+  getTerraformIssueAnalysisProgressPresentation,
+  getTerraformIssueAnalysisProgressTransition,
   getTerraformPreviewReviewProgressStep,
   terraformPreviewReviewSteps,
+  type TerraformIssueAnalysisProgressPhase,
   type WorkspaceAiProgressStep
 } from "./workspace-ai-chat-status";
 import styles from "./workspace-ai-workbench.module.css";
@@ -85,17 +87,55 @@ export function WorkspaceAiWorkbenchReviewProgress({ elapsedMs }: { readonly ela
 
 export function WorkspaceAiWorkbenchTerraformIssueProgress({
   completed,
+  didComplete,
+  isRunning,
   total
 }: {
   readonly completed: number;
+  readonly didComplete: boolean;
+  readonly isRunning: boolean;
   readonly total: number;
 }) {
-  const elapsedMs = useWorkspaceAiProgressElapsed(true, completed);
-  const progress = getTerraformIssueAnalysisProgress({ completed, elapsedMs, total });
+  const [phase, setPhase] = useState<TerraformIssueAnalysisProgressPhase>(() =>
+    isRunning ? "running" : "hidden"
+  );
+
+  useEffect(() => {
+    const transition = getTerraformIssueAnalysisProgressTransition({
+      currentPhase: phase,
+      didComplete,
+      isRunning
+    });
+
+    setPhase(transition.phase);
+    if (transition.phase !== "complete") return;
+
+    const timerId = window.setTimeout(() => {
+      setPhase("hidden");
+    }, transition.delayMs);
+
+    return () => window.clearTimeout(timerId);
+  }, [didComplete, isRunning, phase]);
+
+  const elapsedMs = useWorkspaceAiProgressElapsed(phase === "running", completed);
+  const presentation = getTerraformIssueAnalysisProgressPresentation({
+    completed,
+    elapsedMs,
+    phase,
+    total
+  });
+
+  if (presentation === null) {
+    return null;
+  }
+
+  const { label, progress } = presentation;
+  const accessibleLabel =
+    label === "완료" ? `오류 분석 완료 ${progress}%` : `오류 분석 예상 진행률 ${progress}%`;
 
   return (
     <div
-      aria-label={`오류 분석 예상 진행률 ${progress}%`}
+      aria-label={accessibleLabel}
       aria-valuemax={100}
       aria-valuemin={0}
       aria-valuenow={progress}
@@ -125,7 +165,7 @@ export function WorkspaceAiWorkbenchTerraformIssueProgress({
         </span>
       </div>
       <span aria-hidden="true" className={styles.terraformIssueProgressLabel}>
-        예상
+        {label}
       </span>
     </div>
   );

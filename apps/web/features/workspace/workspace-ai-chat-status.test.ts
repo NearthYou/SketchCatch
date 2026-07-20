@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   architectureDraftGenerationSteps,
+  getTerraformIssueAnalysisProgressPresentation,
   getArchitectureDraftGenerationProgressStep,
+  getTerraformIssueAnalysisProgressTransition,
   getTerraformIssueAnalysisProgress,
   getTerraformPreviewReviewProgressStep,
   getWorkspaceAiChatDockStatus,
+  TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS,
   TERRAFORM_ISSUE_ANALYSIS_ESTIMATED_DURATION_MS,
   terraformPreviewReviewSteps
 } from "./workspace-ai-chat-status";
@@ -108,6 +111,48 @@ test("오류 분석 예상 진행률은 경과 시간에 따라 증가하고 완
   assert.equal(
     getTerraformIssueAnalysisProgress({ completed: 0, elapsedMs: 60_000, total: 1 }),
     94
+  );
+});
+
+test("오류 분석 완료는 100% 상태를 잠시 유지한 뒤 숨긴다", () => {
+  assert.deepEqual(
+    getTerraformIssueAnalysisProgressTransition({
+      currentPhase: "running",
+      didComplete: true,
+      isRunning: false
+    }),
+    {
+      delayMs: TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS,
+      phase: "complete"
+    }
+  );
+  assert.deepEqual(
+    getTerraformIssueAnalysisProgressTransition({
+      currentPhase: "hidden",
+      didComplete: false,
+      isRunning: false
+    }),
+    { delayMs: 0, phase: "hidden" }
+  );
+  assert.deepEqual(
+    getTerraformIssueAnalysisProgressTransition({
+      currentPhase: "running",
+      didComplete: false,
+      isRunning: false
+    }),
+    { delayMs: 0, phase: "hidden" }
+  );
+});
+
+test("오류 분석 완료 상태는 예상치 대신 100%와 완료 라벨을 표시한다", () => {
+  assert.deepEqual(
+    getTerraformIssueAnalysisProgressPresentation({
+      completed: 0,
+      elapsedMs: 2_000,
+      phase: "complete",
+      total: 1
+    }),
+    { label: "완료", progress: 100 }
   );
 });
 
