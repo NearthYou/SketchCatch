@@ -70,16 +70,6 @@ Short English-only working log for the current agent context. Older records are 
 - Replaced the fixed 152 px action-button basis and width with intrinsic sizing while retaining the 44 px control height and full-width mobile layout. Authenticated Chrome QA at 1345x1003 and 390x844 confirmed that the validation label is not clipped.
 - Focused Direct Deployment regressions pass 85/85; root harness, lint, typecheck, and all five build tasks pass. The completed build process was stopped after Turbo remained attached to the existing user-owned Next dev server. No deployment, cloud mutation, contract, migration, dependency, commit, or push was performed.
 
-### 2026-07-20 - Fast-forward dev and the active branch
-
-- Fetched `origin/dev` and the active remote branch, then fast-forwarded local `dev` and `Refactor/jh/498-배포-ui-수정` from `3a26123b` to `252e7085` without pushing.
-- Preserved the existing dirty worktree through a temporary stash; the two local recovery-file deletions and the current progress records were retained while accepting the latest `dev` baseline. Final harness, conflict-marker, branch-alignment, and diff checks pass.
-
-### 2026-07-20 - Plan Direct Deployment UI deduplication
-
-- Added an implementation plan that removes repeated Direct Deployment step headings, Plan/scope/build metrics, validation readiness summaries, repeated execution facts, and empty-history controls while preserving approval and final AWS target safety checks.
-- The plan defines five TDD work units, responsive read-only browser QA, focused Web regressions, and required root checks. Only documentation and the prior Impeccable critique snapshot changed; no runtime code, API contract, DB migration, dependency, Terraform execution, AWS mutation, Deployment, commit, or push was performed.
-
 ### 2026-07-20 - Remove the local draft recovery chooser
 
 - Removed the Workspace dialog that asked users to choose between a dirty IndexedDB draft and the latest server draft. When a server draft exists, Workspace now opens it and synchronizes the local cache to the same revision; server-less local fallback and real 409 conflict handling remain intact.
