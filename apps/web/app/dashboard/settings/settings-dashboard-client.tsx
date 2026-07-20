@@ -418,15 +418,8 @@ export function SettingsDashboardClient() {
         if (!savedConnection.codeConnection) return [connection.id, savedConnection] as const;
         try {
           return [connection.id, await refreshAwsCodeConnection(connection.id)] as const;
-        } catch (error) {
-          if (active) {
-            setErrorMessage(
-              getApiErrorMessage(
-                error,
-                "AWS 상태를 다시 확인하지 못해 저장된 연결 상태를 표시합니다."
-              )
-            );
-          }
+        } catch {
+          // AWS 상태를 다시 확인하지 못해 저장된 연결 상태를 표시합니다.
           return [connection.id, savedConnection] as const;
         }
       })

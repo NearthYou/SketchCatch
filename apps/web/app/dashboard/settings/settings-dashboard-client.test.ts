@@ -24,18 +24,28 @@ test("Pending GitHub authorization identifies the exact AWS connection to update
   assert.match(clientSource, /Update pending connection/);
 });
 
-test("Settings refreshes an existing CodeConnection from AWS before presenting its status", () => {
+test("Settings falls back to a saved CodeConnection without reporting a global AWS connection error", () => {
   const loadStart = clientSource.indexOf("void Promise.all(");
   const loadEnd = clientSource.indexOf("return () =>", loadStart);
   const loadSource = clientSource.slice(loadStart, loadEnd);
+  const refreshStart = loadSource.indexOf("try {");
+  const fallbackStart = loadSource.indexOf(
+    "return [connection.id, savedConnection] as const",
+    refreshStart
+  );
+  const refreshSource = loadSource.slice(refreshStart, fallbackStart);
+
 
   assert.ok(loadStart > -1);
   assert.ok(loadEnd > loadStart);
+  assert.ok(refreshStart > -1);
+  assert.ok(fallbackStart > refreshStart);
   assert.match(loadSource, /await getAwsCodeConnection\(connection\.id\)/);
   assert.match(loadSource, /await refreshAwsCodeConnection\(connection\.id\)/);
-  assert.match(loadSource, /catch \(error\) \{/);
+  assert.match(loadSource, /catch \{/);
   assert.match(loadSource, /return \[connection\.id, savedConnection\] as const/);
   assert.match(loadSource, /AWS 상태를 다시 확인하지 못해 저장된 연결 상태를 표시합니다/);
+  assert.doesNotMatch(refreshSource, /setErrorMessage/);
 });
 
 test("Settings keeps Reverse return behind the selected connection import-access wizard", () => {
