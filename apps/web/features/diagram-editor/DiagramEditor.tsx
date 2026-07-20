@@ -35,11 +35,11 @@ import {
   Eye,
   EyeOff,
   Expand,
+  Link2,
   Maximize2,
   MousePointer2,
   Move,
   Redo2,
-  Sparkles,
   Undo2,
   ZoomIn,
   ZoomOut
@@ -127,6 +127,7 @@ import {
   MAX_RIGHT_PANEL_WIDTH,
   MIN_LEFT_PANEL_WIDTH,
   MIN_RIGHT_PANEL_WIDTH,
+  deriveInitialWorkspacePanelState,
   readWorkspacePanelPreferences,
   writeWorkspacePanelPreferences
 } from "./workspace-panel-preferences";
@@ -303,19 +304,18 @@ function DiagramEditorInner({
   const [terraformRefreshRequestId, setTerraformRefreshRequestId] = useState(0);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
+  const initialPanelStateRef = useRef(
+    deriveInitialWorkspacePanelState({
+      hasDiagramNodes: diagram.nodes.length > 0,
+      isCompactViewport:
+        typeof window !== "undefined" && window.matchMedia("(max-width: 1120px)").matches
+    })
+  );
   const [isLeftPanelOpen, setLeftPanelOpen] = useState(() =>
-    viewerPolicy.isViewer
-      ? true
-      : readWorkspacePanelPreferences(
-          typeof window === "undefined" ? null : window.localStorage
-        ).leftPanelOpen
+    viewerPolicy.isViewer ? true : initialPanelStateRef.current.leftPanelOpen
   );
   const [isRightPanelOpen, setRightPanelOpen] = useState(() =>
-    viewerPolicy.isViewer
-      ? true
-      : readWorkspacePanelPreferences(
-          typeof window === "undefined" ? null : window.localStorage
-        ).rightPanelOpen
+    viewerPolicy.isViewer ? true : initialPanelStateRef.current.rightPanelOpen
   );
   const [leftPanelWidth, setLeftPanelWidth] = useState(readStoredLeftPanelWidth);
   const [rightPanelWidth, setRightPanelWidth] = useState(readStoredRightPanelWidth);
@@ -338,6 +338,7 @@ function DiagramEditorInner({
     getValidInitialAreaDropTargetNodeId(diagram.nodes, initialReferenceDropTargetNodeId)
   );
   const [isConnectionActive, setConnectionActive] = useState(false);
+  const [isConnectionToolEnabled, setConnectionToolEnabled] = useState(false);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const [isFlowReady, setFlowReady] = useState(false);
   const [boardMinimumZoom, setBoardMinimumZoom] = useState(0.25);
@@ -363,12 +364,8 @@ function DiagramEditorInner({
   const flowInstanceRef = useRef<ReactFlowInstance<DiagramFlowNode, DiagramFlowEdge> | null>(null);
   const flowNodeCacheRef = useRef<ReadonlyMap<string, DiagramFlowNode>>(new Map());
   const connectStartNodeIdRef = useRef<string | null>(null);
-  const shouldAutoFitInitialDiagramRef = useRef(
-    normalizedInitialBoardZoom === undefined && (initialDiagram?.nodes.length ?? 0) > 0
-  );
-  const shouldApplyInitialBoardZoomRef = useRef(
-    normalizedInitialBoardZoom !== undefined && (initialDiagram?.nodes.length ?? 0) > 0
-  );
+  const shouldAutoFitInitialDiagramRef = useRef((initialDiagram?.nodes.length ?? 0) > 0);
+  const shouldApplyInitialBoardZoomRef = useRef(false);
   const shouldApplySourceViewportRef = useRef(true);
   const wasSourceViewBoxViewportRef = useRef(false);
   const initialSourceViewportFrameRef = useRef<number | null>(null);
@@ -400,19 +397,9 @@ function DiagramEditorInner({
     [getFlowInstance, setFlowMinimumZoom]
   );
 
-  const updateLeftPanelOpen = useCallback(
-    (nextOpen: boolean): void => {
-      if (!viewerPolicy.isViewer) {
-        writeWorkspacePanelPreferences(
-          typeof window === "undefined" ? null : window.localStorage,
-          { leftPanelOpen: nextOpen }
-        );
-      }
-
-      setLeftPanelOpen(nextOpen);
-    },
-    [viewerPolicy.isViewer]
-  );
+  const updateLeftPanelOpen = useCallback((nextOpen: boolean): void => {
+    setLeftPanelOpen(nextOpen);
+  }, []);
 
   const updateRightPanelOpen = useCallback(
     (nextOpen: boolean): void => {
@@ -420,16 +407,9 @@ function DiagramEditorInner({
         onWorkspacePanelOpen?.();
       }
 
-      if (!viewerPolicy.isViewer) {
-        writeWorkspacePanelPreferences(
-          typeof window === "undefined" ? null : window.localStorage,
-          { rightPanelOpen: nextOpen }
-        );
-      }
-
       setRightPanelOpen(nextOpen);
     },
-    [onWorkspacePanelOpen, viewerPolicy.isViewer]
+    [onWorkspacePanelOpen]
   );
 
   /** 왼쪽 Resource palette를 열거나 닫습니다. */
@@ -588,13 +568,13 @@ function DiagramEditorInner({
 
   useEffect(() => {
     cancelSnapAnimation();
-    const nextDiagram = normalizeDiagramResourceNodeGeometry(cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM));
+    const nextDiagram = normalizeDiagramResourceNodeGeometry(
+      cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM)
+    );
     shouldApplySourceViewportRef.current = true;
     replaceDiagram(nextDiagram, false);
-    shouldAutoFitInitialDiagramRef.current =
-      normalizedInitialBoardZoom === undefined && nextDiagram.nodes.length > 0;
-    shouldApplyInitialBoardZoomRef.current =
-      normalizedInitialBoardZoom !== undefined && nextDiagram.nodes.length > 0;
+    shouldAutoFitInitialDiagramRef.current = nextDiagram.nodes.length > 0;
+    shouldApplyInitialBoardZoomRef.current = false;
     setHistory({ past: [], future: [] });
     setPreviewDiagram(initialPreviewDiagram ?? null, initialPreviewAnnotations ?? null);
     setInspectedNodeId(null);
@@ -1448,6 +1428,7 @@ function DiagramEditorInner({
         cachedNodesById: flowNodeCacheRef.current,
         edges: visibleDiagram.edges,
         geometryPolicy: visibleDiagram.presentation?.geometryPolicy,
+        isConnectionToolEnabled,
         isPreview: isPreviewActive,
         previewAnnotations: isPreviewActive ? (previewAnnotations ?? undefined) : undefined
       }
@@ -1468,6 +1449,7 @@ function DiagramEditorInner({
     displayNodes,
     flowNodeHandlers,
     isConnectionActive,
+    isConnectionToolEnabled,
     interactionMode,
     isPreviewActive,
     previewAnnotations,
@@ -2017,6 +1999,27 @@ function DiagramEditorInner({
     setConnectionActive(false);
   }, []);
 
+  const handleSelectTool = useCallback(() => {
+    resetConnectionStateOnCancel();
+    setConnectionToolEnabled(false);
+    setInteractionMode("select");
+  }, [resetConnectionStateOnCancel]);
+
+  const handlePanTool = useCallback(() => {
+    resetConnectionStateOnCancel();
+    setConnectionToolEnabled(false);
+    setInteractionMode("pan");
+  }, [resetConnectionStateOnCancel]);
+
+  const toggleConnectionTool = useCallback(() => {
+    if (isConnectionToolEnabled) {
+      resetConnectionStateOnCancel();
+    }
+
+    setConnectionToolEnabled((current) => !current);
+    setInteractionMode("select");
+  }, [isConnectionToolEnabled, resetConnectionStateOnCancel]);
+
   const handleConnectStart = useCallback<OnConnectStart>((_event, params) => {
     connectStartNodeIdRef.current = params.nodeId;
     setConnectionActive(true);
@@ -2426,11 +2429,7 @@ function DiagramEditorInner({
       return {
         ...currentDiagram,
         nodes: autoExpandAreasEnabled
-          ? reconcileAreaNodeGeometry(
-              currentDiagram.nodes,
-              nodesWithAssignedParents,
-              pastedNodeIds
-            )
+          ? reconcileAreaNodeGeometry(currentDiagram.nodes, nodesWithAssignedParents, pastedNodeIds)
           : nodesWithAssignedParents
       };
     });
@@ -2773,7 +2772,6 @@ function DiagramEditorInner({
     if (
       !isFlowReady ||
       !shouldAutoFitInitialDiagramRef.current ||
-      hasSourceViewBoxViewport ||
       diagram.nodes.length === 0
     ) {
       return;
@@ -2797,7 +2795,7 @@ function DiagramEditorInner({
         initialAutoFitFrameRef.current = null;
       }
     };
-  }, [diagram.nodes.length, fitVisibleDiagram, hasSourceViewBoxViewport, isFlowReady]);
+  }, [diagram.nodes.length, fitVisibleDiagram, isFlowReady]);
 
   useEffect(() => {
     if (
@@ -2955,10 +2953,13 @@ function DiagramEditorInner({
   useEffect(() => {
     const compactViewport = window.matchMedia("(max-width: 1120px)");
 
-    function restorePanelPreferencesForWideViewport(): void {
-      const preferences = readWorkspacePanelPreferences(window.localStorage);
-      setLeftPanelOpen(preferences.leftPanelOpen);
-      setRightPanelOpen(preferences.rightPanelOpen);
+    function restoreContextualPanelState(): void {
+      const initialPanelState = deriveInitialWorkspacePanelState({
+        hasDiagramNodes: diagramRef.current.nodes.length > 0,
+        isCompactViewport: false
+      });
+      setLeftPanelOpen(initialPanelState.leftPanelOpen);
+      setRightPanelOpen(initialPanelState.rightPanelOpen);
     }
 
     /** 좁은 화면에서는 Board가 먼저 보이도록 양쪽 패널을 접습니다. */
@@ -2968,7 +2969,7 @@ function DiagramEditorInner({
       }
 
       if (!event.matches) {
-        restorePanelPreferencesForWideViewport();
+        restoreContextualPanelState();
         return;
       }
 
@@ -3094,7 +3095,9 @@ function DiagramEditorInner({
   const canvasPanelClassName = [
     styles.canvasPanel,
     showAllEdgeLabels ? styles.canvasPanelEdgeLabelsVisible : styles.canvasPanelEdgeLabelsCompact,
-    resourceNamesVisible ? styles.canvasPanelResourceNamesVisible : styles.canvasPanelResourceNamesHidden,
+    resourceNamesVisible
+      ? styles.canvasPanelResourceNamesVisible
+      : styles.canvasPanelResourceNamesHidden,
     isPreviewActive ? styles.canvasPanelPreviewing : undefined,
     isAreaBlankDragging ? styles.canvasPanelAreaBlankDragging : undefined,
     isSnapAnimating ? styles.canvasPanelSnapAnimating : undefined,
@@ -3212,7 +3215,7 @@ function DiagramEditorInner({
                   className={
                     interactionMode === "select" ? styles.iconButtonSelected : styles.iconButton
                   }
-                  onClick={() => setInteractionMode("select")}
+                  onClick={handleSelectTool}
                   title="선택 모드"
                   type="button"
                 >
@@ -3221,12 +3224,26 @@ function DiagramEditorInner({
                 <button
                   aria-label="캔버스 이동"
                   aria-pressed={interactionMode === "pan"}
-                  className={interactionMode === "pan" ? styles.iconButtonSelected : styles.iconButton}
-                  onClick={() => setInteractionMode("pan")}
+                  className={
+                    interactionMode === "pan" ? styles.iconButtonSelected : styles.iconButton
+                  }
+                  onClick={handlePanTool}
                   title="캔버스 이동"
                   type="button"
                 >
                   <Move aria-hidden="true" size={16} />
+                </button>
+                <button
+                  aria-label="연결 모드"
+                  aria-pressed={isConnectionToolEnabled}
+                  className={
+                    isConnectionToolEnabled ? styles.iconButtonSelected : styles.iconButton
+                  }
+                  onClick={toggleConnectionTool}
+                  title={isConnectionToolEnabled ? "연결 모드 끄기" : "연결 모드 켜기"}
+                  type="button"
+                >
+                  <Link2 aria-hidden="true" size={16} />
                 </button>
                 <button
                   aria-label="영역 자동 확장"
@@ -3255,16 +3272,6 @@ function DiagramEditorInner({
               </div>
 
               <div className={styles.toolbarGroup} aria-label="History">
-                <button
-                  aria-label="Architecture Board 자동 정리 미리보기"
-                  className={styles.iconButton}
-                  disabled={isPreviewActive || diagram.nodes.length === 0}
-                  onClick={previewAutomaticOrganization}
-                  title="자동 정리"
-                  type="button"
-                >
-                  <Sparkles aria-hidden="true" size={16} />
-                </button>
                 <button
                   aria-label="Undo"
                   className={styles.iconButton}
@@ -3391,7 +3398,9 @@ function DiagramEditorInner({
             multiSelectionKeyCode={["Shift", "Meta", "Control"]}
             nodeTypes={NODE_TYPES}
             nodes={flowNodes}
-            nodesConnectable={interactionMode === "select" && !isPreviewActive}
+            nodesConnectable={
+              interactionMode === "select" && isConnectionToolEnabled && !isPreviewActive
+            }
             nodesDraggable={interactionMode === "select" && !isPreviewActive}
             onInit={handleInit}
             panOnDrag={viewerPolicy.canPanAndZoom && (isPreviewActive || interactionMode === "pan")}

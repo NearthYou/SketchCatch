@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   DEFAULT_WORKSPACE_PANEL_PREFERENCES,
+  deriveInitialWorkspacePanelState,
   readWorkspacePanelPreferences,
   writeWorkspacePanelPreferences
 } from "./workspace-panel-preferences";
@@ -75,4 +76,22 @@ test("panel open states round-trip with the stored widths", () => {
     rightPanelOpen: false,
     rightPanelWidth: 520
   });
+});
+
+test("existing boards start in read mode while empty boards expose only resources", () => {
+  assert.deepEqual(
+    deriveInitialWorkspacePanelState({ hasDiagramNodes: true, isCompactViewport: false }),
+    { leftPanelOpen: false, rightPanelOpen: false }
+  );
+  assert.deepEqual(
+    deriveInitialWorkspacePanelState({ hasDiagramNodes: false, isCompactViewport: false }),
+    { leftPanelOpen: true, rightPanelOpen: false }
+  );
+});
+
+test("compact workspaces prioritize the board regardless of its contents", () => {
+  assert.deepEqual(
+    deriveInitialWorkspacePanelState({ hasDiagramNodes: false, isCompactViewport: true }),
+    { leftPanelOpen: false, rightPanelOpen: false }
+  );
 });

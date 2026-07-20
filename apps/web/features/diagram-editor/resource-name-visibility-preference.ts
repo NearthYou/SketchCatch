@@ -2,7 +2,7 @@ export const RESOURCE_NAME_VISIBILITY_STORAGE_KEY =
   "sketchcatch.diagramEditor.resourceNameVisibility.brainboardV1";
 
 export function readResourceNamesVisible(storage: Pick<Storage, "getItem"> | null): boolean {
-  return storage?.getItem(RESOURCE_NAME_VISIBILITY_STORAGE_KEY) === "true";
+  return storage?.getItem(RESOURCE_NAME_VISIBILITY_STORAGE_KEY) !== "false";
 }
 
 export function writeResourceNamesVisible(
