@@ -191,8 +191,15 @@ export function createAwsImportAccessService(
         expectedCurrent: createExpectedCurrentState(current)
       });
       const managerReady = inspection.verified && inspection.managerStatus === "target";
-      const canCreate = inspection.managerStatus === "absent" &&
-        inspection.policyStatus === "absent";
+      // gg: 예전 연결 Role에는 CloudFormation 조회 권한이 없으므로 최초 준비만 exact 새 Stack 생성으로 bootstrap합니다.
+      const canBootstrapCreate = current.status === "check_required" &&
+        current.managerStackId === null &&
+        current.policyStackId === null &&
+        inspection.reason === "retry" &&
+        inspection.managerStackId === null &&
+        inspection.policyStackId === null;
+      const canCreate = (inspection.managerStatus === "absent" &&
+        inspection.policyStatus === "absent") || canBootstrapCreate;
       const canUpdate = inspection.managerStatus === "owned_older" &&
         inspection.managerStackId !== null && inspection.policyStatus !== "invalid";
       const prepared = canCreate
@@ -210,9 +217,11 @@ export function createAwsImportAccessService(
           : undefined;
       const status: AwsImportAccessStatus = managerReady
         ? "policy_approval_required"
-        : inspection.reason === "retry" || (!canCreate && !canUpdate)
-          ? "retry_required"
-          : "manager_approval_required";
+        : prepared
+          ? "manager_approval_required"
+          : inspection.reason === "retry" || (!canCreate && !canUpdate)
+            ? "retry_required"
+            : "manager_approval_required";
       const next = await saveCommandOrThrow(options.repository, {
         connectionId: input.connectionId,
         now: now(),

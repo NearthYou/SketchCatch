@@ -5,6 +5,7 @@ import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
 import {
   registerAwsImportAccessRoutes,
+  resolveAwsImportTemplateBucketName,
   type AwsImportAccessRouteService
 } from "./aws-import-access.js";
 
@@ -13,6 +14,21 @@ process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-charact
 
 const ownerId = "11111111-1111-4111-8111-111111111111";
 const connectionId = "22222222-2222-4222-8222-222222222222";
+
+test("import access rejects placeholder bucket settings before handling a command", () => {
+  assert.throws(
+    () => resolveAwsImportTemplateBucketName("<artifact-bucket-name>"),
+    /실제 S3 bucket 이름/u
+  );
+  assert.throws(
+    () => resolveAwsImportTemplateBucketName(undefined),
+    /Template 저장소 설정/u
+  );
+  assert.equal(
+    resolveAwsImportTemplateBucketName("sketchcatch-555980271919-ap-northeast-2-an"),
+    "sketchcatch-555980271919-ap-northeast-2-an"
+  );
+});
 
 test("all eight import-access routes require auth and expose only safe DTOs", async () => {
   const calls: string[] = [];

@@ -181,10 +181,7 @@ async function createRequestService(
 /** gg: runtime service는 private bucket 설정과 기존 connection repository를 공유합니다. */
 function createDefaultService(client: DatabaseClient): AwsImportAccessRouteService {
   const env = getRuntimeEnv();
-  const templateBucketName = env.s3BucketName;
-  if (!templateBucketName) {
-    throw new AwsImportAccessOperationError("Template 저장소 설정을 확인해 주세요.");
-  }
+  const templateBucketName = resolveAwsImportTemplateBucketName(env.s3BucketName);
   return createAwsImportAccessService({
     connectionRepository: createPostgresAwsConnectionRepository(client.db),
     repository: createPostgresAwsImportAccessRepository(client.db),
@@ -192,6 +189,19 @@ function createDefaultService(client: DatabaseClient): AwsImportAccessRouteServi
     templateBucketName,
     templateStorageRegion: env.awsRegion
   });
+}
+
+/** gg: 예시 문자열을 실제 bucket으로 오인해 command 중간에서 500이 되지 않게 시작 경계에서 막습니다. */
+export function resolveAwsImportTemplateBucketName(bucketName: string | undefined): string {
+  if (!bucketName) {
+    throw new AwsImportAccessOperationError("Template 저장소 설정을 확인해 주세요.");
+  }
+  if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/u.test(bucketName)) {
+    throw new AwsImportAccessOperationError(
+      "Template 저장소에 실제 S3 bucket 이름을 설정해 주세요."
+    );
+  }
+  return bucketName;
 }
 
 type SafeAwsImportAccessResponse = AwsImportAccessCommandResponse & {

@@ -210,6 +210,35 @@ test("preparing an already-current Manager is a read-only no-op", async () => {
   assert.equal(result.state.status, "policy_approval_required");
 });
 
+test("first Manager preparation can bootstrap an old Role without CloudFormation read access", async () => {
+  const fixture = createImportAccessServiceFixture();
+  fixture.gateway.inspectManager = async () => ({
+    verified: false,
+    managerStatus: "invalid",
+    managerStackId: null,
+    managerContractVersion: null,
+    managerTemplateSha256: null,
+    policyStatus: "invalid",
+    policyStackId: null,
+    policyStackExists: false,
+    policyContractVersion: null,
+    policyTemplateSha256: null,
+    policyFingerprint: null,
+    reason: "retry"
+  });
+  const modes: unknown[] = [];
+  fixture.gateway.prepareManager = async (input) => {
+    modes.push(input.mode);
+    return { consoleUrl: "https://console.example/manager" };
+  };
+
+  const result = await fixture.service.prepareManager(fixture.ownerInput);
+
+  assert.deepEqual(modes, [{ kind: "create" }]);
+  assert.equal(result.state.status, "manager_approval_required");
+  assert.equal(result.consoleUrl, "https://console.example/manager");
+});
+
 test("Manager preparation uses Quick Create only when absent and exact update when owned older", async () => {
   for (const scenario of ["absent", "owned_older"] as const) {
     const fixture = createImportAccessServiceFixture();
