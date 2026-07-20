@@ -40,7 +40,6 @@ import {
   MousePointer2,
   Move,
   Redo2,
-  Sparkles,
   Undo2,
   ZoomIn,
   ZoomOut
@@ -3468,21 +3467,6 @@ function DiagramEditorInner({
               </div>
 
               <div className={styles.toolbarGroup} aria-label="History">
-                <button
-                  aria-label="Architecture Board 자동 정리 미리보기"
-                  className={styles.iconButton}
-                  disabled={
-                    isPreviewActive ||
-                    diagram.nodes.length === 0 ||
-                    !onBoardAutoOrganizeApplyRequest ||
-                    projectDraftRevision === null
-                  }
-                  onClick={previewAutomaticOrganization}
-                  title="자동 정리"
-                  type="button"
-                >
-                  <Sparkles aria-hidden="true" size={16} />
-                </button>
                 <button
                   aria-label="Undo"
                   className={styles.iconButton}
