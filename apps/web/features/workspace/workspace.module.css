@@ -10127,7 +10127,7 @@
   border: 1px solid var(--workspace-line-strong, #dcdee0);
   color: var(--workspace-text, #171717);
   display: inline-flex;
-  flex: 0 0 152px;
+  flex: 0 1 auto;
   font-size: calc(14px + var(--presentation-font-size-increase));
   height: 44px;
   justify-content: center;
@@ -10136,7 +10136,7 @@
   min-width: 152px;
   padding: 9px 14px;
   white-space: nowrap;
-  width: 152px;
+  width: auto;
 }
 
 .deploymentConsoleGrid

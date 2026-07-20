@@ -69,14 +69,14 @@ test("settings gates AWS CodeBuild GitHub authorization behind one GitHub App an
   assert.match(source, /AWS 연결이 먼저 필요합니다/);
   assert.match(source, /AWS 연결하러 가기/);
   assert.match(source, /AWS에서 GitHub 권한 승인하기/);
-  assert.match(source, /승인 세션이 남아 있으면 로그인 화면이 생략될 수 있습니다/);
+  assert.doesNotMatch(source, /승인 세션이 남아 있으면 로그인 화면이 생략될 수 있습니다/);
   assert.match(source, /deriveAwsCodeConnectionConnectedState/);
   assert.match(source, /connectedState\.actionHref/);
   assert.match(source, /connectedState\.actionLabel/);
   assert.match(source, /buildConnectionReady/);
   assert.doesNotMatch(source, /buildConnectionUnverified/);
   assert.doesNotMatch(source, /AWS GitHub 승인 완료/);
-  assert.match(source, /승인한 GitHub 계정 이름을 반환하지 않으므로/);
+  assert.doesNotMatch(source, /승인한 GitHub 계정 이름을 반환하지 않으므로/);
   assert.doesNotMatch(source, /GitHub 빌드 연결 완료/);
   assert.match(source, /createAwsCodeConnection/);
   assert.match(source, /refreshAwsCodeConnection/);

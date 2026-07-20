@@ -258,7 +258,7 @@ export function DeploymentConsoleShell({
               onClick={() => selectScreen("deployment")}
               type="button"
             >
-              직접 배포
+              배포
             </button>
             <button
               aria-pressed={activeScreen === "cicd"}

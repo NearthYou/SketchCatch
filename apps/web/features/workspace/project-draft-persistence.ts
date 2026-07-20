@@ -36,7 +36,6 @@ export type LocalProjectDraft = {
 
 export type InitialDiagramChoice = {
   diagramJson: DiagramJson;
-  requiresRecoveryDecision?: true | undefined;
   terraformFiles?: TerraformSyncFileInput[] | undefined;
   source: "server" | "local" | "empty";
 };
@@ -119,23 +118,6 @@ export function chooseInitialDiagram({
   localDraft: LocalProjectDraft | null;
   fallbackDiagram: DiagramJson;
 }): InitialDiagramChoice {
-  if (serverDraft && localDraft) {
-    if (localDraft.dirty) {
-      return {
-        diagramJson: localDraft.diagramJson,
-        ...(localDraft.terraformFiles ? { terraformFiles: localDraft.terraformFiles } : {}),
-        requiresRecoveryDecision: true,
-        source: "local"
-      };
-    }
-
-    return {
-      diagramJson: serverDraft.diagramJson,
-      ...(serverDraft.terraformFiles ? { terraformFiles: serverDraft.terraformFiles } : {}),
-      source: "server"
-    };
-  }
-
   if (serverDraft) {
     return {
       diagramJson: serverDraft.diagramJson,

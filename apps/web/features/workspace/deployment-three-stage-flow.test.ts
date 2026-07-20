@@ -91,16 +91,16 @@ test("workspace runtime actions use icon-only controls", () => {
   );
 });
 
-test("the modal distinguishes the Direct Deployment path from its execution step", () => {
+test("the modal labels the primary deployment path as 배포", () => {
   const navigationStart = deploymentShellSource.indexOf(
     '<nav className={styles.deploymentConsoleScreenNavigation}'
   );
   const navigationEnd = deploymentShellSource.indexOf("</nav>", navigationStart);
   const navigationSource = deploymentShellSource.slice(navigationStart, navigationEnd);
 
-  assert.match(navigationSource, />\s*직접 배포\s*</);
+  assert.match(navigationSource, />\s*배포\s*</);
   assert.match(navigationSource, />\s*CI\/CD\s*</);
-  assert.doesNotMatch(navigationSource, />\s*배포\s*</);
+  assert.doesNotMatch(navigationSource, />\s*직접 배포\s*</);
 });
 
 test("deployment preparation flushes the synchronized draft before artifact creation", () => {
@@ -525,10 +525,16 @@ test("the stepper is the only heading before workspace actions", () => {
   assert.match(workspaceStyles, /"steps"\s*"workspace"\s*"actions"/s);
 });
 
-test("deployment action buttons use one size and fill only while active", () => {
+test("deployment action buttons fit their label without clipping", () => {
   const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
   const resultsStart = directDeploymentSource.indexOf("const renderResultsSection", actionsStart);
   const actionsSource = directDeploymentSource.slice(actionsStart, resultsStart);
+  const actionRailStart = workspaceStyles.indexOf("/* Direct Deployment action rail */");
+  const executiveConsoleStart = workspaceStyles.indexOf(
+    "/* Approved blue executive deployment console */",
+    actionRailStart
+  );
+  const actionRailStyles = workspaceStyles.slice(actionRailStart, executiveConsoleStart);
 
   assert.match(actionsSource, /data-active=/);
   assert.match(
@@ -536,8 +542,16 @@ test("deployment action buttons use one size and fill only while active", () => 
     /\.deploymentConsoleGrid > \.deploymentStepActionBar\s*\{[^}]*justify-content:\s*start;[^}]*justify-items:\s*start;/s
   );
   assert.match(
-    workspaceStyles,
-    /\.deploymentConsoleGrid > \.deploymentStepActionBar > button,[\s\S]*?font-size:\s*calc\(14px \+ var\(--presentation-font-size-increase\)\);[\s\S]*?height:\s*44px;[\s\S]*?justify-content:\s*center;[\s\S]*?justify-self:\s*start;[\s\S]*?min-width:\s*152px;[\s\S]*?width:\s*152px;/
+    actionRailStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar > button,[\s\S]*?flex:\s*0 1 auto;[\s\S]*?font-size:\s*calc\(14px \+ var\(--presentation-font-size-increase\)\);[\s\S]*?height:\s*44px;[\s\S]*?min-width:\s*152px;[\s\S]*?white-space:\s*nowrap;[\s\S]*?width:\s*auto;/
+  );
+  assert.doesNotMatch(
+    actionRailStyles,
+    /(?:flex:\s*0 0 152px|(?:^|\n)\s*width:\s*152px)/
+  );
+  assert.match(
+    actionRailStyles,
+    /@media \(max-width:\s*420px\)[\s\S]*?min-width:\s*0;[\s\S]*?width:\s*100%;/
   );
   assert.match(
     workspaceStyles,

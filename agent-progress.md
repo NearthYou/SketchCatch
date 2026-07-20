@@ -4,6 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- The parked JH Workspace changes are restored on `dev`: Deployment uses the shorter `배포` label and intrinsic action width, Settings omits redundant CodeBuild authorization copy, and Project Draft loading uses the server draft whenever one exists without rendering the removed local-recovery chooser.
 - Terraform reverse sync accepts references to its allowlisted utility resources, so generated Runtime Secret values such as `random_password.check_in_signing.result` round-trip without a false manual-edit warning.
 - The Direct Deployment branch includes `origin/dev` through `fce1d6c0`, removes duplicate deployment summaries, and keeps selected history details within the active filter. Eighty-six focused Web tests and the root harness, lint, typecheck, and build checks pass.
 - Branch `codex/ai-error-analysis-progress-v2` includes the current `origin/dev` through `266f0a81` and adds compact circular estimated progress to Workspace AI Terraform error analysis.
@@ -19,6 +20,13 @@ Short English-only working log for the current agent context. Older records are 
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
+
+### 2026-07-20 - Restore parked JH Workspace changes on dev
+
+- Reapplied the tracked changes from the retained `Refactor/jh/498-배포-ui-수정` WIP stash on top of current `dev`, preserving the separate Terraform reverse-sync commit and both sides of the progress-log conflict.
+- Restored the compact Deployment label and intrinsic action width, removed redundant Settings authorization copy, and made an existing server Project Draft authoritative over a dirty IndexedDB draft while preserving server-less local fallback and real save-conflict handling.
+- Focused Workspace and Settings checks pass 77/77. Root lint, typecheck, and all five build tasks pass; the completed Turbo build process was terminated after the known exit hang. The full Web suite passes 1,039 of 1,041 tests, with two unchanged Live Observation source-marker failures outside the restored files.
+- No dependency, lockfile, DB migration, Terraform execution, cloud mutation, production deployment, or Git/CI/CD handoff was performed.
 
 ### 2026-07-20 - Accept generated utility references during Terraform reverse sync
 
@@ -39,6 +47,27 @@ Short English-only working log for the current agent context. Older records are 
 - Fetched the force-updated remote `dev`, aligned local `dev` exactly at `266f0a81`, and merged it into `Refactor/jh/498-배포-ui-수정` while preserving the branch-specific Direct Deployment record and the newer completed sandbox state.
 - The only merge conflict was `agent-progress.md`; no product behavior or imported migration was manually changed during conflict resolution.
 - Seventy focused Direct Deployment tests, `pnpm harness:check`, `pnpm lint`, and `pnpm typecheck` pass. `pnpm build` reported all five package tasks successful; the known Turbo exit hang was terminated after the success summary.
+
+### 2026-07-20 - Keep the Deployment validation action readable
+
+- Renamed the primary Deployment console tab from `직접 배포` to `배포`.
+- Replaced the fixed 152 px action-button basis and width with intrinsic sizing while retaining the 44 px control height and full-width mobile layout. Authenticated Chrome QA at 1345x1003 and 390x844 confirmed that the validation label is not clipped.
+- Focused Direct Deployment regressions pass 85/85; root harness, lint, typecheck, and all five build tasks pass. The completed build process was stopped after Turbo remained attached to the existing user-owned Next dev server. No deployment, cloud mutation, contract, migration, dependency, commit, or push was performed.
+
+### 2026-07-20 - Fast-forward dev and the active branch
+
+- Fetched `origin/dev` and the active remote branch, then fast-forwarded local `dev` and `Refactor/jh/498-배포-ui-수정` from `3a26123b` to `252e7085` without pushing.
+- Preserved the existing dirty worktree through a temporary stash; the two local recovery-file deletions and the current progress records were retained while accepting the latest `dev` baseline. Final harness, conflict-marker, branch-alignment, and diff checks pass.
+
+### 2026-07-20 - Plan Direct Deployment UI deduplication
+
+- Added an implementation plan that removes repeated Direct Deployment step headings, Plan/scope/build metrics, validation readiness summaries, repeated execution facts, and empty-history controls while preserving approval and final AWS target safety checks.
+- The plan defines five TDD work units, responsive read-only browser QA, focused Web regressions, and required root checks. Only documentation and the prior Impeccable critique snapshot changed; no runtime code, API contract, DB migration, dependency, Terraform execution, AWS mutation, Deployment, commit, or push was performed.
+
+### 2026-07-20 - Remove the local draft recovery chooser
+
+- Removed the Workspace dialog that asked users to choose between a dirty IndexedDB draft and the latest server draft. When a server draft exists, Workspace now opens it and synchronizes the local cache to the same revision; server-less local fallback and real 409 conflict handling remain intact.
+- TDD regressions pass 31/31; root lint, typecheck, and production build pass. The full Web suite exposed unrelated branch-baseline failures in Architecture knowledge artifact and AI chat source assertions, then its long-running diagram adapter test was stopped after more than ten minutes. No API, DB migration, dependency, cloud mutation, deployment, commit, or push was performed.
 
 ### 2026-07-20 - Remove duplicate Direct Deployment UI summaries
 

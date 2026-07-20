@@ -504,9 +504,6 @@ export function SettingsDashboardClient() {
               <DashboardIcon name="github" />
               <div>
                 <h2>AWS CodeBuild용 GitHub 권한</h2>
-                <p>위 GitHub 계정을 사용할 수 있도록 선택한 AWS 계정에서 별도 승인을 진행합니다.</p>
-                <p>AWS 또는 GitHub 승인 세션이 남아 있으면 로그인 화면이 생략될 수 있습니다.</p>
-                <p>AWS는 승인한 GitHub 계정 이름을 반환하지 않으므로, 프로젝트별 실제 Repository checkout으로 최종 접근을 검증합니다.</p>
               </div>
             </header>
             <GitHubAuthorizationTargetNotice
