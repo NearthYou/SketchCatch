@@ -122,6 +122,14 @@ Short English-only working log for the current agent context. Older records are 
 - Moved eight older 2026-07-20 completion records to `docs/agent-history/2026-07.md` after CI reported that `agent-progress.md` exceeded its 24,000-byte limit.
 - Kept all archived content intact and left application code, dependencies, database migrations, cloud resources, and deployment behavior unchanged.
 
+### 2026-07-20 - Streamline AI architecture clarification
+
+- Reduced the deterministic Architecture Draft intake to six product questions: website type, traffic, database, region, monthly budget, and management preference.
+- Added default assumptions for HTTPS, a three-second loading target, 99.9% availability, WebSocket when realtime is requested, and private S3 plus CloudFront when file upload is requested.
+- Preserved explicit natural-language requirements over defaults and retained provider follow-up clarification for genuinely ambiguous details.
+- Verified 22 focused Architecture Draft tests, focused TypeScript checking, and ESLint on the two changed service files. Unrelated tests were intentionally not run.
+- Root lint passed. Root typecheck and build remain blocked by the pre-existing getRepositoryRequiredRuntimeSecrets reference error in repository-start-client.tsx; that unrelated worktree change was not modified.
+
 ## Known Risk
 
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
