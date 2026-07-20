@@ -7,6 +7,7 @@ import type {
 } from "@sketchcatch/types";
 import type { GitCicdHandoffReadinessItem } from "./cicd-handoff";
 import { groupGitCicdReadiness } from "./cicd-delivery-presentation";
+import { CicdChangeReview } from "./CicdChangeReview";
 import handoffStyles from "./cicd-handoff.module.css";
 import styles from "./workspace.module.css";
 
@@ -242,27 +243,16 @@ export function CicdHandoffPanel({
                   GitHub Pull Request 열기
                 </a>
               ) : null}
-              {currentHandoff.repositorySettingsPreview ? (
-                <button
-                  className={styles.deploymentSecondaryButton}
-                  disabled={isHandoffBusy}
-                  onClick={() => onApplyRepositorySettings(currentHandoff.id)}
-                  type="button"
-                >
-                  Repository 설정 적용
-                </button>
-              ) : null}
-              {currentHandoff.awsRoleDiff && !currentHandoff.awsRoleDiff.applied ? (
-                <button
-                  className={styles.deploymentSecondaryButton}
-                  disabled={isHandoffBusy}
-                  onClick={() => onApplyAwsRoleDiff(currentHandoff.id)}
-                  type="button"
-                >
-                  AWS Role 변경 적용
-                </button>
-              ) : null}
             </div>
+            <CicdChangeReview
+              awsRoleDiff={currentHandoff.awsRoleDiff}
+              handoffId={currentHandoff.id}
+              isBusy={isHandoffBusy}
+              key={currentHandoff.id}
+              onApplyAwsRoleDiff={onApplyAwsRoleDiff}
+              onApplyRepositorySettings={onApplyRepositorySettings}
+              repositorySettingsPreview={currentHandoff.repositorySettingsPreview}
+            />
           </div>
           <section className={handoffStyles.commandCard} aria-labelledby="infra-command-title">
             <div>

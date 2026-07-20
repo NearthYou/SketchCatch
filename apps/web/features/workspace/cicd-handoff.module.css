@@ -162,6 +162,135 @@
   font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
+.changeReview {
+  border-top: 1px solid var(--workspace-line-strong, #dcdee0);
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  width: 100%;
+}
+
+.changeReviewHeading h4,
+.changeReviewHeading p,
+.changeReviewCard h5,
+.changeReviewCard header p,
+.reviewList h6,
+.reviewList p,
+.changeReviewWarning {
+  margin: 0;
+}
+
+.changeReviewHeading p,
+.changeReviewCard header p,
+.reviewList p {
+  color: var(--workspace-muted, #60646c);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+.changeReviewCard {
+  background: var(--workspace-surface, #fff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.changeReviewCard > header {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.changeReviewCard > header > span {
+  background: #fff8c5;
+  border-radius: 999px;
+  color: #633c01;
+  flex: 0 0 auto;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  padding: 4px 8px;
+}
+
+.changeReviewCard > header > span[data-applied="true"] {
+  background: #dafbe1;
+  color: #116329;
+}
+
+.changeReviewFacts {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.changeReviewFacts > div,
+.reviewList dl > div {
+  min-width: 0;
+}
+
+.changeReviewFacts dt,
+.reviewList dt,
+.reviewList h6 {
+  color: var(--workspace-muted, #60646c);
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.changeReviewFacts dd,
+.reviewList dd {
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.reviewList {
+  display: grid;
+  gap: 6px;
+}
+
+.reviewList dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.reviewList dl > div {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(0, 1.2fr);
+  padding: 8px 10px;
+}
+
+.reviewList dd {
+  margin: 0;
+}
+
+.changeConfirmation {
+  align-items: flex-start;
+  display: flex;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.changeConfirmation input {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.changeReviewWarning {
+  color: var(--workspace-error, #b42318);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
 .readiness {
   background: var(--workspace-surface-muted, #fafafa);
   border: 1px solid var(--workspace-line-strong, #dcdee0);

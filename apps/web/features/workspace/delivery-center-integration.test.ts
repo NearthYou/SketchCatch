@@ -5,6 +5,7 @@ import test from "node:test";
 const panelSource = readFileSync(new URL("./DeliveryCenterPanel.tsx", import.meta.url), "utf8");
 const cicdConsoleSource = readFileSync(new URL("./CicdConsoleScreen.tsx", import.meta.url), "utf8");
 const handoffPanelSource = readFileSync(new URL("./CicdHandoffPanel.tsx", import.meta.url), "utf8");
+const changeReviewSource = readFileSync(new URL("./CicdChangeReview.tsx", import.meta.url), "utf8");
 const shellSource = readFileSync(new URL("./DeploymentConsoleShell.tsx", import.meta.url), "utf8");
 const rightPanelSource = readFileSync(
   new URL("./WorkspaceRightPanel.tsx", import.meta.url),
@@ -99,6 +100,17 @@ test("CI/CD Delivery shows readiness once beside the PR action", () => {
   assert.match(handoffPanelSource, /remainingLabel/);
   assert.match(handoffPanelSource, /readinessGroup\.required\.map/);
   assert.match(handoffPanelSource, /readinessGroup\.completed\.map/);
+});
+
+test("external settings require an exact preview confirmation before apply", () => {
+  assert.match(handoffPanelSource, /<CicdChangeReview/);
+  assert.doesNotMatch(handoffPanelSource, />\s*Repository 설정 적용\s*</);
+  assert.doesNotMatch(handoffPanelSource, />\s*AWS Role 변경 적용\s*</);
+  assert.match(changeReviewSource, /getRepositorySettingsPreviewRevision/);
+  assert.match(changeReviewSource, /getAwsRoleDiffPreviewRevision/);
+  assert.match(changeReviewSource, /confirmedRepositoryRevision === repositoryRevision/);
+  assert.match(changeReviewSource, /isBusy \|\| !canApplyRepository/);
+  assert.match(changeReviewSource, /이름만 표시/);
 });
 
 test("deployment modal renders Delivery in its existing CI/CD screen", () => {
