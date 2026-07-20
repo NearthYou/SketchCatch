@@ -4,7 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch `dev` matches `origin/dev` at `8e72a20d`; the current worktree contains the Fixed Template runtime-Secret correction requested directly on `dev`.
+- Branch `codex/ai-error-analysis-progress-v2` is based on the current `origin/dev` at `0e064877` and adds compact circular estimated progress to Workspace AI Terraform error analysis.
 - The legacy `practice` Deployment profile is removed; `demo_web_service` is the default live profile, and imported migration `0054` rewrites legacy rows before removing the enum value.
 - Live Observation renders bounded traffic motion, a task-count-responsive Fargate fleet, and collapsed operational analysis without development-only traffic or Task preview controls.
 - Delayed first CloudWatch points retain request and capacity evidence, and stopped sessions no longer continue the countdown.
@@ -16,6 +16,14 @@ Short English-only working log for the current agent context. Older records are 
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
+
+### 2026-07-20 - Add compact AI error analysis progress
+
+- Added a 44px circular progress gauge to the error-analysis card header with a numeric percentage and a visible estimated-state label.
+- Combined elapsed time with completed-item counts for single and batch analysis, while capping an active request below 100% until the API actually completes.
+- Added calculation, rendered accessibility, and Workbench integration regressions; all 33 focused checks pass.
+- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass. The full Web suite was also attempted and remains non-green only on unrelated current-`dev` Architecture Board, thumbnail, Diagram Editor, and Live Observation baselines.
+- No dependency, lockfile, database migration, cloud, or deployment change was made.
 
 ### 2026-07-20 - Complete Fixed Template runtime Secret convergence
 
@@ -71,6 +79,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Known Risk
 
+- Error-analysis percentage is an elapsed-time estimate because the current AI endpoint does not expose server-side progress; the active item rises from 8% to 94% and disappears only on the real completion state.
 - Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
 - Root `pnpm test` is not green because unchanged baseline tests fail in `live-observation-modal-contract.test.ts` (two stale source markers) and `application-artifact-registry.test.ts` (one cancelled lease-heartbeat test).
 - End-to-end Live Observation animation and provider-confirmed scale-out remain unaccepted because the active UI session missed the traffic before the delayed-snapshot fix.
@@ -81,3 +90,4 @@ Short English-only working log for the current agent context. Older records are 
 
 1. Deploy the reviewed `dev` commit through the normal production workflow; no DB migration is required.
 2. Sign in as the owner of project `4b06fa5d`, re-analyze the current repository revision, regenerate the Fixed Template Board, and prepare a new Plan for explicit approval.
+3. Observe the compact gauge against a real delayed error-analysis response and consider server-reported stages only if the API contract later exposes them.
