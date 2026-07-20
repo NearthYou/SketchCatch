@@ -38,6 +38,8 @@ const REFERENCE_PATTERN =
   /^(?:var|local|each|count|path|terraform)\.[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$|^module\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$|^(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$|^data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 const DEPENDENCY_ADDRESS_PATTERN =
   /^(?:(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|module\.[A-Za-z0-9_-]+)$/;
+const RESOURCE_REFERENCE_PATTERN =
+  /^([A-Za-z_][A-Za-z0-9_-]*)\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 const TERRAFORM_UTILITY_BLOCK_KEYS = new Set(["resource/random_password", "resource/terraform_data"]);
 type ParsedBlock = {
   blockType: TerraformBlockType;
@@ -621,6 +623,15 @@ function isProposalSupportedBlock(identity: TerraformBlockIdentity): boolean {
 function isKnownTerraformUtilityBlock(identity: TerraformBlockIdentity): boolean {
   return TERRAFORM_UTILITY_BLOCK_KEYS.has(
     `${identity.terraformBlockType}/${identity.resourceType}`
+  );
+}
+
+function isKnownTerraformUtilityReference(literal: string): boolean {
+  const resourceType = RESOURCE_REFERENCE_PATTERN.exec(literal)?.[1];
+
+  return (
+    resourceType !== undefined &&
+    TERRAFORM_UTILITY_BLOCK_KEYS.has(`${DEFAULT_TERRAFORM_BLOCK_TYPE}/${resourceType}`)
   );
 }
 
@@ -1474,6 +1485,7 @@ class HclValueParser {
 
     if (
       REFERENCE_PATTERN.test(literal) ||
+      isKnownTerraformUtilityReference(literal) ||
       (this.allowDependencyAddress && DEPENDENCY_ADDRESS_PATTERN.test(literal)) ||
       (this.allowBareIdentifier && IDENTIFIER_PATTERN.test(literal))
     ) {

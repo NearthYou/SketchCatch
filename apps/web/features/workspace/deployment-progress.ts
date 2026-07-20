@@ -1,39 +1,30 @@
-import type { Deployment, DeploymentLog, DeploymentStage } from "@sketchcatch/types";
+import type {
+  Deployment,
+  DeploymentProgressSnapshot,
+  DeploymentStage
+} from "@sketchcatch/types";
 
 export type DeploymentProgressOperation = "apply" | "destroy" | "destroy-plan" | "plan";
 
 type ProgressDeployment = Pick<
   Deployment,
-  | "activeStage"
-  | "currentPlanOperation"
-  | "id"
-  | "planSummary"
-  | "startedAt"
-  | "status"
+  "activeStage" | "currentPlanOperation" | "failureStage" | "id" | "status"
 >;
 
-type ProgressLog = Pick<DeploymentLog, "createdAt" | "message" | "stage">;
-
-export type DeploymentProgress = {
+export type DeploymentProgressPresentation = {
   readonly detail: string;
+  readonly mode: "complete" | "determinate" | "estimated" | "status";
   readonly operation: DeploymentProgressOperation;
-  readonly percent: number;
+  readonly percent: number | null;
   readonly title: string;
+  readonly valueLabel: string;
 };
 
-export type DeploymentProgressInput = {
+export type DeploymentProgressPresentationInput = {
   readonly deployment: ProgressDeployment | null;
   readonly isStarting: boolean;
-  readonly logs: readonly ProgressLog[];
-  readonly nowMs?: number;
   readonly operationHint: DeploymentProgressOperation | null;
-  readonly requestedAtMs?: number | null;
-};
-
-type ProgressWindow = {
-  readonly expectedSeconds: number;
-  readonly maximum: number;
-  readonly minimum: number;
+  readonly snapshot: DeploymentProgressSnapshot | null;
 };
 
 const OPERATION_TITLES: Readonly<Record<DeploymentProgressOperation, string>> = {
@@ -43,107 +34,112 @@ const OPERATION_TITLES: Readonly<Record<DeploymentProgressOperation, string>> = 
   plan: "Terraform Plan 생성 중"
 };
 
-const STAGE_WINDOWS: Readonly<Record<DeploymentStage, ProgressWindow>> = {
-  init: { expectedSeconds: 35, maximum: 29, minimum: 12 },
-  validate: { expectedSeconds: 25, maximum: 46, minimum: 31 },
-  plan: { expectedSeconds: 90, maximum: 94, minimum: 48 },
-  apply: { expectedSeconds: 210, maximum: 94, minimum: 16 },
-  application_release: { expectedSeconds: 300, maximum: 94, minimum: 48 },
-  preflight: { expectedSeconds: 120, maximum: 46, minimum: 12 },
-  rollback: { expectedSeconds: 180, maximum: 94, minimum: 16 },
-  destroy: { expectedSeconds: 210, maximum: 94, minimum: 16 }
+const STARTING_ESTIMATED_PERCENT = 5;
+
+const STAGE_ESTIMATED_PERCENT: Readonly<Record<DeploymentStage, number>> = {
+  init: 15,
+  preflight: 30,
+  validate: 45,
+  plan: 75,
+  apply: 15,
+  application_release: 99,
+  rollback: 70,
+  destroy: 15
 };
 
-const RESOURCE_COMPLETION_PATTERN =
-  /([\w.-]+(?:\[[^\]]+\])?):\s+(?:Creation|Modifications|Destruction) complete/i;
+export function getDeploymentProgressPresentation(
+  input: DeploymentProgressPresentationInput
+): DeploymentProgressPresentation | null {
+  const snapshot =
+    input.snapshot &&
+    (!input.deployment || input.snapshot.deploymentId === input.deployment.id)
+      ? input.snapshot
+      : null;
+  const operation = resolveDeploymentProgressOperation(input.deployment, input.operationHint);
 
-export function advanceDisplayedDeploymentProgress(
-  currentPercent: number,
-  targetPercent: number
-): number {
-  const current = Math.min(100, Math.max(0, Math.floor(currentPercent)));
-  const target = Math.min(100, Math.max(0, Math.floor(targetPercent)));
+  if (snapshot?.measurement.kind === "complete") {
+    const wasDestroyed = snapshot.status === "DESTROYED";
 
-  if (target <= current) {
-    return current;
+    return {
+      detail: wasDestroyed
+        ? "승인된 리소스 정리가 완료되었습니다."
+        : "승인된 배포 작업이 완료되었습니다.",
+      mode: "complete",
+      operation,
+      percent: 100,
+      title: wasDestroyed ? "리소스 정리 완료" : "배포 완료",
+      valueLabel: "100% 완료"
+    };
   }
 
-  return Math.min(target, current + 1);
-}
+  if (snapshot && isFailureStatus(snapshot.status)) {
+    return {
+      detail: getTerminalStatusDetail(snapshot.status, snapshot.failureStage),
+      mode: "status",
+      operation,
+      percent: null,
+      title: snapshot.status === "PARTIALLY_FAILED" ? "배포 일부 실패" : "배포 실패",
+      valueLabel: "실패"
+    };
+  }
 
-export function getDeploymentProgress(
-  input: DeploymentProgressInput
-): DeploymentProgress | null {
-  const isRunning = input.deployment?.status === "RUNNING";
+  if (snapshot && isCancelledStatus(snapshot.status)) {
+    return {
+      detail: "배포 실행이 취소되었습니다.",
+      mode: "status",
+      operation,
+      percent: null,
+      title: snapshot.status === "PARTIALLY_CANCELED" ? "배포 일부 취소" : "배포 취소",
+      valueLabel: "취소"
+    };
+  }
+
+  const activeStage = snapshot?.activeStage ?? input.deployment?.activeStage ?? null;
+
+  if (snapshot?.measurement.kind === "resource_count" && activeStage) {
+    const { completedUnits, percent, totalUnits } = snapshot.measurement;
+
+    return {
+      detail: `${getStageDetail(operation, activeStage)} ${completedUnits}/${totalUnits}개 완료`,
+      mode: "determinate",
+      operation,
+      percent,
+      title: getStageTitle(operation, activeStage),
+      valueLabel: `${percent}%`
+    };
+  }
+
+  const isRunning = snapshot?.status === "RUNNING" || input.deployment?.status === "RUNNING";
 
   if (!input.isStarting && !isRunning) {
     return null;
   }
 
-  const nowMs = input.nowMs ?? Date.now();
-  const operation = resolveDeploymentProgressOperation(
-    input.deployment,
-    input.logs,
-    input.operationHint
-  );
-  const activeStage = input.deployment?.activeStage ?? null;
-
   if (!activeStage) {
-    const requestedAtMs = input.requestedAtMs ?? nowMs;
-    const elapsedSeconds = Math.max(0, (nowMs - requestedAtMs) / 1_000);
-    const percent = Math.min(10, 4 + Math.floor(elapsedSeconds / 2));
-
     return {
       detail: "실행 요청을 전달하고 Terraform 작업 환경을 준비하고 있습니다.",
+      mode: "estimated",
       operation,
-      percent,
-      title: OPERATION_TITLES[operation]
+      percent: STARTING_ESTIMATED_PERCENT,
+      title: OPERATION_TITLES[operation],
+      valueLabel: `약 ${STARTING_ESTIMATED_PERCENT}%`
     };
   }
 
-  const stageLogs = input.logs.filter((log) => log.stage === activeStage);
-  const stageStartedAtMs = getStageStartedAtMs(
-    stageLogs,
-    input.deployment?.startedAt ?? null,
-    input.requestedAtMs ?? null,
-    nowMs
-  );
-  const elapsedSeconds = Math.max(0, (nowMs - stageStartedAtMs) / 1_000);
-  const progressWindow = STAGE_WINDOWS[activeStage];
-  const timeRatio = 1 - Math.exp(-elapsedSeconds / progressWindow.expectedSeconds);
-  const logRatio = 1 - Math.exp(-stageLogs.length / 10);
-  let activityRatio = Math.max(timeRatio * 0.9, logRatio);
-  const resourceProgress = getResourceProgress(input.deployment, input.logs, activeStage);
-
-  if (resourceProgress) {
-    activityRatio = Math.max(
-      activityRatio,
-      resourceProgress.completedCount / resourceProgress.expectedCount
-    );
-  }
-
-  let percent = Math.floor(
-    progressWindow.minimum +
-      (progressWindow.maximum - progressWindow.minimum) * Math.min(1, activityRatio)
-  );
-
-  if (hasTerraformCompletionLog(input.logs, activeStage)) {
-    percent = Math.max(percent, 98);
-  }
-
-  const detail = getStageDetail(operation, activeStage, resourceProgress);
+  const estimatedPercent = STAGE_ESTIMATED_PERCENT[activeStage];
 
   return {
-    detail,
+    detail: getStageDetail(operation, activeStage),
+    mode: "estimated",
     operation,
-    percent: Math.min(98, Math.max(progressWindow.minimum, percent)),
-    title: getStageTitle(operation, activeStage)
+    percent: estimatedPercent,
+    title: getStageTitle(operation, activeStage),
+    valueLabel: `약 ${estimatedPercent}%`
   };
 }
 
 export function resolveDeploymentProgressOperation(
   deployment: ProgressDeployment | null,
-  logs: readonly ProgressLog[],
   operationHint: DeploymentProgressOperation | null
 ): DeploymentProgressOperation {
   if (deployment?.activeStage === "apply") {
@@ -158,91 +154,16 @@ export function resolveDeploymentProgressOperation(
     return operationHint;
   }
 
-  const hasDestroyPlanEvidence = logs.some((log) =>
-    /terraform\s+(?:destroy plan|plan\s+-destroy)/i.test(log.message)
-  );
-
-  if (
-    hasDestroyPlanEvidence ||
-    (deployment?.activeStage === "plan" && deployment.currentPlanOperation === "destroy")
-  ) {
+  if (deployment?.activeStage === "plan" && deployment.currentPlanOperation === "destroy") {
     return "destroy-plan";
   }
 
   return "plan";
 }
 
-function getStageStartedAtMs(
-  stageLogs: readonly ProgressLog[],
-  deploymentStartedAt: string | null,
-  requestedAtMs: number | null,
-  nowMs: number
-): number {
-  const firstStageLogAt = stageLogs
-    .map((log) => Date.parse(log.createdAt))
-    .filter(Number.isFinite)
-    .sort((left, right) => left - right)[0];
-
-  if (firstStageLogAt !== undefined) {
-    return firstStageLogAt;
-  }
-
-  const deploymentStartedAtMs = deploymentStartedAt ? Date.parse(deploymentStartedAt) : Number.NaN;
-
-  if (Number.isFinite(deploymentStartedAtMs)) {
-    return deploymentStartedAtMs;
-  }
-
-  return requestedAtMs ?? nowMs;
-}
-
-function getResourceProgress(
-  deployment: ProgressDeployment | null,
-  logs: readonly ProgressLog[],
-  activeStage: DeploymentStage
-): { readonly completedCount: number; readonly expectedCount: number } | null {
-  if ((activeStage !== "apply" && activeStage !== "destroy") || !deployment?.planSummary) {
-    return null;
-  }
-
-  const expectedCount =
-    deployment.planSummary.createCount +
-    deployment.planSummary.updateCount +
-    deployment.planSummary.deleteCount +
-    deployment.planSummary.replaceCount;
-
-  if (expectedCount <= 0) {
-    return null;
-  }
-
-  const completedResources = new Set<string>();
-
-  for (const log of logs) {
-    if (log.stage !== activeStage) continue;
-    const match = RESOURCE_COMPLETION_PATTERN.exec(log.message);
-    if (match?.[1]) completedResources.add(match[1]);
-  }
-
-  return {
-    completedCount: Math.min(expectedCount, completedResources.size),
-    expectedCount
-  };
-}
-
-function hasTerraformCompletionLog(
-  logs: readonly ProgressLog[],
-  activeStage: DeploymentStage
-): boolean {
-  return logs.some(
-    (log) =>
-      log.stage === activeStage && /(?:Apply|Destroy) complete!?/i.test(log.message)
-  );
-}
-
 function getStageDetail(
   operation: DeploymentProgressOperation,
-  activeStage: DeploymentStage,
-  resourceProgress: { readonly completedCount: number; readonly expectedCount: number } | null
+  activeStage: DeploymentStage
 ): string {
   if (activeStage === "init") {
     return "Terraform 실행 환경과 Provider를 초기화하고 있습니다.";
@@ -270,16 +191,9 @@ function getStageDetail(
     return "실패한 변경을 이전 상태로 되돌리고 있습니다.";
   }
 
-  const baseDetail =
-    activeStage === "destroy"
-      ? "승인된 리소스를 안전하게 정리하고 있습니다."
-      : "승인된 변경사항을 클라우드에 적용하고 있습니다.";
-
-  if (!resourceProgress || resourceProgress.completedCount === 0) {
-    return baseDetail;
-  }
-
-  return `${baseDetail} ${resourceProgress.completedCount}/${resourceProgress.expectedCount}개 완료`;
+  return activeStage === "destroy"
+    ? "승인된 리소스를 안전하게 정리하고 있습니다."
+    : "승인된 변경사항을 클라우드에 적용하고 있습니다.";
 }
 
 function getStageTitle(
@@ -290,4 +204,23 @@ function getStageTitle(
   if (activeStage === "application_release") return "애플리케이션 릴리즈 중";
   if (activeStage === "rollback") return "배포 롤백 중";
   return OPERATION_TITLES[operation];
+}
+
+function isFailureStatus(status: Deployment["status"]): boolean {
+  return status === "FAILED" || status === "PARTIALLY_FAILED";
+}
+
+function isCancelledStatus(status: Deployment["status"]): boolean {
+  return status === "CANCELLED" || status === "PARTIALLY_CANCELED";
+}
+
+function getTerminalStatusDetail(
+  status: Deployment["status"],
+  failureStage: DeploymentProgressSnapshot["failureStage"]
+): string {
+  const stageLabel = failureStage ? ` (${failureStage})` : "";
+
+  return status === "PARTIALLY_FAILED"
+    ? `일부 배포 작업이 완료되지 않았습니다${stageLabel}.`
+    : `배포 작업이 완료되지 않았습니다${stageLabel}.`;
 }

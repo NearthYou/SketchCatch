@@ -2091,6 +2091,25 @@ export type DeploymentStage =
   | "rollback"
   | "destroy";
 
+export type DeploymentProgressMeasurement =
+  | { kind: "indeterminate" }
+  | {
+      kind: "resource_count";
+      completedUnits: number;
+      totalUnits: number;
+      percent: number;
+    }
+  | { kind: "complete"; percent: 100 };
+
+export type DeploymentProgressSnapshot = {
+  deploymentId: string;
+  status: DeploymentStatus;
+  activeStage: DeploymentStage | null;
+  failureStage: DeploymentFailureStage | null;
+  measurement: DeploymentProgressMeasurement;
+  updatedAt: IsoDateTimeString;
+};
+
 export type Template = {
   id: string;
   ownerId: string;
@@ -2707,6 +2726,10 @@ export type LiveObservationV2SnapshotResponse = {
 
 export type DeploymentResponse = {
   deployment: Deployment;
+};
+
+export type DeploymentProgressResponse = {
+  progress: DeploymentProgressSnapshot;
 };
 
 export type DeploymentListResponse = {

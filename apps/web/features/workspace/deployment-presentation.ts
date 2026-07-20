@@ -113,19 +113,29 @@ export function resolveDeploymentHistorySelection<T extends DeploymentHistorySum
   readonly currentSelectionId: string;
   readonly deployments: readonly T[];
   readonly previousLatestDeploymentId: string;
+  readonly visibleDeploymentIds?: readonly string[];
 }): { readonly latestDeploymentId: string; readonly selectedDeploymentId: string } {
   const entries = getDeploymentHistoryEntries(input.deployments);
   const latestDeploymentId = entries[0]?.deployment.id ?? "";
-  const currentSelectionIsAvailable = entries.some(
+  const visibleDeploymentIdSet = input.visibleDeploymentIds
+    ? new Set(input.visibleDeploymentIds)
+    : null;
+  const visibleEntries = visibleDeploymentIdSet
+    ? entries.filter(({ deployment }) => visibleDeploymentIdSet.has(deployment.id))
+    : entries;
+  const latestVisibleDeploymentId = visibleEntries[0]?.deployment.id ?? "";
+  const currentSelectionIsAvailable = visibleEntries.some(
     ({ deployment }) => deployment.id === input.currentSelectionId
   );
   const hasNewSuccessfulDeployment = latestDeploymentId !== input.previousLatestDeploymentId;
+  const newestSuccessfulDeploymentIsVisible = latestDeploymentId === latestVisibleDeploymentId;
 
   return {
     latestDeploymentId,
     selectedDeploymentId:
-      !currentSelectionIsAvailable || hasNewSuccessfulDeployment
-        ? latestDeploymentId
+      !currentSelectionIsAvailable ||
+      (hasNewSuccessfulDeployment && newestSuccessfulDeploymentIsVisible)
+        ? latestVisibleDeploymentId
         : input.currentSelectionId
   };
 }

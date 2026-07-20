@@ -4,7 +4,10 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch `codex/fix-error-progress-completion` is based on `origin/dev` at `fce1d6c0` and keeps the compact Workspace AI Terraform error-analysis gauge visible through an explicit successful 100% completion state.
+- Branch `codex/fix-error-progress-completion` includes `origin/dev` through `d189cda3` and keeps the compact Workspace AI Terraform error-analysis gauge visible through an explicit successful 100% completion state.
+- The parked JH Workspace changes are restored on `dev`: Deployment uses the shorter `배포` label and intrinsic action width, Settings omits redundant CodeBuild authorization copy, and Project Draft loading uses the server draft whenever one exists without rendering the removed local-recovery chooser.
+- Terraform reverse sync accepts references to its allowlisted utility resources, so generated Runtime Secret values such as `random_password.check_in_signing.result` round-trip without a false manual-edit warning.
+- The Direct Deployment branch includes `origin/dev` through `fce1d6c0`, removes duplicate deployment summaries, and keeps selected history details within the active filter. Eighty-six focused Web tests and the root harness, lint, typecheck, and build checks pass.
 - The legacy `practice` Deployment profile is removed; `demo_web_service` is the default live profile, and imported migration `0054` rewrites legacy rows before removing the enum value.
 - Live Observation renders bounded traffic motion, a task-count-responsive Fargate fleet, and collapsed operational analysis without development-only traffic or Task preview controls.
 - Delayed first CloudWatch points retain request and capacity evidence, and stopped sessions no longer continue the countdown.
@@ -26,6 +29,67 @@ Short English-only working log for the current agent context. Older records are 
 - Local Chrome QA observed `8% -> 10% -> 12% -> 15% -> 17% -> 100% 완료`, with the completion gauge retained before hiding.
 - `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass. Root `pnpm test` remains non-green on unrelated existing Architecture Board knowledge and Live Observation contract baselines; the changed Workspace AI checks pass.
 - No dependency, lockfile, database migration, cloud, or deployment change was made.
+
+### 2026-07-20 - Server-synchronized deployment progress
+
+- Replaced elapsed-time/log-volume Web estimates and delayed 1% catch-up with a read-only `DeploymentProgressSnapshot` contract and API backed by the existing Deployment and Terraform completion logs.
+- Apply/Destroy show unique current-attempt Resource completion capped at 99% while running. The backend keeps unmeasurable stages indeterminate, while the Web labels stage-based fallback values explicitly as `약 n%`, replaces them with measured Resource percentages, prevents the final release stage from regressing below 99%, and renders the progress output without wrapping. Only `SUCCESS`/`DESTROYED` report exact 100%. Polling is no-store, single-flight, abortable, and stale-response guarded.
+- Focused verification passed: progress service 8/8, deployment route Plan/Apply/Destroy/Cancel/progress 10/10, directly related Web checks 56/56, progress presentation 11/11, and progress source/layout contracts 2/2. Authenticated Chrome CSSOM inspection confirmed the intrinsic output column and `white-space: nowrap`. `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and all five `pnpm build` tasks succeeded; Turbo stayed alive after its success summary and was terminated.
+- Evaluator review: Accept (12/12), with no hard-fail condition. No DB migration, Terraform/AWS mutation, deployment execution, worker/approval/cancel/cleanup logic change, dependency change, commit, or push was performed.
+
+### 2026-07-20 - Restore parked JH Workspace changes on dev
+
+- Reapplied the tracked changes from the retained `Refactor/jh/498-배포-ui-수정` WIP stash on top of current `dev`, preserving the separate Terraform reverse-sync commit and both sides of the progress-log conflict.
+- Restored the compact Deployment label and intrinsic action width, removed redundant Settings authorization copy, and made an existing server Project Draft authoritative over a dirty IndexedDB draft while preserving server-less local fallback and real save-conflict handling.
+- Focused Workspace and Settings checks pass 77/77. Root lint, typecheck, and all five build tasks pass; the completed Turbo build process was terminated after the known exit hang. The full Web suite passes 1,039 of 1,041 tests, with two unchanged Live Observation source-marker failures outside the restored files.
+- No dependency, lockfile, DB migration, Terraform execution, cloud mutation, production deployment, or Git/CI/CD handoff was performed.
+
+### 2026-07-20 - Accept generated utility references during Terraform reverse sync
+
+- Reproduced the generated ECS Runtime Secret warning at `aws_secretsmanager_secret_version.check_in_signing` and confirmed `random_password.check_in_signing.result` was rejected even though `random_password` was already an allowlisted utility resource.
+- Reused the existing utility-resource allowlist when parsing resource references, preserving the narrow parser boundary while supporting both current utility resource types.
+- Verified the Runtime Secret red-green regression and all 54 Terraform-to-Diagram tests. Root lint, typecheck, and build pass. The full API suite passes 1,444 tests and retains the known unrelated 10 failures plus one lease-heartbeat cancellation.
+- No Terraform generation, deployment artifact, database, dependency, cloud resource, or Git/CI/CD behavior was changed.
+
+### 2026-07-20 - Keep Deployment History details aligned with filters
+
+- Reproduced the empty `변경 없음` filter retaining the previously selected version's Resource, Output, and log disclosures while the history table had no rows.
+- Added red-green regressions, constrained automatic history selection to the visible filtered version IDs, preserved a visible manual selection when a newer version is filtered out, and hid secondary details when the active filter is empty.
+- Integrated current `origin/dev` through `fce1d6c0`; the only merge conflict was the shared progress record, and both Direct Deployment and AI progress records were preserved.
+- Eighty-six focused Direct Deployment tests and 33 incoming AI progress tests pass. `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass. No API/shared contract, dependency, DB migration, Terraform execution, cloud, or deployment change was made.
+
+### 2026-07-20 - Synchronize dev and the Direct Deployment UI branch
+
+- Fetched the force-updated remote `dev`, aligned local `dev` exactly at `266f0a81`, and merged it into `Refactor/jh/498-배포-ui-수정` while preserving the branch-specific Direct Deployment record and the newer completed sandbox state.
+- The only merge conflict was `agent-progress.md`; no product behavior or imported migration was manually changed during conflict resolution.
+- Seventy focused Direct Deployment tests, `pnpm harness:check`, `pnpm lint`, and `pnpm typecheck` pass. `pnpm build` reported all five package tasks successful; the known Turbo exit hang was terminated after the success summary.
+
+### 2026-07-20 - Keep the Deployment validation action readable
+
+- Renamed the primary Deployment console tab from `직접 배포` to `배포`.
+- Replaced the fixed 152 px action-button basis and width with intrinsic sizing while retaining the 44 px control height and full-width mobile layout. Authenticated Chrome QA at 1345x1003 and 390x844 confirmed that the validation label is not clipped.
+- Focused Direct Deployment regressions pass 85/85; root harness, lint, typecheck, and all five build tasks pass. The completed build process was stopped after Turbo remained attached to the existing user-owned Next dev server. No deployment, cloud mutation, contract, migration, dependency, commit, or push was performed.
+
+### 2026-07-20 - Fast-forward dev and the active branch
+
+- Fetched `origin/dev` and the active remote branch, then fast-forwarded local `dev` and `Refactor/jh/498-배포-ui-수정` from `3a26123b` to `252e7085` without pushing.
+- Preserved the existing dirty worktree through a temporary stash; the two local recovery-file deletions and the current progress records were retained while accepting the latest `dev` baseline. Final harness, conflict-marker, branch-alignment, and diff checks pass.
+
+### 2026-07-20 - Plan Direct Deployment UI deduplication
+
+- Added an implementation plan that removes repeated Direct Deployment step headings, Plan/scope/build metrics, validation readiness summaries, repeated execution facts, and empty-history controls while preserving approval and final AWS target safety checks.
+- The plan defines five TDD work units, responsive read-only browser QA, focused Web regressions, and required root checks. Only documentation and the prior Impeccable critique snapshot changed; no runtime code, API contract, DB migration, dependency, Terraform execution, AWS mutation, Deployment, commit, or push was performed.
+
+### 2026-07-20 - Remove the local draft recovery chooser
+
+- Removed the Workspace dialog that asked users to choose between a dirty IndexedDB draft and the latest server draft. When a server draft exists, Workspace now opens it and synchronizes the local cache to the same revision; server-less local fallback and real 409 conflict handling remain intact.
+- TDD regressions pass 31/31; root lint, typecheck, and production build pass. The full Web suite exposed unrelated branch-baseline failures in Architecture knowledge artifact and AI chat source assertions, then its long-running diagram adapter test was stopped after more than ten minutes. No API, DB migration, dependency, cloud mutation, deployment, commit, or push was performed.
+
+### 2026-07-20 - Remove duplicate Direct Deployment UI summaries
+
+- Removed repeated Direct Deployment Plan, scope, build-readiness, and change summaries; separated current-run logs from selected history logs and kept first-Plan logs reachable from the shared workspace. Empty history now shows only onboarding content, while populated history keeps metrics, filters, the table, unique selected-version facts, and history logs without repeating scope or change counts.
+- Six focused Web test files pass 85/85 after merging the latest `origin/dev`; root `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` also pass on the merged result. The earlier full `pnpm test` run before this merge had 21 unrelated API failures from missing `DATABASE_URL`/`zstd` and existing contract/AI expectations; none cover the changed Web files.
+- Authenticated read-only Chrome QA passed at 1863x970, 1440x900, 1024x768, and 390x844 for both empty and populated history fixtures. No deployment action, API/shared contract/DB/dependency change, Terraform execution, AWS mutation, Git/CI/CD handoff, or push was performed.
 
 ### 2026-07-20 - Add compact AI error analysis progress
 
@@ -121,5 +185,5 @@ Short English-only working log for the current agent context. Older records are 
 ## Next Action
 
 1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
-2. After review, publish and deploy the `dev` commit through the normal workflow; no DB migration is required.
+2. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for these changes.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
