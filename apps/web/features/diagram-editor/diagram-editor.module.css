@@ -1399,7 +1399,95 @@ button.rightRailResizeHandle {
   text-align: left;
   top: auto;
   transform: none;
-  width: 360px;
+  width: min(920px, calc(100% - 48px));
+}
+
+.autoOrganizeCandidateStrip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 6px;
+  scrollbar-width: thin;
+}
+
+.autoOrganizeCandidateButton {
+  background: var(--board-surface);
+  border: 1px solid var(--board-border);
+  border-radius: 7px;
+  color: var(--board-ink);
+  cursor: pointer;
+  flex: 0 0 150px;
+  font: inherit;
+  min-width: 0;
+  padding: 6px;
+  text-align: left;
+}
+
+.autoOrganizeCandidateButton[aria-pressed="true"] {
+  border-color: var(--board-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--board-primary) 22%, transparent);
+}
+
+.autoOrganizeCandidateButton span {
+  display: block;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
+  padding: 5px 2px 0;
+}
+
+.autoOrganizeDiagramThumbnail {
+  aspect-ratio: 16 / 9;
+  background: #f8fafc;
+  border-radius: 5px;
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.autoOrganizeComparisonTitle {
+  display: block;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  margin-bottom: 6px;
+}
+
+.autoOrganizeComparison {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  overflow: hidden;
+}
+
+.autoOrganizeComparison figure {
+  background: var(--board-surface-subtle);
+  border: 1px solid var(--board-border);
+  border-radius: 7px;
+  margin: 0;
+  min-width: 0;
+  padding: 8px;
+}
+
+.autoOrganizeComparison figcaption {
+  color: var(--board-muted);
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
+  padding-top: 6px;
+  text-align: center;
+}
+
+.autoOrganizeMobileToggle {
+  display: none;
+}
+
+.autoOrganizeExplanations {
+  color: var(--board-muted);
+  display: grid;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  gap: 4px;
+  line-height: 1.45;
+  margin: 0;
+  padding-left: 20px;
 }
 
 .compilerPreviewHeader {
@@ -2830,6 +2918,54 @@ button.rightRailResizeHandle {
 @keyframes saveStatusSpin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .compilerPreviewNotice {
+    bottom: 10px;
+    left: 10px;
+    max-height: calc(100% - 20px);
+    max-width: none;
+    right: 10px;
+    width: auto;
+  }
+
+  .autoOrganizeMobileToggle {
+    background: var(--board-surface-subtle);
+    border: 1px solid var(--board-border);
+    border-radius: 6px;
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .autoOrganizeMobileToggle button {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: var(--board-muted);
+    cursor: pointer;
+    flex: 1 1 0;
+    font: inherit;
+    min-height: 32px;
+    padding: 0 10px;
+  }
+
+  .autoOrganizeMobileToggle button[aria-pressed="true"] {
+    background: var(--board-surface);
+    color: var(--board-ink);
+  }
+
+  .autoOrganizeComparison {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .autoOrganizeComparison[data-preview-view="original"]
+    > [data-comparison-panel="organized"],
+  .autoOrganizeComparison[data-preview-view="organized"]
+    > [data-comparison-panel="original"] {
+    display: none;
   }
 }
 

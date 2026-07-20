@@ -11,6 +11,15 @@ type SecurityGroupIngressRule = {
 type ProviderParameterValue = string | ProviderParameterValue[] | { [key: string]: ProviderParameterValue };
 type ConfigRecord = Record<string, string | number | boolean>;
 
+/** gg: Query page token만 XML에서 꺼내고 빈 값이나 원문 response는 호출자에게 남기지 않습니다. */
+export function parseAwsQueryPaginationToken(
+  xml: string,
+  elementName: "nextToken" | "Marker"
+): string | undefined {
+  const value = extractTag(xml, elementName)?.trim();
+  return value && value.length > 0 ? value : undefined;
+}
+
 // AWS VPC XML을 내부 Resource 후보로 바꿉니다.
 export function parseVpcsFromXml(xml: string, region: string): AwsDiscoveredResourceRecord[] {
   return extractSetItems(xml, "vpcSet").map((item) => {

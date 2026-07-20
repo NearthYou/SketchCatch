@@ -13,6 +13,7 @@ import {
   deploymentPlanArtifacts,
   deployments,
   projectAssets,
+  projectDrafts,
   projects,
   users
 } from "../db/schema.js";
@@ -33,6 +34,7 @@ const ACTIVE_ARCHITECTURE_ID = "55555555-5555-4555-8555-555555555555";
 type UserRow = typeof users.$inferSelect;
 type ProjectRow = typeof projects.$inferSelect;
 type ArchitectureRow = typeof architectures.$inferSelect;
+type ProjectDraftRow = typeof projectDrafts.$inferSelect;
 type ProjectAssetRow = typeof projectAssets.$inferSelect;
 type DeploymentRow = typeof deployments.$inferSelect;
 type DeployedResourceRow = typeof deployedResources.$inferSelect;
@@ -113,6 +115,106 @@ test("POST /api/projects creates a project for the active user", async () => {
   await app.close();
 });
 
+test("POST /api/projects/reverse-engineering atomically creates Project, Draft, and Snapshot", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: createReverseEngineeringProjectPayload()
+  });
+
+  assert.equal(response.statusCode, 201, response.body);
+  assert.equal(fakeDb.projectRows.length, 1);
+  assert.equal(fakeDb.projectDraftRows.length, 1);
+  assert.equal(fakeDb.architectureRows.length, 1);
+  assert.equal(fakeDb.projectDraftRows[0]?.projectId, fakeDb.projectRows[0]?.id);
+  assert.equal(fakeDb.projectDraftRows[0]?.revision, 1);
+  assert.equal(fakeDb.architectureRows[0]?.projectId, fakeDb.projectRows[0]?.id);
+  assert.equal(fakeDb.architectureRows[0]?.source, "imported");
+  assert.equal(
+    fakeDb.projectDraftRows[0]?.diagramJson.nodes[0]?.parameters?.values[
+      "reverseEngineeringSourceScanId"
+    ],
+    "preview-scan-1"
+  );
+  assert.equal(
+    fakeDb.projectDraftRows[0]?.diagramJson.nodes[1]?.parameters?.values[
+      "reverseEngineeringSourceScanId"
+    ],
+    "previous-scan"
+  );
+  assert.equal(
+    fakeDb.projectDraftRows[0]?.diagramJson.nodes[0]?.parameters?.values[
+      "reverseEngineeringSourceKind"
+    ],
+    "preview_scan"
+  );
+  assert.equal(
+    fakeDb.architectureRows[0]?.architectureJson.nodes[0]?.config[
+      "reverseEngineeringSourceScanId"
+    ],
+    "preview-scan-1"
+  );
+  assert.equal(
+    fakeDb.architectureRows[0]?.architectureJson.nodes[1]?.config[
+      "reverseEngineeringSourceScanId"
+    ],
+    "previous-scan"
+  );
+  assert.equal(
+    fakeDb.architectureRows[0]?.architectureJson.nodes[0]?.config[
+      "reverseEngineeringSourceKind"
+    ],
+    "preview_scan"
+  );
+  assert.equal(response.json().draft.revision, 1);
+  assert.equal(response.json().architecture.source, "imported");
+
+  await app.close();
+});
+
+test("POST /api/projects/reverse-engineering rolls back every row and retries without duplicates", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    failArchitectureInsert: true,
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+  const request = {
+    method: "POST" as const,
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: createReverseEngineeringProjectPayload()
+  };
+
+  const failedResponse = await app.inject(request);
+
+  assert.equal(failedResponse.statusCode, 500, failedResponse.body);
+  assert.equal(fakeDb.projectRows.length, 0);
+  assert.equal(fakeDb.projectDraftRows.length, 0);
+  assert.equal(fakeDb.architectureRows.length, 0);
+
+  fakeDb.failArchitectureInsert = false;
+  const retryResponse = await app.inject(request);
+
+  assert.equal(retryResponse.statusCode, 201, retryResponse.body);
+  assert.equal(fakeDb.projectRows.length, 1);
+  assert.equal(fakeDb.projectDraftRows.length, 1);
+  assert.equal(fakeDb.architectureRows.length, 1);
+
+  await app.close();
+});
+
 test("GET /api/projects/:id returns 404 for another user's project", async () => {
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
@@ -136,6 +238,91 @@ test("GET /api/projects/:id returns 404 for another user's project", async () =>
   await app.close();
 });
 
+test("GET /api/projects/:id 공개 응답은 과거 AWS Snapshot을 정리하고 일반 Architecture를 유지한다", async () => {
+  const legacyLambdaArn =
+    "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler";
+  const legacyNodeId =
+    "resource-arn-aws-lambda-ap-northeast-2-123456789012-function-orders-handler";
+  const ordinaryNode = {
+    id: "design-client",
+    type: "UNKNOWN" as const,
+    label: "Client",
+    positionX: 320,
+    positionY: 0,
+    config: { diagramKind: "design", note: "ordinary architecture stays exact" }
+  };
+  const legacyArchitecture = makeArchitecture({
+    source: "imported",
+    architectureJson: {
+      nodes: [
+        {
+          id: legacyNodeId,
+          type: "LAMBDA",
+          label: "orders-handler",
+          positionX: 0,
+          positionY: 0,
+          config: {
+            providerResourceType: "AWS::Lambda::Function",
+            providerResourceId: legacyLambdaArn,
+            functionName: "orders-handler",
+            Environment: { Variables: { TOKEN: "private-token" } },
+            Role: "arn:aws:iam::123456789012:role/orders-runtime",
+            analysisExcluded: true,
+            reverseEngineeringSourceScanId: "scan-legacy",
+            reverseEngineeringDraftId: "draft-legacy",
+            reverseEngineeringSourceKind: "saved_scan"
+          }
+        },
+        ordinaryNode
+      ],
+      edges: [
+        {
+          id: `edge-${legacyNodeId}-design-client-uses`,
+          sourceId: legacyNodeId,
+          targetId: ordinaryNode.id,
+          label: "uses"
+        }
+      ]
+    }
+  });
+  const storedArchitecture = structuredClone(legacyArchitecture.architectureJson);
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    architectures: [legacyArchitecture]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+  const responseArchitecture = response.json().architectures[0].architectureJson;
+  const lambda = responseArchitecture.nodes[0];
+
+  assert.equal(response.statusCode, 200);
+  assert.match(lambda.id, /^resource-aws-ref-[a-f0-9]{24}$/u);
+  assert.match(lambda.config.providerResourceId, /^aws-ref-[a-f0-9]{24}$/u);
+  assert.equal(lambda.config.functionName, "orders-handler");
+  assert.equal(lambda.config.Environment, undefined);
+  assert.equal(lambda.config.Role, undefined);
+  assert.equal(responseArchitecture.edges[0].sourceId, lambda.id);
+  assert.match(responseArchitecture.edges[0].id, new RegExp(lambda.id));
+  assert.deepEqual(responseArchitecture.nodes[1], ordinaryNode);
+  assert.doesNotMatch(
+    JSON.stringify(responseArchitecture),
+    /123456789012|resource-arn-aws-lambda|private-token/iu
+  );
+  assert.deepEqual(fakeDb.architectureRows[0]?.architectureJson, storedArchitecture);
+
+  await app.close();
+});
+
 test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and draft source", async () => {
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
@@ -154,7 +341,9 @@ test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and dr
       source: "imported",
       reverseEngineering: {
         sourceScanId: "scan-1",
-        draftId: "draft-scan-1"
+        draftId: "draft-scan-1",
+        sourceNodeIds: ["resource-vpc-main"],
+        sourceKind: "saved_scan"
       },
       architectureJson: {
         nodes: [
@@ -165,6 +354,18 @@ test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and dr
             positionX: 0,
             positionY: 0,
             config: {}
+          },
+          {
+            id: "resource-vpc-existing",
+            type: "VPC",
+            label: "Existing VPC",
+            positionX: 240,
+            positionY: 0,
+            config: {
+              reverseEngineeringSourceScanId: "previous-scan",
+              reverseEngineeringDraftId: "previous-draft",
+              reverseEngineeringSourceKind: "saved_scan"
+            }
           }
         ],
         edges: []
@@ -173,10 +374,13 @@ test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and dr
   });
   const savedArchitecture = fakeDb.architectureRows[0];
   const savedNode = savedArchitecture?.architectureJson.nodes[0];
+  const existingNode = savedArchitecture?.architectureJson.nodes[1];
 
   assert.equal(response.statusCode, 201);
   assert.equal(savedNode?.config["reverseEngineeringSourceScanId"], "scan-1");
   assert.equal(savedNode?.config["reverseEngineeringDraftId"], "draft-scan-1");
+  assert.equal(savedNode?.config["reverseEngineeringSourceKind"], "saved_scan");
+  assert.equal(existingNode?.config["reverseEngineeringSourceScanId"], "previous-scan");
 
   await app.close();
 });
@@ -1029,6 +1233,99 @@ function makeArchitecture(overrides: Partial<ArchitectureRow> = {}): Architectur
   };
 }
 
+function makeProjectDraft(overrides: Partial<ProjectDraftRow> = {}): ProjectDraftRow {
+  return {
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    projectId: ACTIVE_PROJECT_ID,
+    diagramJson: {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    terraformFiles: null,
+    revision: 1,
+    serverSavedAt: new Date("2026-06-24T00:00:00.000Z"),
+    createdAt: new Date("2026-06-24T00:00:00.000Z"),
+    updatedAt: new Date("2026-06-24T00:00:00.000Z"),
+    ...overrides
+  };
+}
+
+function createReverseEngineeringProjectPayload() {
+  return {
+    name: "Imported AWS project",
+    reverseEngineering: {
+      sourceScanId: "preview-scan-1",
+      draftId: "draft-preview-scan-1",
+      sourceNodeIds: ["imported-vpc"],
+      sourceKind: "preview_scan" as const
+    },
+    diagramJson: {
+      nodes: [
+        {
+          id: "imported-vpc",
+          type: "aws_vpc",
+          kind: "resource" as const,
+          position: { x: 0, y: 0 },
+          size: { width: 168, height: 96 },
+          label: "Imported VPC",
+          locked: false,
+          zIndex: 1,
+          parameters: {
+            resourceType: "aws_vpc",
+            resourceName: "imported",
+            fileName: "main",
+            values: {}
+          }
+        },
+        {
+          id: "existing-vpc",
+          type: "aws_vpc",
+          kind: "resource" as const,
+          position: { x: 240, y: 0 },
+          size: { width: 168, height: 96 },
+          label: "Existing VPC",
+          locked: false,
+          zIndex: 1,
+          parameters: {
+            resourceType: "aws_vpc",
+            resourceName: "existing",
+            fileName: "main",
+            values: {
+              reverseEngineeringSourceScanId: "previous-scan",
+              reverseEngineeringDraftId: "previous-draft"
+            }
+          }
+        }
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    architectureJson: {
+      nodes: [
+        {
+          id: "imported-vpc",
+          type: "VPC" as const,
+          positionX: 0,
+          positionY: 0,
+          config: {}
+        },
+        {
+          id: "existing-vpc",
+          type: "VPC" as const,
+          positionX: 240,
+          positionY: 0,
+          config: {
+            reverseEngineeringSourceScanId: "previous-scan",
+            reverseEngineeringDraftId: "previous-draft"
+          }
+        }
+      ],
+      edges: []
+    }
+  };
+}
+
 function makeProjectAsset(overrides: Partial<ProjectAssetRow> = {}): ProjectAssetRow {
   return {
     architectureId: null,
@@ -1125,6 +1422,7 @@ class ProjectRouteFakeDb {
   requestedProjectId: string | undefined;
   userRows: UserRow[];
   projectRows: ProjectRow[];
+  projectDraftRows: ProjectDraftRow[];
   architectureRows: ArchitectureRow[];
   projectAssetRows: ProjectAssetRow[];
   deploymentRows: DeploymentRow[];
@@ -1134,6 +1432,7 @@ class ProjectRouteFakeDb {
     Pick<DeploymentRow, "approvedPlanArtifactId" | "currentPlanArtifactId" | "id">
   >;
   operationLog: string[];
+  failArchitectureInsert: boolean;
   client: DatabaseClient;
 
   constructor(data: {
@@ -1142,17 +1441,20 @@ class ProjectRouteFakeDb {
     requestedProjectId?: string;
     users?: UserRow[];
     projects?: ProjectRow[];
+    projectDrafts?: ProjectDraftRow[];
     architectures?: ArchitectureRow[];
     projectAssets?: ProjectAssetRow[];
     deployments?: DeploymentRow[];
     deployedResources?: DeployedResourceRow[];
     deploymentPlanArtifacts?: DeploymentPlanArtifactRow[];
+    failArchitectureInsert?: boolean;
   }) {
     this.activeUserId = data.activeUserId;
     this.requestedProjectAssetId = data.requestedProjectAssetId;
     this.requestedProjectId = data.requestedProjectId;
     this.userRows = data.users ?? [];
     this.projectRows = data.projects ?? [];
+    this.projectDraftRows = data.projectDrafts ?? [];
     this.architectureRows = data.architectures ?? [];
     this.projectAssetRows = data.projectAssets ?? [];
     this.deploymentRows = data.deployments ?? [];
@@ -1160,6 +1462,7 @@ class ProjectRouteFakeDb {
     this.deploymentPlanArtifactRows = data.deploymentPlanArtifacts ?? [];
     this.clearedDeploymentPlanPointers = [];
     this.operationLog = [];
+    this.failArchitectureInsert = data.failArchitectureInsert ?? false;
     this.client = {
       db: this.createDb() as Database,
       pool: {
@@ -1174,7 +1477,13 @@ class ProjectRouteFakeDb {
         from: (table: unknown) => new SelectQuery(() => this.selectRows(table, selection))
       }),
       insert: (table: unknown) => ({
-        values: (values: Partial<ArchitectureRow> | Partial<ProjectAssetRow> | Partial<ProjectRow>) => ({
+        values: (
+          values:
+            | Partial<ArchitectureRow>
+            | Partial<ProjectAssetRow>
+            | Partial<ProjectDraftRow>
+            | Partial<ProjectRow>
+        ) => ({
           returning: async () => {
             if (table === projects) {
               const project = makeProject(values as Partial<ProjectRow>);
@@ -1184,10 +1493,21 @@ class ProjectRouteFakeDb {
             }
 
             if (table === architectures) {
+              if (this.failArchitectureInsert) {
+                throw new Error("architecture insert failed");
+              }
+
               const architecture = makeArchitecture(values as Partial<ArchitectureRow>);
               this.architectureRows.push(architecture);
 
               return [architecture];
+            }
+
+            if (table === projectDrafts) {
+              const draft = makeProjectDraft(values as Partial<ProjectDraftRow>);
+              this.projectDraftRows.push(draft);
+
+              return [draft];
             }
 
             if (table === projectAssets) {
@@ -1349,7 +1669,20 @@ class ProjectRouteFakeDb {
           return [];
         }
       }),
-      transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(this.createDb())
+      transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
+        const projectRows = [...this.projectRows];
+        const projectDraftRows = [...this.projectDraftRows];
+        const architectureRows = [...this.architectureRows];
+
+        try {
+          return await callback(this.createDb());
+        } catch (error) {
+          this.projectRows = projectRows;
+          this.projectDraftRows = projectDraftRows;
+          this.architectureRows = architectureRows;
+          throw error;
+        }
+      }
     };
   }
 
@@ -1374,6 +1707,12 @@ class ProjectRouteFakeDb {
       return this.architectureRows.filter(
         (architecture) =>
           !this.requestedProjectId || architecture.projectId === this.requestedProjectId
+      );
+    }
+
+    if (table === projectDrafts) {
+      return this.projectDraftRows.filter(
+        (draft) => !this.requestedProjectId || draft.projectId === this.requestedProjectId
       );
     }
 

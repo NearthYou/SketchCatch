@@ -93,15 +93,33 @@ const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
   })
   .strict();
 
-const diagramNodeParametersSchema = z.object({
-  terraformBlockType: z.enum(["resource", "data"]).optional(),
-  terraformSourceAuthority: z.literal("workspace-seed").optional(),
-  resourceType: z.string().min(1),
-  resourceName: z.string().min(1),
-  fileName: z.string().min(1),
-  values: z.record(z.string(), z.unknown()),
-  invalid: z.boolean().optional()
-});
+const diagramNodeParametersSchema = z
+  .object({
+    terraformBlockType: z.enum(["resource", "data"]).optional(),
+    terraformSourceAuthority: z.literal("workspace-seed").optional(),
+    resourceType: z.string(),
+    resourceName: z.string(),
+    fileName: z.string(),
+    values: z.record(z.string(), z.unknown()),
+    invalid: z.boolean().optional()
+  })
+  .superRefine((parameters, context) => {
+    if (parameters.invalid === true) {
+      return;
+    }
+
+    for (const key of ["resourceType", "resourceName", "fileName"] as const) {
+      if (parameters[key].trim().length > 0) {
+        continue;
+      }
+
+      context.addIssue({
+        code: "custom",
+        message: "Terraform identity is required for an editable resource.",
+        path: [key]
+      });
+    }
+  });
 
 const diagramNodeSchema = z.object({
   id: z.string().min(1),
@@ -162,6 +180,13 @@ const diagramEdgeSchema = z.object({
   zIndex: z.number().finite().optional()
 });
 
+const terraformSyncFileInputSchema = z
+  .object({
+    fileName: z.string().trim().min(1),
+    terraformCode: z.string()
+  })
+  .strict();
+
 export const diagramJsonSchema: z.ZodType<DiagramJson> = z.object({
   nodes: z.array(diagramNodeSchema),
   edges: z.array(diagramEdgeSchema),
@@ -181,14 +206,17 @@ export const projectDraftQuerySchema = z.object({
 export const saveProjectDraftBodySchema = z.object({
   diagramJson: diagramJsonSchema,
   expectedRevision: z.number().int().positive().nullable(),
-  terraformFiles: z
-    .array(
-      z
-        .object({
-          fileName: z.string().trim().min(1),
-          terraformCode: z.string()
-        })
-        .strict()
-    )
-    .optional()
+  terraformFiles: z.array(terraformSyncFileInputSchema).optional()
 });
+
+export const boardAutoOrganizeApplyBodySchema = z
+  .object({
+    sessionId: z.string().trim().min(1).max(160),
+    candidateId: z.string().trim().min(1).max(160),
+    sourceDiagram: diagramJsonSchema,
+    sourceFingerprint: z.string().regex(/^[0-9a-f]{8}$/u),
+    candidateDiagram: diagramJsonSchema,
+    expectedRevision: z.number().int().positive().nullable(),
+    terraformFiles: z.array(terraformSyncFileInputSchema)
+  })
+  .strict();

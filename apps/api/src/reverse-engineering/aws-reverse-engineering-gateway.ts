@@ -5,8 +5,12 @@ import {
   type ResourceTagMapping
 } from "@aws-sdk/client-resource-groups-tagging-api";
 import {
+  GetDefaultViewCommand,
+  GetViewCommand,
   ResourceExplorer2Client,
   SearchCommand,
+  type GetDefaultViewCommandOutput,
+  type GetViewCommandOutput,
   type Resource,
   type SearchCommandOutput
 } from "@aws-sdk/client-resource-explorer-2";
@@ -127,7 +131,9 @@ import type {
   AwsProviderScanGateway,
   AwsProviderScanInput
 } from "./aws-provider-adapter.js";
+import { selectHigherPriorityReverseEngineeringScanError } from "./reverse-engineering-scan-error-priority.js";
 import {
+  parseAwsQueryPaginationToken,
   parseInstancesFromXml,
   parseInternetGatewaysFromXml,
   parseRdsInstancesFromXml,
@@ -148,6 +154,66 @@ export type AwsReverseEngineeringReaderPlan = {
   readonly ecsResources: boolean;
   readonly unknownResources: boolean;
 };
+
+export type AwsPageFailure = {
+  outcome:
+    | "permission_denied"
+    | "not_configured"
+    | "expired_credential"
+    | "invalid_region"
+    | "throttled"
+    | "transient";
+};
+
+export type AwsPageResult<T> = {
+  items: T[];
+  failure?: AwsPageFailure;
+};
+
+/** gg: 뒤 page 실패·반복 token에서도 이미 읽은 item과 원문 없는 실패 분류를 보존합니다. */
+export async function collectAwsPages<T>(
+  readPage: (
+    nextToken: string | undefined
+  ) => Promise<{ items: readonly T[]; nextToken?: string | null | undefined }>
+): Promise<AwsPageResult<T>> {
+  const items: T[] = [];
+  const seenTokens = new Set<string>();
+  let nextToken: string | undefined;
+
+  do {
+    try {
+      const page = await readPage(nextToken);
+      items.push(...page.items);
+      const candidateToken = typeof page.nextToken === "string" && page.nextToken.length > 0
+        ? page.nextToken
+        : undefined;
+      if (candidateToken && seenTokens.has(candidateToken)) {
+        return { items, failure: { outcome: "transient" } };
+      }
+      if (candidateToken) seenTokens.add(candidateToken);
+      nextToken = candidateToken;
+    } catch (error) {
+      return {
+        items,
+        failure: { outcome: classifyAwsPageFailureOutcome(error) }
+      };
+    }
+  } while (nextToken);
+
+  return { items };
+}
+
+/** gg: provider 원문은 버리고 기존 scan reason만 page-level 안전 분류로 좁힙니다. */
+function classifyAwsPageFailureOutcome(error: unknown): AwsPageFailure["outcome"] {
+  const details = error && typeof error === "object"
+    ? error as { name?: unknown; code?: unknown; Code?: unknown; message?: unknown }
+    : {};
+  const classifierText = [details.name, details.code, details.Code, details.message]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+  const reason = classifyScanErrorReason(classifierText);
+  return reason === "provider_error" || reason === "unknown" ? "transient" : reason;
+}
 
 export type AwsS3ReadClient = {
   send(command: object): Promise<unknown>;
@@ -247,6 +313,7 @@ export type AwsCloudWatchReadClientFactory = (
 type LambdaPolicyStatement = {
   readonly Sid?: string;
   readonly Action?: unknown;
+  readonly Condition?: unknown;
   readonly Effect?: unknown;
   readonly Principal?: unknown;
   readonly Resource?: unknown;
@@ -271,31 +338,51 @@ export function createAwsReverseEngineeringGateway(
       const fetchXml = options.fetchXml ?? fetch;
       const readerPlan = createAwsReverseEngineeringReaderPlan(input);
       const resourceGroups = await Promise.all([
-        readResourceGroup(input, "VPC", () => describeVpcs(input.region, credentials, fetchXml)),
-        readResourceGroup(input, "SUBNET", () => describeSubnets(input.region, credentials, fetchXml)),
-        readResourceGroup(input, "INTERNET_GATEWAY", () =>
-          describeInternetGateways(input.region, credentials, fetchXml)
+        readResourceGroup(input, "VPC", (reportPageFailure) =>
+          describeVpcs(input.region, credentials, fetchXml, reportPageFailure)
         ),
-        readResourceGroup(input, "ROUTE_TABLE", () =>
-          describeRouteTables(input.region, credentials, fetchXml)
+        readResourceGroup(input, "SUBNET", (reportPageFailure) =>
+          describeSubnets(input.region, credentials, fetchXml, reportPageFailure)
         ),
-        readResourceGroup(input, "SECURITY_GROUP", () =>
-          describeSecurityGroups(input.region, credentials, fetchXml)
+        readResourceGroup(input, "INTERNET_GATEWAY", (reportPageFailure) =>
+          describeInternetGateways(input.region, credentials, fetchXml, reportPageFailure)
         ),
-        readResourceGroup(input, "EC2", () => describeInstances(input.region, credentials, fetchXml)),
-        readResourceGroup(input, "RDS", () => describeRdsInstances(input.region, credentials, fetchXml)),
-        readResourceGroup(input, "S3", () => listBucketsWithDetails(input.region, credentials)),
+        readResourceGroup(input, "ROUTE_TABLE", (reportPageFailure) =>
+          describeRouteTables(input.region, credentials, fetchXml, reportPageFailure)
+        ),
+        readResourceGroup(input, "SECURITY_GROUP", (reportPageFailure) =>
+          describeSecurityGroups(input.region, credentials, fetchXml, reportPageFailure)
+        ),
+        readResourceGroup(input, "EC2", (reportPageFailure) =>
+          describeInstances(input.region, credentials, fetchXml, reportPageFailure)
+        ),
+        readResourceGroup(input, "RDS", (reportPageFailure) =>
+          describeRdsInstances(input.region, credentials, fetchXml, reportPageFailure)
+        ),
+        readResourceGroup(input, "S3", (reportPageFailure) =>
+          listBucketsWithDetails(input.region, credentials, undefined, reportPageFailure)
+        ),
         ...(readerPlan.loadBalancers
           ? [
-              readResourceGroup(input, "LOAD_BALANCER", () =>
-                listApplicationLoadBalancers(input.region, credentials)
+              readResourceGroup(input, "LOAD_BALANCER", (reportPageFailure) =>
+                listApplicationLoadBalancers(
+                  input.region,
+                  credentials,
+                  undefined,
+                  reportPageFailure
+                )
               )
             ]
           : []),
         ...(readerPlan.cloudFrontDistributions
           ? [
-              readResourceGroup(input, "CLOUDFRONT", () =>
-                listCloudFrontDistributions(input.region, credentials)
+              readResourceGroup(input, "CLOUDFRONT", (reportPageFailure) =>
+                listCloudFrontDistributions(
+                  input.region,
+                  credentials,
+                  undefined,
+                  reportPageFailure
+                )
               )
             ]
           : []),
@@ -325,14 +412,23 @@ export function createAwsReverseEngineeringGateway(
 async function readResourceGroup(
   input: AwsProviderScanInput,
   resourceType: ResourceType,
-  read: () => Promise<AwsDiscoveredResourceRecord[]>
+  read: (
+    reportPageFailure: (failure: AwsPageFailure) => void
+  ) => Promise<AwsDiscoveredResourceRecord[]>
 ): Promise<AwsProviderDiscoveryResult> {
   if (!shouldReadResourceGroup(input, resourceType)) {
     return { records: [], scanErrors: [] };
   }
 
   try {
-    return { records: await read(), scanErrors: [] };
+    const pageFailures: AwsPageFailure[] = [];
+    const records = await read((failure) => pageFailures.push(failure));
+    return {
+      records,
+      scanErrors: pageFailures.slice(0, 1).map((failure) =>
+        toScanErrorFromPageFailure(resourceType, failure)
+      )
+    };
   } catch (error) {
     return {
       records: [],
@@ -373,133 +469,196 @@ function shouldReadEcsResourceGroup(input: AwsProviderScanInput): boolean {
   );
 }
 
-async function describeVpcs(
+type AwsQueryResourceReaderInput = {
+  service: "ec2" | "rds";
+  action: string;
+  version: string;
+  requestToken: "NextToken" | "Marker";
+  responseToken: "nextToken" | "Marker";
+  parse: (xml: string, region: string) => AwsDiscoveredResourceRecord[];
+};
+
+/** gg: EC2/RDS Query reader도 공통 collector로 앞 page와 safe failure를 함께 보존합니다. */
+async function readAwsQueryResourcePages(
+  input: AwsQueryResourceReaderInput,
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  const result = await collectAwsPages(async (nextToken) => {
+    const parameters = nextToken === undefined
+      ? undefined
+      : input.requestToken === "NextToken"
+        ? { NextToken: nextToken }
+        : { Marker: nextToken };
+    const xml = await sendAwsQuery({
+      service: input.service,
+      region,
+      action: input.action,
+      version: input.version,
+      credentials,
+      ...(parameters ? { parameters } : {})
+    }, fetchXml);
+    return {
+      items: input.parse(xml, region),
+      nextToken: parseAwsQueryPaginationToken(xml, input.responseToken)
+    };
+  });
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
+}
+
+/** gg: VPC Query pagination은 EC2 nextToken을 그대로 다음 signed request에만 전달합니다. */
+export async function describeVpcs(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
+): Promise<AwsDiscoveredResourceRecord[]> {
+  return readAwsQueryResourcePages({
     service: "ec2",
-    region,
     action: "DescribeVpcs",
     version: "2016-11-15",
-    credentials
-  }, fetchXml);
-
-  return parseVpcsFromXml(xml, region);
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseVpcsFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-async function describeSubnets(
+/** gg: Subnet Query pagination도 첫 page records를 later failure와 분리합니다. */
+export async function describeSubnets(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  return readAwsQueryResourcePages({
     service: "ec2",
-    region,
     action: "DescribeSubnets",
     version: "2016-11-15",
-    credentials
-  }, fetchXml);
-
-  return parseSubnetsFromXml(xml, region);
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseSubnetsFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-async function describeSecurityGroups(
+/** gg: Security Group Query pagination도 동일한 bounded token 계약을 사용합니다. */
+export async function describeSecurityGroups(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  return readAwsQueryResourcePages({
     service: "ec2",
-    region,
     action: "DescribeSecurityGroups",
     version: "2016-11-15",
-    credentials
-  }, fetchXml);
-
-  return parseSecurityGroupsFromXml(xml, region);
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseSecurityGroupsFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-async function describeInstances(
+/** gg: Instance Query pagination은 누적 instance records를 later failure에도 유지합니다. */
+export async function describeInstances(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  return readAwsQueryResourcePages({
     service: "ec2",
-    region,
     action: "DescribeInstances",
     version: "2016-11-15",
-    credentials
-  }, fetchXml);
-
-  return parseInstancesFromXml(xml, region);
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseInstancesFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-// EC2 Query API에서 Internet Gateway 목록을 읽습니다.
-async function describeInternetGateways(
+/** gg: Internet Gateway Query pagination도 EC2 nextToken만 allowlist로 서명합니다. */
+export async function describeInternetGateways(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  return readAwsQueryResourcePages({
     service: "ec2",
-    region,
     action: "DescribeInternetGateways",
     version: "2016-11-15",
-    credentials
-  }, fetchXml);
-
-  return parseInternetGatewaysFromXml(xml, region);
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseInternetGatewaysFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-// EC2 Query API에서 Route Table 목록을 읽습니다.
-async function describeRouteTables(
+/** gg: Route Table Query pagination도 page별 XML을 즉시 records로 축소합니다. */
+export async function describeRouteTables(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  return readAwsQueryResourcePages({
     service: "ec2",
-    region,
     action: "DescribeRouteTables",
     version: "2016-11-15",
-    credentials
-  }, fetchXml);
-
-  return parseRouteTablesFromXml(xml, region);
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseRouteTablesFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-async function describeRdsInstances(
+/** gg: RDS Query pagination은 대소문자가 다른 Marker 계약을 명시적으로 유지합니다. */
+export async function describeRdsInstances(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  fetchXml: typeof fetch
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  const xml = await sendAwsQuery({
+  return readAwsQueryResourcePages({
     service: "rds",
-    region,
     action: "DescribeDBInstances",
     version: "2014-10-31",
-    credentials
-  }, fetchXml);
-
-  return parseRdsInstancesFromXml(xml, region);
+    requestToken: "Marker",
+    responseToken: "Marker",
+    parse: parseRdsInstancesFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
 }
 
-// S3는 bucket 목록만으로 설정을 알 수 없어서 read-only 세부 조회를 추가로 실행합니다.
+/** gg: S3 bucket page마다 read-only 세부 정보를 축소하고 later failure에는 앞 page를 보존합니다. */
 export async function listBucketsWithDetails(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsS3ReadClientFactory = createDefaultS3ReadClient
+  createClient: AwsS3ReadClientFactory = createDefaultS3ReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const response = await sendS3Command<ListBucketsCommandOutput>(client, new ListBucketsCommand({}));
-  const bucketRecords = await Promise.all(
-    (response.Buckets ?? []).map((bucket) => createS3BucketRecord(bucket.Name, bucket.CreationDate, region, client))
-  );
+  const result = await collectAwsPages(async (continuationToken) => {
+    const response = await sendS3Command<ListBucketsCommandOutput>(
+      client,
+      new ListBucketsCommand({
+        MaxBuckets: 1_000,
+        ...(continuationToken ? { ContinuationToken: continuationToken } : {})
+      })
+    );
+    const bucketRecords = await Promise.all(
+      (response.Buckets ?? []).map((bucket) =>
+        createS3BucketRecord(bucket.Name, bucket.CreationDate, region, client)
+      )
+    );
+    return {
+      items: bucketRecords.filter(
+        (record): record is AwsDiscoveredResourceRecord => record !== null
+      ),
+      nextToken: response.ContinuationToken
+    };
+  });
 
-  return bucketRecords.filter((record): record is AwsDiscoveredResourceRecord => record !== null);
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 function createDefaultS3ReadClient(
@@ -612,27 +771,25 @@ function normalizeS3BucketRegion(
 export async function listTaggedUnknownResources(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsTaggingReadClientFactory = createDefaultTaggingReadClient
+  createClient: AwsTaggingReadClientFactory = createDefaultTaggingReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let paginationToken: string | undefined;
-
-  do {
+  const result = await collectAwsPages(async (paginationToken) => {
     const response = await sendTaggingCommand<GetResourcesCommandOutput>(
       client,
       new GetResourcesCommand({ PaginationToken: paginationToken })
     );
+    return {
+      items: (response.ResourceTagMappingList ?? []).flatMap((resource) =>
+        toUnknownTaggedResourceRecord(resource, region)
+      ),
+      nextToken: response.PaginationToken
+    };
+  });
 
-    records.push(...(response.ResourceTagMappingList ?? []).flatMap((resource) =>
-      toUnknownTaggedResourceRecord(resource, region)
-    ));
-    paginationToken = response.PaginationToken && response.PaginationToken.length > 0
-      ? response.PaginationToken
-      : undefined;
-  } while (paginationToken);
-
-  return records;
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 // Resource Explorer가 켜진 계정에서는 태그 없는 리소스까지 더 넓게 UNKNOWN 후보로 찾습니다.
@@ -642,39 +799,57 @@ export async function listResourceExplorerResourcesAsUnknown(
   createClient: AwsResourceExplorerReadClientFactory = createDefaultResourceExplorerReadClient
 ): Promise<AwsDiscoveredResourceRecord[]> {
   try {
-    return await listResourceExplorerResourceRecords(region, credentials, createClient);
+    return (await listResourceExplorerResourceRecords(region, credentials, createClient)).items;
   } catch {
     return [];
   }
 }
 
-// Resource Explorer Search API를 돌면서 계정/리전 안의 리소스 후보를 끝까지 읽습니다.
+class AwsResourceExplorerNotConfiguredError extends Error {
+  constructor() {
+    super("Resource Explorer default view is not configured");
+    this.name = "AwsResourceExplorerNotConfiguredError";
+  }
+}
+
+// Resource Explorer default view를 exact 확인한 뒤 Search page를 읽습니다.
 async function listResourceExplorerResourceRecords(
   region: string,
   credentials: TerraformAwsCredentialEnv,
   createClient: AwsResourceExplorerReadClientFactory = createDefaultResourceExplorerReadClient
-): Promise<AwsDiscoveredResourceRecord[]> {
+): Promise<AwsPageResult<AwsDiscoveredResourceRecord>> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let nextToken: string | undefined;
+  const defaultView = await sendResourceExplorerCommand<GetDefaultViewCommandOutput>(
+    client,
+    new GetDefaultViewCommand({})
+  );
+  const viewArn = getNonEmptyStringValue(defaultView.ViewArn);
+  if (!viewArn) throw new AwsResourceExplorerNotConfiguredError();
+  const view = await sendResourceExplorerCommand<GetViewCommandOutput>(
+    client,
+    new GetViewCommand({ ViewArn: viewArn })
+  );
+  if (getNonEmptyStringValue(view.View?.ViewArn) !== viewArn) {
+    throw new AwsResourceExplorerNotConfiguredError();
+  }
 
-  do {
+  return collectAwsPages(async (nextToken) => {
     const response = await sendResourceExplorerCommand<SearchCommandOutput>(
       client,
       new SearchCommand({
+        ViewArn: viewArn,
         QueryString: `region:${region}`,
         MaxResults: 100,
         ...(nextToken ? { NextToken: nextToken } : {})
       })
     );
-
-    records.push(...(response.Resources ?? []).flatMap((resource) =>
-      toUnknownResourceExplorerRecord(resource, region)
-    ));
-    nextToken = response.NextToken && response.NextToken.length > 0 ? response.NextToken : undefined;
-  } while (nextToken);
-
-  return records;
+    return {
+      items: (response.Resources ?? []).flatMap((resource) =>
+        toUnknownResourceExplorerRecord(resource, region)
+      ),
+      nextToken: response.NextToken
+    };
+  });
 }
 
 // Resource Explorer가 꺼졌거나 권한이 없으면, 조용히 숨기지 않고 scan error로 남깁니다.
@@ -684,9 +859,12 @@ export async function readResourceExplorerResourcesWithDiagnostics(
   createClient: AwsResourceExplorerReadClientFactory = createDefaultResourceExplorerReadClient
 ): Promise<AwsProviderDiscoveryResult> {
   try {
+    const result = await listResourceExplorerResourceRecords(region, credentials, createClient);
     return {
-      records: await listResourceExplorerResourceRecords(region, credentials, createClient),
-      scanErrors: []
+      records: result.items,
+      scanErrors: result.failure
+        ? [toScanErrorFromPageFailure("UNKNOWN", result.failure, "resource-explorer-2")]
+        : []
     };
   } catch (error) {
     return {
@@ -700,10 +878,19 @@ export async function readResourceExplorerResourcesWithDiagnostics(
 async function readUnknownResourceRecords(
   resourceType: ResourceType,
   serviceKey: string,
-  read: () => Promise<AwsDiscoveredResourceRecord[]>
+  read: (
+    reportPageFailure: (failure: AwsPageFailure) => void
+  ) => Promise<AwsDiscoveredResourceRecord[]>
 ): Promise<AwsProviderDiscoveryResult> {
   try {
-    return { records: await read(), scanErrors: [] };
+    const pageFailures: AwsPageFailure[] = [];
+    const records = await read((failure) => pageFailures.push(failure));
+    return {
+      records,
+      scanErrors: pageFailures.slice(0, 1).map((failure) =>
+        toScanErrorFromPageFailure(resourceType, failure, serviceKey)
+      )
+    };
   } catch (error) {
     return {
       records: [],
@@ -722,99 +909,145 @@ async function listUnknownResources(
   if (input.resourceTypes.includes("ALL") || input.resourceTypes.includes("UNKNOWN")) {
     reads.push(
       readResourceExplorerResourcesWithDiagnostics(input.region, credentials),
-      readUnknownResourceRecords("UNKNOWN", "resource-groups-tagging", () =>
-        listTaggedUnknownResources(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "resource-groups-tagging", (reportPageFailure) =>
+        listTaggedUnknownResources(input.region, credentials, undefined, reportPageFailure)
       ),
-      readUnknownResourceRecords("UNKNOWN", "iam", () =>
-        listIamRolesAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "iam", (reportPageFailure) =>
+        listIamRolesAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
-      readUnknownResourceRecords("UNKNOWN", "kms", () =>
-        listKmsKeysAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "kms", (reportPageFailure) =>
+        listKmsKeysAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
-      readUnknownResourceRecords("UNKNOWN", "cloudwatch-logs", () =>
-        listCloudWatchLogGroupsAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "cloudwatch-logs", (reportPageFailure) =>
+        listCloudWatchLogGroupsAsUnknown(
+          input.region,
+          credentials,
+          undefined,
+          reportPageFailure
+        )
       ),
-      readUnknownResourceRecords("UNKNOWN", "api-gateway", () =>
-        listApiGatewayRestApisAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "api-gateway", (reportPageFailure) =>
+        listApiGatewayRestApisAsUnknown(
+          input.region,
+          credentials,
+          undefined,
+          reportPageFailure
+        )
       ),
-      readUnknownResourceRecords("UNKNOWN", "ec2", () =>
-        listAmiImagesAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "ec2", (reportPageFailure) =>
+        listAmiImagesAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
-      readUnknownResourceRecords("UNKNOWN", "iam", () =>
-        listIamPoliciesAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "iam", (reportPageFailure) =>
+        listIamPoliciesAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
-      readUnknownResourceRecords("UNKNOWN", "iam", () =>
-        listIamInstanceProfilesAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "iam", (reportPageFailure) =>
+        listIamInstanceProfilesAsUnknown(
+          input.region,
+          credentials,
+          undefined,
+          reportPageFailure
+        )
       ),
-      readUnknownResourceRecords("UNKNOWN", "cloudwatch", () =>
-        listCloudWatchMetricAlarmsAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "cloudwatch", (reportPageFailure) =>
+        listCloudWatchMetricAlarmsAsUnknown(
+          input.region,
+          credentials,
+          undefined,
+          reportPageFailure
+        )
       ),
-      readUnknownResourceRecords("UNKNOWN", "lambda", () =>
-        listLambdaPermissionsAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "lambda", (reportPageFailure) =>
+        listLambdaPermissionsAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
 
   if (input.resourceTypes.includes("AMI")) {
     reads.push(
-      readUnknownResourceRecords("AMI", "ec2", () =>
-        listAmiImagesAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("AMI", "ec2", (reportPageFailure) =>
+        listAmiImagesAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
 
   if (input.resourceTypes.includes("IAM_ROLE")) {
     reads.push(
-      readUnknownResourceRecords("IAM_ROLE", "iam", () =>
-        listIamRolesAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("IAM_ROLE", "iam", (reportPageFailure) =>
+        listIamRolesAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
 
   if (input.resourceTypes.includes("IAM_POLICY")) {
     reads.push(
-      readUnknownResourceRecords("IAM_POLICY", "iam", () =>
-        listIamPoliciesAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("IAM_POLICY", "iam", (reportPageFailure) =>
+        listIamPoliciesAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
 
   if (input.resourceTypes.includes("IAM_INSTANCE_PROFILE")) {
     reads.push(
-      readUnknownResourceRecords("IAM_INSTANCE_PROFILE", "iam", () =>
-        listIamInstanceProfilesAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("IAM_INSTANCE_PROFILE", "iam", (reportPageFailure) =>
+        listIamInstanceProfilesAsUnknown(
+          input.region,
+          credentials,
+          undefined,
+          reportPageFailure
+        )
       )
     );
   }
 
   if (input.resourceTypes.includes("KMS_KEY")) {
     reads.push(
-      readUnknownResourceRecords("KMS_KEY", "kms", () =>
-        listKmsKeysAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("KMS_KEY", "kms", (reportPageFailure) =>
+        listKmsKeysAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
 
   if (input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP")) {
     reads.push(
-      readUnknownResourceRecords("CLOUDWATCH_LOG_GROUP", "cloudwatch-logs", () =>
-        listCloudWatchLogGroupsAsUnknown(input.region, credentials)
+      readUnknownResourceRecords(
+        "CLOUDWATCH_LOG_GROUP",
+        "cloudwatch-logs",
+        (reportPageFailure) => listCloudWatchLogGroupsAsUnknown(
+          input.region,
+          credentials,
+          undefined,
+          reportPageFailure
+        )
       )
     );
   }
 
   if (input.resourceTypes.includes("CLOUDWATCH_METRIC_ALARM")) {
     reads.push(
-      readUnknownResourceRecords("CLOUDWATCH_METRIC_ALARM", "cloudwatch", () =>
-        listCloudWatchMetricAlarmsAsUnknown(input.region, credentials)
+      readUnknownResourceRecords(
+        "CLOUDWATCH_METRIC_ALARM",
+        "cloudwatch",
+        (reportPageFailure) => listCloudWatchMetricAlarmsAsUnknown(
+          input.region,
+          credentials,
+          undefined,
+          reportPageFailure
+        )
       )
     );
   }
 
   if (input.resourceTypes.includes("API_GATEWAY_REST_API")) {
     reads.push(
-      readUnknownResourceRecords("API_GATEWAY_REST_API", "api-gateway", () =>
-        listApiGatewayRestApisAsUnknown(input.region, credentials)
+      readUnknownResourceRecords(
+        "API_GATEWAY_REST_API",
+        "api-gateway",
+        (reportPageFailure) => listApiGatewayRestApisAsUnknown(
+          input.region,
+          credentials,
+          undefined,
+          reportPageFailure
+        )
       )
     );
   }
@@ -825,16 +1058,16 @@ async function listUnknownResources(
     input.resourceTypes.includes("LAMBDA")
   ) {
     reads.push(
-      readUnknownResourceRecords("LAMBDA", "lambda", () =>
-        listLambdaFunctionsAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("LAMBDA", "lambda", (reportPageFailure) =>
+        listLambdaFunctionsAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
 
   if (input.resourceTypes.includes("LAMBDA_PERMISSION")) {
     reads.push(
-      readUnknownResourceRecords("LAMBDA_PERMISSION", "lambda", () =>
-        listLambdaPermissionsAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("LAMBDA_PERMISSION", "lambda", (reportPageFailure) =>
+        listLambdaPermissionsAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
@@ -864,15 +1097,12 @@ export async function readEcsResourcesWithDiagnostics(
 ): Promise<AwsProviderDiscoveryResult> {
   const client = createClient(region, credentials);
   const scanErrors: ReverseEngineeringScanError[] = [];
-  let clusterArns: string[];
-
-  try {
-    clusterArns = await listAllEcsClusterArns(client);
-  } catch (error) {
-    return { records: [], scanErrors: [toScanError("ECS_CLUSTER", error)] };
+  const clusterPages = await listAllEcsClusterArns(client);
+  if (clusterPages.failure) {
+    scanErrors.push(toScanErrorFromPageFailure("ECS_CLUSTER", clusterPages.failure));
   }
 
-  const clusters = await describeEcsClusters(client, clusterArns, scanErrors);
+  const clusters = await describeEcsClusters(client, clusterPages.items, scanErrors);
   const clusterRecords = clusters.flatMap((cluster) => toEcsClusterRecord(cluster, region));
   const serviceRecords: AwsDiscoveredResourceRecord[] = [];
   const taskDefinitionArns = new Set<string>();
@@ -883,29 +1113,28 @@ export async function readEcsResourcesWithDiagnostics(
       continue;
     }
 
-    try {
-      const serviceArns = await listAllEcsServiceArns(client, clusterArn);
-      const services = await describeEcsServices(
-        client,
-        cluster,
-        serviceArns,
-        scanErrors
-      );
+    const servicePages = await listAllEcsServiceArns(client, clusterArn);
+    if (servicePages.failure) {
+      scanErrors.push(toScanErrorFromPageFailure("ECS_SERVICE", servicePages.failure));
+    }
+    const services = await describeEcsServices(
+      client,
+      cluster,
+      servicePages.items,
+      scanErrors
+    );
 
-      for (const service of services) {
-        const record = toEcsServiceRecord(service, cluster, region);
-        if (!record) {
-          continue;
-        }
-
-        serviceRecords.push(record);
-        const taskDefinitionArn = getNonEmptyStringValue(record.config["taskDefinitionArn"]);
-        if (taskDefinitionArn) {
-          taskDefinitionArns.add(taskDefinitionArn);
-        }
+    for (const service of services) {
+      const record = toEcsServiceRecord(service, cluster, region);
+      if (!record) {
+        continue;
       }
-    } catch (error) {
-      scanErrors.push(toScanError("ECS_SERVICE", error));
+
+      serviceRecords.push(record);
+      const taskDefinitionArn = getNonEmptyStringValue(record.config["taskDefinitionArn"]);
+      if (taskDefinitionArn) {
+        taskDefinitionArns.add(taskDefinitionArn);
+      }
     }
   }
 
@@ -945,20 +1174,19 @@ export async function readEcsResourcesWithDiagnostics(
   };
 }
 
-async function listAllEcsClusterArns(client: AwsEcsReadClient): Promise<string[]> {
-  const clusterArns: string[] = [];
-  let nextToken: string | undefined;
-
-  do {
+async function listAllEcsClusterArns(client: AwsEcsReadClient): Promise<AwsPageResult<string>> {
+  const result = await collectAwsPages(async (nextToken) => {
     const response = await sendEcsCommand<ListClustersCommandOutput>(
       client,
       new ListClustersCommand({ nextToken })
     );
-    clusterArns.push(...(response.clusterArns ?? []).filter(isNonEmptyString));
-    nextToken = getNonEmptyStringValue(response.nextToken) ?? undefined;
-  } while (nextToken);
+    return {
+      items: (response.clusterArns ?? []).filter(isNonEmptyString),
+      nextToken: getNonEmptyStringValue(response.nextToken)
+    };
+  });
 
-  return [...new Set(clusterArns)];
+  return { ...result, items: [...new Set(result.items)] };
 }
 
 async function describeEcsClusters(
@@ -994,20 +1222,19 @@ async function describeEcsClusters(
 async function listAllEcsServiceArns(
   client: AwsEcsReadClient,
   clusterArn: string
-): Promise<string[]> {
-  const serviceArns: string[] = [];
-  let nextToken: string | undefined;
-
-  do {
+): Promise<AwsPageResult<string>> {
+  const result = await collectAwsPages(async (nextToken) => {
     const response = await sendEcsCommand<ListServicesCommandOutput>(
       client,
       new ListServicesCommand({ cluster: clusterArn, nextToken })
     );
-    serviceArns.push(...(response.serviceArns ?? []).filter(isNonEmptyString));
-    nextToken = getNonEmptyStringValue(response.nextToken) ?? undefined;
-  } while (nextToken);
+    return {
+      items: (response.serviceArns ?? []).filter(isNonEmptyString),
+      nextToken: getNonEmptyStringValue(response.nextToken)
+    };
+  });
 
-  return [...new Set(serviceArns)];
+  return { ...result, items: [...new Set(result.items)] };
 }
 
 async function describeEcsServices(
@@ -1310,62 +1537,60 @@ function isNonEmptyString(value: unknown): value is string {
 export async function listApplicationLoadBalancers(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsElbReadClientFactory = createDefaultElbReadClient
+  createClient: AwsElbReadClientFactory = createDefaultElbReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let marker: string | undefined;
-
-  do {
+  const result = await collectAwsPages(async (marker) => {
     const response = await sendElbCommand<DescribeLoadBalancersCommandOutput>(
       client,
       new DescribeLoadBalancersCommand({ Marker: marker })
     );
+    return {
+      items: (response.LoadBalancers ?? []).flatMap((loadBalancer) =>
+        toApplicationLoadBalancerRecord(loadBalancer, region)
+      ),
+      nextToken: response.NextMarker
+    };
+  });
 
-    records.push(...(response.LoadBalancers ?? []).flatMap((loadBalancer) =>
-      toApplicationLoadBalancerRecord(loadBalancer, region)
-    ));
-    marker = response.NextMarker && response.NextMarker.length > 0 ? response.NextMarker : undefined;
-  } while (marker);
-
-  return records;
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 // Lambda도 태그 없이 쓰이는 경우가 많아서 ListFunctions 결과를 UNKNOWN 후보로 남깁니다.
 export async function listLambdaFunctionsAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsLambdaReadClientFactory = createDefaultLambdaReadClient
+  createClient: AwsLambdaReadClientFactory = createDefaultLambdaReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let marker: string | undefined;
-
-  do {
+  const result = await collectAwsPages(async (marker) => {
     const response = await sendLambdaCommand<ListFunctionsCommandOutput>(
       client,
       new ListFunctionsCommand({ Marker: marker })
     );
+    return {
+      items: (response.Functions ?? []).flatMap((lambdaFunction) =>
+        toUnknownLambdaFunctionRecord(lambdaFunction, region)
+      ),
+      nextToken: response.NextMarker
+    };
+  });
 
-    records.push(...(response.Functions ?? []).flatMap((lambdaFunction) =>
-      toUnknownLambdaFunctionRecord(lambdaFunction, region)
-    ));
-    marker = response.NextMarker && response.NextMarker.length > 0 ? response.NextMarker : undefined;
-  } while (marker);
-
-  return records;
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 export async function listLambdaPermissionsAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsLambdaReadClientFactory = createDefaultLambdaReadClient
+  createClient: AwsLambdaReadClientFactory = createDefaultLambdaReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let marker: string | undefined;
-
-  do {
+  const result = await collectAwsPages(async (marker) => {
     const response = await sendLambdaCommand<ListFunctionsCommandOutput>(
       client,
       new ListFunctionsCommand({ Marker: marker })
@@ -1375,129 +1600,142 @@ export async function listLambdaPermissionsAsUnknown(
         createLambdaPermissionRecords(lambdaFunction, region, client)
       )
     );
+    return {
+      items: permissionGroups.flat(),
+      nextToken: response.NextMarker
+    };
+  });
 
-    records.push(...permissionGroups.flat());
-    marker = response.NextMarker && response.NextMarker.length > 0 ? response.NextMarker : undefined;
-  } while (marker);
-
-  return records;
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 // CloudFront는 global 서비스지만 연결 계정의 credentials로 읽고 결과 region은 global로 고정합니다.
 export async function listCloudFrontDistributions(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsCloudFrontReadClientFactory = createDefaultCloudFrontReadClient
+  createClient: AwsCloudFrontReadClientFactory = createDefaultCloudFrontReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let marker: string | undefined;
-
-  do {
+  const result = await collectAwsPages(async (marker) => {
     const response = await sendCloudFrontCommand<ListDistributionsCommandOutput>(
       client,
       new ListDistributionsCommand({ Marker: marker })
     );
+    return {
+      items: (response.DistributionList?.Items ?? []).flatMap(toCloudFrontDistributionRecord),
+      nextToken: response.DistributionList?.NextMarker
+    };
+  });
 
-    records.push(...(response.DistributionList?.Items ?? []).flatMap(toCloudFrontDistributionRecord));
-    marker = response.DistributionList?.NextMarker;
-  } while (marker);
-
-  return records;
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
+/** gg: AMI NextToken pagination도 앞 page UNKNOWN records와 safe failure를 함께 유지합니다. */
 export async function listAmiImagesAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsEc2ReadClientFactory = createDefaultEc2ReadClient
+  createClient: AwsEc2ReadClientFactory = createDefaultEc2ReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const response = await sendEc2Command<DescribeImagesCommandOutput>(
-    client,
-    new DescribeImagesCommand({ Owners: ["self"] })
-  );
+  const result = await collectAwsPages(async (nextToken) => {
+    const response = await sendEc2Command<DescribeImagesCommandOutput>(
+      client,
+      new DescribeImagesCommand({ Owners: ["self"], MaxResults: 1_000, NextToken: nextToken })
+    );
+    return {
+      items: (response.Images ?? []).flatMap((image) =>
+        toUnknownAmiImageRecord(image, region)
+      ),
+      nextToken: response.NextToken
+    };
+  });
 
-  return (response.Images ?? []).flatMap((image) => toUnknownAmiImageRecord(image, region));
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 export async function listIamRolesAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsIamReadClientFactory = createDefaultIamReadClient
+  createClient: AwsIamReadClientFactory = createDefaultIamReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let marker: string | undefined;
-
-  do {
+  const result = await collectAwsPages(async (marker) => {
     const response = await sendIamCommand<ListRolesCommandOutput>(
       client,
       new ListRolesCommand({ Marker: marker })
     );
+    return {
+      items: (response.Roles ?? []).flatMap((role) => toUnknownIamRoleRecord(role, region)),
+      nextToken: response.Marker
+    };
+  });
 
-    records.push(...(response.Roles ?? []).flatMap((role) => toUnknownIamRoleRecord(role, region)));
-    marker = response.Marker;
-  } while (marker);
-
-  return records;
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 export async function listIamPoliciesAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsIamReadClientFactory = createDefaultIamReadClient
+  createClient: AwsIamReadClientFactory = createDefaultIamReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let marker: string | undefined;
-
-  do {
+  const result = await collectAwsPages(async (marker) => {
     const response = await sendIamCommand<ListPoliciesCommandOutput>(
       client,
       new ListPoliciesCommand({ Marker: marker, Scope: "Local" })
     );
+    return {
+      items: (response.Policies ?? []).flatMap((policy) =>
+        toUnknownIamPolicyRecord(policy, region)
+      ),
+      nextToken: response.Marker
+    };
+  });
 
-    records.push(...(response.Policies ?? []).flatMap((policy) => toUnknownIamPolicyRecord(policy, region)));
-    marker = response.Marker;
-  } while (marker);
-
-  return records;
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 export async function listIamInstanceProfilesAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsIamReadClientFactory = createDefaultIamReadClient
+  createClient: AwsIamReadClientFactory = createDefaultIamReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let marker: string | undefined;
-
-  do {
+  const result = await collectAwsPages(async (marker) => {
     const response = await sendIamCommand<ListInstanceProfilesCommandOutput>(
       client,
       new ListInstanceProfilesCommand({ Marker: marker })
     );
+    return {
+      items: (response.InstanceProfiles ?? []).flatMap((profile) =>
+        toUnknownIamInstanceProfileRecord(profile, region)
+      ),
+      nextToken: response.Marker
+    };
+  });
 
-    records.push(...(response.InstanceProfiles ?? []).flatMap((profile) =>
-      toUnknownIamInstanceProfileRecord(profile, region)
-    ));
-    marker = response.Marker;
-  } while (marker);
-
-  return records;
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 export async function listKmsKeysAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsKmsReadClientFactory = createDefaultKmsReadClient
+  createClient: AwsKmsReadClientFactory = createDefaultKmsReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let marker: string | undefined;
-
-  do {
+  const result = await collectAwsPages(async (marker) => {
     const response = await sendKmsCommand<ListKeysCommandOutput>(
       client,
       new ListKeysCommand({ Marker: marker })
@@ -1505,78 +1743,88 @@ export async function listKmsKeysAsUnknown(
     const keyRecords = await Promise.all(
       (response.Keys ?? []).map((key) => createKmsKeyRecord(key.KeyId, key.KeyArn, region, client))
     );
+    return {
+      items: keyRecords.filter(
+        (record): record is AwsDiscoveredResourceRecord => record !== null
+      ),
+      nextToken: response.NextMarker
+    };
+  });
 
-    records.push(...keyRecords.filter((record): record is AwsDiscoveredResourceRecord => record !== null));
-    marker = response.NextMarker;
-  } while (marker);
-
-  return records;
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 export async function listCloudWatchLogGroupsAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsCloudWatchLogsReadClientFactory = createDefaultCloudWatchLogsReadClient
+  createClient: AwsCloudWatchLogsReadClientFactory = createDefaultCloudWatchLogsReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let nextToken: string | undefined;
-
-  do {
+  const result = await collectAwsPages(async (nextToken) => {
     const response = await sendCloudWatchLogsCommand<DescribeLogGroupsCommandOutput>(
       client,
       new DescribeLogGroupsCommand({ nextToken })
     );
+    return {
+      items: (response.logGroups ?? []).flatMap((logGroup) =>
+        toUnknownLogGroupRecord(logGroup, region)
+      ),
+      nextToken: response.nextToken
+    };
+  });
 
-    records.push(...(response.logGroups ?? []).flatMap((logGroup) => toUnknownLogGroupRecord(logGroup, region)));
-    nextToken = response.nextToken;
-  } while (nextToken);
-
-  return records;
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 export async function listCloudWatchMetricAlarmsAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsCloudWatchReadClientFactory = createDefaultCloudWatchReadClient
+  createClient: AwsCloudWatchReadClientFactory = createDefaultCloudWatchReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let nextToken: string | undefined;
-
-  do {
+  const result = await collectAwsPages(async (nextToken) => {
     const response = await sendCloudWatchCommand<DescribeAlarmsCommandOutput>(
       client,
       new DescribeAlarmsCommand({ NextToken: nextToken })
     );
+    return {
+      items: (response.MetricAlarms ?? []).flatMap((alarm) =>
+        toUnknownMetricAlarmRecord(alarm, region)
+      ),
+      nextToken: response.NextToken
+    };
+  });
 
-    records.push(...(response.MetricAlarms ?? []).flatMap((alarm) => toUnknownMetricAlarmRecord(alarm, region)));
-    nextToken = response.NextToken;
-  } while (nextToken);
-
-  return records;
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 export async function listApiGatewayRestApisAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
-  createClient: AwsApiGatewayReadClientFactory = createDefaultApiGatewayReadClient
+  createClient: AwsApiGatewayReadClientFactory = createDefaultApiGatewayReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const records: AwsDiscoveredResourceRecord[] = [];
-  let position: string | undefined;
-
-  do {
+  const result = await collectAwsPages(async (position) => {
     const response = await sendApiGatewayCommand<GetRestApisCommandOutput>(
       client,
       new GetRestApisCommand({ position })
     );
+    return {
+      items: (response.items ?? []).flatMap((restApi) =>
+        toUnknownRestApiRecord(restApi, region)
+      ),
+      nextToken: response.position
+    };
+  });
 
-    records.push(...(response.items ?? []).flatMap((restApi) => toUnknownRestApiRecord(restApi, region)));
-    position = response.position;
-  } while (position);
-
-  return records;
+  if (result.failure) reportPageFailure(result.failure);
+  return result.items;
 }
 
 function createDefaultTaggingReadClient(
@@ -1893,37 +2141,27 @@ function toUnknownLambdaFunctionRecord(
     {
       providerResourceType: "AWS::Lambda::Function",
       providerResourceId: arn,
-      displayName: lambdaFunction.FunctionName ?? arn,
+      displayName: lambdaFunction.FunctionName ?? "Lambda 함수",
       region: parseAwsArn(arn).region || fallbackRegion,
-      config: {
+      config: compactRecord({
         architectures: lambdaFunction.Architectures,
-        codeSha256: lambdaFunction.CodeSha256,
         codeSize: lambdaFunction.CodeSize,
-        description: lambdaFunction.Description,
-        ephemeralStorage: lambdaFunction.EphemeralStorage,
-        functionArn: arn,
+        ephemeralStorageSize: lambdaFunction.EphemeralStorage?.Size,
         functionName: lambdaFunction.FunctionName,
         handler: lambdaFunction.Handler,
-        kmsKeyArn: lambdaFunction.KMSKeyArn,
         lastModified: lambdaFunction.LastModified,
         lastUpdateStatus: lambdaFunction.LastUpdateStatus,
-        layers: lambdaFunction.Layers,
         memorySize: lambdaFunction.MemorySize,
         packageType: lambdaFunction.PackageType,
-        providerParameters: toProviderParameterSnapshot(lambdaFunction),
-        role: lambdaFunction.Role,
         runtime: lambdaFunction.Runtime,
-        signingJobArn: lambdaFunction.SigningJobArn,
-        signingProfileVersionArn: lambdaFunction.SigningProfileVersionArn,
+        securityGroupIds,
         state: lambdaFunction.State,
-        stateReason: lambdaFunction.StateReason,
         subnetIds,
         timeout: lambdaFunction.Timeout,
-        tracingConfig: lambdaFunction.TracingConfig,
+        tracingMode: lambdaFunction.TracingConfig?.Mode,
         version: lambdaFunction.Version,
-        vpcConfig: lambdaFunction.VpcConfig,
         vpcId
-      },
+      }),
       relationships
     }
   ];
@@ -1977,23 +2215,19 @@ function toUnknownLambdaPermissionRecord(
   fallbackRegion: string
 ): AwsDiscoveredResourceRecord {
   const functionArn = lambdaFunction.FunctionArn ?? lambdaFunction.FunctionName ?? "lambda-function";
-  const sid = statement.Sid && statement.Sid.length > 0 ? statement.Sid : `statement-${index + 1}`;
-  const providerResourceId = `${functionArn}:permission:${sid}`;
+  const permissionIndex = index + 1;
+  const providerResourceId = `${functionArn}:permission:${permissionIndex}`;
 
   return {
     providerResourceType: "AWS::Lambda::Permission",
     providerResourceId,
-    displayName: `${lambdaFunction.FunctionName ?? functionArn} permission ${sid}`,
+    displayName: `${lambdaFunction.FunctionName ?? "Lambda 함수"} permission ${permissionIndex}`,
     region: parseAwsArn(functionArn).region || fallbackRegion,
     config: {
-      action: statement.Action,
-      effect: statement.Effect,
-      functionArn,
+      effect: normalizePolicyEffect(statement.Effect),
       functionName: lambdaFunction.FunctionName,
-      principal: statement.Principal,
-      providerParameters: toProviderParameterSnapshot(statement),
-      resource: statement.Resource,
-      sid
+      hasCondition: isRecordValue(statement.Condition),
+      permissionIndex
     },
     relationships: [{ type: "depends_on", targetProviderResourceId: functionArn }]
   };
@@ -2198,23 +2432,20 @@ function toUnknownIamRoleRecord(role: Role, fallbackRegion: string): AwsDiscover
     {
       providerResourceType: "AWS::IAM::Role",
       providerResourceId: arn,
-      displayName: role.RoleName ?? arn,
+      displayName: role.RoleName ?? "IAM Role",
       region: "global",
-      config: {
-        arn,
-        assumeRolePolicyDocument: role.AssumeRolePolicyDocument,
+      config: compactRecord({
         createdAt: role.CreateDate?.toISOString(),
         description: role.Description,
+        hasPermissionsBoundary: role.PermissionsBoundary !== undefined,
+        hasTrustPolicy: isNonEmptyString(role.AssumeRolePolicyDocument),
+        lastUsedAt: role.RoleLastUsed?.LastUsedDate?.toISOString(),
+        lastUsedRegion: role.RoleLastUsed?.Region,
         maxSessionDuration: role.MaxSessionDuration,
         path: role.Path,
-        permissionsBoundary: role.PermissionsBoundary,
-        providerParameters: toProviderParameterSnapshot(role),
-        roleId: role.RoleId,
-        roleLastUsed: role.RoleLastUsed,
         roleName: role.RoleName,
-        scanRegion: fallbackRegion,
-        tags: role.Tags
-      },
+        scanRegion: fallbackRegion
+      }),
       relationships: []
     }
   ];
@@ -2234,24 +2465,19 @@ function toUnknownIamPolicyRecord(
     {
       providerResourceType: "AWS::IAM::Policy",
       providerResourceId: arn,
-      displayName: policy.PolicyName ?? arn,
+      displayName: policy.PolicyName ?? "IAM Policy",
       region: "global",
-      config: {
-        arn,
+      config: compactRecord({
         attachmentCount: policy.AttachmentCount,
         createdAt: policy.CreateDate?.toISOString(),
-        defaultVersionId: policy.DefaultVersionId,
         description: policy.Description,
         isAttachable: policy.IsAttachable,
         path: policy.Path,
         permissionsBoundaryUsageCount: policy.PermissionsBoundaryUsageCount,
-        policyId: policy.PolicyId,
         policyName: policy.PolicyName,
-        providerParameters: toProviderParameterSnapshot(policy),
         scanRegion: fallbackRegion,
-        tags: policy.Tags,
         updatedAt: policy.UpdateDate?.toISOString()
-      },
+      }),
       relationships: []
     }
   ];
@@ -2271,19 +2497,17 @@ function toUnknownIamInstanceProfileRecord(
     {
       providerResourceType: "AWS::IAM::InstanceProfile",
       providerResourceId: arn,
-      displayName: profile.InstanceProfileName ?? arn,
+      displayName: profile.InstanceProfileName ?? "IAM Instance Profile",
       region: "global",
-      config: {
-        arn,
+      config: compactRecord({
         createdAt: profile.CreateDate?.toISOString(),
-        instanceProfileId: profile.InstanceProfileId,
         instanceProfileName: profile.InstanceProfileName,
         path: profile.Path,
-        providerParameters: toProviderParameterSnapshot(profile),
-        roles: profile.Roles,
+        roleNames: (profile.Roles ?? []).flatMap((role) =>
+          role.RoleName ? [role.RoleName] : []
+        ),
         scanRegion: fallbackRegion,
-        tags: profile.Tags
-      },
+      }),
       relationships: (profile.Roles ?? []).flatMap((role) =>
         role.Arn ? [{ type: "depends_on" as const, targetProviderResourceId: role.Arn }] : []
       )
@@ -2810,6 +3034,13 @@ function isRecordValue(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// gg: Policy 원문은 버리고 permission의 허용·거부 여부만 안전한 소문자 요약으로 남깁니다.
+function normalizePolicyEffect(value: unknown): "allow" | "deny" | "unknown" {
+  if (value === "Allow") return "allow";
+  if (value === "Deny") return "deny";
+  return "unknown";
+}
+
 function toAwsSdkCredentials(credentials: TerraformAwsCredentialEnv) {
   return credentials.AWS_SESSION_TOKEN
     ? {
@@ -2896,9 +3127,11 @@ export function deduplicateReverseEngineeringScanErrors(
   const uniqueErrors = new Map<string, ReverseEngineeringScanError>();
 
   for (const scanError of scanErrors) {
-    if (!uniqueErrors.has(scanError.id)) {
-      uniqueErrors.set(scanError.id, scanError);
-    }
+    const key = scanError.serviceKey ?? scanError.id;
+    uniqueErrors.set(
+      key,
+      selectHigherPriorityReverseEngineeringScanError(uniqueErrors.get(key), scanError)
+    );
   }
 
   return [...uniqueErrors.values()];
@@ -2979,6 +3212,25 @@ function toScanError(
 
   return {
     id: `scan-error-service-${normalizeReverseEngineeringAwsServiceKey(serviceKey)}`,
+    serviceKey: normalizeReverseEngineeringAwsServiceKey(serviceKey),
+    resourceType,
+    stage: "provider_api",
+    reason,
+    message: formatSafeScanErrorMessage(reason),
+    retryable: reason === "throttled" || reason === "provider_error"
+  };
+}
+
+/** gg: page collector의 safe outcome만 scan diagnostic으로 옮기고 원문을 복원하지 않습니다. */
+function toScanErrorFromPageFailure(
+  resourceType: ResourceType,
+  failure: AwsPageFailure,
+  serviceKey = getReverseEngineeringAwsServiceKey(resourceType)
+): ReverseEngineeringScanError {
+  const reason = failure.outcome === "transient" ? "provider_error" : failure.outcome;
+  return {
+    id: `scan-error-service-${normalizeReverseEngineeringAwsServiceKey(serviceKey)}`,
+    serviceKey: normalizeReverseEngineeringAwsServiceKey(serviceKey),
     resourceType,
     stage: "provider_api",
     reason,

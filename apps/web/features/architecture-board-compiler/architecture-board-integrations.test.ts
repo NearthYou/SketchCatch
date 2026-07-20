@@ -6,15 +6,17 @@ import {
   buildTemplateDiagramJson,
   templateDefinitions,
   type AiArchitectureDraftResult,
-  type DiagramJson
+  type DiagramJson,
+  type ReverseEngineeringScanResult
 } from "@sketchcatch/types";
 import {
   ARCHITECTURE_BOARD_COMPILER_VERSION,
   compileArchitectureDraftProposal,
+  createBoardAutoOrganizeCandidates,
   createBoardAutoOrganizeProposal,
   reviewArchitectureBoardTemplate
 } from ".";
-import { compileReverseEngineeringArchitecture } from "../workspace/reverse-engineering-board-application";
+import { createReverseEngineeringBoardApplication } from "../workspace/reverse-engineering-board-application";
 
 test("AI Draft와 Board 자동 정리는 같은 Compiler version의 proposal을 만든다", () => {
   const diagram = buildTemplateDiagramJson("minimal-serverless-api", {
@@ -102,8 +104,8 @@ test("Template review는 29개 usable 사례를 모두 검토하고 source-exact
   });
 });
 
-test("Reverse Engineering도 같은 Compiler interface와 version을 사용한다", () => {
-  const proposal = compileReverseEngineeringArchitecture({
+test("Reverse Engineering도 shared visual-only 정리안 interface를 사용한다", () => {
+  const result: ReverseEngineeringScanResult = {
     scan: {
       id: "scan-1",
       projectId: "project-1",
@@ -120,7 +122,27 @@ test("Reverse Engineering도 같은 Compiler interface와 version을 사용한�
       createdAt: "2026-07-15T00:00:00.000Z",
       updatedAt: "2026-07-15T00:00:00.000Z"
     },
-    architectureJson: { nodes: [], edges: [] },
+    architectureJson: {
+      nodes: [
+        {
+          id: "bucket-1",
+          type: "S3",
+          label: "Bucket 1",
+          positionX: 0,
+          positionY: 0,
+          config: { providerResourceId: "bucket-1" }
+        },
+        {
+          id: "bucket-2",
+          type: "S3",
+          label: "Bucket 2",
+          positionX: 0,
+          positionY: 0,
+          config: { providerResourceId: "bucket-2" }
+        }
+      ],
+      edges: []
+    },
     reverseEngineeringDraft: {
       id: "draft-1",
       scanId: "scan-1",
@@ -134,7 +156,27 @@ test("Reverse Engineering도 같은 Compiler interface와 version을 사용한�
     analysisExclusions: [],
     importSuggestions: [],
     scanErrors: []
+  };
+  const original = createReverseEngineeringBoardApplication({
+    currentDiagram: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } },
+    mode: "replace",
+    placement: "original",
+    result
+  });
+  const candidateSet = createBoardAutoOrganizeCandidates(original.diagram);
+  const selected = candidateSet.candidates[0];
+
+  assert.ok(selected);
+
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } },
+    mode: "replace",
+    organizedDiagram: selected.diagram,
+    placement: "compiled",
+    result
   });
 
-  assert.equal(proposal.provenance.compilerVersion, ARCHITECTURE_BOARD_COMPILER_VERSION);
+  assert.equal(application.compilation, null);
+  assert.deepEqual(application.diagram, selected.diagram);
+  assert.match(selected.id, /^arrangement-/);
 });

@@ -255,6 +255,7 @@ function isExpectedAssumeRoleDeniedError(error: unknown): boolean {
   return isAwsAccessDeniedError(error);
 }
 
+// gg: STS 연결 오류를 원문 없이 Role 거부와 서버 자격 증명 문제로 나눕니다.
 export function toAwsConnectionTestError(error: unknown): AwsConnectionTestError {
   if (isAwsAccessDeniedError(error)) {
     return new AwsConnectionTestError("AWS Role assume permission denied");
@@ -284,17 +285,25 @@ function isAwsAccessDeniedError(error: unknown): boolean {
   );
 }
 
+// gg: local SSO/default provider 오류를 고객 Role의 AccessDenied와 섞지 않습니다.
 function isAwsCredentialError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) {
     return false;
   }
 
   const errorName = "name" in error && typeof error.name === "string" ? error.name : "";
+  const message = "message" in error && typeof error.message === "string"
+    ? error.message.toLowerCase()
+    : "";
 
   return (
+    errorName === "CredentialsProviderError" ||
+    errorName === "TokenProviderError" ||
     errorName === "ExpiredToken" ||
     errorName === "ExpiredTokenException" ||
     errorName === "InvalidClientTokenId" ||
-    errorName === "UnrecognizedClientException"
+    errorName === "UnrecognizedClientException" ||
+    message.includes("could not load credentials") ||
+    message.includes("sso session")
   );
 }

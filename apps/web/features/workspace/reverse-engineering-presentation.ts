@@ -31,7 +31,7 @@ export type ReverseEngineeringScanErrorPresentation = {
 
 type ReverseEngineeringScanSummaryInput = Pick<
   ReverseEngineeringScanResult,
-  "architectureJson" | "discoveredResources" | "scanErrors"
+  "architectureJson" | "coverage" | "discoveredResources" | "scanErrors"
 >;
 
 const SERVICE_LABELS: Readonly<Record<string, string>> = {
@@ -53,6 +53,24 @@ const SERVICE_LABELS: Readonly<Record<string, string>> = {
 };
 
 const MAX_DISPLAY_NAME_LENGTH = 42;
+const SCAN_ERROR_SERVICE_NAMES: Readonly<Record<string, string>> = {
+  "api-gateway": "API Gateway",
+  "aws-inventory": "AWS 리소스 목록",
+  cloudfront: "CloudFront",
+  cloudwatch: "CloudWatch",
+  "cloudwatch-logs": "CloudWatch Logs",
+  ec2: "EC2",
+  ecs: "ECS",
+  "elastic-load-balancing": "Elastic Load Balancing",
+  iam: "IAM",
+  kms: "KMS",
+  lambda: "Lambda",
+  rds: "RDS",
+  "resource-explorer": "Resource Explorer",
+  "resource-explorer-2": "Resource Explorer",
+  "resource-groups-tagging": "Resource Groups Tagging API",
+  s3: "S3"
+};
 
 export function presentReverseEngineeringResource(
   resource: DiscoveredResource
@@ -86,7 +104,9 @@ export function summarizeReverseEngineeringScan(
     reviewOnlyCount: result.discoveredResources.filter(
       (resource) => presentReverseEngineeringResource(resource).displayState === "review_only"
     ).length,
-    unreadableServiceCount: presentReverseEngineeringScanErrors(result.scanErrors).length
+    unreadableServiceCount:
+      result.coverage?.unavailableServices.length ??
+      presentReverseEngineeringScanErrors(result.scanErrors).length
   };
 }
 
@@ -113,7 +133,16 @@ export function presentReverseEngineeringScanErrors(
   return [...presentationByService.values()];
 }
 
+// gg: 새 응답의 allowlisted serviceKey를 우선하고 과거 저장 결과는 기존 ID/type으로 보정합니다.
 function getScanErrorServiceKey(scanError: ReverseEngineeringScanError): string {
+  const explicitServiceKey = scanError.serviceKey?.trim().toLowerCase();
+  if (
+    explicitServiceKey &&
+    Object.prototype.hasOwnProperty.call(SCAN_ERROR_SERVICE_NAMES, explicitServiceKey)
+  ) {
+    return explicitServiceKey;
+  }
+
   const serviceIdMatch = /^scan-error-service-([a-z0-9-]+)$/u.exec(scanError.id);
 
   if (serviceIdMatch?.[1]) {
@@ -153,26 +182,9 @@ function getScanErrorServiceKey(scanError: ReverseEngineeringScanError): string 
   return serviceByResourceType[scanError.resourceType] ?? "aws-inventory";
 }
 
+// gg: 공개 목록에 없는 식별자는 기술 이름 대신 일반 AWS 서비스로 표시합니다.
 function getScanErrorServiceName(key: string): string {
-  const labels: Readonly<Record<string, string>> = {
-    "api-gateway": "API Gateway",
-    "aws-inventory": "AWS 리소스 목록",
-    cloudfront: "CloudFront",
-    cloudwatch: "CloudWatch",
-    "cloudwatch-logs": "CloudWatch Logs",
-    ec2: "EC2",
-    ecs: "ECS",
-    "elastic-load-balancing": "Elastic Load Balancing",
-    iam: "IAM",
-    kms: "KMS",
-    lambda: "Lambda",
-    rds: "RDS",
-    "resource-explorer": "Resource Explorer",
-    "resource-groups-tagging": "Resource Groups Tagging API",
-    s3: "S3"
-  };
-
-  return labels[key] ?? "AWS 서비스";
+  return SCAN_ERROR_SERVICE_NAMES[key] ?? "AWS 서비스";
 }
 
 function getScanErrorRemedy(reason: ReverseEngineeringScanError["reason"]): string {

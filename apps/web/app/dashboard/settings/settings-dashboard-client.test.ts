@@ -10,8 +10,9 @@ const clientSource = readFileSync(join(currentDir, "settings-dashboard-client.ts
 test("Settings client passes one AWS connection ID into recovery navigation", () => {
   assert.match(
     clientSource,
-    /awsConnectionId:\s*getSingleSearchParam\(searchParams\.getAll\("awsConnectionId"\)\)/
+    /const recoveryAwsConnectionId = getSingleSearchParam\([\s\S]*?searchParams\.getAll\("awsConnectionId"\)[\s\S]*?\);/
   );
+  assert.match(clientSource, /awsConnectionId:\s*recoveryAwsConnectionId/);
 });
 
 test("Pending GitHub authorization identifies the exact AWS connection to update", () => {
@@ -35,4 +36,24 @@ test("Settings refreshes an existing CodeConnection from AWS before presenting i
   assert.match(loadSource, /catch \(error\) \{/);
   assert.match(loadSource, /return \[connection\.id, savedConnection\] as const/);
   assert.match(loadSource, /AWS 상태를 다시 확인하지 못해 저장된 연결 상태를 표시합니다/);
+});
+
+test("Settings keeps Reverse return behind the selected connection import-access wizard", () => {
+  assert.match(clientSource, /<AwsImportAccessWizard/);
+  assert.match(clientSource, /connectionId=\{connection\.id\}/);
+  assert.match(clientSource, /connectionStatus=\{connection\.status\}/);
+  assert.match(clientSource, /recoveryAwsConnectionId === connection\.id/);
+  assert.match(clientSource, /onContinue:\s*returnToReverseEngineeringAfterRecovery/);
+  assert.doesNotMatch(
+    clientSource,
+    /connection\.status === "verified"\s*\?\s*\([\s\S]{0,200}<AwsImportAccessWizard/
+  );
+
+  for (const functionName of ["verifyCreatedRole", "retestConnection", "reverifyConnection"]) {
+    const start = clientSource.indexOf(`async function ${functionName}`);
+    const end = clientSource.indexOf("\n  }", start);
+    const source = clientSource.slice(start, end);
+    assert.ok(start > -1, functionName);
+    assert.doesNotMatch(source, /returnToReverseEngineeringAfterRecovery/u, functionName);
+  }
 });

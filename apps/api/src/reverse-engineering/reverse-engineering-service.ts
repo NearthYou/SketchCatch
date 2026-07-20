@@ -5,7 +5,10 @@ import { RESOURCE_TYPES } from "@sketchcatch/types";
 import type {
   AwsConnection,
   ArchitectureJson,
+  CheckFinding,
   DiscoveredResource,
+  ResourceType,
+  ReverseEngineeringAnalysisExclusion,
   ReverseEngineeringDraft,
   ReverseEngineeringImportSuggestion,
   ReverseEngineeringResourceSelection,
@@ -23,12 +26,25 @@ import {
   reverseEngineeringScans
 } from "../db/schema.js";
 import type { ProjectAccessContext, ProjectRecord } from "../deployments/deployment-service.js";
-import { createAwsProviderAdapter, type AwsProviderAdapter } from "./aws-provider-adapter.js";
+import {
+  containsAwsArn,
+  createAwsProviderAdapter,
+  createAwsPublicDisplayName,
+  createAwsPublicProviderResourceId,
+  createAwsPublicResourceConfig,
+  type AwsProviderAdapter
+} from "./aws-provider-adapter.js";
 import { createAwsReverseEngineeringGateway } from "./aws-reverse-engineering-gateway.js";
 import {
   createAwsResourceDisplayName,
   createAwsResourceDisplayNameMap
 } from "./aws-resource-display-name.js";
+import {
+  classifyReverseEngineeringConnectionFailure,
+  createReverseEngineeringPublicCoverage,
+  sanitizeReverseEngineeringScanErrors,
+  type ReverseEngineeringConnectionFailureClassification
+} from "./reverse-engineering-public-errors.js";
 
 export type ReverseEngineeringScanRecord = typeof reverseEngineeringScans.$inferSelect;
 export type ReverseEngineeringScanLogRecord = typeof reverseEngineeringScanLogs.$inferSelect;
@@ -161,25 +177,371 @@ export function normalizeReverseEngineeringScanResult(
   persistedResult: PersistedReverseEngineeringScanResult
 ): ReverseEngineeringScanResult {
   const normalizationContext = createReadCompatibilityNormalizationContext(persistedResult);
-  const architectureJson = normalizeReadCompatibilityArchitecture(
+  const publicResourceIdMap = createReadCompatibilityPublicResourceIdMap(
+    persistedResult.discoveredResources
+  );
+  const normalizedArchitectureJson = normalizeReadCompatibilityArchitecture(
     persistedResult.architectureJson,
     normalizationContext
   );
+  const architectureJson = sanitizeReadCompatibilityArchitecture(
+    normalizedArchitectureJson,
+    publicResourceIdMap
+  );
   const persistedDraft = persistedResult.reverseEngineeringDraft;
-  const draft = isUsableReverseEngineeringDraft(persistedDraft, scan.id)
+  const scanErrors = sanitizeReverseEngineeringScanErrors(persistedResult.scanErrors);
+  const normalizedDraft = isUsableReverseEngineeringDraft(persistedDraft, scan.id)
     ? normalizeReadCompatibilityDraft(persistedDraft, normalizationContext)
-    : createReadCompatibilityDraft(scan, architectureJson);
+    : createReadCompatibilityDraft(scan, normalizedArchitectureJson);
+  const draftArchitectureJson =
+    normalizedDraft.architectureJson === normalizedArchitectureJson
+      ? architectureJson
+      : sanitizeReadCompatibilityArchitecture(
+          normalizedDraft.architectureJson,
+          publicResourceIdMap
+        );
+  const publicDraftId = sanitizePublicStructuredId(
+    normalizedDraft.id,
+    "AWS::ReverseEngineering::Draft",
+    "draft"
+  );
+  const draft = {
+    ...normalizedDraft,
+    id: publicDraftId,
+    architectureJson: draftArchitectureJson
+  };
 
   return {
     ...persistedResult,
-    scan,
+    scan: sanitizePublicScan(scan),
+    discoveredResources: persistedResult.discoveredResources.map((resource) =>
+      sanitizeReadCompatibilityDiscoveredResource(resource, publicResourceIdMap)
+    ),
     architectureJson,
     reverseEngineeringDraft: draft,
-    importSuggestions: sanitizeImportSuggestions(
-      normalizationContext,
-      persistedResult.importSuggestions
+    findings: sanitizePublicFindings(persistedResult.findings, publicResourceIdMap),
+    analysisExclusions: sanitizePublicAnalysisExclusions(
+      persistedResult.analysisExclusions,
+      publicResourceIdMap
+    ),
+    scanErrors,
+    coverage: createReverseEngineeringPublicCoverage(scanErrors).coverage,
+    importSuggestions: sanitizePublicImportSuggestions(
+      sanitizeImportSuggestions(normalizationContext, persistedResult.importSuggestions),
+      publicResourceIdMap
     )
   };
+}
+
+function createReadCompatibilityPublicResourceIdMap(
+  resources: readonly DiscoveredResource[]
+): ReadonlyMap<string, string> {
+  const publicResourceIdMap = new Map<string, string>();
+  const publicIdsByProviderResourceId = new Map<string, Set<string>>();
+
+  for (const resource of resources) {
+    const publicProviderResourceId = createAwsPublicProviderResourceId({
+      providerResourceType: resource.providerResourceType,
+      providerResourceId: resource.providerResourceId
+    });
+    const publicResourceId =
+      publicProviderResourceId !== resource.providerResourceId
+        ? `resource-${publicProviderResourceId}`
+        : sanitizePublicStructuredId(
+            resource.id,
+            resource.providerResourceType,
+            "resource"
+          );
+    publicResourceIdMap.set(resource.id, publicResourceId);
+
+    const publicIds = publicIdsByProviderResourceId.get(resource.providerResourceId) ?? new Set();
+    publicIds.add(publicResourceId);
+    publicIdsByProviderResourceId.set(resource.providerResourceId, publicIds);
+  }
+
+  for (const [providerResourceId, publicIds] of publicIdsByProviderResourceId) {
+    if (publicIds.size === 1 && !publicResourceIdMap.has(providerResourceId)) {
+      publicResourceIdMap.set(providerResourceId, [...publicIds][0]!);
+    }
+  }
+
+  return publicResourceIdMap;
+}
+
+function sanitizeReadCompatibilityDiscoveredResource(
+  resource: DiscoveredResource,
+  publicResourceIdMap: ReadonlyMap<string, string>
+): DiscoveredResource {
+  const identity = {
+    providerResourceType: resource.providerResourceType,
+    providerResourceId: resource.providerResourceId
+  };
+  const displayName = createAwsResourceDisplayName(resource);
+
+  return {
+    ...resource,
+    id: sanitizePublicResourceReference(
+      resource.id,
+      publicResourceIdMap,
+      resource.providerResourceType
+    ),
+    providerResourceId: createAwsPublicProviderResourceId(identity),
+    displayName: createAwsPublicDisplayName(identity, displayName),
+    config: createAwsPublicResourceConfig({
+      providerResourceType: resource.providerResourceType,
+      config: resource.config
+    }),
+    relationships: resource.relationships?.map((relationship) => ({
+      ...relationship,
+      targetResourceId: sanitizePublicResourceReference(
+        relationship.targetResourceId,
+        publicResourceIdMap
+      )
+    }))
+  };
+}
+
+function sanitizeReadCompatibilityArchitecture(
+  architectureJson: ArchitectureJson,
+  publicResourceIdMap: ReadonlyMap<string, string>
+): ArchitectureJson {
+  const nodes = architectureJson.nodes.map((node) => {
+    const providerResourceType = getNodeProviderResourceType(node);
+    const rawProviderResourceId =
+      readNonEmptyConfigString(node.config["providerResourceId"]) ??
+      (node.label && containsAwsArn(node.label) ? node.label : undefined);
+    const identity = {
+      providerResourceType,
+      providerResourceId: rawProviderResourceId ?? node.id
+    };
+    const config = createAwsPublicResourceConfig({
+      providerResourceType,
+      config: node.config
+    });
+
+    const publicNode = {
+      ...node,
+      id: sanitizePublicResourceReference(
+        node.id,
+        publicResourceIdMap,
+        providerResourceType
+      ),
+      label: node.label ? createAwsPublicDisplayName(identity, node.label) : node.label,
+      config: {
+        ...config,
+        providerResourceType,
+        ...(rawProviderResourceId
+          ? { providerResourceId: createAwsPublicProviderResourceId(identity) }
+          : {}),
+        analysisExcluded: node.config["analysisExcluded"] === true
+      }
+    };
+
+    return isDeepStrictEqual(publicNode, node) ? node : publicNode;
+  });
+  const edges = architectureJson.edges.map((edge) => {
+    const publicEdge = {
+      ...edge,
+      id: sanitizePublicStructuredId(
+        edge.id,
+        "AWS::Architecture::Edge",
+        "edge",
+        publicResourceIdMap
+      ),
+      sourceId: sanitizePublicResourceReference(edge.sourceId, publicResourceIdMap),
+      targetId: sanitizePublicResourceReference(edge.targetId, publicResourceIdMap),
+      ...(edge.label && containsSensitiveAwsProviderText(edge.label)
+        ? { label: "AWS Resource 관계" }
+        : {})
+    };
+
+    return isDeepStrictEqual(publicEdge, edge) ? edge : publicEdge;
+  });
+
+  return nodes.every((node, index) => node === architectureJson.nodes[index]) &&
+    edges.every((edge, index) => edge === architectureJson.edges[index])
+    ? architectureJson
+    : { ...architectureJson, nodes, edges };
+}
+
+function getNodeProviderResourceType(
+  node: ArchitectureJson["nodes"][number]
+): string {
+  const explicitType = readNonEmptyConfigString(node.config["providerResourceType"]);
+
+  if (explicitType) {
+    return explicitType;
+  }
+
+  const providerTypesByResourceType: Partial<Record<ResourceType, string>> = {
+    LAMBDA: "AWS::Lambda::Function",
+    LAMBDA_PERMISSION: "AWS::Lambda::Permission",
+    IAM_ROLE: "AWS::IAM::Role",
+    IAM_POLICY: "AWS::IAM::Policy",
+    IAM_INSTANCE_PROFILE: "AWS::IAM::InstanceProfile"
+  };
+
+  return providerTypesByResourceType[node.type] ?? `AWS::${node.type}`;
+}
+
+function sanitizePublicImportSuggestions(
+  importSuggestions: ReverseEngineeringImportSuggestion[],
+  publicResourceIdMap: ReadonlyMap<string, string>
+): ReverseEngineeringImportSuggestion[] {
+  return importSuggestions.map((suggestion) => {
+    const publicId = sanitizePublicStructuredId(
+      suggestion.id,
+      "AWS::ReverseEngineering::ImportSuggestion",
+      "import",
+      publicResourceIdMap
+    );
+    const publicResourceId = sanitizePublicResourceReference(
+      suggestion.resourceId,
+      publicResourceIdMap
+    );
+    const publicFields = [
+      suggestion.terraformAddress,
+      suggestion.importCommand,
+      suggestion.terraformBlockDraft,
+      suggestion.reason
+    ];
+
+    if (!publicFields.some((value) => value !== undefined && containsSensitiveAwsProviderText(value))) {
+      return suggestion.id === publicId && suggestion.resourceId === publicResourceId
+        ? suggestion
+        : { ...suggestion, id: publicId, resourceId: publicResourceId };
+    }
+
+    return {
+      id: publicId,
+      resourceId: publicResourceId,
+      status: "manual_review",
+      handoffReady: false,
+      reason: "보안상 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
+    };
+  });
+}
+
+function sanitizePublicFindings(
+  findings: readonly CheckFinding[],
+  publicResourceIdMap: ReadonlyMap<string, string>
+): CheckFinding[] {
+  return findings.map((finding) => ({
+    ...finding,
+    id: sanitizePublicStructuredId(
+      finding.id,
+      "AWS::ReverseEngineering::Finding",
+      "finding",
+      publicResourceIdMap
+    ),
+    ...(finding.resourceId
+      ? {
+          resourceId: sanitizePublicResourceReference(
+            finding.resourceId,
+            publicResourceIdMap
+          )
+        }
+      : {}),
+    title: sanitizePublicFindingText(finding.title, "AWS Resource 검토가 필요합니다."),
+    description: sanitizePublicFindingText(
+      finding.description,
+      "AWS의 민감한 원본 정보는 표시하지 않습니다."
+    ),
+    recommendation: sanitizePublicFindingText(
+      finding.recommendation,
+      "Resource 상태와 권한을 확인한 뒤 다시 시도해 주세요."
+    )
+  }));
+}
+
+function sanitizePublicAnalysisExclusions(
+  exclusions: readonly ReverseEngineeringAnalysisExclusion[],
+  publicResourceIdMap: ReadonlyMap<string, string>
+): ReverseEngineeringAnalysisExclusion[] {
+  return exclusions.map((exclusion) => ({
+    ...exclusion,
+    id: sanitizePublicStructuredId(
+      exclusion.id,
+      "AWS::ReverseEngineering::AnalysisExclusion",
+      "analysis-exclusion",
+      publicResourceIdMap
+    ),
+    resourceId: sanitizePublicResourceReference(exclusion.resourceId, publicResourceIdMap),
+    message:
+      exclusion.reason === "unsupported_resource_type"
+        ? "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
+        : "가져온 정보가 부족해 분석에서 제외됐습니다."
+  }));
+}
+
+function sanitizePublicScan(scan: ReverseEngineeringScan): ReverseEngineeringScan {
+  return scan.errorSummary && containsSensitiveAwsProviderText(scan.errorSummary)
+    ? {
+        ...scan,
+        errorSummary: "AWS에서 항목을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요."
+      }
+    : scan;
+}
+
+function sanitizePublicFindingText(value: string, fallback: string): string {
+  return containsSensitiveAwsProviderText(value) ? fallback : value;
+}
+
+function containsSensitiveAwsProviderText(value: string): boolean {
+  return (
+    containsAwsArn(value) ||
+    /\b(?:accessdenied(?:exception)?|authorizationerror|requestid)\b/iu.test(value) ||
+    /(?:^|[^a-z0-9-])[a-z][a-z0-9-]*:[A-Z][A-Za-z0-9]+/u.test(value) ||
+    /"(?:Action|Effect|Principal|Resource|Statement)"\s*:/iu.test(value)
+  );
+}
+
+function sanitizePublicResourceReference(
+  value: string,
+  publicResourceIdMap: ReadonlyMap<string, string>,
+  providerResourceType = "AWS::Unknown::Resource"
+): string {
+  return (
+    publicResourceIdMap.get(value) ??
+    sanitizePublicStructuredId(value, providerResourceType, "resource")
+  );
+}
+
+function sanitizePublicStructuredId(
+  value: string,
+  providerResourceType: string,
+  prefix: string,
+  publicResourceIdMap: ReadonlyMap<string, string> = new Map()
+): string {
+  const rewrittenValue = rewriteStructuredPublicResourceReferences(
+    value,
+    publicResourceIdMap
+  );
+
+  if (!containsAwsArn(rewrittenValue)) {
+    return rewrittenValue;
+  }
+
+  return `${prefix}-${createAwsPublicProviderResourceId({
+    providerResourceType,
+    providerResourceId: rewrittenValue
+  })}`;
+}
+
+function rewriteStructuredPublicResourceReferences(
+  value: string,
+  publicResourceIdMap: ReadonlyMap<string, string>
+): string {
+  let rewrittenValue = value;
+  const replacements = [...publicResourceIdMap.entries()]
+    .filter(([privateValue, publicValue]) => privateValue.length > 0 && privateValue !== publicValue)
+    .sort(([left], [right]) => right.length - left.length);
+
+  for (const [privateValue, publicValue] of replacements) {
+    rewrittenValue = rewrittenValue.replaceAll(privateValue, publicValue);
+  }
+
+  return rewrittenValue;
 }
 
 type ReadCompatibilityNormalizationContext = {
@@ -504,9 +866,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 // 스캔 row는 있지만 Provider 호출이 실패한 경우 404와 구분하기 위해 따로 던집니다.
 export class ReverseEngineeringScanFailedError extends Error {
-  constructor(message: string) {
-    super(message);
+  readonly internalCode: ReverseEngineeringConnectionFailureClassification["internalCode"];
+  readonly publicReason: ReverseEngineeringConnectionFailureClassification["publicReason"];
+
+  // gg: 공개 Error에는 안전한 문장과 다음 행동 분류만 남깁니다.
+  constructor(classification: ReverseEngineeringConnectionFailureClassification) {
+    super(classification.publicMessage);
     this.name = "ReverseEngineeringScanFailedError";
+    this.internalCode = classification.internalCode;
+    this.publicReason = classification.publicReason;
   }
 }
 
@@ -564,11 +932,12 @@ export async function createReverseEngineeringPreviewScan(
       region: input.region,
       resourceTypes: input.resourceTypes
     });
+    const publicAdapterResult = normalizePublicAdapterResult(adapterResult);
     const result: ReverseEngineeringScanResult = {
-      ...adapterResult,
+      ...publicAdapterResult,
       scan,
       reverseEngineeringDraft: {
-        ...adapterResult.reverseEngineeringDraft,
+        ...publicAdapterResult.reverseEngineeringDraft,
         id: `draft-${scan.id}`,
         scanId: scan.id,
         createdAt: scan.completedAt ?? scan.updatedAt
@@ -580,13 +949,15 @@ export async function createReverseEngineeringPreviewScan(
       result
     };
   } catch (error) {
-    throw new ReverseEngineeringScanFailedError(toErrorSummary(error));
+    throw new ReverseEngineeringScanFailedError(
+      classifyReverseEngineeringConnectionFailure(error)
+    );
   }
 }
 
-// 알 수 없는 adapter 오류도 사용자에게 보여줄 수 있는 짧은 실패 문장으로 바꿉니다.
+// gg: 알 수 없는 adapter 오류도 저장 가능한 고정 문장으로만 바꿉니다.
 function toErrorSummary(error: unknown): string {
-  return error instanceof Error ? error.message : "Reverse Engineering scan failed";
+  return classifyReverseEngineeringConnectionFailure(error).publicMessage;
 }
 
 // 스캔 생성부터 결과 저장까지 한 번에 처리하는 서비스 진입점입니다.
@@ -689,6 +1060,7 @@ async function runReverseEngineeringScanJob({
       region: input.region,
       resourceTypes: input.resourceTypes
     });
+    const publicAdapterResult = normalizePublicAdapterResult(adapterResult);
     const completedAt = now();
     const completedScan = toReverseEngineeringScan({
       ...scan,
@@ -697,10 +1069,10 @@ async function runReverseEngineeringScanJob({
       updatedAt: completedAt
     });
     const result: ReverseEngineeringScanResult = {
-      ...adapterResult,
+      ...publicAdapterResult,
       scan: completedScan,
       reverseEngineeringDraft: {
-        ...adapterResult.reverseEngineeringDraft,
+        ...publicAdapterResult.reverseEngineeringDraft,
         id: `draft-${completedScan.id}`,
         scanId: completedScan.id,
         createdAt: completedScan.completedAt ?? completedScan.updatedAt
@@ -743,8 +1115,17 @@ async function runReverseEngineeringScanJob({
       throw new ReverseEngineeringNotFoundError("Reverse Engineering scan not found");
     }
 
-    throw new ReverseEngineeringScanFailedError(errorSummary);
+    throw new ReverseEngineeringScanFailedError(
+      classifyReverseEngineeringConnectionFailure(error)
+    );
   }
+}
+
+// gg: 주입된 adapter와 과거 구현도 API 응답·저장 전에 같은 공개 오류 계약으로 줄입니다.
+function normalizePublicAdapterResult(
+  result: ReverseEngineeringScanResult
+): ReverseEngineeringScanResult {
+  return normalizeReverseEngineeringScanResult(result.scan, result);
 }
 
 export function createPostgresReverseEngineeringRepository(
@@ -956,7 +1337,7 @@ export function toReverseEngineeringScan(row: ReverseEngineeringScanRecord): Rev
     completedAt: row.completedAt?.toISOString() ?? null,
     cancelRequestedAt: row.cancelRequestedAt?.toISOString() ?? null,
     deletedAt: row.deletedAt?.toISOString() ?? null,
-    errorSummary: row.errorSummary
+    errorSummary: row.errorSummary ? sanitizeHistoricalErrorSummary(row.errorSummary) : null
   };
 }
 
@@ -969,9 +1350,16 @@ export function toReverseEngineeringScanLogLine(
     sequence: row.sequence,
     stage: row.stage,
     level: row.level,
-    message: row.message,
+    message: row.level === "ERROR"
+      ? "Reverse Engineering 스캔을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요."
+      : row.message,
     createdAt: row.createdAt.toISOString()
   };
+}
+
+// gg: 과거 저장 row의 원문 오류도 읽는 순간 고정 문장으로 바꿉니다.
+function sanitizeHistoricalErrorSummary(_errorSummary: string): string {
+  return "AWS에서 항목을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
 function toAwsConnection(row: typeof awsConnections.$inferSelect): AwsConnection {

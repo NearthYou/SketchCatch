@@ -23,6 +23,7 @@ import type {
   AwsConnectionDeletionPreviewResponse,
   AwsConnection,
   AwsConnectionListResponse,
+  AwsImportAccessCommandResponse,
   AwsCodeConnectionResponse,
   CostEstimatePeriod,
   CostProjectEstimateListResponse,
@@ -45,6 +46,8 @@ import type {
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
   CreateProjectRequest,
+  CreateReverseEngineeringProjectRequest,
+  CreateReverseEngineeringProjectResponse,
   CreateReverseEngineeringScanRequest,
   DeleteProjectRequest,
   DisconnectAwsCodeConnectionRequest,
@@ -146,6 +149,7 @@ import {
   type ApiRequestContext
 } from "../../lib/api-client";
 import { readStoredAuthSession } from "../../lib/auth-storage";
+import type { BoardAutoOrganizeApplyRequest } from "../architecture-board-compiler/board-auto-organize-preview";
 
 const AI_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api").replace(/\/+$/, "");
 const API_ERROR_CODES = [
@@ -199,6 +203,16 @@ export async function createProject(input: CreateProjectRequest): Promise<Projec
   });
 
   return response.project;
+}
+
+export async function createReverseEngineeringProject(
+  input: CreateReverseEngineeringProjectRequest
+): Promise<CreateReverseEngineeringProjectResponse> {
+  return apiFetch<CreateReverseEngineeringProjectResponse>("/projects/reverse-engineering", {
+    auth: true,
+    method: "POST",
+    body: input
+  });
 }
 
 export async function listProjects(): Promise<Project[]> {
@@ -351,6 +365,23 @@ export async function saveProjectDraft({
       ...(terraformFiles !== undefined ? { terraformFiles } : {})
     }
   });
+}
+
+/** 선택한 Board 정리안을 Compiler metadata 없이 전용 서버 검증 경계로 보냅니다. */
+export async function applyProjectDraftBoardAutoOrganize({
+  projectId,
+  ...request
+}: {
+  readonly projectId: string;
+} & BoardAutoOrganizeApplyRequest): Promise<ProjectDraftResponse> {
+  return apiFetch<ProjectDraftResponse>(
+    `/projects/${encodeURIComponent(projectId)}/draft/auto-organize/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: request
+    }
+  );
 }
 
 export async function getRepositoryAnalysisRecord(
@@ -1351,6 +1382,99 @@ export async function getAwsConnectionDeletionPreview(
     `/aws/connections/${encodeURIComponent(connectionId)}/deletion-preview`,
     { auth: true }
   );
+}
+
+export type AwsImportAccessPreviewResponse = AwsImportAccessCommandResponse & {
+  readonly connectionId: string;
+  readonly approvalId: string;
+};
+
+export type AwsImportAccessSafeResponse = AwsImportAccessCommandResponse & {
+  readonly connectionId: string;
+};
+
+// gg: 가져오기 상태 API는 AWS 내부 식별자 없이 shared safe state만 읽습니다.
+export async function getAwsImportAccessState(
+  connectionId: string
+): Promise<AwsImportAccessSafeResponse> {
+  return apiFetch<AwsImportAccessSafeResponse>(awsImportAccessPath(connectionId), { auth: true });
+}
+
+// gg: Manager 준비는 서버가 만든 exact AWS Console URL만 요청합니다.
+export async function prepareAwsImportAccessManager(
+  connectionId: string
+): Promise<AwsImportAccessSafeResponse> {
+  return postAwsImportAccessCommand(connectionId, "/manager/prepare");
+}
+
+// gg: Manager 확인 요청에는 Stack·Role·Template 입력을 받지 않습니다.
+export async function checkAwsImportAccessManager(
+  connectionId: string
+): Promise<AwsImportAccessSafeResponse> {
+  return postAwsImportAccessCommand(connectionId, "/manager/check");
+}
+
+// gg: Policy preview에서만 single-use approval secret을 받습니다.
+export async function previewAwsImportAccessPolicy(
+  connectionId: string
+): Promise<AwsImportAccessPreviewResponse> {
+  return apiFetch<AwsImportAccessPreviewResponse>(
+    `${awsImportAccessPath(connectionId)}/policy/preview`,
+    { auth: true, method: "POST" }
+  );
+}
+
+// gg: Policy apply는 서버 발급 approval와 operation ID만 되돌려 보냅니다.
+export async function applyAwsImportAccessPolicy(input: {
+  connectionId: string;
+  approvalId: string;
+  operationId: string;
+}): Promise<AwsImportAccessSafeResponse> {
+  return apiFetch<AwsImportAccessSafeResponse>(
+    `${awsImportAccessPath(input.connectionId)}/policy/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: { approvalId: input.approvalId, operationId: input.operationId }
+    }
+  );
+}
+
+// gg: 실제 read probe 결과 확인은 고객 Resource를 바꾸지 않는 command입니다.
+export async function checkAwsImportAccessReads(
+  connectionId: string
+): Promise<AwsImportAccessSafeResponse> {
+  return postAwsImportAccessCommand(connectionId, "/check");
+}
+
+// gg: cleanup 준비는 exact Stack의 Console 안내만 받고 삭제 호출은 하지 않습니다.
+export async function prepareAwsImportAccessCleanup(
+  connectionId: string
+): Promise<AwsImportAccessSafeResponse> {
+  return postAwsImportAccessCommand(connectionId, "/cleanup/prepare");
+}
+
+// gg: cleanup 확인은 Policy 다음 Manager 순서를 서버 상태로 다시 읽습니다.
+export async function checkAwsImportAccessCleanup(
+  connectionId: string
+): Promise<AwsImportAccessSafeResponse> {
+  return postAwsImportAccessCommand(connectionId, "/cleanup/check");
+}
+
+// gg: connection ID 외 provider 제어값을 URL이나 body에 추가하지 않습니다.
+function awsImportAccessPath(connectionId: string): string {
+  return `/aws/connections/${encodeURIComponent(connectionId)}/import-access`;
+}
+
+// gg: body 없는 import-access command의 인증 옵션을 한곳에서 유지합니다.
+function postAwsImportAccessCommand(
+  connectionId: string,
+  suffix: string
+): Promise<AwsImportAccessSafeResponse> {
+  return apiFetch<AwsImportAccessSafeResponse>(`${awsImportAccessPath(connectionId)}${suffix}`, {
+    auth: true,
+    method: "POST"
+  });
 }
 
 export async function deleteAwsConnection(

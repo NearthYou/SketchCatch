@@ -5,6 +5,7 @@ import { z } from "zod";
 import type {
   ApiErrorResponse,
   ArchitectureJson,
+  DiagramJson,
   ProjectDraftConflictResponse
 } from "@sketchcatch/types";
 import { RESOURCE_TYPES } from "@sketchcatch/types";
@@ -36,7 +37,20 @@ import {
   ProjectDraftRevisionMissingError,
   saveProjectDraftRevision
 } from "../modules/projects/project-draft-save-service.js";
-import { saveProjectDraftBodySchema } from "./project-draft-schemas.js";
+import {
+  applyBoardAutoOrganizeDraft,
+  BoardAutoOrganizeSemanticMismatchError,
+  BoardAutoOrganizeSourceMismatchError
+} from "../modules/projects/board-auto-organize-apply-service.js";
+import {
+  sanitizeAwsProjectArchitectureRead,
+  sanitizeAwsProjectDiagramRead
+} from "../reverse-engineering/aws-project-read-sanitizer.js";
+import {
+  boardAutoOrganizeApplyBodySchema,
+  diagramJsonSchema,
+  saveProjectDraftBodySchema
+} from "./project-draft-schemas.js";
 
 const createProjectBodySchema = z.object({
   name: z.string().min(1).max(120),
@@ -81,7 +95,14 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 
 const reverseEngineeringSourceSchema = z.object({
   sourceScanId: z.string().min(1),
-  draftId: z.string().min(1)
+  draftId: z.string().min(1),
+  sourceNodeIds: z.array(z.string().min(1)).optional(),
+  sourceKind: z.enum(["saved_scan", "preview_scan"]).optional()
+});
+
+const requiredReverseEngineeringSourceSchema = reverseEngineeringSourceSchema.extend({
+  sourceNodeIds: z.array(z.string().min(1)),
+  sourceKind: z.literal("preview_scan")
 });
 
 const createArchitectureBodySchema = z.object({
@@ -89,6 +110,12 @@ const createArchitectureBodySchema = z.object({
   source: z.string().min(1).max(64).default("manual"),
   reverseEngineering: reverseEngineeringSourceSchema.optional(),
   architectureJson: architectureJsonSchema
+});
+
+const createReverseEngineeringProjectBodySchema = createProjectBodySchema.extend({
+  diagramJson: diagramJsonSchema,
+  architectureJson: architectureJsonSchema,
+  reverseEngineering: requiredReverseEngineeringSourceSchema
 });
 
 const assetTypeSchema = z.enum([
@@ -218,6 +245,64 @@ export async function registerProjectRoutes(
     });
   });
 
+  // 새 Reverse Engineering Board는 Project·Draft·Snapshot을 하나의 DB 경계에서 만듭니다.
+  app.post("/projects/reverse-engineering", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const body = createReverseEngineeringProjectBodySchema.parse(request.body);
+    const { db } = getProjectDatabaseClient();
+
+    const created = await db.transaction(async (tx) => {
+      const projectId = randomUUID();
+      const [project] = await tx
+        .insert(projects)
+        .values({
+          id: projectId,
+          userId: currentUserId,
+          name: body.name,
+          description: body.description ?? null
+        })
+        .returning();
+      const [draft] = await tx
+        .insert(projectDrafts)
+        .values({
+          id: randomUUID(),
+          projectId,
+          diagramJson: attachReverseEngineeringSourceToDiagram(
+            body.diagramJson,
+            body.reverseEngineering
+          ),
+          terraformFiles: null,
+          revision: 1
+        })
+        .returning();
+      const [architecture] = await tx
+        .insert(architectures)
+        .values({
+          id: randomUUID(),
+          projectId,
+          version: 1,
+          source: "imported",
+          architectureJson: attachReverseEngineeringSource(
+            body.architectureJson,
+            body.reverseEngineering
+          )
+        })
+        .returning();
+
+      if (!project || !draft || !architecture) {
+        throw new Error("Reverse Engineering project transaction returned an empty row");
+      }
+
+      return {
+        project,
+        draft: toProjectDraft(draft),
+        architecture
+      };
+    });
+
+    return reply.status(201).send(created);
+  });
+
   app.get("/projects/:id/delete-preview", async (request) => {
     const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
     const params = routeParamsSchema.parse(request.params);
@@ -264,7 +349,12 @@ export async function registerProjectRoutes(
 
     return {
       project,
-      architectures: projectArchitectures,
+      architectures: projectArchitectures.map((architecture) => ({
+        ...architecture,
+        architectureJson: sanitizeAwsProjectArchitectureRead(architecture.architectureJson, {
+          source: architecture.source
+        })
+      })),
       assets
     };
   });
@@ -386,8 +476,15 @@ export async function registerProjectRoutes(
       .from(projectDrafts)
       .where(eq(projectDrafts.projectId, params.id));
 
+    const publicDraft = draft ? toProjectDraft(draft) : null;
+
     return reply.header("Cache-Control", "private, no-store").send({
-      draft: draft ? toProjectDraft(draft) : null
+      draft: publicDraft
+        ? {
+            ...publicDraft,
+            diagramJson: sanitizeAwsProjectDiagramRead(publicDraft.diagramJson)
+          }
+        : null
     });
   });
 
@@ -420,6 +517,56 @@ export async function registerProjectRoutes(
 
       return { draft: toProjectDraft(result.draft) };
     } catch (error) {
+      if (error instanceof ProjectDraftRevisionMissingError) {
+        return sendConflict(reply, error.message);
+      }
+
+      throw error;
+    }
+  });
+
+  // 자동 정리 적용은 일반 Draft 저장과 같은 소유권·revision CAS를 재사용합니다.
+  app.post("/projects/:id/draft/auto-organize/apply", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const params = routeParamsSchema.parse(request.params);
+    const body = boardAutoOrganizeApplyBodySchema.parse(request.body);
+    const { db } = getProjectDatabaseClient();
+
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+    if (!project) {
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
+    }
+
+    try {
+      const result = await applyBoardAutoOrganizeDraft({
+        candidateDiagram: body.candidateDiagram,
+        db,
+        expectedRevision: body.expectedRevision,
+        projectId: params.id,
+        sourceDiagram: body.sourceDiagram,
+        sourceFingerprint: body.sourceFingerprint,
+        terraformFiles: body.terraformFiles,
+        userId: currentUserId
+      });
+
+      if (result.status === "conflict") {
+        return sendProjectDraftConflict(reply, result.currentDraft);
+      }
+
+      return { draft: toProjectDraft(result.draft) };
+    } catch (error) {
+      if (error instanceof BoardAutoOrganizeSourceMismatchError) {
+        return sendConflict(reply, error.message);
+      }
+
+      if (error instanceof BoardAutoOrganizeSemanticMismatchError) {
+        return sendBadRequest(reply, error.message);
+      }
+
       if (error instanceof ProjectDraftRevisionMissingError) {
         return sendConflict(reply, error.message);
       }
@@ -732,16 +879,57 @@ function attachReverseEngineeringSource(
     return architectureJson;
   }
 
+  const sourceNodeIds = reverseEngineering.sourceNodeIds
+    ? new Set(reverseEngineering.sourceNodeIds)
+    : null;
+
   return {
     ...architectureJson,
-    nodes: architectureJson.nodes.map((node) => ({
-      ...node,
-      config: {
-        ...node.config,
-        reverseEngineeringSourceScanId: reverseEngineering.sourceScanId,
-        reverseEngineeringDraftId: reverseEngineering.draftId
+    nodes: architectureJson.nodes.map((node) =>
+      sourceNodeIds && !sourceNodeIds.has(node.id)
+        ? node
+        : {
+            ...node,
+            config: {
+              ...node.config,
+              reverseEngineeringSourceScanId: reverseEngineering.sourceScanId,
+              reverseEngineeringDraftId: reverseEngineering.draftId,
+              ...(reverseEngineering.sourceKind
+                ? { reverseEngineeringSourceKind: reverseEngineering.sourceKind }
+                : {})
+            }
+          }
+    )
+  };
+}
+
+// 새 Project의 Draft도 Snapshot과 같은 source ownership에 속한 node만 추적합니다.
+function attachReverseEngineeringSourceToDiagram(
+  diagramJson: DiagramJson,
+  reverseEngineering: z.infer<typeof requiredReverseEngineeringSourceSchema>
+): DiagramJson {
+  const sourceNodeIds = new Set(reverseEngineering.sourceNodeIds);
+
+  return {
+    ...diagramJson,
+    nodes: diagramJson.nodes.map((node) => {
+      if (!sourceNodeIds.has(node.id) || !node.parameters) {
+        return node;
       }
-    }))
+
+      return {
+        ...node,
+        parameters: {
+          ...node.parameters,
+          values: {
+            ...node.parameters.values,
+            reverseEngineeringSourceScanId: reverseEngineering.sourceScanId,
+            reverseEngineeringDraftId: reverseEngineering.draftId,
+            reverseEngineeringSourceKind: reverseEngineering.sourceKind
+          }
+        }
+      };
+    })
   };
 }
 

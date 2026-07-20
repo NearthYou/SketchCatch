@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DiagramJson } from "@sketchcatch/types";
-import { projectDraftQuerySchema, saveProjectDraftBodySchema } from "./project-draft-schemas.js";
+import {
+  boardAutoOrganizeApplyBodySchema,
+  projectDraftQuerySchema,
+  saveProjectDraftBodySchema
+} from "./project-draft-schemas.js";
 
 const validDiagram: DiagramJson = {
   nodes: [
@@ -177,6 +181,63 @@ test("save project draft body preserves empty source labels and workspace-seed a
 
   assert.equal(parsed.diagramJson.nodes[0]?.label, "");
   assert.equal(parsed.diagramJson.nodes[0]?.parameters?.terraformSourceAuthority, "workspace-seed");
+});
+
+test("save project draft body accepts source-exact AWS nodes without invented Terraform identity", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          type: "VPC",
+          parameters: {
+            resourceType: "",
+            resourceName: "",
+            fileName: "",
+            values: {
+              providerResourceId: "vpc-0123456789abcdef0"
+            },
+            invalid: true
+          }
+        }
+      ],
+      presentation: sourceExactPresentation
+    }
+  });
+
+  assert.deepEqual(parsed.diagramJson.nodes[0]?.parameters, {
+    resourceType: "",
+    resourceName: "",
+    fileName: "",
+    values: {
+      providerResourceId: "vpc-0123456789abcdef0"
+    },
+    invalid: true
+  });
+});
+
+test("save project draft body still rejects empty Terraform identity on editable nodes", () => {
+  const result = saveProjectDraftBodySchema.safeParse({
+    expectedRevision: 1,
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          parameters: {
+            resourceType: "",
+            resourceName: "",
+            fileName: "",
+            values: {}
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.success, false);
 });
 
 test("save project draft body preserves Curated Module provenance metadata", () => {
@@ -567,4 +628,49 @@ test("save project draft body rejects architecture-only json without viewport", 
   });
 
   assert.equal(result.success, false);
+});
+
+test("board auto-organize apply accepts only the exact visual candidate request", () => {
+  const candidateDiagram = structuredClone(validDiagram);
+  candidateDiagram.nodes[0]!.position = { x: 360, y: 180 };
+  const payload = {
+    sessionId: "board-auto-session:1234abcd",
+    candidateId: "arrangement-2",
+    sourceDiagram: validDiagram,
+    sourceFingerprint: "1234abcd",
+    candidateDiagram,
+    expectedRevision: 7,
+    terraformFiles: [{ fileName: "main.tf", terraformCode: "" }]
+  };
+
+  const parsed = boardAutoOrganizeApplyBodySchema.parse(payload);
+
+  assert.deepEqual(parsed, payload);
+  assert.equal(
+    boardAutoOrganizeApplyBodySchema.safeParse({
+      ...payload,
+      compilerVersion: "internal-only"
+    }).success,
+    false
+  );
+});
+
+test("board auto-organize apply requires its source fingerprint and draft revision", () => {
+  const payload = {
+    sessionId: "board-auto-session:1234abcd",
+    candidateId: "arrangement-1",
+    sourceDiagram: validDiagram,
+    candidateDiagram: validDiagram,
+    terraformFiles: []
+  };
+
+  assert.equal(boardAutoOrganizeApplyBodySchema.safeParse(payload).success, false);
+  assert.equal(
+    boardAutoOrganizeApplyBodySchema.safeParse({
+      ...payload,
+      sourceFingerprint: "1234abcd",
+      expectedRevision: null
+    }).success,
+    true
+  );
 });

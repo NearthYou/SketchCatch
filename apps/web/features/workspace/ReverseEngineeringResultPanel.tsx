@@ -1,19 +1,18 @@
 import type {
-  ArchitectureBoardCompilationProposal,
+  BoardAutoOrganizeCandidate,
   DiscoveredResource,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResponse,
-  ReverseEngineeringScanError
+  ReverseEngineeringScanError,
+  ReverseEngineeringServiceCoverage
 } from "@sketchcatch/types";
 import type { ReactNode } from "react";
 import type {
+  ReverseEngineeringBoardApplicationMode,
   ReverseEngineeringBoardComparison,
   ReverseEngineeringPlacement
 } from "./reverse-engineering-board-application";
 import type { ReverseEngineeringBoardCandidate } from "./reverse-engineering-board-candidates";
-import {
-  createReverseEngineeringCompilationReview
-} from "./reverse-engineering-compilation-review";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
 import {
   presentReverseEngineeringResource,
@@ -22,60 +21,51 @@ import {
 } from "./reverse-engineering-presentation";
 import styles from "./reverse-engineering.module.css";
 
-export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "error";
-export type ReverseEngineeringPermissionUpdateState =
-  | "idle"
-  | "preparing"
-  | "awaiting_aws_approval"
-  | "manual_template_required"
-  | "rechecking"
-  | "success"
-  | "error";
-
+export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "partial" | "error";
 export type ReverseEngineeringResultPanelProps = {
   readonly applyMessage: string | null;
+  readonly applicationMode: ReverseEngineeringBoardApplicationMode;
   readonly applyState: ReverseEngineeringApplyState;
-  readonly appendCompilation: ArchitectureBoardCompilationProposal | null;
   readonly boardCandidates: readonly ReverseEngineeringBoardCandidate[];
-  readonly compilation: ArchitectureBoardCompilationProposal | null;
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly createProjectOnApply: boolean;
   readonly hasCurrentBoardResources: boolean;
   readonly logs: ReverseEngineeringScanLogLine[];
   readonly onAppendToCurrentBoard: () => void;
+  readonly onApplicationModeChange: (mode: ReverseEngineeringBoardApplicationMode) => void;
   readonly onCompilePlacement: () => void;
   readonly onKeepOriginalPlacement: () => void;
-  readonly onOpenAsNewBoard: () => void;
-  readonly onPrepareImportPermissions?: (() => void) | undefined;
-  readonly onReverifyImportPermissions?: (() => void) | undefined;
+  readonly onReplaceCurrentBoard: () => void;
   readonly onRetryScan: () => void;
-  readonly permissionUpdateMessage?: string | null | undefined;
-  readonly permissionUpdateState?: ReverseEngineeringPermissionUpdateState | undefined;
+  readonly onSelectOrganizationCandidate: (candidateId: string) => void;
+  readonly organizationCandidates: readonly BoardAutoOrganizeCandidate[];
+  readonly permissionRecoveryHref: string;
   readonly response: ReverseEngineeringScanResponse;
   readonly selectedCandidateId: string;
+  readonly selectedOrganizationCandidateId: string | null;
   readonly placement: ReverseEngineeringPlacement;
 };
 
 // 스캔 결과와 사용자가 누를 적용 버튼을 한 화면에 모아 보여줍니다.
 export function ReverseEngineeringResultPanel({
   applyMessage,
+  applicationMode,
   applyState,
-  appendCompilation,
-  compilation,
   comparison,
   createProjectOnApply,
   hasCurrentBoardResources,
   onAppendToCurrentBoard,
+  onApplicationModeChange,
   onCompilePlacement,
   onKeepOriginalPlacement,
-  onOpenAsNewBoard,
-  onPrepareImportPermissions,
-  onReverifyImportPermissions,
+  onReplaceCurrentBoard,
   onRetryScan,
-  permissionUpdateMessage = null,
-  permissionUpdateState = "idle",
+  onSelectOrganizationCandidate,
+  organizationCandidates,
+  permissionRecoveryHref,
   placement,
-  response
+  response,
+  selectedOrganizationCandidateId
 }: ReverseEngineeringResultPanelProps) {
   const result = response.result;
 
@@ -86,10 +76,12 @@ export function ReverseEngineeringResultPanel({
   const isApplying = applyState === "saving";
   const summary = summarizeReverseEngineeringScan(result);
   const hasApplicableResources = summary.boardCount > 0;
-  const hasPartialFailure = result.scanErrors.length > 0;
-  const hasPermissionFailure = result.scanErrors.some(
-    (scanError) => scanError.reason === "permission_denied"
-  );
+  const hasPartialFailure = result.coverage
+    ? result.coverage.status === "partial"
+    : result.scanErrors.length > 0;
+  const hasPermissionFailure = result.coverage
+    ? result.coverage.unavailableServices.some((service) => service.remedy === "open_settings")
+    : result.scanErrors.some((scanError) => scanError.reason === "permission_denied");
   const unsupportedResources = result.discoveredResources.filter(
     (resource) => presentReverseEngineeringResource(resource).displayState === "review_only"
   );
@@ -137,33 +129,12 @@ export function ReverseEngineeringResultPanel({
         {hasPartialFailure ? (
           <div className={styles.warning} role="alert">
             <strong>일부 항목을 가져오지 못했어요</strong>
-            <p>가져온 항목은 그대로 확인하고 사용할 수 있어요.</p>
+            <p>가져온 항목만 사용해 계속 진행할 수 있어요.</p>
             {hasPermissionFailure ? (
-              permissionUpdateState === "awaiting_aws_approval" ||
-              permissionUpdateState === "manual_template_required" ? (
-                <button
-                  className={styles.secondaryButton}
-                  disabled={permissionUpdateState === "manual_template_required"}
-                  onClick={onReverifyImportPermissions}
-                  type="button"
-                >
-                  AWS에서 승인했어요
-                </button>
-              ) : (
-                <button
-                  className={styles.secondaryButton}
-                  disabled={
-                    permissionUpdateState === "preparing" ||
-                    permissionUpdateState === "rechecking"
-                  }
-                  onClick={onPrepareImportPermissions}
-                  type="button"
-                >
-                  가져오기 권한 추가
-                </button>
-              )
+              <a className={styles.secondaryButton} href={permissionRecoveryHref}>
+                환경설정에서 권한 보완
+              </a>
             ) : null}
-            {permissionUpdateMessage ? <p>{permissionUpdateMessage}</p> : null}
           </div>
         ) : null}
       </section>
@@ -175,7 +146,7 @@ export function ReverseEngineeringResultPanel({
           className={styles.placementDecisionHeader}
         >
           <span className={styles.placementBadge}>
-            {placement === "compiled" ? "정리 결과" : "원본"}
+            {placement === "compiled" ? "정리안" : "원본"}
           </span>
           <h3>
             {placement === "compiled" ? "자동 정리 미리보기" : "AWS에서 가져온 원본"}
@@ -186,6 +157,26 @@ export function ReverseEngineeringResultPanel({
             ? "Resource와 관계와 설정은 그대로 두고, 위치와 연결선만 정리한 모습입니다."
             : "가져온 Resource와 관계와 설정을 바꾸지 않은 상태를 먼저 보여드립니다."}
         </p>
+        {hasCurrentBoardResources ? (
+          <div className={styles.placementActions} role="group" aria-label="적용 방식 미리보기">
+            <button
+              aria-pressed={applicationMode === "replace"}
+              className={styles.secondaryButton}
+              onClick={() => onApplicationModeChange("replace")}
+              type="button"
+            >
+              현재 보드 교체 미리보기
+            </button>
+            <button
+              aria-pressed={applicationMode === "append"}
+              className={styles.secondaryButton}
+              onClick={() => onApplicationModeChange("append")}
+              type="button"
+            >
+              현재 보드 추가 미리보기
+            </button>
+          </div>
+        ) : null}
         <div className={styles.placementActions} role="group" aria-label="배치 미리보기 선택">
           <button
             aria-pressed={placement === "compiled"}
@@ -193,7 +184,7 @@ export function ReverseEngineeringResultPanel({
             onClick={onCompilePlacement}
             type="button"
           >
-            자동 정리
+            자동 정리 해보기
           </button>
           <button
             aria-pressed={placement === "original"}
@@ -204,38 +195,50 @@ export function ReverseEngineeringResultPanel({
             원본 보기
           </button>
         </div>
+        {organizationCandidates.length > 0 ? (
+          <div
+            aria-label="Board 정리안 선택"
+            className={styles.organizationCandidates}
+            role="list"
+          >
+            {organizationCandidates.map((candidate, index) => (
+              <button
+                aria-pressed={candidate.id === selectedOrganizationCandidateId}
+                key={candidate.id}
+                onClick={() => onSelectOrganizationCandidate(candidate.id)}
+                role="listitem"
+                type="button"
+              >
+                <strong>정리안 {index + 1}</strong>
+                <span>
+                  {candidate.explanations[0] ??
+                    "Resource 위치와 연결선을 보기 좋게 정리합니다."}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
         <p className={styles.placementSaveBoundary}>
           원본과 정리 결과를 전환해도 저장되지 않습니다. 마지막 적용 버튼을 눌러야 보드에
           반영됩니다.
         </p>
       </section>
 
-      {placement === "compiled" && compilation ? (
-        <section className={styles.compilationReview} aria-label="배치 컴파일러 검토">
-          <ReverseEngineeringCompilationModeReview
-            proposal={compilation}
-            title={hasCurrentBoardResources ? "새 보드로 열 때" : primaryApplyLabel}
-          />
-          {hasCurrentBoardResources && appendCompilation ? (
-            <ReverseEngineeringCompilationModeReview
-              proposal={appendCompilation}
-              title="현재 보드에 추가할 때"
-            />
-          ) : null}
-        </section>
-      ) : null}
-
       <section className={styles.section} aria-label="선택한 배치 적용">
         <h3>선택한 배치 적용</h3>
         <p className={styles.sectionDescription}>
-          {placement === "compiled" ? "정리 결과" : "가져온 원본"}을 확인한 뒤 원하는 적용
+          {placement === "compiled" ? "선택한 정리안" : "가져온 원본"}을 확인한 뒤 원하는 적용
           방식을 선택하세요.
         </p>
         <div className={styles.buttonRow}>
           <button
             className={styles.primaryButton}
-            disabled={isApplying || !hasApplicableResources}
-            onClick={onOpenAsNewBoard}
+            disabled={
+              isApplying ||
+              !hasApplicableResources ||
+              (hasCurrentBoardResources && applicationMode !== "replace")
+            }
+            onClick={onReplaceCurrentBoard}
             type="button"
           >
             <span>{primaryApplyLabel}</span>
@@ -244,7 +247,10 @@ export function ReverseEngineeringResultPanel({
             <button
               className={styles.secondaryButton}
               disabled={
-                isApplying || !hasApplicableResources || comparison.additions.length === 0
+                isApplying ||
+                !hasApplicableResources ||
+                comparison.additions.length === 0 ||
+                applicationMode !== "append"
               }
               onClick={onAppendToCurrentBoard}
               type="button"
@@ -260,7 +266,13 @@ export function ReverseEngineeringResultPanel({
         ) : null}
         {applyMessage ? (
           <p
-            className={applyState === "error" ? styles.error : styles.success}
+            className={
+              applyState === "error"
+                ? styles.error
+                : applyState === "partial"
+                  ? styles.warning
+                  : styles.success
+            }
             role={applyState === "error" ? "alert" : "status"}
           >
             {applyMessage}
@@ -270,6 +282,7 @@ export function ReverseEngineeringResultPanel({
 
       <ReverseEngineeringDetailGroup title="부분 실패">
         <ReverseEngineeringScanCoveragePanel
+          coverage={result.coverage}
           onRetryScan={onRetryScan}
           scanErrors={result.scanErrors}
         />
@@ -298,56 +311,6 @@ export function ReverseEngineeringResultPanel({
   );
 }
 
-function ReverseEngineeringCompilationModeReview({
-  proposal,
-  title
-}: {
-  readonly proposal: ArchitectureBoardCompilationProposal;
-  readonly title: string;
-}) {
-  const review = createReverseEngineeringCompilationReview(proposal);
-
-  return (
-    <article className={styles.compilationModeReview} aria-label={`${title} 배치 결과`}>
-      <div className={styles.compilationReviewHeader}>
-        <div>
-          <span>{title}</span>
-          <h3>{review.outcome.headline}</h3>
-        </div>
-        <strong>{review.changeCount}개 변경</strong>
-      </div>
-      <p className={styles.compilationReviewSummary}>{review.outcome.reviewSummary}</p>
-      {review.outcome.items.length > 0 ? (
-        <ul className={styles.compilationOutcomes}>
-          {review.outcome.items.map((item) => (
-            <li data-tone={item.tone} key={item.key}>
-              <span>{item.label}</span>
-              <strong>{item.summary}</strong>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className={styles.compilationHint}>추적 지표에서 표시할 배치 문제가 없습니다.</p>
-      )}
-      {review.diagnostics.length > 0 ? (
-        <ul className={styles.compilationDiagnostics}>
-          {review.diagnostics.map((presentation) => (
-            <li key={presentation.key} data-level={presentation.level}>
-              <strong>{presentation.summary}</strong>
-              <span>{presentation.message}</span>
-            </li>
-          ))}
-          {review.hiddenDiagnosticCount > 0 ? (
-            <li className={styles.compilationDiagnosticRemainder}>
-              확인 항목 {review.hiddenDiagnosticCount}개 더 있음
-            </li>
-          ) : null}
-        </ul>
-      ) : null}
-    </article>
-  );
-}
-
 // 새 프로젝트 시작인지 기존 보드 작업인지에 맞춰 적용 버튼 문구를 정합니다.
 function getPrimaryApplyLabel({
   createProjectOnApply,
@@ -372,7 +335,9 @@ function getPrimaryApplyLabel({
     return "프로젝트로 만들기";
   }
 
-  return hasCurrentBoardResources ? "새 보드로 열기" : "보드에 적용";
+  return hasCurrentBoardResources
+    ? "현재 보드를 가져온 항목으로 바꾸기"
+    : "보드에 적용";
 }
 
 // 긴 보조 정보는 기본 화면을 가리지 않도록 접을 수 있는 한 묶음으로 보여줍니다.
@@ -393,20 +358,31 @@ function ReverseEngineeringDetailGroup({
 
 // 사용자가 적용하기 전에 이번 스캔이 전체 결과인지 부분 결과인지 먼저 알려줍니다.
 function ReverseEngineeringScanCoveragePanel({
+  coverage,
   onRetryScan,
   scanErrors
 }: {
+  readonly coverage?: ReverseEngineeringServiceCoverage | undefined;
   readonly onRetryScan: () => void;
   readonly scanErrors: ReverseEngineeringScanError[];
 }) {
-  const notice = getScanCoverageNotice(scanErrors);
-  const hasRetryableScanError = scanErrors.some((scanError) => scanError.retryable);
-  const presentations = presentReverseEngineeringScanErrors(scanErrors);
+  const notice = getScanCoverageNotice(coverage, scanErrors);
+  const hasPartialFailure = coverage ? coverage.status === "partial" : scanErrors.length > 0;
+  const hasRetryableScanError = coverage
+    ? coverage.unavailableServices.some((service) => service.remedy === "retry")
+    : scanErrors.some((scanError) => scanError.retryable);
+  const presentations = coverage
+    ? coverage.unavailableServices.map((service) => ({
+        key: service.serviceKey,
+        serviceName: service.displayName,
+        remedy: getCoverageRemedy(service.reason)
+      }))
+    : presentReverseEngineeringScanErrors(scanErrors);
 
   return (
     <div>
-      <p className={scanErrors.length > 0 ? styles.warning : styles.hint}>{notice}</p>
-      {scanErrors.length > 0 ? (
+      <p className={hasPartialFailure ? styles.warning : styles.hint}>{notice}</p>
+      {hasPartialFailure ? (
         <details className={styles.detail}>
           <summary className={styles.detailSummary}>못 읽은 서비스 자세히 보기</summary>
           <div className={styles.detailBody}>
@@ -432,16 +408,37 @@ function ReverseEngineeringScanCoveragePanel({
 }
 
 // Resource Explorer 실패처럼 전체 스캔 범위에 영향을 주는 상태를 쉬운 말로 바꿉니다.
-function getScanCoverageNotice(scanErrors: ReverseEngineeringScanError[]): string {
-  if (scanErrors.some((scanError) => scanError.id === "scan-error-resource-explorer")) {
+function getScanCoverageNotice(
+  coverage: ReverseEngineeringServiceCoverage | undefined,
+  scanErrors: ReverseEngineeringScanError[]
+): string {
+  if (
+    coverage?.unavailableServices.some((service) => service.serviceKey === "resource-explorer") ||
+    scanErrors.some((scanError) => scanError.id === "scan-error-resource-explorer")
+  ) {
     return "Resource Explorer를 읽지 못했습니다. 가져온 결과가 전체 AWS 상태가 아닐 수 있습니다.";
   }
 
-  if (scanErrors.length > 0) {
+  if (coverage?.status === "partial" || scanErrors.length > 0) {
     return "일부 AWS 서비스를 읽지 못했습니다. 가져온 결과가 전체 AWS 상태가 아닐 수 있습니다.";
   }
 
   return "현재 권한으로 읽을 수 있는 범위에서는 부분 실패 없이 스캔했습니다.";
+}
+
+// gg: 공개 coverage의 세 가지 원인만 사용자가 바로 할 수 있는 짧은 문장으로 바꿉니다.
+function getCoverageRemedy(
+  reason: ReverseEngineeringServiceCoverage["unavailableServices"][number]["reason"]
+): string {
+  if (reason === "permission_required") {
+    return "환경설정에서 읽기 권한을 보완해 주세요.";
+  }
+
+  if (reason === "not_configured") {
+    return "AWS에서 이 서비스의 조회 준비를 확인해 주세요.";
+  }
+
+  return "잠시 후 다시 시도해 주세요.";
 }
 
 // 아직 정식 변환하지 못한 AWS 리소스를 숨기지 않고 별도 목록으로 보여줍니다.

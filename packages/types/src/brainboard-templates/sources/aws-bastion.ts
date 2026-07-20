@@ -43,7 +43,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "7912ce6d-b224-4055-84c0-e847e7ca1224",
       domOrder: 1,
-      label: "default_vpc",
+      label: "VPC",
       position: {
         x: 470,
         y: 180
@@ -61,7 +61,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3cbdd739-7b62-4824-ae49-25f7863bd970",
       domOrder: 2,
-      label: "us-east-1a",
+      label: "AZ us-east-1a",
       position: {
         x: 1030,
         y: 210
@@ -79,7 +79,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "0b578f07-26c1-42ea-8bd0-952dd4b45ebf",
       domOrder: 3,
-      label: "default_subnet",
+      label: "Bastion Subnet",
       position: {
         x: 1150,
         y: 260
@@ -97,7 +97,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6ef194ca-02bc-4039-8ca5-a61e1d285bae",
       domOrder: 4,
-      label: "default_security_group",
+      label: "Bastion SG",
       position: {
         x: 1190,
         y: 320
@@ -115,7 +115,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8810f656-c698-416c-b42b-14221f124aa0",
       domOrder: 5,
-      label: "Internet gateway",
+      label: "Internet Gateway",
       position: {
         x: 440,
         y: 470
@@ -133,7 +133,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d555e514-a657-43d3-9435-f3962064d36f",
       domOrder: 6,
-      label: "Route table",
+      label: "Internet Route Table",
       position: {
         x: 660,
         y: 470
@@ -151,7 +151,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "80489bad-1f77-4035-97ed-0939be2815cf",
       domOrder: 7,
-      label: "Route table association",
+      label: "Route Table Association - Bastion",
       position: {
         x: 910,
         y: 470
@@ -169,7 +169,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "edd96c50-6a71-4db7-b23f-f7f21465b74f",
       domOrder: 8,
-      label: "default_network_acl",
+      label: "Bastion Network ACL",
       position: {
         x: 910,
         y: 610
@@ -187,7 +187,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f91e8491-f010-457d-b966-7cd53de8e7e3",
       domOrder: 9,
-      label: "default_key_pair",
+      label: "Bastion Key Pair",
       position: {
         x: 1510,
         y: 460
@@ -205,7 +205,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "decc2f66-4950-4338-89fa-7eda35c53e60",
       domOrder: 10,
-      label: "SG rule ingress",
+      label: "Security Group Rule - Allowed CIDR Ingress",
       position: {
         x: 1240,
         y: 680
@@ -223,7 +223,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "202d02a1-538d-45fe-b8e5-26aa1753d5d1",
       domOrder: 11,
-      label: "SG rule SSH",
+      label: "Security Group Rule - Internal SSH",
       position: {
         x: 1380,
         y: 680
@@ -241,7 +241,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "941b992f-e911-4533-baff-396fed3cd614",
       domOrder: 12,
-      label: "SG rule egress",
+      label: "Security Group Rule - All Egress",
       position: {
         x: 1510,
         y: 680
@@ -259,7 +259,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3fbf05b5-5729-4f4e-88f7-92ee41797b38",
       domOrder: 13,
-      label: "SSH bastion",
+      label: "Bastion EC2",
       position: {
         x: 1270,
         y: 390
@@ -277,7 +277,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "9e820b53-18b3-407e-be69-6fda71a19f67",
       domOrder: 14,
-      label: "Private T2 instance",
+      label: "Private EC2",
       position: {
         x: 1270,
         y: 530
@@ -313,7 +313,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ff83642d-55bb-4725-9972-e3eef3b98077",
       domOrder: 16,
-      label: "Authorized users",
+      label: "Approved User",
       position: {
         x: 270,
         y: 470
@@ -700,7 +700,7 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_vpc.default_vpc",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "3cbdd739-7b62-4824-ae49-25f7863bd970": {
       kind: "presentation",
@@ -712,13 +712,13 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_subnet.default_subnet",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "6ef194ca-02bc-4039-8ca5-a61e1d285bae": {
       kind: "resource",
       address: "aws_security_group.default_security_group",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "8810f656-c698-416c-b42b-14221f124aa0": {
       kind: "resource",
@@ -742,13 +742,13 @@ export const awsBastionSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_network_acl.default_network_acl",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "f91e8491-f010-457d-b966-7cd53de8e7e3": {
       kind: "resource",
       address: "aws_key_pair.default_key_pair",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "decc2f66-4950-4338-89fa-7eda35c53e60": {
       kind: "resource",

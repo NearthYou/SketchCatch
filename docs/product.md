@@ -59,7 +59,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | Requirement Input | 텍스트와 Voice Requirement Input을 Requirement Prompt로 정규화한다. |
 | AI Architecture Recommendation | Requirement Prompt를 Architecture Draft로 변환하고 수락 전 설명을 제공한다. |
 | 다이어그램 편집 | Architecture Board에서 Resource와 관계를 직접 수정한다. |
-| Board 자동 정리 | Resource·관계·설정은 유지하고 위치·영역 배치·연결선 모양만 정리한 미리보기를 사용자가 비교하고 선택하게 한다. |
+| Board 자동 정리 | Resource·관계·설정·실제 소속은 유지하고 위치·크기·소속 없는 표시 프레임·연결선 모양만 정리한 최대 3개의 정리안을 사용자가 원본과 비교하고 하나를 선택하게 한다. 데스크톱은 thumbnail 갤러리와 좌우 비교, 모바일은 가로 갤러리와 원본/정리안 전환을 사용한다. 표시 프레임은 일반 Board 편집에 자동으로 따라가지 않고 다음 자동 정리 요청 때 다시 계산한다. 안전한 시각 변경이 있으면 측정상 개선 여부와 관계없이 비교·적용할 수 있다. |
 | Terraform 생성 | 다이어그램 기반 설계를 IaC Preview로 변환한다. |
 | Pre-Deployment Check | 비용, 보안, 설정 위험을 설명하고 수정 방향을 제안한다. |
 | Direct Deployment Path | sandbox/practice 실행에서 Plan, 승인, Apply, 로그, Outputs, Auto Cleanup까지 연결한다. |
@@ -82,7 +82,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | Git/CI/CD 운영 경로 | Terraform commit/PR, pipeline template, Plan 결과, 실행 상태를 연결한다. |
 | Application Artifact 재사용 | Direct Deployment와 Git/CI/CD가 같은 provider-neutral Registry를 사용하되 provider의 실제 artifact와 project ownership을 다시 검증한 경우에만 build를 재사용한다. |
 | Runtime Convergence | 동일한 Application Artifact와 runtime configuration이 provider에서 healthy 상태로 실제 실행 중인 경우에만 rollout을 생략한다. DB나 Runtime Cache 기록만으로 성공 처리하지 않으며 provider 조회 실패·불일치·unhealthy 상태는 안전한 rollout으로 fallback한다. ECS Service(Fargate/EC2 Capacity Provider), 단일 EC2, EC2+ASG, EKS(Managed/Self-managed/Fargate), Kubernetes Deployment, Lambda Alias/Version, Static S3/CloudFront는 독립 Adapter 경계를 유지한다. |
-| 리버스 엔지니어링 | Provider Adapter로 기존 cloud Resource를 가져와 Architecture Board와 IaC Preview/import 제안으로 복원한다. MVP는 AWS-first로 시작한다. |
+| 리버스 엔지니어링 | Provider Adapter로 기존 cloud Resource를 가져와 Architecture Board와 IaC Preview/import 제안으로 복원한다. 일부 읽기 권한이 부족하면 성공한 결과는 유지하고 환경설정의 AWS 연결 복구로 안내한다. 모든 기존 연결은 원래 Stack·Role·배포 권한을 유지한다. 연결별 Manager Stack이 CloudFormation 실행·제어·정리 확인 권한을 소유하고, Policy Stack이 읽기 Policy만 소유한다. 사용자는 Manager Stack을 AWS Console에서 승인하며 Policy Stack은 환경설정의 명시적 승인 뒤 서버가 생성·갱신한다. 제거는 Policy Stack 다음 Manager Stack 순서이고, SketchCatch가 소유한 Stack·Policy·Role 제거를 확인할 수 없으면 비활성 재시도 상태로 유지한다. MVP는 AWS-first로 시작한다. |
 | 비용 분석 | Practice Architecture, IaC Preview, Deployment Plan, Deployment History 단위의 Cost Risk를 보여준다. |
 | Well-Architected 기반 리뷰 | 보안, 비용, 신뢰성, 성능, 운영 관점으로 아키텍처를 리뷰한다. |
 | Runtime Cache | Redis를 내부 Runtime Cache로 사용해 Deployment, Reverse Engineering, Git/CI/CD 상태 추적과 로그 스트리밍을 보조한다. |

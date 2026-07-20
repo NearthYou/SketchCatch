@@ -3,6 +3,7 @@ import test from "node:test";
 import type { AwsConnection } from "@sketchcatch/types";
 import {
   canStartReverseEngineeringScan,
+  createReverseEngineeringAwsSettingsHref,
   formatReverseEngineeringAwsConnectionLabel,
   getReverseEngineeringAwsConnectionRecovery
 } from "./reverse-engineering-aws-connection-readiness";
@@ -39,6 +40,16 @@ test("AWS 연결이 없으면 Role 연결 복구 행동을 보여준다", () => 
     settingsHref: "/dashboard/settings?tab=aws&next=reverse",
     selectedConnectionId: null
   });
+});
+
+test("부분 결과 권한 보완도 공개 connection ID만 같은 Settings 주소에 보존한다", () => {
+  const href = createReverseEngineeringAwsSettingsHref("connection-partial");
+
+  assert.equal(
+    href,
+    "/dashboard/settings?tab=aws&next=reverse&awsConnectionId=connection-partial"
+  );
+  assert.doesNotMatch(href, /arn:aws|external-id|123456789012/iu);
 });
 
 test("pending 연결은 설정 계속 행동으로 복구한다", () => {

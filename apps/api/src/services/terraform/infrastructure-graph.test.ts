@@ -438,6 +438,50 @@ test("buildInfrastructureGraphFromDiagramJson excludes design, parameterless, an
   assert.deepEqual(graph.nodes, []);
 });
 
+test("Board 자동 표시 프레임은 Terraform 모양의 값이 있어도 infrastructure graph에서 제외한다", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "board-auto-frame:group",
+        type: "design_group",
+        kind: "design",
+        label: "자동 표시 영역",
+        metadata: { presentationCatalogItemId: "design-group" },
+        parameters: {
+          resourceType: "aws_instance",
+          resourceName: "must_not_render",
+          fileName: "main.tf",
+          values: { instance_type: "m7i.large" }
+        }
+      }),
+      makeNode({
+        id: "instance-1",
+        type: "aws_instance",
+        kind: "resource",
+        label: "API Server",
+        parameters: {
+          resourceType: "aws_instance",
+          resourceName: "api",
+          fileName: "main.tf",
+          values: { instance_type: "t3.micro" }
+        }
+      })
+    ],
+    edges: [
+      {
+        id: "frame-membership",
+        sourceNodeId: "board-auto-frame:group",
+        targetNodeId: "instance-1",
+        label: "contains"
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(graph.nodes.map((node) => node.id), ["instance-1"]);
+  assert.deepEqual(graph.edges, []);
+});
+
 test("buildInfrastructureGraphFromDiagramJson excludes Region and AZ area resources from Terraform Preview", () => {
   const graph = buildInfrastructureGraphFromDiagramJson({
     nodes: [

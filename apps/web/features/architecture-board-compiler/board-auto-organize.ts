@@ -1,9 +1,16 @@
-import type { DiagramJson } from "@sketchcatch/types";
+import {
+  hasSameBoardAutoOrganizeSemantics,
+  isBoardAutoPresentationFrameNode,
+  type DiagramJson
+} from "@sketchcatch/types";
 import { convertDiagramJsonToArchitectureJson } from "../workspace/workspace-ai-diagram-adapter";
 import {
   compileArchitectureBoard,
   type ArchitectureBoardCompilationProposal
 } from "./architecture-board-compiler";
+import { reconcilePresentationFrames } from "./board-auto-organize-frames";
+
+export { hasSameBoardAutoOrganizeSemantics } from "@sketchcatch/types";
 
 export function createBoardAutoOrganizeProposal(
   currentDiagram: DiagramJson
@@ -27,26 +34,32 @@ export function constrainBoardAutoOrganizeProposal(
 ): ArchitectureBoardCompilationProposal {
   const candidateNodesById = new Map(proposal.diagram.nodes.map((node) => [node.id, node]));
   const candidateEdgesById = new Map(proposal.diagram.edges.map((edge) => [edge.id, edge]));
-  const presentation = getConstrainedPresentation(currentDiagram, proposal.diagram);
-  const diagram: DiagramJson = {
+  const constrainedCandidate: DiagramJson = {
     ...structuredClone(currentDiagram),
-    nodes: currentDiagram.nodes.map((sourceNode) => {
-      const candidateNode = candidateNodesById.get(sourceNode.id);
+    nodes: [
+      ...currentDiagram.nodes
+        .filter((sourceNode) => !isBoardAutoPresentationFrameNode(sourceNode))
+        .map((sourceNode) => {
+          const candidateNode = candidateNodesById.get(sourceNode.id);
 
-      if (!candidateNode) {
-        return structuredClone(sourceNode);
-      }
+          if (!candidateNode) {
+            return structuredClone(sourceNode);
+          }
 
-      return {
-        ...structuredClone(sourceNode),
-        position: isFinitePoint(candidateNode.position)
-          ? structuredClone(candidateNode.position)
-          : structuredClone(sourceNode.position),
-        size: isValidSize(candidateNode.size)
-          ? structuredClone(candidateNode.size)
-          : structuredClone(sourceNode.size)
-      };
-    }),
+          return {
+            ...structuredClone(sourceNode),
+            position: isFinitePoint(candidateNode.position)
+              ? structuredClone(candidateNode.position)
+              : structuredClone(sourceNode.position),
+            size: isValidSize(candidateNode.size)
+              ? structuredClone(candidateNode.size)
+              : structuredClone(sourceNode.size)
+          };
+        }),
+      ...proposal.diagram.nodes
+        .filter(isBoardAutoPresentationFrameNode)
+        .map((node) => structuredClone(node))
+    ],
     edges: currentDiagram.edges.map((sourceEdge) => {
       const candidateEdge = candidateEdgesById.get(sourceEdge.id);
       const canReuseRoute =
@@ -61,11 +74,9 @@ export function constrainBoardAutoOrganizeProposal(
             ? { route: structuredClone(sourceEdge.route) }
             : {})
       };
-    }),
-    ...(presentation === undefined
-      ? { presentation: undefined }
-      : { presentation })
+    })
   };
+  const diagram = reconcilePresentationFrames(currentDiagram, constrainedCandidate);
 
   if (!hasSameBoardAutoOrganizeSemantics(currentDiagram, diagram)) {
     throw new Error("Board auto organize changed semantic Diagram data.");
@@ -78,28 +89,6 @@ export function constrainBoardAutoOrganizeProposal(
     changes: proposal.changes
       .filter(({ kind }) => kind === "geometry" || kind === "edge-routing")
       .map((change) => structuredClone(change))
-  };
-}
-
-function getConstrainedPresentation(
-  source: DiagramJson,
-  candidate: DiagramJson
-): DiagramJson["presentation"] {
-  const sourcePresentation = source.presentation;
-  const candidatePresentation = candidate.presentation;
-
-  if (
-    sourcePresentation?.geometryPolicy !== "source-exact" ||
-    candidatePresentation?.geometryPolicy !== "catalog-normalized"
-  ) {
-    return sourcePresentation === undefined ? undefined : structuredClone(sourcePresentation);
-  }
-
-  return {
-    geometryPolicy: "catalog-normalized",
-    ...(sourcePresentation.terraformSourceFingerprint === undefined
-      ? {}
-      : { terraformSourceFingerprint: sourcePresentation.terraformSourceFingerprint })
   };
 }
 
@@ -116,34 +105,6 @@ function mergeVisualRoute(
   }
 
   return route;
-}
-
-export function hasSameBoardAutoOrganizeSemantics(
-  source: DiagramJson,
-  candidate: DiagramJson
-): boolean {
-  return JSON.stringify(toSemanticSnapshot(source)) === JSON.stringify(toSemanticSnapshot(candidate));
-}
-
-function toSemanticSnapshot(diagram: DiagramJson): unknown {
-  const nodes = [...diagram.nodes].sort(compareById);
-  const edges = [...diagram.edges].sort(compareById);
-
-  return {
-    nodes: nodes.map(({ position: _position, size: _size, ...node }) => node),
-    edges: edges.map(({ route, ...edge }) => ({
-      ...edge,
-      routeArrowDirection: route?.arrowDirection
-    })),
-    variables: diagram.variables,
-    presentation: {
-      terraformSourceFingerprint: diagram.presentation?.terraformSourceFingerprint
-    }
-  };
-}
-
-function compareById(left: { readonly id: string }, right: { readonly id: string }): number {
-  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 }
 
 function isFinitePoint(value: { readonly x: number; readonly y: number }): boolean {

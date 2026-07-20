@@ -66,6 +66,10 @@ import { createGitHubAppClient } from "./source-repositories/github-app-client.j
 import { registerTerraformRoutes, type TerraformRouteOptions } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
 import {
+  registerAwsImportAccessRoutes,
+  type AwsImportAccessRouteOptions
+} from "./routes/aws-import-access.js";
+import {
   registerProjectBuildEnvironmentRoutes,
   type ProjectBuildEnvironmentRouteOptions
 } from "./routes/project-build-environments.js";
@@ -179,6 +183,7 @@ export type BuildAppOptions = {
   >;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
   reverseEngineeringServiceOptions?: ReverseEngineeringRouteOptions["serviceOptions"];
+  awsImportAccessRoutes?: Pick<AwsImportAccessRouteOptions, "createService">;
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
@@ -425,6 +430,12 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(registerAwsConnectionRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
+  });
+  // gg: AWS import-access command는 기존 connection route와 분리된 인증 plugin으로 등록합니다.
+  app.register(registerAwsImportAccessRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.awsImportAccessRoutes
   });
   app.register(registerProjectBuildEnvironmentRoutes, {
     prefix: "/api",

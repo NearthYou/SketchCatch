@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
   createTableRelationsHelpers,
@@ -15,6 +16,7 @@ import {
   awsCodeConnections,
   awsConnections,
   applicationReleaseSteps,
+  awsImportAccess,
   deploymentFailureStageEnum,
   deploymentLiveObservationManifests,
   deploymentLiveObservationManifestStatusEnum,
@@ -506,6 +508,113 @@ test("AWS connections store generated external ids without raw credentials", () 
   assert(hasUniqueIndex(config.indexes, "aws_connections_external_id_unique", ["external_id"]));
 });
 
+test("AWS import access storage is connection-scoped and blocks premature deletion", () => {
+  const config = getTableConfig(awsImportAccess);
+
+  assert.equal(config.primaryKeys[0]?.columns[0]?.name, "aws_connection_id");
+  assert(
+    hasForeignKey(
+      config.foreignKeys,
+      "aws_connection_id",
+      awsConnections,
+      "id",
+      "restrict"
+    )
+  );
+  assert(findColumn(config.columns, "manager_template_hash"));
+  assert(findColumn(config.columns, "policy_template_hash"));
+  assert(findColumn(config.columns, "policy_fingerprint"));
+  assert(findColumn(config.columns, "operation_id"));
+  assert(findColumn(config.columns, "lease_expires_at"));
+  assert.equal(findColumn(config.columns, "provider_error"), undefined);
+  assert.equal(findColumn(config.columns, "policy_json"), undefined);
+});
+
+test("0055 AWS import access migration stays restart-safe after collision renumbering", () => {
+  const originalMigration = readFileSync(
+    new URL("../../drizzle/0055_aws_import_access.sql", import.meta.url),
+    "utf8"
+  );
+
+  assert.equal(
+    createHash("sha256").update(originalMigration).digest("hex"),
+    "c850c654e5df44172588f25eefa08abc03a81b8aee5a5ae8aea5cb3007c7b833"
+  );
+  assert.match(originalMigration, /CREATE TABLE IF NOT EXISTS "aws_import_access"/);
+  assert.match(originalMigration, /IF NOT EXISTS[\s\S]*pg_constraint/u);
+  assert.doesNotMatch(originalMigration, /"policy_template_hash"/);
+  assert.match(originalMigration, /ON DELETE restrict/);
+  assert.doesNotMatch(
+    originalMigration,
+    /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i
+  );
+});
+
+test("0056 owns only the AWS import policy template hash repair", () => {
+  const repairMigrationUrl = new URL(
+    "../../drizzle/0056_aws_import_access_schema_repair.sql",
+    import.meta.url
+  );
+
+  assert.equal(existsSync(repairMigrationUrl), true);
+  if (!existsSync(repairMigrationUrl)) return;
+
+  const repairMigration = readFileSync(repairMigrationUrl, "utf8");
+  const repairedColumns = [
+    ...repairMigration.matchAll(/ADD COLUMN IF NOT EXISTS "([^"]+)"/gu)
+  ]
+    .map((match) => match[1])
+    .sort();
+
+  assert(findColumn(getTableConfig(awsImportAccess).columns, "policy_template_hash"));
+  assert.deepEqual(repairedColumns, ["policy_template_hash"]);
+  assert.match(
+    repairMigration,
+    /ALTER TABLE "aws_import_access" ADD COLUMN IF NOT EXISTS "policy_template_hash" varchar\(64\)/u
+  );
+  assert.doesNotMatch(
+    repairMigration,
+    /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i
+  );
+
+  const journal = JSON.parse(
+    readFileSync(new URL("../../drizzle/meta/_journal.json", import.meta.url), "utf8")
+  ) as {
+    entries?: Array<{
+      idx?: number;
+      version?: string;
+      when?: number;
+      tag?: string;
+      breakpoints?: boolean;
+    }>;
+  };
+  const entries = journal.entries ?? [];
+  const originalMigrationPosition = entries.findIndex(
+    (candidate) => candidate.tag === "0055_aws_import_access"
+  );
+
+  assert.notEqual(originalMigrationPosition, -1);
+  assert.deepEqual(
+    entries.slice(originalMigrationPosition, originalMigrationPosition + 2),
+    [
+      {
+        idx: 55,
+        version: "7",
+        when: 1784485550392,
+        tag: "0055_aws_import_access",
+        breakpoints: true
+      },
+      {
+        idx: 56,
+        version: "7",
+        when: 1784485550393,
+        tag: "0056_aws_import_access_schema_repair",
+        breakpoints: true
+      }
+    ]
+  );
+});
+
 test("Git/CI/CD handoffs store repository metadata without raw provider secrets", () => {
   const config = getTableConfig(gitCicdHandoffs);
 
@@ -657,15 +766,18 @@ function hasForeignKey(
   foreignKeys: ReturnType<typeof getTableConfig>["foreignKeys"],
   columnName: string,
   foreignTable: unknown,
-  foreignColumnName: string
+  foreignColumnName: string,
+  onDelete?: string
 ): boolean {
+  // gg 안전 경계: 저장 레코드가 부모 삭제로 조용히 사라지는 FK도 계약에서 검증한다.
   return foreignKeys.some((foreignKey) => {
     const reference = foreignKey.reference();
 
     return (
       reference.columns.some((column) => column.name === columnName) &&
       reference.foreignTable === foreignTable &&
-      reference.foreignColumns.some((column) => column.name === foreignColumnName)
+      reference.foreignColumns.some((column) => column.name === foreignColumnName) &&
+      (onDelete === undefined || foreignKey.onDelete === onDelete)
     );
   });
 }

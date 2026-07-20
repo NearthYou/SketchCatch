@@ -1143,6 +1143,7 @@ export function WorkspaceRightPanel({
                 externalTerraformFilesReplacement={terraformFilesReplacement}
                 externalDiscardRequestId={terraformDiscardRequestId}
                 externalSaveRequestId={terraformSaveRequestId}
+                isMutationLocked={context.isMutationLocked}
                 isVisible={activeView === "terraform"}
                 onArchitectureDiagnosticsChange={handleArchitectureDiagnosticsChange}
                 onDiagnosticsChange={handleTerraformDiagnosticsChange}

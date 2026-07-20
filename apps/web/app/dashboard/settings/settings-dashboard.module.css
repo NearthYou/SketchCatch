@@ -1,0 +1,202 @@
+.importAccessCard {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-control);
+  padding: 16px;
+  background: var(--color-surface);
+}
+
+.connectionImportAccess {
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+.importAccessCard[data-status="ready"] {
+  border-color: var(--color-success);
+  background: var(--color-success-surface);
+}
+
+.importAccessCard[data-status="limited"],
+.importAccessCard[data-status="retry_required"],
+.importAccessCard[data-status^="cleanup_"] {
+  border-color: var(--color-warning);
+  background: var(--color-warning-surface);
+}
+
+.importAccessHeader {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.importAccessHeader > svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  color: var(--color-ink);
+}
+
+.importAccessHeader > div {
+  min-width: 0;
+}
+
+.importAccessHeader span {
+  color: var(--color-body);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+}
+
+.importAccessHeader h3 {
+  margin: 3px 0 0;
+  color: var(--color-ink);
+  font-size: calc(16px + var(--presentation-font-size-increase));
+}
+
+.importAccessHeader p,
+.importAccessSummary,
+.importAccessFeedback,
+.importAccessManagerUpdate p,
+.importAccessApproval p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--color-body);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+}
+
+.importAccessManagerUpdate {
+  display: grid;
+  gap: 8px;
+}
+
+.importAccessPreserved,
+.importAccessLimited,
+.importAccessApproval {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-control);
+  padding: 12px;
+  background: var(--color-canvas);
+}
+
+.importAccessPreserved strong,
+.importAccessLimited strong,
+.importAccessApproval strong {
+  color: var(--color-ink);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+}
+
+.importAccessPreserved ul,
+.importAccessLimited ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--color-body);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  line-height: 1.45;
+}
+
+.importAccessActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.importAccessActions button,
+.importAccessCopyAction,
+.importAccessError button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  padding: 0 12px;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  cursor: pointer;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+}
+
+.importAccessActions .importAccessPrimaryAction {
+  border-color: var(--color-ink);
+  background: var(--color-ink);
+  color: var(--color-on-primary);
+}
+
+.importAccessActions .importAccessCleanupAction {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.importAccessActions button:disabled,
+.importAccessCopyAction:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.importAccessConsoleLink {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 38px;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-control);
+  padding: 0 12px;
+  background: var(--color-ink);
+  color: var(--color-on-primary);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  text-decoration: none;
+}
+
+.importAccessCopyAction {
+  width: fit-content;
+}
+
+.importAccessError {
+  display: grid;
+  gap: 8px;
+  border-left: 3px solid var(--color-error);
+  padding: 10px 12px;
+  background: var(--color-error-surface);
+  color: var(--color-ink);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+}
+
+.importAccessError p {
+  margin: 0;
+}
+
+.importAccessLoading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-body);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+}
+
+@media (max-width: 760px) {
+  .importAccessCard {
+    padding: 14px;
+  }
+
+  .importAccessActions {
+    display: grid;
+  }
+
+  .importAccessActions button,
+  .importAccessConsoleLink,
+  .importAccessCopyAction {
+    width: 100%;
+  }
+}

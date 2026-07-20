@@ -359,6 +359,30 @@ export type CreateProjectRequest = {
   description?: string | undefined;
 };
 
+export type ReverseEngineeringSourceKind = "saved_scan" | "preview_scan";
+
+export type ReverseEngineeringSourceReference = {
+  sourceScanId: string;
+  draftId: string;
+  sourceNodeIds?: string[] | undefined;
+  sourceKind?: ReverseEngineeringSourceKind | undefined;
+};
+
+export type CreateReverseEngineeringProjectRequest = CreateProjectRequest & {
+  diagramJson: DiagramJson;
+  architectureJson: ArchitectureJson;
+  reverseEngineering: ReverseEngineeringSourceReference & {
+    sourceNodeIds: string[];
+    sourceKind: "preview_scan";
+  };
+};
+
+export type CreateReverseEngineeringProjectResponse = {
+  project: Project;
+  draft: ProjectDraft;
+  architecture: ArchitectureSnapshot;
+};
+
 export type ProjectDeletePreviewMode =
   | "plain"
   | "planned"
@@ -443,12 +467,7 @@ export type ProjectDetailsResponse = {
 export type CreateArchitectureSnapshotRequest = {
   version?: number | undefined;
   source?: string | undefined;
-  reverseEngineering?:
-    | {
-        sourceScanId: string;
-        draftId: string;
-      }
-    | undefined;
+  reverseEngineering?: ReverseEngineeringSourceReference | undefined;
   architectureJson: ArchitectureJson;
 };
 
@@ -2103,6 +2122,56 @@ export type Template = {
 
 export type AwsConnectionStatus = "pending" | "verified" | "failed";
 
+export type AwsImportAccessStatus =
+  | "check_required"
+  | "manager_approval_required"
+  | "manager_checking"
+  | "policy_approval_required"
+  | "policy_working"
+  | "checking_reads"
+  | "ready"
+  | "limited"
+  | "update_required"
+  | "retry_required"
+  | "connection_required"
+  | "cleanup_policy_required"
+  | "cleanup_manager_required"
+  | "cleanup_checking"
+  | "cleanup_required"
+  | "cleanup_complete";
+
+export type AwsImportAccessNextAction =
+  | "prepare_manager"
+  | "check_manager"
+  | "preview_policy"
+  | "apply_policy"
+  | "check_reads"
+  | "open_settings"
+  | "delete_policy_stack"
+  | "delete_manager_stack"
+  | "check_cleanup"
+  | "retry";
+
+export type AwsImportAccessState = {
+  connectionId: string;
+  status: AwsImportAccessStatus;
+  nextAction: AwsImportAccessNextAction | null;
+  cleanupAvailable: boolean;
+  coreReady: boolean;
+  limitedServiceLabels: string[];
+  lastCheckedAt: IsoDateTimeString | null;
+  operationId: string | null;
+  safeSummary: string | null;
+};
+
+export type AwsImportAccessCommandResponse = {
+  operationId: string;
+  state: AwsImportAccessState;
+  nextAction: AwsImportAccessNextAction | null;
+  consoleUrl?: string;
+  managerTemplateUrl?: string;
+};
+
 export type AwsConnection = {
   id: string;
   userId: string;
@@ -2355,6 +2424,7 @@ export type ReverseEngineeringImportSuggestion = {
 
 export type ReverseEngineeringScanErrorReason =
   | "permission_denied"
+  | "not_configured"
   | "invalid_region"
   | "expired_credential"
   | "throttled"
@@ -2363,11 +2433,23 @@ export type ReverseEngineeringScanErrorReason =
 
 export type ReverseEngineeringScanError = {
   id: string;
+  /** Safe AWS service identifier used to group partial scan coverage. */
+  serviceKey?: string | undefined;
   resourceType: ResourceType | "UNKNOWN";
   stage: ReverseEngineeringScanStage;
   reason: ReverseEngineeringScanErrorReason;
   message: string;
   retryable: boolean;
+};
+
+export type ReverseEngineeringServiceCoverage = {
+  status: "complete" | "partial";
+  unavailableServices: Array<{
+    serviceKey: string;
+    displayName: string;
+    reason: "permission_required" | "not_configured" | "retry";
+    remedy: "open_settings" | "retry";
+  }>;
 };
 
 export type ReverseEngineeringScanLogLine = {
@@ -2389,6 +2471,8 @@ export type ReverseEngineeringScanResult = {
   analysisExclusions: ReverseEngineeringAnalysisExclusion[];
   importSuggestions: ReverseEngineeringImportSuggestion[];
   scanErrors: ReverseEngineeringScanError[];
+  /** Safe service-level coverage returned by current Reverse Engineering scans. */
+  coverage?: ReverseEngineeringServiceCoverage | undefined;
 };
 
 export type CreateReverseEngineeringScanRequest = {
@@ -4329,4 +4413,5 @@ export type TerraformSyncToDiagramResponse = {
 };
 
 export * from "./architecture-technology-stack.ts";
+export * from "./board-auto-organize-contract.ts";
 export * from "./runtime-convergence.ts";

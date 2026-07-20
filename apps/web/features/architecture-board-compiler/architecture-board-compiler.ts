@@ -20,7 +20,9 @@ import {
 import {
   evaluateAutomaticDiagramLayout,
   layoutAutomaticDiagram,
+  layoutAutomaticDiagramCandidates,
   type AutomaticDiagramLayoutCandidateProfile,
+  type AutomaticDiagramLayoutResult,
   type AutomaticDiagramLayoutQuality
 } from "../workspace/automatic-diagram-layout";
 import {
@@ -303,6 +305,110 @@ export function compileArchitectureBoard(
       ])
     }
   };
+}
+
+/** Board 비교용으로만 단일 Compiler 결과를 여러 결정론적 layout 전략으로 펼칩니다. */
+export function compileArchitectureBoardCandidates(
+  input: ArchitectureBoardCompilationInput
+): readonly ArchitectureBoardCompilationProposal[] {
+  const selected = compileArchitectureBoard(input);
+  const protectedNodeIds = new Set(
+    selected.diagram.nodes.filter((node) => node.locked).map((node) => node.id)
+  );
+  const layoutProfiles = deriveArchitectureBoardKnowledgeLayoutProfiles(
+    selected.diagram,
+    architectureBoardKnowledge
+  );
+  const layouts = layoutAutomaticDiagramCandidates({
+    candidateProfiles: layoutProfiles,
+    edges: createDiagramLayoutEdges(selected.diagram),
+    nodes: selected.diagram.nodes,
+    protectedNodeIds
+  });
+  const beforeDiagram = input.currentDiagram
+    ? cloneDiagram(input.currentDiagram)
+    : convertArchitectureJsonToDiagramJson(input.architecture);
+  const beforeArchitecture = convertDiagramJsonToArchitectureJson(beforeDiagram);
+
+  return layouts.map((layout) =>
+    createBoardVisualLayoutProposal(
+      selected,
+      layout,
+      beforeArchitecture,
+      beforeDiagram
+    )
+  );
+}
+
+/** 한 layout 전략을 기존 proposal 모양과 품질 finding으로 다시 감쌉니다. */
+function createBoardVisualLayoutProposal(
+  selected: ArchitectureBoardCompilationProposal,
+  layout: AutomaticDiagramLayoutResult,
+  beforeArchitecture: ArchitectureJson,
+  beforeDiagram: DiagramJson
+): ArchitectureBoardCompilationProposal {
+  const diagram = routeAndLayerDiagram(
+    {
+      ...cloneDiagram(selected.diagram),
+      nodes: restoreLockedNodeGeometry(layout.nodes, selected.diagram.nodes)
+    },
+    beforeDiagram
+  );
+  const changes = compareCompilationChanges(
+    beforeArchitecture,
+    beforeDiagram,
+    selected.architecture,
+    diagram
+  );
+  const compilationDistance = changes.reduce((total, change) => total + change.cost, 0);
+  const fixedPenalty =
+    selected.quality.after.score -
+    selected.quality.after.visualPenalty -
+    selected.quality.compilationDistance;
+
+  return {
+    ...structuredClone(selected),
+    architecture: cloneArchitecture(selected.architecture),
+    diagram,
+    changes,
+    quality: {
+      before: structuredClone(selected.quality.before),
+      after: {
+        ...structuredClone(selected.quality.after),
+        score: fixedPenalty + layout.quality.score + compilationDistance,
+        visualPenalty: layout.quality.score,
+        metrics: {
+          ...structuredClone(selected.quality.after.metrics),
+          ...layout.quality,
+          compilationDistance
+        }
+      },
+      compilationDistance
+    },
+    provenance: {
+      ...structuredClone(selected.provenance),
+      candidateId: `${selected.provenance.candidateId}:layout:${layout.candidateId}`
+    }
+  };
+}
+
+/** Diagram edge를 provider-neutral layout 입력 모양으로 옮깁니다. */
+function createDiagramLayoutEdges(
+  diagram: DiagramJson
+): readonly {
+  readonly id: string;
+  readonly sourceId: string;
+  readonly targetId: string;
+  readonly label?: string | undefined;
+  readonly metadata?: DiagramEdge["metadata"];
+}[] {
+  return diagram.edges.map((edge) => ({
+    id: edge.id,
+    sourceId: edge.sourceNodeId,
+    targetId: edge.targetNodeId,
+    ...(edge.label === undefined ? {} : { label: edge.label }),
+    ...(edge.metadata === undefined ? {} : { metadata: structuredClone(edge.metadata) })
+  }));
 }
 
 function createModulePatternCandidate(
@@ -1108,7 +1214,10 @@ function hasDiagramAreaAncestor(
   return false;
 }
 
-function routeAndLayerDiagram(diagram: DiagramJson, semanticSourceDiagram: DiagramJson): DiagramJson {
+function routeAndLayerDiagram(
+  diagram: DiagramJson,
+  semanticSourceDiagram: DiagramJson
+): DiagramJson {
   const layeredNodes = applyCompilerLayerOrder(diagram.nodes);
   const nodeById = new Map(layeredNodes.map((node) => [node.id, node]));
   const semanticSourceEdgeById = new Map(
@@ -1331,7 +1440,7 @@ function compareCompilationChanges(
           "resource",
           "add",
           [id],
-          `Resource ${id} 추가`,
+          `Resource ${after.label?.trim() || id} 추가`,
           COMPILATION_DISTANCE_COST.resourceAdd,
           null,
           after
@@ -1345,7 +1454,7 @@ function compareCompilationChanges(
           "resource",
           "remove",
           [id],
-          `Resource ${id} 삭제`,
+          `Resource ${getArchitectureNodeDisplayName(beforeArchitecture, id)} 삭제`,
           COMPILATION_DISTANCE_COST.resourceRemove,
           before,
           null
@@ -1360,7 +1469,7 @@ function compareCompilationChanges(
           "resource",
           "modify",
           [id],
-          `Resource ${id} 정체성 변경`,
+          `Resource ${getArchitectureNodeDisplayName(afterArchitecture, id)} 정체성 변경`,
           COMPILATION_DISTANCE_COST.resourceIdentity,
           { type: before.type, label: before.label },
           { type: after.type, label: after.label }
@@ -1375,7 +1484,7 @@ function compareCompilationChanges(
           "configuration",
           "modify",
           [id],
-          `Resource ${id} 설정 정규화`,
+          `Resource ${getArchitectureNodeDisplayName(afterArchitecture, id)} 설정 정규화`,
           COMPILATION_DISTANCE_COST.configuration,
           beforeConfig,
           afterConfig
@@ -1390,7 +1499,7 @@ function compareCompilationChanges(
           "containment",
           "modify",
           [id, ...(afterParentId ? [afterParentId] : [])],
-          `Resource ${id} 소속 결정 변경`,
+          `Resource ${getArchitectureNodeDisplayName(afterArchitecture, id)} 소속 결정 변경`,
           COMPILATION_DISTANCE_COST.containment,
           beforeParentId,
           afterParentId
@@ -1405,7 +1514,7 @@ function compareCompilationChanges(
         "resource",
         "modify",
         [rename.beforeId, rename.afterId],
-        `중복 Resource id ${rename.beforeId} 정규화`,
+        `중복 Resource ${rename.after.label?.trim() || rename.before.label?.trim() || rename.beforeId} id 정규화`,
         COMPILATION_DISTANCE_COST.resourceIdentity,
         rename.before,
         rename.after,
@@ -1478,7 +1587,7 @@ function compareArchitectureRelationships(
           "relationship",
           "add",
           [next.sourceId, next.targetId],
-          `관계 ${id} 추가`,
+          `관계 ${describeArchitectureRelationship(next, after)} 추가`,
           COMPILATION_DISTANCE_COST.relationship,
           null,
           next,
@@ -1491,7 +1600,7 @@ function compareArchitectureRelationships(
           "relationship",
           "remove",
           [previous.sourceId, previous.targetId],
-          `관계 ${id} 삭제`,
+          `관계 ${describeArchitectureRelationship(previous, before)} 삭제`,
           COMPILATION_DISTANCE_COST.relationship,
           previous,
           null,
@@ -1504,7 +1613,7 @@ function compareArchitectureRelationships(
           "relationship",
           "modify",
           [next.sourceId, next.targetId],
-          `관계 ${id} 변경`,
+          `관계 ${describeArchitectureRelationship(next, after)} 변경`,
           COMPILATION_DISTANCE_COST.relationship,
           previous,
           next,
@@ -1513,6 +1622,17 @@ function compareArchitectureRelationships(
       );
     }
   }
+}
+
+function describeArchitectureRelationship(
+  edge: ArchitectureJson["edges"][number],
+  architecture: ArchitectureJson
+): string {
+  return `${getArchitectureNodeDisplayName(architecture, edge.sourceId)} → ${getArchitectureNodeDisplayName(architecture, edge.targetId)}`;
+}
+
+function getArchitectureNodeDisplayName(architecture: ArchitectureJson, nodeId: string): string {
+  return architecture.nodes.find((node) => node.id === nodeId)?.label?.trim() || nodeId;
 }
 
 function compareDiagramPresentationAndGeometry(
@@ -1532,7 +1652,7 @@ function compareDiagramPresentationAndGeometry(
           "presentation",
           "add",
           [id],
-          `표현 Area ${id} 추가`,
+          `표현 Area ${next.label.trim() || id} 추가`,
           COMPILATION_DISTANCE_COST.presentation,
           null,
           next
@@ -1546,7 +1666,7 @@ function compareDiagramPresentationAndGeometry(
           "presentation",
           "remove",
           [id],
-          `표현 Area ${id} 삭제`,
+          `표현 Area ${previous.label.trim() || id} 삭제`,
           COMPILATION_DISTANCE_COST.presentation,
           previous,
           null
@@ -1566,7 +1686,7 @@ function compareDiagramPresentationAndGeometry(
           "containment",
           "modify",
           [id, ...(afterParent ? [afterParent] : [])],
-          `Resource ${id} 소속 변경`,
+          `Resource ${next.label.trim() || id} 소속 변경`,
           COMPILATION_DISTANCE_COST.containment,
           beforeParent,
           afterParent
@@ -1581,7 +1701,7 @@ function compareDiagramPresentationAndGeometry(
           "presentation",
           "modify",
           [id],
-          `Resource ${id} 표현 Area 변경`,
+          `Resource ${next.label.trim() || id} 표현 Area 변경`,
           COMPILATION_DISTANCE_COST.presentation,
           beforePresentation,
           afterPresentation
@@ -1594,7 +1714,7 @@ function compareDiagramPresentationAndGeometry(
           "geometry",
           "modify",
           [id],
-          `Resource ${id} 위치 변경`,
+          `Resource ${next.label.trim() || id} 위치 변경`,
           COMPILATION_DISTANCE_COST.position,
           previous.position,
           next.position,
@@ -1608,7 +1728,7 @@ function compareDiagramPresentationAndGeometry(
           "geometry",
           "modify",
           [id],
-          `Resource ${id} 크기 변경`,
+          `Resource ${next.label.trim() || id} 크기 변경`,
           COMPILATION_DISTANCE_COST.size,
           previous.size,
           next.size,
@@ -1622,7 +1742,7 @@ function compareDiagramPresentationAndGeometry(
           "geometry",
           "modify",
           [id],
-          `Resource ${id} z-index 변경`,
+          `Resource ${next.label.trim() || id} z-index 변경`,
           COMPILATION_DISTANCE_COST.zIndex,
           previous.zIndex,
           next.zIndex,
@@ -1704,7 +1824,7 @@ function compareDiagramRoutes(
           "edge-routing",
           "add",
           [next.sourceNodeId, next.targetNodeId],
-          `관계 ${id} 화면 연결선 추가`,
+          `관계 ${describeDiagramRelationship(next, after)} 화면 연결선 추가`,
           COMPILATION_DISTANCE_COST.edgeRouting,
           null,
           routeState(next),
@@ -1719,7 +1839,7 @@ function compareDiagramRoutes(
           "edge-routing",
           "remove",
           [previous.sourceNodeId, previous.targetNodeId],
-          `관계 ${id} 화면 연결선 제거`,
+          `관계 ${describeDiagramRelationship(previous, before)} 화면 연결선 제거`,
           COMPILATION_DISTANCE_COST.edgeRouting,
           routeState(previous),
           null,
@@ -1737,7 +1857,7 @@ function compareDiagramRoutes(
           "edge-routing",
           "modify",
           [previous.sourceNodeId, previous.targetNodeId],
-          `관계 ${id} 경로 변경`,
+          `관계 ${describeDiagramRelationship(next, after)} 경로 변경`,
           COMPILATION_DISTANCE_COST.edgeRouting,
           beforeRoute,
           afterRoute,
@@ -1746,6 +1866,14 @@ function compareDiagramRoutes(
       );
     }
   }
+}
+
+function describeDiagramRelationship(edge: DiagramEdge, diagram: DiagramJson): string {
+  return `${getDiagramNodeDisplayName(diagram, edge.sourceNodeId)} → ${getDiagramNodeDisplayName(diagram, edge.targetNodeId)}`;
+}
+
+function getDiagramNodeDisplayName(diagram: DiagramJson, nodeId: string): string {
+  return diagram.nodes.find((node) => node.id === nodeId)?.label.trim() || nodeId;
 }
 
 function routeState(edge: DiagramEdge): unknown {
@@ -1799,8 +1927,8 @@ function createDiagnostics(
       level: normalized ? "info" : "warning",
       summary: normalized ? "중복 Resource id 정규화 제안" : "중복 Resource id",
       message: normalized
-        ? `중복 Resource id ${id}를 결정론적 suffix로 분리했습니다.`
-        : `중복 Resource id ${id}를 확인하세요. Compiler는 이 후보에서 그대로 보존했습니다.`,
+        ? `중복 Resource ${getArchitectureNodeDisplayName(sourceArchitecture, id)} (id: ${id})를 결정론적 suffix로 분리했습니다.`
+        : `중복 Resource ${getArchitectureNodeDisplayName(sourceArchitecture, id)} (id: ${id})를 확인하세요. Compiler는 이 후보에서 그대로 보존했습니다.`,
       relatedChangeIds,
       relatedResourceIds: [id],
       penalty: normalized ? 0 : 350
@@ -1814,8 +1942,8 @@ function createDiagnostics(
       level: removed ? "info" : "warning",
       summary: removed ? "연결 대상 없는 관계 제거 제안" : "연결 대상이 없는 관계",
       message: removed
-        ? `관계 ${edge.id}는 존재하지 않는 Resource를 가리켜 제거 후보로 만들었습니다.`
-        : `관계 ${edge.id}의 시작 또는 대상 Resource가 없습니다.`,
+        ? `${describeArchitectureRelationship(edge, sourceArchitecture)} 관계는 존재하지 않는 Resource를 가리켜 제거 후보로 만들었습니다.`
+        : `${describeArchitectureRelationship(edge, sourceArchitecture)} 관계의 시작 또는 대상 Resource가 없습니다.`,
       relatedChangeIds: changes
         .filter((change) => change.id.endsWith(`:${edge.id}`))
         .map((change) => change.id),
@@ -1830,7 +1958,7 @@ function createDiagnostics(
       code: "compiler.dangling_relationship",
       level: "warning",
       summary: "연결 대상이 없는 관계",
-      message: `관계 ${edge.id}의 시작 또는 대상 Resource가 없습니다.`,
+      message: `${describeArchitectureRelationship(edge, candidateArchitecture)} 관계의 시작 또는 대상 Resource가 없습니다.`,
       relatedChangeIds: [],
       relatedResourceIds: [edge.sourceId, edge.targetId],
       penalty: 300
@@ -1849,7 +1977,7 @@ function createDiagnostics(
         code: "compiler.security_group_containment",
         level: "warning",
         summary: "Security Group은 실제 소속 Area가 아님",
-        message: `Resource ${node.id}의 Security Group parent ${parentId}는 시각 범위일 뿐 persisted containment가 아닙니다.`,
+        message: `Resource ${getArchitectureNodeDisplayName(candidateArchitecture, node.id)}의 Security Group parent ${getArchitectureNodeDisplayName(candidateArchitecture, parentId)}는 시각 범위일 뿐 persisted containment가 아닙니다.`,
         relatedChangeIds: [],
         relatedResourceIds: [node.id, parentId],
         penalty: 750
@@ -1860,7 +1988,7 @@ function createDiagnostics(
         code: "compiler.invalid_containment_parent",
         level: "warning",
         summary: "존재하지 않는 containment parent",
-        message: `Resource ${node.id}의 parent ${parentId}를 찾지 못했습니다.`,
+        message: `Resource ${getArchitectureNodeDisplayName(candidateArchitecture, node.id)}의 parent ${getArchitectureNodeDisplayName(candidateArchitecture, parentId)}를 찾지 못했습니다.`,
         relatedChangeIds: [],
         relatedResourceIds: [node.id, parentId],
         penalty: 1_000
@@ -1873,7 +2001,7 @@ function createDiagnostics(
         code: "compiler.inferred_containment",
         level: "info",
         summary: "비-Security Group containment 추론",
-        message: `contains/hosts 관계 또는 Terraform 참조로 ${node.id}를 ${parentId}에 소속시켰습니다.`,
+        message: `contains/hosts 관계 또는 Terraform 참조로 ${getArchitectureNodeDisplayName(candidateArchitecture, node.id)}를 ${getArchitectureNodeDisplayName(candidateArchitecture, parentId)}에 소속시켰습니다.`,
         relatedChangeIds: changes
           .filter((change) => change.kind === "containment" && change.targetIds.includes(node.id))
           .map((change) => change.id),
@@ -1890,7 +2018,7 @@ function createDiagnostics(
         code: "compiler.presentation_area_inferred",
         level: "info",
         summary: "시각 Area 표현 제안",
-        message: `Resource ${node.id}를 자식 Resource를 묶는 presentation Area로 표시합니다.`,
+        message: `Resource ${getArchitectureNodeDisplayName(candidateArchitecture, node.id)}를 자식 Resource를 묶는 presentation Area로 표시합니다.`,
         relatedChangeIds: changes
           .filter((change) => change.kind === "presentation" && change.targetIds.includes(node.id))
           .map((change) => change.id),
@@ -1904,7 +2032,7 @@ function createDiagnostics(
         code: "compiler.legacy_terraform_reference",
         level: "warning",
         summary: "legacy Terraform interpolation",
-        message: `Resource ${node.id}의 ${"${...}"} 참조를 modern Terraform reference로 정규화할 수 있습니다.`,
+        message: `Resource ${getArchitectureNodeDisplayName(candidateArchitecture, node.id)}의 ${"${...}"} 참조를 modern Terraform reference로 정규화할 수 있습니다.`,
         relatedChangeIds: changes
           .filter((change) => change.kind === "configuration" && change.targetIds.includes(node.id))
           .map((change) => change.id),
@@ -1921,7 +2049,7 @@ function createDiagnostics(
         code: "compiler.missing_terraform_relationship",
         level: "warning",
         summary: "Terraform 참조 관계 미표현",
-        message: `Resource ${node.id}의 Terraform 참조 대상 ${targetId} 관계를 proposal로 추가할 수 있습니다.`,
+        message: `Resource ${getArchitectureNodeDisplayName(candidateArchitecture, node.id)}의 Terraform 참조 대상 ${getArchitectureNodeDisplayName(candidateArchitecture, targetId)} 관계를 proposal로 추가할 수 있습니다.`,
         relatedChangeIds: [],
         relatedResourceIds: [node.id, targetId],
         penalty: 140
@@ -1940,7 +2068,7 @@ function createDiagnostics(
       code: "compiler.inferred_terraform_relationship",
       level: "info",
       summary: "Terraform 참조 관계 추론",
-      message: `${edge.sourceId}의 Terraform 설정 참조에서 ${edge.targetId} 관계를 추가했습니다.`,
+      message: `${getArchitectureNodeDisplayName(candidateArchitecture, edge.sourceId)}의 Terraform 설정 참조에서 ${getArchitectureNodeDisplayName(candidateArchitecture, edge.targetId)} 관계를 추가했습니다.`,
       relatedChangeIds: [change.id],
       relatedResourceIds: [edge.sourceId, edge.targetId],
       penalty: 0
@@ -1952,7 +2080,7 @@ function createDiagnostics(
       code: "compiler.configuration_normalized",
       level: "info",
       summary: "Terraform 설정 정규화 제안",
-      message: `${change.targetIds.join(", ")}의 legacy Terraform reference 또는 설정 표현을 정규화했습니다.`,
+      message: `${change.targetIds.map((id) => getArchitectureNodeDisplayName(candidateArchitecture, id)).join(", ")}의 legacy Terraform reference 또는 설정 표현을 정규화했습니다.`,
       relatedChangeIds: [change.id],
       relatedResourceIds: [...change.targetIds],
       penalty: 0

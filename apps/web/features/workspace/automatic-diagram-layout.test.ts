@@ -3,9 +3,14 @@ import test from "node:test";
 import { buildTemplateDiagramJson, type DiagramNode } from "@sketchcatch/types";
 import {
   evaluateAutomaticDiagramLayout,
-  layoutAutomaticDiagram
+  layoutAutomaticDiagram,
+  layoutAutomaticDiagramCandidates
 } from "./automatic-diagram-layout";
 import { getAutomaticDiagramSemanticRole } from "./automatic-diagram-layout-provider-mapping";
+import {
+  convertArchitectureJsonToDiagramJson,
+  convertDiagramJsonToArchitectureJson
+} from "./workspace-ai-diagram-adapter";
 
 test("layoutAutomaticDiagram arranges the primary request flow from left to right", () => {
   const nodes = [
@@ -45,6 +50,27 @@ test("layoutAutomaticDiagram은 선택 profile마다 기존 후보군을 확장�
 
   assert.equal(result.candidateCount, 12);
   assert.deepEqual(layoutAutomaticDiagram(input), result);
+});
+
+test("layout 후보 목록은 기존 단일 선택을 첫 결과로 유지하고 결정론적으로 정렬한다", () => {
+  const nodes = [
+    makeNode("browser", "actor_browser", 0, 0, "design"),
+    makeNode("service", "aws_ecs_service", 0, 0),
+    makeNode("bucket", "aws_s3_bucket", 0, 0)
+  ];
+  const edges = [
+    { id: "browser-service", sourceId: "browser", targetId: "service" },
+    { id: "service-bucket", sourceId: "service", targetId: "bucket" }
+  ];
+  const input = { edges, nodes };
+
+  const selected = layoutAutomaticDiagram(input);
+  const candidates = layoutAutomaticDiagramCandidates(input);
+
+  assert(candidates.length > 0);
+  assert.deepEqual(candidates[0], selected);
+  assert.deepEqual(layoutAutomaticDiagramCandidates(input), candidates);
+  assert.equal(new Set(candidates.map((candidate) => candidate.candidateId)).size, candidates.length);
 });
 
 test("knowledge spacing profile은 baseline보다 edge/node/containment 이상치를 늘리면 선택하지 않는다", () => {
@@ -383,6 +409,39 @@ test("layoutAutomaticDiagram aligns repeated subnet Areas by tier and availabili
       assert.equal(overlaps(subnets[leftIndex]!, subnets[rightIndex]!), false);
     }
   }
+});
+
+test("layoutAutomaticDiagram keeps Template geometry stable when repeated Area labels change", () => {
+  const diagram = buildTemplateDiagramJson("three-tier-web-app", {
+    projectSlug: "label-layout-regression",
+    shortId: "label-layout-regression"
+  });
+  const legacyLabelsByResourceName: Readonly<Record<string, string>> = {
+    app_subnet_a: "App Subnet A",
+    app_subnet_b: "App Subnet B",
+    db_subnet_a: "DB Subnet A",
+    db_subnet_b: "DB Subnet B"
+  };
+  const legacyNodes = diagram.nodes.map((node) => ({
+    ...node,
+    label: legacyLabelsByResourceName[node.parameters?.resourceName ?? ""] ?? node.label
+  }));
+  const materialize = (nodes: readonly DiagramNode[]) => {
+    const architecture = convertDiagramJsonToArchitectureJson({ ...diagram, nodes: [...nodes] });
+    return {
+      edges: architecture.edges,
+      nodes: convertArchitectureJsonToDiagramJson(architecture).nodes
+    };
+  };
+  const friendlyInput = materialize(diagram.nodes);
+  const legacyInput = materialize(legacyNodes);
+  const projectGeometry = (layoutNodes: readonly DiagramNode[]) =>
+    layoutNodes.map(({ id, position, size }) => ({ id, position, size }));
+
+  assert.deepEqual(
+    projectGeometry(layoutAutomaticDiagram(friendlyInput).nodes),
+    projectGeometry(layoutAutomaticDiagram(legacyInput).nodes)
+  );
 });
 
 test("layoutAutomaticDiagram preserves protected manual layout while placing new nodes", () => {

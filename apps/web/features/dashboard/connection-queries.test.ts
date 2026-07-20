@@ -4,9 +4,10 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { keepPreviousData, QueryObserver } from "@tanstack/react-query";
-import type { AwsConnection } from "@sketchcatch/types";
+import type { AwsConnection, AwsImportAccessState } from "@sketchcatch/types";
 import { createAppQueryClient } from "../../components/query/create-query-client";
 import { queryKeys } from "../../lib/query-keys";
+import { toAwsImportAccessQueryState } from "./connection-queries";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const connectionQuerySource = readFileSync(join(currentDir, "connection-queries.ts"), "utf8");
@@ -81,5 +82,61 @@ test("AWS 연결 query는 복구 화면에서만 이전 목록을 유지한다",
   assert.match(
     awsConnectionsQuerySource,
     /\.\.\.\(includeUnverified\s*\?\s*\{\s*placeholderData:\s*keepPreviousData\s*\}\s*:\s*\{\s*\}\)/
+  );
+});
+
+test("AWS 가져오기 권한 query는 사용자와 연결별 cache를 사용한다", () => {
+  assert.deepEqual(queryKeys.awsImportAccess("user-1", "connection-1"), [
+    "user",
+    "user-1",
+    "connections",
+    "aws",
+    "connection-1",
+    "import-access"
+  ]);
+  assert.notDeepEqual(
+    queryKeys.awsImportAccess("user-1", "connection-1"),
+    queryKeys.awsImportAccess("user-1", "connection-2")
+  );
+  assert.match(connectionQuerySource, /export function useAwsImportAccessQuery/);
+  assert.match(connectionQuerySource, /getAwsImportAccessState\(connectionId\)/);
+  assert.match(connectionQuerySource, /queryKeys\.awsImportAccess\(userId, connectionId\)/);
+});
+
+test("AWS 가져오기 권한 query cache에는 signed Console 링크를 저장하지 않는다", () => {
+  const cached = toAwsImportAccessQueryState({
+    connectionId: "connection-1",
+    operationId: "operation-1",
+    nextAction: "check_manager",
+    state: {
+      connectionId: "connection-1",
+      status: "manager_approval_required",
+      nextAction: "check_manager",
+      cleanupAvailable: true,
+      coreReady: false,
+      limitedServiceLabels: [],
+      lastCheckedAt: null,
+      operationId: "operation-1",
+      safeSummary: null,
+      consoleUrl: "https://nested.example.invalid/?signature=nested-secret",
+      providerError: "AccessDenied RequestId nested-provider-secret"
+    } as AwsImportAccessState & {
+      readonly consoleUrl: string;
+      readonly providerError: string;
+    },
+    consoleUrl: "https://console.example.invalid/?signature=secret",
+    managerTemplateUrl: "https://template.example.invalid/?signature=secret"
+  });
+
+  assert.deepEqual(Object.keys(cached).sort(), [
+    "connectionId",
+    "nextAction",
+    "operationId",
+    "state"
+  ]);
+  assert.equal(cached.state.cleanupAvailable, true);
+  assert.doesNotMatch(
+    JSON.stringify(cached),
+    /signature|consoleUrl|managerTemplateUrl|providerError|AccessDenied|RequestId/u
   );
 });

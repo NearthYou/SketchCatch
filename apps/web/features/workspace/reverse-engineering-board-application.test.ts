@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DiagramJson, ReverseEngineeringScanResult } from "@sketchcatch/types";
-import { ARCHITECTURE_BOARD_COMPILER_VERSION } from "../architecture-board-compiler";
-import { evaluateAutomaticDiagramLayout } from "./automatic-diagram-layout";
 import {
-  compileReverseEngineeringArchitecture,
+  createBoardAutoOrganizeCandidates,
+  hasSameBoardAutoOrganizeSemantics
+} from "../architecture-board-compiler";
+import {
   convertReverseEngineeringBoardToArchitectureJson,
   createReverseEngineeringBoardApplication
 } from "./reverse-engineering-board-application";
@@ -76,27 +77,29 @@ const scanResult: ReverseEngineeringScanResult = {
   scanErrors: []
 };
 
-test("Reverse Engineering은 Compiler proposal을 생성하고 적용 후보와 분리해 노출한다", () => {
+test("Reverse Engineering은 사용자가 고른 visual-only 정리안만 적용 후보로 사용한다", () => {
   const inputBefore = structuredClone(scanResult);
-  const proposal = compileReverseEngineeringArchitecture(scanResult);
+  const original = createReverseEngineeringBoardApplication({
+    currentDiagram,
+    mode: "replace",
+    placement: "original",
+    result: scanResult
+  });
+  const organizedDiagram = moveFirstNode(original.diagram, 160);
   const application = createReverseEngineeringBoardApplication({
     currentDiagram,
     mode: "replace",
+    organizedDiagram,
     placement: "compiled",
     result: scanResult
   });
 
-  assert.ok(application.compilation);
-  assert.equal(proposal.provenance.compilerVersion, ARCHITECTURE_BOARD_COMPILER_VERSION);
-  assert.equal(proposal.architecture.nodes.length, 2);
-  assert.equal(
-    application.compilation.provenance.compilerVersion,
-    proposal.provenance.compilerVersion
-  );
-  assert.deepEqual(application.compilation.diagram, application.previewDiagram);
-  assert.deepEqual(application.compilation.diagram, application.diagram);
+  assert.equal(application.compilation, null);
+  assert.deepEqual(application.diagram, organizedDiagram);
+  assert.deepEqual(application.previewDiagram, application.diagram);
   assert.equal(application.previewDiagram.nodes.length, 2);
   assert.equal(application.diagram.nodes[0]?.metadata?.reverseEngineering?.source, "aws_scan");
+  assert.equal(hasSameBoardAutoOrganizeSemantics(original.diagram, application.diagram), true);
   assert.deepEqual(scanResult, inputBefore);
 });
 
@@ -194,10 +197,23 @@ test("원래 배치는 AWS에서 읽은 Resource, 관계, 설정을 하나도 �
     source
   );
 
+  assert.equal(application.diagram.presentation?.geometryPolicy, "source-exact");
+  assert.deepEqual(
+    application.diagram.nodes.map((node) => ({ id: node.id, values: node.parameters?.values })),
+    source.architectureJson.nodes.map((node) => ({ id: node.id, values: node.config }))
+  );
+  assert.deepEqual(application.diagram.edges, [
+    {
+      id: "source-edge",
+      label: "connects_to",
+      sourceNodeId: "vpc-source",
+      targetNodeId: "unknown-source"
+    }
+  ]);
   assert.deepEqual(storedArchitecture, source.architectureJson);
 });
 
-test("Reverse Engineering Compiler는 사용자가 본 원래 배치를 품질과 변경의 기준으로 사용한다", () => {
+test("Reverse Engineering 자동 정리는 원본 의미를 지킨 shared 후보만 사용한다", () => {
   const overlappingResult = createOverlappingBucketScanResult();
   const originalApplication = createReverseEngineeringBoardApplication({
     currentDiagram,
@@ -205,57 +221,58 @@ test("Reverse Engineering Compiler는 사용자가 본 원래 배치를 품질�
     placement: "original",
     result: overlappingResult
   });
+  const candidateSet = createBoardAutoOrganizeCandidates(
+    originalApplication.diagram,
+    convertReverseEngineeringBoardToArchitectureJson(
+      originalApplication.diagram,
+      overlappingResult
+    )
+  );
+  const candidate = candidateSet.candidates[0];
+
+  assert.ok(candidate);
+
   const compiledApplication = createReverseEngineeringBoardApplication({
     currentDiagram,
     mode: "replace",
+    organizedDiagram: candidate.diagram,
     placement: "compiled",
     result: overlappingResult
   });
-  const originalQuality = evaluateAutomaticDiagramLayout({
-    edges: originalApplication.diagram.edges.map((edge) => ({
-      id: edge.id,
-      sourceId: edge.sourceNodeId,
-      targetId: edge.targetNodeId
-    })),
-    nodes: originalApplication.diagram.nodes
-  });
-  const compilation = compiledApplication.compilation;
 
-  assert.ok(compilation);
-  const beforeOverlapCount = compilation.quality.before.metrics.nodeOverlapCount;
-  const afterOverlapCount = compilation.quality.after.metrics.nodeOverlapCount;
-
-  assert.ok(originalQuality.nodeOverlapCount > 0);
-  assert.ok(beforeOverlapCount !== undefined);
-  assert.ok(afterOverlapCount !== undefined);
-  assert.equal(beforeOverlapCount, originalQuality.nodeOverlapCount);
-  assert.ok(afterOverlapCount < beforeOverlapCount);
-  assert.ok(compilation.changes.some((change) => change.kind === "geometry"));
+  assert.equal(compiledApplication.compilation, null);
+  assert.equal(
+    hasSameBoardAutoOrganizeSemantics(
+      originalApplication.diagram,
+      compiledApplication.diagram
+    ),
+    true
+  );
   assert.notDeepEqual(
     compiledApplication.diagram.nodes.map(({ id, position }) => ({ id, position })),
     originalApplication.diagram.nodes.map(({ id, position }) => ({ id, position }))
   );
-  assert.deepEqual(compilation.diagram, compiledApplication.diagram);
+  assert.deepEqual(compiledApplication.diagram, candidate.diagram);
 });
 
-test("Reverse Engineering은 사용자가 명시적으로 요청한 경우에만 배치 Compiler proposal을 만든다", () => {
+test("Reverse Engineering은 정리안이 없으면 자동 정리를 암묵적으로 실행하지 않는다", () => {
   const originalApplication = createReverseEngineeringBoardApplication({
     currentDiagram,
     mode: "replace",
     placement: "original",
     result: scanResult
   });
-  const compiledApplication = createReverseEngineeringBoardApplication({
-    currentDiagram,
-    mode: "replace",
-    placement: "compiled",
-    result: scanResult
-  });
 
   assert.equal(originalApplication.compilation, null);
-  assert.equal(
-    compiledApplication.compilation?.provenance.compilerVersion,
-    ARCHITECTURE_BOARD_COMPILER_VERSION
+  assert.throws(
+    () =>
+      createReverseEngineeringBoardApplication({
+        currentDiagram,
+        mode: "replace",
+        placement: "compiled",
+        result: scanResult
+      }),
+    /선택한 Board 정리안을 찾지 못했습니다/
   );
 });
 
@@ -265,7 +282,26 @@ test("Reverse Engineering 원래 배치는 Compiler 없이 현재 Board에 추�
       makeResourceNode("current-bucket", "aws_s3_bucket", "current_bucket", "bucket-current", 0)
     ],
     edges: [],
-    viewport: { x: 12, y: 24, zoom: 1.2 }
+    viewport: { x: 12, y: 24, zoom: 1.2 },
+    variables: [
+      {
+        id: "variable-current-region",
+        name: "aws_region",
+        type: "string",
+        value: "ap-northeast-2",
+        bindings: [
+          {
+            nodeId: "current-bucket",
+            parameterKey: "region"
+          }
+        ],
+        source: "user"
+      }
+    ],
+    presentation: {
+      geometryPolicy: "catalog-normalized",
+      terraformSourceFingerprint: "terraform-source-before-reverse"
+    }
   };
   const application = createReverseEngineeringBoardApplication({
     currentDiagram: currentBoard,
@@ -280,6 +316,8 @@ test("Reverse Engineering 원래 배치는 Compiler 없이 현재 Board에 추�
     new Set(["current-bucket", "vpc-1"])
   );
   assert.deepEqual(application.diagram.viewport, currentBoard.viewport);
+  assert.deepEqual(application.diagram.variables, currentBoard.variables);
+  assert.deepEqual(application.diagram.presentation, currentBoard.presentation);
 });
 
 test("Reverse Engineering 자동 정리는 scan 진단을 보드 의미 정보에 섞지 않는다", () => {
@@ -315,11 +353,22 @@ test("Reverse Engineering 자동 정리는 scan 진단을 보드 의미 정보�
       }
     ]
   } satisfies ReverseEngineeringScanResult;
-  const proposal = compileReverseEngineeringArchitecture(result);
+  const original = createReverseEngineeringBoardApplication({
+    currentDiagram,
+    mode: "replace",
+    placement: "original",
+    result
+  });
+  const organized = createReverseEngineeringBoardApplication({
+    currentDiagram,
+    mode: "replace",
+    organizedDiagram: moveFirstNode(original.diagram, 120),
+    placement: "compiled",
+    result
+  });
 
-  assert.equal(proposal.diagnostics.some(({ code }) => code.startsWith("compiler.context.")), false);
   const organizedArchitecture = convertReverseEngineeringBoardToArchitectureJson(
-    proposal.diagram,
+    organized.diagram,
     result
   );
   assert.deepEqual(
@@ -339,7 +388,7 @@ test("관계가 있는 검토 전용 Lambda는 보호 metadata와 확인 필요 
   const application = createReverseEngineeringBoardApplication({
     currentDiagram,
     mode: "replace",
-    placement: "compiled",
+    placement: "original",
     result
   });
   const lambda = application.diagram.nodes.find((node) => node.id === "lambda-1");
@@ -403,15 +452,27 @@ test("최종 혼합 fixture의 정식 지원 ALB, CloudFront, ECS는 Board에서
   ] as const);
 
   for (const placement of ["original", "compiled"] as const) {
-    const application = createReverseEngineeringBoardApplication({
+    const originalApplication = createReverseEngineeringBoardApplication({
       currentDiagram,
       mode: "replace",
-      placement,
+      placement: "original",
       result
     });
+    const application =
+      placement === "original"
+        ? originalApplication
+        : createReverseEngineeringBoardApplication({
+            currentDiagram,
+            mode: "replace",
+            organizedDiagram: moveFirstNode(originalApplication.diagram, 80),
+            placement: "compiled",
+            result
+          });
     const nodeById = new Map(application.diagram.nodes.map((node) => [node.id, node]));
     const appliedArchitectureById = new Map(
-      convertDiagramJsonToArchitectureJson(application.diagram).nodes.map((node) => [node.id, node])
+      convertReverseEngineeringBoardToArchitectureJson(application.diagram, result).nodes.map(
+        (node) => [node.id, node]
+      )
     );
 
     for (const resourceId of TASK9_SUPPORTED_RESOURCE_IDS) {
@@ -582,7 +643,10 @@ test("과거 스캔에서 보정된 Lambda는 원래 배치에서도 짧은 확�
     result
   });
   const lambda = application.diagram.nodes.find((node) => node.id === "legacy-lambda");
-  const appliedArchitecture = convertDiagramJsonToArchitectureJson(application.diagram);
+  const appliedArchitecture = convertReverseEngineeringBoardToArchitectureJson(
+    application.diagram,
+    result
+  );
   const appliedLambda = appliedArchitecture.nodes.find((node) => node.id === "legacy-lambda");
 
   assert.equal(application.compilation, null);
@@ -597,7 +661,7 @@ test("과거 스캔에서 보정된 Lambda는 원래 배치에서도 짧은 확�
   assert.equal(result.importSuggestions[0]?.status, "manual_review");
 });
 
-test("Reverse Engineering append는 현재 Board와 새 스캔 리소스를 하나의 Compiler proposal로 검토하고 적용한다", () => {
+test("Reverse Engineering append는 현재 Board와 새 스캔 리소스의 visual-only 정리안만 적용한다", () => {
   const currentBoard: DiagramJson = {
     nodes: [
       makeResourceNode("current-bucket", "aws_s3_bucket", "current_bucket", "bucket-current", 0),
@@ -606,41 +670,30 @@ test("Reverse Engineering append는 현재 Board와 새 스캔 리소스를 하�
     edges: [],
     viewport: { x: 12, y: 24, zoom: 1.2 }
   };
-  const application = createReverseEngineeringBoardApplication({
-    currentDiagram: currentBoard,
-    mode: "append",
-    placement: "compiled",
-    result: scanResult
-  });
   const originalAppendApplication = createReverseEngineeringBoardApplication({
     currentDiagram: currentBoard,
     mode: "append",
     placement: "original",
     result: scanResult
   });
-  const currentQuality = evaluateAutomaticDiagramLayout({
-    edges: originalAppendApplication.diagram.edges.map((edge) => ({
-      id: edge.id,
-      sourceId: edge.sourceNodeId,
-      targetId: edge.targetNodeId
-    })),
-    nodes: originalAppendApplication.diagram.nodes
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram: currentBoard,
+    mode: "append",
+    organizedDiagram: moveFirstNode(originalAppendApplication.diagram, 180),
+    placement: "compiled",
+    result: scanResult
   });
 
-  assert.ok(application.compilation);
-  assert.deepEqual(application.compilation.diagram, application.previewDiagram);
-  assert.deepEqual(application.compilation.diagram, application.diagram);
+  assert.equal(application.compilation, null);
+  assert.deepEqual(application.previewDiagram, application.diagram);
   assert.deepEqual(
-    new Set(application.compilation.diagram.nodes.map((node) => node.id)),
+    new Set(application.diagram.nodes.map((node) => node.id)),
     new Set(["current-bucket", "current-log", "vpc-1"])
   );
   assert.equal(
-    application.compilation.quality.before.metrics.canvasArea,
-    currentQuality.canvasArea
-  );
-  assert.equal(
-    application.compilation.changes.every(
-      (change) => change.kind === "geometry" || change.kind === "edge-routing"
+    hasSameBoardAutoOrganizeSemantics(
+      originalAppendApplication.diagram,
+      application.diagram
     ),
     true
   );
@@ -655,6 +708,56 @@ test("Reverse Engineering append는 현재 Board와 새 스캔 리소스를 하�
     undefined
   );
 });
+
+test("Reverse Engineering append Snapshot은 같은 id의 기존 Resource를 scan 원본으로 덮어쓰지 않는다", () => {
+  const existingVpc = makeResourceNode(
+    "vpc-1",
+    "aws_vpc",
+    "existing_vpc",
+    "vpc-123",
+    40
+  );
+  existingVpc.label = "사용자가 편집한 VPC";
+  existingVpc.parameters!.values = {
+    providerResourceId: "vpc-123",
+    currentOnly: "KEEP"
+  };
+  const currentBoard: DiagramJson = {
+    nodes: [existingVpc],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram: currentBoard,
+    mode: "append",
+    placement: "original",
+    result: scanResult
+  });
+  const snapshot = convertReverseEngineeringBoardToArchitectureJson(
+    application.diagram,
+    scanResult,
+    application.sourceOwnership
+  );
+  const expected = convertDiagramJsonToArchitectureJson(currentBoard);
+
+  assert.deepEqual(application.comparison.duplicates.map((item) => item.nodeId), ["vpc-1"]);
+  assert.deepEqual(snapshot, expected);
+});
+
+// 테스트 정리안은 의미 정보는 그대로 두고 첫 Resource 위치만 옮깁니다.
+function moveFirstNode(diagram: DiagramJson, offsetX: number): DiagramJson {
+  return {
+    ...structuredClone(diagram),
+    nodes: diagram.nodes.map((node, index) =>
+      index === 0
+        ? {
+            ...structuredClone(node),
+            position: { x: node.position.x + offsetX, y: node.position.y }
+          }
+        : structuredClone(node)
+    )
+  };
+}
 
 function makeResourceNode(
   id: string,

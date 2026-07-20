@@ -1,4 +1,7 @@
-import type { DiagramNode } from "@sketchcatch/types";
+import {
+  isBoardAutoPresentationFrameNode,
+  type DiagramNode
+} from "@sketchcatch/types";
 import { isAreaNode, isSecurityGroupScopeNode } from "../diagram-editor/area-nodes";
 import {
   createAreaTitleRoutingObstacle,
@@ -111,7 +114,28 @@ const LAYOUT_CANDIDATES: readonly LayoutCandidateConfig[] = [
   { columnGap: 64, id: "support-below-reversed", primaryOrder: "descending", rowGap: 56, supportPlacement: "below" }
 ];
 
+/** 기존 소비자를 위해 가장 좋은 단일 layout 결과를 이전 모양 그대로 반환합니다. */
 export function layoutAutomaticDiagram(input: AutomaticDiagramLayoutInput): AutomaticDiagramLayoutResult {
+  const bestCandidate = layoutAutomaticDiagramCandidates(input)[0];
+
+  if (!bestCandidate) {
+    const quality = evaluateAutomaticDiagramLayout(input);
+
+    return {
+      candidateCount: 0,
+      candidateId: "unchanged",
+      nodes: [...input.nodes],
+      quality
+    };
+  }
+
+  return bestCandidate;
+}
+
+/** 같은 전략 집합을 평가해 원본을 끼우지 않은 결정론적 후보 목록으로 반환합니다. */
+export function layoutAutomaticDiagramCandidates(
+  input: AutomaticDiagramLayoutInput
+): readonly AutomaticDiagramLayoutResult[] {
   const candidates = getLayoutCandidateConfigs(input).map((config) => {
     const nodes = createLayoutCandidate(input, config);
 
@@ -130,25 +154,18 @@ export function layoutAutomaticDiagram(input: AutomaticDiagramLayoutInput): Auto
           config.knowledgeProfileId === undefined || doesNotRegressVisualAnomalies(quality, baselineCandidate.quality)
       )
     : candidates;
-  const bestCandidate = selectBestCandidate(eligibleCandidates);
-
-  if (!bestCandidate) {
-    const quality = evaluateAutomaticDiagramLayout(input);
-
-    return {
-      candidateCount: 0,
-      candidateId: "unchanged",
-      nodes: [...input.nodes],
-      quality
-    };
-  }
-
-  return {
-    candidateCount: candidates.length,
-    candidateId: bestCandidate.config.id,
-    nodes: bestCandidate.nodes,
-    quality: bestCandidate.quality
-  };
+  return [...eligibleCandidates]
+    .sort(
+      (left, right) =>
+        left.quality.score - right.quality.score ||
+        left.config.id.localeCompare(right.config.id)
+    )
+    .map((candidate) => ({
+      candidateCount: candidates.length,
+      candidateId: candidate.config.id,
+      nodes: candidate.nodes,
+      quality: candidate.quality
+    }));
 }
 
 function selectBestCandidate<T extends { readonly config: LayoutCandidateConfig; readonly quality: AutomaticDiagramLayoutQuality }>(
@@ -210,11 +227,15 @@ function isUsableCandidateProfile(
   );
 }
 
+/** 자동 프레임과 잠긴 노드는 움직이지 않고 한 전략의 layout을 계산합니다. */
 function createLayoutCandidate(
   input: AutomaticDiagramLayoutInput,
   config: LayoutCandidateConfig
 ): DiagramNode[] {
-  const protectedNodeIds = input.protectedNodeIds ?? new Set<string>();
+  const protectedNodeIds = new Set([
+    ...(input.protectedNodeIds ?? []),
+    ...input.nodes.filter(isBoardAutoPresentationFrameNode).map((node) => node.id)
+  ]);
   const layoutNodes = input.nodes.filter((node) => !isAreaNode(node));
   const roleByNodeId = new Map(layoutNodes.map((node) => [node.id, classifySemanticRole(node)]));
   const rankByNodeId = createFlowRanks(layoutNodes, input.edges, roleByNodeId);
@@ -1749,7 +1770,9 @@ function compareRepeatedNodes(left: DiagramNode, right: DiagramNode): number {
 }
 
 function createRepeatKey(node: DiagramNode): string {
-  return `${node.parameters?.resourceType ?? node.type}:${node.label}`
+  const stableName = node.parameters?.resourceName?.trim() || node.label;
+
+  return `${node.parameters?.resourceType ?? node.type}:${stableName}`
     .toLowerCase()
     .replace(/(?:^|[\s_-])(?:az|zone)?[\s_-]?[a-z0-9]+$/u, "")
     .replace(/[\s_-]+/gu, " ")
