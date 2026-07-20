@@ -282,24 +282,48 @@ function authorizeArchitectureDraftRequest(
 // GitHub 링크 요청도 결국 가벼운 텍스트 근거를 모아 자연어 초안 생성 흐름을 재사용합니다.
 export function createArchitectureDraftFromRepositoryEvidence(
   repositoryUrl: string,
-  evidence: readonly string[]
+  evidence: readonly string[],
+  templateId: CreateArchitectureDraftRequest["templateId"] = undefined
 ): AiArchitectureDraftResult {
   const evidenceText = evidence.join("\n").toLowerCase();
   const draft = createArchitectureDraft(evidenceText || repositoryUrl);
+  const selectedDraft = isAudienceLiveCheckRepositoryUrl(repositoryUrl)
+    && templateId === "ecs-fargate-container-app"
+    ? applyStrictRepositoryEvidencePolicy(draft, {
+        prompt: "Audience Live Check fixed ECS Fargate architecture",
+        templateId,
+        repositoryEvidence: {
+          mode: "strict",
+          repositoryName: "audience-live-check",
+          facts: [
+            { kind: "frontend_delivery", value: "s3_cloudfront_static", sourcePath: "fixed-profile" },
+            { kind: "backend_runtime", value: "ecs_fargate_service", sourcePath: "fixed-profile" },
+            { kind: "container_registry", value: "ecr", sourcePath: "fixed-profile" },
+            { kind: "observability", value: "cloudwatch", sourcePath: "fixed-profile" },
+            { kind: "health_check", value: "http:8080/health", sourcePath: "fixed-profile" },
+            { kind: "transport_security", value: "alb_tls_termination", sourcePath: "fixed-profile" },
+            { kind: "runtime_scale", value: "single_task", sourcePath: "fixed-profile" }
+          ]
+        }
+      })
+    : draft;
 
   return {
-    ...draft,
+    ...selectedDraft,
     metadata: {
-      ...draft.metadata,
+      ...selectedDraft.metadata,
       source: "github",
       assumptions: [
-        ...draft.metadata.assumptions,
+        ...selectedDraft.metadata.assumptions,
         "Source Repository의 README와 package metadata만 근거로 Architecture Draft를 추론했습니다."
       ]
     }
   };
 }
 
+function isAudienceLiveCheckRepositoryUrl(repositoryUrl: string): boolean {
+  return /^https?:\/\/github\.com\/chaekang\/audience-live-check\/?$/iu.test(repositoryUrl.trim());
+}
 export function createConfiguredAmazonQArchitectureDraftResponse(input: {
   readonly onWarmupError?: ((error: unknown) => void) | undefined;
   readonly runtimeCache?: RuntimeCache | undefined;

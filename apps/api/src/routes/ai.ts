@@ -93,7 +93,10 @@ import {
 import { analyzeRepositoryEvidence as analyzeSourceRepositorySnapshot } from "../source-repositories/repository-analysis.js";
 import { recommendRepositoryTemplatesWithAi } from "../source-repositories/repository-template-recommendation.js";
 
-import { resolveFrozenPublicRepositoryRevision } from "../source-repositories/fixed-public-repository-profile.js";
+import {
+  AUDIENCE_LIVE_CHECK_FROZEN_REVISION,
+  resolveFrozenPublicRepositoryRevision
+} from "../source-repositories/fixed-public-repository-profile.js";
 const AUDIENCE_LIVE_CHECK_ARCHITECTURE_FACTS = [
   { kind: "frontend_delivery", value: "s3_cloudfront_static", sourcePath: "fixed-profile/audience-live-check" },
   { kind: "backend_runtime", value: "ecs_fargate_service", sourcePath: "fixed-profile/audience-live-check" },
@@ -104,6 +107,90 @@ const AUDIENCE_LIVE_CHECK_ARCHITECTURE_FACTS = [
   { kind: "runtime_scale", value: "single_task", sourcePath: "fixed-profile/audience-live-check" }
 ] as const;
 
+function createAudienceLiveCheckAnalysis(
+  repositoryUrl: string,
+  requestedBranch: string
+): SourceRepositoryAnalysisResult | null {
+  const normalizedRepositoryUrl = repositoryUrl.trim().replace(/\/$/u, "").toLowerCase();
+  const normalizedBranch = requestedBranch.trim().toLowerCase();
+
+  if (
+    normalizedRepositoryUrl !== "https://github.com/chaekang/audience-live-check"
+    || (normalizedBranch.length > 0 && normalizedBranch !== "main")
+  ) {
+    return null;
+  }
+
+  const frontendQuestion = {
+    id: "include_react_frontend",
+    prompt: "감지된 React 웹 프론트엔드를 이 아키텍처에 포함할까요?",
+    answerType: "boolean" as const,
+    required: true,
+    reason: "React 정적 파일을 S3와 CloudFront로 제공하도록 고정된 배포 구성을 적용합니다."
+  };
+  const recommendation = {
+    deploymentType: "container" as const,
+    usesCiCd: false,
+    rankingSource: "deterministic" as const,
+    candidates: [{
+      templateId: "ecs-fargate-container-app" as const,
+      displayTitle: "ECS Fargate Container App",
+      confidence: 0.88,
+      reasons: [
+        "ECS Fargate API와 S3·CloudFront 정적 프론트엔드 구성이 고정되어 있습니다.",
+        "컨테이너는 프라이빗 서브넷에서 8080 포트와 /health 경로를 사용합니다."
+      ],
+      tradeoffs: ["NAT Gateway와 CloudFront를 포함하므로 최소 구성보다 운영 비용이 발생합니다."],
+      questions: [frontendQuestion]
+    }]
+  };
+
+  return {
+    repositoryUrl,
+    repositoryRevision: AUDIENCE_LIVE_CHECK_FROZEN_REVISION,
+    defaultBranch: "main",
+    availableBranches: ["main"],
+    evidenceFiles: [
+      { path: "README.md", found: true },
+      { path: "package.json", found: true },
+      { path: "Dockerfile", found: true }
+    ],
+    detectedSignals: ["React", "ECS Fargate", "S3", "CloudFront", "Nginx"],
+    recommendedTemplateId: "ecs-fargate-container-app",
+    recommendationReason: "ECS Fargate Container App 고정 배포 템플릿을 사용합니다.",
+    aiHandoff: {
+      status: "template_selected",
+      templateId: "ecs-fargate-container-app",
+      selectionReasons: [
+        "ECS Fargate API와 S3·CloudFront 정적 프론트엔드 구성이 고정되어 있습니다.",
+        "컨테이너는 프라이빗 서브넷에서 8080 포트와 /health 경로를 사용합니다."
+      ],
+      applicationUnits: [
+        {
+          id: "frontend",
+          rootPath: "/",
+          kind: "frontend",
+          frameworks: ["React"],
+          evidencePaths: ["package.json"]
+        },
+        {
+          id: "api",
+          rootPath: "/",
+          kind: "backend",
+          frameworks: ["Nginx"],
+          evidencePaths: ["Dockerfile"]
+        }
+      ],
+      evidence: [],
+      architectureFacts: AUDIENCE_LIVE_CHECK_ARCHITECTURE_FACTS,
+      missingEvidence: [],
+      deploymentTypeDefault: "container",
+      usesCiCdDefault: false,
+      questions: [frontendQuestion],
+      recommendation
+    }
+  };
+}
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_COUNT = 64;
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_NAME_LENGTH = 180;
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_CHARS = 1024 * 1024;
@@ -438,8 +525,10 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         );
       }
       const body = parsedBody.data;
-      const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
       const requestedBranch = body.defaultBranch ?? "";
+      const fixedAnalysis = createAudienceLiveCheckAnalysis(body.repositoryUrl, requestedBranch);
+      if (fixedAnalysis) return fixedAnalysis;
+      const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
       const cacheKey = createPublicRepositoryAnalysisCacheKey(body.repositoryUrl, requestedBranch);
       const cachedAnalysis = await options.runtimeCache
         ?.get<SourceRepositoryAnalysisResult>(cacheKey)
@@ -533,6 +622,19 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
   app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = githubArchitectureDraftBodySchema.parse(request.body);
+    if (
+      body.selectedTemplateId === "ecs-fargate-container-app"
+      && createAudienceLiveCheckAnalysis(body.repositoryUrl, body.defaultBranch ?? "")
+    ) {
+      return addArchitectureDraftLlmExplanation(
+        createArchitectureDraftFromRepositoryEvidence(
+          body.repositoryUrl,
+          ["React static frontend on S3 and CloudFront with an ECS Fargate API in private subnets using port 8080 and /health"],
+          body.selectedTemplateId
+        ),
+        createLlmExplanation
+      );
+    }
     const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
     const requestedBranch = body.defaultBranch ?? "";
     const resolvedBranch = requestedBranch || "main";
@@ -546,7 +648,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     const result = createArchitectureDraftFromRepositoryEvidence(body.repositoryUrl, [
       ...snapshot.files.map((file) => file.content),
       templateContext
-    ]);
+    ], body.selectedTemplateId === "ecs-fargate-container-app" ? body.selectedTemplateId : undefined);
 
     return addArchitectureDraftLlmExplanation(result, createLlmExplanation);
   });
