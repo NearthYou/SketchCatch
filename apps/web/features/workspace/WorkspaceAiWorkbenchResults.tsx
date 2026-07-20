@@ -16,6 +16,7 @@ import {
 import {
   architectureDraftGenerationSteps,
   getArchitectureDraftGenerationProgressStep,
+  getTerraformIssueAnalysisProgress,
   getTerraformPreviewReviewProgressStep,
   terraformPreviewReviewSteps,
   type WorkspaceAiProgressStep
@@ -82,6 +83,54 @@ export function WorkspaceAiWorkbenchReviewProgress({ elapsedMs }: { readonly ela
   );
 }
 
+export function WorkspaceAiWorkbenchTerraformIssueProgress({
+  completed,
+  total
+}: {
+  readonly completed: number;
+  readonly total: number;
+}) {
+  const elapsedMs = useWorkspaceAiProgressElapsed(true, completed);
+  const progress = getTerraformIssueAnalysisProgress({ completed, elapsedMs, total });
+
+  return (
+    <div
+      aria-label={`오류 분석 예상 진행률 ${progress}%`}
+      aria-valuemax={100}
+      aria-valuemin={0}
+      aria-valuenow={progress}
+      className={styles.terraformIssueProgress}
+      role="progressbar"
+    >
+      <div className={styles.terraformIssueProgressGauge}>
+        <svg aria-hidden="true" viewBox="0 0 44 44">
+          <circle
+            className={styles.terraformIssueProgressTrack}
+            cx="22"
+            cy="22"
+            r="18"
+          />
+          <circle
+            className={styles.terraformIssueProgressIndicator}
+            cx="22"
+            cy="22"
+            pathLength="100"
+            r="18"
+            strokeDasharray="100"
+            strokeDashoffset={100 - progress}
+          />
+        </svg>
+        <span aria-hidden="true" className={styles.terraformIssueProgressValue}>
+          {progress}%
+        </span>
+      </div>
+      <span aria-hidden="true" className={styles.terraformIssueProgressLabel}>
+        예상
+      </span>
+    </div>
+  );
+}
+
 function WorkspaceAiWorkbenchProgress({
   currentStep,
   notice,
@@ -138,18 +187,19 @@ function WorkspaceAiWorkbenchProgress({
   );
 }
 
-function useWorkspaceAiProgressElapsed(enabled = true): number {
+function useWorkspaceAiProgressElapsed(enabled = true, resetKey?: unknown): number {
   const [elapsedMs, setElapsedMs] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
+    setElapsedMs(0);
     const startedAt = Date.now();
     const timerId = window.setInterval(() => {
       setElapsedMs(Date.now() - startedAt);
     }, 500);
 
     return () => window.clearInterval(timerId);
-  }, [enabled]);
+  }, [enabled, resetKey]);
 
   return elapsedMs;
 }
