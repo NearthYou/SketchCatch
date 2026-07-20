@@ -19,12 +19,12 @@ export function createTerraformImportBlocks(
     left.terraformAddress.localeCompare(right.terraformAddress, "en")
   );
   const seenAddresses = new Set<string>();
-  const seenImportIds = new Set<string>();
+  const seenPhysicalResourceKeys = new Set<string>();
 
   for (const target of sortedTargets) {
-    assertVerifiedTerraformImportTarget(target, seenAddresses, seenImportIds);
+    assertVerifiedTerraformImportTarget(target, seenAddresses, seenPhysicalResourceKeys);
     seenAddresses.add(target.terraformAddress);
-    seenImportIds.add(target.importId);
+    seenPhysicalResourceKeys.add(createPhysicalResourceKey(target));
   }
 
   return sortedTargets
@@ -44,7 +44,7 @@ export function createTerraformImportBlocks(
 function assertVerifiedTerraformImportTarget(
   target: VerifiedTerraformImportTarget,
   seenAddresses: ReadonlySet<string>,
-  seenImportIds: ReadonlySet<string>
+  seenPhysicalResourceKeys: ReadonlySet<string>
 ): void {
   if (!TERRAFORM_RESOURCE_ADDRESS_PATTERN.test(target.terraformAddress)) {
     throw new Error("검증된 Terraform resource 주소만 import할 수 있습니다.");
@@ -63,7 +63,12 @@ function assertVerifiedTerraformImportTarget(
     throw new Error("검증된 AWS import ID가 필요합니다.");
   }
 
-  if (seenImportIds.has(target.importId)) {
+  if (seenPhysicalResourceKeys.has(createPhysicalResourceKey(target))) {
     throw new Error("같은 AWS 리소스를 여러 Terraform 주소로 import할 수 없습니다.");
   }
+}
+
+/** gg: 서로 다른 AWS 종류가 우연히 같은 이름을 써도 별도 리소스로 구분합니다. */
+function createPhysicalResourceKey(target: VerifiedTerraformImportTarget): string {
+  return `${target.providerResourceType}\0${target.importId}`;
 }
