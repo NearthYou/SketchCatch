@@ -1,11 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback } from "react";
 import {
   AlertCircle,
   CheckCircle2,
-  ExternalLink,
   RefreshCw,
   Settings2,
   Workflow
@@ -13,6 +11,7 @@ import {
 import { ProjectCicdMonitoringSettingsClient } from "../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client";
 import { CicdConsoleScreen } from "./CicdConsoleScreen";
 import { ProjectDeploymentTargetEditor } from "./delivery/ProjectDeploymentTargetEditor";
+import { DeliveryConnectionSummary } from "./delivery/DeliveryConnectionSummary";
 import { useProjectDeliveryProfile } from "./delivery/use-project-delivery-profile";
 import type { LiveObservationSelection } from "./live-observation";
 import styles from "./delivery-center.module.css";
@@ -62,6 +61,16 @@ export function DeliveryCenterPanel({
       </div>
     );
   }
+  const repositoryReturnSearch = new URLSearchParams({
+    projectId,
+    deploymentView: "cicd",
+    readinessKey: "source_repository"
+  });
+  const repositorySearch = new URLSearchParams({
+    returnTo: `/workspace?${repositoryReturnSearch.toString()}`,
+    readinessKey: "source_repository"
+  });
+  const repositoryHref = `/dashboard/projects/${encodeURIComponent(projectId)}/repository?${repositorySearch.toString()}`;
 
   return (
     <div className={styles.root}>
@@ -124,37 +133,13 @@ export function DeliveryCenterPanel({
         </div>
 
         <div className={styles.connectionGrid}>
-          <article className={styles.card} aria-labelledby="delivery-github-title">
-            <div className={styles.cardHeading}>
-              <h4 id="delivery-github-title">GitHub 계정</h4>
-              <strong data-ready={profile.githubInstallations.length > 0}>
-                {profile.githubInstallations.length > 0 ? "연결됨" : "연결 필요"}
-              </strong>
-            </div>
-            <p>Repository 권한과 CI/CD Pull Request 생성에 사용합니다.</p>
-            {profile.githubInstallations.length > 0 ? (
-              <ul className={styles.accountList}>
-                {profile.githubInstallations.map((installation) => (
-                  <li key={installation.installationId}>
-                    <span>{installation.accountLogin}</span>
-                    {installation.htmlUrl ? (
-                      <a href={installation.htmlUrl} rel="noreferrer" target="_blank">
-                        권한 관리 <ExternalLink aria-hidden="true" size={13} />
-                      </a>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <Link
-                className={styles.actionLink}
-                href="/dashboard/settings#github-account-settings-title"
-              >
-                GitHub 연결하기
-              </Link>
+          <DeliveryConnectionSummary
+            accountLogins={profile.githubInstallations.map(
+              (installation) => installation.accountLogin
             )}
-          </article>
-
+            profile={profile}
+            repositoryHref={repositoryHref}
+          />
         </div>
       </section>
 

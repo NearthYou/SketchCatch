@@ -21,6 +21,10 @@ const monitoringSource = readFileSync(
   new URL("../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client.tsx", import.meta.url),
   "utf8"
 );
+const connectionSummarySource = readFileSync(
+  new URL("./delivery/DeliveryConnectionSummary.tsx", import.meta.url),
+  "utf8"
+);
 const compatibilityRouteSource = readFileSync(
   new URL("../../app/dashboard/projects/[projectId]/settings/page.tsx", import.meta.url),
   "utf8"
@@ -31,7 +35,7 @@ const githubCallbackSource = readFileSync(
 );
 
 test("CI/CD Delivery owns the project delivery configuration sections", () => {
-  assert.match(panelSource, /GitHub 연결/);
+  assert.match(panelSource, /DeliveryConnectionSummary/);
   assert.match(panelSource, /ProjectCicdMonitoringSettingsClient/);
   assert.match(panelSource, /ProjectDeploymentTargetEditor/);
   assert.match(panelSource, /profile=\{profile\}/);
@@ -54,6 +58,15 @@ test("Delivery는 Board Repository를 다시 선택하는 카드를 표시하지
   assert.doesNotMatch(panelSource, /delivery-repository-title/);
   assert.doesNotMatch(panelSource, /Repository 다시 분석/);
   assert.doesNotMatch(panelSource, /readinessAction:\s*"select_repository"/);
+});
+
+test("exact Repository를 compact summary에 자동 적용으로 표시한다", () => {
+  assert.match(panelSource, /DeliveryConnectionSummary/);
+  assert.match(connectionSummarySource, /cicd-source-repository/);
+  assert.match(connectionSummarySource, /defaultBranch/);
+  assert.match(connectionSummarySource, /자동 적용/);
+  assert.match(connectionSummarySource, /PR 권한 연결 필요/);
+  assert.doesNotMatch(connectionSummarySource, /<select/);
 });
 
 test("CI/CD는 별도 Repository 목록 대신 Board Delivery Profile을 사용한다", () => {

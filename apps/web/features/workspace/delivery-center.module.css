@@ -94,7 +94,8 @@
 .overallStatus:focus-visible,
 .sectionNavigation a:focus-visible,
 .actionLink:focus-visible,
-.accountList a:focus-visible {
+.accountList a:focus-visible,
+.connectionFacts a:focus-visible {
   outline: 2px solid var(--color-ink);
   outline-offset: 2px;
 }
@@ -230,6 +231,43 @@
   font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.55;
   margin: 10px 0 0;
+}
+
+.connectionSummary {
+  scroll-margin-top: 64px;
+}
+
+.connectionFacts {
+  display: grid;
+  margin: 16px 0 0;
+}
+
+.connectionFacts > div {
+  align-items: baseline;
+  border-top: 1px solid #f0f0f3;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(120px, 0.3fr) minmax(0, 1fr);
+  padding: 12px 0;
+}
+
+.connectionFacts dt {
+  color: #60646c;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.connectionFacts dd {
+  color: #171717;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.connectionFacts a {
+  color: var(--color-ink);
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .accountList {

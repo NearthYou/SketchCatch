@@ -90,7 +90,7 @@ test("provides one concrete CTA for every server readiness action", () => {
   const expected = {
     approve_apply_plan: "Apply Plan 승인하기",
     deploy_initial_application: "최초 앱 배포하기",
-    select_repository: "Repository 선택하기",
+    select_repository: "Repository 연결 확인",
     confirm_monitoring_config: "Branch와 경로 확인하기",
     select_aws_connection: "AWS 연결 선택하기",
     confirm_build_config: "빌드 설정 확인하기",
@@ -105,7 +105,9 @@ test("provides one concrete CTA for every server readiness action", () => {
     });
 
     assert.equal(navigation.actionLabel, actionLabel);
-    if (
+    if (readinessAction === "select_repository") {
+      assert.equal(navigation.href, "#cicd-source-repository");
+    } else if (
       readinessAction === "approve_apply_plan" ||
       readinessAction === "deploy_initial_application"
     ) {

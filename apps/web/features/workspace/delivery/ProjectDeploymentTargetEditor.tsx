@@ -30,6 +30,7 @@ import {
   type ProjectDeploymentTargetDraft,
   type SystemManagedField
 } from "./project-deployment-target-state";
+import { getDeploymentTargetPresentation } from "../cicd-delivery-presentation";
 import { ProjectDeploymentTargetAdvancedSettings } from "./ProjectDeploymentTargetAdvancedSettings";
 import styles from "./project-deployment-target-editor.module.css";
 
@@ -134,6 +135,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
     `${projectId}:${initialSourceRepository?.id ?? "none"}`
   );
   const [connections, setConnections] = useState<AwsConnection[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
   const [target, setTarget] = useState<ProjectDeploymentTarget | null>(initialTarget);
   const [sourceRepository, setSourceRepository] = useState<SourceRepository | null>(
     initialSourceRepository
@@ -184,8 +186,16 @@ export const ProjectDeploymentTargetEditor = forwardRef<
         : "필수 항목을 확인하세요";
     return `${prefix}: ${keys.map((key) => missingFieldLabels[key]).join(", ")}`;
   }, [missingAdvancedFieldKeys, missingFieldKeys]);
+  const targetPresentation = getDeploymentTargetPresentation({
+    draftAwsConnectionId: draft.connectionId || null,
+    savedAwsConnectionId: target?.connectionId ?? null,
+    isDirty
+  });
   const canSave =
-    requestState !== "loading" && requestState !== "saving" && missingFieldKeys.length === 0;
+    requestState !== "loading" &&
+    requestState !== "saving" &&
+    missingFieldKeys.length === 0 &&
+    targetPresentation.status !== "saved";
 
   useEffect(() => {
     if (authStatus !== "authenticated") return;
@@ -211,6 +221,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
         }
         profileOwnerRef.current = nextOwner;
         isDirtyRef.current = false;
+        setIsDirty(false);
         setTarget(nextTarget);
         setSourceRepository(nextSourceRepository);
         const nextEcsDefaults =
@@ -268,6 +279,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
     value: ProjectDeploymentTargetDraft[K]
   ) {
     isDirtyRef.current = true;
+    setIsDirty(true);
     onDirty?.();
     setDraft((current) => ({ ...current, [key]: value }));
     setMessage("");
@@ -275,6 +287,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
 
   function changeRuntime(runtimeTargetKind: RuntimeTargetKind) {
     isDirtyRef.current = true;
+    setIsDirty(true);
     onDirty?.();
     const nextDraft = changeDeploymentTargetRuntime(
       draft,
@@ -302,6 +315,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
         createDeploymentTargetRequest(draft, connections)
       );
       isDirtyRef.current = false;
+      setIsDirty(false);
       setTarget(saved);
       const savedDraft = createDeploymentTargetDraft(saved, connections);
       setDraft(savedDraft);
@@ -386,7 +400,9 @@ export const ProjectDeploymentTargetEditor = forwardRef<
             <h3 id="automatic-settings-title">자동 설정 결과</h3>
             <p>연결된 저장소와 AWS 정보로 계산했습니다.</p>
           </div>
-          <span className={styles.readyBadge}>자동 입력</span>
+          <span className={styles.readyBadge} data-status={targetPresentation.status}>
+            {targetPresentation.statusLabel}
+          </span>
         </div>
         <dl className={styles.summaryList}>
           <div>
@@ -424,6 +440,12 @@ export const ProjectDeploymentTargetEditor = forwardRef<
         </dl>
       </section>
 
+      {targetPresentation.readinessHint ? (
+        <p className="dashboardMessage" role="status">
+          {targetPresentation.readinessHint}
+        </p>
+      ) : null}
+
       <ProjectDeploymentTargetAdvancedSettings
         draft={draft}
         lockedSystemFields={lockedSystemFields}
@@ -459,7 +481,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
             onClick={() => void saveTarget()}
             type="button"
           >
-            {requestState === "saving" ? "저장 중" : "배포 타깃 저장"}
+            {requestState === "saving" ? "저장 중" : targetPresentation.saveLabel}
           </button>
         </div>
       ) : null}
