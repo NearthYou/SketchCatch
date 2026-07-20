@@ -4,10 +4,10 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Branch `codex/fix-error-progress-completion` includes `origin/dev` through `d189cda3` and keeps the compact Workspace AI Terraform error-analysis gauge visible through an explicit successful 100% completion state.
 - The parked JH Workspace changes are restored on `dev`: Deployment uses the shorter `배포` label and intrinsic action width, Settings omits redundant CodeBuild authorization copy, and Project Draft loading uses the server draft whenever one exists without rendering the removed local-recovery chooser.
 - Terraform reverse sync accepts references to its allowlisted utility resources, so generated Runtime Secret values such as `random_password.check_in_signing.result` round-trip without a false manual-edit warning.
 - The Direct Deployment branch includes `origin/dev` through `fce1d6c0`, removes duplicate deployment summaries, and keeps selected history details within the active filter. Eighty-six focused Web tests and the root harness, lint, typecheck, and build checks pass.
-- Branch `codex/ai-error-analysis-progress-v2` includes the current `origin/dev` through `266f0a81` and adds compact circular estimated progress to Workspace AI Terraform error analysis.
 - The legacy `practice` Deployment profile is removed; `demo_web_service` is the default live profile, and imported migration `0054` rewrites legacy rows before removing the enum value.
 - Live Observation renders bounded traffic motion, a task-count-responsive Fargate fleet, and collapsed operational analysis without development-only traffic or Task preview controls.
 - Delayed first CloudWatch points retain request and capacity evidence, and stopped sessions no longer continue the countdown.
@@ -20,6 +20,16 @@ Short English-only working log for the current agent context. Older records are 
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
+
+### 2026-07-20 - Show explicit AI error-analysis completion
+
+- Reproduced the fast local response advancing only to 17% before the progress gauge disappeared; the request result replaced the loading state without an observable completion phase.
+- Added an explicit hidden/running/complete presentation model. Successful single and batch analysis now render `100%` with the `완료` label for 800ms without delaying the result; failed, cancelled, or stale requests do not claim completion.
+- Added transition, presentation, accessibility, exception-boundary, and Workbench wiring regressions. All 36 focused checks pass.
+- Addressed all three PR review threads: Terraform code preparation now stays inside the handled analysis boundary, and completion-state transitions no longer share an effect with the 800ms hide timer.
+- Local Chrome QA observed `8% -> 10% -> 12% -> 15% -> 17% -> 100% 완료`, with the completion gauge retained before hiding.
+- Post-review `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass. Root `pnpm test` remains non-green on unrelated existing Architecture Board knowledge and Live Observation contract baselines; the changed Workspace AI checks pass.
+- No dependency, lockfile, database migration, cloud, or deployment change was made.
 
 ### 2026-07-20 - Server-synchronized deployment progress
 
@@ -60,16 +70,6 @@ Short English-only working log for the current agent context. Older records are 
 - Renamed the primary Deployment console tab from `직접 배포` to `배포`.
 - Replaced the fixed 152 px action-button basis and width with intrinsic sizing while retaining the 44 px control height and full-width mobile layout. Authenticated Chrome QA at 1345x1003 and 390x844 confirmed that the validation label is not clipped.
 - Focused Direct Deployment regressions pass 85/85; root harness, lint, typecheck, and all five build tasks pass. The completed build process was stopped after Turbo remained attached to the existing user-owned Next dev server. No deployment, cloud mutation, contract, migration, dependency, commit, or push was performed.
-
-### 2026-07-20 - Fast-forward dev and the active branch
-
-- Fetched `origin/dev` and the active remote branch, then fast-forwarded local `dev` and `Refactor/jh/498-배포-ui-수정` from `3a26123b` to `252e7085` without pushing.
-- Preserved the existing dirty worktree through a temporary stash; the two local recovery-file deletions and the current progress records were retained while accepting the latest `dev` baseline. Final harness, conflict-marker, branch-alignment, and diff checks pass.
-
-### 2026-07-20 - Plan Direct Deployment UI deduplication
-
-- Added an implementation plan that removes repeated Direct Deployment step headings, Plan/scope/build metrics, validation readiness summaries, repeated execution facts, and empty-history controls while preserving approval and final AWS target safety checks.
-- The plan defines five TDD work units, responsive read-only browser QA, focused Web regressions, and required root checks. Only documentation and the prior Impeccable critique snapshot changed; no runtime code, API contract, DB migration, dependency, Terraform execution, AWS mutation, Deployment, commit, or push was performed.
 
 ### 2026-07-20 - Remove the local draft recovery chooser
 
@@ -164,7 +164,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Known Risk
 
-- Error-analysis percentage is an elapsed-time estimate because the current AI endpoint does not expose server-side progress; the active item rises from 8% to 94% and disappears only on the real completion state.
+- Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
 - Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
 - The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` was saved by the stale Web process and must be re-analyzed/regenerated or replaced after the Web restart.
 - Root `pnpm test` is not green because ten unrelated API baseline tests fail and `application-artifact-registry.test.ts` still has one cancelled lease-heartbeat test.
@@ -176,5 +176,5 @@ Short English-only working log for the current agent context. Older records are 
 ## Next Action
 
 1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
-2. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for the Direct Deployment UI work.
-3. Observe the compact gauge against a real delayed error-analysis response and consider server-reported stages only if the API contract later exposes them.
+2. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for these changes.
+3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
