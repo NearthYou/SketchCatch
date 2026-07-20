@@ -4,7 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch `dev` is based on `origin/dev` at `07ce4ea4`; the current worktree contains the Repository-to-Board runtime-Secret handoff correction requested directly on `dev`.
+- Branch `codex/ai-error-analysis-progress-v2` includes the current `origin/dev` through `266f0a81` and adds compact circular estimated progress to Workspace AI Terraform error analysis.
 - The legacy `practice` Deployment profile is removed; `demo_web_service` is the default live profile, and imported migration `0054` rewrites legacy rows before removing the enum value.
 - Live Observation renders bounded traffic motion, a task-count-responsive Fargate fleet, and collapsed operational analysis without development-only traffic or Task preview controls.
 - Delayed first CloudWatch points retain request and capacity evidence, and stopped sessions no longer continue the countdown.
@@ -17,6 +17,15 @@ Short English-only working log for the current agent context. Older records are 
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
+
+### 2026-07-20 - Add compact AI error analysis progress
+
+- Added a 44px circular progress gauge to the error-analysis card header with a numeric percentage and a visible estimated-state label.
+- Combined elapsed time with completed-item counts for single and batch analysis, while capping an active request below 100% until the API actually completes.
+- Preserved the gauge DOM across batch-item changes and reset only its elapsed-time estimate so the stroke transition remains visible.
+- Added calculation, rendered accessibility, Workbench integration, and remount-prevention regressions; all 33 focused checks pass.
+- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass. The full Web suite was also attempted and remains non-green only on unrelated current-`dev` Architecture Board, thumbnail, Diagram Editor, and Live Observation baselines.
+- No dependency, lockfile, database migration, cloud, or deployment change was made.
 
 ### 2026-07-20 - Accept stateless public check-in verification
 
@@ -91,6 +100,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Known Risk
 
+- Error-analysis percentage is an elapsed-time estimate because the current AI endpoint does not expose server-side progress; the active item rises from 8% to 94% and disappears only on the real completion state.
 - Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
 - The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` was saved by the stale Web process and must be re-analyzed/regenerated or replaced after the Web restart.
 - Root `pnpm test` is not green because ten unrelated API baseline tests fail and `application-artifact-registry.test.ts` still has one cancelled lease-heartbeat test.
@@ -103,3 +113,4 @@ Short English-only working log for the current agent context. Older records are 
 
 1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
 2. After review, publish and deploy the `dev` commit through the normal workflow; no DB migration is required.
+3. Observe the compact gauge against a real delayed error-analysis response and consider server-reported stages only if the API contract later exposes them.
