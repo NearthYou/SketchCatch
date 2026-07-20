@@ -62,6 +62,7 @@ test("the realtime deployment demo prompt keeps questions but always returns the
   if ("status" in first || "status" in second) return;
 
   assert.deepEqual(first.diagramJson, second.diagramJson);
+  assert.equal(first.metadata.authoredSourceId, "audience-live-check");
   assert.ok(first.diagramJson);
   const terraform = generateTerraformFromDiagramJson(first.diagramJson);
 

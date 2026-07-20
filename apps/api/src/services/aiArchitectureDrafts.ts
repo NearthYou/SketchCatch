@@ -1363,7 +1363,8 @@ function createAuthoredTerraformArchitectureResponse(
       ],
       explanations: [
         "S3와 CloudFront 정적 사이트, ALB와 ECS Fargate API, ECR, CloudWatch, Secrets Manager 구성을 고정했습니다."
-      ]
+      ],
+      authoredSourceId: preset.id
     }
   };
 }

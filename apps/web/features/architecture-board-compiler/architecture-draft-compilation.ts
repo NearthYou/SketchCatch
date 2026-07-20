@@ -11,6 +11,7 @@ export function compileArchitectureDraftProposal(
   return compileArchitectureBoard({
     architecture: draft.architectureJson,
     currentDiagram: draft.diagramJson ?? currentDiagram,
+    sourceDiagram: draft.metadata.authoredSourceId ? draft.diagramJson : undefined,
     trigger: "ai-draft"
   });
 }

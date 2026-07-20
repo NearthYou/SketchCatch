@@ -991,7 +991,10 @@ function isArchitectureDraftMetadata(value: unknown): boolean {
       isRecord(value.architectureIntent)) &&
     (!("operatingProfile" in value) ||
       value.operatingProfile === undefined ||
-      isRecord(value.operatingProfile))
+      isRecord(value.operatingProfile)) &&
+    (!("authoredSourceId" in value) ||
+      value.authoredSourceId === undefined ||
+      value.authoredSourceId === "audience-live-check")
   );
 }
 
