@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type {
   AwsConnection,
   ProjectDeliveryProfile,
@@ -12,10 +12,8 @@ import type {
 import { useAuth } from "../../../components/auth/auth-provider";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import {
-  getProjectDeploymentTarget,
   getProjectDraft,
   listAwsConnections,
-  listSourceRepositories,
   putProjectDeploymentTarget
 } from "../api";
 import {
@@ -106,7 +104,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
   {
     readonly projectId: string;
     readonly ecsDefaults?: EcsFargateDeploymentDefaultsInput | null;
-    readonly initialProfile?: ProjectDeploymentTargetEditorInitialProfile | null;
+    readonly profile: ProjectDeploymentTargetEditorInitialProfile;
     readonly onDirty?: (() => void) | undefined;
     readonly onSaved?: (() => void) | undefined;
     readonly preferEcsDefaults?: boolean | undefined;
@@ -117,7 +115,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
   {
     projectId,
     ecsDefaults = null,
-    initialProfile = null,
+    profile,
     onDirty,
     onSaved,
     preferEcsDefaults = false,
@@ -128,9 +126,13 @@ export const ProjectDeploymentTargetEditor = forwardRef<
 ) {
   const router = useRouter();
   const { status: authStatus } = useAuth();
-  const initialTarget = initialProfile?.deploymentTarget ?? null;
-  const initialRepositoryAnalysisTarget = initialProfile?.repositoryAnalysisTarget ?? null;
-  const initialSourceRepository = initialProfile?.sourceRepository ?? null;
+  const initialTarget = profile.deploymentTarget;
+  const initialRepositoryAnalysisTarget = profile.repositoryAnalysisTarget;
+  const initialSourceRepository = profile.sourceRepository;
+  const isDirtyRef = useRef(false);
+  const profileOwnerRef = useRef(
+    `${projectId}:${initialSourceRepository?.id ?? "none"}`
+  );
   const [connections, setConnections] = useState<AwsConnection[]>([]);
   const [target, setTarget] = useState<ProjectDeploymentTarget | null>(initialTarget);
   const [sourceRepository, setSourceRepository] = useState<SourceRepository | null>(
@@ -193,25 +195,24 @@ export const ProjectDeploymentTargetEditor = forwardRef<
       setRequestState("loading");
       setMessage("");
       try {
-        const [nextConnections, nextTarget, sourceRepositories, projectDraftResponse] =
+        const [nextConnections, projectDraftResponse] =
           await Promise.all([
             listAwsConnections(),
-            initialProfile ? Promise.resolve(initialTarget) : getProjectDeploymentTarget(projectId),
-            initialProfile
-              ? Promise.resolve(initialSourceRepository ? [initialSourceRepository] : [])
-              : listSourceRepositories(projectId),
             getProjectDraft(projectId)
           ]);
         if (cancelled) return;
-        const nextSourceRepository = sourceRepositories.find(
-          (repository) =>
-            repository.provider === "github" &&
-            repository.status === "active" &&
-            !repository.archived
-        );
+        const nextTarget = initialTarget;
+        const nextSourceRepository = initialSourceRepository;
         setConnections(nextConnections);
+        const nextOwner = `${projectId}:${nextSourceRepository?.id ?? "none"}`;
+        if (isDirtyRef.current && profileOwnerRef.current === nextOwner) {
+          setRequestState("idle");
+          return;
+        }
+        profileOwnerRef.current = nextOwner;
+        isDirtyRef.current = false;
         setTarget(nextTarget);
-        setSourceRepository(nextSourceRepository ?? null);
+        setSourceRepository(nextSourceRepository);
         const nextEcsDefaults =
           ecsDefaultsProjectName &&
           ecsDefaultsRepositoryRevision &&
@@ -255,7 +256,6 @@ export const ProjectDeploymentTargetEditor = forwardRef<
     ecsDefaultsProjectName,
     ecsDefaultsRepositoryRevision,
     ecsDefaultsSourceRoot,
-    initialProfile,
     initialRepositoryAnalysisTarget,
     initialSourceRepository,
     initialTarget,
@@ -267,12 +267,14 @@ export const ProjectDeploymentTargetEditor = forwardRef<
     key: K,
     value: ProjectDeploymentTargetDraft[K]
   ) {
+    isDirtyRef.current = true;
     onDirty?.();
     setDraft((current) => ({ ...current, [key]: value }));
     setMessage("");
   }
 
   function changeRuntime(runtimeTargetKind: RuntimeTargetKind) {
+    isDirtyRef.current = true;
     onDirty?.();
     const nextDraft = changeDeploymentTargetRuntime(
       draft,
@@ -299,6 +301,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
         projectId,
         createDeploymentTargetRequest(draft, connections)
       );
+      isDirtyRef.current = false;
       setTarget(saved);
       const savedDraft = createDeploymentTargetDraft(saved, connections);
       setDraft(savedDraft);

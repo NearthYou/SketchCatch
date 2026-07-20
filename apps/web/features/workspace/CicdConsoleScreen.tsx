@@ -3,11 +3,9 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import type {
   Deployment,
   GitCicdHandoff,
-  GitCicdMonitoringConfig,
   GitCicdPipelineLog,
   GitCicdPipelineRun,
-  GitCicdReadinessSnapshot,
-  SourceRepository
+  ProjectDeliveryProfile
 } from "@sketchcatch/types";
 import { ApiClientError, getApiErrorMessage } from "../../lib/api-client";
 import { copyTextToClipboard } from "../../lib/clipboard";
@@ -15,9 +13,7 @@ import {
   applyGitCicdAwsRoleDiff,
   applyGitCicdRepositorySettings,
   createGitCicdHandoff,
-  getProjectDeliveryProfile,
   getGitCicdPipelineRun,
-  listGitHubAccountInstallations,
   listDeployments,
   listGitCicdHandoffs,
   listGitCicdPipelineLogs,
@@ -55,10 +51,6 @@ import {
 } from "./cicd-deployment-command";
 import { getSafePipelineRunLinks } from "./deployment-output-links";
 import {
-  deriveGitHubInstallationAccessState,
-  type GitHubInstallationAccessState
-} from "./github-installation-access-state";
-import {
   canOpenGitCicdLiveObservation,
   canRetryGitCicdFrontend,
   getGitCicdLiveObservationSelection
@@ -70,26 +62,29 @@ import styles from "./workspace.module.css";
 export type CicdConsoleView = "activity" | "logs";
 
 export function CicdConsoleScreen({
+  deliveryProfile,
+  deliveryProfileErrorMessage,
   isVisible,
+  isDeliveryProfileRefreshing,
   onOpenDirectDeployment,
   onOpenLiveObservation,
+  onRefreshDeliveryProfile,
   projectId,
   readinessRefreshRequestId = 0
 }: {
+  readonly deliveryProfile: ProjectDeliveryProfile;
+  readonly deliveryProfileErrorMessage: string;
   readonly isVisible: boolean;
+  readonly isDeliveryProfileRefreshing: boolean;
   readonly onOpenDirectDeployment?: (
     (scope: "application" | "full_stack" | null) => void
   ) | undefined;
   readonly onOpenLiveObservation?: ((selection?: LiveObservationSelection) => void) | undefined;
+  readonly onRefreshDeliveryProfile: () => Promise<ProjectDeliveryProfile | null>;
   readonly projectId: string;
   readonly readinessRefreshRequestId?: number | undefined;
 }) {
   const [activeView, setActiveView] = useState<CicdConsoleView>("activity");
-  const [repository, setRepository] = useState<SourceRepository | null>(null);
-  const [githubInstallationAccess, setGitHubInstallationAccess] =
-    useState<GitHubInstallationAccessState | null>(null);
-  const [config, setConfig] = useState<GitCicdMonitoringConfig | null>(null);
-  const [readiness, setReadiness] = useState<GitCicdReadinessSnapshot | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [handoffs, setHandoffs] = useState<GitCicdHandoff[]>([]);
   const [selectedHandoffId, setSelectedHandoffId] = useState<string | null>(null);
@@ -108,8 +103,6 @@ export function CicdConsoleScreen({
   }>({ runId: null, logRevision: null });
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [consoleDataFreshKey, setConsoleDataFreshKey] = useState<string | null>(null);
-  const [isReadinessRefreshing, setIsReadinessRefreshing] = useState(false);
-  const [readinessErrorMessage, setReadinessErrorMessage] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [isFrontendRetrying, setIsFrontendRetrying] = useState(false);
@@ -131,6 +124,11 @@ export function CicdConsoleScreen({
   });
 
   const { logsErrorMessage, permissionFailure, screenErrorMessage } = requestState;
+  const repository = deliveryProfile.sourceRepository;
+  const config = deliveryProfile.monitoringConfig;
+  const readiness = deliveryProfile.readiness;
+  const isReadinessRefreshing = isDeliveryProfileRefreshing;
+  const readinessErrorMessage = deliveryProfileErrorMessage;
 
   const runState = useMemo(
     () => getCicdPipelineRunState(runs, selectedRunId),
@@ -171,7 +169,7 @@ export function CicdConsoleScreen({
     isRefreshing: isReadinessRefreshing,
     hasError: readinessErrorMessage !== ""
   });
-  const consoleRequestKey = `${projectId}:${loadRequestId}:${readinessRefreshRequestId}`;
+  const consoleRequestKey = `${projectId}:${loadRequestId}:${readinessRefreshRequestId}:${readiness.checkedAt}`;
   const isConsoleDataFresh = isVisible && consoleDataFreshKey === consoleRequestKey;
   const infrastructureDeploymentCommand = useMemo(
     () => createInfrastructureDeploymentCommand(),
@@ -220,10 +218,9 @@ export function CicdConsoleScreen({
     }
     reloadReservedOrInFlightRef.current = true;
     setConsoleDataFreshKey(null);
-    setIsReadinessRefreshing(true);
-    setReadinessErrorMessage("");
     setLoadRequestId((requestId) => requestId + 1);
-  }, [isReadinessRefreshing, isRefreshing, isVisible]);
+    void onRefreshDeliveryProfile();
+  }, [isReadinessRefreshing, isRefreshing, isVisible, onRefreshDeliveryProfile]);
 
   const loadRuns = useCallback(async (): Promise<GitCicdPipelineRun[]> => {
     const response = await listGitCicdPipelineRuns(projectId, { limit: 50 });
@@ -307,20 +304,6 @@ export function CicdConsoleScreen({
     [refreshHandoffs]
   );
 
-  const loadDeliveryState = useCallback(async () => {
-    const profile = await getProjectDeliveryProfile(projectId);
-    const githubInstallationAccess = profile.sourceRepository
-      ? null
-      : deriveGitHubInstallationAccessState(await listGitHubAccountInstallations());
-
-    return {
-      repository: profile.sourceRepository,
-      monitoringConfig: profile.monitoringConfig,
-      readiness: profile.readiness,
-      githubInstallationAccess
-    };
-  }, [projectId]);
-
   useEffect(() => {
     if (!isVisible) {
       return;
@@ -335,11 +318,8 @@ export function CicdConsoleScreen({
 
     async function loadConsole(): Promise<void> {
       setConsoleDataFreshKey(null);
-      setReadinessErrorMessage("");
       if (!hasCompletedInitialLoadRef.current) {
         setIsInitialLoading(true);
-      } else {
-        setIsReadinessRefreshing(true);
       }
 
       async function loadConsoleData(): Promise<{
@@ -360,29 +340,12 @@ export function CicdConsoleScreen({
         };
       }
 
-      const [consoleResult, deliveryResult] = await Promise.allSettled([
-        loadConsoleData(),
-        loadDeliveryState()
-      ]);
+      const [consoleResult] = await Promise.allSettled([loadConsoleData()]);
       if (
         cancelled ||
         !isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)
       ) {
         return;
-      }
-
-      if (deliveryResult.status === "fulfilled") {
-        setRepository(deliveryResult.value.repository);
-        setGitHubInstallationAccess(deliveryResult.value.githubInstallationAccess);
-        setConfig(deliveryResult.value.monitoringConfig);
-        setReadiness(deliveryResult.value.readiness);
-      } else {
-        setReadinessErrorMessage(
-          getApiErrorMessage(
-            deliveryResult.reason,
-            "배포 PR 준비 상태를 갱신하지 못했습니다."
-          )
-        );
       }
 
       if (consoleResult.status === "fulfilled") {
@@ -400,9 +363,7 @@ export function CicdConsoleScreen({
         );
         hasExplicitRunSelectionRef.current = false;
         applyRuns(initialRuns.runs);
-        setConsoleDataFreshKey(
-          deliveryResult.status === "fulfilled" ? consoleRequestKey : null
-        );
+        setConsoleDataFreshKey(consoleRequestKey);
         dispatchRequestState({ type: "success", scope: "list" });
       } else {
         setConsoleDataFreshKey(null);
@@ -421,7 +382,6 @@ export function CicdConsoleScreen({
       );
       reloadReservedOrInFlightRef.current = false;
       setIsInitialLoading(false);
-      setIsReadinessRefreshing(false);
     }
 
     void loadConsole();
@@ -431,9 +391,8 @@ export function CicdConsoleScreen({
       reloadReservedOrInFlightRef.current = false;
       setConsoleDataFreshKey(null);
       setIsRefreshing(false);
-      setIsReadinessRefreshing(false);
     };
-  }, [applyRuns, consoleRequestKey, isVisible, loadDeliveryState, projectId]);
+  }, [applyRuns, consoleRequestKey, isVisible, projectId]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -487,33 +446,17 @@ export function CicdConsoleScreen({
     reloadCoordinatorRef.current = reloadStart.coordinator;
     reloadReservedOrInFlightRef.current = true;
     setIsRefreshing(true);
-    setIsReadinessRefreshing(true);
     setConsoleDataFreshKey(null);
-    setReadinessErrorMessage("");
     const [consoleResult, deliveryResult] = await Promise.allSettled([
       Promise.all([
         refreshProjectGitCicdPipelineRuns(projectId),
         listDeployments(projectId),
         listGitCicdHandoffs(projectId)
       ]),
-      loadDeliveryState()
+      onRefreshDeliveryProfile()
     ]);
 
     if (!isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)) return;
-
-    if (deliveryResult.status === "fulfilled") {
-      setRepository(deliveryResult.value.repository);
-      setGitHubInstallationAccess(deliveryResult.value.githubInstallationAccess);
-      setConfig(deliveryResult.value.monitoringConfig);
-      setReadiness(deliveryResult.value.readiness);
-    } else {
-      setReadinessErrorMessage(
-        getApiErrorMessage(
-          deliveryResult.reason,
-          "배포 PR 준비 상태를 갱신하지 못했습니다."
-        )
-      );
-    }
 
     if (consoleResult.status === "fulfilled") {
       const [result, loadedDeployments, loadedHandoffs] = consoleResult.value;
@@ -526,7 +469,9 @@ export function CicdConsoleScreen({
           : (loadedHandoffs[0]?.id ?? null)
       );
       setConsoleDataFreshKey(
-        deliveryResult.status === "fulfilled" ? consoleRequestKey : null
+        deliveryResult.status === "fulfilled" && deliveryResult.value !== null
+          ? consoleRequestKey
+          : null
       );
       dispatchRequestState({ type: "success", scope: "refresh" });
       const errorMessage = result.targets.find((target) => target.errorMessage)?.errorMessage;
@@ -556,14 +501,13 @@ export function CicdConsoleScreen({
     );
     reloadReservedOrInFlightRef.current = false;
     setIsRefreshing(false);
-    setIsReadinessRefreshing(false);
   }, [
     applyRuns,
     consoleRequestKey,
     isReadinessRefreshing,
     isRefreshing,
     isVisible,
-    loadDeliveryState,
+    onRefreshDeliveryProfile,
     projectId
   ]);
 
@@ -749,16 +693,7 @@ export function CicdConsoleScreen({
           {screenErrorMessage}
         </p>
       ) : null}
-      {!repository &&
-      (githubInstallationAccess?.status === "server_not_configured" ||
-        githubInstallationAccess?.status === "connection_setup_not_configured") ? (
-        <section className={handoffStyles.notice} role="status">
-          <span>
-            GitHub App 서버 설정이 필요합니다. 서버 설정이 완료된 뒤 Repository 연결을 다시
-            확인해 주세요.
-          </span>
-        </section>
-      ) : !repository && githubInstallationAccess?.status === "connection_required" ? (
+      {!repository && deliveryProfile.githubInstallations.length === 0 ? (
         <section className={handoffStyles.notice} role="status">
           <span>
             GitHub App 연결이 필요합니다. 현재 로그인 방식과 관계없이 GitHub App을 연결한 뒤

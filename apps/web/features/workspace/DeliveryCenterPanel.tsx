@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import type { ProjectDeliveryProfile } from "@sketchcatch/types";
+import { useCallback } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -12,14 +11,11 @@ import {
   Workflow
 } from "lucide-react";
 import { ProjectCicdMonitoringSettingsClient } from "../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client";
-import { getApiErrorMessage } from "../../lib/api-client";
-import { getProjectDeliveryProfile } from "./api";
 import { CicdConsoleScreen } from "./CicdConsoleScreen";
 import { ProjectDeploymentTargetEditor } from "./delivery/ProjectDeploymentTargetEditor";
+import { useProjectDeliveryProfile } from "./delivery/use-project-delivery-profile";
 import type { LiveObservationSelection } from "./live-observation";
 import styles from "./delivery-center.module.css";
-
-type LoadState = "loading" | "idle" | "error";
 
 export function DeliveryCenterPanel({
   onDeploymentTargetSaved,
@@ -34,37 +30,20 @@ export function DeliveryCenterPanel({
   readonly projectId: string;
   readonly readinessRefreshRequestId?: number | undefined;
 }) {
-  const [profile, setProfile] = useState<ProjectDeliveryProfile | null>(null);
-  const [loadState, setLoadState] = useState<LoadState>("loading");
-  const [message, setMessage] = useState("");
-  const [reloadKey, setReloadKey] = useState(0);
-
-  const reload = useCallback(() => setReloadKey((value) => value + 1), []);
+  const {
+    profile,
+    status: loadState,
+    errorMessage: message,
+    refresh
+  } = useProjectDeliveryProfile(projectId, readinessRefreshRequestId);
+  const reload = useCallback(() => {
+    void refresh();
+  }, [refresh]);
 
   function handleDeploymentTargetSaved(): void {
-    reload();
+    void refresh();
     onDeploymentTargetSaved?.();
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoadState("loading");
-    setMessage("");
-    void getProjectDeliveryProfile(projectId)
-      .then((nextProfile) => {
-        if (cancelled) return;
-        setProfile(nextProfile);
-        setLoadState("idle");
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setLoadState("error");
-        setMessage(getApiErrorMessage(error, "Delivery 정보를 불러오지 못했습니다."));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, readinessRefreshRequestId, reloadKey]);
 
   if (!profile && loadState === "loading") {
     return (
@@ -193,11 +172,15 @@ export function DeliveryCenterPanel({
         </div>
         <div className={styles.settingsStack}>
           <div className={styles.editorSection}>
-            <ProjectCicdMonitoringSettingsClient projectId={projectId} onSaved={reload} />
+            <ProjectCicdMonitoringSettingsClient
+              profile={profile}
+              projectId={projectId}
+              onSaved={reload}
+            />
           </div>
           <div className={styles.editorSection}>
             <ProjectDeploymentTargetEditor
-              initialProfile={profile}
+              profile={profile}
               onSaved={handleDeploymentTargetSaved}
               projectId={projectId}
             />
@@ -220,11 +203,15 @@ export function DeliveryCenterPanel({
           </span>
         </div>
         <CicdConsoleScreen
+          deliveryProfile={profile}
+          deliveryProfileErrorMessage={message}
           isVisible
+          isDeliveryProfileRefreshing={loadState === "loading"}
+          onRefreshDeliveryProfile={refresh}
           onOpenDirectDeployment={onOpenDirectDeployment}
           onOpenLiveObservation={onOpenLiveObservation}
           projectId={projectId}
-          readinessRefreshRequestId={readinessRefreshRequestId + reloadKey}
+          readinessRefreshRequestId={readinessRefreshRequestId}
         />
       </section>
     </div>

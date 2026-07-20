@@ -17,6 +17,10 @@ const editorSource = readFileSync(
   new URL("./delivery/ProjectDeploymentTargetEditor.tsx", import.meta.url),
   "utf8"
 );
+const monitoringSource = readFileSync(
+  new URL("../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client.tsx", import.meta.url),
+  "utf8"
+);
 const compatibilityRouteSource = readFileSync(
   new URL("../../app/dashboard/projects/[projectId]/settings/page.tsx", import.meta.url),
   "utf8"
@@ -30,7 +34,7 @@ test("CI/CD Delivery owns the project delivery configuration sections", () => {
   assert.match(panelSource, /GitHub 연결/);
   assert.match(panelSource, /ProjectCicdMonitoringSettingsClient/);
   assert.match(panelSource, /ProjectDeploymentTargetEditor/);
-  assert.match(panelSource, /initialProfile=\{profile\}/);
+  assert.match(panelSource, /profile=\{profile\}/);
   assert.match(panelSource, /onSaved=\{handleDeploymentTargetSaved\}/);
   assert.doesNotMatch(
     panelSource,
@@ -55,15 +59,27 @@ test("Delivery는 Board Repository를 다시 선택하는 카드를 표시하지
 test("CI/CD는 별도 Repository 목록 대신 Board Delivery Profile을 사용한다", () => {
   assert.doesNotMatch(cicdConsoleSource, /listSourceRepositories/);
   assert.doesNotMatch(cicdConsoleSource, /getGitCicdMonitoringConfig/);
-  assert.match(cicdConsoleSource, /profile\.sourceRepository/);
-  assert.match(cicdConsoleSource, /profile\.monitoringConfig/);
-  assert.match(cicdConsoleSource, /profile\.readiness/);
+  assert.doesNotMatch(cicdConsoleSource, /getProjectDeliveryProfile/);
+  assert.match(cicdConsoleSource, /deliveryProfile\.sourceRepository/);
+  assert.match(cicdConsoleSource, /deliveryProfile\.monitoringConfig/);
+  assert.match(cicdConsoleSource, /deliveryProfile\.readiness/);
+  assert.match(panelSource, /deliveryProfile=\{profile\}/);
+});
+
+test("Delivery 하위 설정은 Profile을 다시 조회하지 않는다", () => {
+  assert.doesNotMatch(monitoringSource, /listSourceRepositories|getGitCicdMonitoringConfig/);
+  assert.doesNotMatch(editorSource, /listSourceRepositories|getProjectDeploymentTarget/);
+  assert.match(monitoringSource, /profile\.sourceRepository/);
+  assert.match(editorSource, /profile\.deploymentTarget/);
 });
 
 test("CI/CD Delivery shows readiness once beside the PR action", () => {
   assert.doesNotMatch(panelSource, /id="delivery-readiness"|href="#delivery-readiness"/);
   assert.match(panelSource, /href="#cicd-pr-readiness"/);
-  assert.match(panelSource, /\[projectId, readinessRefreshRequestId, reloadKey\]/);
+  assert.match(
+    panelSource,
+    /useProjectDeliveryProfile\(projectId, readinessRefreshRequestId\)/
+  );
   assert.match(cicdConsoleSource, /id="cicd-pr-readiness"/);
   assert.match(cicdConsoleSource, /readiness\?\.ready \? \(/);
   assert.match(cicdConsoleSource, /모든 필수 항목 완료/);
