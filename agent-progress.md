@@ -21,6 +21,20 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-20 - Implement consolidated CI/CD Repository and UI/UX improvements
+
+- Implemented the integrated CI/CD plan as focused slices: one exact Repository resolver, read-only monitoring defaults, one Delivery Profile owner, fail-closed handoff Repository validation, automatic Repository status, task-centered setup/handoff/pipeline information architecture, incomplete-first readiness, explicit external-change review, concise Pipeline run presentation, and responsive/accessibility fixes.
+- Added or updated regression contracts for Repository consistency, read-only monitoring behavior, Delivery ownership, handoff safety, task hierarchy, readiness grouping, external-change confirmation, Pipeline empty/run states, heading hierarchy, responsive layout, and external navigation.
+- Verified the signed-in CI/CD modal in Chrome at 1864x947, 1024x768, 768x1024, 390x844, and a 512px effective-width check. The page and all three primary sections stayed within their containers, interactive controls met the 44px target, and heading levels remained sequential.
+- Verification passed: `pnpm harness:check`, 78 focused CI/CD Web tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. The broader Web suite passed 1,076/1,078; its two failures are unchanged current-`dev` Live Observation source-marker expectations, and neither involved a file changed by this workstream.
+- No dependency, lockfile, DB schema, Drizzle migration, secret, cloud mutation, Terraform apply/destroy, deployment, GitHub handoff, push, or PR was performed.
+
+### 2026-07-20 - Consolidate CI/CD Repository and UI/UX plans
+
+- Consolidated the exact Repository resolver, read-only monitoring defaults, single Delivery Profile ownership, handoff safety gate, task-centered CI/CD layout, responsive/accessibility fixes, and external-change review into `docs/jh/07.20/004_CICD_Repository자동연결_UIUX통합_개선계획_JH.md`.
+- Marked plans `002` and `003` as superseded analysis references. The integrated plan removes their conflicting standalone Repository card and places automatic Repository status in the compact deployment-setup summary.
+- Documentation only; no runtime code, API/shared contract, DB migration, dependency, GitHub/AWS/Terraform mutation, PR, deployment, commit, or push was performed.
+
 ### 2026-07-20 - Server-synchronized deployment progress
 
 - Replaced elapsed-time/log-volume Web estimates and delayed 1% catch-up with a read-only `DeploymentProgressSnapshot` contract and API backed by the existing Deployment and Terraform completion logs.
@@ -137,30 +151,6 @@ Short English-only working log for the current agent context. Older records are 
 - No duplicate production-code change was made. Production still requires the current `dev` deployment followed by Repository re-analysis and a newly approved deployment plan for the affected project.
 - Production ECS workflow run `29703545489` completed successfully from remote `dev` SHA `8e72a20d`; validation, API/Web image builds, worker task registration, and API/Web service stabilization all passed.
 - Post-deployment smoke checks passed: `https://sketchcatch.net/health` returned `{\"status\":\"ok\"}`, and `/` plus `/workspace` returned HTTP 200. No production DB migration was required or run.
-
-### 2026-07-20 - Integrate current dev before PR
-
-- Merged `origin/dev` through `ad1464ba`, retaining both the runtime Secret delivery contract and the removal of the legacy `practice` profile.
-- Adapted runtime Secret safety tests to the current `demo_web_service` profile without weakening generated-secret or least-privilege IAM validation.
-- Preserved the imported profile-removal migration and UI refinements without editing their migration files.
-
-### 2026-07-20 - Repair repository verification baseline
-
-- Made the shared contract test invoke `pnpm` correctly on Windows and isolated API tests from local `.env` values.
-- Regenerated Architecture Board knowledge and aligned Repository ECS, Workspace, typography, and resource-catalog tests with current behavior.
-- Kept schema-less Terraform items visible but disabled until an editable parameter contract exists.
-
-### 2026-07-20 - Add repository runtime-secret delivery contract
-
-- Added names-only runtime Secret evidence, isolated preflight placeholders, Terraform-generated signing material, Secrets Manager storage, exact execution-role read access, and ECS Task Definition secret mapping.
-- Preserved the approved Secret mapping across application releases while replacing only the image.
-- Removed the fixed `INSTANCE_ID=fargate` value so hostname fallback can identify distinct Tasks.
-
-### 2026-07-20 - Exercise and fail closed the Live Observation traffic run
-
-- Sent the approved maximum of 963 bounded requests; all returned HTTP 200 and no additional traffic was generated.
-- Retained delayed CloudWatch evidence, stopped inactive countdowns, and removed temporary development controls.
-- Completed approved manual cleanup after automatic Destroy could not read internal Terraform state, then verified the scoped AWS resources absent.
 
 ## Known Risk
 
