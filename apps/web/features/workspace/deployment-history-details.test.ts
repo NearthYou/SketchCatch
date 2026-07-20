@@ -55,6 +55,24 @@ test("the current deployment logs replace stale history logs while a new run is 
   assert.equal(view.isLoading, false);
 });
 
+test("the first deployment exposes current logs before successful history exists", () => {
+  const currentLogs = [{ id: "first-run-log" }] as never[];
+
+  const view = selectDeploymentLogView({
+    currentDeploymentId: "deployment-first",
+    currentLogs,
+    historyDeploymentId: "",
+    historyErrorMessage: "",
+    historyIsLoading: false,
+    historyLogs: []
+  });
+
+  assert.equal(view.source, "current");
+  assert.equal(view.logs, currentLogs);
+  assert.equal(view.errorMessage, "");
+  assert.equal(view.isLoading, false);
+});
+
 test("a selected successful version keeps its history logs", () => {
   const currentLogs = [{ id: "current-log" }] as never[];
   const historyLogs = [{ id: "history-log" }] as never[];
