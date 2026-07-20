@@ -25,9 +25,10 @@ Short English-only working log for the current agent context. Older records are 
 
 - Reproduced the fast local response advancing only to 17% before the progress gauge disappeared; the request result replaced the loading state without an observable completion phase.
 - Added an explicit hidden/running/complete presentation model. Successful single and batch analysis now render `100%` with the `완료` label for 800ms without delaying the result; failed, cancelled, or stale requests do not claim completion.
-- Added transition, presentation, accessibility, and Workbench wiring regressions. All 35 focused checks pass.
+- Added transition, presentation, accessibility, exception-boundary, and Workbench wiring regressions. All 36 focused checks pass.
+- Addressed all three PR review threads: Terraform code preparation now stays inside the handled analysis boundary, and completion-state transitions no longer share an effect with the 800ms hide timer.
 - Local Chrome QA observed `8% -> 10% -> 12% -> 15% -> 17% -> 100% 완료`, with the completion gauge retained before hiding.
-- `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass. Root `pnpm test` remains non-green on unrelated existing Architecture Board knowledge and Live Observation contract baselines; the changed Workspace AI checks pass.
+- Post-review `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass. Root `pnpm test` remains non-green on unrelated existing Architecture Board knowledge and Live Observation contract baselines; the changed Workspace AI checks pass.
 - No dependency, lockfile, database migration, cloud, or deployment change was made.
 
 ### 2026-07-20 - Server-synchronized deployment progress

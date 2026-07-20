@@ -20,6 +20,7 @@ import {
   getTerraformIssueAnalysisProgressTransition,
   getTerraformPreviewReviewProgressStep,
   terraformPreviewReviewSteps,
+  TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS,
   type TerraformIssueAnalysisProgressPhase,
   type WorkspaceAiProgressStep
 } from "./workspace-ai-chat-status";
@@ -107,15 +108,20 @@ export function WorkspaceAiWorkbenchTerraformIssueProgress({
       isRunning
     });
 
-    setPhase(transition.phase);
-    if (transition.phase !== "complete") return;
+    if (transition.phase !== phase) {
+      setPhase(transition.phase);
+    }
+  }, [didComplete, isRunning, phase]);
+
+  useEffect(() => {
+    if (phase !== "complete") return;
 
     const timerId = window.setTimeout(() => {
       setPhase("hidden");
-    }, transition.delayMs);
+    }, TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS);
 
     return () => window.clearTimeout(timerId);
-  }, [didComplete, isRunning, phase]);
+  }, [phase]);
 
   const elapsedMs = useWorkspaceAiProgressElapsed(phase === "running", completed);
   const presentation = getTerraformIssueAnalysisProgressPresentation({

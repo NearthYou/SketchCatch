@@ -1229,13 +1229,12 @@ export function WorkspaceAiChatDock({
       return nextReasons;
     });
 
-    const terraformCode = resolveTerraformIssueCode({
-      combinedTerraformCode: contextSnapshot.combinedTerraformCode,
-      diagnostic: issue.diagnostic,
-      files: contextSnapshot.files
-    });
-
     try {
+      const terraformCode = resolveTerraformIssueCode({
+        combinedTerraformCode: contextSnapshot.combinedTerraformCode,
+        diagnostic: issue.diagnostic,
+        files: contextSnapshot.files
+      });
       const explanation = await runAiTerraformErrorExplanation(
         {
           diagnostic: issue.diagnostic,

@@ -152,13 +152,21 @@ test("오류 분석 게이지는 완료 시 100%를 잠시 표시한 뒤 숨긴�
   );
   assert.match(resultSource, /getTerraformIssueAnalysisProgressTransition/);
   assert.match(resultSource, /getTerraformIssueAnalysisProgressPresentation/);
+  assert.match(resultSource, /TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS/);
   assert.match(resultSource, /useWorkspaceAiProgressElapsed\(phase === "running", completed\)/);
   assert.match(
     resultSource,
-    /transition\.phase !== "complete"[\s\S]*?window\.setTimeout\([\s\S]*?setPhase\("hidden"\)[\s\S]*?transition\.delayMs/
+    /if \(transition\.phase !== phase\) \{[\s\S]*?setPhase\(transition\.phase\);[\s\S]*?\}\s*\}, \[didComplete, isRunning, phase\]\);[\s\S]*?if \(phase !== "complete"\) return;[\s\S]*?window\.setTimeout\([\s\S]*?setPhase\("hidden"\)[\s\S]*?TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS[\s\S]*?\}, \[phase\]\);/
   );
   assert.match(workbenchStyles, /\.terraformIssueProgressGauge/);
   assert.match(workbenchStyles, /\.terraformIssueProgressIndicator/);
+});
+
+test("오류 분석 코드 준비 예외는 완료 상태로 오인되지 않는다", () => {
+  assert.match(
+    controllerSource,
+    /async function analyzeTerraformIssue\([\s\S]*?try \{\s*const terraformCode = resolveTerraformIssueCode\([\s\S]*?\);[\s\S]*?catch \(error\)/
+  );
 });
 
 test("draft composer grows to a six-line maximum and is absent from unsupported scopes", () => {
