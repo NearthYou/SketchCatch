@@ -153,14 +153,7 @@ test("audience-live-check public analysis pins the approved demo source revision
     assert.equal(result.repositoryRevision, "23a87399cbe3456f3f427140f88b8d199ace34f9");
     assert.equal(result.recommendedTemplateId, "ecs-fargate-container-app");
     assert.equal(result.aiHandoff?.recommendation?.candidates[0]?.templateId, "ecs-fargate-container-app");
-    assert.equal(
-      requestedUrls.some((url) => url.includes("/git/trees/23a87399cbe3456f3f427140f88b8d199ace34f9?recursive=1")),
-      true
-    );
-    assert.equal(
-      requestedUrls.some((url) => url.includes("/23a87399cbe3456f3f427140f88b8d199ace34f9/apps/api/Dockerfile")),
-      true
-    );
+    assert.equal(requestedUrls.length, 0);
   } finally {
     await app.close();
     globalThis.fetch = originalFetch;
