@@ -82,6 +82,13 @@ Short English-only working log for the current agent context. Older records are 
 - Six focused Web test files pass 85/85 after merging the latest `origin/dev`; root `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` also pass on the merged result. The earlier full `pnpm test` run before this merge had 21 unrelated API failures from missing `DATABASE_URL`/`zstd` and existing contract/AI expectations; none cover the changed Web files.
 - Authenticated read-only Chrome QA passed at 1863x970, 1440x900, 1024x768, and 390x844 for both empty and populated history fixtures. No deployment action, API/shared contract/DB/dependency change, Terraform execution, AWS mutation, Git/CI/CD handoff, or push was performed.
 
+### 2026-07-20 - Plan Architecture Board readability and section focus
+
+- Audited the current Diagram Editor panel defaults, initial Fit behavior, resource-name preference, zoom LOD, connection handles, containment metadata, findings contract, and Compiler quality metrics.
+- Added a Korean implementation plan for contextual read mode, minimum readable LOD, explicit connection mode, provider-neutral functional sections, section focus/checks, and semantic layout improvements.
+- Kept physical containment separate from functional sections and specified view-only collapsed nodes/aggregated edges so section navigation cannot mutate Diagram or Terraform semantics.
+- No source code, dependency, lockfile, database migration, cloud, or deployment change was made.
+
 ### 2026-07-20 - Add compact AI error analysis progress
 
 - Added a 44px circular progress gauge to the error-analysis card header with a numeric percentage and a visible estimated-state label.
@@ -162,6 +169,15 @@ Short English-only working log for the current agent context. Older records are 
 - Retained delayed CloudWatch evidence, stopped inactive countdowns, and removed temporary development controls.
 - Completed approved manual cleanup after automatic Destroy could not read internal Terraform state, then verified the scoped AWS resources absent.
 
+### 2026-07-20 - Make the Architecture Board read-first and connection-explicit
+
+- Existing boards now open with both side panels collapsed; empty wide boards open only the Resource panel, and resource names are visible by default.
+- Board labels preserve a 12px minimum screen-space size while low-detail overview labels are hidden instead of rendered too small.
+- Added an explicit Connection mode with candidate outlines, hover/focus connection points, and one keyboard focus target per eligible node.
+- Applied the existing local database migrations and verified PostgreSQL and Redis health without creating or editing migration files.
+- Focused diagram tests, lint, typecheck, build, and browser fixture checks passed; the broad test run was stopped at the user's request.
+- Semantic section clustering and automatic layout changes remain deferred outside this workstream.
+
 ## Known Risk
 
 - Error-analysis percentage is an elapsed-time estimate because the current AI endpoint does not expose server-side progress; the active item rises from 8% to 94% and disappears only on the real completion state.
@@ -175,6 +191,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
-2. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for the Direct Deployment UI work.
-3. Observe the compact gauge against a real delayed error-analysis response and consider server-reported stages only if the API contract later exposes them.
+1. Review the Architecture Board read mode and explicit Connection mode in the restarted local Web server.
+2. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
+3. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for the Direct Deployment UI work.
+4. Observe the compact gauge against a real delayed error-analysis response and consider server-reported stages only if the API contract later exposes them.

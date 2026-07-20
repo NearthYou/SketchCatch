@@ -7,9 +7,9 @@ import {
   writeResourceNamesVisible
 } from "./resource-name-visibility-preference";
 
-test("resource names stay hidden until explicitly enabled", () => {
-  assert.equal(readResourceNamesVisible(null), false);
-  assert.equal(readResourceNamesVisible(createStorage()), false);
+test("resource names are visible by default", () => {
+  assert.equal(readResourceNamesVisible(null), true);
+  assert.equal(readResourceNamesVisible(createStorage()), true);
 });
 
 test("resource name visibility persists the selected display mode", () => {

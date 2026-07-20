@@ -2,7 +2,7 @@ import type { DiagramJson } from "../../../../packages/types/src";
 
 const BOARD_MIN_ZOOM = 0.25;
 const BOARD_MAX_ZOOM = 2;
-export const BOARD_LABEL_PERSISTENT_ZOOM = 0.75;
+export const BOARD_LABEL_PERSISTENT_ZOOM = 1;
 const SOURCE_VIEWBOX_HARD_MIN_ZOOM = 0.01;
 
 export type BoardBounds = {
@@ -95,10 +95,7 @@ export function getSourceViewBoxMinimumZoom(
 ): number {
   return Math.min(
     BOARD_MIN_ZOOM,
-    Math.max(
-      SOURCE_VIEWBOX_HARD_MIN_ZOOM,
-      getSourceViewBoxViewport(sourceViewBox, frame).zoom
-    )
+    Math.max(SOURCE_VIEWBOX_HARD_MIN_ZOOM, getSourceViewBoxViewport(sourceViewBox, frame).zoom)
   );
 }
 
@@ -201,14 +198,12 @@ export function rebaseBoardViewport(
 
 export function getBoardZoomPresentationScale(zoom: number): BoardZoomPresentationScale {
   const safeZoom = Number.isFinite(zoom)
-    ? Math.min(BOARD_MAX_ZOOM, Math.max(BOARD_MIN_ZOOM, zoom))
+    ? Math.min(BOARD_MAX_ZOOM, Math.max(SOURCE_VIEWBOX_HARD_MIN_ZOOM, zoom))
     : 1;
 
   return {
     compactLabelScale:
-      safeZoom < BOARD_LABEL_PERSISTENT_ZOOM
-        ? BOARD_LABEL_PERSISTENT_ZOOM / safeZoom
-        : 1,
+      safeZoom < BOARD_LABEL_PERSISTENT_ZOOM ? BOARD_LABEL_PERSISTENT_ZOOM / safeZoom : 1,
     controlScale: 1 / safeZoom
   };
 }

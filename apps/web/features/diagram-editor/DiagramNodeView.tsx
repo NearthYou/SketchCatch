@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  BringToFront,
-  Layers2,
-  Lock,
-  SendToBack,
-  Square,
-  Type,
-  Unlock
-} from "lucide-react";
+import { BringToFront, Layers2, Lock, SendToBack, Square, Type, Unlock } from "lucide-react";
 import {
   Handle,
   NodeToolbar,
@@ -77,8 +69,10 @@ const DESIGN_NODE_ICON_URLS_BY_TYPE: Readonly<Record<string, string>> = {
   aws_ecs_task_definition:
     "/Resource-Icons_07312025/Res_Containers/Res_Amazon-Elastic-Container-Service_Task_48.svg",
   client: "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg",
-  "design-user-client": "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg",
-  github_actions: "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Git-Repository_48_Light.svg",
+  "design-user-client":
+    "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg",
+  github_actions:
+    "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Git-Repository_48_Light.svg",
   sketchcatch_user_client:
     "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg"
 };
@@ -136,9 +130,12 @@ const RESIZE_HANDLES: readonly {
 ];
 
 /** 실제 containment와 보안 범위를 서로 다른 Board 표면으로 렌더링합니다. */
-export const DiagramNodeView = memo(function DiagramNodeView(
-  { data, id, isConnectable, selected }: NodeProps<DiagramFlowNode>
-) {
+export const DiagramNodeView = memo(function DiagramNodeView({
+  data,
+  id,
+  isConnectable,
+  selected
+}: NodeProps<DiagramFlowNode>) {
   const reactFlow = useReactFlow();
   const zoomLevel = useStore((state) => getBoardZoomLevel(state.transform[2]));
   const updateNodeInternals = useUpdateNodeInternals();
@@ -146,10 +143,7 @@ export const DiagramNodeView = memo(function DiagramNodeView(
   const toolbarVisible = !data.isPreview && selected && data.selectedNodeCount === 1;
   const canConnect = !data.isPreview && Boolean(isConnectable) && !node.locked;
   const canResize =
-    !node.locked &&
-    !data.isPreview &&
-    !data.isConnectionActive &&
-    (node.rotation ?? 0) === 0;
+    !node.locked && !data.isPreview && !data.isConnectionActive && (node.rotation ?? 0) === 0;
   const nodeRotationStyle =
     node.rotation === undefined || node.rotation === 0
       ? undefined
@@ -161,19 +155,15 @@ export const DiagramNodeView = memo(function DiagramNodeView(
   const isResourceNode = node.kind === "resource";
   const isArea = isAreaNode(node);
   const isSecurityGroupScope = isSecurityGroupScopeNode(node);
-  const usesIconTileLayout = isResourceNode || (node.kind === "design" && !isArea && Boolean(displayIconUrl));
+  const usesIconTileLayout =
+    isResourceNode || (node.kind === "design" && !isArea && Boolean(displayIconUrl));
   const canChangeBorderColor = canChangeNodeBorderColor(node);
   const borderColor = getNodeDisplayBorderColor(node);
   const borderStyle = getNodeDisplayBorderStyle(node);
   const textColor = node.style?.textColor ?? "#172033";
   const resizeBounds = getNodeResizeBounds(node);
   const resourcePresentation = getResourceNodePresentation({ ...node, iconUrl: displayIconUrl });
-  const nodeShellStyle = getNodeShellStyle(
-    isArea,
-    usesIconTileLayout,
-    borderColor,
-    borderStyle
-  );
+  const nodeShellStyle = getNodeShellStyle(isArea, usesIconTileLayout, borderColor, borderStyle);
   const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
   const areaNodeMetaLabel = isArea ? getAreaNodeMetaLabel(node) : undefined;
   const resourceNodeLabel = isArea ? getAreaNodeLabel(node) : resourcePresentation.label;
@@ -233,7 +223,17 @@ export const DiagramNodeView = memo(function DiagramNodeView(
       window.addEventListener("pointermove", handlePointerMove);
       window.addEventListener("pointerup", handlePointerUp, { once: true });
     },
-    [data, id, isArea, node.locked, node.position, node.size, reactFlow, resizeBounds, usesIconTileLayout]
+    [
+      data,
+      id,
+      isArea,
+      node.locked,
+      node.position,
+      node.size,
+      reactFlow,
+      resizeBounds,
+      usesIconTileLayout
+    ]
   );
 
   const handleResizeKeyDown = useCallback(
@@ -265,7 +265,17 @@ export const DiagramNodeView = memo(function DiagramNodeView(
       data.onResize(id, update);
       data.onResizeEnd(id, update);
     },
-    [data, id, isArea, node.locked, node.position, node.size, reactFlow, resizeBounds, usesIconTileLayout]
+    [
+      data,
+      id,
+      isArea,
+      node.locked,
+      node.position,
+      node.size,
+      reactFlow,
+      resizeBounds,
+      usesIconTileLayout
+    ]
   );
 
   return (
@@ -273,7 +283,9 @@ export const DiagramNodeView = memo(function DiagramNodeView(
       <NodeToolbar
         align="center"
         aria-label={`${resourceNodeLabel} 노드 편집`}
-        className={[styles.nodeToolbar, isArea ? styles.nodeToolbarArea : undefined].filter(Boolean).join(" ")}
+        className={[styles.nodeToolbar, isArea ? styles.nodeToolbarArea : undefined]
+          .filter(Boolean)
+          .join(" ")}
         isVisible={toolbarVisible}
         nodeId={id}
         offset={34}
@@ -311,7 +323,11 @@ export const DiagramNodeView = memo(function DiagramNodeView(
           title={node.locked ? "잠금 해제" : "잠금"}
           type="button"
         >
-          {node.locked ? <Lock aria-hidden="true" size={15} /> : <Unlock aria-hidden="true" size={15} />}
+          {node.locked ? (
+            <Lock aria-hidden="true" size={15} />
+          ) : (
+            <Unlock aria-hidden="true" size={15} />
+          )}
         </button>
       </NodeToolbar>
 
@@ -326,10 +342,15 @@ export const DiagramNodeView = memo(function DiagramNodeView(
             data.previewState === "modified" ? styles.nodeShellPatchModified : undefined,
             data.previewState === "deleted" ? styles.nodeShellPatchDeleted : undefined,
             data.isAreaDropTarget ? styles.nodeShellAreaDropTarget : undefined,
+            data.isValidConnectionTarget ? styles.nodeShellConnectionCandidate : undefined,
             isArea ? styles.nodeShellArea : undefined,
             isSecurityGroupScope ? styles.nodeShellSecurityGroupScope : undefined,
             areaDepthClass,
-            !isArea ? (usesIconTileLayout ? styles.nodeShellResource : styles.nodeShellDesign) : undefined,
+            !isArea
+              ? usesIconTileLayout
+                ? styles.nodeShellResource
+                : styles.nodeShellDesign
+              : undefined,
             zoomLevel === "far" ? styles.nodeShellZoomFar : undefined,
             zoomLevel === "medium" ? styles.nodeShellZoomMedium : undefined,
             node.locked ? styles.nodeShellLocked : undefined
@@ -357,12 +378,17 @@ export const DiagramNodeView = memo(function DiagramNodeView(
                   src={areaNodeIconUrl}
                 />
                 <span className={styles.areaNodeHeaderText}>{resourceNodeLabel}</span>
-                {areaNodeMetaLabel ? <span className={styles.areaNodeHeaderMeta}>{areaNodeMetaLabel}</span> : null}
+                {areaNodeMetaLabel ? (
+                  <span className={styles.areaNodeHeaderMeta}>{areaNodeMetaLabel}</span>
+                ) : null}
               </div>
             </>
           ) : usesIconTileLayout ? (
             <>
-              <div className={styles.resourceNodeIconFrame} data-icon-family={resourcePresentation.icon.family}>
+              <div
+                className={styles.resourceNodeIconFrame}
+                data-icon-family={resourcePresentation.icon.family}
+              >
                 <ResourceIconImage
                   alt=""
                   className={styles.resourceNodeIcon}
@@ -451,48 +477,64 @@ export const DiagramNodeView = memo(function DiagramNodeView(
           ? CONNECTION_HANDLES.map((handle) => {
               const canStartFromHandle = canConnect && !data.isConnectionActive;
               const canEndAtHandle = data.isValidConnectionTarget;
+              const isAccessibleConnectionSource =
+                selected && canStartFromHandle && handle.id === "handle-right";
+              const isAccessibleConnectionTarget =
+                canEndAtHandle && handle.id === "handle-left";
 
               return (
                 <Fragment key={handle.id}>
-              <Handle
-                aria-label={`${resourceNodeLabel} ${handle.label} 연결 시작`}
-                className={[
-                  styles.connectionHandle,
-                  styles.connectionHandleSource,
-                  canStartFromHandle ? undefined : styles.connectionHandleInactive
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                id={`source-${handle.id}`}
-                isConnectable={canStartFromHandle}
-                isConnectableEnd={false}
-                isConnectableStart={canStartFromHandle}
-                onKeyDown={handleConnectionHandleKeyDown}
-                position={handle.position}
-                role="button"
-                tabIndex={selected && canStartFromHandle ? 0 : -1}
-                type="source"
-              />
-              <Handle
-                aria-label={`${resourceNodeLabel} ${handle.label} 연결 대상`}
-                className={[
-                  styles.connectionHandle,
-                  styles.connectionHandleTarget,
-                  canEndAtHandle ? styles.connectionHandleActive : styles.connectionHandleInactive
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                id={`target-${handle.id}`}
-                isConnectable={canEndAtHandle}
-                isConnectableEnd={canEndAtHandle}
-                isConnectableStart={false}
-                isValidConnection={() => canEndAtHandle}
-                onKeyDown={handleConnectionHandleKeyDown}
-                position={handle.position}
-                role="button"
-                tabIndex={canEndAtHandle ? 0 : -1}
-                type="target"
-              />
+                  <Handle
+                    aria-hidden={!isAccessibleConnectionSource}
+                    aria-label={
+                      isAccessibleConnectionSource
+                        ? `${resourceNodeLabel} ${handle.label} 연결 시작`
+                        : undefined
+                    }
+                    className={[
+                      styles.connectionHandle,
+                      styles.connectionHandleSource,
+                      canStartFromHandle ? undefined : styles.connectionHandleInactive
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    id={`source-${handle.id}`}
+                    isConnectable={canStartFromHandle}
+                    isConnectableEnd={false}
+                    isConnectableStart={canStartFromHandle}
+                    onKeyDown={handleConnectionHandleKeyDown}
+                    position={handle.position}
+                    role={isAccessibleConnectionSource ? "button" : undefined}
+                    tabIndex={isAccessibleConnectionSource ? 0 : -1}
+                    type="source"
+                  />
+                  <Handle
+                    aria-hidden={!isAccessibleConnectionTarget}
+                    aria-label={
+                      isAccessibleConnectionTarget
+                        ? `${resourceNodeLabel} ${handle.label} 연결 대상`
+                        : undefined
+                    }
+                    className={[
+                      styles.connectionHandle,
+                      styles.connectionHandleTarget,
+                      canEndAtHandle
+                        ? styles.connectionHandleActive
+                        : styles.connectionHandleInactive
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    id={`target-${handle.id}`}
+                    isConnectable={canEndAtHandle}
+                    isConnectableEnd={canEndAtHandle}
+                    isConnectableStart={false}
+                    isValidConnection={() => canEndAtHandle}
+                    onKeyDown={handleConnectionHandleKeyDown}
+                    position={handle.position}
+                    role={isAccessibleConnectionTarget ? "button" : undefined}
+                    tabIndex={isAccessibleConnectionTarget ? 0 : -1}
+                    type="target"
+                  />
                 </Fragment>
               );
             })
@@ -587,7 +629,10 @@ function getNodeShellStyle(
   borderStyle: string
 ): CSSProperties {
   if (isArea) {
-    return { "--node-border-color": borderColor, "--area-border-style": borderStyle } as CSSProperties;
+    return {
+      "--node-border-color": borderColor,
+      "--area-border-style": borderStyle
+    } as CSSProperties;
   }
 
   if (usesIconTileLayout) {
@@ -691,11 +736,7 @@ function ColorMenu({ colors, groupName, icon, label, onChange, value }: ColorMen
       name={groupName}
       onKeyDown={handleDisclosureKeyDown}
     >
-      <summary
-        aria-label={`${label}, 현재 ${value}`}
-        className={styles.iconButton}
-        title={label}
-      >
+      <summary aria-label={`${label}, 현재 ${value}`} className={styles.iconButton} title={label}>
         {icon}
         <span
           aria-hidden="true"
