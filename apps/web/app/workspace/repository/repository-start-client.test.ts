@@ -71,7 +71,10 @@ test("Repository Fixed Template receives runtime Secret requirements from the an
   );
 
   assert.match(saveTemplateBody, /requiredRuntimeSecrets/);
-  assert.match(source, /runtime_secret/);
+  assert.match(
+    saveTemplateBody,
+    /getRepositoryRequiredRuntimeSecrets\(publicRepositoryAnalysis\.aiHandoff\)/
+  );
   assert.match(saveTemplateBody, /publicRepositoryAnalysis\.aiHandoff/);
 });
 

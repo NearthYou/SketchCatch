@@ -517,6 +517,66 @@
   flex: 0 0 auto;
 }
 
+.terraformIssueProgress {
+  align-items: center;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 5px;
+  grid-template-columns: 44px auto;
+  justify-items: center;
+}
+
+.terraformIssueProgressGauge {
+  display: grid;
+  height: 44px;
+  place-items: center;
+  width: 44px;
+}
+
+.terraformIssueProgressGauge svg,
+.terraformIssueProgressValue {
+  grid-area: 1 / 1;
+}
+
+.terraformIssueProgressGauge svg {
+  height: 44px;
+  transform: rotate(-90deg);
+  width: 44px;
+}
+
+.terraformIssueProgressTrack,
+.terraformIssueProgressIndicator {
+  fill: none;
+  stroke-width: 3;
+}
+
+.terraformIssueProgressTrack {
+  stroke: var(--ai-workbench-line);
+}
+
+.terraformIssueProgressIndicator {
+  stroke: var(--ai-workbench-info);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 450ms ease;
+}
+
+.terraformIssueProgress .terraformIssueProgressValue {
+  color: var(--ai-workbench-text);
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.terraformIssueProgress .terraformIssueProgressLabel {
+  color: var(--ai-workbench-muted);
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: none;
+}
+
 .artifactBody {
   display: grid;
   gap: 13px;
@@ -1449,6 +1509,10 @@
 @media (prefers-reduced-motion: reduce) {
   .reviewProgressSpinner {
     animation: none;
+  }
+
+  .terraformIssueProgressIndicator {
+    transition: none;
   }
 
   .workWindow,

@@ -140,6 +140,25 @@ test("에이전트 리뷰는 Amazon Q 응답 전에도 단계별 진행 상태�
   assert.match(workbenchStyles, /\.reviewProgressSpinner/);
 });
 
+test("오류 분석은 실행 중 카드 헤더에 작은 원형 예상 퍼센트를 표시한다", () => {
+  assert.match(controllerSource, /WorkspaceAiWorkbenchTerraformIssueProgress/);
+  assert.match(
+    controllerSource,
+    /isTerraformIssueAnalysisRunning\s*\?\s*\([\s\S]*?<WorkspaceAiWorkbenchTerraformIssueProgress[\s\S]*?completed=\{terraformIssueBatchProgress\?\.completed \?\? 0\}[\s\S]*?total=\{terraformIssueBatchProgress\?\.total \?\? 1\}/
+  );
+  assert.doesNotMatch(
+    controllerSource,
+    /<WorkspaceAiWorkbenchTerraformIssueProgress[^>]*\bkey=/
+  );
+  assert.match(resultSource, /useWorkspaceAiProgressElapsed\(true, completed\)/);
+  assert.match(
+    resultSource,
+    /function useWorkspaceAiProgressElapsed\(enabled = true, resetKey\?: unknown\): number \{[\s\S]*?setElapsedMs\(0\);[\s\S]*?\}, \[enabled, resetKey\]\);/
+  );
+  assert.match(workbenchStyles, /\.terraformIssueProgressGauge/);
+  assert.match(workbenchStyles, /\.terraformIssueProgressIndicator/);
+});
+
 test("draft composer grows to a six-line maximum and is absent from unsupported scopes", () => {
   assert.match(
     controllerSource,
