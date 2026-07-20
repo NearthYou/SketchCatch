@@ -281,10 +281,24 @@ test("full-stack validation checks the confirmed target and opens its setup surf
     "onPrepareDeploymentArtifacts()",
     targetCheckIndex
   );
+  const targetPrerequisiteCheckIndex = directDeploymentSource.indexOf(
+    "getDeploymentTargetPrerequisite({",
+    targetCheckIndex
+  );
+  const runtimeSecretPrerequisiteCheckIndex = directDeploymentSource.indexOf(
+    "getDeploymentRuntimeSecretPrerequisite({",
+    targetCheckIndex
+  );
 
   assert.ok(targetCheckIndex > -1);
+  assert.ok(targetPrerequisiteCheckIndex > targetCheckIndex);
+  assert.ok(targetPrerequisiteCheckIndex < artifactPreparationIndex);
   assert.ok(artifactPreparationIndex > targetCheckIndex);
-  assert.match(directDeploymentSource, /getDeploymentTargetPrerequisite/);
+  assert.ok(runtimeSecretPrerequisiteCheckIndex > artifactPreparationIndex);
+  assert.match(
+    directDeploymentSource,
+    /getDeploymentRuntimeSecretPrerequisite\(\{[\s\S]*?diagramJson: preparedArtifacts\.diagramJson/
+  );
   assert.match(directDeploymentSource, /CI\/CD 설정으로 이동/);
   assert.match(directDeploymentSource, /onOpenDeliverySetup/);
   assert.match(directDeploymentSource, /deploymentTargetSavedRevision/);
@@ -292,6 +306,14 @@ test("full-stack validation checks the confirmed target and opens its setup surf
     deploymentShellSource,
     /deploymentTargetSavedRevision=\{deploymentTargetSavedRevision\}/
   );
+});
+
+test("runtime Secret mismatch offers a direct Repository reanalysis path", () => {
+  assert.match(directDeploymentSource, /deploymentTargetPrerequisite\.action/);
+  assert.match(directDeploymentSource, /Repository 다시 분석/);
+  assert.match(directDeploymentSource, /\/workspace\/repository/);
+  assert.match(deploymentShellSource, /projectName=\{projectName\}/);
+  assert.match(managerSource, /requiredRuntimeSecrets:\s*template\.requiredRuntimeSecrets/);
 });
 
 test("deployment actions preserve detailed preparation errors", () => {
