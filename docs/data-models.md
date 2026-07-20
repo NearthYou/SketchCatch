@@ -2147,6 +2147,8 @@ type GitCicdPipelineLogListResponse = {
 };
 ```
 
+Monitoring 조회는 설정을 저장하거나 외부 시스템을 변경하지 않는다. 저장된 `GitCicdMonitoringConfig`가 없으면 `GET`과 `ProjectDeliveryProfile`은 Source Repository의 기본 branch, repository root 경로, `validationStatus: "required"`를 사용해 같은 기본 응답을 계산한다. 이 기본값은 사용자가 변경을 수락하고 `PUT`을 호출해 GitHub branch·directory 검증을 통과한 뒤에만 RDS에 저장한다.
+
 `POST /api/git-cicd-pipeline-runs/:pipelineRunId/refresh`는 `GitCicdPipelineRunRefreshResponse`를 반환한다. GitHub Actions 읽기가 실패하면 마지막 RDS 상태와 함께 `stale: true` 및 비밀이나 provider 원문을 포함하지 않는 고정 `errorMessage`를 반환한다. 성공 시 `stale: false`, `errorMessage: null`이다.
 
 `POST /api/projects/:projectId/git-cicd-pipeline-runs/refresh`는 project 소유권을 확인한 뒤 해당 project의 enabled, valid monitoring target을 모두 read-only로 발견·갱신한다. 개별 target 실패는 그 target의 마지막 RDS 상태를 보존하고 `targets[].stale`로 표시하며, 응답의 `stale`은 하나 이상의 target이 stale일 때 `true`다. Workspace observer는 콘솔이 닫혀 있어도 이 endpoint를 먼저 호출한 다음 RDS 목록을 읽는다.

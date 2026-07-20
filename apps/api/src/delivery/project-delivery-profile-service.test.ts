@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
+  GitCicdMonitoringConfig,
   GitCicdReadinessSnapshot,
   ProjectDeliveryProfile,
   ProjectDeploymentTarget,
@@ -58,6 +59,30 @@ test("loads monitoring only for the active Source Repository", async () => {
   assert.equal(profile.sourceRepository, sourceRepository);
   assert.equal(profile.monitoringConfig?.sourceRepositoryId, "source-1");
   assert.equal(calls.includes("find-monitoring"), true);
+});
+
+test("computes unsaved monitoring defaults from the Delivery source without persisting", async () => {
+  const sourceRepository = {
+    id: "source-1",
+    defaultBranch: "develop",
+    updatedAt: "2026-07-20T01:02:03.000Z"
+  } as SourceRepository;
+  const profile = await createProjectDeliveryProfileService({
+    store: createStore({ sourceRepository, monitoringConfig: null }),
+    inspectReadiness: async () => readiness
+  }).get({ projectId: "project-1", userId: "user-1" });
+
+  assert.deepEqual(profile.monitoringConfig, {
+    sourceRepositoryId: "source-1",
+    enabled: true,
+    monitorBranch: "develop",
+    appPath: { mode: "repository_root", path: "." },
+    infraPath: { mode: "repository_root", path: "." },
+    validationStatus: "required",
+    validationMessage: null,
+    validatedAt: null,
+    updatedAt: "2026-07-20T01:02:03.000Z"
+  });
 });
 
 test("does not disclose a profile for an inaccessible project", async () => {
@@ -129,6 +154,7 @@ function createStore(input: {
   analysisTarget?: RepositoryAnalysisRecord | null;
   calls?: string[];
   sourceRepository?: SourceRepository | null;
+  monitoringConfig?: GitCicdMonitoringConfig | null;
 } = {}): ProjectDeliveryProfileStore {
   const calls = input.calls ?? [];
   return {
@@ -147,6 +173,9 @@ function createStore(input: {
     },
     async findMonitoringConfig(sourceRepositoryId) {
       calls.push("find-monitoring");
+      if ("monitoringConfig" in input) {
+        return input.monitoringConfig ?? null;
+      }
       return {
         sourceRepositoryId,
         enabled: true,

@@ -18,6 +18,7 @@ import {
   repositoryAnalysisRecords,
   sourceRepositories
 } from "../db/schema.js";
+import { createDefaultGitCicdMonitoringConfig } from "../git-cicd/git-cicd-monitoring-defaults.js";
 import { selectProjectDeliverySourceRepository } from "./project-delivery-source-repository.js";
 
 export type ProjectDeliveryProfileStore = {
@@ -68,7 +69,7 @@ export function createProjectDeliveryProfileService(options: {
         repositoryAnalysisTarget,
         activeRepositories
       });
-      const [monitoringConfig, readiness] = await Promise.all([
+      const [savedMonitoringConfig, readiness] = await Promise.all([
         sourceRepository
           ? options.store.findMonitoringConfig(sourceRepository.id)
           : Promise.resolve(null),
@@ -82,10 +83,16 @@ export function createProjectDeliveryProfileService(options: {
         githubInstallations,
         repositoryAnalysisTarget,
         sourceRepository,
-        monitoringConfig,
         deploymentTarget,
         environmentName,
-        readiness
+        readiness,
+        monitoringConfig: sourceRepository
+          ? savedMonitoringConfig ?? createDefaultGitCicdMonitoringConfig({
+              sourceRepositoryId: sourceRepository.id,
+              defaultBranch: sourceRepository.defaultBranch,
+              updatedAt: sourceRepository.updatedAt
+            })
+          : null
       };
     }
   };
