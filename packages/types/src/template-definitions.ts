@@ -1,3 +1,7 @@
+import {
+  applyEcsFargateRepositoryContract,
+  createEcsFargateRepositoryExtension
+} from "./ecs-fargate-repository-template.js";
 import type {
   DiagramEdge,
   DiagramJson,
@@ -97,6 +101,9 @@ export type BuildTemplateDiagramInput = {
   readonly projectSlug: string;
   readonly shortId: string;
   readonly requiredRuntimeSecrets?: readonly string[];
+  readonly includeFrontend?: boolean;
+  readonly containerPort?: number;
+  readonly healthCheckPath?: string;
 };
 
 export type EcsFargateRuntimeNames = {
@@ -1809,22 +1816,32 @@ export function buildTemplateDiagramJson(
 ): DiagramJson {
   // Keep project metadata out of Terraform local names so Board labels and deployable identity remain separate.
   const definition = getTemplateDefinitionById(templateId);
+  const repositoryExtension =
+    templateId === "ecs-fargate-container-app"
+      ? createEcsFargateRepositoryExtension(input)
+      : null;
   const ecsRuntimeExtension =
     templateId === "ecs-fargate-container-app"
       ? createEcsFargateRuntimeSecretExtension(input)
       : null;
+  const ecsResources =
+    templateId === "ecs-fargate-container-app"
+      ? applyEcsFargateRepositoryContract(definition.resources, repositoryExtension)
+      : definition.resources;
   const resources =
     templateId === "ecs-fargate-container-app"
       ? [
           ...applyEcsFargateRuntimeNames(
-            applyEcsFargateRuntimeSecretTaskContract(definition.resources, ecsRuntimeExtension),
+            applyEcsFargateRuntimeSecretTaskContract(ecsResources, ecsRuntimeExtension),
             input.projectSlug
           ),
+          ...(repositoryExtension?.resources ?? []),
           ...(ecsRuntimeExtension?.resources ?? [])
         ]
       : definition.resources;
   const relationships = [
     ...definition.relationships,
+    ...(repositoryExtension?.relationships ?? []),
     ...(ecsRuntimeExtension?.relationships ?? [])
   ];
   const resourceById = new Map(resources.map((resource) => [resource.id, resource]));

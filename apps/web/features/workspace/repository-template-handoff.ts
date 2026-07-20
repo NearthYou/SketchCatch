@@ -1,4 +1,5 @@
 import type { RepositoryAnalysisAiHandoff, SourceRepository } from "@sketchcatch/types";
+import { getRepositoryTemplateApplicationContract } from "./repository-template-application-contract";
 import {
   isBoardTemplateAvailable,
   listBoardTemplates
@@ -13,7 +14,10 @@ export function resolveRepositoryAnalysisTemplate(
   repositories: readonly SourceRepository[],
   handoff: RepositoryAnalysisHandoffLocation
 ): {
+  readonly containerPort: number;
+  readonly healthCheckPath: string;
   readonly id: string;
+  readonly includeFrontend: boolean;
   readonly requiredRuntimeSecrets: readonly string[];
   readonly title: string;
 } {
@@ -41,6 +45,7 @@ export function resolveRepositoryAnalysisTemplate(
   }
 
   return {
+    ...getRepositoryTemplateApplicationContract(analysis.aiHandoff),
     id: template.id,
     requiredRuntimeSecrets: getRepositoryRequiredRuntimeSecrets(analysis.aiHandoff),
     title: template.title

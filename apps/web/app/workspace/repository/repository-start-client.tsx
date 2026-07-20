@@ -62,6 +62,7 @@ import {
   createRepositoryAnalysisRecordPayload
 } from "./repository-analysis-record-payload";
 import { getRepositoryRequiredRuntimeSecrets } from "../../../features/workspace/repository-template-handoff";
+import { getRepositoryTemplateApplicationContract } from "../../../features/workspace/repository-template-application-contract";
 import {
   selectRepositoryRecoveryAction,
   type RepositoryRecoveryAction
@@ -455,10 +456,14 @@ export function RepositoryStartClient({
     const requiredRuntimeSecrets = publicRepositoryAnalysis
       ? getRepositoryRequiredRuntimeSecrets(publicRepositoryAnalysis.aiHandoff)
       : [];
+    const applicationContract = getRepositoryTemplateApplicationContract(
+      publicRepositoryAnalysis?.aiHandoff
+    );
     const diagram = buildBoardTemplateDiagram(templateId, {
       projectSlug: effectiveProjectName,
       shortId: "repository",
-      requiredRuntimeSecrets
+      requiredRuntimeSecrets,
+      ...applicationContract
     });
 
     if (!diagram) {
@@ -1228,11 +1233,13 @@ function createRepositoryPreviewDiagram(projectName: string, repository: SourceR
   const handoff = repository?.analysis?.aiHandoff;
   if (!repository || handoff?.status !== "template_selected") return null;
   const requiredRuntimeSecrets = getRepositoryRequiredRuntimeSecrets(handoff);
+  const applicationContract = getRepositoryTemplateApplicationContract(handoff);
   return (
     buildBoardTemplateDiagram(handoff.templateId, {
       projectSlug: projectName,
       shortId: repository.id.slice(0, 8),
-      requiredRuntimeSecrets
+      requiredRuntimeSecrets,
+      ...applicationContract
     }) ?? null
   );
 }

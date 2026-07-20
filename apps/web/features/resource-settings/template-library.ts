@@ -858,6 +858,9 @@ export function listLegacyBoardTemplates(): readonly AvailableBoardTemplate[] {
 export function buildBoardTemplateDiagram(
   templateId: string | undefined,
   input: {
+    readonly containerPort?: number;
+    readonly healthCheckPath?: string;
+    readonly includeFrontend?: boolean;
     readonly projectSlug: string;
     readonly requiredRuntimeSecrets?: readonly string[];
     readonly shortId: string;
