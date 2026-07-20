@@ -77,12 +77,14 @@
   color: var(--color-ink);
   cursor: pointer;
   display: inline-flex;
-  height: 38px;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
   justify-content: center;
   transition:
     background-color 160ms ease-out,
     border-color 160ms ease-out;
-  width: 38px;
+  width: auto;
 }
 
 .headerActions button:hover {
