@@ -152,7 +152,7 @@ test("ALB와 CloudFront를 supported ResourceType으로 변환하고 공개 가�
   assert.equal(cloudFrontB?.analysisExcluded ?? false, false);
   assert.deepEqual(
     result.architectureJson.nodes.map((node) => node.type),
-    ["LOAD_BALANCER", "CLOUDFRONT", "CLOUDFRONT"]
+    ["LOAD_BALANCER", "CLOUDFRONT", "CLOUDFRONT", "LAMBDA", "IAM_ROLE"]
   );
 
   const [albImport, cloudFrontImportA, cloudFrontImportB, lambdaImport, iamRoleImport] =
@@ -162,16 +162,62 @@ test("ALB와 CloudFront를 supported ResourceType으로 변환하고 공개 가�
   assertReadyImport(cloudFrontImportB, "aws_cloudfront_distribution", "EDISTRIBUTIONB");
   assert.notEqual(cloudFrontImportA?.terraformAddress, cloudFrontImportB?.terraformAddress);
 
-  for (const [resource, suggestion] of [
-    [lambda, lambdaImport],
-    [iamRole, iamRoleImport]
+  for (const [resource, expectedType, suggestion] of [
+    [lambda, "LAMBDA", lambdaImport],
+    [iamRole, "IAM_ROLE", iamRoleImport]
   ] as const) {
-    assert.equal(resource?.resourceType, "UNKNOWN");
+    assert.equal(resource?.resourceType, expectedType);
     assert.equal(resource?.analysisExcluded, true);
     assert.equal(suggestion?.status, "unsupported_resource_type");
     assert.equal(suggestion?.handoffReady, false);
     assert.equal(suggestion?.importCommand, undefined);
   }
+});
+
+test("AWS 전용 reader가 찾은 검토 전용 Resource도 실제 Catalog 타입으로 보드에 표시한다", async () => {
+  const providerTypeMappings = [
+    ["AWS::EC2::Image", "AMI"],
+    ["AWS::Lambda::Function", "LAMBDA"],
+    ["AWS::Lambda::Permission", "LAMBDA_PERMISSION"],
+    ["AWS::IAM::Role", "IAM_ROLE"],
+    ["AWS::IAM::Policy", "IAM_POLICY"],
+    ["AWS::IAM::InstanceProfile", "IAM_INSTANCE_PROFILE"],
+    ["AWS::KMS::Key", "KMS_KEY"],
+    ["AWS::Logs::LogGroup", "CLOUDWATCH_LOG_GROUP"],
+    ["AWS::CloudWatch::Alarm", "CLOUDWATCH_METRIC_ALARM"],
+    ["AWS::ApiGateway::RestApi", "API_GATEWAY_REST_API"]
+  ] as const;
+  const result = await scan(
+    providerTypeMappings.map(([providerResourceType], index) =>
+      record({
+        providerResourceType,
+        providerResourceId: `provider-resource-${index}`,
+        displayName: `Resource ${index}`
+      })
+    )
+  );
+
+  assert.deepEqual(
+    result.discoveredResources.map((resource) => resource.resourceType),
+    providerTypeMappings.map(([, resourceType]) => resourceType)
+  );
+  assert.equal(
+    result.discoveredResources.every((resource) => resource.analysisExcluded === true),
+    true
+  );
+  assert.deepEqual(
+    result.architectureJson.nodes.map((node) => node.type),
+    providerTypeMappings.map(([, resourceType]) => resourceType)
+  );
+  assert.equal(result.analysisExclusions.length, providerTypeMappings.length);
+  assert.equal(
+    result.importSuggestions.every(
+      (suggestion) =>
+        suggestion.status === "unsupported_resource_type" &&
+        suggestion.handoffReady === false
+    ),
+    true
+  );
 });
 
 test("AWS 원본 config에는 Terraform 추론을 섞지 않고 handoff 결과에만 둔다", async () => {
@@ -316,7 +362,7 @@ test("ECS Cluster Service Task Definition을 known type과 공개 가능한 hand
 
   assert.deepEqual(
     result.discoveredResources.map((resource) => resource.resourceType),
-    ["ECS_CLUSTER", "ECS_SERVICE", "ECS_TASK_DEFINITION", "UNKNOWN", "UNKNOWN"]
+    ["ECS_CLUSTER", "ECS_SERVICE", "ECS_TASK_DEFINITION", "LAMBDA", "IAM_ROLE"]
   );
   assert.deepEqual(
     result.discoveredResources.slice(0, 3).map((resource) =>
@@ -326,7 +372,7 @@ test("ECS Cluster Service Task Definition을 known type과 공개 가능한 hand
   );
   assert.deepEqual(
     result.architectureJson.nodes.map((node) => node.type),
-    ["ECS_CLUSTER", "ECS_SERVICE", "ECS_TASK_DEFINITION"]
+    ["ECS_CLUSTER", "ECS_SERVICE", "ECS_TASK_DEFINITION", "LAMBDA", "IAM_ROLE"]
   );
   assertManualImportWithoutCommand(result.importSuggestions[0], "aws_ecs_cluster");
   assert.equal(result.importSuggestions[1]?.status, "manual_review");
@@ -483,7 +529,17 @@ test("정규화된 application 증거가 없는 ELBv2 record는 NLB를 포함해
       { resourceType: "UNKNOWN", analysisExcluded: true, terraformResourceType: undefined }
     ]
   );
-  assert.deepEqual(result.architectureJson.nodes, []);
+  assert.deepEqual(
+    result.architectureJson.nodes.map((node) => ({
+      analysisExcluded: node.config["analysisExcluded"],
+      type: node.type
+    })),
+    [
+      { analysisExcluded: true, type: "UNKNOWN" },
+      { analysisExcluded: true, type: "UNKNOWN" },
+      { analysisExcluded: true, type: "UNKNOWN" }
+    ]
+  );
   assert.ok(
     result.importSuggestions.every(
       (suggestion) =>

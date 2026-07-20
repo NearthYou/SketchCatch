@@ -37,7 +37,7 @@ const RESOURCE_SELECTION_LABELS: Readonly<Partial<Record<ResourceType, string>>>
   ECS_CLUSTER: "컨테이너 클러스터(ECS)",
   ECS_SERVICE: "컨테이너 서비스(ECS)",
   ECS_TASK_DEFINITION: "컨테이너 작업 정의(ECS)",
-  UNKNOWN: "확인 전용 AWS Resource"
+  UNKNOWN: "보드에만 표시하는 AWS 리소스"
 };
 
 export function formatReverseEngineeringResourceSelectionLabel(
@@ -56,7 +56,7 @@ export function getReverseEngineeringSelectionHelp(
   selection: ReverseEngineeringResourceSelection
 ): string {
   return selection === REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
-    ? "현재 지원 Resource와 확인 전용 AWS Resource를 함께 읽습니다."
+    ? "배포할 수 있는 리소스와 보드에만 표시하는 AWS 리소스를 함께 읽습니다."
     : "선택한 정식 지원 Resource만 읽습니다.";
 }
 

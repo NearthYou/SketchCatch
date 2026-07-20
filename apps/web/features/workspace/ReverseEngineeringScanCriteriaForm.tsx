@@ -89,7 +89,7 @@ export function ReverseEngineeringScanCriteriaForm({
             : "결과를 바로 반영하지 않고 먼저 미리보기로 보여줍니다."}
         </p>
         <p className={styles.scopeHelp}>
-          전체: 현재 지원 Resource와 확인 전용 AWS Resource를 함께 읽습니다.<br />
+          전체: 배포할 수 있는 리소스와 보드에만 표시하는 AWS 리소스를 함께 읽습니다.<br />
           개별 선택: 선택한 정식 지원 Resource만 읽습니다.
         </p>
 

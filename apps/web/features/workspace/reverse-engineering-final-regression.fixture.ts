@@ -155,13 +155,27 @@ const architectureJson: ReverseEngineeringScanResult["architectureJson"] = {
     },
     {
       id: "lambda-task9",
-      type: "UNKNOWN",
+      type: "LAMBDA",
       label: "orders-handler",
       positionX: 280,
       positionY: 80,
       config: {
         providerResourceId: "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler",
         providerResourceType: "AWS::Lambda::Function",
+        region,
+        accountId,
+        analysisExcluded: true
+      }
+    },
+    {
+      id: "iam-role-task9",
+      type: "IAM_ROLE",
+      label: "orders-read-only",
+      positionX: 540,
+      positionY: 80,
+      config: {
+        providerResourceId: "arn:aws:iam::123456789012:role/orders-read-only",
+        providerResourceType: "AWS::IAM::Role",
         region,
         accountId,
         analysisExcluded: true
@@ -370,7 +384,7 @@ const fixture: {
         providerResourceId: "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler",
         region,
         displayName: "orders-handler",
-        resourceType: "UNKNOWN",
+        resourceType: "LAMBDA",
         config: {},
         analysisExcluded: true,
         importSuggestionStatus: "unsupported_resource_type",
@@ -383,7 +397,7 @@ const fixture: {
         providerResourceId: "arn:aws:iam::123456789012:role/orders-read-only",
         region,
         displayName: "orders-read-only",
-        resourceType: "UNKNOWN",
+        resourceType: "IAM_ROLE",
         config: {},
         analysisExcluded: true,
         importSuggestionStatus: "unsupported_resource_type",

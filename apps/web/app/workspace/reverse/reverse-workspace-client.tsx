@@ -229,7 +229,7 @@ function ReverseResourceInspector({
               <dt>상태</dt>
               <dd>
                 <span className={isReviewOnly ? styles.reviewOnlyBadge : styles.supportedBadge}>
-                  {isReviewOnly ? "확인 필요" : "지원됨"}
+                  {isReviewOnly ? "보드 표시만" : "배포 가능"}
                 </span>
               </dd>
             </div>
@@ -286,7 +286,7 @@ function isHumanInspectorDisplayName(displayName: string, providerResourceId: st
 
 function getInspectorPurpose(resourceType: string, isReviewOnly: boolean): string {
   if (isReviewOnly) {
-    return "이 Resource는 AWS에서 발견됐지만 현재 자동 분석과 Terraform 처리 범위가 아닙니다.";
+    return "AWS에서 찾은 리소스입니다. 보드에서 구조를 확인할 수 있지만 Terraform 생성과 배포에는 자동으로 사용하지 않습니다.";
   }
 
   const purposes: Readonly<Record<string, string>> = {

@@ -105,7 +105,7 @@ export function ReverseEngineeringResultPanel({
             <strong>{summary.boardCount}</strong>
           </span>
           <span>
-            확인 필요
+            보드만 표시
             <strong>{summary.reviewOnlyCount}</strong>
           </span>
           <span>
@@ -121,9 +121,9 @@ export function ReverseEngineeringResultPanel({
         ) : null}
         {summary.reviewOnlyCount > 0 ? (
           <p className={styles.warning}>
-            일부 Resource는 AWS에서 찾았지만 아직 자동 분석과 Terraform 처리 범위가 아닙니다.
+            일부 리소스는 구조 확인을 위해 보드에 표시합니다.
             <br />
-            보드 또는 확인 필요 목록에서 위치와 원본 정보를 확인할 수 있습니다.
+            Terraform 생성과 배포에는 자동으로 사용하지 않습니다.
           </p>
         ) : null}
         {hasPartialFailure ? (
@@ -303,7 +303,7 @@ export function ReverseEngineeringResultPanel({
         />
       </ReverseEngineeringDetailGroup>
 
-      <ReverseEngineeringDetailGroup title="미지원 Resource">
+      <ReverseEngineeringDetailGroup title="보드에만 표시하는 리소스">
         <UnsupportedResourceList resources={unsupportedResources} />
       </ReverseEngineeringDetailGroup>
 
@@ -444,7 +444,7 @@ function getCoverageRemedy(
 // 아직 정식 변환하지 못한 AWS 리소스를 숨기지 않고 별도 목록으로 보여줍니다.
 function UnsupportedResourceList({ resources }: { readonly resources: DiscoveredResource[] }) {
   if (resources.length === 0) {
-    return <p className={styles.hint}>미지원 Resource가 없습니다.</p>;
+    return <p className={styles.hint}>보드에만 표시하는 리소스가 없습니다.</p>;
   }
 
   return (
@@ -455,8 +455,8 @@ function UnsupportedResourceList({ resources }: { readonly resources: Discovered
             <ResourceListIdentity resource={resource} />
             <span>연결된 Resource 수: {resource.relationships?.length ?? 0}</span>
             <span>
-              이 Resource는 AWS에서 발견됐지만 현재 Reverse Engineering 자동 처리 범위가 아닙니다.
-              Terraform 생성·import 제안·배포·확정 비용/보안 판단에는 포함하지 않습니다.
+              AWS에서 찾은 리소스입니다. 구조 확인을 위해 보드에 표시하지만 Terraform 생성과
+              배포에는 자동으로 사용하지 않습니다.
             </span>
           </li>
         ))}

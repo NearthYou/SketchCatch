@@ -64,8 +64,19 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::EC2::RouteTable", "ROUTE_TABLE"],
   ["AWS::EC2::SecurityGroup", "SECURITY_GROUP"],
   ["AWS::EC2::Instance", "EC2"],
+  ["AWS::EC2::Image", "AMI"],
   ["AWS::RDS::DBInstance", "RDS"],
   ["AWS::S3::Bucket", "S3"],
+  ["AWS::Lambda::Function", "LAMBDA"],
+  ["AWS::Lambda::Permission", "LAMBDA_PERMISSION"],
+  ["AWS::IAM::Role", "IAM_ROLE"],
+  ["AWS::IAM::Policy", "IAM_POLICY"],
+  ["AWS::IAM::InstanceProfile", "IAM_INSTANCE_PROFILE"],
+  ["AWS::KMS::Key", "KMS_KEY"],
+  ["AWS::Logs::LogGroup", "CLOUDWATCH_LOG_GROUP"],
+  ["AWS::CloudWatch::Alarm", "CLOUDWATCH_METRIC_ALARM"],
+  ["AWS::ApiGateway::RestApi", "API_GATEWAY_REST_API"],
+  ["AWS::Events::Rule", "EVENTBRIDGE_RULE"],
   ["AWS::ElasticLoadBalancingV2::LoadBalancer", "LOAD_BALANCER"],
   ["AWS::CloudFront::Distribution", "CLOUDFRONT"],
   ["AWS::ECS::Cluster", "ECS_CLUSTER"],
@@ -89,6 +100,21 @@ const terraformResourceTypeMap: ReadonlyMap<ResourceType, string> = new Map([
   ["ECS_TASK_DEFINITION", "aws_ecs_task_definition"]
 ]);
 const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
+  "LOAD_BALANCER",
+  "CLOUDFRONT",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION"
+]);
+const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
+  "VPC",
+  "SUBNET",
+  "INTERNET_GATEWAY",
+  "ROUTE_TABLE",
+  "SECURITY_GROUP",
+  "EC2",
+  "RDS",
+  "S3",
   "LOAD_BALANCER",
   "CLOUDFRONT",
   "ECS_CLUSTER",
@@ -340,7 +366,7 @@ function toDiscoveredResource(
     )
   };
 
-  if (resourceType !== "UNKNOWN") {
+  if (REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES.has(resourceType)) {
     return baseResource;
   }
 
@@ -404,7 +430,7 @@ function createAnalysisExclusions(
   discoveredResources: DiscoveredResource[]
 ): ReverseEngineeringAnalysisExclusion[] {
   return discoveredResources
-    .filter((resource) => resource.resourceType === "UNKNOWN")
+    .filter((resource) => resource.analysisExcluded === true)
     .map((resource) => ({
       id: `analysis-exclusion-${resource.id}`,
       resourceId: resource.id,

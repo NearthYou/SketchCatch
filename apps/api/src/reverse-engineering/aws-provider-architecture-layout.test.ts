@@ -40,16 +40,39 @@ function createReviewOnlyFixture(): DiscoveredResource[] {
   ];
 }
 
-test("관계가 있는 검토 전용 Lambda는 VPC와 관계선을 보드에 남기고 관계 없는 IAM Role은 제외한다", () => {
+test("발견한 검토 전용 Resource는 관계 유무와 관계없이 모두 보드에 남긴다", () => {
   const architectureJson = createReverseEngineeringArchitectureJson(createReviewOnlyFixture());
 
   assert.deepEqual(
     architectureJson.nodes.map((node) => node.id),
-    ["vpc-1", "lambda-1"]
+    ["vpc-1", "lambda-1", "iam-role-1"]
   );
   assert.deepEqual(architectureJson.edges, [
     { id: "edge-lambda-1-vpc-1-uses", sourceId: "vpc-1", targetId: "lambda-1", label: "uses" }
   ]);
+});
+
+test("많은 독립 Resource는 한 줄로 늘이지 않고 보드에서 읽을 수 있는 격자로 배치한다", () => {
+  const resources: DiscoveredResource[] = Array.from({ length: 43 }, (_, index) => ({
+    id: `review-resource-${index}`,
+    provider: "aws",
+    providerResourceType: "AWS::Example::Resource",
+    providerResourceId: `example-${index}`,
+    region: "ap-northeast-2",
+    displayName: `Example ${index}`,
+    resourceType: "UNKNOWN",
+    config: {},
+    analysisExcluded: true
+  }));
+  const architectureJson = createReverseEngineeringArchitectureJson(resources);
+  const first = architectureJson.nodes[0];
+  const lastInFirstRow = architectureJson.nodes[6];
+  const firstInSecondRow = architectureJson.nodes[7];
+
+  assert.equal(architectureJson.nodes.length, 43);
+  assert.equal(first?.positionY, lastInFirstRow?.positionY);
+  assert.equal(first?.positionX, firstInSecondRow?.positionX);
+  assert.ok((firstInSecondRow?.positionY ?? 0) > (first?.positionY ?? Infinity));
 });
 
 test("ALB는 VPC 상위 서비스로, CloudFront는 global edge 영역의 supported 카드로 배치한다", () => {
@@ -254,7 +277,10 @@ test("같은 scan의 evidence-only ECS Service Target Group 관계는 검토 전
   ]);
   const nodes = new Map(architectureJson.nodes.map((node) => [node.id, node]));
 
-  assert.deepEqual([...nodes.keys()], ["ecs-service-api", "target-group-api"]);
+  assert.deepEqual(
+    [...nodes.keys()],
+    ["ecs-service-api", "target-group-api", "unrelated-review-only-resource"]
+  );
   assert.equal(nodes.get("target-group-api")?.type, "UNKNOWN");
   assert.equal(nodes.get("target-group-api")?.config["analysisExcluded"], true);
   assert.deepEqual(architectureJson.edges, [

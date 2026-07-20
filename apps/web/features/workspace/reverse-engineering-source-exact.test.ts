@@ -107,3 +107,29 @@ test("AWS 원본에 없는 Terraform 식별자와 파일 정보를 Catalog에서
   assert.equal(bucket.parameters?.invalid, true);
   assert.deepEqual(bucket.parameters?.values, source.nodes[1]?.config);
 });
+
+test("검토 전용 Resource도 실제 왼쪽 Catalog 아이콘으로 표시한다", () => {
+  const architecture: ArchitectureJson = {
+    nodes: [
+      {
+        id: "iam-role-source",
+        type: "IAM_ROLE",
+        label: "Read Only Role",
+        positionX: 120,
+        positionY: 80,
+        config: {
+          analysisExcluded: true,
+          providerResourceType: "AWS::IAM::Role",
+          providerResourceId: "aws-ref-role"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagram = createSourceExactReverseEngineeringDiagram(architecture);
+  const role = diagram.nodes[0];
+
+  assert.equal(role?.type, "IAM_ROLE");
+  assert.match(role?.iconUrl ?? "", /Identity-Access-Management_Role_48\.svg$/);
+});

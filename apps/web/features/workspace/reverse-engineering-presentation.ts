@@ -35,14 +35,23 @@ type ReverseEngineeringScanSummaryInput = Pick<
 >;
 
 const SERVICE_LABELS: Readonly<Record<string, string>> = {
+  "AWS::ApiGateway::RestApi": "API Gateway API",
+  "AWS::CloudWatch::Alarm": "CloudWatch 알람",
   "AWS::EC2::VPC": "VPC",
   "AWS::EC2::Subnet": "서브넷",
+  "AWS::EC2::Image": "AMI 이미지",
   "AWS::EC2::InternetGateway": "인터넷 게이트웨이",
   "AWS::EC2::RouteTable": "라우팅 테이블",
   "AWS::EC2::SecurityGroup": "보안 그룹",
   "AWS::EC2::Instance": "EC2 인스턴스",
+  "AWS::Events::Rule": "EventBridge 규칙",
+  "AWS::IAM::InstanceProfile": "IAM 인스턴스 프로필",
+  "AWS::IAM::Policy": "IAM 정책",
   "AWS::IAM::Role": "IAM 역할",
+  "AWS::KMS::Key": "KMS 암호화 키",
   "AWS::Lambda::Function": "Lambda 함수",
+  "AWS::Lambda::Permission": "Lambda 호출 권한",
+  "AWS::Logs::LogGroup": "CloudWatch 로그 그룹",
   "AWS::ElasticLoadBalancingV2::LoadBalancer": "애플리케이션 로드 밸런서(ALB)",
   "AWS::CloudFront::Distribution": "CloudFront 배포",
   "AWS::ECS::Cluster": "ECS 클러스터",
@@ -240,13 +249,13 @@ function shortenDisplayName(displayName: string): string {
 
 function getStatusLabel(
   displayState: ReverseEngineeringDisplayState,
-  hasRelationships: boolean
+  _hasRelationships: boolean
 ): string {
   if (displayState === "supported") {
-    return "지원됨";
+    return "배포 가능";
   }
 
-  return hasRelationships ? "확인 필요" : "검토 전용";
+  return "보드 표시만";
 }
 
 function getStatusDescription(
@@ -254,10 +263,10 @@ function getStatusDescription(
   hasRelationships: boolean
 ): string {
   if (displayState === "supported") {
-    return "정식 지원 Resource로 Board와 후속 작업에 반영할 수 있습니다.";
+    return "SketchCatch에서 Terraform을 만들고 배포할 수 있는 리소스입니다.";
   }
 
   return hasRelationships
-    ? "관계를 확인한 뒤 수동으로 반영할 수 있습니다."
-    : "정식 지원 전까지 검토용으로만 표시합니다.";
+    ? "보드에서 위치와 연결 관계를 확인할 수 있지만 Terraform 생성과 배포에는 자동으로 사용하지 않습니다."
+    : "보드에서 위치를 확인할 수 있지만 Terraform 생성과 배포에는 자동으로 사용하지 않습니다.";
 }
