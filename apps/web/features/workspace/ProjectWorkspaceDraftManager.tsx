@@ -553,7 +553,8 @@ function ProjectWorkspaceDraftManagerState({
           );
           const templateDiagram = buildBoardTemplateDiagram(template.id, {
             projectSlug,
-            shortId: "workspace"
+            shortId: "workspace",
+            requiredRuntimeSecrets: template.requiredRuntimeSecrets
           });
 
           if (!templateDiagram) {

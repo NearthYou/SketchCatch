@@ -58,6 +58,8 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
     "전체 스택 배포 전에 Source Repository를 연결하고 프로젝트 배포 타깃과 ECS 빌드 설정을 저장해 주세요.",
   "A confirmed project deployment target is required for application deployment":
     "전체 스택 또는 애플리케이션 배포 전에 Source Repository를 연결하고 프로젝트 배포 타깃과 빌드 설정을 저장해 주세요.",
+  "CHECK_IN_SIGNING_SECRET is required by the Repository build contract but the Terraform runtime Secret mapping is incomplete":
+    "Repository가 요구하는 CHECK_IN_SIGNING_SECRET이 현재 Terraform 초안에 연결되지 않았습니다. Repository를 다시 분석하고 Fixed Template Board를 다시 생성·저장한 뒤 검증을 실행해 주세요.",
   PROJECT_DEPLOYMENT_TARGET_REQUIRED:
     "프로젝트 배포 대상이 확정되지 않았습니다. 프로젝트 설정에서 검증된 AWS 연결과 Repository 빌드 근거를 저장한 뒤 다시 시도해주세요.",
   GIT_APP_AUTHENTICATION_FAILED:

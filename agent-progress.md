@@ -4,7 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch `dev` matches `origin/dev` at `8e72a20d`; the current worktree contains the Fixed Template runtime-Secret correction requested directly on `dev`.
+- Branch `dev` is based on `origin/dev` at `07ce4ea4`; the current worktree contains the Repository-to-Board runtime-Secret handoff correction requested directly on `dev`.
 - The legacy `practice` Deployment profile is removed; `demo_web_service` is the default live profile, and imported migration `0054` rewrites legacy rows before removing the enum value.
 - Live Observation renders bounded traffic motion, a task-count-responsive Fargate fleet, and collapsed operational analysis without development-only traffic or Task preview controls.
 - Delayed first CloudWatch points retain request and capacity evidence, and stopped sessions no longer continue the countdown.
@@ -12,10 +12,19 @@ Short English-only working log for the current agent context. Older records are 
 - Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` is `DESTROYED` with cleared state and current-plan pointers.
 - Repository ECS delivery carries runtime Secret names through analysis. Both strict AI and Fixed Template drafts now generate `CHECK_IN_SIGNING_SECRET` during approved Apply, map the same Secrets Manager ARN into the IAM policy and every Task, and leave `INSTANCE_ID` unset for hostname-based observation.
 - Windows subprocess, local environment isolation, generated architecture knowledge, resource catalog, typography, and Workspace source-contract regressions are repaired.
-- Focused runtime-Secret, deployment-action, and failure-visibility regressions pass. `pnpm lint` and `pnpm typecheck` pass. Root `pnpm build` reported all five tasks successful but Turbo did not exit; direct Types/Config/UI/API/Web package builds all exited 0. The full `pnpm test` run still exposes two unchanged stale Live Observation source-contract failures and one unchanged lease-heartbeat cancellation.
+- Sixty focused Repository runtime-Secret, deployment-action, and failure-visibility regressions pass; the final post-review 50-test subset also passes. `pnpm lint` and `pnpm typecheck` pass. Root `pnpm build` reported all five tasks successful before the known Turbo exit hang. The full Web suite passes 1,090 of 1,098 tests; its eight failures are outside the changed runtime-Secret paths. Root `pnpm test` still exposes ten unrelated API baseline failures and one lease-heartbeat cancellation; its one Repository source-contract failure was corrected and passes focused verification.
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
+
+### 2026-07-20 - Close the initial Repository Board handoff gap
+
+- Fast-forwarded local `dev` to `origin/dev` at `07ce4ea4` and reapplied the runtime-Secret work without conflicts.
+- Centralized Repository `runtime_secret` extraction and passed the result through the Project Workspace fallback path that creates the initial Fixed Template Board.
+- Moved the runtime-Secret prerequisite check after Terraform editor synchronization so it evaluates the exact prepared `DiagramJson` instead of a stale saved Board.
+- Diagnosed fresh local project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9`: its persisted analysis required `CHECK_IN_SIGNING_SECRET`, but the long-running pre-change Next dev process saved a Board with only the ECS Task Definition.
+- Restarted only the local Web dev server. The exact persisted analysis now produces the generated password, Secrets Manager Secret and Version, exact execution-role policy, and ECS Task mapping with the current code.
+- No migration, production deployment, AWS mutation, or production data write was performed.
 
 ### 2026-07-20 - Complete Fixed Template runtime Secret convergence
 
@@ -72,12 +81,14 @@ Short English-only working log for the current agent context. Older records are 
 ## Known Risk
 
 - Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
-- Root `pnpm test` is not green because unchanged baseline tests fail in `live-observation-modal-contract.test.ts` (two stale source markers) and `application-artifact-registry.test.ts` (one cancelled lease-heartbeat test).
+- The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` was saved by the stale Web process and must be re-analyzed/regenerated or replaced after the Web restart.
+- Root `pnpm test` is not green because ten unrelated API baseline tests fail and `application-artifact-registry.test.ts` still has one cancelled lease-heartbeat test.
+- The full Web suite is not green because eight architecture-board/compiler tests outside this workstream fail; the runtime-Secret regression subset is green.
 - End-to-end Live Observation animation and provider-confirmed scale-out remain unaccepted because the active UI session missed the traffic before the delayed-snapshot fix.
 - Automatic cleanup remains blocked for this credential layout until the approved cleanup operator can read the internal deployment-state object.
 - No new AWS resources or traffic may be created without a new explicit approval.
 
 ## Next Action
 
-1. Deploy the reviewed `dev` commit through the normal production workflow; no DB migration is required.
-2. Sign in as the owner of project `4b06fa5d`, re-analyze the current repository revision, regenerate the Fixed Template Board, and prepare a new Plan for explicit approval.
+1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
+2. After review, publish and deploy the `dev` commit through the normal workflow; no DB migration is required.
