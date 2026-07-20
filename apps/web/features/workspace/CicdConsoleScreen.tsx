@@ -699,6 +699,7 @@ export function CicdConsoleScreen({
         canRetryFrontend={canRetryGitCicdFrontend(selectedRun)}
         frontendRetryError={frontendRetryError}
         isFrontendRetrying={isFrontendRetrying}
+        isHandoffReady={handoffReady}
         isLogsLoading={isLogsLoading}
         isReadinessRefreshing={isReadinessRefreshing}
         isRefreshing={isRefreshing}

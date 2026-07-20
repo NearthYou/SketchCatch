@@ -1,4 +1,6 @@
+import type { GitCicdPipelineRun } from "@sketchcatch/types";
 import type { GitCicdHandoffReadinessItem } from "./cicd-handoff";
+import { formatPipelineExecutionKind } from "./cicd-deployment-command";
 
 export type DeploymentTargetPresentation = {
   readonly status: "saved" | "recommended" | "dirty" | "required";
@@ -66,4 +68,40 @@ export function groupGitCicdReadiness(
         ? "배포 PR 준비 완료"
         : `배포 PR까지 ${required.length}개 남음`
   };
+}
+
+export function getPipelinePresentation(
+  runs: readonly GitCicdPipelineRun[]
+): {
+  readonly hasRuns: boolean;
+  readonly showRunControls: boolean;
+  readonly emptyTitle: string;
+  readonly emptyDescription: string;
+} {
+  const hasRuns = runs.length > 0;
+  return {
+    hasRuns,
+    showRunControls: hasRuns,
+    emptyTitle: "아직 실행된 Pipeline이 없습니다",
+    emptyDescription: "배포 PR을 준비한 뒤 GitHub Actions 실행을 새로고침해 확인합니다."
+  };
+}
+
+export function formatPipelineRunOption(run: GitCicdPipelineRun): string {
+  return [
+    formatPipelineExecutionKind(run.executionKind),
+    run.commitSha.slice(0, 8),
+    formatPipelineRunStatus(run.status)
+  ].join(" · ");
+}
+
+export function formatPipelineRunStatus(status: GitCicdPipelineRun["status"]): string {
+  return ({
+    detected: "감지됨",
+    queued: "대기 중",
+    running: "실행 중",
+    succeeded: "성공",
+    failed: "실패",
+    cancelled: "취소됨"
+  } as const)[status];
 }

@@ -189,7 +189,7 @@
 }
 
 .deploymentConsoleScreenNavigation button[aria-pressed="true"],
-.cicdViewNavigation button[aria-pressed="true"] {
+.cicdViewNavigation button[aria-selected="true"] {
   background: var(--workspace-accent, #000000);
   color: #ffffff;
 }
@@ -223,10 +223,6 @@
   padding-bottom: 10px;
 }
 
-.cicdViewNavigation button:last-child {
-  margin-left: auto;
-}
-
 .cicdViewNavigation button:disabled {
   cursor: progress;
   opacity: 0.55;
@@ -254,11 +250,11 @@
 .cicdState p,
 .cicdRepositorySummary h3,
 .cicdRepositorySummary p,
-.cicdActivity h3,
+.cicdActivity h4,
 .cicdActivity p,
 .cicdSettings h3,
 .cicdSettings p,
-.cicdLogs h3,
+.cicdLogs h4,
 .cicdLogs p,
 .cicdOverviewPaths dd {
   margin: 0;
@@ -292,6 +288,70 @@
   background: #ffffff;
   color: #171717;
   font: inherit;
+}
+
+.cicdEmptyState {
+  align-items: center;
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px dashed var(--workspace-line-strong, #dcdee0);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding: 24px;
+}
+
+.cicdEmptyState p {
+  color: var(--workspace-muted, #60646c);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+  margin: 0 0 4px;
+}
+
+.cicdRunSummary {
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.cicdRunSummary > div:first-child {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.cicdRunSummary > div:first-child strong,
+.cicdRunSummary > div:first-child a {
+  overflow-wrap: anywhere;
+}
+
+.cicdRunSummary dl {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.cicdRunSummary dl > div {
+  min-width: 0;
+}
+
+.cicdRunSummary dt {
+  color: var(--workspace-muted, #60646c);
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.cicdRunSummary dd {
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
 }
 
 .cicdOverview {
@@ -383,6 +443,11 @@
   gap: 16px;
   min-height: 50px;
   border-top: 1px solid var(--workspace-line, #f0f0f3);
+}
+
+.cicdStageList li > span:nth-child(2) {
+  color: var(--workspace-muted, #60646c);
+  font-size: calc(11px + var(--presentation-font-size-increase));
 }
 
 .cicdLogList {
