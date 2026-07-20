@@ -80,6 +80,7 @@ import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { PreparedWorkspaceDeploymentArtifacts } from "./workspace-deployment-artifacts";
 import {
   getDeploymentPreparationErrorMessage,
+  getDeploymentRuntimeSecretPrerequisite,
   getDeploymentTargetPrerequisite,
   type DeploymentTargetPrerequisite
 } from "./deployment-preparation-error";
@@ -170,6 +171,7 @@ export type DirectDeploymentScreenProps = {
   readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
   readonly preDeploymentCheckState: DeploymentPreDeploymentCheckState;
   readonly projectId: string;
+  readonly projectName?: string | undefined;
   readonly requestedScope?: "application" | "full_stack" | null | undefined;
   readonly projectDraftRevision?: number | null | undefined;
 };
@@ -192,6 +194,7 @@ export function DirectDeploymentScreen({
   onValidateTerraformDiagnostics,
   preDeploymentCheckState,
   projectId,
+  projectName = "",
   requestedScope = null,
   projectDraftRevision = null
 }: DirectDeploymentScreenProps) {
@@ -978,18 +981,39 @@ export function DirectDeploymentScreen({
     setDeploymentTargetPrerequisite(null);
     await runAction("validation", async () => {
       const target = await getProjectDeploymentTarget(projectId);
-      const prerequisite = getDeploymentTargetPrerequisite({
+      const targetPrerequisite = getDeploymentTargetPrerequisite({
         awsConnectionId: selectedAwsConnectionId,
         diagramJson,
         scope: selectedScope,
         target
       });
-      if (prerequisite) {
-        setDeploymentTargetPrerequisite(prerequisite);
+      if (targetPrerequisite) {
+        setDeploymentTargetPrerequisite(targetPrerequisite);
         return;
       }
 
       const preparedArtifacts = await onPrepareDeploymentArtifacts();
+      const synchronizedTargetPrerequisite = getDeploymentTargetPrerequisite({
+        awsConnectionId: selectedAwsConnectionId,
+        diagramJson: preparedArtifacts.diagramJson,
+        scope: selectedScope,
+        target
+      });
+      if (synchronizedTargetPrerequisite) {
+        setDeploymentTargetPrerequisite(synchronizedTargetPrerequisite);
+        return;
+      }
+
+      const runtimeSecretPrerequisite = getDeploymentRuntimeSecretPrerequisite({
+        diagramJson: preparedArtifacts.diagramJson,
+        scope: selectedScope,
+        target
+      });
+      if (runtimeSecretPrerequisite) {
+        setDeploymentTargetPrerequisite(runtimeSecretPrerequisite);
+        return;
+      }
+
       const checkPassed = await runPreDeploymentCheck(preparedArtifacts);
       if (!checkPassed) return;
 
@@ -1954,7 +1978,13 @@ export function DirectDeploymentScreen({
             <div className={styles.deploymentValidationError} role="alert">
               <strong>{deploymentTargetPrerequisite.title}</strong>
               <p>{deploymentTargetPrerequisite.message}</p>
-              {onOpenDeliverySetup ? (
+              {deploymentTargetPrerequisite.action === "repository_analysis" ? (
+                <div className={styles.deploymentValidationActions}>
+                  <Link href={createRepositoryReanalysisHref(projectId, projectName)}>
+                    Repository 다시 분석
+                  </Link>
+                </div>
+              ) : onOpenDeliverySetup ? (
                 <div className={styles.deploymentValidationActions}>
                   <button onClick={onOpenDeliverySetup} type="button">
                     CI/CD 설정으로 이동
@@ -3084,4 +3114,13 @@ function formatDate(value: string): string {
     dateStyle: "short",
     timeStyle: "short"
   });
+}
+
+function createRepositoryReanalysisHref(projectId: string, projectName: string): string {
+  const params = new URLSearchParams({ projectId });
+  if (projectName.trim()) {
+    params.set("projectName", projectName.trim());
+  }
+
+  return `/workspace/repository?${params.toString()}`;
 }

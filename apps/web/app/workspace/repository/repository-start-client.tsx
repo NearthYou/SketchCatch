@@ -61,6 +61,7 @@ import {
   createConnectedRepositoryAnalysisResult,
   createRepositoryAnalysisRecordPayload
 } from "./repository-analysis-record-payload";
+import { getRepositoryRequiredRuntimeSecrets } from "../../../features/workspace/repository-template-handoff";
 import {
   selectRepositoryRecoveryAction,
   type RepositoryRecoveryAction
@@ -1234,14 +1235,4 @@ function createRepositoryPreviewDiagram(projectName: string, repository: SourceR
       requiredRuntimeSecrets
     }) ?? null
   );
-}
-
-function getRepositoryRequiredRuntimeSecrets(
-  handoff: SourceRepositoryAnalysisResult["aiHandoff"]
-): string[] {
-  return [...new Set(
-    (handoff?.architectureFacts ?? [])
-      .filter((fact) => fact.kind === "runtime_secret")
-      .map((fact) => fact.value)
-  )].sort();
 }

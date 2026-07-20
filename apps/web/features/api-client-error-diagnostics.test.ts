@@ -107,6 +107,19 @@ test("unknown conflicts use a neutral state-conflict message", () => {
   );
 });
 
+test("deployment prepare explains an incomplete Repository runtime Secret mapping", () => {
+  const error = new ApiClientError(409, {
+    error: "conflict",
+    message:
+      "CHECK_IN_SIGNING_SECRET is required by the Repository build contract but the Terraform runtime Secret mapping is incomplete"
+  });
+
+  assert.equal(
+    getApiErrorMessage(error, "배포 검토를 시작하지 못했습니다."),
+    "Repository가 요구하는 CHECK_IN_SIGNING_SECRET이 현재 Terraform 초안에 연결되지 않았습니다. Repository를 다시 분석하고 Fixed Template Board를 다시 생성·저장한 뒤 검증을 실행해 주세요."
+  );
+});
+
 test("deployment prepare explains a missing application target before worker execution", () => {
   const error = new ApiClientError(
     409,

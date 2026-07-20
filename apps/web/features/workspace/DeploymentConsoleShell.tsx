@@ -190,6 +190,7 @@ export function DeploymentConsoleShell({
           {...directProps}
           confirmationDismissRequestId={confirmationDismissRequestId}
           deploymentTargetSavedRevision={deploymentTargetSavedRevision}
+          projectName={projectName}
           onConfirmationStateChange={(isOpen) => {
             confirmationOpenRef.current = isOpen;
           }}
