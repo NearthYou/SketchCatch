@@ -10,7 +10,10 @@ test("Repository draft saves retain the server revision loaded with the screen",
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
 
   assert.match(source, /getProjectDraft\(projectId\)/);
-  assert.match(source, /setProjectDraftRevision\(projectDraftResponse\.draft\?\.revision \?\? null\)/);
+  assert.match(
+    source,
+    /setProjectDraftRevision\(projectDraftResponse\.draft\?\.revision \?\? null\)/
+  );
   assert.equal(source.match(/expectedRevision: requireProjectDraftRevision\(\)/g)?.length, 1);
   assert.match(source, /async function saveRepositoryBoard/);
 });
@@ -52,9 +55,27 @@ test("Repository board generation saves the selected Fixed Template directly", (
   assert.doesNotMatch(connectedBoardBody, /saveProjectDraft/);
   assert.match(source, /await saveRepositoryBoard\(/);
   assert.match(source, /createRepositoryAnalysisRecordPayload/);
-  assert.match(source, /onCreateBoard=\{\(templateId\) => void createConnectedRepositoryBoard\(templateId\)\}/);
+  assert.match(
+    source,
+    /onCreateBoard=\{\(templateId\) => void createConnectedRepositoryBoard\(templateId\)\}/
+  );
   assert.doesNotMatch(source, /createRepositoryBoardHref/);
   assert.doesNotMatch(source, /href=\{createRepositoryBoardHref/);
+});
+
+test("Repository Fixed Template receives runtime Secret requirements from the analyzed revision", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+  const saveTemplateBody = source.slice(
+    source.indexOf("async function saveTemplateBoard"),
+    source.indexOf("async function saveRepositoryBoard")
+  );
+
+  assert.match(saveTemplateBody, /requiredRuntimeSecrets/);
+  assert.match(
+    saveTemplateBody,
+    /getRepositoryRequiredRuntimeSecrets\(publicRepositoryAnalysis\.aiHandoff\)/
+  );
+  assert.match(saveTemplateBody, /publicRepositoryAnalysis\.aiHandoff/);
 });
 
 test("public Repository Template failures do not masquerade as Repository access failures", () => {
@@ -105,7 +126,7 @@ test("Repository draft defers CI/CD connection until Delivery", () => {
   assert.match(source, /getRepositoryDraftBlockingIssue/);
   assert.match(source, /\.map\(localizePublicRepositoryQuestion\)/);
   assert.match(source, /공개 저장소는 GitHub 연결 없이 분석하고 보드를 만들 수 있습니다/);
-  assert.match(source, /CI\/CD는 보드 생성 후 Delivery에서 연결합니다/);
+  assert.match(source, /CI\/CD는 보드 생성\s+후 Delivery에서 연결합니다/);
   assert.doesNotMatch(source, /function RepositoryCiCdConnection/);
   assert.match(source, /onConfirmConfiguration=\{confirmPublicRecommendationConfiguration\}/);
   assert.doesNotMatch(source, /CiCdHandoffOption/);
@@ -122,7 +143,10 @@ test("GitHub connection preserves and restores public analysis without reanalysi
   assert.match(source, /createRepositoryAnalysisResumeKey/);
   assert.match(source, /writeRepositoryAnalysisResume/);
   assert.match(source, /consumeRepositoryAnalysisResume/);
-  assert.match(source, /const targetRepositoryUrl = publicAnalysis\?\.repositoryUrl \?\? repositoryUrl\.trim\(\)/);
+  assert.match(
+    source,
+    /const targetRepositoryUrl = publicAnalysis\?\.repositoryUrl \?\? repositoryUrl\.trim\(\)/
+  );
   assert.match(source, /repositoryUrl:\s*targetRepositoryUrl/);
   assert.match(source, /resumeKey/);
   assert.match(source, /if \(initialResumeKey\) return/);

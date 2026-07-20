@@ -20,15 +20,6 @@
   min-width: 0;
 }
 
-.terraformToolbarLabel {
-  color: #60646c;
-  font-size: calc(10px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
-  letter-spacing: 0.04em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
 .terraformFilePicker {
   min-width: 0;
   position: relative;

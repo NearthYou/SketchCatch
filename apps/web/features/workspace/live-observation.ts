@@ -96,6 +96,134 @@ export function getLiveObservationProviderEvidence(
   };
 }
 
+export type LiveObservationOperationalAnalysis = {
+  readonly state: "awaiting" | "healthy" | "bottleneck" | "incident";
+  readonly stateLabel: string;
+  readonly stateDetail: string;
+  readonly capacity: string;
+  readonly scaleEventCount: number;
+  readonly unhealthyTaskCount: number | null;
+  readonly bottleneckDetail: string;
+  readonly costImpact: string;
+  readonly costDetail: string;
+  readonly terraformAction: string;
+  readonly terraformDetail: string;
+};
+
+export function getLiveObservationOperationalAnalysis(
+  snapshot: LiveObservationProviderSnapshot | null,
+  pressureLevel: LiveObservationPressureLevel
+): LiveObservationOperationalAnalysis {
+  if (!snapshot) {
+    return {
+      state: "awaiting",
+      stateLabel: "관측 대기",
+      stateDetail: "관측을 시작하면 정상·병목·장애 상태를 판정합니다.",
+      capacity: "— / — / —",
+      scaleEventCount: 0,
+      unhealthyTaskCount: null,
+      bottleneckDetail: "오류율·p95·Task 상태 수집 대기",
+      costImpact: "산정 대기",
+      costDetail: "Task CPU·메모리와 실제 가동시간을 연결해 계산합니다.",
+      terraformAction: "관측 데이터 수집 후 생성",
+      terraformDetail: "근거가 생기기 전에는 Terraform 변경을 제안하지 않습니다."
+    };
+  }
+
+  const hasProviderEvidence = [
+    snapshot.requests,
+    snapshot.errorRate,
+    snapshot.p95LatencyMs,
+    snapshot.availability,
+    snapshot.capacity.desired,
+    snapshot.capacity.running,
+    snapshot.capacity.healthy,
+    snapshot.capacity.max
+  ].some((value) => value !== null);
+
+  if (snapshot.state === "unavailable" || !hasProviderEvidence) {
+    return {
+      state: "awaiting",
+      stateLabel: snapshot.state === "unavailable" ? "지표 수집 불가" : "관측 지연",
+      stateDetail: "Provider 지표가 확인될 때까지 인프라 상태를 판정하지 않습니다.",
+      capacity: "— / — / —",
+      scaleEventCount: 0,
+      unhealthyTaskCount: null,
+      bottleneckDetail: "오류율·p95·Task 상태 확인 대기",
+      costImpact: "산정 대기",
+      costDetail: "실제 Task 용량과 가동시간이 확인된 뒤 계산합니다.",
+      terraformAction: "관측 데이터 복구 후 생성",
+      terraformDetail: "수집 실패만으로 Terraform 변경을 제안하지 않습니다."
+    };
+  }
+
+  const { desired, healthy, max, running } = snapshot.capacity;
+  const unhealthyTaskCount =
+    running === null || healthy === null ? null : Math.max(0, running - healthy);
+  const hasIncident =
+    (unhealthyTaskCount ?? 0) > 0 ||
+    (snapshot.errorRate ?? 0) >= 5 ||
+    (snapshot.availability !== null && snapshot.availability < 95);
+  const hasBottleneck =
+    !hasIncident &&
+    (["high", "critical"].includes(pressureLevel) ||
+      (snapshot.errorRate ?? 0) >= 1 ||
+      (snapshot.p95LatencyMs ?? 0) >= 1_000 ||
+      (snapshot.availability !== null && snapshot.availability < 99));
+  const state = hasIncident ? "incident" : hasBottleneck ? "bottleneck" : "healthy";
+  const stateLabel = hasIncident ? "장애" : hasBottleneck ? "병목" : "정상";
+  const scaleEventCount = (snapshot.logs ?? []).filter((entry) =>
+    /scal(?:e|ed|ing)|desired\s*(?:count|capacity)|capacity/i.test(entry.message)
+  ).length;
+  const costMultiplier =
+    running !== null && running > 0 && max !== null && max > running
+      ? `${(max / running).toFixed(1)}×`
+      : null;
+  const bottleneckDetail = [
+    `오류율 ${formatProviderNumber(snapshot.errorRate, "%")}`,
+    `p95 ${formatProviderNumber(snapshot.p95LatencyMs, "ms")}`,
+    `unhealthy Task ${formatProviderNumber(unhealthyTaskCount)}`
+  ].join(" · ");
+
+  let terraformAction = "Terraform 변경 없음";
+  let terraformDetail = "현재 관측 구간에는 설정 변경을 뒷받침할 근거가 없습니다.";
+  if (hasIncident && (unhealthyTaskCount ?? 0) > 0) {
+    terraformAction = "aws_ecs_service.health_check_grace_period_seconds 검토";
+    terraformDetail = "Task 시작 실패 원인을 로그에서 확인한 뒤 grace period 변경안을 생성합니다.";
+  } else if (hasIncident) {
+    terraformAction = "aws_lb_target_group.health_check 검토";
+    terraformDetail = "5xx와 가용성 저하 구간을 기준으로 interval·timeout 변경안을 생성합니다.";
+  } else if (hasBottleneck && max !== null && desired !== null && desired >= max) {
+    terraformAction = `aws_appautoscaling_target.max_capacity = ${max + Math.max(1, Math.ceil(max * 0.25))}`;
+    terraformDetail = "현재 max 도달이 확인된 경우에만 약 25% 확장안을 검토합니다.";
+  } else if (hasBottleneck) {
+    terraformAction = "aws_appautoscaling_policy.target_value 검토";
+    terraformDetail = "관측된 처리량과 지연을 기준으로 target value 변경안을 생성합니다.";
+  }
+
+  return {
+    state,
+    stateLabel,
+    stateDetail:
+      snapshot.state === "delayed"
+        ? "Provider 지표가 지연되어 마지막 수집값으로 판정했습니다."
+        : "브라우저 요청과 Provider 지표를 같은 관측 구간으로 판정했습니다.",
+    capacity: `${formatProviderNumber(running)} / ${formatProviderNumber(desired)} / ${formatProviderNumber(max)}`,
+    scaleEventCount,
+    unhealthyTaskCount,
+    bottleneckDetail,
+    costImpact:
+      running === null
+        ? "산정 대기"
+        : max !== null
+          ? `${running} Task 현재 · 최대 ${max} Task${costMultiplier ? ` (${costMultiplier})` : ""}`
+          : `${running} Task 실행 용량`,
+    costDetail: "정확한 금액은 Task CPU·메모리·리전 단가와 가동시간 연결 후 산정합니다.",
+    terraformAction,
+    terraformDetail
+  };
+}
+
 function formatProviderNumber(value: number | null, suffix = ""): string {
   return value === null ? "—" : `${value}${suffix}`;
 }

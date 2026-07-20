@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-19",
+  "lastUpdated": "2026-07-20",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -562,7 +562,7 @@
         "자동 정리는 미리보기·적용·취소·Undo 경계를 유지하며 승인 전 Board를 변경하지 않는다.",
         "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다.",
         "Workspace AI는 클릭한 option만 의미 기록으로 누적하고 실제 Resource icon Orbit과 Compiler Diagram 최종 Preview를 분리하며 승인 전 Board를 변경하지 않는다.",
-        "Live Observation 하단의 설계 분석이 현재 Board 기준 병목, 장애, 보안, 예상 비용, 개선 권장사항을 같은 화면에서 표시한다."
+        "Live Observation 하단의 기본 닫힘 운영 분석이 관측 근거를 현재 상태, 용량과 스케일링, 병목과 장애, 비용 영향, Terraform 개선 권장사항으로 연결한다."
       ],
       "evidence": {
         "lastVerified": "2026-07-19",
@@ -991,6 +991,69 @@
         "notes": "All 26 planned implementation commits were verified before commit. Follow-ups remove the redundant top-bar panel toggles and keep manual Fit View's automatic viewport move out of ProjectDraft dirty state while preserving accessible edge handles, panel preferences, and direct user viewport persistence. Presentation typography now adds an auditable 6px to every explicit Web text size, resolves UI/code text to bundled Pretendard 1.3.9 through one shared token path, applies the same font/size/weight rules to the generated standalone S3 audience page, and reduces explicit text weights above 400 by one 100-point step; focused dependent tests pass 135/135 and the strengthened font audit passes 4/4. The focused dirty and cost regressions pass 77/77; harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 786/790, with four unrelated existing generated Architecture Board artifact line-ending and Resource catalog contract failures. Signed-in localhost QA confirmed cost tab, period, users, usage range, connection, direct URL entry, and browser history restoration."
       },
       "notes": "No DB schema, Drizzle migration, cloud mutation, deployment, or Git/CI/CD handoff was performed."
+    },
+    {
+      "id": "REPOSITORY-FIXED-TEMPLATE-RUNTIME-SECRET-001",
+      "priority": 1,
+      "area": "repository-deployment",
+      "title": "Repository Fixed Template runtime Secret convergence",
+      "user_visible_behavior": "Repository 분석에서 확인한 필수 runtime Secret이 Fixed Template Terraform과 ECS Task에 실제로 연결되고, 연결이 빠지거나 엇갈리면 Plan 전에 배포 준비가 중단된다.",
+      "status": "passing",
+      "verification": [
+        "Fixed Template이 CHECK_IN_SIGNING_SECRET용 생성 값, Secrets Manager Secret/Version, 최소 읽기 IAM policy, ECS Task mapping을 함께 만든다.",
+        "Secret Version, ECS execution role policy, Task Definition, ECS Service가 하나의 일관된 참조 체인을 이룬다.",
+        "full_stack 준비는 누락되거나 서로 다른 Secret, role, Task를 참조하는 Terraform을 Plan 전에 거절한다.",
+        "실패한 Deployment는 오래된 Apply Plan 승인 버튼을 숨기고 저장된 실제 실패 요약을 모든 단계에서 보여준다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-20",
+        "commands": [
+          "pnpm --filter @sketchcatch/types exec tsx --test src/template-definitions.test.ts src/terraform-provider-files.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-preparation-service.test.ts src/deployments/terraform-artifact-safety.test.ts src/services/terraform/diagram-to-terraform.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/repository/repository-start-client.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/deployment-actions.test.ts features/workspace/deployment-three-stage-flow.test.ts",
+          "Fixed Template to rendered Terraform runtime-Secret chain and artifact-safety assertion",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check"
+        ],
+        "notes": "Focused runtime-Secret, Terraform safety, Repository Fixed Template, and failed-deployment UI regressions pass. The rendered Fixed Template Terraform passes both the complete runtime-Secret reference-chain guard and the demo_web_service artifact safety gate. Lint and typecheck pass. Root build reported all five tasks successful but Turbo did not exit; direct Types/Config/UI/API/Web builds exited 0. Root pnpm test still exposes two unchanged stale Live Observation source-marker failures and one unchanged lease-heartbeat cancellation outside this workstream."
+      },
+      "notes": "No DB schema or migration changed. No cloud mutation, production deployment, Terraform apply/destroy, or Git/CI/CD handoff was performed. Existing saved Project Drafts require re-analysis and regeneration after production deployment."
+    },
+    {
+      "id": "DEPLOYMENT-LIVE-PROFILE-REMOVAL-001",
+      "priority": 1,
+      "area": "direct-deployment",
+      "title": "Legacy practice live profile removal",
+      "user_visible_behavior": "Direct Deployment는 별도 practice 실행 프로필 없이 demo_web_service를 기본으로 사용하고 기존 Deployment 기록도 같은 프로필로 안전하게 전환한다.",
+      "status": "passing",
+      "verification": [
+        "공유 타입과 생성 API가 demo_web_service 또는 demo_web_service_with_rds만 허용한다.",
+        "기존 practice DB 행은 demo_web_service로 변환된 뒤 PostgreSQL enum에서 제거된다.",
+        "호환 API/worker가 migration 전 기존 practice 행을 demo_web_service로 처리한다.",
+        "기본 live apply 프로필이 ECS Application Auto Scaling Target과 Policy를 허용한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-20",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/db/deployment-live-profile-migration.test.ts src/deployments/deployment-preparation-service.test.ts src/deployments/terraform-artifact-safety.test.ts src/routes/deployments.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check",
+          "GitHub Actions Deploy Production ECS run 29700391499 at app SHA 2da6ba32d28e98afcbfad0e9f591915a48b5b461",
+          "GitHub Actions Run Production Database Migrations run 29700681495",
+          "HTTPS GET https://sketchcatch.net/, /health, /health/db"
+        ],
+        "notes": "Focused API checks pass 130/130 and focused merged Web checks pass 31/31. Migration compatibility, lint, serial typecheck, build, harness, and diff checks pass. Production ECS run 29700391499 deployed the compatible API, Web, and worker image before migration run 29700681495 created snapshot sketchcatch-production-pre-migration-29700681495 and completed the one-off ECS migration task with exit code 0. All three HTTPS health checks return 200. The full API suite still exposes unrelated existing failures outside this workstream."
+      },
+      "notes": "Migration 0054 changes apps/api/drizzle/meta/_journal.json and is applied in production. No Terraform apply/destroy or user Git/CI/CD handoff was performed."
     }
   ]
 }

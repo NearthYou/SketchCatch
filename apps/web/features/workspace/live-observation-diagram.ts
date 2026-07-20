@@ -41,7 +41,7 @@ const SUPPORT_TYPES = new Set([
 ]);
 const MAX_PATH_CANDIDATES = 256;
 const MAX_PATH_DEPTH = 64;
-export const MAX_VISIBLE_CAPACITY_UNITS = 8;
+export const MAX_VISIBLE_CAPACITY_UNITS = 10;
 
 export type LiveObservationDiagramNodeState = "active" | "inactive" | "launching";
 export type LiveObservationPresentationRole = "source" | "hop" | "controller";
@@ -121,12 +121,9 @@ export function createLiveObservationDiagramModel(
   const runningCount = providerCapacity?.running ?? 0;
   const desiredCount = providerCapacity?.desired ?? runningCount;
   const orderedCapacityNodes = [...capacityNodes].sort(compareCapacityNodes);
-  const requestedCapacityCount = Math.max(
-    orderedCapacityNodes.length,
-    providerCapacity?.running ?? 0,
-    desiredCount,
-    providerCapacity?.max ?? 0
-  );
+  const requestedCapacityCount = providerCapacity
+    ? Math.max(runningCount, desiredCount)
+    : 0;
   const visibleCapacityCount = Math.min(
     MAX_VISIBLE_CAPACITY_UNITS,
     requestedCapacityCount

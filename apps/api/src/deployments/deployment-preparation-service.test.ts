@@ -87,7 +87,33 @@ test("selects full_stack, application, and explicit infrastructure scopes", asyn
 
   assert.equal(await resolveScope(withTerraform, target, "auto"), "full_stack");
   assert.equal(await resolveScope(withoutTerraform, target, "auto"), "application");
-  assert.equal(await resolveScope(withTerraform, createTarget(null), "infrastructure"), "infrastructure");
+  assert.equal(
+    await resolveScope(withTerraform, createTarget(null), "infrastructure"),
+    "infrastructure"
+  );
+});
+
+test("uses the ECS web-service profile for a basic infrastructure draft", async () => {
+  const repository: DeploymentPreparationRepository = {
+    async findProjectDraftForPreparation() {
+      return createDraft(true);
+    },
+    async findProjectTargetForPreparation() {
+      return createTarget(null);
+    }
+  };
+
+  const preparation = await resolveDeploymentPreparation(
+    {
+      projectId: "project-1",
+      awsConnectionId: "connection-1",
+      draftRevision: 1,
+      requestedScope: "infrastructure"
+    },
+    repository
+  );
+
+  assert.equal(preparation.liveProfile, "demo_web_service");
 });
 
 test("does not silently downgrade an ECS/Fargate auto deployment when build config is missing", async () => {
@@ -95,13 +121,137 @@ test("does not silently downgrade an ECS/Fargate auto deployment when build conf
     resolveScope(createDraft(true, true), createTarget(null), "auto"),
     (error: unknown) =>
       error instanceof DeploymentConflictError &&
-      error.message === "A confirmed project deployment target is required for automatic ECS application deployment"
+      error.message ===
+        "A confirmed project deployment target is required for automatic ECS application deployment"
   );
   await assert.rejects(
     resolveScope(createDraft(true, true), undefined, "auto"),
     /confirmed project deployment target/
   );
 });
+
+test("rejects full-stack preparation when a required runtime Secret is absent from Terraform", async () => {
+  const buildConfig = createBuildConfigWithRequiredSecret();
+
+  await assert.rejects(
+    resolveScope(createDraft(true, true), createTarget(buildConfig), "auto"),
+    (error: unknown) =>
+      error instanceof DeploymentConflictError &&
+      error.message.includes("CHECK_IN_SIGNING_SECRET") &&
+      error.message.includes("Terraform")
+  );
+});
+
+test("accepts the rendered Fixed Template runtime Secret contract before full-stack deployment", async () => {
+  const draft = createDraftWithRuntimeSecretTerraform();
+
+  assert.equal(
+    await resolveScope(draft, createTarget(createBuildConfigWithRequiredSecret()), "auto"),
+    "full_stack"
+  );
+});
+
+test("rejects a runtime Secret contract whose IAM policy references a different Secret", async () => {
+  const draft = createDraftWithRuntimeSecretTerraform();
+  draft.terraformFiles =
+    draft.terraformFiles?.map((file) => ({
+      ...file,
+      terraformCode: file.terraformCode.replace(
+        "aws_secretsmanager_secret.check_in_signing.arn",
+        "aws_secretsmanager_secret.unrelated.arn"
+      )
+    })) ?? [];
+
+  await assert.rejects(
+    resolveScope(draft, createTarget(createBuildConfigWithRequiredSecret()), "auto"),
+    /runtime Secret mapping is incomplete/
+  );
+});
+
+test("rejects a runtime Secret policy attached to a different role than the ECS Task execution role", async () => {
+  const draft = createDraftWithRuntimeSecretTerraform();
+  draft.terraformFiles = draft.terraformFiles?.map((file) => ({
+    ...file,
+    terraformCode: `${file.terraformCode.replace(
+      "role   = aws_iam_role.execution.id",
+      "role   = aws_iam_role.unrelated.id"
+    )}\nresource "aws_iam_role" "unrelated" {}`
+  })) ?? [];
+
+  await assert.rejects(
+    resolveScope(draft, createTarget(createBuildConfigWithRequiredSecret()), "auto"),
+    /runtime Secret mapping is incomplete/
+  );
+});
+
+test("rejects a runtime Secret Task Definition that the ECS Service does not use", async () => {
+  const draft = createDraftWithRuntimeSecretTerraform();
+  draft.terraformFiles = draft.terraformFiles?.map((file) => ({
+    ...file,
+    terraformCode: `${file.terraformCode.replace(
+      "task_definition = aws_ecs_task_definition.task.arn",
+      "task_definition = aws_ecs_task_definition.unrelated.arn"
+    )}\nresource "aws_ecs_task_definition" "unrelated" {}`
+  })) ?? [];
+
+  await assert.rejects(
+    resolveScope(draft, createTarget(createBuildConfigWithRequiredSecret()), "auto"),
+    /runtime Secret mapping is incomplete/
+  );
+});
+
+test("rejects runtime Secret references split across different Secret Version blocks", async () => {
+  const draft = createDraftWithRuntimeSecretTerraform();
+  draft.terraformFiles = draft.terraformFiles?.map((file) => ({
+    ...file,
+    terraformCode: `${file.terraformCode.replace(
+      "secret_string = random_password.check_in_signing.result",
+      'secret_string = "not-generated"'
+    )}
+resource "aws_secretsmanager_secret" "unrelated" {}
+resource "aws_secretsmanager_secret_version" "unrelated" {
+  secret_id     = aws_secretsmanager_secret.unrelated.id
+  secret_string = random_password.check_in_signing.result
+}`
+  })) ?? [];
+
+  await assert.rejects(
+    resolveScope(draft, createTarget(createBuildConfigWithRequiredSecret()), "auto"),
+    /runtime Secret mapping is incomplete/
+  );
+});
+
+function createDraftWithRuntimeSecretTerraform(): DeploymentPreparationDraft {
+  const draft = createDraft(true, true);
+  draft.terraformFiles = [
+    {
+      fileName: "main.tf",
+      terraformCode: `resource "random_password" "check_in_signing" {
+  length  = 48
+  special = false
+}
+resource "aws_secretsmanager_secret" "check_in_signing" {}
+resource "aws_secretsmanager_secret_version" "check_in_signing" {
+  secret_id     = aws_secretsmanager_secret.check_in_signing.id
+  secret_string = random_password.check_in_signing.result
+}
+resource "aws_iam_role" "execution" {}
+resource "aws_iam_role_policy" "check_in_signing_read" {
+  name   = "runtime-secret-read"
+  role   = aws_iam_role.execution.id
+  policy = "{\\"Version\\":\\"2012-10-17\\",\\"Statement\\":[{\\"Sid\\":\\"ReadCheckInSigningSecret\\",\\"Effect\\":\\"Allow\\",\\"Action\\":[\\"secretsmanager:GetSecretValue\\"],\\"Resource\\":\\"\${aws_secretsmanager_secret.check_in_signing.arn}\\"}]}"
+}
+resource "aws_ecs_task_definition" "task" {
+  execution_role_arn    = aws_iam_role.execution.arn
+  container_definitions = "[{\\"name\\":\\"web\\",\\"secrets\\":[{\\"name\\":\\"CHECK_IN_SIGNING_SECRET\\",\\"valueFrom\\":\\"\${aws_secretsmanager_secret.check_in_signing.arn}\\"}]}]"
+}
+resource "aws_ecs_service" "app" {
+  task_definition = aws_ecs_task_definition.task.arn
+}`
+    }
+  ];
+  return draft;
+}
 
 async function resolveScope(
   draft: DeploymentPreparationDraft,
@@ -190,5 +340,30 @@ function createBuildConfig(): ConfirmedBuildConfig {
     manifestVersion: null,
     confirmedCommitSha: "a".repeat(40),
     confirmedAt: "2026-07-17T00:00:00.000Z"
+  };
+}
+
+function createBuildConfigWithRequiredSecret(): ConfirmedBuildConfig {
+  return {
+    ...createBuildConfig(),
+    ecsWeb: {
+      api: {
+        sourceRoot: ".",
+        dockerfilePath: "Dockerfile",
+        containerPort: 4000,
+        healthCheckPath: "/health",
+        requiredRuntimeSecrets: ["CHECK_IN_SIGNING_SECRET"]
+      },
+      frontend: {
+        sourceRoot: "web",
+        packageManifestPath: "web/package.json",
+        lockfilePath: "package-lock.json",
+        packageManager: "npm",
+        packageManagerVersion: "10.9.2",
+        installPreset: "npm_ci",
+        buildPreset: "npm_build",
+        outputPath: "web/dist"
+      }
+    }
   };
 }

@@ -12,7 +12,6 @@ import QRCode from "qrcode";
 import { createPortal } from "react-dom";
 import { copyTextToClipboard } from "../../lib/clipboard";
 import { ApiClientError, getApiErrorMessage } from "../../lib/api-client";
-import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   createLiveObservation,
   stopLiveObservation,
@@ -20,27 +19,21 @@ import {
 } from "./api";
 import {
   getEligibleLiveObservationDeployments,
+  getLiveObservationOperationalAnalysis,
   getSelectedLiveObservationOutputUrl,
   getLiveObservationProviderEvidence,
-  getLiveObservationPressureLabel,
   type LiveObservationSelection
 } from "./live-observation";
 import { getLiveObservationCapacityMode } from "./live-observation-architecture";
 import { useLiveObservationQueries } from "./live-observation-queries";
-import type { LiveObservationViewport } from "./live-observation-view-state";
-import { LiveObservationDiagramMap } from "./LiveObservationDiagramMap";
 import { LiveObservationFocusedFlow } from "./LiveObservationFocusedFlow";
-import { WorkspaceDesignAnalysisPanel } from "./WorkspaceDesignAnalysisPanel";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
-  readonly diagramContext: DiagramEditorPanelContext;
-  readonly initialViewport: LiveObservationViewport | null;
   readonly onClose: () => void;
   readonly onSessionChange: (session: LiveObservationV2Session | null) => void;
   readonly onSelectedDeploymentIdChange: (deploymentId: string) => void;
   readonly onSnapshotChange: (snapshot: LiveObservationV2Snapshot | null) => void;
-  readonly onViewportChange: (viewport: LiveObservationViewport) => void;
   readonly projectId: string;
   readonly selectedDeploymentId: string;
   readonly session: LiveObservationV2Session | null;
@@ -49,13 +42,10 @@ export type LiveObservationModalProps = {
 };
 
 export function LiveObservationModal({
-  diagramContext,
-  initialViewport,
   onClose,
   onSessionChange,
   onSelectedDeploymentIdChange,
   onSnapshotChange,
-  onViewportChange,
   projectId,
   selectedDeploymentId,
   session,
@@ -76,8 +66,7 @@ export function LiveObservationModal({
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [qrState, setQrState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [copied, setCopied] = useState(false);
-  const [audienceUtilityOpen, setAudienceUtilityOpen] = useState(true);
-  const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
+  const [audienceUtilityOpen, setAudienceUtilityOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const queries = useLiveObservationQueries({
     deploymentId: selectedDeploymentId,
@@ -158,12 +147,17 @@ export function LiveObservationModal({
     outputErrorMessage ||
     streamErrorMessage;
   const providerSnapshot = selectedSnapshot?.latestObservation?.payload ?? null;
+  const providerLogs = providerSnapshot?.logs ?? [];
   const capacityModeLabel = selectedArchitecture
     ? getLiveObservationCapacityMode(selectedArchitecture, providerSnapshot?.capacity)
     : null;
   const providerEvidence = providerSnapshot && capacityModeLabel
     ? getLiveObservationProviderEvidence(providerSnapshot, capacityModeLabel)
     : null;
+  const operationalAnalysis = getLiveObservationOperationalAnalysis(
+    providerSnapshot,
+    selectedSnapshot?.live.pressureLevel ?? "normal"
+  );
 
   useEffect(() => {
     activeRef.current = true;
@@ -406,6 +400,49 @@ export function LiveObservationModal({
 
   if (!mounted) return null;
 
+  const audienceUtility = outputUrl && audienceUtilityOpen ? (
+    <section
+      aria-label="배포 Output URL 접속"
+      className={styles.liveObservationAudienceUtility}
+      id="live-observation-audience-utility"
+    >
+      <div>
+        <span className={styles.liveObservationSectionLabel}>배포 Output URL</span>
+        <strong>실제 배포 서비스 접속</strong>
+        <p>QR 또는 링크로 선택한 배포의 Output URL에 접속합니다.</p>
+        {selectedDeployment?.status === "PARTIALLY_FAILED" ||
+        selectedDeployment?.status === "PARTIALLY_CANCELED" ? (
+          <p className={styles.liveObservationFrontendWarning} role="status">
+            API는 배포된 상태지만 현재 웹 화면은 이전 버전일 수 있습니다. CloudFront
+            주소와 ALB/ECS 운영 지표는 계속 사용할 수 있습니다.
+          </p>
+        ) : null}
+        <div className={styles.liveObservationAudienceUtilityActions}>
+          <button
+            className={styles.liveObservationSecondaryButton}
+            onClick={() => void copyOutputUrl()}
+            type="button"
+          >
+            {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+            Output URL 복사
+          </button>
+          <a href={outputUrl} rel="noreferrer" target="_blank">
+            새 창에서 열기 <ExternalLink size={14} aria-hidden="true" />
+          </a>
+        </div>
+      </div>
+      <div className={styles.liveObservationQr}>
+        {qrState === "ready" && qrDataUrl ? (
+          <img alt="배포 Output URL QR 코드" height={184} src={qrDataUrl} width={184} />
+        ) : qrState === "error" ? (
+          <span role="alert">QR 생성 실패</span>
+        ) : (
+          <span>QR 생성 중</span>
+        )}
+      </div>
+    </section>
+  ) : null;
+
   return createPortal(
     <div
       className={styles.liveObservationOverlay}
@@ -466,7 +503,7 @@ export function LiveObservationModal({
             >
               <Radio size={15} aria-hidden="true" />
               <span>{getSessionStatusLabel(selectedSnapshot, remainingSeconds)}</span>
-              {selectedSession ? <strong>{formatRemainingTime(remainingSeconds)}</strong> : null}
+              {isSessionActive ? <strong>{formatRemainingTime(remainingSeconds)}</strong> : null}
             </div>
             <div className={styles.liveObservationTargetActions}>
               <button
@@ -481,13 +518,16 @@ export function LiveObservationModal({
                 type="button"
               >관측 시작</button>
               {outputUrl ? (
-                <button
-                  aria-controls="live-observation-audience-utility"
-                  aria-expanded={audienceUtilityOpen}
-                  className={styles.liveObservationSecondaryButton}
-                  onClick={() => setAudienceUtilityOpen((open) => !open)}
-                  type="button"
-                >QR</button>
+                <div className={styles.liveObservationQrMenu}>
+                  <button
+                    aria-controls="live-observation-audience-utility"
+                    aria-expanded={audienceUtilityOpen}
+                    className={styles.liveObservationSecondaryButton}
+                    onClick={() => setAudienceUtilityOpen((open) => !open)}
+                    type="button"
+                  >QR</button>
+                  {audienceUtility}
+                </div>
               ) : null}
             </div>
           </div>
@@ -499,49 +539,6 @@ export function LiveObservationModal({
             type="button"
           ><X size={20} aria-hidden="true" /></button>
         </header>
-
-        {outputUrl && audienceUtilityOpen ? (
-          <section
-            aria-label="배포 Output URL 접속"
-            className={styles.liveObservationAudienceUtility}
-            id="live-observation-audience-utility"
-          >
-            <div>
-              <span className={styles.liveObservationSectionLabel}>배포 Output URL</span>
-              <strong>실제 배포 서비스 접속</strong>
-              <p>QR 또는 링크로 선택한 배포의 Output URL에 접속합니다.</p>
-              {selectedDeployment?.status === "PARTIALLY_FAILED" ||
-              selectedDeployment?.status === "PARTIALLY_CANCELED" ? (
-                <p className={styles.liveObservationFrontendWarning} role="status">
-                  API는 배포된 상태지만 현재 웹 화면은 이전 버전일 수 있습니다. CloudFront
-                  주소와 ALB/ECS 운영 지표는 계속 사용할 수 있습니다.
-                </p>
-              ) : null}
-              <div className={styles.liveObservationAudienceUtilityActions}>
-                <button
-                  className={styles.liveObservationSecondaryButton}
-                  onClick={() => void copyOutputUrl()}
-                  type="button"
-                >
-                  {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-                  Output URL 복사
-                </button>
-                <a href={outputUrl} rel="noreferrer" target="_blank">
-                  새 창에서 열기 <ExternalLink size={14} aria-hidden="true" />
-                </a>
-              </div>
-            </div>
-            <div className={styles.liveObservationQr}>
-              {qrState === "ready" && qrDataUrl ? (
-                <img alt="배포 Output URL QR 코드" height={184} src={qrDataUrl} width={184} />
-              ) : qrState === "error" ? (
-                <span role="alert">QR 생성 실패</span>
-              ) : (
-                <span>QR 생성 중</span>
-              )}
-            </div>
-          </section>
-        ) : null}
 
         <main className={styles.liveObservationBody}>
           {listState === "loading" ? (
@@ -581,76 +578,73 @@ export function LiveObservationModal({
             </div>
           ) : null}
           {selectedArchitectureState === "ready" && selectedArchitecture ? (
-            <>
-              <LiveObservationFocusedFlow
-                architecture={selectedArchitecture}
-                key={`focused-${selectedDeploymentId}`}
-                snapshot={selectedSnapshot}
-              />
-              <details
-                className={styles.liveObservationArchitectureDisclosure}
-                onToggle={(event) => setIsArchitectureOpen(event.currentTarget.open)}
-                open={isArchitectureOpen}
-              >
-                <summary>전체 Architecture 보기</summary>
-                {isArchitectureOpen ? (
-                  <LiveObservationDiagramMap
-                    architecture={selectedArchitecture}
-                    initialViewport={initialViewport}
-                    key={selectedDeploymentId}
-                    onViewportChange={onViewportChange}
-                    snapshot={selectedSnapshot}
-                  />
-                ) : null}
-              </details>
-            </>
+            <LiveObservationFocusedFlow
+              architecture={selectedArchitecture}
+              key={`focused-${selectedDeploymentId}`}
+              snapshot={selectedSnapshot}
+            />
           ) : null}
 
-          {selectedSnapshot ? (
-            <section className={styles.liveObservationEvidenceRail} aria-label="관측 근거">
-              <div data-source="browser">
-                <span>수락 요청</span>
-                <strong>{selectedSnapshot.live.acceptedEventCount}</strong>
-                <p>공개 요청 API가 수락한 요청</p>
+          {selectedDeployment ? (
+            <details
+              aria-label="실시간 운영 분석"
+              className={styles.liveObservationMetricsSection}
+            >
+              <summary className={styles.liveObservationMetricsHeader}>
+                <div>
+                  <span className={styles.liveObservationSectionLabel}>운영 분석</span>
+                  <h3>운영 분석</h3>
+                </div>
+                <span data-status={selectedSnapshot?.status ?? "idle"}>
+                  {selectedSnapshot?.status === "active" ? "LIVE" : "관측 대기"}
+                </span>
+              </summary>
+              <div className={styles.liveObservationAnalysisGrid}>
+                <article
+                  className={styles.liveObservationAnalysisStatus}
+                  data-analysis-state={operationalAnalysis.state}
+                >
+                  <span>현재 인프라 상태</span>
+                  <strong>{operationalAnalysis.stateLabel}</strong>
+                  <small>
+                    요청 {selectedSnapshot?.live.acceptedEventCount ?? "—"} · {selectedSnapshot
+                      ? `${selectedSnapshot.live.rollingRequestsPerSecond.toFixed(1)} 요청/초`
+                      : "—"} · {providerEvidence?.stateLabel ?? "수집 대기"}
+                  </small>
+                </article>
+                <article>
+                  <span>용량 및 스케일링</span>
+                  <strong>{operationalAnalysis.capacity}</strong>
+                  <small>
+                    실행 / 희망 / 최대 · {capacityModeLabel ?? "확인 중"} · 확장 이력 {operationalAnalysis.scaleEventCount}건
+                  </small>
+                </article>
+                <article>
+                  <span>병목과 장애</span>
+                  <strong>{operationalAnalysis.bottleneckDetail}</strong>
+                  <small>오류율 · p95 · 비정상 Task</small>
+                </article>
+                <article>
+                  <span>비용 영향</span>
+                  <strong>{operationalAnalysis.costImpact}</strong>
+                  <small>{operationalAnalysis.costDetail}</small>
+                </article>
+                <article className={styles.liveObservationAnalysisRecommendation}>
+                  <div>
+                    <span>개선 권장사항</span>
+                    <strong>{operationalAnalysis.terraformAction}</strong>
+                    <small>{operationalAnalysis.terraformDetail}</small>
+                  </div>
+                  <small>검토 제안 · 자동 적용하지 않음</small>
+                </article>
               </div>
-              <div data-source="runtime">
-                <span>현재 요청률</span>
-                <strong>{selectedSnapshot.live.rollingRequestsPerSecond.toFixed(1)} req/s</strong>
-                <p>{getLiveObservationPressureLabel(selectedSnapshot.live.pressureLevel)}</p>
-              </div>
-              <div data-source="aws">
-                <span>요청</span>
-                <strong>{providerEvidence?.requests ?? "—"}</strong>
-                <p>CloudWatch ALB RequestCount</p>
-                <small>공개 경로 CloudFront · {providerEvidence?.stateLabel ?? "수집 대기"}</small>
-              </div>
-              <div data-source="aws">
-                <span>오류율</span>
-                <strong>{providerEvidence?.errorRate ?? "—"}</strong>
-                <p>Target 5xx 기준</p>
-              </div>
-              <div data-source="aws">
-                <span>p95 지연</span>
-                <strong>{providerEvidence?.p95Latency ?? "—"}</strong>
-                <p>TargetResponseTime p95</p>
-              </div>
-              <div data-source="aws">
-                <span>가용성</span>
-                <strong>{providerEvidence?.availability ?? "—"}</strong>
-                <p>RequestCount와 Target 5xx 기반</p>
-              </div>
-              <div data-source="aws">
-                <span>{providerEvidence?.capacityModeLabel ?? "용량"}</span>
-                <strong>{providerEvidence?.capacity ?? "—"}</strong>
-                <p>{providerEvidence?.capacityDetailLabel ?? "수집 대기"}</p>
-              </div>
-            </section>
+            </details>
           ) : null}
-          {providerSnapshot && providerSnapshot.logs.length > 0 ? (
+          {providerLogs.length > 0 ? (
             <details className={styles.liveObservationLogs}>
-              <summary>최근 런타임 로그 {providerSnapshot.logs.length}건</summary>
+              <summary>최근 런타임 로그 {providerLogs.length}건</summary>
               <ol>
-                {providerSnapshot.logs.map((entry, index) => (
+                {providerLogs.map((entry, index) => (
                   <li key={`${entry.timestamp}-${index}`}>
                     <time dateTime={entry.timestamp}>{formatTimestamp(entry.timestamp)}</time>
                     <code>{entry.message}</code>
@@ -659,7 +653,6 @@ export function LiveObservationModal({
               </ol>
             </details>
           ) : null}
-          <WorkspaceDesignAnalysisPanel context={diagramContext} />
         </main>
 
         {selectedSession ? (

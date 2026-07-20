@@ -413,7 +413,7 @@ test("automatic organization preview stays at the lower-left of the board worksp
   assert.match(diagramEditorStyles, /\.workspace\s*\{[\s\S]*?position:\s*relative;/);
   assert.match(
     diagramEditorStyles,
-    /\.compilerPreviewNotice\s*\{[\s\S]*?bottom:\s*16px;[\s\S]*?left:\s*16px;[\s\S]*?right:\s*auto;/
+    /\.compilerPreviewNotice\s*\{[\s\S]*?bottom:\s*12px;[\s\S]*?left:\s*12px;[\s\S]*?right:\s*auto;/
   );
 });
 

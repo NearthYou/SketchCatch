@@ -61,6 +61,7 @@ import {
   createConnectedRepositoryAnalysisResult,
   createRepositoryAnalysisRecordPayload
 } from "./repository-analysis-record-payload";
+import { getRepositoryRequiredRuntimeSecrets } from "../../../features/workspace/repository-template-handoff";
 import {
   selectRepositoryRecoveryAction,
   type RepositoryRecoveryAction
@@ -451,9 +452,13 @@ export function RepositoryStartClient({
     publicRepositoryAnalysis?: SourceRepositoryAnalysisResult,
     analyzedAt?: string
   ): Promise<void> {
+    const requiredRuntimeSecrets = publicRepositoryAnalysis
+      ? getRepositoryRequiredRuntimeSecrets(publicRepositoryAnalysis.aiHandoff)
+      : [];
     const diagram = buildBoardTemplateDiagram(templateId, {
       projectSlug: effectiveProjectName,
-      shortId: "repository"
+      shortId: "repository",
+      requiredRuntimeSecrets
     });
 
     if (!diagram) {
@@ -1222,10 +1227,12 @@ function PublicRepositoryRecommendationStep({
 function createRepositoryPreviewDiagram(projectName: string, repository: SourceRepository | null) {
   const handoff = repository?.analysis?.aiHandoff;
   if (!repository || handoff?.status !== "template_selected") return null;
+  const requiredRuntimeSecrets = getRepositoryRequiredRuntimeSecrets(handoff);
   return (
     buildBoardTemplateDiagram(handoff.templateId, {
       projectSlug: projectName,
-      shortId: repository.id.slice(0, 8)
+      shortId: repository.id.slice(0, 8),
+      requiredRuntimeSecrets
     }) ?? null
   );
 }

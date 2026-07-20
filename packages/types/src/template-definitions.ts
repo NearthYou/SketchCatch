@@ -96,6 +96,7 @@ export type TemplateDefinition = {
 export type BuildTemplateDiagramInput = {
   readonly projectSlug: string;
   readonly shortId: string;
+  readonly requiredRuntimeSecrets?: readonly string[];
 };
 
 export type EcsFargateRuntimeNames = {
@@ -1511,32 +1512,47 @@ export const templateDefinitions = [
         },
         dependsOn: ["@address:listener"]
       }),
-      resource("scaling-target", "Fargate Task Capacity 1–3", "aws", "aws_appautoscaling_target", 1100, 660, {
-        minCapacity: 1,
-        maxCapacity: 3,
-        resourceId: "service/${@ref:cluster.name}/${@ref:service.name}",
-        scalableDimension: "ecs:service:DesiredCount",
-        serviceNamespace: "ecs"
-      }),
-      resource("scaling-policy", "10 requests / target", "aws", "aws_appautoscaling_policy", 1300, 660, {
-        name: "${@ref:service.name}-requests",
-        policyType: "TargetTrackingScaling",
-        resourceId: "@ref:scaling-target.resource_id",
-        scalableDimension: "@ref:scaling-target.scalable_dimension",
-        serviceNamespace: "@ref:scaling-target.service_namespace",
-        targetTrackingScalingPolicyConfiguration: {
-          targetValue: 10,
-          scaleInCooldown: 60,
-          scaleOutCooldown: 30,
-          predefinedMetricSpecification: [
-            {
-              predefinedMetricType: "ALBRequestCountPerTarget",
-              resourceLabel:
-                "${@ref:load-balancer.arn_suffix}/${@ref:target-group.arn_suffix}"
-            }
-          ]
+      resource(
+        "scaling-target",
+        "Fargate Task Capacity 1–3",
+        "aws",
+        "aws_appautoscaling_target",
+        1100,
+        660,
+        {
+          minCapacity: 1,
+          maxCapacity: 3,
+          resourceId: "service/${@ref:cluster.name}/${@ref:service.name}",
+          scalableDimension: "ecs:service:DesiredCount",
+          serviceNamespace: "ecs"
         }
-      })
+      ),
+      resource(
+        "scaling-policy",
+        "10 requests / target",
+        "aws",
+        "aws_appautoscaling_policy",
+        1300,
+        660,
+        {
+          name: "${@ref:service.name}-requests",
+          policyType: "TargetTrackingScaling",
+          resourceId: "@ref:scaling-target.resource_id",
+          scalableDimension: "@ref:scaling-target.scalable_dimension",
+          serviceNamespace: "@ref:scaling-target.service_namespace",
+          targetTrackingScalingPolicyConfiguration: {
+            targetValue: 10,
+            scaleInCooldown: 60,
+            scaleOutCooldown: 30,
+            predefinedMetricSpecification: [
+              {
+                predefinedMetricType: "ALBRequestCountPerTarget",
+                resourceLabel: "${@ref:load-balancer.arn_suffix}/${@ref:target-group.arn_suffix}"
+              }
+            ]
+          }
+        }
+      )
     ],
     relationships: [
       relationship("vpc-subnet-a", "vpc", "subnet-a", "contains"),
@@ -1793,10 +1809,24 @@ export function buildTemplateDiagramJson(
 ): DiagramJson {
   // Keep project metadata out of Terraform local names so Board labels and deployable identity remain separate.
   const definition = getTemplateDefinitionById(templateId);
+  const ecsRuntimeExtension =
+    templateId === "ecs-fargate-container-app"
+      ? createEcsFargateRuntimeSecretExtension(input)
+      : null;
   const resources =
     templateId === "ecs-fargate-container-app"
-      ? applyEcsFargateRuntimeNames(definition.resources, input.projectSlug)
+      ? [
+          ...applyEcsFargateRuntimeNames(
+            applyEcsFargateRuntimeSecretTaskContract(definition.resources, ecsRuntimeExtension),
+            input.projectSlug
+          ),
+          ...(ecsRuntimeExtension?.resources ?? [])
+        ]
       : definition.resources;
+  const relationships = [
+    ...definition.relationships,
+    ...(ecsRuntimeExtension?.relationships ?? [])
+  ];
   const resourceById = new Map(resources.map((resource) => [resource.id, resource]));
   const resourceNames = createTemplateTerraformResourceNames(resources);
   const nodeIdByResourceId = new Map(
@@ -1826,7 +1856,7 @@ export function buildTemplateDiagramJson(
       )
     ],
     edges: [
-      ...definition.relationships.map((relationship) => {
+      ...relationships.map((relationship) => {
         const presentationRole = getTemplateRelationshipPresentationRole(
           templateId,
           relationship.id
@@ -1866,6 +1896,187 @@ export function buildTemplateDiagramJson(
         }
       : {})
   };
+}
+
+type EcsFargateRuntimeSecretExtension = {
+  readonly resources: readonly TemplateResourceDefinition[];
+  readonly relationships: readonly TemplateRelationship[];
+};
+
+const CHECK_IN_SIGNING_SECRET = "CHECK_IN_SIGNING_SECRET";
+const CHECK_IN_SECRET_MATERIAL_RESOURCE_ID = "check-in-signing-material";
+const CHECK_IN_SECRET_RESOURCE_ID = "check-in-signing-secret";
+const CHECK_IN_SECRET_VERSION_RESOURCE_ID = "check-in-signing-secret-version";
+const CHECK_IN_SECRET_POLICY_RESOURCE_ID = "check-in-signing-secret-policy";
+
+function createEcsFargateRuntimeSecretExtension(
+  input: BuildTemplateDiagramInput
+): EcsFargateRuntimeSecretExtension | null {
+  if (!input.requiredRuntimeSecrets?.includes(CHECK_IN_SIGNING_SECRET)) {
+    return null;
+  }
+
+  const runtimeNames = createEcsFargateRuntimeNames(input.projectSlug);
+  const secretReadPolicy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Sid: "ReadCheckInSigningSecret",
+        Effect: "Allow",
+        Action: ["secretsmanager:GetSecretValue"],
+        Resource: `\${@ref:${CHECK_IN_SECRET_RESOURCE_ID}.arn}`
+      }
+    ]
+  });
+
+  return {
+    resources: [
+      {
+        ...resource(
+          CHECK_IN_SECRET_MATERIAL_RESOURCE_ID,
+          "Generated Check-in Signing Material",
+          "aws",
+          "random_password",
+          1320,
+          500,
+          { length: 48, special: false }
+        ),
+        terraformResourceName: "check_in_signing"
+      },
+      {
+        ...resource(
+          CHECK_IN_SECRET_RESOURCE_ID,
+          "Check-in Signing Secret",
+          "aws",
+          "aws_secretsmanager_secret",
+          1480,
+          500,
+          {
+            namePrefix: `${runtimeNames.serviceName}/check-in-signing-`,
+            recoveryWindowInDays: 0
+          }
+        ),
+        terraformResourceName: "check_in_signing"
+      },
+      {
+        ...resource(
+          CHECK_IN_SECRET_VERSION_RESOURCE_ID,
+          "Generated Signing Secret Version",
+          "aws",
+          "aws_secretsmanager_secret_version",
+          1640,
+          500,
+          {
+            secretId: `@ref:${CHECK_IN_SECRET_RESOURCE_ID}.id`,
+            secretString: `@ref:${CHECK_IN_SECRET_MATERIAL_RESOURCE_ID}.result`
+          }
+        ),
+        terraformResourceName: "check_in_signing"
+      },
+      {
+        ...resource(
+          CHECK_IN_SECRET_POLICY_RESOURCE_ID,
+          "ECS Signing Secret Read Policy",
+          "aws",
+          "aws_iam_role_policy",
+          1800,
+          500,
+          {
+            name: `${runtimeNames.serviceName}-check-in-signing-read`,
+            role: "@ref:execution-role.id",
+            policy: secretReadPolicy
+          }
+        ),
+        terraformResourceName: "check_in_signing_read"
+      }
+    ],
+    relationships: [
+      relationship(
+        "check-in-secret-material-version",
+        CHECK_IN_SECRET_MATERIAL_RESOURCE_ID,
+        CHECK_IN_SECRET_VERSION_RESOURCE_ID,
+        "generates"
+      ),
+      relationship(
+        "check-in-secret-version",
+        CHECK_IN_SECRET_RESOURCE_ID,
+        CHECK_IN_SECRET_VERSION_RESOURCE_ID,
+        "stores"
+      ),
+      relationship(
+        "check-in-secret-policy-execution-role",
+        CHECK_IN_SECRET_POLICY_RESOURCE_ID,
+        "execution-role",
+        "grants read"
+      ),
+      relationship(
+        "check-in-secret-task",
+        CHECK_IN_SECRET_RESOURCE_ID,
+        "task",
+        `injects ${CHECK_IN_SIGNING_SECRET}`
+      )
+    ]
+  };
+}
+
+function applyEcsFargateRuntimeSecretTaskContract(
+  resources: readonly TemplateResourceDefinition[],
+  extension: EcsFargateRuntimeSecretExtension | null
+): readonly TemplateResourceDefinition[] {
+  if (!extension) {
+    return resources;
+  }
+
+  return resources.map((resource) => {
+    if (resource.id !== "task") {
+      return resource;
+    }
+
+    return {
+      ...resource,
+      values: {
+        ...resource.values,
+        dependsOn: [
+          `@address:${CHECK_IN_SECRET_VERSION_RESOURCE_ID}`,
+          `@address:${CHECK_IN_SECRET_POLICY_RESOURCE_ID}`
+        ],
+        containerDefinitions: addCheckInSigningSecretToContainerDefinitions(
+          resource.values.containerDefinitions
+        )
+      }
+    };
+  });
+}
+
+function addCheckInSigningSecretToContainerDefinitions(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  try {
+    const definitions: unknown = JSON.parse(value);
+    if (!Array.isArray(definitions)) {
+      return value;
+    }
+
+    return JSON.stringify(
+      definitions.map((definition, index) =>
+        index === 0 && isTemplateRecord(definition)
+          ? {
+              ...definition,
+              secrets: [
+                {
+                  name: CHECK_IN_SIGNING_SECRET,
+                  valueFrom: `\${@ref:${CHECK_IN_SECRET_RESOURCE_ID}.arn}`
+                }
+              ]
+            }
+          : definition
+      )
+    );
+  } catch {
+    return value;
+  }
 }
 
 export function createEcsFargateRuntimeNames(projectSlug: string): EcsFargateRuntimeNames {

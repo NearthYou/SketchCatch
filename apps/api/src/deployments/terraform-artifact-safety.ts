@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import type { DeploymentLiveProfile } from "@sketchcatch/types";
 import {
   getLiveApplySupportedResourceTypes,
-  getTerraformPlanSupportedResourceTypes
+  getTerraformPlanSupportedResourceTypes,
+  normalizeDeploymentLiveProfile
 } from "./deployment-plan-summary.js";
 
 const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "data", "variable", "output", "locals"]);
@@ -20,7 +21,9 @@ const allowedProviderSources = new Set([
   "hashicorp/archive",
   "registry.terraform.io/hashicorp/archive",
   "hashicorp/kubernetes",
-  "registry.terraform.io/hashicorp/kubernetes"
+  "registry.terraform.io/hashicorp/kubernetes",
+  "hashicorp/random",
+  "registry.terraform.io/hashicorp/random"
 ]);
 const allowedAwsProviderRegion = "ap-northeast-2";
 const allowedAwsProviderAttributes = new Set(["alias", "region"]);
@@ -114,13 +117,17 @@ export function assertTerraformArtifactIsSafe(
   validateDisallowedStringInterpolations(tokens);
   validateTemplateFileCalls(code);
   validateArchiveDataSourceAttributes(code);
-  const liveProfile = options.liveProfile ?? "practice";
+  const liveProfile = normalizeDeploymentLiveProfile(options.liveProfile);
   const supportedResourceTypes =
     options.resourceValidationMode === "plan"
       ? getTerraformPlanSupportedResourceTypes()
       : getLiveApplySupportedResourceTypes(liveProfile);
 
-  validateDeploymentResourceAttributes(code, liveProfile);
+  validateDeploymentResourceAttributes(
+    code,
+    liveProfile,
+    options.resourceValidationMode ?? "live_apply"
+  );
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
@@ -259,6 +266,7 @@ function validateRequiredProviderAssignment(
     providerName.value !== "aws" &&
     providerName.value !== "archive" &&
     providerName.value !== "kubernetes" &&
+    providerName.value !== "random" &&
     providerName.value !== "source" &&
     providerName.value !== "version"
   ) {
@@ -442,7 +450,7 @@ function validateArchiveDataSourceAttributes(source: string): void {
   }
 }
 
-type TerraformResourceBlock = {
+export type TerraformResourceBlock = {
   type: string;
   name: string;
   body: string;
@@ -451,10 +459,30 @@ type TerraformResourceBlock = {
 
 function validateDeploymentResourceAttributes(
   source: string,
-  liveProfile: DeploymentLiveProfile
+  liveProfile: DeploymentLiveProfile,
+  resourceValidationMode: "live_apply" | "plan"
 ): void {
-  for (const resource of extractResourceBlocks(source)) {
+  for (const resource of listTerraformResourceBlocks(source)) {
     const body = stripHclComments(resource.body);
+
+    if (resourceValidationMode === "live_apply" && resource.type === "random_password") {
+      validateGeneratedRuntimePassword(resource, body);
+    }
+
+    if (
+      resourceValidationMode === "live_apply" &&
+      resource.type === "aws_secretsmanager_secret_version"
+    ) {
+      validateGeneratedRuntimeSecretVersion(resource, body);
+    }
+
+    if (
+      resourceValidationMode === "live_apply" &&
+      resource.type === "aws_iam_role_policy" &&
+      (liveProfile !== "demo_web_service_with_rds" || /secretsmanager/iu.test(body))
+    ) {
+      validateGeneratedRuntimeSecretPolicy(resource, body);
+    }
 
     if (liveProfile === "demo_web_service") {
       if (resource.type === "aws_autoscaling_group") {
@@ -519,6 +547,89 @@ function validateDeploymentResourceAttributes(
     ) {
       validatePublicRemoteAccessIngress(body, resource.line);
     }
+  }
+}
+
+function validateGeneratedRuntimePassword(
+  resource: TerraformResourceBlock,
+  body: string
+): void {
+  const attributes = findTopLevelAttributeNames(body);
+  const valid =
+    attributes.size === 2 &&
+    attributes.has("length") &&
+    attributes.has("special") &&
+    findNumericAttribute(body, "length") === 48 &&
+    /\bspecial\s*=\s*false\b/.test(body);
+
+  if (!valid) {
+    throw new TerraformArtifactSafetyError(
+      `Terraform runtime Secret material must use a bounded generated password at line ${resource.line}`
+    );
+  }
+}
+
+function validateGeneratedRuntimeSecretVersion(
+  resource: TerraformResourceBlock,
+  body: string
+): void {
+  const attributes = findTopLevelAttributeNames(body);
+  const valid =
+    attributes.size === 2 &&
+    attributes.has("secret_id") &&
+    attributes.has("secret_string") &&
+    /\bsecret_id\s*=\s*aws_secretsmanager_secret\.[a-zA-Z0-9_-]+\.id\b/.test(body) &&
+    /\bsecret_string\s*=\s*random_password\.[a-zA-Z0-9_-]+\.result\b/.test(body);
+
+  if (!valid) {
+    throw new TerraformArtifactSafetyError(
+      `Terraform runtime Secret version must reference generated password material at line ${resource.line}`
+    );
+  }
+}
+
+function validateGeneratedRuntimeSecretPolicy(
+  resource: TerraformResourceBlock,
+  body: string
+): void {
+  const attributes = findTopLevelAttributeNames(body);
+  const policySource = findHclStringAttribute(body, "policy");
+  let policy: unknown;
+  try {
+    policy = policySource === null ? null : JSON.parse(policySource);
+  } catch {
+    policy = null;
+  }
+  const statement = isRecord(policy) && Array.isArray(policy["Statement"])
+    ? policy["Statement"]
+    : [];
+  const entry = statement[0];
+  const actions = isRecord(entry) && Array.isArray(entry["Action"])
+    ? entry["Action"]
+    : [];
+  const valid =
+    attributes.size === 3 &&
+    attributes.has("name") &&
+    attributes.has("role") &&
+    attributes.has("policy") &&
+    /\brole\s*=\s*aws_iam_role\.[a-zA-Z0-9_-]+\.id\b/.test(body) &&
+    isRecord(policy) &&
+    hasExactKeys(policy, ["Statement", "Version"]) &&
+    policy["Version"] === "2012-10-17" &&
+    statement.length === 1 &&
+    isRecord(entry) &&
+    hasExactKeys(entry, ["Action", "Effect", "Resource", "Sid"]) &&
+    entry["Sid"] === "ReadCheckInSigningSecret" &&
+    entry["Effect"] === "Allow" &&
+    actions.length === 1 &&
+    actions[0] === "secretsmanager:GetSecretValue" &&
+    typeof entry["Resource"] === "string" &&
+    /^\$\{aws_secretsmanager_secret\.[a-zA-Z0-9_-]+\.arn\}$/.test(entry["Resource"]);
+
+  if (!valid) {
+    throw new TerraformArtifactSafetyError(
+      `Terraform runtime Secret policy must grant only exact Secrets Manager read access at line ${resource.line}`
+    );
   }
 }
 
@@ -615,6 +726,36 @@ function hasLiteralStringAttribute(
 function findLiteralStringAttribute(body: string, attributeName: string): string | null {
   const pattern = new RegExp(`\\b${escapeRegExp(attributeName)}\\s*=\\s*"([^"]*)"`);
   return pattern.exec(body)?.[1] ?? null;
+}
+
+function findTopLevelAttributeNames(body: string): ReadonlySet<string> {
+  return new Set(
+    [...body.matchAll(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=/gmu)]
+      .map((match) => match[1])
+      .filter((name): name is string => name !== undefined)
+  );
+}
+
+function findHclStringAttribute(body: string, attributeName: string): string | null {
+  const pattern = new RegExp(
+    `\\b${escapeRegExp(attributeName)}\\s*=\\s*("(?:\\\\.|[^"\\\\])*")`
+  );
+  const literal = pattern.exec(body)?.[1];
+  if (!literal) return null;
+
+  try {
+    return JSON.parse(literal) as string;
+  } catch {
+    return null;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasExactKeys(value: Record<string, unknown>, expectedKeys: readonly string[]): boolean {
+  return Object.keys(value).sort().join("\0") === [...expectedKeys].sort().join("\0");
 }
 
 function isSafeArchiveOutputPath(outputPath: string): boolean {
@@ -758,7 +899,7 @@ function findNumericAttribute(body: string, attributeName: string): number | nul
   return Number.parseInt(match[1], 10);
 }
 
-function extractResourceBlocks(source: string): TerraformResourceBlock[] {
+export function listTerraformResourceBlocks(source: string): TerraformResourceBlock[] {
   const resources: TerraformResourceBlock[] = [];
   const headerPattern = /\bresource\s+"([^"]+)"\s+"([^"]+)"\s*\{/g;
   let match: RegExpExecArray | null;

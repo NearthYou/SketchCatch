@@ -225,7 +225,7 @@ function deployment(
     awsAccountIdSnapshot: "123456789012",
     awsRegionSnapshot: "ap-northeast-2",
     awsConnectionNameSnapshot: "123456789012",
-    liveProfile: "practice",
+    liveProfile: "demo_web_service",
     scope: "full_stack",
     targetKind: "ecs_fargate",
     source: "direct",

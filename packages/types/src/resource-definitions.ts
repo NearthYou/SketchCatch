@@ -101,6 +101,15 @@ const DEFAULT_RESOURCE_DEFINITION_ALIASES = [
 ] as const satisfies readonly (readonly [ResourceType, string])[];
 
 export const resourceDefinitions = [
+  createResourceDefinition({
+    id: "terraform-random-password",
+    provider: "aws",
+    resourceType: "RANDOM_PASSWORD",
+    parameterPanel: false,
+    terraformPreview: true,
+    terraformResourceType: "random_password",
+    terraformSync: true
+  }),
   createAwsResourceDefinition({
     id: "aws-vpc",
     resourceType: "VPC",
@@ -315,6 +324,7 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-caller-identity",
     resourceType: "AWS_CALLER_IDENTITY",
+    parameterPanel: false,
     terraformBlockType: "data",
     terraformPreview: true,
     terraformResourceType: "aws_caller_identity",

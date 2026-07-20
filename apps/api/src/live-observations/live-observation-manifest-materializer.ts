@@ -381,7 +381,7 @@ function createEcsScalingEvidence(
   if (policy.config["policyType"] !== "TargetTrackingScaling") {
     throw new Error("Unsupported ECS Service Auto Scaling policy evidence");
   }
-  const configuration = readConfigRecord(
+  const configuration = readSingleConfigRecordBlock(
     policy.config["targetTrackingScalingPolicyConfiguration"],
     "targetTrackingScalingPolicyConfiguration"
   );
@@ -432,6 +432,17 @@ function readConfigRecord(value: unknown, name: string): Readonly<Record<string,
     throw new Error(`Invalid ${name} architecture evidence`);
   }
   return value as Readonly<Record<string, unknown>>;
+}
+
+function readSingleConfigRecordBlock(
+  value: unknown,
+  name: string
+): Readonly<Record<string, unknown>> {
+  if (!Array.isArray(value)) return readConfigRecord(value, name);
+  if (value.length !== 1) {
+    throw new Error(`Invalid ${name} architecture evidence`);
+  }
+  return readConfigRecord(value[0], name);
 }
 
 function readTargetTrackingMetric(configuration: Readonly<Record<string, unknown>>): string {

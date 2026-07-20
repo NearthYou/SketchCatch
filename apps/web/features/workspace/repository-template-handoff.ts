@@ -12,7 +12,11 @@ export type RepositoryAnalysisHandoffLocation = {
 export function resolveRepositoryAnalysisTemplate(
   repositories: readonly SourceRepository[],
   handoff: RepositoryAnalysisHandoffLocation
-): { readonly id: string; readonly title: string } {
+): {
+  readonly id: string;
+  readonly requiredRuntimeSecrets: readonly string[];
+  readonly title: string;
+} {
   const repository = repositories.find((candidate) => candidate.id === handoff.sourceRepositoryId);
   const analysis = repository?.analysis;
 
@@ -36,7 +40,23 @@ export function resolveRepositoryAnalysisTemplate(
     throw new Error("REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE");
   }
 
-  return { id: template.id, title: template.title };
+  return {
+    id: template.id,
+    requiredRuntimeSecrets: getRepositoryRequiredRuntimeSecrets(analysis.aiHandoff),
+    title: template.title
+  };
+}
+
+export function getRepositoryRequiredRuntimeSecrets(
+  handoff: RepositoryAnalysisAiHandoff | undefined
+): string[] {
+  return [
+    ...new Set(
+      (handoff?.architectureFacts ?? [])
+        .filter((fact) => fact.kind === "runtime_secret")
+        .map((fact) => fact.value)
+    )
+  ].sort();
 }
 
 function getAllowedRepositoryAnalysisTemplateIds(handoff: RepositoryAnalysisAiHandoff): Set<string> {

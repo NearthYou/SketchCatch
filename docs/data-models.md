@@ -1367,7 +1367,7 @@ type Deployment = {
   awsAccountIdSnapshot: string | null;
   awsRegionSnapshot: string | null;
   awsConnectionNameSnapshot: string | null;
-  liveProfile: "practice" | "demo_web_service" | "demo_web_service_with_rds";
+  liveProfile: "demo_web_service" | "demo_web_service_with_rds";
   scope: "infrastructure" | "application" | "full_stack";
   targetKind: RuntimeTargetKind | null;
   source: "direct" | "gitops";
@@ -1438,6 +1438,10 @@ type Deployment = {
   updatedAt: IsoDateTimeString;
 };
 ```
+
+`DeploymentLiveProfile`은 `demo_web_service`와 `demo_web_service_with_rds`만 사용한다.
+`demo_web_service`가 신규 Deployment의 기본값이며, `0054_remove_practice_live_profile.sql`은
+기존 `practice` 값을 `demo_web_service`로 변환한 뒤 PostgreSQL enum에서 제거한다.
 
 Direct Deployment의 외부 상태는 `validation`, `approval`, `deployment` 세 단계만 사용한다. 저장,
 Pre-Deployment Check, `terraform init`, `terraform plan`은 `validation` 내부 작업이며 실제 실행과
@@ -3439,6 +3443,7 @@ type RepositoryArchitectureFact = {
     | "health_check"
     | "transport_security"
     | "runtime_scale"
+    | "runtime_secret"
     | "excluded_capability"
     | "infrastructure_definition";
   value: string;
@@ -3512,6 +3517,18 @@ type AnalyzeSourceRepositoryResponse = {
 
 type SourceRepositoryAnalysis = Omit<AnalyzeSourceRepositoryResponse, "sourceRepositoryId">;
 ```
+
+`runtime_secret` fact는 저장소 문서에서 확인한 환경 변수 이름만 담으며 값은 담지 않습니다. 웹 포함 ECS의
+`ConfirmedBuildConfig.ecsWeb.api.requiredRuntimeSecrets`도 검증된 대문자 환경 변수 이름 목록만 저장합니다.
+CodeBuild preflight는 실제 배포 Secret을 조회하지 않고 격리된 검사 전용 placeholder를 컨테이너에 주입합니다.
+Repository Fixed Template은 같은 `runtime_secret` fact를 입력받아 `random_password`, Secrets Manager Secret과
+Secret Version, 최소 읽기 IAM policy, ECS Task Definition의 `secrets.valueFrom`을 Project Draft에 함께 생성합니다.
+`full_stack` 배포 준비는 확정된 `requiredRuntimeSecrets`와 실제 Terraform 연결을 비교하며, 하나라도 빠지거나 서로
+다른 Secret을 참조하면 Plan 생성 전에 요청을 거절합니다. 승인된 Terraform Apply는
+`CHECK_IN_SIGNING_SECRET`을 새로 생성하여 Secrets Manager에 저장하고 모든 Task에 동일하게 주입합니다. 생성 값은
+분석 결과, API 응답, build log에 포함하지 않으며 Terraform state는 승인된 암호화 backend 경계에서만 관리합니다.
+Task Definition은 고정 `INSTANCE_ID`를 만들지 않으므로 애플리케이션이 hostname fallback으로 Task별 `servedBy`를
+구분할 수 있습니다.
 
 `GET /api/projects/:projectId/source-repositories`는 각 Source Repository의 마지막 `analysis`를 함께 반환한다. 세 분석 컬럼 중 하나라도 없는 기존 row는 `analysis: null`로 취급한다. 사용자가 다시 분석하면 최신 revision 기준 결과로 세 값을 한 번에 덮어쓴다.
 

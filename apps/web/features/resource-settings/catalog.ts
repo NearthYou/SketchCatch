@@ -488,10 +488,21 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "terraform-random-password",
+    name: "Generated Password",
+    area: "security-identity",
+    category: "Security",
+    enabled: false,
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Secrets-Manager_64.svg`,
+    label: "Random Password",
+    size
+  },
+  {
     definitionId: "aws-caller-identity",
     name: "Caller Identity",
     area: "tools",
     category: "Terraform Data Sources",
+    enabled: false,
     iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Identity-and-Access-Management_64.svg`,
     label: "Caller Identity",
     size

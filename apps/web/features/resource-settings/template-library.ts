@@ -857,7 +857,11 @@ export function listLegacyBoardTemplates(): readonly AvailableBoardTemplate[] {
 
 export function buildBoardTemplateDiagram(
   templateId: string | undefined,
-  input: { readonly projectSlug: string; readonly shortId: string }
+  input: {
+    readonly projectSlug: string;
+    readonly requiredRuntimeSecrets?: readonly string[];
+    readonly shortId: string;
+  }
 ): DiagramJson | undefined {
   // New Boards must retain the reviewed layout instead of re-running the generic topology arranger.
   const definitionId = resolveTemplateDefinitionId(templateId);

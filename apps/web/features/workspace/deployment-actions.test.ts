@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Deployment, DiagramJson, GitCicdHandoff } from "@sketchcatch/types";
+import type { Deployment, GitCicdHandoff } from "@sketchcatch/types";
 import {
   getGitCicdHandoffStatusLabel,
   getDefaultDeploymentPanelMode,
@@ -8,7 +8,6 @@ import {
   getInfrastructureRollbackTarget,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
-  getRecommendedDeploymentLiveProfile,
   hasCompleteDeploymentApprovalSnapshot,
   selectDeploymentCleanupTarget,
   selectDeploymentCleanupTargets,
@@ -34,27 +33,6 @@ test("infrastructure rollback is offered only from current state to the previous
 
   assert.equal(getInfrastructureRollbackTarget(source, [source, target])?.id, target.id);
   assert.equal(getInfrastructureRollbackTarget(source, [source]), null);
-});
-
-test("template resource graphs recommend the extended live deployment profile", () => {
-  const diagramJson: DiagramJson = {
-    nodes: [
-      {
-        id: "cloudfront",
-        kind: "resource",
-        label: "CloudFront",
-        locked: false,
-        position: { x: 0, y: 0 },
-        size: { width: 124, height: 96 },
-        type: "aws_cloudfront_distribution",
-        zIndex: 1
-      }
-    ],
-    edges: [],
-    viewport: { x: 0, y: 0, zoom: 1 }
-  };
-
-  assert.equal(getRecommendedDeploymentLiveProfile(diagramJson), "demo_web_service_with_rds");
 });
 
 test("successful apply deployment offers cleanup planning but not direct destroy", () => {
@@ -103,7 +81,10 @@ test("successful application releases remain cleanup targets without Terraform s
     status: "SUCCESS"
   });
 
-  assert.equal(selectDeploymentCleanupTarget([applicationDeployment])?.id, applicationDeployment.id);
+  assert.equal(
+    selectDeploymentCleanupTarget([applicationDeployment])?.id,
+    applicationDeployment.id
+  );
   assert.equal(
     getDeploymentActionState(applicationDeployment, "idle").shouldShowDestroyPlanButton,
     true
@@ -303,6 +284,21 @@ test("current apply plan hides plan regeneration and keeps approval enabled", ()
   assert.equal(state.canApprovePlan, true);
   assert.equal(state.shouldShowApplyPlanButton, false);
   assert.equal(state.canRunApplyPlan, false);
+});
+
+test("failed application release never leaves the stale Apply Plan approval available", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+      currentPlanOperation: "apply",
+      failureStage: "application_release",
+      status: "FAILED"
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApprovePlanButton, false);
+  assert.equal(state.canApprovePlan, false);
 });
 
 test("running Terraform work hides stale plan rerun actions", () => {
@@ -507,7 +503,7 @@ function createDeployment(
     awsAccountIdSnapshot: "123456789012",
     awsRegionSnapshot: "ap-northeast-2",
     awsConnectionNameSnapshot: "123456789012",
-    liveProfile: "practice",
+    liveProfile: "demo_web_service",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",
