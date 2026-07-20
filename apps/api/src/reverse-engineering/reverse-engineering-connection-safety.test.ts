@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AwsConnection } from "@sketchcatch/types";
+import type { AwsConnection, ReverseEngineeringScanResult } from "@sketchcatch/types";
 import type { ProjectAccessContext, ProjectRecord } from "../deployments/deployment-service.js";
 import { createAwsProviderAdapter, type AwsProviderAdapter } from "./aws-provider-adapter.js";
 import {
@@ -61,7 +61,7 @@ for (const connectionStatus of ["pending", "failed", "unknown"] as const) {
   });
 }
 
-test("API가 verified로 확인한 연결은 저장 없는 read-only preview reader를 유지한다", async () => {
+test("verified 연결의 preview는 AWS 원본을 서버에만 유효 기간과 함께 저장한다", async () => {
   const verifiedConnection: AwsConnection = {
     id: "verified-connection",
     userId: "user-1",
@@ -75,19 +75,51 @@ test("API가 verified로 확인한 연결은 저장 없는 read-only preview rea
     updatedAt: "2026-07-17T00:00:00.000Z"
   };
   let providerScanCalls = 0;
+  let persistedPreview:
+    | {
+        expiresAt: Date;
+        id: string;
+        rawResult: ReverseEngineeringScanResult;
+        userId: string;
+      }
+    | undefined;
   const resourceTypes = ["LOAD_BALANCER", "ECS_SERVICE"] as const;
   const repository = createRepository({
     async findVerifiedAwsConnection() {
       return verifiedConnection;
+    },
+    async createPreview(input: unknown) {
+      persistedPreview = input as typeof persistedPreview;
+      return input as never;
     }
   });
-  const adapter = createAwsProviderAdapter({
-    async discoverResources(input) {
-      providerScanCalls += 1;
-      assert.deepEqual(input.resourceTypes, resourceTypes);
-      return [];
-    }
-  });
+  const adapter = createAwsProviderAdapter(
+    {
+      async discoverResources(input) {
+        providerScanCalls += 1;
+        assert.deepEqual(input.resourceTypes, resourceTypes);
+        return [
+          {
+            providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            providerResourceId:
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/private/abc",
+            displayName: "private-entry",
+            region: "ap-northeast-2",
+            config: {
+              arn: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/private/abc",
+              name: "private-entry",
+              type: "application",
+              ipAddressType: "ipv4",
+              scheme: "internet-facing",
+              subnetIds: ["subnet-private"]
+            },
+            relationships: []
+          }
+        ];
+      }
+    },
+    { resultVisibility: "private" }
+  );
 
   const response = await createReverseEngineeringPreviewScan(
     {
@@ -105,10 +137,19 @@ test("API가 verified로 확인한 연결은 저장 없는 read-only preview rea
   );
 
   assert.equal(providerScanCalls, 1);
+  assert.equal(response.previewId, "preview-scan-task9");
   assert.equal(response.scan.id, "preview-scan-task9");
   assert.equal(response.scan.status, "completed");
   assert.equal(response.result.scan, response.scan);
-  assert.deepEqual(response.result.discoveredResources, []);
+  assert.equal(persistedPreview?.id, "preview-scan-task9");
+  assert.equal(persistedPreview?.userId, accessContext.userId);
+  assert.equal(
+    persistedPreview?.expiresAt.toISOString(),
+    "2026-07-17T00:30:00.000Z"
+  );
+  assert.match(JSON.stringify(persistedPreview?.rawResult), /arn:aws:elasticloadbalancing/iu);
+  assert.doesNotMatch(JSON.stringify(response), /arn:aws:elasticloadbalancing|terraform import/iu);
+  assert.equal("rawResult" in response, false);
 });
 
 test("preview 부분 결과는 원문 AWS 오류를 버리고 안전한 서비스 coverage만 반환한다", async () => {
@@ -217,6 +258,7 @@ function createVerifiedConnection(): AwsConnection {
   };
 }
 
+// gg: 각 보안 테스트가 필요한 repository 경계만 바꿔 검증하게 합니다.
 function createRepository(
   overrides: Partial<ReverseEngineeringRepository>
 ): ReverseEngineeringRepository {
@@ -229,6 +271,16 @@ function createRepository(
     },
     async createScan() {
       throw new Error("Not used");
+    },
+    // gg: preview 관심사가 아닌 테스트도 서버 영속 계약을 통과하게 합니다.
+    async createPreview(input) {
+      return {
+        ...input,
+        claimedAt: null,
+        claimedProjectId: null,
+        claimedScanId: null,
+        claimedDraftId: null
+      };
     },
     async completeScan() {
       return undefined;

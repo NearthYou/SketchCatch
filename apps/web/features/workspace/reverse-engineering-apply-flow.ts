@@ -1,6 +1,5 @@
 import {
   serializeBoardAutoOrganizeSource,
-  type BoardAutoOrganizeCandidate,
   type DiagramJson,
   type ReverseEngineeringSourceKind
 } from "@sketchcatch/types";
@@ -68,38 +67,10 @@ export function getSavedReverseEngineeringSourceScanIds(diagram: DiagramJson): s
           return [];
         }
 
-        return typeof sourceScanId === "string" && sourceScanId.length > 0
-          ? [sourceScanId]
-          : [];
+        return typeof sourceScanId === "string" && sourceScanId.length > 0 ? [sourceScanId] : [];
       })
     )
   ];
-}
-
-/** 각 mode가 독립 정렬한 후보 중 실제로 미리볼 후보만 그 mode 안에서 고릅니다. */
-export function selectReverseEngineeringOrganizationCandidate({
-  candidates,
-  mode,
-  selectedCandidateId
-}: {
-  readonly candidates: {
-    readonly append: readonly BoardAutoOrganizeCandidate[] | null;
-    readonly replace: readonly BoardAutoOrganizeCandidate[];
-  };
-  readonly mode: "replace" | "append";
-  readonly selectedCandidateId: string | null;
-}): BoardAutoOrganizeCandidate | null {
-  const modeCandidates = mode === "append" ? candidates.append : candidates.replace;
-
-  if (!modeCandidates) {
-    return null;
-  }
-
-  return (
-    modeCandidates.find((candidate) => candidate.id === selectedCandidateId) ??
-    modeCandidates[0] ??
-    null
-  );
 }
 
 /** Reverse 미리보기가 시작된 순간의 저장 revision과 Board 내용을 함께 고정합니다. */

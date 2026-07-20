@@ -57,6 +57,10 @@ export type AwsProviderAdapter = {
   scan(input: AwsProviderScanInput): Promise<ReverseEngineeringScanResult>;
 };
 
+export type AwsProviderAdapterOptions = {
+  resultVisibility?: "public" | "private";
+};
+
 const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::EC2::VPC", "VPC"],
   ["AWS::EC2::Subnet", "SUBNET"],
@@ -255,8 +259,11 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
 ]);
 const OMIT_PUBLIC_VALUE = Symbol("omit-public-value");
 
-// Provider Adapter의 공개 진입점입니다. AWS 원본 목록을 보드 설계도와 분석 재료로 바꿉니다.
-export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsProviderAdapter {
+// gg: 공개 기본값은 유지하고, 서버 영속 경계에서만 AWS 원본을 보존합니다.
+export function createAwsProviderAdapter(
+  gateway: AwsProviderScanGateway,
+  options: AwsProviderAdapterOptions = {}
+): AwsProviderAdapter {
   return {
     async scan(input) {
       const discoveryResult = normalizeDiscoveryResult(await gateway.discoverResources(input));
@@ -272,7 +279,8 @@ export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsPr
           createAwsPublicDisplayName(
             record,
             displayNameMap.get(record.providerResourceId) ?? record.displayName
-          )
+          ),
+          options.resultVisibility ?? "public"
         )
       );
       const architectureJson = createReverseEngineeringArchitectureJson(discoveredResources);
@@ -345,10 +353,12 @@ function createResourceIdMap(records: AwsDiscoveredResourceRecord[]): ReadonlyMa
   return new Map(records.map((record) => [record.providerResourceId, createNodeId(record)]));
 }
 
+// gg: private mode도 비밀 config는 버리고 import에 필요한 provider identity만 서버에 남깁니다.
 function toDiscoveredResource(
   record: AwsDiscoveredResourceRecord,
   idMap: ReadonlyMap<string, string>,
-  displayName: string
+  displayName: string,
+  resultVisibility: "public" | "private"
 ): DiscoveredResource {
   const resourceType = resolveAwsResourceType(record);
   const config = createAwsPublicResourceConfig(record);
@@ -356,7 +366,10 @@ function toDiscoveredResource(
     id: createNodeId(record),
     provider: "aws",
     providerResourceType: record.providerResourceType,
-    providerResourceId: createAwsPublicProviderResourceId(record),
+    providerResourceId:
+      resultVisibility === "private"
+        ? record.providerResourceId
+        : createAwsPublicProviderResourceId(record),
     region: record.region,
     displayName,
     resourceType,

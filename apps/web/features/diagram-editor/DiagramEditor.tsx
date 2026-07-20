@@ -68,7 +68,6 @@ import {
   createBoardAutoOrganizePreviewSession,
   getBoardAutoOrganizeVisibleDiagram,
   getBoardAutoOrganizeViewportPolicy,
-  selectBoardAutoOrganizeCandidate,
   selectBoardAutoOrganizePreviewView,
   type BoardAutoOrganizeApplyRequest,
   type BoardAutoOrganizePreviewSession,
@@ -1190,24 +1189,6 @@ function DiagramEditorInner({
     (view: BoardAutoOrganizePreviewView) => {
       if (autoOrganizePreview === null || autoOrganizeApplyInFlightRef.current) return;
       const nextSession = selectBoardAutoOrganizePreviewView(autoOrganizePreview, view);
-      const viewportPolicy = getBoardAutoOrganizeViewportPolicy("switch");
-
-      shouldApplySourceViewportRef.current = viewportPolicy.applySourceViewport;
-      shouldAutoFitPreviewDiagramRef.current = viewportPolicy.autoFit;
-      setPreviewDiagramState(getBoardAutoOrganizeVisibleDiagram(nextSession));
-      setAutoOrganizePreview(nextSession);
-    },
-    [autoOrganizePreview]
-  );
-
-  /** thumbnail 선택은 저장 없이 session과 보이는 preview만 바꿉니다. */
-  const selectAutomaticOrganizationCandidate = useCallback(
-    (candidateId: string) => {
-      if (autoOrganizePreview === null || autoOrganizeApplyInFlightRef.current) return;
-      const nextSession = selectBoardAutoOrganizeCandidate(
-        autoOrganizePreview,
-        candidateId
-      );
       const viewportPolicy = getBoardAutoOrganizeViewportPolicy("switch");
 
       shouldApplySourceViewportRef.current = viewportPolicy.applySourceViewport;
@@ -3532,7 +3513,6 @@ function DiagramEditorInner({
             {autoOrganizePreview ? (
               <BoardAutoOrganizePreviewPanel
                 onKeepOriginal={cancelAutomaticOrganization}
-                onSelectCandidate={selectAutomaticOrganizationCandidate}
                 onSelectView={selectAutomaticOrganizationPreview}
                 onUseOrganized={applyAutomaticOrganization}
                 session={autoOrganizePreview}

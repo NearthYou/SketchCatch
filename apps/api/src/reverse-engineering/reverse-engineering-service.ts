@@ -22,6 +22,7 @@ import type { Database } from "../db/client.js";
 import {
   awsConnections,
   projects,
+  reverseEngineeringScanPreviews,
   reverseEngineeringScanLogs,
   reverseEngineeringScans
 } from "../db/schema.js";
@@ -48,6 +49,8 @@ import {
 
 export type ReverseEngineeringScanRecord = typeof reverseEngineeringScans.$inferSelect;
 export type ReverseEngineeringScanLogRecord = typeof reverseEngineeringScanLogs.$inferSelect;
+export type ReverseEngineeringScanPreviewRecord =
+  typeof reverseEngineeringScanPreviews.$inferSelect;
 
 export type CreateReverseEngineeringScanInput = {
   projectId: string;
@@ -75,6 +78,19 @@ export type CreateReverseEngineeringScanRecordInput = {
   updatedAt: Date;
 };
 
+export type CreateReverseEngineeringPreviewRecordInput = {
+  id: string;
+  userId: string;
+  awsConnectionId: string;
+  provider: "aws";
+  region: string;
+  resourceTypes: ReverseEngineeringResourceSelection[];
+  rawResult: ReverseEngineeringScanResult;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export type AppendReverseEngineeringScanLogInput = {
   id: string;
   scanId: string;
@@ -94,6 +110,9 @@ export type ReverseEngineeringRepository = {
     awsConnectionId: string,
     accessContext: ProjectAccessContext
   ): Promise<AwsConnection | undefined>;
+  createPreview(
+    input: CreateReverseEngineeringPreviewRecordInput
+  ): Promise<ReverseEngineeringScanPreviewRecord>;
   createScan(input: CreateReverseEngineeringScanRecordInput): Promise<ReverseEngineeringScanRecord>;
   completeScan(
     scanId: string,
@@ -138,6 +157,7 @@ export type ReverseEngineeringServiceOptions = {
   adapter?: AwsProviderAdapter;
   generateId?: () => string;
   now?: () => Date;
+  previewTtlMs?: number;
 };
 
 export type ReverseEngineeringScanJob = {
@@ -886,13 +906,18 @@ class ReverseEngineeringScanCancelledError extends Error {
 }
 
 const PREVIEW_SCAN_PROJECT_ID = "00000000-0000-4000-8000-000000000000";
+export const DEFAULT_REVERSE_ENGINEERING_PREVIEW_TTL_MS = 30 * 60 * 1000;
 
-// 새 프로젝트를 만들기 전 AWS를 먼저 읽기 위한 저장하지 않는 preview scan입니다.
+// gg: 새 Project preview의 AWS 원본은 기한 있는 서버 row에만 남기고 공개 결과만 돌려줍니다.
 export async function createReverseEngineeringPreviewScan(
   input: CreateReverseEngineeringPreviewScanInput,
   repository: ReverseEngineeringRepository,
   options: ReverseEngineeringServiceOptions = {}
-): Promise<{ scan: ReverseEngineeringScan; result: ReverseEngineeringScanResult }> {
+): Promise<{
+  previewId: string;
+  scan: ReverseEngineeringScan;
+  result: ReverseEngineeringScanResult;
+}> {
   const awsConnection = await repository.findVerifiedAwsConnection(
     input.awsConnectionId,
     input.accessContext
@@ -926,13 +951,30 @@ export async function createReverseEngineeringPreviewScan(
   try {
     const adapter =
       options.adapter ??
-      createAwsProviderAdapter(createAwsReverseEngineeringGateway(awsConnection));
+      createAwsProviderAdapter(createAwsReverseEngineeringGateway(awsConnection), {
+        resultVisibility: "private"
+      });
     const adapterResult = await adapter.scan({
       provider: "aws",
       region: input.region,
       resourceTypes: input.resourceTypes
     });
-    const publicAdapterResult = normalizePublicAdapterResult(adapterResult);
+    await repository.createPreview({
+      id: scan.id,
+      userId: input.accessContext.userId,
+      awsConnectionId: input.awsConnectionId,
+      provider: "aws",
+      region: input.region,
+      resourceTypes: input.resourceTypes,
+      rawResult: adapterResult,
+      expiresAt: new Date(
+        completedAt.getTime() +
+          (options.previewTtlMs ?? DEFAULT_REVERSE_ENGINEERING_PREVIEW_TTL_MS)
+      ),
+      createdAt: startedAt,
+      updatedAt: completedAt
+    });
+    const publicAdapterResult = normalizeReverseEngineeringScanResult(scan, adapterResult);
     const result: ReverseEngineeringScanResult = {
       ...publicAdapterResult,
       scan,
@@ -945,6 +987,7 @@ export async function createReverseEngineeringPreviewScan(
     };
 
     return {
+      previewId: scan.id,
       scan,
       result
     };
@@ -1128,6 +1171,7 @@ function normalizePublicAdapterResult(
   return normalizeReverseEngineeringScanResult(result.scan, result);
 }
 
+// gg: preview raw_result와 Project에 붙은 durable Scan을 각각 올바른 테이블에 저장합니다.
 export function createPostgresReverseEngineeringRepository(
   db: Database
 ): ReverseEngineeringRepository {
@@ -1154,6 +1198,20 @@ export function createPostgresReverseEngineeringRepository(
         );
 
       return awsConnection ? toAwsConnection(awsConnection) : undefined;
+    },
+
+    // gg: private preview 원본은 사용자 소유권과 만료 시간을 함께 저장합니다.
+    async createPreview(input) {
+      const [preview] = await db
+        .insert(reverseEngineeringScanPreviews)
+        .values(input)
+        .returning();
+
+      if (!preview) {
+        throw new Error("Reverse Engineering preview creation failed");
+      }
+
+      return preview;
     },
 
     async createScan(input) {

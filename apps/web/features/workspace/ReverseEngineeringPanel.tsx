@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
-  BoardAutoOrganizeCandidateSet,
   DiagramJson,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScan,
@@ -32,7 +31,6 @@ import {
   attachReverseEngineeringSourceToDiagram,
   createReverseEngineeringApplyPreview,
   getSavedReverseEngineeringSourceScanIds,
-  selectReverseEngineeringOrganizationCandidate,
   type ReverseEngineeringApplyPreview
 } from "./reverse-engineering-apply-flow";
 import {
@@ -84,9 +82,9 @@ export type ReverseEngineeringCandidatePanelState = {
 };
 
 type RequestState = "idle" | "loading" | "error";
-type ReverseEngineeringOrganizationCandidates = {
-  readonly append: BoardAutoOrganizeCandidateSet | null;
-  readonly replace: BoardAutoOrganizeCandidateSet;
+type ReverseEngineeringOrganizedDiagrams = {
+  readonly append: DiagramJson | null;
+  readonly replace: DiagramJson;
 };
 const SCAN_POLL_INTERVAL_MS = 1000;
 const SCAN_POLL_ATTEMPT_COUNT = 30;
@@ -116,10 +114,8 @@ export function ReverseEngineeringPanel({
   const [placement, setPlacement] = useState<ReverseEngineeringPlacement>("original");
   const [applicationMode, setApplicationMode] =
     useState<ReverseEngineeringBoardApplicationMode>("replace");
-  const [organizationCandidates, setOrganizationCandidates] =
-    useState<ReverseEngineeringOrganizationCandidates | null>(null);
-  const [selectedOrganizationCandidateId, setSelectedOrganizationCandidateId] =
-    useState<string | null>(null);
+  const [organizedDiagrams, setOrganizedDiagrams] =
+    useState<ReverseEngineeringOrganizedDiagrams | null>(null);
   const handleRequestError = useCallback((error: unknown) => {
     setErrorMessage(toErrorMessage(error));
   }, []);
@@ -225,21 +221,10 @@ export function ReverseEngineeringPanel({
       result: selectedCandidateResult
     });
   }, [previewSourceDiagram, selectedCandidateResult]);
-  const activeOrganizationCandidates =
+  const activeOrganizedDiagram =
     applicationMode === "append"
-      ? (organizationCandidates?.append ?? null)
-      : (organizationCandidates?.replace ?? null);
-  const selectedOrganizationCandidate =
-    organizationCandidates === null
-      ? null
-      : selectReverseEngineeringOrganizationCandidate({
-          candidates: {
-            append: organizationCandidates.append?.candidates ?? null,
-            replace: organizationCandidates.replace.candidates
-          },
-          mode: applicationMode,
-          selectedCandidateId: selectedOrganizationCandidateId
-        });
+      ? (organizedDiagrams?.append ?? null)
+      : (organizedDiagrams?.replace ?? null);
   const originalApplication =
     applicationMode === "append"
       ? originalCandidateAppendApplication
@@ -253,14 +238,14 @@ export function ReverseEngineeringPanel({
       return originalApplication;
     }
 
-    if (!selectedOrganizationCandidate) {
+    if (!activeOrganizedDiagram) {
       return null;
     }
 
     return createReverseEngineeringBoardApplication({
       currentDiagram: previewSourceDiagram,
       mode: applicationMode,
-      organizedDiagram: selectedOrganizationCandidate.diagram,
+      organizedDiagram: activeOrganizedDiagram,
       placement: "compiled",
       result: selectedCandidateResult
     });
@@ -270,7 +255,7 @@ export function ReverseEngineeringPanel({
     placement,
     previewSourceDiagram,
     selectedCandidateResult,
-    selectedOrganizationCandidate
+    activeOrganizedDiagram
   ]);
   const comparison = selectedCandidateApplication?.comparison ?? null;
   const hasDeletedSourceScan = useMemo(
@@ -296,8 +281,7 @@ export function ReverseEngineeringPanel({
 
       setPlacement("original");
       setApplicationMode("replace");
-      setOrganizationCandidates(null);
-      setSelectedOrganizationCandidateId(null);
+      setOrganizedDiagrams(null);
       setSelectedCandidateId(candidateId);
       context.setPreviewDiagram(application.previewDiagram);
     },
@@ -338,8 +322,7 @@ export function ReverseEngineeringPanel({
     setApplyState("idle");
     setPlacement("original");
     setApplicationMode("replace");
-    setOrganizationCandidates(null);
-    setSelectedOrganizationCandidateId(null);
+    setOrganizedDiagrams(null);
     setSelectedCandidateId(null);
     setScanResponse(null);
     setLogs([]);
@@ -413,8 +396,7 @@ export function ReverseEngineeringPanel({
         setSelectedCandidateId(null);
         setPlacement("original");
         setApplicationMode("replace");
-        setOrganizationCandidates(null);
-        setSelectedOrganizationCandidateId(null);
+        setOrganizedDiagrams(null);
         setPreviewBase(null);
         context.setPreviewDiagram(null);
       }
@@ -431,8 +413,7 @@ export function ReverseEngineeringPanel({
     setApplyState("idle");
     setPlacement("original");
     setApplicationMode("replace");
-    setOrganizationCandidates(null);
-    setSelectedOrganizationCandidateId(null);
+    setOrganizedDiagrams(null);
     const basePreview = createReverseEngineeringApplyPreview({
       diagram: context.diagram,
       draftRevision: createProjectOnApply ? null : context.projectDraftRevision
@@ -601,7 +582,7 @@ export function ReverseEngineeringPanel({
     }
   }
 
-  // replace와 append를 바꾸면 실제로 저장될 mode의 원본 또는 정리안을 Board에 다시 보여줍니다.
+  // replace와 append를 바꾸면 실제로 저장될 mode의 원본 또는 정리본을 Board에 다시 보여줍니다.
   function previewApplicationMode(mode: ReverseEngineeringBoardApplicationMode): void {
     const nextOriginalApplication =
       mode === "append" ? originalCandidateAppendApplication : originalCandidateApplication;
@@ -619,20 +600,13 @@ export function ReverseEngineeringPanel({
       return;
     }
 
-    const candidate = organizationCandidates
-      ? selectReverseEngineeringOrganizationCandidate({
-          candidates: {
-            append: organizationCandidates.append?.candidates ?? null,
-            replace: organizationCandidates.replace.candidates
-          },
-          mode,
-          selectedCandidateId: selectedOrganizationCandidateId
-        })
-      : null;
+    const organizedDiagram =
+      mode === "append"
+        ? (organizedDiagrams?.append ?? null)
+        : (organizedDiagrams?.replace ?? null);
 
-    if (!candidate) {
+    if (!organizedDiagram) {
       setPlacement("original");
-      setSelectedOrganizationCandidateId(null);
       context.setPreviewDiagram(nextOriginalApplication.previewDiagram);
       return;
     }
@@ -640,22 +614,21 @@ export function ReverseEngineeringPanel({
     const application = createReverseEngineeringBoardApplication({
       currentDiagram: previewSourceDiagram,
       mode,
-      organizedDiagram: candidate.diagram,
+      organizedDiagram,
       placement: "compiled",
       result: selectedCandidateResult
     });
 
-    setSelectedOrganizationCandidateId(candidate.id);
     context.setPreviewDiagram(application.previewDiagram);
   }
 
-  // gg: 사용자가 눌렀을 때만 shared visual-only 후보를 만들고 첫 정리안을 미리봅니다.
+  // gg: Compiler 내부 후보 중 rank-1만 UI 경계 밖으로 꺼내 하나의 정리본으로 미리봅니다.
   function previewAutomaticOrganization(): void {
     if (!originalCandidateApplication || !selectedCandidateResponse?.result) {
       return;
     }
 
-    const replace = createBoardAutoOrganizeCandidates(
+    const replaceCandidateSet = createBoardAutoOrganizeCandidates(
       originalCandidateApplication.diagram,
       convertReverseEngineeringBoardToArchitectureJson(
         originalCandidateApplication.diagram,
@@ -663,7 +636,7 @@ export function ReverseEngineeringPanel({
         originalCandidateApplication.sourceOwnership
       )
     );
-    const append = originalCandidateAppendApplication
+    const appendCandidateSet = originalCandidateAppendApplication
       ? createBoardAutoOrganizeCandidates(
           originalCandidateAppendApplication.diagram,
           convertReverseEngineeringBoardToArchitectureJson(
@@ -673,49 +646,36 @@ export function ReverseEngineeringPanel({
           )
         )
       : null;
-    const nextCandidates = { append, replace };
-    const activeCandidates =
-      applicationMode === "append" ? nextCandidates.append : nextCandidates.replace;
-    const firstCandidate = activeCandidates?.candidates[0];
+    const replaceDiagram = replaceCandidateSet.candidates[0]?.diagram ?? null;
+    const appendDiagram = appendCandidateSet?.candidates[0]?.diagram ?? null;
 
-    if (!firstCandidate) {
+    if (!replaceDiagram) {
       setApplyState("error");
-      setApplyMessage("현재 선택한 적용 방식에서 사용할 정리안을 만들지 못했어요.");
+      setApplyMessage("정리본을 만들지 못했어요.");
+      return;
+    }
+
+    const nextOrganizedDiagrams: ReverseEngineeringOrganizedDiagrams = {
+      append: appendDiagram ? structuredClone(appendDiagram) : null,
+      replace: structuredClone(replaceDiagram)
+    };
+    const organizedDiagram =
+      applicationMode === "append" ? nextOrganizedDiagrams.append : nextOrganizedDiagrams.replace;
+
+    if (!organizedDiagram) {
+      setApplyState("error");
+      setApplyMessage("현재 적용 방식의 정리본을 만들지 못했어요.");
       return;
     }
 
     setApplyState("idle");
     setApplyMessage(null);
-    setOrganizationCandidates(nextCandidates);
-    setSelectedOrganizationCandidateId(firstCandidate.id);
+    setOrganizedDiagrams(nextOrganizedDiagrams);
     setPlacement("compiled");
-    context.setPreviewDiagram(firstCandidate.diagram);
+    context.setPreviewDiagram(organizedDiagram);
   }
 
-  // gg: 정리안 선택은 저장 없이 현재 미리보기만 같은 visual-only 후보로 바꿉니다.
-  function selectOrganizationCandidate(candidateId: string): void {
-    const candidate = activeOrganizationCandidates?.candidates.find(
-      (item) => item.id === candidateId
-    );
-
-    if (!candidate || !selectedCandidateResult || !originalApplication) {
-      return;
-    }
-
-    const application = createReverseEngineeringBoardApplication({
-      currentDiagram: previewSourceDiagram,
-      mode: applicationMode,
-      organizedDiagram: candidate.diagram,
-      placement: "compiled",
-      result: selectedCandidateResult
-    });
-
-    setSelectedOrganizationCandidateId(candidate.id);
-    setPlacement("compiled");
-    context.setPreviewDiagram(application.previewDiagram);
-  }
-
-  // gg: 원본 보기는 만들어 둔 정리안을 버리거나 저장하지 않고 source-exact 미리보기로 돌아갑니다.
+  // gg: 원본 보기는 만들어 둔 정리본을 버리거나 저장하지 않고 source-exact 미리보기로 돌아갑니다.
   function previewOriginalPlacement(): void {
     if (!originalApplication) {
       return;
@@ -750,8 +710,7 @@ export function ReverseEngineeringPanel({
 
     setPlacement("original");
     setApplicationMode("replace");
-    setOrganizationCandidates(null);
-    setSelectedOrganizationCandidateId(null);
+    setOrganizedDiagrams(null);
     setSelectedCandidateId(nextCandidate.id);
     context.setPreviewDiagram(application.previewDiagram);
   }
@@ -819,14 +778,11 @@ export function ReverseEngineeringPanel({
             onKeepOriginalPlacement={previewOriginalPlacement}
             onReplaceCurrentBoard={() => void applyScanResult("replace")}
             onRetryScan={() => void runScan()}
-            onSelectOrganizationCandidate={selectOrganizationCandidate}
-            organizationCandidates={activeOrganizationCandidates?.candidates ?? []}
             permissionRecoveryHref={createReverseEngineeringAwsSettingsHref(
               selectedCandidateResponse.scan.awsConnectionId
             )}
             response={selectedCandidateResponse}
             selectedCandidateId={selectedCandidate.id}
-            selectedOrganizationCandidateId={selectedOrganizationCandidateId}
             placement={placement}
           />
         ) : (

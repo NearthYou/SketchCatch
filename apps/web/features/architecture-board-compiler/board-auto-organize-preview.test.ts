@@ -9,10 +9,8 @@ import type {
 import {
   applyBoardAutoOrganizeCandidate,
   createBoardAutoOrganizePreviewSession,
-  getBoardAutoOrganizeSelectedCandidate,
   getBoardAutoOrganizeViewportPolicy,
   getBoardAutoOrganizeVisibleDiagram,
-  selectBoardAutoOrganizeCandidate,
   selectBoardAutoOrganizePreviewView
 } from "./board-auto-organize-preview";
 
@@ -27,7 +25,7 @@ test("자동 정리 미리보기는 처음 한 번만 화면을 맞추고 전환
   });
 });
 
-test("preview session keeps every safe candidate and the source draft revision", () => {
+test("preview session keeps only the highest-ranked organized result and the source draft revision", () => {
   const source = createDiagram();
   const candidateSet = createCandidateSet(source);
   const session = createBoardAutoOrganizePreviewSession(source, candidateSet, 7, {
@@ -39,47 +37,35 @@ test("preview session keeps every safe candidate and the source draft revision",
   assert.equal(session.sessionId, candidateSet.sessionId);
   assert.equal(session.sourceFingerprint, candidateSet.sourceFingerprint);
   assert.equal(session.sourceDraftRevision, 7);
-  assert.equal(session.selectedCandidateId, candidateSet.candidates[0]!.id);
+  assert.equal(session.organizedResult.id, candidateSet.candidates[0]!.id);
   assert.equal(session.activeView, "organized");
   assert.deepEqual(session.viewportBeforePreview, { x: 33, y: 44, zoom: 0.7 });
   assert.notEqual(session.originalDiagram, source);
-  assert.notEqual(session.candidates, candidateSet.candidates);
+  assert.notEqual(session.organizedResult, candidateSet.candidates[0]);
+  assert.equal("candidates" in session, false);
+  assert.equal("selectedCandidateId" in session, false);
 });
 
-test("switching candidates changes only local selection and never returns a diagram to apply", () => {
+test("original and organized switching always compares the source with the single organized result", () => {
   const source = createDiagram();
   const candidateSet = createCandidateSet(source);
   const session = createBoardAutoOrganizePreviewSession(source, candidateSet, 7);
   const sourceSnapshot = structuredClone(source);
   const candidateSnapshot = structuredClone(candidateSet);
 
-  const next = selectBoardAutoOrganizeCandidate(session, candidateSet.candidates[1]!.id);
-
-  assert.equal(next.selectedCandidateId, candidateSet.candidates[1]!.id);
-  assert.equal("pendingApply" in next, false);
-  assert.equal("diagramToApply" in next, false);
-  assert.deepEqual(source, sourceSnapshot);
-  assert.deepEqual(candidateSet, candidateSnapshot);
-  assert.deepEqual(getBoardAutoOrganizeVisibleDiagram(next), candidateSet.candidates[1]!.diagram);
-});
-
-test("original and arrangement view switching keeps the selected candidate", () => {
-  const source = createDiagram();
-  const candidateSet = createCandidateSet(source);
-  const session = selectBoardAutoOrganizeCandidate(
-    createBoardAutoOrganizePreviewSession(source, candidateSet, 7),
-    candidateSet.candidates[1]!.id
-  );
-
   const originalView = selectBoardAutoOrganizePreviewView(session, "original");
   const organizedView = selectBoardAutoOrganizePreviewView(originalView, "organized");
 
   assert.deepEqual(getBoardAutoOrganizeVisibleDiagram(originalView), source);
-  assert.equal(organizedView.selectedCandidateId, candidateSet.candidates[1]!.id);
   assert.deepEqual(
-    getBoardAutoOrganizeSelectedCandidate(organizedView)?.diagram,
-    candidateSet.candidates[1]!.diagram
+    getBoardAutoOrganizeVisibleDiagram(organizedView),
+    candidateSet.candidates[0]!.diagram
   );
+  assert.equal(organizedView.organizedResult.id, candidateSet.candidates[0]!.id);
+  assert.equal("pendingApply" in organizedView, false);
+  assert.equal("diagramToApply" in organizedView, false);
+  assert.deepEqual(source, sourceSnapshot);
+  assert.deepEqual(candidateSet, candidateSnapshot);
 });
 
 test("stale source revision blocks apply without calling the server save", async () => {
@@ -128,10 +114,7 @@ test("a source visual change blocks apply even when Resource meaning stays the s
 test("apply exposes the selected diagram only after the exact server request succeeds", async () => {
   const source = createDiagram();
   const candidateSet = createCandidateSet(source);
-  const session = selectBoardAutoOrganizeCandidate(
-    createBoardAutoOrganizePreviewSession(source, candidateSet, 7),
-    candidateSet.candidates[1]!.id
-  );
+  const session = createBoardAutoOrganizePreviewSession(source, candidateSet, 7);
   const terraformFiles: TerraformSyncFileInput[] = [
     { fileName: "main.tf", terraformCode: "" }
   ];
@@ -161,8 +144,8 @@ test("apply exposes the selected diagram only after the exact server request suc
   const result = await applyPromise;
 
   assert.equal(result.status, "saved");
-  assert.deepEqual(result.diagramToApply, candidateSet.candidates[1]!.diagram);
-  assert.notEqual(result.diagramToApply, candidateSet.candidates[1]!.diagram);
+  assert.deepEqual(result.diagramToApply, candidateSet.candidates[0]!.diagram);
+  assert.notEqual(result.diagramToApply, candidateSet.candidates[0]!.diagram);
   assert.deepEqual(Object.keys(observedRequests[0] as object).sort(), [
     "candidateDiagram",
     "candidateId",

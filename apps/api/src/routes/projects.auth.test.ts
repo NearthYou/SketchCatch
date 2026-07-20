@@ -15,11 +15,14 @@ import {
   projectAssets,
   projectDrafts,
   projects,
+  reverseEngineeringScanPreviews,
+  reverseEngineeringScans,
   users
 } from "../db/schema.js";
 import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-workspace.js";
 import { createFilesystemProjectAssetStorage } from "../projects/filesystem-project-asset-storage.js";
 import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
+import { createPublicReverseEngineeringPreviewResult } from "../reverse-engineering/reverse-engineering-preview-claim-service.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -30,6 +33,7 @@ const ACTIVE_PROJECT_ID = "33333333-3333-4333-8333-333333333333";
 const OTHER_PROJECT_ID = "44444444-4444-4444-8444-444444444444";
 const ACTIVE_ASSET_ID = "77777777-7777-4777-8777-777777777777";
 const ACTIVE_ARCHITECTURE_ID = "55555555-5555-4555-8555-555555555555";
+const REVERSE_ENGINEERING_PREVIEW_ID = "99999999-9999-4999-8999-999999999999";
 
 type UserRow = typeof users.$inferSelect;
 type ProjectRow = typeof projects.$inferSelect;
@@ -39,6 +43,8 @@ type ProjectAssetRow = typeof projectAssets.$inferSelect;
 type DeploymentRow = typeof deployments.$inferSelect;
 type DeployedResourceRow = typeof deployedResources.$inferSelect;
 type DeploymentPlanArtifactRow = typeof deploymentPlanArtifacts.$inferSelect;
+type ReverseEngineeringPreviewRow = typeof reverseEngineeringScanPreviews.$inferSelect;
+type ReverseEngineeringScanRow = typeof reverseEngineeringScans.$inferSelect;
 
 test("GET /api/projects returns 401 for a deleted user", async () => {
   const fakeDb = new ProjectRouteFakeDb({
@@ -116,8 +122,16 @@ test("POST /api/projects creates a project for the active user", async () => {
 });
 
 test("POST /api/projects/reverse-engineering atomically creates Project, Draft, and Snapshot", async () => {
+  const preview = makeReverseEngineeringPreview();
+  const payload = createReverseEngineeringProjectPayload();
+  const publicResult = createPublicReverseEngineeringPreviewResult(preview);
+  assert.deepEqual(
+    payload.architectureJson.nodes[0]?.config,
+    publicResult.reverseEngineeringDraft.architectureJson.nodes[0]?.config
+  );
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
+    reverseEngineeringScanPreviews: [preview],
     users: [makeUser({ id: ACTIVE_USER_ID })]
   });
   const app = buildApp({
@@ -128,7 +142,7 @@ test("POST /api/projects/reverse-engineering atomically creates Project, Draft, 
     method: "POST",
     url: "/api/projects/reverse-engineering",
     headers: await authHeaders(ACTIVE_USER_ID),
-    payload: createReverseEngineeringProjectPayload()
+    payload
   });
 
   assert.equal(response.statusCode, 201, response.body);
@@ -139,11 +153,14 @@ test("POST /api/projects/reverse-engineering atomically creates Project, Draft, 
   assert.equal(fakeDb.projectDraftRows[0]?.revision, 1);
   assert.equal(fakeDb.architectureRows[0]?.projectId, fakeDb.projectRows[0]?.id);
   assert.equal(fakeDb.architectureRows[0]?.source, "imported");
+  const persistedScanId = fakeDb.reverseEngineeringScanRows[0]?.id;
+  const persistedDraftId = fakeDb.projectDraftRows[0]?.id;
+  assert.notEqual(persistedScanId, REVERSE_ENGINEERING_PREVIEW_ID);
   assert.equal(
     fakeDb.projectDraftRows[0]?.diagramJson.nodes[0]?.parameters?.values[
       "reverseEngineeringSourceScanId"
     ],
-    "preview-scan-1"
+    persistedScanId
   );
   assert.equal(
     fakeDb.projectDraftRows[0]?.diagramJson.nodes[1]?.parameters?.values[
@@ -155,13 +172,13 @@ test("POST /api/projects/reverse-engineering atomically creates Project, Draft, 
     fakeDb.projectDraftRows[0]?.diagramJson.nodes[0]?.parameters?.values[
       "reverseEngineeringSourceKind"
     ],
-    "preview_scan"
+    "saved_scan"
   );
   assert.equal(
     fakeDb.architectureRows[0]?.architectureJson.nodes[0]?.config[
       "reverseEngineeringSourceScanId"
     ],
-    "preview-scan-1"
+    persistedScanId
   );
   assert.equal(
     fakeDb.architectureRows[0]?.architectureJson.nodes[1]?.config[
@@ -173,7 +190,20 @@ test("POST /api/projects/reverse-engineering atomically creates Project, Draft, 
     fakeDb.architectureRows[0]?.architectureJson.nodes[0]?.config[
       "reverseEngineeringSourceKind"
     ],
-    "preview_scan"
+    "saved_scan"
+  );
+  assert.equal(
+    fakeDb.architectureRows[0]?.architectureJson.nodes[0]?.config[
+      "reverseEngineeringDraftId"
+    ],
+    persistedDraftId
+  );
+  assert.equal(response.json().draft.id, persistedDraftId);
+  assert.equal(
+    response.json().architecture.architectureJson.nodes[0]?.config[
+      "reverseEngineeringSourceScanId"
+    ],
+    persistedScanId
   );
   assert.equal(response.json().draft.revision, 1);
   assert.equal(response.json().architecture.source, "imported");
@@ -185,6 +215,7 @@ test("POST /api/projects/reverse-engineering rolls back every row and retries wi
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
     failArchitectureInsert: true,
+    reverseEngineeringScanPreviews: [makeReverseEngineeringPreview()],
     users: [makeUser({ id: ACTIVE_USER_ID })]
   });
   const app = buildApp({
@@ -203,6 +234,8 @@ test("POST /api/projects/reverse-engineering rolls back every row and retries wi
   assert.equal(fakeDb.projectRows.length, 0);
   assert.equal(fakeDb.projectDraftRows.length, 0);
   assert.equal(fakeDb.architectureRows.length, 0);
+  assert.equal(fakeDb.reverseEngineeringScanRows.length, 0);
+  assert.equal(fakeDb.reverseEngineeringPreviewRows[0]?.claimedAt, null);
 
   fakeDb.failArchitectureInsert = false;
   const retryResponse = await app.inject(request);
@@ -211,6 +244,90 @@ test("POST /api/projects/reverse-engineering rolls back every row and retries wi
   assert.equal(fakeDb.projectRows.length, 1);
   assert.equal(fakeDb.projectDraftRows.length, 1);
   assert.equal(fakeDb.architectureRows.length, 1);
+  assert.equal(fakeDb.reverseEngineeringScanRows.length, 1);
+  assert.notEqual(fakeDb.reverseEngineeringPreviewRows[0]?.claimedAt, null);
+
+  await app.close();
+});
+
+test("POST /api/projects/reverse-engineering hides another user's preview", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    reverseEngineeringScanPreviews: [
+      makeReverseEngineeringPreview({ userId: OTHER_USER_ID })
+    ],
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: createReverseEngineeringProjectPayload()
+  });
+
+  assert.equal(response.statusCode, 404, response.body);
+  assertErrorResponse(response.json() as ApiErrorResponse, "not_found");
+  assert.equal(fakeDb.projectRows.length, 0);
+  assert.equal(fakeDb.reverseEngineeringScanRows.length, 0);
+
+  await app.close();
+});
+
+test("POST /api/projects/reverse-engineering rejects an expired preview", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    reverseEngineeringScanPreviews: [
+      makeReverseEngineeringPreview({ expiresAt: new Date("2020-01-01T00:00:00.000Z") })
+    ],
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: createReverseEngineeringProjectPayload()
+  });
+
+  assert.equal(response.statusCode, 409, response.body);
+  assertErrorResponse(response.json() as ApiErrorResponse, "conflict");
+  assert.equal(fakeDb.projectRows.length, 0);
+  assert.equal(fakeDb.reverseEngineeringPreviewRows[0]?.claimedAt, null);
+
+  await app.close();
+});
+
+test("POST /api/projects/reverse-engineering consumes a preview only once", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    reverseEngineeringScanPreviews: [makeReverseEngineeringPreview()],
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+  const request = {
+    method: "POST" as const,
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: createReverseEngineeringProjectPayload()
+  };
+
+  const firstResponse = await app.inject(request);
+  const replayResponse = await app.inject(request);
+
+  assert.equal(firstResponse.statusCode, 201, firstResponse.body);
+  assert.equal(replayResponse.statusCode, 409, replayResponse.body);
+  assertErrorResponse(replayResponse.json() as ApiErrorResponse, "conflict");
+  assert.equal(fakeDb.projectRows.length, 1);
+  assert.equal(fakeDb.reverseEngineeringScanRows.length, 1);
 
   await app.close();
 });
@@ -1251,14 +1368,14 @@ function makeProjectDraft(overrides: Partial<ProjectDraftRow> = {}): ProjectDraf
   };
 }
 
+// gg: browser가 본 공개 draft identity와 source node만 claim 요청에 담습니다.
 function createReverseEngineeringProjectPayload() {
   return {
     name: "Imported AWS project",
     reverseEngineering: {
-      sourceScanId: "preview-scan-1",
-      draftId: "draft-preview-scan-1",
+      previewId: REVERSE_ENGINEERING_PREVIEW_ID,
+      draftId: `draft-${REVERSE_ENGINEERING_PREVIEW_ID}`,
       sourceNodeIds: ["imported-vpc"],
-      sourceKind: "preview_scan" as const
     },
     diagramJson: {
       nodes: [
@@ -1275,7 +1392,11 @@ function createReverseEngineeringProjectPayload() {
             resourceType: "aws_vpc",
             resourceName: "imported",
             fileName: "main",
-            values: {}
+            values: {
+              providerResourceType: "AWS::EC2::VPC",
+              providerResourceId: "imported-vpc",
+              analysisExcluded: false
+            }
           }
         },
         {
@@ -1306,9 +1427,14 @@ function createReverseEngineeringProjectPayload() {
         {
           id: "imported-vpc",
           type: "VPC" as const,
+          label: "Imported VPC",
           positionX: 0,
           positionY: 0,
-          config: {}
+          config: {
+            providerResourceType: "AWS::EC2::VPC",
+            providerResourceId: "imported-vpc",
+            analysisExcluded: false
+          }
         },
         {
           id: "existing-vpc",
@@ -1323,6 +1449,93 @@ function createReverseEngineeringProjectPayload() {
       ],
       edges: []
     }
+  };
+}
+
+// gg: route integration test에서 owner의 unclaimed raw preview를 준비합니다.
+function makeReverseEngineeringPreview(
+  overrides: Partial<ReverseEngineeringPreviewRow> = {}
+): ReverseEngineeringPreviewRow {
+  const createdAt = new Date("2026-07-20T00:00:00.000Z");
+  const architectureJson = {
+    nodes: [
+      {
+        id: "imported-vpc",
+        type: "VPC" as const,
+        label: "Imported VPC",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          providerResourceType: "AWS::EC2::VPC",
+          providerResourceId: "imported-vpc",
+          analysisExcluded: false
+        }
+      }
+    ],
+    edges: []
+  };
+  const scan = {
+    id: "scan-not-persisted",
+    projectId: "project-not-persisted",
+    awsConnectionId: null,
+    provider: "aws" as const,
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL" as const],
+    status: "completed" as const,
+    createdAt: createdAt.toISOString(),
+    updatedAt: createdAt.toISOString(),
+    startedAt: createdAt.toISOString(),
+    completedAt: createdAt.toISOString(),
+    cancelRequestedAt: null,
+    deletedAt: null,
+    errorSummary: null
+  };
+
+  return {
+    id: REVERSE_ENGINEERING_PREVIEW_ID,
+    userId: ACTIVE_USER_ID,
+    awsConnectionId: null,
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL"],
+    rawResult: {
+      scan,
+      discoveredResources: [
+        {
+          id: "imported-vpc",
+          provider: "aws",
+          providerResourceType: "AWS::EC2::VPC",
+          providerResourceId: "imported-vpc",
+          region: "ap-northeast-2",
+          displayName: "Imported VPC",
+          resourceType: "VPC",
+          config: {},
+          relationships: []
+        }
+      ],
+      reverseEngineeringDraft: {
+        id: "draft-scan-not-persisted",
+        scanId: scan.id,
+        architectureJson,
+        protectedValueKeys: ["providerResourceId", "providerResourceType"],
+        editableValueKeys: ["displayName", "description"],
+        createdAt: createdAt.toISOString()
+      },
+      architectureJson,
+      findings: [],
+      analysisExclusions: [],
+      importSuggestions: [],
+      scanErrors: [],
+      coverage: { status: "complete", unavailableServices: [] }
+    },
+    expiresAt: new Date("2099-07-20T00:30:00.000Z"),
+    claimedAt: null,
+    claimedProjectId: null,
+    claimedScanId: null,
+    claimedDraftId: null,
+    createdAt,
+    updatedAt: createdAt,
+    ...overrides
   };
 }
 
@@ -1428,6 +1641,8 @@ class ProjectRouteFakeDb {
   deploymentRows: DeploymentRow[];
   deployedResourceRows: DeployedResourceRow[];
   deploymentPlanArtifactRows: DeploymentPlanArtifactRow[];
+  reverseEngineeringPreviewRows: ReverseEngineeringPreviewRow[];
+  reverseEngineeringScanRows: ReverseEngineeringScanRow[];
   clearedDeploymentPlanPointers: Array<
     Pick<DeploymentRow, "approvedPlanArtifactId" | "currentPlanArtifactId" | "id">
   >;
@@ -1435,6 +1650,7 @@ class ProjectRouteFakeDb {
   failArchitectureInsert: boolean;
   client: DatabaseClient;
 
+  // gg: route 테스트에서 preview·Scan row까지 같은 fake transaction state로 보존합니다.
   constructor(data: {
     activeUserId: string;
     requestedProjectAssetId?: string;
@@ -1447,6 +1663,8 @@ class ProjectRouteFakeDb {
     deployments?: DeploymentRow[];
     deployedResources?: DeployedResourceRow[];
     deploymentPlanArtifacts?: DeploymentPlanArtifactRow[];
+    reverseEngineeringScanPreviews?: ReverseEngineeringPreviewRow[];
+    reverseEngineeringScans?: ReverseEngineeringScanRow[];
     failArchitectureInsert?: boolean;
   }) {
     this.activeUserId = data.activeUserId;
@@ -1460,6 +1678,8 @@ class ProjectRouteFakeDb {
     this.deploymentRows = data.deployments ?? [];
     this.deployedResourceRows = data.deployedResources ?? [];
     this.deploymentPlanArtifactRows = data.deploymentPlanArtifacts ?? [];
+    this.reverseEngineeringPreviewRows = data.reverseEngineeringScanPreviews ?? [];
+    this.reverseEngineeringScanRows = data.reverseEngineeringScans ?? [];
     this.clearedDeploymentPlanPointers = [];
     this.operationLog = [];
     this.failArchitectureInsert = data.failArchitectureInsert ?? false;
@@ -1471,6 +1691,7 @@ class ProjectRouteFakeDb {
     };
   }
 
+  // gg: Project claim이 사용하는 select·insert·conditional update를 최소 Drizzle 모양으로 모사합니다.
   private createDb(): unknown {
     return {
       select: (selection?: Record<string, unknown>) => ({
@@ -1483,6 +1704,7 @@ class ProjectRouteFakeDb {
             | Partial<ProjectAssetRow>
             | Partial<ProjectDraftRow>
             | Partial<ProjectRow>
+            | Partial<ReverseEngineeringScanRow>
         ) => ({
           returning: async () => {
             if (table === projects) {
@@ -1517,13 +1739,24 @@ class ProjectRouteFakeDb {
               return [asset];
             }
 
+            if (table === reverseEngineeringScans) {
+              const scan = values as ReverseEngineeringScanRow;
+              this.reverseEngineeringScanRows.push(scan);
+
+              return [scan];
+            }
+
             return [values];
           }
         })
       }),
       update: (table: unknown) => ({
         set: (
-          values: Partial<DeploymentRow> | Partial<ProjectAssetRow> | Partial<ProjectRow>
+          values:
+            | Partial<DeploymentRow>
+            | Partial<ProjectAssetRow>
+            | Partial<ProjectRow>
+            | Partial<ReverseEngineeringPreviewRow>
         ) => ({
           where: () => {
             let updatedRows: unknown[] = [];
@@ -1605,6 +1838,31 @@ class ProjectRouteFakeDb {
               updatedRows = nextProjectAssetRows;
             }
 
+            if (table === reverseEngineeringScanPreviews) {
+              const previewValues = values as Partial<ReverseEngineeringPreviewRow>;
+              const nextPreviewRows: ReverseEngineeringPreviewRow[] = [];
+
+              this.reverseEngineeringPreviewRows = this.reverseEngineeringPreviewRows.map(
+                (preview) => {
+                  const claimedAt = previewValues.claimedAt;
+                  const shouldUpdate =
+                    preview.userId === this.activeUserId &&
+                    preview.claimedAt === null &&
+                    claimedAt instanceof Date &&
+                    preview.expiresAt > claimedAt;
+
+                  if (!shouldUpdate) {
+                    return preview;
+                  }
+
+                  const nextPreview = { ...preview, ...previewValues };
+                  nextPreviewRows.push(nextPreview);
+                  return nextPreview;
+                }
+              );
+              updatedRows = nextPreviewRows;
+            }
+
             return {
               returning: async (selection?: Record<string, unknown>) => {
                 if (table === projects && selection && "startedAt" in selection) {
@@ -1673,6 +1931,10 @@ class ProjectRouteFakeDb {
         const projectRows = [...this.projectRows];
         const projectDraftRows = [...this.projectDraftRows];
         const architectureRows = [...this.architectureRows];
+        const reverseEngineeringPreviewRows = structuredClone(
+          this.reverseEngineeringPreviewRows
+        );
+        const reverseEngineeringScanRows = structuredClone(this.reverseEngineeringScanRows);
 
         try {
           return await callback(this.createDb());
@@ -1680,12 +1942,15 @@ class ProjectRouteFakeDb {
           this.projectRows = projectRows;
           this.projectDraftRows = projectDraftRows;
           this.architectureRows = architectureRows;
+          this.reverseEngineeringPreviewRows = reverseEngineeringPreviewRows;
+          this.reverseEngineeringScanRows = reverseEngineeringScanRows;
           throw error;
         }
       }
     };
   }
 
+  // gg: preview 조회는 active user owner row만 반환해 404 소유권 계약을 재현합니다.
   private selectRows(table: unknown, selection?: Record<string, unknown>): unknown[] {
     if (table === users) {
       return this.userRows.filter((user) => user.id === this.activeUserId);
@@ -1722,6 +1987,16 @@ class ProjectRouteFakeDb {
           (!this.requestedProjectId || asset.projectId === this.requestedProjectId) &&
           (!this.requestedProjectAssetId || asset.id === this.requestedProjectAssetId)
       );
+    }
+
+    if (table === reverseEngineeringScanPreviews) {
+      return this.reverseEngineeringPreviewRows.filter(
+        (preview) => preview.userId === this.activeUserId
+      );
+    }
+
+    if (table === reverseEngineeringScans) {
+      return this.reverseEngineeringScanRows;
     }
 
     if (table === deployments) {

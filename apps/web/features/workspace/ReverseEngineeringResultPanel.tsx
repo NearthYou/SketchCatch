@@ -1,5 +1,4 @@
 import type {
-  BoardAutoOrganizeCandidate,
   DiscoveredResource,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResponse,
@@ -37,12 +36,9 @@ export type ReverseEngineeringResultPanelProps = {
   readonly onKeepOriginalPlacement: () => void;
   readonly onReplaceCurrentBoard: () => void;
   readonly onRetryScan: () => void;
-  readonly onSelectOrganizationCandidate: (candidateId: string) => void;
-  readonly organizationCandidates: readonly BoardAutoOrganizeCandidate[];
   readonly permissionRecoveryHref: string;
   readonly response: ReverseEngineeringScanResponse;
   readonly selectedCandidateId: string;
-  readonly selectedOrganizationCandidateId: string | null;
   readonly placement: ReverseEngineeringPlacement;
 };
 
@@ -60,12 +56,9 @@ export function ReverseEngineeringResultPanel({
   onKeepOriginalPlacement,
   onReplaceCurrentBoard,
   onRetryScan,
-  onSelectOrganizationCandidate,
-  organizationCandidates,
   permissionRecoveryHref,
   placement,
-  response,
-  selectedOrganizationCandidateId
+  response
 }: ReverseEngineeringResultPanelProps) {
   const result = response.result;
 
@@ -140,17 +133,11 @@ export function ReverseEngineeringResultPanel({
       </section>
 
       <section className={styles.placementDecision} aria-label="배치 선택">
-        <div
-          aria-atomic="true"
-          aria-live="polite"
-          className={styles.placementDecisionHeader}
-        >
+        <div aria-atomic="true" aria-live="polite" className={styles.placementDecisionHeader}>
           <span className={styles.placementBadge}>
-            {placement === "compiled" ? "정리안" : "원본"}
+            {placement === "compiled" ? "정리본" : "원본"}
           </span>
-          <h3>
-            {placement === "compiled" ? "자동 정리 미리보기" : "AWS에서 가져온 원본"}
-          </h3>
+          <h3>{placement === "compiled" ? "자동 정리 미리보기" : "AWS에서 가져온 원본"}</h3>
         </div>
         <p className={styles.placementDescription}>
           {placement === "compiled"
@@ -179,45 +166,22 @@ export function ReverseEngineeringResultPanel({
         ) : null}
         <div className={styles.placementActions} role="group" aria-label="배치 미리보기 선택">
           <button
-            aria-pressed={placement === "compiled"}
-            className={styles.primaryButton}
-            onClick={onCompilePlacement}
-            type="button"
-          >
-            자동 정리 해보기
-          </button>
-          <button
             aria-pressed={placement === "original"}
             className={styles.secondaryButton}
             onClick={onKeepOriginalPlacement}
             type="button"
           >
-            원본 보기
+            원본
+          </button>
+          <button
+            aria-pressed={placement === "compiled"}
+            className={styles.primaryButton}
+            onClick={onCompilePlacement}
+            type="button"
+          >
+            정리본
           </button>
         </div>
-        {organizationCandidates.length > 0 ? (
-          <div
-            aria-label="Board 정리안 선택"
-            className={styles.organizationCandidates}
-            role="list"
-          >
-            {organizationCandidates.map((candidate, index) => (
-              <button
-                aria-pressed={candidate.id === selectedOrganizationCandidateId}
-                key={candidate.id}
-                onClick={() => onSelectOrganizationCandidate(candidate.id)}
-                role="listitem"
-                type="button"
-              >
-                <strong>정리안 {index + 1}</strong>
-                <span>
-                  {candidate.explanations[0] ??
-                    "Resource 위치와 연결선을 보기 좋게 정리합니다."}
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : null}
         <p className={styles.placementSaveBoundary}>
           원본과 정리 결과를 전환해도 저장되지 않습니다. 마지막 적용 버튼을 눌러야 보드에
           반영됩니다.
@@ -227,8 +191,8 @@ export function ReverseEngineeringResultPanel({
       <section className={styles.section} aria-label="선택한 배치 적용">
         <h3>선택한 배치 적용</h3>
         <p className={styles.sectionDescription}>
-          {placement === "compiled" ? "선택한 정리안" : "가져온 원본"}을 확인한 뒤 원하는 적용
-          방식을 선택하세요.
+          {placement === "compiled" ? "정리본" : "가져온 원본"}을 확인한 뒤 원하는 적용 방식을
+          선택하세요.
         </p>
         <div className={styles.buttonRow}>
           <button
@@ -306,7 +270,6 @@ export function ReverseEngineeringResultPanel({
       <ReverseEngineeringDetailGroup title="보드에만 표시하는 리소스">
         <UnsupportedResourceList resources={unsupportedResources} />
       </ReverseEngineeringDetailGroup>
-
     </>
   );
 }
@@ -335,9 +298,7 @@ function getPrimaryApplyLabel({
     return "프로젝트로 만들기";
   }
 
-  return hasCurrentBoardResources
-    ? "현재 보드를 가져온 항목으로 바꾸기"
-    : "보드에 적용";
+  return hasCurrentBoardResources ? "현재 보드를 가져온 항목으로 바꾸기" : "보드에 적용";
 }
 
 // 긴 보조 정보는 기본 화면을 가리지 않도록 접을 수 있는 한 묶음으로 보여줍니다.

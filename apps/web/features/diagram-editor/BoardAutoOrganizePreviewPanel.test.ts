@@ -23,7 +23,7 @@ const diagramEditorStyles = readFileSync(
 register(`data:text/javascript,${encodeURIComponent(cssLoaderSource)}`, import.meta.url);
 Object.assign(globalThis, { React });
 
-test("preview panel shows candidate thumbnails and a responsive original-arrangement comparison", async () => {
+test("preview panel exposes only the original and organized Board views without image candidates", async () => {
   const { BoardAutoOrganizePreviewPanel } = await import("./BoardAutoOrganizePreviewPanel");
   const source = createDiagram();
   const candidateSet = createCandidateSet(source);
@@ -36,19 +36,21 @@ test("preview panel shows candidate thumbnails and a responsive original-arrange
     createElement(BoardAutoOrganizePreviewPanel, {
       session,
       onKeepOriginal() {},
-      onSelectCandidate() {},
       onSelectView() {},
       onUseOrganized() {}
     })
   );
 
   assert.equal(html.includes("자동 정리 미리보기"), true);
-  assert.equal(html.includes("정리안 1"), true);
-  assert.equal(html.includes("정리안 2"), true);
-  assert.equal(html.includes("원본과 정리안 비교"), true);
   assert.equal(html.includes("원본"), true);
-  assert.equal(html.includes("이 정리안 적용"), true);
+  assert.equal(html.includes("정리본"), true);
+  assert.equal(html.includes("이 정리본 적용"), true);
   assert.equal(html.includes("Resource, 설정, 연결 관계는 바뀌지 않았습니다."), true);
+  assert.equal(html.includes("정리안 1"), false);
+  assert.equal(html.includes("정리안 2"), false);
+  assert.equal(html.includes("원본과 정리안 비교"), false);
+  assert.equal(html.includes("<svg"), false);
+  assert.equal(html.includes("role=\"img\""), false);
   assert.equal(html.includes("candidate-secret-alpha"), false);
   assert.equal(html.includes("candidate-secret-beta"), false);
   assert.equal(html.includes("hidden-compiler"), false);
@@ -57,44 +59,14 @@ test("preview panel shows candidate thumbnails and a responsive original-arrange
   assert.equal(html.includes("Compiler"), false);
 });
 
-test("original and selected comparison share one union viewBox while thumbnails keep individual fit", async () => {
-  const { BoardAutoOrganizePreviewPanel } = await import("./BoardAutoOrganizePreviewPanel");
-  const source = createDiagram();
-  const candidateSet = createCandidateSet(source);
+test("original and organized toggle is visible at every screen size", () => {
+  const viewToggle = getCssBlock(".autoOrganizeViewToggle");
 
-  for (const node of candidateSet.candidates[0]!.diagram.nodes) {
-    node.position = { x: node.position.x + 1_000, y: node.position.y + 500 };
-  }
-
-  const html = renderToStaticMarkup(
-    createElement(BoardAutoOrganizePreviewPanel, {
-      session: createBoardAutoOrganizePreviewSession(source, candidateSet, 7),
-      onKeepOriginal() {},
-      onSelectCandidate() {},
-      onSelectView() {},
-      onUseOrganized() {}
-    })
-  );
-  const originalComparisonViewBox = getSvgViewBox(html, "원본");
-  const organizedComparisonViewBox = getSvgViewBox(html, "선택한 정리안");
-  const candidateThumbnailViewBox = getSvgViewBox(html, "정리안 1");
-
-  assert.equal(originalComparisonViewBox, organizedComparisonViewBox);
-  assert.notEqual(candidateThumbnailViewBox, organizedComparisonViewBox);
-});
-
-test("responsive preview lets only the thumbnail strip scroll horizontally", () => {
-  const candidateStrip = getCssBlock(".autoOrganizeCandidateStrip");
-  const comparison = getCssBlock(".autoOrganizeComparison");
-
-  assert.match(candidateStrip, /overflow-x:\s*auto/);
-  assert.doesNotMatch(comparison, /overflow-x:\s*(?:auto|scroll)/);
-  assert.match(comparison, /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(diagramEditorStyles, /@media \(max-width:\s*720px\)[\s\S]*\.autoOrganizeMobileToggle/);
-  assert.match(
-    diagramEditorStyles,
-    /@media \(max-width:\s*720px\)[\s\S]*\.autoOrganizeComparison\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/
-  );
+  assert.match(viewToggle, /display:\s*inline-flex/);
+  assert.equal(diagramEditorStyles.includes(".autoOrganizeCandidateStrip"), false);
+  assert.equal(diagramEditorStyles.includes(".autoOrganizeDiagramThumbnail"), false);
+  assert.equal(diagramEditorStyles.includes(".autoOrganizeComparison"), false);
+  assert.equal(diagramEditorStyles.includes(".autoOrganizeMobileToggle"), false);
 });
 
 test("automatic organization failure uses short copy without internal diagnostics", async () => {
@@ -122,16 +94,7 @@ function getCssBlock(selector: string): string {
   return diagramEditorStyles.slice(start, end + 2);
 }
 
-/** 접근성 label로 특정 preview SVG의 viewBox를 읽습니다. */
-function getSvgViewBox(html: string, label: string): string {
-  const svg = html.match(new RegExp(`<svg[^>]*aria-label="${label} 그림"[^>]*>`))?.[0];
-  const viewBox = svg?.match(/viewBox="([^"]+)"/)?.[1];
-
-  assert.ok(viewBox, `${label} SVG must expose a viewBox`);
-  return viewBox;
-}
-
-/** 패널 SVG에 표시할 작은 Diagram을 만듭니다. */
+/** 자동 정리 미리보기 계약을 확인할 최소 Diagram을 만듭니다. */
 function createDiagram(): DiagramJson {
   return {
     nodes: [
@@ -161,7 +124,7 @@ function createDiagram(): DiagramJson {
   };
 }
 
-/** 내부 ID가 노출되지 않는지 확인할 두 후보를 만듭니다. */
+/** public preview가 첫 번째 정리 결과만 선택하는지 확인할 후보 집합을 만듭니다. */
 function createCandidateSet(source: DiagramJson): BoardAutoOrganizeCandidateSet {
   const first = structuredClone(source);
   first.nodes[0]!.position = { x: 180, y: 120 };

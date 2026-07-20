@@ -108,6 +108,41 @@ test("AWS 원본에 없는 Terraform 식별자와 파일 정보를 Catalog에서
   assert.deepEqual(bucket.parameters?.values, source.nodes[1]?.config);
 });
 
+test("서버가 검증해 부여한 기존 AWS Terraform identity는 편집 가능한 Board node로 보존한다", () => {
+  const architecture: ArchitectureJson = {
+    nodes: [
+      {
+        id: "resource-existing-bucket",
+        type: "S3",
+        label: "기존 버킷",
+        positionX: 120,
+        positionY: 80,
+        config: {
+          bucket: "existing-bucket",
+          terraformBlockType: "resource",
+          terraformResourceType: "aws_s3_bucket",
+          terraformResourceName: "resource_existing_bucket",
+          terraformFileName: "reverse-engineering",
+          reverseEngineeringManagement: "managed",
+          reverseEngineeringSourceScanId: "scan-1",
+          reverseEngineeringDraftId: "draft-1"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const bucket = createSourceExactReverseEngineeringDiagram(architecture).nodes[0];
+
+  assert.equal(bucket?.type, "aws_s3_bucket");
+  assert.equal(bucket?.parameters?.terraformBlockType, "resource");
+  assert.equal(bucket?.parameters?.resourceType, "aws_s3_bucket");
+  assert.equal(bucket?.parameters?.resourceName, "resource_existing_bucket");
+  assert.equal(bucket?.parameters?.fileName, "reverse-engineering");
+  assert.equal(bucket?.parameters?.invalid, undefined);
+  assert.equal(bucket?.parameters?.values["bucket"], "existing-bucket");
+});
+
 test("검토 전용 Resource도 실제 왼쪽 Catalog 아이콘으로 표시한다", () => {
   const architecture: ArchitectureJson = {
     nodes: [

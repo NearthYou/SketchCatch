@@ -18,8 +18,7 @@ export type BoardAutoOrganizeViewportPolicy = {
 export type BoardAutoOrganizePreviewSession = {
   readonly sessionId: string;
   readonly originalDiagram: DiagramJson;
-  readonly candidates: readonly BoardAutoOrganizeCandidate[];
-  readonly selectedCandidateId: string;
+  readonly organizedResult: BoardAutoOrganizeCandidate;
   readonly activeView: BoardAutoOrganizePreviewView;
   readonly sourceFingerprint: string;
   readonly sourceDraftRevision: number | null;
@@ -53,25 +52,23 @@ export function getBoardAutoOrganizeViewportPolicy(
     : { applySourceViewport: false, autoFit: false };
 }
 
-/** Task 6 후보 전체와 생성 당시 Board revision을 독립적인 로컬 session으로 복사합니다. */
+/** 가장 높은 순위의 정리 결과와 생성 당시 Board revision을 독립적인 로컬 session으로 복사합니다. */
 export function createBoardAutoOrganizePreviewSession(
   originalDiagram: DiagramJson,
   candidateSet: BoardAutoOrganizeCandidateSet,
   sourceDraftRevision: number | null,
   viewportBeforePreview: DiagramJson["viewport"] = originalDiagram.viewport
 ): BoardAutoOrganizePreviewSession {
-  const candidates = structuredClone(candidateSet.candidates);
-  const selectedCandidate = candidates[0];
+  const organizedResult = candidateSet.candidates[0];
 
-  if (!selectedCandidate) {
-    throw new Error("표시할 Board 정리안이 없습니다.");
+  if (!organizedResult) {
+    throw new Error("표시할 Board 정리본이 없습니다.");
   }
 
   return {
     sessionId: candidateSet.sessionId,
     originalDiagram: structuredClone(originalDiagram),
-    candidates,
-    selectedCandidateId: selectedCandidate.id,
+    organizedResult: structuredClone(organizedResult),
     activeView: "organized",
     sourceFingerprint: candidateSet.sourceFingerprint,
     sourceDraftRevision,
@@ -79,23 +76,7 @@ export function createBoardAutoOrganizePreviewSession(
   };
 }
 
-/** 후보 버튼 선택은 저장 payload를 만들지 않고 session의 선택값만 바꿉니다. */
-export function selectBoardAutoOrganizeCandidate(
-  session: BoardAutoOrganizePreviewSession,
-  candidateId: string
-): BoardAutoOrganizePreviewSession {
-  if (!session.candidates.some((candidate) => candidate.id === candidateId)) {
-    return session;
-  }
-
-  return {
-    ...session,
-    activeView: "organized",
-    selectedCandidateId: candidateId
-  };
-}
-
-/** 모바일 원본·정리안 전환은 선택 후보와 저장 상태를 건드리지 않습니다. */
+/** 원본·정리본 전환은 정리 결과와 저장 상태를 건드리지 않습니다. */
 export function selectBoardAutoOrganizePreviewView(
   session: BoardAutoOrganizePreviewSession,
   activeView: BoardAutoOrganizePreviewView
@@ -103,24 +84,14 @@ export function selectBoardAutoOrganizePreviewView(
   return { ...session, activeView };
 }
 
-/** 현재 session에서 사용자가 고른 후보를 찾습니다. */
-export function getBoardAutoOrganizeSelectedCandidate(
-  session: BoardAutoOrganizePreviewSession
-): BoardAutoOrganizeCandidate | null {
-  return (
-    session.candidates.find((candidate) => candidate.id === session.selectedCandidateId) ?? null
-  );
-}
-
 /** 현재 toggle에 맞는 Diagram 복사본만 미리보기 canvas에 제공합니다. */
 export function getBoardAutoOrganizeVisibleDiagram(
   session: BoardAutoOrganizePreviewSession
 ): DiagramJson {
-  const selectedCandidate = getBoardAutoOrganizeSelectedCandidate(session);
   const visibleDiagram =
-    session.activeView === "original" || !selectedCandidate
+    session.activeView === "original"
       ? session.originalDiagram
-      : selectedCandidate.diagram;
+      : session.organizedResult.diagram;
 
   return structuredClone(visibleDiagram);
 }
@@ -139,18 +110,17 @@ export async function applyBoardAutoOrganizeCandidate<TSaveResult>({
   readonly session: BoardAutoOrganizePreviewSession;
   readonly terraformFiles: readonly TerraformSyncFileInput[];
 }): Promise<BoardAutoOrganizeApplyResult<TSaveResult>> {
-  const selectedCandidate = getBoardAutoOrganizeSelectedCandidate(session);
+  const organizedResult = session.organizedResult;
   const sourceIsCurrent =
     serializeBoardAutoOrganizeSource(currentDiagram) ===
     serializeBoardAutoOrganizeSource(session.originalDiagram);
 
   if (
-    !selectedCandidate ||
     currentDraftRevision !== session.sourceDraftRevision ||
     !sourceIsCurrent ||
     !hasSameBoardAutoOrganizeSemantics(
       session.originalDiagram,
-      selectedCandidate.diagram
+      organizedResult.diagram
     )
   ) {
     return { status: "stale" };
@@ -158,17 +128,17 @@ export async function applyBoardAutoOrganizeCandidate<TSaveResult>({
 
   const saveResult = await save({
     sessionId: session.sessionId,
-    candidateId: selectedCandidate.id,
+    candidateId: organizedResult.id,
     sourceDiagram: structuredClone(session.originalDiagram),
     sourceFingerprint: session.sourceFingerprint,
-    candidateDiagram: structuredClone(selectedCandidate.diagram),
+    candidateDiagram: structuredClone(organizedResult.diagram),
     expectedRevision: session.sourceDraftRevision,
     terraformFiles: terraformFiles.map((file) => ({ ...file }))
   });
 
   return {
     status: "saved",
-    diagramToApply: structuredClone(selectedCandidate.diagram),
+    diagramToApply: structuredClone(organizedResult.diagram),
     saveResult
   };
 }

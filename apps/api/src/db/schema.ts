@@ -622,6 +622,46 @@ export const reverseEngineeringScans = pgTable(
   ]
 );
 
+// gg: 새 Project에 적용하기 전 AWS 원본을 owner·만료·1회 claim 경계 안에만 보존합니다.
+export const reverseEngineeringScanPreviews = pgTable(
+  "reverse_engineering_scan_previews",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    awsConnectionId: varchar("aws_connection_id", { length: 36 }).references(
+      () => awsConnections.id,
+      { onDelete: "set null" }
+    ),
+    provider: varchar("provider", { length: 32 }).$type<"aws">().notNull().default("aws"),
+    region: varchar("region", { length: 32 }).notNull(),
+    resourceTypes: jsonb("resource_types").$type<ReverseEngineeringResourceSelection[]>().notNull(),
+    rawResult: jsonb("raw_result").$type<ReverseEngineeringScanResult>().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    claimedProjectId: varchar("claimed_project_id", { length: 36 }).references(
+      () => projects.id,
+      { onDelete: "set null" }
+    ),
+    claimedScanId: varchar("claimed_scan_id", { length: 36 }).references(
+      () => reverseEngineeringScans.id,
+      { onDelete: "set null" }
+    ),
+    claimedDraftId: varchar("claimed_draft_id", { length: 36 }).references(
+      () => projectDrafts.id,
+      { onDelete: "set null" }
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("reverse_engineering_scan_previews_user_id_idx").on(table.userId),
+    index("reverse_engineering_scan_previews_expires_at_idx").on(table.expiresAt),
+    index("reverse_engineering_scan_previews_claimed_at_idx").on(table.claimedAt)
+  ]
+);
+
 export const reverseEngineeringScanLogs = pgTable(
   "reverse_engineering_scan_logs",
   {

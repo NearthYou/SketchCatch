@@ -5,7 +5,6 @@ import { z } from "zod";
 import type {
   ApiErrorResponse,
   ArchitectureJson,
-  DiagramJson,
   ProjectDraftConflictResponse
 } from "@sketchcatch/types";
 import { RESOURCE_TYPES } from "@sketchcatch/types";
@@ -46,6 +45,12 @@ import {
   sanitizeAwsProjectArchitectureRead,
   sanitizeAwsProjectDiagramRead
 } from "../reverse-engineering/aws-project-read-sanitizer.js";
+import {
+  claimReverseEngineeringPreviewProject,
+  createPostgresReverseEngineeringPreviewClaimRepository,
+  ReverseEngineeringPreviewClaimConflictError,
+  ReverseEngineeringPreviewClaimNotFoundError
+} from "../reverse-engineering/reverse-engineering-preview-claim-service.js";
 import {
   boardAutoOrganizeApplyBodySchema,
   diagramJsonSchema,
@@ -100,9 +105,10 @@ const reverseEngineeringSourceSchema = z.object({
   sourceKind: z.enum(["saved_scan", "preview_scan"]).optional()
 });
 
-const requiredReverseEngineeringSourceSchema = reverseEngineeringSourceSchema.extend({
-  sourceNodeIds: z.array(z.string().min(1)),
-  sourceKind: z.literal("preview_scan")
+const reverseEngineeringPreviewClaimSchema = z.object({
+  previewId: z.uuid(),
+  draftId: z.string().min(1),
+  sourceNodeIds: z.array(z.string().min(1)).min(1)
 });
 
 const createArchitectureBodySchema = z.object({
@@ -115,7 +121,7 @@ const createArchitectureBodySchema = z.object({
 const createReverseEngineeringProjectBodySchema = createProjectBodySchema.extend({
   diagramJson: diagramJsonSchema,
   architectureJson: architectureJsonSchema,
-  reverseEngineering: requiredReverseEngineeringSourceSchema
+  reverseEngineering: reverseEngineeringPreviewClaimSchema
 });
 
 const assetTypeSchema = z.enum([
@@ -193,6 +199,7 @@ type ProjectRouteOptions = {
   cleanupManagedResources?: CleanupAwsConnectionManagedResources;
 };
 
+// gg: 새 Reverse Engineering Project는 server-owned preview claim 경계를 통해서만 등록합니다.
 export async function registerProjectRoutes(
   app: FastifyInstance,
   options: ProjectRouteOptions = {}
@@ -245,62 +252,41 @@ export async function registerProjectRoutes(
     });
   });
 
-  // 새 Reverse Engineering Board는 Project·Draft·Snapshot을 하나의 DB 경계에서 만듭니다.
+  // gg: 새 Reverse Engineering Board는 owner preview claim·Project·Draft·Snapshot·Scan을 하나로 만듭니다.
   app.post("/projects/reverse-engineering", async (request, reply) => {
     const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
     const body = createReverseEngineeringProjectBodySchema.parse(request.body);
     const { db } = getProjectDatabaseClient();
 
-    const created = await db.transaction(async (tx) => {
-      const projectId = randomUUID();
-      const [project] = await tx
-        .insert(projects)
-        .values({
-          id: projectId,
+    try {
+      const created = await claimReverseEngineeringPreviewProject(
+        {
           userId: currentUserId,
           name: body.name,
-          description: body.description ?? null
-        })
-        .returning();
-      const [draft] = await tx
-        .insert(projectDrafts)
-        .values({
-          id: randomUUID(),
-          projectId,
-          diagramJson: attachReverseEngineeringSourceToDiagram(
-            body.diagramJson,
-            body.reverseEngineering
-          ),
-          terraformFiles: null,
-          revision: 1
-        })
-        .returning();
-      const [architecture] = await tx
-        .insert(architectures)
-        .values({
-          id: randomUUID(),
-          projectId,
-          version: 1,
-          source: "imported",
-          architectureJson: attachReverseEngineeringSource(
-            body.architectureJson,
-            body.reverseEngineering
-          )
-        })
-        .returning();
+          description: body.description ?? null,
+          diagramJson: body.diagramJson,
+          architectureJson: body.architectureJson,
+          reverseEngineering: {
+            previewId: body.reverseEngineering.previewId,
+            publicDraftId: body.reverseEngineering.draftId,
+            sourceNodeIds: body.reverseEngineering.sourceNodeIds
+          }
+        },
+        createPostgresReverseEngineeringPreviewClaimRepository(db)
+      );
 
-      if (!project || !draft || !architecture) {
-        throw new Error("Reverse Engineering project transaction returned an empty row");
+      return reply.status(201).send(created);
+    } catch (error) {
+      if (error instanceof ReverseEngineeringPreviewClaimNotFoundError) {
+        return sendNotFound(reply, error.message);
       }
 
-      return {
-        project,
-        draft: toProjectDraft(draft),
-        architecture
-      };
-    });
+      if (error instanceof ReverseEngineeringPreviewClaimConflictError) {
+        return sendConflict(reply, error.message);
+      }
 
-    return reply.status(201).send(created);
+      throw error;
+    }
   });
 
   app.get("/projects/:id/delete-preview", async (request) => {
@@ -900,36 +886,6 @@ function attachReverseEngineeringSource(
             }
           }
     )
-  };
-}
-
-// 새 Project의 Draft도 Snapshot과 같은 source ownership에 속한 node만 추적합니다.
-function attachReverseEngineeringSourceToDiagram(
-  diagramJson: DiagramJson,
-  reverseEngineering: z.infer<typeof requiredReverseEngineeringSourceSchema>
-): DiagramJson {
-  const sourceNodeIds = new Set(reverseEngineering.sourceNodeIds);
-
-  return {
-    ...diagramJson,
-    nodes: diagramJson.nodes.map((node) => {
-      if (!sourceNodeIds.has(node.id) || !node.parameters) {
-        return node;
-      }
-
-      return {
-        ...node,
-        parameters: {
-          ...node.parameters,
-          values: {
-            ...node.parameters.values,
-            reverseEngineeringSourceScanId: reverseEngineering.sourceScanId,
-            reverseEngineeringDraftId: reverseEngineering.draftId,
-            reverseEngineeringSourceKind: reverseEngineering.sourceKind
-          }
-        }
-      };
-    })
   };
 }
 

@@ -4,6 +4,7 @@ import type {
   ResourceEdge,
   ResourceNode
 } from "@sketchcatch/types";
+import { createReverseEngineeringTerraformProjection } from "./reverse-engineering-terraform-projection.js";
 
 const BOARD_LAYOUT = {
   ecsGroupGapX: 900,
@@ -228,6 +229,9 @@ function toResourceNode(
   index: number,
   layout: ArchitectureNodeLayout | undefined
 ): ResourceNode {
+  const projection = createReverseEngineeringTerraformProjection(resource);
+  const isTerraformManaged = projection.management === "managed";
+
   return {
     id: resource.id,
     type: resource.resourceType,
@@ -235,10 +239,25 @@ function toResourceNode(
     positionX: layout?.positionX ?? 120 + (index % 3) * 280,
     positionY: layout?.positionY ?? 120 + Math.floor(index / 3) * 180,
     config: {
-      ...resource.config,
+      ...projection.terraformValues,
+      ...(projection.terraformBlockType
+        ? { terraformBlockType: projection.terraformBlockType }
+        : {}),
+      ...(projection.terraformResourceType
+        ? { terraformResourceType: projection.terraformResourceType }
+        : {}),
+      ...(projection.terraformResourceName
+        ? { terraformResourceName: projection.terraformResourceName }
+        : {}),
+      ...(projection.terraformFileName
+        ? { terraformFileName: projection.terraformFileName }
+        : {}),
+      reverseEngineeringManagement: projection.management,
+      reverseEngineeringObservedConfig: structuredClone(resource.config),
       providerResourceType: resource.providerResourceType,
       providerResourceId: resource.providerResourceId,
-      analysisExcluded: resource.analysisExcluded ?? false
+      ...(!isTerraformManaged ? { sketchcatchReferenceTerraform: true } : {}),
+      analysisExcluded: !isTerraformManaged || resource.analysisExcluded === true
     }
   };
 }
