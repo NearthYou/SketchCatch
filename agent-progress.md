@@ -122,6 +122,29 @@ Short English-only working log for the current agent context. Older records are 
 - Moved eight older 2026-07-20 completion records to `docs/agent-history/2026-07.md` after CI reported that `agent-progress.md` exceeded its 24,000-byte limit.
 - Kept all archived content intact and left application code, dependencies, database migrations, cloud resources, and deployment behavior unchanged.
 
+### 2026-07-20 - Streamline AI architecture clarification
+
+- Reduced the deterministic Architecture Draft intake to six product questions: website type, traffic, database, region, monthly budget, and management preference.
+- Added default assumptions for HTTPS, a three-second loading target, 99.9% availability, WebSocket when realtime is requested, and private S3 plus CloudFront when file upload is requested.
+- Preserved explicit natural-language requirements over defaults and retained provider follow-up clarification for genuinely ambiguous details.
+- Verified 22 focused Architecture Draft tests, focused TypeScript checking, and ESLint on the two changed service files. Unrelated tests were intentionally not run.
+- Root lint passed. Root typecheck and build remain blocked by the pre-existing getRepositoryRequiredRuntimeSecrets reference error in repository-start-client.tsx; that unrelated worktree change was not modified.
+
+### 2026-07-20 - Commit fixed public Repository draft flow
+
+- Restored the missing runtime-secret helper import and committed the Audience Live Check fixed analysis, strict Architecture Draft, and Board creation flow as b539268f.
+- Root lint, typecheck, and harness checks pass. No additional test suites were run.
+- Root build exceeded the 244-second command limit without emitting an error; the remaining build processes were stopped and the generated Next.js type reference returned to the tracked baseline.
+
+### 2026-07-20 - Enforce accepted AI Architecture constraints
+
+- Reconciled canonical Provider plans with the accepted fixed intake and explicit natural-language requirements before materialization.
+- Static no-backend answers now remove Provider-selected API/runtime/database/upload topology. Fully managed serverless answers remove ECS, Fargate, EC2, ALB, and NAT resources in favor of API Gateway and Lambda while retaining explicitly required RDS and WebSocket capabilities.
+- Corrected upload targeting so Lambda and S3 event edges use the upload bucket and CloudFront always delivers the required upload S3 origin. Bounded managed-serverless support quantities to remove duplicate subnets, security groups, IAM roles, and alarms.
+- Six focused API regressions, API typecheck, changed-file ESLint, and `git diff --check` passed. Unrelated full suites were intentionally not run.
+- Localhost Chrome QA passed: the fixed-question static flow saved a two-resource CloudFront/S3 Board, and detailed natural-language input saved a 21-resource managed-serverless Board with CloudFront/S3, REST API/Lambda, RDS, WebSocket, and no ECS/Fargate/ALB/NAT.
+- No migration, cloud mutation, deployment, or Git/CI/CD handoff was performed.
+
 ## Known Risk
 
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.

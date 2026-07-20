@@ -567,6 +567,7 @@
       "evidence": {
         "lastVerified": "2026-07-19",
         "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/services/authoredTerraformArchitecturePresets.test.ts",
           "pnpm harness:check",
           "pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts src/routes/ai-architecture-draft-stream.test.ts",
           "pnpm --filter @sketchcatch/api exec tsx --test --test-name-pattern \"does not answer the backend choice\" src/services/aiArchitectureDrafts.test.ts",

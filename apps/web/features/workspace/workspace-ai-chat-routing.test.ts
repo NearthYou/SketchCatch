@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { shouldStartFreshDraftDuringPatchClarification } from "./workspace-ai-chat-routing";
+import {
+  classifyWorkspaceAiChatPrompt,
+  shouldStartFreshDraftDuringPatchClarification
+} from "./workspace-ai-chat-routing";
+
+test("authored realtime deployment diagram prompt routes to architecture generation", () => {
+  assert.equal(
+    classifyWorkspaceAiChatPrompt("데모용 실시간 배포 사이트의 다이어그램 만들어줘."),
+    "architecture"
+  );
+});
 
 test("수정 질문 중 명시적인 새 다이어그램 생성 요청은 신규 초안으로 전환한다", () => {
   assert.equal(shouldStartFreshDraftDuringPatchClarification("다이어그램 생성하고 싶어"), true);

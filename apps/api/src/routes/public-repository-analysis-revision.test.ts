@@ -128,6 +128,44 @@ test("public Repository analysis keeps owner-only golden-path forks on the same 
   }
 });
 
+test("audience-live-check public analysis pins the approved demo source revision", async () => {
+  const requestedUrls: string[] = [];
+  const originalFetch = globalThis.fetch;
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+
+  process.env.OPENAI_API_KEY = "";
+  globalThis.fetch = createGoldenPathRepositoryFetch(requestedUrls);
+
+  const app = Fastify({ logger: false });
+
+  try {
+    await registerAiRoutes(app);
+    await app.ready();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/ai/source-repository-analysis",
+      payload: { repositoryUrl: "https://github.com/chaekang/audience-live-check" }
+    });
+    const result = response.json<SourceRepositoryAnalysisResult>();
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(result.repositoryRevision, "23a87399cbe3456f3f427140f88b8d199ace34f9");
+    assert.equal(result.recommendedTemplateId, "ecs-fargate-container-app");
+    assert.equal(result.aiHandoff?.recommendation?.candidates[0]?.templateId, "ecs-fargate-container-app");
+    assert.equal(requestedUrls.length, 0);
+  } finally {
+    await app.close();
+    globalThis.fetch = originalFetch;
+
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    }
+  }
+});
+
 function createGoldenPathRepositoryFetch(requestedUrls: string[]): typeof fetch {
   const files: Readonly<Record<string, string>> = {
     "package.json": JSON.stringify({ private: true, workspaces: ["apps/*", "packages/*"] }),
@@ -161,7 +199,7 @@ function createGoldenPathRepositoryFetch(requestedUrls: string[]): typeof fetch 
       return Response.json([{ name: "main", commit: { sha: "a".repeat(40) } }]);
     }
 
-    if (url.includes("/git/trees/main?recursive=1")) {
+    if (/\/git\/trees\/(?:main|23a87399cbe3456f3f427140f88b8d199ace34f9)\?recursive=1$/u.test(url)) {
       return Response.json({
         truncated: false,
         tree: Object.keys(files).map((path) => ({ path, type: "blob" }))
@@ -177,7 +215,7 @@ function createGoldenPathRepositoryFetch(requestedUrls: string[]): typeof fetch 
         : new Response(content, { status: 200 });
     }
 
-    if (/\/repos\/(?:whiskend|jh-9999)\/audience-live-check$/u.test(url)) {
+    if (/\/repos\/(?:whiskend|jh-9999|chaekang)\/audience-live-check$/u.test(url)) {
       return Response.json({ default_branch: "main" });
     }
 
