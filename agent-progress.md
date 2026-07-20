@@ -11,11 +11,22 @@ Short English-only working log for the current agent context. Older records are 
 - The approved sandbox traffic run sent exactly 963 requests with 963 HTTP 200 responses. The failed observation acceptance triggered approved cleanup, and the `liveobs-7cccab4b` AWS resource set was verified absent.
 - Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` is `DESTROYED` with cleared state and current-plan pointers.
 - Repository ECS delivery carries runtime Secret names through analysis. Both strict AI and Fixed Template drafts now generate `CHECK_IN_SIGNING_SECRET` during approved Apply, map the same Secrets Manager ARN into the IAM policy and every Task, and leave `INSTANCE_ID` unset for hostname-based observation.
+- Public ECS/Web release verification accepts both the legacy `sessionId` check-in response and the stateless signed `sessionToken` response while retaining the required 201 status and ISO expiry check.
 - Windows subprocess, local environment isolation, generated architecture knowledge, resource catalog, typography, and Workspace source-contract regressions are repaired.
 - Sixty focused Repository runtime-Secret, deployment-action, and failure-visibility regressions pass; the final post-review 50-test subset also passes. `pnpm lint` and `pnpm typecheck` pass. Root `pnpm build` reported all five tasks successful before the known Turbo exit hang. The full Web suite passes 1,090 of 1,098 tests; its eight failures are outside the changed runtime-Secret paths. Root `pnpm test` still exposes ten unrelated API baseline failures and one lease-heartbeat cancellation; its one Repository source-contract failure was corrected and passes focused verification.
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
+
+### 2026-07-20 - Accept stateless public check-in verification
+
+- Reproduced direct Deployment `48a82459-0414-4fb3-9384-b72431071f06` failing only at `public_health`; ECS health, frontend upload/activation, and CloudFront invalidation all succeeded.
+- Confirmed the deployed repository contract intentionally replaced `sessionId` with an opaque signed `sessionToken`; the published frontend marker still matched the pinned commit, so concurrent repository pushes did not mix artifacts.
+- Added a red-green regression and minimally extended the public check-in verifier to accept either the legacy UUID or the stateless two-segment token together with an ISO expiry.
+- Retried only the pinned frontend release for the same Deployment; the retry job and all six retry steps succeeded, promoting the Deployment and Application Release to success without rebuilding or changing ECS.
+- Thirty focused release and Git/CI/CD settings tests, lint, and typecheck pass. A clean retry of the root build completed all five package tasks successfully; the local Turbo process still required termination after printing its success summary.
+- Diagnosed repository variables for `jh-9999/audience-live-check` as stale from project `7b618d82`; current project `f584d0c2` has valid monitoring configuration but no Git/CI/CD handoff, so its current values have not yet been applied.
+- Confirmed local handoff creation is intentionally blocked while `SKETCHCATCH_PUBLIC_BASE_URL` is `http://localhost:3000`; the production HTTPS origin is required so GitHub Actions can call the release API.
 
 ### 2026-07-20 - Close the initial Repository Board handoff gap
 
