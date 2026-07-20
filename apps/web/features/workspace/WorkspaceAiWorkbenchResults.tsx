@@ -16,6 +16,7 @@ import {
 import {
   architectureDraftGenerationSteps,
   getArchitectureDraftGenerationProgressStep,
+  getTerraformIssueAnalysisProgress,
   getTerraformPreviewReviewProgressStep,
   terraformPreviewReviewSteps,
   type WorkspaceAiProgressStep
@@ -79,6 +80,54 @@ export function WorkspaceAiWorkbenchReviewProgress({ elapsedMs }: { readonly ela
       steps={terraformPreviewReviewSteps}
       title="Amazon Q 검토를 진행하고 있습니다"
     />
+  );
+}
+
+export function WorkspaceAiWorkbenchTerraformIssueProgress({
+  completed,
+  total
+}: {
+  readonly completed: number;
+  readonly total: number;
+}) {
+  const elapsedMs = useWorkspaceAiProgressElapsed();
+  const progress = getTerraformIssueAnalysisProgress({ completed, elapsedMs, total });
+
+  return (
+    <div
+      aria-label={`오류 분석 예상 진행률 ${progress}%`}
+      aria-valuemax={100}
+      aria-valuemin={0}
+      aria-valuenow={progress}
+      className={styles.terraformIssueProgress}
+      role="progressbar"
+    >
+      <div className={styles.terraformIssueProgressGauge}>
+        <svg aria-hidden="true" viewBox="0 0 44 44">
+          <circle
+            className={styles.terraformIssueProgressTrack}
+            cx="22"
+            cy="22"
+            r="18"
+          />
+          <circle
+            className={styles.terraformIssueProgressIndicator}
+            cx="22"
+            cy="22"
+            pathLength="100"
+            r="18"
+            strokeDasharray="100"
+            strokeDashoffset={100 - progress}
+          />
+        </svg>
+        <span aria-hidden="true" className={styles.terraformIssueProgressValue}>
+          {progress}%
+        </span>
+      </div>
+      <span aria-hidden="true" className={styles.terraformIssueProgressLabel}>
+        예상
+      </span>
+    </div>
   );
 }
 

@@ -3,8 +3,10 @@ import test from "node:test";
 import {
   architectureDraftGenerationSteps,
   getArchitectureDraftGenerationProgressStep,
+  getTerraformIssueAnalysisProgress,
   getTerraformPreviewReviewProgressStep,
   getWorkspaceAiChatDockStatus,
+  TERRAFORM_ISSUE_ANALYSIS_ESTIMATED_DURATION_MS,
   terraformPreviewReviewSteps
 } from "./workspace-ai-chat-status";
 
@@ -88,4 +90,42 @@ test("에이전트 리뷰는 Amazon Q 결과를 기다리는 동안 단계별 �
   assert.equal(getTerraformPreviewReviewProgressStep(7_000), 2);
   assert.equal(getTerraformPreviewReviewProgressStep(10_500), 3);
   assert.equal(getTerraformPreviewReviewProgressStep(60_000), 3);
+});
+
+test("오류 분석 예상 진행률은 경과 시간에 따라 증가하고 완료 전 100%에 도달하지 않는다", () => {
+  assert.equal(
+    getTerraformIssueAnalysisProgress({ completed: 0, elapsedMs: 0, total: 1 }),
+    8
+  );
+  assert.equal(
+    getTerraformIssueAnalysisProgress({
+      completed: 0,
+      elapsedMs: TERRAFORM_ISSUE_ANALYSIS_ESTIMATED_DURATION_MS,
+      total: 1
+    }),
+    94
+  );
+  assert.equal(
+    getTerraformIssueAnalysisProgress({ completed: 0, elapsedMs: 60_000, total: 1 }),
+    94
+  );
+});
+
+test("오류 일괄 분석 진행률은 완료 개수를 합산하고 활성 상태를 0%로 표시하지 않는다", () => {
+  assert.equal(
+    getTerraformIssueAnalysisProgress({
+      completed: 1,
+      elapsedMs: TERRAFORM_ISSUE_ANALYSIS_ESTIMATED_DURATION_MS / 2,
+      total: 4
+    }),
+    38
+  );
+  assert.equal(
+    getTerraformIssueAnalysisProgress({ completed: 0, elapsedMs: 0, total: 100 }),
+    1
+  );
+  assert.equal(
+    getTerraformIssueAnalysisProgress({ completed: 4, elapsedMs: 0, total: 4 }),
+    99
+  );
 });

@@ -39,6 +39,8 @@ export const architectureDraftGenerationSteps: readonly WorkspaceAiProgressStep[
 
 export const TERRAFORM_PREVIEW_REVIEW_STEP_DURATION_MS = 3_500;
 
+export const TERRAFORM_ISSUE_ANALYSIS_ESTIMATED_DURATION_MS = 20_000;
+
 export const terraformPreviewReviewSteps: readonly TerraformPreviewReviewStep[] = [
   {
     label: "Terraform 코드 구조 분석",
@@ -69,6 +71,31 @@ export function getTerraformPreviewReviewProgressStep(elapsedMs: number): number
   return Math.min(
     Math.max(0, Math.floor(elapsedMs / TERRAFORM_PREVIEW_REVIEW_STEP_DURATION_MS)),
     terraformPreviewReviewSteps.length - 1
+  );
+}
+
+export function getTerraformIssueAnalysisProgress({
+  completed,
+  elapsedMs,
+  total
+}: {
+  readonly completed: number;
+  readonly elapsedMs: number;
+  readonly total: number;
+}): number {
+  const elapsedRatio = Math.min(
+    1,
+    Math.max(0, elapsedMs) / TERRAFORM_ISSUE_ANALYSIS_ESTIMATED_DURATION_MS
+  );
+  const currentIssueProgress = 0.08 + elapsedRatio * 0.86;
+  const safeTotal = Math.max(1, Math.floor(total));
+  const safeCompleted = Math.min(safeTotal, Math.max(0, Math.floor(completed)));
+  const completedWithCurrentIssue =
+    safeCompleted < safeTotal ? safeCompleted + currentIssueProgress : safeCompleted;
+
+  return Math.max(
+    1,
+    Math.min(99, Math.round((completedWithCurrentIssue / safeTotal) * 100))
   );
 }
 

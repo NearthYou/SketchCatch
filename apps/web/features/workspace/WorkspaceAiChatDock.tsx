@@ -54,6 +54,7 @@ import {
   WorkspaceAiWorkbenchDraftProgress,
   WorkspaceAiWorkbenchRequestMessage,
   WorkspaceAiWorkbenchReviewProgress,
+  WorkspaceAiWorkbenchTerraformIssueProgress,
   WorkspaceAiWorkbenchTerraformIssueResult,
   WorkspaceAiWorkbenchTerraformPreviewResult,
   type AiRequestState
@@ -2460,6 +2461,13 @@ export function WorkspaceAiChatDock({
                 <span>Terraform</span>
                 <h3 id="workspace-ai-error-actions-title">오류 분석</h3>
               </div>
+              {isTerraformIssueAnalysisRunning ? (
+                <WorkspaceAiWorkbenchTerraformIssueProgress
+                  completed={terraformIssueBatchProgress?.completed ?? 0}
+                  key={terraformIssueBatchProgress?.completed ?? "single"}
+                  total={terraformIssueBatchProgress?.total ?? 1}
+                />
+              ) : null}
             </header>
             <label className={styles.issueSelect}>
               <span>분석할 오류</span>
