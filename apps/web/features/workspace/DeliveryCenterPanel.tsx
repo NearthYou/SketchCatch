@@ -125,6 +125,7 @@ export function DeliveryCenterPanel({
         <div className={styles.settingsStack}>
           <div className={styles.editorSection}>
             <ProjectCicdMonitoringSettingsClient
+              headingLevel={4}
               profile={profile}
               projectId={projectId}
               onSaved={reload}
@@ -132,6 +133,7 @@ export function DeliveryCenterPanel({
           </div>
           <div className={styles.editorSection}>
             <ProjectDeploymentTargetEditor
+              headingLevel={4}
               profile={profile}
               onSaved={handleDeploymentTargetSaved}
               projectId={projectId}

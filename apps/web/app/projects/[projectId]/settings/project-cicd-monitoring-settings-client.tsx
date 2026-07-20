@@ -24,6 +24,7 @@ export const ProjectCicdMonitoringSettingsClient = forwardRef<
   ProjectCicdMonitoringSettingsHandle,
   {
     readonly projectId: string;
+    readonly headingLevel?: 2 | 4 | undefined;
     readonly profile: Pick<ProjectDeliveryProfile, "monitoringConfig" | "sourceRepository">;
     readonly initialDraft?: {
       readonly enabled: boolean;
@@ -38,6 +39,7 @@ export const ProjectCicdMonitoringSettingsClient = forwardRef<
   }
 >(function ProjectCicdMonitoringSettingsClient({
   projectId,
+  headingLevel = 2,
   profile,
   initialDraft,
   onDirty,
@@ -46,6 +48,7 @@ export const ProjectCicdMonitoringSettingsClient = forwardRef<
   showSaveButton = true
 }, ref) {
   const router = useRouter();
+  const Heading = headingLevel === 4 ? "h4" : "h2";
   const monitoringSettingsRef = useRef<CicdMonitoringSettingsHandle>(null);
   const isDirtyRef = useRef(false);
   const profileOwnerRef = useRef(
@@ -118,7 +121,7 @@ export const ProjectCicdMonitoringSettingsClient = forwardRef<
       <div className="integrationHeader">
         <div>
           <p className="dashboardPanelKicker">CI/CD</p>
-          <h2 id="project-cicd-settings-title">GitOps 감시 설정</h2>
+          <Heading id="project-cicd-settings-title">GitOps 감시 설정</Heading>
         </div>
       </div>
       <p>감시할 branch와 애플리케이션·인프라 경로를 프로젝트 단위로 관리합니다.</p>
@@ -128,6 +131,7 @@ export const ProjectCicdMonitoringSettingsClient = forwardRef<
       {config ? (
         <CicdMonitoringSettings
           config={config}
+          headingLevel={headingLevel === 4 ? 5 : 3}
           initialDraft={initialDraft}
           isSaving={requestState === "saving"}
           onDirty={markDirty}

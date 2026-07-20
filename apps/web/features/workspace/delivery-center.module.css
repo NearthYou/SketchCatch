@@ -1,4 +1,5 @@
 .root {
+  --workspace-error: var(--color-error, #b42318);
   display: grid;
   gap: 0;
   margin: 0 auto;
@@ -141,11 +142,15 @@
 }
 
 .sectionNavigation a {
+  align-items: center;
   border-radius: var(--radius-control);
   color: #60646c;
+  display: flex;
   flex: 0 0 auto;
   font-size: calc(13px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
+  justify-content: center;
+  min-height: 44px;
   padding: 8px 12px;
   text-decoration: none;
   transition:
@@ -268,8 +273,11 @@
 }
 
 .connectionFacts a {
+  align-items: center;
   color: var(--color-ink);
+  display: inline-flex;
   font-weight: var(--presentation-font-weight-bold);
+  min-height: 44px;
 }
 
 .accountList {
@@ -312,6 +320,7 @@
   font-size: calc(13px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
+  min-height: 44px;
   text-decoration: none;
 }
 
@@ -399,7 +408,8 @@
   margin-bottom: 8px;
 }
 
-.editorSection :global(.integrationHeader h2) {
+.editorSection :global(.integrationHeader h2),
+.editorSection :global(.integrationHeader h4) {
   font-size: calc(16px + var(--presentation-font-size-increase));
   letter-spacing: -0.01em;
 }
@@ -410,6 +420,26 @@
   border-top: 1px solid var(--color-hairline);
   margin-top: 18px;
   padding: 18px 0 0;
+}
+
+.editorSection :global(button),
+.editorSection :global(select),
+.editorSection :global(input:not([type])),
+.editorSection :global(input[type="text"]) {
+  min-height: 44px;
+}
+
+.editorSection :global(.deploymentPrimaryButton),
+.editorSection :global(.deploymentSecondaryButton) {
+  white-space: nowrap;
+}
+
+.editorSection :global(button:focus-visible),
+.editorSection :global(select:focus-visible),
+.editorSection :global(input:focus-visible),
+.editorSection :global(summary:focus-visible) {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
 }
 
 .execution {
@@ -500,7 +530,7 @@
   font: inherit;
   font-weight: var(--presentation-font-weight-bold);
   margin-top: 10px;
-  min-height: 38px;
+  min-height: 44px;
   padding: 8px 14px;
 }
 
@@ -561,6 +591,25 @@
     padding-inline: 10px;
   }
 
+  .headerActions button {
+    width: 100%;
+  }
+
+  .connectionFacts > div,
+  .definitionList > div {
+    gap: 4px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .definitionList dd {
+    text-align: left;
+  }
+
+  .accountList li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .sectionGroup {
     padding-top: 30px;
   }
@@ -574,6 +623,21 @@
 
   .execution > .groupHeading {
     align-items: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .sectionNavigation {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .sectionNavigation a {
+    flex: initial;
+    min-width: 0;
+    padding-inline: 4px;
+    text-align: center;
   }
 }
 

@@ -19,6 +19,7 @@ export const CicdMonitoringSettings = forwardRef<
   CicdMonitoringSettingsHandle,
   {
     readonly config: GitCicdMonitoringConfig;
+    readonly headingLevel?: 3 | 5 | undefined;
     readonly initialDraft?: Partial<CicdMonitoringDraft> | undefined;
     readonly isSaving: boolean;
     readonly onDirty?: (() => void) | undefined;
@@ -27,6 +28,7 @@ export const CicdMonitoringSettings = forwardRef<
   }
 >(function CicdMonitoringSettings({
   config,
+  headingLevel = 3,
   initialDraft,
   isSaving,
   onDirty,
@@ -34,6 +36,7 @@ export const CicdMonitoringSettings = forwardRef<
   showSaveButton = true
 }, ref) {
   const [draft, setDraft] = useState<CicdMonitoringDraft>(() => toDraft(config, initialDraft));
+  const Heading = headingLevel === 5 ? "h5" : "h3";
 
   useEffect(() => setDraft(toDraft(config, initialDraft)), [config, initialDraft]);
 
@@ -67,7 +70,7 @@ export const CicdMonitoringSettings = forwardRef<
     <section className={styles.cicdSettings} aria-labelledby="cicd-settings-title">
       <div className={styles.deploymentSectionHeader}>
         <div>
-          <h3 id="cicd-settings-title">모니터링 설정</h3>
+          <Heading id="cicd-settings-title">모니터링 설정</Heading>
           <p>저장소 branch와 앱·인프라 변경 범위를 명시적으로 선택합니다.</p>
         </div>
         {showSaveButton ? (

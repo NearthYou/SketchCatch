@@ -31,12 +31,14 @@ test("CI/CD keeps GitHub account recovery available without hiding the readiness
   assert.doesNotMatch(source, /listGitHubAccountInstallations|githubInstallationAccess/);
 });
 
-test("CI/CD keeps the four server readiness rows visible when no repository is connected", () => {
+test("CI/CD keeps server readiness rows available when no repository is connected", () => {
   assert.match(source, /getGitCicdHandoffReadiness/);
   assert.match(source, /isGitCicdHandoffReady/);
   assert.match(handoffPanelSource, /GitCicdReadinessSnapshot/);
   assert.match(handoffPanelSource, /aria-label="CI\/CD PR 준비 상태"/);
-  assert.match(handoffPanelSource, /readinessItems\.map/);
+  assert.match(handoffPanelSource, /groupGitCicdReadiness\(readinessItems\)/);
+  assert.match(handoffPanelSource, /readinessGroup\.required\.map/);
+  assert.match(handoffPanelSource, /readinessGroup\.completed\.map/);
   assert.match(connectionSource, /repositoryHref/);
   assert.doesNotMatch(source, /if \(!repository\) \{\s*return \(\s*<div/u);
 });

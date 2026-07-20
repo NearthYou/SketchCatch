@@ -104,6 +104,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
   ProjectDeploymentTargetEditorHandle,
   {
     readonly projectId: string;
+    readonly headingLevel?: 2 | 4 | undefined;
     readonly ecsDefaults?: EcsFargateDeploymentDefaultsInput | null;
     readonly profile: ProjectDeploymentTargetEditorInitialProfile;
     readonly onDirty?: (() => void) | undefined;
@@ -115,6 +116,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
 >(function ProjectDeploymentTargetEditor(
   {
     projectId,
+    headingLevel = 2,
     ecsDefaults = null,
     profile,
     onDirty,
@@ -196,6 +198,8 @@ export const ProjectDeploymentTargetEditor = forwardRef<
     requestState !== "saving" &&
     missingFieldKeys.length === 0 &&
     targetPresentation.status !== "saved";
+  const Heading = headingLevel === 4 ? "h4" : "h2";
+  const SectionHeading = headingLevel === 4 ? "h5" : "h3";
 
   useEffect(() => {
     if (authStatus !== "authenticated") return;
@@ -341,14 +345,14 @@ export const ProjectDeploymentTargetEditor = forwardRef<
       <div className="integrationHeader">
         <div>
           <p className="dashboardPanelKicker">Deployment</p>
-          <h2 id="deployment-target-title">프로젝트 배포 타깃</h2>
+          <Heading id="deployment-target-title">프로젝트 배포 타깃</Heading>
         </div>
       </div>
       <p>어디에 배포할지만 확인하세요. 저장소와 AWS에서 확인한 값은 자동으로 채웁니다.</p>
 
       <div className={styles.sectionHeading}>
         <div>
-          <h3>필수 확인</h3>
+          <SectionHeading>필수 확인</SectionHeading>
           <p>계정과 실행 방식이 맞으면 나머지 값은 그대로 저장할 수 있습니다.</p>
         </div>
         <span className={styles.requiredBadge}>
@@ -397,7 +401,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
       <section className={styles.automaticSummary} aria-labelledby="automatic-settings-title">
         <div className={styles.summaryHeading}>
           <div>
-            <h3 id="automatic-settings-title">자동 설정 결과</h3>
+            <SectionHeading id="automatic-settings-title">자동 설정 결과</SectionHeading>
             <p>연결된 저장소와 AWS 정보로 계산했습니다.</p>
           </div>
           <span className={styles.readyBadge} data-status={targetPresentation.status}>
@@ -448,6 +452,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
 
       <ProjectDeploymentTargetAdvancedSettings
         draft={draft}
+        headingLevel={headingLevel === 4 ? 6 : 4}
         lockedSystemFields={lockedSystemFields}
         revealMissingFields={requestState === "idle" && missingAdvancedFieldKeys.length > 0}
         updateDraft={updateDraft}

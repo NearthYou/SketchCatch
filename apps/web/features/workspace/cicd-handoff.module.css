@@ -6,6 +6,7 @@
   gap: 16px;
   justify-items: start;
   padding: 20px;
+  scroll-margin-top: 72px;
 }
 
 .header {
@@ -95,8 +96,11 @@
 }
 
 .notice a {
+  align-items: center;
   color: inherit;
+  display: inline-flex;
   font-weight: var(--presentation-font-weight-bold);
+  min-height: 44px;
 }
 
 .review,
@@ -160,6 +164,12 @@
 .result > div:first-child span {
   color: var(--workspace-muted, #60646c);
   font-size: calc(12px + var(--presentation-font-size-increase));
+}
+
+.result strong,
+.result span,
+.result p {
+  overflow-wrap: anywhere;
 }
 
 .changeReview {
@@ -278,6 +288,7 @@
   font-size: calc(12px + var(--presentation-font-size-increase));
   gap: 8px;
   line-height: 1.5;
+  min-height: 44px;
 }
 
 .changeConfirmation input {
@@ -422,17 +433,6 @@
   padding: 12px 0;
 }
 
-.readinessComplete {
-  background: var(--workspace-surface, #fff);
-  border: 1px solid #aceebb;
-  border-radius: 8px;
-  color: #116329;
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
-  margin: 0;
-  padding: 12px;
-}
-
 .completedReadiness {
   border-top: 1px solid var(--workspace-line, #f0f0f3);
   padding-top: 10px;
@@ -440,10 +440,13 @@
 }
 
 .completedReadiness summary {
+  align-items: center;
   color: var(--workspace-muted, #60646c);
   cursor: pointer;
+  display: flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
+  min-height: 44px;
   padding: 8px 0;
 }
 
@@ -454,9 +457,9 @@
 .readinessError {
   align-items: center;
   background: var(--workspace-surface, #fff);
-  border: 1px solid var(--workspace-error, #eb8e90);
+  border: 1px solid color-mix(in srgb, var(--workspace-error, #b42318) 32%, transparent);
   border-radius: 8px;
-  color: var(--workspace-error, #eb8e90);
+  color: var(--workspace-error, #b42318);
   display: flex;
   flex-wrap: wrap;
   font-size: calc(12px + var(--presentation-font-size-increase));
@@ -502,9 +505,20 @@
   color: #fff;
   flex: 1;
   font-size: calc(12px + var(--presentation-font-size-increase));
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   padding: 12px;
   white-space: nowrap;
+}
+
+.panel button:focus-visible,
+.panel a:focus-visible,
+.panel select:focus-visible,
+.panel summary:focus-visible,
+.panel input:focus-visible {
+  outline: 2px solid var(--workspace-text, #171717);
+  outline-offset: 2px;
 }
 
 @media (max-width: 720px) {
@@ -525,5 +539,30 @@
 
   .reviewFacts {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .changeReviewFacts,
+  .reviewList dl > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .changeReviewCard > header {
+    flex-direction: column;
+  }
+
+  .readinessHeader > span {
+    align-self: flex-start;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 520px) {
+  .panel,
+  .commandCard {
+    padding: 16px;
+  }
+
+  .header {
+    flex-direction: column;
   }
 }

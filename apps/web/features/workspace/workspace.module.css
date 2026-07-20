@@ -185,6 +185,7 @@
   cursor: pointer;
   font: inherit;
   font-weight: var(--presentation-font-weight-bold);
+  min-height: 44px;
   padding: 9px 16px;
 }
 
@@ -212,6 +213,7 @@
   gap: 16px;
   min-width: 0;
   padding: 20px;
+  scroll-margin-top: 72px;
 }
 
 .cicdViewNavigation {
@@ -253,6 +255,7 @@
 .cicdActivity h4,
 .cicdActivity p,
 .cicdSettings h3,
+.cicdSettings h5,
 .cicdSettings p,
 .cicdLogs h4,
 .cicdLogs p,
@@ -276,18 +279,22 @@
   gap: 8px;
   color: var(--workspace-text, #171717);
   font-weight: var(--presentation-font-weight-bold);
+  min-width: 0;
+  width: 100%;
 }
 
 .cicdRunSelect select,
 .cicdSettings input[type="text"],
 .cicdSettings input:not([type]) {
-  min-height: 42px;
+  min-height: 44px;
+  min-width: 0;
   border: 1px solid var(--workspace-line-strong, #dcdee0);
   border-radius: 8px;
   padding: 0 12px;
   background: #ffffff;
   color: #171717;
   font: inherit;
+  width: 100%;
 }
 
 .cicdEmptyState {
@@ -404,29 +411,6 @@
   white-space: nowrap;
 }
 
-.cicdReleaseSummary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin: 18px 0 0;
-}
-
-.cicdReleaseSummary > div {
-  min-width: 0;
-}
-
-.cicdReleaseSummary dt {
-  color: var(--workspace-muted, #60646c);
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
-}
-
-.cicdReleaseSummary dd {
-  margin: 4px 0 0;
-  overflow-wrap: anywhere;
-  font-weight: var(--presentation-font-weight-bold);
-}
-
 .cicdStageList,
 .cicdLogList {
   display: grid;
@@ -463,6 +447,7 @@
   display: grid;
   grid-template-columns: 100px minmax(0, 1fr);
   gap: 12px;
+  overflow-wrap: anywhere;
   padding: 8px 12px;
   border-bottom: 1px solid #283142;
   white-space: pre-wrap;
@@ -484,6 +469,7 @@
 .cicdToggleField {
   grid-template-columns: auto 1fr;
   align-items: center;
+  min-height: 46px;
 }
 
 .cicdPathField {
@@ -505,10 +491,42 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-height: 44px;
 }
 
 .cicdPathField > input {
   flex-basis: 100%;
+  min-height: 44px;
+  min-width: 0;
+}
+
+.cicdConsole .deploymentPrimaryButton,
+.cicdConsole .deploymentSecondaryButton,
+.cicdConsole .deploymentOutputLinks a,
+.cicdConsole .deploymentOutputLinks button,
+.deploymentExpandedBody .cicdConsole .deploymentPrimaryButton,
+.deploymentExpandedBody .cicdConsole .deploymentSecondaryButton {
+  min-height: 46px;
+}
+
+.cicdConsole .deploymentPrimaryButton,
+.cicdConsole .deploymentSecondaryButton {
+  text-decoration: none;
+}
+
+.cicdConsole button:focus-visible,
+.cicdConsole a:focus-visible,
+.cicdConsole select:focus-visible,
+.cicdConsole input:focus-visible,
+.cicdConsole [role="tabpanel"]:focus-visible {
+  outline: 2px solid var(--workspace-text, #171717);
+  outline-offset: 2px;
+}
+
+.cicdRunSummary a {
+  align-items: center;
+  display: inline-flex;
+  min-height: 44px;
 }
 
 @media (max-width: 720px) {
@@ -528,8 +546,36 @@
     grid-template-columns: 1fr auto;
   }
 
-  .cicdReleaseSummary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .cicdStageList li > span:nth-child(2) {
+    grid-column: 1;
+  }
+
+  .cicdStageList li > strong {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+
+  .cicdRunSummary dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+}
+
+@media (max-width: 520px) {
+  .cicdPipelinePanel,
+  .cicdActivity,
+  .cicdLogs,
+  .cicdSettings {
+    padding: 16px;
+  }
+
+  .cicdEmptyState {
+    padding: 16px;
+  }
+
+  .cicdLogList li {
+    gap: 4px;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -3717,7 +3763,7 @@
 }
 
 .deploymentPreflightFindings > li[data-severity="high"] {
-  border-left-color: var(--workspace-error, #eb8e90);
+  border-left-color: var(--workspace-error, #b42318);
 }
 
 .deploymentPreflightFindings > li[data-severity="medium"] {
@@ -6285,7 +6331,7 @@
 .deploymentOutputLinks {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   margin-block: 12px;
 }
 
@@ -6313,6 +6359,7 @@
 
 .deploymentOutputLinks article > div {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
