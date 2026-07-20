@@ -50,6 +50,7 @@ import {
   resolveArchitectureOperationalRequirements,
   validateArchitectureOperationalRequirements
 } from "./aiArchitectureOperationalRequirements.js";
+import { convertDiagramJsonToArchitectureJson } from "./diagram-to-architecture.js";
 import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
 import { createArchitectureDraftFallbackExplanation } from "./aiLlmExplanationFallbacks.js";
@@ -67,6 +68,11 @@ import {
   estimateAiUsage,
   maskSecretsForAi
 } from "./aiProviderSafety.js";
+import {
+  createAuthoredTerraformArchitectureDiagram,
+  findAuthoredTerraformArchitecturePreset,
+  type AuthoredTerraformArchitecturePreset
+} from "./authoredTerraformArchitecturePresets.js";
 
 const ARCHITECTURE_DRAFT_TARGET = "architecture_draft";
 
@@ -388,6 +394,12 @@ export async function createAmazonQArchitectureDraftResponse(
       creditPolicy.billingMode,
       missingQuestion.invalidAnswer
     );
+  }
+
+  const authoredPreset = findAuthoredTerraformArchitecturePreset(request.prompt);
+  if (authoredPreset !== null) {
+    await reportFallbackDraftProgress(progressReporter, options.onProgress);
+    return createAuthoredTerraformArchitectureResponse(authoredPreset);
   }
 
   request = withArchitectureDraftDefaults(
@@ -1330,6 +1342,28 @@ function createFallbackArchitectureDraftResponse(
     llmExplanation: {
       ...llmExplanation,
       providerMetadata: createFallbackProviderMetadata(request, billingMode)
+    }
+  };
+}
+
+function createAuthoredTerraformArchitectureResponse(
+  preset: AuthoredTerraformArchitecturePreset
+): AiArchitectureDraftResult {
+  const diagramJson = createAuthoredTerraformArchitectureDiagram(preset);
+
+  return {
+    architectureJson: convertDiagramJsonToArchitectureJson(diagramJson),
+    diagramJson,
+    title: preset.title,
+    metadata: {
+      source: "template_fallback",
+      confidence: "high",
+      assumptions: [
+        "이 데모 문구는 후속 답변과 무관하게 승인된 고정 배포 아키텍처를 사용합니다."
+      ],
+      explanations: [
+        "S3와 CloudFront 정적 사이트, ALB와 ECS Fargate API, ECR, CloudWatch, Secrets Manager 구성을 고정했습니다."
+      ]
     }
   };
 }
