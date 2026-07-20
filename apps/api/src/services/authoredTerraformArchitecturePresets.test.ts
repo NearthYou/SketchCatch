@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { createAmazonQArchitectureDraftResponse } from "./aiArchitectureDrafts.js";
+import { AUDIENCE_LIVE_CHECK_MANUAL_DIAGRAM } from "./audienceLiveCheckManualDiagram.js";
 
 import { generateTerraformFromDiagramJson } from "./terraform/terraform-preview.js";
 
@@ -61,7 +62,8 @@ test("the realtime deployment demo prompt keeps questions but always returns the
   assert.equal("status" in second, false);
   if ("status" in first || "status" in second) return;
 
-  assert.deepEqual(first.diagramJson, second.diagramJson);
+  assert.deepEqual(first.diagramJson, AUDIENCE_LIVE_CHECK_MANUAL_DIAGRAM);
+  assert.deepEqual(second.diagramJson, AUDIENCE_LIVE_CHECK_MANUAL_DIAGRAM);
   assert.equal(first.metadata.authoredSourceId, "audience-live-check");
   assert.ok(first.diagramJson);
   const terraform = generateTerraformFromDiagramJson(first.diagramJson);
@@ -82,7 +84,7 @@ test("the realtime deployment demo prompt keeps questions but always returns the
     }))
   };
   assert.equal(generateTerraformFromDiagramJson(catalogPresentedDiagram), expectedTerraform);
-  assert.equal(first.diagramJson.nodes.length, 41);
+  assert.equal(first.diagramJson.nodes.length, 42);
   assert.match(terraform, /resource "aws_ecs_service" "ecs_service_fixed_template_fargate_container_app"/u);
   assert.match(terraform, /resource "aws_cloudfront_distribution" "cdn_web"/u);
   assert.match(terraform, /resource "aws_secretsmanager_secret" "check_in_signing"/u);
