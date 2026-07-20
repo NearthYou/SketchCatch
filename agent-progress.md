@@ -4,6 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Terraform reverse sync accepts references to its allowlisted utility resources, so generated Runtime Secret values such as `random_password.check_in_signing.result` round-trip without a false manual-edit warning.
 - The Direct Deployment branch includes `origin/dev` through `fce1d6c0`, removes duplicate deployment summaries, and keeps selected history details within the active filter. Eighty-six focused Web tests and the root harness, lint, typecheck, and build checks pass.
 - Branch `codex/ai-error-analysis-progress-v2` includes the current `origin/dev` through `266f0a81` and adds compact circular estimated progress to Workspace AI Terraform error analysis.
 - The legacy `practice` Deployment profile is removed; `demo_web_service` is the default live profile, and imported migration `0054` rewrites legacy rows before removing the enum value.
@@ -18,6 +19,13 @@ Short English-only working log for the current agent context. Older records are 
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
+
+### 2026-07-20 - Accept generated utility references during Terraform reverse sync
+
+- Reproduced the generated ECS Runtime Secret warning at `aws_secretsmanager_secret_version.check_in_signing` and confirmed `random_password.check_in_signing.result` was rejected even though `random_password` was already an allowlisted utility resource.
+- Reused the existing utility-resource allowlist when parsing resource references, preserving the narrow parser boundary while supporting both current utility resource types.
+- Verified the Runtime Secret red-green regression and all 54 Terraform-to-Diagram tests. Root lint, typecheck, and build pass. The full API suite passes 1,444 tests and retains the known unrelated 10 failures plus one lease-heartbeat cancellation.
+- No Terraform generation, deployment artifact, database, dependency, cloud resource, or Git/CI/CD behavior was changed.
 
 ### 2026-07-20 - Keep Deployment History details aligned with filters
 
