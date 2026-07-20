@@ -55,6 +55,40 @@ test("buildInfrastructureGraphFromDiagramJson projects renderable resource nodes
   ]);
 });
 
+test("Reverse Engineering provenance와 관찰 정보는 Terraform argument로 내보내지 않는다", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "imported-bucket",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        label: "existing bucket",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket",
+          resourceName: "existing_bucket",
+          fileName: "storage",
+          values: {
+            bucket: "existing-bucket",
+            providerResourceId: "existing-bucket",
+            providerResourceType: "AWS::S3::Bucket",
+            reverseEngineeringSourceScanId: "scan-1",
+            reverseEngineeringDraftId: "draft-1",
+            reverseEngineeringSourceKind: "saved_scan",
+            reverseEngineeringManagement: "managed",
+            reverseEngineeringObservedConfig: { createdAt: "2026-07-20" },
+            terraformFileName: "storage"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(graph.nodes[0]?.config, { bucket: "existing-bucket" });
+});
+
 test("Template presentation nodes and edges stay outside the Terraform infrastructure graph", () => {
   // Terraform planning must see the same deployable graph that existed before Design presentation was added.
   for (const definition of templateDefinitions) {
