@@ -561,6 +561,38 @@ function applyPresentationIconUrls(nodes: readonly DiagramNode[]): DiagramNode[]
   });
 }
 
+export function materializeResourceCatalogDiagramVisuals(diagram: DiagramJson): DiagramJson {
+  let didChange = false;
+  const nodes = diagram.nodes.map((node) => {
+    if (node.kind !== "resource" || !node.parameters) {
+      return node;
+    }
+
+    const terraformResourceType = node.parameters.resourceType;
+    const catalogNode = createResourceCatalogDiagramNode(
+      mapTerraformResourceType(node.parameters),
+      terraformResourceType,
+      node.position,
+      node.zIndex ?? 0
+    );
+
+    if (!catalogNode.iconUrl) {
+      return node;
+    }
+
+    didChange = true;
+    return {
+      ...node,
+      type: catalogNode.type,
+      kind: catalogNode.kind,
+      size: { ...catalogNode.size },
+      iconUrl: catalogNode.iconUrl,
+      style: catalogNode.style
+    };
+  });
+
+  return didChange ? { ...diagram, nodes } : diagram;
+}
 export function convertArchitectureJsonToDiagramJson(
   architectureJson: ArchitectureJson,
   options: ArchitectureDiagramConversionOptions = {}

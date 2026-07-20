@@ -71,6 +71,17 @@ test("the realtime deployment demo prompt keeps questions but always returns the
     "utf8"
   );
   assert.equal(terraform, expectedTerraform);
+
+  const catalogPresentedDiagram = {
+    ...first.diagramJson,
+    nodes: first.diagramJson.nodes.map((node) => ({
+      ...node,
+      iconUrl: "/Architecture-Service-Icons_07312025/catalog.svg",
+      size: { width: 48, height: 48 },
+      style: { borderColor: "#2f6db3", textColor: "#172033" }
+    }))
+  };
+  assert.equal(generateTerraformFromDiagramJson(catalogPresentedDiagram), expectedTerraform);
   assert.equal(first.diagramJson.nodes.length, 40);
   assert.match(terraform, /resource "aws_ecs_service" "ecs_service_fixed_template_fargate_container_app"/u);
   assert.match(terraform, /resource "aws_cloudfront_distribution" "cdn_web"/u);

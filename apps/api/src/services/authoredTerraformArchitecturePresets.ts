@@ -20,6 +20,9 @@ const AUDIENCE_LIVE_CHECK_PRESET: AuthoredTerraformArchitecturePreset = {
   title: "데모용 실시간 배포 사이트"
 };
 const AUDIENCE_LIVE_CHECK_DIAGRAM = createCanonicalDiagram();
+const AUDIENCE_LIVE_CHECK_TERRAFORM_CONTENT = createTerraformContentSignature(
+  AUDIENCE_LIVE_CHECK_DIAGRAM
+);
 
 export function findAuthoredTerraformArchitecturePreset(
   prompt: string
@@ -44,11 +47,31 @@ export function createAuthoredTerraformArchitectureDiagram(
 export function renderAuthoredTerraformArchitectureSource(
   diagramJson: DiagramJson
 ): string | undefined {
-  return isDeepStrictEqual(diagramJson, AUDIENCE_LIVE_CHECK_DIAGRAM)
+  return isDeepStrictEqual(
+    createTerraformContentSignature(diagramJson),
+    AUDIENCE_LIVE_CHECK_TERRAFORM_CONTENT
+  )
     ? getAudienceLiveCheckTerraformSource()
     : undefined;
 }
 
+function createTerraformContentSignature(diagramJson: DiagramJson): unknown {
+  return {
+    nodes: diagramJson.nodes.map(
+      ({
+        iconUrl: _iconUrl,
+        locked: _locked,
+        position: _position,
+        size: _size,
+        style: _style,
+        zIndex: _zIndex,
+        ...terraformNode
+      }) => terraformNode
+    ),
+    edges: diagramJson.edges,
+    ...(diagramJson.variables ? { variables: diagramJson.variables } : {})
+  };
+}
 function getAudienceLiveCheckTerraformSource(): string {
   return AUDIENCE_LIVE_CHECK_TERRAFORM_SOURCE;
 }

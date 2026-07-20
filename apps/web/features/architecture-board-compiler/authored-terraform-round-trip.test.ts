@@ -5,7 +5,7 @@ import { compileArchitectureDraftProposal } from ".";
 import { normalizeDiagramResourceNodeGeometry } from "../diagram-editor/resource-node-geometry";
 import { convertDiagramJsonToArchitectureJson } from "../workspace/workspace-ai-diagram-adapter";
 
-test("authored Architecture Draft preserves its exact Diagram through the Workspace compiler", () => {
+test("authored Architecture Draft materializes registered Resource catalog visuals", () => {
   const diagramJson: DiagramJson = {
     nodes: [
       {
@@ -46,7 +46,14 @@ test("authored Architecture Draft preserves its exact Diagram through the Worksp
 
   const proposal = compileArchitectureDraftProposal(draft);
   const appliedDiagram = normalizeDiagramResourceNodeGeometry(structuredClone(proposal.diagram));
+  const secretNode = appliedDiagram.nodes[0];
 
   assert.equal(proposal.provenance.candidateId, "original");
-  assert.deepEqual(appliedDiagram, diagramJson);
+  assert.ok(secretNode);
+  assert.equal(
+    secretNode.iconUrl,
+    "/Architecture-Service-Icons_07312025/Arch_Security-Identity-Compliance/64/Arch_AWS-Secrets-Manager_64.svg"
+  );
+  assert.deepEqual(secretNode.size, { width: 48, height: 48 });
+  assert.deepEqual(secretNode.parameters, diagramJson.nodes[0]?.parameters);
 });
