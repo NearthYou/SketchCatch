@@ -66,7 +66,9 @@ export function getDeploymentActionState(
       hasCurrentPlan &&
       !isPlanApproved &&
       !isFailedDestroyAttempt &&
-      deployment.status !== "RUNNING"
+      (isApplyPlan
+        ? deployment.status === "PENDING"
+        : deployment.status !== "RUNNING")
   );
   const canShowDestroyPlanAction = Boolean(
     deployment &&

@@ -1511,6 +1511,10 @@ export function DirectDeploymentScreen({
       }
 
       if (stepId === "approval") {
+        if (!deploymentActions.shouldShowApprovePlanButton) {
+          return null;
+        }
+
         return (
           <>
             <div className={styles.deploymentStepSummary}>
@@ -1963,7 +1967,7 @@ export function DirectDeploymentScreen({
               {requestError}
             </p>
           ) : null}
-          {selectedStep.id === "deployment" && selectedDeployment?.status === "FAILED" ? (
+          {selectedDeployment?.status === "FAILED" ? (
             <p className={styles.deploymentStageAlert} role="alert">
               {selectedDeployment.errorSummary ??
                 "배포가 실패했습니다. 배포 기록에서 원인을 확인하세요."}
