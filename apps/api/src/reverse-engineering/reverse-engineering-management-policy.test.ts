@@ -27,16 +27,44 @@ test("AWS가 소유한 IAM service-linked Role과 KMS Key는 관리하지 않는
 test("SketchCatch 연결 제어 Role과 Policy는 Terraform 관리에서 제외한다", () => {
   assert.equal(
     classifyReverseEngineeringManagement(
-      resource("IAM_ROLE", { roleName: "SketchCatchImportCfn-connection" })
+      resource("IAM_ROLE", { roleName: "SketchCatchImportCfn-cf4c4732fd3b8f8a" })
     ),
     "sketchcatch_managed"
   );
   assert.equal(
     classifyReverseEngineeringManagement(
-      resource("IAM_POLICY", { policyName: "SketchCatchImportRead-connection" })
+      resource("IAM_POLICY", { policyName: "SketchCatchImportRead-cf4c4732fd3b8f8a" })
     ),
     "sketchcatch_managed"
   );
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("IAM_ROLE", { roleName: "SketchCatchTerraformExecutionRole-467ff1a5" })
+    ),
+    "sketchcatch_managed"
+  );
+});
+
+test("이름 접두사가 비슷할 뿐인 고객 IAM 리소스는 SketchCatch 소유로 오판하지 않는다", () => {
+  for (const { resourceType, config } of [
+    {
+      resourceType: "IAM_ROLE" as const,
+      config: { roleName: "SketchCatchTerraformCustomerArchive" }
+    },
+    {
+      resourceType: "IAM_ROLE" as const,
+      config: { roleName: "SketchCatchCodeBuilder" }
+    },
+    {
+      resourceType: "IAM_POLICY" as const,
+      config: { policyName: "SketchCatchImportCustomerData" }
+    }
+  ]) {
+    assert.equal(
+      classifyReverseEngineeringManagement(resource(resourceType, config)),
+      "needs_mapping"
+    );
+  }
 });
 
 test("실제 import access Stack 이름은 대소문자와 무관하게 SketchCatch 관리로 분류한다", () => {
