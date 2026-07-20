@@ -1,7 +1,7 @@
 import {
   applyEcsFargateRepositoryContract,
   createEcsFargateRepositoryExtension
-} from "./ecs-fargate-repository-template.js";
+} from "./ecs-fargate-repository-template.ts";
 import type {
   DiagramEdge,
   DiagramJson,
