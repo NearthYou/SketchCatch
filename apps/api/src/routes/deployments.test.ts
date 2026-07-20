@@ -5,6 +5,7 @@ import type {
   AwsConnection,
   DeploymentFailureExplanationResponse,
   DeploymentLiveObservationArchitectureResponse,
+  DeploymentProgressResponse,
   RecentSuccessfulDeploymentProjectListResponse
 } from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
@@ -4275,6 +4276,102 @@ test("GET /api/deployments/:deploymentId/logs returns an empty log list", async 
     {
       name: "listDeploymentLogs",
       deploymentId
+    }
+  ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/progress returns read-only resource progress", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "RUNNING",
+    activeStage: "apply",
+    startedAt: fixedNow,
+    planSummary: {
+      blocked: false,
+      createCount: 2,
+      deleteCount: 0,
+      replaceCount: 0,
+      updateCount: 0,
+      warnings: []
+    }
+  });
+  repository.logs = [
+    {
+      id: "log-1",
+      deploymentId,
+      sequence: 1,
+      stage: "apply",
+      level: "INFO",
+      message: "aws_s3_bucket.site: Creation complete after 1s",
+      relatedResourceId: null,
+      createdAt: fixedNow
+    }
+  ];
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/progress`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(String(response.headers["cache-control"]), /private, no-store/);
+  const body = response.json() as DeploymentProgressResponse;
+  assert.deepEqual(body.progress.measurement, {
+    kind: "resource_count",
+    completedUnits: 1,
+    totalUnits: 2,
+    percent: 50
+  });
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findDeploymentById",
+      deploymentId
+    },
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    },
+    {
+      name: "listDeploymentLogs",
+      deploymentId
+    }
+  ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/progress hides inaccessible deployments", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.project = undefined;
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/progress`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findDeploymentById",
+      deploymentId
+    },
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
     }
   ]);
 

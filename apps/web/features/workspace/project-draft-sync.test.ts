@@ -120,7 +120,7 @@ test("loadProjectDiagramDraft loads the server draft when the local cache is cle
   assert.deepEqual(result.localDraft?.diagramJson, serverDiagram);
 });
 
-test("loadProjectDiagramDraft preserves a newer dirty local draft until recovery is decided", async () => {
+test("loadProjectDiagramDraft replaces a dirty local draft with the server draft", async () => {
   const writes: LocalProjectDraft[] = [];
   const deletedLocalDraft: LocalProjectDraft = {
     ...localDraft,
@@ -150,17 +150,17 @@ test("loadProjectDiagramDraft preserves a newer dirty local draft until recovery
     }
   );
 
-  assert.equal(result.source, "local");
-  assert.deepEqual(result.diagramJson, emptyDiagram);
-  assert.equal(result.recoveryDecisionRequired, true);
+  assert.equal(result.source, "server");
+  assert.deepEqual(result.diagramJson, staleServerDraft.diagramJson);
   assert.equal(result.shouldAutoSaveServer, false);
-  assert.equal(result.localDraft?.dirty, true);
-  assert.deepEqual(result.localDraft?.diagramJson, emptyDiagram);
+  assert.equal(result.localDraft?.dirty, false);
+  assert.deepEqual(result.localDraft?.diagramJson, staleServerDraft.diagramJson);
   assert.deepEqual(result.serverDraft, staleServerDraft);
-  assert.deepEqual(writes, []);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0]?.dirty, false);
 });
 
-test("loadProjectDiagramDraft replaces local recovery only after the user chooses the server", async () => {
+test("loadProjectDiagramDraft replaces a newer local draft without a recovery preference", async () => {
   const writes: LocalProjectDraft[] = [];
   const newerLocalDraft: LocalProjectDraft = {
     ...localDraft,
@@ -170,7 +170,6 @@ test("loadProjectDiagramDraft replaces local recovery only after the user choose
     {
       fallbackDiagram: emptyDiagram,
       projectId: serverDraft.projectId,
-      recoveryPreference: "server",
       workspaceId: "workspace-1"
     },
     {
@@ -183,7 +182,6 @@ test("loadProjectDiagramDraft replaces local recovery only after the user choose
   );
 
   assert.equal(result.source, "server");
-  assert.equal(result.recoveryDecisionRequired, false);
   assert.deepEqual(result.diagramJson, serverDiagram);
   assert.equal(result.localDraft?.dirty, false);
   assert.deepEqual(result.localDraft?.diagramJson, serverDiagram);

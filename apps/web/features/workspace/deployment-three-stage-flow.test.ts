@@ -91,6 +91,18 @@ test("workspace runtime actions use icon-only controls", () => {
   );
 });
 
+test("the modal labels the primary deployment path as 배포", () => {
+  const navigationStart = deploymentShellSource.indexOf(
+    '<nav className={styles.deploymentConsoleScreenNavigation}'
+  );
+  const navigationEnd = deploymentShellSource.indexOf("</nav>", navigationStart);
+  const navigationSource = deploymentShellSource.slice(navigationStart, navigationEnd);
+
+  assert.match(navigationSource, />\s*배포\s*</);
+  assert.match(navigationSource, />\s*CI\/CD\s*</);
+  assert.doesNotMatch(navigationSource, />\s*직접 배포\s*</);
+});
+
 test("deployment preparation flushes the synchronized draft before artifact creation", () => {
   const syncIndex = rightPanelSource.indexOf("prepareTerraformArtifact()");
   const saveIndex = rightPanelSource.indexOf("context.saveDiagramNow?.()", syncIndex);
@@ -122,6 +134,110 @@ test("Direct Deployment uses prepare, approve, and execute with three external p
   assert.doesNotMatch(directDeploymentSource, /selectedLiveProfile|liveProfileOptions/);
   assert.match(directDeploymentSource, /stepId === "validation"/);
   assert.match(directDeploymentSource, /stepId === "approval"/);
+});
+
+test("approval owns the Plan summary while execution keeps final target confirmation", () => {
+  const contentStart = directDeploymentSource.indexOf("function renderDirectStepContent");
+  const approvalStart = directDeploymentSource.indexOf(
+    'if (stepId === "approval")',
+    contentStart
+  );
+  const executionStart = directDeploymentSource.indexOf("\n      return (", approvalStart);
+  const executionEnd = directDeploymentSource.indexOf(
+    "function renderDirectStepActions",
+    executionStart
+  );
+  const approvalSource = directDeploymentSource.slice(approvalStart, executionStart);
+  const executionSource = directDeploymentSource.slice(executionStart, executionEnd);
+
+  assert.ok(approvalStart > contentStart);
+  assert.ok(executionStart > approvalStart);
+  assert.ok(executionEnd > executionStart);
+  assert.match(approvalSource, /<InfoRow label="범위"/);
+  assert.match(approvalSource, /label="차단"/);
+  assert.match(approvalSource, /<PlanSummaryRows/);
+  assert.match(approvalSource, /실행 대상과 스냅샷/);
+  assert.match(approvalSource, /selectedAwsConnection\?\.accountId/);
+  assert.match(approvalSource, /selectedAwsConnection\?\.region/);
+  assert.match(approvalSource, /preparedSnapshotHash/);
+  assert.doesNotMatch(executionSource, /<InfoRow label="범위"/);
+  assert.doesNotMatch(executionSource, /<PlanSummaryRows/);
+  assert.match(executionSource, /<InfoRow label="상태"/);
+  assert.match(executionSource, /<InfoRow label="현재 작업"/);
+  assert.match(executionSource, /<h3>최종 실행 대상<\/h3>/);
+  assert.match(executionSource, /approvedAwsAccountId/);
+  assert.match(executionSource, /approvedAwsRegion/);
+  assert.match(
+    executionSource,
+    /승인된 Plan과 프로젝트 스냅샷이 일치할 때만 실행됩니다/
+  );
+});
+
+test("the common step workspace owns current logs before Deployment History exists", () => {
+  const contentStart = directDeploymentSource.indexOf("function renderDirectStepContent");
+  const approvalStart = directDeploymentSource.indexOf(
+    'if (stepId === "approval")',
+    contentStart
+  );
+  const executionStart = directDeploymentSource.indexOf("\n      return (", approvalStart);
+  const executionEnd = directDeploymentSource.indexOf(
+    "function renderDirectStepActions",
+    executionStart
+  );
+  const executionSource = directDeploymentSource.slice(executionStart, executionEnd);
+  const selectedContentStart = directDeploymentSource.indexOf(
+    "{renderDirectStepContent(selectedStep.id)}",
+    executionEnd
+  );
+  const commonAlertStart = directDeploymentSource.indexOf(
+    "{deploymentTargetPrerequisite ? (",
+    selectedContentStart
+  );
+  const commonWorkspaceSource = directDeploymentSource.slice(
+    selectedContentStart,
+    commonAlertStart
+  );
+
+  assert.ok(selectedContentStart > executionEnd);
+  assert.ok(commonAlertStart > selectedContentStart);
+  assert.doesNotMatch(executionSource, /deploymentLogView\.source === "current"/);
+  assert.doesNotMatch(executionSource, /현재 실행 로그/);
+  assert.match(commonWorkspaceSource, /deploymentLogView\.source === "current"/);
+  assert.match(commonWorkspaceSource, /현재 실행 로그/);
+  assert.match(commonWorkspaceSource, /<DeploymentLogList logs=\{deploymentLogs\}/);
+  assert.equal(directDeploymentSource.match(/현재 실행 로그/g)?.length, 2);
+  assert.equal(
+    directDeploymentSource.match(/<DeploymentLogList logs=\{deploymentLogs\}/g)?.length,
+    1
+  );
+});
+
+test("history keeps selected-version logs separate from current execution logs", () => {
+  const logsStart = directDeploymentSource.indexOf("const renderLogsSection");
+  const historyStart = directDeploymentSource.indexOf(
+    "const renderDeploymentHistory",
+    logsStart
+  );
+  const historyViewStart = directDeploymentSource.indexOf(
+    "const renderHistoryView",
+    historyStart
+  );
+  const historyViewEnd = directDeploymentSource.indexOf(
+    "const deploymentContent",
+    historyViewStart
+  );
+  const logsSource = directDeploymentSource.slice(logsStart, historyStart);
+  const historyViewSource = directDeploymentSource.slice(historyViewStart, historyViewEnd);
+
+  assert.match(logsSource, /<DeploymentLogList logs=\{loadedHistoryDeploymentLogs\}/);
+  assert.doesNotMatch(logsSource, /deploymentLogView/);
+  assert.match(historyViewSource, /loadedHistoryDeploymentLogs\.length/);
+  assert.doesNotMatch(historyViewSource, /deploymentLogView/);
+  assert.equal(
+    directDeploymentSource.match(/<DeploymentLogList logs=\{loadedHistoryDeploymentLogs\}/g)
+      ?.length,
+    1
+  );
 });
 
 test("deployment polling keeps unrelated failures but reconciles its accepted Plan", () => {
@@ -164,18 +280,51 @@ test("deployment commands stop their failure boundary before secondary hydration
   assert.match(directDeploymentSource, /actionInFlightRef/);
 });
 
-test("Direct Deployment uses the approved executive validation layout", () => {
-  assert.match(directDeploymentSource, /deploymentExecutiveHeader/);
-  assert.match(directDeploymentSource, /deploymentExecutiveMetrics/);
-  assert.match(directDeploymentSource, /현재 상태/);
-  assert.match(directDeploymentSource, /예상 변경 수/);
+test("Direct Deployment validation removes duplicated executive and readiness summaries", () => {
+  const contentStart = directDeploymentSource.indexOf("function renderDirectStepContent");
+  const validationStart = directDeploymentSource.indexOf(
+    'if (stepId === "validation")',
+    contentStart
+  );
+  const approvalStart = directDeploymentSource.indexOf(
+    'if (stepId === "approval")',
+    validationStart
+  );
+  const validationSource = directDeploymentSource.slice(validationStart, approvalStart);
+
+  assert.doesNotMatch(directDeploymentSource, /deploymentExecutiveHeader/);
+  assert.doesNotMatch(directDeploymentSource, /deploymentExecutiveMetrics/);
+  assert.doesNotMatch(directDeploymentSource, /function DeploymentMetric/);
+  assert.doesNotMatch(validationSource, /deploymentPlanSnapshot/);
+  assert.doesNotMatch(validationSource, /label="변경 내용"/);
+  assert.doesNotMatch(validationSource, /label="실행 준비"/);
+  assert.doesNotMatch(validationSource, /<PlanSummaryRows/);
+  assert.equal(validationSource.match(/<DeploymentValidationSummaryCard/g)?.length, 2);
+  assert.match(validationSource, /label="설정 상태"/);
+  assert.match(validationSource, /label="빌드 환경"/);
   assert.match(deploymentProgressSource, /deploymentExecutionPanel/);
-  assert.match(directDeploymentSource, /deploymentSettingsLayout/);
-  assert.match(directDeploymentSource, /deploymentValidationCards/);
-  assert.match(directDeploymentSource, /설정 상태/);
-  assert.match(directDeploymentSource, /실행 준비/);
-  assert.match(workspaceStyles, /--deployment-blue:\s*#1267f4/);
-  assert.match(workspaceStyles, /--deployment-navy:\s*#071a36/);
+});
+
+test("deployment progress renders actual and stage-estimated percentages without catch-up", () => {
+  assert.match(deploymentProgressSource, /DeploymentProgressPoller/);
+  assert.match(deploymentProgressSource, /getDeploymentProgressSnapshot/);
+  assert.match(deploymentProgressSource, /getDeploymentProgressPresentation/);
+  assert.match(deploymentProgressSource, /data-estimated/);
+  assert.match(deploymentProgressSource, /aria-valuenow=/);
+  assert.doesNotMatch(deploymentProgressSource, /advanceDisplayedDeploymentProgress/);
+  assert.doesNotMatch(deploymentProgressSource, /setInterval/);
+  assert.doesNotMatch(deploymentProgressSource, /예상 진행률/);
+});
+
+test("deployment progress values reserve their content width and never wrap", () => {
+  assert.match(
+    workspaceStyles,
+    /\.deploymentExecutionPanel\s*\{[^}]*grid-template-columns:\s*52px minmax\(0, 1fr\) max-content;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentExecutionPanel output\s*\{[^}]*white-space:\s*nowrap;/s
+  );
 });
 
 test("deployment review delegates build preparation and repository verification to the Plan API", () => {
@@ -383,35 +532,31 @@ test("setup removes the duplicate recent result card", () => {
   assert.doesNotMatch(setupSource, /최근 실행 결과|마지막 완료 단계/);
 });
 
-test("deployment actions stay next to the heading after the recent result is removed", () => {
+test("the stepper is the only heading before workspace actions", () => {
   const setupStart = directDeploymentSource.indexOf("const renderSetupSection");
   const historyStart = directDeploymentSource.indexOf("const renderResultsSection", setupStart);
   const setupSource = directDeploymentSource.slice(setupStart, historyStart);
-  const headingIndex = setupSource.lastIndexOf("styles.deploymentStepHeading");
+  const stepperIndex = setupSource.lastIndexOf("styles.deploymentStepNavigation");
   const actionsIndex = setupSource.lastIndexOf("renderDirectStepActions(selectedStep.id)");
   const workspaceIndex = setupSource.lastIndexOf("styles.deploymentStepWorkspace");
 
-  assert.ok(actionsIndex > headingIndex);
+  assert.ok(stepperIndex > -1);
+  assert.ok(actionsIndex > stepperIndex);
   assert.ok(workspaceIndex > actionsIndex);
-  assert.match(workspaceStyles, /"heading actions"\s*"workspace workspace"/s);
-  assert.match(
-    workspaceStyles,
-    /\.deploymentConsoleGrid > \.deploymentStepActionBar\s*\{[^}]*border:\s*0;[^}]*grid-area:\s*actions;/s
-  );
-  assert.match(
-    workspaceStyles,
-    /\.deploymentConsoleGrid > \.deploymentStepActionBar \.deploymentValidationActions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*nowrap;/s
-  );
-  assert.match(
-    workspaceStyles,
-    /\.deploymentConsoleGrid > \.deploymentStepActionBar \.deploymentPrimaryButton,[\s\S]*?white-space:\s*nowrap;[\s\S]*?width:\s*152px;/
-  );
+  assert.doesNotMatch(setupSource, /styles\.deploymentStepHeading/);
+  assert.match(workspaceStyles, /"steps"\s*"workspace"\s*"actions"/s);
 });
 
-test("deployment action buttons use one size and fill only while active", () => {
+test("deployment action buttons fit their label without clipping", () => {
   const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
   const resultsStart = directDeploymentSource.indexOf("const renderResultsSection", actionsStart);
   const actionsSource = directDeploymentSource.slice(actionsStart, resultsStart);
+  const actionRailStart = workspaceStyles.indexOf("/* Direct Deployment action rail */");
+  const executiveConsoleStart = workspaceStyles.indexOf(
+    "/* Approved blue executive deployment console */",
+    actionRailStart
+  );
+  const actionRailStyles = workspaceStyles.slice(actionRailStart, executiveConsoleStart);
 
   assert.match(actionsSource, /data-active=/);
   assert.match(
@@ -419,8 +564,16 @@ test("deployment action buttons use one size and fill only while active", () => 
     /\.deploymentConsoleGrid > \.deploymentStepActionBar\s*\{[^}]*justify-content:\s*start;[^}]*justify-items:\s*start;/s
   );
   assert.match(
-    workspaceStyles,
-    /\.deploymentConsoleGrid > \.deploymentStepActionBar > button,[\s\S]*?font-size:\s*calc\(14px \+ var\(--presentation-font-size-increase\)\);[\s\S]*?height:\s*44px;[\s\S]*?justify-content:\s*center;[\s\S]*?justify-self:\s*start;[\s\S]*?min-width:\s*152px;[\s\S]*?width:\s*152px;/
+    actionRailStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar > button,[\s\S]*?flex:\s*0 1 auto;[\s\S]*?font-size:\s*calc\(14px \+ var\(--presentation-font-size-increase\)\);[\s\S]*?height:\s*44px;[\s\S]*?min-width:\s*152px;[\s\S]*?white-space:\s*nowrap;[\s\S]*?width:\s*auto;/
+  );
+  assert.doesNotMatch(
+    actionRailStyles,
+    /(?:flex:\s*0 0 152px|(?:^|\n)\s*width:\s*152px)/
+  );
+  assert.match(
+    actionRailStyles,
+    /@media \(max-width:\s*420px\)[\s\S]*?min-width:\s*0;[\s\S]*?width:\s*100%;/
   );
   assert.match(
     workspaceStyles,
@@ -536,6 +689,54 @@ test("Deployment History uses KPI filters and the approved master-detail hierarc
     workspaceStyles,
     /\.deploymentHistoryDetailHero\s*\{[^}]*background:\s*var\(--deployment-navy\)/s
   );
+});
+
+test("Deployment History hides inactive controls when no successful version exists", () => {
+  const historyStart = directDeploymentSource.indexOf("const renderDeploymentHistory");
+  const historyEnd = directDeploymentSource.indexOf("const renderHistoryView", historyStart);
+  const historySource = directDeploymentSource.slice(historyStart, historyEnd);
+
+  assert.match(
+    directDeploymentSource,
+    /const hasDeploymentHistory = deploymentHistoryEntries\.length > 0/
+  );
+  assert.match(
+    historySource,
+    /!hasDeploymentHistory[\s\S]*deploymentHistoryEmpty[\s\S]*hasDeploymentHistory[\s\S]*deploymentHistoryMetrics/
+  );
+});
+
+test("Deployment History hides stale secondary details when the active filter has no rows", () => {
+  const viewStart = directDeploymentSource.indexOf("const renderHistoryView");
+  const viewEnd = directDeploymentSource.indexOf("const deploymentContent", viewStart);
+  const viewSource = directDeploymentSource.slice(viewStart, viewEnd);
+
+  assert.match(
+    viewSource,
+    /\{filteredDeploymentHistoryEntries\.length > 0 \? \([\s\S]*deploymentHistorySecondary/
+  );
+});
+
+test("selected history detail does not repeat scope and change columns", () => {
+  const detailStart = directDeploymentSource.indexOf("deploymentHistoryDetailPanel");
+  const detailEnd = directDeploymentSource.indexOf("const renderHistoryView", detailStart);
+  const detailSource = directDeploymentSource.slice(detailStart, detailEnd);
+
+  assert.ok(detailStart > -1);
+  assert.ok(detailEnd > detailStart);
+  assert.doesNotMatch(detailSource, /<dt>실행 범위<\/dt>/);
+  assert.doesNotMatch(detailSource, /<dt>변경 내용<\/dt>/);
+  assert.doesNotMatch(
+    detailSource,
+    /formatDeploymentHistoryResult|formatDeploymentScope|formatDeploymentChangeSummary/
+  );
+  assert.match(detailSource, /\{status\.label\}/);
+  assert.match(detailSource, /<time dateTime=\{deployment\.createdAt\}>/);
+  assert.match(detailSource, /<dt>앱 릴리즈<\/dt>/);
+  assert.match(detailSource, /<dt>버전 ID<\/dt>/);
+  assert.match(detailSource, /<dt>실행 시간<\/dt>/);
+  assert.match(detailSource, /<dt>요청자<\/dt>/);
+  assert.match(detailSource, /<summary>기술 정보<\/summary>/);
 });
 
 test("expanded history details do not repeat their disclosure titles", () => {
