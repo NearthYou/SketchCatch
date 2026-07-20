@@ -340,6 +340,8 @@ export function WorkspaceAiChatDock({
   >(() => readBrowserTerraformIssueAnalyses(projectId));
   const [terraformIssueBatchProgress, setTerraformIssueBatchProgress] =
     useState<TerraformIssueBatchProgress | null>(null);
+  const [didTerraformIssueAnalysisComplete, setDidTerraformIssueAnalysisComplete] =
+    useState(false);
   const [terraformFixUnavailableReasons, setTerraformFixUnavailableReasons] = useState<
     Record<string, string>
   >({});
@@ -717,6 +719,7 @@ export function WorkspaceAiChatDock({
     setSelectedSuggestionLabelsByMessageId({});
     setTerraformIssueAnalyses(readBrowserTerraformIssueAnalyses(projectId));
     setTerraformIssueBatchProgress(null);
+    setDidTerraformIssueAnalysisComplete(false);
     setTerraformFixUnavailableReasons({});
     setTerraformPreviewExplanation(null);
     setTerraformPreviewReviewElapsedMs(0);
@@ -775,6 +778,7 @@ export function WorkspaceAiChatDock({
     latestTerraformFingerprintRef.current = terraformAiContext.fingerprint;
     setCompletedTerraformFixIssueKeys([]);
     setTerraformFixUnavailableReasons({});
+    setDidTerraformIssueAnalysisComplete(false);
 
     if (!requestRegistryRef.current.cancel("errors")) {
       return;
@@ -1138,9 +1142,15 @@ export function WorkspaceAiChatDock({
     const contextSnapshot = terraformAiContextRef.current;
     const controller = requestRegistryRef.current.begin("errors");
     setTerraformIssueBatchProgress(null);
+    setDidTerraformIssueAnalysisComplete(false);
 
     try {
-      await analyzeTerraformIssue(selectedTerraformIssue, contextSnapshot, controller);
+      const outcome = await analyzeTerraformIssue(
+        selectedTerraformIssue,
+        contextSnapshot,
+        controller
+      );
+      setDidTerraformIssueAnalysisComplete(outcome === "completed");
     } finally {
       requestRegistryRef.current.complete("errors", controller);
     }
@@ -1158,6 +1168,8 @@ export function WorkspaceAiChatDock({
     const contextSnapshot = terraformAiContextRef.current;
     const controller = requestRegistryRef.current.begin("errors");
     setTerraformIssueBatchProgress({ completed: 0, total: issues.length });
+    setDidTerraformIssueAnalysisComplete(false);
+    let didCompleteAll = true;
 
     try {
       for (let index = 0; index < issues.length; index += 1) {
@@ -1174,13 +1186,19 @@ export function WorkspaceAiChatDock({
         const outcome = await analyzeTerraformIssue(issue, contextSnapshot, controller);
 
         if (outcome === "aborted" || outcome === "stale") {
+          didCompleteAll = false;
           break;
+        }
+
+        if (outcome !== "completed") {
+          didCompleteAll = false;
         }
 
         setTerraformIssueBatchProgress({ completed: index + 1, total: issues.length });
       }
     } finally {
       setTerraformIssueBatchProgress(null);
+      setDidTerraformIssueAnalysisComplete(didCompleteAll && !controller.signal.aborted);
       requestRegistryRef.current.complete("errors", controller);
     }
   }
@@ -1211,13 +1229,12 @@ export function WorkspaceAiChatDock({
       return nextReasons;
     });
 
-    const terraformCode = resolveTerraformIssueCode({
-      combinedTerraformCode: contextSnapshot.combinedTerraformCode,
-      diagnostic: issue.diagnostic,
-      files: contextSnapshot.files
-    });
-
     try {
+      const terraformCode = resolveTerraformIssueCode({
+        combinedTerraformCode: contextSnapshot.combinedTerraformCode,
+        diagnostic: issue.diagnostic,
+        files: contextSnapshot.files
+      });
       const explanation = await runAiTerraformErrorExplanation(
         {
           diagnostic: issue.diagnostic,
@@ -1385,6 +1402,7 @@ export function WorkspaceAiChatDock({
       );
       setTerraformIssueAnalyses({});
       setTerraformIssueBatchProgress(null);
+      setDidTerraformIssueAnalysisComplete(false);
       setTerraformFixUnavailableReasons({});
       setApplyingTerraformFixRequestId(null);
       setCompletedTerraformFixIssueKeys([]);
@@ -1975,6 +1993,7 @@ export function WorkspaceAiChatDock({
       setDraftErrorMessage("");
     } else if (activeChatTab === "errors") {
       setTerraformIssueBatchProgress(null);
+      setDidTerraformIssueAnalysisComplete(false);
       setTerraformIssueAnalyses((currentAnalyses) =>
         Object.fromEntries(
           Object.entries(currentAnalyses).map(([diagnosticKey, analysis]) => [
@@ -2461,12 +2480,12 @@ export function WorkspaceAiChatDock({
                 <span>Terraform</span>
                 <h3 id="workspace-ai-error-actions-title">오류 분석</h3>
               </div>
-              {isTerraformIssueAnalysisRunning ? (
-                <WorkspaceAiWorkbenchTerraformIssueProgress
-                  completed={terraformIssueBatchProgress?.completed ?? 0}
-                  total={terraformIssueBatchProgress?.total ?? 1}
-                />
-              ) : null}
+              <WorkspaceAiWorkbenchTerraformIssueProgress
+                completed={terraformIssueBatchProgress?.completed ?? 0}
+                didComplete={didTerraformIssueAnalysisComplete}
+                isRunning={isTerraformIssueAnalysisRunning}
+                total={terraformIssueBatchProgress?.total ?? 1}
+              />
             </header>
             <label className={styles.issueSelect}>
               <span>분석할 오류</span>

@@ -11,7 +11,12 @@ test("오류 분석 로딩은 작은 원형 게이지에 예상 퍼센트를 숫
     "./WorkspaceAiWorkbenchResults"
   );
   const markup = renderToStaticMarkup(
-    createElement(WorkspaceAiWorkbenchTerraformIssueProgress, { completed: 0, total: 1 })
+    createElement(WorkspaceAiWorkbenchTerraformIssueProgress, {
+      completed: 0,
+      didComplete: false,
+      isRunning: true,
+      total: 1
+    })
   );
 
   assert.match(markup, /role="progressbar"/);
