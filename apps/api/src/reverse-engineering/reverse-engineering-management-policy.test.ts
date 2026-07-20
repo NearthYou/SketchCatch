@@ -24,7 +24,7 @@ test("AWS가 소유한 IAM service-linked Role과 KMS Key는 관리하지 않는
   );
 });
 
-test("SketchCatch 연결 제어 Role, Policy, Stack은 Terraform 관리에서 제외한다", () => {
+test("SketchCatch 연결 제어 Role과 Policy는 Terraform 관리에서 제외한다", () => {
   assert.equal(
     classifyReverseEngineeringManagement(
       resource("IAM_ROLE", { roleName: "SketchCatchImportCfn-connection" })
@@ -37,26 +37,85 @@ test("SketchCatch 연결 제어 Role, Policy, Stack은 Terraform 관리에서 �
     ),
     "sketchcatch_managed"
   );
+});
+
+test("실제 import access Stack 이름은 대소문자와 무관하게 SketchCatch 관리로 분류한다", () => {
+  for (const stackName of [
+    "sketchcatch-import-cf4c4732fd3b8f8a-policy",
+    "SKETCHCATCH-IMPORT-CF4C4732FD3B8F8A-MANAGER"
+  ]) {
+    assert.equal(
+      classifyReverseEngineeringManagement(
+        resource("UNKNOWN", { stackName }, "AWS::CloudFormation::Stack")
+      ),
+      "sketchcatch_managed"
+    );
+  }
+});
+
+test("AWS reader 형태의 CloudFormation ownership tag가 있으면 관리하지 않는다", () => {
   assert.equal(
     classifyReverseEngineeringManagement(
-      resource("UNKNOWN", { stackName: "SketchCatchImportPolicy-connection" }, "AWS::CloudFormation::Stack")
+      resource("S3", {
+        tags: [
+          {
+            key: "aws:cloudformation:stack-id",
+            value: "arn:aws:cloudformation:ap-northeast-2:123456789012:stack/customer/stack-id"
+          },
+          { key: "aws:cloudformation:stack-name", value: "customer" }
+        ]
+      })
+    ),
+    "reference"
+  );
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("S3", {
+        tags: [{ Key: "aws:cloudformation:logical-id", Value: "CustomerBucket" }]
+      })
+    ),
+    "reference"
+  );
+});
+
+test("SketchCatch ownership tag와 marker는 Resource 종류와 무관하게 보호한다", () => {
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("ECS_TASK_DEFINITION", {
+        tags: [
+          { key: "ManagedBy", value: "SketchCatch" },
+          { key: "SketchCatchProject", value: "project-123" }
+        ]
+      })
+    ),
+    "sketchcatch_managed"
+  );
+  assert.equal(
+    classifyReverseEngineeringManagement(resource("UNKNOWN", { managedBy: "SketchCatch" })),
+    "sketchcatch_managed"
+  );
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("S3", { tags: [{ Key: "ManagedBy", Value: "SketchCatch" }] })
     ),
     "sketchcatch_managed"
   );
 });
 
-test("CloudFormation 소유 증거가 있는 고객 리소스는 관리하지 않는다", () => {
+test("SketchCatch ownership 값은 정확히 일치할 때만 신뢰한다", () => {
+  for (const value of ["sketchcatch", "SketchCatch ", "Terraform"]) {
+    assert.equal(
+      classifyReverseEngineeringManagement(
+        resource("S3", { tags: [{ key: "ManagedBy", value }] })
+      ),
+      "managed"
+    );
+  }
   assert.equal(
     classifyReverseEngineeringManagement(
-      resource("S3", { cloudFormationStackId: "stack-123" })
+      resource("S3", { tags: [{ key: "SketchCatchProject", value: "project-123" }] })
     ),
-    "reference"
-  );
-  assert.equal(
-    classifyReverseEngineeringManagement(
-      resource("S3", { managedBy: "cloudformation" })
-    ),
-    "reference"
+    "managed"
   );
 });
 

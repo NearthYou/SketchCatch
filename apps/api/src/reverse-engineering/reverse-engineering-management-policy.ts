@@ -30,8 +30,16 @@ const CLOUD_FORMATION_OWNERSHIP_KEYS = [
   "cloudFormationStackArn"
 ] as const;
 
+const CLOUD_FORMATION_OWNERSHIP_TAG_KEYS = new Set([
+  "aws:cloudformation:stack-id",
+  "aws:cloudformation:stack-name",
+  "aws:cloudformation:logical-id"
+]);
+
 const SKETCHCATCH_CONTROL_NAME_PATTERN =
   /^SketchCatch(?:Import|Terraform|ReverseEngineering|CodeBuild)/u;
+const SKETCHCATCH_IMPORT_STACK_NAME_PATTERN =
+  /^sketchcatch-import-[a-f0-9]{16}-(?:policy|manager)$/iu;
 
 export function classifyReverseEngineeringManagement(
   resource: Pick<
@@ -63,10 +71,19 @@ export function classifyReverseEngineeringManagement(
 function isSketchCatchControlResource(
   resource: Pick<DiscoveredResource, "providerResourceType" | "displayName" | "config">
 ): boolean {
+  if (hasExactSketchCatchOwnership(resource.config)) {
+    return true;
+  }
+
+  if (resource.providerResourceType === "AWS::CloudFormation::Stack") {
+    return getSafeResourceNames(resource).some((name) =>
+      SKETCHCATCH_IMPORT_STACK_NAME_PATTERN.test(name)
+    );
+  }
+
   if (
     resource.providerResourceType !== "AWS::IAM::Role" &&
-    resource.providerResourceType !== "AWS::IAM::Policy" &&
-    resource.providerResourceType !== "AWS::CloudFormation::Stack"
+    resource.providerResourceType !== "AWS::IAM::Policy"
   ) {
     return false;
   }
@@ -97,9 +114,44 @@ function hasCloudFormationOwnershipEvidence(config: Record<string, unknown>): bo
     return true;
   }
 
+  if (
+    getResourceTags(config).some(
+      (tag) => CLOUD_FORMATION_OWNERSHIP_TAG_KEYS.has(tag.key) && tag.value.length > 0
+    )
+  ) {
+    return true;
+  }
+
   return [config["managedBy"], config["ownership"]].some(
     (value) => typeof value === "string" && value.toLowerCase() === "cloudformation"
   );
+}
+
+function hasExactSketchCatchOwnership(config: Record<string, unknown>): boolean {
+  return (
+    config["managedBy"] === "SketchCatch" ||
+    getResourceTags(config).some(
+      (tag) => tag.key === "ManagedBy" && tag.value === "SketchCatch"
+    )
+  );
+}
+
+function getResourceTags(config: Record<string, unknown>): Array<{ key: string; value: string }> {
+  const tags = config["tags"];
+  if (!Array.isArray(tags)) {
+    return [];
+  }
+
+  return tags.flatMap((tag) => {
+    if (!isRecord(tag)) {
+      return [];
+    }
+
+    const key = typeof tag["key"] === "string" ? tag["key"] : tag["Key"];
+    const value = typeof tag["value"] === "string" ? tag["value"] : tag["Value"];
+
+    return typeof key === "string" && typeof value === "string" ? [{ key, value }] : [];
+  });
 }
 
 function getSafeResourceNames(
@@ -116,4 +168,8 @@ function getSafeResourceNames(
 
 function hasNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
