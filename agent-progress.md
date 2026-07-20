@@ -130,6 +130,11 @@ Short English-only working log for the current agent context. Older records are 
 - Verified 22 focused Architecture Draft tests, focused TypeScript checking, and ESLint on the two changed service files. Unrelated tests were intentionally not run.
 - Root lint passed. Root typecheck and build remain blocked by the pre-existing getRepositoryRequiredRuntimeSecrets reference error in repository-start-client.tsx; that unrelated worktree change was not modified.
 
+### 2026-07-20 - Commit fixed public Repository draft flow
+
+- Restored the missing runtime-secret helper import and committed the Audience Live Check fixed analysis, strict Architecture Draft, and Board creation flow as b539268f.
+- Root lint, typecheck, and harness checks pass. No additional test suites were run.
+- Root build exceeded the 244-second command limit without emitting an error; the remaining build processes were stopped and the generated Next.js type reference returned to the tracked baseline.
 ## Known Risk
 
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
