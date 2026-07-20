@@ -5,7 +5,7 @@ import { createAmazonQArchitectureDraftResponse } from "./aiArchitectureDrafts.j
 
 import { generateTerraformFromDiagramJson } from "./terraform/terraform-preview.js";
 
-const prompt = "데모용 실시간 배포 사이트를 배포하고 싶어";
+const prompt = "데모용 실시간 배포 사이트의 다이어그램 만들어줘.";
 const creditPolicy = {
   bedrock: false,
   amazonQ: true,

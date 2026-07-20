@@ -6,7 +6,10 @@ import type {
 import { AUDIENCE_LIVE_CHECK_TERRAFORM_SOURCE } from "./audienceLiveCheckTerraformSource.js";
 import { syncTerraformToDiagramJson } from "./terraform/terraform-to-diagram.js";
 
-const AUDIENCE_LIVE_CHECK_PROMPT = "데모용 실시간 배포 사이트를 배포하고 싶어";
+const AUDIENCE_LIVE_CHECK_PROMPTS = new Set([
+  "데모용 실시간 배포 사이트를 배포하고 싶어",
+  "데모용 실시간 배포 사이트의 다이어그램 만들어줘."
+]);
 export type AuthoredTerraformArchitecturePreset = {
   readonly id: "audience-live-check";
   readonly title: string;
@@ -23,7 +26,7 @@ export function findAuthoredTerraformArchitecturePreset(
 ): AuthoredTerraformArchitecturePreset | null {
   const normalizedPrompt = prompt.normalize("NFKC").replace(/\s+/gu, " ").trim();
 
-  return normalizedPrompt === AUDIENCE_LIVE_CHECK_PROMPT
+  return AUDIENCE_LIVE_CHECK_PROMPTS.has(normalizedPrompt)
     ? AUDIENCE_LIVE_CHECK_PRESET
     : null;
 }
