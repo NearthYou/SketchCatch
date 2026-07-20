@@ -11,7 +11,9 @@ export function compileArchitectureDraftProposal(
 ): ArchitectureBoardCompilationProposal {
   const authoredDiagram =
     draft.metadata.authoredSourceId && draft.diagramJson
-      ? materializeResourceCatalogDiagramVisuals(draft.diagramJson)
+      ? draft.diagramJson.presentation?.geometryPolicy === "source-exact"
+      ? draft.diagramJson
+      : materializeResourceCatalogDiagramVisuals(draft.diagramJson)
       : undefined;
 
   return compileArchitectureBoard({

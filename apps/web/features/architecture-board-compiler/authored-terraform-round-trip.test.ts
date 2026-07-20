@@ -57,3 +57,51 @@ test("authored Architecture Draft materializes registered Resource catalog visua
   assert.deepEqual(secretNode.size, { width: 48, height: 48 });
   assert.deepEqual(secretNode.parameters, diagramJson.nodes[0]?.parameters);
 });
+
+test("source-exact authored Architecture Draft preserves captured Area geometry", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      {
+        id: "captured-vpc",
+        type: "aws_vpc",
+        kind: "resource",
+        position: { x: 240, y: 160 },
+        size: { width: 1260, height: 720 },
+        label: "captured-vpc",
+        locked: false,
+        zIndex: 3,
+        parameters: {
+          fileName: "main",
+          resourceName: "captured_vpc",
+          resourceType: "aws_vpc",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      }
+    ],
+    edges: [],
+    viewport: { x: 12, y: 24, zoom: 0.8 },
+    presentation: { geometryPolicy: "source-exact" }
+  };
+  const draft: AiArchitectureDraftResult = {
+    architectureJson: convertDiagramJsonToArchitectureJson(diagramJson),
+    diagramJson,
+    title: "Captured Board",
+    metadata: {
+      source: "template_fallback",
+      confidence: "high",
+      assumptions: [],
+      explanations: [],
+      authoredSourceId: "audience-live-check",
+      guardrailWarnings: []
+    }
+  };
+
+  const proposal = compileArchitectureDraftProposal(draft);
+  const vpcNode = proposal.diagram.nodes[0];
+
+  assert.ok(vpcNode);
+  assert.deepEqual(vpcNode.position, diagramJson.nodes[0]?.position);
+  assert.deepEqual(vpcNode.size, diagramJson.nodes[0]?.size);
+  assert.deepEqual(proposal.diagram.viewport, diagramJson.viewport);
+});
