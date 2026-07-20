@@ -6,8 +6,7 @@ export const MIN_RIGHT_PANEL_WIDTH = 360;
 export const MAX_RIGHT_PANEL_WIDTH = 640;
 
 const PANEL_PREFERENCES_STORAGE_KEY = "sketchcatch.diagramEditor.panelPreferences";
-const LEGACY_LEFT_PANEL_WIDTH_STORAGE_KEY =
-  "sketchcatch.diagramEditor.leftPanelWidth.brainboardV1";
+const LEGACY_LEFT_PANEL_WIDTH_STORAGE_KEY = "sketchcatch.diagramEditor.leftPanelWidth.brainboardV1";
 const LEGACY_RIGHT_PANEL_WIDTH_STORAGE_KEY =
   "sketchcatch.diagramEditor.rightPanelWidth.brainboardV1";
 
@@ -26,6 +25,25 @@ export const DEFAULT_WORKSPACE_PANEL_PREFERENCES: WorkspacePanelPreferences = {
   rightPanelOpen: true,
   rightPanelWidth: DEFAULT_RIGHT_PANEL_WIDTH
 };
+
+export type InitialWorkspacePanelState = Pick<
+  WorkspacePanelPreferences,
+  "leftPanelOpen" | "rightPanelOpen"
+>;
+
+export function deriveInitialWorkspacePanelState({
+  hasDiagramNodes,
+  isCompactViewport
+}: {
+  readonly hasDiagramNodes: boolean;
+  readonly isCompactViewport: boolean;
+}): InitialWorkspacePanelState {
+  if (isCompactViewport || hasDiagramNodes) {
+    return { leftPanelOpen: false, rightPanelOpen: false };
+  }
+
+  return { leftPanelOpen: true, rightPanelOpen: false };
+}
 
 type PanelPreferenceStorage = {
   readonly getItem: (key: string) => string | null;

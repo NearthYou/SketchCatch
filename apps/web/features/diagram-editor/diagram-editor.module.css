@@ -32,12 +32,9 @@
   --board-warning: #b45309;
   --board-danger: #b42318;
   --board-edge: #59687d;
-  --board-shadow-object:
-    0 0 0 1px rgba(23, 32, 51, 0.04),
-    0 10px 28px rgba(23, 32, 51, 0.12);
+  --board-shadow-object: 0 0 0 1px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.12);
   --board-shadow-toolbar:
-    0 14px 30px rgba(23, 32, 51, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    0 14px 30px rgba(23, 32, 51, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.72);
 
   background: var(--workspace-page);
   color: var(--workspace-text);
@@ -1291,6 +1288,9 @@ button.rightRailResizeHandle {
 }
 
 .canvasPanel :global(.react-flow__edge-text) {
+  font-size: calc(
+    calc(12px * var(--board-lod-label-scale)) + var(--presentation-font-size-increase)
+  ) !important;
   letter-spacing: 0;
   paint-order: stroke;
 }
@@ -1308,10 +1308,6 @@ button.rightRailResizeHandle {
     opacity 120ms cubic-bezier(0.22, 1, 0.36, 1),
     visibility 120ms;
   visibility: hidden;
-}
-
-.canvasPanelEdgeLabelsCompact :global(.react-flow__edge-text) {
-  font-size: calc(calc(12px * var(--board-lod-label-scale)) + var(--presentation-font-size-increase)) !important;
 }
 
 .canvasPanelEdgeLabelsCompact :global(.react-flow__edge:hover .react-flow__edge-text),
@@ -1335,7 +1331,9 @@ button.rightRailResizeHandle {
 }
 
 .canvasPanel :global(.react-flow__node:focus-visible) .nodeShell {
-  box-shadow: 0 0 0 2px var(--board-primary-soft), 0 0 0 4px var(--board-primary);
+  box-shadow:
+    0 0 0 2px var(--board-primary-soft),
+    0 0 0 4px var(--board-primary);
   outline: none;
 }
 
@@ -1912,7 +1910,7 @@ button.rightRailResizeHandle {
   line-height: 18px;
   max-width: 100%;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 0 12px;
   pointer-events: all;
   position: absolute;
@@ -1931,6 +1929,8 @@ button.rightRailResizeHandle {
   max-width: 100%;
   min-width: 0;
   padding: 2px 6px;
+  transform: scale(var(--board-lod-label-scale));
+  transform-origin: left center;
 }
 
 .areaNodeHitEdge {
@@ -2099,7 +2099,7 @@ button.rightRailResizeHandle {
   box-sizing: border-box;
   color: var(--board-ink);
   display: -webkit-box;
-  font-size: calc(6px + var(--presentation-font-size-increase));
+  font-size: calc(12px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   left: 50%;
   line-height: 15px;
@@ -2134,6 +2134,11 @@ button.rightRailResizeHandle {
 .nodeShellZoomFar .resourceNodeLabel {
   transform: translateX(-50%) scale(var(--board-lod-label-scale));
   transform-origin: top center;
+}
+
+.nodeShellZoomFar .resourceNodeLabel {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .lockBadge {
@@ -2257,10 +2262,17 @@ button.rightRailResizeHandle {
   pointer-events: none;
 }
 
-.canvasPanel :global(.react-flow__node:hover) .connectionHandleSource:not(.connectionHandleInactive),
+.canvasPanel
+  :global(.react-flow__node:hover)
+  .connectionHandleSource:not(.connectionHandleInactive),
 .nodeShellSelected ~ .connectionHandleSource:not(.connectionHandleInactive),
-.connectionHandleSource:hover,
-.connectionHandleTarget.connectionHandleActive {
+.connectionHandleSource:hover {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.canvasPanel :global(.react-flow__node:hover) .connectionHandleTarget.connectionHandleActive,
+.connectionHandleTarget.connectionHandleActive:focus-visible {
   opacity: 1;
   pointer-events: all;
 }
@@ -2290,6 +2302,11 @@ button.rightRailResizeHandle {
   border-color: var(--board-success);
   cursor: crosshair;
   z-index: 12;
+}
+
+.nodeShellConnectionCandidate {
+  outline: 2px solid var(--board-success);
+  outline-offset: calc(5px * var(--board-control-scale));
 }
 
 .connectionHandleTarget.connectionHandleActive::after {
@@ -2961,10 +2978,8 @@ button.rightRailResizeHandle {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .autoOrganizeComparison[data-preview-view="original"]
-    > [data-comparison-panel="organized"],
-  .autoOrganizeComparison[data-preview-view="organized"]
-    > [data-comparison-panel="original"] {
+  .autoOrganizeComparison[data-preview-view="original"] > [data-comparison-panel="organized"],
+  .autoOrganizeComparison[data-preview-view="organized"] > [data-comparison-panel="original"] {
     display: none;
   }
 }
@@ -3099,7 +3114,6 @@ button.rightRailResizeHandle {
   .compilerPreviewActions {
     margin-left: auto;
   }
-
 }
 
 @media (prefers-reduced-motion: reduce) {
