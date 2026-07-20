@@ -2510,6 +2510,7 @@ test("createAmazonQArchitectureDraftResponse materializes HTTPS SSE and burst sc
     })
   );
   const prompt = [
+    "runtime selection: ECS Fargate service",
     "웹사이트 유형: 동적 웹 애플리케이션",
     "트래픽: 중간 규모 일 1,000명 동시 50명",
     "데이터베이스: 간단한 데이터 사용자 정보 게시글 10GB 미만",
@@ -3425,6 +3426,98 @@ test("createAmazonQArchitectureDraftResponse maps fully managed SPA API answers 
   );
 });
 
+test("createAmazonQArchitectureDraftResponse prioritizes fully managed runtime and CloudFront upload delivery", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "Managed Shopping App",
+      patternIds: ["ecs-fargate", "spa-cloudfront-s3", "multi-az-rds"],
+      requiredResources: [
+        "VPC",
+        "SUBNET",
+        "INTERNET_GATEWAY",
+        "NAT_GATEWAY",
+        "LOAD_BALANCER",
+        "LOAD_BALANCER_LISTENER",
+        "LOAD_BALANCER_TARGET_GROUP",
+        "ECR_REPOSITORY",
+        "ECS_CLUSTER",
+        "ECS_SERVICE",
+        "ECS_TASK_DEFINITION",
+        "CLOUDFRONT",
+        "S3",
+        "RDS"
+      ],
+      resourceQuantities: { S3: 2 },
+      runtimeTopology: {
+        trafficEntry: "LOAD_BALANCER",
+        compute: "ECS_FARGATE",
+        placement: "private_subnets"
+      },
+      region: "ap-northeast-2",
+      database: "required"
+    })
+  );
+  const prompt = [
+    "website type: dynamic web application shopping mall",
+    "traffic: medium daily traffic 1000 users",
+    "database: PostgreSQL member and order data under 10GB",
+    "region: Korea only Seoul ap-northeast-2",
+    "monthly budget: 10-50 manwon",
+    "management preference: fully managed serverless minimal operations",
+    "realtime chat required",
+    "realtime implementation: WebSocket",
+    "profile image file upload required",
+    "file upload implementation: private S3 object storage with CloudFront delivery",
+    "SSL HTTPS: required",
+    "page loading time target: within 3 seconds",
+    "availability: 99.9%; allow up to one hour of downtime per month"
+  ].join("\n");
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const nodes = response.architectureJson.nodes;
+  const nodeTypes = new Set(nodes.map((node) => node.type));
+  const cloudFront = nodes.find((node) => node.type === "CLOUDFRONT");
+  const uploadBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "user_uploads"
+  );
+
+  assert.equal(nodeTypes.has("API_GATEWAY_REST_API"), true);
+  assert.equal(nodeTypes.has("LAMBDA"), true);
+  assert.equal(nodeTypes.has("RDS"), true);
+  assert.equal(nodeTypes.has("API_GATEWAY_WEBSOCKET_API"), true);
+  for (const forbiddenType of [
+    "ECR_REPOSITORY",
+    "ECS_CLUSTER",
+    "ECS_SERVICE",
+    "ECS_TASK_DEFINITION",
+    "LOAD_BALANCER",
+    "NAT_GATEWAY"
+  ] as const) {
+    assert.equal(nodeTypes.has(forbiddenType), false, `Expected no ${forbiddenType}`);
+  }
+  assert.equal(nodes.filter((node) => node.type === "SUBNET").length, 2);
+  assert.equal(nodes.filter((node) => node.type === "SECURITY_GROUP").length, 1);
+  assert.equal(nodes.filter((node) => node.type === "IAM_ROLE").length, 1);
+  assert.ok(nodes.filter((node) => node.type === "CLOUDWATCH_METRIC_ALARM").length <= 1);
+  assert.ok(cloudFront);
+  assert.ok(uploadBucket);
+  assert.equal(
+    response.architectureJson.edges.some(
+      (edge) => edge.sourceId === cloudFront.id && edge.targetId === uploadBucket.id
+    ),
+    true,
+    "Expected CloudFront to deliver objects from the private upload bucket"
+  );
+});
 test("createAmazonQArchitectureDraftResponse removes orphan VPC scaffolding from DB-free serverless previews", async () => {
   const provider = createFakeAmazonQProvider(() =>
     JSON.stringify({
@@ -3570,6 +3663,55 @@ test("createAmazonQArchitectureDraftResponse materializes static no-backend answ
   assert.equal(nodeTypes.has("RDS"), false);
 });
 
+test("createAmazonQArchitectureDraftResponse removes a provider-selected API from static no-backend answers", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "Static Site With Unwanted API",
+      patternIds: ["spa-cloudfront-s3", "serverless-api"],
+      requiredResources: [
+        "CLOUDFRONT",
+        "S3",
+        "API_GATEWAY_REST_API",
+        "LAMBDA",
+        "IAM_ROLE",
+        "IAM_POLICY",
+        "CLOUDWATCH_LOG_GROUP"
+      ],
+      runtimeTopology: {
+        trafficEntry: "API_GATEWAY_REST_API",
+        compute: "LAMBDA"
+      }
+    })
+  );
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createStaticPortfolioQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const nodeTypes = new Set(response.architectureJson.nodes.map((node) => node.type));
+
+  assert.equal(nodeTypes.has("CLOUDFRONT"), true);
+  assert.equal(nodeTypes.has("S3"), true);
+  for (const forbiddenType of [
+    "API_GATEWAY_REST_API",
+    "LAMBDA",
+    "IAM_ROLE",
+    "IAM_POLICY",
+    "CLOUDWATCH_LOG_GROUP"
+  ] as const) {
+    assert.equal(nodeTypes.has(forbiddenType), false, `Expected no ${forbiddenType}`);
+  }
+  assert.equal(
+    response.architectureJson.edges.some((edge) => /upload|image object/iu.test(edge.label ?? "")),
+    false
+  );
+});
 test("createAmazonQArchitectureDraftResponse expands Git CI/CD EC2 handoff answers into deployable resources", async () => {
   const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {

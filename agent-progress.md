@@ -135,6 +135,16 @@ Short English-only working log for the current agent context. Older records are 
 - Restored the missing runtime-secret helper import and committed the Audience Live Check fixed analysis, strict Architecture Draft, and Board creation flow as b539268f.
 - Root lint, typecheck, and harness checks pass. No additional test suites were run.
 - Root build exceeded the 244-second command limit without emitting an error; the remaining build processes were stopped and the generated Next.js type reference returned to the tracked baseline.
+
+### 2026-07-20 - Enforce accepted AI Architecture constraints
+
+- Reconciled canonical Provider plans with the accepted fixed intake and explicit natural-language requirements before materialization.
+- Static no-backend answers now remove Provider-selected API/runtime/database/upload topology. Fully managed serverless answers remove ECS, Fargate, EC2, ALB, and NAT resources in favor of API Gateway and Lambda while retaining explicitly required RDS and WebSocket capabilities.
+- Corrected upload targeting so Lambda and S3 event edges use the upload bucket and CloudFront always delivers the required upload S3 origin. Bounded managed-serverless support quantities to remove duplicate subnets, security groups, IAM roles, and alarms.
+- Six focused API regressions, API typecheck, changed-file ESLint, and `git diff --check` passed. Unrelated full suites were intentionally not run.
+- Localhost Chrome QA passed: the fixed-question static flow saved a two-resource CloudFront/S3 Board, and detailed natural-language input saved a 21-resource managed-serverless Board with CloudFront/S3, REST API/Lambda, RDS, WebSocket, and no ECS/Fargate/ALB/NAT.
+- No migration, cloud mutation, deployment, or Git/CI/CD handoff was performed.
+
 ## Known Risk
 
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.

@@ -976,6 +976,52 @@ function sanitizeArchitecturePreviewForRequirement(
   };
 }
 
+function removeDanglingArchitectureEdges(
+  architectureJson: ArchitectureJson
+): ArchitectureJson {
+  const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
+
+  return {
+    nodes: architectureJson.nodes,
+    edges: architectureJson.edges.filter(
+      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+    )
+  };
+}
+
+function connectRequiredCloudFrontUploadDelivery(
+  architectureJson: ArchitectureJson
+): ArchitectureJson {
+  const cloudFronts = architectureJson.nodes.filter((node) => node.type === "CLOUDFRONT");
+  const uploadBuckets = architectureJson.nodes.filter(
+    (node) =>
+      node.type === "S3" &&
+      (
+        node.config.bucketPurpose === "user_uploads" ||
+        /upload|media|attachment/iu.test(`${node.id} ${node.label ?? ""}`)
+      )
+  );
+  const edges = [...architectureJson.edges];
+
+  for (const cloudFront of cloudFronts) {
+    for (const uploadBucket of uploadBuckets) {
+      if (
+        !edges.some(
+          (edge) => edge.sourceId === cloudFront.id && edge.targetId === uploadBucket.id
+        )
+      ) {
+        edges.push({
+          id: `canonical-${cloudFront.id}-to-${uploadBucket.id}`,
+          sourceId: cloudFront.id,
+          targetId: uploadBucket.id,
+          label: "private media delivery origin"
+        });
+      }
+    }
+  }
+
+  return { nodes: architectureJson.nodes, edges };
+}
 function applyArchitectureParameterCompletenessDefaults(
   architectureJson: ArchitectureJson
 ): ArchitectureJson {
@@ -2816,10 +2862,17 @@ function applyArchitectureDraftRequestPolicies(
     // Candidate authorization is observational and must not interrupt final generation.
   }
 
-  return applyArchitectureDraftCandidateExclusions(
+  const candidateFilteredDraft = applyArchitectureDraftCandidateExclusions(
     policyDraft,
     authorizedCandidateExclusions
   );
+
+  return {
+    ...candidateFilteredDraft,
+    architectureJson: connectRequiredCloudFrontUploadDelivery(
+      removeDanglingArchitectureEdges(candidateFilteredDraft.architectureJson)
+    )
+  };
 }
 
 function applyArchitectureDraftBaseRequestPolicies(
@@ -4669,6 +4722,12 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     patternIds.add("serverless-api");
     requiredResources.add("API_GATEWAY_REST_API");
     requiredResources.add("LAMBDA");
+    if (resolveRealtimeTransport(normalizedPrompt) === "websocket") {
+      requiredResources.add("API_GATEWAY_WEBSOCKET_API");
+      requiredResources.add("API_GATEWAY_V2_ROUTE");
+      requiredResources.add("API_GATEWAY_V2_INTEGRATION");
+      requiredResources.add("API_GATEWAY_V2_STAGE");
+    }
     requiredResources.add("LAMBDA_PERMISSION");
     requiredResources.add("IAM_ROLE");
     requiredResources.add("IAM_POLICY");
@@ -4681,6 +4740,12 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     patternIds.add("serverless-api");
     requiredResources.add("API_GATEWAY_REST_API");
     requiredResources.add("LAMBDA");
+    if (resolveRealtimeTransport(normalizedPrompt) === "websocket") {
+      requiredResources.add("API_GATEWAY_WEBSOCKET_API");
+      requiredResources.add("API_GATEWAY_V2_ROUTE");
+      requiredResources.add("API_GATEWAY_V2_INTEGRATION");
+      requiredResources.add("API_GATEWAY_V2_STAGE");
+    }
     forbiddenCapabilities.add("ec2_runtime");
     forbiddenCapabilities.add("load_balancer");
 
@@ -5071,21 +5136,203 @@ function sanitizeMergedRuntimeTopology(
   return Object.keys(sanitized).length === 0 ? undefined : sanitized;
 }
 
+const STATIC_SITE_ALLOWED_RESOURCE_TYPES = new Set<ResourceType>([
+  "S3",
+  "CLOUDFRONT",
+  "ROUTE53_RECORD",
+  "ACM_CERTIFICATE",
+  "ACM_CERTIFICATE_VALIDATION",
+  "WAF_WEB_ACL",
+  "WAF_WEB_ACL_ASSOCIATION"
+]);
+
+const BACKEND_RUNTIME_RESOURCE_TYPES = new Set<ResourceType>([
+  "API_GATEWAY_REST_API",
+  "API_GATEWAY_RESOURCE",
+  "API_GATEWAY_METHOD",
+  "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
+  "API_GATEWAY_STAGE",
+  "API_GATEWAY_WEBSOCKET_API",
+  "API_GATEWAY_V2_ROUTE",
+  "API_GATEWAY_V2_INTEGRATION",
+  "API_GATEWAY_V2_STAGE",
+  "LAMBDA",
+  "LAMBDA_PERMISSION",
+  "EC2",
+  "AMI",
+  "IAM_INSTANCE_PROFILE",
+  "LAUNCH_TEMPLATE",
+  "AUTO_SCALING_GROUP",
+  "AUTO_SCALING_POLICY",
+  "ECR_REPOSITORY",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION",
+  "ECS_CAPACITY_PROVIDER",
+  "EKS_CLUSTER",
+  "EKS_NODE_GROUP",
+  "LOAD_BALANCER",
+  "LOAD_BALANCER_LISTENER",
+  "LOAD_BALANCER_TARGET_GROUP"
+]);
+
+const MANAGED_SERVERLESS_EXCLUDED_RESOURCE_TYPES = new Set<ResourceType>([
+  "EC2",
+  "AMI",
+  "IAM_INSTANCE_PROFILE",
+  "LAUNCH_TEMPLATE",
+  "AUTO_SCALING_GROUP",
+  "AUTO_SCALING_POLICY",
+  "ECR_REPOSITORY",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION",
+  "ECS_CAPACITY_PROVIDER",
+  "EKS_CLUSTER",
+  "EKS_NODE_GROUP",
+  "LOAD_BALANCER",
+  "LOAD_BALANCER_LISTENER",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "APPLICATION_AUTO_SCALING_TARGET",
+  "APPLICATION_AUTO_SCALING_POLICY",
+  "INTERNET_GATEWAY",
+  "ELASTIC_IP",
+  "NAT_GATEWAY",
+  "ROUTE_TABLE",
+  "ROUTE_TABLE_ASSOCIATION"
+]);
+
+function applyAcceptedAnswerPriorityToRequirementPlan(
+  plan: ArchitectureIntentPlan | null,
+  prompt: string
+): ArchitectureIntentPlan | null {
+  if (plan === null) return null;
+
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const patternIds = new Set(plan.patternIds ?? []);
+  const requiredResources = new Set(plan.requiredResources ?? []);
+  const forbiddenCapabilities = new Set(plan.forbiddenCapabilities ?? []);
+  const resourceQuantities = { ...(plan.resourceQuantities ?? {}) };
+  let runtimeTopology = plan.runtimeTopology;
+  const explicitResourceTypes = new Set(findExplicitResourceTypesInPrompt(normalizedPrompt));
+  const hasExplicitBackendResource = [...explicitResourceTypes].some((resourceType) =>
+    BACKEND_RUNTIME_RESOURCE_TYPES.has(resourceType)
+  );
+
+  if (requiresStaticDeliveryArchitecture(normalizedPrompt) && !hasExplicitBackendResource) {
+    patternIds.delete("serverless-api");
+    patternIds.delete("ecs-fargate");
+    patternIds.delete("alb-asg-ec2");
+    patternIds.delete("multi-az-rds");
+    patternIds.add("spa-cloudfront-s3");
+
+    for (const resourceType of [...requiredResources]) {
+      if (
+        !STATIC_SITE_ALLOWED_RESOURCE_TYPES.has(resourceType as ResourceType) &&
+        !explicitResourceTypes.has(resourceType as ResourceType)
+      ) {
+        requiredResources.delete(resourceType);
+      }
+    }
+    requiredResources.add("CLOUDFRONT");
+    requiredResources.add("S3");
+    for (const resourceType of Object.keys(resourceQuantities)) {
+      if (!requiredResources.has(resourceType as ResourceType)) {
+        delete resourceQuantities[resourceType];
+      }
+    }
+    resourceQuantities.S3 = 1;
+    resourceQuantities.CLOUDFRONT = 1;
+    forbiddenCapabilities.add("backend_runtime");
+    forbiddenCapabilities.add("container_runtime");
+    forbiddenCapabilities.add("database");
+    forbiddenCapabilities.add("ec2_runtime");
+    forbiddenCapabilities.add("file_upload");
+    forbiddenCapabilities.add("load_balancer");
+    forbiddenCapabilities.add("realtime");
+    runtimeTopology = undefined;
+  }
+
+  const backendProfile = resolveBackendProfile(normalizedPrompt);
+  const fullyManagedServerless =
+    resolveManagementProfile(normalizedPrompt) === "fully_managed" &&
+    backendProfile !== undefined &&
+    backendProfile !== "none" &&
+    !hasPromptTerm(normalizedPrompt, [
+      "ecs fargate",
+      "fargate service",
+      "fargate task",
+      "eks cluster",
+      "kubernetes"
+    ]);
+
+  if (fullyManagedServerless) {
+    patternIds.delete("ecs-fargate");
+    patternIds.delete("alb-asg-ec2");
+    patternIds.add("serverless-api");
+    requiredResources.add("API_GATEWAY_REST_API");
+    requiredResources.add("LAMBDA");
+    if (resolveRealtimeTransport(normalizedPrompt) === "websocket") {
+      requiredResources.add("API_GATEWAY_WEBSOCKET_API");
+      requiredResources.add("API_GATEWAY_V2_ROUTE");
+      requiredResources.add("API_GATEWAY_V2_INTEGRATION");
+      requiredResources.add("API_GATEWAY_V2_STAGE");
+    }
+
+    for (const resourceType of MANAGED_SERVERLESS_EXCLUDED_RESOURCE_TYPES) {
+      requiredResources.delete(resourceType);
+      delete resourceQuantities[resourceType];
+    }
+
+    if (patternIds.has("multi-az-rds") || requiredResources.has("RDS")) {
+      resourceQuantities.SUBNET = 2;
+      resourceQuantities.SECURITY_GROUP = 1;
+    }
+    for (const resourceType of [
+      "IAM_ROLE",
+      "IAM_POLICY",
+      "CLOUDWATCH_LOG_GROUP",
+      "CLOUDWATCH_METRIC_ALARM"
+    ] as const) {
+      if (requiredResources.has(resourceType)) {
+        resourceQuantities[resourceType] = 1;
+      }
+    }
+    forbiddenCapabilities.add("container_runtime");
+    forbiddenCapabilities.add("ec2_runtime");
+    forbiddenCapabilities.add("load_balancer");
+    runtimeTopology = {
+      trafficEntry: "API_GATEWAY_REST_API",
+      compute: "LAMBDA"
+    };
+  }
+
+  return {
+    ...plan,
+    patternIds: [...patternIds],
+    requiredResources: [...requiredResources],
+    resourceQuantities,
+    forbiddenCapabilities: [...forbiddenCapabilities],
+    ...(runtimeTopology === undefined ? { runtimeTopology: undefined } : { runtimeTopology })
+  };
+}
+
 function createAmazonQPlanDraftResult(
   response: AmazonQArchitectureDraftPlan,
   request: CreateArchitectureDraftRequest,
   normalizedRequirement: ArchitectureIntentPlan | null,
   providerMetadata: AiProviderMetadata
 ): AiArchitectureDraftResult {
-  const providerPlanIsCanonical = (response.plan.patternIds?.length ?? 0) > 0;
   const plan = applyRepositoryEvidencePriorityToRequirementPlan(
     applyFixedTemplatePriorityToRequirementPlan(
       normalizeArchitecturePlanTopologyInvariants(
-        reconcileCanonicalProviderPlan(
-          providerPlanIsCanonical
-            ? response.plan
-            : mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
-          response.plan
+        applyAcceptedAnswerPriorityToRequirementPlan(
+          reconcileCanonicalProviderPlan(
+            mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
+            response.plan
+          ),
+          request.prompt
         ),
         request.prompt
       ),
@@ -5121,10 +5368,12 @@ function createAmazonQPlanDraftResult(
     connectedCanonicalArchitectureJson,
     plan?.runtimeTopology
   );
-  const materializedArchitectureJson = applyArchitectureParameterCompletenessDefaults(applyArchitectureOperationalPolicy(
-    topologyConnectedArchitectureJson,
-    resolveArchitectureOperationalRequirements(request.prompt)
-  ));
+  const materializedArchitectureJson = applyArchitectureParameterCompletenessDefaults(
+    applyArchitectureOperationalPolicy(
+      topologyConnectedArchitectureJson,
+      resolveArchitectureOperationalRequirements(request.prompt)
+    )
+  );
   const architectureJson = applyStrictRepositoryEvidencePolicy(
     {
       architectureJson: materializedArchitectureJson,
@@ -9497,7 +9746,13 @@ function connectCanonicalPatternTopologies(
     connect("API_GATEWAY_DEPLOYMENT", "API_GATEWAY_STAGE", "publishes");
     connect("IAM_ROLE", "LAMBDA", "authorizes");
     connect("LAMBDA", "CLOUDWATCH_LOG_GROUP", "logs");
-    connect("LAMBDA", "S3", "image upload objects");
+    const lambda = nodesByType.get("LAMBDA")?.[0];
+    const uploadBucket = (nodesByType.get("S3") ?? []).find(
+      (node) => node.config.bucketPurpose === "user_uploads"
+    );
+    if (lambda !== undefined && uploadBucket !== undefined) {
+      connectIds(lambda.id, uploadBucket.id, "stores upload objects");
+    }
   }
 
   if (patternIds.includes("spa-cloudfront-s3")) {
@@ -9589,7 +9844,13 @@ function connectCanonicalPatternTopologies(
     }
   }
 
-  connect("S3", "LAMBDA", "object event");
+  const uploadEventBucket = (nodesByType.get("S3") ?? []).find(
+    (node) => node.config.bucketPurpose === "user_uploads"
+  );
+  const uploadEventLambda = nodesByType.get("LAMBDA")?.[0];
+  if (uploadEventBucket !== undefined && uploadEventLambda !== undefined) {
+    connectIds(uploadEventBucket.id, uploadEventLambda.id, "object event");
+  }
   connect("LAMBDA", "SQS_QUEUE", "enqueues");
   connect("LAMBDA", "DYNAMODB_TABLE", "writes");
   connect("SQS_QUEUE", "ECS_SERVICE", "work queue");
