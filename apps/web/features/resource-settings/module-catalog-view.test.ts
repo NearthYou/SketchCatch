@@ -185,7 +185,7 @@ test("simple Module 수가 같으면 낮은 평균 resource 수가 먼저 정렬
       }),
       createCatalogModule({
         id: "low-average-complex",
-        resourceCount: 4,
+        resourceCount: 8,
         functionalGroup: { key: "low-average", label: "Low average" }
       }),
       createCatalogModule({
@@ -195,7 +195,7 @@ test("simple Module 수가 같으면 낮은 평균 resource 수가 먼저 정렬
       }),
       createCatalogModule({
         id: "high-average-complex",
-        resourceCount: 5,
+        resourceCount: 6,
         functionalGroup: { key: "high-average", label: "High average" }
       })
     ],
@@ -244,14 +244,14 @@ test("동점 Catalog 섹션은 label과 key 순으로 결정적으로 정렬된�
         functionalGroup: { key: "z-key", label: "Alpha" }
       }),
       createCatalogModule({
-        id: "bravo-a",
-        resourceCount: 2,
-        functionalGroup: { key: "a-key", label: "Bravo" }
-      }),
-      createCatalogModule({
         id: "bravo-b",
         resourceCount: 2,
         functionalGroup: { key: "b-key", label: "Bravo" }
+      }),
+      createCatalogModule({
+        id: "bravo-a",
+        resourceCount: 2,
+        functionalGroup: { key: "a-key", label: "Bravo" }
       })
     ],
     view: "functional"
@@ -289,6 +289,56 @@ test("검색된 visible Module만으로 Catalog 섹션 점수를 다시 계산�
   assert.deepEqual(
     createModuleCatalogGroups({ modules, query: "visible", view: "functional" }).map(({ key }) => key),
     ["alpha", "beta"]
+  );
+});
+
+test("view 전환은 active lens의 그룹 구성으로 Catalog 섹션 점수와 순서를 다시 계산한다", () => {
+  const modules = [
+    createCatalogModule({
+      id: "module-six",
+      resourceCount: 6,
+      functionalGroup: { key: "functional-higher-average", label: "Functional higher average" },
+      purposeGroup: { key: "purpose-complex", label: "Purpose complex" }
+    }),
+    createCatalogModule({
+      id: "module-eight",
+      resourceCount: 8,
+      functionalGroup: { key: "functional-lower-average", label: "Functional lower average" },
+      purposeGroup: { key: "purpose-complex", label: "Purpose complex" }
+    }),
+    createCatalogModule({
+      id: "module-three",
+      resourceCount: 3,
+      functionalGroup: { key: "functional-higher-average", label: "Functional higher average" },
+      purposeGroup: { key: "purpose-simple", label: "Purpose simple" }
+    }),
+    createCatalogModule({
+      id: "module-zero",
+      resourceCount: 0,
+      functionalGroup: { key: "functional-lower-average", label: "Functional lower average" },
+      purposeGroup: { key: "purpose-simple", label: "Purpose simple" }
+    })
+  ];
+
+  assert.deepEqual(
+    createModuleCatalogGroups({ modules, view: "functional" }).map(({ key, modules }) => ({
+      key,
+      moduleIds: modules.map(({ id }) => id)
+    })),
+    [
+      { key: "functional-lower-average", moduleIds: ["module-eight", "module-zero"] },
+      { key: "functional-higher-average", moduleIds: ["module-six", "module-three"] }
+    ]
+  );
+  assert.deepEqual(
+    createModuleCatalogGroups({ modules, view: "purpose" }).map(({ key, modules }) => ({
+      key,
+      moduleIds: modules.map(({ id }) => id)
+    })),
+    [
+      { key: "purpose-simple", moduleIds: ["module-three", "module-zero"] },
+      { key: "purpose-complex", moduleIds: ["module-eight", "module-six"] }
+    ]
   );
 });
 
@@ -382,16 +432,23 @@ function createCatalogModule(input: {
   readonly resourceCount?: number | undefined;
   readonly areaCount?: number | undefined;
   readonly functionalGroup?: { readonly key: string; readonly label: string } | undefined;
+  readonly purposeGroup?: { readonly key: string; readonly label: string } | undefined;
 }): CuratedModuleDefinition {
   const resourceCount = input.resourceCount ?? 0;
   const areaCount = input.areaCount ?? 0;
   const functionalGroup = input.functionalGroup ?? sameFunctionalGroup;
+  const lenses: CuratedModuleDefinition["lenses"] = input.purposeGroup
+    ? [
+        { kind: "functional", ...functionalGroup },
+        { kind: "purpose", ...input.purposeGroup }
+      ]
+    : [{ kind: "functional", ...functionalGroup }];
 
   return {
     id: input.id,
     title: input.title ?? input.id,
     description: `${input.id} description`,
-    lenses: [{ kind: "functional", ...functionalGroup }],
+    lenses,
     structuralFingerprint: `${input.id}-fingerprint`,
     nodes: [
       ...Array.from({ length: resourceCount }, (_, index) =>
