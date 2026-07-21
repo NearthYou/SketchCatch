@@ -50,6 +50,29 @@ export function incrementLiveObservationEcsMaxCapacity(
     );
   }
 
+  const hasVerifiedEcsIdentity =
+    hasSingleTerraformAssignment(
+      target.code,
+      /^\s*service_namespace\s*=/gm,
+      /^\s*service_namespace\s*=\s*"ecs"\s*(?:#.*)?\r?$/m
+    ) &&
+    hasSingleTerraformAssignment(
+      target.code,
+      /^\s*scalable_dimension\s*=/gm,
+      /^\s*scalable_dimension\s*=\s*"ecs:service:DesiredCount"\s*(?:#.*)?\r?$/m
+    ) &&
+    hasSingleTerraformAssignment(
+      target.code,
+      /^\s*resource_id\s*=/gm,
+      /^\s*resource_id\s*=\s*"service\/[^"\r\n]+"\s*(?:#.*)?\r?$/m
+    );
+  if (!hasVerifiedEcsIdentity) {
+    throw new LiveObservationTerraformUpdateError(
+      "manual_review_required",
+      "ECS 서비스의 자동 확장 설정인지 확인할 수 없어 직접 검토가 필요합니다."
+    );
+  }
+
   const assignments = target.code.match(/^\s*max_capacity\s*=/gm) ?? [];
   const numericAssignment =
     /^(\s*max_capacity\s*=\s*)(\d+)(\s*(?:#.*)?\r?)$/m.exec(target.code);
@@ -99,4 +122,12 @@ export function incrementLiveObservationEcsMaxCapacity(
     nextMaxCapacity,
     previousMaxCapacity
   };
+}
+
+function hasSingleTerraformAssignment(
+  code: string,
+  assignmentPattern: RegExp,
+  expectedLiteralPattern: RegExp
+): boolean {
+  return (code.match(assignmentPattern) ?? []).length === 1 && expectedLiteralPattern.test(code);
 }

@@ -714,6 +714,8 @@ export function WorkspaceRightPanel({
 
   const updateLiveObservationDeployment = useCallback(
     (deploymentId: string): void => {
+      setLiveObservationIncidentSnapshot(null);
+      setLiveObservationAppliedTerraformUpdate(null);
       setLiveObservationViewState((current) =>
         selectLiveObservationDeployment(current, projectId, deploymentId)
       );
@@ -723,6 +725,8 @@ export function WorkspaceRightPanel({
 
   const updateLiveObservationSession = useCallback(
     (session: LiveObservationV2Session | null): void => {
+      setLiveObservationIncidentSnapshot(null);
+      setLiveObservationAppliedTerraformUpdate(null);
       setLiveObservationSessionState((current) =>
         retainLiveObservationSession(current, projectId, session)
       );
@@ -1107,6 +1111,25 @@ export function WorkspaceRightPanel({
             <Activity size={18} aria-hidden="true" />
           </button>
         </aside>
+        <div hidden>
+          <TerraformCodePanel
+            ref={terraformPanelRef}
+            context={context}
+            initialTerraformFiles={initialTerraformFiles}
+            externalTerraformFilesReplacement={terraformFilesReplacement}
+            externalDiscardRequestId={terraformDiscardRequestId}
+            externalSaveRequestId={terraformSaveRequestId}
+            isVisible={false}
+            onArchitectureDiagnosticsChange={handleArchitectureDiagnosticsChange}
+            onDiagnosticsChange={handleTerraformDiagnosticsChange}
+            onDirtyChange={handleTerraformDirtyChange}
+            onExternalSaveComplete={handleTerraformExternalSaveComplete}
+            onTerraformAiCodeContextChange={setTerraformAiCodeContext}
+            onTerraformAiInteraction={() => onTerraformAiInteraction("preview")}
+            onTerraformFilesChange={onTerraformFilesChange}
+            onTerraformFilesReplacementApplied={onTerraformFilesReplacementApplied}
+          />
+        </div>
         {deploymentConsole}
         {liveObservationModal}
       </>

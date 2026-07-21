@@ -22,12 +22,3 @@ test("design analysis is not exposed as a separate Workspace panel", () => {
   assert.doesNotMatch(rightPanelSource, /activeView === "analysis"/);
   assert.doesNotMatch(liveObservationModalSource, /WorkspaceDesignAnalysisPanel/);
 });
-
-test("Live Observation keeps operational analysis collapsed beneath the focused flow", () => {
-  assert.match(rightPanelSource, /onClick=\{\(\) => openLiveObservation\(\)\}/);
-  assert.match(rightPanelSource, /<LiveObservationModal[\s\S]*?projectId=\{projectId\}/);
-  assert.match(liveObservationModalSource, /<LiveObservationFocusedFlow[\s\S]*?<details/);
-  assert.match(liveObservationModalSource, /getLiveObservationOperationalAnalysis/);
-  assert.match(liveObservationModalSource, /data-analysis-state=\{operationalAnalysis\.state\}/);
-  assert.match(liveObservationModalSource, /operationalAnalysis\.terraformAction/);
-});

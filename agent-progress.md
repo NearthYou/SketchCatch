@@ -10,7 +10,7 @@ Short English-only working log for the current agent context. Older records are 
 - Terraform reverse sync accepts references to its allowlisted utility resources, so generated Runtime Secret values such as `random_password.check_in_signing.result` round-trip without a false manual-edit warning.
 - The Direct Deployment branch includes `origin/dev` through `fce1d6c0`, removes duplicate deployment summaries, and keeps selected history details within the active filter. Eighty-six focused Web tests and the root harness, lint, typecheck, and build checks pass.
 - The legacy `practice` Deployment profile is removed; `demo_web_service` is the default live profile, and imported migration `0054` rewrites legacy rows before removing the enum value.
-- Live Observation renders bounded traffic motion, a task-count-responsive Fargate fleet, and collapsed operational analysis without development-only traffic or Task preview controls.
+- Live Observation keeps its bounded traffic motion and presents a separate, read-only Signal Dashboard: at most three deterministic, evidence-backed signals distinguish confirmed facts, possible causes, and what is still unknown without adding live AWS actions.
 - Delayed first CloudWatch points retain request and capacity evidence, and stopped sessions no longer continue the countdown.
 - The approved sandbox traffic run sent exactly 963 requests with 963 HTTP 200 responses. The failed observation acceptance triggered approved cleanup, and the `liveobs-7cccab4b` AWS resource set was verified absent.
 - Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` is `DESTROYED` with cleared state and current-plan pointers.
@@ -33,6 +33,7 @@ Short English-only working log for the current agent context. Older records are 
 - The separate `audience-live-check` branch `codex/fix-browser-check-in-route` moves browser calls to `/api/participations` while retaining `/api/check-ins` as the release-verification compatibility alias. Its focused tests, full 48-test suite, typecheck, build, and changed-file lint pass.
 - Broad API and Web suites still expose pre-existing Architecture Compiler, generated artifact, artifact-loader, and AI Architecture Draft baseline failures outside this workstream. The changed Live Observation tests pass.
 - Merged `origin/dev` at `587e4443` into `codex/fix-deployment-live-observation`; the only textual conflict was this session log, and both histories were preserved. The combined Redis recovery, SSE diagnostics, Store-backed traffic warning, AI recommendation, and bounded Terraform draft flows pass 10 focused API tests, 27 focused Web tests, the Redis 8 integration suite, harness, lint, typecheck, and all production builds.
+- Refreshed `origin/dev` to `a45c399b` and merged its Signal Dashboard rebuild. The only code conflict kept the typed SSE failure diagnostics while dropping the dashboard's removed legacy capacity import. Ninety-four focused TypeScript tests and six CSS-loaded Signal Dashboard component tests pass together with harness, lint, typecheck, and production builds.
 - No dependency, lockfile, migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
 
 ### 2026-07-22 - Remove the duplicate AWS connection step description
