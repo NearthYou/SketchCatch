@@ -145,7 +145,7 @@
 .targetEnvironmentOptions {
   display: grid;
   margin-top: 3px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -585,7 +585,7 @@
   .backLink svg { width: 20px; height: 20px; }
   .layout { padding: 48px 12px 72px; }
   .heading h1 { font-size: calc(30px + var(--presentation-font-size-increase)); }
-  .targetEnvironmentOptions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .targetEnvironmentOptions { grid-template-columns: 1fr; }
   .optionList { grid-template-columns: 1fr; }
   .option,
   .option:nth-child(2n),
