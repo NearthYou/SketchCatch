@@ -469,7 +469,7 @@ const legacyBoardTemplates: readonly RawBoardTemplate[] = [
           resourceName: "traffic",
           type: "aws_cloudwatch_log_group",
           values: {
-            name: "/sketchcatch/demo/sc-lo/traffic",
+            namePrefix: "/sketchcatch/demo/sc-lo/traffic-",
             retentionInDays: 1,
             tags: { SketchCatchDemo: "true" }
           }

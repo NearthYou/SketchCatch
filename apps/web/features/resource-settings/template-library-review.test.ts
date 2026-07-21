@@ -93,3 +93,19 @@ test("Live Observation scaling policy omits the unbounded cooldown", () => {
   assert.equal(policy?.parameters?.values.cooldown, undefined);
   assert.equal(policy?.parameters?.values.estimatedInstanceWarmup, 60);
 });
+
+test("Live Observation log group uses a unique prefix for each project deployment", () => {
+  const template = listBoardTemplates()
+    .filter(isBoardTemplateAvailable)
+    .find((candidate) => candidate.id === "template-live-observation");
+  const logGroup = template?.diagramJson.nodes.find(
+    (node) => node.id === "template-live-log-group"
+  );
+
+  assert.ok(logGroup?.parameters);
+  assert.equal(logGroup?.parameters?.values.name, undefined);
+  assert.equal(
+    logGroup?.parameters?.values.namePrefix,
+    "/sketchcatch/demo/sc-lo/traffic-"
+  );
+});
