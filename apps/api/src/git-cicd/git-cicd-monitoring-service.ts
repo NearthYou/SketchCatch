@@ -17,6 +17,7 @@ import {
   type GitHubAppClient
 } from "../source-repositories/github-app-client.js";
 import type { ProjectAccessContext } from "./git-cicd-handoff-service.js";
+import { createDefaultGitCicdMonitoringConfig } from "./git-cicd-monitoring-defaults.js";
 
 export type GitCicdMonitoringConfigRecord =
   typeof gitCicdMonitoringConfigs.$inferSelect;
@@ -31,6 +32,7 @@ export type GitCicdMonitoringSourceRepository = Pick<
   | "owner"
   | "name"
   | "defaultBranch"
+  | "updatedAt"
 >;
 
 export type MonitoringTargetInput = {
@@ -57,9 +59,9 @@ export type GitCicdMonitoringRepository = {
     sourceRepositoryId: string,
     accessContext: ProjectAccessContext
   ): Promise<GitCicdMonitoringSourceRepository | undefined>;
-  ensureDefaultConfig(
-    input: Omit<GitCicdMonitoringConfigRecord, "updatedAt">
-  ): Promise<GitCicdMonitoringConfigRecord>;
+  findConfig(
+    sourceRepositoryId: string
+  ): Promise<GitCicdMonitoringConfigRecord | undefined>;
   upsertConfig(
     input: Omit<GitCicdMonitoringConfigRecord, "updatedAt">
   ): Promise<GitCicdMonitoringConfigRecord>;
@@ -132,15 +134,11 @@ export async function getGitCicdMonitoringConfig(
   repository: GitCicdMonitoringRepository
 ): Promise<GitCicdMonitoringConfigRecord> {
   const sourceRepository = await requireSourceRepository(input, repository);
-  return repository.ensureDefaultConfig({
+  const savedConfig = await repository.findConfig(sourceRepository.id);
+  return savedConfig ?? createDefaultGitCicdMonitoringConfig({
     sourceRepositoryId: sourceRepository.id,
-    enabled: true,
-    monitorBranch: sourceRepository.defaultBranch,
-    appPath: { mode: "repository_root", path: "." },
-    infraPath: { mode: "repository_root", path: "." },
-    validationStatus: "required",
-    validationMessage: null,
-    validatedAt: null
+    defaultBranch: sourceRepository.defaultBranch,
+    updatedAt: sourceRepository.updatedAt
   });
 }
 
@@ -282,7 +280,8 @@ export function createPostgresGitCicdMonitoringRepository(
           githubInstallationId: sourceRepositories.githubInstallationId,
           owner: sourceRepositories.owner,
           name: sourceRepositories.name,
-          defaultBranch: sourceRepositories.defaultBranch
+          defaultBranch: sourceRepositories.defaultBranch,
+          updatedAt: sourceRepositories.updatedAt
         })
         .from(sourceRepositories)
         .innerJoin(projects, eq(projects.id, sourceRepositories.projectId))
@@ -296,19 +295,11 @@ export function createPostgresGitCicdMonitoringRepository(
         );
       return sourceRepository;
     },
-    async ensureDefaultConfig(input) {
-      await db
-        .insert(gitCicdMonitoringConfigs)
-        .values(input)
-        .onConflictDoNothing({ target: gitCicdMonitoringConfigs.sourceRepositoryId });
-
+    async findConfig(sourceRepositoryId) {
       const [config] = await db
         .select()
         .from(gitCicdMonitoringConfigs)
-        .where(eq(gitCicdMonitoringConfigs.sourceRepositoryId, input.sourceRepositoryId));
-      if (!config) {
-        throw new Error("Failed to ensure Git/CI/CD monitoring config");
-      }
+        .where(eq(gitCicdMonitoringConfigs.sourceRepositoryId, sourceRepositoryId));
       return config;
     },
     async upsertConfig(input) {

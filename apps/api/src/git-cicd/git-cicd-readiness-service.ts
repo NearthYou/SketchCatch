@@ -16,6 +16,7 @@ import {
   type PackageManagerKind,
   type ProjectDeploymentRuntimeConfig,
   type RepositoryAnalysisAiHandoff,
+  type RepositoryAnalysisRecord,
   type RuntimeDeploymentTarget,
   type RuntimeTargetKind
 } from "@sketchcatch/types";
@@ -55,6 +56,7 @@ import {
   resolveAwsDeploymentTargetIdentity
 } from "../runtime-convergence/deployment-target-identity.js";
 import { resolveCurrentRepositoryAnalysis } from "../source-repositories/current-repository-analysis.js";
+import { selectProjectDeliverySourceRepository } from "../delivery/project-delivery-source-repository.js";
 
 export type GitCicdReadinessDeploymentRecord = {
   id: string;
@@ -187,9 +189,12 @@ export type GitCicdReadinessRepository = {
     connectionId: string,
     userId: string
   ): Promise<VerifiedConnectionRecord | undefined>;
-  findActiveRepositoryWithMonitoring(
+  findRepositoryAnalysisTarget(
     projectId: string
-  ): Promise<RepositoryMonitoringRecord | undefined>;
+  ): Promise<Pick<RepositoryAnalysisRecord, "sourceRepositoryId"> | null>;
+  listActiveRepositoriesWithMonitoring(
+    projectId: string
+  ): Promise<RepositoryMonitoringRecord[]>;
   findProjectDeploymentTarget(
     projectId: string
   ): Promise<ProjectDeploymentTargetRecord | undefined>;
@@ -235,6 +240,12 @@ export class GitCicdReadinessRefreshError extends Error {
   }
 }
 
+type GitCicdReadinessInput = {
+  projectId: string;
+  userId: string;
+  deliverySourceRepositoryId?: string | null;
+};
+
 export function createDeploymentPlanArtifactVerifier(
   storage: Pick<DeploymentPlanArtifactStorage, "downloadDeploymentPlanArtifact">
 ): GitCicdReadinessPlanVerifier {
@@ -271,6 +282,25 @@ export function createDeploymentPlanArtifactVerifier(
   };
 }
 
+async function selectReadinessSourceRepository(
+  repository: GitCicdReadinessRepository,
+  input: GitCicdReadinessInput
+): Promise<RepositoryMonitoringRecord | undefined> {
+  const activeRepositories = await repository.listActiveRepositoriesWithMonitoring(
+    input.projectId
+  );
+  if (input.deliverySourceRepositoryId !== undefined) {
+    if (input.deliverySourceRepositoryId === null) return undefined;
+    return activeRepositories.find(({ id }) => id === input.deliverySourceRepositoryId);
+  }
+
+  return selectProjectDeliverySourceRepository({
+    repositoryAnalysisTarget:
+      await repository.findRepositoryAnalysisTarget(input.projectId),
+    activeRepositories
+  }) ?? undefined;
+}
+
 export function createGitCicdReadinessService(options: {
   repository: GitCicdReadinessRepository;
   planVerifier?: GitCicdReadinessPlanVerifier;
@@ -282,7 +312,7 @@ export function createGitCicdReadinessService(options: {
   const now = options.now ?? (() => new Date());
 
   async function readSnapshot(
-    input: { projectId: string; userId: string },
+    input: GitCicdReadinessInput,
     reconcileTarget: boolean
   ): Promise<GitCicdReadinessSnapshot> {
     return options.repository.runInProjectSnapshot(input.projectId, async (repository) => {
@@ -291,9 +321,7 @@ export function createGitCicdReadinessService(options: {
         throw new GitCicdReadinessNotFoundError("Project not found");
       }
 
-      const sourceRepository = await repository.findActiveRepositoryWithMonitoring(
-        input.projectId
-      );
+      const sourceRepository = await selectReadinessSourceRepository(repository, input);
       const buildEnvironment = await repository.findProjectBuildEnvironment(input.projectId);
       let target = await repository.findProjectDeploymentTarget(input.projectId);
       const preferredConnection = target?.connectionId
@@ -367,16 +395,10 @@ export function createGitCicdReadinessService(options: {
   }
 
   return {
-    async inspect(input: {
-      projectId: string;
-      userId: string;
-    }): Promise<GitCicdReadinessSnapshot> {
+    async inspect(input: GitCicdReadinessInput): Promise<GitCicdReadinessSnapshot> {
       return readSnapshot(input, false);
     },
-    async refresh(input: {
-      projectId: string;
-      userId: string;
-    }): Promise<GitCicdReadinessSnapshot> {
+    async refresh(input: GitCicdReadinessInput): Promise<GitCicdReadinessSnapshot> {
       return readSnapshot(input, true);
     },
     async synchronizeDeploymentTargetAfterSuccessfulApply(input: {
@@ -413,9 +435,7 @@ export function createGitCicdReadinessService(options: {
           repository,
           planVerifier
         );
-        const sourceRepository = await repository.findActiveRepositoryWithMonitoring(
-          input.projectId
-        );
+        const sourceRepository = await selectReadinessSourceRepository(repository, input);
         const buildEnvironment = await repository.findProjectBuildEnvironment(input.projectId);
         const currentTarget = await repository.findProjectDeploymentTarget(input.projectId);
 
@@ -633,8 +653,15 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
         ? { id: connection.id, accountId: connection.accountId, region: connection.region }
         : undefined;
     },
-    async findActiveRepositoryWithMonitoring(projectId) {
+    async findRepositoryAnalysisTarget(projectId) {
       const [record] = await db
+        .select({ sourceRepositoryId: repositoryAnalysisRecords.sourceRepositoryId })
+        .from(repositoryAnalysisRecords)
+        .where(eq(repositoryAnalysisRecords.projectId, projectId));
+      return record ?? null;
+    },
+    async listActiveRepositoriesWithMonitoring(projectId) {
+      const records = await db
         .select({
           id: sourceRepositories.id,
           owner: sourceRepositories.owner,
@@ -664,27 +691,29 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
           and(
             eq(sourceRepositories.projectId, projectId),
             eq(sourceRepositories.status, "active"),
-            eq(sourceRepositories.provider, "github")
+            eq(sourceRepositories.provider, "github"),
+            eq(sourceRepositories.archived, false)
           )
         );
-      if (!record) return undefined;
-      const currentAnalysis = resolveCurrentRepositoryAnalysis({
-        legacyAnalysisRevision: record.analysisRevision,
-        legacyAnalysisResult: record.analysisResult,
-        repositoryAnalysisRevision: record.repositoryAnalysisRevision,
-        repositoryAnalysisResult: record.repositoryAnalysisResult
+      return records.map((record) => {
+        const currentAnalysis = resolveCurrentRepositoryAnalysis({
+          legacyAnalysisRevision: record.analysisRevision,
+          legacyAnalysisResult: record.analysisResult,
+          repositoryAnalysisRevision: record.repositoryAnalysisRevision,
+          repositoryAnalysisResult: record.repositoryAnalysisResult
+        });
+        return {
+          id: record.id,
+          owner: record.owner,
+          name: record.name,
+          analysisRevision: currentAnalysis.analysisRevision,
+          analysisResult: currentAnalysis.analysisResult,
+          defaultBranch: record.defaultBranch,
+          monitorBranch: record.monitorBranch,
+          enabled: record.enabled,
+          validationStatus: record.validationStatus
+        };
       });
-      return {
-        id: record.id,
-        owner: record.owner,
-        name: record.name,
-        analysisRevision: currentAnalysis.analysisRevision,
-        analysisResult: currentAnalysis.analysisResult,
-        defaultBranch: record.defaultBranch,
-        monitorBranch: record.monitorBranch,
-        enabled: record.enabled,
-        validationStatus: record.validationStatus
-      };
     },
     async findProjectDeploymentTarget(projectId) {
       const [target] = await db

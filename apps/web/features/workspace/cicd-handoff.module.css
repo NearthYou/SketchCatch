@@ -6,6 +6,7 @@
   gap: 16px;
   justify-items: start;
   padding: 20px;
+  scroll-margin-top: 72px;
 }
 
 .header {
@@ -24,11 +25,9 @@
 
 .header p {
   color: var(--workspace-muted, #60646c);
-  font-size: calc(11px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
-  letter-spacing: 0.08em;
-  margin-bottom: 4px;
-  text-transform: uppercase;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+  margin-top: 4px;
 }
 
 .header > span {
@@ -97,8 +96,11 @@
 }
 
 .notice a {
+  align-items: center;
   color: inherit;
+  display: inline-flex;
   font-weight: var(--presentation-font-weight-bold);
+  min-height: 44px;
 }
 
 .review,
@@ -120,6 +122,30 @@
   padding-left: 20px;
 }
 
+.reviewFacts {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.reviewFacts > div {
+  min-width: 0;
+}
+
+.reviewFacts dt {
+  color: var(--workspace-muted, #60646c);
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.reviewFacts dd {
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
 .review > div,
 .actions {
   display: flex;
@@ -138,6 +164,142 @@
 .result > div:first-child span {
   color: var(--workspace-muted, #60646c);
   font-size: calc(12px + var(--presentation-font-size-increase));
+}
+
+.result strong,
+.result span,
+.result p {
+  overflow-wrap: anywhere;
+}
+
+.changeReview {
+  border-top: 1px solid var(--workspace-line-strong, #dcdee0);
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  width: 100%;
+}
+
+.changeReviewHeading h4,
+.changeReviewHeading p,
+.changeReviewCard h5,
+.changeReviewCard header p,
+.reviewList h6,
+.reviewList p,
+.changeReviewWarning {
+  margin: 0;
+}
+
+.changeReviewHeading p,
+.changeReviewCard header p,
+.reviewList p {
+  color: var(--workspace-muted, #60646c);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+.changeReviewCard {
+  background: var(--workspace-surface, #fff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.changeReviewCard > header {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.changeReviewCard > header > span {
+  background: #fff8c5;
+  border-radius: 999px;
+  color: #633c01;
+  flex: 0 0 auto;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  padding: 4px 8px;
+}
+
+.changeReviewCard > header > span[data-applied="true"] {
+  background: #dafbe1;
+  color: #116329;
+}
+
+.changeReviewFacts {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.changeReviewFacts > div,
+.reviewList dl > div {
+  min-width: 0;
+}
+
+.changeReviewFacts dt,
+.reviewList dt,
+.reviewList h6 {
+  color: var(--workspace-muted, #60646c);
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.changeReviewFacts dd,
+.reviewList dd {
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.reviewList {
+  display: grid;
+  gap: 6px;
+}
+
+.reviewList dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.reviewList dl > div {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(0, 1.2fr);
+  padding: 8px 10px;
+}
+
+.reviewList dd {
+  margin: 0;
+}
+
+.changeConfirmation {
+  align-items: flex-start;
+  display: flex;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  gap: 8px;
+  line-height: 1.5;
+  min-height: 44px;
+}
+
+.changeConfirmation input {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.changeReviewWarning {
+  color: var(--workspace-error, #b42318);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .readiness {
@@ -271,23 +433,33 @@
   padding: 12px 0;
 }
 
-.readinessComplete {
-  background: var(--workspace-surface, #fff);
-  border: 1px solid #aceebb;
-  border-radius: 8px;
-  color: #116329;
+.completedReadiness {
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  padding-top: 10px;
+  width: 100%;
+}
+
+.completedReadiness summary {
+  align-items: center;
+  color: var(--workspace-muted, #60646c);
+  cursor: pointer;
+  display: flex;
   font-size: calc(12px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
-  margin: 0;
-  padding: 12px;
+  min-height: 44px;
+  padding: 8px 0;
+}
+
+.completedReadiness[open] summary {
+  margin-bottom: 8px;
 }
 
 .readinessError {
   align-items: center;
   background: var(--workspace-surface, #fff);
-  border: 1px solid var(--workspace-error, #eb8e90);
+  border: 1px solid color-mix(in srgb, var(--workspace-error, #b42318) 32%, transparent);
   border-radius: 8px;
-  color: var(--workspace-error, #eb8e90);
+  color: var(--workspace-error, #b42318);
   display: flex;
   flex-wrap: wrap;
   font-size: calc(12px + var(--presentation-font-size-increase));
@@ -333,9 +505,20 @@
   color: #fff;
   flex: 1;
   font-size: calc(12px + var(--presentation-font-size-increase));
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   padding: 12px;
   white-space: nowrap;
+}
+
+.panel button:focus-visible,
+.panel a:focus-visible,
+.panel select:focus-visible,
+.panel summary:focus-visible,
+.panel input:focus-visible {
+  outline: 2px solid var(--workspace-text, #171717);
+  outline-offset: 2px;
 }
 
 @media (max-width: 720px) {
@@ -352,5 +535,34 @@
 
   .readinessDetails {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reviewFacts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .changeReviewFacts,
+  .reviewList dl > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .changeReviewCard > header {
+    flex-direction: column;
+  }
+
+  .readinessHeader > span {
+    align-self: flex-start;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 520px) {
+  .panel,
+  .commandCard {
+    padding: 16px;
+  }
+
+  .header {
+    flex-direction: column;
   }
 }

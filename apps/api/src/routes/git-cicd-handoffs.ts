@@ -40,6 +40,7 @@ import {
   GitCicdHandoffInvalidStatusTransitionError,
   GitCicdHandoffNotFoundError,
   GitCicdHandoffProviderConflictError,
+  GitCicdSourceRepositoryMismatchError,
   GitCicdHandoffProviderPermissionError,
   GitCicdHandoffProviderMismatchError,
   listProjectGitCicdHandoffs,
@@ -1052,6 +1053,13 @@ function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
   }
 
   if (error instanceof GitCicdInitialApplicationReleaseRequiredError) {
+    return reply.status(409).send({
+      error: error.code,
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdSourceRepositoryMismatchError) {
     return reply.status(409).send({
       error: error.code,
       message: error.message

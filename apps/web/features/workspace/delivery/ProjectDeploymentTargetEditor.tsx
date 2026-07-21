@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type {
   AwsConnection,
   ProjectDeliveryProfile,
@@ -12,10 +12,8 @@ import type {
 import { useAuth } from "../../../components/auth/auth-provider";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import {
-  getProjectDeploymentTarget,
   getProjectDraft,
   listAwsConnections,
-  listSourceRepositories,
   putProjectDeploymentTarget
 } from "../api";
 import {
@@ -32,6 +30,7 @@ import {
   type ProjectDeploymentTargetDraft,
   type SystemManagedField
 } from "./project-deployment-target-state";
+import { getDeploymentTargetPresentation } from "../cicd-delivery-presentation";
 import { ProjectDeploymentTargetAdvancedSettings } from "./ProjectDeploymentTargetAdvancedSettings";
 import styles from "./project-deployment-target-editor.module.css";
 
@@ -105,8 +104,9 @@ export const ProjectDeploymentTargetEditor = forwardRef<
   ProjectDeploymentTargetEditorHandle,
   {
     readonly projectId: string;
+    readonly headingLevel?: 2 | 4 | undefined;
     readonly ecsDefaults?: EcsFargateDeploymentDefaultsInput | null;
-    readonly initialProfile?: ProjectDeploymentTargetEditorInitialProfile | null;
+    readonly profile: ProjectDeploymentTargetEditorInitialProfile;
     readonly onDirty?: (() => void) | undefined;
     readonly onSaved?: (() => void) | undefined;
     readonly preferEcsDefaults?: boolean | undefined;
@@ -116,8 +116,9 @@ export const ProjectDeploymentTargetEditor = forwardRef<
 >(function ProjectDeploymentTargetEditor(
   {
     projectId,
+    headingLevel = 2,
     ecsDefaults = null,
-    initialProfile = null,
+    profile,
     onDirty,
     onSaved,
     preferEcsDefaults = false,
@@ -128,10 +129,15 @@ export const ProjectDeploymentTargetEditor = forwardRef<
 ) {
   const router = useRouter();
   const { status: authStatus } = useAuth();
-  const initialTarget = initialProfile?.deploymentTarget ?? null;
-  const initialRepositoryAnalysisTarget = initialProfile?.repositoryAnalysisTarget ?? null;
-  const initialSourceRepository = initialProfile?.sourceRepository ?? null;
+  const initialTarget = profile.deploymentTarget;
+  const initialRepositoryAnalysisTarget = profile.repositoryAnalysisTarget;
+  const initialSourceRepository = profile.sourceRepository;
+  const isDirtyRef = useRef(false);
+  const profileOwnerRef = useRef(
+    `${projectId}:${initialSourceRepository?.id ?? "none"}`
+  );
   const [connections, setConnections] = useState<AwsConnection[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
   const [target, setTarget] = useState<ProjectDeploymentTarget | null>(initialTarget);
   const [sourceRepository, setSourceRepository] = useState<SourceRepository | null>(
     initialSourceRepository
@@ -182,8 +188,18 @@ export const ProjectDeploymentTargetEditor = forwardRef<
         : "필수 항목을 확인하세요";
     return `${prefix}: ${keys.map((key) => missingFieldLabels[key]).join(", ")}`;
   }, [missingAdvancedFieldKeys, missingFieldKeys]);
+  const targetPresentation = getDeploymentTargetPresentation({
+    draftAwsConnectionId: draft.connectionId || null,
+    savedAwsConnectionId: target?.connectionId ?? null,
+    isDirty
+  });
   const canSave =
-    requestState !== "loading" && requestState !== "saving" && missingFieldKeys.length === 0;
+    requestState !== "loading" &&
+    requestState !== "saving" &&
+    missingFieldKeys.length === 0 &&
+    targetPresentation.status !== "saved";
+  const Heading = headingLevel === 4 ? "h4" : "h2";
+  const SectionHeading = headingLevel === 4 ? "h5" : "h3";
 
   useEffect(() => {
     if (authStatus !== "authenticated") return;
@@ -193,25 +209,25 @@ export const ProjectDeploymentTargetEditor = forwardRef<
       setRequestState("loading");
       setMessage("");
       try {
-        const [nextConnections, nextTarget, sourceRepositories, projectDraftResponse] =
+        const [nextConnections, projectDraftResponse] =
           await Promise.all([
             listAwsConnections(),
-            initialProfile ? Promise.resolve(initialTarget) : getProjectDeploymentTarget(projectId),
-            initialProfile
-              ? Promise.resolve(initialSourceRepository ? [initialSourceRepository] : [])
-              : listSourceRepositories(projectId),
             getProjectDraft(projectId)
           ]);
         if (cancelled) return;
-        const nextSourceRepository = sourceRepositories.find(
-          (repository) =>
-            repository.provider === "github" &&
-            repository.status === "active" &&
-            !repository.archived
-        );
+        const nextTarget = initialTarget;
+        const nextSourceRepository = initialSourceRepository;
         setConnections(nextConnections);
+        const nextOwner = `${projectId}:${nextSourceRepository?.id ?? "none"}`;
+        if (isDirtyRef.current && profileOwnerRef.current === nextOwner) {
+          setRequestState("idle");
+          return;
+        }
+        profileOwnerRef.current = nextOwner;
+        isDirtyRef.current = false;
+        setIsDirty(false);
         setTarget(nextTarget);
-        setSourceRepository(nextSourceRepository ?? null);
+        setSourceRepository(nextSourceRepository);
         const nextEcsDefaults =
           ecsDefaultsProjectName &&
           ecsDefaultsRepositoryRevision &&
@@ -255,7 +271,6 @@ export const ProjectDeploymentTargetEditor = forwardRef<
     ecsDefaultsProjectName,
     ecsDefaultsRepositoryRevision,
     ecsDefaultsSourceRoot,
-    initialProfile,
     initialRepositoryAnalysisTarget,
     initialSourceRepository,
     initialTarget,
@@ -267,12 +282,16 @@ export const ProjectDeploymentTargetEditor = forwardRef<
     key: K,
     value: ProjectDeploymentTargetDraft[K]
   ) {
+    isDirtyRef.current = true;
+    setIsDirty(true);
     onDirty?.();
     setDraft((current) => ({ ...current, [key]: value }));
     setMessage("");
   }
 
   function changeRuntime(runtimeTargetKind: RuntimeTargetKind) {
+    isDirtyRef.current = true;
+    setIsDirty(true);
     onDirty?.();
     const nextDraft = changeDeploymentTargetRuntime(
       draft,
@@ -299,6 +318,8 @@ export const ProjectDeploymentTargetEditor = forwardRef<
         projectId,
         createDeploymentTargetRequest(draft, connections)
       );
+      isDirtyRef.current = false;
+      setIsDirty(false);
       setTarget(saved);
       const savedDraft = createDeploymentTargetDraft(saved, connections);
       setDraft(savedDraft);
@@ -324,14 +345,14 @@ export const ProjectDeploymentTargetEditor = forwardRef<
       <div className="integrationHeader">
         <div>
           <p className="dashboardPanelKicker">Deployment</p>
-          <h2 id="deployment-target-title">프로젝트 배포 타깃</h2>
+          <Heading id="deployment-target-title">프로젝트 배포 타깃</Heading>
         </div>
       </div>
       <p>어디에 배포할지만 확인하세요. 저장소와 AWS에서 확인한 값은 자동으로 채웁니다.</p>
 
       <div className={styles.sectionHeading}>
         <div>
-          <h3>필수 확인</h3>
+          <SectionHeading>필수 확인</SectionHeading>
           <p>계정과 실행 방식이 맞으면 나머지 값은 그대로 저장할 수 있습니다.</p>
         </div>
         <span className={styles.requiredBadge}>
@@ -380,10 +401,12 @@ export const ProjectDeploymentTargetEditor = forwardRef<
       <section className={styles.automaticSummary} aria-labelledby="automatic-settings-title">
         <div className={styles.summaryHeading}>
           <div>
-            <h3 id="automatic-settings-title">자동 설정 결과</h3>
+            <SectionHeading id="automatic-settings-title">자동 설정 결과</SectionHeading>
             <p>연결된 저장소와 AWS 정보로 계산했습니다.</p>
           </div>
-          <span className={styles.readyBadge}>자동 입력</span>
+          <span className={styles.readyBadge} data-status={targetPresentation.status}>
+            {targetPresentation.statusLabel}
+          </span>
         </div>
         <dl className={styles.summaryList}>
           <div>
@@ -421,8 +444,15 @@ export const ProjectDeploymentTargetEditor = forwardRef<
         </dl>
       </section>
 
+      {targetPresentation.readinessHint ? (
+        <p className="dashboardMessage" role="status">
+          {targetPresentation.readinessHint}
+        </p>
+      ) : null}
+
       <ProjectDeploymentTargetAdvancedSettings
         draft={draft}
+        headingLevel={headingLevel === 4 ? 6 : 4}
         lockedSystemFields={lockedSystemFields}
         revealMissingFields={requestState === "idle" && missingAdvancedFieldKeys.length > 0}
         updateDraft={updateDraft}
@@ -456,7 +486,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
             onClick={() => void saveTarget()}
             type="button"
           >
-            {requestState === "saving" ? "저장 중" : "배포 타깃 저장"}
+            {requestState === "saving" ? "저장 중" : targetPresentation.saveLabel}
           </button>
         </div>
       ) : null}

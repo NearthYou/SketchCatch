@@ -8,8 +8,11 @@
 }
 
 .sectionHeading h3,
+.sectionHeading h5,
 .summaryHeading h3,
-.advancedGroupHeading h4 {
+.summaryHeading h5,
+.advancedGroupHeading h4,
+.advancedGroupHeading h6 {
   margin: 0;
   color: var(--color-ink);
   font-size: calc(15px + var(--presentation-font-size-increase));
@@ -64,7 +67,7 @@
 .field input,
 .field select {
   min-width: 0;
-  height: 42px;
+  height: 44px;
   border: 1px solid #d7d9de;
   border-radius: 8px;
   padding: 0 12px;
@@ -105,8 +108,8 @@
   cursor: default;
 }
 
-.field input:focus,
-.field select:focus {
+.field input:focus-visible,
+.field select:focus-visible {
   border-color: #171717;
   outline: 2px solid rgb(23 23 23 / 10%);
 }
@@ -139,12 +142,10 @@
 .summaryList dd {
   min-width: 0;
   margin: 0;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--color-ink);
   font-size: calc(13px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-regular);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .advancedSettings {
@@ -159,6 +160,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-height: 44px;
   padding: 14px 16px;
   cursor: pointer;
   list-style: none;
@@ -219,5 +221,23 @@
   .summaryList > div {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+}
+
+@media (max-width: 520px) {
+  .sectionHeading,
+  .summaryHeading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .advancedSettings > summary {
+    align-items: flex-start;
+    padding-inline: 12px;
+  }
+
+  .advancedBody {
+    padding-inline: 12px;
   }
 }

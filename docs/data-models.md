@@ -1980,6 +1980,8 @@ type GitCicdHandoff = {
 
 Git/CI/CD handoff도 `UserAcceptedChange` 이후에만 생성한다. v0 API는 `internal` provider boundary만 사용하며 실제 GitHub PR 생성은 별도 provider 구현에서 담당한다. 저장소 토큰, private key, deploy key, CI secret 원문은 shared type, DB, 응답, 로그에 저장하지 않는다.
 
+Handoff 생성 직전 서버는 요청한 active `SourceRepository`를 현재 Board provenance와 다시 비교한다. Board 분석 기록이 없을 때만 요청 Repository를 그대로 허용한다. Board 분석 기록이 있으면 `sourceRepositoryId`가 요청 ID와 정확히 같아야 하며, `null`이거나 다른 ID이면 provider를 호출하지 않고 HTTP 409 `GIT_CICD_SOURCE_REPOSITORY_MISMATCH`를 반환한다.
+
 `github` provider slice에서는 Terraform artifact metadata를 provider boundary로 넘겨 Source Repository PR 생성 요청 payload를 만든다.
 이 payload에는 PR title/body 초안, IaC Preview artifact 경로, plan summary, Pre-Deployment Check 확인 문구,
 리뷰 체크리스트 초안이 포함된다. provider 결과로 `pullRequestUrl`이 돌아오면 handoff record는 `status: "pr_created"`와
@@ -2155,6 +2157,8 @@ type GitCicdPipelineLogListResponse = {
   nextSequence: number;
 };
 ```
+
+Monitoring 조회는 설정을 저장하거나 외부 시스템을 변경하지 않는다. 저장된 `GitCicdMonitoringConfig`가 없으면 `GET`과 `ProjectDeliveryProfile`은 Source Repository의 기본 branch, repository root 경로, `validationStatus: "required"`를 사용해 같은 기본 응답을 계산한다. 이 기본값은 사용자가 변경을 수락하고 `PUT`을 호출해 GitHub branch·directory 검증을 통과한 뒤에만 RDS에 저장한다.
 
 `POST /api/git-cicd-pipeline-runs/:pipelineRunId/refresh`는 `GitCicdPipelineRunRefreshResponse`를 반환한다. GitHub Actions 읽기가 실패하면 마지막 RDS 상태와 함께 `stale: true` 및 비밀이나 provider 원문을 포함하지 않는 고정 `errorMessage`를 반환한다. 성공 시 `stale: false`, `errorMessage: null`이다.
 
