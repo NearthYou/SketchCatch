@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Bot,
   Boxes,
+  Check,
   CloudDownload,
   GitBranch,
   LayoutPanelTop,
@@ -48,6 +49,11 @@ import {
   resolveWorkspaceStartTemplate,
   resolveWorkspaceStartTemplateView
 } from "./workspace-start-template-flow";
+import {
+  createWorkspaceTargetEnvironmentOptions,
+  DEFAULT_WORKSPACE_TARGET_ENVIRONMENT,
+  type WorkspaceTargetEnvironment
+} from "../../../features/workspace/workspace-target-environment";
 import styles from "./workspace-start.module.css";
 
 const AI_START_DRAFT_STORAGE_KEY = "sketchcatch.newProjectDraft";
@@ -79,6 +85,7 @@ const startModeOptions = createWorkspaceStartOptions();
 const mainStartOptions = startModeOptions.filter((option) => option.kind !== "blank");
 const blankStartOption = startModeOptions.find((option) => option.kind === "blank");
 const boardTemplates = listBoardTemplates();
+const targetEnvironmentOptions = createWorkspaceTargetEnvironmentOptions();
 
 // 프로젝트 이름과 시작 방식을 받아 알맞은 생성 흐름으로 연결합니다.
 export function WorkspaceStartClient({
@@ -107,6 +114,8 @@ export function WorkspaceStartClient({
   );
 
   const [selectedKind, setSelectedKind] = useState<WorkspaceStartKind>(initialStartKind ?? "ai");
+  const [selectedTargetEnvironment, setSelectedTargetEnvironment] =
+    useState<WorkspaceTargetEnvironment>(DEFAULT_WORKSPACE_TARGET_ENVIRONMENT);
   const [isStartFormHydrated, setIsStartFormHydrated] = useState(initialStartKind !== undefined);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
     initialTemplateSelection.templateId
@@ -379,36 +388,45 @@ export function WorkspaceStartClient({
             title={title}
           />
 
-          <div className={styles.optionList} role="group" aria-label="프로젝트 시작 방식">
-            {mainStartOptions.map((option) => {
-              const Icon = START_MODE_ICONS[option.kind];
-              const isOptionSubmitting = submittingKind === option.kind;
+          <TargetEnvironmentField
+            disabled={isSubmitting}
+            onChange={setSelectedTargetEnvironment}
+            value={selectedTargetEnvironment}
+          />
 
-              return (
-                <button
-                  aria-busy={isOptionSubmitting}
-                  className={styles.option}
-                  disabled={isSubmitting}
-                  key={option.kind}
-                  onClick={() => startWithKind(option.kind)}
-                  type="button"
-                >
-                  <span className={styles.optionIcon}>
-                    {isOptionSubmitting ? (
-                      <LoaderCircle aria-hidden="true" className={styles.spinner} size={20} />
-                    ) : (
-                      <Icon aria-hidden="true" size={20} />
-                    )}
-                  </span>
-                  <span className={styles.optionCopy}>
-                    <strong>{option.title}</strong>
-                    <small>{option.description}</small>
-                  </span>
-                  {option.kind === "reverse" ? <em>AWS Role 필요</em> : null}
-                </button>
-              );
-            })}
-          </div>
+          <section className={styles.startMethods} aria-labelledby="workspace-start-method-title">
+            <h2 id="workspace-start-method-title">시작 방식</h2>
+            <div className={styles.optionList} role="group" aria-label="프로젝트 시작 방식">
+              {mainStartOptions.map((option) => {
+                const Icon = START_MODE_ICONS[option.kind];
+                const isOptionSubmitting = submittingKind === option.kind;
+
+                return (
+                  <button
+                    aria-busy={isOptionSubmitting}
+                    className={styles.option}
+                    disabled={isSubmitting}
+                    key={option.kind}
+                    onClick={() => startWithKind(option.kind)}
+                    type="button"
+                  >
+                    <span className={styles.optionIcon}>
+                      {isOptionSubmitting ? (
+                        <LoaderCircle aria-hidden="true" className={styles.spinner} size={20} />
+                      ) : (
+                        <Icon aria-hidden="true" size={20} />
+                      )}
+                    </span>
+                    <span className={styles.optionCopy}>
+                      <strong>{option.title}</strong>
+                      <small>{option.description}</small>
+                    </span>
+                    {option.kind === "reverse" ? <em>AWS Role 필요</em> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
 
           <div className={styles.actions}>
             {blankStartOption ? (
@@ -439,6 +457,48 @@ export function WorkspaceStartClient({
         </section>
       </div>
     </WorkspaceStartFrame>
+  );
+}
+
+function TargetEnvironmentField({
+  disabled,
+  onChange,
+  value
+}: {
+  readonly disabled: boolean;
+  readonly onChange: (value: WorkspaceTargetEnvironment) => void;
+  readonly value: WorkspaceTargetEnvironment;
+}) {
+  return (
+    <fieldset className={styles.targetEnvironmentField} disabled={disabled}>
+      <legend>배포 대상 환경</legend>
+      <div className={styles.targetEnvironmentOptions}>
+        {targetEnvironmentOptions.map((option) => {
+          const isSelected = option.id === value;
+
+          return (
+            <label
+              className={
+                isSelected
+                  ? `${styles.targetEnvironmentOption} ${styles.targetEnvironmentOptionSelected}`
+                  : styles.targetEnvironmentOption
+              }
+              key={option.id}
+            >
+              <input
+                checked={isSelected}
+                name="workspace-target-environment"
+                onChange={() => onChange(option.id)}
+                type="radio"
+                value={option.id}
+              />
+              <span>{option.label}</span>
+              {isSelected ? <Check aria-hidden="true" size={18} strokeWidth={3} /> : null}
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 

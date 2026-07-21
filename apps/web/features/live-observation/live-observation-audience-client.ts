@@ -57,7 +57,7 @@ export function createLiveObservationAudienceClient(
         headers: { Accept: "application/json" },
         method: "POST"
       });
-      if (!response.ok) throw errorFromStatus(response.status);
+      if (!response.ok) throw errorFromResponse(response);
       const body: unknown = await response.json();
       if (!isBootstrapResponse(body)) throw audienceError("unavailable");
       credential = body.credential;
@@ -81,7 +81,7 @@ export function createLiveObservationAudienceClient(
         },
         method: "POST"
       });
-      if (!response.ok) throw errorFromStatus(response.status);
+      if (!response.ok) throw errorFromResponse(response);
       const body: unknown = await response.json();
       if (!isRequestResponse(body)) throw audienceError("unavailable");
       return Object.freeze(body);
@@ -111,9 +111,11 @@ function isRequestResponse(value: unknown): value is AudienceRequestResult {
   );
 }
 
-function errorFromStatus(status: number): LiveObservationAudienceError {
-  if (status === 404 || status === 410) return audienceError("expired");
-  if (status === 429) return audienceError("rate_limited");
+function errorFromResponse(response: Response): LiveObservationAudienceError {
+  if (response.status === 404 || response.status === 410) return audienceError("expired");
+  if (response.status === 429) {
+    return audienceError("rate_limited");
+  }
   return audienceError("unavailable");
 }
 

@@ -64,6 +64,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | Pre-Deployment Check | 비용, 보안, 설정 위험을 설명하고 수정 방향을 제안한다. |
 | Direct Deployment Path | sandbox/practice 실행에서 Plan, 승인, Apply, 로그, Outputs, Auto Cleanup까지 연결한다. |
 | Live Observation | 성공한 Demo Web Service Deployment의 실제 요청, CloudWatch 측정값, ASG/EC2 또는 ECS/Fargate runtime 상태를 15분 세션으로 구분해 관측한다. |
+Live Observation은 실제 배포 앱의 check-in/heartbeat 성공 뒤 collector가 확인한 Store receipt의 10초 rolling pressure가 `warning` 이상이 되면 약 1초 안에 같은 관측 화면에 병목 경고를 고정한다. CloudWatch ALB 지표는 AWS 발행 주기에 따른 보강 증거로 별도 표시한다. AI Design Simulation은 배포 Architecture와 비민감 관측 수치로 Terraform 수정 방향을 제안하고, 사용자가 승인하면 정확히 하나의 ECS Application Auto Scaling Target에서 정수 `max_capacity`만 1 증가시켜 Project Draft에 저장한다. 저장 성공 뒤 경고를 해제하고 재배포 후 정상 예상임을 표시하되 실제 AWS 반영이나 정상화로 표현하지 않는다. 새 Plan, 승인, 재배포 경계는 그대로 유지한다.
 | Git/CI/CD Integration | IaC Preview를 Source Repository PR과 외부 pipeline 상태로 연결한다. |
 | Reverse Engineering | 기존 클라우드 상태를 Practice Architecture와 IaC Preview/import 제안으로 전환한다. |
 

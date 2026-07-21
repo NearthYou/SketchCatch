@@ -243,7 +243,10 @@ test("Architecture failure does not replace QR, Output URL, session, or SSE cont
   );
 
   assert.doesNotMatch(startButton, /architecture|Architecture/);
-  assert.match(modalSource, /QRCode\.toDataURL\(outputUrl/);
+  assert.match(modalSource, /const audienceUrl = selectedSession\?\.audienceUrl \?\? outputUrl/);
+  assert.match(modalSource, /QRCode\.toDataURL\(audienceUrl/);
+  assert.match(modalSource, /onApplyTerraformUpdate/);
+  assert.match(modalSource, /Terraform 수정 완료 · 경고 해제/);
   assert.match(modalSource, /copyOutputUrl/);
   assert.match(modalSource, /createLiveObservation\(/);
   assert.match(modalSource, /stopLiveObservation\(/);
@@ -260,7 +263,7 @@ test("session creation locks Deployment selection and observation evidence stays
   const evidenceBlock = getSourceBlock(
     modalSource,
     'aria-label="실시간 운영 분석"',
-    "{providerSnapshot && providerSnapshot.logs.length > 0 ? ("
+    "{providerLogs.length > 0 ? ("
   );
 
   assert.match(deploymentSelector, /requestState === "loading"/);
@@ -297,7 +300,7 @@ test("capacity analysis renders provider-derived mode and operational values", (
   const evidenceBlock = getSourceBlock(
     modalSource,
     'aria-label="실시간 운영 분석"',
-    "{providerSnapshot && providerSnapshot.logs.length > 0 ? ("
+    "{providerLogs.length > 0 ? ("
   );
 
   assert.match(evidenceBlock, /capacityModeLabel \?\? "확인 중"/);
@@ -316,7 +319,7 @@ test("turns raw metrics into an operational decision flow", () => {
   assert.match(modalSource, /실행 \/ 희망 \/ 최대/);
   assert.match(modalSource, /<details[\s\S]*aria-label="실시간 운영 분석"/);
   assert.match(modalSource, /<summary className=\{styles\.liveObservationMetricsHeader\}>/);
-  assert.doesNotMatch(modalSource, /<details[^>]*\sopen/);
+  assert.match(modalSource, /<details[\s\S]*?open=\{isTrafficPressureElevated\}/);
 });
 
 function getSourceBlock(source: string, startMarker: string, endMarker: string): string {

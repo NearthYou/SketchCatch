@@ -31,12 +31,11 @@ type SessionDependencies = Readonly<{
   onState: (state: LiveObservationAudienceViewState) => void;
 }>;
 
-export const initialLiveObservationAudienceState: LiveObservationAudienceViewState =
-  Object.freeze({
-    bootstrapReady: false,
-    pageState: "connecting",
-    successCount: 0
-  });
+export const initialLiveObservationAudienceState: LiveObservationAudienceViewState = Object.freeze({
+  bootstrapReady: false,
+  pageState: "connecting",
+  successCount: 0
+});
 
 export function createLiveObservationAudienceSession(dependencies: SessionDependencies) {
   const clientRef: { current: ActiveClient | null } = { current: null };
@@ -51,23 +50,34 @@ export function createLiveObservationAudienceSession(dependencies: SessionDepend
 
   function isCurrent(activeClient: ActiveClient): boolean {
     return (
-      clientRef.current === activeClient &&
-      clientRef.current.generation === activeClient.generation
+      clientRef.current === activeClient && clientRef.current.generation === activeClient.generation
     );
   }
 
   async function bootstrap(activeClient: ActiveClient): Promise<void> {
     if (!isCurrent(activeClient) || inFlight) return;
     inFlight = activeClient;
-    publish({ bootstrapReady: false, pageState: "connecting", successCount: 0 });
+    publish({
+      bootstrapReady: false,
+      pageState: "connecting",
+      successCount: 0
+    });
     try {
       await activeClient.client.bootstrap();
       if (isCurrent(activeClient)) {
-        publish({ bootstrapReady: true, pageState: "ready", successCount: 0 });
+        publish({
+          bootstrapReady: true,
+          pageState: "ready",
+          successCount: 0
+        });
       }
     } catch (error) {
       if (isCurrent(activeClient)) {
-        publish({ bootstrapReady: false, pageState: toPageState(error), successCount: 0 });
+        publish({
+          bootstrapReady: false,
+          pageState: toPageState(error),
+          successCount: 0
+        });
       }
     } finally {
       if (inFlight === activeClient) inFlight = null;
@@ -115,7 +125,7 @@ export function createLiveObservationAudienceSession(dependencies: SessionDepend
           publish({
             ...state,
             bootstrapReady: pageState !== "expired",
-            pageState
+            pageState,
           });
         }
       } finally {

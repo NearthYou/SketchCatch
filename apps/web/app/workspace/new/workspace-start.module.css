@@ -76,6 +76,17 @@
   gap: 28px;
 }
 
+.startPanel > .nameField,
+.startPanel > .startMethods {
+  width: 100%;
+  gap: 12px;
+}
+
+.startPanel > .targetEnvironmentField {
+  width: 100%;
+  gap: 0;
+}
+
 .heading h1 {
   margin: 0;
   font-size: calc(36px + var(--presentation-font-size-increase));
@@ -124,8 +135,95 @@
   line-height: 1.4;
 }
 
+.targetEnvironmentField {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  gap: 9px;
+}
+
+.nameField > span:first-child,
+.targetEnvironmentField legend,
+.startMethods h2 {
+  margin: 0;
+  padding: 0;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  line-height: 1.4;
+}
+
+.targetEnvironmentField legend {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.targetEnvironmentOptions {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.targetEnvironmentOption {
+  display: grid;
+  min-width: 0;
+  min-height: 76px;
+  align-items: center;
+  border: 1px solid #dcdee0;
+  border-radius: 10px;
+  padding: 16px;
+  background: #ffffff;
+  color: #60646c;
+  cursor: pointer;
+  font-size: calc(15px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.targetEnvironmentOption:hover {
+  border-color: #aeb0b4;
+  background: #fdfdfd;
+  color: #171717;
+}
+
+.targetEnvironmentOption:focus-within {
+  outline: 3px solid rgba(23, 23, 23, 0.16);
+  outline-offset: 2px;
+}
+
+.targetEnvironmentOptionSelected {
+  border: 2px solid #171717;
+  padding: 15px;
+  color: #171717;
+  box-shadow: 0 8px 24px rgba(23, 23, 23, 0.08);
+}
+
+.targetEnvironmentOption input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.targetEnvironmentField:disabled .targetEnvironmentOption {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.startMethods {
+  display: grid;
+  gap: 12px;
+}
+
 .optionList {
   display: grid;
+  width: 100%;
   overflow: hidden;
   border-radius: 12px;
   background: #ffffff;
@@ -505,6 +603,7 @@
   .backLink svg { width: 20px; height: 20px; }
   .layout { padding: 48px 12px 72px; }
   .heading h1 { font-size: calc(30px + var(--presentation-font-size-increase)); }
+  .targetEnvironmentOptions { grid-template-columns: 1fr; }
   .optionList { grid-template-columns: 1fr; }
   .option,
   .option:nth-child(2n),

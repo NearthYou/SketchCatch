@@ -128,7 +128,7 @@ test("public Repository analysis keeps owner-only golden-path forks on the same 
   }
 });
 
-test("audience-live-check public analysis pins the approved demo source revision", async () => {
+test("audience-live-check public analysis uses the current Repository evidence", async () => {
   const requestedUrls: string[] = [];
   const originalFetch = globalThis.fetch;
   const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
@@ -150,10 +150,14 @@ test("audience-live-check public analysis pins the approved demo source revision
     const result = response.json<SourceRepositoryAnalysisResult>();
 
     assert.equal(response.statusCode, 200);
-    assert.equal(result.repositoryRevision, "23a87399cbe3456f3f427140f88b8d199ace34f9");
+    assert.equal(result.repositoryRevision, "a".repeat(40));
     assert.equal(result.recommendedTemplateId, "ecs-fargate-container-app");
     assert.equal(result.aiHandoff?.recommendation?.candidates[0]?.templateId, "ecs-fargate-container-app");
-    assert.equal(requestedUrls.length, 0);
+    assert.equal(requestedUrls.some((url) => url.includes("/repos/chaekang/audience-live-check")), true);
+    assert.equal(
+      result.aiHandoff?.architectureFacts?.some((fact) => fact.sourcePath.startsWith("fixed-profile/")),
+      false
+    );
   } finally {
     await app.close();
     globalThis.fetch = originalFetch;
@@ -163,6 +167,49 @@ test("audience-live-check public analysis pins the approved demo source revision
     } else {
       process.env.OPENAI_API_KEY = originalOpenAiApiKey;
     }
+  }
+});
+
+test("audience-live-check Architecture Draft reads the selected branch evidence", async () => {
+  const requestedUrls: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = createGoldenPathRepositoryFetch(requestedUrls);
+  const app = Fastify({ logger: false });
+
+  try {
+    await registerAiRoutes(app, {
+      createLlmExplanation: async (input) => ({
+        target: input.target,
+        summary: "Repository evidence summary",
+        highlights: [],
+        nextActions: [],
+        fallbackUsed: false
+      })
+    });
+    await app.ready();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/ai/github-architecture-draft",
+      payload: {
+        repositoryUrl: "https://github.com/chaekang/audience-live-check",
+        defaultBranch: "main",
+        selectedTemplateId: "ecs-fargate-container-app"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(
+      requestedUrls.some((url) => url.includes("/repos/chaekang/audience-live-check/git/trees/main")),
+      true
+    );
+    assert.equal(
+      requestedUrls.some((url) => url.includes("raw.githubusercontent.com/chaekang/audience-live-check/main/")),
+      true
+    );
+  } finally {
+    await app.close();
+    globalThis.fetch = originalFetch;
   }
 });
 
@@ -199,7 +246,7 @@ function createGoldenPathRepositoryFetch(requestedUrls: string[]): typeof fetch 
       return Response.json([{ name: "main", commit: { sha: "a".repeat(40) } }]);
     }
 
-    if (/\/git\/trees\/(?:main|23a87399cbe3456f3f427140f88b8d199ace34f9)\?recursive=1$/u.test(url)) {
+    if (/\/git\/trees\/main\?recursive=1$/u.test(url)) {
       return Response.json({
         truncated: false,
         tree: Object.keys(files).map((path) => ({ path, type: "blob" }))

@@ -4,6 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Public Repository Analysis no longer special-cases `chaekang/audience-live-check`; it resolves the current selected branch SHA and reads real repository evidence while general Fixed Template and authored demo flows remain available.
 - Branch `codex/fix-error-progress-completion` includes `origin/dev` through `d189cda3` and keeps the compact Workspace AI Terraform error-analysis gauge visible through an explicit successful 100% completion state.
 - The parked JH Workspace changes are restored on `dev`: Deployment uses the shorter `배포` label and intrinsic action width, Settings omits redundant CodeBuild authorization copy, and Project Draft loading uses the server draft whenever one exists without rendering the removed local-recovery chooser.
 - Terraform reverse sync accepts references to its allowlisted utility resources, so generated Runtime Secret values such as `random_password.check_in_signing.result` round-trip without a false manual-edit warning.
@@ -23,9 +24,67 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-- 2026-07-22: Removed the CI/CD Phase 2 circular dependency on Deployment, Build Environment, checkout, and output URL evidence. Added a secret-safe Delivery Profile build-verification projection, aligned all Phase 2 row states with server missing keys, and added Repository build verification plus Static Site/API output rows to Phase 3. The Plan CTA only opens Direct Deployment. Focused Types/API/Web and Plan-boundary regressions passed; root lint, typecheck, build, harness, and diff checks passed. The unrelated full API suite was stopped at user request after exposing its existing artifact lease-heartbeat cancellation. No DB migration, provider mutation, Plan, Apply, or Git handoff was performed.
-- 2026-07-22: Completed the CI/CD required-parameter workstream. Delivery Profile now derives and returns an RDS flag plus Static Site/API URLs only from an approved deployment architecture and confirmed target; Git handoff re-derives those values server-side and rejects stale previews before provider calls. The ECS Web target editor validates all required build/runtime settings, preserves generic runtime-secret names, and includes its byte-affecting settings in artifact identity. Verification: focused API/Web tests passed, as did root harness, lint, typecheck, build, Web production build, migration compatibility, and diff checks. No DB migration, cloud mutation, GitHub handoff, or deployment was performed.
-- 2026-07-21: Completed the task-focused CI/CD redesign from the final design specification. It adds one synchronized current-task CTA, four Phase accordions, flat readiness rows, project-blue styling, shared value-level loading placeholders, and accessible right-side setup drawers. The Repository drawer now selects GitHub account, Repository, and default Branch and connects only on explicit submission. Post-review fixes cover current-Plan handoff/run isolation, non-ECS initial-release omission, server-recommended deployment scope, real GitHub Pipeline refresh, busy state, single-instance full-screen rendering, Phase auto-open transitions, nested Escape handling, status semantics, a 13px minimum support-text size, and 390px reflow. Verification: 102 focused CI/CD Web tests, root harness, lint, typecheck, `git diff --check`, and all five build tasks passed; authenticated Chrome checks covered desktop, 390px, the live Repository form, and drawer-only Escape. The Turbo build runner remained open after its successful summary. No API, DB migration, cloud mutation, Repository connection submission, or Git handoff was performed.
+### 2026-07-22 - Remove the duplicate AWS connection step description
+
+- Hid the empty-state AWS Role description from the connection step header while retaining it in the expanded body and preserving the verified account/region summary.
+- Seven focused Settings tests, lint, typecheck, build, final harness, and two-axis review pass. No full test suite was run.
+- No API, shared contract, database migration, dependency, deployment, or cloud mutation change was made.
+
+### 2026-07-22 - Restructure Settings connection flow
+
+- Reworked the existing Settings integrations into one ordered GitHub App -> AWS account -> AWS CodeBuild GitHub authorization flow, with completed steps collapsed and the current or error step expanded.
+- Preserved all existing API clients, DTOs, shared types, actions, and connected AWS account management. Long CodeBuild failure details now remain behind an `오류 상세` disclosure with a neutral summary.
+- Verification passed: 14 focused Web tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, diff checks, and two-axis review. Authenticated browser smoke was unavailable because the in-app browser session was signed out.
+- No database migration, dependency change, cloud mutation, deployment action, or Git/CI/CD handoff was performed.
+
+### 2026-07-22 - Connect real audience traffic to immediate Live Observation warnings
+
+- Removed the separate public per-IP limiter, `Retry-After` propagation, and audience countdown while retaining the Store safety envelope of 20 events/second, 120 events/10 seconds, 10,000 events/session, and a 15-minute session lifetime.
+- Added an optional audience application URL to the v4 manifest with backward-compatible CloudFront derivation for existing manifests. The external audience app receives a scoped observation receipt URL and emits best-effort receipts only after successful real check-in and heartbeat requests.
+- Latched immediate Store-backed pressure warnings until a user-approved Project Draft save succeeds. The only automatic Terraform edit requires exactly one `aws_appautoscaling_target` and one numeric `max_capacity`, increments it by one, and never runs Plan, Apply, deployment, or cloud mutation.
+- Added AI recommendation context, explicit editor navigation after save, revision-conflict protection, contract documentation, and focused API/Web regressions.
+- Verification passed: 24 focused API tests, 28 focused Web tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, final harness, and two-axis review. Review fixes separated Store-only receipts from legacy probes, moved warning latch state outside the modal, streamed Store snapshots before provider refresh, and removed the unused Runtime Cache dependency.
+- Root `pnpm test` remains non-green in pre-existing `aiArchitectureDrafts.test.ts` expectations outside this workstream; the changed Live Observation subsets pass.
+- The external `audience-live-check` clone passes typecheck, build, 49 tests, and changed-file Biome checks. Its root lint remains non-green because of existing repository-wide CRLF formatting findings outside the changed files.
+- No database migration, dependency change, secret access, Terraform execution, deployment, or cloud mutation was performed.
+### 2026-07-22 - Reduce Diagram resource label size
+
+- Reduced only the labels beneath Diagram resource icons from an effective 18px to 13px while preserving the two-line clamp, icon spacing, edge labels, and area headings.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
+
+### 2026-07-22 - Strengthen Workspace panel borders
+
+- Increased the Diagram Editor's neutral border contrast for both outer panel boundaries and internal separators/controls: regular lines now use `#d4d4d4`, while strong lines use `#c8c8c8`.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
+
+### 2026-07-21 - Simplify fallback cost headings
+
+- Removed the marked `예상` qualifier from the fallback monthly and daily cost headings while preserving the explicit `실제` labels for AWS-backed data.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
+
+### 2026-07-21 - Remove visible sample identifiers from Cost Usage
+
+- Replaced visible `sample-*`, `Sample`, `예시`, and test-only wording in fallback Cost Usage content with neutral DB/ALB names and estimated-cost labels. Internal fallback identifiers remain unchanged, and live AWS recommendation conditions retain their original wording.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
+
+### 2026-07-21 - Shorten the Live Observation public traffic cooldown
+
+- Fast-forwarded the issue branch from `c3ac5a8e` to current `origin/dev` at `13ed1cb6`, then restored the Live Observation request work on top.
+- Reproduced the audience page dropping the server `Retry-After` value and the public collector enforcing a 30-request fixed minute, which could leave one client waiting almost 60 seconds.
+- Replaced the long window with two global per-IP safeguards aligned to the Store envelope: 20 requests per second and 120 requests per 10 seconds. Human-paced requests no longer encounter a minute cooldown; excessive traffic waits normally one second and at most ten seconds.
+- Propagated the exact cooldown through the collector error, HTTP `Retry-After`, CORS exposure, audience client, session state, disabled action, and automatic ready-state recovery.
+- Added five API/Web regressions for both rate windows, HTTP/CORS delivery, client parsing, and cooldown suppression. The existing four traffic-burst regressions remain green.
+- Focused verification passes 9/9. Root harness, lint, typecheck, all five production builds, and diff checks pass on the updated branch.
+- Preserved the latest dev progress record and archive during stash conflict resolution; no product-code merge conflict occurred.
+- No dependency, lockfile, database migration, Terraform execution, cloud mutation, Deployment action, or Git/CI/CD handoff was performed.
+
+### 2026-07-21 - Remove the Repository-specific audience demo bypass
+
+- Removed the fixed analysis response, frozen revision, synthetic architecture facts, strict URL profile, and Web-only Architecture Draft branch for `chaekang/audience-live-check`.
+- Public analysis now resolves the selected branch SHA and reads its tree and evidence files; Repository Board generation uses the same analyzed Template path as every other repository.
+- Focused Repository API and Web checks pass 18/18, and the retained general Fixed Template checks pass 4/4. Harness, lint, typecheck, build, and diff checks pass. The broad AI Draft file still has 15 unrelated baseline failures.
+- No dependency, lockfile, database migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
+- 2026-07-21: Added a UI-only target environment selector to the new-project screen with equally selectable AWS, GCP, Azure, and On-premise options. The selection is intentionally not persisted or sent to project creation APIs. The focused environment test, browser selection check, lint, typecheck, and build pass. The full Web suite remains at 1,095/1,099 because of four pre-existing Architecture Board/compiler failures outside this change.
 
 ## Known Risk
 

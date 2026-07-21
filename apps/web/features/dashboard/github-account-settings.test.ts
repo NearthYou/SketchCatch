@@ -31,9 +31,9 @@ test("global settings owns GitHub App installation without project repository be
 
 test("GitHub account settings renders before AWS account and CodeBuild authorization", () => {
   const source = readWorkspaceFile("app/dashboard/settings/settings-dashboard-client.tsx");
-  const githubSettingsIndex = source.indexOf("<GitHubAccountSettings />");
-  const awsConnectionIndex = source.indexOf('id="aws-account-connection"');
-  const codeBuildAuthorizationIndex = source.indexOf("<h2>AWS CodeBuild용 GitHub 권한</h2>");
+  const githubSettingsIndex = source.indexOf('title="GitHub App 연결"');
+  const awsConnectionIndex = source.indexOf('title="AWS 계정 연결"');
+  const codeBuildAuthorizationIndex = source.indexOf('title="AWS CodeBuild용 GitHub 권한"');
 
   assert.ok(githubSettingsIndex >= 0);
   assert.ok(awsConnectionIndex > githubSettingsIndex);
