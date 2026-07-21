@@ -22,6 +22,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-21 - Remove estimate card detail row
+
+- Removed the checked resource-count and pricing-source helper row beneath project estimate amounts while preserving the period label, amount, and calculation behavior.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature test suite was run for this presentation-only removal.
+
 ### 2026-07-21 - Center cost dashboard tab labels
 
 - Centered the Estimate Cost and Actual Usage labels within their existing tab buttons without changing tab placement or behavior.
