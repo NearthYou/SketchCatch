@@ -21,6 +21,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+- 2026-07-21: Completed the first CI/CD UI distillation pass: removed duplicate readiness chrome, embedded automatic target evidence, consolidated refresh ownership in the header, and fixed refresh-generation races. Forty-one focused Web tests plus root harness, lint, typecheck, and build passed. No API, DB migration, cloud mutation, or Git handoff change was made.
 - 2026-07-21: Rebuilt the CI/CD workspace as a compact server-readiness status board plus one continuous accordion for Delivery, GitOps monitoring, deployment target, automatic setup, PR handoff, and Pipeline. Current actions open the relevant local section, PR creation keeps its existing approval gates, and Pipeline state is scoped to the selected handoff. Verification: 35 focused Web contract tests, root harness, lint, typecheck, and build passed. No DB migration, cloud mutation, or Git handoff was performed.
 
 ## Known Risk
