@@ -14,6 +14,8 @@ test("increments the single ECS Application Auto Scaling max_capacity by one", (
         "  min_capacity = 1",
         "  max_capacity = 2 # demo bottleneck",
         '  service_namespace = "ecs"',
+        '  scalable_dimension = "ecs:service:DesiredCount"',
+        '  resource_id = "service/${aws_ecs_cluster.audience.name}/${aws_ecs_service.audience.name}"',
         "}",
         "",
         'resource "aws_ecs_service" "audience" {',
@@ -64,6 +66,99 @@ test("requires max_capacity to be an integer literal", () => {
           terraformCode: [
             'resource "aws_appautoscaling_target" "audience" {',
             "  max_capacity = var.max_capacity",
+            '  service_namespace = "ecs"',
+            '  scalable_dimension = "ecs:service:DesiredCount"',
+            '  resource_id = "service/demo/audience"',
+            "}"
+          ].join("\n")
+        }
+      ]),
+    (error: unknown) =>
+      error instanceof LiveObservationTerraformUpdateError &&
+      error.code === "manual_review_required"
+  );
+});
+
+test("refuses to modify a non-ECS Application Auto Scaling target", () => {
+  assert.throws(
+    () =>
+      incrementLiveObservationEcsMaxCapacity([
+        {
+          fileName: "main.tf",
+          terraformCode: [
+            'resource "aws_appautoscaling_target" "table" {',
+            "  min_capacity = 1",
+            "  max_capacity = 2",
+            '  service_namespace = "dynamodb"',
+            '  scalable_dimension = "dynamodb:table:ReadCapacityUnits"',
+            '  resource_id = "table/audience"',
+            "}"
+          ].join("\n")
+        }
+      ]),
+    (error: unknown) =>
+      error instanceof LiveObservationTerraformUpdateError &&
+      error.code === "manual_review_required"
+  );
+});
+
+test("requires the ECS service scalable dimension", () => {
+  assert.throws(
+    () =>
+      incrementLiveObservationEcsMaxCapacity([
+        {
+          fileName: "main.tf",
+          terraformCode: [
+            'resource "aws_appautoscaling_target" "audience" {',
+            "  max_capacity = 2",
+            '  service_namespace = "ecs"',
+            '  scalable_dimension = "ecs:service:Other"',
+            '  resource_id = "service/demo/audience"',
+            "}"
+          ].join("\n")
+        }
+      ]),
+    (error: unknown) =>
+      error instanceof LiveObservationTerraformUpdateError &&
+      error.code === "manual_review_required"
+  );
+});
+
+test("requires an ECS service resource ID", () => {
+  assert.throws(
+    () =>
+      incrementLiveObservationEcsMaxCapacity([
+        {
+          fileName: "main.tf",
+          terraformCode: [
+            'resource "aws_appautoscaling_target" "audience" {',
+            "  max_capacity = 2",
+            '  service_namespace = "ecs"',
+            '  scalable_dimension = "ecs:service:DesiredCount"',
+            '  resource_id = "table/audience"',
+            "}"
+          ].join("\n")
+        }
+      ]),
+    (error: unknown) =>
+      error instanceof LiveObservationTerraformUpdateError &&
+      error.code === "manual_review_required"
+  );
+});
+
+test("rejects ambiguous duplicate ECS identity assignments", () => {
+  assert.throws(
+    () =>
+      incrementLiveObservationEcsMaxCapacity([
+        {
+          fileName: "main.tf",
+          terraformCode: [
+            'resource "aws_appautoscaling_target" "audience" {',
+            "  max_capacity = 2",
+            '  service_namespace = "ecs"',
+            '  service_namespace = "dynamodb"',
+            '  scalable_dimension = "ecs:service:DesiredCount"',
+            '  resource_id = "service/demo/audience"',
             "}"
           ].join("\n")
         }

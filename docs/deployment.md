@@ -854,7 +854,7 @@ pnpm --filter @sketchcatch/api test -- runtime-cache
 
 ## Live Observation 운영 설정
 
-Live Observation은 verified manifest가 있는 성공 Deployment의 실제 Output URL, CloudWatch 측정값, ASG 또는 ECS/Fargate capacity, 최근 runtime log를 15분 동안 관측하는 opt-in 기능입니다. 운영 API runtime에는 다음 비민감 환경 변수를 주입합니다.
+Live Observation은 verified manifest가 있는 성공 Deployment의 실제 Output URL, CloudWatch 측정값, ASG 또는 ECS/Fargate capacity, 최근 runtime log를 15분 동안 관측하는 opt-in 기능입니다. 상단 트래픽 흐름 아래에는 현재 상태, 사용자 영향, 근거가 있는 중요 신호 최대 3개만 표시합니다. 이 화면은 CloudWatch의 원시 지표·로그 검색을 복제하지 않으며, 관측값이 지연되거나 없으면 정상으로 바꾸지 않고 확인 중 또는 확인할 수 없음으로 안내합니다. 운영 API runtime에는 다음 비민감 환경 변수를 주입합니다.
 
 ```text
 LIVE_OBSERVATION_ENABLED=false
