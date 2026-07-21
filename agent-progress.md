@@ -22,6 +22,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-21 - Center cost dashboard tab labels
+
+- Centered the Estimate Cost and Actual Usage labels within their existing tab buttons without changing tab placement or behavior.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature test suite was run for this one-line CSS-only change.
+
 ### 2026-07-21 - Remove the Repository-specific audience demo bypass
 
 - Removed the fixed analysis response, frozen revision, synthetic architecture facts, strict URL profile, and Web-only Architecture Draft branch for `chaekang/audience-live-check`.

@@ -53,7 +53,7 @@
   background: var(--color-surface-strong);
   color: var(--color-body);
   cursor: pointer;
-  text-align: left;
+  text-align: center;
   z-index: 1;
 }
 
