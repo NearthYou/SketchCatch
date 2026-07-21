@@ -22,6 +22,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Complete the external audience receipt handoff
+
+- Confirmed current `dev` at `a45c399b` already exposes the scoped `sketchcatch_observation_url`, origin-bound bootstrap, Store-only `/receipts`, production Redis namespace, and Signal Dashboard contract; this feature branch adds Redis client recovery and typed SSE diagnostics.
+- Reproduced the external audience gap with a deterministic red test that observed only the real participation request instead of participation -> bootstrap -> receipt. Branch `codex/fix-browser-check-in-route` now validates the scoped HTTPS URL, keeps its capability in memory, and sends unique best-effort receipts only after successful check-ins and heartbeats.
+- Audience commit `b96e8f0` passes all 50 tests, typecheck, production build, and targeted Biome checks. Nine focused SketchCatch API tests and 28 focused Web tests pass.
+- Repository-wide audience lint remains non-green only because 26 pre-existing CRLF-formatted files are outside Biome's expected line ending; all changed source files pass.
+- No dependency, lockfile, migration, Terraform execution, cloud mutation, deployment, push, or Git/CI/CD handoff was performed.
+
 ### 2026-07-22 - Recover Live Observation after Redis command failures
 
 - Production CloudWatch evidence for observation `0fa61f2f-9e99-44b2-8683-b2fc7cbf8f7e` showed every SSE request opening with HTTP 200 and closing in about 6 ms while every snapshot fallback returned HTTP 503. The route contract maps this pattern to `LIVE_OBSERVATION_CACHE_UNAVAILABLE`, not an AWS provider-observation failure.
