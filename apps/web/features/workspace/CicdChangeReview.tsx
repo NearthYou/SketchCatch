@@ -159,7 +159,7 @@ export function CicdChangeReview({
             </div>
           </dl>
           <ReviewList
-            items={Object.entries(awsRoleDiff.requiredTrustConditions)
+            items={Object.entries(awsRoleDiff.requiredTrustConditions ?? {})
               .sort(([left], [right]) => left.localeCompare(right))
               .map(([label, value]) => ({ label, value }))}
             title="추가할 trust conditions"
