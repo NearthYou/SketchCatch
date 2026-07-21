@@ -174,3 +174,8 @@ Short English-only working log for the current agent context. Older records are 
 - ECS Fargate target defaults now select the unique Dockerfile whose Application Unit is `backend` or `fullstack`; ambiguous multi-backend cases remain unfilled rather than guessing.
 - Extended the public Repository Analysis regression with both API and frontend Dockerfiles, keeping the inferred source root, Dockerfile, and commit tied to the API unit.
 - Focused Web test passes 18/18; root harness and lint pass. Root typecheck and build reached the Web TypeScript/Next compilation stage but the existing Turbo/Next runner did not emit its final completion summary in this environment. No deployment, Apply, cloud mutation, or Git/CI/CD handoff was performed.
+### 2026-07-21 - Accept safe inferred ECS runtime-secret names
+
+- Reproduced the deployment-target request contract failure: Repository Analysis can infer names such as `DATABASE_URL`, while the PUT schema accepted only `CHECK_IN_SIGNING_SECRET`, yielding a Zod 400 before the service handler.
+- The route now accepts up to 32 safe uppercase environment-variable names and keeps command-like names rejected. Added red-green parser regressions for both cases.
+- Focused API tests pass 6/6; root harness, lint, typecheck, build, and `git diff --check` pass. No migration, cloud mutation, deployment, or Git/CI/CD handoff was performed.

@@ -54,7 +54,7 @@ const ecsWebBuildConfigSchema = z
           .regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/)
           .max(512),
         requiredRuntimeSecrets: z
-          .array(z.literal("CHECK_IN_SIGNING_SECRET"))
+          .array(z.string().trim().regex(/^[A-Z][A-Z0-9_]{0,127}$/))
           .max(32)
           .optional()
       })
@@ -192,6 +192,12 @@ const putTargetBodySchema = z
   })
   .strict();
 
+export function parseProjectDeploymentTargetRequest(
+  body: unknown
+): PutProjectDeploymentTargetRequest {
+  return putTargetBodySchema.parse(body) as PutProjectDeploymentTargetRequest;
+}
+
 export type ProjectReleaseLedgerRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createRepository?: (db: DatabaseClient["db"]) => ProjectReleaseLedgerRepository;
@@ -222,7 +228,7 @@ export async function registerProjectReleaseLedgerRoutes(
 
   app.put("/projects/:projectId/deployment-target", async (request, reply) => {
     const params = projectParamsSchema.parse(request.params);
-    const target = putTargetBodySchema.parse(request.body) as PutProjectDeploymentTargetRequest;
+    const target = parseProjectDeploymentTargetRequest(request.body);
     const context = await createRequestContext(request, options, getClient);
     try {
       const saved = await putProjectDeploymentTarget(
