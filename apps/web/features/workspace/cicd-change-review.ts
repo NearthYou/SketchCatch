@@ -18,7 +18,7 @@ export function buildRepositorySettingsReview(
 ): RepositorySettingsReview {
   return {
     environmentName: preview.environmentName,
-    variables: Object.entries(preview.variables)
+    variables: Object.entries(preview.variables ?? {})
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([name, value]) => ({ name, value })),
     secrets: [...preview.secrets].sort((left, right) => left.localeCompare(right)),
