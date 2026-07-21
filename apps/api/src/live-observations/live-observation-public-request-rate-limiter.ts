@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import type { RuntimeCache } from "../runtime-cache/index.js";
 
-const WINDOW_MS = 60_000;
-const MAX_REQUESTS_PER_WINDOW = 30;
+const RATE_WINDOWS = [
+  { durationMs: 1_000, maxRequests: 20 },
+  { durationMs: 10_000, maxRequests: 120 }
+] as const;
 const CACHE_NAMESPACE = "live-observation-public-request-rate-limit";
 
 export type LiveObservationPublicRequestRateLimitResult =
@@ -40,20 +42,29 @@ export function createLiveObservationPublicRequestRateLimiter(options: {
       }
 
       const evaluatedAtMs = now();
-      const windowNumber = Math.floor(evaluatedAtMs / WINDOW_MS);
-      const windowEndsAtMs = (windowNumber + 1) * WINDOW_MS;
-      const ttlMs = Math.max(1, windowEndsAtMs - evaluatedAtMs);
       const ipFingerprint = createHash("sha256").update(input.ipAddress, "utf8").digest("hex");
       const degradationCountBefore = options.runtimeCache.getDegradationCount?.();
-      let count: number;
+      let evaluations: Array<{
+        count: number;
+        maxRequests: number;
+        ttlMs: number;
+      }>;
       try {
-        count = await options.runtimeCache.increment(
-          {
-            namespace: CACHE_NAMESPACE,
-            key: `${ipFingerprint}:${windowNumber}`
-          },
-          1,
-          { ttlMs }
+        evaluations = await Promise.all(
+          RATE_WINDOWS.map(async ({ durationMs, maxRequests }) => {
+            const windowNumber = Math.floor(evaluatedAtMs / durationMs);
+            const windowEndsAtMs = (windowNumber + 1) * durationMs;
+            const ttlMs = Math.max(1, windowEndsAtMs - evaluatedAtMs);
+            const count = await options.runtimeCache.increment(
+              {
+                namespace: CACHE_NAMESPACE,
+                key: `${ipFingerprint}:${durationMs}:${windowNumber}`
+              },
+              1,
+              { ttlMs }
+            );
+            return { count, maxRequests, ttlMs };
+          })
         );
       } catch {
         return { kind: "unavailable" };
@@ -66,13 +77,18 @@ export function createLiveObservationPublicRequestRateLimiter(options: {
         return { kind: "unavailable" };
       }
 
-      if (count <= MAX_REQUESTS_PER_WINDOW) {
+      const limitedWindows = evaluations.filter(
+        ({ count, maxRequests }) => count > maxRequests
+      );
+      if (limitedWindows.length === 0) {
         return { kind: "allowed" };
       }
 
       return {
         kind: "rate_limited",
-        retryAfterSeconds: Math.ceil(ttlMs / 1_000)
+        retryAfterSeconds: Math.max(
+          ...limitedWindows.map(({ ttlMs }) => Math.ceil(ttlMs / 1_000))
+        )
       };
     }
   });

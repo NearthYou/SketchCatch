@@ -95,12 +95,12 @@ export async function registerLiveObservationPublicCollectorRoutes(
       }
     }
   );
-
 }
 
 function applyCors(reply: FastifyReply, audienceOrigin: string): void {
   reply.header("Access-Control-Allow-Origin", audienceOrigin);
   reply.header("Access-Control-Allow-Methods", "POST,OPTIONS");
+  reply.header("Access-Control-Expose-Headers", "Retry-After");
   reply.header("Access-Control-Allow-Headers", "authorization,content-type");
   reply.header("Vary", "Origin");
 }
@@ -110,7 +110,13 @@ function handlePublicError(error: unknown, reply: FastifyReply) {
     return sendPublicError(reply, "bad_request", 400, error);
   }
   if (error instanceof LiveObservationPublicCollectorError) {
-    return sendPublicError(reply, error.code, statusFor(error.code), error);
+    return sendPublicError(
+      reply,
+      error.code,
+      statusFor(error.code),
+      error,
+      error.retryAfterSeconds
+    );
   }
   throw error;
 }
@@ -119,8 +125,12 @@ function sendPublicError(
   reply: FastifyReply,
   code: LiveObservationPublicCollectorErrorCode,
   status: 400 | 401 | 403 | 404 | 410 | 413 | 429 | 503,
-  error?: unknown
+  error?: unknown,
+  retryAfterSeconds: number | null = null
 ) {
+  if (status === 429 && Number.isSafeInteger(retryAfterSeconds) && Number(retryAfterSeconds) >= 0) {
+    reply.header("Retry-After", String(retryAfterSeconds));
+  }
   return reply.status(status).send({
     error: `LIVE_OBSERVATION_COLLECTOR_${code.toUpperCase()}`,
     message: getDeveloperErrorMessage(error, "Live Observation collector request failed")
