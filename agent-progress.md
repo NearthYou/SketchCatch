@@ -22,6 +22,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Strengthen Workspace panel borders
+
+- Increased the Diagram Editor's neutral border contrast for both outer panel boundaries and internal separators/controls: regular lines now use `#d4d4d4`, while strong lines use `#c8c8c8`.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
+
 ### 2026-07-21 - Simplify fallback cost headings
 
 - Removed the marked `예상` qualifier from the fallback monthly and daily cost headings while preserving the explicit `실제` labels for AWS-backed data.
