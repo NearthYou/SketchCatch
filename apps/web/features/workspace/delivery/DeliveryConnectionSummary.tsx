@@ -35,8 +35,8 @@ export function DeliveryConnectionSummary({
         <div>
           <dt>GitHub</dt>
           <dd>
-            {accountLogins.length > 0 ? (
-              `${accountLogins.join(", ")} · 연결됨`
+            {(accountLogins ?? []).length > 0 ? (
+              `${(accountLogins ?? []).join(", ")} · 연결됨`
             ) : (
               <Link href="/dashboard/settings#github-account-settings-title">
                 GitHub 연결 필요
