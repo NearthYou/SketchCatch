@@ -78,7 +78,7 @@ export function getPipelinePresentation(
   readonly emptyTitle: string;
   readonly emptyDescription: string;
 } {
-  const hasRuns = runs.length > 0;
+  const hasRuns = (runs ?? []).length > 0;
   return {
     hasRuns,
     showRunControls: hasRuns,
