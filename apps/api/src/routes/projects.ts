@@ -52,6 +52,7 @@ import {
   ReverseEngineeringPreviewClaimNotFoundError
 } from "../reverse-engineering/reverse-engineering-preview-claim-service.js";
 import {
+  hasReverseEngineeringSourceProvenance,
   resolveVerifiedImportTargets,
   ReverseEngineeringImportTargetVerificationError
 } from "../reverse-engineering/reverse-engineering-import-targets.js";
@@ -707,38 +708,41 @@ export async function registerProjectRoutes(
           .where(eq(projectDrafts.projectId, params.id));
 
         if (draft) {
-          if (draft.terraformFiles) {
-            try {
-              assertTerraformBaseFilesDoNotContainImportBlocks(draft.terraformFiles);
-            } catch (error) {
-              return sendBadRequest(
-                reply,
-                error instanceof Error ? error.message : "Terraform import block이 허용되지 않습니다."
-              );
-            }
-          }
-
           try {
-            const targets = await resolveVerifiedImportTargets(
-              {
-                projectId: params.id,
-                accessContext: { kind: "user", userId: currentUserId },
-                diagramJson: draft.diagramJson
-              },
-              createPostgresReverseEngineeringRepository(db)
-            );
+            const hasReverseEngineeringSource =
+              hasReverseEngineeringSourceProvenance(draft.diagramJson);
 
-            if (draft.terraformFiles?.some((file) => file.fileName === terraformImportsFileName)) {
-              return sendBadRequest(reply, "imports.tf는 서버가 생성하는 예약 파일입니다.");
-            }
-
-            if (targets.length > 0) {
+            if (hasReverseEngineeringSource) {
               if (!draft.terraformFiles || draft.terraformFiles.length === 0) {
                 return sendConflict(
                   reply,
                   "저장된 Project Draft의 Terraform 파일을 확인할 수 없습니다."
                 );
               }
+
+              if (draft.terraformFiles.some((file) => file.fileName === terraformImportsFileName)) {
+                return sendBadRequest(reply, "imports.tf는 서버가 생성하는 예약 파일입니다.");
+              }
+
+              try {
+                assertTerraformBaseFilesDoNotContainImportBlocks(draft.terraformFiles);
+              } catch (error) {
+                return sendBadRequest(
+                  reply,
+                  error instanceof Error
+                    ? error.message
+                    : "Terraform import block이 허용되지 않습니다."
+                );
+              }
+
+              const targets = await resolveVerifiedImportTargets(
+                {
+                  projectId: params.id,
+                  accessContext: { kind: "user", userId: currentUserId },
+                  diagramJson: draft.diagramJson
+                },
+                createPostgresReverseEngineeringRepository(db)
+              );
 
               const uploadedTerraformCode = Buffer.isBuffer(body)
                 ? body.toString("utf8")

@@ -15,6 +15,7 @@ type TerraformResourceChange = {
   type?: unknown;
   change?: {
     actions?: unknown;
+    importing?: unknown;
   };
 };
 
@@ -188,6 +189,7 @@ export function createDeploymentPlanSummaryFromTerraformShowJson(
     updateCount: 0,
     deleteCount: 0,
     replaceCount: 0,
+    importCount: 0,
     blocked: false,
     warnings
   };
@@ -200,6 +202,10 @@ export function createDeploymentPlanSummaryFromTerraformShowJson(
     }
 
     const actions = resourceChange.change?.actions;
+
+    if (isRecord(resourceChange.change?.importing)) {
+      summary.importCount = (summary.importCount ?? 0) + 1;
+    }
 
     if (!Array.isArray(actions) || !actions.every((action) => typeof action === "string")) {
       warnings.push(createUnknownTerraformActionWarning(resourceChange.address, "missing actions"));
@@ -275,6 +281,10 @@ export function findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
 }
 
 function isTerraformResourceChange(value: unknown): value is TerraformResourceChange {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 

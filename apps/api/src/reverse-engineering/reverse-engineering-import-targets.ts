@@ -31,6 +31,11 @@ export class ReverseEngineeringImportTargetVerificationError extends Error {
   }
 }
 
+/** Persisted source metadata, including damaged partial metadata, activates the server-owned boundary. */
+export function hasReverseEngineeringSourceProvenance(diagramJson: DiagramJson): boolean {
+  return diagramJson.nodes.some((node) => readNodeSource(node) !== null);
+}
+
 /** gg: 보드 metadata를 서버에 저장된 원본 scan과 다시 맞춰 안전한 import 대상만 반환합니다. */
 export async function resolveVerifiedImportTargets(
   input: ResolveVerifiedImportTargetsInput,

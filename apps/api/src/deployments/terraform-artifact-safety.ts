@@ -298,7 +298,8 @@ function validateTerraformImportBlocks(source: string): void {
       seenAddresses.has(address) ||
       typeof importId !== "string" ||
       importId.trim().length === 0 ||
-      importId !== importId.trim()
+      importId !== importId.trim() ||
+      containsActiveTerraformTemplateMarker(importId)
     ) {
       throw new TerraformArtifactSafetyError(
         "Terraform import blocks must use one declared static AWS resource and one literal ID"
@@ -307,6 +308,25 @@ function validateTerraformImportBlocks(source: string): void {
 
     seenAddresses.add(address);
   }
+}
+
+function containsActiveTerraformTemplateMarker(value: string): boolean {
+  let index = 0;
+
+  while (index < value.length) {
+    if (value.startsWith("$${", index) || value.startsWith("%%{", index)) {
+      index += 3;
+      continue;
+    }
+
+    if (value.startsWith("${", index) || value.startsWith("%{", index)) {
+      return true;
+    }
+
+    index += 1;
+  }
+
+  return false;
 }
 
 function validateRequiredProviderAssignment(

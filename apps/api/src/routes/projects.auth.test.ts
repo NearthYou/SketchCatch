@@ -1039,6 +1039,216 @@ test("PUT Terraform upload stores server-verified Reverse Engineering imports in
   await app.close();
 });
 
+test("PUT Terraform upload rejects arbitrary bytes for a sourced Reverse Engineering draft with no import targets", async () => {
+  const persistedTerraformFiles = [
+    {
+      fileName: "providers.tf",
+      terraformCode: 'terraform { required_version = ">= 1.5.0" }\n'
+    },
+    {
+      fileName: "main.tf",
+      terraformCode: 'resource "aws_s3_bucket" "existing_bucket" {}\n'
+    }
+  ];
+  const browserContent = 'resource "aws_s3_bucket" "forged" {}\n';
+  let putObjectRan = false;
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectDrafts: [makeReverseEngineeringProjectDraft(persistedTerraformFiles)],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        architectureId: ACTIVE_ARCHITECTURE_ID,
+        assetType: "terraform_file",
+        fileName: "main.tf",
+        contentType: "text/plain",
+        byteSize: Buffer.byteLength(browserContent),
+        uploadStatus: "pending"
+      })
+    ],
+    reverseEngineeringScans: [makeReverseEngineeringReferenceScan()]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject() {
+        putObjectRan = true;
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "text/plain"
+    },
+    payload: browserContent
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(putObjectRan, false);
+  assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "pending");
+
+  await app.close();
+});
+
+test("PUT Terraform upload stores a sourced zero-target draft as a canonical base bundle", async () => {
+  const providersTerraformCode = 'terraform { required_version = ">= 1.5.0" }\n';
+  const mainTerraformCode = 'resource "aws_s3_bucket" "existing_bucket" {}\n';
+  const persistedTerraformFiles = [
+    { fileName: "providers.tf", terraformCode: providersTerraformCode },
+    { fileName: "main.tf", terraformCode: mainTerraformCode }
+  ];
+  const browserContent = `${providersTerraformCode.trim()}\n\n${mainTerraformCode.trim()}`;
+  const expectedBundle = JSON.stringify({
+    schemaVersion: 1,
+    files: persistedTerraformFiles
+  });
+  const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectDrafts: [makeReverseEngineeringProjectDraft(persistedTerraformFiles)],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        architectureId: ACTIVE_ARCHITECTURE_ID,
+        assetType: "terraform_file",
+        fileName: "main.tf",
+        contentType: "text/plain",
+        byteSize: Buffer.byteLength(browserContent),
+        uploadStatus: "pending"
+      })
+    ],
+    reverseEngineeringScans: [makeReverseEngineeringReferenceScan()]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject(input) {
+        putObjectRequests.push(input);
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "text/plain"
+    },
+    payload: browserContent
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.deepEqual(putObjectRequests, [
+    {
+      objectKey: "projects/project-id/diagram.png",
+      contentType: "application/vnd.sketchcatch.terraform-files+json",
+      body: expectedBundle
+    }
+  ]);
+  assert.equal(fakeDb.projectAssetRows[0]?.fileName, "terraform-files.json");
+  assert.equal(
+    fakeDb.projectAssetRows[0]?.contentType,
+    "application/vnd.sketchcatch.terraform-files+json"
+  );
+  assert.equal(fakeDb.projectAssetRows[0]?.byteSize, Buffer.byteLength(expectedBundle));
+
+  await app.close();
+});
+
+test("PUT Terraform upload allows user-owned import blocks and imports.tf for ordinary projects", async () => {
+  const scenarios = [
+    {
+      fileName: "main.tf",
+      terraformCode: [
+        'resource "aws_s3_bucket" "existing" {}',
+        'import { to = aws_s3_bucket.existing id = "existing-bucket" }',
+        ""
+      ].join("\n")
+    },
+    {
+      fileName: "imports.tf",
+      terraformCode: [
+        'resource "aws_s3_bucket" "existing" {}',
+        'import { to = aws_s3_bucket.existing id = "existing-bucket" }',
+        ""
+      ].join("\n")
+    }
+  ];
+
+  for (const scenario of scenarios) {
+    const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
+    const fakeDb = new ProjectRouteFakeDb({
+      activeUserId: ACTIVE_USER_ID,
+      requestedProjectAssetId: ACTIVE_ASSET_ID,
+      requestedProjectId: ACTIVE_PROJECT_ID,
+      users: [makeUser({ id: ACTIVE_USER_ID })],
+      projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+      projectDrafts: [
+        makeProjectDraft({
+          terraformFiles: [
+            { fileName: scenario.fileName, terraformCode: scenario.terraformCode }
+          ]
+        })
+      ],
+      projectAssets: [
+        makeProjectAsset({
+          id: ACTIVE_ASSET_ID,
+          projectId: ACTIVE_PROJECT_ID,
+          architectureId: ACTIVE_ARCHITECTURE_ID,
+          assetType: "terraform_file",
+          fileName: scenario.fileName,
+          contentType: "text/plain",
+          byteSize: Buffer.byteLength(scenario.terraformCode),
+          uploadStatus: "pending"
+        })
+      ]
+    });
+    const app = buildApp({
+      getDatabaseClient: () => fakeDb.client,
+      projectAssetStorage: createProjectAssetStorageStub({
+        async putObject(input) {
+          putObjectRequests.push(input);
+        }
+      })
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+      headers: {
+        ...(await authHeaders(ACTIVE_USER_ID)),
+        "content-type": "text/plain"
+      },
+      payload: scenario.terraformCode
+    });
+
+    assert.equal(response.statusCode, 204, scenario.fileName);
+    assert.deepEqual(putObjectRequests, [
+      {
+        objectKey: "projects/project-id/diagram.png",
+        contentType: "text/plain",
+        body: scenario.terraformCode
+      }
+    ]);
+    await app.close();
+  }
+});
+
 test("PUT Terraform upload rejects browser-submitted import block content", async () => {
   const terraformCode = 'resource "aws_s3_bucket" "existing_bucket" {}\n';
   const browserContent = `${terraformCode}\nimport {\n  to = aws_s3_bucket.existing_bucket\n  id = "browser-forged-bucket"\n}\n`;
@@ -1846,6 +2056,26 @@ function makeReverseEngineeringScan(
     createdAt,
     updatedAt: createdAt,
     ...overrides
+  };
+}
+
+function makeReverseEngineeringReferenceScan(): ReverseEngineeringScanRow {
+  const scan = makeReverseEngineeringScan();
+  const result = scan.result!;
+
+  return {
+    ...scan,
+    result: {
+      ...result,
+      discoveredResources: result.discoveredResources.map((resource) => ({
+        ...resource,
+        config: {
+          ...resource.config,
+          cloudFormationStackId: "arn:aws:cloudformation:ap-northeast-2:123456789012:stack/existing"
+        }
+      })),
+      importSuggestions: []
+    }
   };
 }
 

@@ -2055,6 +2055,8 @@ export type DeploymentPlanSummary = {
   updateCount: number;
   deleteCount: number;
   replaceCount: number;
+  /** Older persisted summaries omit this field and are interpreted as zero imports. */
+  importCount?: number;
   blocked: boolean;
   warnings: DeploymentPlanWarning[];
 };

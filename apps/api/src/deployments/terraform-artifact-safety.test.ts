@@ -54,6 +54,34 @@ test("Terraform artifact safety rejects non-static or broadened import blocks", 
   }
 });
 
+test("Terraform import IDs reject active interpolation and template directives", () => {
+  for (const importId of ['"${var.import_id}"', '"%{ if var.enabled }bucket%{ endif }"']) {
+    assert.throws(
+      () =>
+        assertTerraformArtifactIsSafe(`
+          resource "aws_s3_bucket" "existing" {}
+          import {
+            to = aws_s3_bucket.existing
+            id = ${importId}
+          }
+        `),
+      TerraformArtifactSafetyError
+    );
+  }
+});
+
+test("Terraform import IDs allow generator-escaped literal template markers", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      resource "aws_s3_bucket" "existing" {}
+      import {
+        to = aws_s3_bucket.existing
+        id = "bucket-$\${literal_name}-%%{ literal-directive }"
+      }
+    `)
+  );
+});
+
 test("generated S3 artifacts omit synthetic public access blocks and pass safety", () => {
   const graph: InfrastructureGraph = {
     nodes: [

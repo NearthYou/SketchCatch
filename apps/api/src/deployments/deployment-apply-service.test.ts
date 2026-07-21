@@ -1131,7 +1131,16 @@ test("post-apply failure retries terminal persistence when the first failure upd
   assert.equal(repository.deployment?.stateObjectKey, applyArtifactStorage.stateObjectKey);
 });
 
-function createVerifiedNoChangeApplyScenario(): {
+function createVerifiedNoChangeApplyScenario(
+  planSummary: NonNullable<DeploymentRecord["planSummary"]> = {
+    createCount: 0,
+    updateCount: 0,
+    deleteCount: 0,
+    replaceCount: 0,
+    blocked: false,
+    warnings: []
+  }
+): {
   repository: FakeDeploymentRepository;
   applyArtifactStorage: FakeApplyArtifactStorage;
   existingStateObjectKey: string;
@@ -1142,14 +1151,7 @@ function createVerifiedNoChangeApplyScenario(): {
     scope: "full_stack",
     targetKind: "ecs_fargate",
     stateObjectKey: existingStateObjectKey,
-    planSummary: {
-      createCount: 0,
-      updateCount: 0,
-      deleteCount: 0,
-      replaceCount: 0,
-      blocked: false,
-      warnings: []
-    }
+    planSummary
   });
   const applyArtifactStorage = new FakeApplyArtifactStorage();
   repository.planArtifact = createPlanArtifactRecord({
@@ -1186,6 +1188,62 @@ function createVerifiedNoChangeApplyScenario(): {
   );
   return { repository, applyArtifactStorage, existingStateObjectKey };
 }
+
+test("an approved import-only Plan executes Terraform apply instead of the no-change shortcut", async () => {
+  const { repository, applyArtifactStorage } = createVerifiedNoChangeApplyScenario({
+    createCount: 0,
+    updateCount: 0,
+    deleteCount: 0,
+    replaceCount: 0,
+    importCount: 1,
+    blocked: false,
+    warnings: []
+  });
+  let credentialsPrepared = 0;
+  let applyCalls = 0;
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      writeTerraformStateFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-import-only-apply",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-import-only-apply/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => {
+        credentialsPrepared += 1;
+        return createPreparedCredentials();
+      },
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => {
+        applyCalls += 1;
+        return createRunnerResult("apply");
+      },
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", {
+          stdout: '{"values":{"root_module":{"resources":[]}}}'
+        }),
+      reconcileApplicationOutput: async () => undefined,
+      executeApplicationRelease: async () => undefined,
+      now: () => fixedNow
+    }
+  );
+
+  assert.equal(
+    result.deployment.status,
+    "SUCCESS",
+    repository.failedInput?.errorSummary ?? "import-only apply failed without an error summary"
+  );
+  assert.equal(credentialsPrepared, 1);
+  assert.equal(applyCalls, 1);
+});
 
 test("no-change Apply preserves release when target sync warning storage fails", async () => {
   const repository = new FakeDeploymentRepository();

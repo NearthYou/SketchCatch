@@ -9,7 +9,7 @@ export const terraformArtifactBundleFileName = "terraform-files.json";
 export const terraformArtifactBundleContentType =
   "application/vnd.sketchcatch.terraform-files+json";
 
-/** gg: browser가 제출한 파일과 분리해 server-verified import만 예약 파일에 넣습니다. */
+/** gg: persisted base files를 canonical bundle로 만들고 verified target이 있을 때만 import를 넣습니다. */
 export function createTerraformArtifactBundleWithImports(
   baseFiles: readonly TerraformSyncFileInput[],
   targets: readonly VerifiedTerraformImportTarget[]
@@ -17,18 +17,18 @@ export function createTerraformArtifactBundleWithImports(
   assertSafeBaseTerraformFiles(baseFiles);
   assertTerraformBaseFilesDoNotContainImportBlocks(baseFiles);
 
-  if (targets.length === 0) {
-    throw new Error("Terraform import 대상이 없으면 reserved import bundle을 만들 수 없습니다.");
-  }
-
   return {
     schemaVersion: 1,
     files: [
       ...baseFiles.map((file) => ({ ...file })),
-      {
-        fileName: terraformImportsFileName,
-        terraformCode: createTerraformImportBlocks(targets)
-      }
+      ...(targets.length > 0
+        ? [
+            {
+              fileName: terraformImportsFileName,
+              terraformCode: createTerraformImportBlocks(targets)
+            }
+          ]
+        : [])
     ]
   };
 }

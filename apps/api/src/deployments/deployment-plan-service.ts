@@ -27,7 +27,10 @@ import {
   assertTerraformBaseFilesDoNotContainImportBlocks,
   assertTerraformImportArtifactMatches
 } from "../services/terraform/terraform-import-artifact.js";
-import { resolveVerifiedImportTargets } from "../reverse-engineering/reverse-engineering-import-targets.js";
+import {
+  hasReverseEngineeringSourceProvenance,
+  resolveVerifiedImportTargets
+} from "../reverse-engineering/reverse-engineering-import-targets.js";
 import {
   appendTerraformDurationLog,
   runLoggedDeploymentOperation
@@ -934,9 +937,26 @@ async function assertDeploymentTerraformImportArtifactMatches(input: {
   repository: DeploymentRepository;
   terraformFiles: readonly TerraformSyncFileInput[];
 }): Promise<void> {
-  const hasStoredImportFile = input.terraformFiles.some(
-    (file) => file.fileName === "imports.tf"
-  );
+  const findProjectDraft = input.repository.findProjectDraftForPreparation;
+  if (!findProjectDraft) {
+    return;
+  }
+
+  const draft = await findProjectDraft.call(input.repository, input.deployment.projectId);
+  if (!draft) {
+    return;
+  }
+
+  if (!hasReverseEngineeringSourceProvenance(draft.diagramJson)) {
+    return;
+  }
+
+  const findAccessibleScan = input.repository.findAccessibleScan;
+  if (!findAccessibleScan) {
+    throw new DeploymentConflictError(
+      "Terraform import artifact의 서버 원본을 확인할 수 없습니다."
+    );
+  }
 
   try {
     assertTerraformBaseFilesDoNotContainImportBlocks(
@@ -948,28 +968,6 @@ async function assertDeploymentTerraformImportArtifactMatches(input: {
     );
   }
 
-  const findProjectDraft = input.repository.findProjectDraftForPreparation;
-  const findAccessibleScan = input.repository.findAccessibleScan;
-
-  if (!findProjectDraft || !findAccessibleScan) {
-    if (hasStoredImportFile) {
-      throw new DeploymentConflictError(
-        "Terraform import artifact의 서버 원본을 확인할 수 없습니다."
-      );
-    }
-    return;
-  }
-
-  const draft = await findProjectDraft.call(input.repository, input.deployment.projectId);
-  if (!draft) {
-    if (hasStoredImportFile) {
-      throw new DeploymentConflictError(
-        "Terraform import artifact의 Project Draft를 확인할 수 없습니다."
-      );
-    }
-    return;
-  }
-
   const targets = await resolveVerifiedImportTargets(
     {
       projectId: input.deployment.projectId,
@@ -978,10 +976,6 @@ async function assertDeploymentTerraformImportArtifactMatches(input: {
     },
     { findAccessibleScan: findAccessibleScan.bind(input.repository) }
   );
-
-  if (!hasStoredImportFile && targets.length === 0) {
-    return;
-  }
 
   if (
     input.deployment.preparedDraftRevision !== null &&

@@ -1098,6 +1098,7 @@ test("runDeploymentPlan rejects a browser-forged imports.tf against the persiste
 
 test("runDeploymentPlan rejects import blocks outside the server-owned imports.tf file", async () => {
   const repository = new FakeDeploymentRepository();
+  const diagramJson = createReverseEngineeringImportDiagram();
   const terraformCode = [
     'resource "aws_s3_bucket" "existing_bucket" {}',
     "",
@@ -1110,8 +1111,14 @@ test("runDeploymentPlan rejects import blocks outside the server-owned imports.t
   repository.deployment = createDeploymentRecord(deploymentId, { preparedDraftRevision: 1 });
   repository.projectDraft = {
     revision: 1,
-    diagramJson: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } },
+    diagramJson,
     terraformFiles: [{ fileName: "main.tf", terraformCode }]
+  };
+  repository.reverseEngineeringScan = {
+    id: "scan-1",
+    projectId,
+    status: "completed",
+    result: createReverseEngineeringImportScanResult()
   };
   let initRuns = 0;
   let planRuns = 0;
@@ -1142,6 +1149,70 @@ test("runDeploymentPlan rejects import blocks outside the server-owned imports.t
   );
   assert.equal(initRuns, 0);
   assert.equal(planRuns, 0);
+});
+
+test("runDeploymentPlan allows ordinary user-owned import blocks in any Terraform file", async () => {
+  const repository = new FakeDeploymentRepository();
+  const mainTerraformCode = [
+    'resource "aws_s3_bucket" "embedded" {}',
+    'resource "aws_s3_bucket" "separate_file" {}',
+    "",
+    "import {",
+    "  to = aws_s3_bucket.embedded",
+    '  id = "embedded-bucket"',
+    "}",
+    ""
+  ].join("\n");
+  const importsTerraformCode = [
+    "import {",
+    "  to = aws_s3_bucket.separate_file",
+    '  id = "separate-bucket"',
+    "}",
+    ""
+  ].join("\n");
+  const terraformFiles = [
+    { fileName: "main.tf", terraformCode: mainTerraformCode },
+    { fileName: "imports.tf", terraformCode: importsTerraformCode }
+  ];
+  repository.deployment = createDeploymentRecord(deploymentId, { preparedDraftRevision: 1 });
+  repository.projectDraft = {
+    revision: 1,
+    diagramJson: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } },
+    terraformFiles
+  };
+  let initRuns = 0;
+  let planRuns = 0;
+
+  const result = await runDeploymentPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      planArtifactStorage: new FakePlanArtifactStorage(),
+      readTerraformArtifactFile: async () => "ordinary canonical bundle",
+      analyzePreDeployment: () => createAnalysis(),
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-ordinary-import-plan",
+        mainFilePath: "C:/tmp/sketchcatch-ordinary-import-plan/.sketchcatch-artifact.txt",
+        terraformFiles,
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => {
+        initRuns += 1;
+        return createRunnerResult("init");
+      },
+      runTerraformPlan: async () => {
+        planRuns += 1;
+        return createRunnerResult("plan");
+      },
+      runTerraformShowJson: async () =>
+        createRunnerResult("show", { stdout: createPlanJson([]) })
+    }
+  );
+
+  assert.equal(result.deployment.status, "PENDING");
+  assert.equal(initRuns, 1);
+  assert.equal(planRuns, 1);
 });
 
 test("runDeploymentPlan plans the verified imports.tf and fingerprints the whole canonical bundle", async () => {
@@ -1336,6 +1407,7 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
     updateCount: 0,
     deleteCount: 0,
     replaceCount: 0,
+    importCount: 0,
     blocked: false,
     warnings: [
       {
