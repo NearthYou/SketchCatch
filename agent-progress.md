@@ -24,6 +24,16 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Design convergent Git/CI/CD setup and PR recovery
+
+- Confirmed `Refactor/jh/531-cicd-pr개선-및-편의성-추가` is clean and exactly matches the freshly fetched `origin/dev` at `334e33c5`.
+- Traced the production 404 to stale GitHub Repository variables: PR creation can currently complete Phase 3 without applying or verifying the current project's settings.
+- Audited the Repository settings, AWS trust, PR provider, persistence, API, and Web phase gates. The design now uses one user-approved server orchestrator, persisted step evidence, exact provider read-back, lease/idempotency, and open/closed/merged PR reconciliation.
+- Added `docs/superpowers/specs/2026-07-22-git-cicd-setup-convergence-design.md`, including the July 2026 immutable GitHub OIDC subject compatibility, scoped IAM statement preservation, stale project ID defense, failure injection matrix, and production Go/No-Go criteria.
+- Strengthened the written design after adversarial review: setup-ready and execution-ready are separate, generated workflows carry the active revision, normal application commits do not invalidate installation configuration, and unknown provider outcomes are quarantined behind a durable setup worker and append-only mutation journal instead of automatic lease takeover.
+- A DB migration is planned after the written spec gate. Latest checked migration is `0054`; the expected `0055` number must be coordinated before creation. No migration, product code, external GitHub/AWS mutation, deployment, or push was performed in this design pass.
+- Verification: starting and final `pnpm harness:check`, tracked-file `git diff --check`, and new-spec trailing-whitespace checks passed. The written design and continuation records were committed without product-code changes.
+
 ### 2026-07-22 - Complete the external audience receipt handoff
 
 - Confirmed current `dev` at `a45c399b` already exposes the scoped `sketchcatch_observation_url`, origin-bound bootstrap, Store-only `/receipts`, production Redis namespace, and Signal Dashboard contract; this feature branch adds Redis client recovery and typed SSE diagnostics.
@@ -134,6 +144,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
-2. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for these changes.
-3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
+1. Obtain written-spec review approval for `docs/superpowers/specs/2026-07-22-git-cicd-setup-convergence-design.md`.
+2. After approval, create the detailed implementation plan and coordinate the expected `0055` migration number before editing `apps/api/drizzle/**`.
+3. Implement the focused provider/orchestrator/API/Web failure matrix before any production acceptance run.

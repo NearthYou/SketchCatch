@@ -4,34 +4,35 @@ Use this file only for compact continuation context. Write it in English and ref
 
 ## Currently Verified
 
-- SketchCatch branch `codex/fix-deployment-live-observation` contains current `origin/dev` at `b5553be1`, Redis client recovery `17664afe`, typed SSE diagnostics `2d871330`, and the current Signal Dashboard and CI/CD readiness work.
-- External repository `C:\Jungle\audience-live-check` branch `codex/fix-browser-check-in-route` is committed at `b96e8f0`. It binds native browser fetch, retains `/api/check-ins` compatibility aliases, validates the scoped `sketchcatch_observation_url`, bootstraps an in-memory capability, and emits unique best-effort receipts only after successful check-ins and heartbeats.
-- The cross-repository contract aligns: SketchCatch creates the scoped query parameter, restricts CORS to the deployed audience origin, exposes `/bootstrap` and `/receipts`, and streams Store snapshots before provider corroboration.
-- Verification passes after the latest `dev` merge: 29 focused SketchCatch API tests, 43 focused SketchCatch Web tests, all 11 Redis 8 integration cases, harness, lint, typecheck, all five production builds, all 50 audience tests, audience typecheck and production build, and Biome checks for all changed audience source files.
+- Branch `Refactor/jh/531-cicd-pr개선-및-편의성-추가` started exactly at freshly fetched `origin/dev` commit `334e33c5` and now has one committed written-design change on top.
+- The production CI/CD 404 was caused by a stale GitHub Repository `SKETCHCATCH_PROJECT_ID`; current Phase 3 can be marked complete by PR creation without Repository settings verification.
+- Read-only backend, frontend, and verification audits found the same structural gaps: external PR creation precedes the DB handoff insert, Repository settings have no read-back or persisted evidence, AWS trust verification is incomplete, and existing PRs cannot be reconciled deterministically.
+- The user-approved design direction is written in `docs/superpowers/specs/2026-07-22-git-cicd-setup-convergence-design.md`; written-spec review remains the next gate.
+- The starting `pnpm harness:check` passed. No product code, migration, dependency, external mutation, deployment, or push was performed.
 
 ## Changes This Session
 
-- Reproduced the missing audience receipt behavior with a deterministic API-client test: only the real participation request occurred while three requests were expected.
-- Added a bounded receipt reporter that accepts only HTTPS `/api/live-observations/public/<uuid>` URLs without credentials, query, or fragment; keeps the capability in memory; and never turns an observation outage into a participation failure.
-- Added check-in and heartbeat receipt coverage with unique event IDs, plus failure isolation coverage and README contract documentation.
-- Confirmed the older production Redis namespace fix is already present in the current SketchCatch branch as `keyNamespace: "production"`.
-- Merged `origin/dev` at `b5553be1`; only `agent-progress.md` conflicted, and both histories were retained. No Live Observation product-code conflict was present.
-- No dependency, lockfile, migration, Terraform execution, cloud mutation, deployment, push, or Git/CI/CD handoff was performed.
+- Fetched `origin`, verified the new branch has zero commits ahead/behind `origin/dev`, and ran the starting harness successfully.
+- Audited the current GitHub Repository settings, AWS trust, handoff persistence, PR provider, API routes, and Phase 3/4 Web gates.
+- Wrote and self-reviewed the convergent setup design, including persistent steps, exact provider verification, PR recovery, OIDC compatibility, separate setup/execution readiness, durable worker dispatch, unknown-outcome quarantine, and the focused failure-injection matrix.
+- Did not modify product code, schema, migration files, dependencies, external providers, or deployed infrastructure.
 
 ## Broken Or Unverified
 
-- Neither feature branch has been pushed, merged into its target branch, or deployed.
-- Production end-to-end behavior remains unverified until both repositories are deployed and the SketchCatch API receives a working `REDIS_URL`.
-- The audience repository-wide `npm run lint` remains non-green because 26 pre-existing CRLF-formatted files are outside Biome's expected line-ending format. All changed source files pass targeted Biome checks.
-- Do not create traffic or mutate AWS resources without a new explicit deployment approval.
+- Ask the user to review the written spec as required by the brainstorming workflow.
+- After written-spec approval, invoke the writing-plans skill and implement from the resulting plan.
+- Before creating a migration, re-check the latest number. `0054_remove_practice_live_profile.sql` is currently latest; expected `0055` has a cross-branch collision risk.
+- Production acceptance remains intentionally unverified until the implementation, local failure matrix, reviewed deployment, and one authorized live run are complete.
+
+## Implementation Boundaries
+
+- One explicit setup approval may converge GitHub settings, AWS OIDC/trust, and PR state. It does not approve PR merge, workflow dispatch, Terraform Apply, release, or Destroy.
+- Persist the handoff before external mutation, read before and after every provider write, and resume by configuration revision without duplicate PRs.
+- Phase 3 and Pipeline provenance require all three setup steps to be remotely verified for the current revision.
+- Preserve unrelated GitHub variables, branches, and IAM statements; never use wildcard trust as a recovery fallback.
+- Do not run live GitHub/AWS mutation during implementation verification.
 
 ## Best Next Action
 
-1. Review and publish `codex/fix-deployment-live-observation` for merge into SketchCatch `dev`.
-2. Review and publish `codex/fix-browser-check-in-route` for merge into `audience-live-check/main`.
-3. Deploy both targets through their reviewed workflows, confirm `REDIS_URL` readiness, then verify check-in 201 -> heartbeat 200 -> receipt 202/200 -> SSE continuity -> Signal Dashboard count growth.
-
-## Suggested Skills
-
-- Use `review` before opening the two PRs.
-- Use `qa` or browser control for the post-deployment acceptance flow.
+1. Obtain written-spec approval.
+2. Create the detailed implementation plan and execute it with focused failure-injection tests before any production acceptance run.
