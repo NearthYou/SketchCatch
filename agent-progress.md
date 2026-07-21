@@ -22,6 +22,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Remove the duplicate AWS connection step description
+
+- Hid the empty-state AWS Role description from the connection step header while retaining it in the expanded body and preserving the verified account/region summary.
+- Seven focused Settings tests, lint, typecheck, build, final harness, and two-axis review pass. No full test suite was run.
+- No API, shared contract, database migration, dependency, deployment, or cloud mutation change was made.
+
 ### 2026-07-22 - Restructure Settings connection flow
 
 - Reworked the existing Settings integrations into one ordered GitHub App -> AWS account -> AWS CodeBuild GitHub authorization flow, with completed steps collapsed and the current or error step expanded.

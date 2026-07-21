@@ -39,6 +39,13 @@ test("Settings collapses every step after CodeBuild authorization is complete", 
   assert.match(clientSource, /useState<ConnectionFlowStepId \| null>/);
 });
 
+test("Settings shows the AWS Role description only inside the expanded step body", () => {
+  const roleDescriptions = clientSource.match(/Access Key 대신 한 번 만든 Role을 사용합니다\./g);
+
+  assert.equal(roleDescriptions?.length, 1);
+  assert.match(clientSource, /summary \? <span className=\{styles\.connectionStepSummary\}>/);
+});
+
 test("Settings client passes one AWS connection ID into recovery navigation", () => {
   assert.match(
     clientSource,

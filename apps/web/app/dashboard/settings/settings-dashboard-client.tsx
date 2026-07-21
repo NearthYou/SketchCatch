@@ -510,7 +510,7 @@ export function SettingsDashboardClient() {
       : "GitHub App 연결이 필요합니다.";
   const awsStepSummary = primaryVerifiedConnection
     ? `${primaryVerifiedConnection.accountId ?? "계정 확인 전"} · ${getAwsRegionLabel(primaryVerifiedConnection.region)}`
-    : "Access Key 대신 한 번 만든 Role을 사용합니다.";
+    : "";
   const codeBuildStepSummary = getCodeBuildStepSummary(selectedCodeConnection?.status);
 
   return (
@@ -952,7 +952,7 @@ function ConnectionFlowStep({
             {icon}
             <h2 id={titleId}>{title}</h2>
           </span>
-          <span className={styles.connectionStepSummary}>{summary}</span>
+          {summary ? <span className={styles.connectionStepSummary}>{summary}</span> : null}
         </span>
         <span className={styles.connectionStepStatus} data-state={state}>
           {getConnectionFlowStatusLabel(state, number)}
