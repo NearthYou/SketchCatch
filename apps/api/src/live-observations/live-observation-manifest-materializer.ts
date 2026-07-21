@@ -247,6 +247,7 @@ function createCloudFrontDeploymentManifest(input: {
     },
     endpoints: {
       audienceBaseUrl: input.audienceBaseUrl,
+      audienceApplicationUrl: outputUrl.toString(),
       trafficUrl: new URL("/api/traffic", outputUrl).toString()
     },
     pressure: {

@@ -7,7 +7,7 @@ import {
   type LiveObservationAudienceViewState
 } from "./live-observation-audience-session.js";
 
-test("publishes the remaining cooldown after a rate-limited request", async () => {
+test("allows an immediate retry after a rate-limited request", async () => {
   const states: LiveObservationAudienceViewState[] = [];
   let requestCount = 0;
   const session = createLiveObservationAudienceSession({
@@ -16,7 +16,7 @@ test("publishes the remaining cooldown after a rate-limited request", async () =
       dispose() {},
       async request() {
         requestCount += 1;
-        throw new LiveObservationAudienceError("rate_limited", 42);
+        throw new LiveObservationAudienceError("rate_limited");
       }
     }),
     onState: (state) => states.push(state)
@@ -27,11 +27,10 @@ test("publishes the remaining cooldown after a rate-limited request", async () =
   await session.request();
 
   await session.request();
-  assert.equal(requestCount, 1);
+  assert.equal(requestCount, 2);
   assert.deepEqual(states.at(-1), {
     bootstrapReady: true,
     pageState: "rate_limited",
-    retryAfterSeconds: 42,
     successCount: 0
   });
 });
