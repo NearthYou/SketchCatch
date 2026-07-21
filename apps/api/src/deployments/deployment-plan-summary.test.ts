@@ -31,3 +31,23 @@ test("Terraform import-only no-op changes remain represented in the Plan summary
   assert.equal(summary.deleteCount, 0);
   assert.equal(summary.replaceCount, 0);
 });
+
+test("explicit malformed Terraform importing metadata still remains in the import summary", () => {
+  const summary = createDeploymentPlanSummaryFromTerraformShowJson(
+    JSON.stringify({
+      resource_changes: [
+        {
+          address: "aws_s3_bucket.existing_bucket",
+          mode: "managed",
+          type: "aws_s3_bucket",
+          change: {
+            actions: ["no-op"],
+            importing: "malformed-import-metadata"
+          }
+        }
+      ]
+    })
+  );
+
+  assert.equal(summary.importCount, 1);
+});

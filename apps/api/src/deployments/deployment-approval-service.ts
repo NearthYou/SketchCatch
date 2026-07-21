@@ -24,6 +24,7 @@ import {
 } from "./deployment-service.js";
 import { isDeploymentDestroySourceStatus } from "./deployment-destroy-eligibility.js";
 import { createPreparedReleaseSnapshotHash } from "./deployment-preparation-service.js";
+import { requiresTerraformImportSafetyReplan } from "./deployment-safety-gate.js";
 
 export type ApproveDeploymentPlanInput = {
   deploymentId: string;
@@ -383,6 +384,22 @@ function assertDeploymentCanBeApproved(
 
   if (!deployment.currentPlanArtifactId || !deployment.planSummary) {
     throw new DeploymentConflictError("Terraform Plan must be completed before approval");
+  }
+
+  const isActualPlanBlock =
+    (deployment.isBlocked || deployment.planSummary.blocked) &&
+    deployment.blockedBy !== "missing_approval";
+
+  if (isActualPlanBlock) {
+    throw new DeploymentConflictError(
+      deployment.blockedReason ?? "Blocked deployment plan cannot be approved"
+    );
+  }
+
+  if (requiresTerraformImportSafetyReplan(deployment.planSummary)) {
+    throw new DeploymentConflictError(
+      "Terraform import Plan must be regenerated before approval"
+    );
   }
 }
 

@@ -60,7 +60,11 @@ import {
   isTerraformPlanNoChange,
   parseDeploymentPlanOptimizationEvidence
 } from "./deployment-optimization.js";
-import { evaluateDeploymentSafetyGate } from "./deployment-safety-gate.js";
+import {
+  createTerraformImportPlanBlock,
+  evaluateDeploymentSafetyGate,
+  requiresTerraformImportSafetyReplan
+} from "./deployment-safety-gate.js";
 import {
   appendDeploymentLogs,
   DeploymentConflictError,
@@ -726,12 +730,14 @@ async function runDeploymentPlanOnce(
       terraform.showJson.stdout,
       deployment.liveProfile
     );
+    const importPlanBlock = createTerraformImportPlanBlock(terraform.showJson.stdout);
     const planSummary = evaluateDeploymentSafetyGate({
       operation: "apply",
       planSummary: createDeploymentPlanSummaryFromTerraformShowJson(terraform.showJson.stdout),
       liveProfile: deployment.liveProfile,
       findings: preDeploymentAnalysis.findings,
-      unsupportedResourceTypes
+      unsupportedResourceTypes,
+      terraformShowJson: terraform.showJson.stdout
     });
     const resourceChanges = createTerraformResourceChangeEvidence(terraform.showJson.stdout);
     sequence = await appendTerraformResourceChangeEvidenceLogs({
@@ -858,9 +864,7 @@ async function runDeploymentPlanOnce(
               stateSerial: desiredStateIdentity.stateSerial
             },
             planSummary,
-            isBlocked: false,
-            blockedBy: null,
-            blockedReason: null
+            ...importPlanBlock
           })
       });
       const updatedDeployment = planSave.result;
@@ -1223,6 +1227,10 @@ async function evaluateDeploymentPlanReuse(input: {
     input.deployment.approvedAt ||
     !input.currentPlanArtifact
   ) {
+    return { outcome: "execute", reason: "cache_miss" };
+  }
+
+  if (requiresTerraformImportSafetyReplan(input.deployment.planSummary)) {
     return { outcome: "execute", reason: "cache_miss" };
   }
 

@@ -2130,6 +2130,114 @@ test("runDeploymentPlan reuses a verified pending plan without rerunning Plan or
   );
 });
 
+test("runDeploymentPlan replans a legacy pending import plan without safety-gate evidence", async () => {
+  const repository = new FakeDeploymentRepository();
+  const legacyPlanSummary = {
+    createCount: 0,
+    updateCount: 0,
+    deleteCount: 0,
+    replaceCount: 0,
+    importCount: 1,
+    blocked: false,
+    warnings: []
+  };
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "RUNNING",
+    currentPlanArtifactId: planArtifactId,
+    planSummary: legacyPlanSummary,
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null
+  });
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  const reusablePlanContent = Buffer.from("legacy import tfplan");
+  const reusablePlanSha256 = createSha256(reusablePlanContent);
+  planArtifactStorage.planContent = reusablePlanContent;
+  repository.planArtifact = createDeploymentPlanArtifactRecord({
+    sha256: reusablePlanSha256
+  });
+  const desiredStateIdentity = createTerraformDesiredStateIdentity({
+    projectId,
+    canonicalTerraformBundle: terraformArtifactContent,
+    terraformFiles: [{ fileName: "main.tf", terraformCode: terraformArtifactContent }],
+    providerLockContent: null,
+    target: {
+      provider: "aws",
+      accountId: "123456789012",
+      region: "ap-northeast-2"
+    },
+    state: { lineage: null, serial: null }
+  });
+  planArtifactStorage.optimizationEvidenceContent = Buffer.from(
+    JSON.stringify(
+      createDeploymentPlanOptimizationEvidence({
+        projectId,
+        deploymentId,
+        planArtifactId,
+        planArtifactSha256: reusablePlanSha256,
+        desiredStateIdentity,
+        driftVerifiedAt: fixedNow.toISOString(),
+        planSummary: legacyPlanSummary,
+        preDeploymentResult: { findings: [] },
+        resourceChanges: [{ resourceAddress: "aws_s3_bucket.existing", action: "create" }]
+      })
+    )
+  );
+  const runnerStages: string[] = [];
+
+  const result = await runDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext(),
+      startedFromStatus: "PENDING"
+    },
+    repository,
+    {
+      generatePlanArtifactId: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-legacy-import-replan",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-legacy-import-replan/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      now: () => fixedNow,
+      runTerraformInit: async () => {
+        runnerStages.push("init");
+        return createRunnerResult("init");
+      },
+      runTerraformPlan: async () => {
+        runnerStages.push("plan");
+        return createRunnerResult("plan");
+      },
+      runTerraformShowJson: async () => {
+        runnerStages.push("show-json");
+        return createRunnerResult("show", {
+          stdout: createPlanJson([
+            {
+              address: "aws_s3_bucket.existing",
+              type: "aws_s3_bucket",
+              change: {
+                actions: ["no-op"],
+                importing: { id: "existing" }
+              }
+            }
+          ])
+        });
+      }
+    }
+  );
+
+  assert.deepEqual(runnerStages, ["init", "plan", "show-json"]);
+  assert.equal(result.optimization.outcome, "execute");
+  assert.equal(result.deployment.planSummary?.importSafetyGateVersion, 1);
+  assert.equal(result.deployment.isBlocked, false);
+  assert.equal(repository.savedPlans.length, 1);
+});
+
 test("runDeploymentPlan falls back to a fresh Plan when optimization evidence is corrupt", async () => {
   const repository = new FakeDeploymentRepository();
   const previousPlanSummary = {
@@ -2459,6 +2567,75 @@ test("runDeploymentPlan records destructive or high-risk warnings without blocki
       blocksApproval: false
     }
   ]);
+});
+
+test("runDeploymentPlan persists a deterministic risk block only for unsafe imported resources", async () => {
+  const repository = new FakeDeploymentRepository();
+  const planArtifactStorage = new FakePlanArtifactStorage();
+
+  const result = await runDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-import-risk",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-import-risk/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformPlan: async () => createRunnerResult("plan"),
+      runTerraformShowJson: async () =>
+        createRunnerResult("show", {
+          stdout: createPlanJson([
+            {
+              address: "aws_s3_bucket.z_existing",
+              type: "aws_s3_bucket",
+              change: { actions: ["create"], importing: { id: "z-existing" } }
+            },
+            {
+              address: "aws_s3_bucket.safe_update",
+              type: "aws_s3_bucket",
+              change: { actions: ["update"], importing: { id: "safe-update" } }
+            },
+            {
+              address: "aws_s3_bucket.ordinary_delete",
+              type: "aws_s3_bucket",
+              change: { actions: ["delete"] }
+            },
+            {
+              address: "aws_instance.a_existing",
+              type: "aws_instance",
+              change: {
+                actions: ["delete", "create"],
+                importing: { id: "i-existing" }
+              }
+            }
+          ])
+        })
+    }
+  );
+
+  const blockedReason =
+    "Terraform import plan includes unsafe changes for existing resources: aws_instance.a_existing [delete,create]; aws_s3_bucket.z_existing [create]";
+  assert.equal(result.deployment.planSummary?.importCount, 3);
+  assert.equal(result.deployment.planSummary?.importSafetyGateVersion, 1);
+  assert.equal(result.deployment.planSummary?.blocked, true);
+  assert.equal(result.deployment.isBlocked, true);
+  assert.equal(result.deployment.blockedBy, "risk_analysis");
+  assert.equal(result.deployment.blockedReason, blockedReason);
+  assert.equal(repository.savedPlans[0]?.planSummary.blocked, true);
+  assert.equal(repository.savedPlans[0]?.isBlocked, true);
+  assert.equal(repository.savedPlans[0]?.blockedBy, "risk_analysis");
+  assert.equal(repository.savedPlans[0]?.blockedReason, blockedReason);
 });
 
 test("runDeploymentPlan feeds Terraform artifact content into Trivy-backed safety analysis", async () => {

@@ -738,6 +738,72 @@ test("approveDeploymentPlan allows plans with legacy blocking safety warnings", 
   assert.equal(deployment.approvedAt, fixedNow);
 });
 
+test("approveDeploymentPlan rejects an import plan blocked by risk analysis", async () => {
+  const repository = new FakeDeploymentRepository();
+  const blockedReason =
+    "Terraform import plan includes unsafe changes for existing resources: aws_s3_bucket.existing [create]";
+  repository.deployment = createDeploymentRecord(undefined, {
+    isBlocked: true,
+    blockedBy: "risk_analysis",
+    blockedReason,
+    planSummary: {
+      ...createPlanSummary(),
+      importCount: 1,
+      blocked: true
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => artifactContent,
+          now: () => fixedNow
+        }
+      ),
+    (error) => error instanceof DeploymentConflictError && error.message === blockedReason
+  );
+
+  assert.equal(repository.approvals.length, 0);
+});
+
+test("approveDeploymentPlan rejects a legacy import plan without safety-gate evidence", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(undefined, {
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null,
+    planSummary: {
+      ...createPlanSummary(),
+      importCount: 1,
+      blocked: false
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => artifactContent,
+          now: () => fixedNow
+        }
+      ),
+    /Terraform import Plan must be regenerated before approval/
+  );
+
+  assert.equal(repository.approvals.length, 0);
+});
+
 test("approveDeploymentPlan allows acknowledgement-only warnings without acknowledgement ids", async () => {
   const repository = new FakeDeploymentRepository();
   const warning = createAcknowledgementWarning();

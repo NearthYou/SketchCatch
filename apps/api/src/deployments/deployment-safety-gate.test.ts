@@ -234,6 +234,82 @@ test("evaluateDeploymentSafetyGate deduplicates warnings by stable id", () => {
   assert.equal(summary.warnings[0]?.message, "Subnet review: Review generated subnet CIDR");
 });
 
+test("evaluateDeploymentSafetyGate keeps import-only and import-update plans approvable", () => {
+  const summary = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    planSummary: createPlanSummary({ importCount: 2 }),
+    terraformShowJson: createTerraformShowJson([
+      {
+        address: "aws_s3_bucket.import_only",
+        change: {
+          actions: ["no-op"],
+          importing: { id: "import-only-bucket" }
+        }
+      },
+      {
+        address: "aws_s3_bucket.import_update",
+        change: {
+          actions: ["update"],
+          importing: { id: "import-update-bucket" }
+        }
+      }
+    ])
+  });
+
+  assert.equal(summary.blocked, false);
+});
+
+test("evaluateDeploymentSafetyGate blocks unsafe or malformed actions only for import entries", () => {
+  const unsafeImportChanges = [
+    {
+      address: "aws_s3_bucket.create_collision",
+      change: { actions: ["create"], importing: { id: "create-collision" } }
+    },
+    {
+      address: "aws_s3_bucket.destructive_delete",
+      change: { actions: ["delete"], importing: { id: "destructive-delete" } }
+    },
+    {
+      address: "aws_instance.replace_before_create",
+      change: { actions: ["delete", "create"], importing: { id: "replace-before-create" } }
+    },
+    {
+      address: "aws_instance.replace_after_create",
+      change: { actions: ["create", "delete"], importing: { id: "replace-after-create" } }
+    },
+    {
+      address: "aws_s3_bucket.malformed_importing",
+      change: { actions: ["no-op"], importing: "malformed" }
+    },
+    {
+      address: "aws_s3_bucket.malformed_actions",
+      change: { actions: "no-op", importing: { id: "malformed-actions" } }
+    }
+  ];
+
+  for (const resourceChange of unsafeImportChanges) {
+    const summary = evaluateDeploymentSafetyGate({
+      operation: "apply",
+      planSummary: createPlanSummary({ importCount: 1 }),
+      terraformShowJson: createTerraformShowJson([resourceChange])
+    });
+
+    assert.equal(summary.blocked, true, resourceChange.address);
+  }
+
+  const ordinaryDestructiveSummary = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    planSummary: createPlanSummary({ createCount: 1, deleteCount: 1, replaceCount: 1 }),
+    terraformShowJson: createTerraformShowJson([
+      { address: "aws_s3_bucket.new", change: { actions: ["create"] } },
+      { address: "aws_s3_bucket.old", change: { actions: ["delete"] } },
+      { address: "aws_instance.replaced", change: { actions: ["delete", "create"] } }
+    ])
+  });
+
+  assert.equal(ordinaryDestructiveSummary.blocked, false);
+});
+
 function createPlanSummary(
   overrides: Partial<DeploymentPlanSummary> = {}
 ): DeploymentPlanSummary {
@@ -246,6 +322,10 @@ function createPlanSummary(
     warnings: [],
     ...overrides
   };
+}
+
+function createTerraformShowJson(resourceChanges: unknown[]): string {
+  return JSON.stringify({ resource_changes: resourceChanges });
 }
 
 function createFinding(overrides: Partial<CheckFinding> = {}): CheckFinding {

@@ -1756,6 +1756,8 @@ type DeploymentPlanSummary = {
   updateCount: number;
   deleteCount: number;
   replaceCount: number;
+  importCount?: number;
+  importSafetyGateVersion?: 1;
   blocked: boolean;
   warnings: DeploymentPlanWarning[];
 };
@@ -1765,9 +1767,13 @@ type DeploymentPlanSummary = {
 
 `DeploymentPlanWarning.blocksApproval`은 저장된 warning 및 다른 삭제/정리 계약과의 호환을 위해 유지한다. Direct Deployment의 Terraform Plan 승인에서는 이 필드를 차단 조건으로 사용하지 않으며, 신규 Pre-Deployment warning은 severity와 관계없이 `false`로 저장한다.
 
-Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재 기본 흐름에서는 `terraform plan -out=tfplan` 이후 `terraform show -json tfplan` 결과의 `resource_changes`를 파싱해 생성한다.
+Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재 기본 흐름에서는 `terraform plan -out=tfplan` 이후 `terraform show -json tfplan` 결과의 `resource_changes`를 파싱해 생성한다. `importCount`는 `change.importing`이 명시된 주소 수이며, malformed importing metadata도 안전 판정에서 빠지지 않도록 이 수에 포함한다.
 
-Plan 단계의 Safety Gate는 최종 실행 전 점검 결과를 `warnings`에 보존한다. Plan 저장 자체는 high finding이 있어도 `deployments.isBlocked`를 세우지 않는다. High를 포함한 Pre-Deployment finding은 승인 차단 조건으로 사용하지 않고 검토 정보로 남기며, Plan이 존재하고 artifact/hash 안전 조건이 맞으면 사용자는 항상 승인할 수 있다. 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
+Import Safety Gate는 importing 주소만 action과 별도로 분석한다. `no-op`, `update`는 승인 후보로 유지하고 `create`, `delete`, 양방향 replace와 malformed importing/actions는 기존 리소스 충돌 또는 파괴 위험으로 차단한다. 이때 `planSummary.blocked`, `deployments.isBlocked`, `blockedBy: "risk_analysis"`, 정렬된 주소 기반 `blockedReason`을 함께 저장한다. importing이 없는 일반 create/delete/replace는 기존 warning 정책을 유지하며 새로 차단하지 않는다.
+
+`importSafetyGateVersion`은 이 판정을 통과한 import plan에만 저장한다. `importCount > 0`이지만 이 표식이 없는 이전 pending plan은 안전 여부를 증명할 수 없으므로 재사용하지 않고 재계획하며, 재계획 전 직접 승인도 거부한다.
+
+Plan 단계의 Safety Gate는 최종 실행 전 점검 결과를 `warnings`에 보존한다. 일반 Plan 저장은 high finding이 있어도 `deployments.isBlocked`를 세우지 않는다. High를 포함한 Pre-Deployment finding은 승인 차단 조건으로 사용하지 않고 검토 정보로 남기며, 위험 import block이 아닌 Plan은 artifact/hash 안전 조건이 맞으면 승인할 수 있다. 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
 
 Pre-Deployment Check의 보안 finding은 Terraform 파일이 제공되면 Trivy `config` misconfiguration scan 결과를 우선 사용한다. Trivy rule이 기존 `PUBLIC_SSH`, `PUBLIC_RDS`, `PUBLIC_S3`, `IAM_WILDCARD` 코드로 안전하게 분류되지 않으면 `TRIVY_MISCONFIGURATION`으로 보존한다. Trivy 기반 high finding은 Plan 생성 결과에 warning으로 보존하되 승인을 차단하지 않는다. Trivy 실패는 Safety Gate를 대체하지 않고 해당 scan 결과만 생략하며, deterministic cost/config/product policy finding은 계속 반환한다.
 
