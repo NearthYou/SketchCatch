@@ -309,7 +309,7 @@ function ReadinessRow({
         <p>{item.description}</p>
         {item.details ? (
           <ul className={handoffStyles.readinessDetails}>
-            {item.details.map((detail) => (
+            {(item.details ?? []).map((detail) => (
               <li data-ready={detail.ready} key={detail.key}>
                 <span>{detail.label}</span>
                 <strong>{detail.ready ? "완료" : "설정 필요"}</strong>
