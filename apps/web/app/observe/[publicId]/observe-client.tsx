@@ -38,7 +38,9 @@ export function ObserveClient({ publicId }: { readonly publicId: string }) {
       <section className={styles.panel}>
         <p className={styles.kicker}>SketchCatch Live Observation</p>
         <h1>서비스 요청 보내기</h1>
-        <p className={styles.copy}>버튼을 누르면 검증된 서비스로 요청 한 건을 안전하게 전달합니다.</p>
+        <p className={styles.copy}>
+          버튼을 누르면 검증된 서비스로 요청 한 건을 안전하게 전달합니다.
+        </p>
         <button
           className={styles.button}
           disabled={!canRunPrimaryAction}
@@ -53,11 +55,7 @@ export function ObserveClient({ publicId }: { readonly publicId: string }) {
           role="status"
           aria-live="polite"
         >
-          {getStatusMessage(
-            viewState.pageState,
-            viewState.successCount,
-            viewState.bootstrapReady
-          )}
+          {getStatusMessage(viewState.pageState, viewState.successCount, viewState.bootstrapReady)}
         </p>
       </section>
     </main>

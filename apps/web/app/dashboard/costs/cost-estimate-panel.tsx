@@ -172,7 +172,6 @@ export function CostEstimatePanel({
                 <div className={styles.projectCostValue}>
                   <span>{getPeriodLabel(period)} 예상</span>
                   <strong>{formatUsd(costEstimate.totalEstimate.amount)}</strong>
-                  <small>{costEstimate.resources.length}개 리소스 · {costEstimate.pricingSource === "aws_pricing_api" ? "AWS Pricing API" : "보수적 추정 단가"}</small>
                 </div>
               )}
             </article>

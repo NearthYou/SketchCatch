@@ -2578,6 +2578,7 @@ export type DeploymentLiveObservationManifestV2 = {
   };
   endpoints: {
     audienceBaseUrl: string;
+    audienceApplicationUrl?: string | undefined;
     trafficUrl: string;
   };
   pressure: {
@@ -3686,6 +3687,14 @@ export type CreateDesignSimulationRequest = {
   period?: CostEstimatePeriod | undefined;
   expectedUserCount?: number | undefined;
   region?: AwsRegionCode | string | undefined;
+  liveObservation?:
+    | {
+        readonly acceptedEventCount: number;
+        readonly pressureLevel: LiveObservationPressureLevel;
+        readonly pressurePercent: number;
+        readonly projectedRequestsPerMinute: number;
+      }
+    | undefined;
 };
 
 export type DesignSimulationRequestFlowStep = {

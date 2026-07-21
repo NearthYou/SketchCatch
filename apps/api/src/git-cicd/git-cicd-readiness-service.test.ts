@@ -166,7 +166,12 @@ test("does not fall back to an older successful deployment when the latest deplo
 });
 
 test("keeps verified AWS connection readiness separate from Apply Plan evidence", async () => {
+  const state = createRepositoryState({
+    readyContext: true,
+    existingTarget: createExistingTarget(createConfirmedBuildConfig())
+  });
   const repository = createRepository({
+    state,
     plans: [createPlan({ sha256: "f".repeat(64) })]
   });
 
@@ -979,7 +984,14 @@ test("does not guess a build config when Dockerfile evidence is missing or ambig
   for (const dockerfileCount of [0, 2]) {
     await t.test(`${dockerfileCount} Dockerfiles`, async () => {
       const analysis = createRepositoryAnalysis(dockerfileCount);
-      const state = createRepositoryState({ readyContext: true, analysis });
+      const state = createRepositoryState({
+        readyContext: true,
+        analysis,
+        existingTarget: {
+          ...createExistingTarget(createConfirmedBuildConfig()),
+          confirmedBuildConfig: null
+        }
+      });
 
       const result = await createGitCicdReadinessService({
         repository: createRepository({ state }),

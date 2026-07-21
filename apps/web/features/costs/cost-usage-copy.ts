@@ -19,7 +19,6 @@ type CostUsageDisplayCopy = {
   readonly summaryTitle: string;
 };
 
-// 실제 AWS 비용과 Sample data가 화면에서 섞이지 않도록 문구를 고릅니다.
 export function createCostUsageDisplayCopy({
   dataSource,
   hasSelectedProject,
@@ -27,14 +26,13 @@ export function createCostUsageDisplayCopy({
 }: CostUsageDisplayCopyOptions): CostUsageDisplayCopy {
   if (dataSource === "sample") {
     return {
-      controlKicker: "Sample usage",
+      controlKicker: "Estimated usage",
       loadingMessage: "사용량 분석 데이터를 불러오는 중입니다.",
-      metricCostLabel: hasSelectedProject ? "프로젝트 비용 예시" : "총 비용 예시",
-      projectCostTitle: "프로젝트별 비용 예시",
-      sampleNotice:
-        "검증된 AWS Role이 없어 예시 데이터를 표시합니다. 실제 청구액이 아닙니다.",
-      summaryKicker: "Sample data",
-      summaryTitle: hasSelectedProject ? "프로젝트 비용 예시" : "비용 예시"
+      metricCostLabel: hasSelectedProject ? "프로젝트 예상 비용" : "예상 비용",
+      projectCostTitle: "프로젝트별 예상 비용",
+      sampleNotice: "AWS 연결 전 예상 비용입니다.",
+      summaryKicker: "Estimated cost",
+      summaryTitle: hasSelectedProject ? "프로젝트 예상 비용" : "예상 비용"
     };
   }
 

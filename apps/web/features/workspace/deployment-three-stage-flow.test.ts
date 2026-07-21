@@ -130,6 +130,19 @@ test("deployment preparation does not depend on a mounted Terraform panel", () =
   assert.match(rightPanelSource, /if \(!context\.isRightPanelOpen\)\s*\{\s*return/);
 });
 
+test("collapsed right panel keeps the Terraform artifact provider mounted for deployment", () => {
+  const collapsedPanelStart = rightPanelSource.indexOf("if (!context.isRightPanelOpen)");
+  const expandedPanelStart = rightPanelSource.indexOf(
+    '<aside className={styles.rightPanelShell}>',
+    collapsedPanelStart
+  );
+  const collapsedPanelSource = rightPanelSource.slice(collapsedPanelStart, expandedPanelStart);
+
+  assert.ok(collapsedPanelStart > -1);
+  assert.ok(expandedPanelStart > collapsedPanelStart);
+  assert.match(collapsedPanelSource, /<TerraformCodePanel/);
+});
+
 test("deployment preparation validates the exact merged Terraform artifact without a bypass", () => {
   const validationIndex = deploymentArtifactsSource.indexOf("validateTerraformCode({");
   const snapshotIndex = deploymentArtifactsSource.indexOf(

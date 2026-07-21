@@ -1,9 +1,9 @@
+import type { DeploymentLiveObservationManifestV2 } from "@sketchcatch/types";
 import { createLiveObservationCapability } from "./live-observation-capability.js";
 import {
   LiveObservationStoreInputError,
   type LiveObservationStore
 } from "./live-observation-store.js";
-import type { LiveObservationPublicRequestRateLimiter } from "./live-observation-public-request-rate-limiter.js";
 import { requireLiveObservationTrafficTarget } from "./live-observation-manifest.js";
 
 export type LiveObservationPublicCollectorErrorCode =
@@ -29,7 +29,11 @@ type LiveObservationCapability = ReturnType<typeof createLiveObservationCapabili
 
 export type LiveObservationAuthorizedCollector = Readonly<{
   audienceOrigin: string;
-  request(input: { eventId: string; ipAddress: string }): Promise<{
+  request(input: { eventId: string }): Promise<{
+    accepted: boolean;
+    acceptedEventCount: number;
+  }>;
+  receipt(input: { eventId: string }): Promise<{
     accepted: boolean;
     acceptedEventCount: number;
   }>;
@@ -41,7 +45,6 @@ export type LiveObservationPublicCollector = ReturnType<
 
 export function createLiveObservationPublicCollector(options: {
   capability: LiveObservationCapability;
-  requestRateLimiter: LiveObservationPublicRequestRateLimiter;
   store: LiveObservationStore;
   trafficTransport: {
     post(manifest: unknown): Promise<{ status: number }>;
@@ -69,7 +72,7 @@ export function createLiveObservationPublicCollector(options: {
 
       const audienceOrigin = requireAudienceOrigin(
         input.origin,
-        active.session.manifest.endpoints.audienceBaseUrl
+        getAudienceApplicationUrl(active.session.manifest)
       );
 
       const collectEvent = async (eventId: string) => {
@@ -99,38 +102,36 @@ export function createLiveObservationPublicCollector(options: {
         }
       };
 
+      const requireCurrentSession = async () => {
+        const live = await readActiveSession(options.store, active.session.observationId);
+        if (
+          live.session.createdAt !== active.session.createdAt ||
+          live.session.expiresAt !== active.session.expiresAt ||
+          live.session.deploymentId !== active.session.deploymentId ||
+          live.session.capability.kid !== active.session.capability.kid ||
+          live.session.capability.tokenVersion !== active.session.capability.tokenVersion
+        ) {
+          throw collectorError("gone");
+        }
+        return live;
+      };
+
       return Object.freeze({
         audienceOrigin,
-        async request(requestInput: { eventId: string; ipAddress: string }) {
+        async receipt(requestInput: { eventId: string }) {
+          await requireCurrentSession();
+          return collectEvent(requestInput.eventId);
+        },
+        async request(requestInput: { eventId: string }) {
           try {
-            const rateLimit = await options.requestRateLimiter.consume({
-              ipAddress: requestInput.ipAddress,
-              observationId: active.session.observationId
-            });
-            if (rateLimit.kind === "rate_limited") {
-              throw collectorError("rate_limited");
-            }
-            if (rateLimit.kind === "unavailable") {
-              throw collectorError("unavailable");
-            }
-
-            const live = await readActiveSession(
-              options.store,
-              active.session.observationId
-            );
-            if (
-              live.session.createdAt !== active.session.createdAt ||
-              live.session.expiresAt !== active.session.expiresAt ||
-              live.session.deploymentId !== active.session.deploymentId ||
-              live.session.capability.kid !== active.session.capability.kid ||
-              live.session.capability.tokenVersion !==
-                active.session.capability.tokenVersion
-            ) {
-              throw collectorError("gone");
-            }
+            const live = await requireCurrentSession();
             requireLiveObservationTrafficTarget(live.session.manifest);
             const response = await options.trafficTransport.post(live.session.manifest);
-            if (!Number.isInteger(response.status) || response.status < 200 || response.status >= 300) {
+            if (
+              !Number.isInteger(response.status) ||
+              response.status < 200 ||
+              response.status >= 300
+            ) {
               throw collectorError("unavailable");
             }
           } catch (error) {
@@ -150,7 +151,7 @@ export function createLiveObservationPublicCollector(options: {
       const active = await readActiveSession(options.store, input.observationId);
       const audienceOrigin = requireAudienceOrigin(
         input.origin,
-        active.session.manifest.endpoints.audienceBaseUrl
+        getAudienceApplicationUrl(active.session.manifest)
       );
       const regenerated = options.capability.regenerate(
         {
@@ -176,7 +177,7 @@ export function createLiveObservationPublicCollector(options: {
       return {
         audienceOrigin: requireAudienceOrigin(
           input.origin,
-          active.session.manifest.endpoints.audienceBaseUrl
+          getAudienceApplicationUrl(active.session.manifest)
         )
       };
     }
@@ -200,6 +201,16 @@ function parseAuthorization(value: string | undefined): string {
   const match = /^LiveObservation ([A-Za-z0-9_-]{1,32}\.[A-Za-z0-9_-]{43})$/.exec(value);
   if (!match?.[1]) throw collectorError("unauthorized");
   return match[1];
+}
+
+function getAudienceApplicationUrl(manifest: DeploymentLiveObservationManifestV2): string {
+  if (manifest.endpoints.audienceApplicationUrl) {
+    return manifest.endpoints.audienceApplicationUrl;
+  }
+  if (manifest.adapter.version === 4) {
+    return `https://${manifest.adapter.payload.cloudFrontDomainName}`;
+  }
+  return manifest.endpoints.audienceBaseUrl;
 }
 
 function requireAudienceOrigin(origin: string | undefined, audienceBaseUrl: string) {

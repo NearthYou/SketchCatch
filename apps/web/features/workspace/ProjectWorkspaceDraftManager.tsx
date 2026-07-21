@@ -800,6 +800,20 @@ function ProjectWorkspaceDraftManagerState({
     [handleTerraformFilesChange]
   );
 
+  const handleLiveObservationTerraformFilesApply = useCallback(
+    (terraformFiles: readonly TerraformSyncFileInput[]): void => {
+      const files = terraformFiles.map((file) => ({ ...file }));
+      handleTerraformFilesChange(files);
+      terraformFilesReplacementIdRef.current += 1;
+      setTerraformFilesReplacement({
+        diagramFingerprint: toTerraformRefreshFingerprint(latestDiagramRef.current),
+        files,
+        id: terraformFilesReplacementIdRef.current,
+        notifyFilesChange: false
+      });
+    },
+    [handleTerraformFilesChange]
+  );
   const handleTerraformFilesReplacementApplied = useCallback((replacementId: number): void => {
     setTerraformFilesReplacement((currentReplacement) =>
       currentReplacement?.id === replacementId ? null : currentReplacement
@@ -891,6 +905,7 @@ function ProjectWorkspaceDraftManagerState({
             initialCicdReturnCommand={initialCicdReturnCommand}
             initialTerraformFiles={initialTerraformFiles}
             onBlockingPanelOpenChange={setBlockingPanelOpen}
+            onLiveObservationTerraformFilesApply={handleLiveObservationTerraformFilesApply}
             onDeploymentConsoleOpenChange={setDeploymentConsoleOpen}
             onPanelOpenRequest={closeAiChat}
             onInitialCicdReturnCommandReady={acknowledgeInitialCicdReturnCommand}
