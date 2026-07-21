@@ -50,3 +50,15 @@ test("wires the preview into creation and refreshes stale review data without re
   assert.doesNotMatch(catchSource, /createGitCicdHandoff\(/);
   assert.equal((consoleSource.match(/createGitCicdHandoff\(\{/g) ?? []).length, 1);
 });
+
+test("shows build verification and deployment URLs as Phase 3 evidence", () => {
+  assert.match(handoffPanelSource, /title="Repository 빌드 검증"/);
+  assert.match(handoffPanelSource, /title="Static Site URL"/);
+  assert.match(handoffPanelSource, /title="API Base URL"/);
+  assert.match(handoffPanelSource, /getCicdBuildVerificationPresentation/);
+  assert.match(handoffPanelSource, /getCicdDeploymentOutputPresentation/);
+  assert.match(consoleSource, /buildVerification=\{deliveryProfile\.buildVerification\}/);
+  assert.match(consoleSource, /deploymentTarget=\{target\}/);
+  assert.match(consoleSource, /deploymentSucceeded=/);
+  assert.match(handoffPanelSource, /배포에서 Plan 검토하기/);
+});

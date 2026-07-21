@@ -112,18 +112,6 @@ const readinessNavigationByAction: Record<
     destination: "settings",
     hash: "#deployment-target-title",
     readinessKey: "deployment_target"
-  },
-  inspect_runtime_outputs: {
-    actionLabel: "배포 결과 확인하기",
-    destination: "settings",
-    hash: "#deployment-target-title",
-    readinessKey: "deployment_target"
-  },
-  inspect_output_url: {
-    actionLabel: "배포 URL 확인하기",
-    destination: "settings",
-    hash: "#deployment-target-title",
-    readinessKey: "deployment_target"
   }
 };
 
@@ -197,7 +185,7 @@ export function invalidateGitCicdReload(
 
 type GitCicdSourceDeployment = Pick<
   Deployment,
-  "id" | "architectureId" | "terraformArtifactId" | "source"
+  "id" | "architectureId" | "terraformArtifactId" | "source" | "status"
 >;
 
 export function selectGitCicdSourceDeployment(
@@ -267,21 +255,17 @@ const readinessDescriptionByKey: Record<GitCicdReadinessItemKey, string> = {
     "인프라는 준비됐지만 실제 애플리케이션 릴리즈 증거가 없습니다.",
   source_repository: "이 프로젝트에 사용할 활성 GitHub Repository를 연결합니다.",
   monitoring_config: "배포를 감지할 branch와 애플리케이션·인프라 경로를 확인합니다.",
-  deployment_target: "검증된 AWS 연결과 빌드·Runtime·HTTPS 배포 결과를 확인합니다."
+  deployment_target: "검증된 AWS 연결과 Repository 빌드 설정을 확인합니다."
 };
 
 const deploymentTargetDetailKeys: readonly GitCicdDeploymentTargetReadinessKey[] = [
   "aws_connection",
-  "build_config",
-  "runtime_config",
-  "output_url"
+  "build_config"
 ];
 
 const deploymentTargetDetailLabels: Record<GitCicdDeploymentTargetReadinessKey, string> = {
   aws_connection: "AWS 연결",
-  build_config: "Repository 빌드 근거",
-  runtime_config: "Runtime 좌표",
-  output_url: "HTTPS Output URL"
+  build_config: "Repository 빌드 근거"
 };
 
 export function isGitCicdHandoffReady(

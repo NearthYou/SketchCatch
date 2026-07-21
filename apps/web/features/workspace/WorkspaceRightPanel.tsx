@@ -38,7 +38,6 @@ import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
 import {
   TerraformCodePanel,
   type TerraformFilesReplacementRequest,
-  type PreparedTerraformArtifactSource,
   type TerraformCodePanelHandle
 } from "./TerraformCodePanel";
 import { WorkspaceIssuesPanel } from "./WorkspaceIssuesPanel";
@@ -67,6 +66,12 @@ import {
   type PreparedWorkspaceDeploymentArtifacts,
   type SavedWorkspaceTerraformArtifact
 } from "./workspace-deployment-artifacts";
+import {
+  prepareWorkspaceTerraformSource,
+  validateWorkspaceTerraformFiles,
+  WorkspaceTerraformPreparationError,
+  type PreparedTerraformArtifactSource
+} from "./workspace-terraform-preparation";
 import { requireSavedProjectDraftRevision } from "./project-deployment-preparation";
 import { DeploymentPreparationError } from "./deployment-preparation-error";
 import {
@@ -173,6 +178,9 @@ export function WorkspaceRightPanel({
   const pendingTerraformLeaveActionRef = useRef<PendingTerraformLeaveAction | null>(null);
   const skipTerraformLeaveGuardRef = useRef(false);
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
+  const latestTerraformFilesRef = useRef<TerraformSyncFileInput[]>(
+    initialTerraformFiles?.map((file) => ({ ...file })) ?? []
+  );
   const latestTerraformSaveRequestIdRef = useRef(0);
   const overlayNotificationsRef = useRef<WorkspaceOverlayNotifications | null>(null);
   if (overlayNotificationsRef.current === null) {
@@ -228,6 +236,10 @@ export function WorkspaceRightPanel({
       setIsDeploymentConsoleOpen(true);
     }
   }, [deploymentOpenRequestId, onPanelOpenRequest]);
+
+  useEffect(() => {
+    latestTerraformFilesRef.current = initialTerraformFiles?.map((file) => ({ ...file })) ?? [];
+  }, [initialTerraformFiles]);
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
   const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
   const [liveObservationSelection, setLiveObservationSelection] =
@@ -318,6 +330,15 @@ export function WorkspaceRightPanel({
       });
     },
     []
+  );
+
+  const handleWorkspaceTerraformFilesChange = useCallback(
+    (files: readonly TerraformSyncFileInput[]): void => {
+      const nextFiles = files.map((file) => ({ ...file }));
+      latestTerraformFilesRef.current = nextFiles;
+      onTerraformFilesChange?.(nextFiles);
+    },
+    [onTerraformFilesChange]
   );
 
   const openTerraformIssueSourceLocation = useCallback(
@@ -813,19 +834,34 @@ export function WorkspaceRightPanel({
 
   const prepareDeploymentArtifacts =
     useCallback(async (): Promise<PreparedWorkspaceDeploymentArtifacts> => {
-      let preparedSource: PreparedTerraformArtifactSource | undefined;
+      const requestDiagramRevision = context.getDiagramRevision();
+      let preparedSource: PreparedTerraformArtifactSource;
 
       try {
-        preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
-      } catch (cause) {
-        throw new DeploymentPreparationError({ cause, stage: "terraform_prepare" });
-      }
-
-      if (!preparedSource) {
-        throw new DeploymentPreparationError({
-          cause: new Error("Terraform panel did not provide deployment artifacts"),
-          stage: "terraform_prepare"
+        const prepared = await prepareWorkspaceTerraformSource({
+          diagramJson: context.diagram,
+          terraformFiles: latestTerraformFilesRef.current
         });
+
+        if (requestDiagramRevision !== context.getDiagramRevision()) {
+          throw new Error("Terraform 준비 중 Architecture Board가 변경되었습니다.");
+        }
+
+        preparedSource = prepared;
+        handleTerraformDiagnosticsChange([...prepared.diagnostics]);
+        if (prepared.architectureDiagnostics) {
+          handleArchitectureDiagnosticsChange([...prepared.architectureDiagnostics]);
+        }
+        context.applyDiagramJson(prepared.diagramJson);
+        handleWorkspaceTerraformFilesChange(prepared.terraformFiles);
+      } catch (cause) {
+        if (cause instanceof WorkspaceTerraformPreparationError) {
+          handleTerraformDiagnosticsChange([...cause.diagnostics]);
+          if (cause.architectureDiagnostics.length > 0) {
+            handleArchitectureDiagnosticsChange([...cause.architectureDiagnostics]);
+          }
+        }
+        throw new DeploymentPreparationError({ cause, stage: "terraform_prepare" });
       }
 
       let saveResult: unknown;
@@ -858,13 +894,21 @@ export function WorkspaceRightPanel({
         preparedDraftRevision,
         terraformFiles: preparedSource.terraformFiles
       };
-    }, [context, savePreparedTerraformArtifact]);
+    }, [
+      context,
+      handleArchitectureDiagnosticsChange,
+      handleTerraformDiagnosticsChange,
+      handleWorkspaceTerraformFilesChange,
+      savePreparedTerraformArtifact
+    ]);
 
   const validateTerraformForPreDeployment = useCallback(async (): Promise<
     TerraformDiagnostic[]
   > => {
-    return terraformPanelRef.current?.validateCurrentTerraform() ?? terraformDiagnostics;
-  }, [terraformDiagnostics]);
+    const diagnostics = await validateWorkspaceTerraformFiles(latestTerraformFilesRef.current);
+    handleTerraformDiagnosticsChange(diagnostics);
+    return diagnostics;
+  }, [handleTerraformDiagnosticsChange]);
 
   const openPreDeploymentFindingTerraformSource = useCallback(
     (finding: CheckFinding): TerraformSourceLocation | null => {
@@ -1150,7 +1194,7 @@ export function WorkspaceRightPanel({
                 onExternalSaveComplete={handleTerraformExternalSaveComplete}
                 onTerraformAiCodeContextChange={setTerraformAiCodeContext}
                 onTerraformAiInteraction={() => onTerraformAiInteraction("preview")}
-                onTerraformFilesChange={onTerraformFilesChange}
+                onTerraformFilesChange={handleWorkspaceTerraformFilesChange}
                 onTerraformFilesReplacementApplied={onTerraformFilesReplacementApplied}
               />
             </div>

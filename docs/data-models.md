@@ -1878,9 +1878,7 @@ type GitCicdReadinessItemKey =
 
 type GitCicdDeploymentTargetReadinessKey =
   | "aws_connection"
-  | "build_config"
-  | "runtime_config"
-  | "output_url";
+  | "build_config";
 
 type GitCicdReadinessAction =
   | "approve_apply_plan"
@@ -1888,9 +1886,7 @@ type GitCicdReadinessAction =
   | "select_repository"
   | "confirm_monitoring_config"
   | "select_aws_connection"
-  | "confirm_build_config"
-  | "inspect_runtime_outputs"
-  | "inspect_output_url";
+  | "confirm_build_config";
 
 type GitCicdReadinessItem = {
   key: GitCicdReadinessItemKey;
@@ -1919,7 +1915,7 @@ type GitCicdReadinessResponse = {
 };
 ```
 
-`items`는 다섯 상위 항목을 유지하고, `deployment_target`은 `aws_connection`, `build_config`, `runtime_config`, `output_url` 네 세부 key의 완료 수와 누락 목록을 함께 제공한다. 모든 상위 항목이 `ready`일 때만 snapshot의 `ready`가 `true`이며, `requiredActionCount`는 `action_required`인 상위 항목 수다. `refreshing`과 `error`는 서버 저장 상태나 readiness 응답 status가 아니라 Web request state로 관리한다.
+`items`는 다섯 상위 항목을 유지하고, `deployment_target`은 Phase 2에서 사용자가 확정하는 `aws_connection`, `build_config` 두 action key의 누락 목록과 AWS 연결·Region·실행 방식·빌드 설정 네 UI 설정의 완료 수를 함께 제공한다. 저장된 target이 현재 사용자의 verified connection을 가리키고 Region이 일치하며, 현재 Source Repository revision과 확정 build config가 일치하면 `deployment_target`은 `ready`다. Deployment, Apply Plan, `ProjectBuildEnvironment`, Repository checkout 검증, Runtime 좌표와 Output URL은 Phase 2 완료 조건이 아니며 Phase 3 배포 evidence로 확인한다. 모든 상위 항목이 `ready`일 때만 snapshot의 `ready`가 `true`이며, `requiredActionCount`는 `action_required`인 상위 항목 수다. `refreshing`과 `error`는 서버 저장 상태나 readiness 응답 status가 아니라 Web request state로 관리한다.
 
 `approved_apply_plan`은 `DeploymentPlanArtifact.operation: "apply"`인 승인 Plan만 준비 완료로 인정한다. `sourceDeploymentId`는 그 Plan의 원본 Deployment를, `approvedApplyPlanArtifactId`는 승인된 Apply Plan artifact를 가리킨다. `operation: "destroy"` Plan은 cleanup 승인과 실행에만 사용하며 readiness를 충족하거나 `approvedApplyPlanArtifactId`에 들어가지 않는다. 이 조회 DTO 자체는 Apply, Destroy, Git 변경, handoff를 승인하거나 실행하지 않는다.
 
@@ -3455,6 +3451,14 @@ type GitCicdHandoffConfigurationPreview = {
   apiBaseUrl: string | null;
 };
 
+type ProjectDeliveryBuildVerification = {
+  status: "not_started" | "preparing" | "verified" | "failed";
+  requestedCommitSha: string | null;
+  resolvedCommitSha: string | null;
+  statusReason: string | null;
+  verifiedAt: IsoDateTimeString | null;
+};
+
 type ProjectDeliveryProfile = {
   githubInstallations: Array<Omit<GitHubInstallationConnection, "repositoryCount">>;
   repositoryAnalysisTarget: RepositoryAnalysisRecord | null;
@@ -3462,12 +3466,15 @@ type ProjectDeliveryProfile = {
   monitoringConfig: GitCicdMonitoringConfig | null;
   deploymentTarget: ProjectDeploymentTarget | null;
   environmentName: string | null;
+  buildVerification: ProjectDeliveryBuildVerification;
   readiness: GitCicdReadinessSnapshot;
   handoffConfigurationPreview: GitCicdHandoffConfigurationPreview | null;
 };
 ```
 
 `GET /api/projects/:projectId/delivery-profile`은 없는 하위 설정을 `null`로 반환하고 readiness action을 유지합니다. 현재 Board record가 있으면 그 record의 `sourceRepositoryId`와 일치하는 active Repository만 반환하며, 연결되지 않은 record에 과거 active Repository를 대신 표시하지 않습니다. GitHub repository 개수는 이 조회에서 `0`으로 만들지 않고 필드 자체를 제외하며, 개수가 필요한 전역 설정 조회만 GitHub API에서 계산합니다. GitHub secret과 AWS credential은 응답에 포함하지 않습니다. `GitCicdReadinessService.inspect`는 현재 증거를 읽기만 하며 `refresh`와 달리 누락된 배포 타깃을 자동 reconcile하거나 저장하지 않습니다.
+
+`buildVerification`은 Plan 요청 과정에서 저장된 `project_build_environments`의 Repository checkout 상태를 읽기 전용으로 투영합니다. record가 없으면 `not_started`, 환경 준비 또는 checkout 미실행은 `preparing`, exact commit 검증 성공은 `verified`, 검증 실패나 연결 해제는 `failed`입니다. 응답은 requested/resolved commit SHA, 검증 시각과 masking된 실패 요약만 포함하며 Build ARN, CodeBuild Role ARN, permissions boundary, credential과 provider token을 포함하지 않습니다. 이 조회는 Build Environment를 생성하거나 검증을 시작하지 않습니다.
 
 `handoffConfigurationPreview`는 readiness가 선택한 `sourceDeploymentId`, 그 Deployment에 정확히 연결된 동일 프로젝트 Architecture, 현재 확정 Deployment Target이 모두 있을 때만 계산하고 그 외에는 `null`입니다. `rdsEnabled`는 Architecture node의 `config.terraformResourceType`이 `aws_db_instance`, `aws_rds_cluster`, `aws_rds_cluster_instance` 중 하나일 때만 `true`이며 subnet group, parameter group, option group, snapshot 같은 지원 Resource는 포함하지 않습니다. URL은 credential·query·fragment가 없는 public HTTPS `runtimeConfig.outputUrl`만 사용합니다. Static Site는 Static URL만, Lambda와 EC2 ASG 및 legacy ECS는 API URL만 반환합니다. `ecsWeb`이 확정된 ECS는 같은 public Output URL을 Static URL과 API Base URL에 표시하며 내부 `apiOriginUrl`은 노출하지 않습니다.
 

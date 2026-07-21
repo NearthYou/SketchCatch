@@ -5,6 +5,14 @@ import test from "node:test";
 const panelSource = readFileSync(new URL("./DeliveryCenterPanel.tsx", import.meta.url), "utf8");
 const cicdConsoleSource = readFileSync(new URL("./CicdConsoleScreen.tsx", import.meta.url), "utf8");
 const statusBoardSource = readFileSync(new URL("./CicdStatusBoard.tsx", import.meta.url), "utf8");
+const presentationSource = readFileSync(
+  new URL("./cicd-readiness-presentation.ts", import.meta.url),
+  "utf8"
+);
+const settingsDrawerSource = readFileSync(
+  new URL("./CicdSettingsDrawer.tsx", import.meta.url),
+  "utf8"
+);
 const handoffPanelSource = readFileSync(new URL("./CicdHandoffPanel.tsx", import.meta.url), "utf8");
 const changeReviewSource = readFileSync(new URL("./CicdChangeReview.tsx", import.meta.url), "utf8");
 const shellSource = readFileSync(new URL("./DeploymentConsoleShell.tsx", import.meta.url), "utf8");
@@ -31,6 +39,10 @@ const connectionSummarySource = readFileSync(
   new URL("./delivery/DeliveryConnectionSummary.tsx", import.meta.url),
   "utf8"
 );
+const repositoryConnectionFormSource = readFileSync(
+  new URL("./CicdRepositoryConnectionForm.tsx", import.meta.url),
+  "utf8"
+);
 const compatibilityRouteSource = readFileSync(
   new URL("../../app/dashboard/projects/[projectId]/settings/page.tsx", import.meta.url),
   "utf8"
@@ -40,30 +52,51 @@ const githubCallbackSource = readFileSync(
   "utf8"
 );
 
-test("CI/CD Delivery owns the project delivery configuration sections", () => {
-  assert.match(panelSource, /DeliveryConnectionSummary/);
+test("CI/CD Delivery owns the project delivery configuration drawers", () => {
+  assert.match(panelSource, /CicdRepositoryConnectionForm/);
   assert.match(panelSource, /ProjectCicdMonitoringSettingsClient/);
   assert.match(panelSource, /ProjectDeploymentTargetEditor/);
   assert.match(panelSource, /profile=\{profile\}/);
   assert.match(panelSource, /onSaved=\{handleDeploymentTargetSaved\}/);
+  assert.match(panelSource, /const \[activeDrawer, setActiveDrawer\]/);
+  assert.match(panelSource, /getDrawerContent\(activeDrawer/);
+  assert.match(panelSource, /onOpenSetup=\{setActiveDrawer\}/);
+  assert.match(panelSource, /\{drawer \? \([\s\S]*?<CicdSettingsDrawer/);
+  assert.match(
+    panelSource,
+    /onLastRefreshedAtChange\?\.\(profile\?\.readiness\.checkedAt \?\? null\)/
+  );
   assert.doesNotMatch(
     panelSource,
     /app\/projects\/\[projectId\]\/settings\/project-deployment-target-settings-client/
   );
   assert.doesNotMatch(panelSource, /배포 준비부터 GitHub Actions 실행까지/);
-  assert.match(panelSource, /formatCheckedAt\(profile\.readiness\.checkedAt\)/);
+  assert.doesNotMatch(panelSource, /setupContent=/);
 });
 
-test("CI/CD 헤더는 제목, 마지막 확인 시각, 전체 새로고침만 표시한다", () => {
-  assert.match(panelSource, /<h2>CI\/CD<\/h2>/);
-  assert.match(panelSource, /최근 확인/);
-  assert.match(panelSource, /전체 새로고침/);
+test("CI/CD 헤더는 준비 제목을 표시하고 전역 헤더가 확인 시각과 새로고침을 맡는다", () => {
+  assert.match(panelSource, /<h2>CI\/CD 준비<\/h2>/);
+  assert.match(shellSource, /onLastRefreshedAtChange=\{setCicdLastRefreshedAt\}/);
+  assert.match(shellSource, /formatCicdLastRefreshed\(cicdLastRefreshedAt\)/);
+  assert.match(shellSource, /새로고침 중/);
+  assert.match(shellSource, /return `최근 확인 \$\{new Date\(value\)/);
+  assert.doesNotMatch(panelSource, /최근 확인|전체 새로고침/);
   assert.doesNotMatch(panelSource, /배포 준비부터 GitHub Actions 실행까지 ·/);
 });
 
-test("PR handoff가 없으면 상태보드는 짧은 대기 값을 표시한다", () => {
-  assert.match(statusBoardSource, /currentHandoff[\s\S]*?: "대기"/);
-  assert.doesNotMatch(statusBoardSource, /생성 대기/);
+test("연결 전에는 단일 presentation model이 GitHub 저장소 연결을 현재 작업으로 정한다", () => {
+  assert.match(presentationSource, /if \(!input\.sourceReady\)/);
+  assert.match(presentationSource, /title: "GitHub 저장소 연결"/);
+  assert.match(
+    presentationSource,
+    /description: "배포에 사용할 GitHub 계정, Repository와 Branch를 선택하세요\."/
+  );
+  assert.match(presentationSource, /actionLabel: "저장소 연결하기"/);
+  assert.match(presentationSource, /action: \{ kind: "drawer", drawer: "repository" \}/);
+  assert.match(statusBoardSource, /presentation\.currentTask\.title/);
+  assert.match(statusBoardSource, /presentation\.currentTask\.description/);
+  assert.match(statusBoardSource, /presentation\.currentTask\.actionLabel/);
+  assert.doesNotMatch(statusBoardSource, /currentHandoff|getNextAction/);
 });
 
 test("일반 배포 진입은 이전 CI/CD 탭 대신 현재 Board 배포를 연다", () => {
@@ -79,13 +112,19 @@ test("Delivery는 Board Repository를 다시 선택하는 카드를 표시하지
   assert.doesNotMatch(panelSource, /readinessAction:\s*"select_repository"/);
 });
 
-test("exact Repository를 compact summary에 자동 적용으로 표시한다", () => {
-  assert.match(panelSource, /DeliveryConnectionSummary/);
+test("Repository drawer에서 계정, Repository, Branch를 확인하고 명시적으로 연결한다", () => {
+  assert.match(panelSource, /CicdRepositoryConnectionForm/);
+  assert.doesNotMatch(panelSource, /DeliveryConnectionSummary|repositoryHref/);
+  assert.match(repositoryConnectionFormSource, /listGitHubInstalledRepositories/);
+  assert.match(repositoryConnectionFormSource, /connectGitHubSourceRepository/);
+  assert.match(repositoryConnectionFormSource, /GitHub 계정/);
+  assert.match(repositoryConnectionFormSource, /Repository/);
+  assert.match(repositoryConnectionFormSource, /Branch/);
+  assert.match(repositoryConnectionFormSource, /onCancel/);
+  assert.match(repositoryConnectionFormSource, /onSaved/);
+  assert.match(repositoryConnectionFormSource, /type="submit"/);
+  assert.match(repositoryConnectionFormSource, /dashboard\/settings#github-account-settings-title/);
   assert.match(connectionSummarySource, /cicd-source-repository/);
-  assert.match(connectionSummarySource, /defaultBranch/);
-  assert.match(connectionSummarySource, /자동 적용/);
-  assert.match(connectionSummarySource, /PR 권한 연결 필요/);
-  assert.doesNotMatch(connectionSummarySource, /<select/);
 });
 
 test("CI/CD는 별도 Repository 목록 대신 Board Delivery Profile을 사용한다", () => {
@@ -105,18 +144,43 @@ test("Delivery 하위 설정은 Profile을 다시 조회하지 않는다", () =>
   assert.match(editorSource, /profile\.deploymentTarget/);
 });
 
-test("CI/CD status board owns the current action while the PR accordion keeps readiness details", () => {
+test("CI/CD current-task CTA, phase accordion, and setup drawer share one presentation flow", () => {
   assert.doesNotMatch(panelSource, /id="delivery-readiness"|href="#delivery-readiness"/);
   assert.doesNotMatch(panelSource, /href="#cicd-handoff"/);
   assert.match(panelSource, /useProjectDeliveryProfile\(projectId, readinessRefreshRequestId\)/);
+  assert.match(cicdConsoleSource, /const presentation = getCicdReadinessPresentation\(\{/);
   assert.match(cicdConsoleSource, /<CicdStatusBoard/);
-  assert.match(statusBoardSource, /onOpenCreateReview/);
-  assert.match(statusBoardSource, /getNextAction/);
+  assert.match(cicdConsoleSource, /presentation\.currentTask\.action/);
+  assert.match(cicdConsoleSource, /onOpenSetup\(action\.drawer\)/);
+  assert.match(cicdConsoleSource, /presentation\.currentPhase === "source"/);
+  assert.match(cicdConsoleSource, /presentation\.currentPhase === "target"/);
+  assert.match(statusBoardSource, /onClick=\{onActivateCurrentTask\}/);
+  assert.equal(statusBoardSource.match(/className=\{styles\.nextTaskAction\}/g)?.length, 1);
+  assert.match(settingsDrawerSource, /dialog\.showModal\(\)/);
+  assert.match(settingsDrawerSource, /onCancel=\{\(event\) =>/);
+  assert.match(settingsDrawerSource, /aria-labelledby=\{titleId\}/);
   assert.match(handoffPanelSource, /id="cicd-pr-readiness"/);
-  assert.match(handoffPanelSource, /data-ready=\{readiness\.ready\}/);
-  assert.match(handoffPanelSource, /remainingLabel/);
-  assert.match(handoffPanelSource, /readinessGroup\.required\.map/);
-  assert.match(handoffPanelSource, /readinessGroup\.completed\.map/);
+  assert.match(handoffPanelSource, /const applyPlanReady = isReadinessItemReady/);
+  assert.match(handoffPanelSource, /initialApplicationApplicable/);
+  assert.doesNotMatch(handoffPanelSource, /해당 없음/);
+  assert.match(handoffPanelSource, /disabled=\{!canCreateHandoff\}/);
+});
+
+test("Apply Plan CTA는 Direct Deployment만 열고 Plan 또는 Apply API를 직접 호출하지 않는다", () => {
+  assert.match(cicdConsoleSource, /if \(action\.kind === "direct_deployment"\)/);
+  assert.match(cicdConsoleSource, /onOpenDirectDeployment\?\.\(action\.scope\)/);
+  assert.doesNotMatch(cicdConsoleSource, /runDeploymentPlan|approveDeploymentPlan/);
+  assert.match(handoffPanelSource, /onOpenDirectDeployment\?\.\(null\)/);
+});
+
+test("PR 생성은 승인 Plan, 최초 배포, Repository와 모니터링 계약을 계속 요구한다", () => {
+  assert.match(cicdConsoleSource, /isGitCicdHandoffCreationEnabled\(\{/);
+  assert.match(cicdConsoleSource, /hasApprovedApplyPlanArtifact: Boolean/);
+  assert.match(cicdConsoleSource, /hasMonitoringConfig: config !== null/);
+  assert.match(cicdConsoleSource, /hasRepository: repository !== null/);
+  assert.match(cicdConsoleSource, /hasSourceDeployment: sourceDeployment !== null/);
+  assert.match(cicdConsoleSource, /!readiness\?\.approvedApplyPlanArtifactId/);
+  assert.match(cicdConsoleSource, /buildGitCicdHandoffRequest\(\{/);
 });
 
 test("external settings require an exact preview confirmation before apply", () => {
@@ -135,6 +199,10 @@ test("deployment modal renders Delivery in its existing CI/CD screen", () => {
   assert.match(shellSource, /activeScreen !== "cicd"/);
   assert.doesNotMatch(shellSource, /DeliveryModalSummary|onOpenDelivery\b/);
   assert.doesNotMatch(rightPanelSource, /activeView === "delivery"|<DeliveryCenterPanel/);
+});
+
+test("expanded console keeps exactly one active Delivery instance", () => {
+  assert.match(shellSource, /!fullScreenOnly && !isDeploymentOverlayOpen/);
 });
 
 test("legacy project settings route opens the single Delivery editor", () => {

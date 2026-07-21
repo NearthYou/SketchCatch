@@ -43,11 +43,79 @@ test("composes a partial Delivery profile without requiring optional settings", 
     monitoringConfig: null,
     deploymentTarget: null,
     environmentName: null,
+    buildVerification: {
+      status: "not_started",
+      requestedCommitSha: null,
+      resolvedCommitSha: null,
+      statusReason: null,
+      verifiedAt: null
+    },
     readiness,
     handoffConfigurationPreview: null
   } satisfies ProjectDeliveryProfile);
   assert.equal(calls.includes("find-monitoring"), false);
+  assert.equal(calls.includes("find-build-verification"), true);
+  assert.doesNotMatch(calls.join(" "), /prepare|verify-repository/);
   assert.equal(calls.includes("inspect-readiness"), true);
+});
+
+test("projects Build Environment checkout verification without provider-sensitive fields", async (t) => {
+  const cases = [
+    {
+      name: "preparing",
+      record: buildVerificationRecord({
+        status: "preparing",
+        repositoryVerificationStatus: "not_checked"
+      }),
+      expectedStatus: "preparing"
+    },
+    {
+      name: "verified",
+      record: buildVerificationRecord({
+        status: "ready",
+        repositoryVerificationStatus: "verified",
+        verifiedAt: new Date("2026-07-22T03:00:00.000Z")
+      }),
+      expectedStatus: "verified"
+    },
+    {
+      name: "failed",
+      record: buildVerificationRecord({
+        status: "verification_failed",
+        repositoryVerificationStatus: "failed",
+        statusReason:
+          "arn:aws:codebuild:ap-northeast-2:123456789012:build/demo secretAccessKey=temporary-secret"
+      }),
+      expectedStatus: "failed"
+    },
+    {
+      name: "disconnected",
+      record: buildVerificationRecord({
+        status: "disconnected",
+        repositoryVerificationStatus: "verified",
+        verifiedAt: new Date("2026-07-22T03:00:00.000Z")
+      }),
+      expectedStatus: "failed"
+    }
+  ] as const;
+
+  for (const candidate of cases) {
+    await t.test(candidate.name, async () => {
+      const profile = await createProjectDeliveryProfileService({
+        store: createStore({ buildVerification: candidate.record }),
+        inspectReadiness: async () => readiness
+      }).get({ projectId: "project-1", userId: "user-1" });
+      const verification = profile.buildVerification;
+
+      assert.equal(verification?.status, candidate.expectedStatus);
+      if (candidate.name === "verified") {
+        assert.equal(verification?.verifiedAt, "2026-07-22T03:00:00.000Z");
+      }
+      if (candidate.name === "failed") {
+        assert.doesNotMatch(JSON.stringify(verification), /arn:aws|temporary-secret/iu);
+      }
+    });
+  }
 });
 
 test("derives handoff configuration from the readiness-selected Deployment Architecture", async () => {
@@ -268,6 +336,7 @@ function createStore(input: {
   deploymentTarget?: ProjectDeploymentTarget | null;
   sourceRepository?: SourceRepository | null;
   monitoringConfig?: GitCicdMonitoringConfig | null;
+  buildVerification?: ReturnType<typeof buildVerificationRecord> | null;
 } = {}): ProjectDeliveryProfileStore {
   const calls = input.calls ?? [];
   return {
@@ -310,7 +379,30 @@ function createStore(input: {
     },
     async findEnvironmentName() {
       return null;
+    },
+    async findBuildVerification() {
+      calls.push("find-build-verification");
+      return input.buildVerification ?? null;
     }
+  } as ProjectDeliveryProfileStore;
+}
+
+function buildVerificationRecord(overrides: Partial<{
+  status: "preparing" | "ready" | "verification_failed" | "disconnected";
+  repositoryVerificationStatus: "not_checked" | "verified" | "failed";
+  requestedCommitSha: string | null;
+  resolvedCommitSha: string | null;
+  statusReason: string | null;
+  verifiedAt: Date | null;
+}> = {}) {
+  return {
+    status: "preparing" as const,
+    repositoryVerificationStatus: "not_checked" as const,
+    requestedCommitSha: "a".repeat(40),
+    resolvedCommitSha: null,
+    statusReason: null,
+    verifiedAt: null,
+    ...overrides
   };
 }
 

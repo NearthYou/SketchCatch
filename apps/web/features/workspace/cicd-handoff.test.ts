@@ -128,6 +128,7 @@ test("maps one server readiness snapshot to five rows and deployment target prog
   assert.equal(target?.statusLabel, "3/4 완료");
   assert.deepEqual(target?.missingKeys, ["build_config"]);
   assert.equal(target?.actionLabel, "빌드 설정 확인하기");
+  assert.equal(target?.details?.length, 2);
   assert.equal(target?.details?.filter((detail) => !detail.ready).length, 1);
   assert.deepEqual(items.map((item) => item.key), [
     "approved_apply_plan",
@@ -146,9 +147,7 @@ test("provides one concrete CTA for every server readiness action", () => {
     select_repository: "Repository 연결 확인",
     confirm_monitoring_config: "Branch와 경로 확인하기",
     select_aws_connection: "AWS 연결 선택하기",
-    confirm_build_config: "빌드 설정 확인하기",
-    inspect_runtime_outputs: "배포 결과 확인하기",
-    inspect_output_url: "배포 URL 확인하기"
+    confirm_build_config: "빌드 설정 확인하기"
   } as const;
 
   for (const [readinessAction, actionLabel] of Object.entries(expected)) {

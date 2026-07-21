@@ -19,8 +19,12 @@ const statusBoardSource = readFileSync(
   fileURLToPath(new URL("./CicdStatusBoard.tsx", import.meta.url)),
   "utf8"
 );
+const presentationSource = readFileSync(
+  fileURLToPath(new URL("./cicd-readiness-presentation.ts", import.meta.url)),
+  "utf8"
+);
 const connectionSource = readFileSync(
-  fileURLToPath(new URL("./delivery/DeliveryConnectionSummary.tsx", import.meta.url)),
+  fileURLToPath(new URL("./CicdRepositoryConnectionForm.tsx", import.meta.url)),
   "utf8"
 );
 const profileHookSource = readFileSync(
@@ -30,20 +34,29 @@ const profileHookSource = readFileSync(
 
 test("CI/CD keeps GitHub account recovery available without hiding the readiness checklist", () => {
   assert.match(connectionSource, /\/dashboard\/settings#github-account-settings-title/);
-  assert.match(connectionSource, /GitHub 연결 필요/);
+  assert.match(connectionSource, /GitHub 계정 연결이 필요합니다/);
   assert.match(handoffPanelSource, /aria-label="CI\/CD PR 준비 상태"/);
   assert.doesNotMatch(source, /listGitHubAccountInstallations|githubInstallationAccess/);
 });
 
-test("CI/CD keeps server readiness rows available when no repository is connected", () => {
+test("CI/CD keeps server readiness evidence in the flat PR task rows", () => {
   assert.match(source, /getGitCicdHandoffReadiness/);
   assert.match(source, /isGitCicdHandoffReady/);
   assert.match(handoffPanelSource, /GitCicdReadinessSnapshot/);
   assert.match(handoffPanelSource, /aria-label="CI\/CD PR 준비 상태"/);
-  assert.match(handoffPanelSource, /groupGitCicdReadiness\(readinessItems\)/);
-  assert.match(handoffPanelSource, /readinessGroup\.required\.map/);
-  assert.match(handoffPanelSource, /readinessGroup\.completed\.map/);
-  assert.match(connectionSource, /repositoryHref/);
+  assert.match(handoffPanelSource, /isReadinessItemReady\(/);
+  assert.match(handoffPanelSource, /readinessItems/);
+  assert.match(handoffPanelSource, /directDeploymentScope/);
+  assert.match(handoffPanelSource, /applyPlanReady\s*\?/);
+  assert.doesNotMatch(handoffPanelSource, /해당 없음/);
+  assert.doesNotMatch(handoffPanelSource, /onOpenDirectDeployment\?\.\("full_stack"\)/);
+  assertTaskOrder(handoffPanelSource, [
+    'title="Apply Plan"',
+    'title="최초 앱 배포"',
+    'title="배포 증거"',
+    'title="배포 PR"'
+  ]);
+  assert.match(connectionSource, /listGitHubInstalledRepositories/);
   assert.doesNotMatch(source, /if \(!repository\) \{\s*return \(\s*<div/u);
 });
 
@@ -69,11 +82,14 @@ test("CI/CD blocks PR creation until every read-only Delivery readiness item is 
   assert.match(handoffSource, /#deployment-target-title/);
 });
 
-test("CI/CD applies the same creation gate before and after opening PR review", () => {
+test("CI/CD keeps one contextual CTA and applies the server gate to final PR creation", () => {
   assert.match(source, /isGitCicdHandoffCreationEnabled/);
   assert.match(source, /isConsoleDataFresh,/);
   assert.match(source, /if \(\s*!canCreateHandoff/gu);
-  assert.match(statusBoardSource, /input\.canCreateHandoff && !input\.existingHandoff/);
+  assert.match(source, /suppressPrimaryAction=\{isHandoffReviewOpen\}/);
+  assert.equal(statusBoardSource.match(/<button/gu)?.length, 1);
+  assert.match(statusBoardSource, /disabled=\{disabled\}/);
+  assert.match(presentationSource, /action: \{ kind: "review_pr" \}/);
   assert.equal(handoffPanelSource.match(/disabled=\{!canCreateHandoff\}/gu)?.length, 1);
 });
 
@@ -82,3 +98,13 @@ test("CI/CD reloads have one owner and disable manual refresh for either loading
   assert.match(source, /reloadReservedOrInFlightRef/);
   assert.match(source, /isRefreshing/);
 });
+
+function assertTaskOrder(sourceText: string, labels: readonly string[]): void {
+  let previousIndex = -1;
+  for (const label of labels) {
+    const currentIndex = sourceText.indexOf(label);
+    assert.ok(currentIndex >= 0, `${label} 작업 행이 있어야 합니다.`);
+    assert.ok(currentIndex > previousIndex, `${label} 작업 행의 순서를 유지해야 합니다.`);
+    previousIndex = currentIndex;
+  }
+}

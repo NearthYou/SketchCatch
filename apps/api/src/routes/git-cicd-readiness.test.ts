@@ -149,7 +149,7 @@ function createActionRequiredSnapshot(): GitCicdReadinessSnapshot {
         status: "action_required",
         completedCount: 0,
         totalCount: 4,
-        missingKeys: ["aws_connection", "build_config", "runtime_config", "output_url"],
+        missingKeys: ["aws_connection", "build_config"],
         action: "select_aws_connection"
       }
     ]

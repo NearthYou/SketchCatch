@@ -1,14 +1,9 @@
 import type { GitCicdPipelineLog, GitCicdPipelineRun } from "@sketchcatch/types";
-import { PlayCircle } from "lucide-react";
 import { CicdAccordionSection, type CicdAccordionTone } from "./CicdAccordionSection";
 import { CicdActivityView } from "./CicdActivityView";
 import { CicdLogsView } from "./CicdLogsView";
 import { DeploymentOutputLinks } from "./DeploymentOutputLinks";
-import {
-  formatPipelineRunOption,
-  formatPipelineRunStatus,
-  getPipelinePresentation
-} from "./cicd-delivery-presentation";
+import { formatPipelineRunOption, getPipelinePresentation } from "./cicd-delivery-presentation";
 import type { SafeDeploymentLink } from "./deployment-output-links";
 import type { CicdConsoleView } from "./CicdConsoleScreen";
 import deliveryStyles from "./delivery-center.module.css";
@@ -19,6 +14,7 @@ export function CicdPipelineRunsPanel({
   canOpenLiveObservation,
   canRetryFrontend,
   frontendRetryError,
+  isCurrent,
   isFrontendRetrying,
   isHandoffReady,
   isLogsLoading,
@@ -30,6 +26,8 @@ export function CicdPipelineRunsPanel({
   onSelectRun,
   onSelectView,
   outputLinks,
+  phaseStatusLabel,
+  phaseStatusTone,
   runs,
   selectedRun
 }: {
@@ -37,6 +35,7 @@ export function CicdPipelineRunsPanel({
   readonly canOpenLiveObservation: boolean;
   readonly canRetryFrontend: boolean;
   readonly frontendRetryError: string;
+  readonly isCurrent: boolean;
   readonly isFrontendRetrying: boolean;
   readonly isHandoffReady: boolean;
   readonly isLogsLoading: boolean;
@@ -48,39 +47,31 @@ export function CicdPipelineRunsPanel({
   readonly onSelectRun: (runId: string) => void;
   readonly onSelectView: (view: CicdConsoleView) => void;
   readonly outputLinks: readonly SafeDeploymentLink[];
+  readonly phaseStatusLabel: string;
+  readonly phaseStatusTone: CicdAccordionTone;
   readonly runs: readonly GitCicdPipelineRun[];
   readonly selectedRun: GitCicdPipelineRun | null;
 }) {
   const presentation = getPipelinePresentation(runs);
-  const latestRun =
-    [...runs].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null;
 
   return (
     <CicdAccordionSection
-      defaultOpen={presentation.showRunControls}
-      openWhen={presentation.showRunControls}
-      icon={<PlayCircle size={17} />}
+      defaultOpen={isCurrent}
+      openWhen={isCurrent}
       id="cicd-pipeline"
-      metadata={
-        <span className={deliveryStyles.accordionSingleMeta}>
-          GitHub Actions · {latestRun ? `${latestRun.branch} branch` : "최근 실행 없음"}
-        </span>
-      }
-      statusLabel={latestRun ? formatPipelineRunStatus(latestRun.status) : "실행 없음"}
-      statusTone={latestRun ? getPipelineTone(latestRun.status) : "pending"}
+      isCurrent={isCurrent}
+      metadata="PR 생성 이후 Pipeline 실행 상태를 확인합니다."
+      phaseNumber="04"
+      statusLabel={phaseStatusLabel}
+      statusTone={phaseStatusTone}
       title="Pipeline"
     >
       <div className={deliveryStyles.accordionContent}>
         {!presentation.showRunControls ? (
-          <div className={styles.cicdEmptyState}>
-            <strong>{presentation.emptyTitle}</strong>
-            <p>{presentation.emptyDescription}</p>
-            <span className={deliveryStyles.emptyStateHint}>
-              {isHandoffReady
-                ? "전체 새로고침으로 실행을 확인합니다."
-                : "먼저 배포 PR 준비를 완료하세요."}
-            </span>
-          </div>
+          <p className={deliveryStyles.emptyStateHint}>
+            아직 실행된 Pipeline이 없습니다.
+            {!isHandoffReady ? <span>PR 생성 후 실행</span> : null}
+          </p>
         ) : (
           <>
             <label className={styles.cicdRunSelect}>
@@ -113,7 +104,7 @@ export function CicdPipelineRunsPanel({
                   실행합니다.
                 </p>
                 <button
-                  className={styles.deploymentPrimaryButton}
+                  className={styles.deploymentSecondaryButton}
                   disabled={isFrontendRetrying}
                   onClick={onRetryFrontend}
                   type="button"
@@ -186,12 +177,6 @@ export function CicdPipelineRunsPanel({
       </div>
     </CicdAccordionSection>
   );
-}
-
-function getPipelineTone(status: GitCicdPipelineRun["status"]): CicdAccordionTone {
-  if (status === "succeeded") return "success";
-  if (status === "failed" || status === "cancelled") return "warning";
-  return "info";
 }
 
 function SelectedRunSummary({ run }: { readonly run: GitCicdPipelineRun }) {

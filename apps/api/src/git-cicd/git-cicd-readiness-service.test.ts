@@ -406,6 +406,77 @@ test("marks aws_connection missing when the deployment or persisted target conne
   });
 });
 
+test("marks a persisted user-configured target ready before Deployment evidence exists", async () => {
+  const state = createRepositoryState({
+    readyContext: true,
+    existingTarget: createExistingTarget(createConfirmedBuildConfig())
+  });
+  state.buildEnvironment = undefined;
+
+  const result = await createGitCicdReadinessService({
+    repository: createRepository({ state, deployments: [] }),
+    planVerifier: createPlanVerifier()
+  }).inspect({ projectId: "project-1", userId: "user-1" });
+
+  assert.deepEqual(getReadinessItem(result, "deployment_target"), {
+    key: "deployment_target",
+    label: "배포 타깃",
+    status: "ready",
+    completedCount: 4,
+    totalCount: 4,
+    missingKeys: [],
+    action: null
+  });
+});
+
+test("keeps Phase 2 ready when a persisted target has no Repository checkout evidence yet", async () => {
+  const state = createRepositoryState({
+    readyContext: true,
+    existingTarget: createExistingTarget(createConfirmedBuildConfig())
+  });
+  assert.ok(state.buildEnvironment);
+  state.buildEnvironment.repositoryVerificationStatus = "not_checked";
+
+  const result = await createGitCicdReadinessService({
+    repository: createRepository({ state, deployments: [] }),
+    planVerifier: createPlanVerifier()
+  }).inspect({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(getReadinessItem(result, "deployment_target").status, "ready");
+});
+
+test("marks the saved AWS setting incomplete when the verified connection Region differs", async () => {
+  const target = createExistingTarget(createConfirmedBuildConfig());
+  target.region = "us-east-1";
+  const state = createRepositoryState({ readyContext: true, existingTarget: target });
+
+  const result = await createGitCicdReadinessService({
+    repository: createRepository({ state, deployments: [] }),
+    planVerifier: createPlanVerifier()
+  }).inspect({ projectId: "project-1", userId: "user-1" });
+
+  const targetItem = getReadinessItem(result, "deployment_target");
+  assert.ok(targetItem.missingKeys.includes("aws_connection"));
+  assert.equal(targetItem.action, "select_aws_connection");
+});
+
+test("marks an invalid confirmed build configuration incomplete", async () => {
+  const invalidConfig = createConfirmedBuildConfig({ dockerfilePath: null });
+  const state = createRepositoryState({
+    readyContext: true,
+    existingTarget: createExistingTarget(invalidConfig)
+  });
+
+  const result = await createGitCicdReadinessService({
+    repository: createRepository({ state, deployments: [] }),
+    planVerifier: createPlanVerifier()
+  }).inspect({ projectId: "project-1", userId: "user-1" });
+
+  const targetItem = getReadinessItem(result, "deployment_target");
+  assert.ok(targetItem.missingKeys.includes("build_config"));
+  assert.equal(targetItem.action, "confirm_build_config");
+});
+
 test("rejects apply artifacts outside the deployment, Terraform artifact, account, or region scope", async (t) => {
   const mismatches: Array<{
     name: string;
@@ -718,7 +789,7 @@ test("inspect accepts a canonical persisted target without rewriting it", async 
   assert.equal(state.savedTargets.length, 1);
 });
 
-test("inspect rejects a persisted target whose canonical fingerprint no longer matches", async () => {
+test("inspect keeps Phase 2 ready when only runtime fingerprint evidence is stale", async () => {
   const state = createRepositoryState({ readyContext: true });
   const service = createGitCicdReadinessService({
     repository: createRepository({ state }),
@@ -732,8 +803,8 @@ test("inspect rejects a persisted target whose canonical fingerprint no longer m
   const result = await service.inspect({ projectId: "project-1", userId: "user-1" });
 
   const targetItem = getReadinessItem(result, "deployment_target");
-  assert.ok(targetItem.missingKeys.includes("runtime_config"));
-  assert.ok(targetItem.missingKeys.includes("output_url"));
+  assert.equal(targetItem.status, "ready");
+  assert.deepEqual(targetItem.missingKeys, []);
 });
 
 test("accepts and repairs legacy ECS web evidence derived from the confirmed paths", async () => {
@@ -1143,13 +1214,12 @@ test("does not create a target when required CloudFront, ECS, ECR, or ALB output
 
       assert.equal(state.savedTargets.length, 0);
       const targetItem = getReadinessItem(result, "deployment_target");
-      assert.ok(targetItem.missingKeys.includes("runtime_config"));
-      assert.ok(targetItem.missingKeys.includes("output_url"));
+      assert.deepEqual(targetItem.missingKeys, ["aws_connection", "build_config"]);
     });
   }
 });
 
-test("does not treat an existing target as ready when the selected deployment outputs are incomplete", async () => {
+test("keeps an existing Phase 2 target ready when selected deployment outputs are incomplete", async () => {
   const state = createRepositoryState({ readyContext: true });
   const service = createGitCicdReadinessService({
     repository: createRepository({ state }),
@@ -1165,12 +1235,11 @@ test("does not treat an existing target as ready when the selected deployment ou
 
   assert.equal(state.savedTargets.length, 1);
   const targetItem = getReadinessItem(result, "deployment_target");
-  assert.equal(targetItem.status, "action_required");
-  assert.ok(targetItem.missingKeys.includes("runtime_config"));
-  assert.ok(targetItem.missingKeys.includes("output_url"));
+  assert.equal(targetItem.status, "ready");
+  assert.deepEqual(targetItem.missingKeys, []);
 });
 
-test("treats runtime evidence gaps as action_required but propagates database read failures", async (t) => {
+test("keeps runtime evidence outside Phase 2 while propagating database read failures", async (t) => {
   await t.test("runtime evidence gap", async () => {
     const state = createRepositoryState({
       readyContext: true,
@@ -1184,7 +1253,10 @@ test("treats runtime evidence gaps as action_required but propagates database re
       planVerifier: createPlanVerifier()
     }).refresh({ projectId: "project-1", userId: "user-1" });
 
-    assert.ok(getReadinessItem(result, "deployment_target").missingKeys.includes("runtime_config"));
+    assert.deepEqual(
+      getReadinessItem(result, "deployment_target").missingKeys,
+      ["aws_connection", "build_config"]
+    );
   });
 
   await t.test("Terraform output query failure", async () => {
