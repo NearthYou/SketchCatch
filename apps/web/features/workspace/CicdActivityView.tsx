@@ -36,9 +36,9 @@ export function CicdActivityView({ run }: { readonly run: GitCicdPipelineRun | n
 
 function formatStageTime(startedAt: string | null, finishedAt: string | null): string {
   if (!startedAt) return "시작 전";
-  const started = new Date(startedAt).toLocaleTimeString("ko-KR");
+  const started = new Date(startedAt).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" });
   return finishedAt
-    ? `${started} – ${new Date(finishedAt).toLocaleTimeString("ko-KR")}`
+    ? `${started} – ${new Date(finishedAt).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" })}`
     : `${started} – 진행 중`;
 }
 
