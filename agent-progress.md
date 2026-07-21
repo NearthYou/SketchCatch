@@ -4,6 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Public Repository Analysis no longer special-cases `chaekang/audience-live-check`; it resolves the current selected branch SHA and reads real repository evidence while general Fixed Template and authored demo flows remain available.
 - Branch `codex/fix-error-progress-completion` includes `origin/dev` through `d189cda3` and keeps the compact Workspace AI Terraform error-analysis gauge visible through an explicit successful 100% completion state.
 - The parked JH Workspace changes are restored on `dev`: Deployment uses the shorter `배포` label and intrinsic action width, Settings omits redundant CodeBuild authorization copy, and Project Draft loading uses the server draft whenever one exists without rendering the removed local-recovery chooser.
 - Terraform reverse sync accepts references to its allowlisted utility resources, so generated Runtime Secret values such as `random_password.check_in_signing.result` round-trip without a false manual-edit warning.
@@ -20,6 +21,13 @@ Short English-only working log for the current agent context. Older records are 
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
+
+### 2026-07-21 - Remove the Repository-specific audience demo bypass
+
+- Removed the fixed analysis response, frozen revision, synthetic architecture facts, strict URL profile, and Web-only Architecture Draft branch for `chaekang/audience-live-check`.
+- Public analysis now resolves the selected branch SHA and reads its tree and evidence files; Repository Board generation uses the same analyzed Template path as every other repository.
+- Focused Repository API and Web checks pass 18/18, and the retained general Fixed Template checks pass 4/4. Harness, lint, typecheck, build, and diff checks pass. The broad AI Draft file still has 15 unrelated baseline failures.
+- No dependency, lockfile, database migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
 
 ## Known Risk
 
