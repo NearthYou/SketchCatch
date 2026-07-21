@@ -55,7 +55,11 @@ test("현재 조치는 같은 화면의 설정 아코디언을 열고 실행 데
   assert.match(statusBoardSource, /openAccordionSection/);
   assert.match(statusBoardSource, /project-cicd-settings-title/);
   assert.match(statusBoardSource, /deployment-target-title/);
-  assert.match(statusBoardSource, /automatic-settings-title/);
+  assert.match(
+    statusBoardSource,
+    /case "inspect_runtime_outputs":\s*case "inspect_output_url":\s*return "deployment-target-title";/
+  );
+  assert.doesNotMatch(statusBoardSource, /automatic-settings-title/);
   assert.match(statusBoardSource, /run\.handoffId === currentHandoff\.id/);
   assert.match(pipelineSource, /openWhen=\{presentation\.showRunControls\}/);
   assert.match(accordionSource, /if \(ensureOpen \|\| openWhen\) setIsOpen\(true\)/);
@@ -65,10 +69,20 @@ test("현재 조치는 같은 화면의 설정 아코디언을 열고 실행 데
 
 test("CI/CD는 한 번의 전체 새로고침과 배포 타깃 안의 자동 설정 요약만 보여준다", () => {
   assert.match(deliveryCenterSource, /ref=\{consoleRef\}/);
-  assert.match(deliveryCenterSource, /refreshAll\(\)/);
+  assert.match(deliveryCenterSource, /consoleRef\.current\?\.refreshAll\(\)/);
+  assert.match(
+    deliveryCenterSource,
+    /<button(?:(?!<\/button>)[\s\S])*onClick=\{[^}]*refreshAll[^}]*\}(?:(?!<\/button>)[\s\S])*전체 새로고침/
+  );
   assert.match(deliveryCenterSource, /전체 새로고침/);
+  assert.doesNotMatch(deliveryCenterSource, /상태 새로고침/);
   assert.doesNotMatch(deliveryCenterSource, /headerStatus|requiredActionCount/);
   assert.doesNotMatch(deliveryCenterSource, /automatic-settings-title|title="자동 설정 결과"/);
+  assert.equal(
+    (deliveryCenterSource.match(/<CicdAutomaticSetupSummary\b/g) ?? []).length,
+    1,
+    "자동 설정 요약은 하나만 렌더링해야 합니다."
+  );
   assert.match(
     deliveryCenterSource,
     /title="프로젝트 배포 타깃"(?:(?!<\/CicdAccordionSection>)[\s\S])*<CicdAutomaticSetupSummary profile=\{profile\} \/>/
