@@ -21,7 +21,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+- 2026-07-21: Rebuilt the CI/CD workspace as a compact server-readiness status board plus one continuous accordion for Delivery, GitOps monitoring, deployment target, automatic setup, PR handoff, and Pipeline. Current actions open the relevant local section, PR creation keeps its existing approval gates, and Pipeline state is scoped to the selected handoff. Verification: 35 focused Web contract tests, root harness, lint, typecheck, and build passed. No DB migration, cloud mutation, or Git handoff was performed.
+
 ## Known Risk
+
+- The local browser reached the authenticated Workspace gate, but no reusable login session was available; the CI/CD route was therefore not visually captured with live project data in this session.
 
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
 - Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
@@ -34,6 +38,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
-2. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for these changes.
-3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
+1. Open an authenticated project CI/CD screen and visually confirm the compact status board and accordion with real readiness, handoff, and Pipeline data.
+2. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
+3. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for these changes.
+4. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.

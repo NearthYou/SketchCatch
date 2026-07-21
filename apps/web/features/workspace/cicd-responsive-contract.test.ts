@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const deliveryStyles = readFileSync(new URL("./delivery-center.module.css", import.meta.url), "utf8");
+const deliveryStyles = readFileSync(
+  new URL("./delivery-center.module.css", import.meta.url),
+  "utf8"
+);
 const handoffStyles = readFileSync(new URL("./cicd-handoff.module.css", import.meta.url), "utf8");
 const workspaceStyles = readFileSync(new URL("./workspace.module.css", import.meta.url), "utf8");
 const targetStyles = readFileSync(
@@ -10,8 +13,16 @@ const targetStyles = readFileSync(
   "utf8"
 );
 
-test("uses a three-column section navigation on a 390px viewport", () => {
-  assert.match(deliveryStyles, /@media \(max-width: 520px\)[\s\S]*\.sectionNavigation[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+test("stacks the status board and accordion controls on a 390px viewport", () => {
+  assert.doesNotMatch(deliveryStyles, /\.sectionNavigation/);
+  assert.match(
+    deliveryStyles,
+    /@media \(max-width: 640px\)[\s\S]*\.statusStages[\s\S]*grid-template-columns: minmax\(0, 1fr\)/
+  );
+  assert.match(
+    deliveryStyles,
+    /@media \(max-width: 640px\)[\s\S]*\.accordionRow[\s\S]*grid-template-columns: minmax\(0, 1fr\)/
+  );
 });
 
 test("keeps CI/CD controls at least 44px and constrains selects to their panel", () => {

@@ -11,11 +11,7 @@ import type {
 } from "@sketchcatch/types";
 import { useAuth } from "../../../components/auth/auth-provider";
 import { getApiErrorMessage } from "../../../lib/api-client";
-import {
-  getProjectDraft,
-  listAwsConnections,
-  putProjectDeploymentTarget
-} from "../api";
+import { getProjectDraft, listAwsConnections, putProjectDeploymentTarget } from "../api";
 import {
   changeDeploymentTargetRuntime,
   createDeploymentTargetDraft,
@@ -111,6 +107,8 @@ export const ProjectDeploymentTargetEditor = forwardRef<
     readonly onSaved?: (() => void) | undefined;
     readonly preferEcsDefaults?: boolean | undefined;
     readonly safeReturnTo?: string | null | undefined;
+    readonly showAutomaticSummary?: boolean | undefined;
+    readonly showHeading?: boolean | undefined;
     readonly showSaveButton?: boolean | undefined;
   }
 >(function ProjectDeploymentTargetEditor(
@@ -123,6 +121,8 @@ export const ProjectDeploymentTargetEditor = forwardRef<
     onSaved,
     preferEcsDefaults = false,
     safeReturnTo = null,
+    showAutomaticSummary = true,
+    showHeading = true,
     showSaveButton = true
   },
   ref
@@ -133,9 +133,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
   const initialRepositoryAnalysisTarget = profile.repositoryAnalysisTarget;
   const initialSourceRepository = profile.sourceRepository;
   const isDirtyRef = useRef(false);
-  const profileOwnerRef = useRef(
-    `${projectId}:${initialSourceRepository?.id ?? "none"}`
-  );
+  const profileOwnerRef = useRef(`${projectId}:${initialSourceRepository?.id ?? "none"}`);
   const [connections, setConnections] = useState<AwsConnection[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [target, setTarget] = useState<ProjectDeploymentTarget | null>(initialTarget);
@@ -180,8 +178,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
     [missingFieldKeys]
   );
   const missingFieldMessage = useMemo(() => {
-    const keys =
-      missingAdvancedFieldKeys.length > 0 ? missingAdvancedFieldKeys : missingFieldKeys;
+    const keys = missingAdvancedFieldKeys.length > 0 ? missingAdvancedFieldKeys : missingFieldKeys;
     const prefix =
       missingAdvancedFieldKeys.length > 0
         ? "자동 입력되지 않은 설정을 확인하세요"
@@ -209,11 +206,10 @@ export const ProjectDeploymentTargetEditor = forwardRef<
       setRequestState("loading");
       setMessage("");
       try {
-        const [nextConnections, projectDraftResponse] =
-          await Promise.all([
-            listAwsConnections(),
-            getProjectDraft(projectId)
-          ]);
+        const [nextConnections, projectDraftResponse] = await Promise.all([
+          listAwsConnections(),
+          getProjectDraft(projectId)
+        ]);
         if (cancelled) return;
         const nextTarget = initialTarget;
         const nextSourceRepository = initialSourceRepository;
@@ -341,14 +337,22 @@ export const ProjectDeploymentTargetEditor = forwardRef<
   useImperativeHandle(ref, () => ({ save: saveTarget }));
 
   return (
-    <section className="dashboardPanel integrationPanel" aria-labelledby="deployment-target-title">
-      <div className="integrationHeader">
-        <div>
-          <p className="dashboardPanelKicker">Deployment</p>
-          <Heading id="deployment-target-title">프로젝트 배포 타깃</Heading>
-        </div>
-      </div>
-      <p>어디에 배포할지만 확인하세요. 저장소와 AWS에서 확인한 값은 자동으로 채웁니다.</p>
+    <section
+      aria-label={showHeading ? undefined : "프로젝트 배포 타깃"}
+      aria-labelledby={showHeading ? "deployment-target-title" : undefined}
+      className="dashboardPanel integrationPanel"
+    >
+      {showHeading ? (
+        <>
+          <div className="integrationHeader">
+            <div>
+              <p className="dashboardPanelKicker">Deployment</p>
+              <Heading id="deployment-target-title">프로젝트 배포 타깃</Heading>
+            </div>
+          </div>
+          <p>어디에 배포할지만 확인하세요. 저장소와 AWS에서 확인한 값은 자동으로 채웁니다.</p>
+        </>
+      ) : null}
 
       <div className={styles.sectionHeading}>
         <div>
@@ -398,51 +402,53 @@ export const ProjectDeploymentTargetEditor = forwardRef<
         </label>
       </div>
 
-      <section className={styles.automaticSummary} aria-labelledby="automatic-settings-title">
-        <div className={styles.summaryHeading}>
-          <div>
-            <SectionHeading id="automatic-settings-title">자동 설정 결과</SectionHeading>
-            <p>연결된 저장소와 AWS 정보로 계산했습니다.</p>
-          </div>
-          <span className={styles.readyBadge} data-status={targetPresentation.status}>
-            {targetPresentation.statusLabel}
-          </span>
-        </div>
-        <dl className={styles.summaryList}>
-          <div>
-            <dt>AWS 위치</dt>
-            <dd>
-              {selectedConnection
-                ? `${selectedConnection.accountId ?? "AWS account"} · ${selectedConnection.region}`
-                : "연결 선택 필요"}
-            </dd>
-          </div>
-          <div>
-            <dt>빌드 기준</dt>
-            <dd>
-              {draft.sourceRoot} · {draft.evidencePath}
-            </dd>
-          </div>
-          <div>
-            <dt>확정 소스</dt>
-            <dd>{getShortCommitSha(draft.commitSha)}</dd>
-          </div>
-          <div>
-            <dt>배포 위치</dt>
-            <dd>{getRuntimeTargetSummary(draft)}</dd>
-          </div>
-          <div>
-            <dt>공개 주소</dt>
-            <dd>{getDeploymentTargetOutputUrlSummary(draft)}</dd>
-          </div>
-          {target ? (
+      {showAutomaticSummary ? (
+        <section className={styles.automaticSummary} aria-labelledby="automatic-settings-title">
+          <div className={styles.summaryHeading}>
             <div>
-              <dt>마지막 저장</dt>
-              <dd>{formatDeploymentTargetUpdatedAt(target.updatedAt)}</dd>
+              <SectionHeading id="automatic-settings-title">자동 설정 결과</SectionHeading>
+              <p>연결된 저장소와 AWS 정보로 계산했습니다.</p>
             </div>
-          ) : null}
-        </dl>
-      </section>
+            <span className={styles.readyBadge} data-status={targetPresentation.status}>
+              {targetPresentation.statusLabel}
+            </span>
+          </div>
+          <dl className={styles.summaryList}>
+            <div>
+              <dt>AWS 위치</dt>
+              <dd>
+                {selectedConnection
+                  ? `${selectedConnection.accountId ?? "AWS account"} · ${selectedConnection.region}`
+                  : "연결 선택 필요"}
+              </dd>
+            </div>
+            <div>
+              <dt>빌드 기준</dt>
+              <dd>
+                {draft.sourceRoot} · {draft.evidencePath}
+              </dd>
+            </div>
+            <div>
+              <dt>확정 소스</dt>
+              <dd>{getShortCommitSha(draft.commitSha)}</dd>
+            </div>
+            <div>
+              <dt>배포 위치</dt>
+              <dd>{getRuntimeTargetSummary(draft)}</dd>
+            </div>
+            <div>
+              <dt>공개 주소</dt>
+              <dd>{getDeploymentTargetOutputUrlSummary(draft)}</dd>
+            </div>
+            {target ? (
+              <div>
+                <dt>마지막 저장</dt>
+                <dd>{formatDeploymentTargetUpdatedAt(target.updatedAt)}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </section>
+      ) : null}
 
       {targetPresentation.readinessHint ? (
         <p className="dashboardMessage" role="status">

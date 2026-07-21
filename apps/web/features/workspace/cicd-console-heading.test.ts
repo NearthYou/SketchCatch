@@ -5,12 +5,21 @@ import { test } from "node:test";
 const source = [
   "DeliveryCenterPanel.tsx",
   "CicdConsoleScreen.tsx",
+  "CicdStatusBoard.tsx",
   "CicdHandoffPanel.tsx",
   "CicdPipelineRunsPanel.tsx"
-].map((file) => readFileSync(new URL(`./${file}`, import.meta.url), "utf8")).join("\n");
-const deliveryCenterSource = readFileSync(new URL("./DeliveryCenterPanel.tsx", import.meta.url), "utf8");
+]
+  .map((file) => readFileSync(new URL(`./${file}`, import.meta.url), "utf8"))
+  .join("\n");
+const deliveryCenterSource = readFileSync(
+  new URL("./DeliveryCenterPanel.tsx", import.meta.url),
+  "utf8"
+);
 const monitoringSource = readFileSync(
-  new URL("../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client.tsx", import.meta.url),
+  new URL(
+    "../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client.tsx",
+    import.meta.url
+  ),
   "utf8"
 );
 const targetEditorSource = readFileSync(
@@ -20,16 +29,22 @@ const targetEditorSource = readFileSync(
 
 test("CI/CD uses one task-oriented heading hierarchy", () => {
   assert.match(source, /<h2>CI\/CD<\/h2>/);
-  assert.match(source, /<h3[^>]*>배포 준비<\/h3>/);
-  assert.match(source, /<h3[^>]*>배포 PR<\/h3>/);
-  assert.match(source, /<h3[^>]*>Pipeline<\/h3>/);
+  assert.match(source, /<h3 id="cicd-status-title">배포 상태<\/h3>/);
+  assert.match(source, /<h3 id="cicd-config-title">구성 및 실행<\/h3>/);
   assert.doesNotMatch(source, /Project Delivery|INFRASTRUCTURE DEPLOYMENT|>배포 Pull Request</);
 });
 
-test("each primary CI/CD section label is rendered once", () => {
-  for (const label of ["배포 준비", "배포 PR", "Pipeline"]) {
-    const heading = new RegExp(`>\\s*${label}\\s*<\\/h3>`, "gu");
-    assert.equal(source.match(heading)?.length, 1, label);
+test("each CI/CD detail is exposed as one accordion title", () => {
+  for (const label of [
+    "Delivery 연결",
+    "GitOps 감시 설정",
+    "프로젝트 배포 타깃",
+    "자동 설정 결과",
+    "배포 PR",
+    "Pipeline"
+  ]) {
+    const title = new RegExp(`title="${label}"`, "gu");
+    assert.equal(source.match(title)?.length, 1, label);
   }
 });
 

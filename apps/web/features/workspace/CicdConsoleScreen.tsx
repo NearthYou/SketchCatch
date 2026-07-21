@@ -1,5 +1,13 @@
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
 import type {
   Deployment,
   GitCicdHandoff,
@@ -23,6 +31,7 @@ import {
 } from "./api";
 import { CicdHandoffPanel } from "./CicdHandoffPanel";
 import { CicdPipelineRunsPanel } from "./CicdPipelineRunsPanel";
+import { CicdStatusBoard } from "./CicdStatusBoard";
 import {
   getCicdPipelineRunState,
   getCicdPollIntervalMs,
@@ -52,6 +61,7 @@ import {
   getGitCicdLiveObservationSelection
 } from "./cicd-frontend-retry";
 import type { LiveObservationSelection } from "./live-observation";
+import deliveryStyles from "./delivery-center.module.css";
 import styles from "./workspace.module.css";
 
 export type CicdConsoleView = "activity" | "logs";
@@ -65,19 +75,21 @@ export function CicdConsoleScreen({
   onOpenLiveObservation,
   onRefreshDeliveryProfile,
   projectId,
-  readinessRefreshRequestId = 0
+  readinessRefreshRequestId = 0,
+  setupContent
 }: {
   readonly deliveryProfile: ProjectDeliveryProfile;
   readonly deliveryProfileErrorMessage: string;
   readonly isVisible: boolean;
   readonly isDeliveryProfileRefreshing: boolean;
-  readonly onOpenDirectDeployment?: (
-    (scope: "application" | "full_stack" | null) => void
-  ) | undefined;
+  readonly onOpenDirectDeployment?:
+    | ((scope: "application" | "full_stack" | null) => void)
+    | undefined;
   readonly onOpenLiveObservation?: ((selection?: LiveObservationSelection) => void) | undefined;
   readonly onRefreshDeliveryProfile: () => Promise<ProjectDeliveryProfile | null>;
   readonly projectId: string;
   readonly readinessRefreshRequestId?: number | undefined;
+  readonly setupContent: ReactNode;
 }) {
   const [activeView, setActiveView] = useState<CicdConsoleView>("activity");
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -86,9 +98,7 @@ export function CicdConsoleScreen({
   const [isHandoffReviewOpen, setIsHandoffReviewOpen] = useState(false);
   const [isHandoffBusy, setIsHandoffBusy] = useState(false);
   const [handoffErrorMessage, setHandoffErrorMessage] = useState("");
-  const [commandCopyState, setCommandCopyState] = useState<"idle" | "copied" | "failed">(
-    "idle"
-  );
+  const [commandCopyState, setCommandCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [runs, setRuns] = useState<GitCicdPipelineRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [logs, setLogs] = useState<GitCicdPipelineLog[]>([]);
@@ -199,6 +209,13 @@ export function CicdConsoleScreen({
     isReadinessReady: handoffReady
   });
   const githubAccountSettingsHref = "/dashboard/settings#github-account-settings-title";
+  const readinessByKey = new Map(readiness.items.map((item) => [item.key, item.status]));
+  const setupCompletedCount = [
+    readinessByKey.get("source_repository") === "ready",
+    readinessByKey.get("monitoring_config") === "ready",
+    deliveryProfile.deploymentTarget !== null,
+    readinessByKey.get("deployment_target") === "ready"
+  ].filter(Boolean).length;
 
   const requestReadinessReload = useCallback((): void => {
     if (
@@ -334,19 +351,12 @@ export function CicdConsoleScreen({
       }
 
       const [consoleResult] = await Promise.allSettled([loadConsoleData()]);
-      if (
-        cancelled ||
-        !isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)
-      ) {
+      if (cancelled || !isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)) {
         return;
       }
 
       if (consoleResult.status === "fulfilled") {
-        const {
-          initialRuns,
-          loadedDeployments,
-          loadedHandoffs
-        } = consoleResult.value;
+        const { initialRuns, loadedDeployments, loadedHandoffs } = consoleResult.value;
         setDeployments(loadedDeployments);
         setHandoffs(loadedHandoffs);
         setSelectedHandoffId((selected) =>
@@ -481,10 +491,7 @@ export function CicdConsoleScreen({
       dispatchRequestState({
         type: "failure",
         scope: "screen",
-        message: getApiErrorMessage(
-          consoleResult.reason,
-          "CI/CD 상태를 갱신하지 못했습니다."
-        ),
+        message: getApiErrorMessage(consoleResult.reason, "CI/CD 상태를 갱신하지 못했습니다."),
         permissionFailure: isGitHubPermissionFailure(consoleResult.reason)
       });
     }
@@ -521,9 +528,7 @@ export function CicdConsoleScreen({
       await retryGitCicdFrontendRelease(selectedRun.id);
       applyRuns(await loadRuns());
     } catch (error) {
-      setFrontendRetryError(
-        getApiErrorMessage(error, "웹 배포 재시도를 시작하지 못했습니다.")
-      );
+      setFrontendRetryError(getApiErrorMessage(error, "웹 배포 재시도를 시작하지 못했습니다."));
     } finally {
       setIsFrontendRetrying(false);
     }
@@ -631,93 +636,130 @@ export function CicdConsoleScreen({
     };
   }, [activeView, isVisible, logsReloadRequestId, runs, selectedLogRevision, selectedRunId]);
 
+  const consoleError = permissionFailure ? (
+    <section className={styles.deploymentStageAlert} role="alert">
+      <strong>GitHub 권한을 확인해 주세요.</strong>
+      <p>{screenErrorMessage}</p>
+      <Link className={styles.deploymentPrimaryButton} href={githubAccountSettingsHref}>
+        GitHub App 설정 열기
+      </Link>
+      <button
+        className={styles.deploymentSecondaryButton}
+        onClick={requestReadinessReload}
+        type="button"
+      >
+        다시 시도
+      </button>
+    </section>
+  ) : screenErrorMessage ? (
+    <p className={styles.deploymentStageAlert} role="alert">
+      {screenErrorMessage}
+    </p>
+  ) : null;
+
   if (isInitialLoading) {
     return (
       <div className={styles.cicdState} role="status">
-        CI/CD 정보를 불러오는 중입니다.
+        최신 PR과 Pipeline 상태를 확인하는 중입니다.
       </div>
     );
   }
 
+  const isConsoleDataUnavailable = !isConsoleDataFresh && screenErrorMessage !== "";
+
   return (
-    <div className={styles.cicdConsole}>
-      {permissionFailure ? (
-        <section className={styles.deploymentStageAlert} role="alert">
-          <strong>GitHub 권한을 확인해 주세요.</strong>
-          <p>{screenErrorMessage}</p>
-          <Link className={styles.deploymentPrimaryButton} href={githubAccountSettingsHref}>
-            GitHub App 설정 열기
-          </Link>
-          <button
-            className={styles.deploymentSecondaryButton}
-            onClick={requestReadinessReload}
-            type="button"
-          >
-            다시 시도
-          </button>
-        </section>
-      ) : screenErrorMessage ? (
-        <p className={styles.deploymentStageAlert} role="alert">
-          {screenErrorMessage}
-        </p>
+    <div className={`${styles.cicdConsole} ${deliveryStyles.console}`}>
+      {consoleError}
+
+      {!isConsoleDataUnavailable ? (
+        <CicdStatusBoard
+          canCreateHandoff={canCreateHandoff}
+          currentHandoff={currentHandoff}
+          deliveryProfile={deliveryProfile}
+          existingHandoff={existingHandoff}
+          isBusy={isHandoffBusy}
+          onOpenCreateReview={() => setIsHandoffReviewOpen(true)}
+          onOpenDirectDeployment={onOpenDirectDeployment}
+          readinessItems={readinessItems}
+          runs={runs}
+        />
       ) : null}
 
-      <CicdHandoffPanel
-        canCreateHandoff={canCreateHandoff}
-        commandCopyState={commandCopyState}
-        currentHandoff={currentHandoff}
-        existingHandoff={existingHandoff}
-        handoffErrorMessage={handoffErrorMessage}
-        handoffs={handoffs}
-        infrastructureDeploymentCommand={infrastructureDeploymentCommand}
-        isHandoffBusy={isHandoffBusy}
-        isHandoffReviewOpen={isHandoffReviewOpen}
-        isReadinessRefreshing={isReadinessRefreshing}
-        monitoringConfig={config}
-        onApplyAwsRoleDiff={(handoffId) =>
-          void runHandoffAction(() => applyGitCicdAwsRoleDiff(handoffId))
-        }
-        onApplyRepositorySettings={(handoffId) =>
-          void runHandoffAction(() => applyGitCicdRepositorySettings(handoffId))
-        }
-        onCloseCreateReview={() => setIsHandoffReviewOpen(false)}
-        onCopyInfrastructureCommand={() => void copyInfrastructureDeploymentCommand()}
-        onCreateHandoff={() => void createHandoff()}
-        onOpenCreateReview={() => setIsHandoffReviewOpen(true)}
-        onOpenDirectDeployment={onOpenDirectDeployment}
-        onRefreshReadiness={requestReadinessReload}
-        onSelectHandoff={setSelectedHandoffId}
-        readiness={readiness}
-        readinessErrorMessage={readinessErrorMessage}
-        readinessItems={readinessItems}
-        repository={repository}
-      />
+      <section className={deliveryStyles.accordionPanel} aria-labelledby="cicd-config-title">
+        <header className={deliveryStyles.accordionPanelHeader}>
+          <h3 id="cicd-config-title">구성 및 실행</h3>
+          <span>
+            {setupCompletedCount}개 설정 완료 · {readiness.requiredActionCount}개 조치 필요
+          </span>
+        </header>
 
-      <CicdPipelineRunsPanel
-        activeView={activeView}
-        canOpenLiveObservation={canOpenGitCicdLiveObservation(selectedRun)}
-        canRetryFrontend={canRetryGitCicdFrontend(selectedRun)}
-        frontendRetryError={frontendRetryError}
-        isFrontendRetrying={isFrontendRetrying}
-        isHandoffReady={handoffReady}
-        isLogsLoading={isLogsLoading}
-        isReadinessRefreshing={isReadinessRefreshing}
-        isRefreshing={isRefreshing}
-        logs={visibleLogs}
-        logsErrorMessage={logsErrorMessage}
-        onManualRefresh={() => void manualRefresh()}
-        onOpenLiveObservation={openSelectedLiveObservation}
-        onRetryFrontend={() => void retryFrontend()}
-        onRetryLogs={() => setLogsReloadRequestId((requestId) => requestId + 1)}
-        onSelectRun={(runId) => {
-          hasExplicitRunSelectionRef.current = true;
-          setSelectedRunId(runId);
-        }}
-        onSelectView={setActiveView}
-        outputLinks={outputLinks}
-        runs={runs}
-        selectedRun={selectedRun}
-      />
+        {setupContent}
+
+        {isConsoleDataUnavailable ? (
+          <div className={deliveryStyles.consoleUnavailable} role="status">
+            <strong>배포 PR과 Pipeline 상태를 확인할 수 없습니다.</strong>
+            <span>위 오류를 해결한 뒤 상태를 새로고침해 주세요.</span>
+          </div>
+        ) : (
+          <>
+            <CicdHandoffPanel
+              canCreateHandoff={canCreateHandoff}
+              commandCopyState={commandCopyState}
+              currentHandoff={currentHandoff}
+              existingHandoff={existingHandoff}
+              handoffErrorMessage={handoffErrorMessage}
+              handoffs={handoffs}
+              infrastructureDeploymentCommand={infrastructureDeploymentCommand}
+              isHandoffBusy={isHandoffBusy}
+              isHandoffReviewOpen={isHandoffReviewOpen}
+              isReadinessRefreshing={isReadinessRefreshing}
+              monitoringConfig={config}
+              onApplyAwsRoleDiff={(handoffId) =>
+                void runHandoffAction(() => applyGitCicdAwsRoleDiff(handoffId))
+              }
+              onApplyRepositorySettings={(handoffId) =>
+                void runHandoffAction(() => applyGitCicdRepositorySettings(handoffId))
+              }
+              onCloseCreateReview={() => setIsHandoffReviewOpen(false)}
+              onCopyInfrastructureCommand={() => void copyInfrastructureDeploymentCommand()}
+              onCreateHandoff={() => void createHandoff()}
+              onOpenDirectDeployment={onOpenDirectDeployment}
+              onRefreshReadiness={requestReadinessReload}
+              onSelectHandoff={setSelectedHandoffId}
+              readiness={readiness}
+              readinessErrorMessage={readinessErrorMessage}
+              readinessItems={readinessItems}
+              repository={repository}
+            />
+
+            <CicdPipelineRunsPanel
+              activeView={activeView}
+              canOpenLiveObservation={canOpenGitCicdLiveObservation(selectedRun)}
+              canRetryFrontend={canRetryGitCicdFrontend(selectedRun)}
+              frontendRetryError={frontendRetryError}
+              isFrontendRetrying={isFrontendRetrying}
+              isHandoffReady={handoffReady}
+              isLogsLoading={isLogsLoading}
+              isReadinessRefreshing={isReadinessRefreshing}
+              isRefreshing={isRefreshing}
+              logs={visibleLogs}
+              logsErrorMessage={logsErrorMessage}
+              onManualRefresh={() => void manualRefresh()}
+              onOpenLiveObservation={openSelectedLiveObservation}
+              onRetryFrontend={() => void retryFrontend()}
+              onRetryLogs={() => setLogsReloadRequestId((requestId) => requestId + 1)}
+              onSelectRun={(runId) => {
+                hasExplicitRunSelectionRef.current = true;
+                setSelectedRunId(runId);
+              }}
+              onSelectView={setActiveView}
+              outputLinks={outputLinks}
+              runs={runs}
+              selectedRun={selectedRun}
+            />
+          </>
+        )}
+      </section>
     </div>
   );
 }

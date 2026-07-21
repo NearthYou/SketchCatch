@@ -15,6 +15,10 @@ const handoffPanelSource = readFileSync(
   fileURLToPath(new URL("./CicdHandoffPanel.tsx", import.meta.url)),
   "utf8"
 );
+const statusBoardSource = readFileSync(
+  fileURLToPath(new URL("./CicdStatusBoard.tsx", import.meta.url)),
+  "utf8"
+);
 const connectionSource = readFileSync(
   fileURLToPath(new URL("./delivery/DeliveryConnectionSummary.tsx", import.meta.url)),
   "utf8"
@@ -69,7 +73,8 @@ test("CI/CD applies the same creation gate before and after opening PR review", 
   assert.match(source, /isGitCicdHandoffCreationEnabled/);
   assert.match(source, /isConsoleDataFresh,/);
   assert.match(source, /if \(\s*!canCreateHandoff/gu);
-  assert.equal(handoffPanelSource.match(/disabled=\{!canCreateHandoff\}/gu)?.length, 2);
+  assert.match(statusBoardSource, /input\.canCreateHandoff && !input\.existingHandoff/);
+  assert.equal(handoffPanelSource.match(/disabled=\{!canCreateHandoff\}/gu)?.length, 1);
 });
 
 test("CI/CD reloads have one owner and disable manual refresh for either loading state", () => {

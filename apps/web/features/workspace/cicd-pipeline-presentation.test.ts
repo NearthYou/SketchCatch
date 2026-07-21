@@ -6,12 +6,12 @@ const panelSource = readFileSync(new URL("./CicdPipelineRunsPanel.tsx", import.m
 const activitySource = readFileSync(new URL("./CicdActivityView.tsx", import.meta.url), "utf8");
 const logsSource = readFileSync(new URL("./CicdLogsView.tsx", import.meta.url), "utf8");
 
-test("renders one empty-state action instead of empty Pipeline controls", () => {
+test("keeps one Pipeline refresh in the accordion header", () => {
   assert.match(panelSource, /!presentation\.showRunControls \? \(/);
-  assert.match(panelSource, /isHandoffReady \? \(/);
-  assert.match(panelSource, /Pipeline 새로고침/);
-  assert.match(panelSource, /href="#cicd-handoff"/);
-  assert.match(panelSource, /presentation\.showRunControls \? \([\s\S]*새로고침[\s\S]*\) : null/);
+  assert.match(panelSource, /headerAction=\{/);
+  assert.match(panelSource, /aria-label="Pipeline 새로고침"/);
+  assert.doesNotMatch(panelSource, /href="#cicd-handoff"/);
+  assert.match(panelSource, /상단 새로고침으로 실행을 확인합니다/);
 });
 
 test("uses tabs only for a selected Pipeline Run", () => {

@@ -4,6 +4,7 @@ import test from "node:test";
 
 const panelSource = readFileSync(new URL("./DeliveryCenterPanel.tsx", import.meta.url), "utf8");
 const cicdConsoleSource = readFileSync(new URL("./CicdConsoleScreen.tsx", import.meta.url), "utf8");
+const statusBoardSource = readFileSync(new URL("./CicdStatusBoard.tsx", import.meta.url), "utf8");
 const handoffPanelSource = readFileSync(new URL("./CicdHandoffPanel.tsx", import.meta.url), "utf8");
 const changeReviewSource = readFileSync(new URL("./CicdChangeReview.tsx", import.meta.url), "utf8");
 const shellSource = readFileSync(new URL("./DeploymentConsoleShell.tsx", import.meta.url), "utf8");
@@ -20,7 +21,10 @@ const editorSource = readFileSync(
   "utf8"
 );
 const monitoringSource = readFileSync(
-  new URL("../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client.tsx", import.meta.url),
+  new URL(
+    "../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client.tsx",
+    import.meta.url
+  ),
   "utf8"
 );
 const connectionSummarySource = readFileSync(
@@ -46,7 +50,7 @@ test("CI/CD Delivery owns the project delivery configuration sections", () => {
     panelSource,
     /app\/projects\/\[projectId\]\/settings\/project-deployment-target-settings-client/
   );
-  assert.match(panelSource, /배포 준비를 확인하고 PR과 Pipeline을 관리합니다/);
+  assert.match(panelSource, /배포 준비부터 GitHub Actions 실행까지/);
 });
 
 test("일반 배포 진입은 이전 CI/CD 탭 대신 현재 Board 배포를 연다", () => {
@@ -88,13 +92,13 @@ test("Delivery 하위 설정은 Profile을 다시 조회하지 않는다", () =>
   assert.match(editorSource, /profile\.deploymentTarget/);
 });
 
-test("CI/CD Delivery shows readiness once beside the PR action", () => {
+test("CI/CD status board owns the current action while the PR accordion keeps readiness details", () => {
   assert.doesNotMatch(panelSource, /id="delivery-readiness"|href="#delivery-readiness"/);
-  assert.match(panelSource, /href="#cicd-handoff"/);
-  assert.match(
-    panelSource,
-    /useProjectDeliveryProfile\(projectId, readinessRefreshRequestId\)/
-  );
+  assert.doesNotMatch(panelSource, /href="#cicd-handoff"/);
+  assert.match(panelSource, /useProjectDeliveryProfile\(projectId, readinessRefreshRequestId\)/);
+  assert.match(cicdConsoleSource, /<CicdStatusBoard/);
+  assert.match(statusBoardSource, /onOpenCreateReview/);
+  assert.match(statusBoardSource, /getNextAction/);
   assert.match(handoffPanelSource, /id="cicd-pr-readiness"/);
   assert.match(handoffPanelSource, /data-ready=\{readiness\.ready\}/);
   assert.match(handoffPanelSource, /remainingLabel/);
