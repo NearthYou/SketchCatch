@@ -38,7 +38,7 @@ export function getAwsRoleDiffPreviewRevision(diff: GitCicdAwsRoleDiff): string 
     repository: diff.repository,
     targetBranch: diff.targetBranch,
     environmentName: diff.environmentName,
-    requiredTrustConditions: Object.entries(diff.requiredTrustConditions).sort(
+    requiredTrustConditions: Object.entries(diff.requiredTrustConditions ?? {}).sort(
       ([left], [right]) => left.localeCompare(right)
     ),
     approved: diff.approved,
