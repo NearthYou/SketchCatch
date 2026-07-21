@@ -168,6 +168,54 @@ test("materializes Service Auto Scaling from the exact ECS target and policy cha
   });
 });
 
+test("materializes Service Auto Scaling from unambiguous Terraform references when saved edges are missing", () => {
+  const input = createInput();
+  const architecture: ArchitectureJson = {
+    nodes: serviceAutoScalingArchitecture.nodes.map((node) => {
+      if (node.id === "ecs-service") {
+        return {
+          ...node,
+          config: { ...node.config, terraformResourceName: "audience_service" }
+        };
+      }
+      if (node.id === "ecs-scaling-target") {
+        return {
+          ...node,
+          config: {
+            ...node.config,
+            terraformResourceName: "audience_service",
+            resourceId:
+              "service/${aws_ecs_cluster.audience.name}/${aws_ecs_service.audience_service.name}"
+          }
+        };
+      }
+      return {
+        ...node,
+        config: {
+          ...node.config,
+          resourceId: "${aws_appautoscaling_target.audience_service.resource_id}"
+        }
+      };
+    }),
+    edges: []
+  };
+
+  const manifest = createDeploymentLiveObservationManifest({
+    ...input,
+    architecture
+  });
+
+  assert.equal(manifest.adapter.version, 4);
+  if (manifest.adapter.version !== 4) assert.fail("Expected CloudFront adapter v4");
+  assert.deepEqual(manifest.adapter.payload.capacityTarget.scaling, {
+    mode: "service_auto_scaling",
+    minCapacity: 1,
+    maxCapacity: 4,
+    metric: "ALBRequestCountPerTarget",
+    targetValue: 60
+  });
+});
+
 test("materializes the single Terraform-style target tracking block stored by Template Architecture", () => {
   const input = createInput();
   const architecture: ArchitectureJson = {

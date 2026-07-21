@@ -3101,6 +3101,8 @@ export type AiProviderMetadata = {
   generatedAt: IsoDateTimeString;
 };
 
+export type AuthoredArchitectureSourceId = "audience-live-check";
+
 export type AiResultMetadata = {
   source: AiResultSource;
   confidence: AiConfidence;
@@ -3113,6 +3115,7 @@ export type AiResultMetadata = {
   requirementFacts?: ArchitectureRequirementFact[];
   operatingProfile?: ArchitectureDraftOperatingProfile;
   guardrailWarnings?: ArchitectureGuardrailWarning[];
+  authoredSourceId?: AuthoredArchitectureSourceId | undefined;
 };
 
 export type ArchitectureDraftPattern =
@@ -4124,6 +4127,7 @@ export type ArchitectureBoardCompilationQuality = {
 export type ArchitectureBoardCompilationInput = {
   architecture: ArchitectureJson;
   currentDiagram?: DiagramJson | undefined;
+  sourceDiagram?: DiagramJson | undefined;
   semanticContext?: ArchitectureBoardCompilationSemanticContext | undefined;
   trigger: ArchitectureBoardCompilationTrigger;
 };

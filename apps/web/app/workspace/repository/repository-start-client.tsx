@@ -33,6 +33,7 @@ import {
   analyzePublicSourceRepository,
   analyzeSourceRepository,
   connectGitHubSourceRepository,
+  createGitHubArchitectureDraft,
   createGitHubSourceRepositoryInstallUrl,
   getProjectDraft,
   listGitHubAccountInstallations,
@@ -455,7 +456,19 @@ export function RepositoryStartClient({
     const requiredRuntimeSecrets = publicRepositoryAnalysis
       ? getRepositoryRequiredRuntimeSecrets(publicRepositoryAnalysis.aiHandoff)
       : [];
-    const diagram = buildBoardTemplateDiagram(templateId, {
+    const usesAudienceLiveCheckFixedTemplate = (
+      templateId === "ecs-fargate-container-app"
+      && publicRepositoryAnalysis?.repositoryUrl.trim().replace(/\/$/u, "").toLowerCase()
+        === "https://github.com/chaekang/audience-live-check"
+    );
+    const fixedDraft = usesAudienceLiveCheckFixedTemplate
+      ? await createGitHubArchitectureDraft({
+          repositoryUrl: publicRepositoryAnalysis.repositoryUrl,
+          defaultBranch: publicRepositoryAnalysis.defaultBranch,
+          selectedTemplateId: templateId
+        })
+      : undefined;
+    const diagram = fixedDraft?.diagramJson ?? buildBoardTemplateDiagram(templateId, {
       projectSlug: effectiveProjectName,
       shortId: "repository",
       requiredRuntimeSecrets
@@ -1227,12 +1240,10 @@ function PublicRepositoryRecommendationStep({
 function createRepositoryPreviewDiagram(projectName: string, repository: SourceRepository | null) {
   const handoff = repository?.analysis?.aiHandoff;
   if (!repository || handoff?.status !== "template_selected") return null;
-  const requiredRuntimeSecrets = getRepositoryRequiredRuntimeSecrets(handoff);
   return (
     buildBoardTemplateDiagram(handoff.templateId, {
       projectSlug: projectName,
-      shortId: repository.id.slice(0, 8),
-      requiredRuntimeSecrets
+      shortId: repository.id.slice(0, 8)
     }) ?? null
   );
 }

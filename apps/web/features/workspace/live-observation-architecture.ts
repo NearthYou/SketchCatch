@@ -51,19 +51,20 @@ export function createLiveObservationArchitectureModel(
   architecture: ArchitectureJson,
   snapshot: LiveObservationV2Snapshot | null
 ): LiveObservationArchitectureModel {
-  const convertedDiagram = convertArchitectureJsonToDiagramJson(architecture);
-  const diagram = preserveDeployedArchitectureGraph(architecture, convertedDiagram);
+  const observationArchitecture = recoverLiveObservationReferenceEdges(architecture);
+  const convertedDiagram = convertArchitectureJsonToDiagramJson(observationArchitecture);
+  const diagram = preserveDeployedArchitectureGraph(observationArchitecture, convertedDiagram);
   const aggregateObservationState = getAggregateObservationState(snapshot);
   const hasEcsCapacity = architecture.nodes.some(
     (node) => node.type === "ECS_CLUSTER" || node.type === "ECS_SERVICE"
   );
   const providerCapacity = snapshot?.latestObservation?.payload.capacity;
-  const scalingDetailLinesByResourceId = getServiceAutoScalingDetailLines(architecture);
+  const scalingDetailLinesByResourceId = getServiceAutoScalingDetailLines(observationArchitecture);
 
   return {
     aggregateObservationState,
     capacityModeLabel: hasEcsCapacity
-      ? getLiveObservationCapacityMode(architecture, providerCapacity)
+      ? getLiveObservationCapacityMode(observationArchitecture, providerCapacity)
       : null,
     diagram,
     resources: architecture.nodes.map((node) => {
@@ -233,6 +234,111 @@ function mapProviderState(
 ): Exclude<DeploymentResourceObservationState, "not_supported"> {
   return providerState === "available" ? "observed" : providerState;
 }
+
+type TerraformReferenceEdgeRule = {
+  readonly referrerType: ResourceType;
+  readonly referencedType: ResourceType;
+  readonly direction: "referrer-to-referenced" | "referenced-to-referrer";
+};
+
+const LIVE_OBSERVATION_TERRAFORM_REFERENCE_EDGE_RULES: readonly TerraformReferenceEdgeRule[] = [
+  {
+    referrerType: "CLOUDFRONT",
+    referencedType: "LOAD_BALANCER",
+    direction: "referrer-to-referenced"
+  },
+  {
+    referrerType: "LOAD_BALANCER_LISTENER",
+    referencedType: "LOAD_BALANCER",
+    direction: "referenced-to-referrer"
+  },
+  {
+    referrerType: "LOAD_BALANCER_LISTENER",
+    referencedType: "LOAD_BALANCER_TARGET_GROUP",
+    direction: "referrer-to-referenced"
+  },
+  {
+    referrerType: "ECS_SERVICE",
+    referencedType: "LOAD_BALANCER_TARGET_GROUP",
+    direction: "referenced-to-referrer"
+  },
+  {
+    referrerType: "ECS_SERVICE",
+    referencedType: "ECS_TASK_DEFINITION",
+    direction: "referrer-to-referenced"
+  },
+  {
+    referrerType: "APPLICATION_AUTO_SCALING_TARGET",
+    referencedType: "ECS_SERVICE",
+    direction: "referenced-to-referrer"
+  },
+  {
+    referrerType: "APPLICATION_AUTO_SCALING_POLICY",
+    referencedType: "APPLICATION_AUTO_SCALING_TARGET",
+    direction: "referenced-to-referrer"
+  }
+];
+
+const LIVE_OBSERVATION_TERRAFORM_TYPES: Partial<Record<ResourceType, string>> = {
+  APPLICATION_AUTO_SCALING_POLICY: "aws_appautoscaling_policy",
+  APPLICATION_AUTO_SCALING_TARGET: "aws_appautoscaling_target",
+  CLOUDFRONT: "aws_cloudfront_distribution",
+  ECS_SERVICE: "aws_ecs_service",
+  ECS_TASK_DEFINITION: "aws_ecs_task_definition",
+  LOAD_BALANCER: "aws_lb",
+  LOAD_BALANCER_LISTENER: "aws_lb_listener",
+  LOAD_BALANCER_TARGET_GROUP: "aws_lb_target_group"
+};
+
+function recoverLiveObservationReferenceEdges(
+  architecture: ArchitectureJson
+): ArchitectureJson {
+  const edges = [...architecture.edges];
+  const directedPairs = new Set(edges.map((edge) => `${edge.sourceId}\u0000${edge.targetId}`));
+
+  for (const rule of LIVE_OBSERVATION_TERRAFORM_REFERENCE_EDGE_RULES) {
+    const referencedNodes = architecture.nodes.filter((node) => node.type === rule.referencedType);
+    for (const referrer of architecture.nodes.filter((node) => node.type === rule.referrerType)) {
+      const matches = referencedNodes.filter((node) =>
+        configurationReferencesTerraformNode(referrer.config, node)
+      );
+      if (matches.length !== 1) continue;
+
+      const referenced = matches[0]!;
+      const sourceId = rule.direction === "referrer-to-referenced" ? referrer.id : referenced.id;
+      const targetId = rule.direction === "referrer-to-referenced" ? referenced.id : referrer.id;
+      const pair = `${sourceId}\u0000${targetId}`;
+      if (directedPairs.has(pair)) continue;
+
+      directedPairs.add(pair);
+      edges.push({
+        id: `live-observation-inferred:${sourceId}:${targetId}`,
+        label: "Terraform reference",
+        sourceId,
+        targetId
+      });
+    }
+  }
+
+  return edges.length === architecture.edges.length ? architecture : { ...architecture, edges };
+}
+function configurationReferencesTerraformNode(
+  config: Readonly<Record<string, unknown>>,
+  node: ArchitectureJson["nodes"][number]
+): boolean {
+  const resourceName = node.config["terraformResourceName"];
+  const configuredResourceType = node.config["terraformResourceType"];
+  const resourceType =
+    typeof configuredResourceType === "string"
+      ? configuredResourceType
+      : LIVE_OBSERVATION_TERRAFORM_TYPES[node.type];
+  if (typeof resourceName !== "string" || !resourceName.trim() || !resourceType) {
+    return false;
+  }
+
+  return JSON.stringify(config).includes(`${resourceType}.${resourceName.trim()}.`);
+}
+
 
 function preserveDeployedArchitectureGraph(
   architecture: ArchitectureJson,
