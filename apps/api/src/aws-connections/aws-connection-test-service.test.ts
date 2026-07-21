@@ -17,6 +17,13 @@ test("classifies unavailable SSO credentials separately from an unknown Role fai
     }).message,
     "AWS SSO credentials are unavailable or expired"
   );
+  assert.equal(
+    awsConnectionTestService.toAwsConnectionTestError({
+      name: "ProviderError",
+      message: "The SSO session associated with this profile has expired"
+    }).message,
+    "AWS SSO credentials are unavailable or expired"
+  );
 });
 
 test("classifies STS transport, throttling, and validation failures", () => {

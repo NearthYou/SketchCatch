@@ -293,12 +293,12 @@ export function toAwsConnectionTestError(error: unknown): AwsConnectionTestError
     return new AwsConnectionTestError("AWS Role assume permission denied");
   }
 
-  if (isAwsCredentialError(error)) {
-    return new AwsConnectionTestError("AWS caller credentials are invalid or expired");
-  }
-
   if (isAwsSsoCredentialProviderError(error)) {
     return new AwsConnectionTestError("AWS SSO credentials are unavailable or expired");
+  }
+
+  if (isAwsCredentialError(error)) {
+    return new AwsConnectionTestError("AWS caller credentials are invalid or expired");
   }
 
   if (isAwsStsTimeoutError(error)) {
@@ -360,7 +360,7 @@ function isAwsAccessDeniedError(error: unknown): boolean {
   );
 }
 
-// gg: local SSO/default provider 오류를 고객 Role의 AccessDenied와 섞지 않습니다.
+// gg: 실제 STS caller credential 오류만 일반 자격 증명 오류로 분류합니다.
 function isAwsCredentialError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) {
     return false;
@@ -372,24 +372,26 @@ function isAwsCredentialError(error: unknown): boolean {
     : "";
 
   return (
-    errorName === "CredentialsProviderError" ||
-    errorName === "TokenProviderError" ||
     errorName === "ExpiredToken" ||
     errorName === "ExpiredTokenException" ||
     errorName === "InvalidClientTokenId" ||
     errorName === "UnrecognizedClientException" ||
-    message.includes("could not load credentials") ||
-    message.includes("sso session")
+    message.includes("could not load credentials")
   );
 }
 
 function isAwsSsoCredentialProviderError(error: unknown): boolean {
   const errorName = getErrorName(error);
+  const message =
+    typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+      ? error.message.toLowerCase()
+      : "";
 
   return (
     errorName === "CredentialsProviderError" ||
     errorName === "TokenProviderError" ||
-    errorName === "SSOProviderInvalidToken"
+    errorName === "SSOProviderInvalidToken" ||
+    message.includes("sso session")
   );
 }
 
