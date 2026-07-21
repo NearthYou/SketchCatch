@@ -22,6 +22,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-21 - Keep cost metric icon and label on one line
+
+- Reworked shared cost metric cards into a two-column first row so each icon and label remain inline, while the amount continues on a full-width second row. Long dynamic labels truncate with an ellipsis instead of escaping the card.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature test suite was run for this presentation-only CSS change.
+
 ### 2026-07-21 - Remove estimate card detail row
 
 - Removed the checked resource-count and pricing-source helper row beneath project estimate amounts while preserving the period label, amount, and calculation behavior.

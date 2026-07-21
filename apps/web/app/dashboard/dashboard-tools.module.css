@@ -246,7 +246,10 @@
 
 .metricCard {
   display: grid;
-  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 8px;
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-card);
   padding: 20px;
@@ -255,8 +258,8 @@
 }
 
 .metricCard svg { color: var(--color-body); }
-.metricCard span { color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); }
-.metricCard strong { color: var(--color-ink); font-size: calc(28px + var(--presentation-font-size-increase)); letter-spacing: 0; }
+.metricCard span { min-width: 0; overflow: hidden; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); text-overflow: ellipsis; white-space: nowrap; }
+.metricCard strong { grid-column: 1 / -1; color: var(--color-ink); font-size: calc(28px + var(--presentation-font-size-increase)); letter-spacing: 0; }
 
 .monthlyComparisonSection {
   display: grid;
