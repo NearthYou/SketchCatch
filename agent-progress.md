@@ -28,6 +28,7 @@ Short English-only working log for the current agent context. Older records are 
 - Public analysis now resolves the selected branch SHA and reads its tree and evidence files; Repository Board generation uses the same analyzed Template path as every other repository.
 - Focused Repository API and Web checks pass 18/18, and the retained general Fixed Template checks pass 4/4. Harness, lint, typecheck, build, and diff checks pass. The broad AI Draft file still has 15 unrelated baseline failures.
 - No dependency, lockfile, database migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
+- 2026-07-21: Added a UI-only target environment selector to the new-project screen with equally selectable AWS, GCP, Azure, and On-premise options. The selection is intentionally not persisted or sent to project creation APIs. The focused environment test, browser selection check, lint, typecheck, and build pass. The full Web suite remains at 1,095/1,099 because of four pre-existing Architecture Board/compiler failures outside this change.
 
 ## Known Risk
 
