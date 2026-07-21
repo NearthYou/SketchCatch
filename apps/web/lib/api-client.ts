@@ -304,7 +304,7 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
   return authResponse.session;
 }
 
-async function toApiClientError(
+export async function toApiClientError(
   response: Response,
   requestContext: ApiRequestContext
 ): Promise<ApiClientError> {
@@ -349,7 +349,7 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse | LoginLo
   return typeof candidate.error === "string" && typeof candidate.message === "string";
 }
 
-function createConnectionError(requestContext: ApiRequestContext): ApiClientError {
+export function createConnectionError(requestContext: ApiRequestContext): ApiClientError {
   return new ApiClientError(
     0,
     {
@@ -372,7 +372,7 @@ function getBaseApiErrorMessage(error: ApiClientError, fallbackMessage: string):
   return getKoreanApiMessage(error, fallbackMessage);
 }
 
-function createApiRequestContext(path: string, method?: string): ApiRequestContext {
+export function createApiRequestContext(path: string, method?: string): ApiRequestContext {
   return {
     method: (method ?? "GET").toUpperCase(),
     path: getSafeApiPath(buildApiUrl(path))

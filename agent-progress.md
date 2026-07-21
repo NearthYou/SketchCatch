@@ -28,7 +28,9 @@ Short English-only working log for the current agent context. Older records are 
 - Reproduced the store defect with an open Redis client whose command fails: the previous implementation reused that poisoned client forever because reconnect is disabled and `isOpen` remains true.
 - The Redis store now discards and destroys the failed client without replaying the ambiguous command; the next request creates a fresh connection. The Web modal now renders the safe API error code, HTTP status, path, and request ID while automatic reconnect continues.
 - The focused Redis recovery test, Web diagnostic test, and Redis 8 integration suite pass (30/30). Root lint, typecheck, and all five production builds pass.
-- The separate `audience-live-check` branch `codex/fix-browser-check-in-route` moves browser calls to `/api/participations` while retaining `/api/check-ins` as the release-verification compatibility alias. Its focused tests, full 47-test suite, typecheck, build, and changed-file lint pass.
+- Review found that SSE HTTP failures still discarded their response diagnostics. SSE failures now reuse the typed API error conversion, including no-response and missing-body handling, and the source-regex contract test was replaced with a fetch-level behavior test.
+- Chrome exposed the actual audience failure as `TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation`: the native fetch function was passed to `ky` without its Window receiver. The default fetch is now bound to `globalThis`, a receiver-sensitive regression test passes, and local Chrome verification recorded one POST 201 followed by repeated heartbeat POST 200 responses with the UI in `✓ 참여 중 · 연결됨` state.
+- The separate `audience-live-check` branch `codex/fix-browser-check-in-route` moves browser calls to `/api/participations` while retaining `/api/check-ins` as the release-verification compatibility alias. Its focused tests, full 48-test suite, typecheck, build, and changed-file lint pass.
 - Broad API and Web suites still expose pre-existing Architecture Compiler, generated artifact, artifact-loader, and AI Architecture Draft baseline failures outside this workstream. The changed Live Observation tests pass.
 - No dependency, lockfile, migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
 
@@ -64,7 +66,7 @@ Short English-only working log for the current agent context. Older records are 
 ## Known Risk
 
 - Production still runs the pre-fix Redis client lifecycle until this branch is released through the reviewed deployment workflow.
-- Production still serves the old audience bundle until `codex/fix-browser-check-in-route` is reviewed and released; the current deployed bundle remains blocked by the inspected Chrome client on `/api/check-ins` even though direct CloudFront POST returns HTTP 201.
+- Production still serves the old audience bundle until `codex/fix-browser-check-in-route` is reviewed and released; the native fetch receiver fix has only been verified in the local Chrome flow and is not yet present in CloudFront.
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
 - Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
 - The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` was saved by the stale Web process and must be re-analyzed/regenerated or replaced after the Web restart.

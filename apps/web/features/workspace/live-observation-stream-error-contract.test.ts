@@ -1,18 +1,68 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { ApiClientError } from "../../lib/api-client";
+import { streamLiveObservationSnapshots } from "./api";
+import { getLiveObservationStreamErrorMessage } from "./live-observation-errors";
 
-const modalSource = readFileSync(
-  fileURLToPath(new URL("./LiveObservationModal.tsx", import.meta.url)),
-  "utf8"
-);
+test("Live Observation stream failures retain safe request diagnostics", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const abortController = new AbortController();
+  let capturedError: unknown;
 
-test("Live Observation surfaces the failed request diagnostic while reconnecting", () => {
-  assert.match(modalSource, /onError: \(failure\) =>/);
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (_input, init) => {
+    if (init?.signal?.aborted) {
+      throw new DOMException("The operation was aborted", "AbortError");
+    }
+
+    return new Response(
+      JSON.stringify({
+        error: "LIVE_OBSERVATION_CACHE_UNAVAILABLE",
+        message: "Live Observation cache is unavailable"
+      }),
+      {
+        status: 503,
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": "req-live-stream-503"
+        }
+      }
+    );
+  };
+
+  await streamLiveObservationSnapshots({
+    deploymentId: "deployment-id",
+    observationId: "observation-id",
+    signal: abortController.signal,
+    onSnapshot: () => undefined,
+    onError: (failure) => {
+      capturedError = failure.error;
+      abortController.abort();
+    }
+  });
+
+  assert.ok(capturedError instanceof ApiClientError);
+  assert.equal(capturedError.status, 503);
+  assert.equal(capturedError.code, "LIVE_OBSERVATION_CACHE_UNAVAILABLE");
+  assert.deepEqual(capturedError.requestContext, {
+    method: "GET",
+    path: "/api/deployments/deployment-id/live-observations/observation-id/stream",
+    requestId: "req-live-stream-503"
+  });
+
+  const message = getLiveObservationStreamErrorMessage({
+    error: capturedError,
+    retryCount: 0,
+    source: "stream"
+  });
   assert.match(
-    modalSource,
-    /getApiErrorMessage\(\s*failure\.error,[\s\S]*?자동으로 다시 연결합니다\./
+    message,
+    /GET \/api\/deployments\/deployment-id\/live-observations\/observation-id\/stream/u
   );
-  assert.match(modalSource, /failure\.source === "stream"/);
+  assert.match(message, /HTTP 503/u);
+  assert.match(message, /LIVE_OBSERVATION_CACHE_UNAVAILABLE/u);
+  assert.match(message, /req-live-stream-503/u);
 });
