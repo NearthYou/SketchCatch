@@ -12,7 +12,7 @@ import { useGitHubInstallationsQuery } from "../../../features/dashboard/connect
 import styles from "../dashboard-tools.module.css";
 
 // GitHub App installation과 repository 접근 권한을 사용자 계정 단위로 관리합니다.
-export function GitHubAccountSettings() {
+export function GitHubAccountSettings({ embedded = false }: { readonly embedded?: boolean }) {
   const installationsQuery = useGitHubInstallationsQuery();
   const installations: readonly GitHubInstallationConnection[] =
     installationsQuery.data?.installations ?? [];
@@ -40,16 +40,22 @@ export function GitHubAccountSettings() {
   return (
     <section
       aria-labelledby="github-account-settings-title"
-      className={styles.settingsSection}
+      className={embedded ? styles.embeddedSettingsSection : styles.settingsSection}
       id="github-account-connection"
     >
-      <header>
-        <DashboardIcon name="github" />
-        <div>
-          <h2 id="github-account-settings-title">GitHub App 연결</h2>
-          <p>SketchCatch 로그인 방식과 관계없이 모든 프로젝트에서 사용할 GitHub App 권한을 관리합니다.</p>
-        </div>
-      </header>
+      {embedded ? (
+        <p className={styles.embeddedSettingsDescription}>
+          SketchCatch 로그인 방식과 관계없이 모든 프로젝트에서 사용할 GitHub App 권한을 관리합니다.
+        </p>
+      ) : (
+        <header>
+          <DashboardIcon name="github" />
+          <div>
+            <h2 id="github-account-settings-title">GitHub App 연결</h2>
+            <p>SketchCatch 로그인 방식과 관계없이 모든 프로젝트에서 사용할 GitHub App 권한을 관리합니다.</p>
+          </div>
+        </header>
+      )}
 
       {installationsQuery.isPending && installations.length === 0 ? (
         <p className={styles.githubSettingsMessage} role="status">
