@@ -1,24 +1,36 @@
-import Link from "next/link";
+import type { ReactNode } from "react";
 import type {
   GitCicdHandoff,
+  GitCicdHandoffConfigurationPreview,
   GitCicdMonitoringConfig,
   GitCicdReadinessSnapshot,
+  ProjectDeliveryBuildVerification,
+  ProjectDeploymentTarget,
   SourceRepository
 } from "@sketchcatch/types";
+import { CicdAccordionSection, type CicdAccordionTone } from "./CicdAccordionSection";
 import type { GitCicdHandoffReadinessItem } from "./cicd-handoff";
-import { groupGitCicdReadiness } from "./cicd-delivery-presentation";
+import {
+  getCicdBuildVerificationPresentation,
+  getCicdDeploymentOutputPresentation
+} from "./cicd-readiness-presentation";
 import { CicdChangeReview } from "./CicdChangeReview";
 import handoffStyles from "./cicd-handoff.module.css";
 import styles from "./workspace.module.css";
 
 export function CicdHandoffPanel({
+  buildVerification,
   canCreateHandoff,
   commandCopyState,
+  configurationPreview,
+  deploymentSucceeded,
+  deploymentTarget,
   currentHandoff,
   existingHandoff,
   handoffErrorMessage,
   handoffs,
   infrastructureDeploymentCommand,
+  isCurrent,
   isHandoffBusy,
   isHandoffReviewOpen,
   isReadinessRefreshing,
@@ -28,22 +40,28 @@ export function CicdHandoffPanel({
   onCloseCreateReview,
   onCopyInfrastructureCommand,
   onCreateHandoff,
-  onOpenCreateReview,
   onOpenDirectDeployment,
   onRefreshReadiness,
   onSelectHandoff,
   readiness,
   readinessErrorMessage,
   readinessItems,
-  repository
+  repository,
+  phaseStatusLabel,
+  phaseStatusTone
 }: {
+  readonly buildVerification: ProjectDeliveryBuildVerification;
   readonly canCreateHandoff: boolean;
   readonly commandCopyState: "idle" | "copied" | "failed";
+  readonly configurationPreview: GitCicdHandoffConfigurationPreview | null;
+  readonly deploymentSucceeded: boolean;
+  readonly deploymentTarget: ProjectDeploymentTarget | null;
   readonly currentHandoff: GitCicdHandoff | null;
   readonly existingHandoff: GitCicdHandoff | null;
   readonly handoffErrorMessage: string;
   readonly handoffs: readonly GitCicdHandoff[];
   readonly infrastructureDeploymentCommand: string;
+  readonly isCurrent: boolean;
   readonly isHandoffBusy: boolean;
   readonly isHandoffReviewOpen: boolean;
   readonly isReadinessRefreshing: boolean;
@@ -53,288 +71,361 @@ export function CicdHandoffPanel({
   readonly onCloseCreateReview: () => void;
   readonly onCopyInfrastructureCommand: () => void;
   readonly onCreateHandoff: () => void;
-  readonly onOpenCreateReview: () => void;
-  readonly onOpenDirectDeployment?: (
-    (scope: "application" | "full_stack" | null) => void
-  ) | undefined;
+  readonly onOpenDirectDeployment?:
+    | ((scope: "application" | "full_stack" | null) => void)
+    | undefined;
   readonly onRefreshReadiness: () => void;
   readonly onSelectHandoff: (handoffId: string) => void;
   readonly readiness: GitCicdReadinessSnapshot;
   readonly readinessErrorMessage: string;
   readonly readinessItems: readonly GitCicdHandoffReadinessItem[];
   readonly repository: SourceRepository | null;
+  readonly phaseStatusLabel: string;
+  readonly phaseStatusTone: CicdAccordionTone;
 }) {
-  const readinessGroup = groupGitCicdReadiness(readinessItems);
+  const applyPlanReady = isReadinessItemReady(readiness, readinessItems, "approved_apply_plan");
+  const initialApplicationItem = readinessItems.find(
+    (item) => item.key === "initial_application_release"
+  );
+  const initialApplicationApplicable = initialApplicationItem !== undefined;
+  const initialApplicationReady =
+    !initialApplicationApplicable ||
+    isReadinessItemReady(readiness, readinessItems, "initial_application_release");
+  const handoffCreated = Boolean(
+    existingHandoff && !["draft", "cancelled"].includes(existingHandoff.status)
+  );
+  const buildVerificationPresentation =
+    getCicdBuildVerificationPresentation(buildVerification);
+  const deploymentOutputPresentation = getCicdDeploymentOutputPresentation({
+    configurationPreview,
+    deploymentSucceeded,
+    target: deploymentTarget
+  });
 
   return (
-    <section className={handoffStyles.panel} id="cicd-handoff" aria-labelledby="cicd-handoff-title">
-      <header className={handoffStyles.header}>
-        <div>
-          <h3 id="cicd-handoff-title">배포 PR</h3>
-          <p>Workflow와 Terraform 변경을 검토한 뒤 Pull Request를 생성합니다.</p>
-        </div>
-        <span data-status={currentHandoff?.status ?? "draft"}>
-          {getGitCicdHandoffLabel(currentHandoff?.status)}
-        </span>
-      </header>
-
-      <p className={styles.deploymentHint}>
-        이 PR은 이미 배포된 앱의 후속 변경을 자동 배포하도록 Workflow와 Repository 설정을
-        설치합니다. PR merge만으로 최초 앱 배포를 시작하지 않습니다.
-      </p>
-
-      <div
-        className={handoffStyles.readiness}
-        id="cicd-pr-readiness"
-        aria-label="CI/CD PR 준비 상태"
-      >
-        <div className={handoffStyles.readinessHeader}>
-          <div>
-            <strong>준비 상태</strong>
-            <p>필요한 설정을 저장한 뒤 준비 상태를 다시 확인합니다.</p>
-          </div>
-          <span data-ready={readiness.ready}>
-            {readinessGroup.remainingLabel}
-          </span>
-        </div>
-        {isReadinessRefreshing ? (
-          <p className={handoffStyles.readinessLoading} role="status">
-            완료 상태 확인 중
-          </p>
-        ) : readinessErrorMessage ? (
-          <div className={handoffStyles.readinessError} role="alert">
-            <span>{readinessErrorMessage}</span>
-            <button
-              className={styles.deploymentSecondaryButton}
-              onClick={onRefreshReadiness}
-              type="button"
-            >
-              상태 새로고침
-            </button>
-          </div>
-        ) : null}
-        {readinessGroup.required.length > 0 ? (
-          <ul className={handoffStyles.readinessList}>
-            {readinessGroup.required.map((item) => (
-              <ReadinessRow
-                item={item}
-                key={item.key}
-                onOpenDirectDeployment={onOpenDirectDeployment}
-              />
-            ))}
-          </ul>
-        ) : null}
-        {readinessGroup.completedCount > 0 ? (
-          <details className={handoffStyles.completedReadiness}>
-            <summary>{readinessGroup.completedCount}개 완료</summary>
-            <ul className={handoffStyles.readinessList}>
-              {readinessGroup.completed.map((item) => (
-                <ReadinessRow
-                  item={item}
-                  key={item.key}
-                  onOpenDirectDeployment={onOpenDirectDeployment}
-                />
-              ))}
-            </ul>
-          </details>
-        ) : null}
-      </div>
-
-      {handoffErrorMessage ? (
-        <p className={styles.deploymentStageAlert} role="alert">
-          {handoffErrorMessage}
-        </p>
-      ) : null}
-
-      {existingHandoff ? (
-        <p className={handoffStyles.notice}>
-          이 승인 Plan으로 만든 PR이 이미 있습니다.
-          {existingHandoff.pullRequestUrl ? (
-            <a href={existingHandoff.pullRequestUrl} rel="noreferrer" target="_blank">
-              GitHub에서 PR 열기
-            </a>
-          ) : null}
-        </p>
-      ) : null}
-
-      {!isHandoffReviewOpen ? (
-        <button
-          className={styles.deploymentPrimaryButton}
-          disabled={!canCreateHandoff}
-          onClick={onOpenCreateReview}
-          type="button"
+    <CicdAccordionSection
+      defaultOpen={isCurrent}
+      ensureOpen={isHandoffReviewOpen || handoffErrorMessage !== ""}
+      id="cicd-handoff"
+      isCurrent={isCurrent}
+      metadata="Apply Plan, 최초 앱 배포와 PR 생성 조건을 확인합니다."
+      openWhen={isCurrent}
+      phaseNumber="03"
+      statusLabel={phaseStatusLabel}
+      statusTone={phaseStatusTone}
+      title="PR 준비"
+    >
+      <div className={handoffStyles.content}>
+        <div
+          className={handoffStyles.readiness}
+          id="cicd-pr-readiness"
+          aria-label="CI/CD PR 준비 상태"
         >
-          PR 생성 전 검토
-        </button>
-      ) : (
-        <div className={handoffStyles.review} role="group" aria-label="CI/CD PR 생성 확인">
-          <strong>PR 생성 전 검토</strong>
-          <dl className={handoffStyles.reviewFacts}>
-            <div>
-              <dt>Repository</dt>
-              <dd>{repository ? `${repository.owner}/${repository.name}` : "미설정"}</dd>
-            </div>
-            <div>
-              <dt>Target branch</dt>
-              <dd>{monitoringConfig?.monitorBranch ?? "미설정"}</dd>
-            </div>
-            <div>
-              <dt>승인된 Plan</dt>
-              <dd>{readiness.approvedApplyPlanArtifactId?.slice(0, 12) ?? "없음"}</dd>
-            </div>
-          </dl>
-          <ul>
-            <li>배포 workflow와 Terraform 파일을 새 branch에 commit합니다.</li>
-            <li>Repository 설정과 AWS Role 변경은 PR 생성 후 각각 다시 승인합니다.</li>
-          </ul>
-          <div>
-            <button
-              className={styles.deploymentSecondaryButton}
-              disabled={isHandoffBusy}
-              onClick={onCloseCreateReview}
-              type="button"
-            >
-              취소
-            </button>
-            <button
-              className={styles.deploymentPrimaryButton}
-              disabled={!canCreateHandoff}
-              onClick={onCreateHandoff}
-              type="button"
-            >
-              {isHandoffBusy ? "PR 생성 중" : "CI/CD PR 생성"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {handoffs.length > 1 ? (
-        <label className={styles.cicdRunSelect}>
-          이전 handoff
-          <select
-            onChange={(event) => onSelectHandoff(event.target.value)}
-            value={currentHandoff?.id ?? ""}
-          >
-            {handoffs.map((handoff) => (
-              <option key={handoff.id} value={handoff.id}>
-                {handoff.repositoryOwner}/{handoff.repositoryName} · {getGitCicdHandoffLabel(handoff.status)}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
-
-      {currentHandoff ? (
-        <>
-          <div className={handoffStyles.result}>
-            <div>
-              <strong>{currentHandoff.repositoryOwner}/{currentHandoff.repositoryName}</strong>
-              <span>{currentHandoff.targetBranch}</span>
-            </div>
-            {currentHandoff.statusMessage ? <p>{currentHandoff.statusMessage}</p> : null}
-            <div className={handoffStyles.actions}>
-              {currentHandoff.pullRequestUrl ? (
-                <a
-                  className={styles.deploymentPrimaryButton}
-                  href={currentHandoff.pullRequestUrl}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  GitHub Pull Request 열기
-                </a>
-              ) : null}
-            </div>
-            <CicdChangeReview
-              awsRoleDiff={currentHandoff.awsRoleDiff}
-              handoffId={currentHandoff.id}
-              isBusy={isHandoffBusy}
-              key={currentHandoff.id}
-              onApplyAwsRoleDiff={onApplyAwsRoleDiff}
-              onApplyRepositorySettings={onApplyRepositorySettings}
-              repositorySettingsPreview={currentHandoff.repositorySettingsPreview}
-            />
-          </div>
-          <section className={handoffStyles.commandCard} aria-labelledby="infra-command-title">
-            <div>
-              <h4 id="infra-command-title">인프라 배포 명령</h4>
-            </div>
-            <p>
-              설치 PR이 병합된 뒤 이 명령을 실행하면 Terraform Plan을 확인한 같은 job에서
-              Apply까지 진행합니다. 명령 실행 자체가 Apply 승인입니다.
+          {isReadinessRefreshing ? (
+            <p className={handoffStyles.readinessLoading} role="status">
+              완료 상태 확인 중
             </p>
-            <div className={handoffStyles.commandRow}>
-              <code>{infrastructureDeploymentCommand}</code>
+          ) : readinessErrorMessage ? (
+            <div className={handoffStyles.readinessError} role="alert">
+              <span>{readinessErrorMessage}</span>
               <button
                 className={styles.deploymentSecondaryButton}
-                onClick={onCopyInfrastructureCommand}
+                onClick={onRefreshReadiness}
                 type="button"
               >
-                {commandCopyState === "copied"
-                  ? "복사 완료"
-                  : commandCopyState === "failed"
-                    ? "복사 다시 시도"
-                    : "명령 복사"}
+                상태 새로고침
               </button>
             </div>
-            <span aria-live="polite">
-              {commandCopyState === "copied"
-                ? "명령을 복사했습니다."
-                : commandCopyState === "failed"
-                  ? "자동 복사에 실패했습니다. 명령을 직접 선택해 복사해 주세요."
-                  : ""}
-            </span>
-          </section>
-        </>
-      ) : null}
-    </section>
+          ) : null}
+          <ul className={handoffStyles.readinessList}>
+            <PrTaskRow
+              actionLabel="배포에서 Plan 검토하기"
+              description={applyPlanReady ? "완료" : "승인 필요"}
+              isComplete={applyPlanReady}
+              onAction={() => onOpenDirectDeployment?.(null)}
+              title="Apply Plan"
+            />
+            <PrTaskRow
+              description={buildVerificationPresentation.label}
+              isComplete={buildVerificationPresentation.complete}
+              title="Repository 빌드 검증"
+            />
+            {initialApplicationApplicable ? (
+              <>
+                <PrTaskRow
+                  actionLabel="배포하기"
+                  description={
+                    initialApplicationReady
+                      ? "완료"
+                      : applyPlanReady
+                        ? "배포 필요"
+                        : "Apply Plan 승인 후 배포"
+                  }
+                  isComplete={initialApplicationReady}
+                  onAction={
+                    applyPlanReady
+                      ? () =>
+                          onOpenDirectDeployment?.(
+                            initialApplicationItem.directDeploymentScope ?? "full_stack"
+                          )
+                      : undefined
+                  }
+                  title="최초 앱 배포"
+                />
+                <PrTaskRow
+                  description={initialApplicationReady ? "확인 완료" : "첫 앱 배포 후 자동 확인"}
+                  isComplete={initialApplicationReady}
+                  title="배포 증거"
+                />
+              </>
+            ) : null}
+            <PrTaskRow
+              description={renderDeploymentOutput(deploymentOutputPresentation.staticSite)}
+              isComplete={deploymentOutputPresentation.staticSite.complete}
+              title="Static Site URL"
+            />
+            <PrTaskRow
+              description={renderDeploymentOutput(deploymentOutputPresentation.apiBase)}
+              isComplete={deploymentOutputPresentation.apiBase.complete}
+              title="API Base URL"
+            />
+            <PrTaskRow
+              description={
+                handoffCreated
+                  ? "PR 생성됨"
+                  : applyPlanReady && initialApplicationReady
+                    ? "생성 가능"
+                    : "선행 조건 완료 후 생성"
+              }
+              isComplete={handoffCreated}
+              title="배포 PR"
+            />
+          </ul>
+        </div>
+
+        {handoffErrorMessage ? (
+          <p className={styles.deploymentStageAlert} role="alert">
+            {handoffErrorMessage}
+          </p>
+        ) : null}
+
+        {existingHandoff ? (
+          <p className={handoffStyles.notice}>
+            이 승인 Plan으로 만든 PR이 이미 있습니다.
+            {existingHandoff.pullRequestUrl ? (
+              <a href={existingHandoff.pullRequestUrl} rel="noreferrer" target="_blank">
+                GitHub에서 PR 열기
+              </a>
+            ) : null}
+          </p>
+        ) : null}
+
+        {isHandoffReviewOpen ? (
+          <div className={handoffStyles.review} role="group" aria-label="CI/CD PR 생성 확인">
+            <strong>PR 생성 전 검토</strong>
+            <dl className={handoffStyles.reviewFacts}>
+              <div>
+                <dt>Repository</dt>
+                <dd>{repository ? `${repository.owner}/${repository.name}` : "미설정"}</dd>
+              </div>
+              <div>
+                <dt>Target branch</dt>
+                <dd>{monitoringConfig?.monitorBranch ?? "미설정"}</dd>
+              </div>
+              <div>
+                <dt>승인된 Plan</dt>
+                <dd>{readiness.approvedApplyPlanArtifactId?.slice(0, 12) ?? "없음"}</dd>
+              </div>
+              <div>
+                <dt>RDS</dt>
+                <dd>
+                  {configurationPreview
+                    ? configurationPreview.rdsEnabled
+                      ? "사용"
+                      : "사용 안 함"
+                    : "확인 필요"}
+                </dd>
+              </div>
+              <div>
+                <dt>Static Site URL</dt>
+                <dd>
+                  {configurationPreview
+                    ? configurationPreview.staticSiteUrl ?? "생성하지 않음"
+                    : "확인 필요"}
+                </dd>
+              </div>
+              <div>
+                <dt>API Base URL</dt>
+                <dd>
+                  {configurationPreview
+                    ? configurationPreview.apiBaseUrl ?? "생성하지 않음"
+                    : "확인 필요"}
+                </dd>
+              </div>
+            </dl>
+            <ul>
+              <li>배포 workflow와 Terraform 파일을 새 branch에 commit합니다.</li>
+              <li>Repository 설정과 AWS Role 변경은 PR 생성 후 각각 다시 승인합니다.</li>
+            </ul>
+            <div>
+              <button
+                className={styles.deploymentSecondaryButton}
+                disabled={isHandoffBusy}
+                onClick={onCloseCreateReview}
+                type="button"
+              >
+                취소
+              </button>
+              <button
+                className={styles.deploymentPrimaryButton}
+                disabled={!canCreateHandoff}
+                onClick={onCreateHandoff}
+                type="button"
+              >
+                {isHandoffBusy ? "PR 생성 중" : "CI/CD PR 생성"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {handoffs.length > 1 ? (
+          <label className={styles.cicdRunSelect}>
+            이전 handoff
+            <select
+              onChange={(event) => onSelectHandoff(event.target.value)}
+              value={currentHandoff?.id ?? ""}
+            >
+              {handoffs.map((handoff) => (
+                <option key={handoff.id} value={handoff.id}>
+                  {handoff.repositoryOwner}/{handoff.repositoryName} ·{" "}
+                  {getGitCicdHandoffLabel(handoff.status)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        {currentHandoff ? (
+          <>
+            <div className={handoffStyles.result}>
+              <div>
+                <strong>
+                  {currentHandoff.repositoryOwner}/{currentHandoff.repositoryName}
+                </strong>
+                <span>{currentHandoff.targetBranch}</span>
+              </div>
+              {currentHandoff.statusMessage ? <p>{currentHandoff.statusMessage}</p> : null}
+              <div className={handoffStyles.actions}>
+                {currentHandoff.pullRequestUrl ? (
+                  <a
+                    className={styles.deploymentSecondaryButton}
+                    href={currentHandoff.pullRequestUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    GitHub Pull Request 열기
+                  </a>
+                ) : null}
+              </div>
+              <CicdChangeReview
+                awsRoleDiff={currentHandoff.awsRoleDiff}
+                handoffId={currentHandoff.id}
+                isBusy={isHandoffBusy}
+                key={currentHandoff.id}
+                onApplyAwsRoleDiff={onApplyAwsRoleDiff}
+                onApplyRepositorySettings={onApplyRepositorySettings}
+                repositorySettingsPreview={currentHandoff.repositorySettingsPreview}
+              />
+            </div>
+            <section className={handoffStyles.commandCard} aria-labelledby="infra-command-title">
+              <div>
+                <h4 id="infra-command-title">인프라 배포 명령</h4>
+              </div>
+              <p>
+                설치 PR이 병합된 뒤 이 명령을 실행하면 Terraform Plan을 확인한 같은 job에서
+                Apply까지 진행합니다. 명령 실행 자체가 Apply 승인입니다.
+              </p>
+              <div className={handoffStyles.commandRow}>
+                <code>{infrastructureDeploymentCommand}</code>
+                <button
+                  className={styles.deploymentSecondaryButton}
+                  onClick={onCopyInfrastructureCommand}
+                  type="button"
+                >
+                  {commandCopyState === "copied"
+                    ? "복사 완료"
+                    : commandCopyState === "failed"
+                      ? "복사 다시 시도"
+                      : "명령 복사"}
+                </button>
+              </div>
+              <span aria-live="polite">
+                {commandCopyState === "copied"
+                  ? "명령을 복사했습니다."
+                  : commandCopyState === "failed"
+                    ? "자동 복사에 실패했습니다. 명령을 직접 선택해 복사해 주세요."
+                    : ""}
+              </span>
+            </section>
+          </>
+        ) : null}
+      </div>
+    </CicdAccordionSection>
   );
 }
 
-function ReadinessRow({
-  item,
-  onOpenDirectDeployment
+function PrTaskRow({
+  actionLabel,
+  description,
+  isComplete,
+  onAction,
+  title
 }: {
-  readonly item: GitCicdHandoffReadinessItem;
-  readonly onOpenDirectDeployment?: (
-    (scope: "application" | "full_stack" | null) => void
-  ) | undefined;
+  readonly actionLabel?: string | undefined;
+  readonly description: ReactNode;
+  readonly isComplete: boolean;
+  readonly onAction?: (() => void) | undefined;
+  readonly title: string;
 }) {
   return (
-    <li data-ready={item.ready}>
+    <li data-ready={isComplete}>
       <div className={handoffStyles.readinessItemContent}>
         <div>
-          <strong>{item.label}</strong>
-          <span>{item.statusLabel}</span>
+          <strong>{title}</strong>
+          <span>{description}</span>
         </div>
-        <p>{item.description}</p>
-        {item.details ? (
-          <ul className={handoffStyles.readinessDetails}>
-            {(item.details ?? []).map((detail) => (
-              <li data-ready={detail.ready} key={detail.key}>
-                <span>{detail.label}</span>
-                <strong>{detail.ready ? "완료" : "설정 필요"}</strong>
-              </li>
-            ))}
-          </ul>
-        ) : null}
       </div>
-      {!item.ready &&
-      (item.action === "approve_apply_plan" || item.action === "deploy_initial_application") ? (
-        <button
-          className={styles.deploymentSecondaryButton}
-          onClick={() => onOpenDirectDeployment?.(item.directDeploymentScope)}
-          disabled={!onOpenDirectDeployment}
-          type="button"
-        >
-          {item.actionLabel}
+      {!isComplete && actionLabel && onAction ? (
+        <button className={styles.deploymentSecondaryButton} onClick={onAction} type="button">
+          {actionLabel}
         </button>
-      ) : !item.ready && item.href ? (
-        <Link className={styles.deploymentSecondaryButton} href={item.href}>
-          {item.actionLabel}
-        </Link>
       ) : null}
     </li>
   );
+}
+
+function renderDeploymentOutput(output: {
+  readonly label: string;
+  readonly url: string | null;
+}): ReactNode {
+  if (!output.url) return output.label;
+  return (
+    <a href={output.url} rel="noreferrer" target="_blank">
+      {output.label}
+    </a>
+  );
+}
+
+function isReadinessItemReady(
+  readiness: GitCicdReadinessSnapshot,
+  items: readonly GitCicdHandoffReadinessItem[],
+  key: "approved_apply_plan" | "initial_application_release"
+): boolean {
+  const itemReady = items.find((item) => item.key === key)?.ready === true;
+  if (key === "approved_apply_plan") {
+    return readiness.approvedApplyPlanArtifactId !== null || itemReady;
+  }
+  return readiness.initialApplicationReleaseId !== null || itemReady;
 }
 
 function getGitCicdHandoffLabel(status: GitCicdHandoff["status"] | undefined): string {

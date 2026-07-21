@@ -3,15 +3,29 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const panelSource = readFileSync(new URL("./CicdPipelineRunsPanel.tsx", import.meta.url), "utf8");
+const shellSource = readFileSync(new URL("./DeploymentConsoleShell.tsx", import.meta.url), "utf8");
 const activitySource = readFileSync(new URL("./CicdActivityView.tsx", import.meta.url), "utf8");
 const logsSource = readFileSync(new URL("./CicdLogsView.tsx", import.meta.url), "utf8");
 
-test("renders one empty-state action instead of empty Pipeline controls", () => {
+test("keeps Pipeline refresh owned by the global CI/CD header", () => {
   assert.match(panelSource, /!presentation\.showRunControls \? \(/);
-  assert.match(panelSource, /isHandoffReady \? \(/);
-  assert.match(panelSource, /Pipeline 새로고침/);
-  assert.match(panelSource, /href="#cicd-handoff"/);
-  assert.match(panelSource, /presentation\.showRunControls \? \([\s\S]*새로고침[\s\S]*\) : null/);
+  assert.doesNotMatch(panelSource, /headerAction=|Pipeline 새로고침|onManualRefresh/);
+  assert.doesNotMatch(panelSource, /href="#cicd-handoff"/);
+  assert.match(panelSource, /아직 실행된 Pipeline이 없습니다/);
+  assert.match(shellSource, /onClick=\{refreshActiveScreen\}/);
+  assert.match(shellSource, /새로고침 중/);
+});
+
+test("presents Pipeline as the flat fourth phase", () => {
+  assert.match(panelSource, /<CicdAccordionSection/);
+  assert.match(panelSource, /phaseNumber="04"/);
+  assert.match(panelSource, /title="Pipeline"/);
+  assert.match(panelSource, /className=\{deliveryStyles\.accordionContent\}/);
+  assert.match(
+    panelSource,
+    /\{selectedRun \? <SelectedRunSummary run=\{selectedRun\} \/> : null\}/
+  );
+  assert.doesNotMatch(panelSource, /Pipeline 상태 카드|Pipeline 실행 카드|최근 실행 수/);
 });
 
 test("uses tabs only for a selected Pipeline Run", () => {

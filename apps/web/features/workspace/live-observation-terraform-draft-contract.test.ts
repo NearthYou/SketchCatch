@@ -55,6 +55,24 @@ test("Live Observation keeps the warning outside the modal until Project Draft s
   assert.match(applyCallback, /onTrafficIncidentSnapshotChange\(null\)/);
 });
 
+test("Live Observation clears an old incident result when the Deployment or session changes", () => {
+  const deploymentChange = sourceBlock(
+    rightPanelSource,
+    "const updateLiveObservationDeployment",
+    "const updateLiveObservationSession"
+  );
+  const sessionChange = sourceBlock(
+    rightPanelSource,
+    "const updateLiveObservationSession",
+    "const updateLiveObservationSnapshot"
+  );
+
+  for (const block of [deploymentChange, sessionChange]) {
+    assert.match(block, /setLiveObservationIncidentSnapshot\(null\)/);
+    assert.match(block, /setLiveObservationAppliedTerraformUpdate\(null\)/);
+  }
+});
+
 function sourceBlock(source: string, startMarker: string, endMarker: string): string {
   const start = source.indexOf(startMarker);
   const end = source.indexOf(endMarker, start);

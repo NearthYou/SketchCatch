@@ -22,12 +22,9 @@ import {
 } from "./api";
 import {
   getEligibleLiveObservationDeployments,
-  getLiveObservationOperationalAnalysis,
   getSelectedLiveObservationOutputUrl,
-  getLiveObservationProviderEvidence,
   type LiveObservationSelection
 } from "./live-observation";
-import { getLiveObservationCapacityMode } from "./live-observation-architecture";
 import { createLiveObservationDesignSimulationRequest } from "./live-observation-ai-recommendation";
 import { useLiveObservationQueries } from "./live-observation-queries";
 import {
@@ -35,7 +32,7 @@ import {
   type LiveObservationTerraformUpdateResult
 } from "./live-observation-terraform-update";
 import { LiveObservationFocusedFlow } from "./LiveObservationFocusedFlow";
-import { WorkspaceAiExplanation } from "./WorkspaceAiPanelPieces";
+import { LiveObservationSignalDashboard } from "./LiveObservationSignalDashboard";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
@@ -178,18 +175,6 @@ export function LiveObservationModal({
     streamErrorMessage ||
     terraformApplyError;
   const providerSnapshot = selectedSnapshot?.latestObservation?.payload ?? null;
-  const providerLogs = providerSnapshot?.logs ?? [];
-  const capacityModeLabel = selectedArchitecture
-    ? getLiveObservationCapacityMode(selectedArchitecture, providerSnapshot?.capacity)
-    : null;
-  const providerEvidence =
-    providerSnapshot && capacityModeLabel
-      ? getLiveObservationProviderEvidence(providerSnapshot, capacityModeLabel)
-      : null;
-  const operationalAnalysis = getLiveObservationOperationalAnalysis(
-    providerSnapshot,
-    selectedSnapshot?.live.pressureLevel ?? "normal"
-  );
   const isTrafficPressureElevated =
     trafficIncidentSnapshot !== null && appliedTerraformUpdate === null;
   const terraformUpdatePreview = useMemo(() => {
@@ -200,15 +185,27 @@ export function LiveObservationModal({
       return null;
     }
   }, [terraformFiles, trafficIncidentSnapshot]);
-  const aiRecommendationText =
-    aiRecommendation?.recommendations.find((recommendation) =>
-      recommendation.includes("aws_appautoscaling_target.max_capacity")
-    ) ??
-    (isTrafficPressureElevated
-      ? terraformUpdatePreview
-        ? `aws_appautoscaling_target.max_capacity = ${terraformUpdatePreview.nextMaxCapacity}`
-        : "aws_appautoscaling_target.max_capacity 수동 검토 필요"
-      : operationalAnalysis.terraformAction);
+  const recommendedAction = isTrafficPressureElevated
+    ? {
+        actionLabel: "Project Draft 수정",
+        boundary: "수정안을 저장해도 실제 AWS에는 바로 반영되지 않아요.",
+        description: terraformUpdatePreview
+          ? `최대 실행 수를 ${terraformUpdatePreview.previousMaxCapacity}개에서 ${terraformUpdatePreview.nextMaxCapacity}개로 늘리는 수정안을 검토할 수 있어요.`
+          : "자동으로 바꿀 수 있는 용량 설정을 찾지 못했어요. Terraform 설정을 직접 확인해 주세요.",
+        ...(aiRecommendationState === "error" && aiRecommendationError
+          ? { errorMessage: aiRecommendationError }
+          : {}),
+        ...(aiRecommendation?.llmExplanation?.summary
+          ? { explanation: aiRecommendation.llmExplanation.summary }
+          : aiRecommendation?.summary
+            ? { explanation: aiRecommendation.summary }
+            : {}),
+        isApplying: terraformApplyState === "loading",
+        isLoading: aiRecommendationState === "loading",
+        ...(terraformUpdatePreview ? { onAction: () => void applyTerraformUpdate() } : {}),
+        title: "용량 설정을 확인해 보세요"
+      }
+    : null;
 
   useEffect(() => {
     activeRef.current = true;
@@ -281,7 +278,7 @@ export function LiveObservationModal({
         setAiRecommendationError(
           getApiErrorMessage(
             error,
-            "AI 분석을 불러오지 못했습니다. 기본 Terraform 수정안을 표시합니다."
+            "AI 분석을 불러오지 못했습니다. 준비된 용량 수정안을 직접 확인해 주세요."
           )
         );
       }
@@ -754,103 +751,12 @@ export function LiveObservationModal({
               snapshot={selectedSnapshot}
             />
           ) : null}
-
           {selectedDeployment ? (
-            <details
-              aria-label="실시간 운영 분석"
-              open={isTrafficPressureElevated}
-              className={styles.liveObservationMetricsSection}
-            >
-              <summary className={styles.liveObservationMetricsHeader}>
-                <div>
-                  <span className={styles.liveObservationSectionLabel}>운영 분석</span>
-                  <h3>운영 분석</h3>
-                </div>
-                <span data-status={selectedSnapshot?.status ?? "idle"}>
-                  {selectedSnapshot?.status === "active" ? "LIVE" : "관측 대기"}
-                </span>
-              </summary>
-              <div className={styles.liveObservationAnalysisGrid}>
-                <article
-                  className={styles.liveObservationAnalysisStatus}
-                  data-analysis-state={operationalAnalysis.state}
-                >
-                  <span>현재 인프라 상태</span>
-                  <strong>{operationalAnalysis.stateLabel}</strong>
-                  <small>
-                    요청 {selectedSnapshot?.live.acceptedEventCount ?? "—"} ·{" "}
-                    {selectedSnapshot
-                      ? `${selectedSnapshot.live.rollingRequestsPerSecond.toFixed(1)} 요청/초`
-                      : "—"}{" "}
-                    · {providerEvidence?.stateLabel ?? "수집 대기"}
-                  </small>
-                </article>
-                <article>
-                  <span>용량 및 스케일링</span>
-                  <strong>{operationalAnalysis.capacity}</strong>
-                  <small>
-                    실행 / 희망 / 최대 · {capacityModeLabel ?? "확인 중"} · 확장 이력{" "}
-                    {operationalAnalysis.scaleEventCount}건
-                  </small>
-                </article>
-                <article>
-                  <span>병목과 장애</span>
-                  <strong>{operationalAnalysis.bottleneckDetail}</strong>
-                  <small>오류율 · p95 · 비정상 Task</small>
-                </article>
-                <article>
-                  <span>비용 영향</span>
-                  <strong>{operationalAnalysis.costImpact}</strong>
-                  <small>{operationalAnalysis.costDetail}</small>
-                </article>
-                <article className={styles.liveObservationAnalysisRecommendation}>
-                  <div>
-                    <span>AI 개선 권장사항</span>
-                    <strong>{aiRecommendationText}</strong>
-                    {aiRecommendationState === "loading" ? (
-                      <small>실시간 지표와 배포 Architecture를 AI가 분석하고 있습니다.</small>
-                    ) : null}
-                    {aiRecommendationState === "error" ? (
-                      <small role="alert">{aiRecommendationError}</small>
-                    ) : null}
-                    <WorkspaceAiExplanation explanation={aiRecommendation?.llmExplanation} />
-                  </div>
-                  <button
-                    className={styles.liveObservationSecondaryButton}
-                    disabled={
-                      !trafficIncidentSnapshot ||
-                      terraformApplyState === "loading" ||
-                      appliedTerraformUpdate !== null
-                    }
-                    onClick={() => void applyTerraformUpdate()}
-                    type="button"
-                  >
-                    {appliedTerraformUpdate
-                      ? "Terraform 수정 완료"
-                      : terraformApplyState === "loading"
-                        ? "Project Draft 저장 중..."
-                        : "Terraform 수정 적용"}
-                  </button>
-                  <small>
-                    Project Draft만 수정 · 자동 배포하지 않음 ·{" "}
-                    {operationalAnalysis.terraformAction}
-                  </small>
-                </article>
-              </div>
-            </details>
-          ) : null}
-          {providerLogs.length > 0 ? (
-            <details className={styles.liveObservationLogs}>
-              <summary>최근 런타임 로그 {providerLogs.length}건</summary>
-              <ol>
-                {providerLogs.map((entry, index) => (
-                  <li key={`${entry.timestamp}-${index}`}>
-                    <time dateTime={entry.timestamp}>{formatTimestamp(entry.timestamp)}</time>
-                    <code>{entry.message}</code>
-                  </li>
-                ))}
-              </ol>
-            </details>
+            <LiveObservationSignalDashboard
+              deployment={selectedDeployment}
+              recommendedAction={recommendedAction}
+              snapshot={selectedSnapshot}
+            />
           ) : null}
         </main>
 

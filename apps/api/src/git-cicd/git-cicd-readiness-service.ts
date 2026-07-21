@@ -52,8 +52,7 @@ import {
 } from "../releases/project-release-ledger-service.js";
 import { renderPreflightBuildspec } from "../releases/preflight-buildspec.js";
 import {
-  createDeploymentTargetIdentity,
-  resolveAwsDeploymentTargetIdentity
+  createDeploymentTargetIdentity
 } from "../runtime-convergence/deployment-target-identity.js";
 import { resolveCurrentRepositoryAnalysis } from "../source-repositories/current-repository-analysis.js";
 import { selectProjectDeliverySourceRepository } from "../delivery/project-delivery-source-repository.js";
@@ -334,7 +333,6 @@ export function createGitCicdReadinessService(options: {
         preferredConnection,
         !reconcileTarget
       );
-      let targetReconciled = false;
       const checkedAt = now();
       const selection = toSelectedApplyPlan(deploymentEvidence);
       if (reconcileTarget && selection) {
@@ -349,7 +347,6 @@ export function createGitCicdReadinessService(options: {
         });
         if (reconciledTarget) {
           target = reconciledTarget;
-          targetReconciled = true;
         }
       }
       const targetConnection = target?.connectionId
@@ -366,11 +363,8 @@ export function createGitCicdReadinessService(options: {
       const items = createReadinessItems({
         deploymentEvidence,
         sourceRepository,
-        buildEnvironment,
         target,
         targetConnection,
-        targetReconciled,
-        acceptPersistedTargetIdentity: !reconcileTarget,
         initialApplicationReleaseApplicable:
           !target || target.runtimeTargetKind === "ecs_fargate",
         initialApplicationReleaseReady
@@ -1298,59 +1292,40 @@ function resolvePackageManager(path: string): PackageManagerKind | null {
 function createReadinessItems(input: {
   deploymentEvidence: DeploymentEvidence;
   sourceRepository: RepositoryMonitoringRecord | undefined;
-  buildEnvironment: ProjectBuildEnvironmentRecord | undefined;
   target: ProjectDeploymentTargetRecord | undefined;
   targetConnection: VerifiedConnectionRecord | undefined;
-  targetReconciled: boolean;
-  acceptPersistedTargetIdentity: boolean;
   initialApplicationReleaseApplicable: boolean;
   initialApplicationReleaseReady: boolean;
 }): GitCicdReadinessItem[] {
   const monitoringReady = hasValidMonitoringConfig(input.sourceRepository);
   const targetMissingKeys: GitCicdReadinessItem["missingKeys"] = [];
-  const deploymentConnection = input.deploymentEvidence.connection;
-  const persistedTargetIdentityReady = hasValidPersistedDeploymentTargetIdentity(
-    input.target,
-    input.targetConnection
+  const awsConnectionReady = Boolean(
+    input.target &&
+      input.targetConnection &&
+      input.target.provider === "aws" &&
+      input.target.connectionId === input.targetConnection.id &&
+      input.target.region === input.targetConnection.region
   );
-  const runtimeTargetReady =
-    persistedTargetIdentityReady &&
-    (input.targetReconciled || input.acceptPersistedTargetIdentity);
-  const targetConnectionReady = !input.target
-    ? true
-    : Boolean(
-        input.targetConnection &&
-          deploymentConnection &&
-          input.targetConnection.id === deploymentConnection.id &&
-          input.target.connectionId === deploymentConnection.id &&
-          input.target.region === input.targetConnection.region
-      );
-  if (!deploymentConnection || !targetConnectionReady) {
+  const runtimeTargetReady = Boolean(
+    input.target &&
+      ["ecs_fargate", "lambda", "ec2_asg", "static_site"].includes(
+        input.target.runtimeTargetKind
+      )
+  );
+  const buildConfigReady = hasValidConfirmedBuildConfigForRepository(
+    input.target,
+    input.sourceRepository
+  );
+  if (!awsConnectionReady) {
     targetMissingKeys.push("aws_connection");
   }
-  if (
-    !hasValidEcsFargateBuildConfig(input.target?.confirmedBuildConfig) ||
-    input.buildEnvironment?.status !== "ready" ||
-    !hasCurrentRepositoryAccessVerification(
-      input.buildEnvironment,
-      input.sourceRepository,
-      input.target?.confirmedBuildConfig ?? null
-    ) ||
-    input.buildEnvironment.awsConnectionId !== deploymentConnection?.id
-  ) {
+  if (!runtimeTargetReady || !buildConfigReady) {
     targetMissingKeys.push("build_config");
   }
-  if (
-    !runtimeTargetReady
-  ) {
-    targetMissingKeys.push("runtime_config");
-  }
-  if (
-    !runtimeTargetReady ||
-    !hasSafeOutputUrl(input.target?.runtimeConfig?.outputUrl)
-  ) {
-    targetMissingKeys.push("output_url");
-  }
+  const targetCompletedCount =
+    (awsConnectionReady ? 2 : 0) +
+    (runtimeTargetReady ? 1 : 0) +
+    (buildConfigReady ? 1 : 0);
 
   const initialApplicationReleaseItems: GitCicdReadinessItem[] =
     input.initialApplicationReleaseApplicable
@@ -1391,7 +1366,7 @@ function createReadinessItems(input: {
       key: "deployment_target",
       label: "배포 타깃",
       status: targetMissingKeys.length === 0 ? "ready" : "action_required",
-      completedCount: 4 - targetMissingKeys.length,
+      completedCount: targetCompletedCount,
       totalCount: 4,
       missingKeys: targetMissingKeys,
       action: resolveDeploymentTargetAction(targetMissingKeys)
@@ -1401,37 +1376,24 @@ function createReadinessItems(input: {
   return items;
 }
 
-function hasValidPersistedDeploymentTargetIdentity(
+function hasValidConfirmedBuildConfigForRepository(
   target: ProjectDeploymentTargetRecord | undefined,
-  connection: VerifiedConnectionRecord | undefined
+  sourceRepository: RepositoryMonitoringRecord | undefined
 ): boolean {
-  if (
-    !target ||
-    !connection ||
-    target.provider !== "aws" ||
-    target.connectionId !== connection.id ||
-    target.region !== connection.region ||
-    target.runtimeTargetKind !== "ecs_fargate" ||
-    target.runtimeConfig?.runtimeTargetKind !== "ecs_fargate" ||
-    target.runtimeTarget?.adapterKind !== "ecs_service_fargate" ||
-    !isSha256(target.deploymentTargetFingerprint)
-  ) {
-    return false;
-  }
+  const config = target?.confirmedBuildConfig;
+  if (!target || !config || !sourceRepository?.analysisRevision) return false;
   try {
-    resolveAwsDeploymentTargetIdentity({
-      projectId: target.projectId,
-      accountId: connection.accountId,
-      region: connection.region,
-      runtimeConfig: target.runtimeConfig,
-      runtimeTarget: target.runtimeTarget,
-      healthCheckPath: target.confirmedBuildConfig?.healthCheckPath,
-      persistedDeploymentTargetFingerprint: target.deploymentTargetFingerprint
-    });
-    return true;
+    if (target.runtimeTargetKind === "ecs_fargate") {
+      if (!hasValidEcsFargateBuildConfig(config)) return false;
+    } else {
+      validateConfirmedBuildConfig(target.runtimeTargetKind, config);
+    }
   } catch {
     return false;
   }
+  return (
+    config.confirmedCommitSha.toLowerCase() === sourceRepository.analysisRevision.toLowerCase()
+  );
 }
 
 function hasCurrentRepositoryAccessVerification(
@@ -1463,7 +1425,7 @@ function createReadinessItem(input: {
   key: Exclude<GitCicdReadinessItem["key"], "deployment_target">;
   label: string;
   ready: boolean;
-  action: Exclude<GitCicdReadinessAction, "select_aws_connection" | "confirm_build_config" | "inspect_runtime_outputs" | "inspect_output_url">;
+  action: Exclude<GitCicdReadinessAction, "select_aws_connection" | "confirm_build_config">;
   recommendedDeploymentScope?: "application" | "full_stack" | undefined;
 }): GitCicdReadinessItem {
   return {
@@ -1483,8 +1445,6 @@ function resolveDeploymentTargetAction(
 ): GitCicdReadinessAction | null {
   if (missingKeys.includes("aws_connection")) return "select_aws_connection";
   if (missingKeys.includes("build_config")) return "confirm_build_config";
-  if (missingKeys.includes("runtime_config")) return "inspect_runtime_outputs";
-  if (missingKeys.includes("output_url")) return "inspect_output_url";
   return null;
 }
 

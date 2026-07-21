@@ -46,8 +46,14 @@ export type AwsConnectionTester = {
 export type TestAwsConnectionOptions = {
   createRoleSessionName?: () => string;
   maxAssumeRoleAttempts?: number;
+  reportFailure?: AwsConnectionFailureReporter;
   retryDelayMs?: number;
 };
+
+export type AwsConnectionFailureReporter = (
+  stage: AwsConnectionFailureStage,
+  error: unknown
+) => void;
 
 export class AwsConnectionTestError extends Error {
   constructor(message: string) {
@@ -55,6 +61,18 @@ export class AwsConnectionTestError extends Error {
     this.name = "AwsConnectionTestError";
   }
 }
+
+export type AwsConnectionFailureStage =
+  | "assume_role"
+  | "external_id_check"
+  | "get_caller_identity";
+
+export type AwsConnectionFailureDiagnostic = {
+  readonly errorName: string;
+  readonly httpStatusCode?: number | undefined;
+  readonly requestId?: string | undefined;
+  readonly stage: AwsConnectionFailureStage;
+};
 
 export function createAwsConnectionTester(
   gateway: AwsConnectionStsGateway = createAwsSdkStsGateway()
@@ -72,6 +90,7 @@ export async function testAwsConnection(
   options: TestAwsConnectionOptions = {}
 ): Promise<TestAwsConnectionResponse> {
   const roleSessionName = options.createRoleSessionName?.() ?? createDefaultRoleSessionName();
+  const reportFailure = options.reportFailure ?? reportAwsConnectionFailure;
 
   try {
     if (input.region !== supportedAwsConnectionRegion) {
@@ -92,13 +111,20 @@ export async function testAwsConnection(
       gateway,
       {
         maxAttempts: options.maxAssumeRoleAttempts ?? 4,
+        reportFailure,
         retryDelayMs: options.retryDelayMs ?? 1_000
       }
     );
-    const identity = await gateway.getCallerIdentity({
-      region: input.region,
-      credentials
-    });
+    let identity: AwsCallerIdentity;
+    try {
+      identity = await gateway.getCallerIdentity({
+        region: input.region,
+        credentials
+      });
+    } catch (error) {
+      reportFailure("get_caller_identity", error);
+      throw error;
+    }
     const expectedAccountId = getAwsAccountIdFromRoleArn(input.roleArn);
 
     if (identity.accountId !== expectedAccountId) {
@@ -111,7 +137,8 @@ export async function testAwsConnection(
         region: input.region,
         roleSessionName
       },
-      gateway
+      gateway,
+      reportFailure
     );
 
     return {
@@ -139,6 +166,7 @@ async function assumeRoleWithRetry(
   gateway: AwsConnectionStsGateway,
   options: {
     maxAttempts: number;
+    reportFailure: AwsConnectionFailureReporter;
     retryDelayMs: number;
   }
 ): Promise<AwsTemporaryCredentials> {
@@ -152,6 +180,7 @@ async function assumeRoleWithRetry(
       lastError = error;
 
       if (attempt === maxAttempts || error instanceof AwsConnectionTestError) {
+        options.reportFailure("assume_role", error);
         throw error;
       }
 
@@ -233,13 +262,15 @@ export async function assertAwsRoleRequiresExternalId(
     region: string;
     roleSessionName: string;
   },
-  gateway: AwsConnectionStsGateway
+  gateway: AwsConnectionStsGateway,
+  reportFailure: AwsConnectionFailureReporter = reportAwsConnectionFailure
 ): Promise<void> {
   try {
     await gateway.assumeRole(input);
     throw new AwsConnectionTestError("AWS Role trust policy must require external ID");
   } catch (error) {
     if (error instanceof AwsConnectionTestError) {
+      reportFailure("external_id_check", error);
       throw error;
     }
 
@@ -247,6 +278,7 @@ export async function assertAwsRoleRequiresExternalId(
       return;
     }
 
+    reportFailure("external_id_check", error);
     throw new AwsConnectionTestError("AWS Role external ID requirement could not be verified");
   }
 }
@@ -264,7 +296,50 @@ export function toAwsConnectionTestError(error: unknown): AwsConnectionTestError
     return new AwsConnectionTestError("AWS caller credentials are invalid or expired");
   }
 
+  if (isAwsSsoCredentialProviderError(error)) {
+    return new AwsConnectionTestError("AWS SSO credentials are unavailable or expired");
+  }
+
+  if (isAwsStsTimeoutError(error)) {
+    return new AwsConnectionTestError("AWS STS request timed out");
+  }
+
+  if (isAwsStsThrottlingError(error)) {
+    return new AwsConnectionTestError("AWS STS request was throttled");
+  }
+
+  if (getErrorName(error) === "ValidationError") {
+    return new AwsConnectionTestError("AWS STS request validation failed");
+  }
+
   return new AwsConnectionTestError("AWS Role connection test failed");
+}
+
+export function createAwsConnectionFailureDiagnostic(
+  stage: AwsConnectionFailureStage,
+  error: unknown
+): AwsConnectionFailureDiagnostic {
+  const metadata = getAwsErrorMetadata(error);
+
+  return {
+    errorName: getErrorName(error) || "UnknownError",
+    ...(metadata.httpStatusCode !== undefined ? { httpStatusCode: metadata.httpStatusCode } : {}),
+    ...(metadata.requestId ? { requestId: metadata.requestId } : {}),
+    stage
+  };
+}
+
+export function reportAwsConnectionFailure(
+  stage: AwsConnectionFailureStage,
+  error: unknown,
+  write: (message: string) => void = console.error
+): void {
+  write(
+    JSON.stringify({
+      event: "aws_connection_failure",
+      ...createAwsConnectionFailureDiagnostic(stage, error)
+    })
+  );
 }
 
 function isAwsAccessDeniedError(error: unknown): boolean {
@@ -297,4 +372,74 @@ function isAwsCredentialError(error: unknown): boolean {
     errorName === "InvalidClientTokenId" ||
     errorName === "UnrecognizedClientException"
   );
+}
+
+function isAwsSsoCredentialProviderError(error: unknown): boolean {
+  const errorName = getErrorName(error);
+
+  return (
+    errorName === "CredentialsProviderError" ||
+    errorName === "TokenProviderError" ||
+    errorName === "SSOProviderInvalidToken"
+  );
+}
+
+function isAwsStsTimeoutError(error: unknown): boolean {
+  const errorName = getErrorName(error);
+  const errorCode = getErrorCode(error);
+
+  return (
+    errorName === "TimeoutError" ||
+    errorName === "NetworkingError" ||
+    errorCode === "ETIMEDOUT" ||
+    errorCode === "ECONNRESET" ||
+    errorCode === "ENOTFOUND"
+  );
+}
+
+function isAwsStsThrottlingError(error: unknown): boolean {
+  const errorName = getErrorName(error);
+
+  return (
+    errorName === "Throttling" ||
+    errorName === "ThrottlingException" ||
+    errorName === "TooManyRequestsException"
+  );
+}
+
+function getErrorName(error: unknown): string {
+  return typeof error === "object" && error !== null && "name" in error ? String(error.name) : "";
+}
+
+function getErrorCode(error: unknown): string {
+  return typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+}
+
+function getAwsErrorMetadata(error: unknown): {
+  readonly httpStatusCode?: number | undefined;
+  readonly requestId?: string | undefined;
+} {
+  if (typeof error !== "object" || error === null || !("$metadata" in error)) {
+    return {};
+  }
+
+  const metadata = error.$metadata;
+
+  if (typeof metadata !== "object" || metadata === null) {
+    return {};
+  }
+
+  const httpStatusCode =
+    "httpStatusCode" in metadata && typeof metadata.httpStatusCode === "number"
+      ? metadata.httpStatusCode
+      : undefined;
+  const requestId =
+    "requestId" in metadata && typeof metadata.requestId === "string"
+      ? metadata.requestId.slice(0, 256)
+      : undefined;
+
+  return {
+    ...(httpStatusCode !== undefined ? { httpStatusCode } : {}),
+    ...(requestId ? { requestId } : {})
+  };
 }

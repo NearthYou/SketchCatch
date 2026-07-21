@@ -7,7 +7,8 @@ import type {
   GitCicdReadinessAction,
   GitCicdReadinessItemKey,
   GitCicdReadinessSnapshot,
-  GitCicdReadinessStatus
+  GitCicdReadinessStatus,
+  ProjectDeliveryBuildVerification
 } from "./index.js";
 
 type IsExactUnion<Actual, Expected> = [Actual] extends [Expected]
@@ -27,7 +28,7 @@ const exactUnionAssertions: [
   >,
   IsExactUnion<
     GitCicdDeploymentTargetReadinessKey,
-    "aws_connection" | "build_config" | "runtime_config" | "output_url"
+    "aws_connection" | "build_config"
   >,
   IsExactUnion<GitCicdReadinessStatus, "ready" | "action_required">,
   IsExactUnion<
@@ -38,8 +39,6 @@ const exactUnionAssertions: [
     | "confirm_monitoring_config"
     | "select_aws_connection"
     | "confirm_build_config"
-    | "inspect_runtime_outputs"
-    | "inspect_output_url"
   >
 ] = [true, true, true, true];
 
@@ -53,9 +52,7 @@ const readinessItemKeys = [
 
 const deploymentTargetKeys = [
   "aws_connection",
-  "build_config",
-  "runtime_config",
-  "output_url"
+  "build_config"
 ] as const satisfies readonly GitCicdDeploymentTargetReadinessKey[];
 
 // @ts-expect-error readiness item keys are a closed union
@@ -88,6 +85,14 @@ const snapshot: GitCicdReadinessSnapshot = {
     }
   ]
 };
+
+const buildVerification = {
+  status: "failed",
+  requestedCommitSha: "a".repeat(40),
+  resolvedCommitSha: null,
+  statusReason: "Repository checkout verification failed",
+  verifiedAt: null
+} satisfies ProjectDeliveryBuildVerification;
 
 test("defines the Git/CI/CD readiness snapshot contract", () => {
   const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
@@ -131,13 +136,12 @@ test("defines the Git/CI/CD readiness snapshot contract", () => {
   ]);
   assert.deepEqual(deploymentTargetKeys, [
     "aws_connection",
-    "build_config",
-    "runtime_config",
-    "output_url"
+    "build_config"
   ]);
   assert.equal(snapshot.ready, false);
   assert.equal(snapshot.initialApplicationReleaseId, null);
   assert.equal(snapshot.items[0]?.recommendedDeploymentScope, "application");
+  assert.equal(buildVerification.status, "failed");
   assert.deepEqual(
     [
       invalidReadinessItemKey,

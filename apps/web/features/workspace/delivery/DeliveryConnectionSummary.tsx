@@ -5,32 +5,33 @@ import styles from "../delivery-center.module.css";
 
 export type DeliveryConnectionSummaryProps = {
   readonly accountLogins: readonly string[];
-  readonly profile: Pick<
-    ProjectDeliveryProfile,
-    "repositoryAnalysisTarget" | "sourceRepository"
-  >;
+  readonly profile: Pick<ProjectDeliveryProfile, "repositoryAnalysisTarget" | "sourceRepository">;
   readonly repositoryHref: string;
+  readonly showHeader?: boolean | undefined;
 };
 
 export function DeliveryConnectionSummary({
   accountLogins,
   profile,
-  repositoryHref
+  repositoryHref,
+  showHeader = true
 }: DeliveryConnectionSummaryProps) {
   const repositoryState = getDeliveryRepositoryPresentationState(profile);
 
   return (
     <section
       className={`${styles.card} ${styles.connectionSummary}`}
-      id="cicd-source-repository"
+      id={showHeader ? "cicd-source-repository" : undefined}
       aria-label="CI/CD 연결 상태"
     >
-      <div className={styles.cardHeading}>
-        <h4>Delivery 연결</h4>
-        <strong data-ready={repositoryState.kind === "connected"}>
-          {repositoryState.kind === "connected" ? "연결됨" : "연결 필요"}
-        </strong>
-      </div>
+      {showHeader ? (
+        <div className={styles.cardHeading}>
+          <h4>Delivery 연결</h4>
+          <strong data-ready={repositoryState.kind === "connected"}>
+            {repositoryState.kind === "connected" ? "연결됨" : "연결 필요"}
+          </strong>
+        </div>
+      ) : null}
       <dl className={styles.connectionFacts}>
         <div>
           <dt>GitHub</dt>
@@ -38,9 +39,7 @@ export function DeliveryConnectionSummary({
             {(accountLogins ?? []).length > 0 ? (
               `${(accountLogins ?? []).join(", ")} · 연결됨`
             ) : (
-              <Link href="/dashboard/settings#github-account-settings-title">
-                GitHub 연결 필요
-              </Link>
+              <Link href="/dashboard/settings#github-account-settings-title">GitHub 연결 필요</Link>
             )}
           </dd>
         </div>
@@ -50,12 +49,16 @@ export function DeliveryConnectionSummary({
             {repositoryState.kind === "connected" ? (
               <>
                 {repositoryState.repository.owner}/{repositoryState.repository.name}
-                {" · "}{repositoryState.repository.defaultBranch}{" · 자동 적용"}
+                {" · "}
+                {repositoryState.repository.defaultBranch}
+                {" · 자동 적용"}
               </>
             ) : repositoryState.kind === "connection_required" ? (
               <>
                 {repositoryState.analysisTarget.owner}/{repositoryState.analysisTarget.name}
-                {" · "}{repositoryState.analysisTarget.branch}{" · "}
+                {" · "}
+                {repositoryState.analysisTarget.branch}
+                {" · "}
                 <Link href={repositoryHref}>PR 권한 연결 필요</Link>
               </>
             ) : (

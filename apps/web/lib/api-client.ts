@@ -24,6 +24,8 @@ const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
   internal_server_error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
   GIT_CICD_SOURCE_REPOSITORY_MISMATCH:
     "현재 Board의 Repository와 요청한 Repository가 다릅니다. Board에서 Repository를 다시 선택하고 CI/CD 정보를 새로고침해 주세요.",
+  GIT_CICD_HANDOFF_CONFIGURATION_STALE:
+    "CI/CD 설정이 변경되었습니다. Delivery 정보를 새로고침하고 다시 검토해 주세요.",
   PUBLIC_REPOSITORY_INPUT_INVALID: "지원하는 GitHub Repository URL과 branch를 확인해주세요.",
   PUBLIC_REPOSITORY_UNAVAILABLE:
     "Repository를 확인할 수 없습니다. URL이 잘못되었거나 비공개 Repository일 수 있습니다.",
@@ -101,6 +103,14 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
     "AWS Role을 AssumeRole할 권한이 없습니다. 로컬 SSO Permission Set 또는 실행 Role에 sts:AssumeRole 권한을 추가하고, 대상 Role Trust Policy의 Principal과 External ID가 현재 연결 정보와 일치하는지 확인해주세요.",
   "AWS caller credentials are invalid or expired":
     "로컬 AWS 자격 증명이 만료되었거나 유효하지 않습니다. AWS SSO를 다시 로그인한 뒤 API 서버를 재시작하고 다시 시도해주세요.",
+  "AWS SSO credentials are unavailable or expired":
+    "AWS SSO 자격 증명을 불러올 수 없거나 로그인 세션이 만료되었습니다. AWS SSO에 다시 로그인한 뒤 재시도해주세요.",
+  "AWS STS request timed out":
+    "AWS STS 연결 시간이 초과되었습니다. 네트워크와 AWS 서비스 상태를 확인한 뒤 다시 시도해주세요.",
+  "AWS STS request was throttled":
+    "AWS STS 요청이 일시적으로 제한되었습니다. 잠시 후 다시 시도해주세요.",
+  "AWS STS request validation failed":
+    "AWS STS 요청 형식이 올바르지 않습니다. Role ARN과 연결 설정을 다시 확인해주세요.",
   "AWS Role external ID requirement could not be verified":
     "AWS Role의 External ID 조건을 확인하지 못했습니다. CloudFormation Stack의 Trust Policy에 SketchCatch External ID 조건이 있는지 확인해주세요.",
   "AWS Role trust policy must require external ID":

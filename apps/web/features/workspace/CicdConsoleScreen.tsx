@@ -22,7 +22,18 @@ import {
   retryGitCicdFrontendRelease
 } from "./api";
 import { CicdHandoffPanel } from "./CicdHandoffPanel";
+import { CicdLoadingState } from "./CicdLoadingState";
 import { CicdPipelineRunsPanel } from "./CicdPipelineRunsPanel";
+import { CicdStatusBoard } from "./CicdStatusBoard";
+import { CicdAccordionSection } from "./CicdAccordionSection";
+import { CicdTaskRow } from "./CicdTaskRow";
+import {
+  getCicdReadinessPresentation,
+  getCicdTargetSettingState,
+  type CicdPhaseId,
+  type CicdPhasePresentation,
+  type CicdSetupDrawerId
+} from "./cicd-readiness-presentation";
 import {
   getCicdPipelineRunState,
   getCicdPollIntervalMs,
@@ -38,6 +49,7 @@ import {
   completeGitCicdReload,
   createGitCicdReloadCoordinator,
   getGitCicdHandoffReadiness,
+  handleGitCicdHandoffCreationError,
   invalidateGitCicdReload,
   isGitCicdHandoffCreationEnabled,
   isGitCicdHandoffReady,
@@ -52,6 +64,7 @@ import {
   getGitCicdLiveObservationSelection
 } from "./cicd-frontend-retry";
 import type { LiveObservationSelection } from "./live-observation";
+import deliveryStyles from "./delivery-center.module.css";
 import styles from "./workspace.module.css";
 
 export type CicdConsoleView = "activity" | "logs";
@@ -63,6 +76,8 @@ export function CicdConsoleScreen({
   isDeliveryProfileRefreshing,
   onOpenDirectDeployment,
   onOpenLiveObservation,
+  onOpenSetup,
+  onRefreshBusyChange,
   onRefreshDeliveryProfile,
   projectId,
   readinessRefreshRequestId = 0
@@ -71,10 +86,12 @@ export function CicdConsoleScreen({
   readonly deliveryProfileErrorMessage: string;
   readonly isVisible: boolean;
   readonly isDeliveryProfileRefreshing: boolean;
-  readonly onOpenDirectDeployment?: (
-    (scope: "application" | "full_stack" | null) => void
-  ) | undefined;
+  readonly onOpenDirectDeployment?:
+    | ((scope: "application" | "full_stack" | null) => void)
+    | undefined;
   readonly onOpenLiveObservation?: ((selection?: LiveObservationSelection) => void) | undefined;
+  readonly onOpenSetup: (drawer: CicdSetupDrawerId) => void;
+  readonly onRefreshBusyChange?: ((isBusy: boolean) => void) | undefined;
   readonly onRefreshDeliveryProfile: () => Promise<ProjectDeliveryProfile | null>;
   readonly projectId: string;
   readonly readinessRefreshRequestId?: number | undefined;
@@ -86,9 +103,7 @@ export function CicdConsoleScreen({
   const [isHandoffReviewOpen, setIsHandoffReviewOpen] = useState(false);
   const [isHandoffBusy, setIsHandoffBusy] = useState(false);
   const [handoffErrorMessage, setHandoffErrorMessage] = useState("");
-  const [commandCopyState, setCommandCopyState] = useState<"idle" | "copied" | "failed">(
-    "idle"
-  );
+  const [commandCopyState, setCommandCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [runs, setRuns] = useState<GitCicdPipelineRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [logs, setLogs] = useState<GitCicdPipelineLog[]>([]);
@@ -99,6 +114,7 @@ export function CicdConsoleScreen({
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [consoleDataFreshKey, setConsoleDataFreshKey] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isReloadReservedOrInFlight, setIsReloadReservedOrInFlightState] = useState(false);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [isFrontendRetrying, setIsFrontendRetrying] = useState(false);
   const [frontendRetryError, setFrontendRetryError] = useState("");
@@ -121,30 +137,26 @@ export function CicdConsoleScreen({
   const { logsErrorMessage, permissionFailure, screenErrorMessage } = requestState;
   const repository = deliveryProfile.sourceRepository;
   const config = deliveryProfile.monitoringConfig;
+  const configurationPreview = deliveryProfile.handoffConfigurationPreview;
   const readiness = deliveryProfile.readiness;
   const isReadinessRefreshing = isDeliveryProfileRefreshing;
   const readinessErrorMessage = deliveryProfileErrorMessage;
+  const setReloadReservedOrInFlight = useCallback((isBusy: boolean): void => {
+    reloadReservedOrInFlightRef.current = isBusy;
+    setIsReloadReservedOrInFlightState(isBusy);
+  }, []);
+  const isFullRefreshUnavailable =
+    !isVisible ||
+    isInitialLoading ||
+    isRefreshing ||
+    isReadinessRefreshing ||
+    isReloadReservedOrInFlight;
 
-  const runState = useMemo(
-    () => getCicdPipelineRunState(runs, selectedRunId),
-    [runs, selectedRunId]
-  );
-  const selectedRun = runState.selectedRun;
-  const selectedRunIdForLogs = selectedRun?.id ?? null;
-  const selectedLogRevision = selectedRun?.logRevision ?? null;
-  const visibleLogs =
-    logsOwner.runId === selectedRunIdForLogs && logsOwner.logRevision === selectedLogRevision
-      ? logs
-      : [];
-  const outputLinks = useMemo(() => getSafePipelineRunLinks(selectedRun), [selectedRun]);
-  const liveObservationSelection = useMemo(
-    () => getGitCicdLiveObservationSelection(selectedRun),
-    [selectedRun]
-  );
-  const openSelectedLiveObservation =
-    liveObservationSelection && onOpenLiveObservation
-      ? () => onOpenLiveObservation(liveObservationSelection)
-      : undefined;
+  useEffect(() => {
+    onRefreshBusyChange?.(isFullRefreshUnavailable);
+  }, [isFullRefreshUnavailable, onRefreshBusyChange]);
+  useEffect(() => () => onRefreshBusyChange?.(true), [onRefreshBusyChange]);
+
   const sourceDeployment = useMemo(
     () => selectGitCicdSourceDeployment(deployments, readiness?.sourceDeploymentId ?? null),
     [deployments, readiness?.sourceDeploymentId]
@@ -164,18 +176,12 @@ export function CicdConsoleScreen({
     isRefreshing: isReadinessRefreshing,
     hasError: readinessErrorMessage !== ""
   });
-  const consoleRequestKey = `${projectId}:${loadRequestId}:${readinessRefreshRequestId}:${readiness.checkedAt}`;
+  const consoleRequestKey = `${projectId}:${loadRequestId}:${readinessRefreshRequestId}`;
   const isConsoleDataFresh = isVisible && consoleDataFreshKey === consoleRequestKey;
   const infrastructureDeploymentCommand = useMemo(
     () => createInfrastructureDeploymentCommand(),
     []
   );
-  const currentHandoff = useMemo(() => {
-    const sorted = [...handoffs].sort((left, right) =>
-      right.updatedAt.localeCompare(left.updatedAt)
-    );
-    return sorted.find((handoff) => handoff.id === selectedHandoffId) ?? sorted[0] ?? null;
-  }, [handoffs, selectedHandoffId]);
   const existingHandoff = useMemo(
     () =>
       sourceDeployment && readiness?.approvedApplyPlanArtifactId
@@ -188,8 +194,44 @@ export function CicdConsoleScreen({
         : null,
     [handoffs, readiness?.approvedApplyPlanArtifactId, sourceDeployment]
   );
+  const currentHandoff = useMemo(() => {
+    const sorted = [...handoffs].sort((left, right) =>
+      right.updatedAt.localeCompare(left.updatedAt)
+    );
+    return (
+      sorted.find((handoff) => handoff.id === selectedHandoffId) ??
+      existingHandoff ??
+      sorted[0] ??
+      null
+    );
+  }, [existingHandoff, handoffs, selectedHandoffId]);
+  const handoffRuns = useMemo(
+    () => (currentHandoff ? runs.filter((run) => run.handoffId === currentHandoff.id) : []),
+    [currentHandoff, runs]
+  );
+  const runState = useMemo(
+    () => getCicdPipelineRunState(handoffRuns, selectedRunId),
+    [handoffRuns, selectedRunId]
+  );
+  const selectedRun = runState.selectedRun;
+  const selectedRunIdForLogs = selectedRun?.id ?? null;
+  const selectedLogRevision = selectedRun?.logRevision ?? null;
+  const visibleLogs =
+    logsOwner.runId === selectedRunIdForLogs && logsOwner.logRevision === selectedLogRevision
+      ? logs
+      : [];
+  const outputLinks = useMemo(() => getSafePipelineRunLinks(selectedRun), [selectedRun]);
+  const liveObservationSelection = useMemo(
+    () => getGitCicdLiveObservationSelection(selectedRun),
+    [selectedRun]
+  );
+  const openSelectedLiveObservation =
+    liveObservationSelection && onOpenLiveObservation
+      ? () => onOpenLiveObservation(liveObservationSelection)
+      : undefined;
   const canCreateHandoff = isGitCicdHandoffCreationEnabled({
     hasApprovedApplyPlanArtifact: Boolean(readiness?.approvedApplyPlanArtifactId),
+    hasConfigurationPreview: configurationPreview !== null,
     hasExistingHandoff: existingHandoff !== null,
     hasMonitoringConfig: config !== null,
     hasRepository: repository !== null,
@@ -199,7 +241,6 @@ export function CicdConsoleScreen({
     isReadinessReady: handoffReady
   });
   const githubAccountSettingsHref = "/dashboard/settings#github-account-settings-title";
-
   const requestReadinessReload = useCallback((): void => {
     if (
       !isVisible ||
@@ -209,11 +250,17 @@ export function CicdConsoleScreen({
     ) {
       return;
     }
-    reloadReservedOrInFlightRef.current = true;
+    setReloadReservedOrInFlight(true);
     setConsoleDataFreshKey(null);
     setLoadRequestId((requestId) => requestId + 1);
     void onRefreshDeliveryProfile();
-  }, [isReadinessRefreshing, isRefreshing, isVisible, onRefreshDeliveryProfile]);
+  }, [
+    isReadinessRefreshing,
+    isRefreshing,
+    isVisible,
+    onRefreshDeliveryProfile,
+    setReloadReservedOrInFlight
+  ]);
 
   const loadRuns = useCallback(async (): Promise<GitCicdPipelineRun[]> => {
     const response = await listGitCicdPipelineRuns(projectId, { limit: 50 });
@@ -231,9 +278,7 @@ export function CicdConsoleScreen({
     const loadedHandoffs = await listGitCicdHandoffs(projectId);
     setHandoffs(loadedHandoffs);
     setSelectedHandoffId((selected) =>
-      loadedHandoffs.some((handoff) => handoff.id === selected)
-        ? selected
-        : (loadedHandoffs[0]?.id ?? null)
+      loadedHandoffs.some((handoff) => handoff.id === selected) ? selected : null
     );
   }, [projectId]);
 
@@ -242,6 +287,7 @@ export function CicdConsoleScreen({
       !canCreateHandoff ||
       !repository ||
       !config ||
+      !configurationPreview ||
       !sourceDeployment ||
       !readiness?.approvedApplyPlanArtifactId
     ) {
@@ -255,6 +301,7 @@ export function CicdConsoleScreen({
         projectId,
         ...buildGitCicdHandoffRequest({
           approvedApplyPlanArtifactId: readiness.approvedApplyPlanArtifactId,
+          configurationPreview,
           deployment: sourceDeployment,
           monitoringConfig: config,
           repository
@@ -265,7 +312,7 @@ export function CicdConsoleScreen({
       setIsHandoffReviewOpen(false);
     } catch (error) {
       setHandoffErrorMessage(
-        getApiErrorMessage(error, "CI/CD 배포 Pull Request를 생성하지 못했습니다.")
+        await handleGitCicdHandoffCreationError(error, onRefreshDeliveryProfile)
       );
     } finally {
       setIsHandoffBusy(false);
@@ -273,6 +320,8 @@ export function CicdConsoleScreen({
   }, [
     config,
     canCreateHandoff,
+    configurationPreview,
+    onRefreshDeliveryProfile,
     projectId,
     readiness?.approvedApplyPlanArtifactId,
     repository,
@@ -306,7 +355,7 @@ export function CicdConsoleScreen({
     if (reloadStart.generation === null) return;
     const reloadGeneration = reloadStart.generation;
     reloadCoordinatorRef.current = reloadStart.coordinator;
-    reloadReservedOrInFlightRef.current = true;
+    setReloadReservedOrInFlight(true);
     let cancelled = false;
 
     async function loadConsole(): Promise<void> {
@@ -316,48 +365,55 @@ export function CicdConsoleScreen({
       }
 
       async function loadConsoleData(): Promise<{
-        readonly initialRuns: Awaited<ReturnType<typeof listGitCicdPipelineRuns>>;
+        readonly initialRuns: GitCicdPipelineRun[];
         readonly loadedDeployments: Deployment[];
         readonly loadedHandoffs: GitCicdHandoff[];
+        readonly refreshErrorMessage: string | null;
       }> {
-        const [initialRuns, loadedDeployments, loadedHandoffs] = await Promise.all([
-          listGitCicdPipelineRuns(projectId, { limit: 50 }),
+        const [pipelineResult, loadedDeployments, loadedHandoffs] = await Promise.all([
+          readinessRefreshRequestId > 0
+            ? refreshProjectGitCicdPipelineRuns(projectId)
+            : listGitCicdPipelineRuns(projectId, { limit: 50 }),
           listDeployments(projectId),
           listGitCicdHandoffs(projectId)
         ]);
 
         return {
-          initialRuns,
+          initialRuns: pipelineResult.runs,
           loadedDeployments,
-          loadedHandoffs
+          loadedHandoffs,
+          refreshErrorMessage:
+            "targets" in pipelineResult
+              ? (pipelineResult.targets.find((target) => target.errorMessage)?.errorMessage ?? null)
+              : null
         };
       }
 
       const [consoleResult] = await Promise.allSettled([loadConsoleData()]);
-      if (
-        cancelled ||
-        !isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)
-      ) {
+      if (cancelled || !isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)) {
         return;
       }
 
       if (consoleResult.status === "fulfilled") {
-        const {
-          initialRuns,
-          loadedDeployments,
-          loadedHandoffs
-        } = consoleResult.value;
+        const { initialRuns, loadedDeployments, loadedHandoffs, refreshErrorMessage } =
+          consoleResult.value;
         setDeployments(loadedDeployments);
         setHandoffs(loadedHandoffs);
         setSelectedHandoffId((selected) =>
-          loadedHandoffs.some((handoff) => handoff.id === selected)
-            ? selected
-            : (loadedHandoffs[0]?.id ?? null)
+          loadedHandoffs.some((handoff) => handoff.id === selected) ? selected : null
         );
         hasExplicitRunSelectionRef.current = false;
-        applyRuns(initialRuns.runs);
+        applyRuns(initialRuns);
         setConsoleDataFreshKey(consoleRequestKey);
         dispatchRequestState({ type: "success", scope: "list" });
+        if (refreshErrorMessage) {
+          dispatchRequestState({
+            type: "failure",
+            scope: "screen",
+            message: refreshErrorMessage,
+            permissionFailure: false
+          });
+        }
       } else {
         setConsoleDataFreshKey(null);
         dispatchRequestState({
@@ -373,7 +429,7 @@ export function CicdConsoleScreen({
         reloadCoordinatorRef.current,
         reloadGeneration
       );
-      reloadReservedOrInFlightRef.current = false;
+      setReloadReservedOrInFlight(false);
       setIsInitialLoading(false);
     }
 
@@ -381,11 +437,11 @@ export function CicdConsoleScreen({
     return () => {
       cancelled = true;
       reloadCoordinatorRef.current = invalidateGitCicdReload(reloadCoordinatorRef.current);
-      reloadReservedOrInFlightRef.current = false;
+      setReloadReservedOrInFlight(false);
       setConsoleDataFreshKey(null);
       setIsRefreshing(false);
     };
-  }, [applyRuns, consoleRequestKey, isVisible, projectId]);
+  }, [applyRuns, consoleRequestKey, isVisible, projectId, setReloadReservedOrInFlight]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -423,87 +479,6 @@ export function CicdConsoleScreen({
     }
   }, [applyRuns, isVisible, loadRuns]);
 
-  const manualRefresh = useCallback(async (): Promise<void> => {
-    if (
-      !isVisible ||
-      document.visibilityState !== "visible" ||
-      reloadReservedOrInFlightRef.current ||
-      isRefreshing ||
-      isReadinessRefreshing
-    ) {
-      return;
-    }
-    const reloadStart = beginGitCicdReload(reloadCoordinatorRef.current);
-    if (reloadStart.generation === null) return;
-    const reloadGeneration = reloadStart.generation;
-    reloadCoordinatorRef.current = reloadStart.coordinator;
-    reloadReservedOrInFlightRef.current = true;
-    setIsRefreshing(true);
-    setConsoleDataFreshKey(null);
-    const [consoleResult, deliveryResult] = await Promise.allSettled([
-      Promise.all([
-        refreshProjectGitCicdPipelineRuns(projectId),
-        listDeployments(projectId),
-        listGitCicdHandoffs(projectId)
-      ]),
-      onRefreshDeliveryProfile()
-    ]);
-
-    if (!isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)) return;
-
-    if (consoleResult.status === "fulfilled") {
-      const [result, loadedDeployments, loadedHandoffs] = consoleResult.value;
-      applyRuns(result.runs);
-      setDeployments(loadedDeployments);
-      setHandoffs(loadedHandoffs);
-      setSelectedHandoffId((selected) =>
-        loadedHandoffs.some((handoff) => handoff.id === selected)
-          ? selected
-          : (loadedHandoffs[0]?.id ?? null)
-      );
-      setConsoleDataFreshKey(
-        deliveryResult.status === "fulfilled" && deliveryResult.value !== null
-          ? consoleRequestKey
-          : null
-      );
-      dispatchRequestState({ type: "success", scope: "refresh" });
-      const errorMessage = result.targets.find((target) => target.errorMessage)?.errorMessage;
-      if (errorMessage) {
-        dispatchRequestState({
-          type: "failure",
-          scope: "screen",
-          message: errorMessage,
-          permissionFailure: false
-        });
-      }
-    } else {
-      setConsoleDataFreshKey(null);
-      dispatchRequestState({
-        type: "failure",
-        scope: "screen",
-        message: getApiErrorMessage(
-          consoleResult.reason,
-          "CI/CD 상태를 갱신하지 못했습니다."
-        ),
-        permissionFailure: isGitHubPermissionFailure(consoleResult.reason)
-      });
-    }
-    reloadCoordinatorRef.current = completeGitCicdReload(
-      reloadCoordinatorRef.current,
-      reloadGeneration
-    );
-    reloadReservedOrInFlightRef.current = false;
-    setIsRefreshing(false);
-  }, [
-    applyRuns,
-    consoleRequestKey,
-    isReadinessRefreshing,
-    isRefreshing,
-    isVisible,
-    onRefreshDeliveryProfile,
-    projectId
-  ]);
-
   const copyInfrastructureDeploymentCommand = useCallback(async (): Promise<void> => {
     try {
       await copyTextToClipboard(infrastructureDeploymentCommand);
@@ -521,9 +496,7 @@ export function CicdConsoleScreen({
       await retryGitCicdFrontendRelease(selectedRun.id);
       applyRuns(await loadRuns());
     } catch (error) {
-      setFrontendRetryError(
-        getApiErrorMessage(error, "웹 배포 재시도를 시작하지 못했습니다.")
-      );
+      setFrontendRetryError(getApiErrorMessage(error, "웹 배포 재시도를 시작하지 못했습니다."));
     } finally {
       setIsFrontendRetrying(false);
     }
@@ -631,93 +604,282 @@ export function CicdConsoleScreen({
     };
   }, [activeView, isVisible, logsReloadRequestId, runs, selectedLogRevision, selectedRunId]);
 
+  const consoleError = permissionFailure ? (
+    <section className={styles.deploymentStageAlert} role="alert">
+      <strong>GitHub 권한을 확인해 주세요.</strong>
+      <p>{screenErrorMessage}</p>
+      <Link className={styles.deploymentPrimaryButton} href={githubAccountSettingsHref}>
+        GitHub App 설정 열기
+      </Link>
+      <button
+        className={styles.deploymentSecondaryButton}
+        onClick={requestReadinessReload}
+        type="button"
+      >
+        다시 시도
+      </button>
+    </section>
+  ) : screenErrorMessage ? (
+    <p className={styles.deploymentStageAlert} role="alert">
+      {screenErrorMessage}
+    </p>
+  ) : null;
+
   if (isInitialLoading) {
-    return (
-      <div className={styles.cicdState} role="status">
-        CI/CD 정보를 불러오는 중입니다.
-      </div>
-    );
+    return <CicdLoadingState />;
   }
 
+  const isConsoleDataUnavailable = !isConsoleDataFresh && screenErrorMessage !== "";
+  const presentation = getCicdReadinessPresentation({
+    currentHandoff: existingHandoff,
+    profile: deliveryProfile,
+    runs
+  });
+  const sourcePhase = getPhase(presentation.phases, "source");
+  const targetPhase = getPhase(presentation.phases, "target");
+  const prPhase = getPhase(presentation.phases, "pr");
+  const pipelinePhase = getPhase(presentation.phases, "pipeline");
+  const repositoryConnected = repository !== null;
+  const monitoringReady =
+    repositoryConnected &&
+    config !== null &&
+    readiness.items.find((item) => item.key === "monitoring_config")?.status === "ready";
+  const sourceSetupComplete = sourcePhase.statusLabel === "완료";
+  const target = deliveryProfile.deploymentTarget;
+  const targetSettingState = getCicdTargetSettingState(deliveryProfile);
+  const deploymentSucceeded =
+    sourceDeployment?.status === "SUCCESS" || readiness.initialApplicationReleaseId !== null;
+
+  function activateCurrentTask(): void {
+    const action = presentation.currentTask.action;
+    if (action.kind === "drawer") {
+      onOpenSetup(action.drawer);
+      return;
+    }
+    if (action.kind === "direct_deployment") {
+      onOpenDirectDeployment?.(action.scope);
+      return;
+    }
+    if (action.kind === "review_pr") {
+      setIsHandoffReviewOpen(true);
+      window.requestAnimationFrame(() => openAccordionSection("cicd-handoff"));
+      return;
+    }
+    openAccordionSection(action.sectionId);
+  }
+
+  const isCurrentTaskUnavailable =
+    isHandoffBusy ||
+    (presentation.currentTask.action.kind === "review_pr" && !canCreateHandoff) ||
+    (presentation.currentTask.action.kind === "direct_deployment" && !onOpenDirectDeployment);
+
   return (
-    <div className={styles.cicdConsole}>
-      {permissionFailure ? (
-        <section className={styles.deploymentStageAlert} role="alert">
-          <strong>GitHub 권한을 확인해 주세요.</strong>
-          <p>{screenErrorMessage}</p>
-          <Link className={styles.deploymentPrimaryButton} href={githubAccountSettingsHref}>
-            GitHub App 설정 열기
-          </Link>
-          <button
-            className={styles.deploymentSecondaryButton}
-            onClick={requestReadinessReload}
-            type="button"
-          >
-            다시 시도
-          </button>
-        </section>
-      ) : screenErrorMessage ? (
-        <p className={styles.deploymentStageAlert} role="alert">
-          {screenErrorMessage}
-        </p>
+    <div className={`${styles.cicdConsole} ${deliveryStyles.console}`}>
+      {consoleError}
+
+      {!isConsoleDataUnavailable ? (
+        <CicdStatusBoard
+          disabled={isCurrentTaskUnavailable}
+          onActivateCurrentTask={activateCurrentTask}
+          presentation={presentation}
+          suppressPrimaryAction={isHandoffReviewOpen}
+        />
       ) : null}
 
-      <CicdHandoffPanel
-        canCreateHandoff={canCreateHandoff}
-        commandCopyState={commandCopyState}
-        currentHandoff={currentHandoff}
-        existingHandoff={existingHandoff}
-        handoffErrorMessage={handoffErrorMessage}
-        handoffs={handoffs}
-        infrastructureDeploymentCommand={infrastructureDeploymentCommand}
-        isHandoffBusy={isHandoffBusy}
-        isHandoffReviewOpen={isHandoffReviewOpen}
-        isReadinessRefreshing={isReadinessRefreshing}
-        monitoringConfig={config}
-        onApplyAwsRoleDiff={(handoffId) =>
-          void runHandoffAction(() => applyGitCicdAwsRoleDiff(handoffId))
-        }
-        onApplyRepositorySettings={(handoffId) =>
-          void runHandoffAction(() => applyGitCicdRepositorySettings(handoffId))
-        }
-        onCloseCreateReview={() => setIsHandoffReviewOpen(false)}
-        onCopyInfrastructureCommand={() => void copyInfrastructureDeploymentCommand()}
-        onCreateHandoff={() => void createHandoff()}
-        onOpenCreateReview={() => setIsHandoffReviewOpen(true)}
-        onOpenDirectDeployment={onOpenDirectDeployment}
-        onRefreshReadiness={requestReadinessReload}
-        onSelectHandoff={setSelectedHandoffId}
-        readiness={readiness}
-        readinessErrorMessage={readinessErrorMessage}
-        readinessItems={readinessItems}
-        repository={repository}
-      />
+      <section className={deliveryStyles.accordionPanel} aria-labelledby="cicd-config-title">
+        <header className={deliveryStyles.accordionPanelHeader}>
+          <h3 id="cicd-config-title">준비 체크리스트</h3>
+        </header>
 
-      <CicdPipelineRunsPanel
-        activeView={activeView}
-        canOpenLiveObservation={canOpenGitCicdLiveObservation(selectedRun)}
-        canRetryFrontend={canRetryGitCicdFrontend(selectedRun)}
-        frontendRetryError={frontendRetryError}
-        isFrontendRetrying={isFrontendRetrying}
-        isHandoffReady={handoffReady}
-        isLogsLoading={isLogsLoading}
-        isReadinessRefreshing={isReadinessRefreshing}
-        isRefreshing={isRefreshing}
-        logs={visibleLogs}
-        logsErrorMessage={logsErrorMessage}
-        onManualRefresh={() => void manualRefresh()}
-        onOpenLiveObservation={openSelectedLiveObservation}
-        onRetryFrontend={() => void retryFrontend()}
-        onRetryLogs={() => setLogsReloadRequestId((requestId) => requestId + 1)}
-        onSelectRun={(runId) => {
-          hasExplicitRunSelectionRef.current = true;
-          setSelectedRunId(runId);
-        }}
-        onSelectView={setActiveView}
-        outputLinks={outputLinks}
-        runs={runs}
-        selectedRun={selectedRun}
-      />
+        {isConsoleDataUnavailable ? (
+          <div className={deliveryStyles.consoleUnavailable} role="status">
+            <strong>배포 PR과 Pipeline 상태를 확인할 수 없습니다.</strong>
+            <span>위 오류를 해결한 뒤 상태를 새로고침해 주세요.</span>
+          </div>
+        ) : (
+          <>
+            <CicdAccordionSection
+              defaultOpen={presentation.currentPhase === "source"}
+              id="cicd-source-repository"
+              isCurrent={presentation.currentPhase === "source"}
+              metadata={
+                <span className={deliveryStyles.accordionSingleMeta}>{sourcePhase.summary}</span>
+              }
+              openWhen={presentation.currentPhase === "source"}
+              phaseNumber="01"
+              statusLabel={sourcePhase.statusLabel}
+              statusTone={sourcePhase.tone}
+              title="저장소 및 변경 감지"
+            >
+              <ul className={deliveryStyles.taskList} aria-label="저장소 및 변경 감지 작업">
+                <CicdTaskRow
+                  actionLabel={repositoryConnected ? "변경하기" : "연결하기"}
+                  detail={
+                    repository?.defaultBranch ? `Branch · ${repository.defaultBranch}` : undefined
+                  }
+                  label="GitHub 저장소"
+                  onActivate={() => onOpenSetup("repository")}
+                  statusLabel={repositoryConnected ? "완료" : "미연결"}
+                  statusTone={repositoryConnected ? "complete" : "current"}
+                  value={repository ? `${repository.owner}/${repository.name}` : "—"}
+                />
+                <CicdTaskRow
+                  actionLabel={repositoryConnected ? "설정하기" : undefined}
+                  disabledReason={repositoryConnected ? undefined : "저장소 연결 후 설정"}
+                  detail={
+                    config
+                      ? formatMonitoringPaths(config.appPath.path, config.infraPath.path)
+                      : undefined
+                  }
+                  label="변경 감지"
+                  onActivate={repositoryConnected ? () => onOpenSetup("monitoring") : undefined}
+                  statusLabel={monitoringReady ? "완료" : repositoryConnected ? "미설정" : "잠김"}
+                  statusTone={
+                    monitoringReady ? "complete" : repositoryConnected ? "current" : "pending"
+                  }
+                  value={
+                    config
+                      ? `${config.monitorBranch} Branch와 앱·인프라 경로`
+                      : repositoryConnected
+                        ? "Branch와 앱·인프라 경로 설정"
+                        : "—"
+                  }
+                />
+              </ul>
+            </CicdAccordionSection>
+
+            <CicdAccordionSection
+              defaultOpen={presentation.currentPhase === "target"}
+              id="deployment-target-title"
+              isCurrent={presentation.currentPhase === "target"}
+              metadata={
+                <span className={deliveryStyles.accordionSingleMeta}>{targetPhase.summary}</span>
+              }
+              openWhen={presentation.currentPhase === "target"}
+              phaseNumber="02"
+              statusLabel={targetPhase.statusLabel}
+              statusTone={targetPhase.tone}
+              title="AWS 배포 대상"
+            >
+              <ul className={deliveryStyles.taskList} aria-label="AWS 배포 대상 작업">
+                <CicdTaskRow
+                  actionLabel={sourceSetupComplete ? "설정하기" : undefined}
+                  disabledReason={
+                    sourceSetupComplete ? undefined : "저장소 및 변경 감지 완료 후 설정"
+                  }
+                  label="AWS 연결"
+                  onActivate={sourceSetupComplete ? () => onOpenSetup("target") : undefined}
+                  statusLabel={
+                    targetSettingState.awsConnectionReady
+                      ? "완료"
+                      : sourceSetupComplete
+                        ? "미연결"
+                        : "시작 전"
+                  }
+                  statusTone={
+                    targetSettingState.awsConnectionReady
+                      ? "complete"
+                      : presentation.currentPhase === "target"
+                        ? "current"
+                        : "pending"
+                  }
+                  value={target?.connectionId ? "연결된 AWS 계정" : "—"}
+                />
+                <CicdTaskRow
+                  actionLabel={sourceSetupComplete ? "설정하기" : undefined}
+                  disabledReason={sourceSetupComplete ? undefined : "AWS 연결 후 설정"}
+                  label="Region"
+                  onActivate={sourceSetupComplete ? () => onOpenSetup("target") : undefined}
+                  statusLabel={targetSettingState.regionReady ? "완료" : "미설정"}
+                  statusTone={targetSettingState.regionReady ? "complete" : "pending"}
+                  value={target?.region ?? "—"}
+                />
+                <CicdTaskRow
+                  actionLabel={sourceSetupComplete ? "설정하기" : undefined}
+                  disabledReason={sourceSetupComplete ? undefined : "AWS 연결 후 설정"}
+                  label="실행 방식"
+                  onActivate={sourceSetupComplete ? () => onOpenSetup("target") : undefined}
+                  statusLabel={targetSettingState.runtimeTargetReady ? "완료" : "미설정"}
+                  statusTone={targetSettingState.runtimeTargetReady ? "complete" : "pending"}
+                  value={target ? formatRuntimeTarget(target.runtimeTargetKind) : "—"}
+                />
+                <CicdTaskRow
+                  actionLabel={sourceSetupComplete ? "설정하기" : undefined}
+                  disabledReason={sourceSetupComplete ? undefined : "AWS 연결 후 설정"}
+                  label="빌드 설정"
+                  onActivate={sourceSetupComplete ? () => onOpenSetup("target") : undefined}
+                  statusLabel={targetSettingState.buildConfigReady ? "완료" : "미설정"}
+                  statusTone={targetSettingState.buildConfigReady ? "complete" : "pending"}
+                  value={target?.confirmedBuildConfig ? "Repository 빌드 기준 확인됨" : "—"}
+                />
+              </ul>
+            </CicdAccordionSection>
+
+            <CicdHandoffPanel
+              canCreateHandoff={canCreateHandoff}
+              buildVerification={deliveryProfile.buildVerification}
+              commandCopyState={commandCopyState}
+              configurationPreview={configurationPreview}
+              currentHandoff={currentHandoff}
+              existingHandoff={existingHandoff}
+              handoffErrorMessage={handoffErrorMessage}
+              handoffs={handoffs}
+              infrastructureDeploymentCommand={infrastructureDeploymentCommand}
+              deploymentSucceeded={deploymentSucceeded}
+              deploymentTarget={target}
+              isHandoffBusy={isHandoffBusy}
+              isHandoffReviewOpen={isHandoffReviewOpen}
+              isReadinessRefreshing={isReadinessRefreshing}
+              monitoringConfig={config}
+              onApplyAwsRoleDiff={(handoffId) =>
+                void runHandoffAction(() => applyGitCicdAwsRoleDiff(handoffId))
+              }
+              onApplyRepositorySettings={(handoffId) =>
+                void runHandoffAction(() => applyGitCicdRepositorySettings(handoffId))
+              }
+              onCloseCreateReview={() => setIsHandoffReviewOpen(false)}
+              onCopyInfrastructureCommand={() => void copyInfrastructureDeploymentCommand()}
+              onCreateHandoff={() => void createHandoff()}
+              onOpenDirectDeployment={onOpenDirectDeployment}
+              onRefreshReadiness={requestReadinessReload}
+              onSelectHandoff={setSelectedHandoffId}
+              isCurrent={presentation.currentPhase === "pr"}
+              phaseStatusLabel={prPhase.statusLabel}
+              phaseStatusTone={prPhase.tone}
+              readiness={readiness}
+              readinessErrorMessage={readinessErrorMessage}
+              readinessItems={readinessItems}
+              repository={repository}
+            />
+
+            <CicdPipelineRunsPanel
+              activeView={activeView}
+              canOpenLiveObservation={canOpenGitCicdLiveObservation(selectedRun)}
+              canRetryFrontend={canRetryGitCicdFrontend(selectedRun)}
+              frontendRetryError={frontendRetryError}
+              isFrontendRetrying={isFrontendRetrying}
+              isHandoffReady={handoffReady}
+              isLogsLoading={isLogsLoading}
+              logs={visibleLogs}
+              logsErrorMessage={logsErrorMessage}
+              onOpenLiveObservation={openSelectedLiveObservation}
+              onRetryFrontend={() => void retryFrontend()}
+              onRetryLogs={() => setLogsReloadRequestId((requestId) => requestId + 1)}
+              onSelectRun={(runId) => {
+                hasExplicitRunSelectionRef.current = true;
+                setSelectedRunId(runId);
+              }}
+              onSelectView={setActiveView}
+              outputLinks={outputLinks}
+              isCurrent={presentation.currentPhase === "pipeline"}
+              phaseStatusLabel={pipelinePhase.statusLabel}
+              phaseStatusTone={pipelinePhase.tone}
+              runs={handoffRuns}
+              selectedRun={selectedRun}
+            />
+          </>
+        )}
+      </section>
     </div>
   );
 }
@@ -737,4 +899,38 @@ function isGitHubPermissionFailure(error: unknown): boolean {
   }
   const message = error instanceof Error ? error.message : String(error);
   return /permission|forbidden|access|GIT_APP_/i.test(message);
+}
+
+function getPhase(
+  phases: readonly CicdPhasePresentation[],
+  phaseId: CicdPhaseId
+): CicdPhasePresentation {
+  const phase = phases.find((item) => item.id === phaseId);
+  if (!phase) throw new Error(`Missing CI/CD phase: ${phaseId}`);
+  return phase;
+}
+
+function formatMonitoringPaths(appPath: string, infraPath: string): string {
+  return `앱 ${appPath || "/"} · 인프라 ${infraPath || "/"}`;
+}
+
+function formatRuntimeTarget(
+  runtimeTarget: NonNullable<ProjectDeliveryProfile["deploymentTarget"]>["runtimeTargetKind"]
+): string {
+  return {
+    ec2_asg: "EC2 Auto Scaling",
+    ecs_fargate: "ECS Fargate",
+    lambda: "Lambda",
+    static_site: "Static Site"
+  }[runtimeTarget];
+}
+
+function openAccordionSection(sectionId: string): void {
+  const section = document.getElementById(sectionId);
+  const toggle = section?.querySelector<HTMLButtonElement>("button[aria-expanded]");
+  if (!section || !toggle) return;
+  if (toggle.getAttribute("aria-expanded") !== "true") toggle.click();
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  section.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  window.requestAnimationFrame(() => toggle.focus());
 }

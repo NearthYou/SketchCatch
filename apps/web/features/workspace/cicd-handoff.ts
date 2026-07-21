@@ -1,6 +1,7 @@
 import type {
   CreateGitCicdHandoffRequest,
   Deployment,
+  GitCicdHandoffConfigurationPreview,
   GitCicdReadinessAction,
   GitCicdDeploymentTargetReadinessKey,
   GitCicdReadinessItemKey,
@@ -8,6 +9,7 @@ import type {
   GitCicdMonitoringConfig,
   SourceRepository
 } from "@sketchcatch/types";
+import { ApiClientError, getApiErrorMessage } from "../../lib/api-client";
 
 export type GitCicdReadinessNavigation = {
   readonly actionLabel: string;
@@ -110,18 +112,6 @@ const readinessNavigationByAction: Record<
     destination: "settings",
     hash: "#deployment-target-title",
     readinessKey: "deployment_target"
-  },
-  inspect_runtime_outputs: {
-    actionLabel: "배포 결과 확인하기",
-    destination: "settings",
-    hash: "#deployment-target-title",
-    readinessKey: "deployment_target"
-  },
-  inspect_output_url: {
-    actionLabel: "배포 URL 확인하기",
-    destination: "settings",
-    hash: "#deployment-target-title",
-    readinessKey: "deployment_target"
   }
 };
 
@@ -195,7 +185,7 @@ export function invalidateGitCicdReload(
 
 type GitCicdSourceDeployment = Pick<
   Deployment,
-  "id" | "architectureId" | "terraformArtifactId" | "source"
+  "id" | "architectureId" | "terraformArtifactId" | "source" | "status"
 >;
 
 export function selectGitCicdSourceDeployment(
@@ -265,21 +255,17 @@ const readinessDescriptionByKey: Record<GitCicdReadinessItemKey, string> = {
     "인프라는 준비됐지만 실제 애플리케이션 릴리즈 증거가 없습니다.",
   source_repository: "이 프로젝트에 사용할 활성 GitHub Repository를 연결합니다.",
   monitoring_config: "배포를 감지할 branch와 애플리케이션·인프라 경로를 확인합니다.",
-  deployment_target: "검증된 AWS 연결과 빌드·Runtime·HTTPS 배포 결과를 확인합니다."
+  deployment_target: "검증된 AWS 연결과 Repository 빌드 설정을 확인합니다."
 };
 
 const deploymentTargetDetailKeys: readonly GitCicdDeploymentTargetReadinessKey[] = [
   "aws_connection",
-  "build_config",
-  "runtime_config",
-  "output_url"
+  "build_config"
 ];
 
 const deploymentTargetDetailLabels: Record<GitCicdDeploymentTargetReadinessKey, string> = {
   aws_connection: "AWS 연결",
-  build_config: "Repository 빌드 근거",
-  runtime_config: "Runtime 좌표",
-  output_url: "HTTPS Output URL"
+  build_config: "Repository 빌드 근거"
 };
 
 export function isGitCicdHandoffReady(
@@ -294,6 +280,7 @@ export function isGitCicdHandoffReady(
 
 export function isGitCicdHandoffCreationEnabled(input: {
   readonly hasApprovedApplyPlanArtifact: boolean;
+  readonly hasConfigurationPreview: boolean;
   readonly hasExistingHandoff: boolean;
   readonly hasMonitoringConfig: boolean;
   readonly hasRepository: boolean;
@@ -305,6 +292,7 @@ export function isGitCicdHandoffCreationEnabled(input: {
   return (
     input.isReadinessReady &&
     input.isConsoleDataFresh &&
+    input.hasConfigurationPreview &&
     input.hasRepository &&
     input.hasMonitoringConfig &&
     input.hasSourceDeployment &&
@@ -314,13 +302,33 @@ export function isGitCicdHandoffCreationEnabled(input: {
   );
 }
 
+export async function handleGitCicdHandoffCreationError(
+  error: unknown,
+  refreshDeliveryProfile: () => Promise<unknown>
+): Promise<string> {
+  if (
+    error instanceof ApiClientError &&
+    error.code === "GIT_CICD_HANDOFF_CONFIGURATION_STALE"
+  ) {
+    try {
+      await refreshDeliveryProfile();
+    } catch {
+      // Preserve the actionable stale response even when the follow-up refresh fails.
+    }
+  }
+
+  return getApiErrorMessage(error, "CI/CD 배포 Pull Request를 생성하지 못했습니다.");
+}
+
 export function buildGitCicdHandoffRequest({
   approvedApplyPlanArtifactId,
+  configurationPreview,
   deployment,
   monitoringConfig,
   repository
 }: {
   readonly approvedApplyPlanArtifactId: string | null;
+  readonly configurationPreview: GitCicdHandoffConfigurationPreview;
   readonly deployment: GitCicdSourceDeployment;
   readonly monitoringConfig: GitCicdMonitoringConfig;
   readonly repository: SourceRepository;
@@ -338,6 +346,9 @@ export function buildGitCicdHandoffRequest({
     sourceRepositoryId: repository.id,
     targetBranch: monitoringConfig.monitorBranch,
     environmentName: "sketchcatch-production",
+    rdsEnabled: configurationPreview.rdsEnabled,
+    staticSiteUrl: configurationPreview.staticSiteUrl,
+    apiBaseUrl: configurationPreview.apiBaseUrl,
     pullRequestTitle: "Deploy: SketchCatch 인프라와 앱 배포 연결",
     commitMessage: "chore: SketchCatch CI/CD 배포 구성",
     userAcceptedChangeId: approvedApplyPlanArtifactId
