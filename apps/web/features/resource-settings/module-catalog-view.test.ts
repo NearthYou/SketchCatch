@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import type { DiagramJson } from "../../../../packages/types/src";
-import { curatedModules, expandCuratedModuleIntoDiagram } from "./module-catalog";
+import type { DiagramJson, DiagramNode } from "../../../../packages/types/src";
+import {
+  curatedModules,
+  expandCuratedModuleIntoDiagram,
+  type CuratedModuleDefinition
+} from "./module-catalog";
 import { createModuleCatalogPreview } from "./module-catalog-preview";
 import {
+  countModuleResources,
   createModuleCatalogGroups,
   moduleCatalogViews
 } from "./module-catalog-view";
@@ -116,17 +121,198 @@ test("artifact 입력 순서가 달라도 group과 Module 정렬은 결정적이
   }
 });
 
-test("단순 Module이 많은 Catalog 섹션을 복잡한 섹션보다 먼저 표시한다", () => {
-  const groups = createModuleCatalogGroups({ modules: curatedModules, view: "functional" });
+test("resource node가 정확히 3개인 Module은 simple이고 design Area는 수에 포함하지 않는다", () => {
+  const threeResourcesWithAreas = createCatalogModule({
+    id: "three-resources",
+    resourceCount: 3,
+    areaCount: 6,
+    functionalGroup: { key: "simple", label: "Simple" }
+  });
+  const fourResources = createCatalogModule({
+    id: "four-resources",
+    resourceCount: 4,
+    functionalGroup: { key: "complex", label: "Complex" }
+  });
 
-  assert.ok(
-    groups.findIndex(({ label }) => label === "보안") <
-      groups.findIndex(({ label }) => label === "네트워크")
+  assert.equal(countModuleResources(threeResourcesWithAreas), 3);
+  assert.equal(countModuleResources(fourResources), 4);
+  assert.deepEqual(
+    createModuleCatalogGroups({
+      modules: [fourResources, threeResourcesWithAreas],
+      view: "functional"
+    }).map(({ key }) => key),
+    ["simple", "complex"]
   );
-  assert.ok(
-    groups.findIndex(({ label }) => label === "컴퓨트") <
-      groups.findIndex(({ label }) => label === "데이터베이스")
+});
+
+test("더 많은 simple Module은 낮은 평균 resource 수보다 먼저 정렬된다", () => {
+  const groups = createModuleCatalogGroups({
+    modules: [
+      createCatalogModule({
+        id: "simple-one",
+        resourceCount: 3,
+        functionalGroup: { key: "more-simple", label: "More simple" }
+      }),
+      createCatalogModule({
+        id: "simple-two",
+        resourceCount: 3,
+        functionalGroup: { key: "more-simple", label: "More simple" }
+      }),
+      createCatalogModule({
+        id: "lower-average-simple",
+        resourceCount: 0,
+        functionalGroup: { key: "lower-average", label: "Lower average" }
+      }),
+      createCatalogModule({
+        id: "lower-average-complex",
+        resourceCount: 4,
+        functionalGroup: { key: "lower-average", label: "Lower average" }
+      })
+    ],
+    view: "functional"
+  });
+
+  assert.deepEqual(groups.map(({ key }) => key), ["more-simple", "lower-average"]);
+});
+
+test("simple Module 수가 같으면 낮은 평균 resource 수가 먼저 정렬된다", () => {
+  const groups = createModuleCatalogGroups({
+    modules: [
+      createCatalogModule({
+        id: "low-average-simple",
+        resourceCount: 0,
+        functionalGroup: { key: "low-average", label: "Low average" }
+      }),
+      createCatalogModule({
+        id: "low-average-complex",
+        resourceCount: 4,
+        functionalGroup: { key: "low-average", label: "Low average" }
+      }),
+      createCatalogModule({
+        id: "high-average-simple",
+        resourceCount: 3,
+        functionalGroup: { key: "high-average", label: "High average" }
+      }),
+      createCatalogModule({
+        id: "high-average-complex",
+        resourceCount: 5,
+        functionalGroup: { key: "high-average", label: "High average" }
+      })
+    ],
+    view: "functional"
+  });
+
+  assert.deepEqual(groups.map(({ key }) => key), ["low-average", "high-average"]);
+});
+
+test("simple Module 수와 평균이 같으면 낮은 최대 resource 수가 먼저 정렬된다", () => {
+  const groups = createModuleCatalogGroups({
+    modules: [
+      createCatalogModule({
+        id: "low-maximum-simple",
+        resourceCount: 1,
+        functionalGroup: { key: "low-maximum", label: "Low maximum" }
+      }),
+      createCatalogModule({
+        id: "low-maximum-complex",
+        resourceCount: 5,
+        functionalGroup: { key: "low-maximum", label: "Low maximum" }
+      }),
+      createCatalogModule({
+        id: "high-maximum-simple",
+        resourceCount: 0,
+        functionalGroup: { key: "high-maximum", label: "High maximum" }
+      }),
+      createCatalogModule({
+        id: "high-maximum-complex",
+        resourceCount: 6,
+        functionalGroup: { key: "high-maximum", label: "High maximum" }
+      })
+    ],
+    view: "functional"
+  });
+
+  assert.deepEqual(groups.map(({ key }) => key), ["low-maximum", "high-maximum"]);
+});
+
+test("동점 Catalog 섹션은 label과 key 순으로 결정적으로 정렬된다", () => {
+  const groups = createModuleCatalogGroups({
+    modules: [
+      createCatalogModule({
+        id: "alpha-label",
+        resourceCount: 2,
+        functionalGroup: { key: "z-key", label: "Alpha" }
+      }),
+      createCatalogModule({
+        id: "bravo-a",
+        resourceCount: 2,
+        functionalGroup: { key: "a-key", label: "Bravo" }
+      }),
+      createCatalogModule({
+        id: "bravo-b",
+        resourceCount: 2,
+        functionalGroup: { key: "b-key", label: "Bravo" }
+      })
+    ],
+    view: "functional"
+  });
+
+  assert.deepEqual(groups.map(({ key }) => key), ["z-key", "a-key", "b-key"]);
+});
+
+test("검색된 visible Module만으로 Catalog 섹션 점수를 다시 계산한다", () => {
+  const modules = [
+    createCatalogModule({
+      id: "alpha-visible",
+      title: "Visible Alpha",
+      resourceCount: 1,
+      functionalGroup: { key: "alpha", label: "Alpha" }
+    }),
+    createCatalogModule({
+      id: "alpha-hidden",
+      title: "Hidden Alpha",
+      resourceCount: 10,
+      functionalGroup: { key: "alpha", label: "Alpha" }
+    }),
+    createCatalogModule({
+      id: "beta-visible",
+      title: "Visible Beta",
+      resourceCount: 3,
+      functionalGroup: { key: "beta", label: "Beta" }
+    })
+  ];
+
+  assert.deepEqual(
+    createModuleCatalogGroups({ modules, view: "functional" }).map(({ key }) => key),
+    ["beta", "alpha"]
   );
+  assert.deepEqual(
+    createModuleCatalogGroups({ modules, query: "visible", view: "functional" }).map(({ key }) => key),
+    ["alpha", "beta"]
+  );
+});
+
+test("같은 Catalog 섹션의 Module 카드는 title과 id 순서를 유지한다", () => {
+  const groups = createModuleCatalogGroups({
+    modules: [
+      createCatalogModule({ id: "b", title: "Beta", functionalGroup: sameFunctionalGroup }),
+      createCatalogModule({ id: "a-2", title: "Alpha", functionalGroup: sameFunctionalGroup }),
+      createCatalogModule({ id: "a-1", title: "Alpha", functionalGroup: sameFunctionalGroup })
+    ],
+    view: "functional"
+  });
+
+  assert.deepEqual(groups, [
+    {
+      key: "same-group",
+      label: "Same group",
+      modules: [
+        createCatalogModule({ id: "a-1", title: "Alpha", functionalGroup: sameFunctionalGroup }),
+        createCatalogModule({ id: "a-2", title: "Alpha", functionalGroup: sameFunctionalGroup }),
+        createCatalogModule({ id: "b", title: "Beta", functionalGroup: sameFunctionalGroup })
+      ]
+    }
+  ]);
 });
 
 test("검색은 Module 제목·설명·lens label을 대상으로 같은 그룹 구조를 유지한다", () => {
@@ -185,5 +371,73 @@ function normalizeExpandedAt(diagram: DiagramJson): DiagramJson {
           }
         : {})
     }))
+  };
+}
+
+const sameFunctionalGroup = { key: "same-group", label: "Same group" };
+
+function createCatalogModule(input: {
+  readonly id: string;
+  readonly title?: string | undefined;
+  readonly resourceCount?: number | undefined;
+  readonly areaCount?: number | undefined;
+  readonly functionalGroup?: { readonly key: string; readonly label: string } | undefined;
+}): CuratedModuleDefinition {
+  const resourceCount = input.resourceCount ?? 0;
+  const areaCount = input.areaCount ?? 0;
+  const functionalGroup = input.functionalGroup ?? sameFunctionalGroup;
+
+  return {
+    id: input.id,
+    title: input.title ?? input.id,
+    description: `${input.id} description`,
+    lenses: [{ kind: "functional", ...functionalGroup }],
+    structuralFingerprint: `${input.id}-fingerprint`,
+    nodes: [
+      ...Array.from({ length: resourceCount }, (_, index) =>
+        createCatalogResourceNode(input.id, index)
+      ),
+      ...Array.from({ length: areaCount }, (_, index) => createCatalogAreaNode(input.id, index))
+    ],
+    edges: [],
+    variables: [],
+    provenance: {
+      extractorVersion: "architecture-board-module-pattern-extractor/v2",
+      representativeTemplateId: `${input.id}-template`,
+      sourceTemplateIds: [`${input.id}-template`]
+    },
+    version: "architecture-board-knowledge/v1"
+  };
+}
+
+function createCatalogResourceNode(moduleId: string, index: number): DiagramNode {
+  return {
+    id: `${moduleId}-resource-${index}`,
+    type: "aws_s3_bucket",
+    kind: "resource",
+    position: { x: index * 100, y: 0 },
+    size: { width: 100, height: 60 },
+    label: `Resource ${index}`,
+    locked: false,
+    zIndex: 0,
+    parameters: {
+      resourceType: "aws_s3_bucket",
+      resourceName: `${moduleId}_resource_${index}`,
+      fileName: "main.tf",
+      values: {}
+    }
+  };
+}
+
+function createCatalogAreaNode(moduleId: string, index: number): DiagramNode {
+  return {
+    id: `${moduleId}-area-${index}`,
+    type: "area",
+    kind: "design",
+    position: { x: index * 100, y: 100 },
+    size: { width: 300, height: 200 },
+    label: `Area ${index}`,
+    locked: false,
+    zIndex: 0
   };
 }

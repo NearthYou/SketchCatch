@@ -103,4 +103,3 @@ Expected: TypeScript errors are absent in the Web package.
 Run: `git diff --check`
 
 Expected: no output.
-
