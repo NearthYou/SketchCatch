@@ -225,5 +225,5 @@ function SelectedRunSummary({ run }: { readonly run: GitCicdPipelineRun }) {
 }
 
 function formatTime(value: string): string {
-  return new Date(value).toLocaleString("ko-KR");
+  return new Date(value).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
 }
