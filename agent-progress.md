@@ -22,6 +22,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Refine Settings connection copy
+
+- Replaced toy-like Settings helper text with production-oriented GitHub organization, Repository scope, IAM Role, region, and AWS CodeConnections wording while preserving all step titles, status badges, chevrons, actions, and APIs.
+- Twenty-four focused Settings tests, lint, typecheck, build, final harness, and two-axis review pass. No full or browser test suite was run.
+- No API, shared contract, database migration, dependency, deployment, or cloud mutation change was made.
+
 ### 2026-07-22 - Remove the duplicate AWS connection step description
 
 - Hid the empty-state AWS Role description from the connection step header while retaining it in the expanded body and preserving the verified account/region summary.
