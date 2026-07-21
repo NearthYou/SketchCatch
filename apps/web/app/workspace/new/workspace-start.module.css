@@ -77,10 +77,14 @@
 }
 
 .startPanel > .nameField,
-.startPanel > .targetEnvironmentField,
 .startPanel > .startMethods {
   width: 100%;
   gap: 12px;
+}
+
+.startPanel > .targetEnvironmentField {
+  width: 100%;
+  gap: 0;
 }
 
 .heading h1 {
@@ -140,6 +144,7 @@
   gap: 9px;
 }
 
+.nameField > span:first-child,
 .targetEnvironmentField legend,
 .startMethods h2 {
   margin: 0;
@@ -147,6 +152,11 @@
   font-size: calc(13px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   line-height: 1.4;
+}
+
+.targetEnvironmentField legend {
+  width: 100%;
+  margin-bottom: 12px;
 }
 
 .targetEnvironmentOptions {
