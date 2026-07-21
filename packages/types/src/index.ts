@@ -371,9 +371,10 @@ export type ReverseEngineeringSourceReference = {
 export type CreateReverseEngineeringProjectRequest = CreateProjectRequest & {
   diagramJson: DiagramJson;
   architectureJson: ArchitectureJson;
-  reverseEngineering: ReverseEngineeringSourceReference & {
+  reverseEngineering: {
+    previewId: string;
+    draftId: string;
     sourceNodeIds: string[];
-    sourceKind: "preview_scan";
   };
 };
 
@@ -2484,6 +2485,12 @@ export type CreateReverseEngineeringScanRequest = {
 export type ReverseEngineeringScanResponse = {
   scan: ReverseEngineeringScan;
   result?: ReverseEngineeringScanResult | undefined;
+};
+
+export type ReverseEngineeringPreviewScanResponse = {
+  previewId: string;
+  scan: ReverseEngineeringScan;
+  result: ReverseEngineeringScanResult;
 };
 
 export type ReverseEngineeringScanListResponse = {

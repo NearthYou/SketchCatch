@@ -106,6 +106,7 @@ export function ReverseEngineeringPanel({
   const [scanState, setScanState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanResponse, setScanResponse] = useState<ReverseEngineeringScanResponse | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [logs, setLogs] = useState<ReverseEngineeringScanLogLine[]>([]);
   const [applyState, setApplyState] = useState<ReverseEngineeringApplyState>("idle");
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
@@ -325,6 +326,7 @@ export function ReverseEngineeringPanel({
     setOrganizedDiagrams(null);
     setSelectedCandidateId(null);
     setScanResponse(null);
+    setPreviewId(null);
     setLogs([]);
     const basePreview = createReverseEngineeringApplyPreview({
       diagram: context.diagram,
@@ -348,6 +350,7 @@ export function ReverseEngineeringPanel({
           });
 
       setScanResponse(response.response);
+      setPreviewId(response.previewId);
       setLogs(response.logs);
       if (!createProjectOnApply) {
         rememberCompletedScan(response.response.scan);
@@ -484,6 +487,12 @@ export function ReverseEngineeringPanel({
     setApplyMessage(null);
 
     if (createProjectOnApply) {
+      if (!previewId) {
+        setApplyState("error");
+        setApplyMessage("적용할 AWS 미리보기를 찾지 못했습니다. 다시 가져와 주세요.");
+        return;
+      }
+
       let targetProject: Project;
 
       try {
@@ -491,10 +500,9 @@ export function ReverseEngineeringPanel({
           name: projectName,
           diagramJson: diagramToApply,
           reverseEngineering: {
-            sourceScanId: result.scan.id,
+            previewId,
             draftId: result.reverseEngineeringDraft.id,
-            sourceNodeIds: [...application.sourceOwnership.nodeIds],
-            sourceKind: "preview_scan"
+            sourceNodeIds: [...application.sourceOwnership.nodeIds]
           },
           architectureJson: convertReverseEngineeringBoardToArchitectureJson(
             diagramToApply,
@@ -510,6 +518,7 @@ export function ReverseEngineeringPanel({
       }
 
       context.applyDiagramJson(diagramToApply);
+      setPreviewId(null);
       setPreviewBase(null);
       setApplyState("saved");
       setApplyMessage("프로젝트를 만들고 선택한 후보를 보드에 저장했습니다.");
@@ -807,6 +816,7 @@ type ReverseEngineeringRunInput = {
 
 type ReverseEngineeringRunOutput = {
   readonly logs: ReverseEngineeringScanLogLine[];
+  readonly previewId: string | null;
   readonly response: ReverseEngineeringScanResponse;
 };
 
@@ -816,7 +826,7 @@ async function runPreviewScan({
   region,
   resourceTypes
 }: ReverseEngineeringRunInput): Promise<ReverseEngineeringRunOutput> {
-  const response = await createReverseEngineeringPreviewScan({
+  const { previewId, ...response } = await createReverseEngineeringPreviewScan({
     awsConnectionId,
     region,
     resourceTypes
@@ -824,6 +834,7 @@ async function runPreviewScan({
 
   return {
     logs: [],
+    previewId,
     response
   };
 }
@@ -858,6 +869,7 @@ async function runSavedScan({
 
   return {
     logs,
+    previewId: null,
     response
   };
 }

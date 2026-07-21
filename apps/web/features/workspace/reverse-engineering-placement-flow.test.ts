@@ -23,6 +23,11 @@ const applyFlowSource = readFileSync(
   fileURLToPath(new URL("./reverse-engineering-apply-flow.ts", import.meta.url)),
   "utf8"
 );
+const apiSource = readFileSync(fileURLToPath(new URL("./api.ts", import.meta.url)), "utf8");
+const sharedTypesSource = readFileSync(
+  fileURLToPath(new URL("../../../../packages/types/src/index.ts", import.meta.url)),
+  "utf8"
+);
 
 test("새 scan과 저장된 scan은 원래 배치를 먼저 미리보기한다", () => {
   const firstPreview = getSourceBlock(
@@ -158,6 +163,57 @@ test("새 프로젝트 적용은 Project, Draft, Snapshot을 하나의 서버 �
     createProjectFlow,
     /createProject\(|saveProjectDraft\(|createArchitectureSnapshot\(/
   );
+});
+
+test("새 프로젝트는 서버 preview claim만 보내고 공개 scan identity를 요청 계약에 넣지 않는다", () => {
+  const createProjectFlow = getSourceBlock(
+    panelSource,
+    "if (createProjectOnApply)",
+    "if (!context.persistAndApplyDiagramJson)"
+  );
+  const createProjectRequestContract = getSourceBlock(
+    sharedTypesSource,
+    "export type CreateReverseEngineeringProjectRequest",
+    "export type CreateReverseEngineeringProjectResponse"
+  );
+  const previewResponseContract = getSourceBlock(
+    sharedTypesSource,
+    "export type ReverseEngineeringPreviewScanResponse",
+    "export type ReverseEngineeringScanListResponse"
+  );
+  const previewApi = getSourceBlock(
+    apiSource,
+    "export async function createReverseEngineeringPreviewScan(",
+    "export async function listReverseEngineeringScans("
+  );
+  const previewRun = getSourceBlock(
+    panelSource,
+    "async function runPreviewScan(",
+    "async function runSavedScan("
+  );
+
+  assert.match(createProjectRequestContract, /previewId: string/);
+  assert.match(createProjectRequestContract, /draftId: string/);
+  assert.match(createProjectRequestContract, /sourceNodeIds: string\[\]/);
+  assert.doesNotMatch(createProjectRequestContract, /sourceScanId|sourceKind/);
+  assert.match(previewResponseContract, /previewId: string/);
+  assert.match(previewApi, /Promise<ReverseEngineeringPreviewScanResponse>/);
+  assert.match(previewRun, /const \{ previewId, \.\.\.response \} = await/);
+  assert.match(panelSource, /const \[previewId, setPreviewId\] = useState<string \| null>\(null\)/);
+  assert.match(panelSource, /setPreviewId\(response\.previewId\)/);
+  assert.match(createProjectFlow, /previewId,/);
+  assert.match(createProjectFlow, /draftId: result\.reverseEngineeringDraft\.id/);
+  assert.match(
+    createProjectFlow,
+    /sourceNodeIds: \[\.\.\.application\.sourceOwnership\.nodeIds\]/
+  );
+
+  const claimPayload = getSourceBlock(
+    createProjectFlow,
+    "reverseEngineering: {",
+    "architectureJson:"
+  );
+  assert.doesNotMatch(claimPayload, /sourceScanId|sourceKind/);
 });
 
 test("기존 프로젝트 Snapshot도 선택한 replace 또는 append의 source ownership만 저장한다", () => {
