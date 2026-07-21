@@ -1,8 +1,10 @@
 import { and, desc, eq } from "drizzle-orm";
 import type {
+  ArchitectureJson,
   GitCicdMonitoringConfig,
   GitCicdReadinessSnapshot,
   GitHubInstallationConnection,
+  ProjectDeliveryBuildVerification,
   ProjectDeliveryProfile,
   ProjectDeploymentTarget,
   RepositoryAnalysisRecord,
@@ -10,16 +12,30 @@ import type {
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import {
+  architectures,
+  deployments,
   gitCicdHandoffs,
   gitCicdMonitoringConfigs,
   githubInstallationConnections,
+  projectBuildEnvironments,
   projectDeploymentTargets,
   projects,
   repositoryAnalysisRecords,
   sourceRepositories
 } from "../db/schema.js";
+import { maskDeploymentMessage } from "../deployments/log-masking.js";
+import { deriveGitCicdHandoffConfigurationPreview } from "../git-cicd/git-cicd-handoff-configuration.js";
 import { createDefaultGitCicdMonitoringConfig } from "../git-cicd/git-cicd-monitoring-defaults.js";
 import { selectProjectDeliverySourceRepository } from "./project-delivery-source-repository.js";
+
+export type ProjectDeliveryBuildVerificationRecord = {
+  status: "preparing" | "ready" | "verification_failed" | "disconnected";
+  repositoryVerificationStatus: "not_checked" | "verified" | "failed";
+  requestedCommitSha: string | null;
+  resolvedCommitSha: string | null;
+  statusReason: string | null;
+  verifiedAt: Date | null;
+};
 
 export type ProjectDeliveryProfileStore = {
   isProjectAccessible(projectId: string, userId: string): Promise<boolean>;
@@ -29,8 +45,13 @@ export type ProjectDeliveryProfileStore = {
   findRepositoryAnalysisTarget(projectId: string): Promise<RepositoryAnalysisRecord | null>;
   listActiveSourceRepositories(projectId: string): Promise<SourceRepository[]>;
   findMonitoringConfig(sourceRepositoryId: string): Promise<GitCicdMonitoringConfig | null>;
+  findArchitectureForDeployment(
+    projectId: string,
+    deploymentId: string
+  ): Promise<ArchitectureJson | null>;
   findDeploymentTarget(projectId: string): Promise<ProjectDeploymentTarget | null>;
   findEnvironmentName(projectId: string): Promise<string | null>;
+  findBuildVerification(projectId: string): Promise<ProjectDeliveryBuildVerificationRecord | null>;
 };
 
 export type ProjectDeliveryReadinessReader = (input: {
@@ -57,13 +78,20 @@ export function createProjectDeliveryProfileService(options: {
         throw new ProjectDeliveryProfileNotFoundError();
       }
 
-      const [githubInstallations, repositoryAnalysisTarget, activeRepositories,
-        deploymentTarget, environmentName] = await Promise.all([
+      const [
+        githubInstallations,
+        repositoryAnalysisTarget,
+        activeRepositories,
+        deploymentTarget,
+        environmentName,
+        buildVerificationRecord
+      ] = await Promise.all([
         options.store.listGitHubInstallations(input.userId),
         options.store.findRepositoryAnalysisTarget(input.projectId),
         options.store.listActiveSourceRepositories(input.projectId),
         options.store.findDeploymentTarget(input.projectId),
-        options.store.findEnvironmentName(input.projectId)
+        options.store.findEnvironmentName(input.projectId),
+        options.store.findBuildVerification(input.projectId)
       ]);
       const sourceRepository = selectProjectDeliverySourceRepository({
         repositoryAnalysisTarget,
@@ -78,6 +106,18 @@ export function createProjectDeliveryProfileService(options: {
           deliverySourceRepositoryId: sourceRepository?.id ?? null
         })
       ]);
+      const confirmedDeploymentTarget = deploymentTarget?.confirmedBuildConfig
+        ? deploymentTarget
+        : null;
+      const handoffArchitecture =
+        readiness.sourceDeploymentId &&
+        readiness.approvedApplyPlanArtifactId &&
+        confirmedDeploymentTarget
+          ? await options.store.findArchitectureForDeployment(
+              input.projectId,
+              readiness.sourceDeploymentId
+            )
+          : null;
 
       return {
         githubInstallations,
@@ -85,7 +125,14 @@ export function createProjectDeliveryProfileService(options: {
         sourceRepository,
         deploymentTarget,
         environmentName,
+        buildVerification: toProjectDeliveryBuildVerification(buildVerificationRecord),
         readiness,
+        handoffConfigurationPreview: handoffArchitecture && confirmedDeploymentTarget
+          ? deriveGitCicdHandoffConfigurationPreview({
+              architectureJson: handoffArchitecture,
+              deploymentTarget: confirmedDeploymentTarget
+            })
+          : null,
         monitoringConfig: sourceRepository
           ? savedMonitoringConfig ?? createDefaultGitCicdMonitoringConfig({
               sourceRepositoryId: sourceRepository.id,
@@ -168,6 +215,24 @@ export function createPostgresProjectDeliveryProfileStore(
       } : null;
     },
 
+    async findArchitectureForDeployment(projectId, deploymentId) {
+      const [row] = await db
+        .select({ architectureJson: architectures.architectureJson })
+        .from(deployments)
+        .innerJoin(
+          architectures,
+          and(
+            eq(deployments.architectureId, architectures.id),
+            eq(architectures.projectId, projectId)
+          )
+        )
+        .where(and(
+          eq(deployments.id, deploymentId),
+          eq(deployments.projectId, projectId)
+        ));
+      return row?.architectureJson ?? null;
+    },
+
     async findDeploymentTarget(projectId) {
       const [row] = await db
         .select()
@@ -196,8 +261,86 @@ export function createPostgresProjectDeliveryProfileStore(
         .where(eq(gitCicdHandoffs.projectId, projectId))
         .orderBy(desc(gitCicdHandoffs.createdAt));
       return row?.environmentName ?? null;
+    },
+
+    async findBuildVerification(projectId) {
+      const [row] = await db
+        .select({
+          status: projectBuildEnvironments.status,
+          repositoryVerificationStatus:
+            projectBuildEnvironments.repositoryVerificationStatus,
+          requestedCommitSha:
+            projectBuildEnvironments.repositoryVerificationRequestedCommitSha,
+          resolvedCommitSha:
+            projectBuildEnvironments.repositoryVerificationResolvedCommitSha,
+          statusReason:
+            projectBuildEnvironments.repositoryVerificationStatusReason,
+          verifiedAt: projectBuildEnvironments.repositoryVerifiedAt
+        })
+        .from(projectBuildEnvironments)
+        .where(eq(projectBuildEnvironments.projectId, projectId));
+      return row ?? null;
     }
   };
+}
+
+function toProjectDeliveryBuildVerification(
+  record: ProjectDeliveryBuildVerificationRecord | null
+): ProjectDeliveryBuildVerification {
+  if (!record) return emptyBuildVerification();
+  if (
+    record.repositoryVerificationStatus === "failed" ||
+    record.status === "verification_failed" ||
+    record.status === "disconnected"
+  ) {
+    return {
+      status: "failed",
+      requestedCommitSha: record.requestedCommitSha,
+      resolvedCommitSha: record.resolvedCommitSha,
+      statusReason:
+        sanitizeBuildVerificationReason(record.statusReason) ??
+        (record.status === "disconnected"
+          ? "Build Environment 연결이 해제되었습니다."
+          : "Repository checkout 검증에 실패했습니다."),
+      verifiedAt: null
+    };
+  }
+  if (record.repositoryVerificationStatus === "verified") {
+    return {
+      status: "verified",
+      requestedCommitSha: record.requestedCommitSha,
+      resolvedCommitSha: record.resolvedCommitSha,
+      statusReason: null,
+      verifiedAt: record.verifiedAt?.toISOString() ?? null
+    };
+  }
+  return {
+    status: "preparing",
+    requestedCommitSha: record.requestedCommitSha,
+    resolvedCommitSha: record.resolvedCommitSha,
+    statusReason: null,
+    verifiedAt: null
+  };
+}
+
+function emptyBuildVerification(): ProjectDeliveryBuildVerification {
+  return {
+    status: "not_started",
+    requestedCommitSha: null,
+    resolvedCommitSha: null,
+    statusReason: null,
+    verifiedAt: null
+  };
+}
+
+function sanitizeBuildVerificationReason(value: string | null): string | null {
+  if (!value?.trim()) return null;
+  const sanitized = maskDeploymentMessage(value)
+    .replace(/\barn:aws[a-z-]*:[^\s,;]+/giu, "[AWS_RESOURCE]")
+    .replace(/[\r\n\t]+/gu, " ")
+    .trim()
+    .slice(0, 500);
+  return sanitized || null;
 }
 
 function mapRepositoryAnalysisRecord(

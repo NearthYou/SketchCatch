@@ -26,6 +26,7 @@ export type ApiErrorCode =
   | "bad_gateway"
   | "service_unavailable"
   | "internal_server_error"
+  | "GIT_CICD_HANDOFF_CONFIGURATION_STALE"
   | "GIT_CICD_SOURCE_REPOSITORY_MISMATCH"
   | "PUBLIC_REPOSITORY_INPUT_INVALID"
   | "PUBLIC_REPOSITORY_UNAVAILABLE"
@@ -858,9 +859,7 @@ export type GitCicdReadinessItemKey =
 
 export type GitCicdDeploymentTargetReadinessKey =
   | "aws_connection"
-  | "build_config"
-  | "runtime_config"
-  | "output_url";
+  | "build_config";
 
 export type GitCicdReadinessAction =
   | "approve_apply_plan"
@@ -868,9 +867,7 @@ export type GitCicdReadinessAction =
   | "select_repository"
   | "confirm_monitoring_config"
   | "select_aws_connection"
-  | "confirm_build_config"
-  | "inspect_runtime_outputs"
-  | "inspect_output_url";
+  | "confirm_build_config";
 
 export type GitCicdReadinessItem = {
   key: GitCicdReadinessItemKey;
@@ -898,6 +895,20 @@ export type GitCicdReadinessResponse = {
   readiness: GitCicdReadinessSnapshot;
 };
 
+export type ProjectDeliveryBuildVerificationStatus =
+  | "not_started"
+  | "preparing"
+  | "verified"
+  | "failed";
+
+export type ProjectDeliveryBuildVerification = {
+  status: ProjectDeliveryBuildVerificationStatus;
+  requestedCommitSha: string | null;
+  resolvedCommitSha: string | null;
+  statusReason: string | null;
+  verifiedAt: IsoDateTimeString | null;
+};
+
 export type ProjectDeliveryProfile = {
   githubInstallations: Array<Omit<GitHubInstallationConnection, "repositoryCount">>;
   repositoryAnalysisTarget: RepositoryAnalysisRecord | null;
@@ -905,7 +916,9 @@ export type ProjectDeliveryProfile = {
   monitoringConfig: GitCicdMonitoringConfig | null;
   deploymentTarget: ProjectDeploymentTarget | null;
   environmentName: string | null;
+  buildVerification: ProjectDeliveryBuildVerification;
   readiness: GitCicdReadinessSnapshot;
+  handoffConfigurationPreview: GitCicdHandoffConfigurationPreview | null;
 };
 
 export type ProjectDeliveryProfileResponse = {
@@ -1129,6 +1142,12 @@ export type GitCicdPipelineDetailStatus =
   | "success"
   | "failed"
   | "cancelled";
+
+export type GitCicdHandoffConfigurationPreview = {
+  rdsEnabled: boolean;
+  staticSiteUrl: string | null;
+  apiBaseUrl: string | null;
+};
 
 export type GitCicdRepositorySettingsPreview = {
   environmentName: string;

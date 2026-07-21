@@ -4,8 +4,10 @@ import {
   assertAwsRoleRequiresExternalId,
   getAwsAccountIdFromRoleArn,
   supportedAwsConnectionRegion,
+  reportAwsConnectionFailure,
   toAwsConnectionTestError,
   type AwsCallerIdentity,
+  type AwsConnectionFailureReporter,
   type AwsConnectionStsGateway,
   type AwsTemporaryCredentials
 } from "./aws-connection-test-service.js";
@@ -26,6 +28,7 @@ export type PreparedTerraformAwsCredentialEnv = {
 
 export type PrepareTerraformAwsCredentialEnvOptions = {
   createRoleSessionName?: () => string;
+  reportFailure?: AwsConnectionFailureReporter;
 };
 
 export type AwsApplyPreconditions = {
@@ -59,11 +62,18 @@ export async function prepareTerraformAwsCredentialEnv(
   }
 
   const roleSessionName = options.createRoleSessionName?.() ?? createTerraformRoleSessionName();
+  const reportFailure = options.reportFailure ?? reportAwsConnectionFailure;
   const credentials = await assumeRoleForTerraform(awsConnection, gateway, {
+    reportFailure,
     roleArn,
     roleSessionName
   });
-  const identity = await getCallerIdentityForTerraform(awsConnection, gateway, credentials);
+  const identity = await getCallerIdentityForTerraform(
+    awsConnection,
+    gateway,
+    credentials,
+    reportFailure
+  );
 
   if (identity.accountId !== accountId) {
     throw new AwsConnectionRuntimeCredentialsError("AWS Role account mismatch");
@@ -73,7 +83,8 @@ export async function prepareTerraformAwsCredentialEnv(
     {
       roleArn,
       region: awsConnection.region,
-      roleSessionName
+      roleSessionName,
+      reportFailure
     },
     gateway
   );
@@ -119,6 +130,7 @@ async function assumeRoleForTerraform(
   },
   gateway: AwsConnectionStsGateway,
   input: {
+    reportFailure: AwsConnectionFailureReporter;
     roleArn: string;
     roleSessionName: string;
   }
@@ -135,6 +147,7 @@ async function assumeRoleForTerraform(
       throw error;
     }
 
+    input.reportFailure("assume_role", error);
     throw new AwsConnectionRuntimeCredentialsError(toAwsConnectionTestError(error).message);
   }
 }
@@ -145,7 +158,8 @@ async function getCallerIdentityForTerraform(
     roleArn: string;
   },
   gateway: AwsConnectionStsGateway,
-  credentials: AwsTemporaryCredentials
+  credentials: AwsTemporaryCredentials,
+  reportFailure: AwsConnectionFailureReporter
 ): Promise<AwsCallerIdentity> {
   try {
     return await gateway.getCallerIdentity({
@@ -157,6 +171,7 @@ async function getCallerIdentityForTerraform(
       throw error;
     }
 
+    reportFailure("get_caller_identity", error);
     throw new AwsConnectionRuntimeCredentialsError(toAwsConnectionTestError(error).message);
   }
 }
@@ -185,11 +200,12 @@ async function assertRoleRequiresExternalIdForTerraform(
     roleArn: string;
     region: string;
     roleSessionName: string;
+    reportFailure: AwsConnectionFailureReporter;
   },
   gateway: AwsConnectionStsGateway
 ): Promise<void> {
   try {
-    await assertAwsRoleRequiresExternalId(input, gateway);
+    await assertAwsRoleRequiresExternalId(input, gateway, input.reportFailure);
   } catch (error) {
     if (error instanceof Error) {
       throw new AwsConnectionRuntimeCredentialsError(error.message);

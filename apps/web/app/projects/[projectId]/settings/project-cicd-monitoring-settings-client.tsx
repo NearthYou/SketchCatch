@@ -26,38 +26,41 @@ export const ProjectCicdMonitoringSettingsClient = forwardRef<
     readonly projectId: string;
     readonly headingLevel?: 2 | 4 | undefined;
     readonly profile: Pick<ProjectDeliveryProfile, "monitoringConfig" | "sourceRepository">;
-    readonly initialDraft?: {
-      readonly enabled: boolean;
-      readonly monitorBranch: string;
-      readonly appPath: UpdateGitCicdMonitoringConfigRequest["appPath"];
-      readonly infraPath: UpdateGitCicdMonitoringConfigRequest["infraPath"];
-    } | undefined;
+    readonly initialDraft?:
+      | {
+          readonly enabled: boolean;
+          readonly monitorBranch: string;
+          readonly appPath: UpdateGitCicdMonitoringConfigRequest["appPath"];
+          readonly infraPath: UpdateGitCicdMonitoringConfigRequest["infraPath"];
+        }
+      | undefined;
     readonly onDirty?: (() => void) | undefined;
     readonly onSaved?: (() => void) | undefined;
     readonly safeReturnTo?: string | null | undefined;
+    readonly showHeading?: boolean | undefined;
     readonly showSaveButton?: boolean | undefined;
   }
->(function ProjectCicdMonitoringSettingsClient({
-  projectId,
-  headingLevel = 2,
-  profile,
-  initialDraft,
-  onDirty,
-  onSaved,
-  safeReturnTo = null,
-  showSaveButton = true
-}, ref) {
+>(function ProjectCicdMonitoringSettingsClient(
+  {
+    projectId,
+    headingLevel = 2,
+    profile,
+    initialDraft,
+    onDirty,
+    onSaved,
+    safeReturnTo = null,
+    showHeading = true,
+    showSaveButton = true
+  },
+  ref
+) {
   const router = useRouter();
   const Heading = headingLevel === 4 ? "h4" : "h2";
   const monitoringSettingsRef = useRef<CicdMonitoringSettingsHandle>(null);
   const isDirtyRef = useRef(false);
-  const profileOwnerRef = useRef(
-    `${projectId}:${profile.sourceRepository?.id ?? "none"}`
-  );
+  const profileOwnerRef = useRef(`${projectId}:${profile.sourceRepository?.id ?? "none"}`);
   const repository = profile.sourceRepository;
-  const [config, setConfig] = useState<GitCicdMonitoringConfig | null>(
-    profile.monitoringConfig
-  );
+  const [config, setConfig] = useState<GitCicdMonitoringConfig | null>(profile.monitoringConfig);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [message, setMessage] = useState("");
 
@@ -117,17 +120,23 @@ export const ProjectCicdMonitoringSettingsClient = forwardRef<
   }));
 
   return (
-    <section className="dashboardPanel integrationPanel" aria-labelledby="project-cicd-settings-title">
-      <div className="integrationHeader">
-        <div>
-          <p className="dashboardPanelKicker">CI/CD</p>
-          <Heading id="project-cicd-settings-title">GitOps 감시 설정</Heading>
-        </div>
-      </div>
-      <p>감시할 branch와 애플리케이션·인프라 경로를 프로젝트 단위로 관리합니다.</p>
-      {!repository ? (
-        <p role="status">먼저 이 프로젝트에 GitHub 저장소를 연결하세요.</p>
+    <section
+      aria-label={showHeading ? undefined : "GitOps 감시 설정"}
+      aria-labelledby={showHeading ? "project-cicd-settings-title" : undefined}
+      className="dashboardPanel integrationPanel"
+    >
+      {showHeading ? (
+        <>
+          <div className="integrationHeader">
+            <div>
+              <p className="dashboardPanelKicker">CI/CD</p>
+              <Heading id="project-cicd-settings-title">GitOps 감시 설정</Heading>
+            </div>
+          </div>
+          <p>감시할 branch와 애플리케이션·인프라 경로를 프로젝트 단위로 관리합니다.</p>
+        </>
       ) : null}
+      {!repository ? <p role="status">먼저 이 프로젝트에 GitHub 저장소를 연결하세요.</p> : null}
       {config ? (
         <CicdMonitoringSettings
           config={config}

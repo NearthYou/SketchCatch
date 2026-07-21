@@ -221,3 +221,24 @@ test("development AWS connection errors point developers to CloudFormation and I
   assert.match(message, /AssumeRole returned AccessDenied/u);
   assert.match(message, /CloudFormation Stack 상태.*Trust Policy/u);
 });
+
+test("AWS connection failures translate each actionable STS category", () => {
+  const cases = [
+    ["AWS SSO credentials are unavailable or expired", /AWS SSO.*로그인/u],
+    ["AWS STS request timed out", /AWS STS.*시간이 초과/u],
+    ["AWS STS request was throttled", /일시적으로 제한/u],
+    ["AWS STS request validation failed", /Role ARN.*연결 설정/u]
+  ] as const;
+
+  for (const [serverMessage, expectedMessage] of cases) {
+    const error = new ApiClientError(500, {
+      error: "internal_server_error",
+      message: serverMessage
+    });
+
+    assert.match(
+      getApiErrorMessage(error, "AWS Role 검증에 실패했습니다.", { developerMode: false }),
+      expectedMessage
+    );
+  }
+});

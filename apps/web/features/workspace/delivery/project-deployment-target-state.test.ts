@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { createEditableEcsWebBuildConfig } from "./ecs-web-build-config-state.js";
 import {
   changeDeploymentTargetRuntime,
   createDeploymentTargetDraft,
@@ -11,7 +12,9 @@ import {
   getLockedSystemFields,
   getLockedSystemFieldsAfterRuntimeChange,
   getMissingDeploymentTargetFieldKeys,
-  isDeploymentTargetDraftReady
+  isDeploymentTargetDraftReady,
+  replaceDeploymentTargetEcsWeb,
+  updateDeploymentTargetDraftField
 } from "./project-deployment-target-state.js";
 
 const verifiedConnection = {
@@ -265,6 +268,13 @@ test("ECS defaults are immediately saveable without a fabricated output URL", ()
   }
   assert.equal(request.runtimeConfig?.outputUrl, null);
   assert.equal(request.confirmedBuildConfig.healthCheckPath, "/health");
+  assert.deepEqual(request.confirmedBuildConfig.evidence, [
+    { kind: "dockerfile", path: "apps/api/Dockerfile" },
+    { kind: "package_manifest", path: "apps/web/package.json" },
+    { kind: "static_output", path: "apps/web/dist" }
+  ]);
+  assert.equal(request.confirmedBuildConfig.dockerfilePath, "apps/api/Dockerfile");
+  assert.equal(request.confirmedBuildConfig.packageManifestPath, "apps/web/package.json");
   assert.deepEqual(request.confirmedBuildConfig.ecsWeb, {
     api: {
       sourceRoot: ".",
@@ -311,6 +321,282 @@ test("Runtime validation reports only the selected Runtime's missing fields", ()
     getMissingDeploymentTargetFieldKeys(lambdaDraft, [verifiedConnection]).join(","),
     /ecr|cluster|service|container/
   );
+});
+
+test("ECS readiness requires a complete web build config without blocking non-ECS targets", () => {
+  const ecsWithoutWeb = createDeploymentTargetDraft(null, [verifiedConnection], null, {
+    projectName: "Readiness Gate",
+    repositoryRevision: "a".repeat(40),
+    sourceRoot: "services/api",
+    dockerfilePath: "services/api/Dockerfile"
+  });
+
+  assert.deepEqual(getMissingDeploymentTargetFieldKeys(ecsWithoutWeb, [verifiedConnection]), [
+    "ecs_web_build_config"
+  ]);
+  assert.equal(isDeploymentTargetDraftReady(ecsWithoutWeb, [verifiedConnection]), false);
+
+  const ecsWithInvalidWeb = createDeploymentTargetDraft(null, [verifiedConnection], null, {
+    projectName: "Readiness Gate",
+    repositoryRevision: "a".repeat(40),
+    sourceRoot: "services/api",
+    dockerfilePath: "services/api/Dockerfile",
+    ecsWeb: {
+      api: {
+        sourceRoot: "services/api",
+        dockerfilePath: "services/api/Dockerfile",
+        containerPort: 0,
+        healthCheckPath: "/health"
+      },
+      frontend: {
+        sourceRoot: "apps/web",
+        packageManifestPath: "apps/web/package.json",
+        lockfilePath: "pnpm-lock.yaml",
+        packageManager: "pnpm",
+        packageManagerVersion: "11.8.0",
+        installPreset: "pnpm_frozen_lockfile",
+        buildPreset: "pnpm_build",
+        outputPath: "apps/web/dist"
+      }
+    }
+  });
+  assert.ok(
+    getMissingDeploymentTargetFieldKeys(ecsWithInvalidWeb, [verifiedConnection]).includes(
+      "ecs_web_build_config"
+    )
+  );
+
+  const lambdaDraft = {
+    ...changeDeploymentTargetRuntime(ecsWithoutWeb, "lambda"),
+    sourceRoot: ".",
+    evidencePath: "template.yaml",
+    commitSha: "b".repeat(40),
+    codeBuildProjectName: "readiness-gate-build",
+    healthCheckPath: "/health",
+    functionLogicalId: "ApiFunction",
+    functionName: "readiness-gate-api",
+    aliasName: "live",
+    codeDeployApplicationName: "readiness-gate",
+    codeDeployDeploymentGroupName: "readiness-gate-live",
+    outputUrl: "https://api.example.com"
+  };
+  assert.doesNotMatch(
+    getMissingDeploymentTargetFieldKeys(lambdaDraft, [verifiedConnection]).join(","),
+    /ecs_web_build_config/
+  );
+  assert.equal(isDeploymentTargetDraftReady(lambdaDraft, [verifiedConnection]), true);
+});
+
+test("ECS common fields and nested API aliases stay synchronized in both directions", () => {
+  const ecsWeb = {
+    api: {
+      sourceRoot: "services/api",
+      dockerfilePath: "services/api/Dockerfile",
+      containerPort: 8080,
+      healthCheckPath: "/health"
+    },
+    frontend: {
+      sourceRoot: "apps/web",
+      packageManifestPath: "apps/web/package.json",
+      lockfilePath: "pnpm-lock.yaml",
+      packageManager: "pnpm" as const,
+      packageManagerVersion: "11.8.0",
+      installPreset: "pnpm_frozen_lockfile" as const,
+      buildPreset: "pnpm_build" as const,
+      outputPath: "apps/web/dist"
+    }
+  };
+  const original = createDeploymentTargetDraft(null, [verifiedConnection], null, {
+    projectName: "Alias Sync",
+    repositoryRevision: "a".repeat(40),
+    sourceRoot: "services/api",
+    dockerfilePath: "services/api/Dockerfile",
+    ecsWeb
+  });
+
+  const sourceUpdated = updateDeploymentTargetDraftField(
+    original,
+    "sourceRoot",
+    "services/backend"
+  );
+  assert.equal(sourceUpdated.ecsWeb?.api.sourceRoot, "services/backend");
+  const dockerfileUpdated = updateDeploymentTargetDraftField(
+    sourceUpdated,
+    "evidencePath",
+    "services/backend/Dockerfile.prod"
+  );
+  assert.equal(
+    dockerfileUpdated.ecsWeb?.api.dockerfilePath,
+    "services/backend/Dockerfile.prod"
+  );
+  const healthUpdated = updateDeploymentTargetDraftField(
+    dockerfileUpdated,
+    "healthCheckPath",
+    "/ready"
+  );
+  assert.equal(healthUpdated.ecsWeb?.api.healthCheckPath, "/ready");
+
+  const replaced = replaceDeploymentTargetEcsWeb(healthUpdated, {
+    ...ecsWeb,
+    api: {
+      ...ecsWeb.api,
+      sourceRoot: "packages/api",
+      dockerfilePath: "packages/api/Dockerfile",
+      healthCheckPath: "/live"
+    }
+  });
+  assert.equal(replaced.sourceRoot, "packages/api");
+  assert.equal(replaced.evidencePath, "packages/api/Dockerfile");
+  assert.equal(replaced.healthCheckPath, "/live");
+
+  const loaded = createDeploymentTargetDraft(
+    {
+      projectId: "project-1",
+      provider: "aws",
+      connectionId: verifiedConnection.id,
+      region: verifiedConnection.region,
+      runtimeTargetKind: "ecs_fargate",
+      confirmedBuildConfig: {
+        sourceRoot: "legacy/api",
+        evidence: [{ kind: "dockerfile", path: "legacy/api/Dockerfile" }],
+        installPreset: "none",
+        buildPreset: "docker_build",
+        artifactOutputPath: null,
+        runtimeEntrypoint: null,
+        healthCheckPath: "/legacy",
+        dockerfilePath: "legacy/api/Dockerfile",
+        packageManifestPath: null,
+        samTemplatePath: null,
+        appSpecPath: null,
+        staticOutputPath: null,
+        exactSemVerTag: null,
+        manifestVersion: null,
+        confirmedCommitSha: "b".repeat(40),
+        confirmedAt: "2026-07-15T00:00:00.000Z",
+        ecsWeb: replaced.ecsWeb
+      },
+      runtimeConfig: {
+        runtimeTargetKind: "ecs_fargate",
+        codeBuildProjectName: "alias-sync-build",
+        ecrRepositoryName: "alias-sync-api",
+        clusterName: "alias-sync-cluster",
+        serviceName: "alias-sync-service",
+        containerName: "api",
+        outputUrl: null
+      },
+      rolloutStrategy: "all_at_once",
+      createdAt: "2026-07-15T00:00:00.000Z",
+      updatedAt: "2026-07-15T00:00:00.000Z"
+    },
+    [verifiedConnection]
+  );
+  assert.equal(loaded.sourceRoot, "packages/api");
+  assert.equal(loaded.evidencePath, "packages/api/Dockerfile");
+  assert.equal(loaded.healthCheckPath, "/live");
+});
+
+test("runtime secret facts survive incomplete ECS web inference and return to manual config", () => {
+  const repositoryRevision = "f".repeat(40);
+  const sourceRepository = {
+    id: "source-repository-secret-retention",
+    projectId: "project-1",
+    provider: "github" as const,
+    status: "active" as const,
+    githubInstallationId: "123",
+    githubRepositoryId: "456",
+    owner: "sketchcatch",
+    name: "secret-retention",
+    defaultBranch: "main",
+    repositoryUrl: "https://github.com/sketchcatch/secret-retention",
+    visibility: "private" as const,
+    archived: false,
+    analysis: {
+      repositoryRevision,
+      analyzedAt: "2026-07-15T00:00:00.000Z",
+      aiHandoff: {
+        status: "template_selected" as const,
+        templateId: "ecs-fargate-container-app" as const,
+        selectionReasons: ["Dockerized API and frontend unit"],
+        applicationUnits: [
+          {
+            id: "api",
+            rootPath: "services/api",
+            kind: "backend" as const,
+            frameworks: ["Express"],
+            evidencePaths: ["services/api/Dockerfile"]
+          },
+          {
+            id: "web",
+            rootPath: "apps/web",
+            kind: "frontend" as const,
+            frameworks: ["React"],
+            evidencePaths: []
+          }
+        ],
+        evidence: [
+          {
+            kind: "dockerfile" as const,
+            path: "services/api/Dockerfile",
+            applicationUnitId: "api",
+            signals: []
+          }
+        ],
+        architectureFacts: [
+          {
+            kind: "runtime_secret" as const,
+            value: "SESSION_SECRET",
+            sourcePath: "services/api/src/config.ts"
+          },
+          {
+            kind: "runtime_secret" as const,
+            value: "API_TOKEN",
+            sourcePath: "services/api/src/client.ts"
+          },
+          {
+            kind: "runtime_secret" as const,
+            value: "SESSION_SECRET",
+            sourcePath: "README.md"
+          }
+        ],
+        missingEvidence: ["package_json" as const, "static_output" as const]
+      }
+    },
+    disconnectedAt: null,
+    createdAt: "2026-07-15T00:00:00.000Z",
+    updatedAt: "2026-07-15T00:00:00.000Z"
+  };
+  const draft = createDeploymentTargetDraft(
+    null,
+    [verifiedConnection],
+    sourceRepository,
+    null,
+    "preserve_target",
+    {
+      nodes: [
+        deploymentNode("aws_s3_bucket", {}),
+        deploymentNode("aws_cloudfront_distribution", {}),
+        deploymentNode("aws_ecs_service", {})
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    }
+  );
+
+  assert.equal(draft.ecsWeb, null);
+  assert.deepEqual(draft.ecsRequiredRuntimeSecrets, ["API_TOKEN", "SESSION_SECRET"]);
+
+  const manualConfig = createEditableEcsWebBuildConfig({
+    sourceRoot: draft.sourceRoot,
+    dockerfilePath: draft.evidencePath,
+    healthCheckPath: draft.healthCheckPath,
+    packageManager: "pnpm"
+  });
+  const withManualConfig = replaceDeploymentTargetEcsWeb(draft, manualConfig);
+  assert.deepEqual(withManualConfig.ecsWeb?.api.requiredRuntimeSecrets, [
+    "API_TOKEN",
+    "SESSION_SECRET"
+  ]);
+  assert.deepEqual(withManualConfig.ecsRequiredRuntimeSecrets, ["API_TOKEN", "SESSION_SECRET"]);
 });
 
 test("public Repository Analysis Record seeds a target before GitHub Source Repository connection", () => {

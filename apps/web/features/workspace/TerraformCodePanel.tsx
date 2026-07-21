@@ -1511,27 +1511,27 @@ export const TerraformCodePanel = forwardRef<
     if (mutationLockedRef.current) return;
 
     codeVersionRef.current += 1;
-    setTerraformFiles((currentFiles) =>
-      currentFiles.map((file) => {
-        if (inspectedBlock && file.fileName === inspectedBlock.fileName) {
-          return {
-            fileName: file.fileName,
-            code: `${file.code.slice(0, inspectedBlock.startOffset)}${nextCode}${file.code.slice(
-              inspectedBlock.endOffset
-            )}`
-          };
-        }
+    const nextFiles = terraformFiles.map((file) => {
+      if (inspectedBlock && file.fileName === inspectedBlock.fileName) {
+        return {
+          fileName: file.fileName,
+          code: `${file.code.slice(0, inspectedBlock.startOffset)}${nextCode}${file.code.slice(
+            inspectedBlock.endOffset
+          )}`
+        };
+      }
 
-        if (!inspectedBlock && file.fileName === activeFileName) {
-          return {
-            fileName: file.fileName,
-            code: nextCode
-          };
-        }
+      if (!inspectedBlock && file.fileName === activeFileName) {
+        return {
+          fileName: file.fileName,
+          code: nextCode
+        };
+      }
 
-        return file;
-      })
-    );
+      return file;
+    });
+    setTerraformFiles(nextFiles);
+    onTerraformFilesChange?.(toTerraformValidationFiles(nextFiles));
 
     setHasLocalEdits(true);
     setIsTerraformPreviewStale(

@@ -8,6 +8,7 @@ import type {
   DeploymentPlanSummary,
   GitCicdAwsRoleDiff,
   GitCicdDeploymentMode,
+  GitCicdHandoffConfigurationPreview,
   GitCicdHandoffKind,
   GitCicdPipelineDetailStatus,
   GitCicdRepositorySettingsPreview,
@@ -59,6 +60,7 @@ import {
   createS3DeploymentPlanArtifactStorage,
   type DeploymentPlanArtifactStorage
 } from "../deployments/deployment-plan-artifact-storage.js";
+import { deriveGitCicdHandoffConfigurationPreview } from "./git-cicd-handoff-configuration.js";
 
 export type GitCicdHandoffRecord = typeof gitCicdHandoffs.$inferSelect;
 export type ProjectAccessContext = {
@@ -452,6 +454,36 @@ export class GitCicdHandoffProviderConflictError extends Error {
   constructor(message: string, readonly code: string | null = null) {
     super(message);
     this.name = "GitCicdHandoffProviderConflictError";
+  }
+}
+
+export class GitCicdHandoffConfigurationStaleError
+  extends GitCicdHandoffProviderConflictError {
+  override readonly code = "GIT_CICD_HANDOFF_CONFIGURATION_STALE" as const;
+
+  constructor() {
+    super(
+      "CI/CD 설정이 변경되었습니다. Delivery 정보를 새로고침하고 다시 검토해 주세요.",
+      "GIT_CICD_HANDOFF_CONFIGURATION_STALE"
+    );
+    this.name = "GitCicdHandoffConfigurationStaleError";
+  }
+}
+
+function assertOptionalHandoffConfigurationMatches(
+  input: Pick<
+    CreateGitCicdHandoffInput,
+    "rdsEnabled" | "staticSiteUrl" | "apiBaseUrl"
+  >,
+  configuration: GitCicdHandoffConfigurationPreview
+): void {
+  if (
+    (input.rdsEnabled !== undefined && input.rdsEnabled !== configuration.rdsEnabled) ||
+    (input.staticSiteUrl !== undefined &&
+      input.staticSiteUrl !== configuration.staticSiteUrl) ||
+    (input.apiBaseUrl !== undefined && input.apiBaseUrl !== configuration.apiBaseUrl)
+  ) {
+    throw new GitCicdHandoffConfigurationStaleError();
   }
 }
 
@@ -1503,6 +1535,11 @@ export async function createGitCicdHandoff(
   }
   const deploymentTarget = await repository.findProjectDeploymentTarget(input.projectId);
   assertGitOpsTarget(deploymentTarget, sourceRepository, monitoringConfig.appPath);
+  const handoffConfiguration = deriveGitCicdHandoffConfigurationPreview({
+    architectureJson: architecture.architectureJson,
+    deploymentTarget
+  });
+  assertOptionalHandoffConfigurationMatches(input, handoffConfiguration);
   if (!deploymentTarget.awsAccountId || !deploymentTarget.connectionId) {
     throw new GitCicdHandoffProviderConflictError(
       "Git/CI/CD handoff requires a verified AWS account identity"
@@ -1541,7 +1578,7 @@ export async function createGitCicdHandoff(
   const handoffKind = input.handoffKind ?? "terraform_iac";
   const deploymentMode = input.deploymentMode ?? "infra_and_app";
   const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
-  const rdsEnabled = input.rdsEnabled === true;
+  const rdsEnabled = handoffConfiguration.rdsEnabled;
   if (input.awsRegion && input.awsRegion !== deploymentTarget.region) {
     throw new GitCicdHandoffProviderConflictError(
       "GitOps AWS region must match the confirmed project deployment target"
@@ -1556,8 +1593,8 @@ export async function createGitCicdHandoff(
   const awsRoleArn = deploymentTarget.awsRoleArn;
   const tfStateBucket = input.tfStateBucket ?? null;
   const releaseBucket = input.releaseBucket ?? null;
-  const staticSiteUrl = input.staticSiteUrl ?? null;
-  const apiBaseUrl = input.apiBaseUrl ?? null;
+  const staticSiteUrl = handoffConfiguration.staticSiteUrl;
+  const apiBaseUrl = handoffConfiguration.apiBaseUrl;
   const sketchCatchPublicBaseUrl = normalizeGitCicdReleaseApiUrl(
     process.env.SKETCHCATCH_PUBLIC_BASE_URL
   );

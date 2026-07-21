@@ -10,8 +10,72 @@ import {
   getRecentDeploymentResultTitle,
   resolveDeploymentHistorySelection
 } from "./deployment-presentation";
+import * as deploymentPresentation from "./deployment-presentation";
 
-test("Deployment History filters unchanged versions and aggregates only measured durations", () => {
+test("automatic readiness uses only a Plan prepared from the current auto request", () => {
+  type ReadinessScopeResolver = (input: {
+    readonly autoScopeRequestDeploymentId: string;
+    readonly hasCurrentDeploymentChanges: boolean;
+    readonly selectedDeployment: {
+      readonly currentPlanArtifactId: string | null;
+      readonly id: string;
+      readonly scope: "application" | "full_stack" | "infrastructure";
+    } | null;
+    readonly selectedScope: "application" | "auto" | "full_stack" | "infrastructure";
+  }) => "application" | "full_stack" | "infrastructure" | null;
+  const resolver = (
+    deploymentPresentation as typeof deploymentPresentation & {
+      readonly resolveDeploymentReadinessScope?: ReadinessScopeResolver;
+    }
+  ).resolveDeploymentReadinessScope;
+
+  assert.equal(typeof resolver, "function");
+  if (!resolver) return;
+
+  const manualPlan = {
+    currentPlanArtifactId: "plan-1",
+    id: "deployment-1",
+    scope: "infrastructure" as const
+  };
+  assert.equal(
+    resolver({
+      autoScopeRequestDeploymentId: "",
+      hasCurrentDeploymentChanges: false,
+      selectedDeployment: manualPlan,
+      selectedScope: "auto"
+    }),
+    null
+  );
+  assert.equal(
+    resolver({
+      autoScopeRequestDeploymentId: manualPlan.id,
+      hasCurrentDeploymentChanges: false,
+      selectedDeployment: manualPlan,
+      selectedScope: "auto"
+    }),
+    "infrastructure"
+  );
+  assert.equal(
+    resolver({
+      autoScopeRequestDeploymentId: manualPlan.id,
+      hasCurrentDeploymentChanges: true,
+      selectedDeployment: manualPlan,
+      selectedScope: "auto"
+    }),
+    null
+  );
+  assert.equal(
+    resolver({
+      autoScopeRequestDeploymentId: "",
+      hasCurrentDeploymentChanges: true,
+      selectedDeployment: null,
+      selectedScope: "application"
+    }),
+    "application"
+  );
+});
+
+test("Deployment History filters terminal entries by completion state", () => {
   const entries = getDeploymentHistoryEntries([
     {
       id: "deployment-changed",
@@ -48,33 +112,50 @@ test("Deployment History filters unchanged versions and aggregates only measured
         blocked: false,
         warnings: []
       }
-    }
-  ]);
-
-  assert.deepEqual(
-    filterDeploymentHistoryEntries(entries, "unchanged").map(({ deployment }) => deployment.id),
-    ["deployment-unchanged"]
-  );
-  assert.equal(filterDeploymentHistoryEntries(entries, "complete").length, 2);
-  assert.deepEqual(getDeploymentHistoryMetrics(entries), {
-    averageDurationMs: 120_000,
-    completedCount: 2,
-    totalChangeCount: 3,
-    totalCount: 2
-  });
-});
-
-test("Deployment History does not infer unchanged state when a Plan summary is unavailable", () => {
-  const entries = getDeploymentHistoryEntries([
+    },
     {
-      id: "deployment-without-plan-summary",
-      createdAt: "2026-07-18T11:00:00.000Z",
-      status: "SUCCESS" as const,
+      id: "deployment-failed",
+      createdAt: "2026-07-18T08:00:00.000Z",
+      status: "FAILED" as const,
+      startedAt: "2026-07-18T08:00:00.000Z",
+      completedAt: null,
+      failedAt: "2026-07-18T08:00:42.000Z",
+      cancelledAt: null,
+      updatedAt: "2026-07-18T08:00:42.000Z",
       planSummary: null
     }
   ]);
 
-  assert.deepEqual(filterDeploymentHistoryEntries(entries, "unchanged"), []);
+  assert.deepEqual(
+    filterDeploymentHistoryEntries(entries, "complete").map(({ deployment }) => deployment.id),
+    ["deployment-changed", "deployment-unchanged"]
+  );
+  assert.deepEqual(
+    filterDeploymentHistoryEntries(entries, "failed").map(({ deployment }) => deployment.id),
+    ["deployment-failed"]
+  );
+  assert.deepEqual(getDeploymentHistoryMetrics(entries), {
+    averageDurationMs: 81_000,
+    completedCount: 3,
+    totalChangeCount: 3,
+    totalCount: 3
+  });
+});
+
+test("Deployment History keeps a failed entry even when a Plan summary is unavailable", () => {
+  const entries = getDeploymentHistoryEntries([
+    {
+      id: "deployment-without-plan-summary",
+      createdAt: "2026-07-18T11:00:00.000Z",
+      status: "FAILED" as const,
+      planSummary: null
+    }
+  ]);
+
+  assert.deepEqual(
+    filterDeploymentHistoryEntries(entries, "failed").map(({ deployment }) => deployment.id),
+    ["deployment-without-plan-summary"]
+  );
 });
 
 test("infrastructure deployments appear as versioned Deployment History entries", () => {
@@ -103,6 +184,10 @@ test("infrastructure deployments appear as versioned Deployment History entries"
     })),
     [
       { deploymentId: "deployment-2", versionLabel: "v20260716-020000-000-yment2" },
+      {
+        deploymentId: "deployment-failed",
+        versionLabel: "v20260716-013000-000-failed"
+      },
       { deploymentId: "deployment-1", versionLabel: "v20260716-010000-000-yment1" }
     ]
   );
@@ -241,12 +326,12 @@ test("deployment statuses use Korean labels and semantic tones", () => {
     tone: "running"
   });
   assert.deepEqual(getDeploymentStatusPresentation("SUCCESS"), {
-    label: "성공",
+    label: "완료",
     tone: "success"
   });
   assert.equal(getDeploymentStatusPresentation("PENDING").label, "대기 중");
   assert.equal(getDeploymentStatusPresentation("CANCELLED").label, "취소됨");
-  assert.equal(getDeploymentStatusPresentation("DESTROYED").label, "정리 완료");
+  assert.equal(getDeploymentStatusPresentation("DESTROYED").label, "완료");
   assert.deepEqual(getDeploymentStatusPresentation("PARTIALLY_FAILED"), {
     label: "부분 실패",
     tone: "error"
@@ -265,6 +350,10 @@ test("development deployment failures name the concrete evidence developers must
   assert.match(
     getDeploymentFailureDeveloperCheck("plan", "development") ?? "",
     /Terraform plan stderr.*state refresh/u
+  );
+  assert.match(
+    getDeploymentFailureDeveloperCheck("aws_connection", "development") ?? "",
+    /SSO 세션.*External ID.*실패 단계.*AWS request ID/u
   );
   assert.equal(getDeploymentFailureDeveloperCheck("plan", "production"), null);
 });
