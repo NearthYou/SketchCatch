@@ -1,0 +1,435 @@
+.signalDashboard {
+  box-sizing: border-box;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 16px;
+  margin-top: 18px;
+  min-width: 0;
+  padding: 0 16px 16px;
+  width: 100%;
+}
+
+.statusSummary,
+.signalCardsSection,
+.signalDetail {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: 12px;
+}
+
+.statusSummary {
+  align-items: flex-start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 18px;
+}
+
+.statusSummary[data-status="critical"] {
+  border-color: color-mix(in srgb, var(--color-error) 28%, var(--color-canvas));
+}
+
+.statusSummary[data-status="warning"] {
+  border-color: color-mix(in srgb, var(--color-warning) 28%, var(--color-canvas));
+}
+
+.statusIcon {
+  align-items: center;
+  background: var(--color-surface-strong);
+  border-radius: 999px;
+  color: var(--color-muted);
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.statusSummary[data-status="critical"] .statusIcon {
+  background: var(--color-error-surface);
+  color: var(--color-error);
+}
+
+.statusSummary[data-status="warning"] .statusIcon {
+  background: var(--color-warning-surface);
+  color: var(--color-warning);
+}
+
+.statusSummary[data-status="checking"] .statusIcon {
+  background: var(--color-surface-strong);
+  color: var(--color-muted);
+}
+
+.statusContent,
+.detailPrimaryColumn,
+.detailSecondaryColumn {
+  min-width: 0;
+}
+
+.eyebrow {
+  color: var(--color-muted);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+}
+
+.statusContent h2,
+.sectionHeader h2,
+.detailIntro h2 {
+  color: var(--color-ink);
+  font-size: calc(18px + var(--presentation-font-size-increase));
+  letter-spacing: -0.025em;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.statusImpact,
+.detailIntro > p:not(.eyebrow) {
+  color: var(--color-ink);
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  line-height: 1.55;
+  margin: 7px 0 0;
+}
+
+.statusDataNote,
+.statusTimestamp,
+.statusUnknowns,
+.signalImportance,
+.logGroups p,
+.nextActions p {
+  color: var(--color-muted);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  line-height: 1.55;
+}
+
+.statusDataNote {
+  margin: 8px 0 0;
+}
+
+.statusTimestamp {
+  display: block;
+  margin-top: 8px;
+}
+
+.statusUnknowns {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.statusUnknowns li + li {
+  margin-top: 2px;
+}
+
+.signalCardsSection,
+.signalDetail {
+  padding: 18px;
+}
+
+.sectionHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.signalCount {
+  background: var(--color-surface-strong);
+  border-radius: 999px;
+  color: var(--color-muted);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.signalCards {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.signalCard {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: 10px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  min-height: 132px;
+  min-width: 0;
+  padding: 13px;
+  text-align: left;
+}
+
+.signalCard:hover,
+.signalCard[data-selected="true"] {
+  background: var(--color-surface-soft);
+  border-color: var(--color-ink);
+}
+
+.signalCard:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.signalCard[data-status="critical"] .signalStatus {
+  color: var(--color-error);
+}
+
+.signalCard[data-status="warning"] .signalStatus {
+  color: var(--color-warning);
+}
+
+.signalCardTopline,
+.signalStatus,
+.logGroupSummary {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.signalStatus {
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  justify-content: flex-start;
+}
+
+.signalCardTopline > strong {
+  color: var(--color-ink);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+}
+
+.signalTitle {
+  color: var(--color-ink);
+  font-size: calc(15px + var(--presentation-font-size-increase));
+  font-weight: calc(750 - var(--presentation-font-weight-reduction));
+  line-height: 1.4;
+}
+
+.signalImportance {
+  align-self: end;
+}
+
+.detailIntro {
+  max-width: 680px;
+}
+
+.detailGrid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(250px, 0.75fr);
+  margin-top: 18px;
+}
+
+.detailPrimaryColumn,
+.detailSecondaryColumn {
+  display: grid;
+  gap: 14px;
+}
+
+.evidencePanel,
+.logGroups,
+.nextActions,
+.sparkline,
+.incidentTimeline {
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-hairline);
+  border-radius: 10px;
+  margin: 0;
+  padding: 14px;
+}
+
+.evidencePanel h3,
+.logGroups h3,
+.nextActions h3 {
+  color: var(--color-ink);
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  margin: 0;
+}
+
+.evidenceGroup + .evidenceGroup {
+  border-top: 1px solid var(--color-hairline-strong);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.evidenceGroup h4 {
+  color: var(--color-muted);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  margin: 0;
+}
+
+.evidenceGroup ul,
+.logGroups ul {
+  color: var(--color-ink);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  line-height: 1.55;
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.evidenceGroup li + li,
+.logGroups li + li {
+  margin-top: 5px;
+}
+
+.logGroups ul {
+  list-style: none;
+  padding: 0;
+}
+
+.logGroups li {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.logGroupSummary strong {
+  color: var(--color-ink);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+}
+
+.logGroupSummary span {
+  color: var(--color-muted);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  white-space: nowrap;
+}
+
+.logGroups p,
+.nextActions p {
+  margin: 5px 0 0;
+}
+
+.logGroups details {
+  margin-top: 8px;
+}
+
+.logGroups summary {
+  color: var(--color-ink);
+  cursor: pointer;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.logGroups pre {
+  background: var(--color-surface-dark);
+  border-radius: 6px;
+  color: var(--color-on-primary);
+  font-family: var(--font-sans);
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+  margin: 8px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.incidentTimeline {
+  color: var(--color-ink);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+}
+
+.incidentTimeline summary {
+  color: var(--color-ink);
+  cursor: pointer;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.incidentTimeline ol {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.incidentTimeline li {
+  align-items: baseline;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.incidentTimeline time,
+.incidentTimeline p {
+  color: var(--color-muted);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+}
+
+.incidentTimeline p {
+  margin: 12px 0 0;
+}
+
+.sparkline {
+  align-items: center;
+  color: var(--color-ink);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+.sparkline figcaption {
+  color: var(--color-muted);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+}
+
+.sparkline svg {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 900px) {
+  .signalCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detailGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .signalDashboard {
+    gap: 12px;
+    margin-top: 14px;
+    padding: 0 12px 12px;
+  }
+
+  .statusSummary,
+  .signalCardsSection,
+  .signalDetail {
+    border-radius: 10px;
+    padding: 14px;
+  }
+
+  .signalCards {
+    grid-template-columns: 1fr;
+  }
+
+  .signalCard {
+    min-height: 116px;
+  }
+
+  .sparkline {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sparkline svg {
+    max-width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signalCard {
+    scroll-behavior: auto;
+  }
+}

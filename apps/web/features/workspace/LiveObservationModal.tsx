@@ -24,6 +24,7 @@ import {
 } from "./live-observation";
 import { useLiveObservationQueries } from "./live-observation-queries";
 import { LiveObservationFocusedFlow } from "./LiveObservationFocusedFlow";
+import { LiveObservationSignalDashboard } from "./LiveObservationSignalDashboard";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
@@ -566,6 +567,12 @@ export function LiveObservationModal({
             <LiveObservationFocusedFlow
               architecture={selectedArchitecture}
               key={`focused-${selectedDeploymentId}`}
+              snapshot={selectedSnapshot}
+            />
+          ) : null}
+          {selectedDeployment ? (
+            <LiveObservationSignalDashboard
+              deployment={selectedDeployment}
               snapshot={selectedSnapshot}
             />
           ) : null}

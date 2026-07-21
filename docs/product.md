@@ -63,7 +63,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | Terraform 생성 | 다이어그램 기반 설계를 IaC Preview로 변환한다. |
 | Pre-Deployment Check | 비용, 보안, 설정 위험을 설명하고 수정 방향을 제안한다. |
 | Direct Deployment Path | sandbox/practice 실행에서 Plan, 승인, Apply, 로그, Outputs, Auto Cleanup까지 연결한다. |
-| Live Observation | 성공한 Demo Web Service Deployment의 실제 요청, CloudWatch 측정값, ASG/EC2 또는 ECS/Fargate runtime 상태를 15분 세션으로 구분해 관측한다. |
+| Live Observation | 성공한 Demo Web Service Deployment의 실제 요청, CloudWatch 측정값, ASG/EC2 또는 ECS/Fargate runtime 상태를 15분 세션으로 관측한다. 트래픽 흐름 아래에서는 현재 상태와 사용자 영향, 근거가 있는 중요 신호 최대 3개, 확인할 수 없는 내용을 짧게 보여주며 CloudWatch의 지표 목록을 복제하지 않는다. |
 | Git/CI/CD Integration | IaC Preview를 Source Repository PR과 외부 pipeline 상태로 연결한다. |
 | Reverse Engineering | 기존 클라우드 상태를 Practice Architecture와 IaC Preview/import 제안으로 전환한다. |
 

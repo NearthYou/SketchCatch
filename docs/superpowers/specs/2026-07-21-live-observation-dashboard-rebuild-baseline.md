@@ -103,3 +103,7 @@
 - 로컬 브라우저: 390×844, 1024×768, 1440×900에서 모달을 열고 닫았다. 가로 넘침 없이 트래픽 흐름은 남고, 삭제한 운영 분석·로그 패널은 보이지 않았다. 안전한 HTTPS 주소가 없는 배포여서 관측 세션은 시작하지 않았다.
 
 `pnpm test` 전체 실행은 이 변경 범위 밖의 기존 실패로 완료되지 않았다. Web의 module thumbnail 1건과 API의 Terraform template/Amazon Q compiler 관련 20건이며, 이번에 수정한 Live Observation 파일과는 겹치지 않는다. 격리 환경에서는 `tsx` 임시 IPC 소켓 권한으로도 한 번 중단되어, 일반 로컬 권한에서 다시 확인했다.
+
+## 후속 구현
+
+이 기준점 위에 `0017-live-observation-ai-signal-dashboard.md`가 하단 AI Signal Dashboard를 추가한다. 기존 트래픽 흐름은 보호한 채, provider-neutral snapshot의 실제·파생·가능성·확인 불가를 분리해 최대 세 개의 신호와 묶인 로그만 읽기 전용으로 표시한다. 새 UI는 기존 운영 분석 JSX/CSS/테스트를 복원하지 않는다.
