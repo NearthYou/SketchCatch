@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Crosshair, Eye, Link2, RefreshCw } from "lucide-react";
 import type { GitCicdMonitoredPath, ProjectDeploymentTarget } from "@sketchcatch/types";
 import { ProjectCicdMonitoringSettingsClient } from "../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client";
@@ -33,21 +33,25 @@ export function DeliveryCenterPanel({
     refresh
   } = useProjectDeliveryProfile(projectId, readinessRefreshRequestId);
   const consoleRef = useRef<CicdConsoleScreenHandle>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isExplicitRefresh, setIsExplicitRefresh] = useState(false);
+  const [isConsoleRefreshBusy, setIsConsoleRefreshBusy] = useState(true);
+  useEffect(() => setIsConsoleRefreshBusy(true), [projectId]);
   const reload = useCallback(() => {
     void refresh();
   }, [refresh]);
   const refreshAll = useCallback(async (): Promise<void> => {
-    setIsRefreshing(true);
+    const consoleRefresh = consoleRef.current?.refreshAll();
+    if (consoleRef.current && !consoleRefresh) return;
+
+    setIsExplicitRefresh(true);
     try {
-      const consoleRefresh = consoleRef.current?.refreshAll();
       if (consoleRefresh) {
         await consoleRefresh;
         return;
       }
       await refresh();
     } finally {
-      setIsRefreshing(false);
+      setIsExplicitRefresh(false);
     }
   }, [refresh]);
 
@@ -89,6 +93,8 @@ export function DeliveryCenterPanel({
   const deploymentTarget = profile.deploymentTarget;
   const monitoringReady =
     profile.readiness.items.find((item) => item.key === "monitoring_config")?.status === "ready";
+  const isFullRefreshUnavailable =
+    isExplicitRefresh || isConsoleRefreshBusy || loadState === "loading";
   const githubAccount = profile.githubInstallations.find(
     (installation) => installation.installationId === repository?.githubInstallationId
   );
@@ -184,14 +190,16 @@ export function DeliveryCenterPanel({
           <div className={styles.titleLine}>
             <h2>CI/CD</h2>
           </div>
-          <span>
-            배포 준비부터 GitHub Actions 실행까지 · {formatCheckedAt(profile.readiness.checkedAt)}
-          </span>
+          <span>{formatCheckedAt(profile.readiness.checkedAt)}</span>
         </div>
         <div className={styles.headerActions}>
-          <button disabled={isRefreshing} onClick={() => void refreshAll()} type="button">
+          <button
+            disabled={isFullRefreshUnavailable}
+            onClick={() => void refreshAll()}
+            type="button"
+          >
             <RefreshCw aria-hidden="true" size={16} />
-            {isRefreshing ? "새로고침 중" : "전체 새로고침"}
+            {isExplicitRefresh ? "새로고침 중" : "전체 새로고침"}
           </button>
         </div>
       </header>
@@ -209,6 +217,7 @@ export function DeliveryCenterPanel({
         isDeliveryProfileRefreshing={loadState === "loading"}
         onOpenDirectDeployment={onOpenDirectDeployment}
         onOpenLiveObservation={onOpenLiveObservation}
+        onRefreshBusyChange={setIsConsoleRefreshBusy}
         onRefreshDeliveryProfile={refresh}
         projectId={projectId}
         readinessRefreshRequestId={readinessRefreshRequestId}

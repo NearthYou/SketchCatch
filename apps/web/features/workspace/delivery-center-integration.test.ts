@@ -50,7 +50,20 @@ test("CI/CD Delivery owns the project delivery configuration sections", () => {
     panelSource,
     /app\/projects\/\[projectId\]\/settings\/project-deployment-target-settings-client/
   );
-  assert.match(panelSource, /배포 준비부터 GitHub Actions 실행까지/);
+  assert.doesNotMatch(panelSource, /배포 준비부터 GitHub Actions 실행까지/);
+  assert.match(panelSource, /formatCheckedAt\(profile\.readiness\.checkedAt\)/);
+});
+
+test("CI/CD 헤더는 제목, 마지막 확인 시각, 전체 새로고침만 표시한다", () => {
+  assert.match(panelSource, /<h2>CI\/CD<\/h2>/);
+  assert.match(panelSource, /최근 확인/);
+  assert.match(panelSource, /전체 새로고침/);
+  assert.doesNotMatch(panelSource, /배포 준비부터 GitHub Actions 실행까지 ·/);
+});
+
+test("PR handoff가 없으면 상태보드는 짧은 대기 값을 표시한다", () => {
+  assert.match(statusBoardSource, /currentHandoff[\s\S]*?: "대기"/);
+  assert.doesNotMatch(statusBoardSource, /생성 대기/);
 });
 
 test("일반 배포 진입은 이전 CI/CD 탭 대신 현재 Board 배포를 연다", () => {

@@ -68,7 +68,7 @@ import styles from "./workspace.module.css";
 
 export type CicdConsoleView = "activity" | "logs";
 export type CicdConsoleScreenHandle = {
-  refreshAll(): Promise<void>;
+  refreshAll(): Promise<void> | null;
 };
 
 export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
@@ -80,6 +80,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
     | ((scope: "application" | "full_stack" | null) => void)
     | undefined;
   readonly onOpenLiveObservation?: ((selection?: LiveObservationSelection) => void) | undefined;
+  readonly onRefreshBusyChange?: ((isBusy: boolean) => void) | undefined;
   readonly onRefreshDeliveryProfile: () => Promise<ProjectDeliveryProfile | null>;
   readonly projectId: string;
   readonly readinessRefreshRequestId?: number | undefined;
@@ -91,6 +92,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
   isDeliveryProfileRefreshing,
   onOpenDirectDeployment,
   onOpenLiveObservation,
+  onRefreshBusyChange,
   onRefreshDeliveryProfile,
   projectId,
   readinessRefreshRequestId = 0,
@@ -114,6 +116,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [consoleDataFreshKey, setConsoleDataFreshKey] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isReloadReservedOrInFlight, setIsReloadReservedOrInFlightState] = useState(false);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [isFrontendRetrying, setIsFrontendRetrying] = useState(false);
   const [frontendRetryError, setFrontendRetryError] = useState("");
@@ -139,6 +142,24 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
   const readiness = deliveryProfile.readiness;
   const isReadinessRefreshing = isDeliveryProfileRefreshing;
   const readinessErrorMessage = deliveryProfileErrorMessage;
+  const setReloadReservedOrInFlight = useCallback((isBusy: boolean): void => {
+    reloadReservedOrInFlightRef.current = isBusy;
+    setIsReloadReservedOrInFlightState(isBusy);
+  }, []);
+  const isFullRefreshUnavailable =
+    !isVisible ||
+    isInitialLoading ||
+    isRefreshing ||
+    isReadinessRefreshing ||
+    isReloadReservedOrInFlight;
+
+  useEffect(() => {
+    onRefreshBusyChange?.(isFullRefreshUnavailable);
+  }, [isFullRefreshUnavailable, onRefreshBusyChange]);
+  useEffect(
+    () => () => onRefreshBusyChange?.(true),
+    [onRefreshBusyChange]
+  );
 
   const runState = useMemo(
     () => getCicdPipelineRunState(runs, selectedRunId),
@@ -179,7 +200,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
     isRefreshing: isReadinessRefreshing,
     hasError: readinessErrorMessage !== ""
   });
-  const consoleRequestKey = `${projectId}:${loadRequestId}:${readinessRefreshRequestId}:${readiness.checkedAt}`;
+  const consoleRequestKey = `${projectId}:${loadRequestId}:${readinessRefreshRequestId}`;
   const isConsoleDataFresh = isVisible && consoleDataFreshKey === consoleRequestKey;
   const infrastructureDeploymentCommand = useMemo(
     () => createInfrastructureDeploymentCommand(),
@@ -223,11 +244,17 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
     ) {
       return;
     }
-    reloadReservedOrInFlightRef.current = true;
+    setReloadReservedOrInFlight(true);
     setConsoleDataFreshKey(null);
     setLoadRequestId((requestId) => requestId + 1);
     void onRefreshDeliveryProfile();
-  }, [isReadinessRefreshing, isRefreshing, isVisible, onRefreshDeliveryProfile]);
+  }, [
+    isReadinessRefreshing,
+    isRefreshing,
+    isVisible,
+    onRefreshDeliveryProfile,
+    setReloadReservedOrInFlight
+  ]);
 
   const loadRuns = useCallback(async (): Promise<GitCicdPipelineRun[]> => {
     const response = await listGitCicdPipelineRuns(projectId, { limit: 50 });
@@ -320,7 +347,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
     if (reloadStart.generation === null) return;
     const reloadGeneration = reloadStart.generation;
     reloadCoordinatorRef.current = reloadStart.coordinator;
-    reloadReservedOrInFlightRef.current = true;
+    setReloadReservedOrInFlight(true);
     let cancelled = false;
 
     async function loadConsole(): Promise<void> {
@@ -380,7 +407,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
         reloadCoordinatorRef.current,
         reloadGeneration
       );
-      reloadReservedOrInFlightRef.current = false;
+      setReloadReservedOrInFlight(false);
       setIsInitialLoading(false);
     }
 
@@ -388,11 +415,11 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
     return () => {
       cancelled = true;
       reloadCoordinatorRef.current = invalidateGitCicdReload(reloadCoordinatorRef.current);
-      reloadReservedOrInFlightRef.current = false;
+      setReloadReservedOrInFlight(false);
       setConsoleDataFreshKey(null);
       setIsRefreshing(false);
     };
-  }, [applyRuns, consoleRequestKey, isVisible, projectId]);
+  }, [applyRuns, consoleRequestKey, isVisible, projectId, setReloadReservedOrInFlight]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -430,7 +457,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
     }
   }, [applyRuns, isVisible, loadRuns]);
 
-  const refreshAll = useCallback(async (): Promise<void> => {
+  const refreshAll = useCallback((): Promise<void> | null => {
     if (
       !isVisible ||
       document.visibilityState !== "visible" ||
@@ -438,66 +465,73 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
       isRefreshing ||
       isReadinessRefreshing
     ) {
-      return;
+      return null;
     }
     const reloadStart = beginGitCicdReload(reloadCoordinatorRef.current);
-    if (reloadStart.generation === null) return;
+    if (reloadStart.generation === null) return null;
     const reloadGeneration = reloadStart.generation;
     reloadCoordinatorRef.current = reloadStart.coordinator;
-    reloadReservedOrInFlightRef.current = true;
+    setReloadReservedOrInFlight(true);
     setIsRefreshing(true);
     setConsoleDataFreshKey(null);
-    const [consoleResult, deliveryResult] = await Promise.allSettled([
-      Promise.all([
-        refreshProjectGitCicdPipelineRuns(projectId),
-        listDeployments(projectId),
-        listGitCicdHandoffs(projectId)
-      ]),
-      onRefreshDeliveryProfile()
-    ]);
+    return (async (): Promise<void> => {
+      try {
+        const [consoleResult, deliveryResult] = await Promise.allSettled([
+          Promise.all([
+            refreshProjectGitCicdPipelineRuns(projectId),
+            listDeployments(projectId),
+            listGitCicdHandoffs(projectId)
+          ]),
+          onRefreshDeliveryProfile()
+        ]);
 
-    if (!isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)) return;
+        if (!isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)) return;
 
-    if (consoleResult.status === "fulfilled") {
-      const [result, loadedDeployments, loadedHandoffs] = consoleResult.value;
-      applyRuns(result.runs);
-      setDeployments(loadedDeployments);
-      setHandoffs(loadedHandoffs);
-      setSelectedHandoffId((selected) =>
-        loadedHandoffs.some((handoff) => handoff.id === selected)
-          ? selected
-          : (loadedHandoffs[0]?.id ?? null)
-      );
-      setConsoleDataFreshKey(
-        deliveryResult.status === "fulfilled" && deliveryResult.value !== null
-          ? consoleRequestKey
-          : null
-      );
-      dispatchRequestState({ type: "success", scope: "refresh" });
-      const errorMessage = result.targets.find((target) => target.errorMessage)?.errorMessage;
-      if (errorMessage) {
-        dispatchRequestState({
-          type: "failure",
-          scope: "screen",
-          message: errorMessage,
-          permissionFailure: false
-        });
+        if (consoleResult.status === "fulfilled") {
+          const [result, loadedDeployments, loadedHandoffs] = consoleResult.value;
+          applyRuns(result.runs);
+          setDeployments(loadedDeployments);
+          setHandoffs(loadedHandoffs);
+          setSelectedHandoffId((selected) =>
+            loadedHandoffs.some((handoff) => handoff.id === selected)
+              ? selected
+              : (loadedHandoffs[0]?.id ?? null)
+          );
+          setConsoleDataFreshKey(
+            deliveryResult.status === "fulfilled" && deliveryResult.value !== null
+              ? consoleRequestKey
+              : null
+          );
+          dispatchRequestState({ type: "success", scope: "refresh" });
+          const errorMessage = result.targets.find((target) => target.errorMessage)?.errorMessage;
+          if (errorMessage) {
+            dispatchRequestState({
+              type: "failure",
+              scope: "screen",
+              message: errorMessage,
+              permissionFailure: false
+            });
+          }
+        } else {
+          setConsoleDataFreshKey(null);
+          dispatchRequestState({
+            type: "failure",
+            scope: "screen",
+            message: getApiErrorMessage(consoleResult.reason, "CI/CD 상태를 갱신하지 못했습니다."),
+            permissionFailure: isGitHubPermissionFailure(consoleResult.reason)
+          });
+        }
+      } finally {
+        if (isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)) {
+          reloadCoordinatorRef.current = completeGitCicdReload(
+            reloadCoordinatorRef.current,
+            reloadGeneration
+          );
+          setReloadReservedOrInFlight(false);
+          setIsRefreshing(false);
+        }
       }
-    } else {
-      setConsoleDataFreshKey(null);
-      dispatchRequestState({
-        type: "failure",
-        scope: "screen",
-        message: getApiErrorMessage(consoleResult.reason, "CI/CD 상태를 갱신하지 못했습니다."),
-        permissionFailure: isGitHubPermissionFailure(consoleResult.reason)
-      });
-    }
-    reloadCoordinatorRef.current = completeGitCicdReload(
-      reloadCoordinatorRef.current,
-      reloadGeneration
-    );
-    reloadReservedOrInFlightRef.current = false;
-    setIsRefreshing(false);
+    })();
   }, [
     applyRuns,
     consoleRequestKey,
@@ -505,7 +539,8 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
     isRefreshing,
     isVisible,
     onRefreshDeliveryProfile,
-    projectId
+    projectId,
+    setReloadReservedOrInFlight
   ]);
   useImperativeHandle(ref, () => ({ refreshAll }), [refreshAll]);
 

@@ -103,7 +103,7 @@ export function CicdStatusBoard({
           value={
             currentHandoff
               ? getPullRequestStageLabel(currentHandoff.status)
-              : "생성 대기"
+              : "대기"
           }
         />
         <StatusStage

@@ -93,3 +93,33 @@ test("CI/CD는 한 번의 전체 새로고침과 배포 타깃 안의 자동 설
   assert.doesNotMatch(pipelineSource, /onManualRefresh|Pipeline 새로고침|headerAction=/);
   assert.doesNotMatch(statusBoardSource, /statusProgress/);
 });
+
+test("전체 새로고침은 자식 coordinator가 점유 중이면 비활성화하고 명시적 실행만 진행 문구를 표시한다", () => {
+  assert.match(consoleSource, /onRefreshBusyChange/);
+  assert.match(consoleSource, /onRefreshBusyChange\?\.\(isFullRefreshUnavailable\)/);
+  assert.match(deliveryCenterSource, /onRefreshBusyChange=\{setIsConsoleRefreshBusy\}/);
+  assert.match(
+    deliveryCenterSource,
+    /const isFullRefreshUnavailable =\s*isExplicitRefresh \|\| isConsoleRefreshBusy \|\| loadState === "loading";/
+  );
+  assert.match(deliveryCenterSource, /disabled=\{isFullRefreshUnavailable\}/);
+  assert.match(
+    deliveryCenterSource,
+    /\{isExplicitRefresh \? "새로고침 중" : "전체 새로고침"\}/
+  );
+});
+
+test("Profile 확인 시각만 바뀌어도 Console 전체 조회 세대는 유지된다", () => {
+  assert.match(
+    consoleSource,
+    /const consoleRequestKey = `\$\{projectId\}:\$\{loadRequestId\}:\$\{readinessRefreshRequestId\}`;/
+  );
+  assert.doesNotMatch(consoleSource, /consoleRequestKey[^;]*readiness\.checkedAt/);
+});
+
+test("전체 새로고침 정리는 현재 세대 소유자만 잠금과 상태를 해제한다", () => {
+  assert.match(
+    consoleSource,
+    /finally \{\s*if \(isGitCicdReloadOwner\(reloadCoordinatorRef\.current, reloadGeneration\)\) \{[\s\S]*?completeGitCicdReload[\s\S]*?setReloadReservedOrInFlight\(false\);[\s\S]*?setIsRefreshing\(false\);\s*\}\s*\}/
+  );
+});
