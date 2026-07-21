@@ -295,7 +295,7 @@ export function CostUsagePanel({
           </div>
 
           <div className={styles.monthlyComparisonGrid}>
-            <MonthlySummaryCard label={monthlyHasEstimate ? "전월 예상 비용" : "전월 실제"} value={formatUsd(scopedMonthlyComparison.previousMonthActual.amount)} />
+            <MonthlySummaryCard label={monthlyHasEstimate ? "전월 비용" : "전월 실제"} value={formatUsd(scopedMonthlyComparison.previousMonthActual.amount)} />
             <MonthlySummaryCard label="이번 달 누적 사용" value={formatUsd(scopedMonthlyComparison.currentMonthToDate.amount)} />
             <MonthlySummaryCard label="월말 예상" value={formatUsd(scopedMonthlyComparison.currentMonthForecast.amount)} />
             <MonthlySummaryCard
@@ -327,7 +327,7 @@ export function CostUsagePanel({
       ) : null}
 
       <section className={styles.chartSection}>
-        <div><h2>{data?.dataSource === "sample" ? "일별 예상 비용" : "일별 실제 비용"}</h2><span>{data?.startDate} - {data?.endDate}</span></div>
+        <div><h2>{data?.dataSource === "sample" ? "일별 비용" : "일별 실제 비용"}</h2><span>{data?.startDate} - {data?.endDate}</span></div>
         {scopedDailyTrend.length === 0
           ? <p>표시할 비용이 없습니다.</p>
           : <CostUsageChart dailyTrend={scopedDailyTrend} />}

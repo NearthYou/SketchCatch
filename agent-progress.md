@@ -22,6 +22,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-21 - Simplify fallback cost headings
+
+- Removed the marked `예상` qualifier from the fallback monthly and daily cost headings while preserving the explicit `실제` labels for AWS-backed data.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
+
 ### 2026-07-21 - Remove visible sample identifiers from Cost Usage
 
 - Replaced visible `sample-*`, `Sample`, `예시`, and test-only wording in fallback Cost Usage content with neutral DB/ALB names and estimated-cost labels. Internal fallback identifiers remain unchanged, and live AWS recommendation conditions retain their original wording.
