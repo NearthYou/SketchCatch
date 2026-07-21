@@ -12,6 +12,7 @@ Short English-only working log for the current agent context. Older records are 
 - The legacy `practice` Deployment profile is removed; `demo_web_service` is the default live profile, and imported migration `0054` rewrites legacy rows before removing the enum value.
 - Live Observation keeps its bounded traffic motion and presents a separate, read-only Signal Dashboard: at most three deterministic, evidence-backed signals distinguish confirmed facts, possible causes, and what is still unknown without adding live AWS actions.
 - Delayed first CloudWatch points retain request and capacity evidence, and stopped sessions no longer continue the countdown.
+- Production API task definition `sketchcatch-production-api:58` accepts manifests with the optional audience application URL. A fresh Chrome acceptance session stayed active while the audience app connected and the Store-backed request count advanced from `+1` to `+3` across repeat participation and heartbeat traffic.
 - The approved sandbox traffic run sent exactly 963 requests with 963 HTTP 200 responses. The failed observation acceptance triggered approved cleanup, and the `liveobs-7cccab4b` AWS resource set was verified absent.
 - Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` is `DESTROYED` with cleared state and current-plan pointers.
 - Repository ECS delivery carries runtime Secret names through analysis. Both strict AI and Fixed Template drafts now generate `CHECK_IN_SIGNING_SECRET` during approved Apply, map the same Secrets Manager ARN into the IAM policy and every Task, and leave `INSTANCE_ID` unset for hostname-based observation.
@@ -23,6 +24,16 @@ Short English-only working log for the current agent context. Older records are 
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
+
+### 2026-07-22 - Repair the production Live Observation manifest contract
+
+- Reproduced the post-reboot production failure with a fresh ECS task: session creation succeeded, but the first read returned HTTP 503 `LIVE_OBSERVATION_CACHE_UNAVAILABLE`.
+- Isolated the failure to the Redis Lua manifest validator. The API and shared schema validly emit optional `endpoints.audienceApplicationUrl`, while the validator still required exactly the older two endpoint keys and rejected the newly written session as corrupt.
+- Updated the validator to accept the optional string field and added a public-behavior Redis integration regression. The test failed before the fix and the Redis 8 suite now passes 31/31.
+- Merged current `origin/dev` at `334e33c5`, then passed harness, lint, typecheck, all five production builds, and the Redis integration suite.
+- Deployed exact branch SHA `59b0abee` through production workflow `29876627509`; Web and API ECS services stabilized, with the API on task definition revision 58.
+- Chrome acceptance created public observation `c815c2b8-9eb9-44f2-aeba-0eec1f31394b`, observed one running Fargate Task, connected the deployed audience application, and confirmed request growth `+1 -> +2 -> +3` across participation and heartbeat. The audience console had no errors.
+- No database migration, dependency, lockfile, Terraform execution, or user Deployment resource mutation was performed in this repair. The mutation was limited to the explicitly approved SketchCatch production service release.
 
 ### 2026-07-22 - Complete the external audience receipt handoff
 
@@ -121,19 +132,18 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Known Risk
 
-- Production still runs the pre-fix Redis client lifecycle until this branch is released through the reviewed deployment workflow.
-- Production still serves the old audience bundle until `codex/fix-browser-check-in-route` is reviewed and released; the native fetch receiver fix has only been verified in the local Chrome flow and is not yet present in CloudFront.
+- The manifest-contract repair and audience receipt flow are production-verified, but provider-confirmed scale-out remains a separate blocked acceptance item.
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
 - Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
 - The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` was saved by the stale Web process and must be re-analyzed/regenerated or replaced after the Web restart.
 - Root `pnpm test` is not green because ten unrelated API baseline tests fail and `application-artifact-registry.test.ts` still has one cancelled lease-heartbeat test.
 - The full Web suite remains at 1,121/1,125 because four architecture-board/compiler tests outside the CI/CD workstream fail; the 102-test focused CI/CD subset is green.
-- End-to-end Live Observation animation and provider-confirmed scale-out remain unaccepted because the active UI session missed the traffic before the delayed-snapshot fix.
+- Provider-confirmed scale-out remains unaccepted because the production acceptance traffic intentionally covered session, receipt, SSE, and heartbeat continuity rather than a load-triggered capacity change.
 - Automatic cleanup remains blocked for this credential layout until the approved cleanup operator can read the internal deployment-state object.
 - No new AWS resources or traffic may be created without a new explicit approval.
 
 ## Next Action
 
 1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
-2. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for these changes.
+2. Use a separately approved load cycle if provider-confirmed Live Observation scale-out must be accepted; no DB migration is required.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
