@@ -8,6 +8,7 @@ import {
   createReverseEngineeringScanJob,
   ReverseEngineeringNotFoundError,
   ReverseEngineeringScanFailedError,
+  type ReverseEngineeringScanRecord,
   type ReverseEngineeringRepository
 } from "./reverse-engineering-service.js";
 
@@ -143,13 +144,90 @@ test("verified 연결의 preview는 AWS 원본을 서버에만 유효 기간과 
   assert.equal(response.result.scan, response.scan);
   assert.equal(persistedPreview?.id, "preview-scan-task9");
   assert.equal(persistedPreview?.userId, accessContext.userId);
-  assert.equal(
-    persistedPreview?.expiresAt.toISOString(),
-    "2026-07-17T00:30:00.000Z"
-  );
+  assert.equal(persistedPreview?.expiresAt.toISOString(), "2026-07-17T00:30:00.000Z");
   assert.match(JSON.stringify(persistedPreview?.rawResult), /arn:aws:elasticloadbalancing/iu);
   assert.doesNotMatch(JSON.stringify(response), /arn:aws:elasticloadbalancing|terraform import/iu);
   assert.equal("rawResult" in response, false);
+});
+
+test("기존 Project 스캔은 AWS 원본을 저장하고 호출자에게는 공개 결과만 반환한다", async () => {
+  const verifiedConnection = createVerifiedConnection();
+  const createdAt = new Date("2026-07-20T00:00:00.000Z");
+  const scanRow = createScanRow(createdAt);
+  let persistedResult: ReverseEngineeringScanResult | undefined;
+  const repository = createRepository({
+    async findAccessibleProject() {
+      return {} as ProjectRecord;
+    },
+    async findVerifiedAwsConnection() {
+      return verifiedConnection;
+    },
+    async createScan() {
+      return scanRow;
+    },
+    async completeScan(_scanId, result, completedAt) {
+      persistedResult = structuredClone(result);
+      return {
+        ...scanRow,
+        status: "completed",
+        result,
+        completedAt,
+        updatedAt: completedAt
+      };
+    },
+    async appendScanLog(input) {
+      return input;
+    }
+  });
+  const adapter = createAwsProviderAdapter(
+    {
+      async discoverResources() {
+        return [
+          {
+            providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            providerResourceId:
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/private/abc",
+            displayName: "private-entry",
+            region: "ap-northeast-2",
+            config: {
+              name: "private-entry",
+              type: "application",
+              ipAddressType: "ipv4",
+              scheme: "internet-facing",
+              subnetIds: ["subnet-private"]
+            },
+            relationships: []
+          }
+        ];
+      }
+    },
+    { resultVisibility: "private" }
+  );
+  const ids = ["scan-1", "log-start", "log-complete"];
+  const job = await createReverseEngineeringScanJob(
+    {
+      projectId: "project-1",
+      accessContext,
+      awsConnectionId: verifiedConnection.id,
+      region: verifiedConnection.region,
+      resourceTypes: ["ALL"]
+    },
+    repository,
+    {
+      adapter,
+      generateId: () => ids.shift() ?? "unexpected-id",
+      now: () => createdAt
+    }
+  );
+
+  const publicResult = await job.run();
+
+  assert.match(JSON.stringify(persistedResult), /arn:aws:elasticloadbalancing/iu);
+  assert.match(JSON.stringify(persistedResult), /terraform import/iu);
+  assert.equal(persistedResult?.scan.id, scanRow.id);
+  assert.equal(persistedResult?.scan.projectId, scanRow.projectId);
+  assert.equal(persistedResult?.reverseEngineeringDraft.scanId, scanRow.id);
+  assert.doesNotMatch(JSON.stringify(publicResult), /arn:aws|terraform import/iu);
 });
 
 test("preview 부분 결과는 원문 AWS 오류를 버리고 안전한 서비스 coverage만 반환한다", async () => {
@@ -255,6 +333,26 @@ function createVerifiedConnection(): AwsConnection {
     lastVerifiedAt: "2026-07-17T00:00:00.000Z",
     createdAt: "2026-07-17T00:00:00.000Z",
     updatedAt: "2026-07-17T00:00:00.000Z"
+  };
+}
+
+function createScanRow(createdAt: Date): ReverseEngineeringScanRecord {
+  return {
+    id: "scan-1",
+    projectId: "project-1",
+    awsConnectionId: "verified-connection",
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL"],
+    status: "running",
+    result: null,
+    errorSummary: null,
+    startedAt: createdAt,
+    completedAt: null,
+    cancelRequestedAt: null,
+    deletedAt: null,
+    createdAt,
+    updatedAt: createdAt
   };
 }
 

@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
+  ArchitectureJson,
   DiagramJson,
   DiscoveredResource,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
+import { createAwsProviderAdapter } from "./aws-provider-adapter.js";
 import {
   resolveVerifiedImportTargets,
   ReverseEngineeringImportTargetVerificationError,
   type ReverseEngineeringImportTargetRepository
 } from "./reverse-engineering-import-targets.js";
+import { normalizeReverseEngineeringScanResult } from "./reverse-engineering-service.js";
 
 const accessContext = { kind: "user" as const, userId: "user-1" };
 
@@ -34,6 +37,192 @@ test("같은 프로젝트의 완료된 scan과 node 원본이 모두 일치할 �
       resourceType: "S3"
     }
   ]);
+});
+
+test("실제 adapter의 S3 주소를 공개 Board projection에서 바꾸지 않고 import 대상으로 검증한다", async () => {
+  const rawResult = await createAwsProviderAdapter(
+    {
+      async discoverResources() {
+        return [
+          {
+            providerResourceType: "AWS::S3::Bucket",
+            providerResourceId: "customer-assets",
+            displayName: "customer-assets",
+            region: "ap-northeast-2",
+            config: { bucket: "customer-assets" },
+            relationships: []
+          }
+        ];
+      }
+    },
+    { resultVisibility: "private" }
+  ).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
+  const persistedResult = stampPersistedIdentity(rawResult);
+  const publicResult = normalizeReverseEngineeringScanResult(persistedResult.scan, persistedResult);
+
+  const targets = await resolveVerifiedImportTargets(
+    {
+      projectId: "project-1",
+      accessContext,
+      diagramJson: diagramFromPublicArchitecture(
+        publicResult.reverseEngineeringDraft.architectureJson,
+        persistedResult.scan.id,
+        persistedResult.reverseEngineeringDraft.id
+      )
+    },
+    repositoryWith(persistedResult)
+  );
+
+  assert.deepEqual(targets, [
+    {
+      resourceId: persistedResult.discoveredResources[0]?.id,
+      terraformAddress: "aws_s3_bucket.resource_customer_assets",
+      importId: "customer-assets",
+      providerResourceType: "AWS::S3::Bucket",
+      resourceType: "S3"
+    }
+  ]);
+});
+
+test("ARN을 가진 ALB도 공개 Board projection의 Terraform identity로 검증한다", async () => {
+  const rawResult = await createAwsProviderAdapter(
+    {
+      async discoverResources() {
+        return [
+          {
+            providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            providerResourceId:
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/customer/abc",
+            displayName: "customer-entry",
+            region: "ap-northeast-2",
+            config: {
+              name: "customer-entry",
+              type: "application",
+              scheme: "internet-facing",
+              ipAddressType: "ipv4",
+              subnetIds: ["subnet-a"]
+            },
+            relationships: []
+          }
+        ];
+      }
+    },
+    { resultVisibility: "private" }
+  ).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
+  const persistedResult = stampPersistedIdentity(rawResult);
+  const publicResult = normalizeReverseEngineeringScanResult(
+    persistedResult.scan,
+    persistedResult
+  );
+  const publicNode = publicResult.reverseEngineeringDraft.architectureJson.nodes[0];
+  const storedSuggestion = persistedResult.importSuggestions[0];
+
+  assert.equal(publicNode?.config["terraformResourceType"], "aws_lb");
+  assert.equal(publicNode?.config["internal"], false);
+  assert.deepEqual(publicNode?.config["subnets"], ["subnet-a"]);
+  assert.equal(
+    `aws_lb.${String(publicNode?.config["terraformResourceName"])}`,
+    storedSuggestion?.terraformAddress
+  );
+
+  const targets = await resolveVerifiedImportTargets(
+    {
+      projectId: "project-1",
+      accessContext,
+      diagramJson: diagramFromPublicArchitecture(
+        publicResult.reverseEngineeringDraft.architectureJson,
+        persistedResult.scan.id,
+        persistedResult.reverseEngineeringDraft.id
+      )
+    },
+    repositoryWith(persistedResult)
+  );
+
+  assert.equal(targets[0]?.terraformAddress, storedSuggestion?.terraformAddress);
+  assert.equal(
+    targets[0]?.importId,
+    "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/customer/abc"
+  );
+});
+
+test("CloudFront와 ECS Cluster도 공개 Board에서 Terraform identity를 유지한다", async () => {
+  const rawResult = await createAwsProviderAdapter(
+    {
+      async discoverResources() {
+        return [
+          {
+            providerResourceType: "AWS::CloudFront::Distribution",
+            providerResourceId: "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTION",
+            displayName: "customer-cdn",
+            region: "global",
+            config: {
+              id: "EDISTRIBUTION",
+              enabled: true,
+              origin: [{ originId: "app", domainName: "app.example.com" }],
+              defaultCacheBehavior: {
+                targetOriginId: "app",
+                viewerProtocolPolicy: "redirect-to-https",
+                allowedMethods: ["GET", "HEAD"],
+                cachedMethods: ["GET", "HEAD"],
+                cachePolicyId: "managed-cache-policy"
+              },
+              restrictions: { geoRestriction: { restrictionType: "none" } },
+              viewerCertificate: { cloudfrontDefaultCertificate: true }
+            },
+            relationships: []
+          },
+          {
+            providerResourceType: "AWS::ECS::Cluster",
+            providerResourceId:
+              "arn:aws:ecs:ap-northeast-2:123456789012:cluster/customer-orders",
+            displayName: "customer-orders",
+            region: "ap-northeast-2",
+            config: { name: "customer-orders" },
+            relationships: []
+          }
+        ];
+      }
+    },
+    { resultVisibility: "private" }
+  ).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
+  const persistedResult = stampPersistedIdentity(rawResult);
+  const publicResult = normalizeReverseEngineeringScanResult(
+    persistedResult.scan,
+    persistedResult
+  );
+  const publicNodes = publicResult.reverseEngineeringDraft.architectureJson.nodes;
+
+  assert.equal(publicNodes[0]?.config["enabled"], true);
+  assert.equal(publicNodes[1]?.config["name"], "customer-orders");
+
+  for (const node of publicNodes) {
+    assert.equal(node.config["terraformBlockType"], "resource");
+    assert.match(String(node.config["terraformResourceType"]), /^aws_/u);
+    assert.match(String(node.config["terraformResourceName"]), /^[a-z_]/u);
+    assert.equal(node.config["terraformFileName"], "reverse-engineering");
+  }
+  assert.ok(persistedResult.importSuggestions.every((suggestion) => suggestion.status === "ready"));
+
+  const targets = await resolveVerifiedImportTargets(
+    {
+      projectId: "project-1",
+      accessContext,
+      diagramJson: diagramFromPublicArchitecture(
+        publicResult.reverseEngineeringDraft.architectureJson,
+        persistedResult.scan.id,
+        persistedResult.reverseEngineeringDraft.id
+      )
+    },
+    repositoryWith(persistedResult)
+  );
+
+  assert.deepEqual(
+    targets.map((target) => target.terraformAddress).sort(),
+    persistedResult.importSuggestions
+      .map((suggestion) => suggestion.terraformAddress)
+      .filter((address): address is string => address !== undefined)
+      .sort()
+  );
 });
 
 test("다른 프로젝트이거나 접근할 수 없는 scan은 import에 사용하지 않는다", async () => {
@@ -78,6 +267,104 @@ test("draft ID와 현재 Terraform 주소가 저장된 scan과 다르면 fail cl
     ),
     /Terraform 주소/u
   );
+});
+
+test("saved_scan이 아닌 source와 저장 row/result/draft의 어긋난 identity를 거부한다", async () => {
+  await assert.rejects(
+    resolveVerifiedImportTargets(
+      {
+        projectId: "project-1",
+        accessContext,
+        diagramJson: diagram({ reverseEngineeringSourceKind: "preview_scan" })
+      },
+      repositoryWith(result())
+    ),
+    /저장된 AWS 원본/u
+  );
+
+  for (const malformed of [
+    repositoryWith(result(), { id: "scan-other" }),
+    repositoryWith({ ...result(), scan: { ...result().scan, id: "scan-other" } }),
+    repositoryWith({
+      ...result(),
+      reverseEngineeringDraft: {
+        ...result().reverseEngineeringDraft,
+        scanId: "scan-other"
+      }
+    })
+  ]) {
+    await assert.rejects(
+      resolveVerifiedImportTargets(
+        { projectId: "project-1", accessContext, diagramJson: diagram() },
+        malformed
+      ),
+      ReverseEngineeringImportTargetVerificationError
+    );
+  }
+});
+
+test("서버가 만든 Reverse Engineering node에서 provenance 세 필드를 모두 지우면 중단한다", async () => {
+  const rawResult = await createAwsProviderAdapter(
+    {
+      async discoverResources() {
+        return [
+          {
+            providerResourceType: "AWS::S3::Bucket",
+            providerResourceId: "customer-assets",
+            displayName: "customer-assets",
+            region: "ap-northeast-2",
+            config: { bucket: "customer-assets" },
+            relationships: []
+          }
+        ];
+      }
+    },
+    { resultVisibility: "private" }
+  ).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
+  const persistedResult = stampPersistedIdentity(rawResult);
+  const publicResult = normalizeReverseEngineeringScanResult(
+    persistedResult.scan,
+    persistedResult
+  );
+  const forgedDiagram = diagramFromPublicArchitecture(
+    publicResult.reverseEngineeringDraft.architectureJson,
+    persistedResult.scan.id,
+    persistedResult.reverseEngineeringDraft.id
+  );
+  const values = forgedDiagram.nodes[0]?.parameters?.values;
+
+  assert.equal(values?.["reverseEngineeringManagement"], "managed");
+  delete values?.["reverseEngineeringSourceScanId"];
+  delete values?.["reverseEngineeringDraftId"];
+  delete values?.["reverseEngineeringSourceKind"];
+
+  await assert.rejects(
+    resolveVerifiedImportTargets(
+      { projectId: "project-1", accessContext, diagramJson: forgedDiagram },
+      repositoryWith(persistedResult)
+    ),
+    /AWS 원본 정보가 제거/u
+  );
+});
+
+test("browser가 import command와 ID를 위조해도 저장된 suggestion만 사용한다", async () => {
+  const targets = await resolveVerifiedImportTargets(
+    {
+      projectId: "project-1",
+      accessContext,
+      diagramJson: diagram({
+        browserValues: {
+          importCommand: "terraform import aws_s3_bucket.attacker attacker-bucket",
+          importId: "attacker-bucket",
+          terraformAddress: "aws_s3_bucket.attacker"
+        }
+      })
+    },
+    repositoryWith(result())
+  );
+
+  assert.equal(targets[0]?.terraformAddress, "aws_s3_bucket.existing_bucket");
+  assert.equal(targets[0]?.importId, "existing-bucket");
 });
 
 test("ready suggestion이 없는 관리 대상은 새 리소스로 생성되지 않도록 중단한다", async () => {
@@ -143,16 +430,17 @@ test("AWS와 SketchCatch가 소유한 리소스는 보드에 남아도 프로젝
 });
 
 function repositoryWith(
-  scanResult: ReverseEngineeringScanResult
+  scanResult: ReverseEngineeringScanResult,
+  overrides: Partial<{ id: string; projectId: string; status: string }> = {}
 ): ReverseEngineeringImportTargetRepository {
   return {
     async findAccessibleScan(projectId, scanId) {
       assert.equal(projectId, "project-1");
       assert.equal(scanId, "scan-1");
       return {
-        id: "scan-1",
-        projectId,
-        status: "completed",
+        id: overrides.id ?? "scan-1",
+        projectId: overrides.projectId ?? projectId,
+        status: overrides.status ?? "completed",
         result: scanResult
       };
     }
@@ -222,6 +510,8 @@ function diagram(
     resourceType?: string;
     resourceName?: string;
     reverseEngineeringDraftId?: string;
+    reverseEngineeringSourceKind?: string;
+    browserValues?: Record<string, unknown>;
   } = {}
 ): DiagramJson {
   return {
@@ -241,14 +531,64 @@ function diagram(
           resourceName: overrides.resourceName ?? "existing_bucket",
           fileName: "main",
           values: {
+            ...overrides.browserValues,
             reverseEngineeringSourceScanId: "scan-1",
-            reverseEngineeringDraftId:
-              overrides.reverseEngineeringDraftId ?? "draft-scan-1",
-            reverseEngineeringSourceKind: "saved_scan"
+            reverseEngineeringDraftId: overrides.reverseEngineeringDraftId ?? "draft-scan-1",
+            reverseEngineeringSourceKind: overrides.reverseEngineeringSourceKind ?? "saved_scan"
           }
         }
       }
     ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+function stampPersistedIdentity(
+  rawResult: ReverseEngineeringScanResult
+): ReverseEngineeringScanResult {
+  const scan = result().scan;
+
+  return {
+    ...rawResult,
+    scan,
+    reverseEngineeringDraft: {
+      ...rawResult.reverseEngineeringDraft,
+      id: "draft-scan-1",
+      scanId: scan.id,
+      createdAt: scan.completedAt ?? scan.updatedAt
+    }
+  };
+}
+
+function diagramFromPublicArchitecture(
+  architectureJson: ArchitectureJson,
+  scanId: string,
+  draftId: string
+): DiagramJson {
+  return {
+    nodes: architectureJson.nodes.map((node, index) => ({
+      id: node.id,
+      type: String(node.config["terraformResourceType"] ?? node.type),
+      kind: "resource" as const,
+      position: { x: node.positionX, y: node.positionY },
+      size: { width: 48, height: 48 },
+      label: node.label ?? node.id,
+      locked: false,
+      zIndex: index + 1,
+      parameters: {
+        terraformBlockType: "resource" as const,
+        resourceType: String(node.config["terraformResourceType"] ?? ""),
+        resourceName: String(node.config["terraformResourceName"] ?? ""),
+        fileName: String(node.config["terraformFileName"] ?? ""),
+        values: {
+          ...structuredClone(node.config),
+          reverseEngineeringSourceScanId: scanId,
+          reverseEngineeringDraftId: draftId,
+          reverseEngineeringSourceKind: "saved_scan"
+        }
+      }
+    })),
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
   };

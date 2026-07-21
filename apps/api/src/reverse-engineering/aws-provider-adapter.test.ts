@@ -12,8 +12,7 @@ const CLOUDFRONT_ARN_A = "arn:aws:cloudfront::123456789012:distribution/EDISTRIB
 const CLOUDFRONT_ARN_B = "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTIONB";
 const ECS_CLUSTER_ARN = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
 const ECS_SERVICE_ARN = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api";
-const ECS_TASK_DEFINITION_ARN =
-  "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
+const ECS_TASK_DEFINITION_ARN = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
 
 test("공개 Reverse Engineering 결과에는 ARN과 환경 비밀값을 남기지 않는다", async () => {
   const result = await scan([
@@ -244,14 +243,13 @@ test("AWS 전용 reader가 찾은 검토 전용 Resource도 실제 Catalog 타�
   assert.equal(
     result.importSuggestions.every(
       (suggestion) =>
-        suggestion.status === "unsupported_resource_type" &&
-        suggestion.handoffReady === false
+        suggestion.status === "unsupported_resource_type" && suggestion.handoffReady === false
     ),
     true
   );
 });
 
-test("AWS 원본 config에는 Terraform 추론을 섞지 않고 handoff 결과에만 둔다", async () => {
+test("AWS 원본 config는 보존하고 Board projection과 handoff는 같은 Terraform identity를 쓴다", async () => {
   const sourceConfig = {
     arn: ALB_ARN,
     name: "source-exact-alb",
@@ -271,12 +269,14 @@ test("AWS 원본 config에는 Terraform 추론을 섞지 않고 handoff 결과�
 
   const { arn: _sourceArn, ...publicSourceConfig } = sourceConfig;
   assert.deepEqual(result.discoveredResources[0]?.config, publicSourceConfig);
-  assert.deepEqual(result.architectureJson.nodes[0]?.config, {
-    ...publicSourceConfig,
-    providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
-    providerResourceId: result.discoveredResources[0]?.providerResourceId,
-    analysisExcluded: false
-  });
+  const boardConfig = result.architectureJson.nodes[0]?.config;
+  assert.deepEqual(boardConfig?.["reverseEngineeringObservedConfig"], publicSourceConfig);
+  assert.equal(boardConfig?.["terraformBlockType"], "resource");
+  assert.equal(boardConfig?.["terraformResourceType"], "aws_lb");
+  assert.equal(
+    result.importSuggestions[0]?.terraformAddress,
+    `aws_lb.${String(boardConfig?.["terraformResourceName"])}`
+  );
   assert.equal(
     result.reverseEngineeringDraft.protectedValueKeys.includes("terraformResourceName"),
     false
@@ -396,9 +396,9 @@ test("ECS Cluster Service Task Definition을 known type과 공개 가능한 hand
     ["ECS_CLUSTER", "ECS_SERVICE", "ECS_TASK_DEFINITION", "LAMBDA", "IAM_ROLE"]
   );
   assert.deepEqual(
-    result.discoveredResources.slice(0, 3).map((resource) =>
-      resource.config["terraformResourceType"]
-    ),
+    result.discoveredResources
+      .slice(0, 3)
+      .map((resource) => resource.config["terraformResourceType"]),
     [undefined, undefined, undefined]
   );
   assert.deepEqual(
@@ -409,14 +409,11 @@ test("ECS Cluster Service Task Definition을 known type과 공개 가능한 hand
   assert.equal(result.importSuggestions[1]?.status, "manual_review");
   assert.equal(result.importSuggestions[1]?.handoffReady, false);
   assert.equal(result.importSuggestions[1]?.importCommand?.split(" ").at(-1), "orders/api");
-  assertManualImportWithoutCommand(
-    result.importSuggestions[2],
-    "aws_ecs_task_definition"
+  assertManualImportWithoutCommand(result.importSuggestions[2], "aws_ecs_task_definition");
+  assert.deepEqual(
+    result.findings.map((finding) => finding.resourceId),
+    [result.discoveredResources[1]?.id, result.discoveredResources[2]?.id]
   );
-  assert.deepEqual(result.findings.map((finding) => finding.resourceId), [
-    result.discoveredResources[1]?.id,
-    result.discoveredResources[2]?.id
-  ]);
 
   for (const resource of result.discoveredResources.slice(3)) {
     assert.equal(resource.analysisExcluded, true);
@@ -463,8 +460,14 @@ test("불완전한 ECS Service loadBalancer evidence는 supported 상태지만 h
   assert.equal(resource?.config["terraformValidationMissingFields"], undefined);
   assert.equal(suggestion?.status, "manual_review");
   assert.equal(suggestion?.handoffReady, false);
-  assert.match(suggestion?.reason ?? "", /loadBalancers\.containerName.*loadBalancers\.containerPort/);
-  assert.match(finding?.description ?? "", /loadBalancers\.containerName.*loadBalancers\.containerPort/);
+  assert.match(
+    suggestion?.reason ?? "",
+    /loadBalancers\.containerName.*loadBalancers\.containerPort/
+  );
+  assert.match(
+    finding?.description ?? "",
+    /loadBalancers\.containerName.*loadBalancers\.containerPort/
+  );
 });
 
 test("ECS import name 또는 Terraform 생성 입력이 부족하면 import와 생성 readiness를 각각 fail-close 한다", async () => {

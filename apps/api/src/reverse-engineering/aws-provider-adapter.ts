@@ -19,6 +19,10 @@ import {
   createReverseEngineeringPublicCoverage,
   sanitizeReverseEngineeringScanErrors
 } from "./reverse-engineering-public-errors.js";
+import {
+  createStableTerraformResourceName,
+  getReverseEngineeringTerraformResourceType
+} from "./reverse-engineering-terraform-projection.js";
 
 export type AwsProviderScanInput = {
   provider: CloudProvider;
@@ -88,21 +92,6 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::ECS::TaskDefinition", "ECS_TASK_DEFINITION"]
 ]);
 
-const terraformResourceTypeMap: ReadonlyMap<ResourceType, string> = new Map([
-  ["VPC", "aws_vpc"],
-  ["SUBNET", "aws_subnet"],
-  ["INTERNET_GATEWAY", "aws_internet_gateway"],
-  ["ROUTE_TABLE", "aws_route_table"],
-  ["SECURITY_GROUP", "aws_security_group"],
-  ["EC2", "aws_instance"],
-  ["RDS", "aws_db_instance"],
-  ["S3", "aws_s3_bucket"],
-  ["LOAD_BALANCER", "aws_lb"],
-  ["CLOUDFRONT", "aws_cloudfront_distribution"],
-  ["ECS_CLUSTER", "aws_ecs_cluster"],
-  ["ECS_SERVICE", "aws_ecs_service"],
-  ["ECS_TASK_DEFINITION", "aws_ecs_task_definition"]
-]);
 const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
   "LOAD_BALANCER",
   "CLOUDFRONT",
@@ -168,10 +157,7 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
       "viewerCertificate"
     ])
   ],
-  [
-    "AWS::ECS::Cluster",
-    new Set(["capacityProviders", "configuration", "name", "status"])
-  ],
+  ["AWS::ECS::Cluster", new Set(["capacityProviders", "configuration", "name", "status"])],
   [
     "AWS::ECS::Service",
     new Set([
@@ -410,13 +396,13 @@ function hasNormalizedApplicationLoadBalancerType(record: AwsDiscoveredResourceR
     (value): value is string => typeof value === "string"
   );
 
-  return loadBalancerTypes.length > 0 && loadBalancerTypes.every((value) => value === "application");
+  return (
+    loadBalancerTypes.length > 0 && loadBalancerTypes.every((value) => value === "application")
+  );
 }
 
 function isNetworkLoadBalancerArn(providerResourceId: string): boolean {
-  return /^arn:[^:]+:elasticloadbalancing:[^:]+:[^:]+:loadbalancer\/net\//.test(
-    providerResourceId
-  );
+  return /^arn:[^:]+:elasticloadbalancing:[^:]+:[^:]+:loadbalancer\/net\//.test(providerResourceId);
 }
 
 // AWS의 attached_to 같은 관계 이름을 내부 관계 이름으로 줄여서 보드와 분석기가 같이 쓰게 합니다.
@@ -456,7 +442,7 @@ function createImportSuggestions(
   discoveredResources: DiscoveredResource[]
 ): ReverseEngineeringImportSuggestion[] {
   return discoveredResources.map((resource) => {
-    const terraformResourceType = terraformResourceTypeMap.get(resource.resourceType);
+    const terraformResourceType = getReverseEngineeringTerraformResourceType(resource.resourceType);
 
     if (!terraformResourceType) {
       return {
@@ -468,7 +454,7 @@ function createImportSuggestions(
       };
     }
 
-    const terraformResourceName = createTerraformResourceName(resource.providerResourceId);
+    const terraformResourceName = createStableTerraformResourceName(resource.id);
     const terraformAddress = `${terraformResourceType}.${terraformResourceName}`;
     const terraformBlockDraft = `resource "${terraformResourceType}" "${terraformResourceName}" {}`;
     const importId = getStableTerraformImportId(resource);
@@ -561,7 +547,7 @@ function createMissingImportIdReason(resourceType: ResourceType): string {
           ? "Terraform import에 필요한 ECS cluster name과 service name이 없습니다."
           : resourceType === "ECS_TASK_DEFINITION"
             ? "보안상 ECS Task Definition의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
-      : "Terraform import에 필요한 provider Resource ID가 없습니다.";
+            : "Terraform import에 필요한 provider Resource ID가 없습니다.";
 }
 
 function isApplicationLoadBalancerArn(value: string): boolean {
@@ -608,10 +594,7 @@ function createTerraformCreationValidationFindings(
       return [];
     }
 
-    const missingFields = getMissingTerraformCreationFields(
-      resource.resourceType,
-      resource.config
-    );
+    const missingFields = getMissingTerraformCreationFields(resource.resourceType, resource.config);
     if (missingFields.length === 0) {
       return [];
     }
@@ -638,16 +621,12 @@ function getMissingTerraformCreationFields(
   if (resourceType === "LOAD_BALANCER") {
     return [
       ...(getNonEmptyString(config["name"]) ? [] : ["name"]),
-      ...(
-        getNonEmptyString(config["loadBalancerType"]) ?? getNonEmptyString(config["type"])
-          ? []
-          : ["type"]
-      ),
+      ...((getNonEmptyString(config["loadBalancerType"]) ?? getNonEmptyString(config["type"]))
+        ? []
+        : ["type"]),
       ...(getNonEmptyString(config["scheme"]) ? [] : ["scheme"]),
       ...(hasLoadBalancerSubnetPlacement(config) ? [] : ["subnetIds/subnetMapping"]),
-      ...(hasSupportedLoadBalancerIpAddressType(config["ipAddressType"])
-        ? []
-        : ["ipAddressType"])
+      ...(hasSupportedLoadBalancerIpAddressType(config["ipAddressType"]) ? [] : ["ipAddressType"])
     ];
   }
 
@@ -663,9 +642,7 @@ function getMissingTerraformCreationFields(
         ? []
         : ["defaultCacheBehavior"]),
       ...(hasGeoRestriction(config["restrictions"]) ? [] : ["restrictions"]),
-      ...(hasCloudFrontViewerCertificate(config["viewerCertificate"])
-        ? []
-        : ["viewerCertificate"])
+      ...(hasCloudFrontViewerCertificate(config["viewerCertificate"]) ? [] : ["viewerCertificate"])
     ];
   }
 
@@ -679,12 +656,10 @@ function getMissingTerraformCreationFields(
       ...(getNonEmptyString(config["clusterArn"]) ? [] : ["clusterArn"]),
       ...(getNonEmptyString(config["taskDefinitionArn"]) ? [] : ["taskDefinitionArn"]),
       ...(isNonNegativeNumber(config["desiredCount"]) ? [] : ["desiredCount"]),
-      ...(
-        getNonEmptyString(config["launchType"]) ||
-        hasEcsCapacityProviderStrategy(config["capacityProviderStrategy"])
-          ? []
-          : ["launchType/capacityProviderStrategy"]
-      ),
+      ...(getNonEmptyString(config["launchType"]) ||
+      hasEcsCapacityProviderStrategy(config["capacityProviderStrategy"])
+        ? []
+        : ["launchType/capacityProviderStrategy"]),
       ...(hasEcsNetworkConfiguration(config["networkConfiguration"])
         ? []
         : ["networkConfiguration"]),
@@ -717,9 +692,7 @@ function hasEcsCapacityProviderStrategy(value: unknown): boolean {
   return (
     Array.isArray(value) &&
     value.length > 0 &&
-    value.every(
-      (item) => isRecord(item) && getValidEcsName(item["capacityProvider"]) !== null
-    )
+    value.every((item) => isRecord(item) && getValidEcsName(item["capacityProvider"]) !== null)
   );
 }
 
@@ -798,8 +771,9 @@ function hasCloudFrontOrigin(value: unknown): boolean {
 }
 
 function hasCloudFrontVpcOrigin(value: unknown): boolean {
-  return Array.isArray(value) && value.some(
-    (origin) => isRecord(origin) && hasCloudFrontVpcOriginConfig(origin)
+  return (
+    Array.isArray(value) &&
+    value.some((origin) => isRecord(origin) && hasCloudFrontVpcOriginConfig(origin))
   );
 }
 
@@ -822,11 +796,7 @@ function hasLoadBalancerSubnetPlacement(config: Record<string, unknown>): boolea
 }
 
 function hasSupportedLoadBalancerIpAddressType(value: unknown): boolean {
-  return (
-    value === "ipv4" ||
-    value === "dualstack" ||
-    value === "dualstack-without-public-ipv4"
-  );
+  return value === "ipv4" || value === "dualstack" || value === "dualstack-without-public-ipv4";
 }
 
 function hasCloudFrontDefaultCacheBehavior(value: unknown): boolean {
@@ -987,9 +957,7 @@ function pickPublicObjectKeys(
   keys: readonly string[]
 ): Record<string, unknown> {
   return Object.fromEntries(
-    keys.flatMap((key) =>
-      value[key] === undefined ? [] : [[key, value[key]]]
-    )
+    keys.flatMap((key) => (value[key] === undefined ? [] : [[key, value[key]]]))
   );
 }
 
@@ -1060,12 +1028,6 @@ function sanitizePublicConfigValue(value: unknown): unknown | typeof OMIT_PUBLIC
 
 export function containsAwsArn(value: string): boolean {
   return /(?:^|[^a-z0-9])arn:aws(?:-[a-z0-9-]+)?:/iu.test(value);
-}
-
-function createTerraformResourceName(providerResourceId: string): string {
-  const sanitizedName = sanitizeIdPart(providerResourceId).replaceAll("-", "_");
-
-  return /^[a-z_]/.test(sanitizedName) ? sanitizedName : `res_${sanitizedName}`;
 }
 
 // AWS ARN처럼 긴 ID를 보드 node id에 넣을 수 있는 안전한 문자열로 정리합니다.

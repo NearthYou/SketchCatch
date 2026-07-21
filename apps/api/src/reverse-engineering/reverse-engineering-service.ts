@@ -46,6 +46,7 @@ import {
   sanitizeReverseEngineeringScanErrors,
   type ReverseEngineeringConnectionFailureClassification
 } from "./reverse-engineering-public-errors.js";
+import { createReverseEngineeringTerraformProjection } from "./reverse-engineering-terraform-projection.js";
 
 export type ReverseEngineeringScanRecord = typeof reverseEngineeringScans.$inferSelect;
 export type ReverseEngineeringScanLogRecord = typeof reverseEngineeringScanLogs.$inferSelect;
@@ -145,7 +146,9 @@ export type ReverseEngineeringRepository = {
     accessContext: ProjectAccessContext,
     deletedAt: Date
   ): Promise<ReverseEngineeringScanRecord | undefined>;
-  appendScanLog(input: AppendReverseEngineeringScanLogInput): Promise<ReverseEngineeringScanLogRecord>;
+  appendScanLog(
+    input: AppendReverseEngineeringScanLogInput
+  ): Promise<ReverseEngineeringScanLogRecord>;
   listScanLogs(
     projectId: string,
     scanId: string,
@@ -267,11 +270,7 @@ function createReadCompatibilityPublicResourceIdMap(
     const publicResourceId =
       publicProviderResourceId !== resource.providerResourceId
         ? `resource-${publicProviderResourceId}`
-        : sanitizePublicStructuredId(
-            resource.id,
-            resource.providerResourceType,
-            "resource"
-          );
+        : sanitizePublicStructuredId(resource.id, resource.providerResourceType, "resource");
     publicResourceIdMap.set(resource.id, publicResourceId);
 
     const publicIds = publicIdsByProviderResourceId.get(resource.providerResourceId) ?? new Set();
@@ -338,17 +337,22 @@ function sanitizeReadCompatibilityArchitecture(
       providerResourceType,
       config: node.config
     });
+    const terraformProjection = sanitizePublicTerraformProjection({
+      config,
+      node,
+      providerResourceType,
+      publicProviderResourceId: rawProviderResourceId
+        ? createAwsPublicProviderResourceId(identity)
+        : node.id
+    });
 
     const publicNode = {
       ...node,
-      id: sanitizePublicResourceReference(
-        node.id,
-        publicResourceIdMap,
-        providerResourceType
-      ),
+      id: sanitizePublicResourceReference(node.id, publicResourceIdMap, providerResourceType),
       label: node.label ? createAwsPublicDisplayName(identity, node.label) : node.label,
       config: {
         ...config,
+        ...terraformProjection,
         providerResourceType,
         ...(rawProviderResourceId
           ? { providerResourceId: createAwsPublicProviderResourceId(identity) }
@@ -384,9 +388,67 @@ function sanitizeReadCompatibilityArchitecture(
     : { ...architectureJson, nodes, edges };
 }
 
-function getNodeProviderResourceType(
-  node: ArchitectureJson["nodes"][number]
-): string {
+/** gg: 서버가 만든 Terraform 정체성 중 공개해도 되는 고정 형식만 Board 응답에 보존합니다. */
+function sanitizePublicTerraformProjection(input: {
+  config: Record<string, unknown>;
+  node: ArchitectureJson["nodes"][number];
+  providerResourceType: string;
+  publicProviderResourceId: string;
+}): Record<string, unknown> {
+  const terraformBlockType = input.node.config["terraformBlockType"];
+  const terraformResourceType = readNonEmptyConfigString(
+    input.node.config["terraformResourceType"]
+  );
+  const terraformResourceName = readNonEmptyConfigString(
+    input.node.config["terraformResourceName"]
+  );
+  const terraformFileName = readNonEmptyConfigString(input.node.config["terraformFileName"]);
+  const management = input.node.config["reverseEngineeringManagement"];
+  const hasCanonicalIdentity =
+    terraformBlockType === "resource" &&
+    terraformResourceType !== undefined &&
+    /^aws_[a-z0-9_]+$/u.test(terraformResourceType) &&
+    terraformResourceName !== undefined &&
+    /^[a-z_][a-z0-9_]*$/u.test(terraformResourceName) &&
+    terraformFileName === "reverse-engineering";
+  const hasCanonicalManagement =
+    management === "managed" ||
+    management === "reference" ||
+    management === "aws_managed" ||
+    management === "sketchcatch_managed" ||
+    management === "needs_mapping";
+  const resourceType = RESOURCE_TYPE_SET.has(input.node.type)
+    ? (input.node.type as ResourceType)
+    : undefined;
+  const terraformValues =
+    hasCanonicalIdentity && resourceType
+      ? createReverseEngineeringTerraformProjection({
+          id: input.node.id,
+          provider: "aws",
+          providerResourceType: input.providerResourceType,
+          providerResourceId: input.publicProviderResourceId,
+          region: "global",
+          displayName: input.node.label ?? input.node.id,
+          resourceType,
+          config: input.config
+        }).terraformValues
+      : {};
+
+  return {
+    ...terraformValues,
+    ...(hasCanonicalIdentity
+      ? {
+          terraformBlockType,
+          terraformResourceType,
+          terraformResourceName,
+          terraformFileName
+        }
+      : {}),
+    ...(hasCanonicalManagement ? { reverseEngineeringManagement: management } : {})
+  };
+}
+
+function getNodeProviderResourceType(node: ArchitectureJson["nodes"][number]): string {
   const explicitType = readNonEmptyConfigString(node.config["providerResourceType"]);
 
   if (explicitType) {
@@ -409,6 +471,7 @@ function sanitizePublicImportSuggestions(
   publicResourceIdMap: ReadonlyMap<string, string>
 ): ReverseEngineeringImportSuggestion[] {
   return importSuggestions.map((suggestion) => {
+    const publicSuggestion = stripPrivateImportCommand(suggestion);
     const publicId = sanitizePublicStructuredId(
       suggestion.id,
       "AWS::ReverseEngineering::ImportSuggestion",
@@ -420,16 +483,17 @@ function sanitizePublicImportSuggestions(
       publicResourceIdMap
     );
     const publicFields = [
-      suggestion.terraformAddress,
-      suggestion.importCommand,
-      suggestion.terraformBlockDraft,
-      suggestion.reason
+      publicSuggestion.terraformAddress,
+      publicSuggestion.terraformBlockDraft,
+      publicSuggestion.reason
     ];
 
-    if (!publicFields.some((value) => value !== undefined && containsSensitiveAwsProviderText(value))) {
+    if (
+      !publicFields.some((value) => value !== undefined && containsSensitiveAwsProviderText(value))
+    ) {
       return suggestion.id === publicId && suggestion.resourceId === publicResourceId
-        ? suggestion
-        : { ...suggestion, id: publicId, resourceId: publicResourceId };
+        ? publicSuggestion
+        : { ...publicSuggestion, id: publicId, resourceId: publicResourceId };
     }
 
     return {
@@ -440,6 +504,18 @@ function sanitizePublicImportSuggestions(
       reason: "보안상 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
     };
   });
+}
+
+/** gg: 공개 scan은 실행 가능한 import ID를 포함한 명령 문자열을 반환하지 않습니다. */
+function stripPrivateImportCommand(
+  suggestion: ReverseEngineeringImportSuggestion
+): ReverseEngineeringImportSuggestion {
+  if (suggestion.importCommand === undefined) {
+    return suggestion;
+  }
+
+  const { importCommand: _privateImportCommand, ...publicSuggestion } = suggestion;
+  return publicSuggestion;
 }
 
 function sanitizePublicFindings(
@@ -456,10 +532,7 @@ function sanitizePublicFindings(
     ),
     ...(finding.resourceId
       ? {
-          resourceId: sanitizePublicResourceReference(
-            finding.resourceId,
-            publicResourceIdMap
-          )
+          resourceId: sanitizePublicResourceReference(finding.resourceId, publicResourceIdMap)
         }
       : {}),
     title: sanitizePublicFindingText(finding.title, "AWS Resource 검토가 필요합니다."),
@@ -533,10 +606,7 @@ function sanitizePublicStructuredId(
   prefix: string,
   publicResourceIdMap: ReadonlyMap<string, string> = new Map()
 ): string {
-  const rewrittenValue = rewriteStructuredPublicResourceReferences(
-    value,
-    publicResourceIdMap
-  );
+  const rewrittenValue = rewriteStructuredPublicResourceReferences(value, publicResourceIdMap);
 
   if (!containsAwsArn(rewrittenValue)) {
     return rewrittenValue;
@@ -554,7 +624,9 @@ function rewriteStructuredPublicResourceReferences(
 ): string {
   let rewrittenValue = value;
   const replacements = [...publicResourceIdMap.entries()]
-    .filter(([privateValue, publicValue]) => privateValue.length > 0 && privateValue !== publicValue)
+    .filter(
+      ([privateValue, publicValue]) => privateValue.length > 0 && privateValue !== publicValue
+    )
     .sort(([left], [right]) => right.length - left.length);
 
   for (const [privateValue, publicValue] of replacements) {
@@ -566,10 +638,7 @@ function rewriteStructuredPublicResourceReferences(
 
 type ReadCompatibilityNormalizationContext = {
   readonly discoveredResourceById: ReadonlyMap<string, DiscoveredResource | null>;
-  readonly discoveredResourceByProviderResourceId: ReadonlyMap<
-    string,
-    DiscoveredResource | null
-  >;
+  readonly discoveredResourceByProviderResourceId: ReadonlyMap<string, DiscoveredResource | null>;
   readonly displayNameByProviderResourceId: ReadonlyMap<string, string>;
   readonly reviewOnlyResourceIds: ReadonlySet<string>;
 };
@@ -692,9 +761,7 @@ function findCorrelatedDiscoveredResource(
   context: ReadCompatibilityNormalizationContext
 ): DiscoveredResource | null {
   const idMatch = context.discoveredResourceById.get(node.id);
-  const nodeProviderResourceId = readNonEmptyConfigString(
-    node.config["providerResourceId"]
-  );
+  const nodeProviderResourceId = readNonEmptyConfigString(node.config["providerResourceId"]);
   const providerResourceIdMatch = nodeProviderResourceId
     ? context.discoveredResourceByProviderResourceId.get(nodeProviderResourceId)
     : undefined;
@@ -726,13 +793,11 @@ function isUniquelyIndexedDiscoveredResource(
   );
 }
 
-function createFailClosedLegacyNodeLabel(
-  node: ArchitectureJson["nodes"][number]
-): string {
+function createFailClosedLegacyNodeLabel(node: ArchitectureJson["nodes"][number]): string {
   const label = node.label?.trim() || node.id;
   const providerResourceId = label.startsWith("arn:")
     ? label
-    : readNonEmptyConfigString(node.config["providerResourceId"]) ?? node.id;
+    : (readNonEmptyConfigString(node.config["providerResourceId"]) ?? node.id);
   const providerResourceType =
     readNonEmptyConfigString(node.config["providerResourceType"]) ?? `AWS::${node.type}`;
 
@@ -813,7 +878,8 @@ function sanitizeImportSuggestions(
       resourceId: suggestion.resourceId,
       status: "manual_review",
       handoffReady: false,
-      reason: suggestion.reason ?? "검토 전용 Resource는 Terraform import 또는 배포에 사용할 수 없습니다."
+      reason:
+        suggestion.reason ?? "검토 전용 Resource는 Terraform import 또는 배포에 사용할 수 없습니다."
     };
   });
 }
@@ -968,8 +1034,7 @@ export async function createReverseEngineeringPreviewScan(
       resourceTypes: input.resourceTypes,
       rawResult: adapterResult,
       expiresAt: new Date(
-        completedAt.getTime() +
-          (options.previewTtlMs ?? DEFAULT_REVERSE_ENGINEERING_PREVIEW_TTL_MS)
+        completedAt.getTime() + (options.previewTtlMs ?? DEFAULT_REVERSE_ENGINEERING_PREVIEW_TTL_MS)
       ),
       createdAt: startedAt,
       updatedAt: completedAt
@@ -992,9 +1057,7 @@ export async function createReverseEngineeringPreviewScan(
       result
     };
   } catch (error) {
-    throw new ReverseEngineeringScanFailedError(
-      classifyReverseEngineeringConnectionFailure(error)
-    );
+    throw new ReverseEngineeringScanFailedError(classifyReverseEngineeringConnectionFailure(error));
   }
 }
 
@@ -1097,13 +1160,14 @@ async function runReverseEngineeringScanJob({
   try {
     const adapter =
       options.adapter ??
-      createAwsProviderAdapter(createAwsReverseEngineeringGateway(awsConnection));
+      createAwsProviderAdapter(createAwsReverseEngineeringGateway(awsConnection), {
+        resultVisibility: "private"
+      });
     const adapterResult = await adapter.scan({
       provider: "aws",
       region: input.region,
       resourceTypes: input.resourceTypes
     });
-    const publicAdapterResult = normalizePublicAdapterResult(adapterResult);
     const completedAt = now();
     const completedScan = toReverseEngineeringScan({
       ...scan,
@@ -1111,17 +1175,19 @@ async function runReverseEngineeringScanJob({
       completedAt,
       updatedAt: completedAt
     });
-    const result: ReverseEngineeringScanResult = {
-      ...publicAdapterResult,
+    const persistedResult: ReverseEngineeringScanResult = {
+      ...adapterResult,
       scan: completedScan,
       reverseEngineeringDraft: {
-        ...publicAdapterResult.reverseEngineeringDraft,
+        ...adapterResult.reverseEngineeringDraft,
         id: `draft-${completedScan.id}`,
         scanId: completedScan.id,
+        architectureJson: adapterResult.architectureJson,
         createdAt: completedScan.completedAt ?? completedScan.updatedAt
       }
     };
-    const savedScan = await repository.completeScan(scan.id, result, completedAt);
+    const publicResult = normalizeReverseEngineeringScanResult(completedScan, persistedResult);
+    const savedScan = await repository.completeScan(scan.id, persistedResult, completedAt);
 
     if (!savedScan) {
       await throwIfScanWasCancelled(repository, input, scan.id, generateId, now);
@@ -1135,7 +1201,7 @@ async function runReverseEngineeringScanJob({
     });
 
     return {
-      ...result,
+      ...publicResult,
       scan: toReverseEngineeringScan(savedScan)
     };
   } catch (error) {
@@ -1147,28 +1213,24 @@ async function runReverseEngineeringScanJob({
     const errorSummary = toErrorSummary(error);
     const failedScan = await repository.failScan(scan.id, errorSummary, failedAt);
 
-    await appendUserFacingLog(repository, scan.id, `Reverse Engineering 스캔이 실패했습니다. ${errorSummary}`, {
-      generateId,
-      now,
-      sequence: 2,
-      level: "ERROR"
-    });
+    await appendUserFacingLog(
+      repository,
+      scan.id,
+      `Reverse Engineering 스캔이 실패했습니다. ${errorSummary}`,
+      {
+        generateId,
+        now,
+        sequence: 2,
+        level: "ERROR"
+      }
+    );
 
     if (!failedScan) {
       throw new ReverseEngineeringNotFoundError("Reverse Engineering scan not found");
     }
 
-    throw new ReverseEngineeringScanFailedError(
-      classifyReverseEngineeringConnectionFailure(error)
-    );
+    throw new ReverseEngineeringScanFailedError(classifyReverseEngineeringConnectionFailure(error));
   }
-}
-
-// gg: 주입된 adapter와 과거 구현도 API 응답·저장 전에 같은 공개 오류 계약으로 줄입니다.
-function normalizePublicAdapterResult(
-  result: ReverseEngineeringScanResult
-): ReverseEngineeringScanResult {
-  return normalizeReverseEngineeringScanResult(result.scan, result);
 }
 
 // gg: preview raw_result와 Project에 붙은 durable Scan을 각각 올바른 테이블에 저장합니다.
@@ -1202,10 +1264,7 @@ export function createPostgresReverseEngineeringRepository(
 
     // gg: private preview 원본은 사용자 소유권과 만료 시간을 함께 저장합니다.
     async createPreview(input) {
-      const [preview] = await db
-        .insert(reverseEngineeringScanPreviews)
-        .values(input)
-        .returning();
+      const [preview] = await db.insert(reverseEngineeringScanPreviews).values(input).returning();
 
       if (!preview) {
         throw new Error("Reverse Engineering preview creation failed");
@@ -1233,7 +1292,9 @@ export function createPostgresReverseEngineeringRepository(
           completedAt,
           updatedAt: completedAt
         })
-        .where(and(eq(reverseEngineeringScans.id, scanId), eq(reverseEngineeringScans.status, "running")))
+        .where(
+          and(eq(reverseEngineeringScans.id, scanId), eq(reverseEngineeringScans.status, "running"))
+        )
         .returning();
 
       return scan;
@@ -1315,7 +1376,9 @@ export function createPostgresReverseEngineeringRepository(
         return undefined;
       }
 
-      await db.delete(reverseEngineeringScanLogs).where(eq(reverseEngineeringScanLogs.scanId, existingScan.id));
+      await db
+        .delete(reverseEngineeringScanLogs)
+        .where(eq(reverseEngineeringScanLogs.scanId, existingScan.id));
 
       const [scan] = await db
         .update(reverseEngineeringScans)
@@ -1365,7 +1428,11 @@ async function throwIfScanWasCancelled(
   generateId: () => string,
   now: () => Date
 ): Promise<void> {
-  const latestScan = await repository.findAccessibleScan(input.projectId, scanId, input.accessContext);
+  const latestScan = await repository.findAccessibleScan(
+    input.projectId,
+    scanId,
+    input.accessContext
+  );
 
   if (latestScan?.status !== "cancelled") {
     return;
@@ -1380,7 +1447,9 @@ async function throwIfScanWasCancelled(
   throw new ReverseEngineeringScanCancelledError();
 }
 
-export function toReverseEngineeringScan(row: ReverseEngineeringScanRecord): ReverseEngineeringScan {
+export function toReverseEngineeringScan(
+  row: ReverseEngineeringScanRecord
+): ReverseEngineeringScan {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -1408,9 +1477,10 @@ export function toReverseEngineeringScanLogLine(
     sequence: row.sequence,
     stage: row.stage,
     level: row.level,
-    message: row.level === "ERROR"
-      ? "Reverse Engineering 스캔을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요."
-      : row.message,
+    message:
+      row.level === "ERROR"
+        ? "Reverse Engineering 스캔을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요."
+        : row.message,
     createdAt: row.createdAt.toISOString()
   };
 }

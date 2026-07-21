@@ -1,8 +1,4 @@
-import type {
-  DiagramJson,
-  DiagramNode,
-  ReverseEngineeringScanResult
-} from "@sketchcatch/types";
+import type { DiagramJson, DiagramNode, ReverseEngineeringScanResult } from "@sketchcatch/types";
 import type { ProjectAccessContext } from "../deployments/deployment-service.js";
 import type { VerifiedTerraformImportTarget } from "../services/terraform/terraform-import-blocks.js";
 import { classifyReverseEngineeringManagement } from "./reverse-engineering-management-policy.js";
@@ -50,20 +46,22 @@ export async function resolveVerifiedImportTargets(
   for (const { node, source } of sourcedNodes) {
     const scan =
       scans.get(source.scanId) ??
-      (await repository.findAccessibleScan(
-        input.projectId,
-        source.scanId,
-        input.accessContext
-      ));
+      (await repository.findAccessibleScan(input.projectId, source.scanId, input.accessContext));
 
     if (
       !scan ||
+      scan.id !== source.scanId ||
       scan.projectId !== input.projectId ||
       scan.status !== "completed" ||
       !scan.result
     ) {
       throw new ReverseEngineeringImportTargetVerificationError(
         "적용한 AWS 원본 scan을 확인할 수 없습니다."
+      );
+    }
+    if (!hasConsistentStoredIdentity(scan, source)) {
+      throw new ReverseEngineeringImportTargetVerificationError(
+        "보드와 저장된 AWS 원본이 달라 다시 가져와야 합니다."
       );
     }
     scans.set(source.scanId, scan);
@@ -78,24 +76,62 @@ export async function resolveVerifiedImportTargets(
 }
 
 /** gg: source metadata가 일부만 남은 손상 node는 일반 새 리소스로 오인하지 않고 중단합니다. */
-function readNodeSource(
-  node: DiagramNode
-): { scanId: string; draftId: string } | null {
+function readNodeSource(node: DiagramNode): { scanId: string; draftId: string } | null {
   const values = node.parameters?.values;
   const scanId = readNonEmptyString(values?.["reverseEngineeringSourceScanId"]);
   const draftId = readNonEmptyString(values?.["reverseEngineeringDraftId"]);
+  const sourceKind = readNonEmptyString(values?.["reverseEngineeringSourceKind"]);
 
-  if (!scanId && !draftId) {
+  if (!scanId && !draftId && !sourceKind) {
+    if (hasReverseEngineeringProjectionMarker(node)) {
+      throw new ReverseEngineeringImportTargetVerificationError(
+        "보드의 AWS 원본 정보가 제거됐습니다. 다시 가져와 주세요."
+      );
+    }
     return null;
   }
 
-  if (!scanId || !draftId) {
+  if (!scanId || !draftId || sourceKind !== "saved_scan") {
     throw new ReverseEngineeringImportTargetVerificationError(
-      "보드의 AWS 원본 정보가 완전하지 않습니다. 다시 가져와 주세요."
+      "보드가 저장된 AWS 원본을 가리키지 않습니다. 다시 가져와 주세요."
     );
   }
 
   return { scanId, draftId };
+}
+
+/** gg: provenance가 지워져도 서버가 붙인 관리·파일 marker가 남아 있으면 새 Resource로 오인하지 않습니다. */
+function hasReverseEngineeringProjectionMarker(node: DiagramNode): boolean {
+  const values = node.parameters?.values;
+  const management = values?.["reverseEngineeringManagement"];
+
+  return (
+    management === "managed" ||
+    management === "reference" ||
+    management === "aws_managed" ||
+    management === "sketchcatch_managed" ||
+    management === "needs_mapping" ||
+    node.parameters?.fileName === "reverse-engineering" ||
+    values?.["terraformFileName"] === "reverse-engineering" ||
+    Object.prototype.hasOwnProperty.call(values ?? {}, "reverseEngineeringObservedConfig")
+  );
+}
+
+/** gg: DB row와 그 안의 private result/draft가 같은 Project scan을 가리킬 때만 신뢰합니다. */
+function hasConsistentStoredIdentity(
+  scan: ReverseEngineeringImportScanRecord,
+  source: { scanId: string; draftId: string }
+): boolean {
+  const result = scan.result;
+
+  return Boolean(
+    result &&
+    result.scan.id === scan.id &&
+    result.scan.projectId === scan.projectId &&
+    result.scan.status === "completed" &&
+    result.reverseEngineeringDraft.id === source.draftId &&
+    result.reverseEngineeringDraft.scanId === scan.id
+  );
 }
 
 /** gg: 보호 리소스는 제외하고 관리 대상은 저장된 suggestion과 주소가 모두 같아야 허용합니다. */
