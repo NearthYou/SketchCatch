@@ -104,7 +104,7 @@ export function CicdPipelineRunsPanel({
               value={selectedRun?.id ?? ""}
               onChange={(event) => onSelectRun(event.target.value)}
             >
-              {runs.map((run) => (
+              {(runs ?? []).map((run) => (
                 <option key={run.id} value={run.id}>
                   {formatPipelineRunOption(run)}
                 </option>
