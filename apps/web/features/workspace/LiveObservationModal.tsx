@@ -19,12 +19,9 @@ import {
 } from "./api";
 import {
   getEligibleLiveObservationDeployments,
-  getLiveObservationOperationalAnalysis,
   getSelectedLiveObservationOutputUrl,
-  getLiveObservationProviderEvidence,
   type LiveObservationSelection
 } from "./live-observation";
-import { getLiveObservationCapacityMode } from "./live-observation-architecture";
 import { useLiveObservationQueries } from "./live-observation-queries";
 import { LiveObservationFocusedFlow } from "./LiveObservationFocusedFlow";
 import styles from "./workspace.module.css";
@@ -146,18 +143,6 @@ export function LiveObservationModal({
     referenceErrorMessage ||
     outputErrorMessage ||
     streamErrorMessage;
-  const providerSnapshot = selectedSnapshot?.latestObservation?.payload ?? null;
-  const providerLogs = providerSnapshot?.logs ?? [];
-  const capacityModeLabel = selectedArchitecture
-    ? getLiveObservationCapacityMode(selectedArchitecture, providerSnapshot?.capacity)
-    : null;
-  const providerEvidence = providerSnapshot && capacityModeLabel
-    ? getLiveObservationProviderEvidence(providerSnapshot, capacityModeLabel)
-    : null;
-  const operationalAnalysis = getLiveObservationOperationalAnalysis(
-    providerSnapshot,
-    selectedSnapshot?.live.pressureLevel ?? "normal"
-  );
 
   useEffect(() => {
     activeRef.current = true;
@@ -583,75 +568,6 @@ export function LiveObservationModal({
               key={`focused-${selectedDeploymentId}`}
               snapshot={selectedSnapshot}
             />
-          ) : null}
-
-          {selectedDeployment ? (
-            <details
-              aria-label="실시간 운영 분석"
-              className={styles.liveObservationMetricsSection}
-            >
-              <summary className={styles.liveObservationMetricsHeader}>
-                <div>
-                  <span className={styles.liveObservationSectionLabel}>운영 분석</span>
-                  <h3>운영 분석</h3>
-                </div>
-                <span data-status={selectedSnapshot?.status ?? "idle"}>
-                  {selectedSnapshot?.status === "active" ? "LIVE" : "관측 대기"}
-                </span>
-              </summary>
-              <div className={styles.liveObservationAnalysisGrid}>
-                <article
-                  className={styles.liveObservationAnalysisStatus}
-                  data-analysis-state={operationalAnalysis.state}
-                >
-                  <span>현재 인프라 상태</span>
-                  <strong>{operationalAnalysis.stateLabel}</strong>
-                  <small>
-                    요청 {selectedSnapshot?.live.acceptedEventCount ?? "—"} · {selectedSnapshot
-                      ? `${selectedSnapshot.live.rollingRequestsPerSecond.toFixed(1)} 요청/초`
-                      : "—"} · {providerEvidence?.stateLabel ?? "수집 대기"}
-                  </small>
-                </article>
-                <article>
-                  <span>용량 및 스케일링</span>
-                  <strong>{operationalAnalysis.capacity}</strong>
-                  <small>
-                    실행 / 희망 / 최대 · {capacityModeLabel ?? "확인 중"} · 확장 이력 {operationalAnalysis.scaleEventCount}건
-                  </small>
-                </article>
-                <article>
-                  <span>병목과 장애</span>
-                  <strong>{operationalAnalysis.bottleneckDetail}</strong>
-                  <small>오류율 · p95 · 비정상 Task</small>
-                </article>
-                <article>
-                  <span>비용 영향</span>
-                  <strong>{operationalAnalysis.costImpact}</strong>
-                  <small>{operationalAnalysis.costDetail}</small>
-                </article>
-                <article className={styles.liveObservationAnalysisRecommendation}>
-                  <div>
-                    <span>개선 권장사항</span>
-                    <strong>{operationalAnalysis.terraformAction}</strong>
-                    <small>{operationalAnalysis.terraformDetail}</small>
-                  </div>
-                  <small>검토 제안 · 자동 적용하지 않음</small>
-                </article>
-              </div>
-            </details>
-          ) : null}
-          {providerLogs.length > 0 ? (
-            <details className={styles.liveObservationLogs}>
-              <summary>최근 런타임 로그 {providerLogs.length}건</summary>
-              <ol>
-                {providerLogs.map((entry, index) => (
-                  <li key={`${entry.timestamp}-${index}`}>
-                    <time dateTime={entry.timestamp}>{formatTimestamp(entry.timestamp)}</time>
-                    <code>{entry.message}</code>
-                  </li>
-                ))}
-              </ol>
-            </details>
           ) : null}
         </main>
 

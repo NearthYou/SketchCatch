@@ -133,9 +133,6 @@ test("modal re-entry restores only the selected, unexpired active session and ab
 
 test("selected Deployment independently loads and renders its immutable Architecture", () => {
   const focusedFlowIndex = modalSource.indexOf("<LiveObservationFocusedFlow");
-  const evidenceIndex = modalSource.indexOf(
-    'aria-label="실시간 운영 분석"'
-  );
 
   assert.match(modalSource, /useLiveObservationQueries\(\{/);
   assert.match(modalSource, /deploymentId: selectedDeploymentId/);
@@ -145,7 +142,6 @@ test("selected Deployment independently loads and renders its immutable Architec
     /const selectedArchitecture = queries\.architecture\.data\?\.architecture \?\? null;/
   );
   assert.ok(focusedFlowIndex >= 0);
-  assert.ok(evidenceIndex > focusedFlowIndex, "Focused flow must render before the evidence rail");
 });
 
 test("restores the focused traffic path as the default observation view", () => {
@@ -202,10 +198,6 @@ test("renders Architecture state only when it belongs to the selected Deployment
   );
   assert.match(
     modalSource,
-    /getLiveObservationCapacityMode\(selectedArchitecture, providerSnapshot\?\.capacity\)/
-  );
-  assert.match(
-    modalSource,
     /<LiveObservationFocusedFlow[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
   assert.match(
@@ -250,19 +242,13 @@ test("Architecture failure does not replace QR, Output URL, session, or SSE cont
   assert.match(modalSource, /streamLiveObservationSnapshots\(/);
 });
 
-test("session creation locks Deployment selection and observation evidence stays Deployment-matched", () => {
+test("session creation locks Deployment selection and clears a mismatched session", () => {
   const deploymentSelector = getSourceBlock(modalSource, "<select", "</select>");
   const deploymentSelectionHandler = getSourceBlock(
     modalSource,
     "function selectDeployment(",
     "async function startObservation()"
   );
-  const evidenceBlock = getSourceBlock(
-    modalSource,
-    'aria-label="실시간 운영 분석"',
-    "{providerSnapshot && providerSnapshot.logs.length > 0 ? ("
-  );
-
   assert.match(deploymentSelector, /requestState === "loading"/);
   assert.match(
     modalSource,
@@ -273,7 +259,6 @@ test("session creation locks Deployment selection and observation evidence stays
     modalSource,
     /<LiveObservationFocusedFlow[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
-  assert.match(evidenceBlock, /selectedSnapshot\?\.live\.acceptedEventCount/);
   assert.match(deploymentSelectionHandler, /session\.deploymentId !== nextDeploymentId/);
   assert.match(deploymentSelectionHandler, /onSessionChange\(null\)/);
   assert.match(deploymentSelectionHandler, /onSnapshotChange\(null\)/);
@@ -291,32 +276,6 @@ test("shows the countdown only while the selected session is active", () => {
     /\{isSessionActive \? <strong>\{formatRemainingTime\(remainingSeconds\)\}<\/strong> : null\}/
   );
   assert.doesNotMatch(sessionStatus, /\{selectedSession \? <strong>/);
-});
-
-test("capacity analysis renders provider-derived mode and operational values", () => {
-  const evidenceBlock = getSourceBlock(
-    modalSource,
-    'aria-label="실시간 운영 분석"',
-    "{providerSnapshot && providerSnapshot.logs.length > 0 ? ("
-  );
-
-  assert.match(evidenceBlock, /capacityModeLabel \?\? "확인 중"/);
-  assert.match(evidenceBlock, /operationalAnalysis\.capacity/);
-  assert.match(modalSource, /getLiveObservationOperationalAnalysis/);
-});
-
-test("turns raw metrics into an operational decision flow", () => {
-  assert.match(modalSource, /aria-label="실시간 운영 분석"/);
-  assert.match(modalSource, /현재 인프라 상태/);
-  assert.match(modalSource, /용량 및 스케일링/);
-  assert.match(modalSource, /병목과 장애/);
-  assert.match(modalSource, /비용 영향/);
-  assert.match(modalSource, /개선 권장사항/);
-  assert.match(modalSource, /operationalAnalysis\.terraformAction/);
-  assert.match(modalSource, /실행 \/ 희망 \/ 최대/);
-  assert.match(modalSource, /<details[\s\S]*aria-label="실시간 운영 분석"/);
-  assert.match(modalSource, /<summary className=\{styles\.liveObservationMetricsHeader\}>/);
-  assert.doesNotMatch(modalSource, /<details[^>]*\sopen/);
 });
 
 function getSourceBlock(source: string, startMarker: string, endMarker: string): string {
