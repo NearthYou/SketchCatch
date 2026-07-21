@@ -24,6 +24,30 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Complete the external audience receipt handoff
+
+- Confirmed current `dev` at `a45c399b` already exposes the scoped `sketchcatch_observation_url`, origin-bound bootstrap, Store-only `/receipts`, production Redis namespace, and Signal Dashboard contract; this feature branch adds Redis client recovery and typed SSE diagnostics.
+- Reproduced the external audience gap with a deterministic red test that observed only the real participation request instead of participation -> bootstrap -> receipt. Branch `codex/fix-browser-check-in-route` now validates the scoped HTTPS URL, keeps its capability in memory, and sends unique best-effort receipts only after successful check-ins and heartbeats.
+- Audience commit `b96e8f0` passes all 50 tests, typecheck, production build, and targeted Biome checks. Nine focused SketchCatch API tests and 28 focused Web tests pass.
+- Repository-wide audience lint remains non-green only because 26 pre-existing CRLF-formatted files are outside Biome's expected line ending; all changed source files pass.
+- No dependency, lockfile, migration, Terraform execution, cloud mutation, deployment, push, or Git/CI/CD handoff was performed.
+- Merged the latest `origin/dev` at `b5553be1`; the only textual conflict was this session log, and both Live Observation and CI/CD readiness records were preserved without a product-code conflict.
+- Post-merge verification passes 29 focused API tests, 43 focused Web tests, all 11 Redis 8 integration cases, harness, lint, typecheck, and all five production builds.
+
+### 2026-07-22 - Recover Live Observation after Redis command failures
+
+- Production CloudWatch evidence for observation `0fa61f2f-9e99-44b2-8683-b2fc7cbf8f7e` showed every SSE request opening with HTTP 200 and closing in about 6 ms while every snapshot fallback returned HTTP 503. The route contract maps this pattern to `LIVE_OBSERVATION_CACHE_UNAVAILABLE`, not an AWS provider-observation failure.
+- Reproduced the store defect with an open Redis client whose command fails: the previous implementation reused that poisoned client forever because reconnect is disabled and `isOpen` remains true.
+- The Redis store now discards and destroys the failed client without replaying the ambiguous command; the next request creates a fresh connection. The Web modal now renders the safe API error code, HTTP status, path, and request ID while automatic reconnect continues.
+- The focused Redis recovery test, Web diagnostic test, and Redis 8 integration suite pass (30/30). Root lint, typecheck, and all five production builds pass.
+- Review found that SSE HTTP failures still discarded their response diagnostics. SSE failures now reuse the typed API error conversion, including no-response and missing-body handling, and the source-regex contract test was replaced with a fetch-level behavior test.
+- Chrome exposed the actual audience failure as `TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation`: the native fetch function was passed to `ky` without its Window receiver. The default fetch is now bound to `globalThis`, a receiver-sensitive regression test passes, and local Chrome verification recorded one POST 201 followed by repeated heartbeat POST 200 responses with the UI in `✓ 참여 중 · 연결됨` state.
+- The separate `audience-live-check` branch `codex/fix-browser-check-in-route` moves browser calls to `/api/participations` while retaining `/api/check-ins` as the release-verification compatibility alias. Its focused tests, full 48-test suite, typecheck, build, and changed-file lint pass.
+- Broad API and Web suites still expose pre-existing Architecture Compiler, generated artifact, artifact-loader, and AI Architecture Draft baseline failures outside this workstream. The changed Live Observation tests pass.
+- Merged `origin/dev` at `587e4443` into `codex/fix-deployment-live-observation`; the only textual conflict was this session log, and both histories were preserved. The combined Redis recovery, SSE diagnostics, Store-backed traffic warning, AI recommendation, and bounded Terraform draft flows pass 10 focused API tests, 27 focused Web tests, the Redis 8 integration suite, harness, lint, typecheck, and all production builds.
+- Refreshed `origin/dev` to `a45c399b` and merged its Signal Dashboard rebuild. The only code conflict kept the typed SSE failure diagnostics while dropping the dashboard's removed legacy capacity import. Ninety-four focused TypeScript tests and six CSS-loaded Signal Dashboard component tests pass together with harness, lint, typecheck, and production builds.
+- No dependency, lockfile, migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
+
 ### 2026-07-22 - Align CI/CD readiness phase boundaries
 
 - Completed the task-focused four-phase CI/CD redesign and aligned the Phase 2 header and rows with the server-owned verified AWS target, Region, runtime, and current Repository build config.
@@ -55,6 +79,7 @@ Short English-only working log for the current agent context. Older records are 
 - Root `pnpm test` remains non-green in pre-existing `aiArchitectureDrafts.test.ts` expectations outside this workstream; the changed Live Observation subsets pass.
 - The external `audience-live-check` clone passes typecheck, build, 49 tests, and changed-file Biome checks. Its root lint remains non-green because of existing repository-wide CRLF formatting findings outside the changed files.
 - No database migration, dependency change, secret access, Terraform execution, deployment, or cloud mutation was performed.
+
 ### 2026-07-22 - Reduce Diagram resource label size
 
 - Reduced only the labels beneath Diagram resource icons from an effective 18px to 13px while preserving the two-line clamp, icon spacing, edge labels, and area headings.
@@ -96,6 +121,8 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Known Risk
 
+- Production still runs the pre-fix Redis client lifecycle until this branch is released through the reviewed deployment workflow.
+- Production still serves the old audience bundle until `codex/fix-browser-check-in-route` is reviewed and released; the native fetch receiver fix has only been verified in the local Chrome flow and is not yet present in CloudFront.
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
 - Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
 - The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` was saved by the stale Web process and must be re-analyzed/regenerated or replaced after the Web restart.
