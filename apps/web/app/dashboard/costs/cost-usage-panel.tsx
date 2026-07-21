@@ -327,7 +327,7 @@ export function CostUsagePanel({
       ) : null}
 
       <section className={styles.chartSection}>
-        <div><h2>{data?.dataSource === "sample" ? "일별 비용 예시" : "일별 실제 비용"}</h2><span>{data?.startDate} - {data?.endDate}</span></div>
+        <div><h2>{data?.dataSource === "sample" ? "일별 예상 비용" : "일별 실제 비용"}</h2><span>{data?.startDate} - {data?.endDate}</span></div>
         {scopedDailyTrend.length === 0
           ? <p>표시할 비용이 없습니다.</p>
           : <CostUsageChart dailyTrend={scopedDailyTrend} />}
