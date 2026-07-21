@@ -62,16 +62,15 @@
   box-shadow: 0 14px 32px rgb(15 23 42 / 14%);
   display: grid;
   gap: 1px;
-  left: 0;
-  margin-top: 6px;
   max-height: 180px;
-  min-width: 100%;
   overflow: auto;
   padding: 4px;
-  position: absolute;
-  right: 0;
-  top: 100%;
   z-index: 30;
+}
+
+.selectMenuDropdownPortal {
+  position: fixed;
+  z-index: 1000;
 }
 
 .selectMenuOption {
@@ -149,11 +148,13 @@
   padding: 5px 8px;
 }
 
-.compact .selectMenuDropdown {
+.compact .selectMenuDropdown,
+.selectMenuDropdownCompact {
   max-height: 156px;
 }
 
-.compact .selectMenuOption {
+.compact .selectMenuOption,
+.selectMenuDropdownCompact .selectMenuOption {
   min-height: 28px;
   padding: 4px 7px;
 }
@@ -169,7 +170,8 @@
   padding: 10px 12px;
 }
 
-.large .selectMenuOption {
+.large .selectMenuOption,
+.selectMenuDropdownLarge .selectMenuOption {
   min-height: 34px;
   padding: 5px 9px;
 }

@@ -1,28 +1,32 @@
 "use client";
 
-import { useCallback } from "react";
-import {
-  RefreshCw,
-  Workflow
-} from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ProjectCicdMonitoringSettingsClient } from "../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client";
+import { CicdAutomaticSetupSummary } from "./CicdAutomaticSetupSummary";
 import { CicdConsoleScreen } from "./CicdConsoleScreen";
+import { CicdLoadingState } from "./CicdLoadingState";
+import { CicdRepositoryConnectionForm } from "./CicdRepositoryConnectionForm";
+import type { CicdSetupDrawerId } from "./cicd-readiness-presentation";
+import { CicdSettingsDrawer } from "./CicdSettingsDrawer";
 import { ProjectDeploymentTargetEditor } from "./delivery/ProjectDeploymentTargetEditor";
-import { DeliveryConnectionSummary } from "./delivery/DeliveryConnectionSummary";
 import { useProjectDeliveryProfile } from "./delivery/use-project-delivery-profile";
 import type { LiveObservationSelection } from "./live-observation";
 import styles from "./delivery-center.module.css";
 
 export function DeliveryCenterPanel({
   onDeploymentTargetSaved,
+  onLastRefreshedAtChange,
   onOpenDirectDeployment,
   onOpenLiveObservation,
+  onRefreshBusyChange,
   projectId,
   readinessRefreshRequestId = 0
 }: {
   readonly onDeploymentTargetSaved?: (() => void) | undefined;
+  readonly onLastRefreshedAtChange?: ((value: string | null) => void) | undefined;
   readonly onOpenDirectDeployment?: (scope: "application" | "full_stack" | null) => void;
   readonly onOpenLiveObservation?: (selection?: LiveObservationSelection) => void;
+  readonly onRefreshBusyChange?: ((isBusy: boolean) => void) | undefined;
   readonly projectId: string;
   readonly readinessRefreshRequestId?: number | undefined;
 }) {
@@ -32,68 +36,101 @@ export function DeliveryCenterPanel({
     errorMessage: message,
     refresh
   } = useProjectDeliveryProfile(projectId, readinessRefreshRequestId);
+  const [activeDrawer, setActiveDrawer] = useState<CicdSetupDrawerId | null>(null);
+
+  useEffect(() => setActiveDrawer(null), [projectId]);
+  useEffect(() => {
+    onLastRefreshedAtChange?.(profile?.readiness.checkedAt ?? null);
+  }, [onLastRefreshedAtChange, profile?.readiness.checkedAt]);
+  useEffect(() => () => onLastRefreshedAtChange?.(null), [onLastRefreshedAtChange]);
+
   const reload = useCallback(() => {
     void refresh();
   }, [refresh]);
 
+  function handleMonitoringSaved(): void {
+    setActiveDrawer(null);
+    void refresh();
+  }
+
+  function handleRepositorySaved(): void {
+    setActiveDrawer(null);
+    void refresh();
+  }
+
   function handleDeploymentTargetSaved(): void {
+    setActiveDrawer(null);
     void refresh();
     onDeploymentTargetSaved?.();
   }
 
   if (!profile && loadState === "loading") {
     return (
-      <p className={styles.message} role="status">
-        Delivery 정보를 불러오는 중입니다.
-      </p>
+      <div className={styles.root}>
+        <header className={styles.header}>
+          <h2>CI/CD 준비</h2>
+        </header>
+        <CicdLoadingState />
+      </div>
     );
   }
   if (!profile) {
     return (
-      <div className={styles.message} role="alert">
-        <p>{message}</p>
-        <button onClick={reload} type="button">
-          다시 시도
-        </button>
+      <div className={styles.root}>
+        <header className={styles.header}>
+          <h2>CI/CD 준비</h2>
+        </header>
+        <div className={styles.message} role="alert">
+          <p>{message}</p>
+          <button onClick={reload} type="button">
+            다시 시도
+          </button>
+        </div>
       </div>
     );
   }
-  const repositoryReturnSearch = new URLSearchParams({
-    projectId,
-    deploymentView: "cicd",
-    readinessKey: "source_repository"
+
+  const drawer = getDrawerContent(activeDrawer, {
+    repository: (
+      <CicdRepositoryConnectionForm
+        onCancel={() => setActiveDrawer(null)}
+        onSaved={handleRepositorySaved}
+        profile={profile}
+        projectId={projectId}
+      />
+    ),
+    monitoring: (
+      <ProjectCicdMonitoringSettingsClient
+        headingLevel={4}
+        onSaved={handleMonitoringSaved}
+        profile={profile}
+        projectId={projectId}
+        showHeading={false}
+      />
+    ),
+    target: (
+      <div className={styles.drawerFormContent}>
+        <ProjectDeploymentTargetEditor
+          headingLevel={4}
+          onSaved={handleDeploymentTargetSaved}
+          profile={profile}
+          projectId={projectId}
+          showAutomaticSummary={false}
+          showHeading={false}
+        />
+        <section className={styles.automaticSetupSection}>
+          <h4>자동 확인 결과</h4>
+          <CicdAutomaticSetupSummary profile={profile} />
+        </section>
+      </div>
+    )
   });
-  const repositorySearch = new URLSearchParams({
-    returnTo: `/workspace?${repositoryReturnSearch.toString()}`,
-    readinessKey: "source_repository"
-  });
-  const repositoryHref = `/dashboard/projects/${encodeURIComponent(projectId)}/repository?${repositorySearch.toString()}`;
 
   return (
     <div className={styles.root}>
       <header className={styles.header}>
-        <div className={styles.titleBlock}>
-          <span className={styles.titleIcon} aria-hidden="true">
-            <Workflow size={18} />
-          </span>
-          <div>
-            <h2>CI/CD</h2>
-            <span>배포 준비를 확인하고 PR과 Pipeline을 관리합니다.</span>
-          </div>
-        </div>
-        <div className={styles.headerActions}>
-          <button onClick={reload} type="button">
-            <RefreshCw aria-hidden="true" size={16} />
-            준비 상태 새로고침
-          </button>
-        </div>
+        <h2>CI/CD 준비</h2>
       </header>
-
-      <nav className={styles.sectionNavigation} aria-label="CI/CD 섹션">
-        <a href="#cicd-setup">배포 준비</a>
-        <a href="#cicd-handoff">배포 PR</a>
-        <a href="#cicd-pipeline">Pipeline</a>
-      </nav>
 
       {loadState === "error" ? (
         <p className={styles.error} role="alert">
@@ -101,58 +138,51 @@ export function DeliveryCenterPanel({
         </p>
       ) : null}
 
-      <section
-        className={styles.sectionGroup}
-        id="cicd-setup"
-        aria-labelledby="cicd-setup-title"
-      >
-        <div className={styles.groupHeading}>
-          <div>
-            <h3 id="cicd-setup-title">배포 준비</h3>
-          </div>
-          <span>Repository, 변경 감시와 배포 위치를 확인합니다.</span>
-        </div>
-
-        <div className={styles.connectionGrid}>
-          <DeliveryConnectionSummary
-            accountLogins={profile.githubInstallations.map(
-              (installation) => installation.accountLogin
-            )}
-            profile={profile}
-            repositoryHref={repositoryHref}
-          />
-        </div>
-        <div className={styles.settingsStack}>
-          <div className={styles.editorSection}>
-            <ProjectCicdMonitoringSettingsClient
-              headingLevel={4}
-              profile={profile}
-              projectId={projectId}
-              onSaved={reload}
-            />
-          </div>
-          <div className={styles.editorSection}>
-            <ProjectDeploymentTargetEditor
-              headingLevel={4}
-              profile={profile}
-              onSaved={handleDeploymentTargetSaved}
-              projectId={projectId}
-            />
-          </div>
-        </div>
-      </section>
-
       <CicdConsoleScreen
         deliveryProfile={profile}
         deliveryProfileErrorMessage={message}
         isVisible
         isDeliveryProfileRefreshing={loadState === "loading"}
-        onRefreshDeliveryProfile={refresh}
         onOpenDirectDeployment={onOpenDirectDeployment}
         onOpenLiveObservation={onOpenLiveObservation}
+        onOpenSetup={setActiveDrawer}
+        onRefreshBusyChange={onRefreshBusyChange}
+        onRefreshDeliveryProfile={refresh}
         projectId={projectId}
         readinessRefreshRequestId={readinessRefreshRequestId}
       />
+
+      {drawer ? (
+        <CicdSettingsDrawer
+          description={drawer.description}
+          onClose={() => setActiveDrawer(null)}
+          title={drawer.title}
+        >
+          {drawer.content}
+        </CicdSettingsDrawer>
+      ) : null}
     </div>
   );
+}
+
+function getDrawerContent(
+  activeDrawer: CicdSetupDrawerId | null,
+  content: Readonly<Record<CicdSetupDrawerId, ReactNode>>
+): { readonly title: string; readonly description: string; readonly content: ReactNode } | null {
+  if (!activeDrawer) return null;
+  const copy = {
+    repository: {
+      title: "GitHub 저장소 연결",
+      description: "GitHub 계정, Repository와 기본 Branch를 선택합니다."
+    },
+    monitoring: {
+      title: "변경 감지 설정",
+      description: "배포를 감지할 Branch와 앱·인프라 경로를 확인합니다."
+    },
+    target: {
+      title: "AWS 배포 대상",
+      description: "AWS 계정, Region, 실행 방식과 빌드 설정을 저장합니다."
+    }
+  } as const;
+  return { ...copy[activeDrawer], content: content[activeDrawer] };
 }

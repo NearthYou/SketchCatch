@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Maximize2, X } from "lucide-react";
+import { Maximize2, RefreshCw, X } from "lucide-react";
 import { DeliveryCenterPanel } from "./DeliveryCenterPanel";
 import { DirectDeploymentScreen, type DirectDeploymentScreenProps } from "./DirectDeploymentScreen";
 import type { LiveObservationSelection } from "./live-observation";
@@ -11,13 +11,14 @@ import {
   type InitialCicdReturnCommand,
   type PendingCicdReturn
 } from "./cicd-return-command";
+import cicdStyles from "./delivery-center.module.css";
 import styles from "./workspace.module.css";
 
 export type DeploymentConsoleScreen = "deployment" | "cicd";
 
 export type DeploymentConsoleShellProps = Omit<
   DirectDeploymentScreenProps,
-  "onApplyPlanApproved"
+  "onApplyPlanApproved" | "refreshRequestId"
 > & {
   readonly activeScreen?: DeploymentConsoleScreen | undefined;
   readonly fullScreenOnly?: boolean | undefined;
@@ -55,6 +56,9 @@ export function DeploymentConsoleShell({
   const [readinessRefreshRequestId, setReadinessRefreshRequestId] = useState(
     initialCicdReturnCommand ? 1 : 0
   );
+  const [directRefreshRequestId, setDirectRefreshRequestId] = useState(0);
+  const [cicdLastRefreshedAt, setCicdLastRefreshedAt] = useState<string | null>(null);
+  const [isCicdRefreshBusy, setIsCicdRefreshBusy] = useState(true);
   const [deploymentTargetSavedRevision, setDeploymentTargetSavedRevision] = useState(0);
   const [isDeploymentExpanded, setIsDeploymentExpanded] = useState(initialExpanded);
   const [confirmationDismissRequestId, setConfirmationDismissRequestId] = useState(0);
@@ -120,6 +124,9 @@ export function DeploymentConsoleShell({
 
     function handleKeyDown(event: KeyboardEvent): void {
       if (event.key === "Escape") {
+        if (dialogRef.current?.querySelector("dialog[open]")) {
+          return;
+        }
         event.preventDefault();
         if (confirmationOpenRef.current) {
           setConfirmationDismissRequestId((requestId) => requestId + 1);
@@ -183,6 +190,20 @@ export function DeploymentConsoleShell({
     onActiveScreenChange?.(screen);
   }
 
+  function refreshActiveScreen(): void {
+    if (activeScreen === "deployment") {
+      setDirectRefreshRequestId((requestId) => requestId + 1);
+      return;
+    }
+
+    if (!isCicdRefreshBusy) {
+      setIsCicdRefreshBusy(true);
+      setReadinessRefreshRequestId((requestId) => requestId + 1);
+    }
+  }
+
+  const isActiveRefreshBusy = activeScreen === "cicd" && isCicdRefreshBusy;
+
   const screenBody = (
     <div className={styles.deploymentConsoleScreenBody}>
       <div hidden={activeScreen !== "deployment"}>
@@ -191,15 +212,14 @@ export function DeploymentConsoleShell({
           confirmationDismissRequestId={confirmationDismissRequestId}
           deploymentTargetSavedRevision={deploymentTargetSavedRevision}
           projectName={projectName}
+          refreshRequestId={directRefreshRequestId}
           onConfirmationStateChange={(isOpen) => {
             confirmationOpenRef.current = isOpen;
           }}
           onOpenDeliverySetup={() => {
             selectScreen("cicd");
             window.requestAnimationFrame(() =>
-              document
-                .getElementById("deployment-target-title")
-                ?.scrollIntoView({ block: "start" })
+              document.getElementById("deployment-target-title")?.scrollIntoView({ block: "start" })
             );
           }}
           onOpenLiveObservation={onOpenLiveObservation}
@@ -233,6 +253,7 @@ export function DeploymentConsoleShell({
       </div>
       <div hidden={activeScreen !== "cicd"}>
         <DeliveryCenterPanel
+          onLastRefreshedAtChange={setCicdLastRefreshedAt}
           onDeploymentTargetSaved={() =>
             setDeploymentTargetSavedRevision((revision) => revision + 1)
           }
@@ -240,6 +261,7 @@ export function DeploymentConsoleShell({
             setRequestedDirectScope(scope);
             selectScreen("deployment");
           }}
+          onRefreshBusyChange={setIsCicdRefreshBusy}
           {...(onOpenLiveObservation ? { onOpenLiveObservation } : {})}
           projectId={directProps.projectId}
           readinessRefreshRequestId={readinessRefreshRequestId}
@@ -268,17 +290,44 @@ export function DeploymentConsoleShell({
               CI/CD
             </button>
           </nav>
-          {showCloseButton ? (
+          <div className={styles.deploymentConsoleHeaderActions}>
+            {activeScreen === "cicd" && cicdLastRefreshedAt ? (
+              <time
+                aria-label={formatCicdLastRefreshed(cicdLastRefreshedAt)}
+                className={cicdStyles.globalLastRefreshed}
+                dateTime={cicdLastRefreshedAt}
+              >
+                <span aria-hidden="true" className={cicdStyles.globalLastRefreshedFull}>
+                  {formatCicdLastRefreshed(cicdLastRefreshedAt)}
+                </span>
+                <span aria-hidden="true" className={cicdStyles.globalLastRefreshedCompact}>
+                  {formatCicdLastRefreshedCompact(cicdLastRefreshedAt)}
+                </span>
+              </time>
+            ) : null}
             <button
-              aria-label="배포 모달 닫기"
-              className={styles.deploymentExpandedCloseButton}
-              onClick={close}
-              ref={closeButtonRef}
+              aria-busy={isActiveRefreshBusy}
+              aria-label={isActiveRefreshBusy ? "CI/CD 상태 새로고침 중" : "상태 새로고침"}
+              className={styles.deploymentConsoleRefreshButton}
+              disabled={isActiveRefreshBusy}
+              onClick={refreshActiveScreen}
               type="button"
             >
-              <X size={18} aria-hidden="true" />
+              <RefreshCw size={17} aria-hidden="true" />
+              <span>{isActiveRefreshBusy ? "새로고침 중" : "새로고침"}</span>
             </button>
-          ) : null}
+            {showCloseButton ? (
+              <button
+                aria-label="배포 모달 닫기"
+                className={styles.deploymentExpandedCloseButton}
+                onClick={close}
+                ref={closeButtonRef}
+                type="button"
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
         </header>
         {screenBody}
       </>
@@ -305,7 +354,7 @@ export function DeploymentConsoleShell({
           </div>
         </header>
       ) : null}
-      {!fullScreenOnly ? (
+      {!fullScreenOnly && !isDeploymentOverlayOpen ? (
         <div className={styles.deploymentPanelContent}>{renderScreenContent(false)}</div>
       ) : null}
       {isDeploymentOverlayOpen ? (
@@ -327,4 +376,20 @@ export function DeploymentConsoleShell({
 
 function isDeploymentConsoleScreen(value: string | null): value is DeploymentConsoleScreen {
   return value === "deployment" || value === "cicd";
+}
+
+function formatCicdLastRefreshed(value: string): string {
+  return `최근 확인 ${new Date(value).toLocaleTimeString("ko-KR", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Seoul"
+  })}`;
+}
+
+function formatCicdLastRefreshedCompact(value: string): string {
+  return `확인 ${new Date(value).toLocaleTimeString("ko-KR", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Seoul"
+  })}`;
 }

@@ -101,6 +101,16 @@
   line-height: 1.45;
 }
 
+.field input[aria-invalid="true"],
+.field select[aria-invalid="true"] {
+  border-color: var(--color-error);
+  background: var(--color-error-surface);
+}
+
+.field .fieldError {
+  color: var(--color-error);
+}
+
 .field input[readonly] {
   border-color: var(--color-hairline);
   background: var(--color-surface-soft);

@@ -1,12 +1,13 @@
 "use client";
 
 import { Check, ChevronDown } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import type {
   CSSProperties,
   FocusEvent as ReactFocusEvent,
   KeyboardEvent as ReactKeyboardEvent
 } from "react";
+import { createPortal } from "react-dom";
 import styles from "./select-menu.module.css";
 
 export type SelectMenuOption = {
@@ -49,7 +50,9 @@ export function SelectMenu({
 }: SelectMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeOptionIndex, setActiveOptionIndex] = useState(-1);
+  const [dropdownPosition, setDropdownPosition] = useState<CSSProperties | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const triggerButtonRef = useRef<HTMLButtonElement | null>(null);
   const fallbackListboxId = useId();
   const listboxId = `${id ?? fallbackListboxId}-listbox`;
@@ -57,6 +60,39 @@ export function SelectMenu({
   const activeOption = activeOptionIndex >= 0 ? options[activeOptionIndex] : undefined;
   const isDisabled = disabled || options.length === 0;
   const triggerLabel = selectedOption ? getSelectMenuTriggerLabel(selectedOption) : emptyLabel;
+
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      setDropdownPosition(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const trigger = triggerButtonRef.current;
+
+      if (!trigger) {
+        return;
+      }
+
+      setDropdownPosition(
+        getSelectMenuDropdownPosition({
+          preferredMaxHeight: size === "compact" ? 156 : 180,
+          triggerRect: trigger.getBoundingClientRect(),
+          viewportHeight: window.innerHeight,
+          viewportWidth: window.innerWidth
+        })
+      );
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isOpen, size]);
 
   const closeMenu = ({ restoreFocus = false }: { readonly restoreFocus?: boolean } = {}) => {
     setIsOpen(false);
@@ -79,7 +115,10 @@ export function SelectMenu({
   const handleBlur = (event: ReactFocusEvent<HTMLDivElement>) => {
     const nextTarget = event.relatedTarget;
 
-    if (nextTarget instanceof Node && containerRef.current?.contains(nextTarget)) {
+    if (
+      nextTarget instanceof Node &&
+      (containerRef.current?.contains(nextTarget) || dropdownRef.current?.contains(nextTarget))
+    ) {
       return;
     }
 
@@ -163,45 +202,86 @@ export function SelectMenu({
         <ChevronDown aria-hidden="true" size={16} />
       </button>
 
-      {isOpen ? (
-        <div
-          aria-label={ariaLabel}
-          className={styles.selectMenuDropdown}
-          id={listboxId}
-          role="listbox"
-        >
-          {options.map((option, optionIndex) => {
-            const isSelected = option.value === value;
-            const isActive = optionIndex === activeOptionIndex;
+      {isOpen && dropdownPosition
+        ? createPortal(
+            <div
+              aria-label={ariaLabel}
+              className={`${styles.selectMenuDropdown} ${styles.selectMenuDropdownPortal} ${
+                size === "compact" ? styles.selectMenuDropdownCompact : ""
+              } ${size === "large" ? styles.selectMenuDropdownLarge : ""}`}
+              id={listboxId}
+              ref={dropdownRef}
+              role="listbox"
+              style={dropdownPosition}
+            >
+              {options.map((option, optionIndex) => {
+                const isSelected = option.value === value;
+                const isActive = optionIndex === activeOptionIndex;
 
-            return (
-              <button
-                aria-selected={isSelected}
-                className={`${styles.selectMenuOption} ${
-                  isSelected ? styles.selectMenuOptionSelected : ""
-                } ${isActive ? styles.selectMenuOptionActive : ""}`}
-                id={getSelectMenuOptionDomId(listboxId, option.value)}
-                key={option.value}
-                onClick={() => handleSelect(option)}
-                onMouseEnter={() => setActiveOptionIndex(optionIndex)}
-                role="option"
-                tabIndex={-1}
-                type="button"
-              >
-                <span className={styles.selectMenuOptionText}>
-                  <span className={styles.selectMenuOptionLabel}>{option.label}</span>
-                  {option.detail ? (
-                    <span className={styles.selectMenuOptionDetail}>{option.detail}</span>
-                  ) : null}
-                </span>
-                {isSelected ? <Check aria-hidden="true" size={15} /> : null}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+                return (
+                  <button
+                    aria-selected={isSelected}
+                    className={`${styles.selectMenuOption} ${
+                      isSelected ? styles.selectMenuOptionSelected : ""
+                    } ${isActive ? styles.selectMenuOptionActive : ""}`}
+                    id={getSelectMenuOptionDomId(listboxId, option.value)}
+                    key={option.value}
+                    onClick={() => handleSelect(option)}
+                    onMouseEnter={() => setActiveOptionIndex(optionIndex)}
+                    role="option"
+                    tabIndex={-1}
+                    type="button"
+                  >
+                    <span className={styles.selectMenuOptionText}>
+                      <span className={styles.selectMenuOptionLabel}>{option.label}</span>
+                      {option.detail ? (
+                        <span className={styles.selectMenuOptionDetail}>{option.detail}</span>
+                      ) : null}
+                    </span>
+                    {isSelected ? <Check aria-hidden="true" size={15} /> : null}
+                  </button>
+                );
+              })}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
+}
+
+function getSelectMenuDropdownPosition({
+  preferredMaxHeight,
+  triggerRect,
+  viewportHeight,
+  viewportWidth
+}: {
+  readonly preferredMaxHeight: number;
+  readonly triggerRect: DOMRect;
+  readonly viewportHeight: number;
+  readonly viewportWidth: number;
+}): CSSProperties {
+  const viewportPadding = 8;
+  const triggerGap = 6;
+  const availableBelow = viewportHeight - triggerRect.bottom - triggerGap - viewportPadding;
+  const availableAbove = triggerRect.top - triggerGap - viewportPadding;
+  const shouldOpenAbove =
+    availableBelow < Math.min(preferredMaxHeight, 120) && availableAbove > availableBelow;
+  const availableHeight = shouldOpenAbove ? availableAbove : availableBelow;
+  const width = Math.min(triggerRect.width, viewportWidth - viewportPadding * 2);
+  const left = Math.min(
+    Math.max(viewportPadding, triggerRect.left),
+    Math.max(viewportPadding, viewportWidth - viewportPadding - width)
+  );
+
+  return {
+    ...(shouldOpenAbove
+      ? { bottom: viewportHeight - triggerRect.top + triggerGap }
+      : { top: triggerRect.bottom + triggerGap }),
+    left,
+    maxHeight: Math.max(72, Math.min(preferredMaxHeight, availableHeight)),
+    width
+  };
 }
 
 function getSelectMenuTriggerLabel(option: SelectMenuOption): string {

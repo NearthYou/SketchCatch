@@ -5,6 +5,7 @@ import type {
   BuildInstallPreset,
   DiagramJson,
   EcsWebBuildConfig,
+  PackageManagerKind,
   ProjectDeploymentTarget,
   PutProjectDeploymentTargetRequest,
   RepositoryAnalysisAiHandoff,
@@ -13,6 +14,12 @@ import type {
   SourceRepository
 } from "@sketchcatch/types";
 import { createEcsFargateRuntimeNames } from "@sketchcatch/types";
+
+import {
+  createEditableEcsWebBuildConfig,
+  getEcsWebBuildConfigIssueKeys,
+  getEcsWebPackageManagerDefaultsForLockfile
+} from "./ecs-web-build-config-state";
 
 export type ProjectDeploymentTargetDraft = {
   connectionId: string;
@@ -39,6 +46,7 @@ export type ProjectDeploymentTargetDraft = {
   cloudFrontOriginId: string;
   outputUrl: string;
   ecsWeb: EcsWebBuildConfig | null;
+  ecsRequiredRuntimeSecrets: readonly string[];
   evidenceSuggested: boolean;
 };
 
@@ -138,10 +146,21 @@ export function createDeploymentTargetDraft(
     runtimeTargetKind === "ecs_fargate" && hasWebInclusiveEcsArchitecture(diagramJson)
       ? inferEcsWebBuildConfig(repositoryEvidence?.aiHandoff, architectureDefaults)
       : null;
-  const ecsWeb =
+  const selectedEcsWeb =
     runtimeTargetKind === "ecs_fargate"
       ? (config?.ecsWeb ?? ecsDefaults?.ecsWeb ?? inferredEcsWeb)
       : null;
+  const ecsRequiredRuntimeSecrets = normalizeRuntimeSecretNames([
+    ...(config?.ecsWeb?.api.requiredRuntimeSecrets ?? []),
+    ...(ecsDefaults?.ecsWeb?.api.requiredRuntimeSecrets ?? []),
+    ...(inferredEcsWeb?.api.requiredRuntimeSecrets ?? []),
+    ...((repositoryEvidence?.aiHandoff?.architectureFacts ?? [])
+      .filter((fact) => fact.kind === "runtime_secret")
+      .map((fact) => fact.value) ?? [])
+  ]);
+  const ecsWeb = selectedEcsWeb
+    ? withRequiredRuntimeSecrets(selectedEcsWeb, ecsRequiredRuntimeSecrets)
+    : null;
   const repositoryRuntimeNames =
     runtimeTargetKind === "ecs_fargate" && repositoryEvidence
       ? createEcsFargateRuntimeNames(repositoryEvidence.name)
@@ -204,6 +223,7 @@ export function createDeploymentTargetDraft(
       "."
     ),
     evidencePath: firstNonBlank(
+      ecsWeb?.api.dockerfilePath,
       config?.evidence[0]?.path,
       ecsDefaults?.evidencePath,
       suggestion?.evidencePath
@@ -248,6 +268,7 @@ export function createDeploymentTargetDraft(
       ecsDefaults?.outputUrl ??
       "",
     ecsWeb,
+    ecsRequiredRuntimeSecrets,
     evidenceSuggested: Boolean(ecsDefaults || suggestion)
   };
 }
@@ -321,7 +342,9 @@ export function inferEcsWebBuildConfig(
     handoff.evidence.filter((item) => item.kind === "lockfile").map((item) => item.path),
     frontendUnit.rootPath
   );
-  const packageManager = getPackageManagerDefaults(lockfile);
+  const packageManager = lockfile
+    ? getEcsWebPackageManagerDefaultsForLockfile(lockfile)
+    : null;
   if (!lockfile || !packageManager) return null;
 
   const hasRootPackageManifest = handoff.evidence.some(
@@ -367,39 +390,6 @@ function selectFrontendLockfile(paths: readonly string[], sourceRoot: string): s
   if (scoped.length === 1) return scoped[0]!;
   const root = paths.filter((path) => !path.includes("/"));
   return root.length === 1 ? root[0]! : null;
-}
-
-function getPackageManagerDefaults(lockfilePath: string | null): {
-  kind: "npm" | "pnpm" | "yarn";
-  version: string;
-  installPreset: Exclude<BuildInstallPreset, "none">;
-  buildPreset: Extract<BuildExecutionPreset, "pnpm_build" | "npm_build" | "yarn_build">;
-} | null {
-  if (lockfilePath?.endsWith("package-lock.json")) {
-    return {
-      kind: "npm",
-      version: "10.9.2",
-      installPreset: "npm_ci",
-      buildPreset: "npm_build"
-    };
-  }
-  if (lockfilePath?.endsWith("pnpm-lock.yaml")) {
-    return {
-      kind: "pnpm",
-      version: "11.8.0",
-      installPreset: "pnpm_frozen_lockfile",
-      buildPreset: "pnpm_build"
-    };
-  }
-  if (lockfilePath?.endsWith("yarn.lock")) {
-    return {
-      kind: "yarn",
-      version: "1.22.22",
-      installPreset: "yarn_frozen_lockfile",
-      buildPreset: "yarn_build"
-    };
-  }
-  return null;
 }
 
 function getParentRepositoryPath(path: string): string {
@@ -535,6 +525,91 @@ export function changeDeploymentTargetRuntime(
   };
 }
 
+export function updateDeploymentTargetDraftField<
+  K extends keyof ProjectDeploymentTargetDraft
+>(
+  draft: ProjectDeploymentTargetDraft,
+  key: K,
+  value: ProjectDeploymentTargetDraft[K]
+): ProjectDeploymentTargetDraft {
+  const next = { ...draft, [key]: value };
+  if (key === "ecsWeb") {
+    return replaceDeploymentTargetEcsWeb(
+      next,
+      value as ProjectDeploymentTargetDraft["ecsWeb"]
+    );
+  }
+  if (key === "ecsRequiredRuntimeSecrets" && next.ecsWeb) {
+    return replaceDeploymentTargetEcsWeb(next, next.ecsWeb);
+  }
+  if (!next.ecsWeb) return next;
+
+  if (key === "sourceRoot") {
+    return {
+      ...next,
+      ecsWeb: {
+        ...next.ecsWeb,
+        api: { ...next.ecsWeb.api, sourceRoot: value as string }
+      }
+    };
+  }
+  if (key === "evidencePath") {
+    return {
+      ...next,
+      ecsWeb: {
+        ...next.ecsWeb,
+        api: { ...next.ecsWeb.api, dockerfilePath: value as string }
+      }
+    };
+  }
+  if (key === "healthCheckPath") {
+    return {
+      ...next,
+      ecsWeb: {
+        ...next.ecsWeb,
+        api: { ...next.ecsWeb.api, healthCheckPath: value as string }
+      }
+    };
+  }
+  return next;
+}
+
+export function replaceDeploymentTargetEcsWeb(
+  draft: ProjectDeploymentTargetDraft,
+  ecsWeb: EcsWebBuildConfig | null
+): ProjectDeploymentTargetDraft {
+  if (!ecsWeb) return { ...draft, ecsWeb: null };
+  const ecsRequiredRuntimeSecrets = normalizeRuntimeSecretNames([
+    ...draft.ecsRequiredRuntimeSecrets,
+    ...(ecsWeb.api.requiredRuntimeSecrets ?? [])
+  ]);
+  const normalizedEcsWeb = withRequiredRuntimeSecrets(ecsWeb, ecsRequiredRuntimeSecrets);
+  return {
+    ...draft,
+    sourceRoot: normalizedEcsWeb.api.sourceRoot,
+    evidencePath: normalizedEcsWeb.api.dockerfilePath,
+    healthCheckPath: normalizedEcsWeb.api.healthCheckPath,
+    ecsWeb: normalizedEcsWeb,
+    ecsRequiredRuntimeSecrets
+  };
+}
+
+export function createManualEcsWebDraft(
+  draft: ProjectDeploymentTargetDraft,
+  packageManager: PackageManagerKind
+): ProjectDeploymentTargetDraft {
+  return replaceDeploymentTargetEcsWeb(
+    draft,
+    createEditableEcsWebBuildConfig({
+      sourceRoot: draft.sourceRoot,
+      dockerfilePath: draft.evidencePath,
+      healthCheckPath: draft.healthCheckPath,
+      requiredRuntimeSecrets: draft.ecsRequiredRuntimeSecrets,
+      packageManager
+    })
+  );
+}
+
 export function getLockedSystemFields(
   draft: ProjectDeploymentTargetDraft,
   savedTarget: ProjectDeploymentTarget | null
@@ -579,6 +654,7 @@ export type MissingDeploymentTargetFieldKey =
   | "ecs_cluster"
   | "ecs_service"
   | "container"
+  | "ecs_web_build_config"
   | "lambda_function_logical_id"
   | "lambda_function"
   | "lambda_alias"
@@ -618,6 +694,9 @@ export function getMissingDeploymentTargetFieldKeys(
       if (!draft.clusterName.trim()) missing.push("ecs_cluster");
       if (!draft.serviceName.trim()) missing.push("ecs_service");
       if (!draft.containerName.trim()) missing.push("container");
+      if (getEcsWebBuildConfigIssueKeys(draft.ecsWeb).length > 0) {
+        missing.push("ecs_web_build_config");
+      }
       break;
     case "lambda":
       if (!draft.functionLogicalId.trim()) missing.push("lambda_function_logical_id");
@@ -675,6 +754,17 @@ export function createDeploymentTargetRequest(
   const runtime = runtimeBuildConfig[draft.runtimeTargetKind];
   const evidencePath = draft.evidencePath.trim();
   const version = draft.version.trim() || null;
+  const ecsWeb = draft.runtimeTargetKind === "ecs_fargate" ? draft.ecsWeb : null;
+  if (draft.runtimeTargetKind === "ecs_fargate" && !ecsWeb) {
+    throw new Error("ECS web build configuration is required.");
+  }
+  const evidence: { kind: BuildEvidenceKind; path: string }[] = ecsWeb
+    ? [
+        { kind: "dockerfile", path: ecsWeb.api.dockerfilePath.trim() },
+        { kind: "package_manifest", path: ecsWeb.frontend.packageManifestPath.trim() },
+        { kind: "static_output", path: ecsWeb.frontend.outputPath.trim() }
+      ]
+    : [{ kind: runtime.evidenceKind, path: evidencePath }];
 
   return {
     provider: "aws",
@@ -722,20 +812,19 @@ export function createDeploymentTargetRequest(
                 outputUrl: draft.outputUrl.trim()
               },
     confirmedBuildConfig: {
-      sourceRoot: draft.sourceRoot.trim(),
-      evidence: [{ kind: runtime.evidenceKind, path: evidencePath }],
+      sourceRoot: ecsWeb?.api.sourceRoot.trim() ?? draft.sourceRoot.trim(),
+      evidence,
       installPreset: draft.runtimeTargetKind === "static_site" ? draft.installPreset : "none",
       buildPreset: runtime.buildPreset,
       artifactOutputPath: draft.runtimeTargetKind === "static_site" ? evidencePath : null,
       runtimeEntrypoint: null,
       healthCheckPath:
-        draft.runtimeTargetKind === "ecs_fargate" ||
-        draft.runtimeTargetKind === "lambda" ||
-        draft.runtimeTargetKind === "ec2_asg"
+        ecsWeb?.api.healthCheckPath.trim() ??
+        (draft.runtimeTargetKind === "lambda" || draft.runtimeTargetKind === "ec2_asg"
           ? draft.healthCheckPath.trim()
-          : null,
-      dockerfilePath: draft.runtimeTargetKind === "ecs_fargate" ? evidencePath : null,
-      packageManifestPath: null,
+          : null),
+      dockerfilePath: ecsWeb?.api.dockerfilePath.trim() ?? null,
+      packageManifestPath: ecsWeb?.frontend.packageManifestPath.trim() ?? null,
       samTemplatePath: draft.runtimeTargetKind === "lambda" ? evidencePath : null,
       appSpecPath: draft.runtimeTargetKind === "ec2_asg" ? evidencePath : null,
       staticOutputPath: draft.runtimeTargetKind === "static_site" ? evidencePath : null,
@@ -743,7 +832,7 @@ export function createDeploymentTargetRequest(
       manifestVersion: version?.startsWith("v") ? null : version,
       confirmedCommitSha: draft.commitSha.toLowerCase(),
       confirmedAt: confirmedAt.toISOString(),
-      ecsWeb: draft.runtimeTargetKind === "ecs_fargate" ? draft.ecsWeb : null
+      ecsWeb
     }
   };
 }
@@ -856,4 +945,27 @@ function hasSafeHttpsOutputUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function normalizeRuntimeSecretNames(names: readonly string[]): string[] {
+  return [...new Set(names.map((name) => name.trim()).filter(Boolean))].sort((left, right) =>
+    left.localeCompare(right)
+  );
+}
+
+function withRequiredRuntimeSecrets(
+  ecsWeb: EcsWebBuildConfig,
+  names: readonly string[]
+): EcsWebBuildConfig {
+  const requiredRuntimeSecrets = normalizeRuntimeSecretNames([
+    ...(ecsWeb.api.requiredRuntimeSecrets ?? []),
+    ...names
+  ]);
+  return {
+    ...ecsWeb,
+    api: {
+      ...ecsWeb.api,
+      ...(requiredRuntimeSecrets.length > 0 ? { requiredRuntimeSecrets } : {})
+    }
+  };
 }
