@@ -13,10 +13,7 @@ type AudienceClientDependencies = Readonly<{
 }>;
 
 export class LiveObservationAudienceError extends Error {
-  constructor(
-    readonly kind: AudienceErrorKind,
-    readonly retryAfterSeconds: number | null = null
-  ) {
+  constructor(readonly kind: AudienceErrorKind) {
     super("Live Observation audience request failed");
     Object.defineProperty(this, "name", {
       configurable: true,
@@ -117,25 +114,13 @@ function isRequestResponse(value: unknown): value is AudienceRequestResult {
 function errorFromResponse(response: Response): LiveObservationAudienceError {
   if (response.status === 404 || response.status === 410) return audienceError("expired");
   if (response.status === 429) {
-    return audienceError(
-      "rate_limited",
-      parseRetryAfterSeconds(response.headers.get("Retry-After"))
-    );
+    return audienceError("rate_limited");
   }
   return audienceError("unavailable");
 }
 
-function parseRetryAfterSeconds(value: string | null): number | null {
-  if (value === null || !/^\d+$/.test(value)) return null;
-  const retryAfterSeconds = Number(value);
-  return Number.isSafeInteger(retryAfterSeconds) ? retryAfterSeconds : null;
-}
-
-function audienceError(
-  kind: AudienceErrorKind,
-  retryAfterSeconds: number | null = null
-): LiveObservationAudienceError {
-  return new LiveObservationAudienceError(kind, retryAfterSeconds);
+function audienceError(kind: AudienceErrorKind): LiveObservationAudienceError {
+  return new LiveObservationAudienceError(kind);
 }
 
 function createUuid(): string {

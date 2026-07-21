@@ -194,8 +194,8 @@ export function getLiveObservationOperationalAnalysis(
     terraformAction = "aws_lb_target_group.health_check 검토";
     terraformDetail = "5xx와 가용성 저하 구간을 기준으로 interval·timeout 변경안을 생성합니다.";
   } else if (hasBottleneck && max !== null && desired !== null && desired >= max) {
-    terraformAction = `aws_appautoscaling_target.max_capacity = ${max + Math.max(1, Math.ceil(max * 0.25))}`;
-    terraformDetail = "현재 max 도달이 확인된 경우에만 약 25% 확장안을 검토합니다.";
+    terraformAction = `aws_appautoscaling_target.max_capacity = ${max + 1}`;
+    terraformDetail = "현재 max 도달이 확인된 경우에만 용량을 1단계 상향합니다.";
   } else if (hasBottleneck) {
     terraformAction = "aws_appautoscaling_policy.target_value 검토";
     terraformDetail = "관측된 처리량과 지연을 기준으로 target value 변경안을 생성합니다.";

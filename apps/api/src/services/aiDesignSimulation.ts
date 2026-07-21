@@ -25,7 +25,10 @@ export async function simulateDesign(
 ): Promise<DesignSimulationResult> {
   const resourceById = createResourceLookup(input.architectureJson.nodes);
   const requestFlow = createRequestFlow(input.architectureJson.edges, resourceById);
-  const bottlenecks = createBottlenecks(input.architectureJson.nodes, input.trafficLevel);
+  const bottlenecks = [
+    ...createBottlenecks(input.architectureJson.nodes, input.trafficLevel),
+    ...createLiveObservationBottlenecks(input)
+  ];
   const failureScenarios = createFailureScenarios(input.architectureJson.nodes);
   const costEstimate = await analyzeCost(
     createCostEstimateRequest({
@@ -44,6 +47,11 @@ export async function simulateDesign(
       "실제 부하 테스트가 아닌 ArchitectureJson 기반 추정입니다.",
       `트래픽은 ${input.trafficLevel === "normal" ? "보통" : "작음"} 수준으로 가정합니다.`,
       `예산은 ${input.budgetLevel === "low" ? "낮음" : "보통"} 수준으로 가정합니다.`,
+      ...(input.liveObservation
+        ? [
+            `Live Observation의 실제 수락 요청 ${input.liveObservation.acceptedEventCount}건과 분당 환산 요청을 사용합니다.`
+          ]
+        : []),
       ...costEstimate.assumptions
     ],
     requestFlow,
@@ -51,7 +59,7 @@ export async function simulateDesign(
     failureScenarios,
     costPressure,
     costEstimate,
-    recommendations: createRecommendations(bottlenecks, failureScenarios, costPressure)
+    recommendations: createRecommendations(bottlenecks, failureScenarios, costPressure, input)
   };
 }
 
@@ -117,6 +125,84 @@ function createBottlenecks(
   return bottlenecks;
 }
 
+type RequestScalingEvidence = Readonly<{
+  maxCapacity: number;
+  targetNodeId: string;
+  targetValue: number;
+}>;
+
+function createLiveObservationBottlenecks(
+  input: CreateDesignSimulationRequest
+): DesignSimulationBottleneck[] {
+  const observation = input.liveObservation;
+  if (!observation || observation.pressureLevel === "normal") return [];
+
+  const scaling = readRequestScalingEvidence(
+    input.architectureJson.nodes,
+    input.architectureJson.edges
+  );
+  if (!scaling) return [];
+
+  const requiredCapacity = Math.ceil(observation.projectedRequestsPerMinute / scaling.targetValue);
+  if (requiredCapacity < scaling.maxCapacity) return [];
+
+  return [
+    {
+      id: `bottleneck-live-scaling-${scaling.targetNodeId}`,
+      resourceId: scaling.targetNodeId,
+      severity: observation.pressureLevel === "warning" ? "medium" : "high",
+      title: "ECS Auto Scaling 상한 도달 위험",
+      description: `Live Observation 분당 ${observation.projectedRequestsPerMinute}건 요청이면 현재 설정에서 최대 ${scaling.maxCapacity}개 Task 상한에 도달할 수 있습니다.`
+    }
+  ];
+}
+
+function readRequestScalingEvidence(
+  nodes: readonly ResourceNode[],
+  edges: readonly ResourceEdge[]
+): RequestScalingEvidence | null {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const targets = nodes.filter((node) => node.type === "APPLICATION_AUTO_SCALING_TARGET");
+  if (targets.length !== 1) return null;
+
+  const target = targets[0]!;
+  const services = edges
+    .filter((edge) => edge.targetId === target.id)
+    .map((edge) => nodeById.get(edge.sourceId))
+    .filter((node) => node?.type === "ECS_SERVICE");
+  const policies = edges
+    .filter((edge) => edge.sourceId === target.id)
+    .map((edge) => nodeById.get(edge.targetId))
+    .filter((node) => node?.type === "APPLICATION_AUTO_SCALING_POLICY");
+  if (services.length !== 1 || policies.length !== 1) return null;
+
+  const maxCapacity = readPositiveNumber(target.config["maxCapacity"]);
+  const policy = policies[0]!;
+  const tracking = isRecord(policy.config["targetTrackingScalingPolicyConfiguration"])
+    ? policy.config["targetTrackingScalingPolicyConfiguration"]
+    : null;
+  const targetValue = readPositiveNumber(tracking?.["targetValue"]);
+  const specifications = Array.isArray(tracking?.["predefinedMetricSpecification"])
+    ? tracking["predefinedMetricSpecification"]
+    : [tracking?.["predefinedMetricSpecification"]];
+  const specification =
+    specifications.length === 1 && isRecord(specifications[0]) ? specifications[0] : null;
+
+  if (
+    policy.config["policyType"] !== "TargetTrackingScaling" ||
+    maxCapacity === null ||
+    targetValue === null ||
+    specification?.["predefinedMetricType"] !== "ALBRequestCountPerTarget"
+  ) {
+    return null;
+  }
+
+  return { maxCapacity, targetNodeId: target.id, targetValue };
+}
+
+function readPositiveNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
 // Resource 구성이 하나뿐일 때 장애가 어디까지 번지는지 사용자에게 먼저 보여줍니다.
 function createFailureScenarios(nodes: readonly ResourceNode[]): DesignSimulationFailureScenario[] {
   const ec2Nodes = nodes.filter((node) => node.type === "EC2");
@@ -132,7 +218,8 @@ function createFailureScenarios(nodes: readonly ResourceNode[]): DesignSimulatio
         id: `failure-single-ec2-${node.id}`,
         title: "EC2 장애 시 API 응답 중단 가능",
         affectedResourceIds: [node.id],
-        description: "대체 EC2나 Load Balancer가 없으면 해당 서버 장애가 곧 서비스 중단으로 이어질 수 있습니다.",
+        description:
+          "대체 EC2나 Load Balancer가 없으면 해당 서버 장애가 곧 서비스 중단으로 이어질 수 있습니다.",
         mitigation: "두 번째 EC2, Auto Scaling, Load Balancer는 후속 설계에서 검토하세요."
       });
     }
@@ -146,7 +233,8 @@ function createFailureScenarios(nodes: readonly ResourceNode[]): DesignSimulatio
         id: `failure-single-rds-${node.id}`,
         title: "RDS 장애 시 읽기와 쓰기 중단 가능",
         affectedResourceIds: [node.id],
-        description: "DB가 하나뿐이면 장애나 점검 시간 동안 애플리케이션이 데이터를 읽고 쓰기 어렵습니다.",
+        description:
+          "DB가 하나뿐이면 장애나 점검 시간 동안 애플리케이션이 데이터를 읽고 쓰기 어렵습니다.",
         mitigation: "백업, Multi-AZ, 복구 절차는 비용과 함께 후속 설계에서 검토하세요."
       });
     }
@@ -157,7 +245,8 @@ function createFailureScenarios(nodes: readonly ResourceNode[]): DesignSimulatio
       id: `failure-public-exposure-${node.id}`,
       title: "Public 노출 Resource 접근 시도 증가 가능",
       affectedResourceIds: [node.id],
-      description: "전체 인터넷에 열린 접근 규칙은 연습 환경에서도 불필요한 접속 시도와 보안 점검 부담을 늘릴 수 있습니다.",
+      description:
+        "전체 인터넷에 열린 접근 규칙은 연습 환경에서도 불필요한 접속 시도와 보안 점검 부담을 늘릴 수 있습니다.",
       mitigation: "접근 대상을 본인 IP나 팀 관리용 CIDR로 줄이는 방안을 먼저 검토하세요."
     });
   }
@@ -216,12 +305,31 @@ function createCostPressure(
 function createRecommendations(
   bottlenecks: readonly DesignSimulationBottleneck[],
   failureScenarios: readonly DesignSimulationFailureScenario[],
-  costPressure: readonly string[]
+  costPressure: readonly string[],
+  input: CreateDesignSimulationRequest
 ): string[] {
   const recommendations: string[] = [];
 
   if (bottlenecks.some((item) => item.resourceId.includes("ec2"))) {
-    recommendations.push("EC2가 하나뿐이면 보통 트래픽 전에 두 번째 EC2나 Load Balancer 필요성을 검토하세요.");
+    recommendations.push(
+      "EC2가 하나뿐이면 보통 트래픽 전에 두 번째 EC2나 Load Balancer 필요성을 검토하세요."
+    );
+  }
+
+  const scaling = readRequestScalingEvidence(
+    input.architectureJson.nodes,
+    input.architectureJson.edges
+  );
+  if (scaling && input.liveObservation && input.liveObservation.pressureLevel !== "normal") {
+    const requiredCapacity = Math.ceil(
+      input.liveObservation.projectedRequestsPerMinute / scaling.targetValue
+    );
+    if (requiredCapacity >= scaling.maxCapacity) {
+      const nextMaxCapacity = scaling.maxCapacity + 1;
+      recommendations.push(
+        `aws_appautoscaling_target.max_capacity를 ${scaling.maxCapacity}에서 ${nextMaxCapacity}으로 늘리고 새 Terraform Plan으로 재배포하세요.`
+      );
+    }
   }
 
   if (failureScenarios.some((item) => item.affectedResourceIds.some((id) => id.includes("rds")))) {
@@ -229,7 +337,9 @@ function createRecommendations(
   }
 
   if (costPressure.length > 0) {
-    recommendations.push("비용 압박이 있는 Resource는 Practice Session 시간을 짧게 잡고 Auto Cleanup 계획을 확인하세요.");
+    recommendations.push(
+      "비용 압박이 있는 Resource는 Practice Session 시간을 짧게 잡고 Auto Cleanup 계획을 확인하세요."
+    );
   }
 
   return recommendations;

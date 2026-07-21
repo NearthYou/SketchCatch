@@ -32,7 +32,42 @@ Short English-only working log for the current agent context. Older records are 
 - Chrome exposed the actual audience failure as `TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation`: the native fetch function was passed to `ky` without its Window receiver. The default fetch is now bound to `globalThis`, a receiver-sensitive regression test passes, and local Chrome verification recorded one POST 201 followed by repeated heartbeat POST 200 responses with the UI in `✓ 참여 중 · 연결됨` state.
 - The separate `audience-live-check` branch `codex/fix-browser-check-in-route` moves browser calls to `/api/participations` while retaining `/api/check-ins` as the release-verification compatibility alias. Its focused tests, full 48-test suite, typecheck, build, and changed-file lint pass.
 - Broad API and Web suites still expose pre-existing Architecture Compiler, generated artifact, artifact-loader, and AI Architecture Draft baseline failures outside this workstream. The changed Live Observation tests pass.
+- Merged `origin/dev` at `587e4443` into `codex/fix-deployment-live-observation`; the only textual conflict was this session log, and both histories were preserved. The combined Redis recovery, SSE diagnostics, Store-backed traffic warning, AI recommendation, and bounded Terraform draft flows pass 10 focused API tests, 27 focused Web tests, the Redis 8 integration suite, harness, lint, typecheck, and all production builds.
 - No dependency, lockfile, migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
+
+### 2026-07-22 - Remove the duplicate AWS connection step description
+
+- Hid the empty-state AWS Role description from the connection step header while retaining it in the expanded body and preserving the verified account/region summary.
+- Seven focused Settings tests, lint, typecheck, build, final harness, and two-axis review pass. No full test suite was run.
+- No API, shared contract, database migration, dependency, deployment, or cloud mutation change was made.
+
+### 2026-07-22 - Restructure Settings connection flow
+
+- Reworked the existing Settings integrations into one ordered GitHub App -> AWS account -> AWS CodeBuild GitHub authorization flow, with completed steps collapsed and the current or error step expanded.
+- Preserved all existing API clients, DTOs, shared types, actions, and connected AWS account management. Long CodeBuild failure details now remain behind an `오류 상세` disclosure with a neutral summary.
+- Verification passed: 14 focused Web tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, diff checks, and two-axis review. Authenticated browser smoke was unavailable because the in-app browser session was signed out.
+- No database migration, dependency change, cloud mutation, deployment action, or Git/CI/CD handoff was performed.
+
+### 2026-07-22 - Connect real audience traffic to immediate Live Observation warnings
+
+- Removed the separate public per-IP limiter, `Retry-After` propagation, and audience countdown while retaining the Store safety envelope of 20 events/second, 120 events/10 seconds, 10,000 events/session, and a 15-minute session lifetime.
+- Added an optional audience application URL to the v4 manifest with backward-compatible CloudFront derivation for existing manifests. The external audience app receives a scoped observation receipt URL and emits best-effort receipts only after successful real check-in and heartbeat requests.
+- Latched immediate Store-backed pressure warnings until a user-approved Project Draft save succeeds. The only automatic Terraform edit requires exactly one `aws_appautoscaling_target` and one numeric `max_capacity`, increments it by one, and never runs Plan, Apply, deployment, or cloud mutation.
+- Added AI recommendation context, explicit editor navigation after save, revision-conflict protection, contract documentation, and focused API/Web regressions.
+- Verification passed: 24 focused API tests, 28 focused Web tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, final harness, and two-axis review. Review fixes separated Store-only receipts from legacy probes, moved warning latch state outside the modal, streamed Store snapshots before provider refresh, and removed the unused Runtime Cache dependency.
+- Root `pnpm test` remains non-green in pre-existing `aiArchitectureDrafts.test.ts` expectations outside this workstream; the changed Live Observation subsets pass.
+- The external `audience-live-check` clone passes typecheck, build, 49 tests, and changed-file Biome checks. Its root lint remains non-green because of existing repository-wide CRLF formatting findings outside the changed files.
+- No database migration, dependency change, secret access, Terraform execution, deployment, or cloud mutation was performed.
+
+### 2026-07-22 - Reduce Diagram resource label size
+
+- Reduced only the labels beneath Diagram resource icons from an effective 18px to 13px while preserving the two-line clamp, icon spacing, edge labels, and area headings.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
+
+### 2026-07-22 - Strengthen Workspace panel borders
+
+- Increased the Diagram Editor's neutral border contrast for both outer panel boundaries and internal separators/controls: regular lines now use `#d4d4d4`, while strong lines use `#c8c8c8`.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
 
 ### 2026-07-21 - Simplify fallback cost headings
 

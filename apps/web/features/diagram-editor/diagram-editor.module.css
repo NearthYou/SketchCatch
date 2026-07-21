@@ -6,8 +6,8 @@
   --workspace-page: #ffffff;
   --workspace-surface: #ffffff;
   --workspace-surface-muted: #fafafa;
-  --workspace-line: #dddfe4;
-  --workspace-line-strong: #dcdee0;
+  --workspace-line: #d4d4d4;
+  --workspace-line-strong: #c8c8c8;
   --workspace-text: #171717;
   --workspace-muted: #60646c;
   --workspace-accent: #000000;
@@ -2011,7 +2011,7 @@ button.rightRailResizeHandle {
   box-sizing: border-box;
   color: var(--board-ink);
   display: -webkit-box;
-  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-size: calc(7px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   left: 50%;
   line-height: 15px;

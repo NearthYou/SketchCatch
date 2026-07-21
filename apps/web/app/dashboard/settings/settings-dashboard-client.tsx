@@ -4,17 +4,21 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   Cloud,
   ExternalLink,
+  LockKeyhole,
   RefreshCw,
   Trash2,
   X
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import type {
   AwsConnection,
   AwsCodeConnectionResponse,
+  AwsCodeConnectionStatus,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnectionDeletionPreviewResponse,
   GitHubInstallationConnection
@@ -68,6 +72,9 @@ const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
   { label: "버지니아 북부", value: "us-east-1" },
   { label: "도쿄", value: "ap-northeast-1" }
 ];
+
+type ConnectionFlowStepId = "github" | "aws" | "codebuild";
+type ConnectionFlowStepState = "complete" | "current" | "error" | "locked";
 
 // AWS Role 생성 안내, CloudFormation 이동, 연결 검증과 삭제를 관리합니다.
 export function SettingsDashboardClient() {
@@ -143,10 +150,26 @@ export function SettingsDashboardClient() {
     Record<string, AwsCodeConnectionResponse>
   >({});
   const [selectedBuildAwsConnectionId, setSelectedBuildAwsConnectionId] = useState("");
+  const selectedCodeConnectionStatus =
+    codeConnections[selectedBuildAwsConnectionId]?.codeConnection?.status;
+  const recommendedConnectionStep: ConnectionFlowStepId | null =
+    githubAuthorizationTarget.status !== "ready"
+      ? "github"
+      : displayedVerifiedConnections.length === 0
+        ? "aws"
+        : selectedCodeConnectionStatus === "AVAILABLE"
+          ? null
+          : "codebuild";
+  const [expandedConnectionStep, setExpandedConnectionStep] =
+    useState<ConnectionFlowStepId | null>(recommendedConnectionStep);
   const [showAwsRequiredModal, setShowAwsRequiredModal] = useState(false);
   const modalOverlayRef = useRef<HTMLDivElement>(null);
   const modalDialogRef = useRef<HTMLElement>(null);
   const modalCloseButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    setExpandedConnectionStep(recommendedConnectionStep);
+  }, [recommendedConnectionStep]);
 
   // 저장된 AWS 연결 목록을 다시 읽고 현재 상태를 최신으로 맞춥니다.
   async function loadConnections(): Promise<void> {
@@ -462,6 +485,34 @@ export function SettingsDashboardClient() {
     });
   }, [deletionPreview, showAwsRequiredModal, showCodeConnectionDisconnectModal]);
 
+  const githubStepComplete = githubAuthorizationTarget.status === "ready";
+  const awsStepComplete = displayedVerifiedConnections.length > 0;
+  const selectedCodeConnection = codeConnections[selectedBuildAwsConnectionId]?.codeConnection;
+  const codeBuildStepComplete = selectedCodeConnection?.status === "AVAILABLE";
+  const githubStepState: ConnectionFlowStepState = githubStepComplete ? "complete" : "current";
+  const awsStepState: ConnectionFlowStepState = !githubStepComplete
+    ? "locked"
+    : awsStepComplete
+      ? "complete"
+      : "current";
+  const codeBuildStepState: ConnectionFlowStepState = !githubStepComplete || !awsStepComplete
+    ? "locked"
+    : codeBuildStepComplete
+      ? "complete"
+      : selectedCodeConnection?.status === "ERROR"
+        ? "error"
+        : "current";
+  const primaryVerifiedConnection = displayedVerifiedConnections[0];
+  const githubStepSummary = githubStepComplete
+    ? `${githubAuthorizationTarget.installation.accountLogin} · GitHub App 연결됨`
+    : githubAuthorizationTarget.status === "multiple_github_installations_unsupported"
+      ? "활성 GitHub App 연결을 하나만 남겨 주세요."
+      : "GitHub App 연결이 필요합니다.";
+  const awsStepSummary = primaryVerifiedConnection
+    ? `${primaryVerifiedConnection.accountId ?? "계정 확인 전"} · ${getAwsRegionLabel(primaryVerifiedConnection.region)}`
+    : "";
+  const codeBuildStepSummary = getCodeBuildStepSummary(selectedCodeConnection?.status);
+
   return (
     <div className="dashboardRouteStack">
       <header className="dashboardPageHeader dashboardPageHeaderCompact">
@@ -469,86 +520,123 @@ export function SettingsDashboardClient() {
         <button className={styles.iconAction} aria-label="연결 새로고침" disabled={displayedConnectionsQuery.isFetching} onClick={() => void loadConnections()} title="새로고침" type="button"><RefreshCw size={17} /></button>
       </header>
 
-      <GitHubAccountSettings />
-
       {isConnectionsPending ? (
-        <ProductState description="AWS Role 연결 상태를 확인하고 있습니다." kind="loading" title="AWS 환경설정 불러오는 중" />
+        <>
+          <GitHubAccountSettings />
+          <ProductState description="AWS Role 연결 상태를 확인하고 있습니다." kind="loading" title="AWS 환경설정 불러오는 중" />
+        </>
       ) : hasConnectionsLoadError ? (
-        <ProductState action={<button onClick={() => void loadConnections()} type="button">다시 시도</button>} description={getApiErrorMessage(displayedConnectionsQuery.error, "AWS 연결을 불러오지 못했습니다.")} kind="error" title="AWS 환경설정을 불러오지 못했습니다" />
+        <>
+          <GitHubAccountSettings />
+          <ProductState action={<button onClick={() => void loadConnections()} type="button">다시 시도</button>} description={getApiErrorMessage(displayedConnectionsQuery.error, "AWS 연결을 불러오지 못했습니다.")} kind="error" title="AWS 환경설정을 불러오지 못했습니다" />
+        </>
       ) : (
         <>
           {displayedConnectionsQuery.isError ? <p className={styles.errorBand}>{getApiErrorMessage(displayedConnectionsQuery.error, "AWS 연결을 갱신하지 못했습니다.")}</p> : null}
           {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}
 
-          <section className={styles.settingsSection} id="aws-account-connection">
-            <header><Cloud size={20} /><div><h2>AWS 계정 연결</h2><p>Access Key 대신 한 번 만든 Role을 사용합니다.</p></div></header>
-            <div className={styles.controlRow}>
-              <div className={styles.controlField}>
-                <span>기본 region</span>
-                <SelectMenu
-                  ariaLabel="기본 region 선택"
-                  emptyLabel="region 선택"
-                  onChange={setRegion}
-                  options={AWS_REGION_OPTIONS}
-                  size="large"
-                  tone="surface"
-                  value={region}
-                />
-              </div>
-              <button className={styles.primaryAction} disabled={actionPending} onClick={() => void createConnection()} type="button">새 AWS 연결</button>
-            </div>
-          </section>
+          <section aria-label="외부 서비스 연결 순서" className={styles.connectionFlow}>
+            <ConnectionFlowStep
+              expanded={expandedConnectionStep === "github"}
+              icon={<DashboardIcon name="github" />}
+              number={1}
+              onToggle={() => setExpandedConnectionStep("github")}
+              state={githubStepState}
+              summary={githubStepSummary}
+              title="GitHub App 연결"
+              titleId="github-account-settings-title"
+            >
+              <GitHubAccountSettings embedded />
+            </ConnectionFlowStep>
 
-          <section className={styles.settingsSection} id="aws-codebuild-github-authorization">
-            <header>
-              <DashboardIcon name="github" />
-              <div>
-                <h2>AWS CodeBuild용 GitHub 권한</h2>
+            <ConnectionFlowStep
+              expanded={expandedConnectionStep === "aws"}
+              icon={<Cloud />}
+              locked={awsStepState === "locked"}
+              number={2}
+              onToggle={() => setExpandedConnectionStep("aws")}
+              state={awsStepState}
+              summary={awsStepSummary}
+              title="AWS 계정 연결"
+              titleId="aws-account-connection-title"
+            >
+              <div className={styles.connectionStepControls} id="aws-account-connection">
+                <p>Access Key 대신 한 번 만든 Role을 사용합니다.</p>
+                <div className={styles.controlRow}>
+                  <div className={styles.controlField}>
+                    <span>기본 region</span>
+                    <SelectMenu
+                      ariaLabel="기본 region 선택"
+                      emptyLabel="region 선택"
+                      onChange={setRegion}
+                      options={AWS_REGION_OPTIONS}
+                      size="large"
+                      tone="surface"
+                      value={region}
+                    />
+                  </div>
+                  <button className={styles.primaryAction} disabled={actionPending} onClick={() => void createConnection()} type="button">새 AWS 연결</button>
+                </div>
+
+                {setupConnection && cloudFormation ? (
+                  <section aria-label="AWS Role 연결 설정" className={`${styles.setupSection} ${styles.inlineSetupSection}`}>
+                    <div><span>1</span><div><strong>CloudFormation으로 Role 만들기</strong><p>{cloudFormation.roleName}</p></div></div>
+                    {cloudFormation.launchStackUrl ? <a href={cloudFormation.launchStackUrl} rel="noreferrer" target="_blank">AWS Console 열기 <ExternalLink size={15} /></a> : <pre>{cloudFormation.templateBody}</pre>}
+                    <div><span>2</span><label><strong>AWS 계정 ID 확인</strong><input inputMode="numeric" maxLength={12} onChange={(event) => setAccountId(event.target.value.replace(/\D/g, ""))} placeholder="12자리 계정 ID" value={accountId} /></label></div>
+                    <button className={styles.primaryAction} disabled={actionPending || !/^\d{12}$/.test(accountId)} onClick={() => void verifyCreatedRole()} type="button">Role 연결 확인</button>
+                  </section>
+                ) : null}
               </div>
-            </header>
-            <GitHubAuthorizationTargetNotice
-              isError={githubInstallationsQuery.isError}
-              isPending={githubInstallationsQuery.isPending}
-              target={githubAuthorizationTarget}
-            />
-            <div className={styles.controlRow}>
-              {displayedVerifiedConnections.length > 1 ? (
-                <div className={styles.controlField}>
-                  <span>사용할 AWS 계정</span>
-                  <SelectMenu
-                    ariaLabel="GitHub 빌드 AWS 계정 선택"
-                    emptyLabel="AWS 계정 선택"
-                    onChange={setSelectedBuildAwsConnectionId}
-                    options={displayedVerifiedConnections.map((connection) => ({
-                      label: connection.accountId ?? connection.region,
-                      detail: connection.region,
-                      value: connection.id
-                    }))}
-                    size="large"
-                    tone="surface"
-                    value={selectedBuildAwsConnectionId}
+            </ConnectionFlowStep>
+
+            <ConnectionFlowStep
+              expanded={expandedConnectionStep === "codebuild"}
+              icon={<DashboardIcon name="github" />}
+              locked={codeBuildStepState === "locked"}
+              number={3}
+              onToggle={() => setExpandedConnectionStep("codebuild")}
+              state={codeBuildStepState}
+              summary={codeBuildStepSummary}
+              title="AWS CodeBuild용 GitHub 권한"
+              titleId="aws-codebuild-github-authorization-title"
+            >
+              <div className={styles.connectionStepControls} id="aws-codebuild-github-authorization">
+                <GitHubAuthorizationTargetNotice
+                  isError={githubInstallationsQuery.isError}
+                  isPending={githubInstallationsQuery.isPending}
+                  target={githubAuthorizationTarget}
+                />
+                <div className={styles.controlRow}>
+                  {displayedVerifiedConnections.length > 1 ? (
+                    <div className={styles.controlField}>
+                      <span>사용할 AWS 계정</span>
+                      <SelectMenu
+                        ariaLabel="GitHub 빌드 AWS 계정 선택"
+                        emptyLabel="AWS 계정 선택"
+                        onChange={setSelectedBuildAwsConnectionId}
+                        options={displayedVerifiedConnections.map((connection) => ({
+                          label: connection.accountId ?? connection.region,
+                          detail: connection.region,
+                          value: connection.id
+                        }))}
+                        size="large"
+                        tone="surface"
+                        value={selectedBuildAwsConnectionId}
+                      />
+                    </div>
+                  ) : null}
+                  <GitHubBuildConnectionAction
+                    actionPending={actionPending}
+                    connection={codeConnections[selectedBuildAwsConnectionId]}
+                    disabled={githubAuthorizationTarget.status === "github_app_not_configured"}
+                    onConnect={() => void connectGitHubBuild()}
+                    onDisconnect={openGitHubBuildDisconnect}
+                    onRefresh={() => void refreshGitHubBuildConnection()}
                   />
                 </div>
-              ) : null}
-              <GitHubBuildConnectionAction
-                actionPending={actionPending}
-                connection={codeConnections[selectedBuildAwsConnectionId]}
-                disabled={githubAuthorizationTarget.status === "github_app_not_configured"}
-                onConnect={() => void connectGitHubBuild()}
-                onDisconnect={openGitHubBuildDisconnect}
-                onRefresh={() => void refreshGitHubBuildConnection()}
-              />
-            </div>
+              </div>
+            </ConnectionFlowStep>
           </section>
-
-          {setupConnection && cloudFormation ? (
-            <section className={styles.setupSection}>
-              <div><span>1</span><div><strong>CloudFormation으로 Role 만들기</strong><p>{cloudFormation.roleName}</p></div></div>
-              {cloudFormation.launchStackUrl ? <a href={cloudFormation.launchStackUrl} rel="noreferrer" target="_blank">AWS Console 열기 <ExternalLink size={15} /></a> : <pre>{cloudFormation.templateBody}</pre>}
-              <div><span>2</span><label><strong>AWS 계정 ID 확인</strong><input inputMode="numeric" maxLength={12} onChange={(event) => setAccountId(event.target.value.replace(/\D/g, ""))} placeholder="12자리 계정 ID" value={accountId} /></label></div>
-              <button className={styles.primaryAction} disabled={actionPending || !/^\d{12}$/.test(accountId)} onClick={() => void verifyCreatedRole()} type="button">Role 연결 확인</button>
-            </section>
-          ) : null}
 
           {displayedCleanupRetries.length > 0 ? (
             <section className={`${styles.connectionList} ${styles.cleanupRetryList}`}>
@@ -811,6 +899,103 @@ export function SettingsDashboardClient() {
   );
 }
 
+function ConnectionFlowStep({
+  children,
+  expanded,
+  icon,
+  locked = false,
+  number,
+  onToggle,
+  state,
+  summary,
+  title,
+  titleId
+}: {
+  readonly children: ReactNode;
+  readonly expanded: boolean;
+  readonly icon: ReactNode;
+  readonly locked?: boolean;
+  readonly number: number;
+  readonly onToggle: () => void;
+  readonly state: ConnectionFlowStepState;
+  readonly summary: string;
+  readonly title: string;
+  readonly titleId: string;
+}) {
+  const contentId = `${titleId}-content`;
+
+  return (
+    <article
+      className={styles.connectionFlowStep}
+      data-expanded={expanded}
+      data-state={state}
+    >
+      <button
+        aria-controls={contentId}
+        aria-expanded={expanded}
+        className={styles.connectionStepHeader}
+        disabled={locked}
+        onClick={onToggle}
+        type="button"
+      >
+        <span className={styles.connectionStepMarker}>
+          {state === "complete" ? (
+            <CheckCircle2 aria-hidden="true" size={17} />
+          ) : state === "locked" ? (
+            <LockKeyhole aria-hidden="true" size={15} />
+          ) : (
+            number
+          )}
+        </span>
+        <span className={styles.connectionStepHeading}>
+          <span className={styles.connectionStepTitle}>
+            {icon}
+            <h2 id={titleId}>{title}</h2>
+          </span>
+          {summary ? <span className={styles.connectionStepSummary}>{summary}</span> : null}
+        </span>
+        <span className={styles.connectionStepStatus} data-state={state}>
+          {getConnectionFlowStatusLabel(state, number)}
+        </span>
+        <ChevronDown
+          aria-hidden="true"
+          className={styles.connectionStepChevron}
+          data-expanded={expanded}
+          size={18}
+        />
+      </button>
+      {expanded ? (
+        <div className={styles.connectionStepBody} id={contentId}>
+          {children}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function getConnectionFlowStatusLabel(
+  state: ConnectionFlowStepState,
+  number: number
+): string {
+  if (state === "complete") return number === 2 ? "검증됨" : "연결됨";
+  if (state === "error") return "오류";
+  if (state === "locked") return "대기";
+  return "진행 중";
+}
+
+function getAwsRegionLabel(region: string): string {
+  return AWS_REGION_OPTIONS.find((option) => option.value === region)?.label ?? region;
+}
+
+function getCodeBuildStepSummary(status: AwsCodeConnectionStatus | undefined): string {
+  if (status === "AVAILABLE") return "GitHub 권한 연결됨";
+  if (status === "ERROR") return "연결 오류를 확인해 주세요.";
+  if (status === "CREATING") return "AWS GitHub 권한 생성 중";
+  if (status === "PENDING") return "AWS에서 GitHub 권한 승인이 필요합니다.";
+  if (status === "DELETING") return "GitHub 빌드 연결 해제 중";
+  return "검증된 AWS 계정으로 GitHub 권한을 연결합니다.";
+}
+
 function GitHubAuthorizationTargetNotice({
   isError,
   isPending,
@@ -938,16 +1123,35 @@ function GitHubBuildConnectionAction({
     const hasAwsConnection = Boolean(connection.codeConnection.connectionArn);
     const cleanupRetryRequired = connection.codeConnection.cleanupRetryRequired === true;
     return (
-      <div className={styles.buildConnectionPending} role="alert">
-        <span>{connection.codeConnection.statusReason ?? "AWS GitHub 권한 생성에 실패했습니다."}</span>
-        {hasAwsConnection && !cleanupRetryRequired ? (
-          <button disabled={actionPending} onClick={onRefresh} type="button">상태 확인</button>
-        ) : !hasAwsConnection ? (
-          <button disabled={actionPending} onClick={onConnect} type="button">다시 생성</button>
+      <div className={styles.buildConnectionError} role="alert">
+        <div className={styles.buildConnectionErrorSummary}>
+          <AlertTriangle aria-hidden="true" size={18} />
+          <div>
+            <strong>AWS GitHub 권한 연결을 확인할 수 없습니다.</strong>
+            <p>오류 상세를 확인한 뒤 다시 시도해 주세요.</p>
+          </div>
+        </div>
+        {connection.codeConnection.statusReason ? (
+          <details className={styles.buildConnectionErrorDetails}>
+            <summary>오류 상세</summary>
+            <p>{connection.codeConnection.statusReason}</p>
+          </details>
         ) : null}
-        <button data-danger="true" disabled={actionPending} onClick={onDisconnect} type="button">
-          {hasAwsConnection ? "연결 해제 재시도" : "연결 정보 지우기"}
-        </button>
+        <div className={styles.buildConnectionErrorActions}>
+          {hasAwsConnection && !cleanupRetryRequired ? (
+            <button className={styles.primaryAction} disabled={actionPending} onClick={onRefresh} type="button">상태 확인</button>
+          ) : !hasAwsConnection ? (
+            <button className={styles.primaryAction} disabled={actionPending} onClick={onConnect} type="button">다시 생성</button>
+          ) : null}
+          <button
+            data-danger={hasAwsConnection ? "true" : undefined}
+            disabled={actionPending}
+            onClick={onDisconnect}
+            type="button"
+          >
+            {hasAwsConnection ? "연결 해제 재시도" : "연결 정보 지우기"}
+          </button>
+        </div>
       </div>
     );
   }

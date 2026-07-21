@@ -44,6 +44,10 @@ import {
 import { WorkspaceIssuesPanel } from "./WorkspaceIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { LiveObservationModal } from "./LiveObservationModal";
+import {
+  incrementLiveObservationEcsMaxCapacity,
+  type LiveObservationTerraformUpdateResult
+} from "./live-observation-terraform-update";
 import type { LiveObservationSelection } from "./live-observation";
 import {
   createLiveObservationViewState,
@@ -112,6 +116,9 @@ export type WorkspaceRightPanelProps = {
   readonly onBlockingPanelOpenChange: (isOpen: boolean) => void;
   readonly onDeploymentConsoleOpenChange?: ((isOpen: boolean) => void) | undefined;
   readonly onPanelOpenRequest: () => void;
+  readonly onLiveObservationTerraformFilesApply?:
+    | ((files: readonly TerraformSyncFileInput[]) => void)
+    | undefined;
   readonly onSelectTerraformIssue: (diagnosticKey: string | null) => void;
   readonly onTerraformAiContextChange: (context: WorkspaceTerraformAiContext) => void;
   readonly onTerraformAiInteraction: (
@@ -155,6 +162,7 @@ export function WorkspaceRightPanel({
   onDeploymentConsoleOpenChange = noopDeploymentConsoleOpenChange,
   onPanelOpenRequest,
   onInitialCicdReturnCommandReady,
+  onLiveObservationTerraformFilesApply,
   onSelectTerraformIssue,
   onTerraformAiContextChange,
   onTerraformAiInteraction,
@@ -246,6 +254,15 @@ export function WorkspaceRightPanel({
     liveObservationSessionState,
     projectId
   );
+  const [liveObservationIncidentSnapshot, setLiveObservationIncidentSnapshot] =
+    useState<LiveObservationV2Snapshot | null>(null);
+  const [liveObservationAppliedTerraformUpdate, setLiveObservationAppliedTerraformUpdate] =
+    useState<LiveObservationTerraformUpdateResult | null>(null);
+
+  useEffect(() => {
+    setLiveObservationIncidentSnapshot(null);
+    setLiveObservationAppliedTerraformUpdate(null);
+  }, [projectId]);
 
   useEffect(() => {
     overlayNotificationsRef.current?.setCallbacks(
@@ -526,9 +543,7 @@ export function WorkspaceRightPanel({
       if (pendingAction.kind === "view") {
         onPanelOpenRequest();
         setActiveView(pendingAction.view);
-        onTerraformAiInteraction(
-          pendingAction.view === "terraform" ? "preview" : "draft"
-        );
+        onTerraformAiInteraction(pendingAction.view === "terraform" ? "preview" : "draft");
         return;
       }
 
@@ -658,11 +673,44 @@ export function WorkspaceRightPanel({
     setIsDeploymentConsoleOpen(true);
   }, [onPanelOpenRequest, requestTerraformLeave]);
 
-  const openLiveObservation = useCallback((selection?: LiveObservationSelection): void => {
-    onPanelOpenRequest();
-    setLiveObservationSelection(selection ?? null);
-    setIsLiveObservationOpen(true);
-  }, [onPanelOpenRequest]);
+  const openLiveObservation = useCallback(
+    (selection?: LiveObservationSelection): void => {
+      onPanelOpenRequest();
+      setLiveObservationSelection(selection ?? null);
+      setIsLiveObservationOpen(true);
+    },
+    [onPanelOpenRequest]
+  );
+
+  const applyLiveObservationTerraformUpdate =
+    useCallback(async (): Promise<LiveObservationTerraformUpdateResult> => {
+      const result = incrementLiveObservationEcsMaxCapacity(terraformAiCodeContext.files);
+
+      if (onLiveObservationTerraformFilesApply) {
+        onLiveObservationTerraformFilesApply(result.files);
+      } else {
+        onTerraformFilesChange?.(result.files);
+      }
+
+      const saveResult = await context.saveDiagramNow?.();
+      requireSavedProjectDraftRevision(saveResult);
+      setHasUnsavedTerraformChanges(false);
+      setIsDeploymentBaselineDirty(false);
+      return result;
+    }, [
+      context,
+      onLiveObservationTerraformFilesApply,
+      onTerraformFilesChange,
+      terraformAiCodeContext.files
+    ]);
+
+  const openLiveObservationTerraformEditor = useCallback((): void => {
+    setIsLiveObservationOpen(false);
+    setLiveObservationSelection(null);
+    context.setRightPanelOpen(true);
+    setActiveView("terraform");
+    onTerraformAiInteraction("preview");
+  }, [context, onTerraformAiInteraction]);
 
   const updateLiveObservationDeployment = useCallback(
     (deploymentId: string): void => {
@@ -983,11 +1031,16 @@ export function WorkspaceRightPanel({
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
     <LiveObservationModal
+      appliedTerraformUpdate={liveObservationAppliedTerraformUpdate}
+      onAppliedTerraformUpdateChange={setLiveObservationAppliedTerraformUpdate}
+      onTrafficIncidentSnapshotChange={setLiveObservationIncidentSnapshot}
+      onApplyTerraformUpdate={applyLiveObservationTerraformUpdate}
       onClose={() => {
         setIsLiveObservationOpen(false);
         setLiveObservationSelection(null);
       }}
       onSessionChange={updateLiveObservationSession}
+      onOpenTerraformEditor={openLiveObservationTerraformEditor}
       onSelectedDeploymentIdChange={updateLiveObservationDeployment}
       onSnapshotChange={updateLiveObservationSnapshot}
       projectId={projectId}
@@ -995,6 +1048,8 @@ export function WorkspaceRightPanel({
       session={retainedLiveObservationSession.session}
       selection={liveObservationSelection}
       snapshot={retainedLiveObservationSession.snapshot}
+      terraformFiles={terraformAiCodeContext.files}
+      trafficIncidentSnapshot={liveObservationIncidentSnapshot}
     />
   ) : null;
   const terraformSplitStyle = {
@@ -1247,9 +1302,7 @@ function getTerraformIssueFixSourceLocation(
   return {
     fileName: fix?.diagnostic.sourceFileName ?? "main.tf",
     line: fix?.codePreview?.sourceLine ?? fix?.diagnostic.line ?? 1,
-    ...(fix?.diagnostic.resourceAddress
-      ? { resourceAddress: fix.diagnostic.resourceAddress }
-      : {})
+    ...(fix?.diagnostic.resourceAddress ? { resourceAddress: fix.diagnostic.resourceAddress } : {})
   };
 }
 

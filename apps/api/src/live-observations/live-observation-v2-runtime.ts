@@ -11,7 +11,6 @@ import {
   type DeploymentRepository,
   type ProjectAccessContext
 } from "../deployments/deployment-service.js";
-import type { RuntimeCache } from "../runtime-cache/index.js";
 import {
   createAwsCloudFrontLiveObservationTopologyVerifier,
   type CloudFrontLiveObservationTopologyVerifier
@@ -34,7 +33,6 @@ import {
 } from "./live-observation-manifest-repository.js";
 import { createLiveObservationPublicCollector } from "./live-observation-public-collector.js";
 import { createLiveObservationHttpsTransport } from "./live-observation-https-transport.js";
-import { createLiveObservationPublicRequestRateLimiter } from "./live-observation-public-request-rate-limiter.js";
 import { createLiveObservationObserverService } from "./live-observation-observer-service.js";
 import {
   LiveObservationStoreUnavailableError,
@@ -204,7 +202,6 @@ function requireReusableManifest(input: {
 export function createLiveObservationV2Runtime(options: {
   readonly getDatabaseClient: () => DatabaseClient;
   readonly keyring: LiveObservationCapabilityKeyring;
-  readonly runtimeCache: RuntimeCache;
   readonly runtimeEnv: RuntimeEnv;
   readonly topologyVerifier?: CloudFrontLiveObservationTopologyVerifier | undefined;
 }): LiveObservationV2Runtime {
@@ -226,10 +223,6 @@ export function createLiveObservationV2Runtime(options: {
   });
   const collector = createLiveObservationPublicCollector({
     capability,
-    requestRateLimiter: createLiveObservationPublicRequestRateLimiter({
-      runtimeCache: options.runtimeCache,
-      requireRedis: options.runtimeEnv.nodeEnv === "production"
-    }),
     store,
     trafficTransport: createLiveObservationHttpsTransport()
   });

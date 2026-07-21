@@ -478,6 +478,10 @@ test("materializes a CloudFront public entry with one verified S3 and ALB topolo
 
   assert.equal(manifest.adapter.version, 4);
   assert.equal(manifest.endpoints.trafficUrl, "https://d111111abcdef8.cloudfront.net/api/traffic");
+  assert.equal(
+    manifest.endpoints.audienceApplicationUrl,
+    "https://d111111abcdef8.cloudfront.net/"
+  );
   if (manifest.adapter.version !== 4) assert.fail("Expected CloudFront adapter v4");
   assert.equal(manifest.adapter.payload.cloudFrontDistributionId, "E123456789ABC");
   assert.equal(manifest.adapter.payload.frontendBucketName, "audience-live-check-web-assets");
