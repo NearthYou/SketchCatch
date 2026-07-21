@@ -1,4 +1,4 @@
-import type { Deployment } from "@sketchcatch/types";
+import type { Deployment, DeploymentScope } from "@sketchcatch/types";
 import { getDeploymentDurationMs } from "./deployment-duration";
 
 export type DeploymentStatusTone = "error" | "neutral" | "running" | "success";
@@ -16,7 +16,28 @@ export type DeploymentHistoryEntry<T extends DeploymentHistorySummary = Deployme
     readonly versionLabel: string;
   };
 
-export type DeploymentHistoryFilter = "all" | "complete" | "unchanged";
+export type DeploymentHistoryFilter = "all" | "complete" | "failed";
+
+export function resolveDeploymentReadinessScope(input: {
+  readonly autoScopeRequestDeploymentId: string;
+  readonly hasCurrentDeploymentChanges: boolean;
+  readonly selectedDeployment: Pick<Deployment, "currentPlanArtifactId" | "id" | "scope"> | null;
+  readonly selectedScope: DeploymentScope | "auto";
+}): DeploymentScope | null {
+  if (input.selectedScope !== "auto") {
+    return input.selectedScope;
+  }
+
+  if (
+    input.hasCurrentDeploymentChanges ||
+    !input.selectedDeployment?.currentPlanArtifactId ||
+    input.autoScopeRequestDeploymentId !== input.selectedDeployment.id
+  ) {
+    return null;
+  }
+
+  return input.selectedDeployment.scope;
+}
 
 type DeploymentHistoryMetricSource = Pick<
   Deployment,
@@ -27,13 +48,13 @@ const DEPLOYMENT_STATUS_PRESENTATIONS: Readonly<
   Record<Deployment["status"], DeploymentStatusPresentation>
 > = {
   CANCELLED: { label: "취소됨", tone: "neutral" },
-  DESTROYED: { label: "정리 완료", tone: "success" },
+  DESTROYED: { label: "완료", tone: "success" },
   FAILED: { label: "실패", tone: "error" },
   PARTIALLY_CANCELED: { label: "부분 취소", tone: "neutral" },
   PARTIALLY_FAILED: { label: "부분 실패", tone: "error" },
   PENDING: { label: "대기 중", tone: "neutral" },
   RUNNING: { label: "실행 중", tone: "running" },
-  SUCCESS: { label: "성공", tone: "success" }
+  SUCCESS: { label: "완료", tone: "success" }
 };
 
 export function getDeploymentStatusPresentation(
@@ -46,7 +67,7 @@ export function getDeploymentHistoryEntries<T extends DeploymentHistorySummary>(
   deployments: readonly T[]
 ): DeploymentHistoryEntry<T>[] {
   const ascendingDeployments = deployments
-    .filter(isSuccessfulDeploymentVersion)
+    .filter(isDeploymentHistoryEntry)
     .sort(compareDeploymentHistoryAscending);
 
   return ascendingDeployments
@@ -63,13 +84,14 @@ export function filterDeploymentHistoryEntries<
   entries: readonly DeploymentHistoryEntry<T>[],
   filter: DeploymentHistoryFilter
 ): DeploymentHistoryEntry<T>[] {
-  if (filter === "all" || filter === "complete") {
+  if (filter === "all") {
     return [...entries];
   }
 
-  return entries.filter(
-    ({ deployment }) =>
-      deployment.planSummary !== null && getDeploymentPlanChangeCount(deployment.planSummary) === 0
+  return entries.filter(({ deployment }) =>
+    filter === "complete"
+      ? deployment.status === "SUCCESS" || deployment.status === "DESTROYED"
+      : deployment.status === "FAILED" || deployment.status === "PARTIALLY_FAILED"
   );
 }
 
@@ -115,7 +137,9 @@ export function resolveDeploymentHistorySelection<T extends DeploymentHistorySum
   readonly previousLatestDeploymentId: string;
   readonly visibleDeploymentIds?: readonly string[];
 }): { readonly latestDeploymentId: string; readonly selectedDeploymentId: string } {
-  const entries = getDeploymentHistoryEntries(input.deployments);
+  const entries = getDeploymentHistoryEntries(input.deployments).filter(({ deployment }) =>
+    isSuccessfulDeploymentVersion(deployment)
+  );
   const latestDeploymentId = entries[0]?.deployment.id ?? "";
   const visibleDeploymentIdSet = input.visibleDeploymentIds
     ? new Set(input.visibleDeploymentIds)
@@ -142,6 +166,14 @@ export function resolveDeploymentHistorySelection<T extends DeploymentHistorySum
 
 function isSuccessfulDeploymentVersion(deployment: DeploymentHistorySummary): boolean {
   return deployment.status === "SUCCESS" || deployment.status === "DESTROYED";
+}
+
+function isDeploymentHistoryEntry(deployment: DeploymentHistorySummary): boolean {
+  return (
+    isSuccessfulDeploymentVersion(deployment) ||
+    deployment.status === "FAILED" ||
+    deployment.status === "PARTIALLY_FAILED"
+  );
 }
 
 function createStableDeploymentVersionLabel(deployment: DeploymentHistorySummary): string {
@@ -206,7 +238,7 @@ const DEPLOYMENT_FAILURE_DEVELOPER_CHECKS: Readonly<
   approval:
     "승인된 Terraform artifact·Plan ID·hash와 현재 프로젝트 snapshot이 동일한지 확인하세요.",
   aws_connection:
-    "Deployment의 AWS account·region snapshot과 연결 Role ARN, AssumeRole trust policy 및 session policy를 확인하세요.",
+    "표시된 AWS 오류 종류에 따라 SSO 세션, Role ARN, AssumeRole 권한, External ID trust 조건 또는 STS 네트워크를 확인하세요. 서버의 aws_connection_failure 로그에는 비밀값 없이 실패 단계와 가능한 경우 AWS request ID가 기록됩니다.",
   build_environment:
     "CodeBuild project와 service role, Permissions Boundary, CodeConnections 상태 및 runtime fingerprint를 확인하세요.",
   destroy:

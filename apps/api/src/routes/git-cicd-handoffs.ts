@@ -36,6 +36,7 @@ import {
   createInternalGitCicdHandoffProvider,
   createPostgresGitCicdHandoffRepository,
   getGitCicdHandoff,
+  GitCicdHandoffConfigurationStaleError,
   GitCicdInitialApplicationReleaseRequiredError,
   GitCicdHandoffInvalidStatusTransitionError,
   GitCicdHandoffNotFoundError,
@@ -1060,6 +1061,13 @@ function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
   }
 
   if (error instanceof GitCicdSourceRepositoryMismatchError) {
+    return reply.status(409).send({
+      error: error.code,
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdHandoffConfigurationStaleError) {
     return reply.status(409).send({
       error: error.code,
       message: error.message

@@ -17,6 +17,8 @@ Short English-only working log for the current agent context. Older records are 
 - Repository ECS delivery carries runtime Secret names through analysis. Both strict AI and Fixed Template drafts now generate `CHECK_IN_SIGNING_SECRET` during approved Apply, map the same Secrets Manager ARN into the IAM policy and every Task, and leave `INSTANCE_ID` unset for hostname-based observation.
 - Public ECS/Web release verification accepts both the legacy `sessionId` check-in response and the stateless signed `sessionToken` response while retaining the required 201 status and ISO expiry check.
 - Windows subprocess, local environment isolation, generated architecture knowledge, resource catalog, typography, and Workspace source-contract regressions are repaired.
+- The CI/CD tab now presents one current task, a four-Phase readiness flow, flat checklist rows, and right-side setup drawers in the project deployment blue. Current Plan handoffs and Pipeline runs stay scoped, global refresh synchronizes GitHub state, and desktop/390px authenticated browser checks pass.
+- CI/CD Phase 2 now depends only on the verified AWS target, matching Region, supported runtime kind, and current confirmed Repository build config. Plan-time checkout verification and deployment URLs are secret-safe Phase 3 evidence, so the Phase header and its four rows share the same server readiness result.
 - Sixty focused Repository runtime-Secret, deployment-action, and failure-visibility regressions pass; the final post-review 50-test subset also passes. `pnpm lint` and `pnpm typecheck` pass. Root `pnpm build` reported all five tasks successful before the known Turbo exit hang. The full Web suite passes 1,090 of 1,098 tests; its eight failures are outside the changed runtime-Secret paths. Root `pnpm test` still exposes ten unrelated API baseline failures and one lease-heartbeat cancellation; its one Repository source-contract failure was corrected and passes focused verification.
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
@@ -29,6 +31,8 @@ Short English-only working log for the current agent context. Older records are 
 - Audience commit `b96e8f0` passes all 50 tests, typecheck, production build, and targeted Biome checks. Nine focused SketchCatch API tests and 28 focused Web tests pass.
 - Repository-wide audience lint remains non-green only because 26 pre-existing CRLF-formatted files are outside Biome's expected line ending; all changed source files pass.
 - No dependency, lockfile, migration, Terraform execution, cloud mutation, deployment, push, or Git/CI/CD handoff was performed.
+- Merged the latest `origin/dev` at `b5553be1`; the only textual conflict was this session log, and both Live Observation and CI/CD readiness records were preserved without a product-code conflict.
+- Post-merge verification passes 29 focused API tests, 43 focused Web tests, all 11 Redis 8 integration cases, harness, lint, typecheck, and all five production builds.
 
 ### 2026-07-22 - Recover Live Observation after Redis command failures
 
@@ -43,6 +47,14 @@ Short English-only working log for the current agent context. Older records are 
 - Merged `origin/dev` at `587e4443` into `codex/fix-deployment-live-observation`; the only textual conflict was this session log, and both histories were preserved. The combined Redis recovery, SSE diagnostics, Store-backed traffic warning, AI recommendation, and bounded Terraform draft flows pass 10 focused API tests, 27 focused Web tests, the Redis 8 integration suite, harness, lint, typecheck, and all production builds.
 - Refreshed `origin/dev` to `a45c399b` and merged its Signal Dashboard rebuild. The only code conflict kept the typed SSE failure diagnostics while dropping the dashboard's removed legacy capacity import. Ninety-four focused TypeScript tests and six CSS-loaded Signal Dashboard component tests pass together with harness, lint, typecheck, and production builds.
 - No dependency, lockfile, migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
+
+### 2026-07-22 - Align CI/CD readiness phase boundaries
+
+- Completed the task-focused four-phase CI/CD redesign and aligned the Phase 2 header and rows with the server-owned verified AWS target, Region, runtime, and current Repository build config.
+- Moved Plan-time checkout verification and secret-safe Static Site/API output evidence into Phase 3. The Plan CTA only opens Direct Deployment and never starts Plan or Apply itself.
+- Updated stale API readiness fixtures to include the persisted Phase 2 deployment target, preserving the production readiness contract while repairing the four CI failures.
+- Merged the latest `origin/dev`, preserved both Workspace panel regression intents, retained the updated historical Live Observation plan, and resolved every conflict marker.
+- Focused API and Web regressions, lint, typecheck, build, harness, and diff checks passed. No database migration, provider mutation, deployment, or Git handoff was performed.
 
 ### 2026-07-22 - Remove the duplicate AWS connection step description
 
@@ -115,7 +127,7 @@ Short English-only working log for the current agent context. Older records are 
 - Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
 - The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` was saved by the stale Web process and must be re-analyzed/regenerated or replaced after the Web restart.
 - Root `pnpm test` is not green because ten unrelated API baseline tests fail and `application-artifact-registry.test.ts` still has one cancelled lease-heartbeat test.
-- The full Web suite is not green because eight architecture-board/compiler tests outside this workstream fail; the runtime-Secret regression subset is green.
+- The full Web suite remains at 1,121/1,125 because four architecture-board/compiler tests outside the CI/CD workstream fail; the 102-test focused CI/CD subset is green.
 - End-to-end Live Observation animation and provider-confirmed scale-out remain unaccepted because the active UI session missed the traffic before the delayed-snapshot fix.
 - Automatic cleanup remains blocked for this credential layout until the approved cleanup operator can read the internal deployment-state object.
 - No new AWS resources or traffic may be created without a new explicit approval.

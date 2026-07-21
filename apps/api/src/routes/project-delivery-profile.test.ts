@@ -54,6 +54,14 @@ function createProfile(): ProjectDeliveryProfile {
     monitoringConfig: null,
     deploymentTarget: null,
     environmentName: null,
+    buildVerification: {
+      status: "not_started",
+      requestedCommitSha: null,
+      resolvedCommitSha: null,
+      statusReason: null,
+      verifiedAt: null
+    },
+    handoffConfigurationPreview: null,
     readiness: {
       projectId,
       checkedAt: "2026-07-17T00:00:00.000Z",

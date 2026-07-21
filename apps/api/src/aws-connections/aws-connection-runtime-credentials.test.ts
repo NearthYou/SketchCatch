@@ -33,7 +33,7 @@ test("Terraform credentials preserve an AssumeRole permission denial", async () 
   };
 
   await assert.rejects(
-    prepareTerraformAwsCredentialEnv(verifiedConnection, gateway),
+    prepareTerraformAwsCredentialEnv(verifiedConnection, gateway, { reportFailure: () => {} }),
     new AwsConnectionRuntimeCredentialsError("AWS Role assume permission denied")
   );
 });
@@ -51,7 +51,7 @@ test("Terraform credentials preserve an expired caller credential error", async 
   };
 
   await assert.rejects(
-    prepareTerraformAwsCredentialEnv(verifiedConnection, gateway),
+    prepareTerraformAwsCredentialEnv(verifiedConnection, gateway, { reportFailure: () => {} }),
     new AwsConnectionRuntimeCredentialsError("AWS caller credentials are invalid or expired")
   );
 });

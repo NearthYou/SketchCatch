@@ -4,10 +4,10 @@ Use this file only for compact continuation context. Write it in English and ref
 
 ## Currently Verified
 
-- SketchCatch branch `codex/fix-deployment-live-observation` is clean at `0a00dcef` before this handoff update and contains current `dev` at `a45c399b`, Redis client recovery `17664afe`, and typed SSE diagnostics `2d871330`.
+- SketchCatch branch `codex/fix-deployment-live-observation` contains current `origin/dev` at `b5553be1`, Redis client recovery `17664afe`, typed SSE diagnostics `2d871330`, and the current Signal Dashboard and CI/CD readiness work.
 - External repository `C:\Jungle\audience-live-check` branch `codex/fix-browser-check-in-route` is committed at `b96e8f0`. It binds native browser fetch, retains `/api/check-ins` compatibility aliases, validates the scoped `sketchcatch_observation_url`, bootstraps an in-memory capability, and emits unique best-effort receipts only after successful check-ins and heartbeats.
 - The cross-repository contract aligns: SketchCatch creates the scoped query parameter, restricts CORS to the deployed audience origin, exposes `/bootstrap` and `/receipts`, and streams Store snapshots before provider corroboration.
-- Verification passes: 9 focused SketchCatch API tests, 28 focused SketchCatch Web tests, all 50 audience tests, audience typecheck and production build, and Biome checks for all changed audience source files.
+- Verification passes after the latest `dev` merge: 29 focused SketchCatch API tests, 43 focused SketchCatch Web tests, all 11 Redis 8 integration cases, harness, lint, typecheck, all five production builds, all 50 audience tests, audience typecheck and production build, and Biome checks for all changed audience source files.
 
 ## Changes This Session
 
@@ -15,6 +15,7 @@ Use this file only for compact continuation context. Write it in English and ref
 - Added a bounded receipt reporter that accepts only HTTPS `/api/live-observations/public/<uuid>` URLs without credentials, query, or fragment; keeps the capability in memory; and never turns an observation outage into a participation failure.
 - Added check-in and heartbeat receipt coverage with unique event IDs, plus failure isolation coverage and README contract documentation.
 - Confirmed the older production Redis namespace fix is already present in the current SketchCatch branch as `keyNamespace: "production"`.
+- Merged `origin/dev` at `b5553be1`; only `agent-progress.md` conflicted, and both histories were retained. No Live Observation product-code conflict was present.
 - No dependency, lockfile, migration, Terraform execution, cloud mutation, deployment, push, or Git/CI/CD handoff was performed.
 
 ## Broken Or Unverified
