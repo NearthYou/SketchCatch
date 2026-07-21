@@ -1,4 +1,4 @@
-export type WorkspaceTargetEnvironment = "aws" | "gcp" | "azure" | "on_premise";
+export type WorkspaceTargetEnvironment = "aws" | "gcp" | "azure";
 
 export type WorkspaceTargetEnvironmentOption = {
   readonly id: WorkspaceTargetEnvironment;
@@ -10,8 +10,7 @@ export const DEFAULT_WORKSPACE_TARGET_ENVIRONMENT: WorkspaceTargetEnvironment = 
 const WORKSPACE_TARGET_ENVIRONMENT_OPTIONS: readonly WorkspaceTargetEnvironmentOption[] = [
   { id: "aws", label: "AWS" },
   { id: "gcp", label: "GCP" },
-  { id: "azure", label: "Azure" },
-  { id: "on_premise", label: "On-premise" }
+  { id: "azure", label: "Azure" }
 ];
 
 export function createWorkspaceTargetEnvironmentOptions(): readonly WorkspaceTargetEnvironmentOption[] {
