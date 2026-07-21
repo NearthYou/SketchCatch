@@ -22,6 +22,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Reduce Diagram resource label size
+
+- Reduced only the labels beneath Diagram resource icons from an effective 18px to 13px while preserving the two-line clamp, icon spacing, edge labels, and area headings.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
+
 ### 2026-07-22 - Strengthen Workspace panel borders
 
 - Increased the Diagram Editor's neutral border contrast for both outer panel boundaries and internal separators/controls: regular lines now use `#d4d4d4`, while strong lines use `#c8c8c8`.

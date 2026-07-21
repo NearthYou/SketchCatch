@@ -2011,7 +2011,7 @@ button.rightRailResizeHandle {
   box-sizing: border-box;
   color: var(--board-ink);
   display: -webkit-box;
-  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-size: calc(7px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   left: 50%;
   line-height: 15px;
