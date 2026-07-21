@@ -21,6 +21,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+- 2026-07-21: Standardized the new-project form sections to full width with a consistent 12px label-to-control gap. Target environment cards retain equal 12px spacing. Lint, typecheck, build, harness, and two-axis review pass; no additional feature test suite was run per user request.
 - 2026-07-21: Removed the On-premise option from the UI-only new-project target environment selector. AWS, GCP, and Azure remain available in an equal three-column desktop layout and a gap-free single-column mobile layout. The focused regression test, lint, typecheck, and build pass.
 - 2026-07-21: Added a UI-only target environment selector to the new-project screen with equally selectable AWS, GCP, Azure, and On-premise options. The selection is intentionally not persisted or sent to project creation APIs. The focused environment test, browser selection check, lint, typecheck, and build pass. The full Web suite remains at 1,095/1,099 because of four pre-existing Architecture Board/compiler failures outside this change.
 

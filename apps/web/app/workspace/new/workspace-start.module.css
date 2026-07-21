@@ -76,6 +76,13 @@
   gap: 28px;
 }
 
+.startPanel > .nameField,
+.startPanel > .targetEnvironmentField,
+.startPanel > .startMethods {
+  width: 100%;
+  gap: 12px;
+}
+
 .heading h1 {
   margin: 0;
   font-size: calc(36px + var(--presentation-font-size-increase));
@@ -144,7 +151,7 @@
 
 .targetEnvironmentOptions {
   display: grid;
-  margin-top: 3px;
+  width: 100%;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
@@ -206,6 +213,7 @@
 
 .optionList {
   display: grid;
+  width: 100%;
   overflow: hidden;
   border-radius: 12px;
   background: #ffffff;
