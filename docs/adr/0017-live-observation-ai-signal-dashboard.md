@@ -2,7 +2,7 @@
 
 Live Observation의 상단 트래픽 흐름은 실제 관측 세션의 요청과 용량 변화를 표현하는 독립된 화면으로 유지한다. 그 아래는 CloudWatch처럼 많은 지표를 나열하는 대시보드가 아니라, 사용자가 **문제 발견 → 사용자 영향 확인 → 근거 확인 → 다음 판단** 순서로 읽는 AI Signal Dashboard로 구성한다.
 
-여기서 AI Signal은 별도의 AI 호출 결과가 아니다. 현재 AWS Provider Adapter가 검증해 전달한 snapshot을 Web이 결정론적으로 정리한 표현이다. 화면에는 AI가 원인을 분석했다고 표시하지 않으며, 새 AI 요청·backend persistence·polling을 만들지 않는다.
+여기서 AI Signal 자체는 별도의 AI 호출 결과가 아니다. 현재 AWS Provider Adapter가 검증해 전달한 snapshot을 Web이 결정론적으로 정리한 표현이다. 다만 실시간 요청 압력이 경고 이상이면 기존 AI Design Simulation을 읽기 전용 권장안으로 요청할 수 있고, 이 결과는 신호 판정 근거가 아니라 별도의 다음 행동 설명으로만 사용한다.
 
 ## 결정
 
@@ -18,7 +18,7 @@ Live Observation의 상단 트래픽 흐름은 실제 관측 세션의 요청과
 - 같은 오류는 정규화한 마스킹 message의 opaque fingerprint로 묶는다. 현재 Web contract에는 source/level이 없으므로 runtime log의 마스킹된 message만으로 보수적으로 묶고, 대표 원문은 닫힌 disclosure에서만 연다. 오류·경고·복구·확인 필요 로그는 한 묶음 목록에서 모두 볼 수 있다.
 - current session history는 Web 메모리에만 두고 session ID별 최대 120개, 최대 15분으로 제한한다. 페이지 재진입이나 session 변경에서는 복원하지 않는다. 실제 값이 두 개 이상일 때만 작은 SVG history를 보여준다. 단일 오류는 이 세션의 이전 fingerprint와 비교할 수 있을 때만 `새 오류`라고 표시한다.
 - 사고 흐름은 실제 배포 완료·신호·로그 시각 중 두 종류 이상이 있을 때만 닫힌 disclosure로 표시한다. 시간의 근접성은 원인 관계로 표현하지 않는다.
-- Dashboard에는 실행되지 않는 버튼을 만들지 않는다. 현재 실제 action은 대표 로그 disclosure뿐이며, Deployment·Terraform·Project·Board·AWS Resource는 이 화면에서 변경하지 않는다.
+- Dashboard에는 실행되지 않는 버튼을 만들지 않는다. 대표 로그 disclosure와, 안전한 단일 용량 수정안을 실제로 만들 수 있을 때의 `Project Draft 수정`만 제공한다. 후자는 사용자가 버튼을 눌렀을 때만 정확히 하나의 ECS Application Auto Scaling Target에서 정수 `max_capacity`를 1 늘려 Project Draft에 저장한다. Deployment·Board·AWS Resource·Plan/Apply는 변경하지 않는다.
 - 현재 aggregate snapshot에는 관측 대상 Resource ID가 없으므로 추측성 관련 Resource chip을 표시하지 않는다. 전체 Architecture diagram, 가짜 edge, 가짜 multi-cloud 데이터는 다시 그리지 않는다. 실제 Resource ID 매핑이 추가된 뒤에만 이를 재검토한다.
 
 ## CloudWatch와 역할 분리
@@ -57,4 +57,4 @@ API는 AWS-specific manifest와 AWS Provider Adapter를 server 경계 안에서 
 - Live Observation은 트래픽을 계속 표현하지만, 하단은 트래픽 구경이 아니라 판단을 돕는 읽기 전용 워크벤치가 된다.
 - 사용자는 인프라 변경 전에 확인된 사실과 아직 모르는 부분을 분리해 볼 수 있다.
 - 새 provider나 더 풍부한 snapshot이 생겨도 Web model의 unknown 경계를 유지한 채 adapter를 확장할 수 있다.
-- 자동 대응이나 자동 정리는 이 결정의 범위 밖이며, 기존 User-Accepted Change 경계를 유지한다.
+- 자동 대응이나 자동 정리는 이 결정의 범위 밖이다. 용량 수정안도 사용자가 명시적으로 승인해야 하며 기존 User-Accepted Change 경계를 유지한다.

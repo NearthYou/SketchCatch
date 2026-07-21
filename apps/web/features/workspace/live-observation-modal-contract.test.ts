@@ -53,10 +53,7 @@ test("Live Observation stays above non-blocking Workspace surfaces and below rec
     getRuleZIndex(aiWorkbenchStyles, ".workWindow"),
     getRuleZIndex(aiLauncherStyles, ".launcher"),
     getRuleZIndex(deploymentNotificationStyles, ".center"),
-    getRuleZIndex(
-      diagramEditorStyles,
-      ".floatingPanelSlot:has([data-workspace-ai-chat-overlay])"
-    )
+    getRuleZIndex(diagramEditorStyles, ".floatingPanelSlot:has([data-workspace-ai-chat-overlay])")
   ];
 
   assert.ok(
@@ -95,35 +92,20 @@ test("Deployment selection effect notifies the parent only when the target chang
 test("empty Deployment picker cannot open a blank native menu", () => {
   const deploymentPickerSource = getSourceBlock(modalSource, "<select", "</select>");
 
-  assert.match(
-    deploymentPickerSource,
-    /disabled=\{[\s\S]*?eligibleDeployments\.length === 0/
-  );
+  assert.match(deploymentPickerSource, /disabled=\{[\s\S]*?eligibleDeployments\.length === 0/);
   assert.match(deploymentPickerSource, /<option disabled value="">/);
   assert.match(deploymentPickerSource, /관측 가능한 성공 배포가 없습니다\./);
 });
 
 test("Direct Deployment opens Live Observation without leaking the click event as a selection", () => {
-  assert.match(
-    deploymentOutputLinksSource,
-    /onClick=\{\(\) => onOpenLiveObservation\(\)\}/
-  );
-  assert.doesNotMatch(
-    deploymentOutputLinksSource,
-    /onClick=\{onOpenLiveObservation\}/
-  );
+  assert.match(deploymentOutputLinksSource, /onClick=\{\(\) => onOpenLiveObservation\(\)\}/);
+  assert.doesNotMatch(deploymentOutputLinksSource, /onClick=\{onOpenLiveObservation\}/);
 });
 
 test("modal re-entry restores only the selected, unexpired active session and aborts on close", () => {
   assert.match(rightPanelSource, /createLiveObservationSessionState\(projectId\)/);
-  assert.match(
-    rightPanelSource,
-    /session=\{retainedLiveObservationSession\.session\}/
-  );
-  assert.match(
-    rightPanelSource,
-    /snapshot=\{retainedLiveObservationSession\.snapshot\}/
-  );
+  assert.match(rightPanelSource, /session=\{retainedLiveObservationSession\.session\}/);
+  assert.match(rightPanelSource, /snapshot=\{retainedLiveObservationSession\.snapshot\}/);
   assert.match(modalSource, /if \(!selectedSession \|\| !isSessionActive\)/);
   assert.match(modalSource, /deploymentId: selectedSession\.deploymentId/);
   assert.match(modalSource, /observationId: selectedSession\.id/);
@@ -173,10 +155,7 @@ test("anchors the QR utility below its button without covering header controls",
     /const \[audienceUtilityOpen, setAudienceUtilityOpen\] = useState\(false\)/
   );
   assert.match(modalSource, /className=\{styles\.liveObservationQrMenu\}/);
-  assert.match(
-    workspaceStyles,
-    /\.liveObservationQrMenu\s*\{[^}]*position:\s*relative/
-  );
+  assert.match(workspaceStyles, /\.liveObservationQrMenu\s*\{[^}]*position:\s*relative/);
   assert.match(
     workspaceStyles,
     /\.liveObservationAudienceUtility\s*\{[^}]*top:\s*calc\(100% \+ 10px\)/
@@ -184,10 +163,7 @@ test("anchors the QR utility below its button without covering header controls",
 });
 
 test("renders Architecture state only when it belongs to the selected Deployment", () => {
-  assert.match(
-    modalSource,
-    /deploymentId: selectedDeploymentId/
-  );
+  assert.match(modalSource, /deploymentId: selectedDeploymentId/);
   assert.match(
     modalSource,
     /const selectedArchitecture = queries\.architecture\.data\?\.architecture \?\? null;/
@@ -207,16 +183,9 @@ test("renders Architecture state only when it belongs to the selected Deployment
 });
 
 test("Architecture loading and errors stay separate from observation session errors", () => {
-  const visibleSessionError = getSourceBlock(
-    modalSource,
-    "const visibleErrorMessage =",
-    ";"
-  );
+  const visibleSessionError = getSourceBlock(modalSource, "const visibleErrorMessage =", ";");
 
-  assert.match(
-    modalSource,
-    /const selectedArchitectureState = !selectedDeploymentId/
-  );
+  assert.match(modalSource, /const selectedArchitectureState = !selectedDeploymentId/);
   assert.match(
     modalSource,
     /const selectedArchitectureErrorMessage = queries\.architecture\.isError/
@@ -235,7 +204,10 @@ test("Architecture failure does not replace QR, Output URL, session, or SSE cont
   );
 
   assert.doesNotMatch(startButton, /architecture|Architecture/);
-  assert.match(modalSource, /QRCode\.toDataURL\(outputUrl/);
+  assert.match(modalSource, /const audienceUrl = selectedSession\?\.audienceUrl \?\? outputUrl/);
+  assert.match(modalSource, /QRCode\.toDataURL\(audienceUrl/);
+  assert.match(modalSource, /onApplyTerraformUpdate/);
+  assert.match(modalSource, /Terraform 수정 완료 · 경고 해제/);
   assert.match(modalSource, /copyOutputUrl/);
   assert.match(modalSource, /createLiveObservation\(/);
   assert.match(modalSource, /stopLiveObservation\(/);
@@ -276,6 +248,22 @@ test("shows the countdown only while the selected session is active", () => {
     /\{isSessionActive \? <strong>\{formatRemainingTime\(remainingSeconds\)\}<\/strong> : null\}/
   );
   assert.doesNotMatch(sessionStatus, /\{selectedSession \? <strong>/);
+});
+
+test("keeps the Signal Dashboard and does not restore the legacy metric grid", () => {
+  assert.match(modalSource, /<LiveObservationSignalDashboard/);
+  assert.match(modalSource, /recommendedAction=\{recommendedAction\}/);
+  assert.doesNotMatch(modalSource, /aria-label="실시간 운영 분석"/);
+  assert.doesNotMatch(modalSource, /operationalAnalysis|providerLogs|최근 런타임 로그/);
+});
+
+test("offers the capacity change only as an explicit Project Draft action", () => {
+  assert.match(modalSource, /createLiveObservationDesignSimulationRequest/);
+  assert.match(modalSource, /최대 실행 수를/);
+  assert.match(modalSource, /onAction: \(\) => void applyTerraformUpdate\(\)/);
+  assert.match(modalSource, /수정안을 저장해도 실제 AWS에는 바로 반영되지 않아요\./);
+  assert.match(modalSource, /const result = await onApplyTerraformUpdate\(\)/);
+  assert.match(modalSource, /onTrafficIncidentSnapshotChange\(null\)/);
 });
 
 function getSourceBlock(source: string, startMarker: string, endMarker: string): string {

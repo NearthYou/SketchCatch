@@ -1363,7 +1363,7 @@ function createSampleMetricSeries(rangeDates: CostRangeDates): CostMetricSeries[
   return [
     {
       id: "sample-ec2-cpu",
-      label: "sample-api CPUUtilization",
+      label: "API CPUUtilization",
       points,
       unit: "Percent"
     }
@@ -1377,7 +1377,7 @@ function createSampleWasteResources(
     {
       estimatedMonthlyWaste: createMoneyEstimate(18),
       finding:
-        "최근 평균 CPU가 3.2%라 DB 사용량이 낮습니다. 테스트 DB라면 db.t4g.micro 같은 작은 클래스로 낮추는 것을 먼저 검토하세요.",
+        "최근 평균 CPU가 3.2%라 DB 사용량이 낮습니다. db.t4g.micro 같은 작은 클래스로 낮추는 것을 먼저 검토하세요.",
       id: "sample-waste-rds-cpu",
       metricName: "CPUUtilization",
       ...(project === undefined
@@ -1387,7 +1387,7 @@ function createSampleWasteResources(
             projectName: project.name
           }),
       resourceId: "sample-db",
-      resourceName: "sample-db",
+      resourceName: "DB",
       resourceType: "aws_db_instance",
       service: "Amazon Relational Database Service",
       unit: "Percent",
@@ -1396,7 +1396,7 @@ function createSampleWasteResources(
     {
       estimatedMonthlyWaste: createMoneyEstimate(16),
       finding:
-        "일 평균 요청량이 42건으로 낮습니다. 테스트용 진입점이면 ALB를 제거하거나 하나의 공유 ALB로 합치는 편이 비용을 줄일 수 있습니다.",
+        "일 평균 요청량이 42건으로 낮습니다. ALB를 제거하거나 하나의 공유 ALB로 합치는 편이 비용을 줄일 수 있습니다.",
       id: "sample-waste-alb-requests",
       metricName: "RequestCount",
       ...(project === undefined
@@ -1406,7 +1406,7 @@ function createSampleWasteResources(
             projectName: project.name
           }),
       resourceId: "sample-alb",
-      resourceName: "sample-alb",
+      resourceName: "ALB",
       resourceType: "aws_lb",
       service: "Elastic Load Balancing",
       unit: "Count",

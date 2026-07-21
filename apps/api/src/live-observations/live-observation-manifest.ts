@@ -202,6 +202,7 @@ export const deploymentLiveObservationManifestV2Schema: z.ZodType<DeploymentLive
       endpoints: z
         .object({
           audienceBaseUrl: httpsEndpointSchema,
+          audienceApplicationUrl: httpsEndpointSchema.optional(),
           trafficUrl: httpsEndpointSchema
         })
         .strict(),

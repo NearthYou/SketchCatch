@@ -225,7 +225,7 @@ An opt-in, time-bounded read-only session for viewing a successful Deployment's 
 _Avoid_: CloudWatch replacement, traffic generator, automatic remediation
 
 **Live Observation Signal Dashboard**:
-A compact, deterministic lower dashboard that selects at most three evidence-backed signals from the current Live Observation session and separates confirmed facts, cautious possibilities, and unknowns. It is not an AI call and it never applies a Deployment, Terraform, Project, or Architecture Board change.
+A compact, deterministic lower dashboard that selects at most three evidence-backed signals from the current Live Observation session and separates confirmed facts, cautious possibilities, and unknowns. Signal selection is not an AI call. For elevated request pressure, a separate read-only Design Simulation may explain an available capacity action; only explicit user approval may update the Project Draft, never the Deployment, AWS Resources, Plan/Apply, or Architecture Board.
 _Avoid_: AI diagnosis, metric wall, automatic fix, CloudWatch clone
 
 **Design Version**:

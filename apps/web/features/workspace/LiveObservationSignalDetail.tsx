@@ -3,16 +3,21 @@ import type { LiveObservationSignal } from "./live-observation-signal-dashboard"
 import { LiveObservationEvidencePanel } from "./LiveObservationEvidencePanel";
 import { LiveObservationIncidentTimeline } from "./LiveObservationIncidentTimeline";
 import { LiveObservationLogGroups } from "./LiveObservationLogGroups";
-import { LiveObservationNextActions } from "./LiveObservationNextActions";
+import {
+  LiveObservationNextActions,
+  type LiveObservationRecommendedAction
+} from "./LiveObservationNextActions";
 import type { LiveObservationLogGroup } from "./live-observation-log-groups";
 import styles from "./live-observation-signal-dashboard.module.css";
 
 /** Presents impact, evidence, logs, and only available next checks for the signal the user selected. */
 export function LiveObservationSignalDetail({
   logGroups,
+  recommendedAction,
   signal
 }: {
   readonly logGroups: readonly LiveObservationLogGroup[];
+  readonly recommendedAction?: LiveObservationRecommendedAction | null | undefined;
   readonly signal: LiveObservationSignal;
 }) {
   return (
@@ -35,7 +40,10 @@ export function LiveObservationSignalDetail({
         </div>
         <div className={styles.detailSecondaryColumn}>
           <LiveObservationLogGroups groups={logGroups} />
-          <LiveObservationNextActions hasLogDetails={logGroups.length > 0} />
+          <LiveObservationNextActions
+            hasLogDetails={logGroups.length > 0}
+            recommendedAction={recommendedAction}
+          />
         </div>
       </div>
     </section>

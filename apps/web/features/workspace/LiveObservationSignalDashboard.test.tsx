@@ -95,6 +95,29 @@ test("관측 전에는 확인 중 상태와 안내만 보여주고 문제를 만
   assert.equal((html.match(/aria-pressed=/g) ?? []).length, 0);
 });
 
+test("실행 가능한 용량 수정안은 신호가 없어도 명시적 Project Draft 행동으로 보여준다", () => {
+  const html = renderToStaticMarkup(
+    createElement(LiveObservationSignalDashboard, {
+      deployment: null,
+      recommendedAction: {
+        actionLabel: "Project Draft 수정",
+        boundary: "수정안을 저장해도 실제 AWS에는 바로 반영되지 않아요.",
+        description: "최대 실행 수를 2개에서 3개로 늘리는 수정안을 검토할 수 있어요.",
+        isApplying: false,
+        isLoading: false,
+        onAction: () => undefined,
+        title: "용량 설정을 확인해 보세요"
+      },
+      snapshot: null
+    })
+  );
+
+  assert.match(html, /다음 확인/);
+  assert.match(html, /Project Draft 수정/);
+  assert.match(html, /실제 AWS에는 바로 반영되지 않아요/);
+  assert.doesNotMatch(html, /자동 배포|AWS에 적용/);
+});
+
 function renderDashboard(
   value: LiveObservationV2Snapshot,
   deployment: Deployment | null = null

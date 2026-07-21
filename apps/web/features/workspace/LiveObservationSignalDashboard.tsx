@@ -5,6 +5,10 @@ import type { Deployment, LiveObservationV2Snapshot } from "@sketchcatch/types";
 import { LiveObservationSignalCards } from "./LiveObservationSignalCards";
 import { LiveObservationSignalDetail } from "./LiveObservationSignalDetail";
 import { LiveObservationStatusSummary } from "./LiveObservationStatusSummary";
+import {
+  LiveObservationNextActions,
+  type LiveObservationRecommendedAction
+} from "./LiveObservationNextActions";
 import { createLiveObservationSignalDashboardModel } from "./live-observation-signal-dashboard";
 import { appendLiveObservationSessionHistory } from "./live-observation-session-history";
 import styles from "./live-observation-signal-dashboard.module.css";
@@ -12,9 +16,11 @@ import styles from "./live-observation-signal-dashboard.module.css";
 /** Coordinates local session history and card selection while leaving session/SSE ownership in the modal. */
 export function LiveObservationSignalDashboard({
   deployment,
+  recommendedAction,
   snapshot
 }: {
   readonly deployment: Deployment | null;
+  readonly recommendedAction?: LiveObservationRecommendedAction | null | undefined;
   readonly snapshot: LiveObservationV2Snapshot | null;
 }) {
   const [history, setHistory] = useState<ReturnType<typeof appendLiveObservationSessionHistory>>(
@@ -52,7 +58,16 @@ export function LiveObservationSignalDashboard({
         signals={model.signals}
       />
       {selectedSignal ? (
-        <LiveObservationSignalDetail logGroups={model.logGroups} signal={selectedSignal} />
+        <LiveObservationSignalDetail
+          logGroups={model.logGroups}
+          recommendedAction={recommendedAction}
+          signal={selectedSignal}
+        />
+      ) : recommendedAction ? (
+        <LiveObservationNextActions
+          hasLogDetails={model.logGroups.length > 0}
+          recommendedAction={recommendedAction}
+        />
       ) : null}
     </section>
   );

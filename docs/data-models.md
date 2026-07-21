@@ -2423,7 +2423,7 @@ type DeploymentLiveObservationArchitectureResponse = {
 type DeploymentResourceObservationState = "observed" | "delayed" | "unavailable" | "not_supported";
 ```
 
-`provenance`는 Deployment, Terraform artifact SHA-256, 연결, region, 서버 검증 시점을 증명한다. `deploymentId`는 UUID여야 하고, `awsConnectionId`는 AWS connection repository가 `randomUUID()`로 생성하는 canonical lowercase UUIDv4만 허용한다. Role ARN, External ID, credential 값은 이 provenance identifier에 저장하지 않으며 AWS connection record의 보호된 필드에서만 다룬다. `endpoints`는 credential, query, fragment가 없는 absolute HTTPS URL만 허용하고, `pressure`는 분당 target당 60 requests를 60초 window로 해석하는 고정 계약이다. core envelope는 provider-neutral하게 유지하며, MVP의 의도적인 `provider: "aws"` 값과 `adapter`만 Provider Adapter 경계를 나타낸다. core consumer는 adapter의 `kind`와 `version`만 분기하고 AWS payload 해석은 AWS Provider Adapter 경계에 둔다. shared contract는 v1-v4 discriminated union으로 안전한 payload shape만 제한한다.
+`provenance`는 Deployment, Terraform artifact SHA-256, 연결, region, 서버 검증 시점을 증명한다. `deploymentId`는 UUID여야 하고, `awsConnectionId`는 canonical lowercase UUIDv4만 허용한다. `endpoints.audienceBaseUrl`은 SketchCatch public base, 선택적인 `audienceApplicationUrl`은 실제 배포된 CloudFront 앱, `trafficUrl`은 검증된 실제 요청 endpoint다. 세 URL은 credential, query, fragment가 없는 absolute HTTPS만 허용한다. `pressure`는 분당 target당 60 requests를 60초 window로 해석하는 고정 계약이다.
 
 `kind: "aws-live-observation"`, `version: 1`의 runtime validator는 `payload`를 위 `AwsLiveObservationAdapterPayloadV1`의 정확한 네 string key만 가진 strict object로 제한한다. `resourceSuffix`는 `deploymentId`에서 hyphen을 제거한 뒤 앞 12개 hex 문자를 lowercase로 변환한 서버 소유 결정값이다. `loadBalancerArn`의 resource name은 정확히 `loadbalancer/app/sc-lo-alb-${resourceSuffix}`, `targetGroupArn`은 정확히 `targetgroup/sc-lo-api-${resourceSuffix}`, `autoScalingGroupName`은 정확히 `sc-lo-asg-${resourceSuffix}`여야 한다. ALB/TG ARN은 같은 AWS partition, region, 12자리 account ID를 사용해야 하고 그 region은 `provenance.region`과 같아야 한다. `cloudFrontDistributionId`는 `E`로 시작하는 bounded uppercase distribution ID이며 Stage 2 materializer가 AWS relationship read로 실제 연관성을 검증한다. array, nested object, extra key, number, boolean, 임의 string leaf는 허용하지 않는다.
 
@@ -2461,7 +2461,7 @@ HMAC-SHA256(
 
 capability는 non-secret `currentKid`만 먼저 노출한다. v2 Store는 이 값을 session의 `kid`로 원자 저장하면서 Store/Redis clock으로 `createdAt`과 `expiresAt`을 결정한다. Store create/read 결과는 trusted claims, stored `kid`와 함께 같은 operation의 canonical UTC ISO `evaluatedAt`을 반드시 포함한다. production Redis adapter는 이 값들을 동일한 `Redis TIME`에서 만들고 in-memory Store는 동일한 injected Store clock 값을 사용한다. `issue(claims, evaluatedAt)`, `regenerate(expected, evaluatedAt)`, `verify(credential, expected, evaluatedAt)`는 lifetime과 rotation 판단에 이 명시적 Store time만 사용하며 API process clock, client 입력, 별도 시점에 다시 읽은 clock으로 대체하지 않는다. `regenerate`는 해당 current 또는 아직 유효한 previous key로 같은 credential을 결정론적으로 다시 만든다. claims가 invalid/expired이거나 stored `kid`에 해당하는 key가 없거나 rotation window 밖이면 `null`을 반환하며, 성공시키기 위해 stored `kid`를 current 값으로 바꾸지 않는다.
 
-v2 Store에는 non-secret인 `kid`, `tokenVersion`, `createdAt`, `expiresAt`만 저장한다. capability credential/token, token의 SHA-256, 둘 중 하나를 key로 한 index, token-bearing URL은 RDS, S3, Runtime Cache, 로그, `localStorage`, `sessionStorage`에 저장하지 않는다. audience URL은 `${SKETCHCATCH_PUBLIC_BASE_URL}/observe/:observationId`이고 capability를 포함하지 않는다. audience page는 exact Origin 검증을 통과한 `bootstrap` 응답에서 session-bound transient credential을 받아 page lifetime 동안 메모리에만 보유하며 응답은 `Cache-Control: no-store`를 사용한다. 여러 audience client의 반복 bootstrap은 허용한다.
+v2 Store에는 non-secret인 `kid`, `tokenVersion`, `createdAt`, `expiresAt`만 저장한다. capability credential/token과 token-bearing URL은 저장하지 않는다. v4 audience URL은 `audienceApplicationUrl`에 non-secret `sketchcatch_observation_url` query만 추가하고, 구형 manifest는 `${SKETCHCATCH_PUBLIC_BASE_URL}/observe/:observationId`를 사용한다. capability는 exact Origin 검증을 통과한 `bootstrap` 응답에서만 받아 page lifetime 메모리에 보유하며 응답은 `Cache-Control: no-store`를 사용한다.
 
 rotation 중 previous key는 absolute `stoppedIssuingAt`을 기준으로 `createdAt <= stoppedIssuingAt`이고 `evaluatedAt < stoppedIssuingAt + 15분`일 때만 검증하거나 재생성한다. stop 이후 생성된 session은 overlap 안이어도 previous key를 사용할 수 없다. 정확한 경계 시각부터 거부하며 credential 자체의 `expiresAt`이 더 이르면 그 시각에 먼저 끝난다. `stoppedIssuingAt`은 모든 old process가 실제 issuance를 멈춘 뒤 기록하며, process restart가 overlap을 다시 시작하거나 연장해서는 안 된다.
 
@@ -2630,14 +2630,16 @@ API 계약:
 - `GET /api/deployments/:deploymentId/live-observations/:observationId/stream`: snapshot SSE
 - `POST /api/deployments/:deploymentId/live-observations/:observationId/stop`: 관측 세션만 종료
 - `POST /api/live-observations/public/:observationId/bootstrap`: active session-bound transient credential 재생성
-- `POST /api/live-observations/public/:observationId/requests`: 서버가 검증된 ALB target의 2xx를 확인한 뒤 receipt 수집
+- `POST /api/live-observations/public/:observationId/requests`: 레거시 내장 audience가 서버의 검증된 traffic target 2xx 뒤 receipt 수집
+- `POST /api/live-observations/public/:observationId/receipts`: 실제 배포 앱의 check-in/heartbeat 성공 뒤 추가 traffic probe 없이 receipt 수집
 
 `LIVE_OBSERVATION_ENABLED=false`이면 인증 세션 관리 경로는 service나 Store를 호출하지 않고
 `503 LIVE_OBSERVATION_DISABLED`를 반환한다. API는 모든 응답의 `x-request-id`에 Fastify request ID를
 반환한다. Web은 API 오류에 HTTP method, query/fragment를 제거한 path, HTTP status 또는 응답 없음,
 error code, 선택적인 request ID를 표시하며 credential-bearing query와 fragment는 화면에 복제하지 않는다.
 
-public request body는 `{ eventId: string }`만 받는다. count나 target URL을 받지 않는다. direct `/events` endpoint는 제공하지 않는다. 서버가 global per-IP limiter와 public ALB target 검증을 통과한 요청에서 2xx를 받은 뒤에만 receipt를 기록한다. 최초 수락은 `202`, 중복은 `200`과 `accepted: false`, 만료·중지는 `410`, rate limit은 `429`를 사용한다.
+public request/receipt body는 `{ eventId: string }`만 받는다. count나 target URL을 받지 않는다. 서버는 manifest의 exact audience application Origin과 capability를 검증한다. `/requests`는 traffic endpoint의 2xx 뒤 receipt를 기록하고, `/receipts`는 외부 앱이 이미 성공시킨 실제 요청의 영수증만 Store에 기록한다. 최초 수락은 `202`, 중복은 `200`과 `accepted: false`, 만료·중지는 `410`, Store 상한은 `429`를 사용한다.
+별도 per-IP limiter와 `Retry-After` 응답은 모든 환경에서 사용하지 않는다. Audience Web은 요청 진행 중에만 버튼을 잠그고 `429` 뒤에도 즉시 다시 요청할 수 있다. Store의 초당·10초·세션 상한은 적용되며 거부된 요청은 receipt나 pressure에 포함하지 않는다.
 
 SSE는 연결 직후 전체 snapshot을 보내고 live count는 최대 1초, AWS 상태는 최대 10초 간격으로 갱신한다. 15초 heartbeat를 보내며 재연결 시 최신 전체 snapshot을 다시 보낸다. 인증된 GET snapshot은 SSE fallback이다.
 
@@ -2867,6 +2869,21 @@ type LlmExplanation = {
 ```
 
 `AiArchitectureDraftResult`, `AiPreDeploymentAnalysisResult`, `DesignSimulationResult`, `AiTerraformErrorExplanationResult`는 필요할 때 `llmExplanation?: LlmExplanation`를 포함할 수 있다.
+`CreateDesignSimulationRequest.liveObservation`은 Live Observation 경고에서만 보내는 optional 비민감 증거다. `acceptedEventCount`, `projectedRequestsPerMinute`, `pressurePercent`, `pressureLevel`만 포함하며 credential, target URL, AWS account, raw log는 포함하지 않는다. AI simulation은 배포 Architecture의 `APPLICATION_AUTO_SCALING_TARGET`과 `ALBRequestCountPerTarget` policy를 이 증거와 결합해 bounded `max_capacity` 수정안을 설명할 수 있다.
+
+```ts
+type CreateDesignSimulationRequest = {
+  architectureJson: ArchitectureJson;
+  liveObservation?: {
+    acceptedEventCount: number;
+    projectedRequestsPerMinute: number;
+    pressurePercent: number;
+    pressureLevel: LiveObservationPressureLevel;
+  };
+};
+```
+
+Live Observation UI는 최초 `warning` 이상 snapshot을 incident evidence로 유지한다. 사용자가 `Terraform 수정 적용`을 선택하면 정확히 하나의 ECS Application Auto Scaling Target에서 정수 `max_capacity`를 1 증가시키고 Project Draft 저장 성공 뒤에만 경고를 해제한다. 완료 배너에는 이전 값과 새 값, 재배포 후 정상 예상, 실제 인프라 미적용 상태를 함께 표시한다.
 
 Pre-Deployment Check 요청은 현재 Practice Architecture와 선택적으로 현재 Terraform editor 파일 목록을 함께 보낸다. Terraform syntax/schema diagnostics에 `error`가 있으면 프론트는 이 요청을 보내지 않고 diagnostics-only 결과를 즉시 표시한다.
 

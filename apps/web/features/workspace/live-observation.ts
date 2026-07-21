@@ -43,21 +43,18 @@ export type LiveObservationTrafficCursor = {
   readonly providerObservedAt: string | null;
 };
 
-export function getEligibleLiveObservationDeployments<
-  T extends LiveObservationDeploymentCandidate
->(deployments: readonly T[]): T[] {
+export function getEligibleLiveObservationDeployments<T extends LiveObservationDeploymentCandidate>(
+  deployments: readonly T[]
+): T[] {
   return deployments
     .filter(
       (deployment) =>
-        ["SUCCESS", "PARTIALLY_FAILED", "PARTIALLY_CANCELED"].includes(
-          deployment.status
-        ) &&
+        ["SUCCESS", "PARTIALLY_FAILED", "PARTIALLY_CANCELED"].includes(deployment.status) &&
         deployment.completedAt !== null
     )
     .sort(
       (left, right) =>
-        new Date(right.completedAt ?? 0).getTime() -
-        new Date(left.completedAt ?? 0).getTime()
+        new Date(right.completedAt ?? 0).getTime() - new Date(left.completedAt ?? 0).getTime()
     );
 }
 
@@ -81,8 +78,7 @@ export function getLiveObservationOutputUrl(
     )
     .sort(
       (left, right) =>
-        new Date(right.completedAt ?? 0).getTime() -
-        new Date(left.completedAt ?? 0).getTime()
+        new Date(right.completedAt ?? 0).getTime() - new Date(left.completedAt ?? 0).getTime()
     );
 
   for (const release of candidates) {
@@ -155,9 +151,7 @@ export function normalizeLiveObservationOutputUrl(value: string): string | null 
   }
 }
 
-export function getLiveObservationAudienceUrl(
-  session: LiveObservationV2Session
-): string | null {
+export function getLiveObservationAudienceUrl(session: LiveObservationV2Session): string | null {
   try {
     const url = new URL(session.audienceUrl);
     const expectedPath = `/observe/${encodeURIComponent(session.id)}`;
@@ -220,10 +214,7 @@ export function getLiveObservationTrafficBurst(
 
   const provider = snapshot.latestObservation;
   const runningCount = provider?.payload.capacity.running ?? 0;
-  const acceptedDelta = Math.max(
-    0,
-    snapshot.live.acceptedEventCount - previous.acceptedEventCount
-  );
+  const acceptedDelta = Math.max(0, snapshot.live.acceptedEventCount - previous.acceptedEventCount);
   const providerRequestCount =
     provider &&
     provider.observedAt !== previous.providerObservedAt &&
@@ -285,8 +276,7 @@ export function getLiveObservationInstanceMarkers(
   const desiredCapacity = snapshot.capacity.desiredCapacity ?? markers.length;
   const activityStatus = snapshot.capacity.latestActivity?.statusCode;
   const activityInProgress =
-    activityStatus !== undefined &&
-    !["Successful", "Failed", "Cancelled"].includes(activityStatus);
+    activityStatus !== undefined && !["Successful", "Failed", "Cancelled"].includes(activityStatus);
 
   if (desiredCapacity > markers.length || activityInProgress) {
     markers.push({ key: "launching", label: "Launching", state: "launching" });

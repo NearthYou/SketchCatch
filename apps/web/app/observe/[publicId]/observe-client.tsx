@@ -31,9 +31,7 @@ export function ObserveClient({ publicId }: { readonly publicId: string }) {
   }
 
   const isBusy = viewState.pageState === "connecting" || viewState.pageState === "sending";
-  const isCoolingDown =
-    viewState.pageState === "rate_limited" && viewState.retryAfterSeconds !== null;
-  const canRunPrimaryAction = !isBusy && !isCoolingDown && viewState.pageState !== "expired";
+  const canRunPrimaryAction = !isBusy && viewState.pageState !== "expired";
 
   return (
     <main className={styles.page}>
@@ -49,11 +47,7 @@ export function ObserveClient({ publicId }: { readonly publicId: string }) {
           onClick={runPrimaryAction}
           type="button"
         >
-          {getPrimaryActionLabel(
-            viewState.pageState,
-            viewState.bootstrapReady,
-            viewState.retryAfterSeconds
-          )}
+          {getPrimaryActionLabel(viewState.pageState, viewState.bootstrapReady)}
         </button>
         <p
           className={styles.status}
@@ -61,12 +55,7 @@ export function ObserveClient({ publicId }: { readonly publicId: string }) {
           role="status"
           aria-live="polite"
         >
-          {getStatusMessage(
-            viewState.pageState,
-            viewState.successCount,
-            viewState.bootstrapReady,
-            viewState.retryAfterSeconds
-          )}
+          {getStatusMessage(viewState.pageState, viewState.successCount, viewState.bootstrapReady)}
         </p>
       </section>
     </main>
@@ -75,15 +64,11 @@ export function ObserveClient({ publicId }: { readonly publicId: string }) {
 
 function getPrimaryActionLabel(
   pageState: LiveObservationAudiencePageState,
-  bootstrapReady: boolean,
-  retryAfterSeconds: number | null
+  bootstrapReady: boolean
 ): string {
   if (pageState === "connecting") return "연결 중";
   if (pageState === "sending") return "전송 중";
   if (!bootstrapReady) return "다시 연결";
-  if (pageState === "rate_limited" && retryAfterSeconds !== null) {
-    return `${retryAfterSeconds}\uCD08 \uD6C4 \uC7AC\uC2DC\uB3C4`;
-  }
   if (pageState === "rate_limited" || pageState === "error") return "다시 요청";
   return "요청 보내기";
 }
@@ -91,8 +76,7 @@ function getPrimaryActionLabel(
 function getStatusMessage(
   state: LiveObservationAudiencePageState,
   successCount: number,
-  bootstrapReady: boolean,
-  retryAfterSeconds: number | null
+  bootstrapReady: boolean
 ): string {
   switch (state) {
     case "connecting":
@@ -106,9 +90,6 @@ function getStatusMessage(
     case "expired":
       return "관측 세션이 종료되었거나 만료되었습니다.";
     case "rate_limited":
-      if (retryAfterSeconds !== null) {
-        return `\uC694\uCCAD \uD55C\uB3C4\uC5D0 \uB3C4\uB2EC\uD588\uC2B5\uB2C8\uB2E4. ${retryAfterSeconds}\uCD08 \uD6C4 \uB2E4\uC2DC \uC694\uCCAD\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.`;
-      }
       return bootstrapReady
         ? "요청 한도에 도달했습니다. 다시 요청할 수 있습니다."
         : "연결 요청 한도에 도달했습니다. 다시 연결할 수 있습니다.";

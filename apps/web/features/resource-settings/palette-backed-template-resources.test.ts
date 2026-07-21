@@ -80,7 +80,7 @@ test("모든 available Template Resource는 enabled Palette item과 실제 icon 
     }
   }
 
-  assert.equal(templates.length, 29);
+  assert.equal(templates.length, 30);
   assert.equal(sourceExactAutoScalingGroupCount, 3);
   assert.ok(nonAreaResourceCount > 0);
   assert.ok(resourceCount > 0);
@@ -143,7 +143,7 @@ test("Cross-account Template은 원본의 Group 영역과 세 S3 Resource만 사
 test("모든 available Template의 parented node는 materialization 후에도 parent Area 안에 남는다", () => {
   const templates = listBoardTemplates().filter(isBoardTemplateAvailable);
 
-  assert.equal(templates.length, 29);
+  assert.equal(templates.length, 30);
 
   for (const template of templates) {
     const nodeById = new Map(template.diagramJson.nodes.map((node) => [node.id, node]));
