@@ -116,6 +116,19 @@ test("artifact 입력 순서가 달라도 group과 Module 정렬은 결정적이
   }
 });
 
+test("단순 Module이 많은 Catalog 섹션을 복잡한 섹션보다 먼저 표시한다", () => {
+  const groups = createModuleCatalogGroups({ modules: curatedModules, view: "functional" });
+
+  assert.ok(
+    groups.findIndex(({ label }) => label === "보안") <
+      groups.findIndex(({ label }) => label === "네트워크")
+  );
+  assert.ok(
+    groups.findIndex(({ label }) => label === "컴퓨트") <
+      groups.findIndex(({ label }) => label === "데이터베이스")
+  );
+});
+
 test("검색은 Module 제목·설명·lens label을 대상으로 같은 그룹 구조를 유지한다", () => {
   const byTitle = createModuleCatalogGroups({
     modules: curatedModules,
