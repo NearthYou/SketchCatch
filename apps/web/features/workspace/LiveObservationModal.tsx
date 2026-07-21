@@ -278,9 +278,16 @@ export function LiveObservationModal({
     void streamLiveObservationSnapshots({
       deploymentId: selectedSession.deploymentId,
       observationId: selectedSession.id,
-      onError: () => {
+      onError: (failure) => {
         if (!abortController.signal.aborted) {
-          setStreamErrorMessage("관측 상태 연결이 지연되고 있습니다. 자동으로 다시 연결합니다.");
+          setStreamErrorMessage(
+            getApiErrorMessage(
+              failure.error,
+              failure.source === "stream"
+                ? "실시간 관측 연결이 지연되고 있습니다. 자동으로 다시 연결합니다."
+                : "관측 상태 조회가 지연되고 있습니다. 자동으로 다시 연결합니다."
+            )
+          );
         }
       },
       onSnapshot: (nextSnapshot) => {
