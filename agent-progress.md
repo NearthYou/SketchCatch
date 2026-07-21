@@ -22,30 +22,16 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-21 - Simplify monthly comparison annotations
+### 2026-07-21 - Shorten the Live Observation public traffic cooldown
 
-- Removed the marked monthly comparison sample suffix, description, summary badges, and per-month helper labels. Concise summary labels and patterned estimated bars preserve status clarity without restoring the removed text.
-- Lint, typecheck, build, harness, and two-axis review pass. No feature test suite was run for this presentation-only change.
-
-### 2026-07-21 - Remove usage notices and internal chart scrolling
-
-- Removed the three marked sample-data notice elements from Actual Usage and replaced the monthly chart's internal scroll viewport with responsive 6/3/2-column layouts that show all six months at once.
-- Sample mode remains explicit through compact metric and section titles instead of the removed banners. Lint, typecheck, build, harness, and two-axis review pass; the intentional title wording preserves truthful sample-state presentation. No feature test suite was run.
-
-### 2026-07-21 - Keep cost metric icon and label on one line
-
-- Reworked shared cost metric cards into a two-column first row so each icon and label remain inline, while the amount continues on a full-width second row. Long dynamic labels truncate with an ellipsis instead of escaping the card.
-- Lint, typecheck, build, harness, and two-axis review pass. No feature test suite was run for this presentation-only CSS change.
-
-### 2026-07-21 - Remove estimate card detail row
-
-- Removed the checked resource-count and pricing-source helper row beneath project estimate amounts while preserving the period label, amount, and calculation behavior.
-- Lint, typecheck, build, harness, and two-axis review pass. No feature test suite was run for this presentation-only removal.
-
-### 2026-07-21 - Center cost dashboard tab labels
-
-- Centered the Estimate Cost and Actual Usage labels within their existing tab buttons without changing tab placement or behavior.
-- Lint, typecheck, build, harness, and two-axis review pass. No feature test suite was run for this one-line CSS-only change.
+- Fast-forwarded the issue branch from `c3ac5a8e` to current `origin/dev` at `13ed1cb6`, then restored the Live Observation request work on top.
+- Reproduced the audience page dropping the server `Retry-After` value and the public collector enforcing a 30-request fixed minute, which could leave one client waiting almost 60 seconds.
+- Replaced the long window with two global per-IP safeguards aligned to the Store envelope: 20 requests per second and 120 requests per 10 seconds. Human-paced requests no longer encounter a minute cooldown; excessive traffic waits normally one second and at most ten seconds.
+- Propagated the exact cooldown through the collector error, HTTP `Retry-After`, CORS exposure, audience client, session state, disabled action, and automatic ready-state recovery.
+- Added five API/Web regressions for both rate windows, HTTP/CORS delivery, client parsing, and cooldown suppression. The existing four traffic-burst regressions remain green.
+- Focused verification passes 9/9. Root harness, lint, typecheck, all five production builds, and diff checks pass on the updated branch.
+- Preserved the latest dev progress record and archive during stash conflict resolution; no product-code merge conflict occurred.
+- No dependency, lockfile, database migration, Terraform execution, cloud mutation, Deployment action, or Git/CI/CD handoff was performed.
 
 ### 2026-07-21 - Remove the Repository-specific audience demo bypass
 
