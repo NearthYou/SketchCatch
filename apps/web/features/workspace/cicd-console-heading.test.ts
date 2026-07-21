@@ -39,13 +39,14 @@ test("each CI/CD detail is exposed as one accordion title", () => {
     "Delivery 연결",
     "GitOps 감시 설정",
     "프로젝트 배포 타깃",
-    "자동 설정 결과",
     "배포 PR",
     "Pipeline"
   ]) {
     const title = new RegExp(`title="${label}"`, "gu");
     assert.equal(source.match(title)?.length, 1, label);
   }
+  assert.match(deliveryCenterSource, /<h4>감지된 배포 정보<\/h4>/);
+  assert.match(deliveryCenterSource, /<CicdAutomaticSetupSummary profile=\{profile\} \/>/);
 });
 
 test("embedded setup editors continue the CI/CD heading hierarchy at h4", () => {

@@ -22,11 +22,8 @@ export function CicdPipelineRunsPanel({
   isFrontendRetrying,
   isHandoffReady,
   isLogsLoading,
-  isRefreshing,
-  isReadinessRefreshing,
   logs,
   logsErrorMessage,
-  onManualRefresh,
   onOpenLiveObservation,
   onRetryFrontend,
   onRetryLogs,
@@ -43,11 +40,8 @@ export function CicdPipelineRunsPanel({
   readonly isFrontendRetrying: boolean;
   readonly isHandoffReady: boolean;
   readonly isLogsLoading: boolean;
-  readonly isRefreshing: boolean;
-  readonly isReadinessRefreshing: boolean;
   readonly logs: readonly GitCicdPipelineLog[];
   readonly logsErrorMessage: string;
-  readonly onManualRefresh: () => void;
   readonly onOpenLiveObservation?: (() => void) | undefined;
   readonly onRetryFrontend: () => void;
   readonly onRetryLogs: () => void;
@@ -65,17 +59,6 @@ export function CicdPipelineRunsPanel({
     <CicdAccordionSection
       defaultOpen={presentation.showRunControls}
       openWhen={presentation.showRunControls}
-      headerAction={
-        <button
-          aria-label="Pipeline 새로고침"
-          className={deliveryStyles.accordionRowAction}
-          disabled={isRefreshing || isReadinessRefreshing}
-          onClick={onManualRefresh}
-          type="button"
-        >
-          {isRefreshing || isReadinessRefreshing ? "갱신 중" : "새로고침"}
-        </button>
-      }
       icon={<PlayCircle size={17} />}
       id="cicd-pipeline"
       metadata={
@@ -94,7 +77,7 @@ export function CicdPipelineRunsPanel({
             <p>{presentation.emptyDescription}</p>
             <span className={deliveryStyles.emptyStateHint}>
               {isHandoffReady
-                ? "상단 새로고침으로 실행을 확인합니다."
+                ? "전체 새로고침으로 실행을 확인합니다."
                 : "먼저 배포 PR 준비를 완료하세요."}
             </span>
           </div>

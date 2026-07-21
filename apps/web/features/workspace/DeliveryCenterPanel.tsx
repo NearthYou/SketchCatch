@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback } from "react";
-import { Crosshair, Eye, Link2, RefreshCw, Settings2 } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { Crosshair, Eye, Link2, RefreshCw } from "lucide-react";
 import type { GitCicdMonitoredPath, ProjectDeploymentTarget } from "@sketchcatch/types";
 import { ProjectCicdMonitoringSettingsClient } from "../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client";
 import { CicdAccordionSection } from "./CicdAccordionSection";
 import { CicdAutomaticSetupSummary } from "./CicdAutomaticSetupSummary";
-import { CicdConsoleScreen } from "./CicdConsoleScreen";
+import { CicdConsoleScreen, type CicdConsoleScreenHandle } from "./CicdConsoleScreen";
 import { ProjectDeploymentTargetEditor } from "./delivery/ProjectDeploymentTargetEditor";
 import { DeliveryConnectionSummary } from "./delivery/DeliveryConnectionSummary";
 import { useProjectDeliveryProfile } from "./delivery/use-project-delivery-profile";
@@ -32,8 +32,23 @@ export function DeliveryCenterPanel({
     errorMessage: message,
     refresh
   } = useProjectDeliveryProfile(projectId, readinessRefreshRequestId);
+  const consoleRef = useRef<CicdConsoleScreenHandle>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const reload = useCallback(() => {
     void refresh();
+  }, [refresh]);
+  const refreshAll = useCallback(async (): Promise<void> => {
+    setIsRefreshing(true);
+    try {
+      const consoleRefresh = consoleRef.current?.refreshAll();
+      if (consoleRefresh) {
+        await consoleRefresh;
+        return;
+      }
+      await refresh();
+    } finally {
+      setIsRefreshing(false);
+    }
   }, [refresh]);
 
   function handleDeploymentTargetSaved(): void {
@@ -77,8 +92,6 @@ export function DeliveryCenterPanel({
   const githubAccount = profile.githubInstallations.find(
     (installation) => installation.installationId === repository?.githubInstallationId
   );
-  const automaticSetupReady =
-    profile.readiness.items.find((item) => item.key === "deployment_target")?.status === "ready";
   const setupContent = (
     <>
       <CicdAccordionSection
@@ -156,25 +169,10 @@ export function DeliveryCenterPanel({
           showAutomaticSummary={false}
           showHeading={false}
         />
-      </CicdAccordionSection>
-
-      <CicdAccordionSection
-        icon={<Settings2 size={17} />}
-        id="automatic-settings-title"
-        metadata={
-          <AccordionFacts
-            facts={[
-              ["빌드 기준", getBuildBasis(deploymentTarget)],
-              ["확정 소스", getConfirmedSource(deploymentTarget)],
-              ["배포 위치", getDeploymentLocation(deploymentTarget)]
-            ]}
-          />
-        }
-        statusLabel={automaticSetupReady ? "완료" : "확인 필요"}
-        statusTone={automaticSetupReady ? "success" : "warning"}
-        title="자동 설정 결과"
-      >
-        <CicdAutomaticSetupSummary profile={profile} />
+        <section className={styles.automaticSetupSection}>
+          <h4>감지된 배포 정보</h4>
+          <CicdAutomaticSetupSummary profile={profile} />
+        </section>
       </CicdAccordionSection>
     </>
   );
@@ -185,21 +183,15 @@ export function DeliveryCenterPanel({
         <div className={styles.titleBlock}>
           <div className={styles.titleLine}>
             <h2>CI/CD</h2>
-            <span className={styles.headerStatus} data-ready={profile.readiness.ready}>
-              <i aria-hidden="true" />
-              {profile.readiness.ready
-                ? "배포 준비 완료"
-                : `${profile.readiness.requiredActionCount}개 조치 필요`}
-            </span>
           </div>
           <span>
             배포 준비부터 GitHub Actions 실행까지 · {formatCheckedAt(profile.readiness.checkedAt)}
           </span>
         </div>
         <div className={styles.headerActions}>
-          <button onClick={reload} type="button">
+          <button disabled={isRefreshing} onClick={() => void refreshAll()} type="button">
             <RefreshCw aria-hidden="true" size={16} />
-            상태 새로고침
+            {isRefreshing ? "새로고침 중" : "전체 새로고침"}
           </button>
         </div>
       </header>
@@ -220,6 +212,7 @@ export function DeliveryCenterPanel({
         onRefreshDeliveryProfile={refresh}
         projectId={projectId}
         readinessRefreshRequestId={readinessRefreshRequestId}
+        ref={consoleRef}
         setupContent={setupContent}
       />
     </div>
@@ -268,30 +261,4 @@ function formatCheckedAt(value: string): string {
     minute: "2-digit",
     timeZone: "Asia/Seoul"
   })}`;
-}
-
-function getBuildBasis(target: ProjectDeploymentTarget | null): string {
-  const build = target?.confirmedBuildConfig;
-  if (!build) return "미설정";
-  return build.dockerfilePath ?? build.packageManifestPath ?? build.sourceRoot;
-}
-
-function getConfirmedSource(target: ProjectDeploymentTarget | null): string {
-  const commitSha = target?.confirmedBuildConfig?.confirmedCommitSha;
-  return commitSha ? `${commitSha.slice(0, 10)}…` : "미설정";
-}
-
-function getDeploymentLocation(target: ProjectDeploymentTarget | null): string {
-  const runtime = target?.runtimeConfig;
-  if (!runtime) return "미설정";
-  switch (runtime.runtimeTargetKind) {
-    case "ecs_fargate":
-      return runtime.clusterName;
-    case "lambda":
-      return runtime.functionName;
-    case "ec2_asg":
-      return runtime.autoScalingGroupName;
-    case "static_site":
-      return runtime.hostingBucketName;
-  }
 }

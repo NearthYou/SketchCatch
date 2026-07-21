@@ -1,7 +1,9 @@
 import Link from "next/link";
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useReducer,
   useRef,
@@ -65,19 +67,11 @@ import deliveryStyles from "./delivery-center.module.css";
 import styles from "./workspace.module.css";
 
 export type CicdConsoleView = "activity" | "logs";
+export type CicdConsoleScreenHandle = {
+  refreshAll(): Promise<void>;
+};
 
-export function CicdConsoleScreen({
-  deliveryProfile,
-  deliveryProfileErrorMessage,
-  isVisible,
-  isDeliveryProfileRefreshing,
-  onOpenDirectDeployment,
-  onOpenLiveObservation,
-  onRefreshDeliveryProfile,
-  projectId,
-  readinessRefreshRequestId = 0,
-  setupContent
-}: {
+export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
   readonly deliveryProfile: ProjectDeliveryProfile;
   readonly deliveryProfileErrorMessage: string;
   readonly isVisible: boolean;
@@ -90,7 +84,18 @@ export function CicdConsoleScreen({
   readonly projectId: string;
   readonly readinessRefreshRequestId?: number | undefined;
   readonly setupContent: ReactNode;
-}) {
+}>(function CicdConsoleScreen({
+  deliveryProfile,
+  deliveryProfileErrorMessage,
+  isVisible,
+  isDeliveryProfileRefreshing,
+  onOpenDirectDeployment,
+  onOpenLiveObservation,
+  onRefreshDeliveryProfile,
+  projectId,
+  readinessRefreshRequestId = 0,
+  setupContent
+}, ref) {
   const [activeView, setActiveView] = useState<CicdConsoleView>("activity");
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [handoffs, setHandoffs] = useState<GitCicdHandoff[]>([]);
@@ -209,14 +214,6 @@ export function CicdConsoleScreen({
     isReadinessReady: handoffReady
   });
   const githubAccountSettingsHref = "/dashboard/settings#github-account-settings-title";
-  const readinessByKey = new Map(readiness.items.map((item) => [item.key, item.status]));
-  const setupCompletedCount = [
-    readinessByKey.get("source_repository") === "ready",
-    readinessByKey.get("monitoring_config") === "ready",
-    deliveryProfile.deploymentTarget !== null,
-    readinessByKey.get("deployment_target") === "ready"
-  ].filter(Boolean).length;
-
   const requestReadinessReload = useCallback((): void => {
     if (
       !isVisible ||
@@ -433,7 +430,7 @@ export function CicdConsoleScreen({
     }
   }, [applyRuns, isVisible, loadRuns]);
 
-  const manualRefresh = useCallback(async (): Promise<void> => {
+  const refreshAll = useCallback(async (): Promise<void> => {
     if (
       !isVisible ||
       document.visibilityState !== "visible" ||
@@ -510,6 +507,7 @@ export function CicdConsoleScreen({
     onRefreshDeliveryProfile,
     projectId
   ]);
+  useImperativeHandle(ref, () => ({ refreshAll }), [refreshAll]);
 
   const copyInfrastructureDeploymentCommand = useCallback(async (): Promise<void> => {
     try {
@@ -688,9 +686,6 @@ export function CicdConsoleScreen({
       <section className={deliveryStyles.accordionPanel} aria-labelledby="cicd-config-title">
         <header className={deliveryStyles.accordionPanelHeader}>
           <h3 id="cicd-config-title">구성 및 실행</h3>
-          <span>
-            {setupCompletedCount}개 설정 완료 · {readiness.requiredActionCount}개 조치 필요
-          </span>
         </header>
 
         {setupContent}
@@ -740,11 +735,8 @@ export function CicdConsoleScreen({
               isFrontendRetrying={isFrontendRetrying}
               isHandoffReady={handoffReady}
               isLogsLoading={isLogsLoading}
-              isReadinessRefreshing={isReadinessRefreshing}
-              isRefreshing={isRefreshing}
               logs={visibleLogs}
               logsErrorMessage={logsErrorMessage}
-              onManualRefresh={() => void manualRefresh()}
               onOpenLiveObservation={openSelectedLiveObservation}
               onRetryFrontend={() => void retryFrontend()}
               onRetryLogs={() => setLogsReloadRequestId((requestId) => requestId + 1)}
@@ -762,7 +754,7 @@ export function CicdConsoleScreen({
       </section>
     </div>
   );
-}
+});
 
 function mergeLogs(
   current: readonly GitCicdPipelineLog[],

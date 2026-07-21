@@ -6,12 +6,11 @@ const panelSource = readFileSync(new URL("./CicdPipelineRunsPanel.tsx", import.m
 const activitySource = readFileSync(new URL("./CicdActivityView.tsx", import.meta.url), "utf8");
 const logsSource = readFileSync(new URL("./CicdLogsView.tsx", import.meta.url), "utf8");
 
-test("keeps one Pipeline refresh in the accordion header", () => {
+test("keeps Pipeline refresh owned by the CI/CD header", () => {
   assert.match(panelSource, /!presentation\.showRunControls \? \(/);
-  assert.match(panelSource, /headerAction=\{/);
-  assert.match(panelSource, /aria-label="Pipeline 새로고침"/);
+  assert.doesNotMatch(panelSource, /headerAction=|Pipeline 새로고침|onManualRefresh/);
   assert.doesNotMatch(panelSource, /href="#cicd-handoff"/);
-  assert.match(panelSource, /상단 새로고침으로 실행을 확인합니다/);
+  assert.match(panelSource, /전체 새로고침으로 실행을 확인합니다/);
 });
 
 test("uses tabs only for a selected Pipeline Run", () => {

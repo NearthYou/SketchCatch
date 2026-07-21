@@ -35,8 +35,6 @@ export function CicdStatusBoard({
   const repository = deliveryProfile.sourceRepository;
   const target = deliveryProfile.deploymentTarget;
   const setupReady = deliveryProfile.readiness.ready;
-  const remainingActionCount = deliveryProfile.readiness.requiredActionCount;
-  const readinessCompleted = readinessItems.filter((item) => item.ready).length;
   const isDeliveryCurrent = repository === null;
   const isSetupCurrent = repository !== null && !setupReady;
   const isHandoffCurrent =
@@ -76,15 +74,6 @@ export function CicdStatusBoard({
         </div>
       </header>
 
-      <div className={styles.statusProgress} aria-hidden="true">
-        <span data-state={repository ? "success" : "pending"} />
-        <span data-state={setupReady ? "success" : isSetupCurrent ? "info" : "pending"} />
-        <span
-          data-state={currentHandoff ? pullRequestTone : isHandoffCurrent ? "info" : "pending"}
-        />
-        <span data-state={pipelineStage.tone} />
-      </div>
-
       <div className={styles.statusStages}>
         <StatusStage
           current={isDeliveryCurrent}
@@ -98,7 +87,9 @@ export function CicdStatusBoard({
           label={isSetupCurrent ? "현재 단계 · 배포 준비" : "배포 준비"}
           meta={setupReady ? "필수 요건 충족" : getReadinessMeta(readinessItems)}
           tone={setupReady ? "success" : isSetupCurrent ? "info" : "pending"}
-          value={setupReady ? "준비 완료" : `${remainingActionCount}개 남음`}
+          value={
+            setupReady ? "준비 완료" : `${deliveryProfile.readiness.requiredActionCount}개 남음`
+          }
         />
         <StatusStage
           current={isHandoffCurrent}
@@ -112,7 +103,7 @@ export function CicdStatusBoard({
           value={
             currentHandoff
               ? getPullRequestStageLabel(currentHandoff.status)
-              : `${readinessCompleted}/${readinessItems.length} 요건 충족`
+              : "생성 대기"
           }
         />
         <StatusStage
@@ -338,10 +329,9 @@ function getReadinessSectionId(action: GitCicdHandoffReadinessItem["action"]): s
       return "project-cicd-settings-title";
     case "select_aws_connection":
     case "confirm_build_config":
-      return "deployment-target-title";
     case "inspect_runtime_outputs":
     case "inspect_output_url":
-      return "automatic-settings-title";
+      return "deployment-target-title";
     default:
       return null;
   }

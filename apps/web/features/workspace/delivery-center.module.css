@@ -43,20 +43,6 @@
   line-height: 1.5;
 }
 
-.headerStatus {
-  align-items: center;
-  color: var(--color-warning);
-  display: inline-flex;
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-bold);
-  gap: 7px;
-}
-
-.headerStatus[data-ready="true"] {
-  color: var(--color-success);
-}
-
-.headerStatus i,
 .statusStageLabel i,
 .accordionStatus i {
   background: currentColor;
@@ -157,31 +143,6 @@
   flex: 0 0 auto;
   height: 14px;
   width: 1px;
-}
-
-.statusProgress {
-  display: grid;
-  gap: 4px;
-  grid-template-columns: 1fr 1fr 1.5fr 1fr;
-  padding: 14px 20px 0;
-}
-
-.statusProgress span {
-  background: var(--color-hairline-strong);
-  border-radius: 2px;
-  height: 3px;
-}
-
-.statusProgress span[data-state="success"] {
-  background: var(--color-success);
-}
-
-.statusProgress span[data-state="info"] {
-  background: var(--color-text-link);
-}
-
-.statusProgress span[data-state="warning"] {
-  background: var(--color-warning);
 }
 
 .statusStages {
@@ -350,11 +311,6 @@
   justify-content: space-between;
   min-height: 50px;
   padding: 0 18px;
-}
-
-.accordionPanelHeader > span {
-  color: var(--color-muted);
-  font-size: calc(11px + var(--presentation-font-size-increase));
 }
 
 .accordionItem {
@@ -659,6 +615,20 @@
   margin: 0;
 }
 
+.automaticSetupSection {
+  border-top: 1px solid var(--color-hairline);
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 20px;
+}
+
+.automaticSetupSection h4 {
+  color: var(--color-ink);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  margin: 0;
+}
+
 .automaticSummaryGrid > div {
   border-bottom: 1px solid var(--color-hairline);
   display: grid;
@@ -719,13 +689,8 @@
     padding-block: 14px;
   }
 
-  .statusProgress,
   .statusStages {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .statusProgress span:nth-child(3) {
-    margin-top: 4px;
   }
 
   .statusStage:nth-child(3) {
@@ -778,13 +743,8 @@
     display: none;
   }
 
-  .statusProgress,
   .statusStages {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .statusProgress {
-    display: none;
   }
 
   .statusStage,
