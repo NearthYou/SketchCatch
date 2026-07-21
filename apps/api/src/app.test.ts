@@ -179,6 +179,7 @@ test("Live Observation v2 app composition exposes Store routes and removes legac
         async authorize() {
           return {
             audienceOrigin: "https://sketchcatch.example.com",
+            receipt: async () => ({ accepted: true, acceptedEventCount: 1 }),
             request: async () => ({ accepted: true, acceptedEventCount: 1 })
           };
         },
@@ -224,7 +225,10 @@ test("Live Observation v2 app composition exposes Store routes and removes legac
     url: `/api/deployments/${deploymentId}/live-observations`
   });
   assert.equal(created.statusCode, 201);
-  assert.equal(created.json().session.audienceUrl, `https://sketchcatch.example.com/observe/${observationId}`);
+  assert.equal(
+    created.json().session.audienceUrl,
+    `https://sketchcatch.example.com/observe/${observationId}`
+  );
 
   const bootstrap = await app.inject({
     method: "POST",
@@ -466,9 +470,7 @@ function assertErrorResponse(
   assert.equal(typeof body.message, "string");
 }
 
-function createLiveObservationRuntimeEnv(
-  overrides: Partial<RuntimeEnv> = {}
-): RuntimeEnv {
+function createLiveObservationRuntimeEnv(overrides: Partial<RuntimeEnv> = {}): RuntimeEnv {
   return {
     awsRegion: "ap-northeast-2",
     authTokenSecret: process.env.AUTH_TOKEN_SECRET,

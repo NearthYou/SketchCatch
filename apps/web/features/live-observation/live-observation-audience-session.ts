@@ -12,7 +12,6 @@ export type LiveObservationAudiencePageState =
 export type LiveObservationAudienceViewState = Readonly<{
   bootstrapReady: boolean;
   pageState: LiveObservationAudiencePageState;
-  retryAfterSeconds: number | null;
   successCount: number;
 }>;
 
@@ -35,7 +34,6 @@ type SessionDependencies = Readonly<{
 export const initialLiveObservationAudienceState: LiveObservationAudienceViewState = Object.freeze({
   bootstrapReady: false,
   pageState: "connecting",
-  retryAfterSeconds: null,
   successCount: 0
 });
 
@@ -44,7 +42,6 @@ export function createLiveObservationAudienceSession(dependencies: SessionDepend
   let generation = 0;
   let inFlight: ActiveClient | null = null;
   let state = initialLiveObservationAudienceState;
-  let cooldownTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 
   function publish(nextState: LiveObservationAudienceViewState): void {
     state = Object.freeze(nextState);
@@ -57,35 +54,12 @@ export function createLiveObservationAudienceSession(dependencies: SessionDepend
     );
   }
 
-  function clearCooldown(): void {
-    if (cooldownTimer !== null) globalThis.clearTimeout(cooldownTimer);
-    cooldownTimer = null;
-  }
-
-  function scheduleCooldown(activeClient: ActiveClient, retryAfterSeconds: number | null): void {
-    clearCooldown();
-    if (retryAfterSeconds === null || retryAfterSeconds <= 0) return;
-    cooldownTimer = globalThis.setTimeout(() => {
-      cooldownTimer = null;
-      if (isCurrent(activeClient) && state.pageState === "rate_limited") {
-        publish({
-          ...state,
-          pageState: "ready",
-          retryAfterSeconds: null
-        });
-      }
-    }, retryAfterSeconds * 1_000);
-    (cooldownTimer as { unref?: () => void }).unref?.();
-  }
-
   async function bootstrap(activeClient: ActiveClient): Promise<void> {
     if (!isCurrent(activeClient) || inFlight) return;
-    clearCooldown();
     inFlight = activeClient;
     publish({
       bootstrapReady: false,
       pageState: "connecting",
-      retryAfterSeconds: null,
       successCount: 0
     });
     try {
@@ -94,20 +68,16 @@ export function createLiveObservationAudienceSession(dependencies: SessionDepend
         publish({
           bootstrapReady: true,
           pageState: "ready",
-          retryAfterSeconds: null,
           successCount: 0
         });
       }
     } catch (error) {
       if (isCurrent(activeClient)) {
-        const retryAfterSeconds = retryAfterSecondsFrom(error);
         publish({
           bootstrapReady: false,
           pageState: toPageState(error),
-          retryAfterSeconds,
           successCount: 0
         });
-        scheduleCooldown(activeClient, retryAfterSeconds);
       }
     } finally {
       if (inFlight === activeClient) inFlight = null;
@@ -125,10 +95,7 @@ export function createLiveObservationAudienceSession(dependencies: SessionDepend
 
       return () => {
         activeClient.client.dispose();
-        if (clientRef.current === activeClient) {
-          clearCooldown();
-          clientRef.current = null;
-        }
+        if (clientRef.current === activeClient) clientRef.current = null;
         if (inFlight === activeClient) inFlight = null;
       };
     },
@@ -140,8 +107,7 @@ export function createLiveObservationAudienceSession(dependencies: SessionDepend
 
     async request(): Promise<void> {
       const activeClient = clientRef.current;
-      if (!activeClient || !state.bootstrapReady || inFlight || state.retryAfterSeconds !== null)
-        return;
+      if (!activeClient || !state.bootstrapReady || inFlight) return;
       inFlight = activeClient;
       publish({ ...state, pageState: "sending" });
       try {
@@ -150,21 +116,17 @@ export function createLiveObservationAudienceSession(dependencies: SessionDepend
           publish({
             bootstrapReady: true,
             pageState: "success",
-            retryAfterSeconds: null,
             successCount: state.successCount + 1
           });
         }
       } catch (error) {
         if (isCurrent(activeClient)) {
           const pageState = toPageState(error);
-          const retryAfterSeconds = retryAfterSecondsFrom(error);
           publish({
             ...state,
             bootstrapReady: pageState !== "expired",
             pageState,
-            retryAfterSeconds
           });
-          scheduleCooldown(activeClient, retryAfterSeconds);
         }
       } finally {
         if (inFlight === activeClient) inFlight = null;
@@ -181,10 +143,4 @@ function toPageState(
     if (error.kind === "rate_limited") return "rate_limited";
   }
   return "error";
-}
-
-function retryAfterSecondsFrom(error: unknown): number | null {
-  return error instanceof LiveObservationAudienceError && error.kind === "rate_limited"
-    ? error.retryAfterSeconds
-    : null;
 }

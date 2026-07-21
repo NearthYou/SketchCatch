@@ -220,6 +220,15 @@ const designSimulationBodySchema: z.ZodType<CreateDesignSimulationRequest> = z.o
   architectureJson: architectureJsonSchema,
   trafficLevel: z.enum(["small", "normal"]).default("normal"),
   budgetLevel: z.enum(["low", "normal"]).default("normal"),
+  liveObservation: z
+    .object({
+      acceptedEventCount: z.number().int().nonnegative().max(10_000),
+      pressureLevel: z.enum(["normal", "warning", "high", "critical"]),
+      pressurePercent: z.number().finite().nonnegative(),
+      projectedRequestsPerMinute: z.number().finite().nonnegative()
+    })
+    .strict()
+    .optional(),
   period: z.enum(["day", "week", "month"]).default("month"),
   expectedUserCount: z.coerce.number().int().min(1).max(1_000_000).default(1000),
   region: z.string().trim().min(1).default("ap-northeast-2")
