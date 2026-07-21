@@ -72,3 +72,24 @@ test("AWS onboarding template does not expose the Training prefix", () => {
 
   assert.equal(template.title, "AWS onboarding");
 });
+
+test("Live Observation template is the last item in the dashboard catalog", () => {
+  const templates = listBoardTemplates();
+  const template = templates.at(-1);
+
+  assert.equal(template?.id, "template-live-observation");
+  assert.equal(template?.title, "실시간 트래픽 · ASG 관측");
+});
+
+test("Live Observation scaling policy omits the unbounded cooldown", () => {
+  const template = listBoardTemplates()
+    .filter(isBoardTemplateAvailable)
+    .find((candidate) => candidate.id === "template-live-observation");
+  const policy = template?.diagramJson.nodes.find(
+    (node) => node.id === "template-live-policy"
+  );
+
+  assert.ok(policy?.parameters);
+  assert.equal(policy?.parameters?.values.cooldown, undefined);
+  assert.equal(policy?.parameters?.values.estimatedInstanceWarmup, 60);
+});
