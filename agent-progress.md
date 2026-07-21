@@ -22,6 +22,19 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Remove the duplicate AWS connection step description
+
+- Hid the empty-state AWS Role description from the connection step header while retaining it in the expanded body and preserving the verified account/region summary.
+- Seven focused Settings tests, lint, typecheck, build, final harness, and two-axis review pass. No full test suite was run.
+- No API, shared contract, database migration, dependency, deployment, or cloud mutation change was made.
+
+### 2026-07-22 - Restructure Settings connection flow
+
+- Reworked the existing Settings integrations into one ordered GitHub App -> AWS account -> AWS CodeBuild GitHub authorization flow, with completed steps collapsed and the current or error step expanded.
+- Preserved all existing API clients, DTOs, shared types, actions, and connected AWS account management. Long CodeBuild failure details now remain behind an `오류 상세` disclosure with a neutral summary.
+- Verification passed: 14 focused Web tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, diff checks, and two-axis review. Authenticated browser smoke was unavailable because the in-app browser session was signed out.
+- No database migration, dependency change, cloud mutation, deployment action, or Git/CI/CD handoff was performed.
+
 ### 2026-07-22 - Connect real audience traffic to immediate Live Observation warnings
 
 - Removed the separate public per-IP limiter, `Retry-After` propagation, and audience countdown while retaining the Store safety envelope of 20 events/second, 120 events/10 seconds, 10,000 events/session, and a 15-minute session lifetime.
