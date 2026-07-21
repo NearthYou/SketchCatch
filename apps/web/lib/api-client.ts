@@ -24,6 +24,8 @@ const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
   internal_server_error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
   GIT_CICD_SOURCE_REPOSITORY_MISMATCH:
     "현재 Board의 Repository와 요청한 Repository가 다릅니다. Board에서 Repository를 다시 선택하고 CI/CD 정보를 새로고침해 주세요.",
+  GIT_CICD_HANDOFF_CONFIGURATION_STALE:
+    "CI/CD 설정이 변경되었습니다. Delivery 정보를 새로고침하고 다시 검토해 주세요.",
   PUBLIC_REPOSITORY_INPUT_INVALID: "지원하는 GitHub Repository URL과 branch를 확인해주세요.",
   PUBLIC_REPOSITORY_UNAVAILABLE:
     "Repository를 확인할 수 없습니다. URL이 잘못되었거나 비공개 Repository일 수 있습니다.",

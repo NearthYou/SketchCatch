@@ -54,6 +54,7 @@ function createProfile(): ProjectDeliveryProfile {
     monitoringConfig: null,
     deploymentTarget: null,
     environmentName: null,
+    handoffConfigurationPreview: null,
     readiness: {
       projectId,
       checkedAt: "2026-07-17T00:00:00.000Z",

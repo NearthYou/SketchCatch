@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type {
   GitCicdHandoff,
+  GitCicdHandoffConfigurationPreview,
   GitCicdMonitoringConfig,
   GitCicdReadinessSnapshot,
   SourceRepository
@@ -16,6 +17,7 @@ import styles from "./workspace.module.css";
 export function CicdHandoffPanel({
   canCreateHandoff,
   commandCopyState,
+  configurationPreview,
   currentHandoff,
   existingHandoff,
   handoffErrorMessage,
@@ -40,6 +42,7 @@ export function CicdHandoffPanel({
 }: {
   readonly canCreateHandoff: boolean;
   readonly commandCopyState: "idle" | "copied" | "failed";
+  readonly configurationPreview: GitCicdHandoffConfigurationPreview | null;
   readonly currentHandoff: GitCicdHandoff | null;
   readonly existingHandoff: GitCicdHandoff | null;
   readonly handoffErrorMessage: string;
@@ -176,6 +179,32 @@ export function CicdHandoffPanel({
               <div>
                 <dt>승인된 Plan</dt>
                 <dd>{readiness.approvedApplyPlanArtifactId?.slice(0, 12) ?? "없음"}</dd>
+              </div>
+              <div>
+                <dt>RDS</dt>
+                <dd>
+                  {configurationPreview
+                    ? configurationPreview.rdsEnabled
+                      ? "사용"
+                      : "사용 안 함"
+                    : "확인 필요"}
+                </dd>
+              </div>
+              <div>
+                <dt>Static Site URL</dt>
+                <dd>
+                  {configurationPreview
+                    ? configurationPreview.staticSiteUrl ?? "생성하지 않음"
+                    : "확인 필요"}
+                </dd>
+              </div>
+              <div>
+                <dt>API Base URL</dt>
+                <dd>
+                  {configurationPreview
+                    ? configurationPreview.apiBaseUrl ?? "생성하지 않음"
+                    : "확인 필요"}
+                </dd>
               </div>
             </dl>
             <ul>

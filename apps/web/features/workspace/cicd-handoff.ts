@@ -1,6 +1,7 @@
 import type {
   CreateGitCicdHandoffRequest,
   Deployment,
+  GitCicdHandoffConfigurationPreview,
   GitCicdReadinessAction,
   GitCicdDeploymentTargetReadinessKey,
   GitCicdReadinessItemKey,
@@ -8,6 +9,7 @@ import type {
   GitCicdMonitoringConfig,
   SourceRepository
 } from "@sketchcatch/types";
+import { ApiClientError, getApiErrorMessage } from "../../lib/api-client";
 
 export type GitCicdReadinessNavigation = {
   readonly actionLabel: string;
@@ -294,6 +296,7 @@ export function isGitCicdHandoffReady(
 
 export function isGitCicdHandoffCreationEnabled(input: {
   readonly hasApprovedApplyPlanArtifact: boolean;
+  readonly hasConfigurationPreview: boolean;
   readonly hasExistingHandoff: boolean;
   readonly hasMonitoringConfig: boolean;
   readonly hasRepository: boolean;
@@ -305,6 +308,7 @@ export function isGitCicdHandoffCreationEnabled(input: {
   return (
     input.isReadinessReady &&
     input.isConsoleDataFresh &&
+    input.hasConfigurationPreview &&
     input.hasRepository &&
     input.hasMonitoringConfig &&
     input.hasSourceDeployment &&
@@ -314,13 +318,33 @@ export function isGitCicdHandoffCreationEnabled(input: {
   );
 }
 
+export async function handleGitCicdHandoffCreationError(
+  error: unknown,
+  refreshDeliveryProfile: () => Promise<unknown>
+): Promise<string> {
+  if (
+    error instanceof ApiClientError &&
+    error.code === "GIT_CICD_HANDOFF_CONFIGURATION_STALE"
+  ) {
+    try {
+      await refreshDeliveryProfile();
+    } catch {
+      // Preserve the actionable stale response even when the follow-up refresh fails.
+    }
+  }
+
+  return getApiErrorMessage(error, "CI/CD 배포 Pull Request를 생성하지 못했습니다.");
+}
+
 export function buildGitCicdHandoffRequest({
   approvedApplyPlanArtifactId,
+  configurationPreview,
   deployment,
   monitoringConfig,
   repository
 }: {
   readonly approvedApplyPlanArtifactId: string | null;
+  readonly configurationPreview: GitCicdHandoffConfigurationPreview;
   readonly deployment: GitCicdSourceDeployment;
   readonly monitoringConfig: GitCicdMonitoringConfig;
   readonly repository: SourceRepository;
@@ -338,6 +362,9 @@ export function buildGitCicdHandoffRequest({
     sourceRepositoryId: repository.id,
     targetBranch: monitoringConfig.monitorBranch,
     environmentName: "sketchcatch-production",
+    rdsEnabled: configurationPreview.rdsEnabled,
+    staticSiteUrl: configurationPreview.staticSiteUrl,
+    apiBaseUrl: configurationPreview.apiBaseUrl,
     pullRequestTitle: "Deploy: SketchCatch 인프라와 앱 배포 연결",
     commitMessage: "chore: SketchCatch CI/CD 배포 구성",
     userAcceptedChangeId: approvedApplyPlanArtifactId

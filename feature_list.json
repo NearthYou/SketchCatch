@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-20",
+  "lastUpdated": "2026-07-22",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -1025,6 +1025,36 @@
         "notes": "Focused runtime-Secret, Terraform safety, Repository Fixed Template, and failed-deployment UI regressions pass. The rendered Fixed Template Terraform passes both the complete runtime-Secret reference-chain guard and the demo_web_service artifact safety gate. Lint and typecheck pass. Root build reported all five tasks successful but Turbo did not exit; direct Types/Config/UI/API/Web builds exited 0. Root pnpm test still exposes two unchanged stale Live Observation source-marker failures and one unchanged lease-heartbeat cancellation outside this workstream."
       },
       "notes": "No DB schema or migration changed. No cloud mutation, production deployment, Terraform apply/destroy, or Git/CI/CD handoff was performed. Existing saved Project Drafts require re-analysis and regeneration after production deployment."
+    },
+    {
+      "id": "CICD-REQUIRED-PARAMETERS-001",
+      "priority": 1,
+      "area": "git-cicd",
+      "title": "Server-derived CI/CD parameters and ECS web build settings",
+      "user_visible_behavior": "CI/CD PR 생성 전에 RDS 사용 여부와 Static Site/API URL을 검토하고, ECS API·Frontend 빌드 파라미터를 한 Advanced Settings에서 완성하며, 오래된 설정으로는 PR을 생성하지 않는다.",
+      "status": "passing",
+      "verification": [
+        "Delivery Profile은 readiness가 선택한 승인 Deployment의 Architecture와 확정 Target으로 RDS와 public HTTPS URL preview를 계산한다.",
+        "Handoff API는 optional client preview를 exact 비교하고 stale 값이면 provider 호출 전에 stable 409를 반환하며 provider와 저장 record에는 서버 계산값만 전달한다.",
+        "PR 검토는 RDS, Static Site URL, API Base URL을 평면으로 표시하고 stale 응답 시 Delivery Profile만 한 번 새로고침하며 자동 재시도하지 않는다.",
+        "ECS Advanced Settings는 API와 Frontend 빌드 필드를 검증하고 alias, package manager preset, Repository runtime Secret evidence를 보존한다.",
+        "Next Client 번들은 ECS helper를 확장자 없는 import로 해석하고 production build를 완료한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-22",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-handoff-configuration.test.ts src/delivery/project-delivery-profile-service.test.ts src/git-cicd/git-cicd-handoff-configuration-integration.test.ts src/routes/git-cicd-handoffs.test.ts src/routes/project-release-ledger.test.ts src/artifacts/application-artifact-identity.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/cicd-handoff.test.ts features/workspace/cicd-handoff-configuration-preview.test.ts features/workspace/delivery/ecs-web-build-config-state.test.ts features/workspace/delivery/project-deployment-target-state.test.ts features/workspace/delivery/project-deployment-target-editor.test.ts",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check"
+        ],
+        "notes": "The recorded focused API command passes 39/39 and the focused Web command passes 43/43, including approved-Plan preview gating, stale-refresh failure handling, complete ECS Web artifact identity, generic runtime Secret validation, and the extensionless Next import regression. Full lint, typecheck, API/Web production build, migration compatibility, harness, and diff checks pass."
+      },
+      "notes": "No DB schema or Drizzle migration changed. No secret value, cloud mutation, Terraform apply/destroy, deployment, GitHub PR, or Git/CI/CD handoff was executed."
     },
     {
       "id": "DEPLOYMENT-LIVE-PROFILE-REMOVAL-001",

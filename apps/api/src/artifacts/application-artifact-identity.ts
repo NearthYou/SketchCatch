@@ -84,7 +84,35 @@ function normalizeConfirmedBuildConfig(config: ConfirmedBuildConfig): Record<str
     appSpecPath: normalizeOptionalPath(config.appSpecPath),
     staticOutputPath: normalizeOptionalPath(config.staticOutputPath),
     exactSemVerTag: normalizeOptionalText(config.exactSemVerTag),
-    manifestVersion: normalizeOptionalText(config.manifestVersion)
+    manifestVersion: normalizeOptionalText(config.manifestVersion),
+    ...(config.ecsWeb
+      ? {
+          ecsWeb: {
+            api: {
+              sourceRoot: normalizePath(config.ecsWeb.api.sourceRoot),
+              dockerfilePath: normalizePath(config.ecsWeb.api.dockerfilePath),
+              containerPort: config.ecsWeb.api.containerPort,
+              healthCheckPath: normalizePath(config.ecsWeb.api.healthCheckPath),
+              requiredRuntimeSecrets: [...new Set(config.ecsWeb.api.requiredRuntimeSecrets ?? [])]
+                .map((name) => requireNonEmpty(name, "runtime secret name"))
+                .sort(compareCanonicalText)
+            },
+            frontend: {
+              sourceRoot: normalizePath(config.ecsWeb.frontend.sourceRoot),
+              packageManifestPath: normalizePath(config.ecsWeb.frontend.packageManifestPath),
+              lockfilePath: normalizePath(config.ecsWeb.frontend.lockfilePath),
+              packageManager: config.ecsWeb.frontend.packageManager,
+              packageManagerVersion: requireNonEmpty(
+                config.ecsWeb.frontend.packageManagerVersion,
+                "package manager version"
+              ),
+              installPreset: config.ecsWeb.frontend.installPreset,
+              buildPreset: config.ecsWeb.frontend.buildPreset,
+              outputPath: normalizePath(config.ecsWeb.frontend.outputPath)
+            }
+          }
+        }
+      : {})
   };
 }
 

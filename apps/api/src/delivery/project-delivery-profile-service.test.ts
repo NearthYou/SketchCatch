@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
+  ArchitectureJson,
   GitCicdMonitoringConfig,
   GitCicdReadinessSnapshot,
   ProjectDeliveryProfile,
@@ -42,10 +43,119 @@ test("composes a partial Delivery profile without requiring optional settings", 
     monitoringConfig: null,
     deploymentTarget: null,
     environmentName: null,
-    readiness
+    readiness,
+    handoffConfigurationPreview: null
   } satisfies ProjectDeliveryProfile);
   assert.equal(calls.includes("find-monitoring"), false);
   assert.equal(calls.includes("inspect-readiness"), true);
+});
+
+test("derives handoff configuration from the readiness-selected Deployment Architecture", async () => {
+  const profile = await createProjectDeliveryProfileService({
+    store: createStore({
+      architectureForDeployment: {
+        nodes: [
+          {
+            id: "database-1",
+            type: "RDS",
+            positionX: 0,
+            positionY: 0,
+            config: { terraformResourceType: "aws_db_instance" }
+          }
+        ],
+        edges: []
+      },
+      deploymentTarget: createEcsWebTarget("https://app.example.com")
+    }),
+    inspectReadiness: async () => ({
+      ...readiness,
+      sourceDeploymentId: "deployment-1",
+      approvedApplyPlanArtifactId: "plan-artifact-1"
+    })
+  }).get({ projectId: "project-1", userId: "user-1" });
+
+  assert.deepEqual(profile.handoffConfigurationPreview, {
+    rdsEnabled: true,
+    staticSiteUrl: "https://app.example.com",
+    apiBaseUrl: "https://app.example.com"
+  });
+});
+
+test("returns no handoff configuration when the readiness-selected Architecture is unavailable", async () => {
+  const architectureLookupCalls: Array<{ projectId: string; deploymentId: string }> = [];
+  const profile = await createProjectDeliveryProfileService({
+    store: createStore({
+      architectureLookupCalls,
+      architectureForDeployment: null,
+      deploymentTarget: createEcsWebTarget("https://app.example.com")
+    }),
+    inspectReadiness: async () => ({
+      ...readiness,
+      sourceDeploymentId: "deployment-1",
+      approvedApplyPlanArtifactId: "plan-artifact-1"
+    })
+  }).get({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(profile.handoffConfigurationPreview, null);
+  assert.deepEqual(architectureLookupCalls, [
+    { projectId: "project-1", deploymentId: "deployment-1" }
+  ]);
+});
+
+test("does not read a handoff Architecture when no Deployment Target is confirmed", async () => {
+  const architectureLookupCalls: Array<{ projectId: string; deploymentId: string }> = [];
+  const profile = await createProjectDeliveryProfileService({
+    store: createStore({ architectureLookupCalls, deploymentTarget: null }),
+    inspectReadiness: async () => ({
+      ...readiness,
+      sourceDeploymentId: "deployment-1",
+      approvedApplyPlanArtifactId: "plan-artifact-1"
+    })
+  }).get({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(profile.handoffConfigurationPreview, null);
+  assert.deepEqual(architectureLookupCalls, []);
+});
+
+test("does not derive handoff configuration from an unconfirmed Deployment Target", async () => {
+  const architectureLookupCalls: Array<{ projectId: string; deploymentId: string }> = [];
+  const profile = await createProjectDeliveryProfileService({
+    store: createStore({
+      architectureLookupCalls,
+      architectureForDeployment: { nodes: [], edges: [] },
+      deploymentTarget: {
+        ...createEcsWebTarget("https://app.example.com"),
+        confirmedBuildConfig: null
+      }
+    }),
+    inspectReadiness: async () => ({
+      ...readiness,
+      sourceDeploymentId: "deployment-1",
+      approvedApplyPlanArtifactId: "plan-artifact-1"
+    })
+  }).get({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(profile.handoffConfigurationPreview, null);
+  assert.deepEqual(architectureLookupCalls, []);
+});
+
+test("does not read a handoff Architecture before an Apply Plan is approved", async () => {
+  const architectureLookupCalls: Array<{ projectId: string; deploymentId: string }> = [];
+  const profile = await createProjectDeliveryProfileService({
+    store: createStore({
+      architectureLookupCalls,
+      architectureForDeployment: { nodes: [], edges: [] },
+      deploymentTarget: createEcsWebTarget("https://app.example.com")
+    }),
+    inspectReadiness: async () => ({
+      ...readiness,
+      sourceDeploymentId: "deployment-1",
+      approvedApplyPlanArtifactId: null
+    })
+  }).get({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(profile.handoffConfigurationPreview, null);
+  assert.deepEqual(architectureLookupCalls, []);
 });
 
 test("loads monitoring only for the active Source Repository", async () => {
@@ -152,7 +262,10 @@ test("passes null to readiness instead of a stale active Repository", async () =
 function createStore(input: {
   accessible?: boolean;
   analysisTarget?: RepositoryAnalysisRecord | null;
+  architectureLookupCalls?: Array<{ projectId: string; deploymentId: string }>;
+  architectureForDeployment?: ArchitectureJson | null;
   calls?: string[];
+  deploymentTarget?: ProjectDeploymentTarget | null;
   sourceRepository?: SourceRepository | null;
   monitoringConfig?: GitCicdMonitoringConfig | null;
 } = {}): ProjectDeliveryProfileStore {
@@ -188,11 +301,77 @@ function createStore(input: {
         updatedAt: "2026-07-17T00:00:00.000Z"
       };
     },
+    async findArchitectureForDeployment(projectId, deploymentId) {
+      input.architectureLookupCalls?.push({ projectId, deploymentId });
+      return input.architectureForDeployment ?? null;
+    },
     async findDeploymentTarget() {
-      return null as ProjectDeploymentTarget | null;
+      return input.deploymentTarget ?? null;
     },
     async findEnvironmentName() {
       return null;
     }
+  };
+}
+
+function createEcsWebTarget(outputUrl: string): ProjectDeploymentTarget {
+  return {
+    projectId: "project-1",
+    provider: "aws",
+    connectionId: "connection-1",
+    region: "ap-northeast-2",
+    runtimeTargetKind: "ecs_fargate",
+    confirmedBuildConfig: {
+      sourceRoot: ".",
+      evidence: [
+        { kind: "dockerfile", path: "apps/api/Dockerfile" },
+        { kind: "package_manifest", path: "apps/web/package.json" },
+        { kind: "static_output", path: "apps/web/.next" }
+      ],
+      installPreset: "none",
+      buildPreset: "docker_build",
+      artifactOutputPath: null,
+      runtimeEntrypoint: null,
+      healthCheckPath: "/health",
+      dockerfilePath: "apps/api/Dockerfile",
+      packageManifestPath: "apps/web/package.json",
+      samTemplatePath: null,
+      appSpecPath: null,
+      staticOutputPath: null,
+      exactSemVerTag: null,
+      manifestVersion: null,
+      confirmedCommitSha: "a".repeat(40),
+      confirmedAt: "2026-07-22T00:00:00.000Z",
+      ecsWeb: {
+        api: {
+          sourceRoot: ".",
+          dockerfilePath: "apps/api/Dockerfile",
+          containerPort: 8080,
+          healthCheckPath: "/health"
+        },
+        frontend: {
+          sourceRoot: "apps/web",
+          packageManifestPath: "apps/web/package.json",
+          lockfilePath: "pnpm-lock.yaml",
+          packageManager: "pnpm",
+          packageManagerVersion: "11.8.0",
+          installPreset: "pnpm_frozen_lockfile",
+          buildPreset: "pnpm_build",
+          outputPath: "apps/web/.next"
+        }
+      }
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "ecs_fargate",
+      codeBuildProjectName: "app-build",
+      ecrRepositoryName: "app",
+      clusterName: "app-cluster",
+      serviceName: "app-service",
+      containerName: "app",
+      outputUrl
+    },
+    rolloutStrategy: "all_at_once",
+    createdAt: "2026-07-22T00:00:00.000Z",
+    updatedAt: "2026-07-22T00:00:00.000Z"
   };
 }

@@ -49,6 +49,7 @@ import {
   completeGitCicdReload,
   createGitCicdReloadCoordinator,
   getGitCicdHandoffReadiness,
+  handleGitCicdHandoffCreationError,
   invalidateGitCicdReload,
   isGitCicdHandoffCreationEnabled,
   isGitCicdHandoffReady,
@@ -139,6 +140,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
   const { logsErrorMessage, permissionFailure, screenErrorMessage } = requestState;
   const repository = deliveryProfile.sourceRepository;
   const config = deliveryProfile.monitoringConfig;
+  const configurationPreview = deliveryProfile.handoffConfigurationPreview;
   const readiness = deliveryProfile.readiness;
   const isReadinessRefreshing = isDeliveryProfileRefreshing;
   const readinessErrorMessage = deliveryProfileErrorMessage;
@@ -226,6 +228,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
   );
   const canCreateHandoff = isGitCicdHandoffCreationEnabled({
     hasApprovedApplyPlanArtifact: Boolean(readiness?.approvedApplyPlanArtifactId),
+    hasConfigurationPreview: configurationPreview !== null,
     hasExistingHandoff: existingHandoff !== null,
     hasMonitoringConfig: config !== null,
     hasRepository: repository !== null,
@@ -283,6 +286,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
       !canCreateHandoff ||
       !repository ||
       !config ||
+      !configurationPreview ||
       !sourceDeployment ||
       !readiness?.approvedApplyPlanArtifactId
     ) {
@@ -296,6 +300,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
         projectId,
         ...buildGitCicdHandoffRequest({
           approvedApplyPlanArtifactId: readiness.approvedApplyPlanArtifactId,
+          configurationPreview,
           deployment: sourceDeployment,
           monitoringConfig: config,
           repository
@@ -306,7 +311,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
       setIsHandoffReviewOpen(false);
     } catch (error) {
       setHandoffErrorMessage(
-        getApiErrorMessage(error, "CI/CD 배포 Pull Request를 생성하지 못했습니다.")
+        await handleGitCicdHandoffCreationError(error, onRefreshDeliveryProfile)
       );
     } finally {
       setIsHandoffBusy(false);
@@ -314,6 +319,8 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
   }, [
     config,
     canCreateHandoff,
+    configurationPreview,
+    onRefreshDeliveryProfile,
     projectId,
     readiness?.approvedApplyPlanArtifactId,
     repository,
@@ -735,6 +742,7 @@ export const CicdConsoleScreen = forwardRef<CicdConsoleScreenHandle, {
             <CicdHandoffPanel
               canCreateHandoff={canCreateHandoff}
               commandCopyState={commandCopyState}
+              configurationPreview={configurationPreview}
               currentHandoff={currentHandoff}
               existingHandoff={existingHandoff}
               handoffErrorMessage={handoffErrorMessage}

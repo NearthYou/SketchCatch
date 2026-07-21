@@ -13,6 +13,7 @@ import {
   createGitCicdReloadCoordinator,
   createGitCicdReadinessNavigation,
   getGitCicdHandoffReadiness,
+  handleGitCicdHandoffCreationError,
   isGitCicdHandoffCreationEnabled,
   isGitCicdHandoffReady,
   invalidateGitCicdReload,
@@ -29,6 +30,58 @@ test("explains how to recover from a stale Board Repository handoff request", ()
   assert.equal(
     getApiErrorMessage(error, "CI/CD 배포 Pull Request를 생성하지 못했습니다."),
     "현재 Board의 Repository와 요청한 Repository가 다릅니다. Board에서 Repository를 다시 선택하고 CI/CD 정보를 새로고침해 주세요."
+  );
+});
+
+test("refreshes Delivery Profile once when the handoff configuration became stale", async () => {
+  let refreshCount = 0;
+  const staleMessage = await handleGitCicdHandoffCreationError(
+    new ApiClientError(409, {
+      error: "GIT_CICD_HANDOFF_CONFIGURATION_STALE",
+      message: "stale handoff configuration"
+    }),
+    async () => {
+      refreshCount += 1;
+    }
+  );
+
+  assert.equal(refreshCount, 1);
+  assert.equal(
+    staleMessage,
+    "CI/CD 설정이 변경되었습니다. Delivery 정보를 새로고침하고 다시 검토해 주세요."
+  );
+
+  const genericMessage = await handleGitCicdHandoffCreationError(
+    new ApiClientError(409, {
+      error: "conflict",
+      message: "generic conflict"
+    }),
+    async () => {
+      refreshCount += 1;
+    }
+  );
+
+  assert.equal(refreshCount, 1);
+  assert.equal(
+    genericMessage,
+    "현재 상태와 요청 조건이 충돌합니다. 최신 상태와 필요한 설정을 확인해주세요."
+  );
+});
+
+test("keeps the stale guidance when Delivery Profile refresh fails", async () => {
+  const staleMessage = await handleGitCicdHandoffCreationError(
+    new ApiClientError(409, {
+      error: "GIT_CICD_HANDOFF_CONFIGURATION_STALE",
+      message: "stale handoff configuration"
+    }),
+    async () => {
+      throw new Error("refresh failed");
+    }
+  );
+
+  assert.equal(
+    staleMessage,
+    "CI/CD 설정이 변경되었습니다. Delivery 정보를 새로고침하고 다시 검토해 주세요."
   );
 });
 
@@ -175,6 +228,7 @@ test("disables handoff review while readiness is refreshing or failed", () => {
 test("keeps PR creation disabled when readiness succeeds but console data is stale", () => {
   const available = {
     hasApprovedApplyPlanArtifact: true,
+    hasConfigurationPreview: true,
     hasExistingHandoff: false,
     hasMonitoringConfig: true,
     hasRepository: true,
@@ -189,6 +243,7 @@ test("keeps PR creation disabled when readiness succeeds but console data is sta
     { isReadinessReady: false },
     { isConsoleDataFresh: false },
     { hasApprovedApplyPlanArtifact: false },
+    { hasConfigurationPreview: false },
     { hasSourceDeployment: false },
     { hasRepository: false },
     { hasMonitoringConfig: false },
@@ -335,6 +390,11 @@ test("uses the server-recorded approved plan artifact as the user acceptance id"
 
   const request = buildGitCicdHandoffRequest({
     approvedApplyPlanArtifactId: "approved-plan-artifact",
+    configurationPreview: {
+      rdsEnabled: true,
+      staticSiteUrl: "https://app.example.com",
+      apiBaseUrl: "https://app.example.com"
+    },
     deployment: sourceDeployment,
     monitoringConfig,
     repository
@@ -345,6 +405,9 @@ test("uses the server-recorded approved plan artifact as the user acceptance id"
   assert.equal(request.sourceRepositoryId, "repository-1");
   assert.equal(request.targetBranch, "main");
   assert.equal(request.deploymentMode, "infra_and_app");
+  assert.equal(request.rdsEnabled, true);
+  assert.equal(request.staticSiteUrl, "https://app.example.com");
+  assert.equal(request.apiBaseUrl, "https://app.example.com");
 });
 
 test("uses the readiness-selected Apply artifact instead of the deployment current approval", () => {
@@ -358,6 +421,11 @@ test("uses the readiness-selected Apply artifact instead of the deployment curre
   const request = buildGitCicdHandoffRequest({
     deployment: sourceDeployment,
     approvedApplyPlanArtifactId: "readiness-apply-plan",
+    configurationPreview: {
+      rdsEnabled: false,
+      staticSiteUrl: null,
+      apiBaseUrl: "https://api.example.com"
+    },
     monitoringConfig: { monitorBranch: "main" } as GitCicdMonitoringConfig,
     repository: { id: "repository-1" } as SourceRepository
   });

@@ -26,6 +26,7 @@ export type ApiErrorCode =
   | "bad_gateway"
   | "service_unavailable"
   | "internal_server_error"
+  | "GIT_CICD_HANDOFF_CONFIGURATION_STALE"
   | "GIT_CICD_SOURCE_REPOSITORY_MISMATCH"
   | "PUBLIC_REPOSITORY_INPUT_INVALID"
   | "PUBLIC_REPOSITORY_UNAVAILABLE"
@@ -886,6 +887,7 @@ export type ProjectDeliveryProfile = {
   deploymentTarget: ProjectDeploymentTarget | null;
   environmentName: string | null;
   readiness: GitCicdReadinessSnapshot;
+  handoffConfigurationPreview: GitCicdHandoffConfigurationPreview | null;
 };
 
 export type ProjectDeliveryProfileResponse = {
@@ -1109,6 +1111,12 @@ export type GitCicdPipelineDetailStatus =
   | "success"
   | "failed"
   | "cancelled";
+
+export type GitCicdHandoffConfigurationPreview = {
+  rdsEnabled: boolean;
+  staticSiteUrl: string | null;
+  apiBaseUrl: string | null;
+};
 
 export type GitCicdRepositorySettingsPreview = {
   environmentName: string;

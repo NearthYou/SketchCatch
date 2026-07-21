@@ -1,5 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import type {
+  ArchitectureJson,
   GitCicdMonitoringConfig,
   GitCicdReadinessSnapshot,
   GitHubInstallationConnection,
@@ -10,6 +11,8 @@ import type {
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import {
+  architectures,
+  deployments,
   gitCicdHandoffs,
   gitCicdMonitoringConfigs,
   githubInstallationConnections,
@@ -18,6 +21,7 @@ import {
   repositoryAnalysisRecords,
   sourceRepositories
 } from "../db/schema.js";
+import { deriveGitCicdHandoffConfigurationPreview } from "../git-cicd/git-cicd-handoff-configuration.js";
 import { createDefaultGitCicdMonitoringConfig } from "../git-cicd/git-cicd-monitoring-defaults.js";
 import { selectProjectDeliverySourceRepository } from "./project-delivery-source-repository.js";
 
@@ -29,6 +33,10 @@ export type ProjectDeliveryProfileStore = {
   findRepositoryAnalysisTarget(projectId: string): Promise<RepositoryAnalysisRecord | null>;
   listActiveSourceRepositories(projectId: string): Promise<SourceRepository[]>;
   findMonitoringConfig(sourceRepositoryId: string): Promise<GitCicdMonitoringConfig | null>;
+  findArchitectureForDeployment(
+    projectId: string,
+    deploymentId: string
+  ): Promise<ArchitectureJson | null>;
   findDeploymentTarget(projectId: string): Promise<ProjectDeploymentTarget | null>;
   findEnvironmentName(projectId: string): Promise<string | null>;
 };
@@ -78,6 +86,18 @@ export function createProjectDeliveryProfileService(options: {
           deliverySourceRepositoryId: sourceRepository?.id ?? null
         })
       ]);
+      const confirmedDeploymentTarget = deploymentTarget?.confirmedBuildConfig
+        ? deploymentTarget
+        : null;
+      const handoffArchitecture =
+        readiness.sourceDeploymentId &&
+        readiness.approvedApplyPlanArtifactId &&
+        confirmedDeploymentTarget
+          ? await options.store.findArchitectureForDeployment(
+              input.projectId,
+              readiness.sourceDeploymentId
+            )
+          : null;
 
       return {
         githubInstallations,
@@ -86,6 +106,12 @@ export function createProjectDeliveryProfileService(options: {
         deploymentTarget,
         environmentName,
         readiness,
+        handoffConfigurationPreview: handoffArchitecture && confirmedDeploymentTarget
+          ? deriveGitCicdHandoffConfigurationPreview({
+              architectureJson: handoffArchitecture,
+              deploymentTarget: confirmedDeploymentTarget
+            })
+          : null,
         monitoringConfig: sourceRepository
           ? savedMonitoringConfig ?? createDefaultGitCicdMonitoringConfig({
               sourceRepositoryId: sourceRepository.id,
@@ -166,6 +192,24 @@ export function createPostgresProjectDeliveryProfileStore(
         validatedAt: row.validatedAt?.toISOString() ?? null,
         updatedAt: row.updatedAt.toISOString()
       } : null;
+    },
+
+    async findArchitectureForDeployment(projectId, deploymentId) {
+      const [row] = await db
+        .select({ architectureJson: architectures.architectureJson })
+        .from(deployments)
+        .innerJoin(
+          architectures,
+          and(
+            eq(deployments.architectureId, architectures.id),
+            eq(architectures.projectId, projectId)
+          )
+        )
+        .where(and(
+          eq(deployments.id, deploymentId),
+          eq(deployments.projectId, projectId)
+        ));
+      return row?.architectureJson ?? null;
     },
 
     async findDeploymentTarget(projectId) {
