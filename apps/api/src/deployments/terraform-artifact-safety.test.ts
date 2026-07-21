@@ -22,6 +22,38 @@ const broadRuntimeSecretPolicyLiteral = JSON.stringify(JSON.stringify({
   Statement: [{ Effect: "Allow", Action: ["secretsmanager:*"], Resource: "*" }]
 }));
 
+test("server-generated static import blocks pass Terraform artifact safety", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      resource "aws_s3_bucket" "existing_bucket" {}
+
+      import {
+        to = aws_s3_bucket.existing_bucket
+        id = "existing-bucket"
+      }
+    `)
+  );
+});
+
+test("Terraform artifact safety rejects non-static or broadened import blocks", () => {
+  for (const importBlock of [
+    'import { to = data.aws_s3_bucket.existing id = "existing-bucket" }',
+    'import { to = module.external.aws_s3_bucket.existing id = "existing-bucket" }',
+    'import { to = aws_s3_bucket.existing[0] id = "existing-bucket" }',
+    'import { to = aws_s3_bucket.existing id = var.import_id }',
+    'import { to = aws_s3_bucket.existing id = "existing-bucket" provider = aws.other }'
+  ]) {
+    assert.throws(
+      () =>
+        assertTerraformArtifactIsSafe(`
+          resource "aws_s3_bucket" "existing" {}
+          ${importBlock}
+        `),
+      TerraformArtifactSafetyError
+    );
+  }
+});
+
 test("generated S3 artifacts omit synthetic public access blocks and pass safety", () => {
   const graph: InfrastructureGraph = {
     nodes: [

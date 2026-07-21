@@ -24,6 +24,11 @@ import {
 } from "../services/aiPreDeploymentCheck.js";
 import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
 import {
+  assertTerraformBaseFilesDoNotContainImportBlocks,
+  assertTerraformImportArtifactMatches
+} from "../services/terraform/terraform-import-artifact.js";
+import { resolveVerifiedImportTargets } from "../reverse-engineering/reverse-engineering-import-targets.js";
+import {
   appendTerraformDurationLog,
   runLoggedDeploymentOperation
 } from "./deployment-duration-logs.js";
@@ -407,6 +412,12 @@ async function runDeploymentPlanOnce(
             terraformCode: toTerraformCodeString(terraformArtifactContent)
           }
         ];
+    await assertDeploymentTerraformImportArtifactMatches({
+      deployment,
+      accessContext: input.accessContext,
+      repository,
+      terraformFiles: preDeploymentTerraformFiles
+    });
     assertArchitectureTerraformDoesNotIncludeAnalysisExcludedResource(
       architecture.architectureJson,
       preDeploymentTerraformFiles
@@ -913,6 +924,82 @@ async function runDeploymentPlanOnce(
       await heartbeatProjectExecutionLease(planLeaseFence, leaseRepository, { now });
     }
     if (leaseHeartbeatError) throw leaseHeartbeatError;
+  }
+}
+
+/** gg: upload 때 생성한 imports.tf를 현재 persisted ProjectDraft와 scan으로 다시 검증합니다. */
+async function assertDeploymentTerraformImportArtifactMatches(input: {
+  deployment: DeploymentRecord;
+  accessContext: ProjectAccessContext;
+  repository: DeploymentRepository;
+  terraformFiles: readonly TerraformSyncFileInput[];
+}): Promise<void> {
+  const hasStoredImportFile = input.terraformFiles.some(
+    (file) => file.fileName === "imports.tf"
+  );
+
+  try {
+    assertTerraformBaseFilesDoNotContainImportBlocks(
+      input.terraformFiles.filter((file) => file.fileName !== "imports.tf")
+    );
+  } catch (error) {
+    throw new DeploymentConflictError(
+      error instanceof Error ? error.message : "Terraform import artifact가 올바르지 않습니다."
+    );
+  }
+
+  const findProjectDraft = input.repository.findProjectDraftForPreparation;
+  const findAccessibleScan = input.repository.findAccessibleScan;
+
+  if (!findProjectDraft || !findAccessibleScan) {
+    if (hasStoredImportFile) {
+      throw new DeploymentConflictError(
+        "Terraform import artifact의 서버 원본을 확인할 수 없습니다."
+      );
+    }
+    return;
+  }
+
+  const draft = await findProjectDraft.call(input.repository, input.deployment.projectId);
+  if (!draft) {
+    if (hasStoredImportFile) {
+      throw new DeploymentConflictError(
+        "Terraform import artifact의 Project Draft를 확인할 수 없습니다."
+      );
+    }
+    return;
+  }
+
+  const targets = await resolveVerifiedImportTargets(
+    {
+      projectId: input.deployment.projectId,
+      accessContext: input.accessContext,
+      diagramJson: draft.diagramJson
+    },
+    { findAccessibleScan: findAccessibleScan.bind(input.repository) }
+  );
+
+  if (!hasStoredImportFile && targets.length === 0) {
+    return;
+  }
+
+  if (
+    input.deployment.preparedDraftRevision !== null &&
+    draft.revision !== input.deployment.preparedDraftRevision
+  ) {
+    throw new DeploymentConflictError(
+      "Terraform import artifact의 Project Draft revision이 변경됐습니다."
+    );
+  }
+
+  try {
+    assertTerraformImportArtifactMatches(input.terraformFiles, targets);
+  } catch (error) {
+    throw new DeploymentConflictError(
+      error instanceof Error
+        ? error.message
+        : "Terraform import artifact가 현재 AWS 원본과 다릅니다."
+    );
   }
 }
 

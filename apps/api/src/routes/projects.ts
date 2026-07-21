@@ -52,6 +52,18 @@ import {
   ReverseEngineeringPreviewClaimNotFoundError
 } from "../reverse-engineering/reverse-engineering-preview-claim-service.js";
 import {
+  resolveVerifiedImportTargets,
+  ReverseEngineeringImportTargetVerificationError
+} from "../reverse-engineering/reverse-engineering-import-targets.js";
+import { createPostgresReverseEngineeringRepository } from "../reverse-engineering/reverse-engineering-service.js";
+import {
+  assertTerraformBaseFilesDoNotContainImportBlocks,
+  createTerraformArtifactBundleWithImports,
+  terraformArtifactBundleContentType,
+  terraformArtifactBundleFileName,
+  terraformImportsFileName
+} from "../services/terraform/terraform-import-artifact.js";
+import {
   boardAutoOrganizeApplyBodySchema,
   diagramJsonSchema,
   saveProjectDraftBodySchema
@@ -680,15 +692,106 @@ export async function registerProjectRoutes(
         }
       }
 
+      let storedBody: Buffer | string = body;
+      let storedContentType = asset.contentType;
+      let storedFileName = asset.fileName;
+      let storedByteSize = byteSize;
+
+      if (asset.assetType === "terraform_file") {
+        const [draft] = await db
+          .select({
+            diagramJson: projectDrafts.diagramJson,
+            terraformFiles: projectDrafts.terraformFiles
+          })
+          .from(projectDrafts)
+          .where(eq(projectDrafts.projectId, params.id));
+
+        if (draft) {
+          if (draft.terraformFiles) {
+            try {
+              assertTerraformBaseFilesDoNotContainImportBlocks(draft.terraformFiles);
+            } catch (error) {
+              return sendBadRequest(
+                reply,
+                error instanceof Error ? error.message : "Terraform import block이 허용되지 않습니다."
+              );
+            }
+          }
+
+          try {
+            const targets = await resolveVerifiedImportTargets(
+              {
+                projectId: params.id,
+                accessContext: { kind: "user", userId: currentUserId },
+                diagramJson: draft.diagramJson
+              },
+              createPostgresReverseEngineeringRepository(db)
+            );
+
+            if (draft.terraformFiles?.some((file) => file.fileName === terraformImportsFileName)) {
+              return sendBadRequest(reply, "imports.tf는 서버가 생성하는 예약 파일입니다.");
+            }
+
+            if (targets.length > 0) {
+              if (!draft.terraformFiles || draft.terraformFiles.length === 0) {
+                return sendConflict(
+                  reply,
+                  "저장된 Project Draft의 Terraform 파일을 확인할 수 없습니다."
+                );
+              }
+
+              const uploadedTerraformCode = Buffer.isBuffer(body)
+                ? body.toString("utf8")
+                : body;
+              const persistedTerraformCode = draft.terraformFiles
+                .map((file) => file.terraformCode.trim())
+                .filter(Boolean)
+                .join("\n\n");
+
+              if (uploadedTerraformCode.trim() !== persistedTerraformCode.trim()) {
+                return sendConflict(
+                  reply,
+                  "업로드 Terraform이 저장된 Project Draft와 다릅니다."
+                );
+              }
+
+              storedBody = JSON.stringify(
+                createTerraformArtifactBundleWithImports(draft.terraformFiles, targets)
+              );
+              storedContentType = terraformArtifactBundleContentType;
+              storedFileName = terraformArtifactBundleFileName;
+              storedByteSize = Buffer.byteLength(storedBody);
+
+              if (storedByteSize > defaultTerraformArtifactMaxBytes) {
+                return sendBadRequest(
+                  reply,
+                  `Terraform artifact bundle must be ${defaultTerraformArtifactMaxBytes} bytes or smaller`
+                );
+              }
+            }
+          } catch (error) {
+            if (error instanceof ReverseEngineeringImportTargetVerificationError) {
+              return sendConflict(reply, error.message);
+            }
+            throw error;
+          }
+        }
+      }
+
       await projectAssetStorage.putObject({
         objectKey: asset.objectKey,
-        contentType: asset.contentType,
-        body
+        contentType: storedContentType,
+        body: storedBody
       });
 
       const [confirmedAsset] = await db
         .update(projectAssets)
-        .set({ uploadStatus: "uploaded" })
+        .set({
+          uploadStatus: "uploaded",
+          fileName: storedFileName,
+          contentType: storedContentType,
+          byteSize: storedByteSize
+        })
         .where(and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id)))
         .returning();
 

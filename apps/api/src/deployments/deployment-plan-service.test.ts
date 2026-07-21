@@ -5,7 +5,10 @@ import type {
   AiPreDeploymentAnalysisResult,
   ArchitectureJson,
   AwsConnection,
-  CheckFinding
+  CheckFinding,
+  DiagramJson,
+  ReverseEngineeringScanResult,
+  TerraformSyncFileInput
 } from "@sketchcatch/types";
 import {
   type ArchitectureRecord,
@@ -39,6 +42,8 @@ import {
   createTerraformDesiredStateIdentity,
   type DeploymentPlanOptimizationEvidence
 } from "./deployment-optimization.js";
+import type { ReverseEngineeringImportScanRecord } from "../reverse-engineering/reverse-engineering-import-targets.js";
+import { createTerraformArtifactCanonicalContent } from "./terraform-workspace.js";
 
 delete process.env.S3_BUCKET_NAME;
 
@@ -71,6 +76,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
   logs: DeploymentLogRecord[] = [];
   throwOnSaveDeploymentPlan = false;
   readonly accessibleUserIds = new Set([userId]);
+  projectDraft:
+    | { revision: number; diagramJson: DiagramJson; terraformFiles: TerraformSyncFileInput[] | null }
+    | undefined;
+  reverseEngineeringScan: ReverseEngineeringImportScanRecord | undefined;
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     if (
@@ -144,6 +153,26 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
   async findRunningDeploymentInProject(): Promise<DeploymentRecord | undefined> {
     return this.deployment?.status === "RUNNING" ? this.deployment : undefined;
+  }
+
+  async findProjectDraftForPreparation() {
+    return this.projectDraft;
+  }
+
+  async findAccessibleScan(
+    candidateProjectId: string,
+    scanId: string,
+    accessContext: ProjectAccessContext
+  ): Promise<ReverseEngineeringImportScanRecord | undefined> {
+    if (
+      !this.reverseEngineeringScan ||
+      this.reverseEngineeringScan.projectId !== candidateProjectId ||
+      this.reverseEngineeringScan.id !== scanId ||
+      !this.accessibleUserIds.has(accessContext.userId)
+    ) {
+      return undefined;
+    }
+    return this.reverseEngineeringScan;
   }
 
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
@@ -860,6 +889,97 @@ function createAccessContext(candidateUserId = userId): ProjectAccessContext {
   };
 }
 
+function createReverseEngineeringImportDiagram(): DiagramJson {
+  return {
+    nodes: [
+      {
+        id: "resource-existing-bucket",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        position: { x: 0, y: 0 },
+        size: { width: 48, height: 48 },
+        label: "existing-bucket",
+        locked: false,
+        zIndex: 1,
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket",
+          resourceName: "existing_bucket",
+          fileName: "main",
+          values: {
+            importId: "browser-forged-bucket",
+            reverseEngineeringSourceScanId: "scan-1",
+            reverseEngineeringDraftId: "draft-scan-1",
+            reverseEngineeringSourceKind: "saved_scan"
+          }
+        }
+      }
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+function createReverseEngineeringImportScanResult(): ReverseEngineeringScanResult {
+  const createdAt = "2026-07-20T00:00:00.000Z";
+  const scan = {
+    id: "scan-1",
+    projectId,
+    awsConnectionId,
+    provider: "aws" as const,
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL" as const],
+    status: "completed" as const,
+    createdAt,
+    updatedAt: createdAt,
+    startedAt: createdAt,
+    completedAt: createdAt,
+    cancelRequestedAt: null,
+    deletedAt: null,
+    errorSummary: null
+  };
+  const architectureJson = { nodes: [], edges: [] };
+
+  return {
+    scan,
+    discoveredResources: [
+      {
+        id: "resource-existing-bucket",
+        provider: "aws",
+        providerResourceType: "AWS::S3::Bucket",
+        providerResourceId: "existing-bucket",
+        region: "ap-northeast-2",
+        displayName: "existing-bucket",
+        resourceType: "S3",
+        config: { bucket: "existing-bucket" },
+        relationships: []
+      }
+    ],
+    reverseEngineeringDraft: {
+      id: "draft-scan-1",
+      scanId: scan.id,
+      architectureJson,
+      protectedValueKeys: [],
+      editableValueKeys: [],
+      createdAt
+    },
+    architectureJson,
+    findings: [],
+    analysisExclusions: [],
+    importSuggestions: [
+      {
+        id: "import-resource-existing-bucket",
+        resourceId: "resource-existing-bucket",
+        status: "ready",
+        handoffReady: true,
+        terraformAddress: "aws_s3_bucket.existing_bucket",
+        importCommand: "terraform import aws_s3_bucket.existing_bucket existing-bucket"
+      }
+    ],
+    scanErrors: []
+  };
+}
+
 function createPreparedCredentials() {
   return {
     env: {
@@ -916,6 +1036,189 @@ function createPlanJson(resourceChanges: unknown[]): string {
     resource_changes: resourceChanges
   });
 }
+
+test("runDeploymentPlan rejects a browser-forged imports.tf against the persisted scan draft", async () => {
+  const repository = new FakeDeploymentRepository();
+  const diagramJson = createReverseEngineeringImportDiagram();
+  const mainTerraformCode = 'resource "aws_s3_bucket" "existing_bucket" {}\n';
+  repository.deployment = createDeploymentRecord(deploymentId, { preparedDraftRevision: 1 });
+  repository.projectDraft = {
+    revision: 1,
+    diagramJson,
+    terraformFiles: [{ fileName: "main.tf", terraformCode: mainTerraformCode }]
+  };
+  repository.reverseEngineeringScan = {
+    id: "scan-1",
+    projectId,
+    status: "completed",
+    result: createReverseEngineeringImportScanResult()
+  };
+  let initRuns = 0;
+  let planRuns = 0;
+
+  await assert.rejects(
+    runDeploymentPlan({ deploymentId, accessContext: createAccessContext() }, repository, {
+      planArtifactStorage: new FakePlanArtifactStorage(),
+      readTerraformArtifactFile: async () => "canonical browser bundle",
+      analyzePreDeployment: () => createAnalysis(),
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-forged-import-plan",
+        mainFilePath: "C:/tmp/sketchcatch-forged-import-plan/.sketchcatch-artifact.txt",
+        terraformFiles: [
+          { fileName: "main.tf", terraformCode: mainTerraformCode },
+          {
+            fileName: "imports.tf",
+            terraformCode: [
+              "import {",
+              "  to = aws_s3_bucket.existing_bucket",
+              '  id = "browser-forged-bucket"',
+              "}",
+              ""
+            ].join("\n")
+          }
+        ],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => {
+        initRuns += 1;
+        return createRunnerResult("init");
+      },
+      runTerraformPlan: async () => {
+        planRuns += 1;
+        return createRunnerResult("plan");
+      },
+      runTerraformShowJson: async () => createRunnerResult("show", { stdout: createPlanJson([]) })
+    }),
+    /Terraform import artifact.*AWS 원본/u
+  );
+  assert.equal(initRuns, 0);
+  assert.equal(planRuns, 0);
+});
+
+test("runDeploymentPlan rejects import blocks outside the server-owned imports.tf file", async () => {
+  const repository = new FakeDeploymentRepository();
+  const terraformCode = [
+    'resource "aws_s3_bucket" "existing_bucket" {}',
+    "",
+    "import {",
+    "  to = aws_s3_bucket.existing_bucket",
+    '  id = "browser-forged-bucket"',
+    "}",
+    ""
+  ].join("\n");
+  repository.deployment = createDeploymentRecord(deploymentId, { preparedDraftRevision: 1 });
+  repository.projectDraft = {
+    revision: 1,
+    diagramJson: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } },
+    terraformFiles: [{ fileName: "main.tf", terraformCode }]
+  };
+  let initRuns = 0;
+  let planRuns = 0;
+
+  await assert.rejects(
+    runDeploymentPlan({ deploymentId, accessContext: createAccessContext() }, repository, {
+      planArtifactStorage: new FakePlanArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformCode,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-embedded-import-plan",
+        mainFilePath: "C:/tmp/sketchcatch-embedded-import-plan/main.tf",
+        terraformFiles: [{ fileName: "main.tf", terraformCode }],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => {
+        initRuns += 1;
+        return createRunnerResult("init");
+      },
+      runTerraformPlan: async () => {
+        planRuns += 1;
+        return createRunnerResult("plan");
+      },
+      runTerraformShowJson: async () => createRunnerResult("show", { stdout: createPlanJson([]) })
+    }),
+    /server-owned imports\.tf/u
+  );
+  assert.equal(initRuns, 0);
+  assert.equal(planRuns, 0);
+});
+
+test("runDeploymentPlan plans the verified imports.tf and fingerprints the whole canonical bundle", async () => {
+  const repository = new FakeDeploymentRepository();
+  const diagramJson = createReverseEngineeringImportDiagram();
+  const mainTerraformCode = 'resource "aws_s3_bucket" "existing_bucket" {}\n';
+  const importTerraformCode = [
+    "import {",
+    "  to = aws_s3_bucket.existing_bucket",
+    '  id = "existing-bucket"',
+    "}",
+    ""
+  ].join("\n");
+  const terraformFiles = [
+    { fileName: "main.tf", terraformCode: mainTerraformCode },
+    { fileName: "imports.tf", terraformCode: importTerraformCode }
+  ];
+  const artifactInput = {
+    objectKey: "projects/project-id/assets/terraform_file/artifact-main.tf",
+    fileName: "terraform-files.json",
+    contentType: "application/vnd.sketchcatch.terraform-files+json"
+  };
+  const canonicalBundle = createTerraformArtifactCanonicalContent(
+    artifactInput,
+    JSON.stringify({ schemaVersion: 1, files: terraformFiles })
+  );
+  repository.deployment = createDeploymentRecord(deploymentId, { preparedDraftRevision: 1 });
+  repository.terraformArtifact = createTerraformArtifactRecord(artifactInput);
+  repository.projectDraft = {
+    revision: 1,
+    diagramJson,
+    terraformFiles: [{ fileName: "main.tf", terraformCode: mainTerraformCode }]
+  };
+  repository.reverseEngineeringScan = {
+    id: "scan-1",
+    projectId,
+    status: "completed",
+    result: createReverseEngineeringImportScanResult()
+  };
+  let initRuns = 0;
+  let planRuns = 0;
+
+  const result = await runDeploymentPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage: new FakePlanArtifactStorage(),
+      readTerraformArtifactFile: async () => canonicalBundle,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-verified-import-plan",
+        mainFilePath: "C:/tmp/sketchcatch-verified-import-plan/.sketchcatch-artifact.txt",
+        terraformFiles,
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => {
+        initRuns += 1;
+        return createRunnerResult("init");
+      },
+      runTerraformPlan: async () => {
+        planRuns += 1;
+        return createRunnerResult("plan");
+      },
+      runTerraformShowJson: async () => createRunnerResult("show", { stdout: createPlanJson([]) })
+    }
+  );
+
+  assert.equal(result.deployment.status, "PENDING");
+  assert.equal(initRuns, 1);
+  assert.equal(planRuns, 1);
+  assert.equal(
+    repository.savedPlans[0]?.planArtifact.terraformArtifactSha256,
+    createSha256(canonicalBundle)
+  );
+});
 
 test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and current pointer", async () => {
   const planTerraformArtifactContent = `resource "aws_db_instance" "database" {}

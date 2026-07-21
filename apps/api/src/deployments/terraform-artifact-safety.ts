@@ -6,7 +6,17 @@ import {
   normalizeDeploymentLiveProfile
 } from "./deployment-plan-summary.js";
 
-const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "data", "variable", "output", "locals"]);
+const allowedTopLevelBlocks = new Set([
+  "terraform",
+  "provider",
+  "resource",
+  "data",
+  "variable",
+  "output",
+  "locals",
+  "import"
+]);
+const terraformImportAddressPattern = /^aws_[a-z0-9_]+\.[a-z_][a-z0-9_]*$/u;
 const liveApplySupportedDataSourceTypes = new Set([
   "archive_file",
   "aws_ami",
@@ -117,6 +127,7 @@ export function assertTerraformArtifactIsSafe(
   validateDisallowedStringInterpolations(tokens);
   validateTemplateFileCalls(code);
   validateArchiveDataSourceAttributes(code);
+  validateTerraformImportBlocks(code);
   const liveProfile = normalizeDeploymentLiveProfile(options.liveProfile);
   const supportedResourceTypes =
     options.resourceValidationMode === "plan"
@@ -205,6 +216,12 @@ function validateBlock(
     );
   }
 
+  if (block.type === "import") {
+    throw new TerraformArtifactSafetyError(
+      `Terraform import block must be top-level at line ${block.line}`
+    );
+  }
+
   if (restrictedNestedBlocks.has(block.type)) {
     throw new TerraformArtifactSafetyError(
       `Terraform block "${block.type}" is not allowed before live deployment at line ${block.line}`
@@ -222,6 +239,12 @@ function validateTopLevelBlock(block: HclBlock, supportedResourceTypes: Readonly
   if (block.type === "provider" && block.labels[0] !== "aws" && block.labels[0] !== "kubernetes") {
     throw new TerraformArtifactSafetyError(
       `Terraform provider "${block.labels[0] ?? ""}" is not allowed before live deployment at line ${block.line}`
+    );
+  }
+
+  if (block.type === "import" && block.labels.length !== 0) {
+    throw new TerraformArtifactSafetyError(
+      `Terraform import block labels are not allowed at line ${block.line}`
     );
   }
 
@@ -243,6 +266,46 @@ function validateTopLevelBlock(block: HclBlock, supportedResourceTypes: Readonly
         `Terraform resource "${resourceType ?? ""}" is not allowed before live deployment at line ${block.line}`
       );
     }
+  }
+}
+
+/** gg: server generator가 만드는 static resource 주소와 literal ID 두 필드만 허용합니다. */
+function validateTerraformImportBlocks(source: string): void {
+  const code = stripHclComments(source);
+  const resourceAddresses = new Set(
+    listTerraformResourceBlocks(code).map((resource) => `${resource.type}.${resource.name}`)
+  );
+  const seenAddresses = new Set<string>();
+
+  for (const block of extractNamedBlocks(code, "import")) {
+    const match = /^\s*to\s*=\s*(aws_[a-z0-9_]+\.[a-z_][a-z0-9_]*)\s*\n\s*id\s*=\s*("(?:\\.|[^"\\])*")\s*$/u.exec(
+      block.body
+    );
+    const address = match?.[1];
+    const importIdLiteral = match?.[2];
+    let importId: unknown;
+
+    try {
+      importId = importIdLiteral ? JSON.parse(importIdLiteral) : undefined;
+    } catch {
+      importId = undefined;
+    }
+
+    if (
+      !address ||
+      !terraformImportAddressPattern.test(address) ||
+      !resourceAddresses.has(address) ||
+      seenAddresses.has(address) ||
+      typeof importId !== "string" ||
+      importId.trim().length === 0 ||
+      importId !== importId.trim()
+    ) {
+      throw new TerraformArtifactSafetyError(
+        "Terraform import blocks must use one declared static AWS resource and one literal ID"
+      );
+    }
+
+    seenAddresses.add(address);
   }
 }
 

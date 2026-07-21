@@ -958,6 +958,200 @@ test("PUT /api/projects/:id/assets/:assetId/upload-content uploads Terraform art
   await app.close();
 });
 
+test("PUT Terraform upload stores server-verified Reverse Engineering imports in the canonical bundle", async () => {
+  const providersTerraformCode = 'terraform { required_version = ">= 1.5.0" }\n';
+  const mainTerraformCode = 'resource "aws_s3_bucket" "existing_bucket" {}\n';
+  const terraformCode = `${providersTerraformCode.trim()}\n\n${mainTerraformCode.trim()}`;
+  const persistedTerraformFiles = [
+    { fileName: "providers.tf", terraformCode: providersTerraformCode },
+    { fileName: "main.tf", terraformCode: mainTerraformCode }
+  ];
+  const expectedImportCode = [
+    "import {",
+    "  to = aws_s3_bucket.existing_bucket",
+    '  id = "existing-bucket"',
+    "}",
+    ""
+  ].join("\n");
+  const expectedBundle = JSON.stringify({
+    schemaVersion: 1,
+    files: [
+      ...persistedTerraformFiles,
+      { fileName: "imports.tf", terraformCode: expectedImportCode }
+    ]
+  });
+  const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectDrafts: [makeReverseEngineeringProjectDraft(persistedTerraformFiles)],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        architectureId: ACTIVE_ARCHITECTURE_ID,
+        assetType: "terraform_file",
+        fileName: "main.tf",
+        contentType: "text/plain",
+        byteSize: Buffer.byteLength(terraformCode),
+        uploadStatus: "pending"
+      })
+    ],
+    reverseEngineeringScans: [makeReverseEngineeringScan()]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject(input) {
+        putObjectRequests.push(input);
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "text/plain"
+    },
+    payload: terraformCode
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.deepEqual(putObjectRequests, [
+    {
+      objectKey: "projects/project-id/diagram.png",
+      contentType: "application/vnd.sketchcatch.terraform-files+json",
+      body: expectedBundle
+    }
+  ]);
+  assert.equal(fakeDb.projectAssetRows[0]?.fileName, "terraform-files.json");
+  assert.equal(
+    fakeDb.projectAssetRows[0]?.contentType,
+    "application/vnd.sketchcatch.terraform-files+json"
+  );
+  assert.equal(fakeDb.projectAssetRows[0]?.byteSize, Buffer.byteLength(expectedBundle));
+
+  await app.close();
+});
+
+test("PUT Terraform upload rejects browser-submitted import block content", async () => {
+  const terraformCode = 'resource "aws_s3_bucket" "existing_bucket" {}\n';
+  const browserContent = `${terraformCode}\nimport {\n  to = aws_s3_bucket.existing_bucket\n  id = "browser-forged-bucket"\n}\n`;
+  let putObjectRan = false;
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectDrafts: [
+      makeReverseEngineeringProjectDraft([{ fileName: "main.tf", terraformCode }])
+    ],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        architectureId: ACTIVE_ARCHITECTURE_ID,
+        assetType: "terraform_file",
+        fileName: "main.tf",
+        contentType: "text/plain",
+        byteSize: Buffer.byteLength(browserContent),
+        uploadStatus: "pending"
+      })
+    ],
+    reverseEngineeringScans: [makeReverseEngineeringScan()]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject() {
+        putObjectRan = true;
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "text/plain"
+    },
+    payload: browserContent
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(putObjectRan, false);
+  assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "pending");
+
+  await app.close();
+});
+
+test("PUT Terraform upload rejects import blocks persisted inside browser-controlled base files", async () => {
+  const terraformCode = [
+    'resource "aws_s3_bucket" "existing_bucket" {}',
+    "",
+    "import {",
+    "  to = aws_s3_bucket.existing_bucket",
+    '  id = "browser-forged-bucket"',
+    "}",
+    ""
+  ].join("\n");
+  let putObjectRan = false;
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectDrafts: [
+      makeReverseEngineeringProjectDraft([{ fileName: "main.tf", terraformCode }])
+    ],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        architectureId: ACTIVE_ARCHITECTURE_ID,
+        assetType: "terraform_file",
+        fileName: "main.tf",
+        contentType: "text/plain",
+        byteSize: Buffer.byteLength(terraformCode),
+        uploadStatus: "pending"
+      })
+    ],
+    reverseEngineeringScans: [makeReverseEngineeringScan()]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject() {
+        putObjectRan = true;
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "text/plain"
+    },
+    payload: terraformCode
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(putObjectRan, false);
+  assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "pending");
+
+  await app.close();
+});
+
 test("PUT /api/projects/:id/assets/:assetId/upload-content stores a captured WebP thumbnail", async () => {
   const thumbnailBytes = Buffer.from("RIFF\u0010\u0000\u0000\u0000WEBPVP8 captured-board", "binary");
   const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
@@ -1368,6 +1562,42 @@ function makeProjectDraft(overrides: Partial<ProjectDraftRow> = {}): ProjectDraf
   };
 }
 
+function makeReverseEngineeringProjectDraft(
+  terraformFiles: NonNullable<ProjectDraftRow["terraformFiles"]>
+): ProjectDraftRow {
+  return makeProjectDraft({
+    diagramJson: {
+      nodes: [
+        {
+          id: "resource-existing-bucket",
+          type: "aws_s3_bucket",
+          kind: "resource",
+          position: { x: 0, y: 0 },
+          size: { width: 48, height: 48 },
+          label: "existing-bucket",
+          locked: false,
+          zIndex: 1,
+          parameters: {
+            terraformBlockType: "resource",
+            resourceType: "aws_s3_bucket",
+            resourceName: "existing_bucket",
+            fileName: "main",
+            values: {
+              importId: "browser-forged-bucket",
+              reverseEngineeringSourceScanId: "scan-1",
+              reverseEngineeringDraftId: "draft-scan-1",
+              reverseEngineeringSourceKind: "saved_scan"
+            }
+          }
+        }
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    terraformFiles
+  });
+}
+
 // gg: browser가 본 공개 draft identity와 source node만 claim 요청에 담습니다.
 function createReverseEngineeringProjectPayload() {
   return {
@@ -1539,6 +1769,86 @@ function makeReverseEngineeringPreview(
   };
 }
 
+function makeReverseEngineeringScan(
+  overrides: Partial<ReverseEngineeringScanRow> = {}
+): ReverseEngineeringScanRow {
+  const createdAt = new Date("2026-07-20T00:00:00.000Z");
+  const scan = {
+    id: "scan-1",
+    projectId: ACTIVE_PROJECT_ID,
+    awsConnectionId: null,
+    provider: "aws" as const,
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL" as const],
+    status: "completed" as const,
+    createdAt: createdAt.toISOString(),
+    updatedAt: createdAt.toISOString(),
+    startedAt: createdAt.toISOString(),
+    completedAt: createdAt.toISOString(),
+    cancelRequestedAt: null,
+    deletedAt: null,
+    errorSummary: null
+  };
+  const architectureJson = { nodes: [], edges: [] };
+
+  return {
+    id: scan.id,
+    projectId: scan.projectId,
+    awsConnectionId: null,
+    provider: "aws",
+    region: scan.region,
+    resourceTypes: ["ALL"],
+    status: "completed",
+    result: {
+      scan,
+      discoveredResources: [
+        {
+          id: "resource-existing-bucket",
+          provider: "aws",
+          providerResourceType: "AWS::S3::Bucket",
+          providerResourceId: "existing-bucket",
+          region: "ap-northeast-2",
+          displayName: "existing-bucket",
+          resourceType: "S3",
+          config: { bucket: "existing-bucket" },
+          relationships: []
+        }
+      ],
+      reverseEngineeringDraft: {
+        id: "draft-scan-1",
+        scanId: scan.id,
+        architectureJson,
+        protectedValueKeys: [],
+        editableValueKeys: [],
+        createdAt: createdAt.toISOString()
+      },
+      architectureJson,
+      findings: [],
+      analysisExclusions: [],
+      importSuggestions: [
+        {
+          id: "import-resource-existing-bucket",
+          resourceId: "resource-existing-bucket",
+          status: "ready",
+          handoffReady: true,
+          terraformAddress: "aws_s3_bucket.existing_bucket",
+          importCommand:
+            "terraform import aws_s3_bucket.existing_bucket existing-bucket"
+        }
+      ],
+      scanErrors: []
+    },
+    errorSummary: null,
+    startedAt: createdAt,
+    completedAt: createdAt,
+    cancelRequestedAt: null,
+    deletedAt: null,
+    createdAt,
+    updatedAt: createdAt,
+    ...overrides
+  };
+}
+
 function makeProjectAsset(overrides: Partial<ProjectAssetRow> = {}): ProjectAssetRow {
   return {
     architectureId: null,
@@ -1695,7 +2005,16 @@ class ProjectRouteFakeDb {
   private createDb(): unknown {
     return {
       select: (selection?: Record<string, unknown>) => ({
-        from: (table: unknown) => new SelectQuery(() => this.selectRows(table, selection))
+        from: (table: unknown) =>
+          new SelectQuery(
+            () => this.selectRows(table, selection),
+            table === reverseEngineeringScans
+              ? () =>
+                  this.selectRows(table, selection).map((scan) => ({
+                    reverse_engineering_scans: scan
+                  }))
+              : undefined
+          )
       }),
       insert: (table: unknown) => ({
         values: (
@@ -2026,7 +2345,12 @@ class ProjectRouteFakeDb {
 }
 
 class SelectQuery {
-  constructor(private readonly resolveRows: () => unknown[]) {}
+  private joined = false;
+
+  constructor(
+    private readonly resolveRows: () => unknown[],
+    private readonly resolveJoinedRows?: () => unknown[]
+  ) {}
 
   where(): this {
     return this;
@@ -2037,6 +2361,7 @@ class SelectQuery {
   }
 
   innerJoin(): this {
+    this.joined = true;
     return this;
   }
 
@@ -2052,6 +2377,9 @@ class SelectQuery {
     onfulfilled?: ((value: unknown[]) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
   ): Promise<TResult1 | TResult2> {
-    return Promise.resolve(this.resolveRows()).then(onfulfilled, onrejected);
+    const rows = this.joined && this.resolveJoinedRows
+      ? this.resolveJoinedRows()
+      : this.resolveRows();
+    return Promise.resolve(rows).then(onfulfilled, onrejected);
   }
 }
