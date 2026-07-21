@@ -22,6 +22,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-21 - Remove usage notices and internal chart scrolling
+
+- Removed the three marked sample-data notice elements from Actual Usage and replaced the monthly chart's internal scroll viewport with responsive 6/3/2-column layouts that show all six months at once.
+- Sample mode remains explicit through compact metric and section titles instead of the removed banners. Lint, typecheck, build, harness, and two-axis review pass; the intentional title wording preserves truthful sample-state presentation. No feature test suite was run.
+
 ### 2026-07-21 - Keep cost metric icon and label on one line
 
 - Reworked shared cost metric cards into a two-column first row so each icon and label remain inline, while the amount continues on a full-width second row. Long dynamic labels truncate with an ellipsis instead of escaping the card.

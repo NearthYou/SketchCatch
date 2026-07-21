@@ -149,17 +149,6 @@ export function CostUsagePanel({
   const serviceBars = useMemo(() => createServiceCostBars(scopedServiceCosts), [scopedServiceCosts]);
   const monthlyBars = useMemo(() => createCostUsageMonthlyBars(scopedMonthlyTrend), [scopedMonthlyTrend]);
   const monthlyHasEstimate = monthlyBars.some((bar) => bar.isEstimated);
-  const monthlyHasActual = monthlyBars.some((bar) => !bar.isEstimated);
-  const monthlyScopeLabel = selectedProject
-    ? `${selectedProject.projectName} · ${monthlyHasEstimate
-        ? monthlyHasActual ? "실측·추정 혼합" : "추정 배분"
-        : "태그 실측"}`
-    : data?.dataSource === "sample" ? "AWS 계정 전체 · 예시" : "AWS 계정 전체";
-  const monthlyEstimateNote = selectedProject && monthlyHasEstimate
-    ? "‘추정’으로 표시된 월은 선택 기간의 프로젝트 비용 비율로 배분한 값입니다."
-    : data?.dataSource === "sample"
-      ? "AWS 실제 사용량을 연결하면 월별 실측 데이터로 교체됩니다."
-      : null;
   const savings = useMemo(() => sumEstimatedMonthlySavings(scopedRecommendations), [scopedRecommendations]);
   const currentCost = selectedProject?.amount ?? data?.totalCost.amount;
   const forecastCost = useMemo(
@@ -289,7 +278,6 @@ export function CostUsagePanel({
         </button>
       </div>
 
-      {displayCopy.sampleNotice ? <p className="dashboardInformationBand" role="status">{displayCopy.sampleNotice}</p> : null}
       {queryError ? <p className={styles.errorBand}>{queryError instanceof Error ? queryError.message : "실제 사용량을 갱신하지 못했습니다."}</p> : null}
 
       <section className={styles.metricGrid}>
@@ -302,10 +290,9 @@ export function CostUsagePanel({
         <section className={styles.monthlyComparisonSection}>
           <div className={styles.monthlyComparisonHeader}>
             <div>
-              <h2>월별 비교</h2>
+              <h2>{data?.dataSource === "sample" ? "월별 비교 예시" : "월별 비교"}</h2>
               <p>최근 6개월의 월별 비용과 이번 달 예상 비용을 비교합니다.</p>
             </div>
-            <span>{monthlyScopeLabel}</span>
           </div>
 
           <div className={styles.monthlyComparisonGrid}>
@@ -341,12 +328,11 @@ export function CostUsagePanel({
               ))}
             </div>
           </div>
-          {monthlyEstimateNote ? <p className={styles.monthlyEstimateNote}>{monthlyEstimateNote}</p> : null}
         </section>
       ) : null}
 
       <section className={styles.chartSection}>
-        <div><h2>일별 실제 비용</h2><span>{data?.startDate} - {data?.endDate}</span></div>
+        <div><h2>{data?.dataSource === "sample" ? "일별 비용 예시" : "일별 실제 비용"}</h2><span>{data?.startDate} - {data?.endDate}</span></div>
         {scopedDailyTrend.length === 0
           ? <p>표시할 비용이 없습니다.</p>
           : <CostUsageChart dailyTrend={scopedDailyTrend} />}

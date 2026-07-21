@@ -280,7 +280,6 @@
 
 .monthlyComparisonHeader h2 { margin: 0; color: var(--color-ink); font-size: calc(16px + var(--presentation-font-size-increase)); }
 .monthlyComparisonHeader p { margin: 5px 0 0; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); line-height: 1.5; }
-.monthlyComparisonHeader > span { flex: none; border-radius: var(--radius-pill); padding: 5px 9px; background: var(--color-surface-strong); color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 
 .monthlyComparisonGrid {
   display: grid;
@@ -295,16 +294,15 @@
 .monthlySummaryCard[data-direction="up"] strong { color: var(--color-error); }
 .monthlySummaryCard[data-direction="down"] strong { color: var(--color-success); }
 
-.monthlyChartViewport { overflow-x: auto; padding: 4px 0 2px; }
-.monthlyChart { display: grid; min-width: 520px; height: 190px; grid-template-columns: repeat(6, minmax(64px, 1fr)); gap: 12px; }
-.monthlyBar { display: grid; min-width: 0; grid-template-rows: 26px minmax(0, 1fr) 32px; gap: 5px; text-align: center; }
+.monthlyChartViewport { overflow: visible; padding: 4px 0 2px; }
+.monthlyChart { display: grid; width: 100%; min-width: 0; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: clamp(4px, 1.5vw, 12px); }
+.monthlyBar { display: grid; min-width: 0; grid-template-rows: auto 96px auto; gap: 5px; text-align: center; }
 .monthlyBar > strong { overflow: hidden; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-variant-numeric: tabular-nums; font-weight: calc(600 - var(--presentation-font-weight-reduction)); text-overflow: ellipsis; white-space: nowrap; }
 .monthlyBarTrack { display: flex; min-height: 0; align-items: flex-end; justify-content: center; border-bottom: 1px solid var(--color-hairline-strong); background: linear-gradient(to top, transparent 49%, var(--color-hairline) 50%, transparent 51%); }
 .monthlyBarTrack i { display: block; width: min(46px, 68%); border-radius: 7px 7px 2px 2px; background: var(--color-ink); transition: height 180ms ease; }
 .monthlyBarTrack i[data-partial="true"] { background: repeating-linear-gradient(135deg, var(--color-ink) 0 6px, var(--color-body) 6px 10px); }
 .monthlyBar > span { display: grid; justify-items: center; color: var(--color-ink); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .monthlyBar > span small { color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(600 - var(--presentation-font-weight-reduction)); }
-.monthlyEstimateNote { margin: -4px 0 0; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); line-height: 1.5; }
 
 .chartSection,
 .listSection,
@@ -539,10 +537,11 @@
   .githubSettingsActions .primaryAction { width: 100%; }
   .rowActions { flex-wrap: wrap; }
   .monthlyComparisonHeader { display: grid; }
-  .monthlyComparisonHeader > span { width: fit-content; }
   .monthlyComparisonGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .monthlyChart { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 16px; }
 }
 
 @media (max-width: 460px) {
   .monthlyComparisonGrid { grid-template-columns: 1fr; }
+  .monthlyChart { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
