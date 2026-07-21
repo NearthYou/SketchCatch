@@ -32,6 +32,15 @@ Short English-only working log for the current agent context. Older records are 
 - Root `pnpm test` remains non-green in pre-existing `aiArchitectureDrafts.test.ts` expectations outside this workstream; the changed Live Observation subsets pass.
 - The external `audience-live-check` clone passes typecheck, build, 49 tests, and changed-file Biome checks. Its root lint remains non-green because of existing repository-wide CRLF formatting findings outside the changed files.
 - No database migration, dependency change, secret access, Terraform execution, deployment, or cloud mutation was performed.
+### 2026-07-22 - Reduce Diagram resource label size
+
+- Reduced only the labels beneath Diagram resource icons from an effective 18px to 13px while preserving the two-line clamp, icon spacing, edge labels, and area headings.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
+
+### 2026-07-22 - Strengthen Workspace panel borders
+
+- Increased the Diagram Editor's neutral border contrast for both outer panel boundaries and internal separators/controls: regular lines now use `#d4d4d4`, while strong lines use `#c8c8c8`.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
 
 ### 2026-07-21 - Simplify fallback cost headings
 
