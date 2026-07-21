@@ -290,14 +290,13 @@ export function CostUsagePanel({
         <section className={styles.monthlyComparisonSection}>
           <div className={styles.monthlyComparisonHeader}>
             <div>
-              <h2>{data?.dataSource === "sample" ? "월별 비교 예시" : "월별 비교"}</h2>
-              <p>최근 6개월의 월별 비용과 이번 달 예상 비용을 비교합니다.</p>
+              <h2>월별 비교</h2>
             </div>
           </div>
 
           <div className={styles.monthlyComparisonGrid}>
-            <MonthlySummaryCard label={monthlyHasEstimate ? "전월 비용" : "전월 실제"} note={monthlyHasEstimate ? "추정 포함" : undefined} value={formatUsd(scopedMonthlyComparison.previousMonthActual.amount)} />
-            <MonthlySummaryCard label="이번 달 사용" note="집계 중" value={formatUsd(scopedMonthlyComparison.currentMonthToDate.amount)} />
+            <MonthlySummaryCard label={monthlyHasEstimate ? "전월 예상 비용" : "전월 실제"} value={formatUsd(scopedMonthlyComparison.previousMonthActual.amount)} />
+            <MonthlySummaryCard label="이번 달 누적 사용" value={formatUsd(scopedMonthlyComparison.currentMonthToDate.amount)} />
             <MonthlySummaryCard label="월말 예상" value={formatUsd(scopedMonthlyComparison.currentMonthForecast.amount)} />
             <MonthlySummaryCard
               direction={scopedMonthlyComparison.forecastChangeAmount.amount > 0 ? "up" : scopedMonthlyComparison.forecastChangeAmount.amount < 0 ? "down" : "flat"}
@@ -314,16 +313,12 @@ export function CostUsagePanel({
                   <strong>{formatUsd(bar.amount)}</strong>
                   <div className={styles.monthlyBarTrack}>
                     <i
+                      data-estimated={bar.isEstimated}
                       data-partial={bar.isPartial}
                       style={{ height: `${Math.max(bar.amount > 0 ? 4 : 0, bar.heightPercentage)}%` }}
                     />
                   </div>
-                  <span>
-                    {bar.label}
-                    {bar.isPartial || bar.isEstimated
-                      ? <small>{[bar.isPartial ? "집계 중" : "", bar.isEstimated ? "추정" : ""].filter(Boolean).join(" · ")}</small>
-                      : null}
-                  </span>
+                  <span>{bar.label}</span>
                 </div>
               ))}
             </div>

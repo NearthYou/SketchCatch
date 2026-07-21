@@ -22,6 +22,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-21 - Simplify monthly comparison annotations
+
+- Removed the marked monthly comparison sample suffix, description, summary badges, and per-month helper labels. Concise summary labels and patterned estimated bars preserve status clarity without restoring the removed text.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature test suite was run for this presentation-only change.
+
 ### 2026-07-21 - Remove usage notices and internal chart scrolling
 
 - Removed the three marked sample-data notice elements from Actual Usage and replaced the monthly chart's internal scroll viewport with responsive 6/3/2-column layouts that show all six months at once.
