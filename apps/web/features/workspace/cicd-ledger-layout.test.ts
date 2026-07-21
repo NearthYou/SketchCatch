@@ -62,3 +62,20 @@ test("현재 조치는 같은 화면의 설정 아코디언을 열고 실행 데
   assert.match(accordionSource, /ensureOpen \? true : !current/);
   assert.match(accordionSource, /<h4 className=\{styles\.accordionHeading\}>/);
 });
+
+test("CI/CD는 한 번의 전체 새로고침과 배포 타깃 안의 자동 설정 요약만 보여준다", () => {
+  assert.match(deliveryCenterSource, /ref=\{consoleRef\}/);
+  assert.match(deliveryCenterSource, /refreshAll\(\)/);
+  assert.match(deliveryCenterSource, /전체 새로고침/);
+  assert.doesNotMatch(deliveryCenterSource, /headerStatus|requiredActionCount/);
+  assert.doesNotMatch(deliveryCenterSource, /automatic-settings-title|title="자동 설정 결과"/);
+  assert.match(
+    deliveryCenterSource,
+    /title="프로젝트 배포 타깃"(?:(?!<\/CicdAccordionSection>)[\s\S])*<CicdAutomaticSetupSummary profile=\{profile\} \/>/
+  );
+
+  assert.doesNotMatch(consoleSource, /manualRefresh|onManualRefresh/);
+  assert.doesNotMatch(consoleSource, /setupCompletedCount|개 설정 완료/);
+  assert.doesNotMatch(pipelineSource, /onManualRefresh|Pipeline 새로고침|headerAction=/);
+  assert.doesNotMatch(statusBoardSource, /statusProgress/);
+});
