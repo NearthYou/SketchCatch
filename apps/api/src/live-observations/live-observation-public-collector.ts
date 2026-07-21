@@ -16,7 +16,10 @@ export type LiveObservationPublicCollectorErrorCode =
   | "unavailable";
 
 export class LiveObservationPublicCollectorError extends Error {
-  constructor(readonly code: LiveObservationPublicCollectorErrorCode) {
+  constructor(
+    readonly code: LiveObservationPublicCollectorErrorCode,
+    readonly retryAfterSeconds: number | null = null
+  ) {
     super("Live Observation collector request failed");
     Object.defineProperty(this, "name", {
       configurable: true,
@@ -108,29 +111,29 @@ export function createLiveObservationPublicCollector(options: {
               observationId: active.session.observationId
             });
             if (rateLimit.kind === "rate_limited") {
-              throw collectorError("rate_limited");
+              throw collectorError("rate_limited", rateLimit.retryAfterSeconds);
             }
             if (rateLimit.kind === "unavailable") {
               throw collectorError("unavailable");
             }
 
-            const live = await readActiveSession(
-              options.store,
-              active.session.observationId
-            );
+            const live = await readActiveSession(options.store, active.session.observationId);
             if (
               live.session.createdAt !== active.session.createdAt ||
               live.session.expiresAt !== active.session.expiresAt ||
               live.session.deploymentId !== active.session.deploymentId ||
               live.session.capability.kid !== active.session.capability.kid ||
-              live.session.capability.tokenVersion !==
-                active.session.capability.tokenVersion
+              live.session.capability.tokenVersion !== active.session.capability.tokenVersion
             ) {
               throw collectorError("gone");
             }
             requireLiveObservationTrafficTarget(live.session.manifest);
             const response = await options.trafficTransport.post(live.session.manifest);
-            if (!Number.isInteger(response.status) || response.status < 200 || response.status >= 300) {
+            if (
+              !Number.isInteger(response.status) ||
+              response.status < 200 ||
+              response.status >= 300
+            ) {
               throw collectorError("unavailable");
             }
           } catch (error) {
@@ -216,7 +219,8 @@ function mapStoreError(error: unknown): LiveObservationPublicCollectorError {
 }
 
 function collectorError(
-  code: LiveObservationPublicCollectorErrorCode
+  code: LiveObservationPublicCollectorErrorCode,
+  retryAfterSeconds: number | null = null
 ): LiveObservationPublicCollectorError {
-  return new LiveObservationPublicCollectorError(code);
+  return new LiveObservationPublicCollectorError(code, retryAfterSeconds);
 }
