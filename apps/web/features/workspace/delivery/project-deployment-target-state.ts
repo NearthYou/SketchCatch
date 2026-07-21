@@ -135,7 +135,7 @@ export function createDeploymentTargetDraft(
   const architectureDefaults =
     runtimeTargetKind === "ecs_fargate" ? getEcsFargateArchitectureDefaults(diagramJson) : null;
   const inferredEcsWeb =
-    runtimeTargetKind === "ecs_fargate" && hasWebInclusiveEcsArchitecture(diagramJson)
+    runtimeTargetKind === "ecs_fargate"
       ? inferEcsWebBuildConfig(repositoryEvidence?.aiHandoff, architectureDefaults)
       : null;
   const ecsWeb =
@@ -250,18 +250,6 @@ export function createDeploymentTargetDraft(
     ecsWeb,
     evidenceSuggested: Boolean(ecsDefaults || suggestion)
   };
-}
-
-function hasWebInclusiveEcsArchitecture(diagramJson?: DiagramJson | null): boolean {
-  if (!diagramJson) return false;
-  const resourceTypes = new Set(
-    diagramJson.nodes.map((node) => node.parameters?.resourceType).filter(Boolean)
-  );
-  return (
-    resourceTypes.has("aws_s3_bucket") &&
-    resourceTypes.has("aws_cloudfront_distribution") &&
-    resourceTypes.has("aws_ecs_service")
-  );
 }
 
 function inferRuntimeTargetKind(

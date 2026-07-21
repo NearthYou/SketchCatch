@@ -161,3 +161,10 @@ Short English-only working log for the current agent context. Older records are 
 1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
 2. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for these changes.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
+
+### 2026-07-21 - Preserve inferred ECS web build configuration without static-board gating
+
+- Reproduced the deployment-target 400 through a fresh Repository Analysis and Board save: ECS Fargate drafts showed Dockerfile and commit evidence but omitted `ecsWeb` unless the Board already included S3 and CloudFront.
+- Removed that presentation-shape gate. An ECS Fargate draft now carries a valid inferred `ecsWeb` snapshot whenever Repository Analysis supplies the API Dockerfile and frontend build evidence.
+- Added a regression that removes the static web Resources from an otherwise valid ECS Board and asserts that the request retains the same `ecsWeb` configuration.
+- Focused Web test passes 18/18; root harness, lint, and typecheck pass. Root build reached successful Next.js compilation and TypeScript but the existing Turbo/Next runner did not emit its final completion summary in this environment; no deployment, Apply, cloud mutation, or Git/CI/CD handoff was performed.

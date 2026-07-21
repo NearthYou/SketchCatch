@@ -499,6 +499,29 @@ test("web-inclusive ECS Architecture derives the frontend build snapshot from Re
   assert.deepEqual(request.confirmedBuildConfig.ecsWeb?.api.requiredRuntimeSecrets, [
     "CHECK_IN_SIGNING_SECRET"
   ]);
+
+  const apiOnlyDraft = createDeploymentTargetDraft(
+    null,
+    [verifiedConnection],
+    sourceRepository,
+    null,
+    "preserve_target",
+    {
+      ...diagramJson,
+      nodes: diagramJson.nodes.filter(
+        (node) =>
+          node.parameters?.resourceType !== "aws_s3_bucket" &&
+          node.parameters?.resourceType !== "aws_cloudfront_distribution"
+      )
+    }
+  );
+  const apiOnlyRequest = createDeploymentTargetRequest(
+    apiOnlyDraft,
+    [verifiedConnection],
+    new Date("2026-07-15T00:00:00.000Z")
+  );
+
+  assert.deepEqual(apiOnlyRequest.confirmedBuildConfig.ecsWeb, request.confirmedBuildConfig.ecsWeb);
 });
 
 test("empty ECS settings use Source Repository evidence and current Architecture defaults", () => {
