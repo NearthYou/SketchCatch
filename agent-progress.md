@@ -168,3 +168,9 @@ Short English-only working log for the current agent context. Older records are 
 - Removed that presentation-shape gate. An ECS Fargate draft now carries a valid inferred `ecsWeb` snapshot whenever Repository Analysis supplies the API Dockerfile and frontend build evidence.
 - Added a regression that removes the static web Resources from an otherwise valid ECS Board and asserts that the request retains the same `ecsWeb` configuration.
 - Focused Web test passes 18/18; root harness, lint, and typecheck pass. Root build reached successful Next.js compilation and TypeScript but the existing Turbo/Next runner did not emit its final completion summary in this environment; no deployment, Apply, cloud mutation, or Git/CI/CD handoff was performed.
+### 2026-07-21 - Prefer the analyzed API Dockerfile for ECS target defaults
+
+- Reproduced the blank build-evidence and confirmed-commit fields when Repository Analysis contains more than one Dockerfile: the prior exact-one condition discarded all candidates.
+- ECS Fargate target defaults now select the unique Dockerfile whose Application Unit is `backend` or `fullstack`; ambiguous multi-backend cases remain unfilled rather than guessing.
+- Extended the public Repository Analysis regression with both API and frontend Dockerfiles, keeping the inferred source root, Dockerfile, and commit tied to the API unit.
+- Focused Web test passes 18/18; root harness and lint pass. Root typecheck and build reached the Web TypeScript/Next compilation stage but the existing Turbo/Next runner did not emit its final completion summary in this environment. No deployment, Apply, cloud mutation, or Git/CI/CD handoff was performed.

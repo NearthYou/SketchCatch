@@ -351,6 +351,13 @@ test("public Repository Analysis Record seeds a target before GitHub Source Repo
               kind: "backend",
               frameworks: ["express"],
               evidencePaths: ["services/api/Dockerfile"]
+            },
+            {
+              id: "web",
+              rootPath: "apps/web",
+              kind: "frontend",
+              frameworks: ["React"],
+              evidencePaths: ["apps/web/Dockerfile"]
             }
           ],
           evidence: [
@@ -358,6 +365,12 @@ test("public Repository Analysis Record seeds a target before GitHub Source Repo
               kind: "dockerfile",
               path: "services/api/Dockerfile",
               applicationUnitId: "api",
+              signals: []
+            },
+            {
+              kind: "dockerfile",
+              path: "apps/web/Dockerfile",
+              applicationUnitId: "web",
               signals: []
             }
           ],

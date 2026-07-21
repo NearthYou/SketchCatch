@@ -762,9 +762,21 @@ function getEvidenceSuggestion(
         ? item.kind === "framework_config" && /(?:^|\/)appspec\.ya?ml$/i.test(item.path)
         : item.kind === evidenceKind
   );
-  if (matchingEvidence.length !== 1) return null;
-
-  const evidence = matchingEvidence[0];
+  const preferredEcsDockerfiles =
+    runtimeTargetKind === "ecs_fargate"
+      ? matchingEvidence.filter((item) => {
+          const applicationUnit = handoff.applicationUnits.find(
+            (unit) => unit.id === item.applicationUnitId
+          );
+          return applicationUnit?.kind === "backend" || applicationUnit?.kind === "fullstack";
+        })
+      : [];
+  const evidence =
+    matchingEvidence.length === 1
+      ? matchingEvidence[0]
+      : preferredEcsDockerfiles.length === 1
+        ? preferredEcsDockerfiles[0]
+        : null;
   if (!evidence) return null;
   const applicationUnit = handoff.applicationUnits.find(
     (unit) => unit.id === evidence.applicationUnitId
