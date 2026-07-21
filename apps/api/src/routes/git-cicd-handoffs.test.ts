@@ -5,6 +5,7 @@ import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
 import {
   GitCicdInitialApplicationReleaseRequiredError,
+  GitCicdSourceRepositoryMismatchError,
   type GitCicdHandoffProvider,
   type GitCicdHandoffRepository
 } from "../git-cicd/git-cicd-handoff-service.js";
@@ -46,6 +47,40 @@ test("initial application release evidence failure maps to HTTP 409", async (t) 
   assert.deepEqual(response.json(), {
     error: "GIT_CICD_INITIAL_APPLICATION_RELEASE_REQUIRED",
     message: "최초 앱 배포를 완료한 뒤 CI/CD 설치 PR을 생성해 주세요."
+  });
+});
+
+test("source Repository mismatch maps to its stable HTTP 409 code", async (t) => {
+  const app = Fastify();
+  await app.register(registerGitCicdHandoffRoutes, {
+    prefix: "/api",
+    getDatabaseClient: createAuthDatabaseClient,
+    createGitCicdHandoffRepository: () => ({}) as GitCicdHandoffRepository,
+    gitCicdHandoffProvider: {} as GitCicdHandoffProvider,
+    createGitCicdHandoff: async () => {
+      throw new GitCicdSourceRepositoryMismatchError();
+    }
+  });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: { authorization: `Bearer ${await createAccessToken(userId)}` },
+    payload: {
+      architectureId: "33333333-3333-4333-8333-333333333333",
+      terraformArtifactId: "44444444-4444-4444-8444-444444444444",
+      sourceDeploymentId: "55555555-5555-4555-8555-555555555555",
+      sourceRepositoryId: "repository-1",
+      userAcceptedChangeId: "66666666-6666-4666-8666-666666666666"
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "GIT_CICD_SOURCE_REPOSITORY_MISMATCH",
+    message:
+      "현재 Board와 다른 Repository가 요청되었습니다. Board에서 Repository를 다시 선택한 뒤 CI/CD 정보를 새로고침해 주세요."
   });
 });
 

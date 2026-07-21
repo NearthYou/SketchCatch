@@ -21,7 +21,6 @@ export type LoadProjectDiagramDraftInput = {
   legacyLocalCacheWorkspaceId?: string | undefined;
   localCacheWorkspaceId?: string | undefined;
   projectId: string;
-  recoveryPreference?: "server" | undefined;
   workspaceId?: string | undefined;
 };
 
@@ -60,7 +59,6 @@ type SaveServerProjectDiagramDraftDependencies = {
 
 export type LoadedProjectDiagramDraft = InitialDiagramChoice & {
   localDraft: LocalProjectDraft | null;
-  recoveryDecisionRequired: boolean;
   serverDraft: ProjectDraftResponse["draft"];
   shouldAutoSaveServer: boolean;
 };
@@ -116,7 +114,7 @@ export async function loadProjectDiagramDraft(
   }
   const choice = chooseInitialDiagram({
     fallbackDiagram: input.fallbackDiagram,
-    localDraft: input.recoveryPreference === "server" ? null : localDraft,
+    localDraft,
     serverDraft: serverResponse.draft
   });
   let resolvedLocalDraft = localDraft;
@@ -139,10 +137,8 @@ export async function loadProjectDiagramDraft(
   return {
     ...choice,
     localDraft: resolvedLocalDraft,
-    recoveryDecisionRequired: choice.requiresRecoveryDecision === true,
     serverDraft: serverResponse.draft,
     shouldAutoSaveServer:
-      choice.requiresRecoveryDecision !== true &&
       choice.source === "local" &&
       localDraft !== null &&
       Object.prototype.hasOwnProperty.call(localDraft, "baseServerRevision")

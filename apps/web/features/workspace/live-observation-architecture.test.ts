@@ -249,6 +249,47 @@ test("shows validated Service Auto Scaling capacity and target tracking details 
   ]);
 });
 
+test("recovers the immutable observation path from unambiguous Terraform references when saved edges are missing", () => {
+  const model = createLiveObservationArchitectureModel(
+    createReferenceOnlyLiveObservationArchitecture(),
+    null
+  );
+  const edgePairs = new Set(
+    model.diagram.edges.map((edge) => `${edge.sourceNodeId}->${edge.targetNodeId}`)
+  );
+
+  for (const pair of [
+    "cloudfront->alb",
+    "alb->listener",
+    "listener->target-group",
+    "target-group->service",
+    "service->task",
+    "service->scaling-target",
+    "scaling-target->scaling-policy"
+  ]) {
+    assert.ok(edgePairs.has(pair), `Missing recovered observation edge ${pair}`);
+  }
+  assert.equal(model.capacityModeLabel, "Auto Scaling");
+  assert.ok(
+    (model.resources.find((resource) => resource.id === "scaling-target")?.detailLines.length ?? 0) > 0
+  );
+});
+
+test("does not infer an observation edge from an ambiguous Terraform reference", () => {
+  const architecture = createReferenceOnlyLiveObservationArchitecture();
+  architecture.nodes.push({
+    ...resourceNode("alb-duplicate", "LOAD_BALANCER", "Duplicate ALB", 200, 200),
+    config: { terraformResourceName: "app" }
+  });
+
+  const model = createLiveObservationArchitectureModel(architecture, null);
+
+  assert.equal(
+    model.diagram.edges.some((edge) => edge.sourceNodeId === "cloudfront"),
+    false
+  );
+});
+
 test("does not show partial Service Auto Scaling details from invalid Architecture config", () => {
   const validArchitecture = createServiceAutoScalingArchitecture();
   const invalidArchitecture = {
@@ -418,6 +459,91 @@ function createServiceAutoScalingArchitecture(): ArchitectureJson {
         label: "uses"
       }
     ]
+  };
+}
+
+function createReferenceOnlyLiveObservationArchitecture(): ArchitectureJson {
+  return {
+    nodes: [
+      {
+        ...resourceNode("cloudfront", "CLOUDFRONT", "CloudFront", 0, 0),
+        config: {
+          terraformResourceName: "web",
+          origin: [{ domainName: "aws_lb.app.dns_name" }]
+        }
+      },
+      {
+        ...resourceNode("alb", "LOAD_BALANCER", "ALB", 200, 0),
+        config: { terraformResourceName: "app" }
+      },
+      {
+        ...resourceNode("listener", "LOAD_BALANCER_LISTENER", "Listener", 400, 0),
+        config: {
+          terraformResourceName: "http",
+          loadBalancerArn: "aws_lb.app.arn",
+          defaultAction: { targetGroupArn: "aws_lb_target_group.app.arn" }
+        }
+      },
+      {
+        ...resourceNode(
+          "target-group",
+          "LOAD_BALANCER_TARGET_GROUP",
+          "Target Group",
+          600,
+          0
+        ),
+        config: { terraformResourceName: "app" }
+      },
+      {
+        ...resourceNode("service", "ECS_SERVICE", "ECS Service", 800, 0),
+        config: {
+          terraformResourceName: "audience_service",
+          loadBalancer: { targetGroupArn: "aws_lb_target_group.app.arn" },
+          taskDefinition: "aws_ecs_task_definition.audience.arn"
+        }
+      },
+      {
+        ...resourceNode("task", "ECS_TASK_DEFINITION", "Task Definition", 1_000, 0),
+        config: { terraformResourceName: "audience" }
+      },
+      {
+        ...resourceNode(
+          "scaling-target",
+          "APPLICATION_AUTO_SCALING_TARGET",
+          "Scaling Target",
+          1_200,
+          0
+        ),
+        config: {
+          terraformResourceName: "audience_service",
+          minCapacity: 1,
+          maxCapacity: 4,
+          resourceId:
+            "service/${aws_ecs_cluster.audience.name}/${aws_ecs_service.audience_service.name}"
+        }
+      },
+      {
+        ...resourceNode(
+          "scaling-policy",
+          "APPLICATION_AUTO_SCALING_POLICY",
+          "Scaling Policy",
+          1_400,
+          0
+        ),
+        config: {
+          terraformResourceName: "audience_service",
+          resourceId: "${aws_appautoscaling_target.audience_service.resource_id}",
+          policyType: "TargetTrackingScaling",
+          targetTrackingScalingPolicyConfiguration: {
+            targetValue: 60,
+            predefinedMetricSpecification: [
+              { predefinedMetricType: "ALBRequestCountPerTarget" }
+            ]
+          }
+        }
+      }
+    ],
+    edges: []
   };
 }
 

@@ -209,14 +209,10 @@ test("pending Board apply locks Resource, Diagram, History, save, and Terraform 
   );
 });
 
-test("auto-organize cannot open where no persisted apply boundary exists", () => {
-  assert.match(
+test("Workspace does not render the removed toolbar auto-organize action", () => {
+  assert.doesNotMatch(
     diagramEditorSource,
-    /disabled=\{[^}]*!onBoardAutoOrganizeApplyRequest[^}]*\}/
-  );
-  assert.match(
-    diagramEditorSource,
-    /disabled=\{[^}]*projectDraftRevision === null[^}]*\}/
+    /aria-label="Architecture Board 자동 정리 미리보기"/
   );
 });
 
@@ -288,3 +284,25 @@ function createCandidateSet(source: DiagramJson): BoardAutoOrganizeCandidateSet 
     ]
   };
 }
+
+test("Workspace does not render a local draft recovery dialog", () => {
+  assert.doesNotMatch(projectManagerSource, /ProjectDraftRecoveryDialog/);
+  assert.doesNotMatch(projectManagerSource, /draftRecoveryRequired/);
+});
+
+test("server conflict recovery replaces the mounted Terraform editor files", () => {
+  const reloadStart = projectManagerSource.indexOf("const reloadLatestProjectDraft");
+  const reloadEnd = projectManagerSource.indexOf("const keepCurrentDraftEditing", reloadStart);
+  const reloadSource = projectManagerSource.slice(reloadStart, reloadEnd);
+
+  assert.ok(reloadStart > -1);
+  assert.ok(reloadEnd > reloadStart);
+  assert.match(reloadSource, /setTerraformFilesReplacement/);
+  assert.match(reloadSource, /diagramFingerprint: toTerraformRefreshFingerprint\(nextDiagram\)/);
+  assert.match(reloadSource, /files: nextTerraformFiles/);
+  assert.match(reloadSource, /notifyFilesChange: false/);
+  assert.match(
+    terraformCodePanelSource,
+    /replacement\.notifyFilesChange !== false[\s\S]*?onTerraformFilesChange/
+  );
+});

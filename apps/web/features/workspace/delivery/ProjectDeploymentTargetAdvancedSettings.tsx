@@ -43,15 +43,19 @@ const runtimeSystemFields: Record<RuntimeTargetKind, readonly SystemFieldDefinit
 
 export function ProjectDeploymentTargetAdvancedSettings({
   draft,
+  headingLevel = 4,
   lockedSystemFields,
   revealMissingFields = false,
   updateDraft
 }: {
   readonly draft: ProjectDeploymentTargetDraft;
+  readonly headingLevel?: 4 | 6 | undefined;
   readonly lockedSystemFields: ReadonlySet<SystemManagedField>;
   readonly revealMissingFields?: boolean | undefined;
   readonly updateDraft: DraftUpdater;
 }) {
+  const Heading = headingLevel === 6 ? "h6" : "h4";
+
   return (
     <details className={styles.advancedSettings} open={revealMissingFields || undefined}>
       <summary>
@@ -62,7 +66,7 @@ export function ProjectDeploymentTargetAdvancedSettings({
       </summary>
       <div className={styles.advancedBody}>
         <div className={styles.advancedGroupHeading}>
-          <h4>분석 결과 수정</h4>
+          <Heading>분석 결과 수정</Heading>
           <p>프로젝트 구조가 다를 때만 변경합니다.</p>
         </div>
         <div className={styles.formGrid}>
@@ -129,7 +133,7 @@ export function ProjectDeploymentTargetAdvancedSettings({
         </div>
 
         <div className={styles.advancedGroupHeading}>
-          <h4>AWS 배포 시스템 값</h4>
+          <Heading>AWS 배포 시스템 값</Heading>
           <p>저장된 값은 잠기며, 자동 계산값과 비어 있는 필수 값은 저장 전 수정할 수 있습니다.</p>
         </div>
         <div className={styles.formGrid}>

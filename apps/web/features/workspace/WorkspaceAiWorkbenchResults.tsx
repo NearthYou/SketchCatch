@@ -16,8 +16,12 @@ import {
 import {
   architectureDraftGenerationSteps,
   getArchitectureDraftGenerationProgressStep,
+  getTerraformIssueAnalysisProgressPresentation,
+  getTerraformIssueAnalysisProgressTransition,
   getTerraformPreviewReviewProgressStep,
   terraformPreviewReviewSteps,
+  TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS,
+  type TerraformIssueAnalysisProgressPhase,
   type WorkspaceAiProgressStep
 } from "./workspace-ai-chat-status";
 import styles from "./workspace-ai-workbench.module.css";
@@ -82,6 +86,97 @@ export function WorkspaceAiWorkbenchReviewProgress({ elapsedMs }: { readonly ela
   );
 }
 
+export function WorkspaceAiWorkbenchTerraformIssueProgress({
+  completed,
+  didComplete,
+  isRunning,
+  total
+}: {
+  readonly completed: number;
+  readonly didComplete: boolean;
+  readonly isRunning: boolean;
+  readonly total: number;
+}) {
+  const [phase, setPhase] = useState<TerraformIssueAnalysisProgressPhase>(() =>
+    isRunning ? "running" : "hidden"
+  );
+
+  useEffect(() => {
+    const transition = getTerraformIssueAnalysisProgressTransition({
+      currentPhase: phase,
+      didComplete,
+      isRunning
+    });
+
+    if (transition.phase !== phase) {
+      setPhase(transition.phase);
+    }
+  }, [didComplete, isRunning, phase]);
+
+  useEffect(() => {
+    if (phase !== "complete") return;
+
+    const timerId = window.setTimeout(() => {
+      setPhase("hidden");
+    }, TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS);
+
+    return () => window.clearTimeout(timerId);
+  }, [phase]);
+
+  const elapsedMs = useWorkspaceAiProgressElapsed(phase === "running", completed);
+  const presentation = getTerraformIssueAnalysisProgressPresentation({
+    completed,
+    elapsedMs,
+    phase,
+    total
+  });
+
+  if (presentation === null) {
+    return null;
+  }
+
+  const { label, progress } = presentation;
+  const accessibleLabel =
+    label === "완료" ? `오류 분석 완료 ${progress}%` : `오류 분석 예상 진행률 ${progress}%`;
+
+  return (
+    <div
+      aria-label={accessibleLabel}
+      aria-valuemax={100}
+      aria-valuemin={0}
+      aria-valuenow={progress}
+      className={styles.terraformIssueProgress}
+      role="progressbar"
+    >
+      <div className={styles.terraformIssueProgressGauge}>
+        <svg aria-hidden="true" viewBox="0 0 44 44">
+          <circle
+            className={styles.terraformIssueProgressTrack}
+            cx="22"
+            cy="22"
+            r="18"
+          />
+          <circle
+            className={styles.terraformIssueProgressIndicator}
+            cx="22"
+            cy="22"
+            pathLength="100"
+            r="18"
+            strokeDasharray="100"
+            strokeDashoffset={100 - progress}
+          />
+        </svg>
+        <span aria-hidden="true" className={styles.terraformIssueProgressValue}>
+          {progress}%
+        </span>
+      </div>
+      <span aria-hidden="true" className={styles.terraformIssueProgressLabel}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function WorkspaceAiWorkbenchProgress({
   currentStep,
   notice,
@@ -138,18 +233,19 @@ function WorkspaceAiWorkbenchProgress({
   );
 }
 
-function useWorkspaceAiProgressElapsed(enabled = true): number {
+function useWorkspaceAiProgressElapsed(enabled = true, resetKey?: unknown): number {
   const [elapsedMs, setElapsedMs] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
+    setElapsedMs(0);
     const startedAt = Date.now();
     const timerId = window.setInterval(() => {
       setElapsedMs(Date.now() - startedAt);
     }, 500);
 
     return () => window.clearInterval(timerId);
-  }, [enabled]);
+  }, [enabled, resetKey]);
 
   return elapsedMs;
 }

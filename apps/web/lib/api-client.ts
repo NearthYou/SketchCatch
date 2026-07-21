@@ -22,6 +22,8 @@ const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
   bad_gateway: "AI 응답을 아키텍처로 해석하지 못했습니다. 다시 시도해주세요.",
   conflict: "현재 상태와 요청 조건이 충돌합니다. 최신 상태와 필요한 설정을 확인해주세요.",
   internal_server_error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+  GIT_CICD_SOURCE_REPOSITORY_MISMATCH:
+    "현재 Board의 Repository와 요청한 Repository가 다릅니다. Board에서 Repository를 다시 선택하고 CI/CD 정보를 새로고침해 주세요.",
   PUBLIC_REPOSITORY_INPUT_INVALID: "지원하는 GitHub Repository URL과 branch를 확인해주세요.",
   PUBLIC_REPOSITORY_UNAVAILABLE:
     "Repository를 확인할 수 없습니다. URL이 잘못되었거나 비공개 Repository일 수 있습니다.",
@@ -58,6 +60,8 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
     "전체 스택 배포 전에 Source Repository를 연결하고 프로젝트 배포 타깃과 ECS 빌드 설정을 저장해 주세요.",
   "A confirmed project deployment target is required for application deployment":
     "전체 스택 또는 애플리케이션 배포 전에 Source Repository를 연결하고 프로젝트 배포 타깃과 빌드 설정을 저장해 주세요.",
+  "CHECK_IN_SIGNING_SECRET is required by the Repository build contract but the Terraform runtime Secret mapping is incomplete":
+    "Repository가 요구하는 CHECK_IN_SIGNING_SECRET이 현재 Terraform 초안에 연결되지 않았습니다. Repository를 다시 분석하고 Fixed Template Board를 다시 생성·저장한 뒤 검증을 실행해 주세요.",
   PROJECT_DEPLOYMENT_TARGET_REQUIRED:
     "프로젝트 배포 대상이 확정되지 않았습니다. 프로젝트 설정에서 검증된 AWS 연결과 Repository 빌드 근거를 저장한 뒤 다시 시도해주세요.",
   GIT_APP_AUTHENTICATION_FAILED:

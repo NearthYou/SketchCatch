@@ -26,6 +26,7 @@ export type ApiErrorCode =
   | "bad_gateway"
   | "service_unavailable"
   | "internal_server_error"
+  | "GIT_CICD_SOURCE_REPOSITORY_MISMATCH"
   | "PUBLIC_REPOSITORY_INPUT_INVALID"
   | "PUBLIC_REPOSITORY_UNAVAILABLE"
   | "PUBLIC_REPOSITORY_BRANCH_UNAVAILABLE"
@@ -2111,6 +2112,25 @@ export type DeploymentStage =
   | "rollback"
   | "destroy";
 
+export type DeploymentProgressMeasurement =
+  | { kind: "indeterminate" }
+  | {
+      kind: "resource_count";
+      completedUnits: number;
+      totalUnits: number;
+      percent: number;
+    }
+  | { kind: "complete"; percent: 100 };
+
+export type DeploymentProgressSnapshot = {
+  deploymentId: string;
+  status: DeploymentStatus;
+  activeStage: DeploymentStage | null;
+  failureStage: DeploymentFailureStage | null;
+  measurement: DeploymentProgressMeasurement;
+  updatedAt: IsoDateTimeString;
+};
+
 export type Template = {
   id: string;
   ownerId: string;
@@ -2630,6 +2650,7 @@ export type DeploymentLiveObservationManifestV2 = {
   };
   endpoints: {
     audienceBaseUrl: string;
+    audienceApplicationUrl?: string | undefined;
     trafficUrl: string;
   };
   pressure: {
@@ -2798,6 +2819,10 @@ export type LiveObservationV2SnapshotResponse = {
 
 export type DeploymentResponse = {
   deployment: Deployment;
+};
+
+export type DeploymentProgressResponse = {
+  progress: DeploymentProgressSnapshot;
 };
 
 export type DeploymentListResponse = {
@@ -3168,6 +3193,8 @@ export type AiProviderMetadata = {
   generatedAt: IsoDateTimeString;
 };
 
+export type AuthoredArchitectureSourceId = "audience-live-check";
+
 export type AiResultMetadata = {
   source: AiResultSource;
   confidence: AiConfidence;
@@ -3180,6 +3207,7 @@ export type AiResultMetadata = {
   requirementFacts?: ArchitectureRequirementFact[];
   operatingProfile?: ArchitectureDraftOperatingProfile;
   guardrailWarnings?: ArchitectureGuardrailWarning[];
+  authoredSourceId?: AuthoredArchitectureSourceId | undefined;
 };
 
 export type ArchitectureDraftPattern =
@@ -3731,6 +3759,14 @@ export type CreateDesignSimulationRequest = {
   period?: CostEstimatePeriod | undefined;
   expectedUserCount?: number | undefined;
   region?: AwsRegionCode | string | undefined;
+  liveObservation?:
+    | {
+        readonly acceptedEventCount: number;
+        readonly pressureLevel: LiveObservationPressureLevel;
+        readonly pressurePercent: number;
+        readonly projectedRequestsPerMinute: number;
+      }
+    | undefined;
 };
 
 export type DesignSimulationRequestFlowStep = {
@@ -4191,6 +4227,7 @@ export type ArchitectureBoardCompilationQuality = {
 export type ArchitectureBoardCompilationInput = {
   architecture: ArchitectureJson;
   currentDiagram?: DiagramJson | undefined;
+  sourceDiagram?: DiagramJson | undefined;
   semanticContext?: ArchitectureBoardCompilationSemanticContext | undefined;
   trigger: ArchitectureBoardCompilationTrigger;
 };

@@ -50,6 +50,7 @@ import {
   resolveArchitectureOperationalRequirements,
   validateArchitectureOperationalRequirements
 } from "./aiArchitectureOperationalRequirements.js";
+import { convertDiagramJsonToArchitectureJson } from "./diagram-to-architecture.js";
 import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
 import { createArchitectureDraftFallbackExplanation } from "./aiLlmExplanationFallbacks.js";
@@ -67,6 +68,11 @@ import {
   estimateAiUsage,
   maskSecretsForAi
 } from "./aiProviderSafety.js";
+import {
+  createAuthoredTerraformArchitectureDiagram,
+  findAuthoredTerraformArchitecturePreset,
+  type AuthoredTerraformArchitecturePreset
+} from "./authoredTerraformArchitecturePresets.js";
 
 const ARCHITECTURE_DRAFT_TARGET = "architecture_draft";
 
@@ -366,7 +372,15 @@ export async function createAmazonQArchitectureDraftResponse(
     );
   }
 
-  request = withAcceptedArchitectureClarificationAnswers(request);
+  const authoredPreset = findAuthoredTerraformArchitecturePreset(request.prompt);
+  if (authoredPreset !== null) {
+    await reportFallbackDraftProgress(progressReporter, options.onProgress);
+    return createAuthoredTerraformArchitectureResponse(authoredPreset);
+  }
+
+  request = withArchitectureDraftDefaults(
+    withAcceptedArchitectureClarificationAnswers(request)
+  );
   const conditionalQuestion = findConditionalArchitectureQuestion(request.prompt);
 
   if (conditionalQuestion !== null) {
@@ -950,6 +964,52 @@ function sanitizeArchitecturePreviewForRequirement(
   };
 }
 
+function removeDanglingArchitectureEdges(
+  architectureJson: ArchitectureJson
+): ArchitectureJson {
+  const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
+
+  return {
+    nodes: architectureJson.nodes,
+    edges: architectureJson.edges.filter(
+      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+    )
+  };
+}
+
+function connectRequiredCloudFrontUploadDelivery(
+  architectureJson: ArchitectureJson
+): ArchitectureJson {
+  const cloudFronts = architectureJson.nodes.filter((node) => node.type === "CLOUDFRONT");
+  const uploadBuckets = architectureJson.nodes.filter(
+    (node) =>
+      node.type === "S3" &&
+      (
+        node.config.bucketPurpose === "user_uploads" ||
+        /upload|media|attachment/iu.test(`${node.id} ${node.label ?? ""}`)
+      )
+  );
+  const edges = [...architectureJson.edges];
+
+  for (const cloudFront of cloudFronts) {
+    for (const uploadBucket of uploadBuckets) {
+      if (
+        !edges.some(
+          (edge) => edge.sourceId === cloudFront.id && edge.targetId === uploadBucket.id
+        )
+      ) {
+        edges.push({
+          id: `canonical-${cloudFront.id}-to-${uploadBucket.id}`,
+          sourceId: cloudFront.id,
+          targetId: uploadBucket.id,
+          label: "private media delivery origin"
+        });
+      }
+    }
+  }
+
+  return { nodes: architectureJson.nodes, edges };
+}
 function applyArchitectureParameterCompletenessDefaults(
   architectureJson: ArchitectureJson
 ): ArchitectureJson {
@@ -1262,15 +1322,37 @@ function createFallbackArchitectureDraftResponse(
   };
 }
 
+function createAuthoredTerraformArchitectureResponse(
+  preset: AuthoredTerraformArchitecturePreset
+): AiArchitectureDraftResult {
+  const diagramJson = createAuthoredTerraformArchitectureDiagram(preset);
+
+  return {
+    architectureJson: convertDiagramJsonToArchitectureJson(diagramJson),
+    diagramJson,
+    title: preset.title,
+    metadata: {
+      source: "template_fallback",
+      confidence: "high",
+      assumptions: [
+        "이 데모 문구는 후속 답변과 무관하게 승인된 고정 배포 아키텍처를 사용합니다."
+      ],
+      explanations: [
+        "S3와 CloudFront 정적 사이트, ALB와 ECS Fargate API, ECR, CloudWatch, Secrets Manager 구성을 고정했습니다."
+      ],
+      authoredSourceId: preset.id
+    }
+  };
+}
+
 const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] = [
   {
     id: "website_type",
-    question: "어떤 종류의 웹사이트인가요?",
+    question: "웹사이트 유형은?",
     suggestions: [
-      "정적 사이트 (블로그, 포트폴리오, 회사 소개페이지)",
-      "동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)",
-      "SPA (Single Page Application) (React/Vue 등)",
-      "API 서버 (모바일 앱 백엔드)"
+      "정적 사이트 (블로그, 포트폴리오)",
+      "동적 웹 애플리케이션 (쇼핑몰, 게시판)",
+      "API 서버 (모바일 백엔드)"
     ],
     isAnswered: isWebsiteTypeAnswered
   },
@@ -1278,10 +1360,9 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
     id: "traffic",
     question: "예상 트래픽 규모는?",
     suggestions: [
-      "소규모 (일 100명 미만, 동시 10명 미만)",
-      "중간 규모 (일 1,000명, 동시 50명)",
-      "대규모 (일 10,000명 이상, 동시 500명 이상)",
-      "급변동 (평상시 적지만 이벤트 시 급증)"
+      "소규모 (일 100명 미만)",
+      "중간 규모 (일 1,000명)",
+      "대규모 (일 10,000명 이상)"
     ],
     isAnswered: isTrafficAnswered
   },
@@ -1290,42 +1371,18 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
     question: "데이터베이스가 필요한가요?",
     suggestions: [
       "필요 없음 (정적 콘텐츠만)",
-      "간단한 데이터 (사용자 정보, 게시글 등 < 10GB)",
-      "중간 규모 데이터 (10GB ~ 100GB)",
-      "대용량 데이터 (100GB 이상, 복잡한 쿼리)"
+      "간단한 데이터 (< 10GB)",
+      "대용량 데이터 (> 100GB)"
     ],
     isAnswered: isDatabaseAnswered
-  },
-  {
-    id: "frontend",
-    question: "프론트엔드 기술은?",
-    suggestions: [
-      "HTML/CSS/JS만 (순수 웹)",
-      "React/Vue/Angular (SPA 프레임워크)",
-      "Next.js/Nuxt.js (SSR 필요)",
-      "모바일 앱 (웹뷰 또는 네이티브)"
-    ],
-    isAnswered: isFrontendAnswered
-  },
-  {
-    id: "backend",
-    question: "백엔드가 필요한가요?",
-    suggestions: [
-      "필요 없음 (정적 사이트)",
-      "간단한 API (Node.js, Python Flask 등)",
-      "복잡한 비즈니스 로직 (Spring Boot, Django 등)",
-      "마이크로서비스 (여러 서비스 분리)"
-    ],
-    isAnswered: isBackendAnswered
   },
   {
     id: "region",
     question: "주요 사용자 지역은?",
     suggestions: [
-      "한국만 (서울 리전)",
-      "아시아 태평양 (도쿄, 싱가포르 포함)",
-      "글로벌 (미국, 유럽 포함)",
-      "특정 지역 (중국, 일본 등)"
+      "한국만",
+      "아시아 태평양",
+      "글로벌"
     ],
     isAnswered: isRegionAnswered
   },
@@ -1333,99 +1390,21 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
     id: "budget",
     question: "월 예산 범위는?",
     suggestions: [
-      "10만원 미만 (최소 비용)",
-      "10-50만원 (적당한 성능)",
-      "50-200만원 (고성능)",
-      "200만원 이상 (엔터프라이즈급)"
+      "10만원 미만",
+      "10-50만원",
+      "50만원 이상"
     ],
     isAnswered: isBudgetAnswered
   },
   {
-    id: "ssl",
-    question: "SSL 인증서(HTTPS)가 필요한가요?",
-    suggestions: [
-      "필수 (보안 중요)",
-      "선택사항 (HTTP도 괜찮음)",
-      "모르겠음 (추천해주세요)"
-    ],
-    isAnswered: isSslAnswered
-  },
-  {
-    id: "file_upload",
-    question: "파일 업로드 기능이 있나요? (이미지, 문서 등)",
-    suggestions: [
-      "없음 (텍스트만)",
-      "이미지만 (프로필, 게시글 이미지)",
-      "다양한 파일 (문서, 동영상 포함)",
-      "대용량 파일 (100MB 이상)"
-    ],
-    isAnswered: isFileUploadAnswered
-  },
-  {
-    id: "realtime",
-    question: "실시간 기능이 필요한가요? (채팅, 알림 등)",
-    suggestions: [
-      "필요 없음",
-      "실시간 채팅",
-      "실시간 알림",
-      "실시간 데이터 업데이트 (주식, 게임 등)"
-    ],
-    isAnswered: isRealtimeAnswered
-  },
-  {
     id: "management_preference",
-    question: "관리 복잡도 선호도는?",
+    question: "관리 복잡도 선호는?",
     suggestions: [
-      "완전 관리형 (서버리스, 관리 최소화)",
+      "완전 관리형 (서버리스)",
       "반관리형 (일부 서버 관리)",
-      "직접 관리 (서버 직접 운영)",
-      "모르겠음 (추천해주세요)"
+      "직접 관리"
     ],
     isAnswered: isManagementPreferenceAnswered
-  },
-  {
-    id: "page_loading_time",
-    question: "페이지 로딩 시간 목표는?",
-    suggestions: [
-      "1초 이내 (매우 빠름)",
-      "3초 이내 (적당함)",
-      "5초 이내 (느려도 괜찮음)",
-      "상관없음"
-    ],
-    isAnswered: isPageLoadingTimeAnswered
-  },
-  {
-    id: "website_size",
-    question: "전체 웹사이트 크기는?",
-    suggestions: [
-      "10MB 미만 (간단한 사이트)",
-      "10MB-100MB (일반적인 사이트)",
-      "100MB-1GB (이미지 많은 사이트)",
-      "1GB 이상 (동영상 포함)"
-    ],
-    isAnswered: isWebsiteSizeAnswered
-  },
-  {
-    id: "traffic_pattern",
-    question: "트래픽 패턴은?",
-    suggestions: [
-      "일정함 (하루 종일 비슷)",
-      "시간대별 차이 (낮에 많음)",
-      "이벤트성 급증 (특정 시기에만)",
-      "예측 불가"
-    ],
-    isAnswered: isTrafficPatternAnswered
-  },
-  {
-    id: "downtime_tolerance",
-    question: "서비스 중단 허용 시간은?",
-    suggestions: [
-      "절대 안됨 (99.99% 가용성)",
-      "월 1시간 이내 (99.9% 가용성)",
-      "월 8시간 이내 (99% 가용성)",
-      "상관없음"
-    ],
-    isAnswered: isDowntimeToleranceAnswered
   }
 ];
 function isWebsiteTypeAnswered(prompt: string): boolean {
@@ -1466,20 +1445,6 @@ function isDatabaseAnswered(prompt: string): boolean {
   return hasPromptTerm(prompt, ["database", " db", "rds", "postgres", "postgresql", "mysql", "dynamodb", "데이터베이스", "간단한 데이터", "중간 규모 데이터", "대용량 데이터", "정적 콘텐츠", "사용자 정보", "게시글", "?곗씠", "肄섑뀗", "寃뚯떆", "10gb", "100gb"]);
 }
 
-function isFrontendAnswered(prompt: string): boolean {
-  return resolveArchitectureTechnologyStackCategory("frontend", prompt) !== null || hasPromptTerm(prompt, ["frontend", "html", "css", "javascript", " js", "react", "vue", "angular", "next.js", "nuxt", "ssr", "프론트엔드", "순수 웹", "모바일", "웹뷰", "네이티브", "?꾨줎", "?쒖닔", "?밸럭"]);
-}
-
-function isBackendAnswered(prompt: string): boolean {
-  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
-
-  if (resolveBackendProfile(normalizedPrompt) !== undefined) {
-    return true;
-  }
-
-  return hasPromptTerm(prompt, ["backend", "api", "node.js", "nodejs", "python", "flask", "spring", "django", "microservice", "백엔드", "간단한 api", "복잡한 비즈니스", "마이크로서비스", "諛깆뿏", "媛꾨떒", "蹂듭옟", "留덉씠"]);
-}
-
 function isRegionAnswered(prompt: string): boolean {
   return hasPromptTerm(prompt, ["region", "korea", "seoul", "ap-northeast-2", "asia", "global", "worldwide", "us", "europe", "한국", "서울", "아시아", "태평양", "글로벌", "미국", "유럽", "중국", "일본", "?쒓뎅", "?쒖슱", "?꾩떆", "湲濡", "誘멸뎅", "?좊읇", "以묎뎅", "?쇰낯"]);
 }
@@ -1488,36 +1453,8 @@ function isBudgetAnswered(prompt: string): boolean {
   return hasPromptTerm(prompt, ["budget", "cost", "krw", "usd", "monthly", "예산", "비용", "만원", "최소 비용", "적당한 성능", "고성능", "?덉궛", "鍮꾩슜", "留뚯썝", "理쒖냼", "怨좎꽦"]) || /\$\s*\d+|\b\d+\s*(?:usd|krw|monthly)\b/iu.test(prompt);
 }
 
-function isSslAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["ssl", "https", "http", "domain", "인증서", "보안", "선택사항", "?몄쬆", "蹂댁븞", "?좏깮"]);
-}
-
-function isFileUploadAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["file upload", "upload", "image", "document", "file", "100mb", "파일", "업로드", "이미지", "문서", "동영상", "텍스트만", "?뚯씪", "?낅줈", "?띿뒪?몃쭔", "?대?吏", "臾몄꽌", "?숈쁺"]);
-}
-
-function isRealtimeAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["realtime", "real-time", "chat", "notification", "websocket", "sse", "실시간", "채팅", "알림", "데이터 업데이트", "?ㅼ떆", "梨꾪똿", "?뚮┝", "?낅뜲"]);
-}
-
 function isManagementPreferenceAnswered(prompt: string): boolean {
   return hasPromptTerm(prompt, ["managed", "serverless", "management", "operations", "관리", "서버리스", "완전 관리형", "반관리형", "직접 관리", "愿由", "?쒕쾭由", "諛섍?由", "吏곸젒"]);
-}
-
-function isPageLoadingTimeAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["loading time", "loading", "로딩", "1초", "3초", "5초", "?섏씠吏", "濡쒕뵫", "1珥", "3珥", "5珥"]) || /\b[135]\s*seconds?\b/iu.test(prompt);
-}
-
-function isWebsiteSizeAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["10mb", "100mb", "1gb", "website size", "웹사이트 크기", "간단한 사이트", "일반적인 사이트", "이미지 많은", "동영상 포함", "?뱀궗?댄듃", "?ш린", "媛꾨떒", "?쇰컲", "?대?吏", "?숈쁺"]);
-}
-
-function isTrafficPatternAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["traffic pattern", "steady", "time of day", "event spike", "unpredictable", "트래픽 패턴", "일정함", "시간대별", "이벤트성", "예측 불가", "?몃옒", "?⑦꽩", "?쇱젙", "?쒓컙", "?대깽", "?덉륫"]);
-}
-
-function isDowntimeToleranceAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["downtime", "availability", "99.99", "99.9", "99%", "서비스 중단", "허용 시간", "절대 안됨", "가용성", "상관없음", "?쒕퉬", "以묐떒", "?덈?", "?곴??놁쓬"]);
 }
 
 function hasPromptTerm(prompt: string, terms: readonly string[]): boolean {
@@ -1543,6 +1480,79 @@ function createProviderClarificationQuestionId(question: string): string {
   return `amazon_q_follow_up_${(hash >>> 0).toString(36)}`;
 }
 
+function withArchitectureDraftDefaults(
+  request: CreateArchitectureDraftRequest
+): CreateArchitectureDraftRequest {
+  const normalizedPrompt = request.prompt.normalize("NFKC").toLowerCase();
+  const defaults: string[] = [];
+
+  if (!hasExplicitSslDecision(normalizedPrompt)) {
+    defaults.push("SSL/HTTPS: required.");
+  }
+  if (!hasExplicitPageLoadingTarget(normalizedPrompt)) {
+    defaults.push("Page loading time target: within 3 seconds.");
+  }
+  if (!hasExplicitAvailabilityTarget(normalizedPrompt)) {
+    defaults.push("Availability: 99.9%; allow up to one hour of downtime per month.");
+  }
+  if (
+    requiresRealtime(normalizedPrompt)
+    && !hasRealtimeImplementationDecision(normalizedPrompt)
+  ) {
+    defaults.push("Realtime implementation: WebSocket.");
+  }
+  if (
+    requiresUploadStorage(normalizedPrompt)
+    && !hasFileUploadImplementationDecision(normalizedPrompt)
+  ) {
+    defaults.push("File upload implementation: private S3 object storage with CloudFront delivery.");
+  }
+
+  if (defaults.length === 0) return request;
+
+  return {
+    ...request,
+    prompt: `${request.prompt}\n\nDefault architecture assumptions (apply only when the user did not specify a different value):\n${defaults
+      .map((value) => `- ${value}`)
+      .join("\n")}`
+  };
+}
+
+function hasExplicitSslDecision(normalizedPrompt: string): boolean {
+  return /(?:(?:https|ssl|tls|\uC778\uC99D\uC11C)[\s\S]{0,60}(?:required|mandatory|optional|not\s+required|\uD544\uC218|\uC120\uD0DD|\uBD88\uD544\uC694|\uAD1C\uCC2E)|(?:required|mandatory|optional|not\s+required|\uD544\uC218|\uC120\uD0DD|\uBD88\uD544\uC694)[\s\S]{0,60}(?:https|ssl|tls|\uC778\uC99D\uC11C)|http\s*(?:only|\uB9CC)|http\uB3C4\s*\uAD1C\uCC2E)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function hasExplicitPageLoadingTarget(normalizedPrompt: string): boolean {
+  const subject = "(?:page\\s*(?:load|loading)|loading\\s*time|\\uD398\\uC774\\uC9C0\\s*\\uB85C\\uB529|\\uB85C\\uB529\\s*\\uC2DC\\uAC04|\\uB85C\\uB529)";
+  const target = "(?:\\d+(?:\\.\\d+)?\\s*(?:seconds?|secs?|\\uCD08)|no\\s+preference|does(?:n't|\\s+not)\\s+matter|\\uC0C1\\uAD00\\uC5C6\\uC74C)";
+
+  return new RegExp(subject + "[\\s\\S]{0,60}" + target + "|" + target + "[\\s\\S]{0,60}" + subject, "iu").test(
+    normalizedPrompt
+  );
+}
+
+function hasExplicitAvailabilityTarget(normalizedPrompt: string): boolean {
+  const subject = "(?:availability|downtime|\\uAC00\\uC6A9\\uC131|\\uC11C\\uBE44\\uC2A4\\s*\\uC911\\uB2E8|\\uC911\\uB2E8\\s*\\uD5C8\\uC6A9)";
+  const target = "(?:\\d+(?:\\.\\d+)?\\s*%|\\d+(?:\\.\\d+)?\\s*(?:hours?|minutes?|\\uC2DC\\uAC04|\\uBD84)|no\\s+preference|does(?:n't|\\s+not)\\s+matter|\\uC0C1\\uAD00\\uC5C6\\uC74C)";
+
+  return new RegExp(subject + "[\\s\\S]{0,80}" + target + "|" + target + "[\\s\\S]{0,80}" + subject, "iu").test(
+    normalizedPrompt
+  );
+}
+
+function hasFileUploadImplementationDecision(normalizedPrompt: string): boolean {
+  const uploadContext = "(?:file\\s*uploads?|image\\s*uploads?|photo\\s*uploads?|upload(?:ed|ing)?\\s+files?|\\uD30C\\uC77C\\s*\\uC5C5\\uB85C\\uB4DC|\\uC774\\uBBF8\\uC9C0\\s*\\uC5C5\\uB85C\\uB4DC|\\uC0AC\\uC9C4\\s*\\uC5C5\\uB85C\\uB4DC|\\uC5C5\\uB85C\\uB4DC\\s*\\uAE30\\uB2A5|\\uD30C\\uC77C\\s*\\uCCA8\\uBD80)";
+  const storage = "(?:\\bs3\\b|object\\s*storage|blob\\s*storage|azure\\s*blob|google\\s*cloud\\s*storage|\\bgcs\\b|\\befs\\b|\\uC624\\uBE0C\\uC81D\\uD2B8\\s*\\uC2A4\\uD1A0\\uB9AC\\uC9C0|\\uAC1D\\uCCB4\\s*\\uC2A4\\uD1A0\\uB9AC\\uC9C0|\\uD30C\\uC77C\\s*\\uC11C\\uBC84)";
+  const uploadFirst = new RegExp(uploadContext + "[^\\n.;\\u3002]{0,100}" + storage, "iu");
+  const storageFirst = new RegExp(
+    storage + "\\s*(?:\\uC5D0|\\uB85C|for|as|used\\s+for|stores?)\\s*(?:the\\s+)?" + uploadContext,
+    "iu"
+  );
+
+  return uploadFirst.test(normalizedPrompt) || storageFirst.test(normalizedPrompt);
+}
 function withAcceptedArchitectureClarificationAnswers(
   request: CreateArchitectureDraftRequest
 ): CreateArchitectureDraftRequest {
@@ -2863,10 +2873,17 @@ function applyArchitectureDraftRequestPolicies(
     // Candidate authorization is observational and must not interrupt final generation.
   }
 
-  return applyArchitectureDraftCandidateExclusions(
+  const candidateFilteredDraft = applyArchitectureDraftCandidateExclusions(
     policyDraft,
     authorizedCandidateExclusions
   );
+
+  return {
+    ...candidateFilteredDraft,
+    architectureJson: connectRequiredCloudFrontUploadDelivery(
+      removeDanglingArchitectureEdges(candidateFilteredDraft.architectureJson)
+    )
+  };
 }
 
 function applyArchitectureDraftBaseRequestPolicies(
@@ -4716,6 +4733,12 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     patternIds.add("serverless-api");
     requiredResources.add("API_GATEWAY_REST_API");
     requiredResources.add("LAMBDA");
+    if (resolveRealtimeTransport(normalizedPrompt) === "websocket") {
+      requiredResources.add("API_GATEWAY_WEBSOCKET_API");
+      requiredResources.add("API_GATEWAY_V2_ROUTE");
+      requiredResources.add("API_GATEWAY_V2_INTEGRATION");
+      requiredResources.add("API_GATEWAY_V2_STAGE");
+    }
     requiredResources.add("LAMBDA_PERMISSION");
     requiredResources.add("IAM_ROLE");
     requiredResources.add("IAM_POLICY");
@@ -4728,6 +4751,12 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     patternIds.add("serverless-api");
     requiredResources.add("API_GATEWAY_REST_API");
     requiredResources.add("LAMBDA");
+    if (resolveRealtimeTransport(normalizedPrompt) === "websocket") {
+      requiredResources.add("API_GATEWAY_WEBSOCKET_API");
+      requiredResources.add("API_GATEWAY_V2_ROUTE");
+      requiredResources.add("API_GATEWAY_V2_INTEGRATION");
+      requiredResources.add("API_GATEWAY_V2_STAGE");
+    }
     forbiddenCapabilities.add("ec2_runtime");
     forbiddenCapabilities.add("load_balancer");
 
@@ -5118,21 +5147,203 @@ function sanitizeMergedRuntimeTopology(
   return Object.keys(sanitized).length === 0 ? undefined : sanitized;
 }
 
+const STATIC_SITE_ALLOWED_RESOURCE_TYPES = new Set<ResourceType>([
+  "S3",
+  "CLOUDFRONT",
+  "ROUTE53_RECORD",
+  "ACM_CERTIFICATE",
+  "ACM_CERTIFICATE_VALIDATION",
+  "WAF_WEB_ACL",
+  "WAF_WEB_ACL_ASSOCIATION"
+]);
+
+const BACKEND_RUNTIME_RESOURCE_TYPES = new Set<ResourceType>([
+  "API_GATEWAY_REST_API",
+  "API_GATEWAY_RESOURCE",
+  "API_GATEWAY_METHOD",
+  "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
+  "API_GATEWAY_STAGE",
+  "API_GATEWAY_WEBSOCKET_API",
+  "API_GATEWAY_V2_ROUTE",
+  "API_GATEWAY_V2_INTEGRATION",
+  "API_GATEWAY_V2_STAGE",
+  "LAMBDA",
+  "LAMBDA_PERMISSION",
+  "EC2",
+  "AMI",
+  "IAM_INSTANCE_PROFILE",
+  "LAUNCH_TEMPLATE",
+  "AUTO_SCALING_GROUP",
+  "AUTO_SCALING_POLICY",
+  "ECR_REPOSITORY",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION",
+  "ECS_CAPACITY_PROVIDER",
+  "EKS_CLUSTER",
+  "EKS_NODE_GROUP",
+  "LOAD_BALANCER",
+  "LOAD_BALANCER_LISTENER",
+  "LOAD_BALANCER_TARGET_GROUP"
+]);
+
+const MANAGED_SERVERLESS_EXCLUDED_RESOURCE_TYPES = new Set<ResourceType>([
+  "EC2",
+  "AMI",
+  "IAM_INSTANCE_PROFILE",
+  "LAUNCH_TEMPLATE",
+  "AUTO_SCALING_GROUP",
+  "AUTO_SCALING_POLICY",
+  "ECR_REPOSITORY",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION",
+  "ECS_CAPACITY_PROVIDER",
+  "EKS_CLUSTER",
+  "EKS_NODE_GROUP",
+  "LOAD_BALANCER",
+  "LOAD_BALANCER_LISTENER",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "APPLICATION_AUTO_SCALING_TARGET",
+  "APPLICATION_AUTO_SCALING_POLICY",
+  "INTERNET_GATEWAY",
+  "ELASTIC_IP",
+  "NAT_GATEWAY",
+  "ROUTE_TABLE",
+  "ROUTE_TABLE_ASSOCIATION"
+]);
+
+function applyAcceptedAnswerPriorityToRequirementPlan(
+  plan: ArchitectureIntentPlan | null,
+  prompt: string
+): ArchitectureIntentPlan | null {
+  if (plan === null) return null;
+
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const patternIds = new Set(plan.patternIds ?? []);
+  const requiredResources = new Set(plan.requiredResources ?? []);
+  const forbiddenCapabilities = new Set(plan.forbiddenCapabilities ?? []);
+  const resourceQuantities = { ...(plan.resourceQuantities ?? {}) };
+  let runtimeTopology = plan.runtimeTopology;
+  const explicitResourceTypes = new Set(findExplicitResourceTypesInPrompt(normalizedPrompt));
+  const hasExplicitBackendResource = [...explicitResourceTypes].some((resourceType) =>
+    BACKEND_RUNTIME_RESOURCE_TYPES.has(resourceType)
+  );
+
+  if (requiresStaticDeliveryArchitecture(normalizedPrompt) && !hasExplicitBackendResource) {
+    patternIds.delete("serverless-api");
+    patternIds.delete("ecs-fargate");
+    patternIds.delete("alb-asg-ec2");
+    patternIds.delete("multi-az-rds");
+    patternIds.add("spa-cloudfront-s3");
+
+    for (const resourceType of [...requiredResources]) {
+      if (
+        !STATIC_SITE_ALLOWED_RESOURCE_TYPES.has(resourceType as ResourceType) &&
+        !explicitResourceTypes.has(resourceType as ResourceType)
+      ) {
+        requiredResources.delete(resourceType);
+      }
+    }
+    requiredResources.add("CLOUDFRONT");
+    requiredResources.add("S3");
+    for (const resourceType of Object.keys(resourceQuantities)) {
+      if (!requiredResources.has(resourceType as ResourceType)) {
+        delete resourceQuantities[resourceType];
+      }
+    }
+    resourceQuantities.S3 = 1;
+    resourceQuantities.CLOUDFRONT = 1;
+    forbiddenCapabilities.add("backend_runtime");
+    forbiddenCapabilities.add("container_runtime");
+    forbiddenCapabilities.add("database");
+    forbiddenCapabilities.add("ec2_runtime");
+    forbiddenCapabilities.add("file_upload");
+    forbiddenCapabilities.add("load_balancer");
+    forbiddenCapabilities.add("realtime");
+    runtimeTopology = undefined;
+  }
+
+  const backendProfile = resolveBackendProfile(normalizedPrompt);
+  const fullyManagedServerless =
+    resolveManagementProfile(normalizedPrompt) === "fully_managed" &&
+    backendProfile !== undefined &&
+    backendProfile !== "none" &&
+    !hasPromptTerm(normalizedPrompt, [
+      "ecs fargate",
+      "fargate service",
+      "fargate task",
+      "eks cluster",
+      "kubernetes"
+    ]);
+
+  if (fullyManagedServerless) {
+    patternIds.delete("ecs-fargate");
+    patternIds.delete("alb-asg-ec2");
+    patternIds.add("serverless-api");
+    requiredResources.add("API_GATEWAY_REST_API");
+    requiredResources.add("LAMBDA");
+    if (resolveRealtimeTransport(normalizedPrompt) === "websocket") {
+      requiredResources.add("API_GATEWAY_WEBSOCKET_API");
+      requiredResources.add("API_GATEWAY_V2_ROUTE");
+      requiredResources.add("API_GATEWAY_V2_INTEGRATION");
+      requiredResources.add("API_GATEWAY_V2_STAGE");
+    }
+
+    for (const resourceType of MANAGED_SERVERLESS_EXCLUDED_RESOURCE_TYPES) {
+      requiredResources.delete(resourceType);
+      delete resourceQuantities[resourceType];
+    }
+
+    if (patternIds.has("multi-az-rds") || requiredResources.has("RDS")) {
+      resourceQuantities.SUBNET = 2;
+      resourceQuantities.SECURITY_GROUP = 1;
+    }
+    for (const resourceType of [
+      "IAM_ROLE",
+      "IAM_POLICY",
+      "CLOUDWATCH_LOG_GROUP",
+      "CLOUDWATCH_METRIC_ALARM"
+    ] as const) {
+      if (requiredResources.has(resourceType)) {
+        resourceQuantities[resourceType] = 1;
+      }
+    }
+    forbiddenCapabilities.add("container_runtime");
+    forbiddenCapabilities.add("ec2_runtime");
+    forbiddenCapabilities.add("load_balancer");
+    runtimeTopology = {
+      trafficEntry: "API_GATEWAY_REST_API",
+      compute: "LAMBDA"
+    };
+  }
+
+  return {
+    ...plan,
+    patternIds: [...patternIds],
+    requiredResources: [...requiredResources],
+    resourceQuantities,
+    forbiddenCapabilities: [...forbiddenCapabilities],
+    ...(runtimeTopology === undefined ? { runtimeTopology: undefined } : { runtimeTopology })
+  };
+}
+
 function createAmazonQPlanDraftResult(
   response: AmazonQArchitectureDraftPlan,
   request: CreateArchitectureDraftRequest,
   normalizedRequirement: ArchitectureIntentPlan | null,
   providerMetadata: AiProviderMetadata
 ): AiArchitectureDraftResult {
-  const providerPlanIsCanonical = (response.plan.patternIds?.length ?? 0) > 0;
   const plan = applyRepositoryEvidencePriorityToRequirementPlan(
     applyFixedTemplatePriorityToRequirementPlan(
       normalizeArchitecturePlanTopologyInvariants(
-        reconcileCanonicalProviderPlan(
-          providerPlanIsCanonical
-            ? response.plan
-            : mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
-          response.plan
+        applyAcceptedAnswerPriorityToRequirementPlan(
+          reconcileCanonicalProviderPlan(
+            mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
+            response.plan
+          ),
+          request.prompt
         ),
         request.prompt
       ),
@@ -5168,10 +5379,12 @@ function createAmazonQPlanDraftResult(
     connectedCanonicalArchitectureJson,
     plan?.runtimeTopology
   );
-  const materializedArchitectureJson = applyArchitectureParameterCompletenessDefaults(applyArchitectureOperationalPolicy(
-    topologyConnectedArchitectureJson,
-    resolveArchitectureOperationalRequirements(request.prompt)
-  ));
+  const materializedArchitectureJson = applyArchitectureParameterCompletenessDefaults(
+    applyArchitectureOperationalPolicy(
+      topologyConnectedArchitectureJson,
+      resolveArchitectureOperationalRequirements(request.prompt)
+    )
+  );
   const architectureJson = applyStrictRepositoryEvidencePolicy(
     {
       architectureJson: materializedArchitectureJson,
@@ -9544,7 +9757,13 @@ function connectCanonicalPatternTopologies(
     connect("API_GATEWAY_DEPLOYMENT", "API_GATEWAY_STAGE", "publishes");
     connect("IAM_ROLE", "LAMBDA", "authorizes");
     connect("LAMBDA", "CLOUDWATCH_LOG_GROUP", "logs");
-    connect("LAMBDA", "S3", "image upload objects");
+    const lambda = nodesByType.get("LAMBDA")?.[0];
+    const uploadBucket = (nodesByType.get("S3") ?? []).find(
+      (node) => node.config.bucketPurpose === "user_uploads"
+    );
+    if (lambda !== undefined && uploadBucket !== undefined) {
+      connectIds(lambda.id, uploadBucket.id, "stores upload objects");
+    }
   }
 
   if (patternIds.includes("spa-cloudfront-s3")) {
@@ -9636,7 +9855,13 @@ function connectCanonicalPatternTopologies(
     }
   }
 
-  connect("S3", "LAMBDA", "object event");
+  const uploadEventBucket = (nodesByType.get("S3") ?? []).find(
+    (node) => node.config.bucketPurpose === "user_uploads"
+  );
+  const uploadEventLambda = nodesByType.get("LAMBDA")?.[0];
+  if (uploadEventBucket !== undefined && uploadEventLambda !== undefined) {
+    connectIds(uploadEventBucket.id, uploadEventLambda.id, "object event");
+  }
   connect("LAMBDA", "SQS_QUEUE", "enqueues");
   connect("LAMBDA", "DYNAMODB_TABLE", "writes");
   connect("SQS_QUEUE", "ECS_SERVICE", "work queue");
@@ -9957,6 +10182,10 @@ function resolveUploadProfile(normalizedPrompt: string): ArchitectureAnswerProfi
     return "image";
   }
 
+  if (/(?:file\s*upload|upload\s+files?|파일\s*업로드|업로드\s*기능|파일을\s*올|파일\s*첨부)/iu.test(normalizedPrompt)) {
+    return "mixed";
+  }
+
   return undefined;
 }
 
@@ -10183,11 +10412,10 @@ function requiresGlobalDeploymentScopeDecision(normalizedPrompt: string): boolea
 }
 
 function hasRealtimeImplementationDecision(normalizedPrompt: string): boolean {
-  return /(websocket|web\s*socket|sse|server-sent\s*events|polling|api\s*gateway|\uC6F9\uC18C\uCF13|\uC5F0\uACB0\s*\uACBD\uB85C|\uD3F4\uB9C1)/iu.test(
+  return /(websocket|web\s*socket|sse|server-sent\s*events|polling|\uC6F9\uC18C\uCF13|\uC5F0\uACB0\s*\uACBD\uB85C|\uD3F4\uB9C1)/iu.test(
     normalizedPrompt
   );
 }
-
 type RealtimeTransport = "polling" | "sse" | "websocket";
 
 function requiresHttpsTransport(normalizedPrompt: string): boolean {

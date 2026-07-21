@@ -220,6 +220,15 @@ const designSimulationBodySchema: z.ZodType<CreateDesignSimulationRequest> = z.o
   architectureJson: architectureJsonSchema,
   trafficLevel: z.enum(["small", "normal"]).default("normal"),
   budgetLevel: z.enum(["low", "normal"]).default("normal"),
+  liveObservation: z
+    .object({
+      acceptedEventCount: z.number().int().nonnegative().max(10_000),
+      pressureLevel: z.enum(["normal", "warning", "high", "critical"]),
+      pressurePercent: z.number().finite().nonnegative(),
+      projectedRequestsPerMinute: z.number().finite().nonnegative()
+    })
+    .strict()
+    .optional(),
   period: z.enum(["day", "week", "month"]).default("month"),
   expectedUserCount: z.coerce.number().int().min(1).max(1_000_000).default(1000),
   region: z.string().trim().min(1).default("ap-northeast-2")
@@ -427,8 +436,8 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         );
       }
       const body = parsedBody.data;
-      const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
       const requestedBranch = body.defaultBranch ?? "";
+      const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
       const cacheKey = createPublicRepositoryAnalysisCacheKey(body.repositoryUrl, requestedBranch);
       const cachedAnalysis = await options.runtimeCache
         ?.get<SourceRepositoryAnalysisResult>(cacheKey)
@@ -468,11 +477,12 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         repositoryUrl: body.repositoryUrl
       });
 
-      const aiHandoff = analyzeSourceRepositorySnapshot({
+      const analyzedAiHandoff = analyzeSourceRepositorySnapshot({
         revision: repositoryRevision,
         treePaths: snapshot.treePaths,
         files: snapshot.files
       });
+      const aiHandoff = analyzedAiHandoff;
       const recommendation = aiHandoff.deploymentTypeDefault
         ? await recommendRepositoryTemplatesWithAi({
             snapshot: {
@@ -515,7 +525,8 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = githubArchitectureDraftBodySchema.parse(request.body);
     const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
-    const snapshot = await fetchRepositoryEvidence(repository, body.defaultBranch ?? "main");
+    const resolvedBranch = body.defaultBranch?.trim() || "main";
+    const snapshot = await fetchRepositoryEvidence(repository, resolvedBranch);
     const templateContext = getRepositoryTemplateContext(body.selectedTemplateId);
     const result = createArchitectureDraftFromRepositoryEvidence(body.repositoryUrl, [
       ...snapshot.files.map((file) => file.content),
@@ -976,7 +987,7 @@ const PUBLIC_GITHUB_API_BASE_URL = "https://api.github.com";
 const MAX_PUBLIC_REPOSITORY_EVIDENCE_FILES = 24;
 const MAX_PUBLIC_REPOSITORY_BRANCH_PAGES = 50;
 const PUBLIC_GITHUB_REQUEST_TIMEOUT_MS = 10_000;
-const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v14";
+const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v15";
 const PUBLIC_REPOSITORY_ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1_000;
 
 // GitHub URL에서 owner/repo만 뽑습니다. public repository 근거 파일을 읽을 때 이 값이 필요합니다.

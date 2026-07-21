@@ -35,37 +35,37 @@ flowchart TB
 
 ## 기술 스택
 
-| 영역 | 선택한 기술 | 기준 |
-| --- | --- | --- |
-| 패키지 관리 | pnpm workspace | 모노레포 패키지 연결 |
-| 빌드 | Turborepo | 앱/패키지 빌드 순서 관리 |
-| 프론트엔드 | Next.js, React, TypeScript | 작업 화면과 API 연동 |
-| API 서버 | Fastify, TypeScript | 명확한 route/service 분리 |
-| DB | RDS PostgreSQL | 프로젝트, 설계, 배포 이력 저장 |
-| ORM | Drizzle ORM | 타입 안전 DB schema와 migration |
-| 파일 저장 | S3 | Terraform, export, image, tfplan, state/output artifact |
-| Runtime Cache | Redis | Deployment, Reverse Engineering, Git/CI/CD 상태와 15분 Live Observation 세션·집계 보조 |
-| IaC | Terraform | MVP 기준 IaC, 멀티 클라우드 확장 기반 |
-| AI 계층 | Bedrock, Amazon Q, Amazon Transcribe | 추천, 설명, Guardrails, AWS 특화 reasoning, 음성 전사 |
-| 운영 배포 | ECS/Fargate, ALB, ECR | API/web 분리 서비스와 path routing |
-| CI/CD | GitHub Actions, OIDC | 장기 AWS key 없는 운영 배포 |
+| 영역          | 선택한 기술                          | 기준                                                                                   |
+| ------------- | ------------------------------------ | -------------------------------------------------------------------------------------- |
+| 패키지 관리   | pnpm workspace                       | 모노레포 패키지 연결                                                                   |
+| 빌드          | Turborepo                            | 앱/패키지 빌드 순서 관리                                                               |
+| 프론트엔드    | Next.js, React, TypeScript           | 작업 화면과 API 연동                                                                   |
+| API 서버      | Fastify, TypeScript                  | 명확한 route/service 분리                                                              |
+| DB            | RDS PostgreSQL                       | 프로젝트, 설계, 배포 이력 저장                                                         |
+| ORM           | Drizzle ORM                          | 타입 안전 DB schema와 migration                                                        |
+| 파일 저장     | S3                                   | Terraform, export, image, tfplan, state/output artifact                                |
+| Runtime Cache | Redis                                | Deployment, Reverse Engineering, Git/CI/CD 상태와 15분 Live Observation 세션·집계 보조 |
+| IaC           | Terraform                            | MVP 기준 IaC, 멀티 클라우드 확장 기반                                                  |
+| AI 계층       | Bedrock, Amazon Q, Amazon Transcribe | 추천, 설명, Guardrails, AWS 특화 reasoning, 음성 전사                                  |
+| 운영 배포     | ECS/Fargate, ALB, ECR                | API/web 분리 서비스와 path routing                                                     |
+| CI/CD         | GitHub Actions, OIDC                 | 장기 AWS key 없는 운영 배포                                                            |
 
 ## 실행 경계
 
-| 책임 | 위치 | 금지 |
-| --- | --- | --- |
-| UI 표시와 사용자 승인 | `apps/web` | AWS SDK 직접 호출, Terraform CLI 실행 |
-| Architecture Board Compiler 제안 계산 | 초기에는 `apps/web`의 순수 in-process Module | DB 직접 변경, 승인 없는 Board mutation, Deployment Safety Gate 우회 |
-| Terraform 생성/검증 API | `apps/api` | 프론트에 실행 책임 위임 |
-| Terraform Plan/Apply/Destroy | `apps/api` 또는 ECS RunTask worker | 승인 없는 apply/destroy |
-| SketchCatch production infra Plan/Import/Apply | 승인된 GitHub Actions/운영자 경로 | product API/worker에서 호출, 승인 없는 state/resource mutation |
-| AWS 연결 확인 | `apps/api` 또는 ECS RunTask worker | credential 응답/로그 노출 |
-| Provider Adapter와 Reverse Engineering | `apps/api` 또는 ECS RunTask worker | provider별 credential/raw state 프론트 노출 |
-| Git/CI/CD handoff와 상태 추적 | `apps/api` 또는 ECS RunTask worker | 승인 없는 commit/apply, secret 저장 |
-| Runtime Cache 사용 | `apps/api` 또는 ECS RunTask worker | 사용자 Practice Architecture Resource로 노출 |
-| Live Observation UI | `apps/web` | AWS SDK 호출, ASG desired capacity 직접 변경, 사용자 입력 target URL |
-| Live Observation 세션·관측 | `apps/api`의 provider-neutral service + AWS adapter | token 로그/RDS 저장, 실패 시 sample AWS 상태 생성 |
-| 파일 artifact 저장 | S3 + RDS metadata | Terraform 원문 RDS 영구 저장 |
+| 책임                                           | 위치                                                | 금지                                                                 |
+| ---------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------- |
+| UI 표시와 사용자 승인                          | `apps/web`                                          | AWS SDK 직접 호출, Terraform CLI 실행                                |
+| Architecture Board Compiler 제안 계산          | 초기에는 `apps/web`의 순수 in-process Module        | DB 직접 변경, 승인 없는 Board mutation, Deployment Safety Gate 우회  |
+| Terraform 생성/검증 API                        | `apps/api`                                          | 프론트에 실행 책임 위임                                              |
+| Terraform Plan/Apply/Destroy                   | `apps/api` 또는 ECS RunTask worker                  | 승인 없는 apply/destroy                                              |
+| SketchCatch production infra Plan/Import/Apply | 승인된 GitHub Actions/운영자 경로                   | product API/worker에서 호출, 승인 없는 state/resource mutation       |
+| AWS 연결 확인                                  | `apps/api` 또는 ECS RunTask worker                  | credential 응답/로그 노출                                            |
+| Provider Adapter와 Reverse Engineering         | `apps/api` 또는 ECS RunTask worker                  | provider별 credential/raw state 프론트 노출                          |
+| Git/CI/CD handoff와 상태 추적                  | `apps/api` 또는 ECS RunTask worker                  | 승인 없는 commit/apply, secret 저장                                  |
+| Runtime Cache 사용                             | `apps/api` 또는 ECS RunTask worker                  | 사용자 Practice Architecture Resource로 노출                         |
+| Live Observation UI                            | `apps/web`                                          | AWS SDK 호출, ASG desired capacity 직접 변경, 사용자 입력 target URL |
+| Live Observation 세션·관측                     | `apps/api`의 provider-neutral service + AWS adapter | token 로그/RDS 저장, 실패 시 sample AWS 상태 생성                    |
+| 파일 artifact 저장                             | S3 + RDS metadata                                   | Terraform 원문 RDS 영구 저장                                         |
 
 프론트엔드는 버튼과 상태를 보여줄 뿐 실제 클라우드 변경을 직접 수행하지 않는다. 실제 리소스 변경은 backend/worker에서 승인 게이트, 로그 마스킹, cleanup 경로를 갖춘 뒤 실행한다.
 
@@ -128,25 +128,25 @@ AWS 승인 뒤에는 같은 Role로 bounded read probe를 실행합니다. Role 
 
 ## 데이터 저장 기준
 
-| 데이터 | 저장 위치 |
-| --- | --- |
-| 사용자, refresh token hash | RDS |
-| 프로젝트 정보 | RDS |
-| Source Repository 연결, Board Repository Analysis 출처와 마지막 인증 분석 요약 | RDS |
-| `ArchitectureJson` snapshot | RDS |
-| `ProjectDraft.diagramJson`, working `terraformFiles` | RDS + 브라우저 복구 상태 |
-| Deployment, Plan summary, 로그 metadata | RDS |
-| Deployment 완료 알림, outbox, Inbox 읽음 상태 | RDS |
-| Web Push subscription | RDS, endpoint hash + AES-256-GCM encrypted payload |
-| S3 파일 metadata | RDS |
-| Terraform 파일 | S3 |
-| `tfplan`, state, output artifact | S3 |
-| versioned Plan optimization evidence | S3, `tfplan`과 같은 수명 |
-| ApplicationArtifact identity, digest, provider location, claim/lease | RDS |
-| 사용자 application artifact byte | 사용자 ECR/S3 또는 provider storage |
-| 다이어그램 이미지, export zip, thumbnail | S3 |
-| Redis Runtime Cache 데이터 | Redis, 짧은 TTL |
-| Live Observation session, receipt dedup, 1초 bucket | Redis, 최대 15분 TTL |
+| 데이터                                                                         | 저장 위치                                          |
+| ------------------------------------------------------------------------------ | -------------------------------------------------- |
+| 사용자, refresh token hash                                                     | RDS                                                |
+| 프로젝트 정보                                                                  | RDS                                                |
+| Source Repository 연결, Board Repository Analysis 출처와 마지막 인증 분석 요약 | RDS                                                |
+| `ArchitectureJson` snapshot                                                    | RDS                                                |
+| `ProjectDraft.diagramJson`, working `terraformFiles`                           | RDS + 브라우저 복구 상태                           |
+| Deployment, Plan summary, 로그 metadata                                        | RDS                                                |
+| Deployment 완료 알림, outbox, Inbox 읽음 상태                                  | RDS                                                |
+| Web Push subscription                                                          | RDS, endpoint hash + AES-256-GCM encrypted payload |
+| S3 파일 metadata                                                               | RDS                                                |
+| Terraform 파일                                                                 | S3                                                 |
+| `tfplan`, state, output artifact                                               | S3                                                 |
+| versioned Plan optimization evidence                                           | S3, `tfplan`과 같은 수명                           |
+| ApplicationArtifact identity, digest, provider location, claim/lease           | RDS                                                |
+| 사용자 application artifact byte                                               | 사용자 ECR/S3 또는 provider storage                |
+| 다이어그램 이미지, export zip, thumbnail                                       | S3                                                 |
+| Redis Runtime Cache 데이터                                                     | Redis, 짧은 TTL                                    |
+| Live Observation session, receipt dedup, 1초 bucket                            | Redis, 최대 15분 TTL                               |
 
 RDS는 원천 데이터와 metadata를 저장한다. SketchCatch S3는 Terraform, tfplan, export처럼 서비스가 생성한 파일성 산출물을 저장한다. 사용자 application artifact byte는 사용자 ECR/S3 또는 provider storage에 남기고 SketchCatch production ECR/S3로 복사하지 않는다.
 Redis는 Deployment, Reverse Engineering, Git/CI/CD Integration처럼 오래 걸리는 workflow 상태와 streaming-friendly metadata를 보조한다. Live Observation은 예외적으로 15분 세션, public token SHA-256 lookup, receipt dedup, 원자 count, 1초 bucket을 Redis에만 저장하며 영구 Deployment 기록으로 승격하지 않는다. Redis 데이터는 원천 기록이 아니며, 최종 기록은 RDS/S3에 남긴다.
@@ -199,11 +199,11 @@ Deployment 최적화의 지원 여부는 `packages/types`의 provider-neutral `R
 
 최적화는 한 종류의 cache가 아니라 세 계층으로 분리한다.
 
-| 계층 | identity | 현재 범위 |
-| --- | --- | --- |
-| IaC desired state | Terraform bundle + provider lock/identity + target + state lineage/serial | v1 구현 |
-| application artifact | repository/commit + normalized build config/contract + platform + secret-free input + immutable digest | Direct/GitOps 공통 Registry v1 구현 |
-| runtime release | deployment target fingerprint + ApplicationArtifact fingerprint/digest + provider actual state + health evidence | Runtime Convergence Adapter v1 구현 |
+| 계층                 | identity                                                                                                         | 현재 범위                           |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| IaC desired state    | Terraform bundle + provider lock/identity + target + state lineage/serial                                        | v1 구현                             |
+| application artifact | repository/commit + normalized build config/contract + platform + secret-free input + immutable digest           | Direct/GitOps 공통 Registry v1 구현 |
+| runtime release      | deployment target fingerprint + ApplicationArtifact fingerprint/digest + provider actual state + health evidence | Runtime Convergence Adapter v1 구현 |
 
 IaC 계층은 canonical Terraform bundle과 provider lock을 재사용하되 account, region, state lineage/serial, drift TTL을 함께 검증한다. 안전한 pending Plan 재사용은 실제 `tfplan`, S3 optimization evidence, Plan summary, Pre-Deployment result가 모두 같은 경우에만 허용한다. 동일 process의 같은 Deployment Plan은 single-flight로 합치고, API route는 이미 실행 중인 동일 Plan에 합류한다. RDS의 Deployment/job 제약은 process 간 중복 실행을 막는 영구 경계이며 Redis는 이 결정의 source of truth가 아니다.
 
@@ -279,18 +279,22 @@ CI/CD Logs는 GitHub Actions의 build/deploy workflow 증거이며 Runtime appli
 
 ## Live Observation 실행 경계
 
+공개 audience app URL은 capability 대신 non-secret collector URL만 query parameter로 전달한다. 배포 앱은 실제 check-in/heartbeat가 성공한 뒤 session-bound bootstrap credential을 메모리에만 받아 `/receipts`를 best-effort 호출한다. collector는 manifest의 정확한 audience application Origin과 capability를 다시 검증한 뒤 Store receipt만 반영하며 같은 ECS/ALB 요청을 다시 보내지 않는다. 레거시 내장 `/observe` 흐름의 `/requests`만 검증된 traffic endpoint의 2xx 뒤에 receipt를 반영한다. 별도 client IP limiter와 `Retry-After` 시간 잠금은 사용하지 않는다. 남는 보호 경계는 Store의 초당 20건, 10초 120건, 세션 10,000건 상한과 15분 세션 수명이며, 거부된 event ID는 즉시 다시 시도할 수 있다.
+
 공개 audience page는 URL에 capability를 넣지 않고 session-bound bootstrap credential을 메모리에만 보유한다. 여러 audience client는 같은 active session에서 bootstrap을 반복할 수 있다. 실제 요청은 ACM custom hostname의 CNAME이 manifest의 public AWS ALB DNS와 정확히 일치하는지 다시 조회하고, ALB의 모든 A/AAAA 응답이 public address인지 검증한 뒤 선택한 IP로 HTTPS 연결을 고정한다. DNS와 HTTPS는 하나의 3초 wall-clock deadline을 공유하고 HTTPS는 남은 시간만 explicit destroy timer로 사용한다. TLS SNI와 Host는 custom hostname을 유지하며 POST와 redirect 미허용 조건으로 전송하고, status headers를 받는 즉시 response/socket을 destroy하여 body를 drain하지 않으며 성공한 2xx 뒤에만 Store receipt를 반영한다. DNS 불일치, 빈 응답, 하나라도 private·loopback·link-local·metadata·multicast·reserved address가 포함된 응답은 upstream 연결 전에 generic unavailable로 차단한다. IPv6는 native global unicast만 허용하고 IETF special assignment, 6to4, 반환된 6bone, documentation, IPv4-mapped 범위를 차단한다. public write endpoint는 `/requests` 하나뿐이며 IP별 전역 한도는 ALB가 추가한 client IP의 SHA-256 fingerprint로만 집계한다.
 
-API의 Live Observation service는 session/receipt/snapshot 계산을 소유하고 provider-neutral snapshot port만 호출한다. URL의 Deployment ID와 Store session의 Deployment ID가 같은지 lease 전에 확인하고, verified manifest와 현재 verified AWS connection의 partition/region/account가 모두 일치할 때만 AWS target을 만든다. AWS adapter는 선택된 Target Group 범위의 CloudWatch `HTTPCode_Target_2XX_Count`, `HTTPCode_Target_3XX_Count`, `HTTPCode_Target_4XX_Count`, `HTTPCode_Target_5XX_Count`, `TargetResponseTime` p95, ASG `InService` 또는 ECS running capacity, ELB target health, bounded CloudWatch Logs를 조회한다. 각 CloudWatch query result가 유일하고 `StatusCode=Complete`일 때만 사용하며 `PartialData`, `InternalError`, `Forbidden`, 누락 status는 unavailable이다. request 수는 p95가 선택한 완료 period를 각 response class의 전체 finite point에서 정확히 찾아 합산하고, 같은 period에 하나 이상의 다른 response class가 있어 period 존재가 증명된 sparse class만 0으로 취급한다. latency만 있거나 response class가 완전히 비어 있거나 다른 period의 class만 있으면 합치지 않으며 freshness는 period 종료 시각부터 계산한다. 동일 observation/target read는 settlement 이후 10초 동안 bounded cache하고 pending read는 TTL로 중복 시작하지 않는다. cache가 pending으로 가득 차면 fail-closed하고 STS와 모든 AWS read는 하나의 5초 abort deadline을 공유한다. observer lease와 fencing token을 획득한 service만 Store의 latest observation을 갱신한다. Store 장애는 GET의 `LIVE_OBSERVATION_CACHE_UNAVAILABLE` 503 또는 SSE의 단일 sanitized error event로 반환한다. SSE는 1초 snapshot, 15초 heartbeat를 제공하고 Web은 연결 실패 시 인증 GET snapshot 후 exponential backoff로 재연결한다. AWS evidence가 지연되거나 unavailable이면 이전 정량값을 유지하지 않고 공통 snapshot의 모든 숫자를 `null`로 만들며 상태를 명시한다.
+API의 Live Observation service는 session/receipt/snapshot 계산을 소유하고 provider-neutral snapshot port만 호출한다. URL의 Deployment ID와 Store session의 Deployment ID가 같은지 lease 전에 확인하고, verified manifest와 현재 verified AWS connection의 partition/region/account가 모두 일치할 때만 AWS target을 만든다. AWS adapter는 선택된 Target Group 범위의 CloudWatch `HTTPCode_Target_2XX_Count`, `HTTPCode_Target_3XX_Count`, `HTTPCode_Target_4XX_Count`, `HTTPCode_Target_5XX_Count`, `TargetResponseTime` p95, ASG `InService` 또는 ECS running capacity, ELB target health, bounded CloudWatch Logs를 조회한다. 각 CloudWatch query result가 유일하고 `StatusCode=Complete`일 때만 사용하며 `PartialData`, `InternalError`, `Forbidden`, 누락 status는 unavailable이다. request 수는 p95가 선택한 완료 period를 각 response class의 전체 finite point에서 정확히 찾아 합산하고, 같은 period에 하나 이상의 다른 response class가 있어 period 존재가 증명된 sparse class만 0으로 취급한다. latency만 있거나 response class가 완전히 비어 있거나 다른 period의 class만 있으면 합치지 않으며 freshness는 period 종료 시각부터 계산한다. 동일 observation/target read는 settlement 이후 10초 동안 bounded cache하고 pending read는 TTL로 중복 시작하지 않는다. cache가 pending으로 가득 차면 fail-closed하고 STS와 모든 AWS read는 하나의 5초 abort deadline을 공유한다. observer lease와 fencing token을 획득한 service만 Store의 latest observation을 갱신한다. Store 장애는 GET의 `LIVE_OBSERVATION_CACHE_UNAVAILABLE` 503 또는 SSE의 단일 sanitized error event로 반환한다. SSE는 1초 snapshot, 15초 heartbeat를 제공하고 Web은 연결 실패 시 인증 GET snapshot 후 exponential backoff로 재연결한다. `unavailable`은 정량값 없이 반환한다. `delayed`는 이전의 완전한 관측값을 재사용할 수 있지만 Web은 이를 최신 상태나 정상 판단으로 사용하지 않고 확인 중으로 표시한다.
+
+Web Signal Dashboard는 provider-neutral snapshot만 읽어 최대 세 개의 결정론적 신호를 만들며 새 polling이나 자동 변경을 만들지 않는다. Store가 계산한 pressure가 `warning` 이상이면 최초 snapshot을 incident evidence로 유지하고 배포 Architecture와 함께 기존 AI Design Simulation API에 전달한다. AI 분석은 읽기 전용 추천이다. 사용자가 `Project Draft 수정`을 명시적으로 승인한 경우에만 현재 Terraform 파일에서 정확히 하나의 `aws_appautoscaling_target`과 단일 정수 `max_capacity`를 확인해 값을 1 증가시키고 Project Draft 저장 성공을 검증한다. 대상이 없거나 여러 개이거나 변수 표현식이면 수동 검토로 중단하고, revision conflict나 저장 실패 때는 경고를 유지한다. 저장 성공 뒤에만 경고를 해제하며 실제 Provider snapshot, Deployment, AWS Resource, Plan/Apply 상태는 변경하지 않는다.
 
 ## 멀티 클라우드 확장 방향
 
 MVP는 AWS Provider Adapter 기준이다. `Resource`, `Practice Architecture`, `InfrastructureGraph`, `Reverse Engineering`은 provider-neutral 모델을 유지하고, provider별 차이는 adapter에 둔다. 장기적으로는 아래처럼 확장한다.
 
-| 단계 | 범위 |
-| --- | --- |
-| MVP | AWS + Terraform |
-| 이후 | AzureRM Provider, Google Provider |
+| 단계 | 범위                                           |
+| ---- | ---------------------------------------------- |
+| MVP  | AWS + Terraform                                |
+| 이후 | AzureRM Provider, Google Provider              |
 | 장기 | 클라우드별 비용 비교, 클라우드별 아키텍처 리뷰 |
 
 문서와 코드에서 SketchCatch를 AWS 전용 서비스로 표현하지 않는다. 단, MVP 구현은 AWS-first로 진행한다.

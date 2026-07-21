@@ -34,6 +34,14 @@ export function createGitCicdReadinessNavigation(input: {
           : null
     };
   }
+  if (action.destination === "repository") {
+    return {
+      actionLabel: action.actionLabel,
+      href: "#cicd-source-repository",
+      readinessKey: action.readinessKey,
+      directDeploymentScope: null
+    };
+  }
 
   const returnSearch = new URLSearchParams({
     projectId: input.projectId,
@@ -48,9 +56,7 @@ export function createGitCicdReadinessNavigation(input: {
     readinessKey: action.readinessKey
   });
   const projectPath = encodeURIComponent(input.projectId);
-  const pathname = action.destination === "repository"
-    ? `/dashboard/projects/${projectPath}/repository`
-    : `/dashboard/projects/${projectPath}/settings`;
+  const pathname = `/dashboard/projects/${projectPath}/settings`;
 
   return {
     actionLabel: action.actionLabel,
@@ -82,7 +88,7 @@ const readinessNavigationByAction: Record<
     readinessKey: "initial_application_release"
   },
   select_repository: {
-    actionLabel: "Repository 선택하기",
+    actionLabel: "Repository 연결 확인",
     destination: "repository",
     hash: "",
     readinessKey: "source_repository"

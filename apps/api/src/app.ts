@@ -235,7 +235,6 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       createLiveObservationV2Runtime({
         getDatabaseClient: getAppDatabaseClient,
         keyring: liveObservationKeyring!,
-        runtimeCache,
         runtimeEnv
       }))
     : undefined;

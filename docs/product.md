@@ -43,14 +43,14 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 
 ## 대상 사용자
 
-| 사용자 | 상황 | 핵심 니즈 |
-| --- | --- | --- |
-| 애플리케이션 개발자 | 서비스 요구사항을 인프라 설계와 IaC로 빠르게 옮겨야 함 | 쉬운 설계, 구조 이해, 안전한 배포 |
-| 백엔드 개발자 | 서비스 개발은 가능하지만 인프라 경험이 부족함 | 빠른 인프라 초안, 코드 생성, 배포 보조 |
-| 사이드프로젝트 팀 | 인프라 전담자가 없음 | 저비용 구조, 빠른 배포, 위험 검증 |
-| 초기 스타트업 | MVP를 빠르게 출시해야 함 | 실용적인 기본 아키텍처와 비용 관리 |
+| 사용자                 | 상황                                                          | 핵심 니즈                                         |
+| ---------------------- | ------------------------------------------------------------- | ------------------------------------------------- |
+| 애플리케이션 개발자    | 서비스 요구사항을 인프라 설계와 IaC로 빠르게 옮겨야 함        | 쉬운 설계, 구조 이해, 안전한 배포                 |
+| 백엔드 개발자          | 서비스 개발은 가능하지만 인프라 경험이 부족함                 | 빠른 인프라 초안, 코드 생성, 배포 보조            |
+| 사이드프로젝트 팀      | 인프라 전담자가 없음                                          | 저비용 구조, 빠른 배포, 위험 검증                 |
+| 초기 스타트업          | MVP를 빠르게 출시해야 함                                      | 실용적인 기본 아키텍처와 비용 관리                |
 | 플랫폼/DevOps 엔지니어 | 기존 cloud state 분석, IaC 전환, 운영 배포 흐름 정리가 필요함 | Reverse Engineering, Git/CI/CD handoff, 위험 요약 |
-| 기술 리드/SRE | 팀원의 설계와 운영 변경을 검토해야 함 | 품질 리뷰, 변경 영향 확인, 안전한 승인 흐름 |
+| 기술 리드/SRE          | 팀원의 설계와 운영 변경을 검토해야 함                         | 품질 리뷰, 변경 영향 확인, 안전한 승인 흐름       |
 
 ## 유지할 핵심 기능
 
@@ -63,16 +63,18 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | Terraform 생성 | 다이어그램 기반 설계를 IaC Preview로 변환한다. |
 | Pre-Deployment Check | 비용, 보안, 설정 위험을 설명하고 수정 방향을 제안한다. |
 | Direct Deployment Path | sandbox/practice 실행에서 Plan, 승인, Apply, 로그, Outputs, Auto Cleanup까지 연결한다. |
-| Live Observation | 성공한 Demo Web Service Deployment의 실제 요청, CloudWatch 측정값, ASG/EC2 또는 ECS/Fargate runtime 상태를 15분 세션으로 구분해 관측한다. |
+| Live Observation | 성공한 Demo Web Service Deployment의 실제 요청, CloudWatch 측정값, ASG/EC2 또는 ECS/Fargate runtime 상태를 15분 세션으로 관측한다. 트래픽 흐름 아래에서는 현재 상태와 사용자 영향, 근거가 있는 중요 신호 최대 3개, 확인할 수 없는 내용을 짧게 보여주며 CloudWatch의 지표 목록을 복제하지 않는다. |
+
+Live Observation은 실제 배포 앱의 check-in/heartbeat 성공 뒤 collector가 확인한 Store receipt의 10초 rolling pressure가 `warning` 이상이 되면 같은 관측 화면에 경고를 유지한다. AI Design Simulation은 배포 Architecture와 비민감 관측 수치로 용량 설정 검토 방향을 제안한다. 사용자가 직접 승인한 경우에만 정확히 하나의 ECS Application Auto Scaling Target에서 정수 `max_capacity`를 1 증가시켜 Project Draft에 저장한다. 저장 성공 뒤 경고를 해제하되 실제 AWS 반영이나 정상화로 표현하지 않으며 새 Plan, 승인, 재배포 경계는 그대로 유지한다.
 | Git/CI/CD Integration | IaC Preview를 Source Repository PR과 외부 pipeline 상태로 연결한다. |
 | Reverse Engineering | 기존 클라우드 상태를 Practice Architecture와 IaC Preview/import 제안으로 전환한다. |
 
 ## 축소할 기능
 
-| 기능 | 기준 |
-| --- | --- |
+| 기능                       | 기준                                                                                                                                                |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 고도화된 트래픽 시뮬레이터 | 미래 용량 예측·임의 target·무제한 부하 생성은 지원하지 않는다. 성공 Deployment의 제한된 Live Observation은 실제 서비스 흐름 검증 용도로만 제공한다. |
-| 병목 예측 엔진 | 정밀 예측이 아니라 잠재 병목 가능성 경고로 제한한다. |
+| 병목 예측 엔진             | 정밀 예측이 아니라 잠재 병목 가능성 경고로 제한한다.                                                                                                |
 
 ## 강화할 기능
 
@@ -90,6 +92,8 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 공개 Repository는 GitHub 계정 연결 없이 분석하고 Architecture Board를 만들 수 있다. Board 저장 시 Repository URL, branch, 분석 commit SHA와 선택 Template을 프로젝트의 `RepositoryAnalysisRecord`에 저장한다. 공개 조회에 실패하면 실제 공개/비공개 여부를 단정하지 않고 입력 오류 또는 접근 제한 가능성을 함께 안내한다. GitHub가 연결되어 있으면 입력한 owner/name과 정확히 일치하는 Repository만 연결하고, 연결되어 있지 않으면 전역 GitHub 연결 또는 Repository 권한 추가로 이어진다.
 
 GitHub App installation은 Dashboard 전역 설정에서 사용자 계정 단위로 관리한다. 프로젝트별 Source Repository, 감시 branch/path, 배포 타깃, readiness와 CI/CD 실행 기록은 Workspace의 `Delivery`에서 관리한다. GitHub callback은 정확한 Repository 연결만 마친 뒤 원래 분석으로 돌아가며 배포 설정을 요구하지 않는다. 배포 modal의 CI/CD 화면은 요약과 최근 결과만 보여주고 상세 수정은 `Delivery 열기`로 이동한다. 설정 저장은 실제 cloud 배포, PR 생성 또는 Git 변경을 자동 실행하지 않는다.
+
+Delivery는 현재 Board provenance와 정확히 연결된 active Source Repository를 selector 없이 자동 적용하고 `owner/name · default branch · 자동 적용`으로 표시한다. Board provenance만 있고 PR 권한이 연결되지 않았으면 해당 Repository의 `PR 권한 연결 필요` 동작을 제공한다. 자동 적용은 PR 생성 승인이나 Git 변경 실행을 뜻하지 않으며, Monitoring과 AWS 배포 타깃의 추천값은 사용자가 저장하기 전까지 `저장 전 추천값`, 편집하면 `미저장 변경`으로 구분한다.
 
 분석 SHA와 마지막 인증 분석 SHA가 다르면 코드 변경 사실만 안내한다. SketchCatch는 이 차이만으로 새 cloud Resource의 추가·변경·삭제를 추론하지 않고, 기존 Board를 자동 재생성하거나 덮어쓰지 않으며 Git/CI/CD readiness도 차단하지 않는다.
 
@@ -187,17 +191,17 @@ MVP에서 하지 않는다.
 
 ## 주요 리스크
 
-| 리스크 | 영향 | 대응 |
-| --- | --- | --- |
-| AI 설계 부정확 | 잘못된 Resource 조합 생성 | 제한된 Golden Path, deterministic fallback, 사용자 승인 |
-| 음성 입력 오인식 | 의도와 다른 Requirement Prompt 생성 | Transcribe 결과 확인, 사용자 수정 후 확정 |
-| Terraform 생성 오류 | Plan/Apply 실패 | 정적 diagnostics, `terraform validate`, Golden Path 테스트 |
-| AWS 비용 사고 | 원치 않는 비용 발생 | 리소스 whitelist, 비용 경고, Destroy/Cleanup 필수 |
-| 보안 위험 설정 | 공개 SSH, Public DB 등 | Pre-Deployment Check, High 위험 강조 표시, 사용자 Plan 승인 기록 |
-| Git/CI/CD 권한 오남용 | 운영 배포 경로 사고 | PR 기반 handoff, pipeline status tracking, 승인 gate |
+| 리스크                     | 영향                                            | 대응                                                                |
+| -------------------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
+| AI 설계 부정확             | 잘못된 Resource 조합 생성                       | 제한된 Golden Path, deterministic fallback, 사용자 승인             |
+| 음성 입력 오인식           | 의도와 다른 Requirement Prompt 생성             | Transcribe 결과 확인, 사용자 수정 후 확정                           |
+| Terraform 생성 오류        | Plan/Apply 실패                                 | 정적 diagnostics, `terraform validate`, Golden Path 테스트          |
+| AWS 비용 사고              | 원치 않는 비용 발생                             | 리소스 whitelist, 비용 경고, Destroy/Cleanup 필수                   |
+| 보안 위험 설정             | 공개 SSH, Public DB 등                          | Pre-Deployment Check, High 위험 강조 표시, 사용자 Plan 승인 기록    |
+| Git/CI/CD 권한 오남용      | 운영 배포 경로 사고                             | PR 기반 handoff, pipeline status tracking, 승인 gate                |
 | Reverse Engineering 오해석 | 기존 cloud state와 Practice Architecture 불일치 | Provider Adapter 범위 명시, import suggestion은 사용자 확인 후 적용 |
-| 로그/응답 secret 노출 | credential 유출 | 로그 마스킹, shared type secret 배제 |
-| 팀 계약 불일치 | API 연결 단계에서 깨짐 | `docs/data-models.md`와 `packages/types` 선반영 |
+| 로그/응답 secret 노출      | credential 유출                                 | 로그 마스킹, shared type secret 배제                                |
+| 팀 계약 불일치             | API 연결 단계에서 깨짐                          | `docs/data-models.md`와 `packages/types` 선반영                     |
 
 ## 제품 언어
 

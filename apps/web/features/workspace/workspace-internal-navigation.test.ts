@@ -8,6 +8,7 @@ function readSource(relativePath: string): string {
 }
 
 const cicdSource = readSource("./CicdConsoleScreen.tsx");
+const cicdHandoffSource = readSource("./CicdHandoffPanel.tsx");
 const directDeploymentSource = readSource("./DirectDeploymentScreen.tsx");
 const reverseEngineeringSource = readSource("./ReverseEngineeringScanCriteriaForm.tsx");
 
@@ -23,7 +24,7 @@ test("Workspace settings and project routes use client navigation", () => {
 
 test("Workspace deployment output and GitHub links remain external anchors", () => {
   assert.match(
-    cicdSource,
+    cicdHandoffSource,
     /<a href=\{existingHandoff\.pullRequestUrl\} rel="noreferrer" target="_blank">/
   );
   assert.match(

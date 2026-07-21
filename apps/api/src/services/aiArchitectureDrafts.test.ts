@@ -955,10 +955,9 @@ test("createAmazonQArchitectureDraftResponse asks the next required website ques
   assert.equal(response.status, "needs_clarification");
   assert.equal(response.question, "예상 트래픽 규모는?");
   assert.deepEqual(response.suggestions, [
-    "소규모 (일 100명 미만, 동시 10명 미만)",
-    "중간 규모 (일 1,000명, 동시 50명)",
-    "대규모 (일 10,000명 이상, 동시 500명 이상)",
-    "급변동 (평상시 적지만 이벤트 시 급증)"
+    "소규모 (일 100명 미만)",
+    "중간 규모 (일 1,000명)",
+    "대규모 (일 10,000명 이상)"
   ]);
 });
 
@@ -982,7 +981,7 @@ test("createAmazonQArchitectureDraftResponse asks deterministic clarifications b
   }
 
   assert.equal(response.status, "needs_clarification");
-  assert.equal(response.question, "어떤 종류의 웹사이트인가요?");
+  assert.equal(response.question, "웹사이트 유형은?");
   assert.ok((response.suggestions?.length ?? 0) > 0);
   assert.equal(response.providerMetadata.provider, "fallback");
 });
@@ -1052,7 +1051,7 @@ test("createAmazonQArchitectureDraftResponse treats Play Store app prompts as mo
   }
 
   assert.equal(response.status, "needs_clarification");
-  assert.notEqual(response.question, "어떤 종류의 웹사이트인가요?");
+  assert.notEqual(response.question, "웹사이트 유형은?");
   assert.equal(response.question, "예상 트래픽 규모는?");
 });
 
@@ -1079,7 +1078,7 @@ test("createAmazonQArchitectureDraftResponse does not classify web app prompts a
   }
 
   assert.equal(response.status, "needs_clarification");
-  assert.equal(response.question, "어떤 종류의 웹사이트인가요?");
+  assert.equal(response.question, "웹사이트 유형은?");
 });
 
 test("createAmazonQArchitectureDraftResponse accepts a relevant natural-language clarification answer", async () => {
@@ -1110,7 +1109,7 @@ test("createAmazonQArchitectureDraftResponse rejects an unrelated natural-langua
   );
   if (!("status" in response)) assert.fail("Expected the same clarification response");
   assert.equal(response.questionId, "website_type");
-  assert.equal(response.question, "어떤 종류의 웹사이트인가요?");
+  assert.equal(response.question, "웹사이트 유형은?");
   assert.match(response.validationMessage ?? "", /다시 답해/);
 });
 
@@ -1128,7 +1127,7 @@ test("createAmazonQArchitectureDraftResponse evaluates short natural answers in 
     { provider, creditPolicy: confirmedCreditPolicy }
   );
   if (!("status" in accepted)) assert.fail("Expected the next clarification response");
-  assert.equal(accepted.questionId, "frontend");
+  assert.equal(accepted.questionId, "region");
 
   const rejected = await createAmazonQArchitectureDraftResponse(
     {
@@ -1142,20 +1141,21 @@ test("createAmazonQArchitectureDraftResponse evaluates short natural answers in 
   assert.match(rejected.validationMessage ?? "", /다시 답해/);
 });
 
-test("createAmazonQArchitectureDraftResponse rejects text that does not answer the backend choice", async () => {
+test("createAmazonQArchitectureDraftResponse rejects text that does not answer the management choice", async () => {
   const provider = createFakeAmazonQProvider(() => "{}");
   const prompt = [
     "website type: dynamic company information website",
     "traffic: small under 100 users",
     "database: PostgreSQL required",
-    "frontend: HTML CSS JavaScript"
+    "region: Korea Seoul",
+    "monthly budget: 30만원"
   ].join("\n");
 
-  for (const answer of ["김치찌개 레시피 알려줘", "API가 무엇인지 설명해줘"]) {
+  for (const answer of ["김치찌개 레시피 알려줘", "관리 방식이 무엇인지 설명해줘"]) {
     const response = await createAmazonQArchitectureDraftResponse(
       {
         prompt,
-        clarificationAnswers: [{ questionId: "backend", answer }]
+        clarificationAnswers: [{ questionId: "management_preference", answer }]
       },
       { provider, creditPolicy: confirmedCreditPolicy }
     );
@@ -1163,8 +1163,8 @@ test("createAmazonQArchitectureDraftResponse rejects text that does not answer t
     if (!("status" in response)) {
       assert.fail("Expected the repeated clarification response");
     }
-    assert.equal(response.questionId, "backend");
-    assert.equal(response.question, "백엔드가 필요한가요?");
+    assert.equal(response.questionId, "management_preference");
+    assert.equal(response.question, "관리 복잡도 선호는?");
     assert.match(response.validationMessage ?? "", /다시 답해/);
   }
 });
@@ -1183,13 +1183,11 @@ test("createAmazonQArchitectureDraftResponse forwards accepted natural-language 
   });
   const promptWithoutAnsweredQuestions = createKoreaNoUploadNoRealtimePrompt()
     .split("\n")
-    .filter((line) => !/^(?:website type|traffic:|frontend:|backend:)/iu.test(line))
+    .filter((line) => !/^(?:website type|traffic:)/iu.test(line))
     .join("\n");
   const clarificationAnswers = [
     { questionId: "website_type", answer: "네이버 쇼핑몰 같은 사이트를 만들고 싶어" },
-    { questionId: "traffic", answer: "일일 500명 정도" },
-    { questionId: "frontend", answer: "Svelte 쓸 거야" },
-    { questionId: "backend", answer: "스프링부트 썼어" }
+    { questionId: "traffic", answer: "일일 500명 정도" }
   ];
   await createAmazonQArchitectureDraftResponse(
     {
@@ -1200,10 +1198,8 @@ test("createAmazonQArchitectureDraftResponse forwards accepted natural-language 
   );
   assert.match(requestedPrompt, /Accepted architecture clarification answers:/);
   assert.match(requestedPrompt, /website_type: 네이버 쇼핑몰 같은 사이트/);
-  assert.match(requestedPrompt, /traffic: 중간 규모 \(일 1,000명, 동시 50명\)/);
-  assert.match(requestedPrompt, /frontend: React\/Vue\/Angular \(SPA 프레임워크\)/);
-  assert.match(requestedPrompt, /backend: 복잡한 비즈니스 로직 \(Spring Boot, Django 등\)/);
-  assert.doesNotMatch(requestedPrompt, /어떤 종류의 웹사이트인가요\?: 네이버/);
+  assert.match(requestedPrompt, /traffic: 중간 규모 \(일 1,000명\)/);
+  assert.doesNotMatch(requestedPrompt, /웹사이트 유형은\?: 네이버/);
   assert.deepEqual(
     (requestedPayload as { clarificationAnswers?: unknown }).clarificationAnswers,
     clarificationAnswers
@@ -1233,213 +1229,202 @@ test("createAmazonQArchitectureDraftResponse treats concurrent user capacity as 
   assert.equal(response.question, "데이터베이스가 필요한가요?");
 });
 
-test("createAmazonQArchitectureDraftResponse asks clarification questions in the provided priority order", async () => {
-  const provider = createFakeAmazonQProvider(() => "{}");
-
-  const answeredRequirements = [
-    "정적 사이트 (블로그, 포트폴리오, 회사 소개페이지)입니다.",
-    "예상 트래픽 규모는 중간 규모 (일 1,000명, 동시 50명)입니다.",
-    "데이터베이스는 필요 없음 (정적 콘텐츠만)입니다.",
-    "프론트엔드 기술은 HTML/CSS/JS만 (순수 웹)입니다.",
-    "백엔드는 간단한 API (Node.js, Python Flask 등)입니다.",
-    "주요 사용자 지역은 한국만 (서울 리전)입니다.",
-    "월 예산 범위는 10만원 미만 (최소 비용)입니다.",
-    "SSL 인증서(HTTPS)는 필수 (보안 중요)입니다.",
-    "파일 업로드 기능은 없음 (텍스트만)입니다.",
-    "실시간 기능은 필요 없음입니다.",
-    "관리 복잡도 선호도는 완전 관리형 (서버리스, 관리 최소화)입니다.",
-    "페이지 로딩 시간 목표는 3초 이내 (적당함)입니다.",
-    "전체 웹사이트 크기는 10MB 미만 (간단한 사이트)입니다.",
-    "트래픽 패턴은 일정함 (하루 종일 비슷)입니다."
-  ] as const;
-
-  const orderedClarifications = [
+test("createAmazonQArchitectureDraftResponse asks only the six streamlined architecture questions", async () => {
+  let providerCallCount = 0;
+  const provider = createFakeAmazonQProvider(() => {
+    providerCallCount += 1;
+    return JSON.stringify({
+      status: "needs_clarification",
+      question: "추가로 결정할 요구사항이 있나요?",
+      suggestions: []
+    });
+  });
+  const clarificationAnswers: Array<{ questionId: string; answer: string }> = [];
+  const expectedQuestions = [
     {
-      question: "어떤 종류의 웹사이트인가요?",
+      questionId: "website_type",
+      question: "웹사이트 유형은?",
       suggestions: [
-        "정적 사이트 (블로그, 포트폴리오, 회사 소개페이지)",
-        "동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)",
-        "SPA (Single Page Application) (React/Vue 등)",
-        "API 서버 (모바일 앱 백엔드)"
+        "정적 사이트 (블로그, 포트폴리오)",
+        "동적 웹 애플리케이션 (쇼핑몰, 게시판)",
+        "API 서버 (모바일 백엔드)"
       ]
     },
     {
+      questionId: "traffic",
       question: "예상 트래픽 규모는?",
       suggestions: [
-        "소규모 (일 100명 미만, 동시 10명 미만)",
-        "중간 규모 (일 1,000명, 동시 50명)",
-        "대규모 (일 10,000명 이상, 동시 500명 이상)",
-        "급변동 (평상시 적지만 이벤트 시 급증)"
+        "소규모 (일 100명 미만)",
+        "중간 규모 (일 1,000명)",
+        "대규모 (일 10,000명 이상)"
       ]
     },
     {
+      questionId: "database",
       question: "데이터베이스가 필요한가요?",
       suggestions: [
         "필요 없음 (정적 콘텐츠만)",
-        "간단한 데이터 (사용자 정보, 게시글 등 < 10GB)",
-        "중간 규모 데이터 (10GB ~ 100GB)",
-        "대용량 데이터 (100GB 이상, 복잡한 쿼리)"
+        "간단한 데이터 (< 10GB)",
+        "대용량 데이터 (> 100GB)"
       ]
     },
     {
-      question: "프론트엔드 기술은?",
-      suggestions: [
-        "HTML/CSS/JS만 (순수 웹)",
-        "React/Vue/Angular (SPA 프레임워크)",
-        "Next.js/Nuxt.js (SSR 필요)",
-        "모바일 앱 (웹뷰 또는 네이티브)"
-      ]
-    },
-    {
-      question: "백엔드가 필요한가요?",
-      suggestions: [
-        "필요 없음 (정적 사이트)",
-        "간단한 API (Node.js, Python Flask 등)",
-        "복잡한 비즈니스 로직 (Spring Boot, Django 등)",
-        "마이크로서비스 (여러 서비스 분리)"
-      ]
-    },
-    {
+      questionId: "region",
       question: "주요 사용자 지역은?",
-      suggestions: [
-        "한국만 (서울 리전)",
-        "아시아 태평양 (도쿄, 싱가포르 포함)",
-        "글로벌 (미국, 유럽 포함)",
-        "특정 지역 (중국, 일본 등)"
-      ]
+      suggestions: ["한국만", "아시아 태평양", "글로벌"]
     },
     {
+      questionId: "budget",
       question: "월 예산 범위는?",
-      suggestions: [
-        "10만원 미만 (최소 비용)",
-        "10-50만원 (적당한 성능)",
-        "50-200만원 (고성능)",
-        "200만원 이상 (엔터프라이즈급)"
-      ]
+      suggestions: ["10만원 미만", "10-50만원", "50만원 이상"]
     },
     {
-      question: "SSL 인증서(HTTPS)가 필요한가요?",
+      questionId: "management_preference",
+      question: "관리 복잡도 선호는?",
       suggestions: [
-        "필수 (보안 중요)",
-        "선택사항 (HTTP도 괜찮음)",
-        "모르겠음 (추천해주세요)"
-      ]
-    },
-    {
-      question: "파일 업로드 기능이 있나요? (이미지, 문서 등)",
-      suggestions: [
-        "없음 (텍스트만)",
-        "이미지만 (프로필, 게시글 이미지)",
-        "다양한 파일 (문서, 동영상 포함)",
-        "대용량 파일 (100MB 이상)"
-      ]
-    },
-    {
-      question: "실시간 기능이 필요한가요? (채팅, 알림 등)",
-      suggestions: [
-        "필요 없음",
-        "실시간 채팅",
-        "실시간 알림",
-        "실시간 데이터 업데이트 (주식, 게임 등)"
-      ]
-    },
-    {
-      question: "관리 복잡도 선호도는?",
-      suggestions: [
-        "완전 관리형 (서버리스, 관리 최소화)",
+        "완전 관리형 (서버리스)",
         "반관리형 (일부 서버 관리)",
-        "직접 관리 (서버 직접 운영)",
-        "모르겠음 (추천해주세요)"
-      ]
-    },
-    {
-      question: "페이지 로딩 시간 목표는?",
-      suggestions: [
-        "1초 이내 (매우 빠름)",
-        "3초 이내 (적당함)",
-        "5초 이내 (느려도 괜찮음)",
-        "상관없음"
-      ]
-    },
-    {
-      question: "전체 웹사이트 크기는?",
-      suggestions: [
-        "10MB 미만 (간단한 사이트)",
-        "10MB-100MB (일반적인 사이트)",
-        "100MB-1GB (이미지 많은 사이트)",
-        "1GB 이상 (동영상 포함)"
-      ]
-    },
-    {
-      question: "트래픽 패턴은?",
-      suggestions: [
-        "일정함 (하루 종일 비슷)",
-        "시간대별 차이 (낮에 많음)",
-        "이벤트성 급증 (특정 시기에만)",
-        "예측 불가"
-      ]
-    },
-    {
-      question: "서비스 중단 허용 시간은?",
-      suggestions: [
-        "절대 안됨 (99.99% 가용성)",
-        "월 1시간 이내 (99.9% 가용성)",
-        "월 8시간 이내 (99% 가용성)",
-        "상관없음"
+        "직접 관리"
       ]
     }
   ] as const;
 
-  const nonOverlappingAnsweredRequirements = [
-    "Website type: dynamic web application.",
-    "Expected traffic: medium, 1,000 daily and 50 concurrent.",
-    "Database: none.",
-    "Frontend: HTML, CSS, and JavaScript.",
-    "Backend: simple Node.js API.",
-    "Primary users: Korea, Seoul region.",
-    "Monthly budget: under 100 USD.",
-    "HTTPS is required.",
-    "File upload: none.",
-    "Realtime features: none.",
-    "Management preference: fully managed.",
-    "Page loading target: within 3 seconds.",
-    "Website size: under 10 MB.",
-    "Traffic pattern: steady."
-  ] as const;
-  assert.equal(answeredRequirements.length, nonOverlappingAnsweredRequirements.length);
-
-  const promptsAndQuestions = orderedClarifications.map((clarification, answeredCount) => ({
-    prompt:
-      answeredCount === 0
-        ? "웹사이트를 만들고 싶어요."
-        : nonOverlappingAnsweredRequirements.slice(0, answeredCount).join("\n"),
-    ...clarification
-  }));
-
-  for (const scenario of promptsAndQuestions) {
+  for (const expected of expectedQuestions) {
     const response = await createAmazonQArchitectureDraftResponse(
-      {
-        prompt: scenario.prompt
-      },
-      {
-        provider,
-        creditPolicy: confirmedCreditPolicy
-      }
+      { prompt: "웹사이트를 만들고 싶어요.", clarificationAnswers },
+      { provider, creditPolicy: confirmedCreditPolicy }
     );
-
-    if (!("status" in response)) {
-      assert.fail(`Expected clarification for question: ${scenario.question}`);
-    }
-
-    assert.equal(response.question, scenario.question);
-    assert.deepEqual(response.suggestions, scenario.suggestions);
+    if (!("status" in response)) assert.fail(`Expected ${expected.questionId} clarification`);
+    assert.equal(response.questionId, expected.questionId);
+    assert.equal(response.question, expected.question);
+    assert.deepEqual(response.suggestions, expected.suggestions);
+    clarificationAnswers.push({
+      questionId: response.questionId,
+      answer: response.suggestions[0] ?? "추천해줘"
+    });
   }
+
+  const responseAfterRequiredQuestions = await createAmazonQArchitectureDraftResponse(
+    { prompt: "웹사이트를 만들고 싶어요.", clarificationAnswers },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+  if (!("status" in responseAfterRequiredQuestions)) {
+    assert.fail("Expected the provider clarification after the six required questions");
+  }
+  assert.equal(providerCallCount, 1);
+  assert.match(responseAfterRequiredQuestions.questionId, /^amazon_q_follow_up_/u);
 });
 
+test("createAmazonQArchitectureDraftResponse applies operational defaults after the streamlined answers", async () => {
+  let requestedPrompt = "";
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompt = request.prompt;
+    return JSON.stringify({
+      status: "needs_clarification",
+      question: "추가 요구사항이 있나요?",
+      suggestions: []
+    });
+  });
+
+  await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "동적 웹 애플리케이션 쇼핑몰입니다.",
+        "일 1,000명 규모입니다.",
+        "PostgreSQL 데이터베이스가 필요합니다.",
+        "주요 사용자는 한국에 있습니다.",
+        "월 예산은 30만원입니다.",
+        "완전 관리형을 선호합니다.",
+        "프로필 이미지 업로드와 실시간 채팅이 필요합니다."
+      ].join("\n")
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  assert.match(requestedPrompt, /SSL\/HTTPS: required\./u);
+  assert.match(requestedPrompt, /Page loading time target: within 3 seconds\./u);
+  assert.match(requestedPrompt, /Availability: 99\.9%; allow up to one hour of downtime per month\./u);
+  assert.match(requestedPrompt, /Realtime implementation: WebSocket\./u);
+  assert.match(requestedPrompt, /private S3 object storage with CloudFront delivery\./u);
+});
+
+test("createAmazonQArchitectureDraftResponse keeps explicit natural-language operating choices over defaults", async () => {
+  let requestedPrompt = "";
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompt = request.prompt;
+    return JSON.stringify({
+      status: "needs_clarification",
+      question: "추가 요구사항이 있나요?",
+      suggestions: []
+    });
+  });
+
+  await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "동적 웹 애플리케이션 쇼핑몰입니다.",
+        "일 1,000명 규모입니다.",
+        "PostgreSQL 데이터베이스가 필요합니다.",
+        "주요 사용자는 한국에 있습니다.",
+        "월 예산은 30만원입니다.",
+        "직접 관리 방식으로 운영합니다.",
+        "HTTPS는 선택사항이고 HTTP도 괜찮습니다.",
+        "페이지 로딩은 5초 이내면 됩니다.",
+        "가용성은 99.99%가 필요합니다.",
+        "실시간 알림은 SSE로 구현합니다.",
+        "프로필 이미지 업로드는 EFS 파일 서버에 저장합니다."
+      ].join("\n")
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  assert.doesNotMatch(requestedPrompt, /Default architecture assumptions/u);
+  assert.match(requestedPrompt, /HTTPS는 선택사항/u);
+  assert.match(requestedPrompt, /5초 이내/u);
+  assert.match(requestedPrompt, /99\.99%/u);
+  assert.match(requestedPrompt, /SSE/u);
+  assert.match(requestedPrompt, /EFS/u);
+});
+
+test("createAmazonQArchitectureDraftResponse keeps defaults for topic-only infrastructure mentions", async () => {
+  let requestedPrompt = "";
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompt = request.prompt;
+    return JSON.stringify({
+      status: "needs_clarification",
+      question: "추가 요구사항이 있나요?",
+      suggestions: []
+    });
+  });
+
+  await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "HTTP API 서버 기반 모바일 백엔드입니다.",
+        "일 1,000명 규모입니다.",
+        "PostgreSQL 데이터베이스가 필요합니다.",
+        "주요 사용자는 한국에 있습니다.",
+        "월 예산은 30만원입니다.",
+        "반관리형으로 운영합니다.",
+        "로딩 스피너와 availability 모니터링이 중요합니다.",
+        "정적 자산은 CloudFront CDN으로 제공합니다.",
+        "REST API는 API Gateway를 사용합니다.",
+        "파일 업로드와 실시간 알림이 필요합니다."
+      ].join("\n")
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  assert.match(requestedPrompt, /SSL\/HTTPS: required\./u);
+  assert.match(requestedPrompt, /Page loading time target: within 3 seconds\./u);
+  assert.match(requestedPrompt, /Availability: 99\.9%; allow up to one hour of downtime per month\./u);
+  assert.match(requestedPrompt, /Realtime implementation: WebSocket\./u);
+  assert.match(requestedPrompt, /private S3 object storage with CloudFront delivery\./u);
+});
 test("createAmazonQArchitectureDraftResponse re-asks every required question for explanation-only answers", async () => {
   const provider = createFakeAmazonQProvider(() => "{}");
   const clarificationAnswers: Array<{ questionId: string; answer: string }> = [];
-  for (let index = 0; index < 15; index += 1) {
+  for (let index = 0; index < 6; index += 1) {
     const response = await createAmazonQArchitectureDraftResponse(
       { prompt: "웹사이트를 만들고 싶어요.", clarificationAnswers },
       { provider, creditPolicy: confirmedCreditPolicy }
@@ -1472,22 +1457,13 @@ test("createAmazonQArchitectureDraftResponse rejects answers that belong to anot
     website_type: "월 예산은 30만원이야",
     traffic: "월 예산은 30만원이야",
     database: "사용자는 한국에 있어",
-    frontend: "월 1시간 정도 중단돼도 괜찮아",
-    backend: "낮에 트래픽이 몰려",
     region: "리액트 쓸게",
     budget: "페이지는 3초 이내에 열려야 해",
-    ssl: "보안 그룹을 사용할래",
-    file_upload: "서울 사용자 대상이야",
-    realtime: "RDS 쓸 거야",
-    management_preference: "파일을 직접 업로드할래",
-    page_loading_time: "월 예산은 30만원이야",
-    website_size: "월 예산은 30만원이야",
-    traffic_pattern: "낮은 예산으로 만들래",
-    downtime_tolerance: "파일 크기는 100MB야"
+    management_preference: "파일을 직접 업로드할래"
   } as const;
   const clarificationAnswers: Array<{ questionId: string; answer: string }> = [];
 
-  for (let index = 0; index < 15; index += 1) {
+  for (let index = 0; index < 6; index += 1) {
     const response = await createAmazonQArchitectureDraftResponse(
       { prompt: "웹사이트를 만들고 싶어요.", clarificationAnswers },
       { provider, creditPolicy: confirmedCreditPolicy }
@@ -1496,13 +1472,7 @@ test("createAmazonQArchitectureDraftResponse rejects answers that belong to anot
     const offTopicAnswer = offTopicAnswers[response.questionId as keyof typeof offTopicAnswers];
     assert.ok(offTopicAnswer, `Missing off-topic fixture for ${response.questionId}`);
 
-    const answersToReject = [
-      offTopicAnswer,
-      ...(response.questionId === "frontend" ? ["\uC77C\uC77C 500\uBA85 \uC815\uB3C4?"] : []),
-      ...(["region", "website_size", "traffic_pattern"].includes(response.questionId)
-        ? ["스프링부트 썼어"]
-        : [])
-    ];
+    const answersToReject = [offTopicAnswer];
 
     for (const answer of answersToReject) {
       const repeatedResponse = await createAmazonQArchitectureDraftResponse(
@@ -1525,9 +1495,7 @@ test("createAmazonQArchitectureDraftResponse rejects answers that belong to anot
     }
     clarificationAnswers.push({
       questionId: response.questionId,
-      answer: response.questionId === "backend"
-        ? "스프링부트 썼어"
-        : response.suggestions[0] ?? "추천해줘"
+      answer: response.suggestions[0] ?? "추천해줘"
     });
   }
 });
@@ -1541,8 +1509,6 @@ test("createAmazonQArchitectureDraftResponse accepts a conversational monthly bu
         { questionId: "website_type", answer: "동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)" },
         { questionId: "traffic", answer: "중간 규모 (일 1,000명, 동시 50명)" },
         { questionId: "database", answer: "간단한 데이터 (사용자 정보, 게시글 등 < 10GB)" },
-        { questionId: "frontend", answer: "React/Vue/Angular (SPA 프레임워크)" },
-        { questionId: "backend", answer: "복잡한 비즈니스 로직 (Spring Boot, Django 등)" },
         { questionId: "region", answer: "한국만 (서울 리전)" },
         { questionId: "budget", answer: "한달에 한 30정도로" }
       ]
@@ -1551,7 +1517,7 @@ test("createAmazonQArchitectureDraftResponse accepts a conversational monthly bu
   );
 
   if (!("status" in response)) assert.fail("Expected the next clarification question");
-  assert.equal(response.questionId, "ssl");
+  assert.equal(response.questionId, "management_preference");
   assert.equal(response.validationMessage, undefined);
 });
 
@@ -1565,46 +1531,41 @@ test("createArchitectureDraft maps a conversational monthly budget to the matchi
 
 
 test("createAmazonQArchitectureDraftResponse understands natural-language clarification examples", async () => {
-  const provider = createFakeAmazonQProvider(() => "{}");
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "needs_clarification",
+      questionId: "dynamic_detail",
+      question: "추가로 필요한 기능이 있나요?",
+      suggestions: ["없어요"]
+    })
+  );
   const scenarios = [
     { questionId: "website_type", answer: "당근처럼 동네 중고거래 플랫폼을 만들고 싶어" },
     { questionId: "traffic", answer: "출시 초기에는 이용자가 많지 않을 것 같아" },
     { questionId: "database", answer: "회원가입 정보와 주문 내역을 저장해야 해" },
     { questionId: "region", answer: "일본과 싱가포르 사용자가 대부분이야" },
     { questionId: "region", answer: "홍콩만" },
-    { questionId: "website_size", answer: "간단한 사이트야" },
-    { questionId: "backend", answer: "스프링부트 썼어" },
-    { questionId: "file_upload", answer: "사용자가 프로필 사진을 올릴 수 있어야 해" },
-    { questionId: "file_upload", answer: "없어" },
-    { questionId: "realtime", answer: "아니" }
+    { questionId: "budget", answer: "한달에 한 30정도로" },
+    { questionId: "management_preference", answer: "완전 관리형으로 운영해줘" }
   ] as const;
-  const targetQuestionIds = new Set(scenarios.map(({ questionId }) => questionId));
-  const answers: Array<{ questionId: string; answer: string }> = [];
-  const prefixes = new Map<string, Array<{ questionId: string; answer: string }>>();
-
-  for (let index = 0; index < 15 && prefixes.size < scenarios.length; index += 1) {
-    const response = await createAmazonQArchitectureDraftResponse(
-      { prompt: "새로운 웹 서비스를 만들고 싶어요.", clarificationAnswers: answers },
-      { provider, creditPolicy: confirmedCreditPolicy }
-    );
-    if (!("status" in response)) assert.fail("Expected a required clarification question");
-    if (targetQuestionIds.has(response.questionId as (typeof scenarios)[number]["questionId"])) {
-      prefixes.set(response.questionId, [...answers]);
-    }
-    answers.push({
-      questionId: response.questionId,
-      answer: response.suggestions[0] ?? "추천해줘"
-    });
-  }
+  const acceptedAnswers = [
+    { questionId: "website_type", answer: "정적 사이트 (블로그, 포트폴리오)" },
+    { questionId: "traffic", answer: "소규모 (일 100명 미만)" },
+    { questionId: "database", answer: "필요 없음 (정적 콘텐츠만)" },
+    { questionId: "region", answer: "한국만" },
+    { questionId: "budget", answer: "10만원 미만" },
+    { questionId: "management_preference", answer: "완전 관리형 (서버리스)" }
+  ];
+  const questionOrder = acceptedAnswers.map(({ questionId }) => questionId);
 
   const results = [];
   for (const scenario of scenarios) {
-    const prefix = prefixes.get(scenario.questionId);
-    if (prefix === undefined) assert.fail(`Missing prefix for ${scenario.questionId}`);
+    const questionIndex = questionOrder.indexOf(scenario.questionId);
+    assert.notEqual(questionIndex, -1);
     const response = await createAmazonQArchitectureDraftResponse(
       {
         prompt: "새로운 웹 서비스를 만들고 싶어요.",
-        clarificationAnswers: [...prefix, scenario]
+        clarificationAnswers: [...acceptedAnswers.slice(0, questionIndex), scenario]
       },
       { provider, creditPolicy: confirmedCreditPolicy }
     );
@@ -2549,6 +2510,7 @@ test("createAmazonQArchitectureDraftResponse materializes HTTPS SSE and burst sc
     })
   );
   const prompt = [
+    "runtime selection: ECS Fargate service",
     "웹사이트 유형: 동적 웹 애플리케이션",
     "트래픽: 중간 규모 일 1,000명 동시 50명",
     "데이터베이스: 간단한 데이터 사용자 정보 게시글 10GB 미만",
@@ -3464,6 +3426,98 @@ test("createAmazonQArchitectureDraftResponse maps fully managed SPA API answers 
   );
 });
 
+test("createAmazonQArchitectureDraftResponse prioritizes fully managed runtime and CloudFront upload delivery", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "Managed Shopping App",
+      patternIds: ["ecs-fargate", "spa-cloudfront-s3", "multi-az-rds"],
+      requiredResources: [
+        "VPC",
+        "SUBNET",
+        "INTERNET_GATEWAY",
+        "NAT_GATEWAY",
+        "LOAD_BALANCER",
+        "LOAD_BALANCER_LISTENER",
+        "LOAD_BALANCER_TARGET_GROUP",
+        "ECR_REPOSITORY",
+        "ECS_CLUSTER",
+        "ECS_SERVICE",
+        "ECS_TASK_DEFINITION",
+        "CLOUDFRONT",
+        "S3",
+        "RDS"
+      ],
+      resourceQuantities: { S3: 2 },
+      runtimeTopology: {
+        trafficEntry: "LOAD_BALANCER",
+        compute: "ECS_FARGATE",
+        placement: "private_subnets"
+      },
+      region: "ap-northeast-2",
+      database: "required"
+    })
+  );
+  const prompt = [
+    "website type: dynamic web application shopping mall",
+    "traffic: medium daily traffic 1000 users",
+    "database: PostgreSQL member and order data under 10GB",
+    "region: Korea only Seoul ap-northeast-2",
+    "monthly budget: 10-50 manwon",
+    "management preference: fully managed serverless minimal operations",
+    "realtime chat required",
+    "realtime implementation: WebSocket",
+    "profile image file upload required",
+    "file upload implementation: private S3 object storage with CloudFront delivery",
+    "SSL HTTPS: required",
+    "page loading time target: within 3 seconds",
+    "availability: 99.9%; allow up to one hour of downtime per month"
+  ].join("\n");
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const nodes = response.architectureJson.nodes;
+  const nodeTypes = new Set(nodes.map((node) => node.type));
+  const cloudFront = nodes.find((node) => node.type === "CLOUDFRONT");
+  const uploadBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "user_uploads"
+  );
+
+  assert.equal(nodeTypes.has("API_GATEWAY_REST_API"), true);
+  assert.equal(nodeTypes.has("LAMBDA"), true);
+  assert.equal(nodeTypes.has("RDS"), true);
+  assert.equal(nodeTypes.has("API_GATEWAY_WEBSOCKET_API"), true);
+  for (const forbiddenType of [
+    "ECR_REPOSITORY",
+    "ECS_CLUSTER",
+    "ECS_SERVICE",
+    "ECS_TASK_DEFINITION",
+    "LOAD_BALANCER",
+    "NAT_GATEWAY"
+  ] as const) {
+    assert.equal(nodeTypes.has(forbiddenType), false, `Expected no ${forbiddenType}`);
+  }
+  assert.equal(nodes.filter((node) => node.type === "SUBNET").length, 2);
+  assert.equal(nodes.filter((node) => node.type === "SECURITY_GROUP").length, 1);
+  assert.equal(nodes.filter((node) => node.type === "IAM_ROLE").length, 1);
+  assert.ok(nodes.filter((node) => node.type === "CLOUDWATCH_METRIC_ALARM").length <= 1);
+  assert.ok(cloudFront);
+  assert.ok(uploadBucket);
+  assert.equal(
+    response.architectureJson.edges.some(
+      (edge) => edge.sourceId === cloudFront.id && edge.targetId === uploadBucket.id
+    ),
+    true,
+    "Expected CloudFront to deliver objects from the private upload bucket"
+  );
+});
 test("createAmazonQArchitectureDraftResponse removes orphan VPC scaffolding from DB-free serverless previews", async () => {
   const provider = createFakeAmazonQProvider(() =>
     JSON.stringify({
@@ -3609,6 +3663,55 @@ test("createAmazonQArchitectureDraftResponse materializes static no-backend answ
   assert.equal(nodeTypes.has("RDS"), false);
 });
 
+test("createAmazonQArchitectureDraftResponse removes a provider-selected API from static no-backend answers", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "Static Site With Unwanted API",
+      patternIds: ["spa-cloudfront-s3", "serverless-api"],
+      requiredResources: [
+        "CLOUDFRONT",
+        "S3",
+        "API_GATEWAY_REST_API",
+        "LAMBDA",
+        "IAM_ROLE",
+        "IAM_POLICY",
+        "CLOUDWATCH_LOG_GROUP"
+      ],
+      runtimeTopology: {
+        trafficEntry: "API_GATEWAY_REST_API",
+        compute: "LAMBDA"
+      }
+    })
+  );
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createStaticPortfolioQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const nodeTypes = new Set(response.architectureJson.nodes.map((node) => node.type));
+
+  assert.equal(nodeTypes.has("CLOUDFRONT"), true);
+  assert.equal(nodeTypes.has("S3"), true);
+  for (const forbiddenType of [
+    "API_GATEWAY_REST_API",
+    "LAMBDA",
+    "IAM_ROLE",
+    "IAM_POLICY",
+    "CLOUDWATCH_LOG_GROUP"
+  ] as const) {
+    assert.equal(nodeTypes.has(forbiddenType), false, `Expected no ${forbiddenType}`);
+  }
+  assert.equal(
+    response.architectureJson.edges.some((edge) => /upload|image object/iu.test(edge.label ?? "")),
+    false
+  );
+});
 test("createAmazonQArchitectureDraftResponse expands Git CI/CD EC2 handoff answers into deployable resources", async () => {
   const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
@@ -6495,11 +6598,17 @@ test("createAmazonQArchitectureDraftResponse does not fake unsupported multi-reg
   assert.ok(response.suggestions.some((suggestion) => /CloudFront.*단일 리전/u.test(suggestion)));
 });
 
-test("createAmazonQArchitectureDraftResponse asks the realtime implementation question with readable Korean text", async () => {
+test("createAmazonQArchitectureDraftResponse defaults realtime notifications to WebSocket", async () => {
   let callCount = 0;
-  const provider = createFakeAmazonQProvider(() => {
+  let requestedPrompt = "";
+  const provider = createFakeAmazonQProvider((request) => {
     callCount += 1;
-    return "{}";
+    requestedPrompt = request.prompt;
+    return JSON.stringify({
+      status: "needs_clarification",
+      question: "추가 요구사항이 있나요?",
+      suggestions: []
+    });
   });
 
   const response = await createAmazonQArchitectureDraftResponse(
@@ -6508,18 +6617,10 @@ test("createAmazonQArchitectureDraftResponse asks the realtime implementation qu
         "website type: dynamic SPA website",
         "traffic: medium daily traffic 1000 concurrent users 50",
         "database: PostgreSQL database required",
-        "frontend: React/Vue/Angular SPA framework",
-        "backend: simple API Node.js",
         "region: Korea only Seoul region ap-northeast-2",
         "budget cost: 100 monthly",
-        "SSL HTTPS: required",
-        "file upload: none no file upload text only",
         "realtime: real-time notification",
-        "management preference: semi-managed operations",
-        "loading time: 1 second",
-        "website size: 10MB-100MB",
-        "traffic pattern: steady traffic",
-        "downtime tolerance: 99.9% availability"
+        "management preference: semi-managed operations"
       ].join("\n")
     },
     {
@@ -6528,22 +6629,22 @@ test("createAmazonQArchitectureDraftResponse asks the realtime implementation qu
     }
   );
 
-  assert.equal(callCount, 0);
-  if (!("status" in response)) {
-    assert.fail("Expected a clarification response");
+  assert.equal(callCount, 1);
+  assert.match(requestedPrompt, /Realtime implementation: WebSocket\./u);
+  if ("status" in response) {
+    assert.doesNotMatch(response.question, /실시간 알림은 어떤 방식으로 표현할까요/u);
   }
-
-  assert.equal(response.status, "needs_clarification");
-  assert.equal(response.question, "실시간 알림은 어떤 방식으로 표현할까요?");
-  assert.deepEqual(response.suggestions, [
-    "WebSocket 연결 경로",
-    "SSE 단방향 알림 경로",
-    "간단 폴링 방식과 비용 절감 경고"
-  ]);
 });
-
-test("createAmazonQArchitectureDraftResponse asks a chat-specific realtime implementation question", async () => {
-  const provider = createFakeAmazonQProvider(() => "{}");
+test("createAmazonQArchitectureDraftResponse defaults chat realtime implementation to WebSocket", async () => {
+  let requestedPrompt = "";
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompt = request.prompt;
+    return JSON.stringify({
+      status: "needs_clarification",
+      question: "추가 요구사항이 있나요?",
+      suggestions: []
+    });
+  });
   const response = await createAmazonQArchitectureDraftResponse(
     {
       prompt: [
@@ -6567,16 +6668,8 @@ test("createAmazonQArchitectureDraftResponse asks a chat-specific realtime imple
     { provider, creditPolicy: confirmedCreditPolicy }
   );
 
-  if (!("status" in response)) {
-    assert.fail("Expected a clarification response");
-  }
-
-  assert.equal(response.question, "실시간 채팅 연결은 어떤 방식으로 표현할까요?");
-  assert.deepEqual(response.suggestions, [
-    "WebSocket 양방향 연결 경로",
-    "HTTP 메시지 전송 + SSE 수신 경로",
-    "간단 폴링 방식과 비용 절감 경고"
-  ]);
+  assert.match(requestedPrompt, /Realtime implementation: WebSocket\./u);
+  if ("status" in response) assert.notEqual(response.question, "실시간 채팅 연결은 어떤 방식으로 표현할까요?");
 });
 
 function createKoreaNoUploadNoRealtimePrompt(): string {

@@ -37,6 +37,7 @@
 | [0028-use-per-connection-manager-and-policy-stacks.md](./0028-use-per-connection-manager-and-policy-stacks.md) | 연결별 Manager Stack이 service Role을, Policy Stack이 Reverse Engineering 읽기 Policy를 소유한다 | Stack pair 생성·갱신·삭제 순서와 service Role 격리를 바꿀 때 |
 | [0029-reverse-engineering-shows-source-before-auto-arrange.md](./0029-reverse-engineering-shows-source-before-auto-arrange.md) | Reverse Engineering은 가져온 원본을 source-exact 방식으로 먼저 보여주고 사용자 요청 뒤에만 자동 정리를 실행한다 | 가져온 원본 변환, 자동 정리 실행 시점, 적용 전 저장 경계를 바꿀 때 |
 | [0031-template-node-labels-use-english-only.md](./0031-template-node-labels-use-english-only.md) | Template에서 최초 생성되는 Resource Display Name과 Architecture Area Title은 영어만 사용한다 | Template 최초 node label의 언어 규칙을 바꿀 때 |
+| [0017-live-observation-ai-signal-dashboard.md](./0017-live-observation-ai-signal-dashboard.md)                               | Live Observation은 최대 세 개의 근거 기반 신호로 사용자 영향·근거·불확실성을 보여주고 자동 변경하지 않는다                                     | Live Observation 하단 신호, 로그 묶기, 관측값 표현, CloudWatch 역할 분리를 바꿀 때         |
 
 ## 추가 규칙
 

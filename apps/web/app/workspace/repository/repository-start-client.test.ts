@@ -71,8 +71,22 @@ test("Repository Fixed Template receives runtime Secret requirements from the an
   );
 
   assert.match(saveTemplateBody, /requiredRuntimeSecrets/);
-  assert.match(source, /runtime_secret/);
+  assert.match(
+    saveTemplateBody,
+    /getRepositoryRequiredRuntimeSecrets\(publicRepositoryAnalysis\.aiHandoff\)/
+  );
   assert.match(saveTemplateBody, /publicRepositoryAnalysis\.aiHandoff/);
+});
+
+test("Repository board generation does not special-case repository identities", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+  const saveTemplateBody = source.slice(
+    source.indexOf("async function saveTemplateBoard"),
+    source.indexOf("async function saveRepositoryBoard")
+  );
+
+  assert.doesNotMatch(saveTemplateBody, /createGitHubArchitectureDraft/);
+  assert.doesNotMatch(saveTemplateBody, /chaekang\/audience-live-check/);
 });
 
 test("public Repository Template failures do not masquerade as Repository access failures", () => {

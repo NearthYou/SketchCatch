@@ -227,7 +227,10 @@ async function verifyPublicApiProbe(
       if (
         input.apiProbeMethod === "POST" &&
         input.apiProbePath === "/api/check-ins" &&
-        (!isUuid(body?.["sessionId"]) || !isIsoTimestamp(body?.["expiresAt"]))
+        (
+          (!isUuid(body?.["sessionId"]) && !isOpaqueSessionToken(body?.["sessionToken"])) ||
+          !isIsoTimestamp(body?.["expiresAt"])
+        )
       ) {
         throw new Error("Public API route probe response does not match the demo API contract");
       }
@@ -254,6 +257,10 @@ async function readJsonRecord(response: Response): Promise<Record<string, unknow
 function isUuid(value: unknown): boolean {
   return typeof value === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
+}
+
+function isOpaqueSessionToken(value: unknown): boolean {
+  return typeof value === "string" && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u.test(value);
 }
 
 function isIsoTimestamp(value: unknown): boolean {

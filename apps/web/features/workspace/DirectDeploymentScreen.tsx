@@ -80,6 +80,7 @@ import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { PreparedWorkspaceDeploymentArtifacts } from "./workspace-deployment-artifacts";
 import {
   getDeploymentPreparationErrorMessage,
+  getDeploymentRuntimeSecretPrerequisite,
   getDeploymentTargetPrerequisite,
   type DeploymentTargetPrerequisite
 } from "./deployment-preparation-error";
@@ -170,6 +171,7 @@ export type DirectDeploymentScreenProps = {
   readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
   readonly preDeploymentCheckState: DeploymentPreDeploymentCheckState;
   readonly projectId: string;
+  readonly projectName?: string | undefined;
   readonly requestedScope?: "application" | "full_stack" | null | undefined;
   readonly projectDraftRevision?: number | null | undefined;
 };
@@ -192,6 +194,7 @@ export function DirectDeploymentScreen({
   onValidateTerraformDiagnostics,
   preDeploymentCheckState,
   projectId,
+  projectName = "",
   requestedScope = null,
   projectDraftRevision = null
 }: DirectDeploymentScreenProps) {
@@ -233,7 +236,6 @@ export function DirectDeploymentScreen({
     useState<DeploymentTargetPrerequisite | null>(null);
   const [activeProgress, setActiveProgress] = useState<{
     readonly operation: DeploymentProgressOperation;
-    readonly requestedAtMs: number;
   } | null>(null);
   const [selectedDirectStepId, setSelectedDirectStepId] =
     useState<DirectDeploymentStepId>("validation");
@@ -288,6 +290,7 @@ export function DirectDeploymentScreen({
     () => getDeploymentHistoryEntries(deployments),
     [deployments]
   );
+  const hasDeploymentHistory = deploymentHistoryEntries.length > 0;
   const deploymentHistoryMetrics = useMemo(
     () => getDeploymentHistoryMetrics(deploymentHistoryEntries),
     [deploymentHistoryEntries]
@@ -353,7 +356,6 @@ export function DirectDeploymentScreen({
     historyIsLoading: historyDetailsIsLoading,
     historyLogs: loadedHistoryDeploymentLogs
   });
-  const historyDeploymentLogs = deploymentLogView.logs;
   const historyDeploymentOutputLinks = useMemo(
     () => getSafeDeploymentLinks(historyTerraformOutputs),
     [historyTerraformOutputs]
@@ -464,7 +466,10 @@ export function DirectDeploymentScreen({
     const selection = resolveDeploymentHistorySelection({
       currentSelectionId: selectedHistoryDeploymentId,
       deployments,
-      previousLatestDeploymentId: previousLatestHistoryDeploymentIdRef.current
+      previousLatestDeploymentId: previousLatestHistoryDeploymentIdRef.current,
+      visibleDeploymentIds: filteredDeploymentHistoryEntries.map(
+        ({ deployment }) => deployment.id
+      )
     });
 
     previousLatestHistoryDeploymentIdRef.current = selection.latestDeploymentId;
@@ -472,7 +477,7 @@ export function DirectDeploymentScreen({
     if (selection.selectedDeploymentId !== selectedHistoryDeploymentId) {
       setSelectedHistoryDeploymentId(selection.selectedDeploymentId);
     }
-  }, [deployments, selectedHistoryDeploymentId]);
+  }, [deployments, filteredDeploymentHistoryEntries, selectedHistoryDeploymentId]);
 
   useEffect(() => {
     if (shouldShowApplyButton) {
@@ -974,22 +979,43 @@ export function DirectDeploymentScreen({
       return;
     }
 
-    setActiveProgress({ operation: "plan", requestedAtMs: Date.now() });
+    setActiveProgress({ operation: "plan" });
     setDeploymentTargetPrerequisite(null);
     await runAction("validation", async () => {
       const target = await getProjectDeploymentTarget(projectId);
-      const prerequisite = getDeploymentTargetPrerequisite({
+      const targetPrerequisite = getDeploymentTargetPrerequisite({
         awsConnectionId: selectedAwsConnectionId,
         diagramJson,
         scope: selectedScope,
         target
       });
-      if (prerequisite) {
-        setDeploymentTargetPrerequisite(prerequisite);
+      if (targetPrerequisite) {
+        setDeploymentTargetPrerequisite(targetPrerequisite);
         return;
       }
 
       const preparedArtifacts = await onPrepareDeploymentArtifacts();
+      const synchronizedTargetPrerequisite = getDeploymentTargetPrerequisite({
+        awsConnectionId: selectedAwsConnectionId,
+        diagramJson: preparedArtifacts.diagramJson,
+        scope: selectedScope,
+        target
+      });
+      if (synchronizedTargetPrerequisite) {
+        setDeploymentTargetPrerequisite(synchronizedTargetPrerequisite);
+        return;
+      }
+
+      const runtimeSecretPrerequisite = getDeploymentRuntimeSecretPrerequisite({
+        diagramJson: preparedArtifacts.diagramJson,
+        scope: selectedScope,
+        target
+      });
+      if (runtimeSecretPrerequisite) {
+        setDeploymentTargetPrerequisite(runtimeSecretPrerequisite);
+        return;
+      }
+
       const checkPassed = await runPreDeploymentCheck(preparedArtifacts);
       if (!checkPassed) return;
 
@@ -1041,7 +1067,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
-    setActiveProgress({ operation: "plan", requestedAtMs: Date.now() });
+    setActiveProgress({ operation: "plan" });
 
     dispatchTerraformOutputState({
       type: "clear",
@@ -1130,7 +1156,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
-    setActiveProgress({ operation: "apply", requestedAtMs: Date.now() });
+    setActiveProgress({ operation: "apply" });
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: selectedDeployment.id
@@ -1166,7 +1192,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
-    setActiveProgress({ operation: "destroy-plan", requestedAtMs: Date.now() });
+    setActiveProgress({ operation: "destroy-plan" });
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: targetDeployment.id
@@ -1195,7 +1221,7 @@ export function DirectDeploymentScreen({
     }
 
     setSelectedDeploymentId(targetDeployment.id);
-    setActiveProgress({ operation: "destroy", requestedAtMs: Date.now() });
+    setActiveProgress({ operation: "destroy" });
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: targetDeployment.id
@@ -1339,55 +1365,9 @@ export function DirectDeploymentScreen({
     const requiresApprovedPlanRevalidation = Boolean(
       hasCurrentDeploymentChanges && selectedDeployment?.approvedAt
     );
-    const selectedStepHeading =
-      selectedStep.id === "validation"
-        ? {
-            description: requiresApprovedPlanRevalidation
-              ? "승인된 Plan 이후 변경사항이 있어, 새 설정을 저장하고 다시 검증합니다."
-              : "배포 전에 설정을 저장하고 Terraform Plan과 안전 검사를 실행합니다.",
-            label: "1단계",
-            title: requiresApprovedPlanRevalidation ? "변경사항 재검증" : "배포 검증"
-          }
-        : selectedStep.id === "approval"
-          ? {
-              description: "범위, 변경량, 차단 사유와 비용 경고를 확인한 뒤 Plan을 승인합니다.",
-              label: "2단계",
-              title: "승인"
-            }
-          : {
-              description: "승인된 스냅샷을 실행하고 상태, 릴리즈 버전, Output URL을 확인합니다.",
-              label: "3단계",
-              title: "배포"
-            };
     const settingsStatus = hasCurrentDeploymentChanges
       ? { label: "변경사항 있음", tone: "warning" as const }
       : { label: "변경사항 없음", tone: "success" as const };
-    const planStatus = validationIsBusy
-      ? { label: "생성 중", tone: "running" as const }
-      : selectedDeployment?.approvedAt
-        ? { label: "승인 완료", tone: "success" as const }
-        : hasCurrentPlan
-          ? { label: "승인 대기", tone: "primary" as const }
-          : { label: "실행 전", tone: "neutral" as const };
-    const planChangeCount = selectedDeployment?.planSummary
-      ? selectedDeployment.planSummary.createCount +
-        selectedDeployment.planSummary.updateCount +
-        selectedDeployment.planSummary.deleteCount +
-        selectedDeployment.planSummary.replaceCount
-      : null;
-    const currentStatusLabel = selectedDeployment
-      ? getDeploymentStatusPresentation(selectedDeployment.status).label
-      : "검증 필요";
-    const executionReadiness =
-      selectedStep.state === "done"
-        ? "다음 단계로 이동 가능"
-        : selectedStep.state === "active" || selectedStep.state === "running"
-          ? "현재 단계 진행 중"
-          : "선행 단계 확인 필요";
-    const selectedScopeLabel = formatSelectedDeploymentScope(
-      selectedDeployment?.scope,
-      selectedScope
-    );
 
     function renderDirectStepContent(stepId: DirectDeploymentStepId) {
       if (stepId === "validation") {
@@ -1413,16 +1393,6 @@ export function DirectDeploymentScreen({
                     저장된 Terraform과 확인된 프로젝트 실행 타깃을 기준으로 실행 대상을 결정합니다.
                   </p>
                 </div>
-                <dl className={styles.deploymentPlanSnapshot}>
-                  <div>
-                    <span>변경 범위</span>
-                    <strong>{selectedScopeLabel}</strong>
-                  </div>
-                  <div>
-                    <span>Terraform Plan</span>
-                    <strong>{planStatus.label}</strong>
-                  </div>
-                </dl>
               </div>
             </section>
             <section className={styles.deploymentValidationSection}>
@@ -1447,18 +1417,6 @@ export function DirectDeploymentScreen({
                       ? formatBuildEnvironmentStatus(buildEnvironment)
                       : "해당 없음"
                   }
-                />
-                <DeploymentValidationSummaryCard
-                  description="Terraform Plan이 계산한 생성·변경·삭제 합계입니다."
-                  label="변경 내용"
-                  tone="primary"
-                  value={planChangeCount === null ? "계산 전" : `${planChangeCount}개 변경`}
-                />
-                <DeploymentValidationSummaryCard
-                  description="선행 검증과 승인 상태를 기준으로 다음 행동을 안내합니다."
-                  label="실행 준비"
-                  tone={selectedStep.state === "done" ? "success" : "primary"}
-                  value={executionReadiness}
                 />
               </div>
               {needsBuildEnvironment &&
@@ -1495,9 +1453,6 @@ export function DirectDeploymentScreen({
                     </button>
                   </div>
                 </div>
-              ) : null}
-              {selectedDeployment?.planSummary ? (
-                <PlanSummaryRows deployment={selectedDeployment} />
               ) : null}
             </section>
             {preDeploymentAnalysis !== null && !hasStalePreDeploymentAnalysis ? (
@@ -1557,11 +1512,7 @@ export function DirectDeploymentScreen({
               data-has-output-links={deploymentOutputLinks.length > 0}
             >
               <InfoRow label="상태" value={selectedDeployment?.status ?? "대기"} />
-              <InfoRow label="범위" value={selectedDeployment?.scope ?? "대기"} />
               <InfoRow label="현재 작업" value={primaryDeploymentStepStatus} />
-              {selectedDeployment?.planSummary ? (
-                <PlanSummaryRows deployment={selectedDeployment} />
-              ) : null}
               <OptionalInfoRow
                 label="릴리즈"
                 value={
@@ -1600,7 +1551,7 @@ export function DirectDeploymentScreen({
           ) : null}
           {showApplyConfirmation && selectedDeployment ? (
             <div className={styles.deploymentApplyConfirm}>
-              <h3>배포 실행 확인</h3>
+              <h3>최종 실행 대상</h3>
               <InfoRow
                 label="AWS account"
                 value={selectedDeployment.approvedAwsAccountId ?? "없음"}
@@ -1867,40 +1818,6 @@ export function DirectDeploymentScreen({
 
     return (
       <section className={styles.deploymentConsoleGrid} aria-label="Direct Deployment">
-        <header className={styles.deploymentExecutiveHeader}>
-          <div className={styles.deploymentExecutiveTitle}>
-            <span aria-hidden="true">
-              <ShieldCheck size={22} />
-            </span>
-            <div className={styles.deploymentStepHeading}>
-              <span>{selectedStepHeading.label}</span>
-              <h3>{selectedStepHeading.title}</h3>
-              <p>{selectedStepHeading.description}</p>
-            </div>
-          </div>
-          <dl className={styles.deploymentExecutiveMetrics}>
-            <DeploymentMetric label="현재 상태" tone="primary" value={currentStatusLabel} />
-            <DeploymentMetric
-              label="Terraform Plan"
-              tone={planStatus.tone}
-              value={planStatus.label}
-            />
-            <DeploymentMetric label="변경 적용 범위" value={selectedScopeLabel} />
-            <DeploymentMetric
-              label="예상 변경 수"
-              value={planChangeCount === null ? "계산 전" : `${planChangeCount}개`}
-            />
-            <DeploymentMetric
-              label="빌드 환경"
-              tone={
-                needsBuildEnvironment ? getBuildEnvironmentStatusTone(buildEnvironment) : "neutral"
-              }
-              value={
-                needsBuildEnvironment ? formatBuildEnvironmentStatus(buildEnvironment) : "해당 없음"
-              }
-            />
-          </dl>
-        </header>
         <nav className={styles.deploymentStepNavigation} aria-label="Direct Deployment 단계">
           <ol>
             {directDeploymentFlow.steps.map((step, index) => {
@@ -1945,16 +1862,36 @@ export function DirectDeploymentScreen({
           <DeploymentProgressBar
             deployment={selectedDeployment}
             isStarting={deploymentProgressIsStarting}
-            logs={deploymentLogs}
             operationHint={activeProgress?.operation ?? null}
-            requestedAtMs={activeProgress?.requestedAtMs ?? null}
           />
           {renderDirectStepContent(selectedStep.id)}
+          {deploymentLogView.source === "current" ? (
+            <details className={styles.deploymentDisclosure}>
+              <summary>
+                <span>현재 실행 로그</span>
+                <small>{deploymentLogs.length}줄</small>
+              </summary>
+              <div className={styles.deploymentDisclosureBody}>
+                <section
+                  aria-label="현재 실행 로그 세부 내용"
+                  className={styles.deploymentSection}
+                >
+                  <DeploymentLogList logs={deploymentLogs} />
+                </section>
+              </div>
+            </details>
+          ) : null}
           {deploymentTargetPrerequisite ? (
             <div className={styles.deploymentValidationError} role="alert">
               <strong>{deploymentTargetPrerequisite.title}</strong>
               <p>{deploymentTargetPrerequisite.message}</p>
-              {onOpenDeliverySetup ? (
+              {deploymentTargetPrerequisite.action === "repository_analysis" ? (
+                <div className={styles.deploymentValidationActions}>
+                  <Link href={createRepositoryReanalysisHref(projectId, projectName)}>
+                    Repository 다시 분석
+                  </Link>
+                </div>
+              ) : onOpenDeliverySetup ? (
                 <div className={styles.deploymentValidationActions}>
                   <button onClick={onOpenDeliverySetup} type="button">
                     CI/CD 설정으로 이동
@@ -2050,7 +1987,7 @@ export function DirectDeploymentScreen({
   };
 
   const renderLogsSection = () => {
-    if (deploymentLogView.isLoading) {
+    if (historyDetailsIsLoading) {
       return (
         <section
           aria-busy="true"
@@ -2064,11 +2001,11 @@ export function DirectDeploymentScreen({
       );
     }
 
-    if (deploymentLogView.errorMessage) {
+    if (historyDetailsErrorMessage) {
       return (
         <section aria-label="전체 로그 세부 내용" className={styles.deploymentSection}>
           <p className={styles.deploymentRecentResultError} role="alert">
-            {deploymentLogView.errorMessage}
+            {historyDetailsErrorMessage}
           </p>
         </section>
       );
@@ -2076,7 +2013,7 @@ export function DirectDeploymentScreen({
 
     return (
       <section aria-label="전체 로그 세부 내용" className={styles.deploymentSection}>
-        <DeploymentLogList logs={deploymentLogView.logs} />
+        <DeploymentLogList logs={loadedHistoryDeploymentLogs} />
       </section>
     );
   };
@@ -2101,6 +2038,14 @@ export function DirectDeploymentScreen({
             <p>성공한 배포의 변경 내용과 실행 결과를 확인합니다.</p>
           </div>
         </header>
+        {!hasDeploymentHistory ? (
+          <div className={styles.deploymentHistoryEmpty}>
+            <strong>아직 성공한 배포 버전이 없습니다.</strong>
+            <p>첫 번째 배포가 성공하면 이곳에 표시됩니다.</p>
+          </div>
+        ) : null}
+        {hasDeploymentHistory ? (
+          <>
         <dl className={styles.deploymentHistoryMetrics}>
           <DeploymentHistoryMetric
             icon={<Code2 size={20} />}
@@ -2145,13 +2090,7 @@ export function DirectDeploymentScreen({
             </button>
           ))}
         </div>
-        {deploymentHistoryEntries.length === 0 ? (
-          <div className={styles.deploymentHistoryEmpty}>
-            <strong>아직 성공한 배포 버전이 없습니다.</strong>
-            <p>첫 번째 배포가 성공하면 이곳에 표시됩니다.</p>
-          </div>
-        ) : (
-          <div className={styles.deploymentHistoryBody}>
+        <div className={styles.deploymentHistoryBody}>
             <div className={styles.deploymentHistoryTableRegion}>
               <table className={styles.deploymentHistoryTable}>
                 <caption className={styles.deploymentHistoryTableCaption}>
@@ -2236,21 +2175,10 @@ export function DirectDeploymentScreen({
                     <h4>
                       {deployment.status === "DESTROYED" ? "정리 완료된 버전" : "배포 완료된 버전"}
                     </h4>
-                    <p className={styles.deploymentHistoryResultSentence}>
-                      {formatDeploymentHistoryResult(deployment)}
-                    </p>
                   </div>
                 </div>
                 <div className={styles.deploymentHistoryDetailContent}>
                   <dl className={styles.deploymentHistoryDetailFacts}>
-                    <div>
-                      <dt>실행 범위</dt>
-                      <dd>{formatDeploymentScope(deployment.scope)}</dd>
-                    </div>
-                    <div>
-                      <dt>변경 내용</dt>
-                      <dd>{formatDeploymentChangeSummary(deployment.planSummary)}</dd>
-                    </div>
                     {release ? (
                       <div>
                         <dt>앱 릴리즈</dt>
@@ -2350,8 +2278,9 @@ export function DirectDeploymentScreen({
                 </div>
               </article>
             ) : null}
-          </div>
-        )}
+        </div>
+          </>
+        ) : null}
       </section>
     );
   };
@@ -2359,7 +2288,8 @@ export function DirectDeploymentScreen({
   const renderHistoryView = () => (
     <div className={styles.deploymentHistoryGrid}>
       {renderDeploymentHistory()}
-      <div className={styles.deploymentHistorySecondary}>
+      {filteredDeploymentHistoryEntries.length > 0 ? (
+        <div className={styles.deploymentHistorySecondary}>
         <details className={styles.deploymentDisclosure}>
           <summary>
             <span>리소스와 Output</span>
@@ -2377,16 +2307,17 @@ export function DirectDeploymentScreen({
           <summary>
             <span>전체 로그</span>
             <small>
-              {deploymentLogView.isLoading
+              {historyDetailsIsLoading
                 ? "불러오는 중"
-                : deploymentLogView.errorMessage
+                : historyDetailsErrorMessage
                   ? "불러오기 실패"
-                  : `${historyDeploymentLogs.length}줄`}
+                  : `${loadedHistoryDeploymentLogs.length}줄`}
             </small>
           </summary>
           <div className={styles.deploymentDisclosureBody}>{renderLogsSection()}</div>
         </details>
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 
@@ -2628,23 +2559,6 @@ function countChecklistItems(
   status: AiPreDeploymentAnalysisResult["checklist"][number]["status"]
 ): number {
   return analysis.checklist.filter((item) => item.status === status).length;
-}
-
-function DeploymentMetric({
-  label,
-  tone = "neutral",
-  value
-}: {
-  readonly label: string;
-  readonly tone?: DeploymentStatusTone | "primary" | "warning";
-  readonly value: string;
-}) {
-  return (
-    <div data-tone={tone}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
 }
 
 function DeploymentHistoryMetric({
@@ -3034,22 +2948,6 @@ function formatDeploymentChangeSummary(summary: Deployment["planSummary"]): stri
   return changes.length > 0 ? changes.join(" · ") : "변경 없음";
 }
 
-function formatDeploymentHistoryResult(deployment: Deployment): string {
-  const scope = formatDeploymentScope(deployment.scope);
-
-  if (deployment.status === "DESTROYED") {
-    const deleteCount = deployment.planSummary?.deleteCount ?? 0;
-    return deleteCount > 0
-      ? `${scope}에서 리소스 ${deleteCount}개를 정상적으로 정리했습니다.`
-      : `${scope} 리소스 정리를 완료했습니다.`;
-  }
-
-  const changes = formatDeploymentChangeSummary(deployment.planSummary);
-  return changes === "변경 없음" || changes === "변경 정보 없음"
-    ? `${scope} 배포를 완료했습니다.`
-    : `${scope} 배포를 완료했습니다. ${changes}.`;
-}
-
 function formatDeploymentScope(scope: DeploymentScope): string {
   if (scope === "infrastructure") {
     return "인프라";
@@ -3060,17 +2958,6 @@ function formatDeploymentScope(scope: DeploymentScope): string {
   }
 
   return "전체 스택";
-}
-
-function formatSelectedDeploymentScope(
-  deployedScope: DeploymentScope | undefined,
-  selectedScope: DeploymentScope | "auto"
-): string {
-  if (deployedScope) {
-    return formatDeploymentScope(deployedScope);
-  }
-
-  return selectedScope === "auto" ? "자동 감지" : formatDeploymentScope(selectedScope);
 }
 
 function formatDate(value: string): string {
@@ -3084,4 +2971,13 @@ function formatDate(value: string): string {
     dateStyle: "short",
     timeStyle: "short"
   });
+}
+
+function createRepositoryReanalysisHref(projectId: string, projectName: string): string {
+  const params = new URLSearchParams({ projectId });
+  if (projectName.trim()) {
+    params.set("projectName", projectName.trim());
+  }
+
+  return `/workspace/repository?${params.toString()}`;
 }

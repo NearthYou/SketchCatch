@@ -469,7 +469,7 @@ const legacyBoardTemplates: readonly RawBoardTemplate[] = [
           resourceName: "traffic",
           type: "aws_cloudwatch_log_group",
           values: {
-            name: "/sketchcatch/demo/sc-lo/traffic",
+            namePrefix: "/sketchcatch/demo/sc-lo/traffic-",
             retentionInDays: 1,
             tags: { SketchCatchDemo: "true" }
           }
@@ -615,7 +615,6 @@ const legacyBoardTemplates: readonly RawBoardTemplate[] = [
           values: {
             adjustmentType: "ChangeInCapacity",
             autoscalingGroupName: "aws_autoscaling_group.api.name",
-            cooldown: 180,
             estimatedInstanceWarmup: 60,
             name: "sketchcatch-live-observation-scale-out",
             policyType: "StepScaling",
@@ -781,7 +780,15 @@ const brainboardBoardTemplates: readonly AvailableBoardTemplate[] = brainboardTe
 
 const boardTemplates: readonly BoardTemplate[] = [
   ...repositoryBoardTemplates,
-  ...brainboardBoardTemplates
+  ...brainboardBoardTemplates,
+  ...legacyBoardTemplates
+    .filter((template) => template.id === "template-live-observation")
+    .map((template): AvailableBoardTemplate => ({
+      ...template,
+      availability: "available",
+      diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson)),
+      terraformFiles: []
+    }))
 ];
 
 // 페이지와 보드 모달은 실제 Board 캡처로 검토한 authored geometry를 같은 목록에서 사용한다.

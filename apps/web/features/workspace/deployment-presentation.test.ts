@@ -180,6 +180,45 @@ test("Deployment History selects a newly successful deployment but preserves man
   );
 });
 
+test("Deployment History clears its selection when the active filter has no visible version", () => {
+  const selection = resolveDeploymentHistorySelection({
+    currentSelectionId: "deployment-success",
+    deployments: [
+      {
+        id: "deployment-success",
+        createdAt: "2026-07-16T02:00:00.000Z",
+        status: "SUCCESS" as const
+      }
+    ],
+    previousLatestDeploymentId: "deployment-success",
+    visibleDeploymentIds: []
+  });
+
+  assert.equal(selection.selectedDeploymentId, "");
+});
+
+test("Deployment History preserves a visible selection when a new version is excluded by the filter", () => {
+  const selection = resolveDeploymentHistorySelection({
+    currentSelectionId: "deployment-unchanged",
+    deployments: [
+      {
+        id: "deployment-changed",
+        createdAt: "2026-07-16T03:00:00.000Z",
+        status: "SUCCESS" as const
+      },
+      {
+        id: "deployment-unchanged",
+        createdAt: "2026-07-16T02:00:00.000Z",
+        status: "SUCCESS" as const
+      }
+    ],
+    previousLatestDeploymentId: "deployment-unchanged",
+    visibleDeploymentIds: ["deployment-unchanged"]
+  });
+
+  assert.equal(selection.selectedDeploymentId, "deployment-unchanged");
+});
+
 test("Deployment History versions remain unique for deployments created in the same millisecond", () => {
   const entries = getDeploymentHistoryEntries([
     { id: "deployment-aaaaaa", createdAt: "2026-07-16T02:00:00.000Z", status: "SUCCESS" },

@@ -3,7 +3,6 @@ import { test } from "node:test";
 import type { AwsConnection, DeploymentLiveObservationManifestRecord } from "@sketchcatch/types";
 import type { RuntimeEnv } from "../config/env.js";
 import type { DeploymentRecord, DeploymentRepository } from "../deployments/deployment-service.js";
-import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
 import type {
   CloudFrontLiveObservationExpectedTopology,
   CloudFrontLiveObservationTopologyVerifier
@@ -35,7 +34,6 @@ test("production Live Observation runtime accepts its Redis key namespace", () =
           secret: Buffer.alloc(32, 0x41).toString("base64url")
         }
       },
-      runtimeCache: createInMemoryRuntimeCache({ cleanupIntervalMs: null }),
       runtimeEnv: {
         nodeEnv: "production",
         redisUrl: "rediss://cache.example.test:6379",
@@ -93,6 +91,9 @@ test("revalidates an invalid manifest from its deployment architecture before cr
   assert.equal(manifestRecord.status, "valid");
   assert.equal(manifestRecord.manifest?.adapter.version, 4);
 
+  if (manifestRecord.manifest) {
+    delete manifestRecord.manifest.endpoints.audienceApplicationUrl;
+  }
   const service = createLiveObservationV2Service({
     audienceBaseUrl: "https://sketchcatch.example",
     capabilityKid: "test-key",
@@ -101,6 +102,13 @@ test("revalidates an invalid manifest from its deployment architecture before cr
   });
   const created = await service.createSession(deployment.id);
   assert.equal(created.session.deploymentId, deployment.id);
+  assert.equal(
+    created.session.audienceUrl,
+    "https://d111111abcdef8.cloudfront.net/?" +
+      "sketchcatch_observation_url=" +
+      "https%3A%2F%2Fsketchcatch.example%2Fapi%2Flive-observations%2Fpublic%2F" +
+      created.session.id
+  );
 });
 
 test("maps a persistence-conflict winner with different immutable evidence to controlled 409", async () => {

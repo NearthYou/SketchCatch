@@ -164,6 +164,41 @@ test("demo API verification requires POST /api/check-ins and its 201 response co
   assert.equal(apiProbeAttempts, 2);
 });
 
+test("demo API verification accepts the stateless session token response contract", async () => {
+  const marker = `${"a".repeat(40)}:candidate-1`;
+  const evidence = await verifyPublicFrontendRelease(
+    {
+      outputUrl: "https://demo.cloudfront.net",
+      expectedMarker: marker,
+      healthPath: "/health",
+      apiProbePath: "/api/check-ins",
+      apiProbeMethod: "POST",
+      apiProbeExpectedStatus: 201
+    },
+    async (request) => {
+      const url = String(request);
+      if (url.endsWith("/")) {
+        return new Response(
+          `<meta name="sketchcatch-release" content="${marker}">`,
+          { status: 200 }
+        );
+      }
+      if (url.endsWith("/health")) return new Response("ok", { status: 200 });
+      return Response.json(
+        {
+          sessionToken: "signed-payload.signature",
+          expiresAt: "2026-07-20T07:04:53.096Z",
+          heartbeatIntervalMs: 3_000
+        },
+        { status: 201 }
+      );
+    },
+    { maxApiProbeAttempts: 1 }
+  );
+
+  assert.equal((evidence as { apiProbeStatus: number }).apiProbeStatus, 201);
+});
+
 async function createFrontendFixture(): Promise<{
   root: string;
   manifest: FrontendArtifactManifest;

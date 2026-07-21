@@ -789,6 +789,27 @@ test("generated Template Terraform keeps presentation AZ parents unchanged when 
   }
 });
 
+test("generated Runtime Secret Terraform round-trips utility references without warnings", () => {
+  const diagramJson = buildTemplateDiagramJson("ecs-fargate-container-app", {
+    projectSlug: "runtime-secret-round-trip",
+    shortId: "runtime-secret",
+    requiredRuntimeSecrets: ["CHECK_IN_SIGNING_SECRET"]
+  });
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    generateTerraformFromDiagramJson(diagramJson)
+  );
+  const secretVersionNode = result.diagramJson.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_secretsmanager_secret_version"
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(
+    secretVersionNode?.parameters?.values.secretString,
+    "random_password.check_in_signing.result"
+  );
+});
+
 test("creates AZ area proposal before Subnet and EBS proposals that use availability_zone", () => {
   const result = syncTerraformToDiagramJson(
     {

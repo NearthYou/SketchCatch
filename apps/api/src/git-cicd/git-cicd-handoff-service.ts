@@ -96,6 +96,10 @@ export type GitCicdHandoffSourceRepositoryRecord = Pick<
   repositoryAnalysisRevision?: string | null;
   repositoryAnalysisResult?: SourceRepositoryAnalysisResult | null;
 };
+export type GitCicdHandoffRepositoryAnalysisTarget = Pick<
+  typeof repositoryAnalysisRecords.$inferSelect,
+  "sourceRepositoryId"
+>;
 export type GitCicdHandoffDeploymentTargetRecord =
   typeof projectDeploymentTargets.$inferSelect & {
     awsRoleArn: string | null;
@@ -370,6 +374,9 @@ export type GitCicdHandoffRepository = {
     sourceRepositoryId: string,
     projectId: string
   ): Promise<GitCicdHandoffSourceRepositoryRecord | undefined>;
+  findRepositoryAnalysisTarget(
+    projectId: string
+  ): Promise<GitCicdHandoffRepositoryAnalysisTarget | undefined>;
   findMonitoringConfig(
     sourceRepositoryId: string
   ): Promise<typeof gitCicdMonitoringConfigs.$inferSelect | undefined>;
@@ -445,6 +452,28 @@ export class GitCicdHandoffProviderConflictError extends Error {
   constructor(message: string, readonly code: string | null = null) {
     super(message);
     this.name = "GitCicdHandoffProviderConflictError";
+  }
+}
+
+export class GitCicdSourceRepositoryMismatchError extends GitCicdHandoffProviderConflictError {
+  constructor() {
+    super(
+      "현재 Board와 다른 Repository가 요청되었습니다. Board에서 Repository를 다시 선택한 뒤 CI/CD 정보를 새로고침해 주세요.",
+      "GIT_CICD_SOURCE_REPOSITORY_MISMATCH"
+    );
+    this.name = "GitCicdSourceRepositoryMismatchError";
+  }
+}
+
+export function assertGitCicdHandoffSourceRepositoryMatchesBoard(input: {
+  repositoryAnalysisTarget: GitCicdHandoffRepositoryAnalysisTarget | undefined;
+  requestedSourceRepositoryId: string;
+}): void {
+  if (
+    input.repositoryAnalysisTarget &&
+    input.repositoryAnalysisTarget.sourceRepositoryId !== input.requestedSourceRepositoryId
+  ) {
+    throw new GitCicdSourceRepositoryMismatchError();
   }
 }
 
@@ -1105,6 +1134,14 @@ export function createPostgresGitCicdHandoffRepository(
       return sourceRepository;
     },
 
+    async findRepositoryAnalysisTarget(projectId) {
+      const [target] = await db
+        .select({ sourceRepositoryId: repositoryAnalysisRecords.sourceRepositoryId })
+        .from(repositoryAnalysisRecords)
+        .where(eq(repositoryAnalysisRecords.projectId, projectId));
+      return target;
+    },
+
     async findMonitoringConfig(sourceRepositoryId) {
       const [config] = await db
         .select()
@@ -1447,6 +1484,12 @@ export async function createGitCicdHandoff(
   if (!sourceRepository) {
     throw new GitCicdHandoffNotFoundError("Active source repository not found for project");
   }
+
+  const repositoryAnalysisTarget = await repository.findRepositoryAnalysisTarget(input.projectId);
+  assertGitCicdHandoffSourceRepositoryMatchesBoard({
+    repositoryAnalysisTarget,
+    requestedSourceRepositoryId: input.sourceRepositoryId
+  });
 
   const monitoringConfig = await repository.findMonitoringConfig(input.sourceRepositoryId);
   if (

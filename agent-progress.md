@@ -4,80 +4,99 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch `dev` matches `origin/dev` at `8e72a20d`; the current worktree contains the Fixed Template runtime-Secret correction requested directly on `dev`.
+- Public Repository Analysis no longer special-cases `chaekang/audience-live-check`; it resolves the current selected branch SHA and reads real repository evidence while general Fixed Template and authored demo flows remain available.
+- Branch `codex/fix-error-progress-completion` includes `origin/dev` through `d189cda3` and keeps the compact Workspace AI Terraform error-analysis gauge visible through an explicit successful 100% completion state.
+- The parked JH Workspace changes are restored on `dev`: Deployment uses the shorter `배포` label and intrinsic action width, Settings omits redundant CodeBuild authorization copy, and Project Draft loading uses the server draft whenever one exists without rendering the removed local-recovery chooser.
+- Terraform reverse sync accepts references to its allowlisted utility resources, so generated Runtime Secret values such as `random_password.check_in_signing.result` round-trip without a false manual-edit warning.
+- The Direct Deployment branch includes `origin/dev` through `fce1d6c0`, removes duplicate deployment summaries, and keeps selected history details within the active filter. Eighty-six focused Web tests and the root harness, lint, typecheck, and build checks pass.
 - The legacy `practice` Deployment profile is removed; `demo_web_service` is the default live profile, and imported migration `0054` rewrites legacy rows before removing the enum value.
-- Live Observation renders bounded traffic motion, a task-count-responsive Fargate fleet, and collapsed operational analysis without development-only traffic or Task preview controls.
+- Live Observation keeps its bounded traffic motion and presents a separate, read-only Signal Dashboard: at most three deterministic, evidence-backed signals distinguish confirmed facts, possible causes, and what is still unknown without adding live AWS actions.
 - Delayed first CloudWatch points retain request and capacity evidence, and stopped sessions no longer continue the countdown.
 - The approved sandbox traffic run sent exactly 963 requests with 963 HTTP 200 responses. The failed observation acceptance triggered approved cleanup, and the `liveobs-7cccab4b` AWS resource set was verified absent.
 - Deployment `57bda2bf-88af-4e15-8674-0b2ef20f1e8c` is `DESTROYED` with cleared state and current-plan pointers.
 - Repository ECS delivery carries runtime Secret names through analysis. Both strict AI and Fixed Template drafts now generate `CHECK_IN_SIGNING_SECRET` during approved Apply, map the same Secrets Manager ARN into the IAM policy and every Task, and leave `INSTANCE_ID` unset for hostname-based observation.
+- Public ECS/Web release verification accepts both the legacy `sessionId` check-in response and the stateless signed `sessionToken` response while retaining the required 201 status and ISO expiry check.
 - Windows subprocess, local environment isolation, generated architecture knowledge, resource catalog, typography, and Workspace source-contract regressions are repaired.
-- Focused runtime-Secret, deployment-action, and failure-visibility regressions pass. `pnpm lint` and `pnpm typecheck` pass. Root `pnpm build` reported all five tasks successful but Turbo did not exit; direct Types/Config/UI/API/Web package builds all exited 0. The full `pnpm test` run still exposes two unchanged stale Live Observation source-contract failures and one unchanged lease-heartbeat cancellation.
+- Sixty focused Repository runtime-Secret, deployment-action, and failure-visibility regressions pass; the final post-review 50-test subset also passes. `pnpm lint` and `pnpm typecheck` pass. Root `pnpm build` reported all five tasks successful before the known Turbo exit hang. The full Web suite passes 1,090 of 1,098 tests; its eight failures are outside the changed runtime-Secret paths. Root `pnpm test` still exposes ten unrelated API baseline failures and one lease-heartbeat cancellation; its one Repository source-contract failure was corrected and passes focused verification.
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
 
-### 2026-07-20 - Complete Fixed Template runtime Secret convergence
+### 2026-07-22 - Remove the duplicate AWS connection step description
 
-- Corrected the earlier diagnosis: the production runtime-Secret support was only applied to the strict AI Architecture path; Repository Fixed Template Board creation bypassed it.
-- Passed Repository Analysis `runtime_secret` facts into Fixed Template generation and conditionally added generated password material, Secrets Manager Secret/Version, exact execution-role read policy, ECS Task secret mapping, and dependency edges.
-- Added a fail-closed `full_stack` preparation guard that compares the confirmed build contract with the rendered Terraform and rejects missing or cross-wired runtime Secret references before Plan creation.
-- Hid stale Apply Plan approval for non-`PENDING` deployments and kept the stored deployment failure summary visible from every Direct Deployment step.
-- No migration or cloud mutation was performed.
+- Hid the empty-state AWS Role description from the connection step header while retaining it in the expanded body and preserving the verified account/region summary.
+- Seven focused Settings tests, lint, typecheck, build, final harness, and two-axis review pass. No full test suite was run.
+- No API, shared contract, database migration, dependency, deployment, or cloud mutation change was made.
 
-### 2026-07-20 - Diagnose chaekang GitOps API health failure
+### 2026-07-22 - Restructure Settings connection flow
 
-- Reproduced GitHub run `29702236763` failing at `Preflight api_health` after the current production deployment.
-- Compared it with successful `jh-9999/audience-live-check` run `29701336062`: the app workflows and checked-in Terraform are identical, while only the failing repository's API now requires `CHECK_IN_SIGNING_SECRET` in production.
-- Verified the failing repository variables are populated and the OIDC release request succeeds; GitHub Actions configuration is not the failing boundary.
-- Confirmed the checked-in Terraform task definition has no runtime Secret mapping. A local minimized execution of the failing repository throws `CHECK_IN_SIGNING_SECRET is required in production` without the value and succeeds with a 36-byte value.
-- The signed-in SketchCatch session can access successful project `7b618d82` but gets an ownership-hiding 404 for failing project `4b06fa5d`, so the current account cannot re-analyze or update the failing project.
-- Root cause: project `4b06fa5d` retains a pre-runtime-secret Repository Analysis and approved infrastructure artifact. It needs owner access, fresh analysis, and a newly approved Terraform Apply before another application release.
-- Production diff `2da6ba32..8e72a20d` adds runtime-Secret support through `f00f1ce4`; it does not remove the release path. The failing `chaekang` repository has no earlier App workflow run, while the successful `jh-9999` comparator uses an API revision without the production signing-Secret requirement.
+- Reworked the existing Settings integrations into one ordered GitHub App -> AWS account -> AWS CodeBuild GitHub authorization flow, with completed steps collapsed and the current or error step expanded.
+- Preserved all existing API clients, DTOs, shared types, actions, and connected AWS account management. Long CodeBuild failure details now remain behind an `오류 상세` disclosure with a neutral summary.
+- Verification passed: 14 focused Web tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, diff checks, and two-axis review. Authenticated browser smoke was unavailable because the in-app browser session was signed out.
+- No database migration, dependency change, cloud mutation, deployment action, or Git/CI/CD handoff was performed.
 
-### 2026-07-20 - Verify repository runtime Secret fix on current dev
+### 2026-07-22 - Connect real audience traffic to immediate Live Observation warnings
 
-- Fast-forwarded local `dev` from `6db37d66` to `8e72a20d` and confirmed it matches `origin/dev`.
-- Traced `chaekang/audience-live-check` run `29702236763`: GitHub variables and OIDC succeeded, while the API container exited during `api_health` because production startup required `CHECK_IN_SIGNING_SECRET`.
-- Confirmed merged commit `f00f1ce4` already fixes this contract by detecting the Secret name, injecting an isolated preflight placeholder, and generating an approved Secrets Manager/ECS Task mapping for runtime.
-- Focused verification passed: 99 API tests across preflight, Repository Analysis, Terraform rendering, and safety; 18 Web deployment-target tests.
-- No duplicate production-code change was made. Production still requires the current `dev` deployment followed by Repository re-analysis and a newly approved deployment plan for the affected project.
-- Production ECS workflow run `29703545489` completed successfully from remote `dev` SHA `8e72a20d`; validation, API/Web image builds, worker task registration, and API/Web service stabilization all passed.
-- Post-deployment smoke checks passed: `https://sketchcatch.net/health` returned `{\"status\":\"ok\"}`, and `/` plus `/workspace` returned HTTP 200. No production DB migration was required or run.
+- Removed the separate public per-IP limiter, `Retry-After` propagation, and audience countdown while retaining the Store safety envelope of 20 events/second, 120 events/10 seconds, 10,000 events/session, and a 15-minute session lifetime.
+- Added an optional audience application URL to the v4 manifest with backward-compatible CloudFront derivation for existing manifests. The external audience app receives a scoped observation receipt URL and emits best-effort receipts only after successful real check-in and heartbeat requests.
+- Latched immediate Store-backed pressure warnings until a user-approved Project Draft save succeeds. The only automatic Terraform edit requires exactly one `aws_appautoscaling_target` and one numeric `max_capacity`, increments it by one, and never runs Plan, Apply, deployment, or cloud mutation.
+- Added AI recommendation context, explicit editor navigation after save, revision-conflict protection, contract documentation, and focused API/Web regressions.
+- Verification passed: 24 focused API tests, 28 focused Web tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, final harness, and two-axis review. Review fixes separated Store-only receipts from legacy probes, moved warning latch state outside the modal, streamed Store snapshots before provider refresh, and removed the unused Runtime Cache dependency.
+- Root `pnpm test` remains non-green in pre-existing `aiArchitectureDrafts.test.ts` expectations outside this workstream; the changed Live Observation subsets pass.
+- The external `audience-live-check` clone passes typecheck, build, 49 tests, and changed-file Biome checks. Its root lint remains non-green because of existing repository-wide CRLF formatting findings outside the changed files.
+- No database migration, dependency change, secret access, Terraform execution, deployment, or cloud mutation was performed.
+### 2026-07-22 - Reduce Diagram resource label size
 
-### 2026-07-20 - Integrate current dev before PR
+- Reduced only the labels beneath Diagram resource icons from an effective 18px to 13px while preserving the two-line clamp, icon spacing, edge labels, and area headings.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
 
-- Merged `origin/dev` through `ad1464ba`, retaining both the runtime Secret delivery contract and the removal of the legacy `practice` profile.
-- Adapted runtime Secret safety tests to the current `demo_web_service` profile without weakening generated-secret or least-privilege IAM validation.
-- Preserved the imported profile-removal migration and UI refinements without editing their migration files.
+### 2026-07-22 - Strengthen Workspace panel borders
 
-### 2026-07-20 - Repair repository verification baseline
+- Increased the Diagram Editor's neutral border contrast for both outer panel boundaries and internal separators/controls: regular lines now use `#d4d4d4`, while strong lines use `#c8c8c8`.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
 
-- Made the shared contract test invoke `pnpm` correctly on Windows and isolated API tests from local `.env` values.
-- Regenerated Architecture Board knowledge and aligned Repository ECS, Workspace, typography, and resource-catalog tests with current behavior.
-- Kept schema-less Terraform items visible but disabled until an editable parameter contract exists.
+### 2026-07-21 - Simplify fallback cost headings
 
-### 2026-07-20 - Add repository runtime-secret delivery contract
+- Removed the marked `예상` qualifier from the fallback monthly and daily cost headings while preserving the explicit `실제` labels for AWS-backed data.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
 
-- Added names-only runtime Secret evidence, isolated preflight placeholders, Terraform-generated signing material, Secrets Manager storage, exact execution-role read access, and ECS Task Definition secret mapping.
-- Preserved the approved Secret mapping across application releases while replacing only the image.
-- Removed the fixed `INSTANCE_ID=fargate` value so hostname fallback can identify distinct Tasks.
+### 2026-07-21 - Remove visible sample identifiers from Cost Usage
 
-### 2026-07-20 - Exercise and fail closed the Live Observation traffic run
+- Replaced visible `sample-*`, `Sample`, `예시`, and test-only wording in fallback Cost Usage content with neutral DB/ALB names and estimated-cost labels. Internal fallback identifiers remain unchanged, and live AWS recommendation conditions retain their original wording.
+- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
 
-- Sent the approved maximum of 963 bounded requests; all returned HTTP 200 and no additional traffic was generated.
-- Retained delayed CloudWatch evidence, stopped inactive countdowns, and removed temporary development controls.
-- Completed approved manual cleanup after automatic Destroy could not read internal Terraform state, then verified the scoped AWS resources absent.
+### 2026-07-21 - Shorten the Live Observation public traffic cooldown
+
+- Fast-forwarded the issue branch from `c3ac5a8e` to current `origin/dev` at `13ed1cb6`, then restored the Live Observation request work on top.
+- Reproduced the audience page dropping the server `Retry-After` value and the public collector enforcing a 30-request fixed minute, which could leave one client waiting almost 60 seconds.
+- Replaced the long window with two global per-IP safeguards aligned to the Store envelope: 20 requests per second and 120 requests per 10 seconds. Human-paced requests no longer encounter a minute cooldown; excessive traffic waits normally one second and at most ten seconds.
+- Propagated the exact cooldown through the collector error, HTTP `Retry-After`, CORS exposure, audience client, session state, disabled action, and automatic ready-state recovery.
+- Added five API/Web regressions for both rate windows, HTTP/CORS delivery, client parsing, and cooldown suppression. The existing four traffic-burst regressions remain green.
+- Focused verification passes 9/9. Root harness, lint, typecheck, all five production builds, and diff checks pass on the updated branch.
+- Preserved the latest dev progress record and archive during stash conflict resolution; no product-code merge conflict occurred.
+- No dependency, lockfile, database migration, Terraform execution, cloud mutation, Deployment action, or Git/CI/CD handoff was performed.
+
+### 2026-07-21 - Remove the Repository-specific audience demo bypass
+
+- Removed the fixed analysis response, frozen revision, synthetic architecture facts, strict URL profile, and Web-only Architecture Draft branch for `chaekang/audience-live-check`.
+- Public analysis now resolves the selected branch SHA and reads its tree and evidence files; Repository Board generation uses the same analyzed Template path as every other repository.
+- Focused Repository API and Web checks pass 18/18, and the retained general Fixed Template checks pass 4/4. Harness, lint, typecheck, build, and diff checks pass. The broad AI Draft file still has 15 unrelated baseline failures.
+- No dependency, lockfile, database migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
+- 2026-07-21: Added a UI-only target environment selector to the new-project screen with equally selectable AWS, GCP, Azure, and On-premise options. The selection is intentionally not persisted or sent to project creation APIs. The focused environment test, browser selection check, lint, typecheck, and build pass. The full Web suite remains at 1,095/1,099 because of four pre-existing Architecture Board/compiler failures outside this change.
 
 ## Known Risk
 
+- Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
 - Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
-- Root `pnpm test` is not green because unchanged baseline tests fail in `live-observation-modal-contract.test.ts` (two stale source markers) and `application-artifact-registry.test.ts` (one cancelled lease-heartbeat test).
+- The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` was saved by the stale Web process and must be re-analyzed/regenerated or replaced after the Web restart.
+- Root `pnpm test` is not green because ten unrelated API baseline tests fail and `application-artifact-registry.test.ts` still has one cancelled lease-heartbeat test.
+- The full Web suite is not green because eight architecture-board/compiler tests outside this workstream fail; the runtime-Secret regression subset is green.
 - End-to-end Live Observation animation and provider-confirmed scale-out remain unaccepted because the active UI session missed the traffic before the delayed-snapshot fix.
 - Automatic cleanup remains blocked for this credential layout until the approved cleanup operator can read the internal deployment-state object.
 - No new AWS resources or traffic may be created without a new explicit approval.
 
 ## Next Action
 
-1. Deploy the reviewed `dev` commit through the normal production workflow; no DB migration is required.
-2. Sign in as the owner of project `4b06fa5d`, re-analyze the current repository revision, regenerate the Fixed Template Board, and prepare a new Plan for explicit approval.
+1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
+2. Deploy `dev` through the normal reviewed workflow when a production release is approved; no DB migration is required for these changes.
+3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.

@@ -102,9 +102,25 @@ test("toFlowNodes replaces cached nodes for connection activity and target-valid
   assert.notEqual(active[1], inactive[1]);
   assert.notEqual(active[2], inactive[2]);
   assert.equal(active[1]?.data.isValidConnectionTarget, true);
+  assert.match(active[1]?.ariaLabel ?? "", /연결 대상/);
   assert.notEqual(validityChanged[1], active[1]);
   assert.equal(validityChanged[2], active[2]);
   assert.equal(validityChanged[1]?.data.isValidConnectionTarget, false);
+});
+
+test("toFlowNodes disables connection handles until connection mode is enabled", () => {
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const disabled = toFlowNodes([instance], [], null, false, handlers, {
+    isConnectionToolEnabled: false
+  });
+  const enabled = toFlowNodes([instance], [], null, false, handlers, {
+    cachedNodesById: new Map(disabled.map((node) => [node.id, node])),
+    isConnectionToolEnabled: true
+  });
+
+  assert.equal(disabled[0]?.connectable, false);
+  assert.equal(enabled[0]?.connectable, true);
+  assert.notEqual(enabled[0], disabled[0]);
 });
 
 test("toFlowNodes replaces cached preview nodes when preview mode or annotations change", () => {
@@ -434,14 +450,9 @@ test("toFlowNodes preserves literal source-exact z-index values without kind or 
     zIndex: -35
   };
 
-  const flowNodes = toFlowNodes(
-    [region, instance],
-    [instance.id],
-    null,
-    false,
-    handlers,
-    { geometryPolicy: "source-exact" }
-  );
+  const flowNodes = toFlowNodes([region, instance], [instance.id], null, false, handlers, {
+    geometryPolicy: "source-exact"
+  });
 
   assert.equal(getFlowNodeZIndex(flowNodes, region.id), 420_000);
   assert.equal(getFlowNodeZIndex(flowNodes, instance.id), -35);
@@ -594,14 +605,29 @@ test("toFlowEdges replaces stored handles when their rendered route crosses a re
 });
 
 test("toFlowEdges keeps authored-route handles and raw route metadata across obstacles", () => {
-  const source = makeNode({ id: "authored-source", position: { x: 0, y: 100 }, resourceType: "aws_instance" });
-  const blocker = makeNode({ id: "authored-blocker", position: { x: 240, y: 100 }, resourceType: "aws_s3_bucket" });
-  const target = makeNode({ id: "authored-target", position: { x: 480, y: 100 }, resourceType: "aws_lambda_function" });
+  const source = makeNode({
+    id: "authored-source",
+    position: { x: 0, y: 100 },
+    resourceType: "aws_instance"
+  });
+  const blocker = makeNode({
+    id: "authored-blocker",
+    position: { x: 240, y: 100 },
+    resourceType: "aws_s3_bucket"
+  });
+  const target = makeNode({
+    id: "authored-target",
+    position: { x: 480, y: 100 },
+    resourceType: "aws_lambda_function"
+  });
   const route: NonNullable<DiagramEdge["route"]> = {
     svgPath: "M 168 148 L 240 148 L 240 52 L 480 52",
     sourcePoint: { x: 168, y: 148 },
     targetPoint: { x: 480, y: 52 },
-    waypoints: [{ x: 240, y: 148 }, { x: 240, y: 52 }],
+    waypoints: [
+      { x: 240, y: 148 },
+      { x: 240, y: 52 }
+    ],
     labelPosition: { x: 240, y: 92 },
     arrowDirection: "target-to-source",
     arrowAngle: -90
@@ -726,12 +752,10 @@ test("toFlowEdges preserves literal source-exact z-index and DOM fallback withou
     { geometryPolicy: "source-exact" }
   );
 
-  assert.deepEqual(flowEdges.map((edge) => edge.id), [
-    firstDomEdge.id,
-    selectedEdge.id,
-    highAuthoredEdge.id,
-    secondDomEdge.id
-  ]);
+  assert.deepEqual(
+    flowEdges.map((edge) => edge.id),
+    [firstDomEdge.id, selectedEdge.id, highAuthoredEdge.id, secondDomEdge.id]
+  );
   assert.equal(getFlowEdgeZIndex(flowEdges, selectedEdge.id), -240);
   assert.equal(getFlowEdgeZIndex(flowEdges, firstDomEdge.id), 0);
   assert.equal(getFlowEdgeZIndex(flowEdges, highAuthoredEdge.id), 900_000);
@@ -835,10 +859,7 @@ test("toFlowEdges preserves non-empty labels independently of selection", () => 
   const [labeledFlowEdge, blankFlowEdge] = toFlowEdges([labeled, blank], []);
 
   assert.equal(labeledFlowEdge?.label, "publishes");
-  assert.equal(
-    labeledFlowEdge?.labelStyle?.fontWeight,
-    "var(--presentation-font-weight-bold)"
-  );
+  assert.equal(labeledFlowEdge?.labelStyle?.fontWeight, "var(--presentation-font-weight-bold)");
   assert.equal(labeledFlowEdge?.labelStyle?.fill, "#172033");
   assert.equal(labeledFlowEdge?.labelBgStyle?.fill, "#f8fbff");
   assert.equal(labeledFlowEdge?.labelBgStyle?.stroke, "#9fb2c8");

@@ -247,6 +247,7 @@ function createCloudFrontDeploymentManifest(input: {
     },
     endpoints: {
       audienceBaseUrl: input.audienceBaseUrl,
+      audienceApplicationUrl: outputUrl.toString(),
       trafficUrl: new URL("/api/traffic", outputUrl).toString()
     },
     pressure: {
@@ -353,18 +354,39 @@ function createEcsScalingEvidence(
   }
 
   const target = targets[0]!;
-  const connectedServices = architecture.edges
+  const edgeConnectedServices = architecture.edges
     .filter((edge) => edge.targetId === target.id)
     .map((edge) => architecture.nodes.find((node) => node.id === edge.sourceId))
-    .filter((node) => node?.type === "ECS_SERVICE");
+    .filter((node): node is ArchitectureJson["nodes"][number] => node?.type === "ECS_SERVICE");
+  const connectedServices = edgeConnectedServices.length > 0
+    ? edgeConnectedServices
+    : architecture.nodes.filter(
+        (node) =>
+          node.type === "ECS_SERVICE" &&
+          configurationReferencesTerraformNode(target.config, node, "aws_ecs_service")
+      );
   if (connectedServices.length !== 1) {
     throw new Error("Incomplete ECS Service Auto Scaling target evidence");
   }
 
-  const connectedPolicies = architecture.edges
+  const edgeConnectedPolicies = architecture.edges
     .filter((edge) => edge.sourceId === target.id)
     .map((edge) => architecture.nodes.find((node) => node.id === edge.targetId))
-    .filter((node) => node?.type === "APPLICATION_AUTO_SCALING_POLICY");
+    .filter(
+      (node): node is ArchitectureJson["nodes"][number] =>
+        node?.type === "APPLICATION_AUTO_SCALING_POLICY"
+    );
+  const connectedPolicies = edgeConnectedPolicies.length > 0
+    ? edgeConnectedPolicies
+    : architecture.nodes.filter(
+        (node) =>
+          node.type === "APPLICATION_AUTO_SCALING_POLICY" &&
+          configurationReferencesTerraformNode(
+            node.config,
+            target,
+            "aws_appautoscaling_target"
+          )
+      );
   if (connectedPolicies.length !== 1) {
     throw new Error("Incomplete ECS Service Auto Scaling policy evidence");
   }
@@ -395,6 +417,21 @@ function createEcsScalingEvidence(
     metric: readTargetTrackingMetric(configuration),
     targetValue
   };
+}
+
+function configurationReferencesTerraformNode(
+  config: Readonly<Record<string, unknown>>,
+  node: ArchitectureJson["nodes"][number],
+  terraformResourceType: string
+): boolean {
+  const terraformResourceName = node.config["terraformResourceName"];
+  if (typeof terraformResourceName !== "string" || !terraformResourceName.trim()) {
+    return false;
+  }
+
+  return JSON.stringify(config).includes(
+    `${terraformResourceType}.${terraformResourceName.trim()}.`
+  );
 }
 
 function readPositiveIntegerConfig(

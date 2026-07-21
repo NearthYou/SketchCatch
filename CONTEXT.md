@@ -244,6 +244,14 @@ _Avoid_: AI backend, Bedrock automation, model magic
 An analysis that estimates request flow, bottlenecks, failure exposure, cost pressure, and capacity from the Infrastructure Graph under stated assumptions.
 _Avoid_: Monitoring, load test, benchmark
 
+**Live Observation**:
+An opt-in, time-bounded read-only session for viewing a successful Deployment's verified live request evidence, AWS observation snapshot, and runtime logs without changing the Deployment or its Resources.
+_Avoid_: CloudWatch replacement, traffic generator, automatic remediation
+
+**Live Observation Signal Dashboard**:
+A compact, deterministic lower dashboard that selects at most three evidence-backed signals from the current Live Observation session and separates confirmed facts, cautious possibilities, and unknowns. Signal selection is not an AI call. For elevated request pressure, a separate read-only Design Simulation may explain an available capacity action; only explicit user approval may update the Project Draft, never the Deployment, AWS Resources, Plan/Apply, or Architecture Board.
+_Avoid_: AI diagnosis, metric wall, automatic fix, CloudWatch clone
+
 **Design Version**:
 A saved version of a Practice Architecture and its IaC Preview that can be compared with another version.
 _Avoid_: Backup, history item, save point

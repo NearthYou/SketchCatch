@@ -1,5 +1,9 @@
 import { getApiErrorMessage } from "../../lib/api-client";
-import type { DeploymentScope, DiagramJson } from "@sketchcatch/types";
+import type {
+  DeploymentScope,
+  DiagramJson,
+  ProjectDeploymentTarget
+} from "@sketchcatch/types";
 
 export type DeploymentPreparationStage =
   | "terraform_prepare"
@@ -43,6 +47,7 @@ export class DeploymentPreparationError extends Error {
 }
 
 export type DeploymentTargetPrerequisite = Readonly<{
+  action?: "repository_analysis" | undefined;
   message: string;
   title: string;
 }>;
@@ -56,10 +61,9 @@ export function getDeploymentTargetPrerequisite({
   readonly awsConnectionId: string;
   readonly diagramJson: DiagramJson;
   readonly scope: DeploymentScope | "auto";
-  readonly target: Readonly<{
-    connectionId: string | null;
-    confirmedBuildConfig: unknown | null;
-  }> | null;
+  readonly target: Readonly<
+    Pick<ProjectDeploymentTarget, "connectionId" | "confirmedBuildConfig">
+  > | null;
 }): DeploymentTargetPrerequisite | null {
   const requiresApplicationTarget =
     scope === "application" ||
@@ -95,6 +99,41 @@ export function getDeploymentTargetPrerequisite({
   return null;
 }
 
+export function getDeploymentRuntimeSecretPrerequisite({
+  diagramJson,
+  scope,
+  target
+}: {
+  readonly diagramJson: DiagramJson;
+  readonly scope: DeploymentScope | "auto";
+  readonly target: Readonly<
+    Pick<ProjectDeploymentTarget, "connectionId" | "confirmedBuildConfig">
+  > | null;
+}): DeploymentTargetPrerequisite | null {
+  if (!target?.confirmedBuildConfig) {
+    return null;
+  }
+
+  const requiredRuntimeSecrets =
+    target.confirmedBuildConfig.ecsWeb?.api.requiredRuntimeSecrets ?? [];
+  const requiresFullStackRuntimeSecretContract =
+    scope === "full_stack" || (scope === "auto" && hasEcsApplicationResource(diagramJson));
+  if (
+    requiresFullStackRuntimeSecretContract &&
+    requiredRuntimeSecrets.includes("CHECK_IN_SIGNING_SECRET") &&
+    !hasCheckInSigningSecretDiagramContract(diagramJson)
+  ) {
+    return {
+      action: "repository_analysis",
+      message:
+        "Repository가 요구하는 CHECK_IN_SIGNING_SECRET이 현재 Terraform 초안에 없습니다. Repository를 다시 분석하고 Fixed Template Board를 다시 생성·저장한 뒤 검증을 실행해 주세요.",
+      title: "Repository와 Terraform 시크릿 연결 불일치"
+    };
+  }
+
+  return null;
+}
+
 export function getDeploymentPreparationErrorMessage(
   error: unknown,
   fallbackMessage: string
@@ -115,4 +154,213 @@ function hasEcsApplicationResource(diagramJson: DiagramJson): boolean {
       "aws_ecs_task_definition"
     ].includes(resourceType);
   });
+}
+
+function hasCheckInSigningSecretDiagramContract(diagramJson: DiagramJson): boolean {
+  const resources = diagramJson.nodes.filter(isTerraformResourceNode);
+  const secretVersions = resources.filter(
+    (node) => node.parameters.resourceType === "aws_secretsmanager_secret_version"
+  );
+
+  return secretVersions.some((secretVersion) => {
+    const secretResourceName = matchTerraformReference(
+      secretVersion.parameters.values.secretId,
+      "aws_secretsmanager_secret",
+      "id"
+    );
+    const generatedMaterialResourceName = matchTerraformReference(
+      secretVersion.parameters.values.secretString,
+      "random_password",
+      "result"
+    );
+    if (
+      !secretResourceName ||
+      !generatedMaterialResourceName ||
+      !hasTerraformResource(resources, "aws_secretsmanager_secret", secretResourceName) ||
+      !hasTerraformResource(resources, "random_password", generatedMaterialResourceName)
+    ) {
+      return false;
+    }
+
+    return resources
+      .filter((node) => node.parameters.resourceType === "aws_ecs_task_definition")
+      .some((taskDefinition) =>
+        hasCompleteEcsRuntimeSecretChain(resources, taskDefinition, secretResourceName)
+      );
+  });
+}
+
+type TerraformResourceNode = DiagramJson["nodes"][number] & {
+  readonly kind: "resource";
+  readonly parameters: NonNullable<DiagramJson["nodes"][number]["parameters"]>;
+};
+
+function isTerraformResourceNode(
+  node: DiagramJson["nodes"][number]
+): node is TerraformResourceNode {
+  return node.kind === "resource" && node.parameters !== undefined;
+}
+
+function hasCompleteEcsRuntimeSecretChain(
+  resources: readonly TerraformResourceNode[],
+  taskDefinition: TerraformResourceNode,
+  secretResourceName: string
+): boolean {
+  const executionRoleName = matchTerraformReference(
+    taskDefinition.parameters.values.executionRoleArn,
+    "aws_iam_role",
+    "arn"
+  );
+  if (
+    !executionRoleName ||
+    !hasTerraformResource(resources, "aws_iam_role", executionRoleName) ||
+    !hasTaskSecretMapping(taskDefinition, secretResourceName)
+  ) {
+    return false;
+  }
+
+  const hasExactExecutionRolePolicy = resources
+    .filter((node) => node.parameters.resourceType === "aws_iam_role_policy")
+    .some((policy) =>
+      hasExactSecretReadPolicy(policy, executionRoleName, secretResourceName)
+    );
+  const isTaskUsedByService = resources
+    .filter((node) => node.parameters.resourceType === "aws_ecs_service")
+    .some(
+      (service) =>
+        matchTerraformReference(
+          service.parameters.values.taskDefinition,
+          "aws_ecs_task_definition",
+          "arn"
+        ) === taskDefinition.parameters.resourceName
+    );
+
+  return hasExactExecutionRolePolicy && isTaskUsedByService;
+}
+
+function hasTaskSecretMapping(
+  taskDefinition: TerraformResourceNode,
+  secretResourceName: string
+): boolean {
+  const containerDefinitions = taskDefinition.parameters.values.containerDefinitions;
+  if (typeof containerDefinitions !== "string") {
+    return false;
+  }
+
+  try {
+    const definitions: unknown = JSON.parse(containerDefinitions);
+    return (
+      Array.isArray(definitions) &&
+      definitions.some(
+        (definition) =>
+          isRecord(definition) &&
+          Array.isArray(definition["secrets"]) &&
+          definition["secrets"].some(
+            (secret) =>
+              isRecord(secret) &&
+              secret["name"] === "CHECK_IN_SIGNING_SECRET" &&
+              secret["valueFrom"] ===
+                `\${aws_secretsmanager_secret.${secretResourceName}.arn}`
+          )
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
+function hasExactSecretReadPolicy(
+  policyNode: TerraformResourceNode,
+  executionRoleName: string,
+  secretResourceName: string
+): boolean {
+  const roleReference = matchTerraformReference(
+    policyNode.parameters.values.role,
+    "aws_iam_role",
+    "id"
+  );
+  const policy = parseJsonRecord(policyNode.parameters.values.policy);
+  if (roleReference !== executionRoleName || !policy) {
+    return false;
+  }
+
+  const statements = policy["Statement"];
+  if (
+    !hasExactKeys(policy, ["Statement", "Version"]) ||
+    policy["Version"] !== "2012-10-17" ||
+    !Array.isArray(statements) ||
+    statements.length !== 1 ||
+    !isRecord(statements[0])
+  ) {
+    return false;
+  }
+
+  const statement = statements[0];
+  return (
+    hasExactKeys(statement, ["Action", "Effect", "Resource", "Sid"]) &&
+    statement["Sid"] === "ReadCheckInSigningSecret" &&
+    statement["Effect"] === "Allow" &&
+    Array.isArray(statement["Action"]) &&
+    statement["Action"].length === 1 &&
+    statement["Action"][0] === "secretsmanager:GetSecretValue" &&
+    statement["Resource"] ===
+      `\${aws_secretsmanager_secret.${secretResourceName}.arn}`
+  );
+}
+
+function hasTerraformResource(
+  resources: readonly TerraformResourceNode[],
+  resourceType: string,
+  resourceName: string
+): boolean {
+  return resources.some(
+    (node) =>
+      node.parameters.resourceType === resourceType &&
+      node.parameters.resourceName === resourceName
+  );
+}
+
+function matchTerraformReference(
+  value: unknown,
+  resourceType: string,
+  attribute: string
+): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const prefix = `${resourceType}.`;
+  const suffix = `.${attribute}`;
+  if (!value.startsWith(prefix) || !value.endsWith(suffix)) {
+    return null;
+  }
+
+  const resourceName = value.slice(prefix.length, -suffix.length);
+  return /^[a-z_][a-z0-9_]*$/u.test(resourceName) ? resourceName : null;
+}
+
+function parseJsonRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasExactKeys(record: Record<string, unknown>, expectedKeys: readonly string[]): boolean {
+  const actualKeys = Object.keys(record).sort();
+  const sortedExpectedKeys = [...expectedKeys].sort();
+  return (
+    actualKeys.length === sortedExpectedKeys.length &&
+    actualKeys.every((key, index) => key === sortedExpectedKeys[index])
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

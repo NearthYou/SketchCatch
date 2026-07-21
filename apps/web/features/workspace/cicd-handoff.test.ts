@@ -18,6 +18,19 @@ import {
   invalidateGitCicdReload,
   selectGitCicdSourceDeployment
 } from "./cicd-handoff";
+import { ApiClientError, getApiErrorMessage } from "../../lib/api-client";
+
+test("explains how to recover from a stale Board Repository handoff request", () => {
+  const error = new ApiClientError(409, {
+    error: "GIT_CICD_SOURCE_REPOSITORY_MISMATCH",
+    message: "Delivery source repository mismatch"
+  });
+
+  assert.equal(
+    getApiErrorMessage(error, "CI/CD 배포 Pull Request를 생성하지 못했습니다."),
+    "현재 Board의 Repository와 요청한 Repository가 다릅니다. Board에서 Repository를 다시 선택하고 CI/CD 정보를 새로고침해 주세요."
+  );
+});
 
 test("builds a safe settings round trip for a missing build configuration", () => {
   const action = createGitCicdReadinessNavigation({
@@ -77,7 +90,7 @@ test("provides one concrete CTA for every server readiness action", () => {
   const expected = {
     approve_apply_plan: "Apply Plan 승인하기",
     deploy_initial_application: "최초 앱 배포하기",
-    select_repository: "Repository 선택하기",
+    select_repository: "Repository 연결 확인",
     confirm_monitoring_config: "Branch와 경로 확인하기",
     select_aws_connection: "AWS 연결 선택하기",
     confirm_build_config: "빌드 설정 확인하기",
@@ -92,7 +105,9 @@ test("provides one concrete CTA for every server readiness action", () => {
     });
 
     assert.equal(navigation.actionLabel, actionLabel);
-    if (
+    if (readinessAction === "select_repository") {
+      assert.equal(navigation.href, "#cicd-source-repository");
+    } else if (
       readinessAction === "approve_apply_plan" ||
       readinessAction === "deploy_initial_application"
     ) {

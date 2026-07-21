@@ -107,7 +107,7 @@ const STEP_META: Readonly<
 > = {
   validation: { description: "저장·안전검사·Plan", label: "검증" },
   approval: { description: "scope·변경·비용 검토", label: "승인" },
-  deployment: { description: "실행·health·Output", label: "배포" }
+  deployment: { description: "실행·health·Output", label: "실행" }
 };
 
 export function getDirectDeploymentPreflightState(

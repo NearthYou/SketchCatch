@@ -62,6 +62,8 @@ import type {
   DeploymentLog,
   DeploymentLogListResponse,
   DeploymentLiveObservationArchitectureResponse,
+  DeploymentProgressResponse,
+  DeploymentProgressSnapshot,
   DeploymentResourceListResponse,
   DeploymentResponse,
   DiagramJson,
@@ -1021,7 +1023,10 @@ function isArchitectureDraftMetadata(value: unknown): boolean {
       isRecord(value.architectureIntent)) &&
     (!("operatingProfile" in value) ||
       value.operatingProfile === undefined ||
-      isRecord(value.operatingProfile))
+      isRecord(value.operatingProfile)) &&
+    (!("authoredSourceId" in value) ||
+      value.authoredSourceId === undefined ||
+      value.authoredSourceId === "audience-live-check")
   );
 }
 
@@ -2422,6 +2427,22 @@ export async function executeDeployment(deploymentId: string): Promise<Deploymen
   );
 
   return response.deployment;
+}
+
+export async function getDeploymentProgressSnapshot(
+  deploymentId: string,
+  signal?: AbortSignal
+): Promise<DeploymentProgressSnapshot> {
+  const response = await apiFetch<DeploymentProgressResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/progress`,
+    {
+      auth: true,
+      cache: "no-store",
+      ...(signal ? { signal } : {})
+    }
+  );
+
+  return response.progress;
 }
 
 export async function runDeploymentDestroyPlan(deploymentId: string): Promise<Deployment> {

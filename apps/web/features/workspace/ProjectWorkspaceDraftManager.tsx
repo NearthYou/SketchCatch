@@ -76,7 +76,6 @@ import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type { InitialCicdReturnCommand } from "./cicd-return-command";
 import { ProjectDraftConflictDialog } from "./ProjectDraftConflictDialog";
 import { reconcileBoardAutoOrganizeTerraformFiles } from "./project-draft-conflict";
-import { ProjectDraftRecoveryDialog } from "./ProjectDraftRecoveryDialog";
 import {
   claimProjectDraftTabCacheWorkspaceId,
   type ProjectDraftTabCacheClaim
@@ -204,7 +203,6 @@ function ProjectWorkspaceDraftManagerState({
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
   const [projectDraftRevision, setProjectDraftRevision] = useState<number | null>(null);
   const [draftConflict, setDraftConflict] = useState<ProjectDraftConflictResponse | null>(null);
-  const [draftRecoveryRequired, setDraftRecoveryRequired] = useState(false);
   const [isReloadingLatestDraft, setReloadingLatestDraft] = useState(false);
   const [draftReloadError, setDraftReloadError] = useState<string | null>(null);
   const [thumbnailLifecycleState, setThumbnailLifecycleState] =
@@ -242,7 +240,6 @@ function ProjectWorkspaceDraftManagerState({
   const draftChangeVersionRef = useRef(0);
   const serverDirtyRef = useRef(false);
   const serverConflictRef = useRef(false);
-  const draftRecoveryRequiredRef = useRef(false);
   const serverSavingRef = useRef(false);
   const serverSavePromiseRef = useRef<Promise<FlushDraftToServerResult> | null>(null);
   const boardElementRef = useRef<HTMLElement | null>(null);
@@ -377,16 +374,6 @@ function ProjectWorkspaceDraftManagerState({
         return Promise.resolve({
           ok: false,
           error: new Error("Project draft is not loaded yet."),
-          conflict: null,
-          localDraft: localDraftRef.current,
-          serverDraft: null
-        });
-      }
-
-      if (draftRecoveryRequiredRef.current) {
-        return Promise.resolve({
-          ok: false,
-          error: new Error("Choose a project draft recovery source before saving."),
           conflict: null,
           localDraft: localDraftRef.current,
           serverDraft: null
@@ -553,10 +540,8 @@ function ProjectWorkspaceDraftManagerState({
     setTerraformSafeFixApplyRequest(null);
     setTerraformSafeFixApplyResult(null);
     setDraftConflict(null);
-    setDraftRecoveryRequired(false);
     setDraftReloadError(null);
     serverConflictRef.current = false;
-    draftRecoveryRequiredRef.current = false;
 
     async function loadWorkspace() {
       try {
@@ -571,7 +556,8 @@ function ProjectWorkspaceDraftManagerState({
           );
           const templateDiagram = buildBoardTemplateDiagram(template.id, {
             projectSlug,
-            shortId: "workspace"
+            shortId: "workspace",
+            requiredRuntimeSecrets: template.requiredRuntimeSecrets
           });
 
           if (!templateDiagram) {
@@ -599,8 +585,7 @@ function ProjectWorkspaceDraftManagerState({
         latestTerraformFilesRef.current = loadedDraft.terraformFiles ?? [];
         hasPendingLocalChangesRef.current = false;
         serverDirtyRef.current = loadedDraft.shouldAutoSaveServer;
-        serverConflictRef.current = loadedDraft.recoveryDecisionRequired;
-        draftRecoveryRequiredRef.current = loadedDraft.recoveryDecisionRequired;
+        serverConflictRef.current = false;
         draftChangeVersionRef.current = 0;
         setInitialDiagram(nextDiagram);
         setInitialTerraformFiles(loadedDraft.terraformFiles ?? []);
@@ -608,12 +593,7 @@ function ProjectWorkspaceDraftManagerState({
         setCurrentLocalDraft(loadedDraft.localDraft);
         setProjectDraftRevision(loadedDraft.serverDraft?.revision ?? null);
         setLocalSaveState(loadedDraft.localDraft ? "local-saved" : "idle");
-        setServerSaveState(
-          loadedDraft.recoveryDecisionRequired
-            ? "server-conflict"
-            : sourceServerSaveState[loadedDraft.source]
-        );
-        setDraftRecoveryRequired(loadedDraft.recoveryDecisionRequired);
+        setServerSaveState(sourceServerSaveState[loadedDraft.source]);
 
         if (loadedDraft.source === "server" && loadedDraft.serverDraft) {
           void thumbnailLifecycleRef.current
@@ -705,7 +685,6 @@ function ProjectWorkspaceDraftManagerState({
         localCacheWorkspaceId,
         legacyLocalCacheWorkspaceId,
         projectId,
-        recoveryPreference: "server",
         fallbackDiagram: EMPTY_DIAGRAM
       });
 
@@ -721,7 +700,6 @@ function ProjectWorkspaceDraftManagerState({
       hasPendingLocalChangesRef.current = false;
       serverDirtyRef.current = false;
       serverConflictRef.current = false;
-      draftRecoveryRequiredRef.current = false;
       draftChangeVersionRef.current = 0;
       setInitialDiagram(nextDiagram);
       setInitialTerraformFiles(nextTerraformFiles);
@@ -737,7 +715,6 @@ function ProjectWorkspaceDraftManagerState({
       setLocalSaveState("local-saved");
       setServerSaveState("server-saved");
       setDraftConflict(null);
-      setDraftRecoveryRequired(false);
       setDraftReloadError(null);
       void thumbnailLifecycleRef.current
         ?.requestInitialServerRevision(loadedDraft.serverDraft.revision)
@@ -760,15 +737,6 @@ function ProjectWorkspaceDraftManagerState({
   const keepCurrentDraftEditing = useCallback((): void => {
     setDraftConflict(null);
     setDraftReloadError(null);
-  }, []);
-
-  const restoreLocalRecoveryDraft = useCallback((): void => {
-    draftRecoveryRequiredRef.current = false;
-    serverConflictRef.current = false;
-    serverDirtyRef.current = true;
-    setDraftRecoveryRequired(false);
-    setDraftReloadError(null);
-    setServerSaveState("server-dirty");
   }, []);
 
   const handleDiagramChange = useCallback(
@@ -868,10 +836,8 @@ function ProjectWorkspaceDraftManagerState({
       hasPendingLocalChangesRef.current = terraformReconciliation.hasUnsavedChanges;
       serverDirtyRef.current = terraformReconciliation.hasUnsavedChanges;
       serverConflictRef.current = false;
-      draftRecoveryRequiredRef.current = false;
       setProjectDraftRevision(draft.revision);
       setDraftConflict(null);
-      setDraftRecoveryRequired(false);
       setDraftReloadError(null);
       setServerSaveState(
         terraformReconciliation.hasUnsavedChanges ? "server-dirty" : "server-saved"
@@ -988,6 +954,20 @@ function ProjectWorkspaceDraftManagerState({
     [handleTerraformFilesChange]
   );
 
+  const handleLiveObservationTerraformFilesApply = useCallback(
+    (terraformFiles: readonly TerraformSyncFileInput[]): void => {
+      const files = terraformFiles.map((file) => ({ ...file }));
+      handleTerraformFilesChange(files);
+      terraformFilesReplacementIdRef.current += 1;
+      setTerraformFilesReplacement({
+        diagramFingerprint: toTerraformRefreshFingerprint(latestDiagramRef.current),
+        files,
+        id: terraformFilesReplacementIdRef.current,
+        notifyFilesChange: false
+      });
+    },
+    [handleTerraformFilesChange]
+  );
   const handleTerraformFilesReplacementApplied = useCallback((replacementId: number): void => {
     setTerraformFilesReplacement((currentReplacement) =>
       currentReplacement?.id === replacementId ? null : currentReplacement
@@ -1085,6 +1065,7 @@ function ProjectWorkspaceDraftManagerState({
             initialCicdReturnCommand={initialCicdReturnCommand}
             initialTerraformFiles={initialTerraformFiles}
             onBlockingPanelOpenChange={setBlockingPanelOpen}
+            onLiveObservationTerraformFilesApply={handleLiveObservationTerraformFilesApply}
             onDeploymentConsoleOpenChange={setDeploymentConsoleOpen}
             onPanelOpenRequest={closeAiChat}
             onInitialCicdReturnCommandReady={acknowledgeInitialCicdReturnCommand}
@@ -1110,14 +1091,6 @@ function ProjectWorkspaceDraftManagerState({
           isReloading={isReloadingLatestDraft}
           onKeepEditing={keepCurrentDraftEditing}
           onReloadLatest={() => void reloadLatestProjectDraft()}
-        />
-      ) : null}
-      {draftRecoveryRequired ? (
-        <ProjectDraftRecoveryDialog
-          errorMessage={draftReloadError ?? undefined}
-          isLoading={isReloadingLatestDraft}
-          onRestoreLocal={restoreLocalRecoveryDraft}
-          onUseServer={() => void reloadLatestProjectDraft()}
         />
       ) : null}
     </>
