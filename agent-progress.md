@@ -4,6 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Public Repository Analysis no longer special-cases `chaekang/audience-live-check`; it resolves the current selected branch SHA and reads real repository evidence while general Fixed Template and authored demo flows remain available.
 - Branch `codex/fix-error-progress-completion` includes `origin/dev` through `d189cda3` and keeps the compact Workspace AI Terraform error-analysis gauge visible through an explicit successful 100% completion state.
 - The parked JH Workspace changes are restored on `dev`: Deployment uses the shorter `배포` label and intrinsic action width, Settings omits redundant CodeBuild authorization copy, and Project Draft loading uses the server draft whenever one exists without rendering the removed local-recovery chooser.
 - Terraform reverse sync accepts references to its allowlisted utility resources, so generated Runtime Secret values such as `random_password.check_in_signing.result` round-trip without a false manual-edit warning.
@@ -21,9 +22,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-- 2026-07-21: Corrected the perceived label-to-control spacing mismatch on the new-project screen. All three subtitles now share line-height 1.4 and a measured 12px visual gap; the fieldset legend uses an explicit margin because browser fieldset layout does not honor grid gap like ordinary elements. Playwright confirmed the legend gap at 12px. Lint, typecheck, build, harness, and two-axis review pass; no feature test suite was run.
-- 2026-07-21: Standardized the new-project form sections to full width with a consistent 12px label-to-control gap. Target environment cards retain equal 12px spacing. Lint, typecheck, build, harness, and two-axis review pass; no additional feature test suite was run per user request.
-- 2026-07-21: Removed the On-premise option from the UI-only new-project target environment selector. AWS, GCP, and Azure remain available in an equal three-column desktop layout and a gap-free single-column mobile layout. The focused regression test, lint, typecheck, and build pass.
+### 2026-07-21 - Remove the Repository-specific audience demo bypass
+
+- Removed the fixed analysis response, frozen revision, synthetic architecture facts, strict URL profile, and Web-only Architecture Draft branch for `chaekang/audience-live-check`.
+- Public analysis now resolves the selected branch SHA and reads its tree and evidence files; Repository Board generation uses the same analyzed Template path as every other repository.
+- Focused Repository API and Web checks pass 18/18, and the retained general Fixed Template checks pass 4/4. Harness, lint, typecheck, build, and diff checks pass. The broad AI Draft file still has 15 unrelated baseline failures.
+- No dependency, lockfile, database migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
 - 2026-07-21: Added a UI-only target environment selector to the new-project screen with equally selectable AWS, GCP, Azure, and On-premise options. The selection is intentionally not persisted or sent to project creation APIs. The focused environment test, browser selection check, lint, typecheck, and build pass. The full Web suite remains at 1,095/1,099 because of four pre-existing Architecture Board/compiler failures outside this change.
 
 ## Known Risk

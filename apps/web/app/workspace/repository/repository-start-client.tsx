@@ -33,7 +33,6 @@ import {
   analyzePublicSourceRepository,
   analyzeSourceRepository,
   connectGitHubSourceRepository,
-  createGitHubArchitectureDraft,
   createGitHubSourceRepositoryInstallUrl,
   getProjectDraft,
   listGitHubAccountInstallations,
@@ -456,19 +455,7 @@ export function RepositoryStartClient({
     const requiredRuntimeSecrets = publicRepositoryAnalysis
       ? getRepositoryRequiredRuntimeSecrets(publicRepositoryAnalysis.aiHandoff)
       : [];
-    const usesAudienceLiveCheckFixedTemplate = (
-      templateId === "ecs-fargate-container-app"
-      && publicRepositoryAnalysis?.repositoryUrl.trim().replace(/\/$/u, "").toLowerCase()
-        === "https://github.com/chaekang/audience-live-check"
-    );
-    const fixedDraft = usesAudienceLiveCheckFixedTemplate
-      ? await createGitHubArchitectureDraft({
-          repositoryUrl: publicRepositoryAnalysis.repositoryUrl,
-          defaultBranch: publicRepositoryAnalysis.defaultBranch,
-          selectedTemplateId: templateId
-        })
-      : undefined;
-    const diagram = fixedDraft?.diagramJson ?? buildBoardTemplateDiagram(templateId, {
+    const diagram = buildBoardTemplateDiagram(templateId, {
       projectSlug: effectiveProjectName,
       shortId: "repository",
       requiredRuntimeSecrets
