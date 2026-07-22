@@ -46,6 +46,7 @@ import {
   sanitizeReverseEngineeringScanErrors,
   type ReverseEngineeringConnectionFailureClassification
 } from "./reverse-engineering-public-errors.js";
+import { isKmsConnectedCloudWatchLogGroup } from "./reverse-engineering-management-policy.js";
 import { createReverseEngineeringTerraformProjection } from "./reverse-engineering-terraform-projection.js";
 
 export type ReverseEngineeringScanRecord = typeof reverseEngineeringScans.$inferSelect;
@@ -296,6 +297,7 @@ function sanitizeReadCompatibilityDiscoveredResource(
     providerResourceId: resource.providerResourceId
   };
   const displayName = createAwsResourceDisplayName(resource);
+  const needsKmsMapping = isKmsConnectedCloudWatchLogGroup(resource);
 
   return {
     ...resource,
@@ -310,6 +312,9 @@ function sanitizeReadCompatibilityDiscoveredResource(
       providerResourceType: resource.providerResourceType,
       config: resource.config
     }),
+    ...(needsKmsMapping
+      ? { analysisExcluded: true, importSuggestionStatus: "manual_review" as const }
+      : {}),
     relationships: resource.relationships?.map((relationship) => ({
       ...relationship,
       targetResourceId: sanitizePublicResourceReference(
@@ -660,7 +665,11 @@ function createReadCompatibilityNormalizationContext(
     ),
     reviewOnlyResourceIds: new Set([
       ...persistedResult.discoveredResources
-        .filter(isReviewOnlyDiscoveredResource)
+        .filter(
+          (resource) =>
+            isReviewOnlyDiscoveredResource(resource) ||
+            isKmsConnectedCloudWatchLogGroup(resource)
+        )
         .map((resource) => resource.id),
       ...persistedResult.analysisExclusions.map((exclusion) => exclusion.resourceId)
     ])
@@ -737,13 +746,16 @@ function normalizeReadCompatibilityNode(
   const label =
     context.displayNameByProviderResourceId.get(resource.providerResourceId) ??
     createAwsResourceDisplayName(resource);
-  const config = {
+  const observedConfig = {
     ...resource.config,
     ...node.config,
     providerResourceType: resource.providerResourceType,
     providerResourceId: resource.providerResourceId,
     analysisExcluded
   };
+  const config = isKmsConnectedCloudWatchLogGroup(resource)
+    ? createKmsLogGroupReadCompatibilityConfig(observedConfig)
+    : observedConfig;
 
   if (node.label === label && isDeepStrictEqual(node.config, config)) {
     return node;
@@ -753,6 +765,25 @@ function normalizeReadCompatibilityNode(
     ...node,
     label,
     config
+  };
+}
+
+/** 과거 KMS Log Group에 남은 실행 가능한 Terraform identity를 읽는 즉시 제거합니다. */
+function createKmsLogGroupReadCompatibilityConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  const {
+    terraformBlockType: _terraformBlockType,
+    terraformResourceType: _terraformResourceType,
+    terraformResourceName: _terraformResourceName,
+    terraformFileName: _terraformFileName,
+    ...safeConfig
+  } = config;
+
+  return {
+    ...safeConfig,
+    analysisExcluded: true,
+    reverseEngineeringManagement: "needs_mapping"
   };
 }
 

@@ -665,6 +665,7 @@ test("ALL 스캔은 generic Log Group보다 이름과 설정이 있는 전용 �
   );
   const detailedRecord: AwsDiscoveredResourceRecord = {
     ...genericRecord,
+    providerResourceId: `${logGroupArn}:*`,
     displayName: "/ecs/orders",
     config: {
       logGroupName: "/ecs/orders",

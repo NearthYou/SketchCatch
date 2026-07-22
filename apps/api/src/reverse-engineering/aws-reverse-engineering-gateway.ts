@@ -3018,9 +3018,10 @@ export function uniqueDiscoveredRecordsByProviderId(
   const recordIndexByProviderResourceId = new Map<string, number>();
 
   for (const record of records) {
-    const existingIndex = recordIndexByProviderResourceId.get(record.providerResourceId);
+    const identityKey = createDiscoveredRecordIdentityKey(record);
+    const existingIndex = recordIndexByProviderResourceId.get(identityKey);
     if (existingIndex === undefined) {
-      recordIndexByProviderResourceId.set(record.providerResourceId, uniqueRecords.length);
+      recordIndexByProviderResourceId.set(identityKey, uniqueRecords.length);
       uniqueRecords.push(record);
       continue;
     }
@@ -3032,6 +3033,17 @@ export function uniqueDiscoveredRecordsByProviderId(
   }
 
   return uniqueRecords;
+}
+
+/** CloudWatch Logs SDK ARN의 끝 `:*`와 Resource Explorer ARN을 같은 Log Group으로 맞춥니다. */
+function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord): string {
+  if (record.providerResourceType !== "AWS::Logs::LogGroup") {
+    return record.providerResourceId;
+  }
+
+  return record.providerResourceId.endsWith(":*")
+    ? record.providerResourceId.slice(0, -2)
+    : record.providerResourceId;
 }
 
 // gg: 다른 Resource의 기존 first-win 규칙은 유지하고 Log Group의 전용 상세 정보만 교체합니다.

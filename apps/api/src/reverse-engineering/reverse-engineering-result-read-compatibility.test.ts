@@ -138,6 +138,81 @@ test("과거 저장 결과를 읽어도 공개 응답에는 AWS ARN을 남기지
   assert.ok(result.importSuggestions.every((suggestion) => suggestion.importCommand === undefined));
 });
 
+test("과거 저장된 KMS Log Group도 읽는 순간 관리와 import를 다시 차단한다", () => {
+  const legacyResult = createLegacyResult();
+  const logGroupArn =
+    "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders:*";
+  const kmsKeyArn =
+    "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555";
+  const resourceId = "legacy-kms-log-group";
+
+  legacyResult.discoveredResources.push({
+    id: resourceId,
+    provider: "aws",
+    providerResourceType: "AWS::Logs::LogGroup",
+    providerResourceId: logGroupArn,
+    region: "ap-northeast-2",
+    displayName: "/ecs/orders",
+    resourceType: "CLOUDWATCH_LOG_GROUP",
+    config: {
+      logGroupName: "/ecs/orders",
+      retentionInDays: 30,
+      kmsKeyId: kmsKeyArn
+    }
+  });
+  legacyResult.architectureJson.nodes.push({
+    id: resourceId,
+    type: "CLOUDWATCH_LOG_GROUP",
+    label: "/ecs/orders",
+    positionX: 720,
+    positionY: 80,
+    config: {
+      providerResourceType: "AWS::Logs::LogGroup",
+      providerResourceId: logGroupArn,
+      logGroupName: "/ecs/orders",
+      retentionInDays: 30,
+      kmsKeyId: kmsKeyArn,
+      reverseEngineeringManagement: "managed",
+      terraformBlockType: "resource",
+      terraformResourceType: "aws_cloudwatch_log_group",
+      terraformResourceName: "legacy_kms_log_group",
+      terraformFileName: "reverse-engineering"
+    }
+  });
+  legacyResult.importSuggestions.push({
+    id: "import-legacy-kms-log-group",
+    resourceId,
+    status: "ready",
+    handoffReady: true,
+    terraformAddress: "aws_cloudwatch_log_group.legacy_kms_log_group",
+    importCommand:
+      "terraform import aws_cloudwatch_log_group.legacy_kms_log_group /ecs/orders",
+    terraformBlockDraft:
+      'resource "aws_cloudwatch_log_group" "legacy_kms_log_group" {}'
+  });
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const resource = result.discoveredResources.at(-1);
+  const node = result.architectureJson.nodes.at(-1);
+  const suggestion = result.importSuggestions.at(-1);
+
+  assert.equal(resource?.analysisExcluded, true);
+  assert.deepEqual(resource?.config, {
+    logGroupName: "/ecs/orders",
+    retentionInDays: 30,
+    hasKmsKey: true
+  });
+  assert.equal(node?.config["analysisExcluded"], true);
+  assert.equal(node?.config["reverseEngineeringManagement"], "needs_mapping");
+  assert.equal(node?.config["terraformResourceType"], undefined);
+  assert.equal(node?.config["terraformResourceName"], undefined);
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.equal(suggestion?.terraformAddress, undefined);
+  assert.equal(suggestion?.importCommand, undefined);
+  assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
+});
+
 test("과거 raw ARN 내부 ID와 진단 참조도 하나의 공개 ID로 다시 연결한다", () => {
   const legacyResult = createLegacyResult();
   legacyResult.discoveredResources[0]!.id = LEGACY_LAMBDA_ARN;
