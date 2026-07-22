@@ -7,11 +7,15 @@ export type ReverseEngineeringInspectorCoreValue = {
 };
 
 const RESOURCE_PURPOSES: Partial<Record<ResourceType, string>> = {
+  APPLICATION_AUTO_SCALING_POLICY: "요청량에 따라 컨테이너 수를 바꿀 기준을 정합니다.",
+  APPLICATION_AUTO_SCALING_TARGET: "자동으로 늘리거나 줄일 최소·최대 실행 수를 정합니다.",
   API_GATEWAY_REST_API: "외부 요청을 애플리케이션 API로 전달하는 입구입니다.",
   CLOUDWATCH_LOG_GROUP: "애플리케이션과 AWS 서비스의 실행 로그를 보관합니다.",
   CLOUDWATCH_METRIC_ALARM: "지표가 정한 기준을 넘었는지 확인하고 알림을 만듭니다.",
   CLOUDFRONT: "웹 콘텐츠와 API 응답을 사용자 가까운 위치에서 전달합니다.",
   EC2: "애플리케이션을 실행하는 가상 서버입니다.",
+  ECR_REPOSITORY: "배포할 컨테이너 이미지를 저장합니다.",
+  ELASTIC_IP: "NAT 게이트웨이처럼 주소가 바뀌면 안 되는 리소스에 고정 IP를 제공합니다.",
   ECS_CLUSTER: "컨테이너 서비스를 함께 운영하는 실행 공간입니다.",
   ECS_SERVICE: "필요한 수의 컨테이너 작업을 계속 실행합니다.",
   ECS_TASK_DEFINITION: "컨테이너 이미지와 실행 크기, 포트를 정한 실행 명세입니다.",
@@ -23,10 +27,15 @@ const RESOURCE_PURPOSES: Partial<Record<ResourceType, string>> = {
   KMS_KEY: "데이터를 암호화하고 복호화할 때 사용하는 키입니다.",
   LAMBDA: "서버를 직접 운영하지 않고 코드를 실행합니다.",
   LOAD_BALANCER: "들어온 요청을 정상 상태의 애플리케이션으로 나눠 보냅니다.",
+  LOAD_BALANCER_LISTENER: "로드 밸런서가 받을 포트와 요청 전달 대상을 정합니다.",
+  LOAD_BALANCER_TARGET_GROUP: "로드 밸런서가 요청을 보낼 애플리케이션과 상태 확인 방식을 정합니다.",
+  NAT_GATEWAY: "사설 서브넷의 애플리케이션이 외부로 나갈 수 있게 합니다.",
   RDS: "애플리케이션 데이터를 저장하는 관리형 데이터베이스입니다.",
   ROUTE_TABLE: "네트워크 트래픽의 경로를 정합니다.",
+  ROUTE_TABLE_ASSOCIATION: "서브넷에 사용할 라우팅 테이블을 연결합니다.",
   S3: "파일과 객체 데이터를 저장합니다.",
   SECURITY_GROUP: "리소스에 허용할 네트워크 통신을 제어합니다.",
+  SECRETS_MANAGER_SECRET: "애플리케이션이 사용할 비밀번호와 서명 키 같은 보안 값을 보관합니다.",
   SUBNET: "VPC 안에서 리소스를 배치할 네트워크 구역입니다.",
   VPC: "AWS 리소스가 통신하는 사설 네트워크 범위입니다."
 };
@@ -34,6 +43,16 @@ const RESOURCE_PURPOSES: Partial<Record<ResourceType, string>> = {
 const CORE_VALUE_ALLOWLIST: Partial<
   Record<ResourceType, readonly [key: string, label: string][]>
 > = {
+  APPLICATION_AUTO_SCALING_POLICY: [
+    ["name", "확장 기준 이름"],
+    ["policyType", "확장 방식"],
+    ["targetValue", "목표 요청 수"],
+    ["scaleOutCooldown", "늘린 뒤 대기 시간"]
+  ],
+  APPLICATION_AUTO_SCALING_TARGET: [
+    ["minCapacity", "최소 실행 수"],
+    ["maxCapacity", "최대 실행 수"]
+  ],
   API_GATEWAY_REST_API: [
     ["name", "API 이름"],
     ["description", "설명"],
@@ -58,6 +77,15 @@ const CORE_VALUE_ALLOWLIST: Partial<
     ["instanceType", "인스턴스 유형"],
     ["placementAvailabilityZone", "Availability Zone"],
     ["privateIpAddress", "사설 IP"]
+  ],
+  ECR_REPOSITORY: [
+    ["name", "저장소 이름"],
+    ["imageTagMutability", "이미지 태그 변경"],
+    ["scanOnPush", "업로드할 때 보안 검사"]
+  ],
+  ELASTIC_IP: [
+    ["publicIp", "공인 IP"],
+    ["domain", "사용 범위"]
   ],
   ECS_CLUSTER: [
     ["name", "클러스터 이름"],
@@ -111,6 +139,20 @@ const CORE_VALUE_ALLOWLIST: Partial<
     ["scheme", "접속 범위"],
     ["ipAddressType", "IP 방식"]
   ],
+  LOAD_BALANCER_LISTENER: [
+    ["protocol", "통신 방식"],
+    ["port", "받는 포트"]
+  ],
+  LOAD_BALANCER_TARGET_GROUP: [
+    ["name", "대상 그룹 이름"],
+    ["protocol", "통신 방식"],
+    ["port", "앱 포트"],
+    ["targetType", "연결 대상"]
+  ],
+  NAT_GATEWAY: [
+    ["state", "현재 상태"],
+    ["connectivityType", "연결 방식"]
+  ],
   RDS: [
     ["dbInstanceClass", "DB 인스턴스 유형"],
     ["engine", "DB 엔진"],
@@ -118,6 +160,7 @@ const CORE_VALUE_ALLOWLIST: Partial<
     ["dbName", "DB 이름"]
   ],
   ROUTE_TABLE: [],
+  ROUTE_TABLE_ASSOCIATION: [],
   S3: [
     ["bucketRegion", "Bucket 리전"],
     ["versioningStatus", "버전 관리"],
@@ -126,6 +169,11 @@ const CORE_VALUE_ALLOWLIST: Partial<
   SECURITY_GROUP: [
     ["groupName", "보안 그룹 이름"],
     ["description", "설명"]
+  ],
+  SECRETS_MANAGER_SECRET: [
+    ["name", "보안 값 이름"],
+    ["description", "설명"],
+    ["lastChangedDate", "마지막 변경"]
   ],
   SUBNET: [
     ["availabilityZone", "Availability Zone"],
@@ -181,6 +229,14 @@ function formatMeaningfulValue(key: string, value: unknown): string | null {
 
   if (key === "launchType" && value === "FARGATE") {
     return "Fargate";
+  }
+
+  if (key === "targetType" && typeof value === "string") {
+    return value.toLowerCase() === "ip"
+      ? "IP 주소"
+      : value.toLowerCase() === "instance"
+        ? "EC2 인스턴스"
+        : value;
   }
 
   if (key === "keyManager" && typeof value === "string") {
