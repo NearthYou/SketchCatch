@@ -32,6 +32,11 @@ Short English-only working log for the current agent context. Older records are 
 - Updated setup handoff selection to require the current Source Repository id, so a handoff tied to the inactive pre-reconnect record is ignored and the approved setup flow creates a fresh handoff.
 - Verification passes: 54 focused CI/CD Web tests, root lint, root typecheck, all five production builds, diff checks, and the final harness check.
 - No database migration, dependency change, AWS mutation, Terraform execution, deployment, or handoff creation was performed. GitHub issue #537 and its review branch were created after verification.
+### 2026-07-22 - Unblock the dev-to-main release migration history check
+
+- Confirmed release PR #534 failed only because main legitimately lacks the historically skipped `0044_github_codebuild_release_plane` entry while already containing `0045` and `0046`.
+- The compatibility guard now permits that one recovery only when its tag, timestamp, and LF-normalized SQL SHA256 match the reviewed migration exactly; every other historical insertion and any timestamp drift remain blocked.
+- Five migration-history regressions, the exact main-baseline compatibility command, harness, lint, typecheck, build, and diff checks pass. No migration file, journal, schema, dependency, secret, or cloud resource changed.
 
 
 ### 2026-07-22 - Repair the production Live Observation manifest contract
