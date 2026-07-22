@@ -7,6 +7,7 @@ import {
   DescribeLoadBalancersCommand
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { ListDistributionsCommand } from "@aws-sdk/client-cloudfront";
+import { DescribeAlarmsCommand } from "@aws-sdk/client-cloudwatch";
 import { ListBucketsCommand } from "@aws-sdk/client-s3";
 import {
   GetDefaultViewCommand,
@@ -46,6 +47,7 @@ import {
   listApplicationLoadBalancers,
   listBucketsWithDetails,
   listCloudFrontDistributions,
+  listCloudWatchMetricAlarmsAsUnknown,
   listIamRolesAsUnknown,
   listLambdaFunctionsAsUnknown,
   listLambdaPermissionsAsUnknown,
@@ -705,6 +707,135 @@ test("ALL 스캔은 API Gateway ARN inventory와 전용 REST API ID를 하나로
     genericRecord,
     detailedRecord
   ]);
+
+  assert.equal(records.length, 1);
+  assert.deepEqual(records[0], detailedRecord);
+});
+
+test("CloudWatch 전용 reader는 Alarm 재생성에 필요한 단일 Metric 설정을 페이지별로 보존한다", async () => {
+  const commands: DescribeAlarmsCommand[] = [];
+  const records = await listCloudWatchMetricAlarmsAsUnknown(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        assert.ok(command instanceof DescribeAlarmsCommand);
+        commands.push(command);
+
+        if (command.input.NextToken === "page-2") {
+          return {
+            MetricAlarms: [
+              {
+                AlarmArn:
+                  "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:p99-latency",
+                AlarmName: "p99-latency",
+                ComparisonOperator: "GreaterThanThreshold",
+                EvaluateLowSampleCountPercentile: "ignore",
+                EvaluationPeriods: 2,
+                ExtendedStatistic: "p99",
+                MetricName: "TargetResponseTime",
+                Namespace: "AWS/ApplicationELB",
+                Period: 60,
+                Threshold: 1.5,
+                ThresholdMetricId: "e1",
+                TreatMissingData: "notBreaching"
+              }
+            ]
+          };
+        }
+
+        return {
+          MetricAlarms: [
+            {
+              ActionsEnabled: true,
+              AlarmActions: [],
+              AlarmArn:
+                "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count",
+              AlarmDescription: "API request threshold",
+              AlarmName: "api-request-count",
+              ComparisonOperator: "GreaterThanThreshold",
+              DatapointsToAlarm: 2,
+              Dimensions: [{ Name: "LoadBalancer", Value: "app/customer/1234" }],
+              EvaluationPeriods: 3,
+              InsufficientDataActions: [],
+              MetricName: "RequestCountPerTarget",
+              Namespace: "AWS/ApplicationELB",
+              OKActions: [],
+              Period: 60,
+              Statistic: "Sum",
+              Threshold: 100,
+              TreatMissingData: "notBreaching",
+              Unit: "Count"
+            }
+          ],
+          NextToken: "page-2"
+        };
+      }
+    })
+  );
+
+  assert.equal(commands.length, 2);
+  assert.equal(commands[0]?.input.NextToken, undefined);
+  assert.equal(commands[1]?.input.NextToken, "page-2");
+  const { providerParameters, ...firstConfig } = records[0]?.config ?? {};
+  assert.ok(providerParameters);
+  assert.deepEqual(firstConfig, {
+    actionsEnabled: true,
+    alarmActions: [],
+    alarmArn: "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count",
+    alarmConfigurationUpdatedAt: undefined,
+    alarmDescription: "API request threshold",
+    alarmName: "api-request-count",
+    comparisonOperator: "GreaterThanThreshold",
+    datapointsToAlarm: 2,
+    dimensions: [{ Name: "LoadBalancer", Value: "app/customer/1234" }],
+    evaluateLowSampleCountPercentiles: undefined,
+    evaluationPeriods: 3,
+    extendedStatistic: undefined,
+    insufficientDataActions: [],
+    metricName: "RequestCountPerTarget",
+    metrics: undefined,
+    namespace: "AWS/ApplicationELB",
+    okActions: [],
+    period: 60,
+    stateReason: undefined,
+    stateUpdatedAt: undefined,
+    stateValue: undefined,
+    statistic: "Sum",
+    threshold: 100,
+    thresholdMetricId: undefined,
+    treatMissingData: "notBreaching",
+    unit: "Count"
+  });
+  assert.equal(records[1]?.config["evaluateLowSampleCountPercentiles"], "ignore");
+  assert.equal(records[1]?.config["extendedStatistic"], "p99");
+  assert.equal(records[1]?.config["thresholdMetricId"], "e1");
+});
+
+test("ALL 스캔은 generic Alarm보다 이름과 Metric 설정이 있는 전용 조회 결과를 우선한다", () => {
+  const alarmArn =
+    "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count";
+  const genericRecord = safeRecord(
+    "AWS::CloudWatch::Alarm",
+    alarmArn,
+    "Alarm · generic"
+  );
+  const detailedRecord: AwsDiscoveredResourceRecord = {
+    ...genericRecord,
+    displayName: "api-request-count",
+    config: {
+      alarmName: "api-request-count",
+      comparisonOperator: "GreaterThanThreshold",
+      evaluationPeriods: 3,
+      metricName: "RequestCountPerTarget",
+      namespace: "AWS/ApplicationELB",
+      period: 60,
+      statistic: "Sum",
+      threshold: 100
+    }
+  };
+
+  const records = uniqueDiscoveredRecordsByProviderId([genericRecord, detailedRecord]);
 
   assert.equal(records.length, 1);
   assert.deepEqual(records[0], detailedRecord);

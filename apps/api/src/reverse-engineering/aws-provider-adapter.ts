@@ -23,7 +23,10 @@ import {
   createStableTerraformResourceName,
   getReverseEngineeringTerraformResourceType
 } from "./reverse-engineering-terraform-projection.js";
-import { isKmsConnectedCloudWatchLogGroup } from "./reverse-engineering-management-policy.js";
+import {
+  isCloudWatchMetricAlarmRequiringMapping,
+  isKmsConnectedCloudWatchLogGroup
+} from "./reverse-engineering-management-policy.js";
 
 export type AwsProviderScanInput = {
   provider: CloudProvider;
@@ -95,6 +98,7 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
 
 const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_REST_API",
+  "CLOUDWATCH_METRIC_ALARM",
   "CLOUDWATCH_LOG_GROUP",
   "LOAD_BALANCER",
   "CLOUDFRONT",
@@ -104,6 +108,7 @@ const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
 ]);
 const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_REST_API",
+  "CLOUDWATCH_METRIC_ALARM",
   "VPC",
   "SUBNET",
   "INTERNET_GATEWAY",
@@ -146,6 +151,28 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
       "minimumCompressionSize",
       "name",
       "tags"
+    ])
+  ],
+  [
+    "AWS::CloudWatch::Alarm",
+    new Set([
+      "actionsEnabled",
+      "alarmDescription",
+      "alarmName",
+      "comparisonOperator",
+      "datapointsToAlarm",
+      "dimensions",
+      "evaluateLowSampleCountPercentiles",
+      "evaluationPeriods",
+      "extendedStatistic",
+      "metricName",
+      "namespace",
+      "period",
+      "statistic",
+      "threshold",
+      "thresholdMetricId",
+      "treatMissingData",
+      "unit"
     ])
   ],
   [
@@ -396,6 +423,14 @@ function toDiscoveredResource(
     };
   }
 
+  if (isCloudWatchMetricAlarmRequiringMapping(baseResource)) {
+    return {
+      ...baseResource,
+      analysisExcluded: true,
+      importSuggestionStatus: "manual_review"
+    };
+  }
+
   if (REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES.has(resourceType)) {
     return baseResource;
   }
@@ -467,7 +502,9 @@ function createAnalysisExclusions(
       reason: "unsupported_resource_type",
       message: isKmsConnectedCloudWatchLogGroup(resource)
         ? "KMS Key로 암호화된 로그 저장소는 현재 안전하게 수정할 수 없어 보드에만 표시됩니다."
-        : "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
+        : isCloudWatchMetricAlarmRequiringMapping(resource)
+          ? "알림 동작 대상 또는 계산식 지표 연결이 남아 있어 보드에만 표시됩니다."
+          : "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
     }));
 }
 
@@ -482,6 +519,17 @@ function createImportSuggestions(
         status: "manual_review",
         reason:
           "KMS Key로 암호화된 로그 저장소는 현재 안전하게 수정할 수 없어 보드에만 표시됩니다.",
+        handoffReady: false
+      };
+    }
+
+    if (isCloudWatchMetricAlarmRequiringMapping(resource)) {
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "manual_review",
+        reason:
+          "알림 동작 대상 또는 계산식 지표를 보드 리소스와 먼저 연결해야 안전하게 수정할 수 있습니다.",
         handoffReady: false
       };
     }
@@ -548,6 +596,10 @@ function createImportSuggestions(
 
 // gg: 각 Resource가 Terraform에서 요구하는 실제 import ID만 선택해 잘못된 대상을 막습니다.
 function getStableTerraformImportId(resource: DiscoveredResource): string | null {
+  if (resource.resourceType === "CLOUDWATCH_METRIC_ALARM") {
+    return getNonEmptyString(resource.config["alarmName"]);
+  }
+
   if (resource.resourceType === "CLOUDWATCH_LOG_GROUP") {
     return getNonEmptyString(resource.config["logGroupName"]);
   }
@@ -671,6 +723,28 @@ function getMissingTerraformCreationFields(
   resourceType: ResourceType,
   config: Record<string, unknown>
 ): string[] {
+  if (resourceType === "CLOUDWATCH_METRIC_ALARM") {
+    return [
+      ...(getNonEmptyString(config["alarmName"]) ? [] : ["alarmName"]),
+      ...(getNonEmptyString(config["comparisonOperator"])
+        ? []
+        : ["comparisonOperator"]),
+      ...(isPositiveNumber(config["evaluationPeriods"])
+        ? []
+        : ["evaluationPeriods"]),
+      ...(typeof config["threshold"] === "number" && Number.isFinite(config["threshold"])
+        ? []
+        : ["threshold"]),
+      ...(getNonEmptyString(config["metricName"]) ? [] : ["metricName"]),
+      ...(getNonEmptyString(config["namespace"]) ? [] : ["namespace"]),
+      ...(isPositiveNumber(config["period"]) ? [] : ["period"]),
+      ...((getNonEmptyString(config["statistic"]) ??
+        getNonEmptyString(config["extendedStatistic"]))
+        ? []
+        : ["statistic/extendedStatistic"])
+    ];
+  }
+
   if (resourceType === "API_GATEWAY_REST_API") {
     return getNonEmptyString(config["name"]) ? [] : ["name"];
   }
@@ -898,6 +972,10 @@ function getStringArray(value: unknown): string[] {
     : [];
 }
 
+function isPositiveNumber(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -931,9 +1009,15 @@ export function createAwsPublicResourceConfig(
     return sanitizePublicEcsTaskDefinitionConfig(publicConfig, record.config);
   }
 
-  return record.providerResourceType === "AWS::Logs::LogGroup"
-    ? sanitizePublicCloudWatchLogGroupConfig(publicConfig, record.config)
-    : publicConfig;
+  if (record.providerResourceType === "AWS::Logs::LogGroup") {
+    return sanitizePublicCloudWatchLogGroupConfig(publicConfig, record.config);
+  }
+
+  if (record.providerResourceType === "AWS::CloudWatch::Alarm") {
+    return sanitizePublicCloudWatchMetricAlarmConfig(publicConfig, record.config);
+  }
+
+  return publicConfig;
 }
 
 // gg: 서버 전용 결과도 allowlist를 지키되 KMS 로그를 관리 대상에서 막을 판정 근거는 보존합니다.
@@ -962,6 +1046,33 @@ function sanitizePublicCloudWatchLogGroupConfig(
     sourceConfig["hasKmsKey"] === true || getNonEmptyString(sourceConfig["kmsKeyId"]) !== null;
 
   return hasKmsKey ? { ...publicConfig, hasKmsKey: true } : publicConfig;
+}
+
+// gg: Action ARN과 metric query 원문은 숨기고 안전한 관리 경계 marker만 보드에 전달합니다.
+function sanitizePublicCloudWatchMetricAlarmConfig(
+  publicConfig: Record<string, unknown>,
+  sourceConfig: Record<string, unknown>
+): Record<string, unknown> {
+  const hasActionTargets =
+    sourceConfig["hasActionTargets"] === true ||
+    ["alarmActions", "insufficientDataActions", "okActions"].some(
+      (key) => Array.isArray(sourceConfig[key]) && sourceConfig[key].length > 0
+    );
+  const hasMetricQueries =
+    sourceConfig["hasMetricQueries"] === true ||
+    (Array.isArray(sourceConfig["metrics"]) && sourceConfig["metrics"].length > 0) ||
+    getNonEmptyString(sourceConfig["thresholdMetricId"]) !== null;
+
+  if (!hasActionTargets && !hasMetricQueries) {
+    return publicConfig;
+  }
+
+  const alarmName = getNonEmptyString(publicConfig["alarmName"]);
+  return {
+    ...(alarmName ? { alarmName } : {}),
+    ...(hasActionTargets ? { hasActionTargets: true } : {}),
+    ...(hasMetricQueries ? { hasMetricQueries: true } : {})
+  };
 }
 
 function sanitizePublicEcsTaskDefinitionConfig(

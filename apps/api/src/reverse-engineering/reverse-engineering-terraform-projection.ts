@@ -28,6 +28,7 @@ const TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE = new Map<ResourceType, string>([
   ["EC2", "aws_instance"],
   ["RDS", "aws_db_instance"],
   ["S3", "aws_s3_bucket"],
+  ["CLOUDWATCH_METRIC_ALARM", "aws_cloudwatch_metric_alarm"],
   ["CLOUDWATCH_LOG_GROUP", "aws_cloudwatch_log_group"],
   ["LOAD_BALANCER", "aws_lb"],
   ["CLOUDFRONT", "aws_cloudfront_distribution"],
@@ -169,6 +170,25 @@ function createTerraformValues(resource: DiscoveredResource): ResourceConfig {
         name: config["logGroupName"],
         retentionInDays: config["retentionInDays"]
       });
+    case "CLOUDWATCH_METRIC_ALARM":
+      return compactConfig({
+        actionsEnabled: config["actionsEnabled"],
+        alarmDescription: config["alarmDescription"],
+        alarmName: config["alarmName"],
+        comparisonOperator: config["comparisonOperator"],
+        datapointsToAlarm: config["datapointsToAlarm"],
+        dimensions: normalizeCloudWatchMetricAlarmDimensions(config["dimensions"]),
+        evaluateLowSampleCountPercentiles: config["evaluateLowSampleCountPercentiles"],
+        evaluationPeriods: config["evaluationPeriods"],
+        extendedStatistic: config["extendedStatistic"],
+        metricName: config["metricName"],
+        namespace: config["namespace"],
+        period: config["period"],
+        statistic: config["statistic"],
+        threshold: config["threshold"],
+        treatMissingData: config["treatMissingData"],
+        unit: config["unit"]
+      });
     case "LOAD_BALANCER":
       return compactConfig({
         name: config["name"],
@@ -270,6 +290,29 @@ function normalizeTerraformTags(value: unknown): Record<string, string> | undefi
   });
 
   return tags.length > 0 ? Object.fromEntries(tags) : undefined;
+}
+
+/** CloudWatch SDK Dimension 배열을 Terraform dimensions map으로 바꿉니다. */
+function normalizeCloudWatchMetricAlarmDimensions(
+  value: unknown
+): Record<string, string> | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const dimensions = value.flatMap((candidate): Array<[string, string]> => {
+    if (!isRecord(candidate)) {
+      return [];
+    }
+
+    const name = candidate["Name"] ?? candidate["name"];
+    const dimensionValue = candidate["Value"] ?? candidate["value"];
+    return typeof name === "string" && typeof dimensionValue === "string"
+      ? [[name, dimensionValue]]
+      : [];
+  });
+
+  return dimensions.length > 0 ? Object.fromEntries(dimensions) : undefined;
 }
 
 /** Internet Gateway attachment 목록의 첫 VPC ID만 Terraform attachment 인수로 사용한다. */

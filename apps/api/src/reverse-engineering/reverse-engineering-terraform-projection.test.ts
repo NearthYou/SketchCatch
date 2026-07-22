@@ -234,6 +234,63 @@ test("API Gateway REST API 관찰값을 재배포 가능한 Terraform 값으로 
   });
 });
 
+test("단일 Metric CloudWatch Alarm을 Terraform 인수로 정규화한다", () => {
+  const projection = createReverseEngineeringTerraformProjection(
+    resource("CLOUDWATCH_METRIC_ALARM", {
+      providerResourceId:
+        "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count",
+      providerResourceType: "AWS::CloudWatch::Alarm",
+      config: {
+        actionsEnabled: true,
+        alarmDescription: "API request threshold",
+        alarmName: "api-request-count",
+        comparisonOperator: "GreaterThanThreshold",
+        datapointsToAlarm: 2,
+        dimensions: [
+          { Name: "LoadBalancer", Value: "app/customer/1234" },
+          { Name: "TargetGroup", Value: "targetgroup/customer/5678" }
+        ],
+        evaluationPeriods: 3,
+        metricName: "RequestCountPerTarget",
+        namespace: "AWS/ApplicationELB",
+        period: 60,
+        statistic: "Sum",
+        threshold: 100,
+        treatMissingData: "notBreaching",
+        unit: "Count",
+        stateValue: "OK"
+      }
+    })
+  );
+
+  assert.deepEqual(projection, {
+    management: "managed",
+    terraformBlockType: "resource",
+    terraformResourceType: "aws_cloudwatch_metric_alarm",
+    terraformResourceName: "resource_customer_assets",
+    terraformFileName: "reverse-engineering",
+    terraformValues: {
+      actionsEnabled: true,
+      alarmDescription: "API request threshold",
+      alarmName: "api-request-count",
+      comparisonOperator: "GreaterThanThreshold",
+      datapointsToAlarm: 2,
+      dimensions: {
+        LoadBalancer: "app/customer/1234",
+        TargetGroup: "targetgroup/customer/5678"
+      },
+      evaluationPeriods: 3,
+      metricName: "RequestCountPerTarget",
+      namespace: "AWS/ApplicationELB",
+      period: 60,
+      statistic: "Sum",
+      threshold: 100,
+      treatMissingData: "notBreaching",
+      unit: "Count"
+    }
+  });
+});
+
 test("AWS와 CloudFormation과 SketchCatch 소유 리소스는 보드에는 남겨도 Terraform identity를 만들지 않는다", () => {
   const protectedResources = [
     resource("S3", {

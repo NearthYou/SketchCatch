@@ -46,7 +46,10 @@ import {
   sanitizeReverseEngineeringScanErrors,
   type ReverseEngineeringConnectionFailureClassification
 } from "./reverse-engineering-public-errors.js";
-import { isKmsConnectedCloudWatchLogGroup } from "./reverse-engineering-management-policy.js";
+import {
+  isCloudWatchMetricAlarmRequiringMapping,
+  isKmsConnectedCloudWatchLogGroup
+} from "./reverse-engineering-management-policy.js";
 import { createReverseEngineeringTerraformProjection } from "./reverse-engineering-terraform-projection.js";
 
 export type ReverseEngineeringScanRecord = typeof reverseEngineeringScans.$inferSelect;
@@ -297,7 +300,9 @@ function sanitizeReadCompatibilityDiscoveredResource(
     providerResourceId: resource.providerResourceId
   };
   const displayName = createAwsResourceDisplayName(resource);
-  const needsKmsMapping = isKmsConnectedCloudWatchLogGroup(resource);
+  const needsManualMapping =
+    isKmsConnectedCloudWatchLogGroup(resource) ||
+    isCloudWatchMetricAlarmRequiringMapping(resource);
 
   return {
     ...resource,
@@ -312,7 +317,7 @@ function sanitizeReadCompatibilityDiscoveredResource(
       providerResourceType: resource.providerResourceType,
       config: resource.config
     }),
-    ...(needsKmsMapping
+    ...(needsManualMapping
       ? { analysisExcluded: true, importSuggestionStatus: "manual_review" as const }
       : {}),
     relationships: resource.relationships?.map((relationship) => ({
@@ -668,7 +673,8 @@ function createReadCompatibilityNormalizationContext(
         .filter(
           (resource) =>
             isReviewOnlyDiscoveredResource(resource) ||
-            isKmsConnectedCloudWatchLogGroup(resource)
+            isKmsConnectedCloudWatchLogGroup(resource) ||
+            isCloudWatchMetricAlarmRequiringMapping(resource)
         )
         .map((resource) => resource.id),
       ...persistedResult.analysisExclusions.map((exclusion) => exclusion.resourceId)
@@ -753,8 +759,11 @@ function normalizeReadCompatibilityNode(
     providerResourceId: resource.providerResourceId,
     analysisExcluded
   };
-  const config = isKmsConnectedCloudWatchLogGroup(resource)
-    ? createKmsLogGroupReadCompatibilityConfig(observedConfig)
+  const requiresManualMapping =
+    isKmsConnectedCloudWatchLogGroup(resource) ||
+    isCloudWatchMetricAlarmRequiringMapping(resource);
+  const config = requiresManualMapping
+    ? createManualMappingReadCompatibilityConfig(observedConfig)
     : observedConfig;
 
   if (node.label === label && isDeepStrictEqual(node.config, config)) {
@@ -768,8 +777,8 @@ function normalizeReadCompatibilityNode(
   };
 }
 
-/** 과거 KMS Log Group에 남은 실행 가능한 Terraform identity를 읽는 즉시 제거합니다. */
-function createKmsLogGroupReadCompatibilityConfig(
+/** 과거 위험 Resource에 남은 실행 가능한 Terraform identity를 읽는 즉시 제거합니다. */
+function createManualMappingReadCompatibilityConfig(
   config: Record<string, unknown>
 ): Record<string, unknown> {
   const {

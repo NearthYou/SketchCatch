@@ -2632,7 +2632,9 @@ function toUnknownMetricAlarmRecord(
         comparisonOperator: alarm.ComparisonOperator,
         datapointsToAlarm: alarm.DatapointsToAlarm,
         dimensions: alarm.Dimensions,
+        evaluateLowSampleCountPercentiles: alarm.EvaluateLowSampleCountPercentile,
         evaluationPeriods: alarm.EvaluationPeriods,
+        extendedStatistic: alarm.ExtendedStatistic,
         insufficientDataActions: alarm.InsufficientDataActions,
         metricName: alarm.MetricName,
         metrics: alarm.Metrics,
@@ -2645,6 +2647,7 @@ function toUnknownMetricAlarmRecord(
         stateValue: alarm.StateValue,
         statistic: alarm.Statistic,
         threshold: alarm.Threshold,
+        thresholdMetricId: alarm.ThresholdMetricId,
         treatMissingData: alarm.TreatMissingData,
         unit: alarm.Unit
       },
@@ -3069,6 +3072,8 @@ function shouldPreferDedicatedRecord(
     ? "logGroupName"
     : existingRecord.providerResourceType === "AWS::ApiGateway::RestApi"
       ? "name"
+      : existingRecord.providerResourceType === "AWS::CloudWatch::Alarm"
+        ? "alarmName"
       : null;
 
   return Boolean(

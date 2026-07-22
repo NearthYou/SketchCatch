@@ -9,6 +9,7 @@ export type ReverseEngineeringManagementDecision =
 
 const AUTOMATED_MANAGED_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_REST_API",
+  "CLOUDWATCH_METRIC_ALARM",
   "VPC",
   "SUBNET",
   "INTERNET_GATEWAY",
@@ -75,9 +76,33 @@ export function classifyReverseEngineeringManagement(
     return "needs_mapping";
   }
 
+  if (isCloudWatchMetricAlarmRequiringMapping(resource)) {
+    return "needs_mapping";
+  }
+
   return AUTOMATED_MANAGED_RESOURCE_TYPES.has(resource.resourceType)
     ? "managed"
     : "needs_mapping";
+}
+
+/** Action ARN 또는 metric math 연결을 안전하게 재구성하지 못하는 Alarm인지 확인합니다. */
+export function isCloudWatchMetricAlarmRequiringMapping(
+  resource: Pick<DiscoveredResource, "resourceType" | "config">
+): boolean {
+  if (resource.resourceType !== "CLOUDWATCH_METRIC_ALARM") {
+    return false;
+  }
+
+  return (
+    resource.config["hasActionTargets"] === true ||
+    resource.config["hasMetricQueries"] === true ||
+    ["alarmActions", "insufficientDataActions", "okActions"].some(
+      (key) => Array.isArray(resource.config[key]) && resource.config[key].length > 0
+    ) ||
+    (Array.isArray(resource.config["metrics"]) && resource.config["metrics"].length > 0) ||
+    (typeof resource.config["thresholdMetricId"] === "string" &&
+      resource.config["thresholdMetricId"].trim().length > 0)
+  );
 }
 
 /** KMS 연결을 안전하게 재주입할 수 없는 Log Group인지 공개 marker와 서버 원본으로 확인한다. */

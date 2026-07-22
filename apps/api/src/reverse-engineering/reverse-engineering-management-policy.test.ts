@@ -14,7 +14,32 @@ test("자동 지원 워크로드와 AMI를 Terraform 관리 경계에 맞게 분
     classifyReverseEngineeringManagement(resource("API_GATEWAY_REST_API")),
     "managed"
   );
+  assert.equal(
+    classifyReverseEngineeringManagement(resource("CLOUDWATCH_METRIC_ALARM")),
+    "managed"
+  );
   assert.equal(classifyReverseEngineeringManagement(resource("AMI")), "reference");
+});
+
+test("Action 대상이나 Metric Query 연결이 남은 CloudWatch Alarm은 매핑 전까지 관리하지 않는다", () => {
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("CLOUDWATCH_METRIC_ALARM", { hasActionTargets: true })
+    ),
+    "needs_mapping"
+  );
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("CLOUDWATCH_METRIC_ALARM", { hasMetricQueries: true })
+    ),
+    "needs_mapping"
+  );
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("CLOUDWATCH_METRIC_ALARM", { thresholdMetricId: "e1" })
+    ),
+    "needs_mapping"
+  );
 });
 
 test("AWS가 소유한 IAM service-linked Role과 KMS Key는 관리하지 않는다", () => {

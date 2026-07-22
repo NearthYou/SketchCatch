@@ -213,6 +213,79 @@ test("과거 저장된 KMS Log Group도 읽는 순간 관리와 import를 다시
   assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
 });
 
+test("과거 저장된 Action과 Metric Query Alarm도 읽는 순간 관리와 import를 다시 차단한다", () => {
+  const legacyResult = createLegacyResult();
+  const alarmArn =
+    "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:notify-ops";
+  const resourceId = "legacy-cloudwatch-alarm";
+
+  legacyResult.discoveredResources.push({
+    id: resourceId,
+    provider: "aws",
+    providerResourceType: "AWS::CloudWatch::Alarm",
+    providerResourceId: alarmArn,
+    region: "ap-northeast-2",
+    displayName: "notify-ops",
+    resourceType: "CLOUDWATCH_METRIC_ALARM",
+    config: {
+      alarmName: "notify-ops",
+      alarmActions: ["arn:aws:sns:ap-northeast-2:123456789012:ops"],
+      metrics: [{ Id: "e1", Expression: "SUM(METRICS())" }]
+    }
+  });
+  legacyResult.architectureJson.nodes.push({
+    id: resourceId,
+    type: "CLOUDWATCH_METRIC_ALARM",
+    label: "notify-ops",
+    positionX: 720,
+    positionY: 80,
+    config: {
+      providerResourceType: "AWS::CloudWatch::Alarm",
+      providerResourceId: alarmArn,
+      alarmName: "notify-ops",
+      alarmActions: ["arn:aws:sns:ap-northeast-2:123456789012:ops"],
+      metrics: [{ Id: "e1", Expression: "SUM(METRICS())" }],
+      reverseEngineeringManagement: "managed",
+      terraformBlockType: "resource",
+      terraformResourceType: "aws_cloudwatch_metric_alarm",
+      terraformResourceName: "legacy_cloudwatch_alarm",
+      terraformFileName: "reverse-engineering"
+    }
+  });
+  legacyResult.importSuggestions.push({
+    id: "import-legacy-cloudwatch-alarm",
+    resourceId,
+    status: "ready",
+    handoffReady: true,
+    terraformAddress: "aws_cloudwatch_metric_alarm.legacy_cloudwatch_alarm",
+    importCommand:
+      "terraform import aws_cloudwatch_metric_alarm.legacy_cloudwatch_alarm notify-ops",
+    terraformBlockDraft:
+      'resource "aws_cloudwatch_metric_alarm" "legacy_cloudwatch_alarm" {}'
+  });
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const resource = result.discoveredResources.at(-1);
+  const node = result.architectureJson.nodes.at(-1);
+  const suggestion = result.importSuggestions.at(-1);
+
+  assert.equal(resource?.analysisExcluded, true);
+  assert.deepEqual(resource?.config, {
+    alarmName: "notify-ops",
+    hasActionTargets: true,
+    hasMetricQueries: true
+  });
+  assert.equal(node?.config["analysisExcluded"], true);
+  assert.equal(node?.config["reverseEngineeringManagement"], "needs_mapping");
+  assert.equal(node?.config["terraformResourceType"], undefined);
+  assert.equal(node?.config["terraformResourceName"], undefined);
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.equal(suggestion?.terraformAddress, undefined);
+  assert.equal(suggestion?.importCommand, undefined);
+  assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
+});
+
 test("과거 raw ARN 내부 ID와 진단 참조도 하나의 공개 ID로 다시 연결한다", () => {
   const legacyResult = createLegacyResult();
   legacyResult.discoveredResources[0]!.id = LEGACY_LAMBDA_ARN;

@@ -235,24 +235,127 @@ test("AWS 전용 reader가 찾은 Resource를 실제 Catalog 타입으로 보드
     providerTypeMappings.map(([, resourceType]) => resourceType)
   );
   assert.equal(
-    result.discoveredResources.slice(0, -1).every((resource) => resource.analysisExcluded === true),
+    result.discoveredResources.slice(0, -2).every((resource) => resource.analysisExcluded === true),
     true
   );
+  assert.equal(result.discoveredResources.at(-2)?.analysisExcluded ?? false, false);
   assert.equal(result.discoveredResources.at(-1)?.analysisExcluded ?? false, false);
   assert.deepEqual(
     result.architectureJson.nodes.map((node) => node.type),
     providerTypeMappings.map(([, resourceType]) => resourceType)
   );
-  assert.equal(result.analysisExclusions.length, providerTypeMappings.length - 1);
+  assert.equal(result.analysisExclusions.length, providerTypeMappings.length - 2);
   assert.equal(
-    result.importSuggestions.slice(0, -1).every(
+    result.importSuggestions.slice(0, -2).every(
       (suggestion) =>
         suggestion.status === "unsupported_resource_type" && suggestion.handoffReady === false
     ),
     true
   );
+  assert.equal(result.importSuggestions.at(-2)?.status, "manual_review");
+  assert.match(result.importSuggestions.at(-2)?.reason ?? "", /alarmName/iu);
   assert.equal(result.importSuggestions.at(-1)?.status, "manual_review");
   assert.match(result.importSuggestions.at(-1)?.reason ?? "", /name/iu);
+});
+
+test("단일 Metric CloudWatch Alarm을 재배포 가능한 Terraform 관리 대상으로 만든다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::CloudWatch::Alarm",
+      providerResourceId:
+        "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count",
+      displayName: "api-request-count",
+      config: {
+        actionsEnabled: true,
+        alarmDescription: "API request threshold",
+        alarmName: "api-request-count",
+        comparisonOperator: "GreaterThanThreshold",
+        datapointsToAlarm: 2,
+        dimensions: [
+          { Name: "LoadBalancer", Value: "app/customer/1234" },
+          { Name: "TargetGroup", Value: "targetgroup/customer/5678" }
+        ],
+        evaluationPeriods: 3,
+        metricName: "RequestCountPerTarget",
+        namespace: "AWS/ApplicationELB",
+        period: 60,
+        statistic: "Sum",
+        threshold: 100,
+        treatMissingData: "notBreaching",
+        unit: "Count",
+        stateReason: "must-not-be-managed",
+        stateValue: "OK"
+      }
+    })
+  ]);
+
+  const [resource] = result.discoveredResources;
+  assert.equal(resource?.analysisExcluded ?? false, false);
+  assert.deepEqual(resource?.config, {
+    actionsEnabled: true,
+    alarmDescription: "API request threshold",
+    alarmName: "api-request-count",
+    comparisonOperator: "GreaterThanThreshold",
+    datapointsToAlarm: 2,
+    dimensions: [
+      { Name: "LoadBalancer", Value: "app/customer/1234" },
+      { Name: "TargetGroup", Value: "targetgroup/customer/5678" }
+    ],
+    evaluationPeriods: 3,
+    metricName: "RequestCountPerTarget",
+    namespace: "AWS/ApplicationELB",
+    period: 60,
+    statistic: "Sum",
+    threshold: 100,
+    treatMissingData: "notBreaching",
+    unit: "Count"
+  });
+  assertReadyImport(
+    result.importSuggestions[0],
+    "aws_cloudwatch_metric_alarm",
+    "api-request-count"
+  );
+  assert.equal(
+    result.architectureJson.nodes[0]?.config["terraformResourceType"],
+    "aws_cloudwatch_metric_alarm"
+  );
+});
+
+test("Action 대상이나 Metric Query가 있는 CloudWatch Alarm은 보드에 표시하되 자동 변경을 막는다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::CloudWatch::Alarm",
+      providerResourceId:
+        "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:notify-ops",
+      displayName: "notify-ops",
+      config: {
+        alarmName: "notify-ops",
+        alarmActions: ["arn:aws:sns:ap-northeast-2:123456789012:ops"],
+        metrics: [{ Id: "m1", Expression: "SUM(METRICS())" }]
+      }
+    })
+  ]);
+
+  const [resource] = result.discoveredResources;
+  const [suggestion] = result.importSuggestions;
+  assert.equal(resource?.analysisExcluded, true);
+  assert.deepEqual(resource?.config, {
+    alarmName: "notify-ops",
+    hasActionTargets: true,
+    hasMetricQueries: true
+  });
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.equal(suggestion?.importCommand, undefined);
+  assert.match(
+    result.analysisExclusions[0]?.message ?? "",
+    /알림 동작 대상|계산식 지표/u
+  );
+  assert.equal(
+    result.architectureJson.nodes[0]?.config["reverseEngineeringManagement"],
+    "needs_mapping"
+  );
+  assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
 });
 
 test("API Gateway REST API를 이름과 설정을 보존한 Terraform 관리 대상으로 만든다", async () => {
