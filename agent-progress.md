@@ -143,6 +143,12 @@ Short English-only working log for the current agent context. Older records are 
 - Preserved every protected traffic, capacity, and animation source unchanged. Focused checks pass 75/75; harness, lint, typecheck, build, diff checks, and responsive browser QA at 390x844, 1024x768, and 1440x900 pass.
 - No deployment, cloud mutation, dependency, migration, PR, or merge was performed.
 
+### 2026-07-22 - Roll back the added Live Observation resource label overrides
+
+- Restored the resource presentation source and its test to the current `dev` baseline. The incident wording, signal calculation, log handling, and Terraform source navigation changes remain unchanged.
+- The existing internal Terraform-label cleanup remains in place; only this branch's generic AWS-name, RDS-name, and fallback overrides were removed.
+- Focused resource presentation tests pass 2/2. Web typecheck, lint, build, harness, and diff checks pass. The root test command remains non-green in unrelated API tests.
+
 ## Known Risk
 
 - The manifest-contract repair and audience receipt flow are production-verified, but provider-confirmed scale-out remains a separate blocked acceptance item.

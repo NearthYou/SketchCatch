@@ -31,7 +31,7 @@ test("internal Terraform labels become stable Korean role names before UI render
   if (model.status !== "ready") return;
   assert.deepEqual(
     model.stages.map((stage) => stage.node.label),
-    ["웹 배포", "요청 분배", "서버 연결", "앱 서버"]
+    ["웹 배포", "로드 밸런서", "앱 트래픽 대상", "앱 서버"]
   );
   assert.equal(model.capacityUnits[0]?.node.label, "실행 서버");
   assert.equal(
@@ -60,25 +60,6 @@ test("different infrastructure roles stay distinguishable without raw names", ()
   assert.deepEqual(labels, ["인터넷 연결", "라우팅", "파일 접근 정책", "가용 영역"]);
   assert.equal(new Set(labels).size, labels.length);
   assert.equal(labels.some((label) => label.includes("_") || label.includes("fixed_template")), false);
-});
-
-test("default AWS names and unknown internal types use simple user-facing names", () => {
-  const diagram: DiagramJson = {
-    edges: [],
-    nodes: [
-      node("alb", "aws_lb", "Load Balancer", 0),
-      node("target", "aws_lb_target_group", "Target Group", 200),
-      node("service", "aws_ecs_service", "ECS Service", 400),
-      node("database", "aws_db_instance", "RDS Instance", 600),
-      node("nat", "aws_nat_gateway", "nat_gateway_fixed_template_app", 800)
-    ],
-    viewport: { x: 0, y: 0, zoom: 1 }
-  };
-
-  assert.deepEqual(
-    presentLiveObservationDiagramResourceLabels(diagram).nodes.map((resource) => resource.label),
-    ["요청 분배", "서버 연결", "앱 서버", "데이터베이스", "AWS 리소스"]
-  );
 });
 
 function node(
