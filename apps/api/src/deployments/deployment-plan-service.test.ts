@@ -889,6 +889,7 @@ function createAccessContext(candidateUserId = userId): ProjectAccessContext {
   };
 }
 
+/** 서버가 확인한 import 선택을 포함해 배포 단계의 위조 차단 경계를 재현한다. */
 function createReverseEngineeringImportDiagram(): DiagramJson {
   return {
     nodes: [
@@ -901,6 +902,18 @@ function createReverseEngineeringImportDiagram(): DiagramJson {
         label: "existing-bucket",
         locked: false,
         zIndex: 1,
+        metadata: {
+          reverseEngineering: {
+            source: "aws_scan",
+            protectedValueKeys: [],
+            editableValueKeys: [],
+            importDecision: {
+              version: 1,
+              mode: "import_existing",
+              statusAtConfirmation: "ready"
+            }
+          }
+        },
         parameters: {
           terraformBlockType: "resource",
           resourceType: "aws_s3_bucket",
