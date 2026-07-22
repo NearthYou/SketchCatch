@@ -107,6 +107,7 @@ export function parseAddressesFromXml(
       "instanceId",
       "networkInterfaceId"
     ].some((tagName) => extractTag(item, tagName) !== null);
+    const serviceManaged = extractTag(item, "serviceManaged");
 
     return {
       providerResourceType: "AWS::EC2::EIP",
@@ -119,7 +120,11 @@ export function parseAddressesFromXml(
           domain: extractTag(item, "domain"),
           publicIp
         }),
-        associationTargetType: hasUnsupportedAssociation ? "ec2_or_eni" : "unassociated",
+        associationTargetType: serviceManaged
+          ? "service_managed"
+          : hasUnsupportedAssociation
+            ? "ec2_or_eni"
+            : "unassociated",
         tags: extractTags(item)
       },
       relationships: []
@@ -139,9 +144,13 @@ export function parseNatGatewaysFromXml(
     const allocationIds = addresses
       .map((address) => extractTag(address, "allocationId"))
       .filter((allocationId): allocationId is string => allocationId !== null);
-    const primaryAddress = addresses.find(
+    const explicitPrimaryAddress = addresses.find(
       (address) => extractBooleanTag(address, "isPrimary") === true
     );
+    const primaryAddress = explicitPrimaryAddress ??
+      (addresses.length === 1 && extractTag(addresses[0] ?? "", "isPrimary") === null
+        ? addresses[0]
+        : undefined);
 
     return {
       providerResourceType: "AWS::EC2::NatGateway",
