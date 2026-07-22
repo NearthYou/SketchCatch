@@ -12,7 +12,9 @@ import {
 } from "./deployment-warning-factory.js";
 import {
   findTerraformImportChangesFromTerraformShowJson,
-  type TerraformImportChange
+  findTerraformPlanChangesFromTerraformShowJson,
+  type TerraformImportChange,
+  type TerraformPlanChange
 } from "./deployment-plan-summary.js";
 
 export type DeploymentSafetyGateOperation = "apply" | "destroy";
@@ -31,9 +33,14 @@ export type EvaluateDeploymentSafetyGateInput = {
 export function evaluateDeploymentSafetyGate(
   input: EvaluateDeploymentSafetyGateInput
 ): DeploymentPlanSummary {
+  const expectedImportCount = input.planSummary.importCount ?? 0;
+  const parsedImportCount = input.terraformShowJson
+    ? findTerraformImportChangesFromTerraformShowJson(input.terraformShowJson).length
+    : null;
+  const importCountMatches = parsedImportCount === expectedImportCount;
   const importPlanBlock =
     input.operation === "apply" && input.terraformShowJson
-      ? createTerraformImportPlanBlock(input.terraformShowJson)
+      ? createTerraformImportPlanBlock(input.terraformShowJson, expectedImportCount)
       : null;
   const warnings = deduplicateDeploymentPlanWarnings([
     ...input.planSummary.warnings,
@@ -52,7 +59,7 @@ export function evaluateDeploymentSafetyGate(
 
   return {
     ...input.planSummary,
-    ...((input.planSummary.importCount ?? 0) > 0 && input.terraformShowJson
+    ...(expectedImportCount > 0 && input.terraformShowJson && importCountMatches
       ? { importSafetyGateVersion: terraformImportSafetyGateVersion }
       : {}),
     blocked: input.planSummary.blocked || importPlanBlock?.isBlocked === true,
@@ -69,12 +76,36 @@ export function requiresTerraformImportSafetyReplan(
   );
 }
 
-export function createTerraformImportPlanBlock(terraformShowJson: string): DeploymentBlock {
-  const unsafeImportChanges = findTerraformImportChangesFromTerraformShowJson(
-    terraformShowJson
-  ).filter((change) => !isSafeTerraformImportChange(change));
+export function createTerraformImportPlanBlock(
+  terraformShowJson: string,
+  expectedImportCount?: number
+): DeploymentBlock {
+  const importChanges = findTerraformImportChangesFromTerraformShowJson(terraformShowJson);
 
-  if (unsafeImportChanges.length === 0) {
+  if (expectedImportCount !== undefined && importChanges.length !== expectedImportCount) {
+    return {
+      isBlocked: true,
+      blockedBy: "risk_analysis",
+      blockedReason: `Terraform import summary does not match the inspected plan: expected ${expectedImportCount}, found ${importChanges.length}`
+    };
+  }
+
+  if (importChanges.length === 0) {
+    return {
+      isBlocked: false,
+      blockedBy: null,
+      blockedReason: null
+    };
+  }
+
+  const unsafeImportChanges = importChanges.filter(
+    (change) => !isSafeTerraformImportChange(change)
+  );
+  const unsafeCompanionChanges = findTerraformPlanChangesFromTerraformShowJson(
+    terraformShowJson
+  ).filter((change) => !change.isImport && !isSafeTerraformImportCompanionChange(change));
+
+  if (unsafeImportChanges.length === 0 && unsafeCompanionChanges.length === 0) {
     return {
       isBlocked: false,
       blockedBy: null,
@@ -85,8 +116,10 @@ export function createTerraformImportPlanBlock(terraformShowJson: string): Deplo
   return {
     isBlocked: true,
     blockedBy: "risk_analysis",
-    blockedReason: `Terraform import plan includes unsafe changes for existing resources: ${unsafeImportChanges
-      .map(formatUnsafeTerraformImportChange)
+    blockedReason: `Terraform import plan includes unsafe changes for existing resources: ${[
+      ...unsafeImportChanges.map(formatUnsafeTerraformImportChange),
+      ...unsafeCompanionChanges.map(formatUnsafeTerraformImportCompanionChange)
+    ]
       .join("; ")}`
   };
 }
@@ -100,6 +133,16 @@ function isSafeTerraformImportChange(change: TerraformImportChange): boolean {
   );
 }
 
+function isSafeTerraformImportCompanionChange(change: TerraformPlanChange): boolean {
+  return (
+    change.address !== null &&
+    change.actions !== null &&
+    (["no-op", "read", "update"] as const).some((action) =>
+      isSameActions(change.actions ?? [], [action])
+    )
+  );
+}
+
 function formatUnsafeTerraformImportChange(change: TerraformImportChange): string {
   const address = change.address ?? "unknown";
 
@@ -110,6 +153,16 @@ function formatUnsafeTerraformImportChange(change: TerraformImportChange): strin
   if (!change.importingMetadataValid) {
     return `${address} [malformed importing]`;
   }
+
+  if (change.actions === null) {
+    return `${address} [malformed actions]`;
+  }
+
+  return `${address} [${change.actions.join(",") || "no actions"}]`;
+}
+
+function formatUnsafeTerraformImportCompanionChange(change: TerraformPlanChange): string {
+  const address = change.address ?? "unknown";
 
   if (change.actions === null) {
     return `${address} [malformed actions]`;

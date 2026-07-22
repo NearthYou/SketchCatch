@@ -25,6 +25,12 @@ export type TerraformImportChange = {
   readonly importingMetadataValid: boolean;
 };
 
+export type TerraformPlanChange = {
+  readonly address: string | null;
+  readonly actions: readonly string[] | null;
+  readonly isImport: boolean;
+};
+
 const baselineLiveApplySupportedResourceTypes = new Set([
   "aws_vpc",
   "aws_subnet",
@@ -251,6 +257,31 @@ export function findTerraformImportChangesFromTerraformShowJson(
   return findTerraformImportChanges(parseTerraformShowJson(terraformShowJson));
 }
 
+export function findTerraformPlanChangesFromTerraformShowJson(
+  terraformShowJson: string
+): TerraformPlanChange[] {
+  const parsed = parseTerraformShowJson(terraformShowJson);
+  const resourceChanges = Array.isArray(parsed.resource_changes) ? parsed.resource_changes : [];
+
+  return resourceChanges
+    .filter(isTerraformResourceChange)
+    .map((resourceChange) => {
+      const change = resourceChange.change;
+      const actions = change?.actions;
+
+      return {
+        address: normalizeTerraformResourceAddress(resourceChange.address),
+        actions:
+          Array.isArray(actions) && actions.every((action) => typeof action === "string")
+            ? [...actions]
+            : null,
+        isImport:
+          isRecord(change) && Object.prototype.hasOwnProperty.call(change, "importing")
+      };
+    })
+    .sort(compareTerraformPlanChanges);
+}
+
 export function findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
   terraformShowJson: string,
   liveProfile: DeploymentLiveProfile = "demo_web_service"
@@ -347,6 +378,16 @@ function compareTerraformImportChanges(
   if (leftActions < rightActions) return -1;
   if (leftActions > rightActions) return 1;
   return Number(left.importingMetadataValid) - Number(right.importingMetadataValid);
+}
+
+function compareTerraformPlanChanges(
+  left: TerraformPlanChange,
+  right: TerraformPlanChange
+): number {
+  const leftAddress = left.address ?? "";
+  const rightAddress = right.address ?? "";
+
+  return leftAddress.localeCompare(rightAddress);
 }
 
 function parseTerraformShowJson(terraformShowJson: string): TerraformShowJson {

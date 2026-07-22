@@ -355,6 +355,124 @@ test("evaluateDeploymentSafetyGate blocks unsafe or malformed actions only for i
   assert.equal(ordinaryDestructiveSummary.blocked, false);
 });
 
+test("evaluateDeploymentSafetyGate blocks ordinary create delete and replace mixed into an initial import plan", () => {
+  const ordinaryUnsafeChanges = [
+    { address: "aws_s3_bucket.unexpected_create", change: { actions: ["create"] } },
+    { address: "aws_s3_bucket.unexpected_delete", change: { actions: ["delete"] } },
+    {
+      address: "aws_instance.unexpected_replace_before_create",
+      change: { actions: ["delete", "create"] }
+    },
+    {
+      address: "aws_instance.unexpected_replace_after_create",
+      change: { actions: ["create", "delete"] }
+    }
+  ];
+
+  for (const resourceChange of ordinaryUnsafeChanges) {
+    const summary = evaluateDeploymentSafetyGate({
+      operation: "apply",
+      planSummary: createPlanSummary({ importCount: 1 }),
+      terraformShowJson: createTerraformShowJson([
+        {
+          address: "aws_s3_bucket.safe_import",
+          change: {
+            actions: ["no-op"],
+            importing: { id: "safe-import-bucket" }
+          }
+        },
+        resourceChange
+      ])
+    });
+
+    assert.equal(summary.blocked, true, resourceChange.address);
+  }
+});
+
+test("evaluateDeploymentSafetyGate keeps an ordinary update approvable beside a safe import", () => {
+  const summary = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    planSummary: createPlanSummary({ importCount: 1, updateCount: 1 }),
+    terraformShowJson: createTerraformShowJson([
+      {
+        address: "aws_s3_bucket.safe_import",
+        change: {
+          actions: ["no-op"],
+          importing: { id: "safe-import-bucket" }
+        }
+      },
+      {
+        address: "aws_s3_bucket.already_managed",
+        change: { actions: ["update"] }
+      }
+    ])
+  });
+
+  assert.equal(summary.blocked, false);
+});
+
+test("evaluateDeploymentSafetyGate fails closed when the import summary and Terraform plan disagree", () => {
+  const summary = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    planSummary: createPlanSummary({ importCount: 1 }),
+    terraformShowJson: createTerraformShowJson([
+      {
+        address: "aws_s3_bucket.not_an_import",
+        change: { actions: ["no-op"] }
+      }
+    ])
+  });
+
+  assert.equal(summary.blocked, true);
+  assert.equal(summary.importSafetyGateVersion, undefined);
+});
+
+test("evaluateDeploymentSafetyGate allows read and no-op companions beside a safe import", () => {
+  const summary = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    planSummary: createPlanSummary({ importCount: 1 }),
+    terraformShowJson: createTerraformShowJson([
+      {
+        address: "aws_s3_bucket.safe_import",
+        change: {
+          actions: ["no-op"],
+          importing: { id: "safe-import-bucket" }
+        }
+      },
+      { address: "data.aws_region.current", change: { actions: ["read"] } },
+      { address: "aws_s3_bucket.stable", change: { actions: ["no-op"] } }
+    ])
+  });
+
+  assert.equal(summary.blocked, false);
+});
+
+test("evaluateDeploymentSafetyGate blocks malformed and unknown companions beside a safe import", () => {
+  const unsafeCompanions = [
+    { address: "aws_s3_bucket.malformed", change: { actions: "create" } },
+    { address: "aws_s3_bucket.unknown", change: { actions: ["mystery"] } }
+  ];
+
+  for (const resourceChange of unsafeCompanions) {
+    const summary = evaluateDeploymentSafetyGate({
+      operation: "apply",
+      planSummary: createPlanSummary({ importCount: 1 }),
+      terraformShowJson: createTerraformShowJson([
+        {
+          address: "aws_s3_bucket.safe_import",
+          change: {
+            actions: ["no-op"],
+            importing: { id: "safe-import-bucket" }
+          }
+        },
+        resourceChange
+      ])
+    });
+
+    assert.equal(summary.blocked, true, resourceChange.address);
+  }
+});
+
 function createPlanSummary(
   overrides: Partial<DeploymentPlanSummary> = {}
 ): DeploymentPlanSummary {
