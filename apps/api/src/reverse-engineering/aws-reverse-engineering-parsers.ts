@@ -116,7 +116,7 @@ export function parseRouteTablesFromXml(
   xml: string,
   region: string
 ): AwsDiscoveredResourceRecord[] {
-  return extractSetItems(xml, "routeTableSet").map((item) => {
+  return extractSetItems(xml, "routeTableSet").flatMap((item) => {
     const routeTableId = extractRequiredTag(item, "routeTableId");
     const vpcId = extractTag(item, "vpcId");
     const gatewayIds = extractRepeatedTags(item, "gatewayId").filter((gatewayId) =>
@@ -127,7 +127,7 @@ export function parseRouteTablesFromXml(
       ...gatewayIds.map((gatewayId) => createRelationship("depends_on", gatewayId))
     ];
 
-    return {
+    const routeTable: AwsDiscoveredResourceRecord = {
       providerResourceType: "AWS::EC2::RouteTable",
       providerResourceId: routeTableId,
       displayName: extractNameTag(item) ?? routeTableId,
@@ -139,6 +139,40 @@ export function parseRouteTablesFromXml(
         vpcId
       },
       relationships
+    };
+
+    return [
+      routeTable,
+      ...extractRouteTableAssociationRecords(item, routeTableId, region)
+    ];
+  });
+}
+
+// 같은 DescribeRouteTables 응답의 association을 별도 Resource로 만들되 gateway 원본은 노출하지 않습니다.
+function extractRouteTableAssociationRecords(
+  xml: string,
+  routeTableId: string,
+  region: string
+): AwsDiscoveredResourceRecord[] {
+  return extractSetItems(xml, "associationSet").map((item) => {
+    const routeTableAssociationId = extractRequiredTag(item, "routeTableAssociationId");
+    const subnetId = extractTag(item, "subnetId");
+
+    return {
+      providerResourceType: "AWS::EC2::RouteTableAssociation",
+      providerResourceId: routeTableAssociationId,
+      displayName: routeTableAssociationId,
+      region,
+      config: compactConfigRecord({
+        routeTableAssociationId,
+        subnetId,
+        routeTableId,
+        main: extractBooleanTag(item, "main")
+      }),
+      relationships: [
+        ...(subnetId ? [createRelationship("attached_to", subnetId)] : []),
+        createRelationship("depends_on", routeTableId)
+      ]
     };
   });
 }

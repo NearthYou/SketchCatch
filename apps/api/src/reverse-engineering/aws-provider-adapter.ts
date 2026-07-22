@@ -20,6 +20,7 @@ import {
   sanitizeReverseEngineeringScanErrors
 } from "./reverse-engineering-public-errors.js";
 import {
+  createReverseEngineeringTerraformProjection,
   createStableTerraformResourceName,
   getReverseEngineeringTerraformResourceType
 } from "./reverse-engineering-terraform-projection.js";
@@ -78,6 +79,7 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::EC2::Subnet", "SUBNET"],
   ["AWS::EC2::InternetGateway", "INTERNET_GATEWAY"],
   ["AWS::EC2::RouteTable", "ROUTE_TABLE"],
+  ["AWS::EC2::RouteTableAssociation", "ROUTE_TABLE_ASSOCIATION"],
   ["AWS::EC2::SecurityGroup", "SECURITY_GROUP"],
   ["AWS::EC2::Instance", "EC2"],
   ["AWS::EC2::Image", "AMI"],
@@ -105,6 +107,7 @@ const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_REST_API",
   "CLOUDWATCH_METRIC_ALARM",
   "CLOUDWATCH_LOG_GROUP",
+  "ROUTE_TABLE_ASSOCIATION",
   "EVENTBRIDGE_RULE",
   "EVENTBRIDGE_TARGET",
   "LOAD_BALANCER",
@@ -120,6 +123,7 @@ const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
   "SUBNET",
   "INTERNET_GATEWAY",
   "ROUTE_TABLE",
+  "ROUTE_TABLE_ASSOCIATION",
   "SECURITY_GROUP",
   "EC2",
   "RDS",
@@ -158,6 +162,10 @@ const IAM_CLOUD_FORMATION_OWNERSHIP_TAG_KEYS = new Set([
   "aws:cloudformation:logical-id"
 ]);
 const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>([
+  [
+    "AWS::EC2::RouteTableAssociation",
+    new Set(["routeTableAssociationId", "subnetId", "routeTableId", "main"])
+  ],
   [
     "AWS::ApiGateway::RestApi",
     new Set([
@@ -365,7 +373,7 @@ export function createAwsProviderAdapter(
       const records = discoveryResult.records;
       const idMap = createResourceIdMap(records);
       const displayNameMap = createAwsResourceDisplayNameMap(records);
-      const discoveredResources = records.map((record) =>
+      const baseDiscoveredResources = records.map((record) =>
         toDiscoveredResource(
           record,
           idMap,
@@ -375,6 +383,17 @@ export function createAwsProviderAdapter(
           ),
           options.resultVisibility ?? "public"
         )
+      );
+      const discoveredResources = baseDiscoveredResources.map((resource) =>
+        resource.resourceType === "ROUTE_TABLE_ASSOCIATION" &&
+        createReverseEngineeringTerraformProjection(resource, baseDiscoveredResources)
+          .management !== "managed"
+          ? {
+              ...resource,
+              analysisExcluded: true,
+              importSuggestionStatus: "manual_review" as const
+            }
+          : resource
       );
       const architectureJson = createReverseEngineeringArchitectureJson(discoveredResources);
       const scan = createEmptyScan(input);
@@ -621,7 +640,10 @@ function createAnalysisExclusions(
     .map((resource) => ({
       id: `analysis-exclusion-${resource.id}`,
       resourceId: resource.id,
-      reason: "unsupported_resource_type",
+      reason:
+        resource.resourceType === "ROUTE_TABLE_ASSOCIATION"
+          ? "missing_required_data"
+          : "unsupported_resource_type",
       message: isKmsConnectedCloudWatchLogGroup(resource)
         ? "KMS Key로 암호화된 로그 저장소는 현재 안전하게 수정할 수 없어 보드에만 표시됩니다."
         : isCloudWatchMetricAlarmRequiringMapping(resource)
@@ -632,6 +654,8 @@ function createAnalysisExclusions(
               ? "AWS가 관리하거나 별도 실행 Role을 쓰는 EventBridge Rule은 자동으로 수정할 수 없어 보드에만 표시됩니다."
               : isEventBridgeTargetRequiringMapping(resource)
                 ? "EventBridge Target의 전달 설정이나 대상 연결을 안전하게 다시 만들 수 없어 보드에만 표시됩니다."
+                : resource.resourceType === "ROUTE_TABLE_ASSOCIATION"
+                  ? "같은 스캔의 Subnet과 Route Table을 안전하게 연결할 수 없어 보드에만 표시됩니다."
           : "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
     }));
 }
@@ -732,6 +756,21 @@ function createImportSuggestions(
       };
     }
 
+    if (
+      resource.resourceType === "ROUTE_TABLE_ASSOCIATION" &&
+      createReverseEngineeringTerraformProjection(resource, discoveredResources).management !==
+        "managed"
+    ) {
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "manual_review",
+        reason:
+          "같은 스캔의 관리 가능한 Subnet과 Route Table을 먼저 확인해야 안전하게 가져올 수 있습니다.",
+        handoffReady: false
+      };
+    }
+
     const terraformResourceName = createStableTerraformResourceName(resource.id);
     const terraformAddress = `${terraformResourceType}.${terraformResourceName}`;
     const terraformBlockDraft = `resource "${terraformResourceType}" "${terraformResourceName}" {}`;
@@ -750,7 +789,9 @@ function createImportSuggestions(
 
 // gg: 자동 import를 만들 수 없는 이유를 Resource별로 짧고 정확하게 설명합니다.
 function createMissingImportIdReason(resourceType: ResourceType): string {
-  return resourceType === "EVENTBRIDGE_RULE"
+  return resourceType === "ROUTE_TABLE_ASSOCIATION"
+    ? "Terraform import에 필요한 subnet ID와 route table ID가 없습니다."
+    : resourceType === "EVENTBRIDGE_RULE"
     ? "Terraform import에 필요한 EventBridge bus name과 rule name이 없습니다."
     : resourceType === "EVENTBRIDGE_TARGET"
       ? "Terraform import에 필요한 EventBridge bus, rule, target ID가 없습니다."

@@ -1,7 +1,7 @@
 import type { DiagramJson, DiagramNode, ReverseEngineeringScanResult } from "@sketchcatch/types";
 import type { ProjectAccessContext } from "../deployments/deployment-service.js";
 import type { VerifiedTerraformImportTarget } from "../services/terraform/terraform-import-blocks.js";
-import { classifyReverseEngineeringManagement } from "./reverse-engineering-management-policy.js";
+import { createReverseEngineeringTerraformProjection } from "./reverse-engineering-terraform-projection.js";
 
 export type ReverseEngineeringImportScanRecord = {
   id: string;
@@ -158,7 +158,10 @@ function resolveNodeImportTarget(
     );
   }
   const resource = resources[0]!;
-  const management = classifyReverseEngineeringManagement(resource);
+  const management = createReverseEngineeringTerraformProjection(
+    resource,
+    result.discoveredResources
+  ).management;
 
   if (management !== "managed") {
     return null;

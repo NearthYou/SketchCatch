@@ -24,6 +24,7 @@ const TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE = new Map<ResourceType, string>([
   ["SUBNET", "aws_subnet"],
   ["INTERNET_GATEWAY", "aws_internet_gateway"],
   ["ROUTE_TABLE", "aws_route_table"],
+  ["ROUTE_TABLE_ASSOCIATION", "aws_route_table_association"],
   ["SECURITY_GROUP", "aws_security_group"],
   ["EC2", "aws_instance"],
   ["RDS", "aws_db_instance"],
@@ -41,7 +42,8 @@ const TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE = new Map<ResourceType, string>([
 
 /** 기존 AWS 리소스를 보드에서 편집 가능한 Terraform identity와 명시적 인수로 투영한다. */
 export function createReverseEngineeringTerraformProjection(
-  resource: DiscoveredResource
+  resource: DiscoveredResource,
+  sameScanResources?: readonly DiscoveredResource[]
 ): ReverseEngineeringTerraformProjection {
   const management = classifyReverseEngineeringManagement(resource);
   const terraformResourceType = TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE.get(
@@ -52,13 +54,24 @@ export function createReverseEngineeringTerraformProjection(
     return { management, terraformValues: {} };
   }
 
+  const terraformValues = createReverseEngineeringTerraformValues(
+    resource,
+    sameScanResources
+  );
+  if (
+    resource.resourceType === "ROUTE_TABLE_ASSOCIATION" &&
+    Object.keys(terraformValues).length === 0
+  ) {
+    return { management: "needs_mapping", terraformValues: {} };
+  }
+
   return {
     management,
     terraformBlockType: "resource",
     terraformResourceType,
     terraformResourceName: createStableTerraformResourceName(resource.id),
     terraformFileName: "reverse-engineering",
-    terraformValues: createReverseEngineeringTerraformValues(resource)
+    terraformValues
   };
 }
 
@@ -83,7 +96,8 @@ export function createStableTerraformResourceName(resourceId: string): string {
 
 /** Resource 종류별로 AWS 관찰값 중 Terraform에서 실제로 선언할 값만 allowlist한다. */
 export function createReverseEngineeringTerraformValues(
-  resource: DiscoveredResource
+  resource: DiscoveredResource,
+  sameScanResources?: readonly DiscoveredResource[]
 ): ResourceConfig {
   const { config } = resource;
 
@@ -125,6 +139,8 @@ export function createReverseEngineeringTerraformValues(
         route: normalizeRouteTableRoutes(config["routes"]),
         tags: normalizeTerraformTags(config["tags"])
       });
+    case "ROUTE_TABLE_ASSOCIATION":
+      return createRouteTableAssociationTerraformValues(resource, sameScanResources);
     case "SECURITY_GROUP":
       return compactConfig({
         name: config["groupName"],
@@ -266,6 +282,62 @@ export function createReverseEngineeringTerraformValues(
     default:
       return {};
   }
+}
+
+/** Association은 같은 scan에서 관리 가능한 두 대상의 Terraform identity가 있을 때만 투영한다. */
+function createRouteTableAssociationTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  if (!sameScanResources) {
+    return {};
+  }
+
+  const subnet = findSameScanAssociationTarget(
+    resource,
+    sameScanResources,
+    "SUBNET",
+    resource.config["subnetId"]
+  );
+  const routeTable = findSameScanAssociationTarget(
+    resource,
+    sameScanResources,
+    "ROUTE_TABLE",
+    resource.config["routeTableId"]
+  );
+  if (!subnet || !routeTable) {
+    return {};
+  }
+
+  return {
+    subnetId: `aws_subnet.${createStableTerraformResourceName(subnet.id)}.id`,
+    routeTableId: `aws_route_table.${createStableTerraformResourceName(routeTable.id)}.id`
+  };
+}
+
+function findSameScanAssociationTarget(
+  association: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[],
+  resourceType: "SUBNET" | "ROUTE_TABLE",
+  providerResourceId: unknown
+): DiscoveredResource | undefined {
+  if (typeof providerResourceId !== "string" || providerResourceId.trim().length === 0) {
+    return undefined;
+  }
+
+  const candidates = sameScanResources.filter(
+    (candidate) =>
+      candidate.resourceType === resourceType &&
+      candidate.providerResourceId === providerResourceId.trim() &&
+      (association.relationships ?? []).some(
+        (relationship) => relationship.targetResourceId === candidate.id
+      )
+  );
+  const target = candidates.length === 1 ? candidates[0] : undefined;
+
+  return target && classifyReverseEngineeringManagement(target) === "managed"
+    ? target
+    : undefined;
 }
 
 /** undefined, null, 빈 배열과 빈 object를 제거하되 false와 0은 보존한다. */

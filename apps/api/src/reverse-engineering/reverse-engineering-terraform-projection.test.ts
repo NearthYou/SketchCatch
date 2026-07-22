@@ -407,6 +407,67 @@ test("단일 Metric CloudWatch Alarm을 Terraform 인수로 정규화한다", ()
   });
 });
 
+test("Route Table Association은 같은 scan의 관리 가능한 Subnet과 Route Table만 Terraform 참조한다", () => {
+  const subnet = resource("SUBNET", {
+    id: "resource-subnet-main",
+    providerResourceType: "AWS::EC2::Subnet",
+    providerResourceId: "subnet-main",
+    config: {
+      vpcId: "vpc-main",
+      cidrBlock: "10.0.1.0/24",
+      availabilityZone: "ap-northeast-2a",
+      mapPublicIpOnLaunch: false,
+      assignIpv6AddressOnCreation: false
+    }
+  });
+  const routeTable = resource("ROUTE_TABLE", {
+    id: "resource-rtb-main",
+    providerResourceType: "AWS::EC2::RouteTable",
+    providerResourceId: "rtb-main",
+    config: {
+      vpcId: "vpc-main",
+      routes: [{ destinationCidrBlock: "10.0.0.0/16", gatewayId: "local" }]
+    }
+  });
+  const association = resource("ROUTE_TABLE_ASSOCIATION", {
+    id: "resource-rtbassoc-main-subnet",
+    providerResourceType: "AWS::EC2::RouteTableAssociation",
+    providerResourceId: "rtbassoc-main-subnet",
+    config: {
+      routeTableAssociationId: "rtbassoc-main-subnet",
+      subnetId: "subnet-main",
+      routeTableId: "rtb-main",
+      main: false
+    },
+    relationships: [
+      { type: "connects_to", targetResourceId: subnet.id, label: "attached_to" },
+      { type: "depends_on", targetResourceId: routeTable.id, label: "depends_on" }
+    ]
+  });
+
+  assert.deepEqual(
+    createReverseEngineeringTerraformProjection(association, [subnet, routeTable, association]),
+    {
+      management: "managed",
+      terraformBlockType: "resource",
+      terraformResourceType: "aws_route_table_association",
+      terraformResourceName: "resource_rtbassoc_main_subnet",
+      terraformFileName: "reverse-engineering",
+      terraformValues: {
+        subnetId: "aws_subnet.resource_subnet_main.id",
+        routeTableId: "aws_route_table.resource_rtb_main.id"
+      }
+    }
+  );
+
+  for (const sameScanResources of [undefined, [subnet, association], [routeTable, association]]) {
+    assert.deepEqual(
+      createReverseEngineeringTerraformProjection(association, sameScanResources),
+      { management: "needs_mapping", terraformValues: {} }
+    );
+  }
+});
+
 test("AWS와 CloudFormation과 SketchCatch 소유 리소스는 보드에는 남겨도 Terraform identity를 만들지 않는다", () => {
   const protectedResources = [
     resource("S3", {

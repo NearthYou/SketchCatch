@@ -1034,6 +1034,105 @@ test("ALB subnet_mapping은 subnets 대신 새 Terraform 생성 위치 정보로
   assert.equal(result.importSuggestions[0]?.importCommand, undefined);
 });
 
+test("Subnet Route Table Association을 안전한 config와 두 관계가 있는 지원 리소스로 변환한다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::EC2::Subnet",
+      providerResourceId: "subnet-main",
+      displayName: "subnet-main",
+      config: {
+        vpcId: "vpc-main",
+        cidrBlock: "10.0.1.0/24",
+        availabilityZone: "ap-northeast-2a",
+        mapPublicIpOnLaunch: false,
+        assignIpv6AddressOnCreation: false
+      }
+    }),
+    record({
+      providerResourceType: "AWS::EC2::RouteTable",
+      providerResourceId: "rtb-main",
+      displayName: "rtb-main",
+      config: {
+        vpcId: "vpc-main",
+        routes: [
+          {
+            destinationCidrBlock: "10.0.0.0/16",
+            gatewayId: "local",
+            state: "active"
+          }
+        ]
+      }
+    }),
+    record({
+      providerResourceType: "AWS::EC2::RouteTableAssociation",
+      providerResourceId: "rtbassoc-main-subnet",
+      displayName: "rtbassoc-main-subnet",
+      config: {
+        routeTableAssociationId: "rtbassoc-main-subnet",
+        subnetId: "subnet-main",
+        routeTableId: "rtb-main",
+        main: false,
+        gatewayId: "must-not-be-public",
+        associationState: "associated",
+        providerParameters: { secret: "must-not-be-public" }
+      },
+      relationships: [
+        { type: "attached_to", targetProviderResourceId: "subnet-main" },
+        { type: "depends_on", targetProviderResourceId: "rtb-main" }
+      ]
+    })
+  ]);
+
+  const association = result.discoveredResources.find(
+    (resource) => resource.providerResourceId === "rtbassoc-main-subnet"
+  );
+  assert.ok(association);
+  assert.equal(association.resourceType, "ROUTE_TABLE_ASSOCIATION");
+  assert.deepEqual(association.config, {
+    routeTableAssociationId: "rtbassoc-main-subnet",
+    subnetId: "subnet-main",
+    routeTableId: "rtb-main",
+    main: false
+  });
+  assert.deepEqual(association.relationships, [
+    {
+      type: "connects_to",
+      targetResourceId: "resource-subnet-main",
+      label: "attached_to"
+    },
+    {
+      type: "depends_on",
+      targetResourceId: "resource-rtb-main",
+      label: "depends_on"
+    }
+  ]);
+
+  const associationNode = result.architectureJson.nodes.find(
+    (node) => node.id === association.id
+  );
+  assert.equal(associationNode?.config["reverseEngineeringManagement"], "managed");
+  assert.equal(
+    associationNode?.config["terraformResourceType"],
+    "aws_route_table_association"
+  );
+  assert.deepEqual(
+    {
+      subnetId: associationNode?.config["subnetId"],
+      routeTableId: associationNode?.config["routeTableId"]
+    },
+    {
+      subnetId: "aws_subnet.resource_subnet_main.id",
+      routeTableId: "aws_route_table.resource_rtb_main.id"
+    }
+  );
+  assert.deepEqual(
+    result.architectureJson.edges
+      .filter((edge) => edge.targetId === association.id)
+      .map((edge) => edge.sourceId),
+    ["resource-subnet-main", "resource-rtb-main"]
+  );
+});
+
 async function scan(records: AwsDiscoveredResourceRecord[]): Promise<ReverseEngineeringScanResult> {
   return createAwsProviderAdapter({
     async discoverResources() {

@@ -67,6 +67,17 @@ function getMissingTerraformResourceFields(
     ];
   }
 
+  if (resourceType === "ROUTE_TABLE_ASSOCIATION") {
+    return [
+      ...(getNonEmptyString(config["routeTableAssociationId"])
+        ? []
+        : ["routeTableAssociationId"]),
+      ...(getNonEmptyString(config["subnetId"]) ? [] : ["subnetId"]),
+      ...(getNonEmptyString(config["routeTableId"]) ? [] : ["routeTableId"]),
+      ...(config["main"] === false ? [] : ["main=false"])
+    ];
+  }
+
   if (resourceType === "EC2") {
     return [
       ...(getNonEmptyString(config["imageId"]) ? [] : ["imageId"]),
@@ -251,6 +262,15 @@ function getMissingTerraformResourceFields(
 function getStableTerraformImportId(
   resource: Pick<DiscoveredResource, "providerResourceId" | "resourceType" | "config">
 ): string | null {
+  if (resource.resourceType === "ROUTE_TABLE_ASSOCIATION") {
+    const subnetId = getNonEmptyString(resource.config["subnetId"]);
+    const routeTableId = getNonEmptyString(resource.config["routeTableId"]);
+
+    return resource.config["main"] === false && subnetId && routeTableId
+      ? `${subnetId}/${routeTableId}`
+      : null;
+  }
+
   if (resource.resourceType === "EVENTBRIDGE_RULE") {
     const ruleName = getValidEventBridgeName(resource.config["name"]);
     const eventBusName = getValidEventBridgeName(resource.config["eventBusName"]);

@@ -58,6 +58,7 @@ import {
   readEcsResourcesWithDiagnostics,
   readResourceExplorerResourcesWithDiagnostics,
   resolveCloudFrontOriginRelationships,
+  shouldReadResourceGroup,
   uniqueDiscoveredRecordsByProviderId
 } from "./aws-reverse-engineering-gateway.js";
 import { parseAwsQueryPaginationToken } from "./aws-reverse-engineering-parsers.js";
@@ -491,6 +492,93 @@ test("AWS Query parses EC2 nextToken and RDS Marker without retaining response X
     parseAwsQueryPaginationToken("<DescribeVpcsResponse />", "nextToken"),
     undefined
   );
+});
+
+test("Route Table Association 직접 선택과 ALL은 기존 DescribeRouteTables reader를 함께 사용한다", async () => {
+  assert.equal(
+    shouldReadResourceGroup(scanInput(["ROUTE_TABLE_ASSOCIATION"]), "ROUTE_TABLE"),
+    true
+  );
+  assert.equal(shouldReadResourceGroup(scanInput(["ALL"]), "ROUTE_TABLE"), true);
+  assert.equal(shouldReadResourceGroup(scanInput(["SUBNET"]), "ROUTE_TABLE"), false);
+
+  const bodies: string[] = [];
+  const records = await describeRouteTables(
+    "ap-northeast-2",
+    credentials,
+    (async (_url: string | URL | Request, init?: RequestInit) => {
+      bodies.push(String(init?.body ?? ""));
+      return new Response(
+        `<DescribeRouteTablesResponse>
+          <routeTableSet>
+            <item>
+              <routeTableId>rtb-main</routeTableId>
+              <vpcId>vpc-main</vpcId>
+              <associationSet>
+                <item>
+                  <routeTableAssociationId>rtbassoc-main-subnet</routeTableAssociationId>
+                  <routeTableId>rtb-main</routeTableId>
+                  <subnetId>subnet-main</subnetId>
+                  <main>false</main>
+                </item>
+              </associationSet>
+            </item>
+          </routeTableSet>
+        </DescribeRouteTablesResponse>`,
+        { status: 200 }
+      );
+    }) as typeof fetch
+  );
+
+  assert.equal(bodies.length, 1);
+  assert.equal(new URLSearchParams(bodies[0]).get("Action"), "DescribeRouteTables");
+  assert.deepEqual(
+    records.map((record) => [record.providerResourceType, record.providerResourceId]),
+    [
+      ["AWS::EC2::RouteTable", "rtb-main"],
+      ["AWS::EC2::RouteTableAssociation", "rtbassoc-main-subnet"]
+    ]
+  );
+});
+
+test("반복 Route Table page의 Association record를 provider ID 기준으로 한 번만 남긴다", () => {
+  const duplicateRecords: AwsDiscoveredResourceRecord[] = [
+    {
+      providerResourceType: "AWS::EC2::RouteTable",
+      providerResourceId: "rtb-main",
+      displayName: "rtb-main",
+      region: "ap-northeast-2",
+      config: {},
+      relationships: []
+    },
+    {
+      providerResourceType: "AWS::EC2::RouteTableAssociation",
+      providerResourceId: "rtbassoc-main-subnet",
+      displayName: "rtbassoc-main-subnet",
+      region: "ap-northeast-2",
+      config: {
+        routeTableAssociationId: "rtbassoc-main-subnet",
+        subnetId: "subnet-main",
+        routeTableId: "rtb-main",
+        main: false
+      },
+      relationships: [
+        { type: "attached_to", targetProviderResourceId: "subnet-main" },
+        { type: "depends_on", targetProviderResourceId: "rtb-main" }
+      ]
+    }
+  ];
+
+  const records = uniqueDiscoveredRecordsByProviderId([
+    ...duplicateRecords,
+    ...structuredClone(duplicateRecords)
+  ]);
+
+  assert.deepEqual(
+    records.map((record) => record.providerResourceId),
+    ["rtb-main", "rtbassoc-main-subnet"]
+  );
+  assert.equal(records[1]?.relationships.length, 2);
 });
 
 test("all six EC2 Query readers and RDS follow their response pagination token", async () => {

@@ -42,7 +42,7 @@ export function createReverseEngineeringArchitectureJson(
 
   return {
     nodes: boardResources.map((resource, index) =>
-      toResourceNode(resource, index, layoutByResourceId.get(resource.id))
+      toResourceNode(resource, index, layoutByResourceId.get(resource.id), boardResources)
     ),
     edges: boardResources.flatMap((resource) => toResourceEdges(resource, boardResourceIds))
   };
@@ -227,9 +227,10 @@ function layoutSubnetChildren(input: LayoutSubnetChildrenInput): void {
 function toResourceNode(
   resource: DiscoveredResource,
   index: number,
-  layout: ArchitectureNodeLayout | undefined
+  layout: ArchitectureNodeLayout | undefined,
+  sameScanResources: readonly DiscoveredResource[]
 ): ResourceNode {
-  const projection = createReverseEngineeringTerraformProjection(resource);
+  const projection = createReverseEngineeringTerraformProjection(resource, sameScanResources);
   const isTerraformManaged = projection.management === "managed";
 
   return {

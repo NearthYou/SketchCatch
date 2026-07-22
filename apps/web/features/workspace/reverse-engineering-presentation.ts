@@ -44,6 +44,7 @@ const SERVICE_LABELS: Readonly<Record<string, string>> = {
   "AWS::EC2::EIP": "고정 공인 IP",
   "AWS::EC2::NatGateway": "NAT 게이트웨이",
   "AWS::EC2::RouteTable": "라우팅 테이블",
+  "AWS::EC2::RouteTableAssociation": "서브넷 경로 연결",
   "AWS::EC2::SubnetRouteTableAssociation": "서브넷 경로 연결",
   "AWS::EC2::SecurityGroup": "보안 그룹",
   "AWS::EC2::Instance": "EC2 인스턴스",

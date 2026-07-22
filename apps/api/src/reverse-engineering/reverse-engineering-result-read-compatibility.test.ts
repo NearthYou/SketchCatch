@@ -600,6 +600,88 @@ test("과거 analysisExclusion만 남은 Resource도 실행 가능한 import han
   assert.equal(persistedImportSuggestion?.handoffReady, true);
 });
 
+test("같은 scan 대상이 사라진 과거 Route Table Association의 Terraform identity를 제거한다", () => {
+  const legacyResult = createLegacyResult();
+  legacyResult.discoveredResources.push({
+    id: "legacy-route-table-association",
+    provider: "aws",
+    providerResourceType: "AWS::EC2::RouteTableAssociation",
+    providerResourceId: "rtbassoc-main-subnet",
+    region: "ap-northeast-2",
+    displayName: "rtbassoc-main-subnet",
+    resourceType: "ROUTE_TABLE_ASSOCIATION",
+    config: {
+      routeTableAssociationId: "rtbassoc-main-subnet",
+      subnetId: "subnet-main",
+      routeTableId: "rtb-main",
+      main: false
+    },
+    relationships: [
+      {
+        type: "connects_to",
+        targetResourceId: "missing-subnet",
+        label: "attached_to"
+      },
+      {
+        type: "depends_on",
+        targetResourceId: "missing-route-table",
+        label: "depends_on"
+      }
+    ]
+  });
+  legacyResult.architectureJson.nodes.push({
+    id: "legacy-route-table-association",
+    type: "ROUTE_TABLE_ASSOCIATION",
+    label: "rtbassoc-main-subnet",
+    positionX: 720,
+    positionY: 80,
+    config: {
+      providerResourceId: "rtbassoc-main-subnet",
+      terraformBlockType: "resource",
+      terraformResourceType: "aws_route_table_association",
+      terraformResourceName: "legacy_route_table_association",
+      terraformFileName: "reverse-engineering",
+      reverseEngineeringManagement: "managed"
+    }
+  });
+  legacyResult.importSuggestions.push({
+    id: "import-legacy-route-table-association",
+    resourceId: "legacy-route-table-association",
+    status: "ready",
+    handoffReady: true,
+    terraformAddress: "aws_route_table_association.legacy_route_table_association",
+    importCommand:
+      "terraform import aws_route_table_association.legacy_route_table_association subnet-main/rtb-main"
+  });
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const association = result.discoveredResources.find(
+    (resource) => resource.resourceType === "ROUTE_TABLE_ASSOCIATION"
+  );
+  const associationNode = result.architectureJson.nodes.find(
+    (node) => node.id === "legacy-route-table-association"
+  );
+  const suggestion = result.importSuggestions.find(
+    (candidate) => candidate.resourceId === "legacy-route-table-association"
+  );
+
+  assert.equal(association?.analysisExcluded, true);
+  assert.equal(association?.importSuggestionStatus, "manual_review");
+  assert.equal(associationNode?.config["analysisExcluded"], true);
+  assert.equal(associationNode?.config["reverseEngineeringManagement"], "needs_mapping");
+  assert.equal(associationNode?.config["terraformBlockType"], undefined);
+  assert.equal(associationNode?.config["terraformResourceType"], undefined);
+  assert.equal(associationNode?.config["terraformResourceName"], undefined);
+  assert.equal(associationNode?.config["terraformFileName"], undefined);
+  assert.deepEqual(suggestion, {
+    id: "import-legacy-route-table-association",
+    resourceId: "legacy-route-table-association",
+    status: "manual_review",
+    handoffReady: false,
+    reason: "검토 전용 Resource는 Terraform import 또는 배포에 사용할 수 없습니다."
+  });
+});
+
 test("유일하게 연결된 지원 Resource가 아닌 과거 import handoff는 안전하게 제거한다", () => {
   const unmatchedResult = createLegacyResult();
   unmatchedResult.importSuggestions.push({

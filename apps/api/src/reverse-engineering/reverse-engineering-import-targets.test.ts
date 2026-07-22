@@ -534,6 +534,61 @@ test("AWS와 SketchCatch가 소유한 리소스는 보드에 남아도 프로젝
   assert.deepEqual(targets, []);
 });
 
+test("같은 scan에 Subnet과 Route Table이 없는 과거 Association handoff는 import 대상에서 제외한다", async () => {
+  const scanResult = result({
+    id: "resource-route-table-association",
+    providerResourceType: "AWS::EC2::RouteTableAssociation",
+    providerResourceId: "rtbassoc-main-subnet",
+    displayName: "rtbassoc-main-subnet",
+    resourceType: "ROUTE_TABLE_ASSOCIATION",
+    config: {
+      routeTableAssociationId: "rtbassoc-main-subnet",
+      subnetId: "subnet-main",
+      routeTableId: "rtb-main",
+      main: false
+    },
+    relationships: [
+      {
+        type: "connects_to",
+        targetResourceId: "resource-subnet-main",
+        label: "attached_to"
+      },
+      {
+        type: "depends_on",
+        targetResourceId: "resource-rtb-main",
+        label: "depends_on"
+      }
+    ]
+  });
+  scanResult.importSuggestions = [
+    {
+      id: "import-resource-route-table-association",
+      resourceId: "resource-route-table-association",
+      status: "ready",
+      handoffReady: true,
+      terraformAddress:
+        "aws_route_table_association.resource_route_table_association",
+      importCommand:
+        "terraform import aws_route_table_association.resource_route_table_association subnet-main/rtb-main"
+    }
+  ];
+
+  const targets = await resolveVerifiedImportTargets(
+    {
+      projectId: "project-1",
+      accessContext,
+      diagramJson: diagram({
+        id: "resource-route-table-association",
+        resourceType: "aws_route_table_association",
+        resourceName: "resource_route_table_association"
+      })
+    },
+    repositoryWith(scanResult)
+  );
+
+  assert.deepEqual(targets, []);
+});
+
 function repositoryWith(
   scanResult: ReverseEngineeringScanResult,
   overrides: Partial<{ id: string; projectId: string; status: string }> = {}

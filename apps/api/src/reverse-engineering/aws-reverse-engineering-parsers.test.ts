@@ -1,6 +1,96 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseSecurityGroupsFromXml } from "./aws-reverse-engineering-parsers.js";
+import {
+  parseRouteTablesFromXml,
+  parseSecurityGroupsFromXml
+} from "./aws-reverse-engineering-parsers.js";
+
+test("Route Table XML에서 테이블과 subnet/main/gateway association을 각각 보존한다", () => {
+  const records = parseRouteTablesFromXml(
+    `<DescribeRouteTablesResponse>
+      <routeTableSet>
+        <item>
+          <routeTableId>rtb-main</routeTableId>
+          <vpcId>vpc-main</vpcId>
+          <routeSet>
+            <item>
+              <destinationCidrBlock>10.0.0.0/16</destinationCidrBlock>
+              <gatewayId>local</gatewayId>
+              <state>active</state>
+            </item>
+          </routeSet>
+          <associationSet>
+            <item>
+              <routeTableAssociationId>rtbassoc-subnet</routeTableAssociationId>
+              <routeTableId>rtb-main</routeTableId>
+              <subnetId>subnet-main</subnetId>
+              <main>false</main>
+            </item>
+            <item>
+              <routeTableAssociationId>rtbassoc-main</routeTableAssociationId>
+              <routeTableId>rtb-main</routeTableId>
+              <main>true</main>
+            </item>
+            <item>
+              <routeTableAssociationId>rtbassoc-gateway</routeTableAssociationId>
+              <routeTableId>rtb-main</routeTableId>
+              <gatewayId>igw-main</gatewayId>
+              <main>false</main>
+            </item>
+          </associationSet>
+        </item>
+      </routeTableSet>
+    </DescribeRouteTablesResponse>`,
+    "ap-northeast-2"
+  );
+
+  assert.equal(records.length, 4);
+  const [routeTable, subnetAssociation, mainAssociation, gatewayAssociation] = records;
+  assert.equal(routeTable?.providerResourceType, "AWS::EC2::RouteTable");
+  assert.equal(routeTable?.providerResourceId, "rtb-main");
+  assert.deepEqual(routeTable?.config["associations"], [
+    {
+      routeTableAssociationId: "rtbassoc-subnet",
+      subnetId: "subnet-main",
+      main: false
+    },
+    { routeTableAssociationId: "rtbassoc-main", main: true },
+    { routeTableAssociationId: "rtbassoc-gateway", main: false }
+  ]);
+
+  assert.deepEqual(subnetAssociation, {
+    providerResourceType: "AWS::EC2::RouteTableAssociation",
+    providerResourceId: "rtbassoc-subnet",
+    displayName: "rtbassoc-subnet",
+    region: "ap-northeast-2",
+    config: {
+      routeTableAssociationId: "rtbassoc-subnet",
+      subnetId: "subnet-main",
+      routeTableId: "rtb-main",
+      main: false
+    },
+    relationships: [
+      { type: "attached_to", targetProviderResourceId: "subnet-main" },
+      { type: "depends_on", targetProviderResourceId: "rtb-main" }
+    ]
+  });
+  assert.deepEqual(mainAssociation?.config, {
+    routeTableAssociationId: "rtbassoc-main",
+    routeTableId: "rtb-main",
+    main: true
+  });
+  assert.deepEqual(mainAssociation?.relationships, [
+    { type: "depends_on", targetProviderResourceId: "rtb-main" }
+  ]);
+  assert.deepEqual(gatewayAssociation?.config, {
+    routeTableAssociationId: "rtbassoc-gateway",
+    routeTableId: "rtb-main",
+    main: false
+  });
+  assert.deepEqual(gatewayAssociation?.relationships, [
+    { type: "depends_on", targetProviderResourceId: "rtb-main" }
+  ]);
+});
 
 test("Security Group XML의 모든 source와 설명을 손실 없이 별도 규칙으로 보존한다", () => {
   const [securityGroup] = parseSecurityGroupsFromXml(

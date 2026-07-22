@@ -197,6 +197,7 @@ test("배포 토폴로지 서비스 이름을 짧고 쉽게 표시한다", () =>
       [
         "AWS::EC2::EIP",
         "AWS::EC2::NatGateway",
+        "AWS::EC2::RouteTableAssociation",
         "AWS::EC2::SubnetRouteTableAssociation",
         "AWS::ElasticLoadBalancingV2::TargetGroup",
         "AWS::ElasticLoadBalancingV2::Listener",
@@ -212,6 +213,7 @@ test("배포 토폴로지 서비스 이름을 짧고 쉽게 표시한다", () =>
     {
       "AWS::EC2::EIP": "고정 공인 IP",
       "AWS::EC2::NatGateway": "NAT 게이트웨이",
+      "AWS::EC2::RouteTableAssociation": "서브넷 경로 연결",
       "AWS::EC2::SubnetRouteTableAssociation": "서브넷 경로 연결",
       "AWS::ElasticLoadBalancingV2::TargetGroup": "로드 밸런서 대상 그룹",
       "AWS::ElasticLoadBalancingV2::Listener": "로드 밸런서 요청 연결",

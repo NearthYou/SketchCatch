@@ -200,6 +200,125 @@ test("실제 Query parser의 완전한 fixture는 핵심 리소스 import 준비
   assert.ok(result.importSuggestions.every((suggestion) => suggestion.handoffReady));
 });
 
+test("Subnet Route Table Association import ID는 association ID 대신 subnet/table 조합을 사용한다", async () => {
+  const result = await scan(completeRouteTableAssociationRecords());
+  const association = result.discoveredResources.find(
+    (resource) => resource.resourceType === "ROUTE_TABLE_ASSOCIATION"
+  );
+  assert.ok(association);
+  const suggestion = result.importSuggestions.find(
+    (candidate) => candidate.resourceId === association.id
+  );
+
+  assert.equal(suggestion?.status, "ready");
+  assert.equal(suggestion?.handoffReady, true);
+  assert.match(suggestion?.terraformAddress ?? "", /^aws_route_table_association\./u);
+  assert.equal(
+    suggestion?.importCommand,
+    `terraform import ${suggestion.terraformAddress} subnet-main/rtb-main`
+  );
+  assert.doesNotMatch(suggestion?.importCommand ?? "", /rtbassoc-main-subnet$/u);
+});
+
+test("main/gateway 및 같은 scan 대상이 빠진 Association은 보존하되 Terraform identity와 import를 닫는다", async () => {
+  const scenarios: Array<{
+    name: string;
+    records: AwsDiscoveredResourceRecord[];
+    config: Record<string, unknown>;
+  }> = [
+    {
+      name: "main association",
+      records: completeRouteTableAssociationRecords().slice(0, 2),
+      config: {
+        routeTableAssociationId: "rtbassoc-main",
+        routeTableId: "rtb-main",
+        main: true
+      }
+    },
+    {
+      name: "gateway association",
+      records: completeRouteTableAssociationRecords().slice(0, 2),
+      config: {
+        routeTableAssociationId: "rtbassoc-gateway",
+        routeTableId: "rtb-main",
+        main: false
+      }
+    },
+    {
+      name: "missing same-scan subnet",
+      records: completeRouteTableAssociationRecords().slice(1, 2),
+      config: {
+        routeTableAssociationId: "rtbassoc-missing-subnet",
+        subnetId: "subnet-main",
+        routeTableId: "rtb-main",
+        main: false
+      }
+    },
+    {
+      name: "missing same-scan route table",
+      records: completeRouteTableAssociationRecords().slice(0, 1),
+      config: {
+        routeTableAssociationId: "rtbassoc-missing-table",
+        subnetId: "subnet-main",
+        routeTableId: "rtb-main",
+        main: false
+      }
+    },
+    {
+      name: "missing route table ID",
+      records: completeRouteTableAssociationRecords().slice(0, 1),
+      config: {
+        routeTableAssociationId: "rtbassoc-no-table-id",
+        subnetId: "subnet-main",
+        main: false
+      }
+    }
+  ];
+
+  for (const scenario of scenarios) {
+    const associationId = String(scenario.config["routeTableAssociationId"]);
+    const result = await scan([
+      ...scenario.records,
+      record("AWS::EC2::RouteTableAssociation", associationId, scenario.config, [
+        ...(typeof scenario.config["subnetId"] === "string"
+          ? [{ type: "attached_to" as const, targetProviderResourceId: scenario.config["subnetId"] }]
+          : []),
+        ...(typeof scenario.config["routeTableId"] === "string"
+          ? [{ type: "depends_on" as const, targetProviderResourceId: scenario.config["routeTableId"] }]
+          : [])
+      ])
+    ]);
+    const association = result.discoveredResources.find(
+      (resource) => resource.providerResourceId === associationId
+    );
+    assert.ok(association, scenario.name);
+    assert.equal(association.resourceType, "ROUTE_TABLE_ASSOCIATION", scenario.name);
+    const node = result.architectureJson.nodes.find(
+      (candidate) => candidate.id === association.id
+    );
+    const suggestion = result.importSuggestions.find(
+      (candidate) => candidate.resourceId === association.id
+    );
+    const exclusion = result.analysisExclusions.find(
+      (candidate) => candidate.resourceId === association.id
+    );
+
+    assert.equal(association.analysisExcluded, true, scenario.name);
+    assert.equal(association.importSuggestionStatus, "manual_review", scenario.name);
+    assert.equal(node?.config["reverseEngineeringManagement"], "needs_mapping", scenario.name);
+    assert.equal(node?.config["terraformBlockType"], undefined, scenario.name);
+    assert.equal(node?.config["terraformResourceType"], undefined, scenario.name);
+    assert.equal(node?.config["terraformResourceName"], undefined, scenario.name);
+    assert.equal(suggestion?.status, "manual_review", scenario.name);
+    assert.equal(suggestion?.handoffReady, false, scenario.name);
+    assert.equal(suggestion?.terraformAddress, undefined, scenario.name);
+    assert.equal(suggestion?.importCommand, undefined, scenario.name);
+    assert.equal(suggestion?.terraformBlockDraft, undefined, scenario.name);
+    assert.equal(exclusion?.reason, "missing_required_data", scenario.name);
+    assert.match(exclusion?.message ?? "", /Subnet과 Route Table/u, scenario.name);
+  }
+});
+
 // gg: 각 핵심 타입이 안전한 import에 필요한 최소 관찰값을 갖춘 fixture를 한곳에서 관리합니다.
 function completeCoreRecords(): AwsDiscoveredResourceRecord[] {
   return [
@@ -275,11 +394,42 @@ function completeCoreRecords(): AwsDiscoveredResourceRecord[] {
   ];
 }
 
+function completeRouteTableAssociationRecords(): AwsDiscoveredResourceRecord[] {
+  return [
+    record("AWS::EC2::Subnet", "subnet-main", {
+      vpcId: "vpc-main",
+      cidrBlock: "10.0.1.0/24",
+      availabilityZone: "ap-northeast-2a",
+      mapPublicIpOnLaunch: false,
+      assignIpv6AddressOnCreation: false
+    }),
+    record("AWS::EC2::RouteTable", "rtb-main", {
+      vpcId: "vpc-main",
+      routes: [{ destinationCidrBlock: "10.0.0.0/16", gatewayId: "local" }]
+    }),
+    record(
+      "AWS::EC2::RouteTableAssociation",
+      "rtbassoc-main-subnet",
+      {
+        routeTableAssociationId: "rtbassoc-main-subnet",
+        subnetId: "subnet-main",
+        routeTableId: "rtb-main",
+        main: false
+      },
+      [
+        { type: "attached_to", targetProviderResourceId: "subnet-main" },
+        { type: "depends_on", targetProviderResourceId: "rtb-main" }
+      ]
+    )
+  ];
+}
+
 // gg: private scan과 같은 원본 ID를 쓰는 단순 gateway fixture를 만듭니다.
 function record(
   providerResourceType: string,
   providerResourceId: string,
-  config: Record<string, unknown>
+  config: Record<string, unknown>,
+  relationships: AwsDiscoveredResourceRecord["relationships"] = []
 ): AwsDiscoveredResourceRecord {
   return {
     providerResourceType,
@@ -287,7 +437,7 @@ function record(
     displayName: providerResourceId,
     region,
     config,
-    relationships: []
+    relationships
   };
 }
 
