@@ -34,6 +34,7 @@ export type AwsKmsServerOnlyDetail =
       readonly terraformImportId: string;
       readonly keyId?: string;
       readonly policyDocument?: string;
+      readonly tags?: readonly KmsTag[];
     }
   | {
       readonly providerResourceId: string;
@@ -75,6 +76,16 @@ type KmsDetailResult = {
 type CreatedKmsAliasRecord = {
   readonly record: AwsDiscoveredResourceRecord;
   readonly serverOnlyDetail: AwsKmsServerOnlyDetail;
+};
+
+type KmsTag = {
+  readonly key: string;
+  readonly value: string;
+};
+
+type KmsRotationStatus = {
+  readonly enabled: boolean;
+  readonly periodInDays?: number;
 };
 
 /**
@@ -153,9 +164,22 @@ async function readAllAliases(
         NextMarker?: string;
         Truncated?: boolean;
       };
-      aliases.push(...(response.Aliases ?? []));
-      if (!response.Truncated) return { aliases, complete: true };
-      if (!response.NextMarker) {
+      const pageAliases = response.Aliases ?? [];
+      if (
+        pageAliases.some(
+          (alias) =>
+            !isNonEmptyString(alias.AliasName) ||
+            (!isNonEmptyString(alias.TargetKeyId) && !alias.AliasName.startsWith("alias/aws/"))
+        )
+      ) {
+        failures.push({ operation: "ListAliasesResponse", outcome: "transient" });
+        return { aliases, complete: false };
+      }
+      aliases.push(...pageAliases);
+      if (response.Truncated === false && response.NextMarker === undefined) {
+        return { aliases, complete: true };
+      }
+      if (response.Truncated !== true || !isNonEmptyString(response.NextMarker)) {
         failures.push({ operation: "ListAliasesPagination", outcome: "transient" });
         return { aliases, complete: false };
       }
@@ -188,9 +212,16 @@ async function readAllKeys(
         NextMarker?: string;
         Truncated?: boolean;
       };
-      keys.push(...(response.Keys ?? []));
-      if (!response.Truncated) return { keys, complete: true };
-      if (!response.NextMarker) {
+      const pageKeys = response.Keys ?? [];
+      if (pageKeys.some((key) => !isNonEmptyString(key.KeyId))) {
+        failures.push({ operation: "ListKeysResponse", outcome: "transient" });
+        return { keys, complete: false };
+      }
+      keys.push(...pageKeys);
+      if (response.Truncated === false && response.NextMarker === undefined) {
+        return { keys, complete: true };
+      }
+      if (response.Truncated !== true || !isNonEmptyString(response.NextMarker)) {
         failures.push({ operation: "ListKeysPagination", outcome: "transient" });
         return { keys, complete: false };
       }
@@ -239,15 +270,15 @@ async function readKeyDetails(input: {
     "GetKeyPolicy",
     providerResourceId,
     input.failures,
-    (response) => (response as { Policy?: string }).Policy
+    selectKmsPolicyDocument
   );
-  const rotationEnabled = await readKmsDetail<boolean>(
+  const rotationStatus = await readKmsDetail<KmsRotationStatus>(
     input.client,
     new GetKeyRotationStatusCommand({ KeyId: resolvedKeyId ?? providerResourceId }),
     "GetKeyRotationStatus",
     providerResourceId,
     input.failures,
-    (response) => (response as { KeyRotationEnabled?: boolean }).KeyRotationEnabled
+    selectKmsRotationStatus
   );
   const tags = await readAllKeyTags(
     input.client,
@@ -258,7 +289,7 @@ async function readKeyDetails(input: {
   const detailsComplete =
     metadata !== undefined &&
     policyDocument !== undefined &&
-    rotationEnabled !== undefined &&
+    rotationStatus !== undefined &&
     tags.complete &&
     input.aliasesComplete &&
     input.keysComplete;
@@ -279,13 +310,18 @@ async function readKeyDetails(input: {
       resourceKind: "key",
       terraformImportId: resolvedKeyId ?? providerResourceId,
       ...(resolvedKeyId ? { keyId: resolvedKeyId } : {}),
-      ...(policyDocument !== undefined ? { policyDocument } : {})
+      ...(policyDocument !== undefined ? { policyDocument } : {}),
+      ...(tags.complete ? { tags: tags.values } : {})
     },
     record: {
       providerResourceType: "AWS::KMS::Key",
       providerResourceId,
-      displayName:
-        input.aliasNames[0] ?? metadata?.Description ?? resolvedKeyId ?? providerResourceId,
+      displayName: createKmsKeyDisplayName({
+        aliasNames: input.aliasNames,
+        description: metadata?.Description,
+        keyId: resolvedKeyId,
+        providerResourceId
+      }),
       region: input.region,
       config: {
         description: metadata?.Description,
@@ -303,9 +339,10 @@ async function readKeyDetails(input: {
         policyReadComplete: policyDocument !== undefined,
         reverseEngineeringDetailsComplete: detailsComplete,
         reverseEngineeringDetailsVersion: 1,
-        rotationEnabled,
-        rotationReadComplete: rotationEnabled !== undefined,
-        tags: tags.values,
+        rotationEnabled: rotationStatus?.enabled,
+        rotationPeriodInDays: rotationStatus?.periodInDays,
+        rotationReadComplete: rotationStatus !== undefined,
+        tagCount: tags.complete ? tags.values.length : undefined,
         tagsReadComplete: tags.complete
       },
       relationships: []
@@ -319,8 +356,9 @@ async function readAllKeyTags(
   keyId: string,
   providerResourceId: string,
   failures: AwsKmsReadFailure[]
-): Promise<{ readonly values: Array<{ key: string; value: string }>; readonly complete: boolean }> {
-  const values: Array<{ key: string; value: string }> = [];
+): Promise<{ readonly values: KmsTag[]; readonly complete: boolean }> {
+  const values: KmsTag[] = [];
+  const seenTagKeys = new Set<string>();
   const seenMarkers = new Set<string>();
   let marker: string | undefined;
 
@@ -333,13 +371,30 @@ async function readAllKeyTags(
         NextMarker?: string;
         Truncated?: boolean;
       };
-      values.push(
-        ...(response.Tags ?? []).flatMap((tag) =>
-          tag.TagKey && tag.TagValue !== undefined ? [{ key: tag.TagKey, value: tag.TagValue }] : []
-        )
-      );
-      if (!response.Truncated) return { values, complete: true };
-      if (!response.NextMarker) {
+      const pageTags = response.Tags ?? [];
+      for (const tag of pageTags) {
+        if (
+          !isNonEmptyString(tag.TagKey) ||
+          typeof tag.TagValue !== "string" ||
+          seenTagKeys.has(tag.TagKey)
+        ) {
+          failures.push({
+            operation: "ListResourceTagsResponse",
+            outcome: "transient",
+            resourceId: createKmsFailureResourceRef(providerResourceId)
+          });
+          return { values, complete: false };
+        }
+        seenTagKeys.add(tag.TagKey);
+        values.push({ key: tag.TagKey, value: tag.TagValue });
+      }
+      if (response.Truncated === false && response.NextMarker === undefined) {
+        return {
+          values: values.sort((left, right) => left.key.localeCompare(right.key)),
+          complete: true
+        };
+      }
+      if (response.Truncated !== true || !isNonEmptyString(response.NextMarker)) {
         failures.push({
           operation: "ListResourceTagsPagination",
           outcome: "transient",
@@ -378,7 +433,14 @@ async function readKmsDetail<T>(
   select: (response: unknown) => T | undefined
 ): Promise<T | undefined> {
   try {
-    return select(await client.send(command));
+    const selected = select(await client.send(command));
+    if (selected !== undefined) return selected;
+    failures.push({
+      operation: `${operation}Response`,
+      outcome: "transient",
+      ...(resourceId ? { resourceId: createKmsFailureResourceRef(resourceId) } : {})
+    });
+    return undefined;
   } catch (error) {
     failures.push({
       operation,
@@ -387,6 +449,55 @@ async function readKmsDetail<T>(
     });
     return undefined;
   }
+}
+
+function selectKmsPolicyDocument(response: unknown): string | undefined {
+  const policy = (response as { Policy?: unknown }).Policy;
+  if (typeof policy !== "string" || policy.trim().length === 0) return undefined;
+  try {
+    const parsed = JSON.parse(policy) as unknown;
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? policy : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function selectKmsRotationStatus(response: unknown): KmsRotationStatus | undefined {
+  const value = response as {
+    KeyRotationEnabled?: unknown;
+    RotationPeriodInDays?: unknown;
+  };
+  if (typeof value.KeyRotationEnabled !== "boolean") return undefined;
+  const period = value.RotationPeriodInDays;
+  if (period !== undefined && !isKmsRotationPeriod(period)) return undefined;
+  if (value.KeyRotationEnabled && period === undefined) return undefined;
+  return {
+    enabled: value.KeyRotationEnabled,
+    ...(typeof period === "number" ? { periodInDays: period } : {})
+  };
+}
+
+function isKmsRotationPeriod(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 90 && value <= 2560;
+}
+
+function createKmsKeyDisplayName(input: {
+  readonly aliasNames: readonly string[];
+  readonly description: string | undefined;
+  readonly keyId: string | undefined;
+  readonly providerResourceId: string;
+}): string {
+  const displayCandidate = [...input.aliasNames, input.description].find(
+    (candidate): candidate is string =>
+      isNonEmptyString(candidate) && (!input.keyId || !candidate.includes(input.keyId))
+  );
+  if (displayCandidate) return displayCandidate;
+  const suffix = createHash("sha256").update(input.providerResourceId).digest("hex").slice(0, 7);
+  return `KMS Key · ${suffix}`;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
 }
 
 /** gg: 실패 응답에서는 AWS 계정·Key ID를 숨기면서 같은 리소스를 추적할 안정 참조값만 만듭니다. */
