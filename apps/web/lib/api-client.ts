@@ -542,7 +542,7 @@ function sanitizeDeveloperCause(value: string): string {
 function getKoreanApiMessage(error: ApiClientError, fallbackMessage: string): string {
   if (error.code === "github_app_permission_required") {
     if (error.message.includes("environments or Actions variables")) {
-      return "GitHub App 권한이 부족해서 repository settings를 적용할 수 없습니다. GitHub App repository permissions에서 Administration 권한과 Variables 권한을 Read and write로 승인한 뒤 다시 시도해주세요.";
+      return "GitHub App 권한이 부족해서 repository settings를 적용할 수 없습니다. Administration과 Variables는 Read and write, Actions는 Read-only로 승인한 뒤 다시 시도해주세요.";
     }
 
     if (error.message.includes("credentials are not configured")) {

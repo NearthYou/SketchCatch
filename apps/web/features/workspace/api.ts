@@ -1982,6 +1982,19 @@ export async function createGitCicdHandoff({
   return response.handoff;
 }
 
+export async function setupGitCicdHandoff(handoffId: string): Promise<GitCicdHandoff> {
+  const response = await apiFetch<GitCicdHandoffResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/setup`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+
+  return response.handoff;
+}
+
 export async function applyGitCicdRepositorySettings(
   handoffId: string
 ): Promise<GitCicdRepositorySettingsApplyResponse> {

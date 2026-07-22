@@ -67,11 +67,20 @@ export function createGitHubRepositorySettingsApplier(
           owner: sourceRepository.owner,
           name: sourceRepository.name,
           environmentName: preview.environmentName,
-          variables: removeBlankVariableValues(preview.variables)
+          targetBranch: handoff.targetBranch,
+          variables: preview.variables
         });
+
+        if (result.verified !== true) {
+          throw new GitCicdRepositorySettingsConflictError(
+            "GitHub repository settings could not be verified after applying them"
+          );
+        }
 
         return {
           applied: true,
+          appliedAt: new Date().toISOString(),
+          verified: true,
           environmentName: result.environmentName,
           variables: result.variables,
           secrets: preview.secrets,
@@ -80,7 +89,7 @@ export function createGitHubRepositorySettingsApplier(
       } catch (error) {
         if (isGitHubPermissionError(error)) {
           throw new GitCicdRepositorySettingsPermissionError(
-            "GitHub App does not have permission to create environments or Actions variables. Approve Administration and Variables repository permissions as Read and write."
+            "GitHub App does not have permission to manage environments, branch policies, or Actions variables. Approve Administration and Variables as Read and write, and Actions as Read-only."
           );
         }
 
@@ -122,6 +131,11 @@ export async function applyGitCicdRepositorySettings(
     );
   }
 
+  const preview = handoff.repositorySettingsPreview;
+  if (!preview) {
+    throw new GitCicdHandoffNotFoundError("Git/CI/CD repository settings preview not found");
+  }
+
   const sourceRepository = await repository.findSourceRepositoryById(
     handoff.sourceRepositoryId,
     handoff.projectId
@@ -132,6 +146,34 @@ export async function applyGitCicdRepositorySettings(
   }
 
   const result = await applier.applyRepositorySettings({ handoff, sourceRepository });
+
+  if (result.applied !== true || result.verified !== true) {
+    throw new GitCicdRepositorySettingsConflictError(
+      "Repository settings must be applied and verified before handoff setup can continue"
+    );
+  }
+
+  if (!repository.updateHandoffAutomationMetadata) {
+    throw new GitCicdRepositorySettingsConflictError(
+      "Repository settings evidence storage is not available"
+    );
+  }
+
+  const updatedHandoff = await repository.updateHandoffAutomationMetadata(handoff.id, {
+    repositorySettingsPreview: {
+      ...preview,
+      applied: true,
+      appliedAt: result.appliedAt,
+      verified: true
+    }
+  });
+
+  if (updatedHandoff?.repositorySettingsPreview?.verified !== true) {
+    throw new GitCicdRepositorySettingsConflictError(
+      "Repository settings verification evidence was not persisted"
+    );
+  }
+
   return result;
 }
 
@@ -164,12 +206,4 @@ function isGitHubPermissionError(error: unknown): boolean {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
-}
-
-function removeBlankVariableValues(variables: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(variables).filter(
-      ([, value]) => typeof value === "string" && value.trim().length > 0
-    )
-  );
 }
