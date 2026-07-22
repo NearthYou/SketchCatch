@@ -73,6 +73,19 @@ test("Live Observation clears an old incident result when the Deployment or sess
   }
 });
 
+test("Live Observation opens and highlights the exact saved Terraform location", () => {
+  const openCallback = sourceBlock(
+    rightPanelSource,
+    "const openLiveObservationTerraformEditor",
+    "const updateLiveObservationDeployment"
+  );
+
+  assert.match(openCallback, /openTerraformIssueSourceLocation\(\{/);
+  assert.match(openCallback, /fileName: liveObservationAppliedTerraformUpdate\.fileName/);
+  assert.match(openCallback, /line: liveObservationAppliedTerraformUpdate\.line/);
+  assert.match(openCallback, /resourceAddress: liveObservationAppliedTerraformUpdate\.address/);
+});
+
 function sourceBlock(source: string, startMarker: string, endMarker: string): string {
   const start = source.indexOf(startMarker);
   const end = source.indexOf(endMarker, start);

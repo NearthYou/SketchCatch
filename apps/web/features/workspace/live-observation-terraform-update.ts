@@ -5,6 +5,7 @@ export type LiveObservationTerraformUpdateResult = {
   readonly address: string;
   readonly fileName: string;
   readonly files: readonly TerraformSyncFileInput[];
+  readonly line: number;
   readonly nextMaxCapacity: number;
   readonly previousMaxCapacity: number;
 };
@@ -119,6 +120,7 @@ export function incrementLiveObservationEcsMaxCapacity(
     address: target.address,
     fileName: target.fileName,
     files: nextFiles,
+    line: file.terraformCode.slice(0, valueStart).split(/\r\n|\r|\n/u).length,
     nextMaxCapacity,
     previousMaxCapacity
   };
