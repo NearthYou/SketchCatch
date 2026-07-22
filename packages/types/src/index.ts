@@ -2062,8 +2062,8 @@ export type DeploymentPlanSummary = {
   replaceCount: number;
   /** Older persisted summaries omit this field and are interpreted as zero imports. */
   importCount?: number;
-  /** Older import summaries without this marker must be regenerated before reuse or approval. */
-  importSafetyGateVersion?: 1;
+  /** Import summaries with a missing or older marker must be regenerated before reuse or approval. */
+  importSafetyGateVersion?: 1 | 2;
   blocked: boolean;
   warnings: DeploymentPlanWarning[];
 };

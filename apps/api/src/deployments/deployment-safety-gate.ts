@@ -16,7 +16,7 @@ import {
 } from "./deployment-plan-summary.js";
 
 export type DeploymentSafetyGateOperation = "apply" | "destroy";
-export const terraformImportSafetyGateVersion = 1 as const;
+export const terraformImportSafetyGateVersion = 2 as const;
 
 export type EvaluateDeploymentSafetyGateInput = {
   operation: DeploymentSafetyGateOperation;
@@ -96,7 +96,7 @@ function isSafeTerraformImportChange(change: TerraformImportChange): boolean {
     change.address !== null &&
     change.importingMetadataValid &&
     change.actions !== null &&
-    (isSameActions(change.actions, ["no-op"]) || isSameActions(change.actions, ["update"]))
+    isSameActions(change.actions, ["no-op"])
   );
 }
 

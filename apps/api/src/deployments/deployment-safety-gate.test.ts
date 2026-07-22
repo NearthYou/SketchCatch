@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { CheckFinding, DeploymentPlanSummary, DeploymentPlanWarning } from "@sketchcatch/types";
-import { evaluateDeploymentSafetyGate } from "./deployment-safety-gate.js";
+import {
+  evaluateDeploymentSafetyGate,
+  requiresTerraformImportSafetyReplan
+} from "./deployment-safety-gate.js";
 
 test("evaluateDeploymentSafetyGate records high risk findings without blocking plan state", () => {
   const summary = evaluateDeploymentSafetyGate({
@@ -234,10 +237,10 @@ test("evaluateDeploymentSafetyGate deduplicates warnings by stable id", () => {
   assert.equal(summary.warnings[0]?.message, "Subnet review: Review generated subnet CIDR");
 });
 
-test("evaluateDeploymentSafetyGate keeps import-only and import-update plans approvable", () => {
+test("evaluateDeploymentSafetyGate keeps import-only plans approvable", () => {
   const summary = evaluateDeploymentSafetyGate({
     operation: "apply",
-    planSummary: createPlanSummary({ importCount: 2 }),
+    planSummary: createPlanSummary({ importCount: 1 }),
     terraformShowJson: createTerraformShowJson([
       {
         address: "aws_s3_bucket.import_only",
@@ -245,13 +248,55 @@ test("evaluateDeploymentSafetyGate keeps import-only and import-update plans app
           actions: ["no-op"],
           importing: { id: "import-only-bucket" }
         }
-      },
+      }
+    ])
+  });
+
+  assert.equal(summary.blocked, false);
+  assert.equal(summary.importSafetyGateVersion, 2);
+});
+
+test("requiresTerraformImportSafetyReplan invalidates version 1 import plans", () => {
+  assert.equal(
+    requiresTerraformImportSafetyReplan(
+      createPlanSummary({ importCount: 1, importSafetyGateVersion: 1 })
+    ),
+    true
+  );
+  assert.equal(
+    requiresTerraformImportSafetyReplan(
+      createPlanSummary({ importCount: 1, importSafetyGateVersion: 2 })
+    ),
+    false
+  );
+});
+
+test("evaluateDeploymentSafetyGate blocks updates that are part of the initial import", () => {
+  const summary = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    planSummary: createPlanSummary({ importCount: 1 }),
+    terraformShowJson: createTerraformShowJson([
       {
         address: "aws_s3_bucket.import_update",
         change: {
           actions: ["update"],
           importing: { id: "import-update-bucket" }
         }
+      }
+    ])
+  });
+
+  assert.equal(summary.blocked, true);
+});
+
+test("evaluateDeploymentSafetyGate keeps ordinary updates approvable after import", () => {
+  const summary = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    planSummary: createPlanSummary({ updateCount: 1 }),
+    terraformShowJson: createTerraformShowJson([
+      {
+        address: "aws_s3_bucket.already_imported",
+        change: { actions: ["update"] }
       }
     ])
   });

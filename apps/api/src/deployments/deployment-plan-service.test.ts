@@ -2233,7 +2233,7 @@ test("runDeploymentPlan replans a legacy pending import plan without safety-gate
 
   assert.deepEqual(runnerStages, ["init", "plan", "show-json"]);
   assert.equal(result.optimization.outcome, "execute");
-  assert.equal(result.deployment.planSummary?.importSafetyGateVersion, 1);
+  assert.equal(result.deployment.planSummary?.importSafetyGateVersion, 2);
   assert.equal(result.deployment.isBlocked, false);
   assert.equal(repository.savedPlans.length, 1);
 });
@@ -2602,9 +2602,9 @@ test("runDeploymentPlan persists a deterministic risk block only for unsafe impo
               change: { actions: ["create"], importing: { id: "z-existing" } }
             },
             {
-              address: "aws_s3_bucket.safe_update",
+              address: "aws_s3_bucket.import_update",
               type: "aws_s3_bucket",
-              change: { actions: ["update"], importing: { id: "safe-update" } }
+              change: { actions: ["update"], importing: { id: "import-update" } }
             },
             {
               address: "aws_s3_bucket.ordinary_delete",
@@ -2625,9 +2625,9 @@ test("runDeploymentPlan persists a deterministic risk block only for unsafe impo
   );
 
   const blockedReason =
-    "Terraform import plan includes unsafe changes for existing resources: aws_instance.a_existing [delete,create]; aws_s3_bucket.z_existing [create]";
+    "Terraform import plan includes unsafe changes for existing resources: aws_instance.a_existing [delete,create]; aws_s3_bucket.import_update [update]; aws_s3_bucket.z_existing [create]";
   assert.equal(result.deployment.planSummary?.importCount, 3);
-  assert.equal(result.deployment.planSummary?.importSafetyGateVersion, 1);
+  assert.equal(result.deployment.planSummary?.importSafetyGateVersion, 2);
   assert.equal(result.deployment.planSummary?.blocked, true);
   assert.equal(result.deployment.isBlocked, true);
   assert.equal(result.deployment.blockedBy, "risk_analysis");
