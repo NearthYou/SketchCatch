@@ -370,7 +370,7 @@ export function createAwsProviderAdapter(
       const discoveryResult = normalizeDiscoveryResult(await gateway.discoverResources(input));
       const scanErrors = sanitizeReverseEngineeringScanErrors(discoveryResult.scanErrors);
       const { coverage } = createReverseEngineeringPublicCoverage(scanErrors);
-      const records = discoveryResult.records;
+      const records = filterMultiplexedReaderRecordsForOutput(input, discoveryResult.records);
       const idMap = createResourceIdMap(records);
       const displayNameMap = createAwsResourceDisplayNameMap(records);
       const baseDiscoveredResources = records.map((record) =>
@@ -429,6 +429,23 @@ function createReverseEngineeringDraft(
     editableValueKeys: [...REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS],
     createdAt: scan.createdAt
   };
+}
+
+// Association reader가 함께 반환한 record는 직접 선택했거나 ALL일 때만 최종 결과로 승격합니다.
+function filterMultiplexedReaderRecordsForOutput(
+  input: AwsProviderScanInput,
+  records: readonly AwsDiscoveredResourceRecord[]
+): AwsDiscoveredResourceRecord[] {
+  if (
+    input.resourceTypes.includes("ALL") ||
+    input.resourceTypes.includes("ROUTE_TABLE_ASSOCIATION")
+  ) {
+    return [...records];
+  }
+
+  return records.filter(
+    (record) => record.providerResourceType !== "AWS::EC2::RouteTableAssociation"
+  );
 }
 
 // 예전 gateway 배열 응답과 새 부분 실패 응답을 같은 모양으로 맞춥니다.

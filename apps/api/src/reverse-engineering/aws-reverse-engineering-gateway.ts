@@ -3792,7 +3792,8 @@ export function shouldReadResourceGroup(input: AwsProviderScanInput, resourceTyp
   return (
     input.resourceTypes.includes("ALL") ||
     input.resourceTypes.includes(resourceType) ||
-    (resourceType === "ROUTE_TABLE" && input.resourceTypes.includes("ROUTE_TABLE_ASSOCIATION"))
+    ((resourceType === "ROUTE_TABLE" || resourceType === "SUBNET") &&
+      input.resourceTypes.includes("ROUTE_TABLE_ASSOCIATION"))
   );
 }
 

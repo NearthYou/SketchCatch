@@ -61,7 +61,11 @@ import {
   shouldReadResourceGroup,
   uniqueDiscoveredRecordsByProviderId
 } from "./aws-reverse-engineering-gateway.js";
-import { parseAwsQueryPaginationToken } from "./aws-reverse-engineering-parsers.js";
+import {
+  parseAwsQueryPaginationToken,
+  parseRouteTablesFromXml,
+  parseSubnetsFromXml
+} from "./aws-reverse-engineering-parsers.js";
 
 const credentials: TerraformAwsCredentialEnv = {
   AWS_ACCESS_KEY_ID: "fixture-access-key",
@@ -70,13 +74,14 @@ const credentials: TerraformAwsCredentialEnv = {
 };
 
 async function scanGatewayRecords(
-  records: AwsDiscoveredResourceRecord[]
+  records: AwsDiscoveredResourceRecord[],
+  resourceTypes: AwsProviderScanInput["resourceTypes"] = ["ALL"]
 ): Promise<ReverseEngineeringScanResult> {
   return createAwsProviderAdapter({
     async discoverResources() {
       return records;
     }
-  }).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
+  }).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes });
 }
 
 function safeRecord(
@@ -538,6 +543,120 @@ test("Route Table Association 직접 선택과 ALL은 기존 DescribeRouteTables
       ["AWS::EC2::RouteTable", "rtb-main"],
       ["AWS::EC2::RouteTableAssociation", "rtbassoc-main-subnet"]
     ]
+  );
+});
+
+test("Route Table Association 단독 선택은 Route Table과 Subnet을 dependency로 읽어 ready 결과를 만든다", async () => {
+  const input = scanInput(["ROUTE_TABLE_ASSOCIATION"]);
+  const readsRouteTables = shouldReadResourceGroup(input, "ROUTE_TABLE");
+  const readsSubnets = shouldReadResourceGroup(input, "SUBNET");
+  const records = [
+    ...(readsSubnets
+      ? parseSubnetsFromXml(
+          `<DescribeSubnetsResponse>
+            <subnetSet>
+              <item>
+                <subnetId>subnet-main</subnetId>
+                <vpcId>vpc-main</vpcId>
+                <cidrBlock>10.0.1.0/24</cidrBlock>
+                <availabilityZone>ap-northeast-2a</availabilityZone>
+                <mapPublicIpOnLaunch>false</mapPublicIpOnLaunch>
+                <assignIpv6AddressOnCreation>false</assignIpv6AddressOnCreation>
+              </item>
+            </subnetSet>
+          </DescribeSubnetsResponse>`,
+          input.region
+        )
+      : []),
+    ...(readsRouteTables
+      ? parseRouteTablesFromXml(
+          `<DescribeRouteTablesResponse>
+            <routeTableSet>
+              <item>
+                <routeTableId>rtb-main</routeTableId>
+                <vpcId>vpc-main</vpcId>
+                <routeSet>
+                  <item>
+                    <destinationCidrBlock>10.0.0.0/16</destinationCidrBlock>
+                    <gatewayId>local</gatewayId>
+                    <state>active</state>
+                  </item>
+                </routeSet>
+                <associationSet>
+                  <item>
+                    <routeTableAssociationId>rtbassoc-main-subnet</routeTableAssociationId>
+                    <routeTableId>rtb-main</routeTableId>
+                    <subnetId>subnet-main</subnetId>
+                    <main>false</main>
+                  </item>
+                </associationSet>
+              </item>
+            </routeTableSet>
+          </DescribeRouteTablesResponse>`,
+          input.region
+        )
+      : [])
+  ];
+
+  const result = await scanGatewayRecords(records, input.resourceTypes);
+  const association = result.discoveredResources.find(
+    (resource) => resource.resourceType === "ROUTE_TABLE_ASSOCIATION"
+  );
+  const suggestion = result.importSuggestions.find(
+    (candidate) => candidate.resourceId === association?.id
+  );
+
+  assert.equal(readsRouteTables, true);
+  assert.equal(readsSubnets, true);
+  assert.deepEqual(
+    result.discoveredResources.map((resource) => resource.resourceType),
+    ["SUBNET", "ROUTE_TABLE", "ROUTE_TABLE_ASSOCIATION"]
+  );
+  assert.equal(association?.analysisExcluded, undefined);
+  assert.equal(suggestion?.status, "ready");
+  assert.equal(suggestion?.handoffReady, true);
+});
+
+test("Route Table만 선택하면 같은 reader가 반환한 Association을 최종 결과에서 제외한다", async () => {
+  const input = scanInput(["ROUTE_TABLE"]);
+  const records = parseRouteTablesFromXml(
+    `<DescribeRouteTablesResponse>
+      <routeTableSet>
+        <item>
+          <routeTableId>rtb-main</routeTableId>
+          <vpcId>vpc-main</vpcId>
+          <routeSet>
+            <item>
+              <destinationCidrBlock>10.0.0.0/16</destinationCidrBlock>
+              <gatewayId>local</gatewayId>
+              <state>active</state>
+            </item>
+          </routeSet>
+          <associationSet>
+            <item>
+              <routeTableAssociationId>rtbassoc-main-subnet</routeTableAssociationId>
+              <routeTableId>rtb-main</routeTableId>
+              <subnetId>subnet-main</subnetId>
+              <main>false</main>
+            </item>
+          </associationSet>
+        </item>
+      </routeTableSet>
+    </DescribeRouteTablesResponse>`,
+    input.region
+  );
+
+  const result = await scanGatewayRecords(records, input.resourceTypes);
+
+  assert.deepEqual(
+    result.discoveredResources.map((resource) => resource.resourceType),
+    ["ROUTE_TABLE"]
+  );
+  assert.equal(
+    result.importSuggestions.some((suggestion) =>
+      suggestion.terraformAddress?.startsWith("aws_route_table_association.")
+    ),
+    false
   );
 });
 
