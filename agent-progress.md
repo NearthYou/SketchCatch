@@ -33,6 +33,12 @@ Short English-only working log for the current agent context. Older records are 
 - Browser geometry confirmed equal track widths and arrow placement before the final compression; lint, typecheck, build, final harness, and diff checks pass. The post-restart browser reload was blocked by the local URL policy, so no second screenshot was captured.
 - No shared contract, database migration, dependency, deployment, cloud mutation, or Git/CI/CD handoff change was made.
 
+### 2026-07-22 - Ignore CI/CD handoffs from replaced Repository connections
+
+- Reproduced the production failure with a deterministic Web regression: reconnecting the same GitHub Repository creates a new Source Repository id, while the previous selector reused a handoff by Deployment and accepted Plan only.
+- Updated setup handoff selection to require the current Source Repository id, so a handoff tied to the inactive pre-reconnect record is ignored and the approved setup flow creates a fresh handoff.
+- Verification passes: 54 focused CI/CD Web tests, root lint, root typecheck, all five production builds, diff checks, and the final harness check.
+- No database migration, dependency change, AWS mutation, Terraform execution, deployment, or handoff creation was performed. GitHub issue #537 and its review branch were created after verification.
 ### 2026-07-22 - Unblock the dev-to-main release migration history check
 
 - Confirmed release PR #534 failed only because main legitimately lacks the historically skipped `0044_github_codebuild_release_plane` entry while already containing `0045` and `0046`.
@@ -149,6 +155,19 @@ Short English-only working log for the current agent context. Older records are 
 
 - Reserved a non-shrinking desktop traffic viewport above the Signal Dashboard and added a 20px separation; mobile keeps its existing content-sized layout.
 - Browser QA confirmed a 410px desktop flow, a 20px gap, and no mobile horizontal overflow. Focused Live Observation checks, harness, lint, typecheck, build, and diff checks pass.
+
+### 2026-07-22 - Simplify the Live Observation incident view
+
+- Reorganized the Signal Dashboard around current impact, at most three evidence-backed problems, concise evidence, grouped masked logs, and real user-approved actions.
+- Replaced internal resource names and developer diagnostics with stable Korean labels. Saved capacity drafts now open the exact Terraform file and line with the existing editor highlight.
+- Preserved every protected traffic, capacity, and animation source unchanged. Focused checks pass 75/75; harness, lint, typecheck, build, diff checks, and responsive browser QA at 390x844, 1024x768, and 1440x900 pass.
+- No deployment, cloud mutation, dependency, migration, PR, or merge was performed.
+
+### 2026-07-22 - Roll back the added Live Observation resource label overrides
+
+- Restored the resource presentation source and its test to the current `dev` baseline. The incident wording, signal calculation, log handling, and Terraform source navigation changes remain unchanged.
+- The existing internal Terraform-label cleanup remains in place; only this branch's generic AWS-name, RDS-name, and fallback overrides were removed.
+- Focused resource presentation tests pass 2/2. Web typecheck, lint, build, harness, and diff checks pass. The root test command remains non-green in unrelated API tests.
 
 ## Known Risk
 

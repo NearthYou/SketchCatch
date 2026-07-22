@@ -32,6 +32,8 @@ test("increments the single ECS Application Auto Scaling max_capacity by one", (
   assert.equal(result.previousMaxCapacity, 2);
   assert.equal(result.nextMaxCapacity, 3);
   assert.equal(result.address, "aws_appautoscaling_target.audience");
+  assert.equal(result.fileName, "main.tf");
+  assert.equal(result.line, 3);
   assert.match(result.files[0]?.terraformCode ?? "", /max_capacity = 3 # demo bottleneck/);
   assert.equal(result.files[1]?.terraformCode, 'output "max_capacity" { value = 2 }');
 });

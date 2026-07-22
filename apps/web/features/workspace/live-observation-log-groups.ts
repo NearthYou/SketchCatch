@@ -115,7 +115,7 @@ export function getLiveObservationLogKind(message: string): LiveObservationLogGr
 /** Keeps the first dashboard sentence short while retaining the raw, already-masked line behind a disclosure. */
 function getLiveObservationLogSummary(kind: LiveObservationLogGroupKind, count: number): string {
   if (kind === "error") {
-    return count > 1 ? "같은 오류 표현이 반복되고 있어요." : "오류 표현이 기록됐어요.";
+    return count > 1 ? "같은 오류가 반복되고 있어요." : "오류가 기록됐어요.";
   }
   if (kind === "warning") return "확인이 필요한 경고가 기록됐어요.";
   if (kind === "recovery") return "정상화 신호가 기록됐어요.";

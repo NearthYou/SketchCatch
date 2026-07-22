@@ -342,10 +342,30 @@ test("selects the latest cancelled handoff so setup can create its retry branch"
       })
     ],
     "deployment-1",
-    "plan-1"
+    "plan-1",
+    "repository-1"
   );
 
   assert.equal(selected?.id, "latest-cancelled");
+});
+
+test("ignores a handoff created for a repository connection that is no longer current", () => {
+  const selected = selectSetupHandoff(
+    [
+      handoff({
+        id: "stale-handoff",
+        sourceDeploymentId: "deployment-1",
+        sourceRepositoryId: "repository-before-reconnect",
+        userAcceptedChangeId: "plan-1",
+        updatedAt: "2026-07-22T10:00:00.000Z"
+      })
+    ],
+    "deployment-1",
+    "plan-1",
+    "repository-after-reconnect"
+  );
+
+  assert.equal(selected, null);
 });
 
 test("serializes automatic and manual reloads and discards late completions", () => {
@@ -428,6 +448,7 @@ function deployment(
 function handoff(overrides: Record<string, unknown>): GitCicdHandoff {
   return {
     id: "handoff-1",
+    sourceRepositoryId: "repository-1",
     repositorySettingsPreview: null,
     awsRoleDiff: null,
     status: "draft",
@@ -449,19 +470,21 @@ function isSetupComplete(handoff: GitCicdHandoff): boolean {
 function selectSetupHandoff(
   handoffs: readonly GitCicdHandoff[],
   sourceDeploymentId: string,
-  acceptedPlanId: string
+  acceptedPlanId: string,
+  sourceRepositoryId: string
 ): GitCicdHandoff | null {
   const candidate = (
     cicdHandoffModule as typeof cicdHandoffModule & {
       readonly selectGitCicdHandoffForSetup?: (
         handoffs: readonly GitCicdHandoff[],
         sourceDeploymentId: string | null,
-        acceptedPlanId: string | null
+        acceptedPlanId: string | null,
+        sourceRepositoryId: string | null
       ) => GitCicdHandoff | null;
     }
   ).selectGitCicdHandoffForSetup;
   assert.equal(typeof candidate, "function", "CI/CD setup handoff selector must exist");
-  return candidate(handoffs, sourceDeploymentId, acceptedPlanId);
+  return candidate(handoffs, sourceDeploymentId, acceptedPlanId, sourceRepositoryId);
 }
 
 function createReadinessSnapshot(

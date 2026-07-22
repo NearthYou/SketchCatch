@@ -94,7 +94,7 @@ test("empty Deployment picker cannot open a blank native menu", () => {
 
   assert.match(deploymentPickerSource, /disabled=\{[\s\S]*?eligibleDeployments\.length === 0/);
   assert.match(deploymentPickerSource, /<option disabled value="">/);
-  assert.match(deploymentPickerSource, /관측 가능한 성공 배포가 없습니다\./);
+  assert.match(deploymentPickerSource, /관측할 배포가 없어요\./);
 });
 
 test("Direct Deployment opens Live Observation without leaking the click event as a selection", () => {
@@ -191,8 +191,8 @@ test("Architecture loading and errors stay separate from observation session err
     /const selectedArchitectureErrorMessage = queries\.architecture\.isError/
   );
   assert.doesNotMatch(visibleSessionError, /architectureErrorMessage/);
-  assert.match(modalSource, /배포 Architecture를 불러오고 있습니다\./);
-  assert.match(modalSource, /이 배포의 Architecture를 찾을 수 없습니다\./);
+  assert.match(modalSource, /배포 구성을 불러오고 있어요\./);
+  assert.match(modalSource, /이 배포의 구성을 찾을 수 없어요\./);
   assert.match(modalSource, /error instanceof ApiClientError && error\.status === 404/);
 });
 
@@ -207,7 +207,8 @@ test("Architecture failure does not replace QR, Output URL, session, or SSE cont
   assert.match(modalSource, /const audienceUrl = selectedSession\?\.audienceUrl \?\? outputUrl/);
   assert.match(modalSource, /QRCode\.toDataURL\(audienceUrl/);
   assert.match(modalSource, /onApplyTerraformUpdate/);
-  assert.match(modalSource, /Terraform 수정 완료 · 경고 해제/);
+  assert.match(modalSource, /용량 수정안을 저장했어요/);
+  assert.match(modalSource, /수정 위치 보기/);
   assert.match(modalSource, /copyOutputUrl/);
   assert.match(modalSource, /createLiveObservation\(/);
   assert.match(modalSource, /stopLiveObservation\(/);
@@ -259,9 +260,9 @@ test("keeps the Signal Dashboard and does not restore the legacy metric grid", (
 
 test("offers the capacity change only as an explicit Project Draft action", () => {
   assert.match(modalSource, /createLiveObservationDesignSimulationRequest/);
-  assert.match(modalSource, /최대 실행 수를/);
+  assert.match(modalSource, /최대 실행 서버를/);
   assert.match(modalSource, /onAction: \(\) => void applyTerraformUpdate\(\)/);
-  assert.match(modalSource, /수정안을 저장해도 실제 AWS에는 바로 반영되지 않아요\./);
+  assert.match(modalSource, /저장해도 실제 서버는 바뀌지 않아요\./);
   assert.match(modalSource, /const result = await onApplyTerraformUpdate\(\)/);
   assert.match(modalSource, /onTrafficIncidentSnapshotChange\(null\)/);
 });
