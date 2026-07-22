@@ -947,13 +947,87 @@ test("PUT /api/projects/:id/assets/:assetId/upload-content uploads Terraform art
 
   assert.equal(response.statusCode, 204);
   assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "uploaded");
-  assert.deepEqual(putObjectRequests, [
-    {
-      objectKey: "projects/project-id/diagram.png",
-      contentType: "text/plain",
-      body: terraformCode
-    }
+  assert.equal(putObjectRequests.length, 1);
+  assert.match(putObjectRequests[0]?.objectKey ?? "", /^projects\/project-id\/\.attempt-/u);
+  assert.equal(fakeDb.projectAssetRows[0]?.objectKey, putObjectRequests[0]?.objectKey);
+  assert.equal(putObjectRequests[0]?.contentType, "text/plain");
+  assert.equal(putObjectRequests[0]?.body, terraformCode);
+
+  await app.close();
+});
+
+test("concurrent Terraform uploads keep DB metadata aligned with the winning stored object", async () => {
+  const firstTerraformCode = 'resource "aws_s3_bucket" "first" {}\n';
+  const secondTerraformCode = 'resource "aws_s3_bucket" "second" {}\n';
+  const storedObjects = new Map<string, Buffer | string>();
+  let releaseWrites: (() => void) | undefined;
+  const bothWritesStarted = new Promise<void>((resolve) => {
+    releaseWrites = resolve;
+  });
+  let writeCount = 0;
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        assetType: "terraform_file",
+        contentType: "text/plain",
+        byteSize: null,
+        uploadStatus: "pending"
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject(input) {
+        storedObjects.set(input.objectKey, input.body);
+        writeCount += 1;
+
+        if (writeCount === 2) {
+          releaseWrites?.();
+        }
+
+        await bothWritesStarted;
+      },
+      async deleteObject(input) {
+        storedObjects.delete(input.objectKey);
+      }
+    })
+  });
+  const upload = async (payload: string) =>
+    app.inject({
+      method: "PUT",
+      url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+      headers: {
+        ...(await authHeaders(ACTIVE_USER_ID)),
+        "content-type": "text/plain"
+      },
+      payload
+    });
+
+  const responses = await Promise.all([
+    upload(firstTerraformCode),
+    upload(secondTerraformCode)
   ]);
+  const confirmedAsset = fakeDb.projectAssetRows[0];
+
+  assert.deepEqual(
+    responses.map((response) => response.statusCode).sort((left, right) => left - right),
+    [204, 409]
+  );
+  assert.equal(confirmedAsset?.uploadStatus, "uploaded");
+  assert.equal(storedObjects.size, 1);
+  assert.ok(confirmedAsset?.objectKey.includes("/.attempt-"));
+  const winningBody = storedObjects.get(confirmedAsset?.objectKey ?? "");
+
+  assert.ok(winningBody === firstTerraformCode || winningBody === secondTerraformCode);
+  assert.equal(confirmedAsset?.byteSize, Buffer.byteLength(winningBody));
 
   await app.close();
 });
@@ -1022,13 +1096,14 @@ test("PUT Terraform upload stores server-verified Reverse Engineering imports in
   });
 
   assert.equal(response.statusCode, 204);
-  assert.deepEqual(putObjectRequests, [
-    {
-      objectKey: "projects/project-id/diagram.png",
-      contentType: "application/vnd.sketchcatch.terraform-files+json",
-      body: expectedBundle
-    }
-  ]);
+  assert.equal(putObjectRequests.length, 1);
+  assert.match(putObjectRequests[0]?.objectKey ?? "", /^projects\/project-id\/\.attempt-/u);
+  assert.equal(fakeDb.projectAssetRows[0]?.objectKey, putObjectRequests[0]?.objectKey);
+  assert.equal(
+    putObjectRequests[0]?.contentType,
+    "application/vnd.sketchcatch.terraform-files+json"
+  );
+  assert.equal(putObjectRequests[0]?.body, expectedBundle);
   assert.equal(fakeDb.projectAssetRows[0]?.fileName, "terraform-files.json");
   assert.equal(
     fakeDb.projectAssetRows[0]?.contentType,
@@ -1153,13 +1228,14 @@ test("PUT Terraform upload stores a sourced zero-target draft as a canonical bas
   });
 
   assert.equal(response.statusCode, 204);
-  assert.deepEqual(putObjectRequests, [
-    {
-      objectKey: "projects/project-id/diagram.png",
-      contentType: "application/vnd.sketchcatch.terraform-files+json",
-      body: expectedBundle
-    }
-  ]);
+  assert.equal(putObjectRequests.length, 1);
+  assert.match(putObjectRequests[0]?.objectKey ?? "", /^projects\/project-id\/\.attempt-/u);
+  assert.equal(fakeDb.projectAssetRows[0]?.objectKey, putObjectRequests[0]?.objectKey);
+  assert.equal(
+    putObjectRequests[0]?.contentType,
+    "application/vnd.sketchcatch.terraform-files+json"
+  );
+  assert.equal(putObjectRequests[0]?.body, expectedBundle);
   assert.equal(fakeDb.projectAssetRows[0]?.fileName, "terraform-files.json");
   assert.equal(
     fakeDb.projectAssetRows[0]?.contentType,
@@ -1238,13 +1314,11 @@ test("PUT Terraform upload allows user-owned import blocks and imports.tf for or
     });
 
     assert.equal(response.statusCode, 204, scenario.fileName);
-    assert.deepEqual(putObjectRequests, [
-      {
-        objectKey: "projects/project-id/diagram.png",
-        contentType: "text/plain",
-        body: scenario.terraformCode
-      }
-    ]);
+    assert.equal(putObjectRequests.length, 1);
+    assert.match(putObjectRequests[0]?.objectKey ?? "", /^projects\/project-id\/\.attempt-/u);
+    assert.equal(fakeDb.projectAssetRows[0]?.objectKey, putObjectRequests[0]?.objectKey);
+    assert.equal(putObjectRequests[0]?.contentType, "text/plain");
+    assert.equal(putObjectRequests[0]?.body, scenario.terraformCode);
     await app.close();
   }
 });
@@ -1516,6 +1590,7 @@ test("Project thumbnail upload and read share a real filesystem storage instance
     url: `/api/projects/${ACTIVE_PROJECT_ID}/thumbnail`,
     headers: await authHeaders(ACTIVE_USER_ID)
   });
+  const uploadedAsset = fakeDb.projectAssetRows.find((asset) => asset.id === pendingAsset.id);
 
   assert.equal(pendingResponse.statusCode, 201);
   assert.equal(uploadResponse.statusCode, 204);
@@ -1524,7 +1599,7 @@ test("Project thumbnail upload and read share a real filesystem storage instance
   assert.deepEqual(thumbnailResponse.rawPayload, thumbnailBytes);
   assert.equal(
     await projectAssetStorage.objectExists({
-      objectKey: pendingAsset.objectKey,
+      objectKey: uploadedAsset?.objectKey ?? "",
       byteSize: thumbnailBytes.byteLength
     }),
     true
@@ -2365,11 +2440,16 @@ class ProjectRouteFakeDb {
 
             if (table === projectAssets) {
               const nextProjectAssetRows: ProjectAssetRow[] = [];
+              const projectAssetValues = values as Partial<ProjectAssetRow>;
+              const requiresPendingUpload =
+                projectAssetValues.uploadStatus === "uploaded" &&
+                typeof projectAssetValues.objectKey === "string";
 
               this.projectAssetRows = this.projectAssetRows.map((asset) => {
                 const shouldUpdate =
                   (!this.requestedProjectId || asset.projectId === this.requestedProjectId) &&
-                  (!this.requestedProjectAssetId || asset.id === this.requestedProjectAssetId);
+                  (!this.requestedProjectAssetId || asset.id === this.requestedProjectAssetId) &&
+                  (!requiresPendingUpload || asset.uploadStatus === "pending");
 
                 if (!shouldUpdate) {
                   return asset;
@@ -2377,7 +2457,7 @@ class ProjectRouteFakeDb {
 
                 const nextAsset = {
                   ...asset,
-                  ...(values as Partial<ProjectAssetRow>)
+                  ...projectAssetValues
                 };
 
                 nextProjectAssetRows.push(nextAsset);

@@ -782,8 +782,10 @@ export async function registerProjectRoutes(
         }
       }
 
+      const candidateObjectKey = buildUploadAttemptObjectKey(asset.objectKey);
+
       await projectAssetStorage.putObject({
-        objectKey: asset.objectKey,
+        objectKey: candidateObjectKey,
         contentType: storedContentType,
         body: storedBody
       });
@@ -791,16 +793,32 @@ export async function registerProjectRoutes(
       const [confirmedAsset] = await db
         .update(projectAssets)
         .set({
+          objectKey: candidateObjectKey,
           uploadStatus: "uploaded",
           fileName: storedFileName,
           contentType: storedContentType,
           byteSize: storedByteSize
         })
-        .where(and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id)))
+        .where(
+          and(
+            eq(projectAssets.id, params.assetId),
+            eq(projectAssets.projectId, params.id),
+            eq(projectAssets.uploadStatus, "pending")
+          )
+        )
         .returning();
 
       if (!confirmedAsset) {
-        return sendNotFound(reply, "업로드된 파일 기록을 찾을 수 없습니다.");
+        try {
+          await projectAssetStorage.deleteObject({ objectKey: candidateObjectKey });
+        } catch (error) {
+          request.log.warn(
+            { error, objectKey: candidateObjectKey, projectId: params.id },
+            "Failed to delete a losing project asset upload"
+          );
+        }
+
+        return sendConflict(reply, "같은 파일의 다른 업로드가 먼저 완료되었습니다.");
       }
 
       return reply.status(204).send();
@@ -1119,4 +1137,13 @@ function buildObjectKey(
   const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180);
 
   return `projects/${projectId}/assets/${assetType}/${assetId}-${safeFileName}`;
+}
+
+/** gg: 동시 PUT을 별도 객체에 기록해 DB가 선택한 한 객체만 최종본으로 연결합니다. */
+function buildUploadAttemptObjectKey(objectKey: string): string {
+  const lastSeparatorIndex = objectKey.lastIndexOf("/");
+  const parentPrefix =
+    lastSeparatorIndex === -1 ? "" : objectKey.slice(0, lastSeparatorIndex + 1);
+
+  return `${parentPrefix}.attempt-${randomUUID()}`;
 }
