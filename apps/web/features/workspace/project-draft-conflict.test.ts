@@ -196,9 +196,10 @@ test("pending Board apply locks Resource, Diagram, History, save, and Terraform 
   assert.match(pushHistorySource, /autoOrganizeApplyInFlightRef\.current/);
   assert.match(diagramEditorSource, /isMutationLocked:\s*isAutoOrganizeApplyPending/);
   assert.match(diagramEditorTypesSource, /isMutationLocked:\s*boolean/);
-  assert.match(
-    workspaceRightPanelSource,
-    /isMutationLocked=\{context\.isMutationLocked\}/
+  assert.equal(
+    workspaceRightPanelSource.match(/isMutationLocked=\{context\.isMutationLocked\}/g)?.length,
+    2,
+    "hidden and visible Terraform panels must both inherit the Board mutation lock"
   );
   assert.match(terraformCodePanelSource, /mutationLockedRef\.current/);
   assert.match(terraformEditorSurfaceSource, /readOnly=\{state\.isMutationLocked\}/);
