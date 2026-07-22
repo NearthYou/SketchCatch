@@ -138,16 +138,32 @@ export const AWS_IMPORT_READERS = [
     tier: "expanded",
     actions: [
       "iam:ListRoles",
+      "iam:GetRole",
+      "iam:ListRoleTags",
+      "iam:ListAttachedRolePolicies",
+      "iam:ListRolePolicies",
+      "iam:GetRolePolicy",
       "iam:ListPolicies",
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:ListPolicyTags",
       "iam:ListInstanceProfiles",
-      "iam:ListAttachedRolePolicies"
+      "iam:GetInstanceProfile",
+      "iam:ListInstanceProfileTags"
     ]
   },
   {
     serviceKey: "kms",
     displayName: "KMS",
     tier: "expanded",
-    actions: ["kms:ListKeys", "kms:DescribeKey"]
+    actions: [
+      "kms:ListKeys",
+      "kms:DescribeKey",
+      "kms:GetKeyPolicy",
+      "kms:GetKeyRotationStatus",
+      "kms:ListResourceTags",
+      "kms:ListAliases"
+    ]
   },
   {
     serviceKey: "logs",
@@ -171,7 +187,14 @@ export const AWS_IMPORT_READERS = [
     serviceKey: "lambda",
     displayName: "Lambda",
     tier: "expanded",
-    actions: ["lambda:ListFunctions", "lambda:GetPolicy"]
+    actions: [
+      "lambda:ListFunctions",
+      "lambda:GetFunction",
+      "lambda:GetPolicy",
+      "lambda:ListTags",
+      "lambda:ListAliases",
+      "lambda:ListVersionsByFunction"
+    ]
   },
   {
     serviceKey: "eventbridge",

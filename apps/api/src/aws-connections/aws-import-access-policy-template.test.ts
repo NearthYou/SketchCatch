@@ -103,11 +103,33 @@ const issuedV6AddedActions = [
   "logs:ListTagsForResource"
 ].sort();
 
-test("Policy contract v6는 topology metadata 읽기만 추가하고 발급된 v1-v5 권한은 보존한다", () => {
-  assert.equal(AWS_IMPORT_POLICY_CONTRACT_VERSION, "6");
+const issuedV6Actions = [...issuedV5Actions, ...issuedV6AddedActions].sort();
+
+const issuedV7AddedActions = [
+  "iam:GetInstanceProfile",
+  "iam:GetPolicy",
+  "iam:GetPolicyVersion",
+  "iam:GetRole",
+  "iam:GetRolePolicy",
+  "iam:ListInstanceProfileTags",
+  "iam:ListPolicyTags",
+  "iam:ListRolePolicies",
+  "iam:ListRoleTags",
+  "kms:GetKeyPolicy",
+  "kms:GetKeyRotationStatus",
+  "kms:ListAliases",
+  "kms:ListResourceTags",
+  "lambda:GetFunction",
+  "lambda:ListAliases",
+  "lambda:ListTags",
+  "lambda:ListVersionsByFunction"
+].sort();
+
+test("Policy contract v7은 남은 상세 조회만 추가하고 발급된 v1-v6 권한은 보존한다", () => {
+  assert.equal(AWS_IMPORT_POLICY_CONTRACT_VERSION, "7");
   assert.deepEqual(
     Object.keys(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION),
-    ["1", "2", "3", "4", "5", "6"]
+    ["1", "2", "3", "4", "5", "6", "7"]
   );
   assert.deepEqual(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["1"], issuedV1Actions);
   assert.deepEqual(
@@ -128,16 +150,20 @@ test("Policy contract v6는 topology metadata 읽기만 추가하고 발급된 v
   );
   assert.deepEqual(
     [...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["6"]].sort(),
+    issuedV6Actions
+  );
+  assert.deepEqual(
+    [...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["7"]].sort(),
     [...createAwsImportReadPolicyDocument().Statement[0].Action].sort()
   );
   assert.deepEqual(
-    AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["6"]
-      .filter((action) => !issuedV5Actions.includes(action))
+    AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["7"]
+      .filter((action) => !issuedV6Actions.includes(action))
       .sort(),
-    issuedV6AddedActions
+    issuedV7AddedActions
   );
   assert.doesNotMatch(
-    JSON.stringify(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["6"]),
+    JSON.stringify(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["7"]),
     /GetSecretValue|Create|Update|Put|Delete|(?:^|:)TagResource|UntagResource/u
   );
 });
@@ -181,6 +207,6 @@ test("policy template contract is deterministic, immutable, and hash-verifiable"
   assert.equal(first.postVerification.templateSha256, expectedHash);
   assert.equal(first.postVerification.policyFingerprint, first.policyFingerprint);
   assert.equal(first.postVerification.targetRoleArn, connectionFixture.targetRoleArn);
-  assert.equal(first.contractVersion, "6");
-  assert.equal(first.postVerification.contractVersion, "6");
+  assert.equal(first.contractVersion, "7");
+  assert.equal(first.postVerification.contractVersion, "7");
 });

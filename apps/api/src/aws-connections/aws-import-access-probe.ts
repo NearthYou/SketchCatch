@@ -5,7 +5,18 @@ import {
   DescribeScalingPoliciesCommand,
   ListTagsForResourceCommand as ListApplicationAutoScalingTagsForResourceCommand
 } from "@aws-sdk/client-application-auto-scaling";
-import { GetRestApisCommand, APIGatewayClient } from "@aws-sdk/client-api-gateway";
+import {
+  APIGatewayClient,
+  GetAuthorizersCommand,
+  GetDeploymentsCommand,
+  GetIntegrationCommand,
+  GetMethodCommand,
+  GetModelsCommand,
+  GetRequestValidatorsCommand,
+  GetResourcesCommand as GetApiGatewayResourcesCommand,
+  GetRestApisCommand,
+  GetStagesCommand
+} from "@aws-sdk/client-api-gateway";
 import {
   CloudFrontClient,
   GetOriginAccessControlCommand,
@@ -67,14 +78,39 @@ import {
   ListServicesCommand
 } from "@aws-sdk/client-ecs";
 import {
+  GetInstanceProfileCommand,
+  GetPolicyCommand as GetIamPolicyCommand,
+  GetPolicyVersionCommand,
+  GetRoleCommand,
+  GetRolePolicyCommand,
   IAMClient,
   ListAttachedRolePoliciesCommand,
+  ListInstanceProfileTagsCommand,
   ListInstanceProfilesCommand,
+  ListPolicyTagsCommand,
   ListPoliciesCommand,
+  ListRolePoliciesCommand,
+  ListRoleTagsCommand,
   ListRolesCommand
 } from "@aws-sdk/client-iam";
-import { DescribeKeyCommand, KMSClient, ListKeysCommand } from "@aws-sdk/client-kms";
-import { GetPolicyCommand, LambdaClient, ListFunctionsCommand } from "@aws-sdk/client-lambda";
+import {
+  DescribeKeyCommand,
+  GetKeyPolicyCommand,
+  GetKeyRotationStatusCommand,
+  KMSClient,
+  ListAliasesCommand as ListKmsAliasesCommand,
+  ListKeysCommand,
+  ListResourceTagsCommand
+} from "@aws-sdk/client-kms";
+import {
+  GetFunctionCommand,
+  GetPolicyCommand,
+  LambdaClient,
+  ListAliasesCommand as ListLambdaAliasesCommand,
+  ListFunctionsCommand,
+  ListTagsCommand as ListLambdaTagsCommand,
+  ListVersionsByFunctionCommand
+} from "@aws-sdk/client-lambda";
 import {
   GetDefaultViewCommand,
   GetViewCommand,
@@ -686,7 +722,7 @@ async function probeTagging(context: AwsImportProbeExecutorContext): Promise<Aws
   return "success";
 }
 
-/** gg: IAM list action 각각은 첫 page 한 건만 확인합니다. */
+/** gg: IAM 상세 probe는 첫 Role, Policy, Profile만 읽어 권한 범위를 제한합니다. */
 async function probeIam(context: AwsImportProbeExecutorContext): Promise<AwsImportProbeOutcome> {
   const client = bindAbortSignal(
     new IAMClient({ region: context.region, credentials: context.credentials }),
@@ -697,34 +733,99 @@ async function probeIam(context: AwsImportProbeExecutorContext): Promise<AwsImpo
   });
 }
 
-/** gg: 첫 Role 하나로 Managed Policy 연결 관계를 읽을 수 있는지도 함께 확인합니다. */
+/** gg: Terraform 복원에 필요한 IAM 상세와 태그를 첫 Resource에 한해 fail-closed 확인합니다. */
 export async function probeIamRoleAttachments(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
   const roles = await client.send(new ListRolesCommand({ MaxItems: 1 })) as {
     Roles?: Array<{ RoleName?: string }>;
   };
-  await client.send(new ListPoliciesCommand({ MaxItems: 1 }));
-  await client.send(new ListInstanceProfilesCommand({ MaxItems: 1 }));
   const roleName = roles.Roles?.[0]?.RoleName;
+  let attachedPolicyArn: string | undefined;
   if (roleName) {
-    await client.send(new ListAttachedRolePoliciesCommand({
+    await client.send(new GetRoleCommand({ RoleName: roleName }));
+    await client.send(new ListRoleTagsCommand({ RoleName: roleName, MaxItems: 1 }));
+    const attachedPolicies = await client.send(new ListAttachedRolePoliciesCommand({
       RoleName: roleName,
+      MaxItems: 1
+    })) as { AttachedPolicies?: Array<{ PolicyArn?: string }> };
+    attachedPolicyArn = attachedPolicies.AttachedPolicies?.[0]?.PolicyArn;
+    const inlinePolicies = await client.send(new ListRolePoliciesCommand({
+      RoleName: roleName,
+      MaxItems: 1
+    })) as { PolicyNames?: string[] };
+    const inlinePolicyName = inlinePolicies.PolicyNames?.[0];
+    if (inlinePolicyName) {
+      await client.send(new GetRolePolicyCommand({
+        RoleName: roleName,
+        PolicyName: inlinePolicyName
+      }));
+    }
+  }
+
+  const listedPolicies = await client.send(new ListPoliciesCommand({
+    MaxItems: 1,
+    Scope: "Local"
+  })) as { Policies?: Array<{ Arn?: string; DefaultVersionId?: string }> };
+  const localPolicy = listedPolicies.Policies?.[0];
+  const policyArn = localPolicy?.Arn ?? attachedPolicyArn;
+  if (policyArn) {
+    const policy = await client.send(new GetIamPolicyCommand({ PolicyArn: policyArn })) as {
+      Policy?: { DefaultVersionId?: string };
+    };
+    const defaultVersionId = policy.Policy?.DefaultVersionId ?? localPolicy?.DefaultVersionId;
+    if (defaultVersionId) {
+      await client.send(new GetPolicyVersionCommand({
+        PolicyArn: policyArn,
+        VersionId: defaultVersionId
+      }));
+    }
+    if (localPolicy?.Arn === policyArn) {
+      await client.send(new ListPolicyTagsCommand({ PolicyArn: policyArn }));
+    }
+  }
+
+  const instanceProfiles = await client.send(new ListInstanceProfilesCommand({ MaxItems: 1 })) as {
+    InstanceProfiles?: Array<{ InstanceProfileName?: string }>;
+  };
+  const instanceProfileName = instanceProfiles.InstanceProfiles?.[0]?.InstanceProfileName;
+  if (instanceProfileName) {
+    await client.send(new GetInstanceProfileCommand({
+      InstanceProfileName: instanceProfileName
+    }));
+    await client.send(new ListInstanceProfileTagsCommand({
+      InstanceProfileName: instanceProfileName,
       MaxItems: 1
     }));
   }
   return "success";
 }
 
-/** gg: KMS는 첫 key 한 건만 seed로 Describe합니다. */
+/** gg: KMS production executor는 첫 Key 상세 probe에 같은 session을 전달합니다. */
 async function probeKms(context: AwsImportProbeExecutorContext): Promise<AwsImportProbeOutcome> {
   const client = bindAbortSignal(
     new KMSClient({ region: context.region, credentials: context.credentials }),
     context.abortSignal
   );
-  const listed = await client.send(new ListKeysCommand({ Limit: 1 }));
+  return probeKmsMetadata({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+}
+
+/** gg: 첫 KMS Key의 복원 정보와 태그를 모두 읽되 key material은 요청하지 않습니다. */
+export async function probeKmsMetadata(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  const listed = await client.send(new ListKeysCommand({ Limit: 1 })) as {
+    Keys?: Array<{ KeyId?: string }>;
+  };
   const keyId = listed.Keys?.[0]?.KeyId;
-  if (keyId) await client.send(new DescribeKeyCommand({ KeyId: keyId }));
+  if (!keyId) return "success";
+  await client.send(new DescribeKeyCommand({ KeyId: keyId }));
+  await client.send(new GetKeyPolicyCommand({ KeyId: keyId, PolicyName: "default" }));
+  await client.send(new GetKeyRotationStatusCommand({ KeyId: keyId }));
+  await client.send(new ListResourceTagsCommand({ KeyId: keyId, Limit: 1 }));
+  await client.send(new ListKmsAliasesCommand({ KeyId: keyId, Limit: 1 }));
   return "success";
 }
 
@@ -781,13 +882,58 @@ export async function probeCloudWatchMetadata(
   return "success";
 }
 
-/** gg: API Gateway는 position을 따르지 않는 첫 page 한 건만 읽습니다. */
+/** gg: API Gateway production executor는 첫 REST API topology probe만 실행합니다. */
 async function probeApiGateway(context: AwsImportProbeExecutorContext): Promise<AwsImportProbeOutcome> {
   const client = bindAbortSignal(
     new APIGatewayClient({ region: context.region, credentials: context.credentials }),
     context.abortSignal
   );
-  await client.send(new GetRestApisCommand({ limit: 1 }));
+  return probeApiGatewayTopology({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+}
+
+/** gg: 첫 REST API의 Resource/Method/Integration/Stage 관계를 bounded read로 확인합니다. */
+export async function probeApiGatewayTopology(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  const listed = await client.send(new GetRestApisCommand({ limit: 1 })) as {
+    items?: Array<{ id?: string }>;
+  };
+  const restApiId = listed.items?.[0]?.id;
+  if (!restApiId) return "success";
+
+  const resources = await client.send(new GetApiGatewayResourcesCommand({
+    restApiId,
+    limit: 1,
+    embed: ["methods"]
+  })) as {
+    items?: Array<{ id?: string; resourceMethods?: Record<string, unknown> }>;
+  };
+  const resource = resources.items?.[0];
+  const resourceId = resource?.id;
+  const httpMethod = Object.keys(resource?.resourceMethods ?? {})[0];
+  if (resourceId && httpMethod) {
+    await client.send(new GetMethodCommand({
+      restApiId,
+      resourceId,
+      httpMethod
+    }));
+    try {
+      await client.send(new GetIntegrationCommand({
+        restApiId,
+        resourceId,
+        httpMethod
+      }));
+    } catch (error) {
+      if (errorName(error) !== "NotFoundException") throw error;
+    }
+  }
+  await client.send(new GetDeploymentsCommand({ restApiId, limit: 1 }));
+  await client.send(new GetStagesCommand({ restApiId }));
+  await client.send(new GetAuthorizersCommand({ restApiId, limit: 1 }));
+  await client.send(new GetModelsCommand({ restApiId, limit: 1 }));
+  await client.send(new GetRequestValidatorsCommand({ restApiId, limit: 1 }));
   return "success";
 }
 
@@ -804,21 +950,30 @@ async function probeLambdaExecutor(
   });
 }
 
-/** gg: Lambda는 첫 function 하나만 seed로 읽고 policy 부재는 정상 접근으로 봅니다. */
+/** gg: Lambda는 첫 Function의 복원 정보만 읽고 policy 부재만 정상 상태로 봅니다. */
 export async function probeLambda(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
   const listed = await client.send(new ListFunctionsCommand({ MaxItems: 1 })) as {
-    Functions?: Array<{ FunctionName?: string }>;
+    Functions?: Array<{ FunctionName?: string; FunctionArn?: string }>;
   };
-  const functionName = listed.Functions?.[0]?.FunctionName;
+  const listedFunction = listed.Functions?.[0];
+  const functionName = listedFunction?.FunctionName;
   if (!functionName) return "success";
+  const functionDetail = await client.send(new GetFunctionCommand({ FunctionName: functionName })) as {
+    Configuration?: { FunctionArn?: string };
+  };
   try {
     await client.send(new GetPolicyCommand({ FunctionName: functionName }));
   } catch (error) {
-    if (errorName(error) === "ResourceNotFoundException") return "success";
-    throw error;
+    if (errorName(error) !== "ResourceNotFoundException") throw error;
   }
+  const functionArn = listedFunction.FunctionArn ?? functionDetail.Configuration?.FunctionArn;
+  if (functionArn) {
+    await client.send(new ListLambdaTagsCommand({ Resource: functionArn }));
+  }
+  await client.send(new ListLambdaAliasesCommand({ FunctionName: functionName, MaxItems: 1 }));
+  await client.send(new ListVersionsByFunctionCommand({ FunctionName: functionName, MaxItems: 1 }));
   return "success";
 }
 

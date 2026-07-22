@@ -8,12 +8,14 @@ import {
 import {
   AWS_IMPORT_PROBE_EXECUTORS,
   probeApplicationAutoScaling,
+  probeApiGatewayTopology,
   probeAwsImportAccess,
   probeCloudFrontTopology,
   probeCloudWatchMetadata,
   probeElbv2Topology,
   probeEventBridge,
   probeIamRoleAttachments,
+  probeKmsMetadata,
   probeLambda,
   probeLogsMetadata,
   probeResourceExplorer,
@@ -208,13 +210,33 @@ test("tag probe는 빈 목록이면 추가 호출하지 않는다", async () => 
   }
 });
 
-test("IAM probe는 첫 Role의 연결된 Managed Policy 읽기 권한까지 확인한다", async () => {
+test("IAM probe는 첫 Role, Policy, Instance Profile의 상세와 태그를 확인한다", async () => {
   const commands: object[] = [];
   const outcome = await probeIamRoleAttachments({
     async send(command) {
       commands.push(command);
       if (command.constructor.name === "ListRolesCommand") {
         return { Roles: [{ RoleName: "application-role" }] };
+      }
+      if (command.constructor.name === "ListAttachedRolePoliciesCommand") {
+        return { AttachedPolicies: [{ PolicyArn: "arn:aws:iam::123:policy/application" }] };
+      }
+      if (command.constructor.name === "ListRolePoliciesCommand") {
+        return { PolicyNames: ["inline-policy"] };
+      }
+      if (command.constructor.name === "ListPoliciesCommand") {
+        return {
+          Policies: [{
+            Arn: "arn:aws:iam::123:policy/application",
+            DefaultVersionId: "v3"
+          }]
+        };
+      }
+      if (command.constructor.name === "GetPolicyCommand") {
+        return { Policy: { DefaultVersionId: "v3" } };
+      }
+      if (command.constructor.name === "ListInstanceProfilesCommand") {
+        return { InstanceProfiles: [{ InstanceProfileName: "application-profile" }] };
       }
       return {};
     }
@@ -223,10 +245,189 @@ test("IAM probe는 첫 Role의 연결된 Managed Policy 읽기 권한까지 확�
   assert.equal(outcome, "success");
   assert.deepEqual(commands.map((command) => command.constructor.name), [
     "ListRolesCommand",
+    "GetRoleCommand",
+    "ListRoleTagsCommand",
+    "ListAttachedRolePoliciesCommand",
+    "ListRolePoliciesCommand",
+    "GetRolePolicyCommand",
     "ListPoliciesCommand",
+    "GetPolicyCommand",
+    "GetPolicyVersionCommand",
+    "ListPolicyTagsCommand",
     "ListInstanceProfilesCommand",
-    "ListAttachedRolePoliciesCommand"
+    "GetInstanceProfileCommand",
+    "ListInstanceProfileTagsCommand"
   ]);
+});
+
+test("Lambda probe는 첫 Function의 구성, policy, tags, alias와 version을 확인한다", async () => {
+  const commands: object[] = [];
+  const outcome = await probeLambda({
+    async send(command) {
+      commands.push(command);
+      if (command.constructor.name === "ListFunctionsCommand") {
+        return {
+          Functions: [{
+            FunctionName: "application-function",
+            FunctionArn: "arn:aws:lambda:ap-northeast-2:123:function:application-function"
+          }]
+        };
+      }
+      return {};
+    }
+  });
+
+  assert.equal(outcome, "success");
+  assert.deepEqual(commands.map((command) => command.constructor.name), [
+    "ListFunctionsCommand",
+    "GetFunctionCommand",
+    "GetPolicyCommand",
+    "ListTagsCommand",
+    "ListAliasesCommand",
+    "ListVersionsByFunctionCommand"
+  ]);
+});
+
+test("Lambda probe는 resource policy가 없어도 나머지 상세 읽기를 계속한다", async () => {
+  const commands: object[] = [];
+  const outcome = await probeLambda({
+    async send(command) {
+      commands.push(command);
+      if (command.constructor.name === "ListFunctionsCommand") {
+        return {
+          Functions: [{
+            FunctionName: "application-function",
+            FunctionArn: "arn:aws:lambda:ap-northeast-2:123:function:application-function"
+          }]
+        };
+      }
+      if (command.constructor.name === "GetPolicyCommand") {
+        throw Object.assign(new Error("missing policy"), { name: "ResourceNotFoundException" });
+      }
+      return {};
+    }
+  });
+
+  assert.equal(outcome, "success");
+  assert.deepEqual(commands.map((command) => command.constructor.name).slice(-3), [
+    "ListTagsCommand",
+    "ListAliasesCommand",
+    "ListVersionsByFunctionCommand"
+  ]);
+});
+
+test("KMS probe는 첫 Key의 policy, rotation, tags와 aliases를 확인한다", async () => {
+  const commands: object[] = [];
+  const outcome = await probeKmsMetadata({
+    async send(command) {
+      commands.push(command);
+      if (command.constructor.name === "ListKeysCommand") {
+        return { Keys: [{ KeyId: "key-id" }] };
+      }
+      return {};
+    }
+  });
+
+  assert.equal(outcome, "success");
+  assert.deepEqual(commands.map((command) => command.constructor.name), [
+    "ListKeysCommand",
+    "DescribeKeyCommand",
+    "GetKeyPolicyCommand",
+    "GetKeyRotationStatusCommand",
+    "ListResourceTagsCommand",
+    "ListAliasesCommand"
+  ]);
+});
+
+test("API Gateway probe는 첫 REST API의 resource, method, integration, deployment와 stage를 확인한다", async () => {
+  const commands: object[] = [];
+  const outcome = await probeApiGatewayTopology({
+    async send(command) {
+      commands.push(command);
+      if (command.constructor.name === "GetRestApisCommand") {
+        return { items: [{ id: "rest-api" }] };
+      }
+      if (command.constructor.name === "GetResourcesCommand") {
+        return { items: [{ id: "resource", resourceMethods: { GET: {} } }] };
+      }
+      if (command.constructor.name === "GetMethodCommand") {
+        return { methodResponses: { 200: {} } };
+      }
+      if (command.constructor.name === "GetIntegrationCommand") {
+        return { integrationResponses: { 200: {} } };
+      }
+      return {};
+    }
+  });
+
+  assert.equal(outcome, "success");
+  assert.deepEqual(commands.map((command) => command.constructor.name), [
+    "GetRestApisCommand",
+    "GetResourcesCommand",
+    "GetMethodCommand",
+    "GetIntegrationCommand",
+    "GetDeploymentsCommand",
+    "GetStagesCommand",
+    "GetAuthorizersCommand",
+    "GetModelsCommand",
+    "GetRequestValidatorsCommand"
+  ]);
+});
+
+test("상세 probe는 권한 거부를 성공으로 숨기지 않는다", async () => {
+  const denied = Object.assign(new Error("denied"), { name: "AccessDeniedException" });
+  await assert.rejects(
+    probeIamRoleAttachments({
+      async send(command) {
+        if (command.constructor.name === "ListRolesCommand") {
+          return { Roles: [{ RoleName: "application-role" }] };
+        }
+        throw denied;
+      }
+    }),
+    denied
+  );
+  await assert.rejects(
+    probeLambda({
+      async send(command) {
+        if (command.constructor.name === "ListFunctionsCommand") {
+          return {
+            Functions: [{
+              FunctionName: "application-function",
+              FunctionArn: "arn:aws:lambda:ap-northeast-2:123:function:application-function"
+            }]
+          };
+        }
+        if (command.constructor.name === "GetFunctionCommand") return {};
+        if (command.constructor.name === "GetPolicyCommand") return {};
+        throw denied;
+      }
+    }),
+    denied
+  );
+  await assert.rejects(
+    probeKmsMetadata({
+      async send(command) {
+        if (command.constructor.name === "ListKeysCommand") {
+          return { Keys: [{ KeyId: "key-id" }] };
+        }
+        if (command.constructor.name === "DescribeKeyCommand") return {};
+        throw denied;
+      }
+    }),
+    denied
+  );
+  await assert.rejects(
+    probeApiGatewayTopology({
+      async send(command) {
+        if (command.constructor.name === "GetRestApisCommand") {
+          return { items: [{ id: "rest-api" }] };
+        }
+        throw denied;
+      }
+    }),
+    denied
+  );
 });
 
 const connection: AwsConnection = {
@@ -564,17 +765,29 @@ test("Resource Explorer Search ResourceNotFound is transient after the View was 
 });
 
 test("Lambda without a resource policy is a successful readable seed", async () => {
-  let calls = 0;
+  const calls: string[] = [];
   const outcome = await probeLambda({
-    async send() {
-      calls += 1;
-      if (calls === 1) return { Functions: [{ FunctionName: "seed" }] };
-      throw Object.assign(new Error("policy missing"), { name: "ResourceNotFoundException" });
+    async send(command) {
+      calls.push(command.constructor.name);
+      if (command.constructor.name === "ListFunctionsCommand") {
+        return { Functions: [{ FunctionName: "seed", FunctionArn: "arn:lambda:seed" }] };
+      }
+      if (command.constructor.name === "GetPolicyCommand") {
+        throw Object.assign(new Error("policy missing"), { name: "ResourceNotFoundException" });
+      }
+      return {};
     }
   });
 
   assert.equal(outcome, "success");
-  assert.equal(calls, 2);
+  assert.deepEqual(calls, [
+    "ListFunctionsCommand",
+    "GetFunctionCommand",
+    "GetPolicyCommand",
+    "ListTagsCommand",
+    "ListAliasesCommand",
+    "ListVersionsByFunctionCommand"
+  ]);
 });
 
 test("S3 optional bucket configuration absence still proves read access", async () => {
