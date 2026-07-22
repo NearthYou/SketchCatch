@@ -26,6 +26,7 @@ import {
   type TerraformArtifactRecord
 } from "./deployment-service.js";
 import { createPreparedReleaseSnapshotHash } from "./deployment-preparation-service.js";
+import { terraformImportSafetyGateVersion } from "./deployment-safety-gate.js";
 import {
   createTerraformArtifactCanonicalContent,
   prepareTerraformWorkspace
@@ -974,6 +975,69 @@ test("assertDeploymentApplyPreconditions blocks artifact plan and AWS drift", ()
       }),
     /AWS account changed before apply/
   );
+});
+
+test("assertDeploymentApplyPreconditions requires a fresh safety check before applying an old import plan", () => {
+  const currentPlanArtifact = createPlanArtifactRecord();
+  const currentAwsConnection = createVerifiedAwsConnection();
+  const input = {
+    currentPlanArtifact,
+    currentTerraformArtifactHash: artifactHash,
+    currentTfplanHash: tfplanHash,
+    currentAwsConnection
+  };
+
+  for (const importSafetyGateVersion of [undefined, 1] as const) {
+    assert.throws(
+      () =>
+        assertDeploymentApplyPreconditions({
+          ...input,
+          deployment: createApprovedDeploymentRecord({
+            planSummary: {
+              ...createPlanSummary(),
+              blocked: false,
+              importCount: 1,
+              ...(importSafetyGateVersion === undefined
+                ? {}
+                : { importSafetyGateVersion })
+            }
+          })
+        }),
+      (error) => {
+        assert.equal(error instanceof DeploymentApplyPreconditionError, true);
+        assert.equal(
+          (error as DeploymentApplyPreconditionError).reason,
+          "terraform_plan"
+        );
+        assert.match((error as Error).message, /must be regenerated before apply/i);
+        return true;
+      },
+      String(importSafetyGateVersion)
+    );
+  }
+});
+
+test("assertDeploymentApplyPreconditions keeps non-import and current import plans applicable", () => {
+  const currentPlanArtifact = createPlanArtifactRecord();
+  const currentAwsConnection = createVerifiedAwsConnection();
+  const assertApplicable = (planSummary: DeploymentPlanSummary) =>
+    assert.doesNotThrow(() =>
+      assertDeploymentApplyPreconditions({
+        deployment: createApprovedDeploymentRecord({ planSummary }),
+        currentPlanArtifact,
+        currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: tfplanHash,
+        currentAwsConnection
+      })
+    );
+
+  assertApplicable({ ...createPlanSummary(), blocked: false });
+  assertApplicable({
+    ...createPlanSummary(),
+    blocked: false,
+    importCount: 1,
+    importSafetyGateVersion: terraformImportSafetyGateVersion
+  });
 });
 
 test("assertDeploymentApplyPreconditions rejects AWS region drift before apply", () => {

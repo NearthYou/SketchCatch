@@ -236,6 +236,7 @@ export async function revokeDeploymentApproval(
   return revokedDeployment;
 }
 
+// gg: 승인 뒤에도 현재 Plan과 AWS 연결 및 import 안전성 근거가 그대로인지 apply 직전에 다시 확인합니다.
 export function assertDeploymentApplyPreconditions(
   input: AssertDeploymentApplyPreconditionsInput
 ): void {
@@ -254,6 +255,16 @@ export function assertDeploymentApplyPreconditions(
     throw new DeploymentApplyPreconditionError(
       "plan_operation",
       `Terraform apply plan is required before apply: current plan operation is ${input.currentPlanArtifact.operation}`
+    );
+  }
+
+  if (
+    deployment.planSummary &&
+    requiresTerraformImportSafetyReplan(deployment.planSummary)
+  ) {
+    throw new DeploymentApplyPreconditionError(
+      "terraform_plan",
+      "Terraform import Plan must be regenerated before apply"
     );
   }
 
