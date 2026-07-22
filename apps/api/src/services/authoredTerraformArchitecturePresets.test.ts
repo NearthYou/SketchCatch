@@ -5,6 +5,7 @@ import { createAmazonQArchitectureDraftResponse } from "./aiArchitectureDrafts.j
 import { AUDIENCE_LIVE_CHECK_MANUAL_DIAGRAM } from "./audienceLiveCheckManualDiagram.js";
 
 import { generateTerraformFromDiagramJson } from "./terraform/terraform-preview.js";
+import { syncTerraformToDiagramJson } from "./terraform/terraform-to-diagram.js";
 
 const prompt = "데모용 실시간 배포 사이트의 다이어그램 만들어줘.";
 const creditPolicy = {
@@ -73,6 +74,33 @@ test("the realtime deployment demo prompt keeps questions but always returns the
     "utf8"
   );
   assert.equal(terraform, expectedTerraform);
+  assert.doesNotMatch(terraform, /\r/u);
+  assert.match(terraform, /target_value\s+= 50/u);
+  assert.doesNotMatch(terraform, /target_value\s+= 10/u);
+  const canonicalClassification = syncTerraformToDiagramJson(first.diagramJson, {
+    terraformCode: terraform,
+    terraformFiles: [{ fileName: "main.tf", terraformCode: terraform }]
+  });
+  assert.ok(
+    canonicalClassification.preservedResourceAddresses?.includes(
+      "random_password.check_in_signing"
+    )
+  );
+
+  const tunedDiagram = structuredClone(first.diagramJson);
+  const scalingPolicy = tunedDiagram.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_appautoscaling_policy"
+  );
+  assert.ok(scalingPolicy?.parameters?.values);
+  const trackingConfiguration = scalingPolicy.parameters.values[
+    "targetTrackingScalingPolicyConfiguration"
+  ] as Array<{ targetValue: number }>;
+  assert.ok(trackingConfiguration[0]);
+  trackingConfiguration[0].targetValue = 5;
+
+  const tunedTerraform = generateTerraformFromDiagramJson(tunedDiagram);
+  assert.match(tunedTerraform, /target_value\s+= 5/u);
+  assert.doesNotMatch(tunedTerraform, /target_value\s+= 50/u);
 
   const catalogPresentedDiagram = {
     ...first.diagramJson,

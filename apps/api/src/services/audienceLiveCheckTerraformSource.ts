@@ -316,7 +316,7 @@ export const AUDIENCE_LIVE_CHECK_TERRAFORM_SOURCE = [
   "  service_namespace  = aws_appautoscaling_target.ecs_service_requests.service_namespace",
   "",
   "  target_tracking_scaling_policy_configuration {",
-  "    target_value       = 10",
+  "    target_value       = 50",
   "    scale_out_cooldown = 30",
   "    scale_in_cooldown  = 300",
   "",
@@ -518,8 +518,8 @@ export const AUDIENCE_LIVE_CHECK_TERRAFORM_SOURCE = [
   "}",
   "",
   "resource \"aws_secretsmanager_secret\" \"check_in_signing\" {",
-  "  name_prefix               = \"audience-live-check/check-in-signing-\"",
-  "  recovery_window_in_days   = 0",
+  "  name_prefix             = \"audience-live-check/check-in-signing-\"",
+  "  recovery_window_in_days = 0",
   "}",
   "",
   "resource \"aws_secretsmanager_secret_version\" \"check_in_signing\" {",
@@ -532,4 +532,4 @@ export const AUDIENCE_LIVE_CHECK_TERRAFORM_SOURCE = [
   "  role   = aws_iam_role.role_fixed_template_ecs_fargate_container_app_execution.id",
   "  policy = \"{\\\"Version\\\":\\\"2012-10-17\\\",\\\"Statement\\\":[{\\\"Sid\\\":\\\"ReadCheckInSigningSecret\\\",\\\"Effect\\\":\\\"Allow\\\",\\\"Action\\\":[\\\"secretsmanager:GetSecretValue\\\"],\\\"Resource\\\":\\\"${aws_secretsmanager_secret.check_in_signing.arn}\\\"}]}\"",
   "}",
-].join("\r\n");
+].join("\n") + "\n";

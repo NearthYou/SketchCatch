@@ -314,7 +314,7 @@ resource "aws_appautoscaling_policy" "ecs_service_requests" {
   service_namespace  = aws_appautoscaling_target.ecs_service_requests.service_namespace
 
   target_tracking_scaling_policy_configuration {
-    target_value       = 10
+    target_value       = 50
     scale_out_cooldown = 30
     scale_in_cooldown  = 300
 
@@ -516,8 +516,8 @@ resource "random_password" "check_in_signing" {
 }
 
 resource "aws_secretsmanager_secret" "check_in_signing" {
-  name_prefix               = "audience-live-check/check-in-signing-"
-  recovery_window_in_days   = 0
+  name_prefix             = "audience-live-check/check-in-signing-"
+  recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "check_in_signing" {

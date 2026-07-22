@@ -28,13 +28,16 @@ import {
   createTerraformDiagramRequestGuard,
   createTerraformFilesForRefresh,
   createTerraformFilesFromGeneratedCode,
+  createInitialTerraformFiles,
   findTerraformBlockForNode,
   getDiagramTerraformAddresses,
   getEffectivePreservedTerraformAddresses,
   getTerraformAddressesRemovedFromDiagram,
   getTerraformFileCode,
   getTerraformFileOptions,
+  getTerraformSourceClassificationAfterRefresh,
   hasAuthoritativeTerraformSource,
+  hasTerraformResourceBlocks,
   markTerraformSourceAuthoritative,
   parseTerraformFiles,
   removeTerraformBlocksAndDependentOutputsByAddress,
@@ -289,14 +292,19 @@ export const TerraformCodePanel = forwardRef<
   },
   ref
 ) {
+  const initialTerraformSourceFiles = createInitialTerraformFiles(
+    context.diagram,
+    initialTerraformFiles
+  );
+  const hasInitialTerraformResourceBlocks = hasTerraformResourceBlocks(
+    initialTerraformSourceFiles
+  );
   const initialTerraformFingerprint =
     initialTerraformFiles?.length && hasAuthoritativeTerraformSource(context.diagram)
       ? toTerraformRefreshFingerprint(context.diagram)
       : "";
   const [terraformFiles, setTerraformFiles] = useState<TerraformVirtualFile[]>(() =>
-    initialTerraformFiles && initialTerraformFiles.length > 0
-      ? initialTerraformFiles.map((file) => ({ fileName: file.fileName, code: file.terraformCode }))
-      : createTerraformFilesFromGeneratedCode(context.diagram, "")
+    initialTerraformSourceFiles
   );
   const mutationLockedRef = useRef(isMutationLocked);
   mutationLockedRef.current = isMutationLocked;
@@ -346,7 +354,7 @@ export const TerraformCodePanel = forwardRef<
   const latestExternalTerraformFilesReplacementIdRef = useRef<number | null>(null);
   const latestTerraformRefreshRequestIdRef = useRef(context.terraformRefreshRequestId);
   const classifiedPreservedResourceAddressesRef = useRef(new Set<string>());
-  const initialTerraformSourceClassifiedRef = useRef(!initialTerraformFiles?.length);
+  const initialTerraformSourceClassifiedRef = useRef(!hasInitialTerraformResourceBlocks);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
   const lastScrolledNodeIdRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -542,6 +550,7 @@ export const TerraformCodePanel = forwardRef<
       setRequestState("loading");
 
       try {
+        const sourceWasClassified = initialTerraformSourceClassifiedRef.current;
         let nextClassifiedPreservedResourceAddresses =
           classifiedPreservedResourceAddressesRef.current;
         let shouldCommitInitialSourceClassification = false;
@@ -613,10 +622,17 @@ export const TerraformCodePanel = forwardRef<
           return;
         }
 
+        initialTerraformSourceClassifiedRef.current =
+          getTerraformSourceClassificationAfterRefresh({
+            currentFiles: terraformFiles,
+            didClassifyCurrentSource: shouldCommitInitialSourceClassification,
+            nextFiles,
+            preserveExistingSource,
+            sourceWasClassified
+          });
         if (shouldCommitInitialSourceClassification) {
           classifiedPreservedResourceAddressesRef.current =
             nextClassifiedPreservedResourceAddresses;
-          initialTerraformSourceClassifiedRef.current = true;
         }
         codeVersionRef.current += 1;
         terraformBaselineFilesRef.current = nextFiles.map((file) => ({ ...file }));
@@ -1227,10 +1243,11 @@ export const TerraformCodePanel = forwardRef<
           }))
         : createTerraformFilesFromGeneratedCode(context.diagram, "");
     const hasSourceSeed = replacement.files.length > 0;
+    const hasSourceResourceBlocks = hasTerraformResourceBlocks(nextFiles);
 
     terraformBaselineFilesRef.current = nextFiles.map((file) => ({ ...file }));
     classifiedPreservedResourceAddressesRef.current = new Set();
-    initialTerraformSourceClassifiedRef.current = !hasSourceSeed;
+    initialTerraformSourceClassifiedRef.current = !hasSourceResourceBlocks;
     latestDiagramResourceAddressesRef.current = getDiagramTerraformAddresses(context.diagram);
     latestDiagramFingerprintRef.current = hasSourceSeed ? replacement.diagramFingerprint : "";
     latestSuccessfulTerraformPreviewFingerprintRef.current = hasSourceSeed
