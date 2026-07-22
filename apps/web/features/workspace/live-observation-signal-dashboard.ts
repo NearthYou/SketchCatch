@@ -16,6 +16,7 @@ export type LiveObservationSignalStatus =
   | "normal"
   | "warning"
   | "critical"
+  | "observed"
   | "checking"
   | "unknown";
 
@@ -60,7 +61,10 @@ export type LiveObservationSignal = {
   readonly importance: string;
   readonly lastObservedAt?: string | undefined;
   readonly possibleCauses: readonly LiveObservationPossibleCause[];
-  readonly status: Exclude<LiveObservationSignalStatus, "normal" | "checking" | "unknown">;
+  readonly status: Exclude<
+    LiveObservationSignalStatus,
+    "normal" | "observed" | "checking" | "unknown"
+  >;
   readonly timeline: readonly LiveObservationTimelineEvent[];
   readonly title: string;
   readonly unknowns: readonly LiveObservationUnknown[];
@@ -106,13 +110,27 @@ export function createLiveObservationSignalDashboardModel(
 
   const providerSnapshot = snapshot.latestObservation?.payload;
   if (!providerSnapshot) {
-    return { logGroups: [], signals: [], status: getAwaitingProviderStatus() };
+    return {
+      logGroups: [],
+      signals: [],
+      status: hasAcceptedLiveEvents(snapshot)
+        ? (getStorePressureStatus(snapshot) ??
+          getObservedRequestStatus(snapshot, "최신 상태는 아직 확인 중이에요."))
+        : getAwaitingProviderStatus()
+    };
   }
   if (providerSnapshot.state === "unavailable") {
-    return { logGroups: [], signals: [], status: getUnavailableStatus(providerSnapshot) };
+    return { logGroups: [], signals: [], status: getUnavailableStatus(providerSnapshot, snapshot) };
   }
   if (providerSnapshot.state === "delayed") {
-    return { logGroups: [], signals: [], status: getDelayedStatus(providerSnapshot) };
+    return {
+      logGroups: [],
+      signals: [],
+      status: hasAcceptedLiveEvents(snapshot)
+        ? (getStorePressureStatus(snapshot) ??
+          getObservedRequestStatus(snapshot, "최신 상태가 늦게 도착해 다시 확인 중이에요."))
+        : getDelayedStatus(providerSnapshot)
+    };
   }
 
   const logGroups = groupLiveObservationLogs(providerSnapshot.logs);
@@ -146,10 +164,23 @@ function createSignalCandidates(input: {
   if (requestFailure) candidates.push(requestFailure);
 
   const capacitySignals = createCapacitySignals(input, providerSnapshot);
-  candidates.push(...capacitySignals);
+  if (requestFailure || capacitySignals.length === 0) {
+    candidates.push(...capacitySignals);
+  } else {
+    const [primaryCapacitySignal, ...remainingCapacitySignals] = capacitySignals;
+    if (primaryCapacitySignal) {
+      candidates.push(
+        appendResponseTimeEvidence(primaryCapacitySignal, providerSnapshot.p95LatencyMs),
+        ...remainingCapacitySignals
+      );
+    }
+  }
 
   const logSignals = createLogSignals(input, providerSnapshot);
   candidates.push(...logSignals);
+
+  const requestSurge = createRequestSurgeSignal(input);
+  if (requestSurge) candidates.push(requestSurge);
 
   return candidates;
 }
@@ -159,68 +190,83 @@ function createRequestFailureSignal(
   input: Parameters<typeof createSignalCandidates>[0],
   providerSnapshot: LiveObservationProviderSnapshot
 ): SignalCandidate | null {
-  const errorRate = providerSnapshot.errorRate;
-  const availability = providerSnapshot.availability;
   const requestCount = providerSnapshot.requests;
-  if (requestCount !== null && requestCount > 0 && errorRate !== null && errorRate > 0) {
-    const evidenceId = "request-failure-rate";
-    return createCandidate({
-      currentValue: formatPercent(errorRate),
-      deployment: input.deployment,
-      evidence: [
-        {
-          detail: `최근 확인한 요청 중 ${formatPercent(errorRate)}가 실패했어요.`,
-          id: evidenceId,
-          kind: "actual"
-        }
-      ],
-      history: getSignalHistory(input.history, input.snapshot.observationId, "errorRate"),
-      id: "request-failure",
-      impactRank: 0,
-      importance: "요청 실패는 사용자가 바로 겪을 수 있는 문제예요.",
-      possibleCauses: [],
-      severityRank: 0,
-      status: "critical",
-      title: "요청 실패가 확인됐어요",
-      firstObservedAt: providerSnapshot.observedAt ?? undefined,
-      lastObservedAt: providerSnapshot.observedAt ?? undefined,
-      unknowns: getDeploymentUnknown(input.deployment),
-      userImpact: "일부 사용자가 요청을 완료하지 못할 수 있어요."
+  if (requestCount === null || requestCount <= 0) return null;
+
+  const failureRate =
+    providerSnapshot.errorRate !== null && providerSnapshot.errorRate > 0
+      ? providerSnapshot.errorRate
+      : null;
+  const degradedAvailability =
+    providerSnapshot.availability !== null && providerSnapshot.availability < 100
+      ? providerSnapshot.availability
+      : null;
+  const primaryValue = failureRate ?? degradedAvailability;
+  if (primaryValue === null) return null;
+
+  const evidence: LiveObservationSignalEvidence[] = [];
+  if (failureRate !== null) {
+    evidence.push({
+      detail: `최근 확인한 요청 중 ${formatPercent(failureRate)}가 실패했어요.`,
+      id: "request-failure-rate",
+      kind: "actual"
     });
   }
-  if (
-    requestCount !== null &&
-    requestCount > 0 &&
-    errorRate === null &&
-    availability !== null &&
-    availability < 100
-  ) {
-    const evidenceId = "request-availability";
-    return createCandidate({
-      currentValue: formatPercent(availability),
-      deployment: input.deployment,
-      evidence: [
-        {
-          detail: `최근 확인한 요청의 응답 가능 비율은 ${formatPercent(availability)}예요.`,
-          id: evidenceId,
-          kind: "actual"
-        }
-      ],
-      history: getSignalHistory(input.history, input.snapshot.observationId, "availability"),
-      id: "request-failure",
-      impactRank: 0,
-      importance: "응답하지 못한 요청이 확인됐어요.",
-      possibleCauses: [],
-      severityRank: 0,
-      status: "critical",
-      title: "일부 요청이 정상 응답하지 않았어요",
-      firstObservedAt: providerSnapshot.observedAt ?? undefined,
-      lastObservedAt: providerSnapshot.observedAt ?? undefined,
-      unknowns: getDeploymentUnknown(input.deployment),
-      userImpact: "일부 사용자가 요청을 완료하지 못할 수 있어요."
+  if (degradedAvailability !== null) {
+    evidence.push({
+      detail: `최근 확인한 요청 중 ${formatPercent(degradedAvailability)}가 응답했어요.`,
+      id: "request-availability",
+      kind: "actual"
     });
   }
-  return null;
+  const responseTimeEvidence = createResponseTimeEvidence(providerSnapshot.p95LatencyMs);
+  if (responseTimeEvidence) evidence.push(responseTimeEvidence);
+
+  const hasFailureRate = failureRate !== null;
+  return createCandidate({
+    currentValue: formatPercent(primaryValue),
+    deployment: input.deployment,
+    evidence,
+    history: getSignalHistory(
+      input.history,
+      input.snapshot.observationId,
+      hasFailureRate ? "errorRate" : "availability"
+    ),
+    id: "request-failure",
+    impactRank: 0,
+    importance: hasFailureRate
+      ? "요청 실패는 사용자가 바로 겪을 수 있는 문제예요."
+      : "응답하지 못한 요청이 확인됐어요.",
+    possibleCauses: [],
+    severityRank: 0,
+    status: "critical",
+    title: hasFailureRate ? "요청 실패가 확인됐어요" : "일부 요청이 정상 응답하지 않았어요",
+    firstObservedAt: providerSnapshot.observedAt ?? undefined,
+    lastObservedAt: providerSnapshot.observedAt ?? undefined,
+    unknowns: getDeploymentUnknown(input.deployment),
+    userImpact: "일부 사용자가 요청을 완료하지 못할 수 있어요."
+  });
+}
+
+/** Adds direct response-time context to one existing problem without inventing a standalone threshold. */
+function appendResponseTimeEvidence(
+  signal: SignalCandidate,
+  p95LatencyMs: number | null
+): SignalCandidate {
+  const evidence = createResponseTimeEvidence(p95LatencyMs);
+  return evidence ? { ...signal, evidence: [...signal.evidence, evidence] } : signal;
+}
+
+/** Converts the observed upper-request response time into user wording without exposing metric names. */
+function createResponseTimeEvidence(
+  p95LatencyMs: number | null
+): LiveObservationSignalEvidence | null {
+  if (p95LatencyMs === null || !Number.isFinite(p95LatencyMs)) return null;
+  return {
+    detail: `느린 요청은 응답까지 ${formatResponseTime(p95LatencyMs)} 걸렸어요.`,
+    id: "request-response-time",
+    kind: "actual"
+  };
 }
 
 /** Detects only direct capacity count gaps, never a predicted scaling outcome or an individual failing task. */
@@ -307,7 +353,7 @@ function createLogSignals(
         deployment: input.deployment,
         evidence: [
           {
-            detail: `같은 오류 표현이 ${repeatedError.count}번 기록됐어요.`,
+            detail: `같은 오류가 ${repeatedError.count}번 기록됐어요.`,
             id: evidenceId,
             kind: "actual"
           }
@@ -344,7 +390,7 @@ function createLogSignals(
         deployment: input.deployment,
         evidence: [
           {
-            detail: "오류 표현이 기록됐어요.",
+            detail: "오류가 기록됐어요.",
             id: evidenceId,
             kind: "actual"
           }
@@ -387,7 +433,7 @@ function createLogSignals(
       history: [],
       id: "warning-log",
       impactRank: 5,
-      importance: "경고가 반복되면 오류로 이어질 수 있어요.",
+      importance: "경고 내용을 확인해 보세요.",
       lastObservedAt: warning.lastObservedAt,
       possibleCauses: [],
       severityRank: 2,
@@ -398,6 +444,44 @@ function createLogSignals(
       userImpact: "현재 사용자 영향은 아직 확인할 수 없어요."
     })
   ];
+}
+
+/** Shows the live request surge only from the existing session pressure calculation. */
+function createRequestSurgeSignal(
+  input: Parameters<typeof createSignalCandidates>[0]
+): SignalCandidate | null {
+  const { acceptedEventCount, observedAt, pressureLevel, projectedRequestsPerMinute } =
+    input.snapshot.live;
+  if (pressureLevel === "normal" || acceptedEventCount <= 0) return null;
+
+  return createCandidate({
+    currentValue: `분당 약 ${formatCount(projectedRequestsPerMinute)}건`,
+    deployment: input.deployment,
+    evidence: [
+      {
+        detail: `이번 관측에서 요청 ${formatCount(acceptedEventCount)}건을 확인했어요.`,
+        id: "live-request-count",
+        kind: "actual"
+      },
+      {
+        detail: `현재 속도가 이어지면 1분에 약 ${formatCount(projectedRequestsPerMinute)}건이에요.`,
+        id: "live-request-rate",
+        kind: "derived"
+      }
+    ],
+    firstObservedAt: observedAt,
+    history: [],
+    id: "request-surge",
+    impactRank: 6,
+    importance: "요청 증가가 이어지는지 확인해 보세요.",
+    lastObservedAt: observedAt,
+    possibleCauses: [],
+    severityRank: pressureLevel === "critical" ? 1 : 2,
+    status: "warning",
+    title: "요청이 빠르게 늘고 있어요",
+    unknowns: getDeploymentUnknown(input.deployment),
+    userImpact: "요청이 계속 늘면 응답이 느려질 수 있어요."
+  });
 }
 
 /** Builds one consistent signal shape without claiming a resource relationship the aggregate snapshot cannot identify. */
@@ -623,18 +707,31 @@ function getAvailableStatus(input: {
     return {
       lastObservedAt,
       status: primarySignal.status,
-      title: primarySignal.title,
+      title:
+        primarySignal.status === "critical"
+          ? "일부 요청에 문제가 있어요."
+          : "주의해서 볼 문제가 있어요.",
       unknowns,
       userImpact: primarySignal.userImpact
     };
   }
 
   if (!hasCurrentHealthEvidence(input.providerSnapshot)) {
+    if (hasAcceptedLiveEvents(input.snapshot)) {
+      return (
+        getStorePressureStatus(input.snapshot) ??
+        getObservedRequestStatus(
+          input.snapshot,
+          "서비스 상태를 확인할 최신 정보가 아직 없어요.",
+          unknowns
+        )
+      );
+    }
     return {
       dataNote: "지금 받은 값만으로는 상태를 확인할 수 없어요.",
       lastObservedAt,
       status: "checking",
-      title: "서비스 상태를 확인하고 있어요",
+      title: "상태를 확인하고 있어요.",
       unknowns,
       userImpact: "현재 사용자 영향은 아직 확인할 수 없어요."
     };
@@ -643,9 +740,48 @@ function getAvailableStatus(input: {
   return {
     lastObservedAt,
     status: "normal",
-    title: "현재 큰 문제는 확인되지 않았어요",
+    title: "현재 큰 문제는 없어요.",
     unknowns,
     userImpact: "현재 확인한 요청과 서버 상태에서 큰 문제는 보이지 않아요."
+  };
+}
+
+/** Shows confirmed application traffic without converting it into a provider health decision. */
+function getObservedRequestStatus(
+  snapshot: LiveObservationV2Snapshot,
+  providerNote: string,
+  unknowns: readonly LiveObservationUnknown[] = [
+    createUnknown("서비스 상태는 아직 확인 중이에요.")
+  ]
+): LiveObservationDashboardStatus {
+  return {
+    dataNote: `참여 요청 ${snapshot.live.acceptedEventCount}건을 확인했어요. ${providerNote}`,
+    lastObservedAt: snapshot.live.observedAt,
+    status: "observed",
+    title: "상태를 확인하고 있어요.",
+    unknowns,
+    userImpact: "요청은 확인했지만 서비스 상태는 아직 확인 중이에요."
+  };
+}
+
+function hasAcceptedLiveEvents(snapshot: LiveObservationV2Snapshot): boolean {
+  return snapshot.live.acceptedEventCount > 0;
+}
+
+/** Keeps Store pressure visible while provider health remains unknown, without declaring an incident. */
+function getStorePressureStatus(
+  snapshot: LiveObservationV2Snapshot
+): LiveObservationDashboardStatus | null {
+  const level = snapshot.live.pressureLevel;
+  if (level === "normal" || !hasAcceptedLiveEvents(snapshot)) return null;
+
+  return {
+    dataNote: `참여 요청 ${snapshot.live.acceptedEventCount}건을 확인했어요. 최신 상태는 아직 확인 중이에요.`,
+    lastObservedAt: snapshot.live.observedAt,
+    status: "observed",
+    title: "주의해서 볼 문제가 있어요.",
+    unknowns: [createUnknown("상태를 확인하기 전에는 요청 증가의 원인을 알 수 없어요.")],
+    userImpact: "요청이 계속 늘면 일부 응답이 느려질 수 있어요."
   };
 }
 
@@ -689,8 +825,8 @@ function getWaitingStatus(): LiveObservationDashboardStatus {
   return {
     dataNote: "관측 세션을 시작하면 최신 상태가 여기에 표시돼요.",
     status: "checking",
-    title: "관측을 시작하면 상태를 확인할 수 있어요",
-    unknowns: [createUnknown("관측 데이터가 아직 없어요.")],
+    title: "상태를 확인하고 있어요.",
+    unknowns: [createUnknown("아직 받은 상태 정보가 없어요.")],
     userImpact: "현재 사용자 영향은 아직 확인할 수 없어요."
   };
 }
@@ -698,10 +834,10 @@ function getWaitingStatus(): LiveObservationDashboardStatus {
 /** Distinguishes an active session waiting for AWS evidence from a healthy service. */
 function getAwaitingProviderStatus(): LiveObservationDashboardStatus {
   return {
-    dataNote: "AWS 관측값을 기다리고 있어요.",
+    dataNote: "최신 상태를 기다리고 있어요.",
     status: "checking",
-    title: "서비스 상태를 확인하고 있어요",
-    unknowns: [createUnknown("AWS 관측값이 아직 도착하지 않았어요.")],
+    title: "상태를 확인하고 있어요.",
+    unknowns: [createUnknown("최신 상태가 아직 도착하지 않았어요.")],
     userImpact: "현재 사용자 영향은 아직 확인할 수 없어요."
   };
 }
@@ -714,7 +850,7 @@ function getDelayedStatus(
     dataNote: "마지막 관측값이 늦게 도착했어요. 최신 상태를 확인하고 있어요.",
     lastObservedAt: providerSnapshot.observedAt ?? undefined,
     status: "checking",
-    title: "AWS 상태를 확인하고 있어요",
+    title: "상태를 확인하고 있어요.",
     unknowns: [createUnknown("현재 값이 늦게 도착해 서비스 상태를 확정할 수 없어요.")],
     userImpact: "현재 사용자 영향은 아직 확인할 수 없어요."
   };
@@ -722,14 +858,24 @@ function getDelayedStatus(
 
 /** Keeps provider failures separate from application incidents because the snapshot did not establish either condition. */
 function getUnavailableStatus(
-  providerSnapshot: LiveObservationProviderSnapshot
+  providerSnapshot: LiveObservationProviderSnapshot,
+  snapshot: LiveObservationV2Snapshot
 ): LiveObservationDashboardStatus {
+  const acceptedEventNote = hasAcceptedLiveEvents(snapshot)
+    ? `참여 요청 ${snapshot.live.acceptedEventCount}건은 확인했지만 `
+    : "";
   return {
-    dataNote: "AWS 관측값을 받지 못했어요.",
-    lastObservedAt: providerSnapshot.observedAt ?? undefined,
+    dataNote: `${acceptedEventNote}최신 상태를 받지 못했어요.`,
+    lastObservedAt: providerSnapshot.observedAt ?? snapshot.live.observedAt,
     status: "unknown",
-    title: "현재 데이터로는 서비스 상태를 확인할 수 없어요",
-    unknowns: [createUnknown("관측값이 없어 사용자 영향과 원인을 확인할 수 없어요.")],
+    title: "지금은 상태를 확인할 수 없어요.",
+    unknowns: [
+      createUnknown(
+        hasAcceptedLiveEvents(snapshot)
+          ? `참여 요청 ${snapshot.live.acceptedEventCount}건 외의 관측값이 없어 사용자 영향과 원인을 확인할 수 없어요.`
+          : "관측값이 없어 사용자 영향과 원인을 확인할 수 없어요."
+      )
+    ],
     userImpact: "현재 사용자 영향은 아직 확인할 수 없어요."
   };
 }
@@ -740,7 +886,7 @@ function getEndedStatus(snapshot: LiveObservationV2Snapshot): LiveObservationDas
     dataNote: "새 관측 세션을 시작하면 최신 상태를 다시 확인할 수 있어요.",
     lastObservedAt: snapshot.terminalAt ?? undefined,
     status: "unknown",
-    title: "관측이 끝났어요",
+    title: "지금은 상태를 확인할 수 없어요.",
     unknowns: [createUnknown("현재 서비스 상태는 새 관측으로 확인해야 해요.")],
     userImpact: "현재 사용자 영향은 아직 확인할 수 없어요."
   };
@@ -749,6 +895,17 @@ function getEndedStatus(snapshot: LiveObservationV2Snapshot): LiveObservationDas
 /** Formats a factual percentage without implying that a separate normal range exists. */
 function formatPercent(value: number): string {
   return `${new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 1 }).format(value)}%`;
+}
+
+function formatCount(value: number): string {
+  return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 }).format(value);
+}
+
+/** Uses familiar time units while keeping the observed number intact. */
+function formatResponseTime(valueMs: number): string {
+  const value = valueMs >= 1000 ? valueMs / 1000 : valueMs;
+  const unit = valueMs >= 1000 ? "초" : "밀리초";
+  return `${new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 1 }).format(value)}${unit}`;
 }
 
 /** Marks a presentation statement as unknown so it cannot be styled or documented as observed evidence. */

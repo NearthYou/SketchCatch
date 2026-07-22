@@ -11,7 +11,8 @@ import type {
 } from "./git-cicd-handoff-service.js";
 import {
   createGitCicdHandoff,
-  GitCicdHandoffProviderConflictError
+  GitCicdHandoffProviderConflictError,
+  setupGitCicdHandoff
 } from "./git-cicd-handoff-service.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -110,7 +111,10 @@ test("uses server-derived configuration when the request omits preview fields", 
       fixture.repository,
       fixture.provider,
       () => "99999999-9999-4999-8999-999999999999",
-      { planArtifactVerifier: { async verify() { return true; } } }
+      {
+        planArtifactVerifier: { async verify() { return true; } },
+        setupActions: createNoopSetupActions()
+      }
     );
   });
 
@@ -150,7 +154,10 @@ test("accepts explicit false and null values when they exactly match the server 
       fixture.repository,
       fixture.provider,
       () => "99999999-9999-4999-8999-999999999999",
-      { planArtifactVerifier: { async verify() { return true; } } }
+      {
+        planArtifactVerifier: { async verify() { return true; } },
+        setupActions: createNoopSetupActions()
+      }
     );
   });
 
@@ -158,6 +165,371 @@ test("accepts explicit false and null values when they exactly match the server 
   assert.equal(fixture.providerInputs[0]?.rdsEnabled, false);
   assert.equal(fixture.providerInputs[0]?.staticSiteUrl, publicOutputUrl);
   assert.equal(fixture.providerInputs[0]?.apiBaseUrl, null);
+});
+
+test("stores a resumable draft before settings, AWS trust, and pull request setup", async () => {
+  const fixture = createFixture();
+
+  await withPublicBaseUrl(async () => {
+    await createGitCicdHandoff(
+      createInput(),
+      fixture.repository,
+      fixture.provider,
+      () => "99999999-9999-4999-8999-999999999999",
+      {
+        planArtifactVerifier: { async verify() { return true; } },
+        setupActions: {
+          async applyRepositorySettings() {
+            fixture.events.push("repository-settings");
+          },
+          async applyAwsRoleDiff() {
+            fixture.events.push("aws-role-diff");
+          }
+        }
+      }
+    );
+  });
+
+  assert.deepEqual(fixture.events, [
+    "draft",
+    "repository-settings",
+    "aws-role-diff",
+    "pull-request",
+    "pr-created"
+  ]);
+  assert.equal(fixture.storedInputs[0]?.status, "draft");
+  assert.equal(fixture.storedInputs[0]?.pullRequestUrl, null);
+});
+
+test("resumes the same accepted draft after an automatic setup failure", async () => {
+  const fixture = createFixture();
+  const handoffId = "99999999-9999-4999-8999-999999999999";
+
+  await withPublicBaseUrl(async () => {
+    await assert.rejects(
+      createGitCicdHandoff(
+        createInput(),
+        fixture.repository,
+        fixture.provider,
+        () => handoffId,
+        {
+          planArtifactVerifier: { async verify() { return true; } },
+          setupActions: {
+            async applyRepositorySettings() {
+              fixture.events.push("repository-settings-first");
+            },
+            async applyAwsRoleDiff() {
+              fixture.events.push("aws-role-diff-failed");
+              throw new Error("temporary AWS failure");
+            }
+          }
+        }
+      ),
+      /temporary AWS failure/
+    );
+
+    fixture.events.length = 0;
+    const result = await setupGitCicdHandoff(
+      {
+        handoffId,
+        accessContext: { kind: "user", userId }
+      },
+      fixture.repository,
+      fixture.provider,
+      {
+        planArtifactVerifier: { async verify() { return true; } },
+        setupActions: {
+          async applyRepositorySettings() {
+            fixture.events.push("repository-settings-retry");
+          },
+          async applyAwsRoleDiff() {
+            fixture.events.push("aws-role-diff-retry");
+          }
+        }
+      }
+    );
+
+    assert.equal(result.id, handoffId);
+    assert.equal(result.userAcceptedChangeId, planId);
+    assert.equal(result.status, "pr_created");
+  });
+
+  assert.equal(fixture.storedInputs.length, 1);
+  assert.deepEqual(fixture.events, [
+    "repository-settings-retry",
+    "aws-role-diff-retry",
+    "pull-request",
+    "pr-created"
+  ]);
+});
+
+test("reconciles settings and pull request again for an existing PR without new approval", async () => {
+  const fixture = createFixture();
+  const handoffId = "99999999-9999-4999-8999-999999999999";
+  const setupActions = createNoopSetupActions();
+
+  await withPublicBaseUrl(async () => {
+    await createGitCicdHandoff(
+      createInput(),
+      fixture.repository,
+      fixture.provider,
+      () => handoffId,
+      {
+        planArtifactVerifier: { async verify() { return true; } },
+        setupActions
+      }
+    );
+
+    fixture.events.length = 0;
+    const result = await setupGitCicdHandoff(
+      { handoffId, accessContext: { kind: "user", userId } },
+      fixture.repository,
+      fixture.provider,
+      {
+        planArtifactVerifier: { async verify() { return true; } },
+        setupActions: {
+          async applyRepositorySettings() {
+            fixture.events.push("repository-settings-reconcile");
+          },
+          async applyAwsRoleDiff() {
+            fixture.events.push("aws-role-diff-reconcile");
+          }
+        }
+      }
+    );
+
+    assert.equal(result.userAcceptedChangeId, planId);
+    assert.equal(result.status, "pr_created");
+  });
+
+  assert.equal(fixture.storedInputs.length, 1);
+  assert.equal(fixture.providerInputs.length, 2);
+  assert.equal(fixture.providerInputs[0]?.expectedPullRequestHeadSha, null);
+  assert.equal(fixture.providerInputs[1]?.expectedPullRequestHeadSha, "a".repeat(40));
+  assert.deepEqual(fixture.events, [
+    "repository-settings-reconcile",
+    "aws-role-diff-reconcile",
+    "pull-request",
+    "pr-created"
+  ]);
+});
+
+test("adds a stable retry token to the same accepted handoff after pipeline failure", async () => {
+  const fixture = createFixture();
+  const failedHandoffId = "99999999-9999-4999-8999-999999999999";
+
+  await withPublicBaseUrl(async () => {
+    await createGitCicdHandoff(
+      createInput(),
+      fixture.repository,
+      fixture.provider,
+      () => failedHandoffId,
+      {
+        planArtifactVerifier: { async verify() { return true; } },
+        setupActions: createNoopSetupActions()
+      }
+    );
+    await fixture.repository.updateHandoffStatus(failedHandoffId, {
+      status: "pipeline_failed"
+    });
+
+    fixture.events.length = 0;
+    const retried = await setupGitCicdHandoff(
+      { handoffId: failedHandoffId, accessContext: { kind: "user", userId } },
+      fixture.repository,
+      fixture.provider,
+      {
+        planArtifactVerifier: { async verify() { return true; } },
+        setupActions: {
+          async applyRepositorySettings() {
+            fixture.events.push("repository-settings-retry-pr");
+          },
+          async applyAwsRoleDiff() {
+            fixture.events.push("aws-role-diff-retry-pr");
+          }
+        }
+      }
+    );
+
+    assert.equal(retried.id, failedHandoffId);
+    assert.equal(retried.userAcceptedChangeId, planId);
+    assert.equal(retried.status, "pr_created");
+    assert.equal(fixture.providerInputs[1]?.handoffId, failedHandoffId);
+    assert.match(
+      fixture.providerInputs[1]?.setupRetryToken ?? "",
+      new RegExp(`^${failedHandoffId}:[a-f0-9]{24}$`, "u")
+    );
+
+    const firstRetryToken = fixture.providerInputs[1]?.setupRetryToken;
+    await fixture.repository.updateHandoffStatus(failedHandoffId, {
+      status: "pipeline_failed"
+    });
+    fixture.events.length = 0;
+    await setupGitCicdHandoff(
+      { handoffId: failedHandoffId, accessContext: { kind: "user", userId } },
+      fixture.repository,
+      fixture.provider,
+      {
+        planArtifactVerifier: { async verify() { return true; } },
+        setupActions: {
+          async applyRepositorySettings() {
+            fixture.events.push("repository-settings-retry-pr");
+          },
+          async applyAwsRoleDiff() {
+            fixture.events.push("aws-role-diff-retry-pr");
+          }
+        }
+      }
+    );
+    assert.equal(fixture.providerInputs[2]?.setupRetryToken, firstRetryToken);
+  });
+
+  assert.equal(fixture.storedInputs.length, 1);
+  assert.deepEqual(fixture.events, [
+    "repository-settings-retry-pr",
+    "aws-role-diff-retry-pr",
+    "pull-request",
+    "pr-created"
+  ]);
+});
+
+test("backfills verified setup evidence for a legacy successful handoff without creating another PR", async () => {
+  const fixture = createFixture();
+  const handoffId = "99999999-9999-4999-8999-999999999999";
+  let setupCalls = 0;
+
+  await withPublicBaseUrl(async () => {
+    await createGitCicdHandoff(
+      createInput(),
+      fixture.repository,
+      fixture.provider,
+      () => handoffId,
+      {
+        planArtifactVerifier: { async verify() { return true; } },
+        setupActions: createNoopSetupActions()
+      }
+    );
+    await fixture.repository.updateHandoffStatus(handoffId, {
+      status: "pipeline_success"
+    });
+
+    const converged = await setupGitCicdHandoff(
+      { handoffId, accessContext: { kind: "user", userId } },
+      fixture.repository,
+      fixture.provider,
+      {
+        setupActions: {
+          async applyRepositorySettings(_input, repository) {
+            setupCalls += 1;
+            const current = await repository.findHandoffById(handoffId);
+            assert.ok(current?.repositorySettingsPreview);
+            await repository.updateHandoffAutomationMetadata?.(handoffId, {
+              repositorySettingsPreview: {
+                ...current.repositorySettingsPreview,
+                applied: true,
+                appliedAt: "2026-07-22T02:00:00.000Z",
+                verified: true
+              }
+            });
+          },
+          async applyAwsRoleDiff(_input, repository) {
+            setupCalls += 1;
+            const current = await repository.findHandoffById(handoffId);
+            assert.ok(current?.awsRoleDiff);
+            await repository.updateHandoffAutomationMetadata?.(handoffId, {
+              awsRoleDiff: {
+                ...current.awsRoleDiff,
+                appliedAt: "2026-07-22T02:00:00.000Z",
+                verified: true
+              }
+            });
+          }
+        }
+      }
+    );
+
+    assert.equal(converged.status, "pipeline_success");
+    assert.equal(converged.repositorySettingsPreview?.verified, true);
+    assert.equal(converged.awsRoleDiff?.verified, true);
+
+    const unchanged = await setupGitCicdHandoff(
+      { handoffId, accessContext: { kind: "user", userId } },
+      fixture.repository,
+      fixture.provider,
+      {
+        setupActions: {
+          async applyRepositorySettings() {
+            setupCalls += 1;
+          },
+          async applyAwsRoleDiff() {
+            setupCalls += 1;
+          }
+        }
+      }
+    );
+
+    assert.equal(unchanged.status, "pipeline_success");
+  });
+
+  assert.equal(setupCalls, 2);
+  assert.equal(fixture.providerInputs.length, 1);
+});
+
+test("legacy setup skips AWS mutation when the handoff has no AWS trust diff", async () => {
+  const fixture = createFixture();
+  const handoffId = "99999999-9999-4999-8999-999999999999";
+  let awsSetupCalls = 0;
+
+  await withPublicBaseUrl(async () => {
+    await createGitCicdHandoff(
+      createInput(),
+      fixture.repository,
+      fixture.provider,
+      () => handoffId,
+      {
+        planArtifactVerifier: { async verify() { return true; } },
+        setupActions: createNoopSetupActions()
+      }
+    );
+    await fixture.repository.updateHandoffAutomationMetadata?.(handoffId, {
+      awsRoleDiff: null
+    });
+    await fixture.repository.updateHandoffStatus(handoffId, {
+      status: "pipeline_success"
+    });
+
+    const converged = await setupGitCicdHandoff(
+      { handoffId, accessContext: { kind: "user", userId } },
+      fixture.repository,
+      fixture.provider,
+      {
+        setupActions: {
+          async applyRepositorySettings(_input, repository) {
+            const current = await repository.findHandoffById(handoffId);
+            assert.ok(current?.repositorySettingsPreview);
+            await repository.updateHandoffAutomationMetadata?.(handoffId, {
+              repositorySettingsPreview: {
+                ...current.repositorySettingsPreview,
+                applied: true,
+                appliedAt: "2026-07-22T02:00:00.000Z",
+                verified: true
+              }
+            });
+          },
+          async applyAwsRoleDiff() {
+            awsSetupCalls += 1;
+          }
+        }
+      }
+    );
+
+    assert.equal(converged.status, "pipeline_success");
+    assert.equal(converged.repositorySettingsPreview?.verified, true);
+    assert.equal(converged.awsRoleDiff, null);
+  });
+
+  assert.equal(awsSetupCalls, 0);
+  assert.equal(fixture.providerInputs.length, 1);
 });
 
 function createInput() {
@@ -172,9 +544,18 @@ function createInput() {
   };
 }
 
+function createNoopSetupActions() {
+  return {
+    async applyRepositorySettings() {},
+    async applyAwsRoleDiff() {}
+  };
+}
+
 function createFixture(input: { withRds?: boolean } = {}) {
   const providerInputs: GitCicdProviderCreateInput[] = [];
   const storedInputs: CreateGitCicdHandoffRecordInput[] = [];
+  const events: string[] = [];
+  let storedHandoff: GitCicdHandoffRecord | undefined;
   const target = createStaticSiteTarget();
   const deployment = createDeployment();
   const plan = createPlan();
@@ -242,20 +623,49 @@ function createFixture(input: { withRds?: boolean } = {}) {
     },
     async createHandoff(input: CreateGitCicdHandoffRecordInput) {
       storedInputs.push(input);
-      return {
+      events.push("draft");
+      storedHandoff = {
         ...input,
         createdAt: new Date("2026-07-22T01:00:00.000Z"),
         updatedAt: new Date("2026-07-22T01:00:00.000Z")
       } as GitCicdHandoffRecord;
+      return storedHandoff;
+    },
+    async findHandoffById() {
+      return storedHandoff;
+    },
+    async updateHandoffStatus(_handoffId: string, update: Record<string, unknown>) {
+      events.push("pr-created");
+      storedHandoff = {
+        ...storedHandoff,
+        ...update
+      } as GitCicdHandoffRecord;
+      return storedHandoff;
+    },
+    async updateHandoffAutomationMetadata(
+      _handoffId: string,
+      update: {
+        repositorySettingsPreview?: GitCicdHandoffRecord["repositorySettingsPreview"];
+        awsRoleDiff?: GitCicdHandoffRecord["awsRoleDiff"];
+      }
+    ) {
+      storedHandoff = {
+        ...storedHandoff,
+        ...update
+      } as GitCicdHandoffRecord;
+      return storedHandoff;
     }
   } as unknown as GitCicdHandoffRepository;
 
   const provider: GitCicdHandoffProvider = {
     async createHandoff(input) {
+      events.push("pull-request");
       providerInputs.push(input);
       return {
         repositoryProvider: "github",
         pullRequestUrl: "https://github.com/sketchcatch/example/pull/1",
+        pullRequestNumber: 1,
+        pullRequestHeadSha: "a".repeat(40),
         pipelineRunUrl: null,
         status: "pr_created",
         statusMessage: null
@@ -263,7 +673,7 @@ function createFixture(input: { withRds?: boolean } = {}) {
     }
   };
 
-  return { provider, providerInputs, repository, storedInputs };
+  return { events, provider, providerInputs, repository, storedInputs };
 }
 
 function createSourceRepository() {

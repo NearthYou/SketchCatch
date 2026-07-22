@@ -10,8 +10,6 @@ import type {
 import { ApiClientError, getApiErrorMessage } from "../../lib/api-client";
 import { copyTextToClipboard } from "../../lib/clipboard";
 import {
-  applyGitCicdAwsRoleDiff,
-  applyGitCicdRepositorySettings,
   createGitCicdHandoff,
   getGitCicdPipelineRun,
   listDeployments,
@@ -19,7 +17,8 @@ import {
   listGitCicdPipelineLogs,
   listGitCicdPipelineRuns,
   refreshProjectGitCicdPipelineRuns,
-  retryGitCicdFrontendRelease
+  retryGitCicdFrontendRelease,
+  setupGitCicdHandoff
 } from "./api";
 import { CicdHandoffPanel } from "./CicdHandoffPanel";
 import { CicdLoadingState } from "./CicdLoadingState";
@@ -53,7 +52,9 @@ import {
   invalidateGitCicdReload,
   isGitCicdHandoffCreationEnabled,
   isGitCicdHandoffReady,
+  isGitCicdHandoffSetupComplete,
   isGitCicdReloadOwner,
+  selectGitCicdHandoffForSetup,
   selectGitCicdSourceDeployment
 } from "./cicd-handoff";
 import { createInfrastructureDeploymentCommand } from "./cicd-deployment-command";
@@ -184,15 +185,13 @@ export function CicdConsoleScreen({
   );
   const existingHandoff = useMemo(
     () =>
-      sourceDeployment && readiness?.approvedApplyPlanArtifactId
-        ? (handoffs.find(
-            (handoff) =>
-              handoff.sourceDeploymentId === sourceDeployment.id &&
-              handoff.userAcceptedChangeId === readiness.approvedApplyPlanArtifactId &&
-              handoff.status !== "cancelled"
-          ) ?? null)
-        : null,
-    [handoffs, readiness?.approvedApplyPlanArtifactId, sourceDeployment]
+      selectGitCicdHandoffForSetup(
+        handoffs,
+        sourceDeployment?.id ?? null,
+        readiness?.approvedApplyPlanArtifactId ?? null,
+        repository?.id ?? null
+      ),
+    [handoffs, readiness?.approvedApplyPlanArtifactId, repository?.id, sourceDeployment]
   );
   const currentHandoff = useMemo(() => {
     const sorted = [...handoffs].sort((left, right) =>
@@ -240,6 +239,7 @@ export function CicdConsoleScreen({
     isConsoleDataFresh,
     isReadinessReady: handoffReady
   });
+  const handoffSetupComplete = isGitCicdHandoffSetupComplete(existingHandoff);
   const githubAccountSettingsHref = "/dashboard/settings#github-account-settings-title";
   const requestReadinessReload = useCallback((): void => {
     if (
@@ -282,7 +282,7 @@ export function CicdConsoleScreen({
     );
   }, [projectId]);
 
-  const createHandoff = useCallback(async (): Promise<void> => {
+  const runHandoffSetup = useCallback(async (): Promise<void> => {
     if (
       !canCreateHandoff ||
       !repository ||
@@ -297,20 +297,27 @@ export function CicdConsoleScreen({
     setIsHandoffBusy(true);
     setHandoffErrorMessage("");
     try {
-      const created = await createGitCicdHandoff({
-        projectId,
-        ...buildGitCicdHandoffRequest({
-          approvedApplyPlanArtifactId: readiness.approvedApplyPlanArtifactId,
-          configurationPreview,
-          deployment: sourceDeployment,
-          monitoringConfig: config,
-          repository
-        })
-      });
-      setHandoffs((current) => [created, ...current.filter((item) => item.id !== created.id)]);
-      setSelectedHandoffId(created.id);
+      const updated = existingHandoff
+        ? await setupGitCicdHandoff(existingHandoff.id)
+        : await createGitCicdHandoff({
+            projectId,
+            ...buildGitCicdHandoffRequest({
+              approvedApplyPlanArtifactId: readiness.approvedApplyPlanArtifactId,
+              configurationPreview,
+              deployment: sourceDeployment,
+              monitoringConfig: config,
+              repository
+            })
+          });
+      setHandoffs((current) => [updated, ...current.filter((item) => item.id !== updated.id)]);
+      setSelectedHandoffId(updated.id);
       setIsHandoffReviewOpen(false);
     } catch (error) {
+      try {
+        await refreshHandoffs();
+      } catch {
+        // Preserve the setup error even if the persisted partial state cannot be reloaded.
+      }
       setHandoffErrorMessage(
         await handleGitCicdHandoffCreationError(error, onRefreshDeliveryProfile)
       );
@@ -321,30 +328,14 @@ export function CicdConsoleScreen({
     config,
     canCreateHandoff,
     configurationPreview,
+    existingHandoff,
     onRefreshDeliveryProfile,
     projectId,
     readiness?.approvedApplyPlanArtifactId,
+    refreshHandoffs,
     repository,
     sourceDeployment
   ]);
-
-  const runHandoffAction = useCallback(
-    async (action: () => Promise<unknown>): Promise<void> => {
-      setIsHandoffBusy(true);
-      setHandoffErrorMessage("");
-      try {
-        await action();
-        await refreshHandoffs();
-      } catch (error) {
-        setHandoffErrorMessage(
-          getApiErrorMessage(error, "Git/CI/CD 연결 작업을 완료하지 못했습니다.")
-        );
-      } finally {
-        setIsHandoffBusy(false);
-      }
-    },
-    [refreshHandoffs]
-  );
 
   useEffect(() => {
     if (!isVisible) {
@@ -665,12 +656,17 @@ export function CicdConsoleScreen({
       window.requestAnimationFrame(() => openAccordionSection("cicd-handoff"));
       return;
     }
+    if (action.kind === "retry_setup") {
+      void runHandoffSetup();
+      return;
+    }
     openAccordionSection(action.sectionId);
   }
 
   const isCurrentTaskUnavailable =
     isHandoffBusy ||
     (presentation.currentTask.action.kind === "review_pr" && !canCreateHandoff) ||
+    (presentation.currentTask.action.kind === "retry_setup" && !canCreateHandoff) ||
     (presentation.currentTask.action.kind === "direct_deployment" && !onOpenDirectDeployment);
 
   return (
@@ -831,15 +827,9 @@ export function CicdConsoleScreen({
               isHandoffReviewOpen={isHandoffReviewOpen}
               isReadinessRefreshing={isReadinessRefreshing}
               monitoringConfig={config}
-              onApplyAwsRoleDiff={(handoffId) =>
-                void runHandoffAction(() => applyGitCicdAwsRoleDiff(handoffId))
-              }
-              onApplyRepositorySettings={(handoffId) =>
-                void runHandoffAction(() => applyGitCicdRepositorySettings(handoffId))
-              }
               onCloseCreateReview={() => setIsHandoffReviewOpen(false)}
               onCopyInfrastructureCommand={() => void copyInfrastructureDeploymentCommand()}
-              onCreateHandoff={() => void createHandoff()}
+              onCreateHandoff={() => void runHandoffSetup()}
               onOpenDirectDeployment={onOpenDirectDeployment}
               onRefreshReadiness={requestReadinessReload}
               onSelectHandoff={setSelectedHandoffId}
@@ -858,7 +848,7 @@ export function CicdConsoleScreen({
               canRetryFrontend={canRetryGitCicdFrontend(selectedRun)}
               frontendRetryError={frontendRetryError}
               isFrontendRetrying={isFrontendRetrying}
-              isHandoffReady={handoffReady}
+              isHandoffReady={handoffSetupComplete}
               isLogsLoading={isLogsLoading}
               logs={visibleLogs}
               logsErrorMessage={logsErrorMessage}

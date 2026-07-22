@@ -347,10 +347,58 @@ test("최초 앱 배포 항목이 없는 대상은 해당 작업을 건너뛰고
   assert.equal(presentation.currentPhase, "pr");
 });
 
+test("PR만 생성되고 외부 설정 검증이 남으면 Phase 3에서 설정 계속하기를 안내한다", async () => {
+  const { getCicdReadinessPresentation } = await loadPresentationModule();
+  const presentation = getCicdReadinessPresentation({
+    currentHandoff: setupHandoff({
+      status: "pr_created",
+      pullRequestUrl: "https://github.com/jh-9999/audience-live-check/pull/10",
+      repositorySettingsPreview: {
+        environmentName: "sketchcatch-production",
+        variables: {},
+        secrets: [],
+        workflowFiles: [],
+        applied: true,
+        appliedAt: "2026-07-22T10:00:00.000Z",
+        verified: false
+      },
+      awsRoleDiff: null
+    }),
+    profile: profile({
+      monitoringConfig: monitoringConfig(),
+      deploymentTarget: deploymentTarget(),
+      readinessItems: readySetupItems([
+        readinessItem("approved_apply_plan", "ready", null),
+        readinessItem("initial_application_release", "ready", null)
+      ])
+    }),
+    runs: []
+  });
+
+  assert.equal(presentation.currentTask.id, "create_pr");
+  assert.equal(presentation.currentTask.actionLabel, "설정 계속하기");
+  assert.equal(presentation.currentPhase, "pr");
+  assert.equal(presentation.phases.find((phase) => phase.id === "pr")?.statusLabel, "진행 중");
+});
+
 test("PR 생성 이후 Pipeline 실행 상태를 별도 실행 상태로 표시한다", async () => {
   const { getCicdReadinessPresentation } = await loadPresentationModule();
   const presentation = getCicdReadinessPresentation({
-    currentHandoff: { id: "handoff-current", status: "pr_created" } as GitCicdHandoff,
+    currentHandoff: setupHandoff({
+      id: "handoff-current",
+      status: "pr_created",
+      pullRequestUrl: "https://github.com/jh-9999/audience-live-check/pull/10",
+      repositorySettingsPreview: {
+        environmentName: "sketchcatch-production",
+        variables: {},
+        secrets: [],
+        workflowFiles: [],
+        applied: true,
+        appliedAt: "2026-07-22T10:00:00.000Z",
+        verified: true
+      },
+      awsRoleDiff: null
+    }),
     profile: profile({
       monitoringConfig: monitoringConfig(),
       deploymentTarget: deploymentTarget(),
@@ -384,10 +432,21 @@ test("PR 생성 이후 Pipeline 실행 상태를 별도 실행 상태로 표시�
 test("관련 Run이 아직 없어도 Handoff의 Pipeline 상태를 fallback으로 표시한다", async () => {
   const { getCicdReadinessPresentation } = await loadPresentationModule();
   const presentation = getCicdReadinessPresentation({
-    currentHandoff: {
+    currentHandoff: setupHandoff({
       id: "handoff-current",
-      status: "pipeline_failed"
-    } as GitCicdHandoff,
+      status: "pipeline_failed",
+      pullRequestUrl: "https://github.com/jh-9999/audience-live-check/pull/10",
+      repositorySettingsPreview: {
+        environmentName: "sketchcatch-production",
+        variables: {},
+        secrets: [],
+        workflowFiles: [],
+        applied: true,
+        appliedAt: "2026-07-22T10:00:00.000Z",
+        verified: true
+      },
+      awsRoleDiff: null
+    }),
     profile: profile({
       monitoringConfig: monitoringConfig(),
       deploymentTarget: deploymentTarget(),
@@ -400,6 +459,44 @@ test("관련 Run이 아직 없어도 Handoff의 Pipeline 상태를 fallback으�
   });
 
   assert.equal(presentation.pipelineRunStatus, "실패");
+});
+
+test("Pipeline 실패는 Phase 3 완료를 유지하고 설정 재적용 CTA를 제공한다", async () => {
+  const { getCicdReadinessPresentation } = await loadPresentationModule();
+  const presentation = getCicdReadinessPresentation({
+    currentHandoff: setupHandoff({
+      id: "handoff-current",
+      status: "pipeline_failed",
+      pullRequestUrl: "https://github.com/jh-9999/audience-live-check/pull/10",
+      repositorySettingsPreview: {
+        environmentName: "sketchcatch-production",
+        variables: {},
+        secrets: [],
+        workflowFiles: [],
+        applied: true,
+        appliedAt: "2026-07-22T10:00:00.000Z",
+        verified: true
+      },
+      awsRoleDiff: null
+    }),
+    profile: profile({
+      monitoringConfig: monitoringConfig(),
+      deploymentTarget: deploymentTarget(),
+      readinessItems: readySetupItems([
+        readinessItem("approved_apply_plan", "ready", null),
+        readinessItem("initial_application_release", "ready", null)
+      ])
+    }),
+    runs: []
+  });
+
+  assert.equal(presentation.currentTask.id, "retry_setup");
+  assert.deepEqual(presentation.currentTask.action, { kind: "retry_setup" });
+  assert.equal(presentation.currentTask.actionLabel, "설정 재적용 및 Retry PR 생성");
+  assert.equal(presentation.currentPhase, "pipeline");
+  assert.equal(presentation.taskStatus, "action_required");
+  assert.equal(presentation.phases.find((phase) => phase.id === "pr")?.statusLabel, "완료");
+  assert.equal(presentation.phases.find((phase) => phase.id === "pipeline")?.statusLabel, "실패");
 });
 
 function profile(input: {
@@ -442,6 +539,17 @@ function profile(input: {
       items: input.readinessItems
     }
   };
+}
+
+function setupHandoff(overrides: Record<string, unknown>): GitCicdHandoff {
+  return {
+    id: "handoff-1",
+    status: "draft",
+    pullRequestUrl: null,
+    repositorySettingsPreview: null,
+    awsRoleDiff: null,
+    ...overrides
+  } as unknown as GitCicdHandoff;
 }
 
 function readinessItem(

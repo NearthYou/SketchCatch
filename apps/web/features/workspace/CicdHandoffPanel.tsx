@@ -9,12 +9,14 @@ import type {
   SourceRepository
 } from "@sketchcatch/types";
 import { CicdAccordionSection, type CicdAccordionTone } from "./CicdAccordionSection";
-import type { GitCicdHandoffReadinessItem } from "./cicd-handoff";
+import {
+  isGitCicdHandoffSetupComplete,
+  type GitCicdHandoffReadinessItem
+} from "./cicd-handoff";
 import {
   getCicdBuildVerificationPresentation,
   getCicdDeploymentOutputPresentation
 } from "./cicd-readiness-presentation";
-import { CicdChangeReview } from "./CicdChangeReview";
 import handoffStyles from "./cicd-handoff.module.css";
 import styles from "./workspace.module.css";
 
@@ -35,8 +37,6 @@ export function CicdHandoffPanel({
   isHandoffReviewOpen,
   isReadinessRefreshing,
   monitoringConfig,
-  onApplyAwsRoleDiff,
-  onApplyRepositorySettings,
   onCloseCreateReview,
   onCopyInfrastructureCommand,
   onCreateHandoff,
@@ -66,8 +66,6 @@ export function CicdHandoffPanel({
   readonly isHandoffReviewOpen: boolean;
   readonly isReadinessRefreshing: boolean;
   readonly monitoringConfig: GitCicdMonitoringConfig | null;
-  readonly onApplyAwsRoleDiff: (handoffId: string) => void;
-  readonly onApplyRepositorySettings: (handoffId: string) => void;
   readonly onCloseCreateReview: () => void;
   readonly onCopyInfrastructureCommand: () => void;
   readonly onCreateHandoff: () => void;
@@ -91,9 +89,15 @@ export function CicdHandoffPanel({
   const initialApplicationReady =
     !initialApplicationApplicable ||
     isReadinessItemReady(readiness, readinessItems, "initial_application_release");
-  const handoffCreated = Boolean(
-    existingHandoff && !["draft", "cancelled"].includes(existingHandoff.status)
+  const repositorySettingsVerified = existingHandoff?.repositorySettingsPreview?.verified === true;
+  const awsRoleDiff = existingHandoff?.awsRoleDiff;
+  const awsTrustVerified = Boolean(
+    existingHandoff && (awsRoleDiff === null || awsRoleDiff?.verified === true)
   );
+  const pullRequestReady = Boolean(
+    existingHandoff?.pullRequestUrl && !["draft", "cancelled"].includes(existingHandoff.status)
+  );
+  const handoffSetupComplete = isGitCicdHandoffSetupComplete(existingHandoff);
   const buildVerificationPresentation =
     getCicdBuildVerificationPresentation(buildVerification);
   const deploymentOutputPresentation = getCicdDeploymentOutputPresentation({
@@ -108,7 +112,7 @@ export function CicdHandoffPanel({
       ensureOpen={isHandoffReviewOpen || handoffErrorMessage !== ""}
       id="cicd-handoff"
       isCurrent={isCurrent}
-      metadata="Apply Plan, 최초 앱 배포와 PR 생성 조건을 확인합니다."
+      metadata="배포 증거와 GitHub·AWS 설정, PR 준비 상태를 확인합니다."
       openWhen={isCurrent}
       phaseNumber="03"
       statusLabel={phaseStatusLabel}
@@ -191,13 +195,43 @@ export function CicdHandoffPanel({
             />
             <PrTaskRow
               description={
-                handoffCreated
+                repositorySettingsVerified
+                  ? "적용·검증 완료"
+                  : existingHandoff?.repositorySettingsPreview?.applied
+                    ? "적용 후 검증 필요"
+                    : existingHandoff
+                      ? "적용 대기"
+                      : "승인 후 자동 적용"
+              }
+              isComplete={repositorySettingsVerified}
+              title="Repository 설정"
+            />
+            <PrTaskRow
+              description={
+                awsTrustVerified
+                  ? awsRoleDiff === null
+                    ? "변경 필요 없음"
+                    : "적용·검증 완료"
+                  : awsRoleDiff?.applied
+                    ? "적용 후 검증 필요"
+                    : existingHandoff
+                      ? "적용 대기"
+                      : "승인 후 자동 적용"
+              }
+              isComplete={awsTrustVerified}
+              title="AWS 신뢰 정책"
+            />
+            <PrTaskRow
+              description={
+                pullRequestReady
                   ? "PR 생성됨"
                   : applyPlanReady && initialApplicationReady
-                    ? "생성 가능"
+                    ? existingHandoff
+                      ? "생성 또는 업데이트 대기"
+                      : "생성 가능"
                     : "선행 조건 완료 후 생성"
               }
-              isComplete={handoffCreated}
+              isComplete={pullRequestReady}
               title="배포 PR"
             />
           </ul>
@@ -211,7 +245,9 @@ export function CicdHandoffPanel({
 
         {existingHandoff ? (
           <p className={handoffStyles.notice}>
-            이 승인 Plan으로 만든 PR이 이미 있습니다.
+            {handoffSetupComplete
+              ? "Repository 설정, AWS 신뢰 정책과 PR 준비가 완료되었습니다."
+              : "이 승인 Plan의 CI/CD 설정이 일부 남아 있습니다."}
             {existingHandoff.pullRequestUrl ? (
               <a href={existingHandoff.pullRequestUrl} rel="noreferrer" target="_blank">
                 GitHub에서 PR 열기
@@ -222,7 +258,7 @@ export function CicdHandoffPanel({
 
         {isHandoffReviewOpen ? (
           <div className={handoffStyles.review} role="group" aria-label="CI/CD PR 생성 확인">
-            <strong>PR 생성 전 검토</strong>
+            <strong>{existingHandoff ? "CI/CD 설정 계속하기" : "CI/CD 설정 및 PR 검토"}</strong>
             <dl className={handoffStyles.reviewFacts}>
               <div>
                 <dt>Repository</dt>
@@ -264,8 +300,11 @@ export function CicdHandoffPanel({
               </div>
             </dl>
             <ul>
-              <li>배포 workflow와 Terraform 파일을 새 branch에 commit합니다.</li>
-              <li>Repository 설정과 AWS Role 변경은 PR 생성 후 각각 다시 승인합니다.</li>
+              <li>
+                GitHub Environment와 Actions variables를 현재 프로젝트 값으로 적용하고 검증합니다.
+              </li>
+              <li>AWS Role에 필요한 GitHub OIDC 신뢰 조건만 추가하고 검증합니다.</li>
+              <li>검증된 설정으로 배포 workflow와 Terraform PR을 생성하거나 이어서 준비합니다.</li>
             </ul>
             <div>
               <button
@@ -282,7 +321,11 @@ export function CicdHandoffPanel({
                 onClick={onCreateHandoff}
                 type="button"
               >
-                {isHandoffBusy ? "PR 생성 중" : "CI/CD PR 생성"}
+                {isHandoffBusy
+                  ? "설정 적용 중"
+                  : existingHandoff
+                    ? "설정 계속하기"
+                    : "설정 적용 및 PR 생성"}
               </button>
             </div>
           </div>
@@ -327,46 +370,39 @@ export function CicdHandoffPanel({
                   </a>
                 ) : null}
               </div>
-              <CicdChangeReview
-                awsRoleDiff={currentHandoff.awsRoleDiff}
-                handoffId={currentHandoff.id}
-                isBusy={isHandoffBusy}
-                key={currentHandoff.id}
-                onApplyAwsRoleDiff={onApplyAwsRoleDiff}
-                onApplyRepositorySettings={onApplyRepositorySettings}
-                repositorySettingsPreview={currentHandoff.repositorySettingsPreview}
-              />
             </div>
-            <section className={handoffStyles.commandCard} aria-labelledby="infra-command-title">
-              <div>
-                <h4 id="infra-command-title">인프라 배포 명령</h4>
-              </div>
-              <p>
-                설치 PR이 병합된 뒤 이 명령을 실행하면 Terraform Plan을 확인한 같은 job에서
-                Apply까지 진행합니다. 명령 실행 자체가 Apply 승인입니다.
-              </p>
-              <div className={handoffStyles.commandRow}>
-                <code>{infrastructureDeploymentCommand}</code>
-                <button
-                  className={styles.deploymentSecondaryButton}
-                  onClick={onCopyInfrastructureCommand}
-                  type="button"
-                >
+            {handoffSetupComplete ? (
+              <section className={handoffStyles.commandCard} aria-labelledby="infra-command-title">
+                <div>
+                  <h4 id="infra-command-title">인프라 배포 명령</h4>
+                </div>
+                <p>
+                  설치 PR이 병합된 뒤 이 명령을 실행하면 Terraform Plan을 확인한 같은 job에서
+                  Apply까지 진행합니다. 명령 실행 자체가 Apply 승인입니다.
+                </p>
+                <div className={handoffStyles.commandRow}>
+                  <code>{infrastructureDeploymentCommand}</code>
+                  <button
+                    className={styles.deploymentSecondaryButton}
+                    onClick={onCopyInfrastructureCommand}
+                    type="button"
+                  >
+                    {commandCopyState === "copied"
+                      ? "복사 완료"
+                      : commandCopyState === "failed"
+                        ? "복사 다시 시도"
+                        : "명령 복사"}
+                  </button>
+                </div>
+                <span aria-live="polite">
                   {commandCopyState === "copied"
-                    ? "복사 완료"
+                    ? "명령을 복사했습니다."
                     : commandCopyState === "failed"
-                      ? "복사 다시 시도"
-                      : "명령 복사"}
-                </button>
-              </div>
-              <span aria-live="polite">
-                {commandCopyState === "copied"
-                  ? "명령을 복사했습니다."
-                  : commandCopyState === "failed"
-                    ? "자동 복사에 실패했습니다. 명령을 직접 선택해 복사해 주세요."
-                    : ""}
-              </span>
-            </section>
+                      ? "자동 복사에 실패했습니다. 명령을 직접 선택해 복사해 주세요."
+                      : ""}
+                </span>
+              </section>
+            ) : null}
           </>
         ) : null}
       </div>

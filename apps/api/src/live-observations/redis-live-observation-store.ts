@@ -32,6 +32,7 @@ const KID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
 export type RedisLiveObservationStoreClient = {
   readonly isOpen: boolean;
   connect(): Promise<unknown>;
+  destroy?(): void;
   eval(
     script: string,
     options: {
@@ -276,13 +277,23 @@ export function createRedisLiveObservationStoreInternal(
     derivedDurationMs?: number
   ): Promise<unknown> {
     const clockArgument = readLogicalClock(options.logicalNow, derivedDurationMs);
+    let redisClient: RedisLiveObservationStoreClient | null = null;
     try {
-      const redisClient = await getConnectedClient();
+      redisClient = await getConnectedClient();
       return await redisClient.eval(script, {
         keys,
         arguments: [clockArgument, keyBase, ...args]
       });
     } catch {
+      if (redisClient && client === redisClient) {
+        client = null;
+        connectPromise = null;
+        try {
+          redisClient.destroy?.();
+        } catch {
+          // The store is already unavailable. The next request must still get a fresh client.
+        }
+      }
       throw unavailable();
     }
   }

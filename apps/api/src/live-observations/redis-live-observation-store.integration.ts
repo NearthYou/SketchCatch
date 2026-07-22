@@ -151,6 +151,29 @@ test("dedicated integration requires Redis server major version 8", async () => 
   assert.equal(match[1], "8");
 });
 
+
+test("reads a session whose manifest includes the audience application URL", async () => {
+  const keyNamespace = namespace("audience_application_url");
+  const { seam } = storeClientFactory();
+  const store = createRedisLiveObservationStoreForTest({
+    createClient: () => seam,
+    keyNamespace,
+    now: () => START_MS,
+    redisUrl
+  });
+  const input = createLiveObservationStoreContractInput();
+  input.manifest.endpoints.audienceApplicationUrl = "https://application.example.com";
+
+  assert.equal((await store.createSession(input)).kind, "created");
+  const read = await store.readSession({ observationId: input.observationId });
+
+  assert.equal(read.kind, "active");
+  if (read.kind !== "active") assert.fail("Expected active session");
+  assert.equal(
+    read.session.manifest.endpoints.audienceApplicationUrl,
+    "https://application.example.com"
+  );
+});
 test("production store uses Redis TIME and exact absolute active expiries", async () => {
   const keyNamespace = namespace("production_ttl");
   const { seam } = storeClientFactory();

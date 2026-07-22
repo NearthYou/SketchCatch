@@ -1154,6 +1154,9 @@ export type GitCicdRepositorySettingsPreview = {
   variables: Record<string, string>;
   secrets: string[];
   workflowFiles: string[];
+  applied?: boolean | undefined;
+  appliedAt?: IsoDateTimeString | null | undefined;
+  verified?: boolean | undefined;
 };
 
 export type GitCicdAwsRoleDiff = {
@@ -1929,6 +1932,8 @@ export type WebPushSubscriptionResponse = {
 
 export type GitCicdRepositorySettingsApplyResponse = {
   applied: boolean;
+  appliedAt: IsoDateTimeString;
+  verified: boolean;
   environmentName: string;
   variables: string[];
   secrets: string[];

@@ -50,7 +50,7 @@ export function LiveObservationSignalDashboard({
   }, [model.signals]);
 
   return (
-    <section aria-label="Live Observation 중요 신호" className={styles.signalDashboard}>
+    <section aria-label="실시간 상태와 중요 문제" className={styles.signalDashboard}>
       <LiveObservationStatusSummary status={model.status} />
       <LiveObservationSignalCards
         onSelect={setSelectedSignalId}
@@ -64,10 +64,7 @@ export function LiveObservationSignalDashboard({
           signal={selectedSignal}
         />
       ) : recommendedAction ? (
-        <LiveObservationNextActions
-          hasLogDetails={model.logGroups.length > 0}
-          recommendedAction={recommendedAction}
-        />
+        <LiveObservationNextActions recommendedAction={recommendedAction} />
       ) : null}
     </section>
   );

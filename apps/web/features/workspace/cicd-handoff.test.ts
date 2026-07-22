@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type {
   Deployment,
+  GitCicdHandoff,
   GitCicdReadinessSnapshot,
   GitCicdMonitoringConfig,
   SourceRepository
 } from "@sketchcatch/types";
+import * as cicdHandoffModule from "./cicd-handoff";
 import {
   beginGitCicdReload,
   buildGitCicdHandoffRequest,
@@ -224,7 +226,7 @@ test("disables handoff review while readiness is refreshing or failed", () => {
   );
 });
 
-test("keeps PR creation disabled when readiness succeeds but console data is stale", () => {
+test("keeps setup enabled for an existing partial handoff while retaining readiness gates", () => {
   const available = {
     hasApprovedApplyPlanArtifact: true,
     hasConfigurationPreview: true,
@@ -238,6 +240,7 @@ test("keeps PR creation disabled when readiness succeeds but console data is sta
   } as const;
 
   assert.equal(isGitCicdHandoffCreationEnabled(available), true);
+  assert.equal(isGitCicdHandoffCreationEnabled({ ...available, hasExistingHandoff: true }), true);
   for (const unavailable of [
     { isReadinessReady: false },
     { isConsoleDataFresh: false },
@@ -246,7 +249,6 @@ test("keeps PR creation disabled when readiness succeeds but console data is sta
     { hasSourceDeployment: false },
     { hasRepository: false },
     { hasMonitoringConfig: false },
-    { hasExistingHandoff: true },
     { isBusy: true }
   ]) {
     assert.equal(
@@ -254,6 +256,116 @@ test("keeps PR creation disabled when readiness succeeds but console data is sta
       false
     );
   }
+});
+
+test("keeps Phase 3 incomplete until Repository settings, AWS trust, and PR are verified", () => {
+  const base = handoff({
+    status: "pr_created",
+    pullRequestUrl: "https://github.com/jh-9999/audience-live-check/pull/10",
+    repositorySettingsPreview: {
+      environmentName: "sketchcatch-production",
+      variables: {},
+      secrets: [],
+      workflowFiles: [],
+      applied: true,
+      appliedAt: "2026-07-22T10:00:00.000Z",
+      verified: false
+    },
+    awsRoleDiff: {
+      roleArn: "arn:aws:iam::123456789012:role/sketchcatch",
+      repository: "jh-9999/audience-live-check",
+      targetBranch: "main",
+      environmentName: "sketchcatch-production",
+      requiredTrustConditions: {},
+      approved: true,
+      approvedByUserId: "user-1",
+      approvedAt: "2026-07-22T10:00:00.000Z",
+      applied: true,
+      appliedAt: "2026-07-22T10:00:00.000Z",
+      verified: true
+    }
+  });
+
+  assert.equal(isSetupComplete(base), false);
+  assert.equal(
+    isSetupComplete(
+      handoff({
+        ...base,
+        repositorySettingsPreview: {
+          ...base.repositorySettingsPreview!,
+          verified: true
+        }
+      })
+    ),
+    true
+  );
+});
+
+test("treats an absent AWS trust diff as no required AWS change", () => {
+  assert.equal(
+    isSetupComplete(
+      handoff({
+        status: "pr_created",
+        pullRequestUrl: "https://github.com/jh-9999/audience-live-check/pull/10",
+        repositorySettingsPreview: {
+          environmentName: "sketchcatch-production",
+          variables: {},
+          secrets: [],
+          workflowFiles: [],
+          applied: true,
+          appliedAt: "2026-07-22T10:00:00.000Z",
+          verified: true
+        },
+        awsRoleDiff: null
+      })
+    ),
+    true
+  );
+});
+
+test("selects the latest cancelled handoff so setup can create its retry branch", () => {
+  const selected = selectSetupHandoff(
+    [
+      handoff({
+        id: "older-open",
+        sourceDeploymentId: "deployment-1",
+        userAcceptedChangeId: "plan-1",
+        status: "pr_created",
+        updatedAt: "2026-07-22T09:00:00.000Z"
+      }),
+      handoff({
+        id: "latest-cancelled",
+        sourceDeploymentId: "deployment-1",
+        userAcceptedChangeId: "plan-1",
+        status: "cancelled",
+        updatedAt: "2026-07-22T10:00:00.000Z"
+      })
+    ],
+    "deployment-1",
+    "plan-1",
+    "repository-1"
+  );
+
+  assert.equal(selected?.id, "latest-cancelled");
+});
+
+test("ignores a handoff created for a repository connection that is no longer current", () => {
+  const selected = selectSetupHandoff(
+    [
+      handoff({
+        id: "stale-handoff",
+        sourceDeploymentId: "deployment-1",
+        sourceRepositoryId: "repository-before-reconnect",
+        userAcceptedChangeId: "plan-1",
+        updatedAt: "2026-07-22T10:00:00.000Z"
+      })
+    ],
+    "deployment-1",
+    "plan-1",
+    "repository-after-reconnect"
+  );
+
+  assert.equal(selected, null);
 });
 
 test("serializes automatic and manual reloads and discards late completions", () => {
@@ -331,6 +443,48 @@ function deployment(
     blockedReason: null,
     ...remainingOverrides
   };
+}
+
+function handoff(overrides: Record<string, unknown>): GitCicdHandoff {
+  return {
+    id: "handoff-1",
+    sourceRepositoryId: "repository-1",
+    repositorySettingsPreview: null,
+    awsRoleDiff: null,
+    status: "draft",
+    pullRequestUrl: null,
+    ...overrides
+  } as unknown as GitCicdHandoff;
+}
+
+function isSetupComplete(handoff: GitCicdHandoff): boolean {
+  const candidate = (
+    cicdHandoffModule as typeof cicdHandoffModule & {
+      readonly isGitCicdHandoffSetupComplete?: (value: GitCicdHandoff | null) => boolean;
+    }
+  ).isGitCicdHandoffSetupComplete;
+  assert.equal(typeof candidate, "function", "CI/CD setup completion helper must exist");
+  return candidate(handoff);
+}
+
+function selectSetupHandoff(
+  handoffs: readonly GitCicdHandoff[],
+  sourceDeploymentId: string,
+  acceptedPlanId: string,
+  sourceRepositoryId: string
+): GitCicdHandoff | null {
+  const candidate = (
+    cicdHandoffModule as typeof cicdHandoffModule & {
+      readonly selectGitCicdHandoffForSetup?: (
+        handoffs: readonly GitCicdHandoff[],
+        sourceDeploymentId: string | null,
+        acceptedPlanId: string | null,
+        sourceRepositoryId: string | null
+      ) => GitCicdHandoff | null;
+    }
+  ).selectGitCicdHandoffForSetup;
+  assert.equal(typeof candidate, "function", "CI/CD setup handoff selector must exist");
+  return candidate(handoffs, sourceDeploymentId, acceptedPlanId, sourceRepositoryId);
 }
 
 function createReadinessSnapshot(

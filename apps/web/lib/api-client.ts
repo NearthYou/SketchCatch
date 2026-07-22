@@ -314,7 +314,7 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
   return authResponse.session;
 }
 
-async function toApiClientError(
+export async function toApiClientError(
   response: Response,
   requestContext: ApiRequestContext
 ): Promise<ApiClientError> {
@@ -359,7 +359,7 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse | LoginLo
   return typeof candidate.error === "string" && typeof candidate.message === "string";
 }
 
-function createConnectionError(requestContext: ApiRequestContext): ApiClientError {
+export function createConnectionError(requestContext: ApiRequestContext): ApiClientError {
   return new ApiClientError(
     0,
     {
@@ -382,7 +382,7 @@ function getBaseApiErrorMessage(error: ApiClientError, fallbackMessage: string):
   return getKoreanApiMessage(error, fallbackMessage);
 }
 
-function createApiRequestContext(path: string, method?: string): ApiRequestContext {
+export function createApiRequestContext(path: string, method?: string): ApiRequestContext {
   return {
     method: (method ?? "GET").toUpperCase(),
     path: getSafeApiPath(buildApiUrl(path))
@@ -542,7 +542,7 @@ function sanitizeDeveloperCause(value: string): string {
 function getKoreanApiMessage(error: ApiClientError, fallbackMessage: string): string {
   if (error.code === "github_app_permission_required") {
     if (error.message.includes("environments or Actions variables")) {
-      return "GitHub App 권한이 부족해서 repository settings를 적용할 수 없습니다. GitHub App repository permissions에서 Administration 권한과 Variables 권한을 Read and write로 승인한 뒤 다시 시도해주세요.";
+      return "GitHub App 권한이 부족해서 repository settings를 적용할 수 없습니다. Administration과 Variables는 Read and write, Actions는 Read-only로 승인한 뒤 다시 시도해주세요.";
     }
 
     if (error.message.includes("credentials are not configured")) {

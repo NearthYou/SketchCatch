@@ -26,7 +26,7 @@ export function LiveObservationSignalDetail({
       className={styles.signalDetail}
     >
       <div className={styles.detailIntro}>
-        <p className={styles.eyebrow}>선택한 신호</p>
+        <p className={styles.eyebrow}>문제 상세</p>
         <h2 id="live-observation-signal-detail-heading">{signal.title}</h2>
         <p>{signal.userImpact}</p>
       </div>
@@ -40,10 +40,7 @@ export function LiveObservationSignalDetail({
         </div>
         <div className={styles.detailSecondaryColumn}>
           <LiveObservationLogGroups groups={logGroups} />
-          <LiveObservationNextActions
-            hasLogDetails={logGroups.length > 0}
-            recommendedAction={recommendedAction}
-          />
+          <LiveObservationNextActions recommendedAction={recommendedAction} />
         </div>
       </div>
     </section>
@@ -59,9 +56,9 @@ function LiveObservationSignalSparkline({
   const pathPoints = getSparklinePoints(points);
   return (
     <figure className={styles.sparkline}>
-      <figcaption>최근 이 세션에서 확인한 값</figcaption>
+      <figcaption>최근 확인한 값</figcaption>
       <svg
-        aria-label="최근 실제 관측값 변화"
+        aria-label="최근 값 변화"
         height="44"
         role="img"
         viewBox="0 0 160 44"

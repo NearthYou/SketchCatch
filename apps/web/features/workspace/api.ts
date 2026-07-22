@@ -149,6 +149,9 @@ import {
   ApiClientError,
   apiFetch,
   buildApiUrl,
+  createApiRequestContext,
+  createConnectionError,
+  toApiClientError,
   type ApiRequestContext
 } from "../../lib/api-client";
 import { readStoredAuthSession } from "../../lib/auth-storage";
@@ -1911,25 +1914,40 @@ async function readLiveObservationSnapshotStream(input: {
   readonly signal: AbortSignal;
   readonly onSnapshot: (snapshot: LiveObservationV2Snapshot) => void;
 }): Promise<LiveObservationV2Snapshot["status"] | null> {
+  const path = `/deployments/${encodeURIComponent(input.deploymentId)}/live-observations/${encodeURIComponent(input.observationId)}/stream`;
+  const requestContext = createApiRequestContext(path);
   const session = readStoredAuthSession();
   const headers = new Headers({ Accept: "text/event-stream" });
   if (session) {
     headers.set("Authorization", `Bearer ${session.accessToken}`);
   }
 
-  const response = await fetch(
-    buildApiUrl(
-      `/deployments/${encodeURIComponent(input.deploymentId)}/live-observations/${encodeURIComponent(input.observationId)}/stream`
-    ),
-    {
+  let response: Response;
+  try {
+    response = await fetch(buildApiUrl(path), {
       credentials: "include",
       headers,
       signal: input.signal
-    }
-  );
+    });
+  } catch (error) {
+    if (input.signal.aborted) throw error;
+    throw createConnectionError(requestContext);
+  }
 
-  if (!response.ok || !response.body) {
-    throw new Error("Live Observation stream request failed");
+  if (!response.ok) {
+    throw await toApiClientError(response, requestContext);
+  }
+
+  if (!response.body) {
+    const requestId = response.headers.get("x-request-id")?.trim();
+    throw new ApiClientError(
+      response.status,
+      {
+        error: "internal_server_error",
+        message: "Live Observation stream response body is missing"
+      },
+      requestId ? { ...requestContext, requestId } : requestContext
+    );
   }
 
   let finalStatus: LiveObservationV2Snapshot["status"] | null = null;
@@ -2083,6 +2101,19 @@ export async function createGitCicdHandoff({
       auth: true,
       method: "POST",
       body: input
+    }
+  );
+
+  return response.handoff;
+}
+
+export async function setupGitCicdHandoff(handoffId: string): Promise<GitCicdHandoff> {
+  const response = await apiFetch<GitCicdHandoffResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/setup`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
     }
   );
 

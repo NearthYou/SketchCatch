@@ -82,13 +82,28 @@ test("keeps developer preview controls out of the live observation header", () =
   assert.match(source, /liveObservationBurstMeter/);
 });
 
-test("focused flow sizes to content and animates task removal", () => {
+test("focused flow reserves desktop animation space and keeps mobile content-sized", () => {
   assert.match(
     source,
     /className=\{`\$\{styles\.liveObservationDiagramMap\} \$\{styles\.liveObservationFocusedFlow\}`\}/
   );
   assert.match(source, /data-transition=\{unit\.transition\}/);
-  assert.match(styles, /\.liveObservationFocusedFlow\s*\{[\s\S]*height:\s*auto/);
+  assert.match(
+    styles,
+    /\.liveObservationFocusedFlow\s*\{[^}]*flex:\s*0 0 auto[^}]*height:\s*clamp\(320px,\s*36dvh,\s*420px\)[^}]*min-height:\s*clamp\(320px,\s*36dvh,\s*420px\)[^}]*margin-bottom:\s*20px/
+  );
+  assert.match(
+    styles,
+    /\.liveObservationFocusedFlow \.liveObservationPresentationViewport\s*\{[^}]*flex:\s*1 1 auto/
+  );
+  const mobileStyles = styles.slice(styles.indexOf("@media (max-width: 759px)"));
+  assert.match(mobileStyles, /\.liveObservationFocusedFlow\s*\{[^}]*height:\s*auto/);
+  assert.match(mobileStyles, /\.liveObservationFocusedFlow\s*\{[^}]*min-height:\s*0/);
+  assert.match(mobileStyles, /\.liveObservationFocusedFlow\s*\{[^}]*margin-bottom:\s*0/);
+  assert.match(
+    mobileStyles,
+    /\.liveObservationFocusedFlow \.liveObservationPresentationViewport\s*\{[^}]*flex:\s*0 0 auto/
+  );
   assert.match(styles, /data-transition="exiting"[\s\S]*liveObservationCapacityExit/);
 });
 
@@ -100,6 +115,13 @@ test("shows immediate traffic capacity as a forecast without replacing actual ta
   assert.match(source, /축소 예상/);
   assert.match(styles, /data-capacity-forecast="predicted"/);
   assert.match(styles, /data-capacity-forecast="scale-in"/);
+});
+
+test("uses plain Korean capacity labels without exposing internal task wording", () => {
+  assert.match(source, /실행 서버 그룹/);
+  assert.match(source, /실행 서버 \$\{actualCapacityCount\}개 관측/);
+  assert.match(source, /추가 실행 서버 \$\{model\.hiddenCapacityCount\}개/);
+  assert.doesNotMatch(source, /FARGATE TASK 그룹|Task 관측 대기|추가 Task/);
 });
 
 test("stops traffic and capacity motion when reduced motion is requested", () => {

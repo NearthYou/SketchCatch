@@ -20,6 +20,41 @@ test("rejects a migration inserted behind the deployed migration timestamp", () 
   ]);
 });
 
+test("accepts an explicitly declared historical repair identity", () => {
+  const repair = {
+    tag: "0044_github_codebuild_release_plane",
+    when: 1784160000002
+  };
+
+  assert.deepEqual(
+    findAppendOnlyMigrationHistoryFailures(
+      deployedHistory,
+      [deployedHistory[0], repair, ...deployedHistory.slice(1)],
+      { allowedHistoricalInsertions: [repair] }
+    ),
+    []
+  );
+});
+
+test("does not allow a historical repair with a different timestamp", () => {
+  const declaredRepair = {
+    tag: "0044_github_codebuild_release_plane",
+    when: 1784160000002
+  };
+  const changedRepair = { ...declaredRepair, when: declaredRepair.when + 1 };
+
+  assert.deepEqual(
+    findAppendOnlyMigrationHistoryFailures(
+      deployedHistory,
+      [deployedHistory[0], changedRepair, ...deployedHistory.slice(1)],
+      { allowedHistoricalInsertions: [declaredRepair] }
+    ),
+    [
+      "0044_github_codebuild_release_plane was inserted at 1784160000003, not after deployed migration timestamp 1784246400001"
+    ]
+  );
+});
+
 test("rejects removing or retimestamping an existing migration", () => {
   const failures = findAppendOnlyMigrationHistoryFailures(deployedHistory, [
     deployedHistory[0],

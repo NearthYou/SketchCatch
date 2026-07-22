@@ -49,6 +49,7 @@ export function createGitHubAppGitProvider(
         name: input.repository.name,
         targetBranch: input.targetBranch,
         sourceBranch: input.sourceBranch,
+        expectedPullRequestHeadSha: input.expectedPullRequestHeadSha,
         commitMessage: input.commitMessage,
         pullRequestTitle: input.pullRequest.title,
         pullRequestBody: input.pullRequest.body,
@@ -57,7 +58,7 @@ export function createGitHubAppGitProvider(
 
       return {
         pullRequestUrl: result.pullRequestUrl,
-        sourceBranch: input.sourceBranch,
+        sourceBranch: result.sourceBranch ?? input.sourceBranch,
         commitSha: result.commitSha,
         pullRequestHeadSha: result.pullRequestHeadSha,
         pullRequestNumber: result.pullRequestNumber

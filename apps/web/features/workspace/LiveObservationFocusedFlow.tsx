@@ -91,7 +91,7 @@ export function LiveObservationFocusedFlow({
           node: {
             ...template,
             id: `${template.id}--predicted-capacity-${modelCapacityUnits.length + index + 1}`,
-            label: `예상 Fargate Task ${modelCapacityUnits.length + index + 1}`,
+            label: `예상 실행 서버 ${modelCapacityUnits.length + index + 1}`,
             metadata: template.metadata ? { ...template.metadata } : undefined,
             position: { ...template.position },
             size: { ...template.size }
@@ -221,8 +221,8 @@ export function LiveObservationFocusedFlow({
             {model.stages.length}단계 · {predictedCapacityCount !== null
               ? `실제 ${actualCapacityCount ?? "확인 중"} · 예상 ${predictedCapacityCount}`
               : actualCapacityCount !== null
-                ? `Task ${actualCapacityCount}개 관측`
-                : "Task 관측 대기"}
+                ? `실행 서버 ${actualCapacityCount}개 관측`
+                : "실행 서버 관측 대기"}
           </span>
           {burst ? (
             <em
@@ -308,7 +308,7 @@ export function LiveObservationFocusedFlow({
                   : null}
               </i>
               <span className={styles.liveObservationCapacityLabel}>
-                <strong>FARGATE TASK 그룹</strong>
+                <strong>실행 서버 그룹</strong>
                 <small>
                   {predictedCapacityCount !== null
                     ? `실제 ${actualCapacityCount ?? "확인 중"} · 예상 ${predictedCapacityCount}`
@@ -373,7 +373,7 @@ export function LiveObservationFocusedFlow({
                 ))}
                 {model.hiddenCapacityCount > 0 ? (
                   <div
-                    aria-label={`추가 Task ${model.hiddenCapacityCount}개`}
+                    aria-label={`추가 실행 서버 ${model.hiddenCapacityCount}개`}
                     className={styles.liveObservationCapacityOverflow}
                   >
                     +{model.hiddenCapacityCount}
