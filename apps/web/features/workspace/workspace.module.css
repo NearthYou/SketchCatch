@@ -7802,7 +7802,10 @@
   --live-observation-node-radius: 32px;
   --live-observation-node-size: 64px;
 
-  height: auto;
+  flex: 0 0 auto;
+  height: clamp(320px, 36dvh, 420px);
+  min-height: clamp(320px, 36dvh, 420px);
+  margin-bottom: 20px;
 }
 
 .liveObservationFocusedFlow[data-capacity-density="compact"] {
@@ -7824,7 +7827,7 @@
 }
 
 .liveObservationFocusedFlow .liveObservationPresentationViewport {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
 }
 
 .liveObservationArchitectureHeader {
@@ -9287,6 +9290,16 @@
   .liveObservationMapStage {
     flex: 0 0 auto;
     overflow: hidden;
+  }
+
+  .liveObservationFocusedFlow {
+    height: auto;
+    min-height: 0;
+    margin-bottom: 0;
+  }
+
+  .liveObservationFocusedFlow .liveObservationPresentationViewport {
+    flex: 0 0 auto;
   }
 
   .liveObservationSignalMap {

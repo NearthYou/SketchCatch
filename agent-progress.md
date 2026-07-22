@@ -131,6 +131,11 @@ Short English-only working log for the current agent context. Older records are 
 - No dependency, lockfile, database migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
 - 2026-07-21: Added a UI-only target environment selector to the new-project screen with equally selectable AWS, GCP, Azure, and On-premise options. The selection is intentionally not persisted or sent to project creation APIs. The focused environment test, browser selection check, lint, typecheck, and build pass. The full Web suite remains at 1,095/1,099 because of four pre-existing Architecture Board/compiler failures outside this change.
 
+### 2026-07-22 - Keep Live Observation traffic visible
+
+- Reserved a non-shrinking desktop traffic viewport above the Signal Dashboard and added a 20px separation; mobile keeps its existing content-sized layout.
+- Browser QA confirmed a 410px desktop flow, a 20px gap, and no mobile horizontal overflow. Focused Live Observation checks, harness, lint, typecheck, build, and diff checks pass.
+
 ## Known Risk
 
 - The manifest-contract repair and audience receipt flow are production-verified, but provider-confirmed scale-out remains a separate blocked acceptance item.
