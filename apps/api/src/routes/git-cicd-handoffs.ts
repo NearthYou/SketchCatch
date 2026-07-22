@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type {
   GitCicdAwsRoleDiffApplyResponse,
-  GitCicdGitHubOAuthStartResponse,
   GitCicdHandoff,
   GitCicdHandoffListResponse,
   GitCicdHandoffPipelineStatus,
@@ -22,8 +21,9 @@ import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
   applyGitCicdAwsRoleDiff,
+  applyGitCicdAwsRoleDiffUsingProjectConnection,
   AwsRoleDiffApplyError,
-  createIamAwsRoleDiffGateway,
+  createPostgresAwsRoleDiffConnectionRepository,
   type AwsRoleDiffGateway
 } from "../git-cicd/aws-role-diff-apply-service.js";
 import {
@@ -36,13 +36,18 @@ import {
   createInternalGitCicdHandoffProvider,
   createPostgresGitCicdHandoffRepository,
   getGitCicdHandoff,
+  GitCicdHandoffConfigurationStaleError,
+  GitCicdInitialApplicationReleaseRequiredError,
   GitCicdHandoffInvalidStatusTransitionError,
   GitCicdHandoffNotFoundError,
   GitCicdHandoffProviderConflictError,
+  GitCicdSourceRepositoryMismatchError,
   GitCicdHandoffProviderPermissionError,
   GitCicdHandoffProviderMismatchError,
   listProjectGitCicdHandoffs,
+  setupGitCicdHandoff,
   updateGitCicdHandoffStatus,
+  type GitCicdHandoffSetupActions,
   type GitCicdHandoffProvider,
   type GitCicdHandoffRecord,
   type GitCicdHandoffRepository,
@@ -51,14 +56,10 @@ import {
 import {
   applyGitCicdRepositorySettings,
   createGitHubRepositorySettingsApplier,
+  GitCicdRepositorySettingsConflictError,
   GitCicdRepositorySettingsPermissionError,
   type GitCicdRepositorySettingsApplier
 } from "../git-cicd/git-cicd-repository-settings-service.js";
-import {
-  applyGitHubOAuthRepositorySettings,
-  completeGitHubRepositorySettingsOAuthCallback,
-  createGitHubRepositorySettingsOAuthStart
-} from "../git-cicd/github-oauth-repository-settings.js";
 import type { GitCicdPipelineStatusProvider } from "../git-cicd/github-actions-pipeline-status-provider.js";
 import {
   createAwsEcsGitOpsCloudGateway,
@@ -153,14 +154,6 @@ const handoffParamsSchema = z.object({
   handoffId: z.uuid()
 });
 
-const githubOAuthCallbackQuerySchema = z
-  .object({
-    code: z.string().trim().min(1).optional(),
-    error: z.string().trim().min(1).optional(),
-    state: z.string().trim().min(1).optional()
-  })
-  .passthrough();
-
 const branchSchema = z.string().trim().min(1).max(255);
 
 const monitoringParamsSchema = z
@@ -248,12 +241,10 @@ type GitCicdHandoffRouteOptions = {
   gitCicdRunProvider?: GitCicdRunProvider;
   gitCicdMonitoringProvider?: GitCicdMonitoringProvider;
   gitCicdHandoffProvider?: GitCicdHandoffProvider;
+  createGitCicdHandoff?: typeof createGitCicdHandoff;
+  setupGitCicdHandoff?: typeof setupGitCicdHandoff;
   gitCicdPipelineStatusProvider?: GitCicdPipelineStatusProvider;
   gitCicdRepositorySettingsApplier?: GitCicdRepositorySettingsApplier;
-  createGitHubOAuthRepositorySettingsApplier?: (
-    accessToken: string
-  ) => GitCicdRepositorySettingsApplier;
-  githubOAuthFetch?: typeof fetch;
   awsRoleDiffGateway?: AwsRoleDiffGateway;
   gitOpsReleaseReconciler?: GitOpsReleaseReconciler;
   ecsGitOpsReleaseReconciler?: EcsGitOpsReleaseReconciler;
@@ -262,6 +253,7 @@ type GitCicdHandoffRouteOptions = {
 
 type GitCicdHandoffRequestContext = {
   accessContext: ProjectAccessContext;
+  db: DatabaseClient["db"];
   repository: GitCicdHandoffRepository;
   provider: GitCicdHandoffProvider;
 };
@@ -464,14 +456,14 @@ export async function registerGitCicdHandoffRoutes(
   app.post("/projects/:projectId/git-cicd-handoffs", async (request, reply) => {
     const params = projectHandoffParamsSchema.parse(request.params);
     const body = createGitCicdHandoffBodySchema.parse(request.body);
-    const { accessContext, repository, provider } = await getGitCicdHandoffRequestContext(
+    const { accessContext, db, repository, provider } = await getGitCicdHandoffRequestContext(
       request,
       options,
       getGitCicdDatabaseClient
     );
 
     try {
-      const handoff = await createGitCicdHandoff(
+      const handoff = await (options?.createGitCicdHandoff ?? createGitCicdHandoff)(
         {
           projectId: params.projectId,
           accessContext,
@@ -496,7 +488,11 @@ export async function registerGitCicdHandoffRoutes(
           userAcceptedChangeId: body.userAcceptedChangeId
         },
         repository,
-        provider
+        provider,
+        undefined,
+        {
+          setupActions: createGitCicdHandoffSetupActions(db, options)
+        }
       );
       const response: GitCicdHandoffResponse = {
         handoff: toGitCicdHandoff(handoff)
@@ -562,6 +558,39 @@ export async function registerGitCicdHandoffRoutes(
     }
   });
 
+  app.post("/git-cicd-handoffs/:handoffId/setup", async (request, reply) => {
+    const params = handoffParamsSchema.parse(request.params);
+    const { accessContext, db, repository, provider } =
+      await getGitCicdHandoffRequestContext(
+        request,
+        options,
+        getGitCicdDatabaseClient
+      );
+
+    try {
+      const handoff = await (options?.setupGitCicdHandoff ?? setupGitCicdHandoff)(
+        {
+          handoffId: params.handoffId,
+          accessContext
+        },
+        repository,
+        provider,
+        {
+          setupActions: createGitCicdHandoffSetupActions(db, options)
+        }
+      );
+      const response: GitCicdHandoffResponse = {
+        handoff: toGitCicdHandoff(handoff)
+      };
+
+      await writeGitCicdPipelineStatusSnapshot({ handoff, runtimeCache });
+
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
   app.get("/git-cicd-handoffs/:handoffId/pipeline-status", async (request, reply) => {
     const params = handoffParamsSchema.parse(request.params);
     const { accessContext, repository } = await getGitCicdHandoffRequestContext(
@@ -615,111 +644,26 @@ export async function registerGitCicdHandoffRoutes(
     }
   });
 
-  app.post("/git-cicd-handoffs/:handoffId/github-oauth/start", async (request, reply) => {
-    const params = handoffParamsSchema.parse(request.params);
-    const { accessContext, repository } = await getGitCicdHandoffRequestContext(
-      request,
-      options,
-      getGitCicdDatabaseClient
-    );
-
-    try {
-      const response: GitCicdGitHubOAuthStartResponse =
-        await createGitHubRepositorySettingsOAuthStart(
-          {
-            handoffId: params.handoffId,
-            accessContext
-          },
-          repository,
-          runtimeCache
-        );
-
-      return reply.status(201).send(response);
-    } catch (error) {
-      return handleGitCicdHandoffError(error, reply);
-    }
-  });
-
-  app.get("/git-cicd-handoffs/github-oauth/callback", async (request, reply) => {
-    const query = githubOAuthCallbackQuerySchema.parse(request.query);
-
-    if (query.error || !query.code || !query.state) {
-      request.log.error(
-        {
-          oauthError: query.error,
-          hasCode: Boolean(query.code),
-          hasState: Boolean(query.state)
-        },
-        "GitHub OAuth callback query error or missing parameters"
-      );
-
-      return reply.redirect("/workspace?gitCicdGitHubOAuth=failed");
-    }
-
-    try {
-      await completeGitHubRepositorySettingsOAuthCallback({
-        code: query.code,
-        state: query.state,
-        runtimeCache,
-        ...(options?.githubOAuthFetch ? { fetcher: options.githubOAuthFetch } : {})
-      });
-
-      return reply.redirect("/workspace?gitCicdGitHubOAuth=ready");
-    } catch (error) {
-      request.log.error(error, "GitHub OAuth callback failed");
-
-      return reply.redirect("/workspace?gitCicdGitHubOAuth=failed");
-    }
-  });
-
-  app.post(
-    "/git-cicd-handoffs/:handoffId/repository-settings/apply-with-github-oauth",
-    async (request, reply) => {
-      const params = handoffParamsSchema.parse(request.params);
-      const { accessContext, repository } = await getGitCicdHandoffRequestContext(
-        request,
-        options,
-        getGitCicdDatabaseClient
-      );
-
-      try {
-        const response: GitCicdRepositorySettingsApplyResponse =
-          await applyGitHubOAuthRepositorySettings(
-            {
-              handoffId: params.handoffId,
-              accessContext,
-              runtimeCache,
-              ...(options?.createGitHubOAuthRepositorySettingsApplier
-                ? { createApplier: options.createGitHubOAuthRepositorySettingsApplier }
-                : {})
-            },
-            repository
-          );
-
-        return reply.status(200).send(response);
-      } catch (error) {
-        return handleGitCicdHandoffError(error, reply);
-      }
-    }
-  );
-
   app.post("/git-cicd-handoffs/:handoffId/aws-role-diff/apply", async (request, reply) => {
     const params = handoffParamsSchema.parse(request.params);
-    const { accessContext, repository } = await getGitCicdHandoffRequestContext(
+    const { accessContext, db, repository } = await getGitCicdHandoffRequestContext(
       request,
       options,
       getGitCicdDatabaseClient
     );
 
     try {
-      const response: GitCicdAwsRoleDiffApplyResponse = await applyGitCicdAwsRoleDiff(
-        {
-          handoffId: params.handoffId,
-          accessContext
-        },
-        repository,
-        options?.awsRoleDiffGateway ?? createIamAwsRoleDiffGateway()
-      );
+      const input = {
+        handoffId: params.handoffId,
+        accessContext
+      };
+      const response: GitCicdAwsRoleDiffApplyResponse = options?.awsRoleDiffGateway
+        ? await applyGitCicdAwsRoleDiff(input, repository, options.awsRoleDiffGateway)
+        : await applyGitCicdAwsRoleDiffUsingProjectConnection(
+            input,
+            repository,
+            createPostgresAwsRoleDiffConnectionRepository(db)
+          );
 
       return reply.status(200).send(response);
     } catch (error) {
@@ -770,6 +714,30 @@ export async function registerGitCicdHandoffRoutes(
   });
 }
 
+function createGitCicdHandoffSetupActions(
+  db: DatabaseClient["db"],
+  options: GitCicdHandoffRouteOptions | undefined
+): GitCicdHandoffSetupActions {
+  return {
+    applyRepositorySettings(input, repository) {
+      return applyGitCicdRepositorySettings(
+        input,
+        repository,
+        options?.gitCicdRepositorySettingsApplier ?? createGitHubRepositorySettingsApplier()
+      );
+    },
+    applyAwsRoleDiff(input, repository) {
+      return options?.awsRoleDiffGateway
+        ? applyGitCicdAwsRoleDiff(input, repository, options.awsRoleDiffGateway)
+        : applyGitCicdAwsRoleDiffUsingProjectConnection(
+            input,
+            repository,
+            createPostgresAwsRoleDiffConnectionRepository(db)
+          );
+    }
+  };
+}
+
 function toGitCicdHandoff(row: GitCicdHandoffRecord): GitCicdHandoff {
   return {
     id: row.id,
@@ -804,7 +772,6 @@ function toGitCicdHandoff(row: GitCicdHandoffRecord): GitCicdHandoff {
     apiBaseUrl: row.apiBaseUrl,
     repositorySettingsPreview: row.repositorySettingsPreview,
     awsRoleDiff: row.awsRoleDiff,
-    githubOAuthRequired: row.githubOAuthRequired,
     status: row.status,
     statusMessage: row.statusMessage,
     userAcceptedChangeId: row.userAcceptedChangeId,
@@ -1022,14 +989,55 @@ async function requireAccessiblePipelineRun(
 
 function toGitCicdPipelineRun(row: PipelineRunWithStages): GitCicdPipelineRun {
   return {
-    ...row,
+    id: row.id,
+    projectId: row.projectId,
+    infrastructureDeploymentId: row.infrastructureDeploymentId,
+    sourceRepositoryId: row.sourceRepositoryId,
+    handoffId: row.handoffId,
+    executionKind: row.executionKind,
+    githubWorkflowRunId: row.githubWorkflowRunId,
+    githubWorkflowRunAttempt: row.githubWorkflowRunAttempt,
+    commitSha: row.commitSha,
+    commitMessage: row.commitMessage,
+    branch: row.branch,
+    changeScope: row.changeScope,
+    status: row.status,
+    statusMessage: row.statusMessage,
+    pipelineRunUrl: row.pipelineRunUrl,
+    appUrl: row.appUrl,
+    apiUrl: row.apiUrl,
     startedAt: row.startedAt?.toISOString() ?? null,
     finishedAt: row.finishedAt?.toISOString() ?? null,
+    upstreamOrderingToken: row.upstreamOrderingToken,
+    logRevision: row.logRevision,
     lastRefreshedAt: row.lastRefreshedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     release: row.release
       ? {
-          ...row.release,
+          id: row.release.id,
+          projectId: row.release.projectId,
+          artifactId: row.release.artifactId,
+          deploymentId: row.release.deploymentId,
+          pipelineRunId: row.release.pipelineRunId,
+          source: row.release.source,
+          runtimeTargetKind: row.release.runtimeTargetKind,
+          runtimeAdapterKind: row.release.runtimeAdapterKind,
+          deploymentTargetFingerprint: row.release.deploymentTargetFingerprint,
+          convergenceOutcome: row.release.convergenceOutcome,
+          version: row.release.version,
+          commitSha: row.release.commitSha,
+          artifactDigestAlgorithm: row.release.artifactDigestAlgorithm,
+          artifactDigest: row.release.artifactDigest,
+          releaseCandidateId: row.release.releaseCandidateId,
+          compositeDigest: row.release.compositeDigest,
+          providerRevision: row.release.providerRevision,
+          frontendEvidence: row.release.frontendEvidence,
+          failureStage: row.release.failureStage,
+          baselineReleaseId: row.release.baselineReleaseId,
+          outputUrl: row.release.outputUrl,
+          status: row.release.status,
+          healthEvidence: row.release.healthEvidence,
+          rollbackEvidence: row.release.rollbackEvidence,
           startedAt: row.release.startedAt?.toISOString() ?? null,
           completedAt: row.release.completedAt?.toISOString() ?? null,
           createdAt: row.release.createdAt.toISOString(),
@@ -1037,7 +1045,11 @@ function toGitCicdPipelineRun(row: PipelineRunWithStages): GitCicdPipelineRun {
         }
       : null,
     stages: row.stages.map((stage) => ({
-      ...stage,
+      id: stage.id,
+      pipelineRunId: stage.pipelineRunId,
+      kind: stage.kind,
+      status: stage.status,
+      runUrl: stage.runUrl,
       startedAt: stage.startedAt?.toISOString() ?? null,
       finishedAt: stage.finishedAt?.toISOString() ?? null
     }))
@@ -1061,6 +1073,7 @@ async function getGitCicdHandoffRequestContext(
       kind: "user",
       userId: currentUserId
     },
+    db: client.db,
     repository:
       options?.createGitCicdHandoffRepository?.(client.db) ??
       createPostgresGitCicdHandoffRepository(client.db),
@@ -1104,6 +1117,27 @@ function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
     });
   }
 
+  if (error instanceof GitCicdInitialApplicationReleaseRequiredError) {
+    return reply.status(409).send({
+      error: error.code,
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdSourceRepositoryMismatchError) {
+    return reply.status(409).send({
+      error: error.code,
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdHandoffConfigurationStaleError) {
+    return reply.status(409).send({
+      error: error.code,
+      message: error.message
+    });
+  }
+
   if (error instanceof GitCicdHandoffProviderConflictError) {
     return reply.status(409).send({
       error: "conflict",
@@ -1113,14 +1147,21 @@ function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
 
   if (error instanceof GitCicdHandoffProviderPermissionError) {
     return reply.status(409).send({
-      error: "github_oauth_required",
+      error: "github_app_permission_required",
       message: error.message
     });
   }
 
   if (error instanceof GitCicdRepositorySettingsPermissionError) {
     return reply.status(409).send({
-      error: "github_oauth_required",
+      error: "github_app_permission_required",
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdRepositorySettingsConflictError) {
+    return reply.status(409).send({
+      error: error.code,
       message: error.message
     });
   }

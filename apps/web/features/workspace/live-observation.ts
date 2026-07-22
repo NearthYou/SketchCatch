@@ -1,8 +1,8 @@
 import type {
-  LiveObservationPressureLevel,
-  LiveObservationProviderSnapshot,
   LiveObservationSnapshot,
-  LiveObservationV2Session
+  LiveObservationV2Session,
+  LiveObservationV2Snapshot,
+  TerraformOutput
 } from "@sketchcatch/types";
 
 const MAX_VISIBLE_REQUEST_PARTICLES = 5;
@@ -20,6 +20,12 @@ export type LiveObservationReleaseCandidate = {
   readonly completedAt: string | null;
 };
 
+export type LiveObservationSelection = {
+  readonly runId: string;
+  readonly deploymentId: string;
+  readonly outputUrl: string;
+};
+
 export type LiveObservationInstanceMarker = {
   readonly key: string;
   readonly label: string;
@@ -31,82 +37,48 @@ export type LiveObservationRequestBurst = {
   readonly visibleParticleCount: number;
 };
 
-export function getLiveObservationPressureLabel(
-  level: LiveObservationPressureLevel
-): string {
-  switch (level) {
-    case "normal":
-      return "정상";
-    case "warning":
-      return "요청 증가";
-    case "high":
-      return "Scale-out 예상";
-    case "critical":
-      return "포화 임박";
-  }
-}
+export type LiveObservationTrafficCursor = {
+  readonly acceptedEventCount: number;
+  readonly observationId: string;
+  readonly providerObservedAt: string | null;
+};
 
-export function getLiveObservationProviderEvidence(
-  snapshot: LiveObservationProviderSnapshot
-): {
-  stateLabel: string;
-  requests: string;
-  errorRate: string;
-  p95Latency: string;
-  availability: string;
-  capacity: string;
-} {
-  if (snapshot.state !== "available") {
-    return {
-      stateLabel: snapshot.state === "delayed" ? "지연" : "사용 불가",
-      requests: "—",
-      errorRate: "—",
-      p95Latency: "—",
-      availability: "—",
-      capacity: "—"
-    };
-  }
-
-  return {
-    stateLabel: "정상",
-    requests: String(snapshot.requests),
-    errorRate: `${snapshot.errorRate}%`,
-    p95Latency: `${snapshot.p95LatencyMs}ms`,
-    availability: `${snapshot.availability}%`,
-    capacity: `${snapshot.capacity.healthy} / ${snapshot.capacity.running} / ${snapshot.capacity.max}`
-  };
-}
-export function getEligibleLiveObservationDeployments<
-  T extends LiveObservationDeploymentCandidate
->(deployments: readonly T[]): T[] {
+export function getEligibleLiveObservationDeployments<T extends LiveObservationDeploymentCandidate>(
+  deployments: readonly T[]
+): T[] {
   return deployments
     .filter(
       (deployment) =>
-        deployment.status === "SUCCESS" &&
+        ["SUCCESS", "PARTIALLY_FAILED", "PARTIALLY_CANCELED"].includes(deployment.status) &&
         deployment.completedAt !== null
     )
     .sort(
       (left, right) =>
-        new Date(right.completedAt ?? 0).getTime() -
-        new Date(left.completedAt ?? 0).getTime()
+        new Date(right.completedAt ?? 0).getTime() - new Date(left.completedAt ?? 0).getTime()
     );
 }
 
 export function getLiveObservationOutputUrl(
   deploymentId: string,
-  releases: readonly LiveObservationReleaseCandidate[]
+  releases: readonly LiveObservationReleaseCandidate[],
+  terraformOutputs: readonly TerraformOutput[] = []
 ): string | null {
   const candidates = releases
     .filter(
       (release) =>
         release.deploymentId === deploymentId &&
-        release.status === "succeeded" &&
+        [
+          "succeeded",
+          "rolled_back",
+          "retrying",
+          "partially_failed",
+          "partially_cancelled"
+        ].includes(release.status) &&
         release.completedAt !== null
     )
     .sort(
       (left, right) =>
-        new Date(right.completedAt ?? 0).getTime() -
-        new Date(left.completedAt ?? 0).getTime()
+        new Date(right.completedAt ?? 0).getTime() - new Date(left.completedAt ?? 0).getTime()
     );
 
   for (const release of candidates) {
@@ -128,12 +100,58 @@ export function getLiveObservationOutputUrl(
     }
   }
 
+  const outputNames = ["cloudfronturl", "staticsiteurl", "apibaseurl"] as const;
+  for (const outputName of outputNames) {
+    const output = terraformOutputs.find(
+      (candidate) =>
+        candidate.deploymentId === deploymentId &&
+        !candidate.sensitive &&
+        candidate.name.replaceAll("_", "").toLowerCase() === outputName &&
+        typeof candidate.value === "string"
+    );
+    if (output && typeof output.value === "string") {
+      const normalized = normalizeLiveObservationOutputUrl(output.value);
+      if (normalized) return normalized;
+    }
+  }
+
   return null;
 }
 
-export function getLiveObservationAudienceUrl(
-  session: LiveObservationV2Session
+export function getSelectedLiveObservationOutputUrl(
+  selection: LiveObservationSelection | null | undefined,
+  deploymentId: string,
+  releases: readonly LiveObservationReleaseCandidate[],
+  terraformOutputs: readonly TerraformOutput[] = []
 ): string | null {
+  if (!selection) {
+    return getLiveObservationOutputUrl(deploymentId, releases, terraformOutputs);
+  }
+  if (selection.deploymentId !== deploymentId) {
+    return null;
+  }
+  return normalizeLiveObservationOutputUrl(selection.outputUrl);
+}
+
+export function normalizeLiveObservationOutputUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== "https:" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.search !== "" ||
+      url.hash !== ""
+    ) {
+      return null;
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function getLiveObservationAudienceUrl(session: LiveObservationV2Session): string | null {
   try {
     const url = new URL(session.audienceUrl);
     const expectedPath = `/observe/${encodeURIComponent(session.id)}`;
@@ -172,6 +190,40 @@ export function getLiveObservationRequestBurst(
     overflowCount: Math.max(0, delta - MAX_VISIBLE_REQUEST_PARTICLES),
     visibleParticleCount: Math.min(delta, MAX_VISIBLE_REQUEST_PARTICLES)
   };
+}
+
+export function getLiveObservationTrafficCursor(
+  snapshot: LiveObservationV2Snapshot | null
+): LiveObservationTrafficCursor | null {
+  if (!snapshot) return null;
+
+  return {
+    acceptedEventCount: snapshot.live.acceptedEventCount,
+    observationId: snapshot.observationId,
+    providerObservedAt: snapshot.latestObservation?.observedAt ?? null
+  };
+}
+
+export function getLiveObservationTrafficBurst(
+  previous: LiveObservationTrafficCursor | null,
+  snapshot: LiveObservationV2Snapshot | null
+): LiveObservationRequestBurst | null {
+  if (!previous || !snapshot || previous.observationId !== snapshot.observationId) {
+    return null;
+  }
+
+  const provider = snapshot.latestObservation;
+  const runningCount = provider?.payload.capacity.running ?? 0;
+  const acceptedDelta = Math.max(0, snapshot.live.acceptedEventCount - previous.acceptedEventCount);
+  const providerRequestCount =
+    provider &&
+    provider.observedAt !== previous.providerObservedAt &&
+    provider.payload.state !== "unavailable"
+      ? Math.max(0, Math.floor(provider.payload.requests ?? 0))
+      : 0;
+  const detectedRequestCount = Math.max(acceptedDelta, providerRequestCount);
+
+  return getLiveObservationRequestBurst(0, detectedRequestCount, runningCount > 0);
 }
 
 export function getLiveObservationRequestTargetIndexes(
@@ -224,8 +276,7 @@ export function getLiveObservationInstanceMarkers(
   const desiredCapacity = snapshot.capacity.desiredCapacity ?? markers.length;
   const activityStatus = snapshot.capacity.latestActivity?.statusCode;
   const activityInProgress =
-    activityStatus !== undefined &&
-    !["Successful", "Failed", "Cancelled"].includes(activityStatus);
+    activityStatus !== undefined && !["Successful", "Failed", "Cancelled"].includes(activityStatus);
 
   if (desiredCapacity > markers.length || activityInProgress) {
     markers.push({ key: "launching", label: "Launching", state: "launching" });

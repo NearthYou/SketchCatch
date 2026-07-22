@@ -69,9 +69,8 @@ export function WorkspaceAiWorkbench({
   surfaceRef,
   transcriptRef
 }: WorkspaceAiWorkbenchProps) {
-  const activeDefinition = scopeDefinitions.find((definition) => definition.scope === activeScope);
-  const activeScopeLabel = activeDefinition?.label ?? "AI 작업";
-  const readyLabel = activeDefinition?.inputAvailable ? "입력 가능" : "작업 선택 가능";
+  const activeScopeLabel =
+    scopeDefinitions.find((definition) => definition.scope === activeScope)?.label ?? "AI 작업";
   const modeList = isMobileSurface ? (
     <WorkspaceAiModeList
       activeScope={activeScope}
@@ -81,6 +80,7 @@ export function WorkspaceAiWorkbench({
       onScopeChange={onScopeChange}
       onScopeKeyDown={onScopeKeyDown}
       scopeDefinitions={scopeDefinitions}
+      showLabels={true}
     />
   ) : (
     <WorkspaceAiModeList
@@ -91,6 +91,7 @@ export function WorkspaceAiWorkbench({
       onScopeChange={onScopeChange}
       onScopeKeyDown={onScopeKeyDown}
       scopeDefinitions={scopeDefinitions}
+      showLabels={false}
     />
   );
 
@@ -110,13 +111,10 @@ export function WorkspaceAiWorkbench({
       >
         {modeList}
 
-        <div className={styles.workArea}>
+        <div className={`${styles.workArea} ${status ? styles.workAreaWithStatus : ""}`}>
           <header className={styles.header}>
             <div className={styles.heading}>
-              <h2 id="workspace-ai-chat-title">AI 작업실</h2>
-              <p>
-                {activeScopeLabel} · {isBusy ? "작업 중" : "현재 Board 기준"}
-              </p>
+              <h2 id="workspace-ai-chat-title">{activeScopeLabel}</h2>
             </div>
             <div className={styles.headerActions}>
               <button
@@ -130,7 +128,7 @@ export function WorkspaceAiWorkbench({
                 <Trash2 aria-hidden="true" size={16} />
               </button>
               <button
-                aria-label="AI 작업실 닫기"
+                aria-label={`${activeScopeLabel} 닫기`}
                 className={styles.iconButton}
                 onClick={onClose}
                 title="닫기"
@@ -141,23 +139,25 @@ export function WorkspaceAiWorkbench({
             </div>
           </header>
 
-          <div
-            aria-live="polite"
-            className={styles.statusLine}
-            data-status={status?.label ?? "준비"}
-            role="status"
-          >
-            <span aria-hidden="true" className={styles.statusMark} />
-            <div>
-              <strong>{status?.label ?? readyLabel}</strong>
-              <p>{status?.description ?? `${activeScopeLabel} 작업을 시작할 수 있습니다.`}</p>
+          {status ? (
+            <div
+              aria-live="polite"
+              className={styles.statusLine}
+              data-status={status.label}
+              role="status"
+            >
+              <span aria-hidden="true" className={styles.statusMark} />
+              <div>
+                <strong>{status.label}</strong>
+                <p>{status.description}</p>
+              </div>
+              {isBusy ? (
+                <button className={styles.cancelButton} onClick={onCancelRequest} type="button">
+                  요청 중지
+                </button>
+              ) : null}
             </div>
-            {isBusy ? (
-              <button className={styles.cancelButton} onClick={onCancelRequest} type="button">
-                요청 중지
-              </button>
-            ) : null}
-          </div>
+          ) : null}
 
           <div
             aria-labelledby={`workspace-ai-chat-tab-${activeScope}`}
@@ -184,7 +184,8 @@ function WorkspaceAiModeList({
   onScopeButtonRef,
   onScopeChange,
   onScopeKeyDown,
-  scopeDefinitions
+  scopeDefinitions,
+  showLabels
 }: {
   readonly activeScope: WorkspaceAiChatScope;
   readonly ariaOrientation: "horizontal" | "vertical";
@@ -196,6 +197,7 @@ function WorkspaceAiModeList({
   readonly onScopeChange: (scope: WorkspaceAiChatScope) => void;
   readonly onScopeKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   readonly scopeDefinitions: readonly WorkspaceAiWorkbenchScopeDefinition[];
+  readonly showLabels: boolean;
 }) {
   return (
     <nav
@@ -210,6 +212,7 @@ function WorkspaceAiModeList({
         return (
           <button
             aria-controls={`workspace-ai-chat-panel-${scope}`}
+            aria-label={label}
             aria-selected={activeScope === scope}
             className={styles.modeButton}
             id={`workspace-ai-chat-tab-${scope}`}
@@ -219,10 +222,11 @@ function WorkspaceAiModeList({
             ref={(element) => onScopeButtonRef(scope, element)}
             role="tab"
             tabIndex={activeScope === scope ? 0 : -1}
+            title={label}
             type="button"
           >
             <Icon aria-hidden="true" size={18} />
-            <span>{label}</span>
+            {showLabels ? <span>{label}</span> : null}
           </button>
         );
       })}

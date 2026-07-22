@@ -1,12 +1,13 @@
 .editorShell {
   --left-panel-width: 346px;
+  --panel-edge-handle-width: 24px;
   --right-panel-width: 440px;
-  --workspace-font: "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif;
+  --workspace-font: var(--font-sans);
   --workspace-page: #ffffff;
   --workspace-surface: #ffffff;
   --workspace-surface-muted: #fafafa;
-  --workspace-line: #f0f0f3;
-  --workspace-line-strong: #dcdee0;
+  --workspace-line: #d4d4d4;
+  --workspace-line-strong: #c8c8c8;
   --workspace-text: #171717;
   --workspace-muted: #60646c;
   --workspace-accent: #000000;
@@ -20,8 +21,8 @@
   --board-canvas-raised: #ffffff;
   --board-surface: #ffffff;
   --board-surface-subtle: #f4f6fa;
-  --board-border: #d8e0ec;
-  --board-border-strong: #9aa8ba;
+  --board-border: #c1cddc;
+  --board-border-strong: #7f90a6;
   --board-ink: #172033;
   --board-body: #4b5870;
   --board-muted: #60646c;
@@ -31,12 +32,9 @@
   --board-warning: #b45309;
   --board-danger: #b42318;
   --board-edge: #59687d;
-  --board-shadow-object:
-    0 0 0 1px rgba(23, 32, 51, 0.04),
-    0 10px 28px rgba(23, 32, 51, 0.12);
+  --board-shadow-object: 0 0 0 1px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.12);
   --board-shadow-toolbar:
-    0 14px 30px rgba(23, 32, 51, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    0 14px 30px rgba(23, 32, 51, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.72);
 
   background: var(--workspace-page);
   color: var(--workspace-text);
@@ -50,6 +48,17 @@
   overflow: hidden;
   position: relative;
   width: 100%;
+}
+
+.editorShellViewer {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+}
+
+.editorShellViewer .workspace {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .editorShellLeftCollapsed {
@@ -106,14 +115,14 @@
 
 .projectBarContext strong {
   color: var(--workspace-text);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .projectBarContext span {
   color: var(--workspace-muted);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .projectBarActions {
@@ -127,8 +136,8 @@
   align-items: center;
   color: var(--workspace-muted);
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   min-width: 0;
   padding: 0 6px;
@@ -178,38 +187,10 @@
   cursor: not-allowed;
 }
 
-.projectBarPrimaryAction {
-  align-items: center;
+.projectBarDeployButton[data-active="true"] {
   background: var(--workspace-text);
-  border: 1px solid var(--workspace-text);
-  border-radius: 8px;
+  border-color: var(--workspace-text);
   color: var(--workspace-surface);
-  cursor: pointer;
-  display: inline-flex;
-  font-size: 12px;
-  font-weight: 700;
-  gap: 6px;
-  height: 36px;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
-.projectBarPrimaryAction:hover,
-.projectBarPrimaryAction:focus-visible {
-  opacity: 0.86;
-  outline: none;
-}
-
-.projectBarPrimaryAction:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.projectBarDivider {
-  background: var(--workspace-line);
-  height: 24px;
-  margin: 0 2px;
-  width: 1px;
 }
 
 .leftRail,
@@ -268,8 +249,8 @@
   color: var(--workspace-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   height: 34px;
   padding: 0 10px;
 }
@@ -365,8 +346,8 @@
 }
 
 .leftRail :global(.providerVersionValue) {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(7px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .leftRail :global(.providerVersionChevron) {
@@ -400,8 +381,8 @@
   color: var(--workspace-text);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(6px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   min-height: 32px;
   padding: 0 8px;
   text-align: left;
@@ -418,8 +399,8 @@
   align-items: center;
   color: var(--workspace-text);
   display: grid;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(10px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   justify-items: center;
   line-height: 1;
   width: 34px;
@@ -459,7 +440,7 @@
   border: 0;
   color: var(--workspace-text);
   font: inherit;
-  font-size: 13px;
+  font-size: calc(9px + var(--presentation-font-size-increase));
   min-width: 0;
   outline: none;
   width: 100%;
@@ -524,8 +505,8 @@
 }
 
 .leftRail :global(.resourceAreaLabel) {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -554,8 +535,8 @@
   align-items: center;
   color: var(--workspace-muted);
   display: flex;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   justify-content: space-between;
   margin: 2px 2px 7px;
 }
@@ -619,14 +600,14 @@
   background: var(--workspace-surface-muted);
   border-radius: 6px;
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   justify-content: center;
 }
 
 .leftRail :global(.resourceTileLabel) {
-  font-size: 12px;
-  font-weight: 650;
+  font-size: calc(9px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.25;
   min-width: 0;
   overflow: hidden;
@@ -642,7 +623,7 @@
 .leftRail :global(.emptyPanelState) {
   color: var(--workspace-muted);
   display: grid;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   gap: 7px;
   line-height: 1.45;
   padding: 10px 4px 4px;
@@ -657,8 +638,8 @@
   color: var(--workspace-text);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   min-height: 36px;
   padding: 0 12px;
 }
@@ -671,8 +652,8 @@
 
 .leftRail :global(.sectionCaption) {
   color: var(--workspace-muted);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   margin: 2px 2px 10px;
 }
 
@@ -714,8 +695,8 @@
   color: var(--workspace-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   min-height: 30px;
 }
 
@@ -734,10 +715,10 @@
   border-radius: 8px;
   color: var(--workspace-muted);
   display: grid;
-  gap: 7px;
-  grid-template-columns: 16px minmax(0, 1fr);
-  min-height: 36px;
-  padding: 0 10px;
+  gap: 6px;
+  grid-template-columns: 14px minmax(0, 1fr);
+  min-height: 32px;
+  padding: 0 8px;
 }
 
 .leftRail :global(.moduleCatalogSearch:focus-within) {
@@ -750,7 +731,7 @@
   border: 0;
   color: var(--workspace-text);
   font: inherit;
-  font-size: 12px;
+  font-size: calc(9px + var(--presentation-font-size-increase));
   min-width: 0;
   outline: none;
   width: 100%;
@@ -774,8 +755,8 @@
   align-items: center;
   color: var(--workspace-text);
   display: flex;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 7px;
   justify-content: space-between;
   padding: 0 2px;
@@ -785,7 +766,7 @@
   background: var(--workspace-surface-muted);
   border-radius: 999px;
   color: var(--workspace-muted);
-  font-size: 11px;
+  font-size: calc(11px + var(--presentation-font-size-increase));
   min-width: 20px;
   padding: 2px 6px;
   text-align: center;
@@ -803,7 +784,6 @@
   border: 1px solid var(--workspace-line);
   border-radius: 8px;
   color: var(--workspace-text);
-  cursor: pointer;
   display: grid;
   font: inherit;
   gap: 4px;
@@ -812,8 +792,10 @@
   text-align: left;
 }
 
-.leftRail :global(.moduleCatalogCard:hover),
-.leftRail :global(.moduleCatalogCard:focus-visible),
+.leftRail :global(.templateCatalogCard) {
+  cursor: pointer;
+}
+
 .leftRail :global(.templateCatalogCard:hover),
 .leftRail :global(.templateCatalogCard:focus-visible) {
   border-color: var(--workspace-line-strong);
@@ -824,15 +806,19 @@
 .leftRail :global(.moduleCatalogCard span),
 .leftRail :global(.templateCatalogCard span) {
   color: var(--workspace-muted);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+}
+
+.leftRail :global(.templateCatalogCard span) {
+  font-size: calc(9px + var(--presentation-font-size-increase));
 }
 
 .leftRail :global(.templateCatalogCard strong) {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .leftRail :global(.moduleCatalogCard strong) {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.3;
 }
 
@@ -843,8 +829,8 @@
 
 .leftRail :global(.moduleCatalogCard small) {
   color: var(--workspace-muted);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .leftRail :global(.templateLibraryOpenCard) {
@@ -861,7 +847,7 @@
   gap: 5px;
 }
 
-.leftRail :global(.templateApplyCard) {
+.leftRail :global(.templatePreviewCard) {
   border-left: 3px solid var(--workspace-line-strong);
 }
 
@@ -972,6 +958,59 @@ button.rightRailResizeHandle {
   display: none;
 }
 
+.panelEdgeHandle {
+  align-items: center;
+  background: var(--workspace-surface);
+  border: 1px solid var(--workspace-line-strong);
+  color: var(--workspace-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 48px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  top: calc(50% + 32px);
+  transform: translateY(-50%);
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    left 160ms ease,
+    right 160ms ease;
+  width: var(--panel-edge-handle-width);
+  z-index: 44;
+}
+
+.panelEdgeHandle:hover,
+.panelEdgeHandle:focus-visible {
+  background: var(--workspace-surface-muted);
+  color: var(--workspace-text);
+  outline: none;
+}
+
+.panelEdgeHandle:focus-visible {
+  box-shadow: 0 0 0 2px var(--board-primary-soft);
+}
+
+.leftPanelEdgeHandle {
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  left: var(--left-panel-width);
+}
+
+.rightPanelEdgeHandle {
+  border-radius: 8px 0 0 8px;
+  border-right: 0;
+  right: var(--right-panel-width);
+}
+
+.editorShellLeftCollapsed .leftPanelEdgeHandle {
+  left: 0;
+}
+
+.editorShellRightCollapsed .rightPanelEdgeHandle {
+  right: 0;
+}
+
 .workspace {
   background: var(--workspace-page);
   grid-column: 2;
@@ -990,7 +1029,7 @@ button.rightRailResizeHandle {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  left: 16px;
+  left: calc(var(--panel-edge-handle-width) + 12px);
   max-height: calc(100% - 32px);
   padding: 5px;
   position: absolute;
@@ -998,6 +1037,10 @@ button.rightRailResizeHandle {
   transform: translateY(-50%);
   width: fit-content;
   z-index: 12;
+}
+
+.editorShellViewer .canvasToolbar {
+  left: 16px;
 }
 
 .toolbarGroup {
@@ -1157,8 +1200,8 @@ button.rightRailResizeHandle {
 .edgePatchBadge text {
   fill: currentColor;
   font-family: var(--workspace-font);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .edgePatchBadge[data-preview-state="added"] {
@@ -1245,6 +1288,9 @@ button.rightRailResizeHandle {
 }
 
 .canvasPanel :global(.react-flow__edge-text) {
+  font-size: calc(
+    calc(12px * var(--board-lod-label-scale)) + var(--presentation-font-size-increase)
+  ) !important;
   letter-spacing: 0;
   paint-order: stroke;
 }
@@ -1264,10 +1310,6 @@ button.rightRailResizeHandle {
   visibility: hidden;
 }
 
-.canvasPanelEdgeLabelsCompact :global(.react-flow__edge-text) {
-  font-size: calc(12px * var(--board-lod-label-scale)) !important;
-}
-
 .canvasPanelEdgeLabelsCompact :global(.react-flow__edge:hover .react-flow__edge-text),
 .canvasPanelEdgeLabelsCompact :global(.react-flow__edge:hover .react-flow__edge-textbg),
 .canvasPanelEdgeLabelsCompact :global(.react-flow__edge.selected .react-flow__edge-text),
@@ -1278,8 +1320,20 @@ button.rightRailResizeHandle {
   visibility: visible;
 }
 
+.canvasPanelResourceNamesHidden .resourceNodeLabel {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.canvasPanelResourceNamesVisible .resourceNodeLabel {
+  opacity: 1;
+  visibility: visible;
+}
+
 .canvasPanel :global(.react-flow__node:focus-visible) .nodeShell {
-  box-shadow: 0 0 0 2px var(--board-primary-soft), 0 0 0 4px var(--board-primary);
+  box-shadow:
+    0 0 0 2px var(--board-primary-soft),
+    0 0 0 4px var(--board-primary);
   outline: none;
 }
 
@@ -1310,8 +1364,8 @@ button.rightRailResizeHandle {
   border-radius: 7px;
   box-shadow: 0 12px 28px rgba(31, 41, 55, 0.1);
   color: #7a4d00;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   left: 50%;
   line-height: 1.35;
   max-width: min(520px, calc(100% - 32px));
@@ -1330,18 +1384,20 @@ button.rightRailResizeHandle {
   align-items: stretch;
   background: color-mix(in srgb, var(--board-surface) 96%, #e7f0ff);
   border-color: color-mix(in srgb, var(--board-primary) 36%, var(--board-border));
-  bottom: 16px;
+  bottom: 12px;
   color: var(--board-ink);
   flex-direction: column;
-  font-weight: 500;
-  left: auto;
-  max-width: min(500px, calc(100% - 48px));
-  padding: 10px 12px;
-  right: 16px;
+  font-weight: var(--presentation-font-weight-bold);
+  left: 12px;
+  max-height: min(480px, calc(100% - 32px));
+  max-width: calc(100% - 24px);
+  overflow-y: auto;
+  padding: 8px;
+  right: auto;
   text-align: left;
   top: auto;
   transform: none;
-  width: 460px;
+  width: 360px;
 }
 
 .compilerPreviewHeader {
@@ -1354,20 +1410,20 @@ button.rightRailResizeHandle {
 
 .compilerPreviewHeader > div:first-child {
   display: grid;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
 }
 
 .compilerPreviewHeader strong {
   color: var(--board-ink);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: calc(15px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .compilerPreviewHeader span {
   color: var(--board-muted);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .compilerPreviewActions {
@@ -1377,6 +1433,12 @@ button.rightRailResizeHandle {
   gap: 5px;
 }
 
+.compilerPreviewNotice > .compilerPreviewActions {
+  border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
+  justify-content: flex-end;
+  padding-top: 6px;
+}
+
 .compilerPreviewActions button {
   background: transparent;
   border: 1px solid var(--board-border);
@@ -1384,65 +1446,25 @@ button.rightRailResizeHandle {
   color: var(--board-ink);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1;
   min-height: 28px;
-  padding: 0 9px;
+  padding: 0 8px;
 }
 
 .compilerPreviewActions button:hover,
 .compilerPreviewActions button:focus-visible {
   background: var(--board-surface-subtle);
   border-color: var(--board-primary);
-  outline: none;
+  outline: 3px solid color-mix(in srgb, var(--board-primary) 32%, transparent);
+  outline-offset: 2px;
 }
 
 .compilerPreviewActions button:last-child {
   background: var(--board-primary);
   border-color: var(--board-primary);
   color: #ffffff;
-}
-
-.compilerPreviewDetails {
-  border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
-  display: grid;
-  gap: 5px;
-  margin-top: 8px;
-  padding-top: 8px;
-}
-
-.compilerPreviewDetail {
-  align-items: baseline;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: 32px minmax(0, 1fr);
-  min-width: 0;
-}
-
-.compilerPreviewDetail > span {
-  color: var(--board-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.compilerPreviewDetail strong {
-  color: var(--board-ink);
-  font-size: 11px;
-  font-weight: 700;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.compilerPreviewDiagnostic {
-  border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
-  color: var(--board-warning);
-  font-size: 11px;
-  font-weight: 700;
-  margin: 8px 0 0;
-  padding-top: 8px;
 }
 
 .emptyState {
@@ -1453,7 +1475,7 @@ button.rightRailResizeHandle {
   color: #6f778c;
   display: flex;
   flex-direction: column;
-  font-size: 0.85rem;
+  font-size: calc(0.85rem + var(--presentation-font-size-increase));
   gap: 4px;
   left: 50%;
   padding: 14px 18px;
@@ -1466,7 +1488,7 @@ button.rightRailResizeHandle {
 
 .emptyState strong {
   color: #171c2f;
-  font-size: 0.95rem;
+  font-size: calc(0.95rem + var(--presentation-font-size-increase));
 }
 
 .panelHeader {
@@ -1476,8 +1498,8 @@ button.rightRailResizeHandle {
 
 .panelKicker {
   color: #727d91;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0;
   margin: 0 0 3px;
   text-transform: uppercase;
@@ -1485,7 +1507,7 @@ button.rightRailResizeHandle {
 
 .panelTitle {
   color: #171c2f;
-  font-size: 1rem;
+  font-size: calc(1rem + var(--presentation-font-size-increase));
   line-height: 1.2;
   margin: 0;
 }
@@ -1502,8 +1524,8 @@ button.rightRailResizeHandle {
   align-items: center;
   color: #727d91;
   display: flex;
-  font-size: 0.78rem;
-  font-weight: 800;
+  font-size: calc(0.78rem + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   margin: 0 0 8px 4px;
 }
@@ -1565,13 +1587,13 @@ button.rightRailResizeHandle {
 
 .paletteItemName {
   color: #171c2f;
-  font-size: 0.84rem;
-  font-weight: 800;
+  font-size: calc(0.84rem + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .paletteItemType {
   color: #778196;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1792,15 +1814,15 @@ button.rightRailResizeHandle {
   border-radius: 9px 9px 0 0;
   box-shadow: none;
   display: flex;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   height: 34px;
   left: 0;
   line-height: 18px;
   max-width: 100%;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 0 12px;
   pointer-events: all;
   position: absolute;
@@ -1819,6 +1841,8 @@ button.rightRailResizeHandle {
   max-width: 100%;
   min-width: 0;
   padding: 2px 6px;
+  transform: scale(var(--board-lod-label-scale));
+  transform-origin: left center;
 }
 
 .areaNodeHitEdge {
@@ -1878,8 +1902,8 @@ button.rightRailResizeHandle {
   border-radius: 6px;
   color: var(--board-primary);
   flex: 0 1 auto;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 14px;
   max-width: 120px;
   min-width: 0;
@@ -1896,8 +1920,8 @@ button.rightRailResizeHandle {
   border-radius: 8px;
   color: var(--board-primary);
   display: flex;
-  font-size: 0.9rem;
-  font-weight: 900;
+  font-size: calc(0.9rem + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   height: 38px;
   justify-content: center;
   width: 38px;
@@ -1918,19 +1942,19 @@ button.rightRailResizeHandle {
 
 .nodeType {
   color: var(--board-muted);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   text-transform: uppercase;
 }
 
 .nodeLabel {
-  font-size: 0.92rem;
-  font-weight: 850;
+  font-size: calc(0.92rem + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .nodeSubtitle {
   color: var(--board-muted);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1945,6 +1969,7 @@ button.rightRailResizeHandle {
   display: flex;
   height: 100%;
   justify-content: center;
+  padding: 4cqmin;
   pointer-events: none;
   width: 100%;
 }
@@ -1952,8 +1977,6 @@ button.rightRailResizeHandle {
 .resourceNodeIcon {
   display: block;
   height: 100%;
-  max-height: 48px;
-  max-width: 48px;
   object-fit: contain;
   width: 100%;
 }
@@ -1988,8 +2011,8 @@ button.rightRailResizeHandle {
   box-sizing: border-box;
   color: var(--board-ink);
   display: -webkit-box;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: calc(7px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   left: 50%;
   line-height: 15px;
   max-height: 30px;
@@ -2002,7 +2025,7 @@ button.rightRailResizeHandle {
   position: absolute;
   text-align: center;
   text-overflow: ellipsis;
-  top: calc(50% + 28px);
+  top: calc(100% + 4px);
   transform: translateX(-50%);
   transition:
     opacity 120ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -2025,6 +2048,11 @@ button.rightRailResizeHandle {
   transform-origin: top center;
 }
 
+.nodeShellZoomFar .resourceNodeLabel {
+  opacity: 0;
+  visibility: hidden;
+}
+
 .lockBadge {
   align-items: center;
   background: var(--board-ink);
@@ -2045,8 +2073,8 @@ button.rightRailResizeHandle {
   border: 1px solid currentColor;
   border-radius: 5px;
   display: flex;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   justify-content: center;
   line-height: 14px;
   min-height: 18px;
@@ -2085,13 +2113,13 @@ button.rightRailResizeHandle {
   .lockBadge,
   .stateBadge {
     border-radius: 3px;
-    font-size: 12px;
-    height: 12px;
-    line-height: 10px;
-    min-height: 12px;
-    min-width: 12px;
+    font-size: calc(12px + var(--presentation-font-size-increase));
+    height: 18px;
+    line-height: 16px;
+    min-height: 18px;
+    min-width: 18px;
     padding: 0;
-    width: 12px;
+    width: 18px;
   }
 
   .lockBadge {
@@ -2119,7 +2147,7 @@ button.rightRailResizeHandle {
 
   .stateBadgePreview::after {
     content: "P";
-    font-size: 12px;
+    font-size: calc(12px + var(--presentation-font-size-increase));
   }
 }
 
@@ -2127,6 +2155,11 @@ button.rightRailResizeHandle {
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
+}
+
+.edgeAnchorHandle {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .connectionHandleSource {
@@ -2141,10 +2174,17 @@ button.rightRailResizeHandle {
   pointer-events: none;
 }
 
-.canvasPanel :global(.react-flow__node:hover) .connectionHandleSource:not(.connectionHandleInactive),
+.canvasPanel
+  :global(.react-flow__node:hover)
+  .connectionHandleSource:not(.connectionHandleInactive),
 .nodeShellSelected ~ .connectionHandleSource:not(.connectionHandleInactive),
-.connectionHandleSource:hover,
-.connectionHandleTarget.connectionHandleActive {
+.connectionHandleSource:hover {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.canvasPanel :global(.react-flow__node:hover) .connectionHandleTarget.connectionHandleActive,
+.connectionHandleTarget.connectionHandleActive:focus-visible {
   opacity: 1;
   pointer-events: all;
 }
@@ -2176,6 +2216,11 @@ button.rightRailResizeHandle {
   z-index: 12;
 }
 
+.nodeShellConnectionCandidate {
+  outline: 2px solid var(--board-success);
+  outline-offset: calc(5px * var(--board-control-scale));
+}
+
 .connectionHandleTarget.connectionHandleActive::after {
   border-color: var(--board-success);
   box-shadow: 0 0 0 calc(4px * var(--board-control-scale)) rgba(40, 125, 60, 0.16);
@@ -2189,8 +2234,8 @@ button.rightRailResizeHandle {
   color: #ffffff;
   content: "+";
   /* ui-legibility-exception: shape; a11y: DiagramNodeView gives each connection handle an aria-label. */
-  font-size: calc(9px * var(--board-control-scale));
-  font-weight: 700;
+  font-size: calc(calc(9px * var(--board-control-scale)) + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1;
 }
 
@@ -2306,8 +2351,8 @@ button.rightRailResizeHandle {
   border-top: 1px solid var(--board-border);
   color: var(--board-body);
   display: flex;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   justify-content: space-between;
   margin-top: 3px;
   padding-top: 6px;
@@ -2365,8 +2410,8 @@ button.rightRailResizeHandle {
 
 .edgeToolbarPanelLabel {
   color: var(--board-body);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 16px;
 }
 
@@ -2817,6 +2862,10 @@ button.rightRailResizeHandle {
     overflow: hidden;
   }
 
+  .editorShellViewer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .leftRail {
     border: 0;
     border-right: 1px solid var(--workspace-line);
@@ -2842,6 +2891,22 @@ button.rightRailResizeHandle {
     top: 64px;
     width: min(var(--right-panel-width), calc(100vw - 56px));
     z-index: 42;
+  }
+
+  .leftPanelEdgeHandle {
+    left: min(var(--left-panel-width), calc(100vw - 56px));
+  }
+
+  .rightPanelEdgeHandle {
+    right: min(var(--right-panel-width), calc(100vw - 56px));
+  }
+
+  .editorShellLeftCollapsed .leftPanelEdgeHandle {
+    left: 0;
+  }
+
+  .editorShellRightCollapsed .rightPanelEdgeHandle {
+    right: 0;
   }
 
   .editorShellRightCollapsed .rightRail {
@@ -2881,10 +2946,6 @@ button.rightRailResizeHandle {
     text-overflow: ellipsis;
   }
 
-  .projectBarDivider {
-    display: none;
-  }
-
   .projectBarActions {
     gap: 2px;
   }
@@ -2895,8 +2956,12 @@ button.rightRailResizeHandle {
   }
 
   .canvasToolbar {
-    left: 10px;
+    left: calc(var(--panel-edge-handle-width) + 10px);
     max-height: calc(100% - 20px);
+  }
+
+  .editorShellViewer .canvasToolbar {
+    left: 10px;
   }
 
   .compilerPreviewNotice {
@@ -2918,6 +2983,10 @@ button.rightRailResizeHandle {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .panelEdgeHandle {
+    transition: none;
+  }
+
   .canvasPanelSnapAnimating :global(.react-flow__node) {
     transition: none;
   }

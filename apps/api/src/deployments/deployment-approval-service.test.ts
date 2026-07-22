@@ -8,7 +8,8 @@ import type { AwsConnection, DeploymentPlanSummary } from "@sketchcatch/types";
 import {
   approveDeploymentPlan,
   assertDeploymentApplyPreconditions,
-  DeploymentApplyPreconditionError
+  DeploymentApplyPreconditionError,
+  revokeDeploymentApproval
 } from "./deployment-approval-service.js";
 import {
   DeploymentConflictError,
@@ -20,9 +21,11 @@ import {
   type DeploymentRepository,
   type ProjectAccessContext,
   type ProjectRecord,
+  type ReleaseCandidateRecord,
   type SaveDeploymentPlanInput,
   type TerraformArtifactRecord
 } from "./deployment-service.js";
+import { createPreparedReleaseSnapshotHash } from "./deployment-preparation-service.js";
 import {
   createTerraformArtifactCanonicalContent,
   prepareTerraformWorkspace
@@ -49,10 +52,12 @@ class FakeDeploymentRepository implements DeploymentRepository {
   terraformArtifact: TerraformArtifactRecord | undefined = createTerraformArtifactRecord();
   planArtifact: DeploymentPlanArtifactRecord | undefined = createPlanArtifactRecord();
   awsConnection: AwsConnection | undefined = createVerifiedAwsConnection();
+  releaseCandidate: ReleaseCandidateRecord | undefined;
   readonly approvals: Array<{
     deploymentId: string;
     input: Parameters<DeploymentRepository["approveDeployment"]>[1];
   }> = [];
+  readonly revokedApprovals: string[] = [];
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     if (
@@ -118,6 +123,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     }
 
     return this.planArtifact;
+  }
+
+  async findReleaseCandidateById(candidateId: string) {
+    return this.releaseCandidate?.id === candidateId ? this.releaseCandidate : undefined;
   }
 
   async findRunningDeploymentInProject(): Promise<DeploymentRecord | undefined> {
@@ -212,7 +221,38 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
-  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+  revokeDeploymentApproval: NonNullable<DeploymentRepository["revokeDeploymentApproval"]> = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    this.revokedApprovals.push(candidateDeploymentId);
+
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      approvedAt: null,
+      approvedByUserId: null,
+      approvedTerraformArtifactId: null,
+      approvedPlanArtifactId: null,
+      approvedTerraformArtifactHash: null,
+      approvedTfplanHash: null,
+      approvedAwsAccountId: null,
+      approvedAwsRegion: null,
+      approvedPreparedSnapshotHash: null,
+      status: "PENDING",
+      isBlocked: true,
+      blockedBy: "missing_approval",
+      blockedReason: input.blockedReason,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  saveDeploymentApplyResults: DeploymentRepository["saveDeploymentApplyResults"] = async (
     candidateDeploymentId,
     input
   ) => {
@@ -222,9 +262,24 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     this.deployment = {
       ...this.deployment,
-      status: "SUCCESS",
       stateObjectKey: input.stateObjectKey,
       resultWarningSummary: input.resultWarningSummary,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "SUCCESS",
       failureStage: null,
       errorSummary: null,
       updatedAt: fixedNow
@@ -342,6 +397,38 @@ test("approveDeploymentPlan stores the approved artifact plan and AWS snapshot",
     status: "PENDING",
     preserveFailureDetails: false
   });
+});
+
+test("revokeDeploymentApproval clears approval and returns the apply plan to approval", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = {
+    ...repository.deployment!,
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: artifactHash,
+    approvedTfplanHash: tfplanHash,
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2",
+    status: "PENDING",
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null
+  };
+
+  const deployment = await revokeDeploymentApproval(
+    { deploymentId, accessContext: createAccessContext() },
+    repository
+  );
+
+  assert.equal(deployment.approvedAt, null);
+  assert.equal(deployment.approvedPlanArtifactId, null);
+  assert.equal(deployment.status, "PENDING");
+  assert.equal(deployment.isBlocked, true);
+  assert.equal(deployment.blockedBy, "missing_approval");
+  assert.equal(deployment.blockedReason, "Terraform Plan requires user approval before apply");
+  assert.deepEqual(repository.revokedApprovals, [deploymentId]);
 });
 
 test("approveDeploymentPlan reads local Terraform artifacts from project asset storage", async () => {
@@ -586,6 +673,41 @@ test("approveDeploymentPlan preserves failed cleanup state for destroy approvals
   });
 });
 
+test("approveDeploymentPlan allows full-stack destroy after its ReleaseCandidate failed", async () => {
+  const repository = new FakeDeploymentRepository();
+  const candidate = { ...createReleaseCandidateRecord(), status: "failed" as const };
+  const preparedSnapshotHash = createPreparedReleaseSnapshotHash({
+    candidateId: candidate.id,
+    commitSha: candidate.commitSha,
+    compositeDigest: candidate.compositeDigest,
+    configFingerprint: candidate.configFingerprint
+  });
+  repository.releaseCandidate = candidate;
+  repository.deployment = createDeploymentRecord(undefined, {
+    status: "FAILED",
+    scope: "full_stack",
+    targetKind: "ecs_fargate",
+    releaseCandidateId: candidate.id,
+    preparedSnapshotHash,
+    stateObjectKey,
+    failureStage: "destroy",
+    errorSummary: "previous destroy lost its execution lease"
+  });
+  repository.planArtifact = createPlanArtifactRecord({ operation: "destroy" });
+
+  const deployment = await approveDeploymentPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      downloadTerraformArtifact: async () => artifactContent,
+      now: () => fixedNow
+    }
+  );
+
+  assert.equal(deployment.status, "FAILED");
+  assert.equal(deployment.approvedPreparedSnapshotHash, preparedSnapshotHash);
+});
+
 test("approveDeploymentPlan allows plans with legacy blocking safety warnings", async () => {
   const repository = new FakeDeploymentRepository();
   const warning = createBlockingWarning();
@@ -828,6 +950,50 @@ test("assertDeploymentApplyPreconditions rejects prepared draft drift after appr
   );
 });
 
+test("assertDeploymentApplyPreconditions pins the approved ReleaseCandidate", () => {
+  const candidate = createReleaseCandidateRecord();
+  const snapshot = createPreparedReleaseSnapshotHash({
+    candidateId: candidate.id,
+    commitSha: candidate.commitSha,
+    compositeDigest: candidate.compositeDigest,
+    configFingerprint: candidate.configFingerprint
+  });
+  const deployment = createApprovedDeploymentRecord({
+    scope: "full_stack",
+    targetKind: "ecs_fargate",
+    releaseCandidateId: candidate.id,
+    preparedSnapshotHash: snapshot,
+    approvedPreparedSnapshotHash: snapshot
+  });
+
+  assert.doesNotThrow(() =>
+    assertDeploymentApplyPreconditions({
+      deployment,
+      currentPlanArtifact: createPlanArtifactRecord(),
+      currentTerraformArtifactHash: artifactHash,
+      currentTfplanHash: tfplanHash,
+      currentAwsConnection: createVerifiedAwsConnection(),
+      currentReleaseCandidate: candidate,
+      now: fixedNow
+    })
+  );
+  assert.throws(
+    () =>
+      assertDeploymentApplyPreconditions({
+        deployment,
+        currentPlanArtifact: createPlanArtifactRecord(),
+        currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: tfplanHash,
+        currentAwsConnection: createVerifiedAwsConnection(),
+        currentReleaseCandidate: { ...candidate, expiresAt: fixedNow },
+        now: fixedNow
+      }),
+    (error) =>
+      error instanceof DeploymentApplyPreconditionError &&
+      error.reason === "release_candidate"
+  );
+});
+
 test("assertDeploymentApplyPreconditions rejects missing approval snapshot fields", () => {
   const requiredSnapshotFields: Array<keyof DeploymentRecord> = [
     "approvedAt",
@@ -884,12 +1050,19 @@ function createDeploymentRecord(
     projectId,
     architectureId,
     terraformArtifactId,
+    preparationKey: null,
     awsConnectionId,
-    liveProfile: "practice",
+    awsAccountIdSnapshot: "123456789012",
+    awsRegionSnapshot: "ap-northeast-2",
+    awsConnectionNameSnapshot: "123456789012",
+    liveProfile: "demo_web_service",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",
     releaseId: null,
+    releaseCandidateId: null,
+    rollbackOfDeploymentId: null,
+    rollbackTargetDeploymentId: null,
     preparedDraftRevision: null,
     preparedSnapshotHash: null,
     currentPlanArtifactId: planArtifactId,
@@ -957,6 +1130,40 @@ function createPlanSummary(): DeploymentPlanSummary {
   };
 }
 
+function createReleaseCandidateRecord(): ReleaseCandidateRecord {
+  return {
+    id: "candidate-1",
+    projectId,
+    deploymentId,
+    pipelineRunId: null,
+    buildEnvironmentId: "build-environment-1",
+    commitSha: "a".repeat(40),
+    configFingerprint: "b".repeat(64),
+    compositeDigest: "c".repeat(64),
+    apiOciDigest: "d".repeat(64),
+    apiArchiveDigest: "1".repeat(64),
+    frontendArchiveDigest: "e".repeat(64),
+    frontendManifestDigest: "f".repeat(64),
+    frontendIndexDigest: "2".repeat(64),
+    apiArchiveObjectKey: "deployments/deployment/release-candidates/candidate/api-image.oci.tar",
+    apiArchiveObjectVersionId: "api-version",
+    apiArchiveByteSize: 100,
+    frontendArchiveObjectKey: "deployments/deployment/release-candidates/candidate/frontend.tar.zst",
+    frontendArchiveObjectVersionId: "frontend-version",
+    frontendArchiveByteSize: 200,
+    frontendManifestObjectKey:
+      "deployments/deployment/release-candidates/candidate/frontend-manifest.json",
+    frontendManifestObjectVersionId: "frontend-manifest-version",
+    manifestObjectKey: "deployments/deployment/release-candidates/candidate/candidate-manifest.json",
+    manifestObjectVersionId: "candidate-manifest-version",
+    status: "pending",
+    expiresAt: new Date(fixedNow.getTime() + 60_000),
+    frontendRetryExpiresAt: null,
+    createdAt: fixedNow,
+    updatedAt: fixedNow
+  };
+}
+
 function createBlockingWarning(): DeploymentPlanSummary["warnings"][number] {
   return {
     id: "pre_deployment_check:security-open-ssh",
@@ -992,6 +1199,8 @@ function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRec
     userId,
     name: "Test Project",
     description: null,
+    deletionStartedAt: null,
+    deletionErrorSummary: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides
@@ -1026,6 +1235,10 @@ function createPlanArtifactRecord(
     sha256: tfplanHash,
     accountId: "123456789012",
     region: "ap-northeast-2",
+    stateBaselineDeploymentId: null,
+    stateObjectKey: null,
+    stateLineageSha256: null,
+    stateSerial: null,
     createdAt: fixedNow,
     ...overrides
   };

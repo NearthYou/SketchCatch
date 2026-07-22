@@ -12,32 +12,107 @@ import {
 import {
   createPostgresDeploymentRepository
 } from "./deployments/deployment-service.js";
+import { getDeployment } from "./deployments/deployment-service.js";
+import {
+  createInterruptedDirectApplicationReleaseRecovery,
+  recoverInterruptedDirectPreflightCancellation
+} from "./deployments/direct-release-recovery-orchestrator.js";
 import { maskDeploymentMessage } from "./deployments/log-masking.js";
+import {
+  createPostgresDirectApplicationReleaseRepository,
+  retryDirectApplicationFrontendRelease
+} from "./deployments/direct-application-release-service.js";
+import { createAwsCodeBuildDirectApplicationReleaseGateway } from "./deployments/aws-codebuild-direct-application-release-gateway.js";
+import { installDeploymentWorkerSignalHandlers } from "./deployment-worker-shutdown.js";
+import { prepareEcsBuildEnvironmentForPlan } from "./deployments/deployment-plan-build-environment.js";
+import { runDeploymentPlan } from "./deployments/deployment-plan-service.js";
 
-async function runDeploymentWorker(): Promise<void> {
+async function runDeploymentWorker(abortSignal: AbortSignal): Promise<void> {
   assertNoStaticAwsCredentialsForApiServer();
 
   const jobId = requireDeploymentWorkerJobId(process.env);
   const { db } = getDatabaseClient();
   const jobRepository = createPostgresDeploymentJobRepository(db);
   const deploymentRepository = createPostgresDeploymentRepository(db);
+  const defaultRunner = createDeploymentWorkerOperationRunner(deploymentRepository, {
+    plan: (input, repository) =>
+      runDeploymentPlan(input, repository, {
+        prepareBuildEnvironment: async ({ deployment, accessContext }) => {
+          await prepareEcsBuildEnvironmentForPlan({
+            db,
+            deployment,
+            userId: accessContext.userId
+          });
+        }
+      })
+  });
+  const recoverApplicationRelease = createInterruptedDirectApplicationReleaseRecovery({ db });
 
   await runDeploymentWorkerJob(
-    { jobId },
+    { jobId, abortSignal },
     jobRepository,
-    createDeploymentWorkerOperationRunner(deploymentRepository)
+    async (input) => {
+      input.abortSignal?.throwIfAborted();
+      if (input.operation === "retry_application_frontend") {
+        await retryDirectApplicationFrontendRelease(
+          { deploymentId: input.deploymentId, userId: input.accessContext.userId },
+          createPostgresDirectApplicationReleaseRepository(db),
+          createAwsCodeBuildDirectApplicationReleaseGateway()
+        );
+        const deployment = await getDeployment(
+          { deploymentId: input.deploymentId, accessContext: input.accessContext },
+          deploymentRepository
+        );
+        return { status: deployment.status, errorSummary: deployment.errorSummary };
+      }
+      if (input.operation !== "recover_application_release") {
+        return defaultRunner(input);
+      }
+      const recovery = await recoverApplicationRelease({
+        excludeDeploymentIds: [],
+        onlyDeploymentIds: [input.deploymentId],
+        stopActiveCodeBuild: true,
+        recoveryWorkerTaskArn: input.workerTaskArn
+      });
+      let recovered = recovery.recoveredDeploymentIds.includes(input.deploymentId);
+      if (!recovered) {
+        recovered = await recoverInterruptedDirectPreflightCancellation({
+          db,
+          deploymentId: input.deploymentId,
+          userId: input.accessContext.userId,
+          recoveryWorkerTaskArn: input.workerTaskArn
+        });
+      }
+      if (!recovered) {
+        throw new Error("Direct application release recovery must be retried");
+      }
+      const deployment = await getDeployment(
+        {
+          deploymentId: input.deploymentId,
+          accessContext: input.accessContext
+        },
+        deploymentRepository
+      );
+      return {
+        status: deployment.status,
+        errorSummary: deployment.errorSummary
+      };
+    }
   );
 }
 
 async function main(): Promise<void> {
   let exitCode = 0;
+  const shutdownController = new AbortController();
+  const removeSignalHandlers = installDeploymentWorkerSignalHandlers(shutdownController);
 
   try {
-    await runDeploymentWorker();
+    await runDeploymentWorker(shutdownController.signal);
   } catch (error) {
     reportWorkerFailure(error);
     exitCode = 1;
   } finally {
+    removeSignalHandlers();
     try {
       await closeDatabaseClient();
     } catch (error) {

@@ -1,4 +1,5 @@
 import type { GitCicdPipelineRun } from "@sketchcatch/types";
+import { formatPipelineRunStatus } from "./cicd-delivery-presentation";
 import styles from "./workspace.module.css";
 
 export function CicdActivityView({ run }: { readonly run: GitCicdPipelineRun | null }) {
@@ -10,51 +11,22 @@ export function CicdActivityView({ run }: { readonly run: GitCicdPipelineRun | n
     <section className={styles.cicdActivity} aria-label="Pipeline activity">
       <header>
         <div>
-          <span>{formatScope(run.changeScope)}</span>
-          <h3>{run.commitMessage || "Commit message 없음"}</h3>
-          <p>{run.branch} · {run.commitSha.slice(0, 8)}</p>
-          <p>
-            시작 {formatTime(run.startedAt ?? run.createdAt)} · 종료 {run.finishedAt ? formatTime(run.finishedAt) : "진행 중"}
-          </p>
+          <h4>실행 단계</h4>
+          <p>각 GitHub Actions 단계의 상태와 시간을 확인합니다.</p>
         </div>
-        <strong data-status={run.status}>{formatRunStatus(run.status)}</strong>
+        <strong data-status={run.status}>{formatPipelineRunStatus(run.status)}</strong>
       </header>
-      {run.release ? (
-        <dl className={styles.cicdReleaseSummary}>
-          <div>
-            <dt>Release</dt>
-            <dd>{run.release.version}</dd>
-          </div>
-          <div>
-            <dt>Artifact digest</dt>
-            <dd>{run.release.artifactDigest.slice(0, 12)}</dd>
-          </div>
-          <div>
-            <dt>Provider revision</dt>
-            <dd>{run.release.providerRevision?.revisionId ?? "-"}</dd>
-          </div>
-          <div>
-            <dt>Output</dt>
-            <dd>
-              {run.release.outputUrl ? (
-                <a href={run.release.outputUrl} rel="noreferrer" target="_blank">
-                  열기
-                </a>
-              ) : (
-                "-"
-              )}
-            </dd>
-          </div>
-        </dl>
+      {run.statusMessage ? (
+        <p role={run.status === "failed" || run.status === "cancelled" ? "alert" : "status"}>
+          {run.statusMessage}
+        </p>
       ) : null}
       <ol className={styles.cicdStageList}>
         {run.stages.map((stage) => (
           <li data-status={stage.status} key={stage.id}>
             <span>{formatStage(stage.kind)}</span>
+            <span>{formatStageTime(stage.startedAt, stage.finishedAt)}</span>
             <strong>{formatStageStatus(stage.status)}</strong>
-            {stage.runUrl ? (
-              <a href={stage.runUrl} rel="noreferrer" target="_blank">GitHub Actions에서 보기</a>
-            ) : null}
           </li>
         ))}
       </ol>
@@ -62,23 +34,12 @@ export function CicdActivityView({ run }: { readonly run: GitCicdPipelineRun | n
   );
 }
 
-function formatTime(value: string): string {
-  return new Date(value).toLocaleString("ko-KR");
-}
-
-function formatScope(scope: GitCicdPipelineRun["changeScope"]): string {
-  return scope === "app" ? "App" : scope === "infra" ? "Infrastructure" : "App + Infrastructure";
-}
-
-function formatRunStatus(status: GitCicdPipelineRun["status"]): string {
-  return ({
-    detected: "감지됨",
-    queued: "대기 중",
-    running: "실행 중",
-    succeeded: "성공",
-    failed: "실패",
-    cancelled: "취소됨"
-  } as const)[status];
+function formatStageTime(startedAt: string | null, finishedAt: string | null): string {
+  if (!startedAt) return "시작 전";
+  const started = new Date(startedAt).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" });
+  return finishedAt
+    ? `${started} – ${new Date(finishedAt).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" })}`
+    : `${started} – 진행 중`;
 }
 
 function formatStage(kind: GitCicdPipelineRun["stages"][number]["kind"]): string {

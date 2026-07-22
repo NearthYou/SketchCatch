@@ -1,3 +1,5 @@
+import { BOARD_LABEL_PERSISTENT_ZOOM } from "../diagram-editor/board-viewport";
+
 export type BoardThumbnailBounds = {
   readonly height: number;
   readonly width: number;
@@ -24,6 +26,12 @@ type RootRect = {
 };
 
 const THUMBNAIL_PADDING_RATIO = 0.08;
+
+export function getBoardThumbnailPersistentLabelScale(zoom: number): number {
+  return Number.isFinite(zoom) && zoom > 0 && zoom < BOARD_LABEL_PERSISTENT_ZOOM
+    ? BOARD_LABEL_PERSISTENT_ZOOM / zoom
+    : 1;
+}
 
 export function getBoardViewportFromCssTransform(
   transform: string

@@ -1,34 +1,8 @@
 import type {
   Deployment,
-  DeploymentLiveProfile,
   DeploymentLog,
-  DiagramJson,
   GitCicdHandoff
 } from "@sketchcatch/types";
-
-const practiceLiveApplyResourceTypes = new Set([
-  "aws_vpc",
-  "aws_subnet",
-  "aws_internet_gateway",
-  "aws_route_table",
-  "aws_route_table_association",
-  "aws_security_group",
-  "aws_security_group_rule",
-  "aws_instance",
-  "aws_s3_bucket"
-]);
-
-export function getRecommendedDeploymentLiveProfile(
-  diagramJson: DiagramJson
-): DeploymentLiveProfile {
-  const hasExtendedTemplateResources = diagramJson.nodes.some((node) => {
-    const resourceType = node.parameters?.resourceType ?? node.type;
-
-    return node.kind === "resource" && !practiceLiveApplyResourceTypes.has(resourceType);
-  });
-
-  return hasExtendedTemplateResources ? "demo_web_service_with_rds" : "practice";
-}
 
 type DeploymentRequestState = "idle" | "loading" | "error";
 export type DeploymentPanelMode = "setup" | "records";
@@ -74,25 +48,32 @@ export function getDeploymentActionState(
   const isDestroyable = Boolean(deployment && isCleanupDestroyCandidate(deployment));
   const isDestroyPlan = deployment?.currentPlanOperation === "destroy";
   const isApplyPlan = deployment?.currentPlanOperation === "apply";
+  const isFailedDestroyAttempt = Boolean(
+    deployment && isDestroyPlan && deployment.status === "FAILED" && deployment.failedAt
+  );
   const canStartFreshApplyPlan = Boolean(deployment && !hasCurrentPlan && !isDestroyPlan);
   const canShowApplyPlanAction = Boolean(
     deployment &&
-      canStartFreshApplyPlan &&
-      deployment.status !== "RUNNING" &&
-      deployment.status !== "SUCCESS" &&
-      deployment.status !== "DESTROYED" &&
-      !isDestroyable &&
-      !isPlanApproved
+    canStartFreshApplyPlan &&
+    deployment.status !== "RUNNING" &&
+    deployment.status !== "SUCCESS" &&
+    deployment.status !== "DESTROYED" &&
+    !isDestroyable &&
+    !isPlanApproved
   );
   const canShowApprovePlanAction = Boolean(
     deployment &&
       hasCurrentPlan &&
       !isPlanApproved &&
-      deployment.status !== "RUNNING"
+      !isFailedDestroyAttempt &&
+      (isApplyPlan
+        ? deployment.status === "PENDING"
+        : deployment.status !== "RUNNING")
   );
   const canShowDestroyPlanAction = Boolean(
     deployment &&
       isDestroyable &&
+      (!isDestroyPlan || isFailedDestroyAttempt) &&
       deployment.status !== "RUNNING"
   );
 
@@ -100,25 +81,26 @@ export function getDeploymentActionState(
   const canApprovePlan = canShowApprovePlanAction && !isLoading;
   const canApply = Boolean(
     deployment &&
-      isApplyPlan &&
-      isPlanApproved &&
-      deployment.status !== "RUNNING" &&
-      deployment.status !== "SUCCESS" &&
-      deployment.status !== "DESTROYED" &&
-      deployment.isBlocked === false &&
-      hasCompleteApprovalSnapshot &&
-      !isLoading
+    isApplyPlan &&
+    isPlanApproved &&
+    deployment.status !== "RUNNING" &&
+    deployment.status !== "SUCCESS" &&
+    deployment.status !== "DESTROYED" &&
+    deployment.isBlocked === false &&
+    hasCompleteApprovalSnapshot &&
+    !isLoading
   );
   const canRunDestroyPlan = canShowDestroyPlanAction && !isLoading;
   const canDestroy = Boolean(
     deployment &&
-      isDestroyable &&
-      isDestroyPlan &&
-      isPlanApproved &&
-      deployment.status !== "RUNNING" &&
-      deployment.isBlocked === false &&
-      hasCompleteApprovalSnapshot &&
-      !isLoading
+    isDestroyable &&
+    isDestroyPlan &&
+    isPlanApproved &&
+    !isFailedDestroyAttempt &&
+    deployment.status !== "RUNNING" &&
+    deployment.isBlocked === false &&
+    hasCompleteApprovalSnapshot &&
+    !isLoading
   );
   const canCancelDeployment = Boolean(
     deployment?.status === "RUNNING" && !deployment.cancelRequestedAt && !isLoading
@@ -135,32 +117,109 @@ export function getDeploymentActionState(
     shouldShowApprovePlanButton: canShowApprovePlanAction,
     shouldShowApplyButton: Boolean(
       deployment &&
-        isApplyPlan &&
-        isPlanApproved &&
-        deployment.status !== "SUCCESS" &&
-        deployment.status !== "DESTROYED"
+      isApplyPlan &&
+      isPlanApproved &&
+      deployment.status !== "SUCCESS" &&
+      deployment.status !== "DESTROYED"
     ),
     shouldShowDestroyPlanButton: canShowDestroyPlanAction,
-    shouldShowDestroyButton: Boolean(deployment && isDestroyPlan && isPlanApproved),
-    approvePlanLabel: isDestroyPlan ? "Destroy Plan 승인" : "Plan 승인"
+    shouldShowDestroyButton: Boolean(
+      deployment && isDestroyPlan && isPlanApproved && !isFailedDestroyAttempt
+    ),
+    approvePlanLabel: isDestroyPlan ? "삭제 Plan 승인" : "Plan 승인"
   };
+}
+
+export function selectDeploymentCleanupTarget(
+  deployments: readonly Deployment[]
+): Deployment | null {
+  return selectDeploymentCleanupTargets(deployments)[0] ?? null;
+}
+
+export function selectDeploymentCleanupTargets(
+  deployments: readonly Deployment[]
+): Deployment[] {
+  const lifecycleHeads = new Map<"application" | "terraform", Deployment>();
+
+  for (const deployment of [...deployments]
+    .filter(isDeploymentLifecycleHeadCandidate)
+    .sort(compareDeploymentCreatedAtDescending)) {
+    const lineage = deployment.scope === "application" ? "application" : "terraform";
+
+    if (!lifecycleHeads.has(lineage)) {
+      lifecycleHeads.set(lineage, deployment);
+    }
+  }
+
+  return [...lifecycleHeads.values()]
+    .filter(isCleanupDestroyCandidate)
+    .sort(compareDeploymentCreatedAtDescending);
 }
 
 export function hasCompleteDeploymentApprovalSnapshot(deployment: Deployment): boolean {
   return Boolean(
     deployment.approvedAt &&
-      deployment.approvedByUserId &&
-      deployment.approvedTerraformArtifactId &&
-      deployment.approvedPlanArtifactId &&
-      deployment.approvedTerraformArtifactHash &&
-      deployment.approvedTfplanHash &&
-      deployment.approvedAwsAccountId &&
-      deployment.approvedAwsRegion
+    deployment.approvedByUserId &&
+    deployment.approvedTerraformArtifactId &&
+    deployment.approvedPlanArtifactId &&
+    deployment.approvedTerraformArtifactHash &&
+    deployment.approvedTfplanHash &&
+    deployment.approvedAwsAccountId &&
+    deployment.approvedAwsRegion
   );
 }
 
 export function shouldAutoRefreshDeployment(deployment: Deployment | null): boolean {
   return deployment?.status === "RUNNING";
+}
+
+export function getInfrastructureRollbackTarget(
+  source: Deployment | null,
+  deployments: readonly Deployment[]
+): Deployment | null {
+  if (
+    !source ||
+    source.scope === "application" ||
+    !source.stateObjectKey ||
+    !(
+      source.status === "SUCCESS" ||
+      (source.status === "FAILED" &&
+        (source.failureStage === "apply" || source.failureStage === "destroy"))
+    ) ||
+    !source.awsConnectionId ||
+    !source.awsAccountIdSnapshot ||
+    !source.awsRegionSnapshot
+  ) {
+    return null;
+  }
+
+  const sourceCreatedAt = Date.parse(source.createdAt);
+  const hasNewerState = deployments.some(
+    (candidate) =>
+      candidate.id !== source.id &&
+      candidate.status !== "DESTROYED" &&
+      candidate.stateObjectKey !== null &&
+      candidate.awsAccountIdSnapshot === source.awsAccountIdSnapshot &&
+      candidate.awsRegionSnapshot === source.awsRegionSnapshot &&
+      Date.parse(candidate.createdAt) > sourceCreatedAt
+  );
+  if (hasNewerState) return null;
+
+  return (
+    deployments
+      .filter(
+        (candidate) =>
+          candidate.id !== source.id &&
+          candidate.projectId === source.projectId &&
+          candidate.status === "SUCCESS" &&
+          candidate.scope !== "application" &&
+          candidate.stateObjectKey !== null &&
+          candidate.awsAccountIdSnapshot === source.awsAccountIdSnapshot &&
+          candidate.awsRegionSnapshot === source.awsRegionSnapshot &&
+          Date.parse(candidate.createdAt) < sourceCreatedAt
+      )
+      .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))[0] ?? null
+  );
 }
 
 export function shouldAutoRefreshGitCicdHandoff(handoff: GitCicdHandoff | null): boolean {
@@ -233,19 +292,21 @@ export function shouldShowDeploymentInfoValue(value: string | null | undefined):
   return Boolean(value && value !== "없음");
 }
 
-function getNextDeploymentLogMessageToken(
-  text: string
-): DeploymentLogMessageToken | null {
+function getNextDeploymentLogMessageToken(text: string): DeploymentLogMessageToken | null {
   const patterns: readonly {
     readonly tone: DeploymentLogMessageTokenTone;
     readonly pattern: RegExp;
   }[] = [
     { tone: "metadata", pattern: /^\[[^\]]+\]/ },
     { tone: "string", pattern: /^"[^"]*"/ },
-    { tone: "resource", pattern: /^(?:data\.)?[a-z][a-z0-9_]*\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?/ },
+    {
+      tone: "resource",
+      pattern: /^(?:data\.)?[a-z][a-z0-9_]*\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?/
+    },
     {
       tone: "operation",
-      pattern: /^(?:Creation complete|Destruction complete|Still creating|Still destroying|Creating|Destroying|Apply complete|Destroy complete|Outputs)/
+      pattern:
+        /^(?:Creation complete|Destruction complete|Still creating|Still destroying|Creating|Destroying|Apply complete|Destroy complete|Outputs)/
     },
     { tone: "output", pattern: /^[A-Za-z_][A-Za-z0-9_]*(?=\s*=)/ }
   ];
@@ -283,6 +344,18 @@ function appendDeploymentLogMessageToken(
 }
 
 function isCleanupDestroyCandidate(deployment: Deployment): boolean {
+  if (deployment.scope === "application") {
+    if (!deployment.releaseId) {
+      return false;
+    }
+
+    return (
+      deployment.status === "SUCCESS" ||
+      (deployment.status === "FAILED" &&
+        (deployment.failureStage === "apply" || deployment.failureStage === "destroy"))
+    );
+  }
+
   if (!deployment.stateObjectKey) {
     return false;
   }
@@ -296,5 +369,21 @@ function isCleanupDestroyCandidate(deployment: Deployment): boolean {
     (deployment.failureStage === "plan" ||
       deployment.failureStage === "apply" ||
       deployment.failureStage === "destroy")
+  );
+}
+
+function isDeploymentLifecycleHeadCandidate(deployment: Deployment): boolean {
+  return (
+    deployment.status === "SUCCESS" ||
+    deployment.status === "DESTROYED" ||
+    (deployment.status === "FAILED" &&
+      (deployment.stateObjectKey !== null ||
+        (deployment.scope === "application" && deployment.releaseId !== null)))
+  );
+}
+
+function compareDeploymentCreatedAtDescending(left: Deployment, right: Deployment): number {
+  return (
+    Date.parse(right.createdAt) - Date.parse(left.createdAt) || right.id.localeCompare(left.id)
   );
 }

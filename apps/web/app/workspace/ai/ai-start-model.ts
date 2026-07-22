@@ -3,10 +3,14 @@ import type {
   ArchitectureDraftClarification,
   ArchitecturePatchClarification,
   ArchitecturePatchClarificationCandidate,
-  ArchitecturePatchPreview,
-  DiagramJson
+  ArchitecturePatchPreview
 } from "@sketchcatch/types";
-import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/WorkspaceAiChatDock";
+import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/workspace-ai-chat-storage";
+import {
+  findPatchClarificationCandidate as findSharedPatchClarificationCandidate,
+  findPatchClarificationSuggestion as findSharedPatchClarificationSuggestion,
+  getPatchClarificationSuggestions as getSharedPatchClarificationSuggestions
+} from "../../../features/workspace/workspace-ai-patch-clarification";
 
 const AI_START_DRAFT_STORAGE_KEY = "sketchcatch.newProjectDraft";
 const MAX_CHAT_MESSAGES = 80;
@@ -104,35 +108,21 @@ export function isArchitecturePatchClarification(
 export function getPatchClarificationSuggestions(
   clarification: ArchitecturePatchClarification
 ): readonly string[] {
-  const candidates = clarification.candidates.map(formatPatchCandidate);
-  return [...candidates, ...(clarification.suggestions ?? [])];
+  return getSharedPatchClarificationSuggestions(clarification);
 }
 
 export function findPatchClarificationCandidate(
   clarification: ArchitecturePatchClarification,
   answer: string
 ): ArchitecturePatchClarificationCandidate | undefined {
-  const normalizedAnswer = normalizeAnswer(answer);
-
-  return clarification.candidates.find((candidate) => {
-    const candidateLabel = normalizeAnswer(formatPatchCandidate(candidate));
-    return (
-      normalizedAnswer === normalizeAnswer(candidate.resourceId) ||
-      normalizedAnswer === normalizeAnswer(candidate.label) ||
-      normalizedAnswer === candidateLabel ||
-      normalizedAnswer.includes(normalizeAnswer(candidate.resourceId))
-    );
-  });
+  return findSharedPatchClarificationCandidate(clarification, answer);
 }
 
 export function findPatchClarificationSuggestion(
   clarification: ArchitecturePatchClarification,
   answer: string
 ): string | undefined {
-  const normalizedAnswer = normalizeAnswer(answer);
-  return clarification.suggestions?.find(
-    (suggestion) => normalizeAnswer(suggestion) === normalizedAnswer
-  );
+  return findSharedPatchClarificationSuggestion(clarification, answer);
 }
 
 export function createDraftFromPatch(
@@ -155,18 +145,14 @@ export function createDraftFromPatch(
 
 export function createPatchSummary(preview: ArchitecturePatchPreview): string {
   if (preview.changes.length === 0) {
-    return "변경 없이 현재 PREVIEW를 유지합니다.";
+    return "변경 없이 현재 초안을 유지합니다.";
   }
 
   if (preview.changes.length === 1) {
-    return preview.changes[0]?.summary ?? "수정 PREVIEW를 만들었습니다.";
+    return preview.changes[0]?.summary ?? "수정한 초안을 만들었습니다.";
   }
 
-  return `${preview.changes.length}개 변경 사항을 PREVIEW에 반영했습니다.`;
-}
-
-export function hasDraftResources(diagram: DiagramJson | null): boolean {
-  return diagram !== null && diagram.nodes.length > 0;
+  return `${preview.changes.length}개 변경 사항을 초안에 반영했습니다.`;
 }
 
 function isAiStartProjectDraft(value: unknown): value is AiStartProjectDraft {
@@ -189,12 +175,4 @@ function createMessageId(): string {
   return typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
     : `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function formatPatchCandidate(candidate: ArchitecturePatchClarificationCandidate): string {
-  return `${candidate.label} (${candidate.resourceType})`;
-}
-
-function normalizeAnswer(value: string): string {
-  return value.trim().toLowerCase();
 }

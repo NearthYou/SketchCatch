@@ -1,42 +1,31 @@
 # Session Handoff
 
-Use this file only for compact continuation context. Write it in English.
+Use this file only for compact continuation context. Write it in English and reference durable artifacts instead of repeating them.
 
 ## Currently Verified
 
-- Epic #432 remains ordered as merged PR 1 / issue #434, current PR 2 / issue #433, then PR 3 / issue #435.
-- `feature/sw/433-application-artifact-reuse` is based on merged PR 1 commit `207a979f` and implements only PR 2.
-- Direct Deployment and GitOps share a provider-neutral `ApplicationArtifact` Registry with canonical fingerprinting, provider revalidation, persistent build claims, and project isolation.
-- PR #438 review hardening rejects malformed or delimiter-obfuscated build inputs, streams S3 digest verification, and releases failed renewal heartbeats immediately.
-- `ApplicationRelease.artifactId` is nullable for legacy/v1 fallback, while a composite project foreign key blocks cross-project links.
-- Migration `0045_application_artifact_registry.sql` avoids `0044`, which another branch reserved. `_journal.json` changes.
+- Branch `Refactor/jh/531-cicd-pr개선-및-편의성-추가` implements the minimal CI/CD setup convergence scope on top of `origin/dev` at `334e33c5`; the earlier written design commit is `a7e3e4e2`.
+- One Phase 3 action now persists a draft before applying GitHub Repository settings, a target-branch Environment policy, scoped AWS trust, and PR changes in order.
+- Partial handoffs resume with the same accepted Plan. Failed/cancelled Pipeline state creates a retry-only file and safe retry PR without Direct Destroy or redeployment.
+- Provider hardening preserves unrelated GitHub branches and IAM statements, avoids exact-state writes, verifies remote read-back, and requires persisted Repository/AWS evidence before Phase 3 completion.
+- Generated workflows reject a stale `SKETCHCATCH_PROJECT_ID` before external work and retain API error bodies.
+- Focused verification passes: API setup/provider 42, full Git/CI/CD API 246, readiness 96, Web 54, root lint, root typecheck, and all five production build tasks.
 
 ## Changes This Session
 
-- Added all seven artifact kinds, canonical identity, strict v2 evidence, the Postgres Registry/lease boundary, read-only AWS verification, and the authenticated project artifact list.
-- Integrated verified reuse with Direct Deployment and GitOps while preserving v1 release evidence and legacy releases.
-- Updated product, data model, architecture, deployment, harness, and continuation documentation. PR 3 was not started.
+- Added the resumable setup API, persisted verification evidence, exact GitHub/AWS convergence, safe PR recovery, workflow project binding guard, and Phase 4 retry CTA.
+- Updated shared contracts and canonical data/deployment/architecture documentation.
+- No DB schema, Drizzle migration, dependency, worker, or lease change was added.
+- No live GitHub/AWS mutation, PR merge, Terraform Plan/Apply/Destroy, deployment, or push was performed.
+- The combined user approval covers Repository variables, Environment branch policy, the current scoped AWS trust statement, and PR preparation. It does not approve merge or Pipeline/cloud execution.
 
 ## Broken Or Unverified
 
-- Pass: focused PR 2 tests 59/59, `pnpm harness:check`, migration compatibility, lint, typecheck, and build.
-- API full suite: 666/669; only three Windows symlink-creation tests fail with `EPERM`.
-- Workspace `test:core` stops on three pre-existing three-tier Template contract failures unrelated to PR 2.
-- No real credential, live AWS mutation, Terraform apply/destroy, user deployment, or Git handoff was executed.
+- No changed local regression is known to be broken.
+- Live GitHub/AWS acceptance is intentionally unverified until the reviewed branch is deployed.
 
 ## Best Next Action
 
-1. Review and merge the Ready PR into `dev` after CI.
-2. Keep PR 3 / issue #435 blocked until PR 2 is merged.
-3. Merge the production runtime drift-review PR after a current review-only Plan passes, then execute the explicitly approved full-runtime Apply only from that merged revision. Do not use a targeted apply.
-
-## Production Runtime Plan Review
-
-- Review-only production runtime Plan 29498864502 at `c8b107d3` succeeded with 3 add, 7 change, and 2 task-definition replacement destroys. It injects the GitHub App Secret into API and worker and preserves the Live Observation capability Secret; no Secret value was recorded.
-- Branch `fix/sw/production-runtime-plan-drift` stores the existing capability ARN as a dedicated production-infra-plan Environment Secret and overlays it into the runtime tfvars without replacing `PRODUCTION_INFRA_RUNTIME_TFVARS_JSON`.
-
-## PR #439 Follow-up Review
-
-- Pending follow-up branch scopes the static Secret checks to their declared Terraform sets, selects the named worker container in the Terraform test, and removes an unnecessary `tolist` conversion.
-- The nullable worker Secret list is normalized with `try(..., [])` so the test remains safe when `secrets` is absent or null.
-- Harness, structure check, Terraform formatting, lint, typecheck, build, and diff check pass. Local Terraform validate/test cannot load the uncached AWS provider 6.54.0; no cloud mutation was performed.
+1. Review and deploy this branch through the normal production workflow.
+2. Confirm the GitHub App installation has Administration and Variables Read/write plus Actions Read-only.
+3. Run one authorized production acceptance covering first setup and one failed-Pipeline retry.

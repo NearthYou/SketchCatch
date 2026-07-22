@@ -62,16 +62,15 @@
   box-shadow: 0 14px 32px rgb(15 23 42 / 14%);
   display: grid;
   gap: 1px;
-  left: 0;
-  margin-top: 6px;
   max-height: 180px;
-  min-width: 100%;
   overflow: auto;
   padding: 4px;
-  position: absolute;
-  right: 0;
-  top: 100%;
   z-index: 30;
+}
+
+.selectMenuDropdownPortal {
+  position: fixed;
+  z-index: 1000;
 }
 
 .selectMenuOption {
@@ -124,16 +123,16 @@
 
 .selectMenuOptionLabel {
   flex: 0 1 auto;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   min-width: 0;
 }
 
 .selectMenuOptionDetail {
   color: #64748b;
   flex: 1 1 auto;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   min-width: 0;
   text-align: right;
 }
@@ -144,16 +143,18 @@
 }
 
 .compact .selectMenuTrigger {
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   min-height: 30px;
   padding: 5px 8px;
 }
 
-.compact .selectMenuDropdown {
+.compact .selectMenuDropdown,
+.selectMenuDropdownCompact {
   max-height: 156px;
 }
 
-.compact .selectMenuOption {
+.compact .selectMenuOption,
+.selectMenuDropdownCompact .selectMenuOption {
   min-height: 28px;
   padding: 4px 7px;
 }
@@ -164,12 +165,13 @@
 }
 
 .large .selectMenuTrigger {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   min-height: 42px;
   padding: 10px 12px;
 }
 
-.large .selectMenuOption {
+.large .selectMenuOption,
+.selectMenuDropdownLarge .selectMenuOption {
   min-height: 34px;
   padding: 5px 9px;
 }
@@ -180,8 +182,8 @@
   border-radius: var(--radius-control);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.5;
   min-height: 42px;
   padding: 0 12px;
@@ -238,8 +240,8 @@
 
 .surfaceTone .selectMenuOptionLabel {
   font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.45;
   overflow: visible;
   text-overflow: clip;
@@ -247,7 +249,7 @@
 }
 
 .surfaceTone .selectMenuOptionSelected .selectMenuOptionLabel {
-  font-weight: 600;
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .surfaceTone .selectMenuOptionSelected svg {

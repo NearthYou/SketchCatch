@@ -3,6 +3,7 @@ import type {
   TerraformDiagnostic,
   TerraformValidateRequest
 } from "@sketchcatch/types";
+import { findTerraformRequiredProvidersDeclarations } from "@sketchcatch/types";
 import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import { isSilentlyPreservedTerraformBlockType } from "./terraform-configuration-blocks.js";
 import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
@@ -40,9 +41,19 @@ const FAST_AWS_UNSUPPORTED_ARGUMENTS: Record<string, ReadonlySet<string>> = {
   aws_s3_bucket: new Set(["bucket_purpose", "origin_resource_id", "public_access_block"])
 };
 
+const MODULE_WIDE_DIAGNOSTIC_CODES = new Set([
+  "terraform.duplicate_address",
+  "terraform.undefined_reference"
+]);
+
 type TerraformValidationFile = {
   readonly fileName: string;
   readonly terraformCode: string;
+};
+
+type TerraformDiagnosticsOptions = {
+  readonly declaredReferenceAddresses?: ReadonlySet<string>;
+  readonly undefinedReferenceSeverity?: "error" | "warning";
 };
 
 type TerraformBlockHeader = {
@@ -69,7 +80,10 @@ type TerraformResourceBlock = TerraformBlockHeader & {
   readonly attributes: readonly TerraformAttribute[];
 };
 
-export function createTerraformDiagnostics(terraformCode: string): TerraformDiagnostic[] {
+export function createTerraformDiagnostics(
+  terraformCode: string,
+  options: TerraformDiagnosticsOptions = {}
+): TerraformDiagnostic[] {
   const trimmedCode = terraformCode.trim();
 
   if (trimmedCode.length === 0) {
@@ -98,7 +112,7 @@ export function createTerraformDiagnostics(terraformCode: string): TerraformDiag
     ...checkUnexpectedTokens(syntaxScannedCode),
     ...checkStandaloneTopLevelTokens(syntaxScannedCode),
     ...checkTrailingAttributeCommas(syntaxScannedCode),
-    ...checkUndefinedReferences(syntaxScannedCode),
+    ...checkUndefinedReferences(syntaxScannedCode, options),
     ...checkQuotedReferences(syntaxScannedCode),
     ...checkFastAwsSchemaDiagnostics(commentStrippedCode)
   ];
@@ -116,11 +130,34 @@ export function createTerraformValidationDiagnostics(
     );
   }
 
-  return nonEmptyFiles.flatMap((file) =>
-    createTerraformDiagnostics(file.terraformCode).map((diagnostic) =>
-      addDiagnosticSource(diagnostic, file.fileName)
-    )
+  const moduleSource = createTerraformModuleSource(nonEmptyFiles);
+  const fileDiagnostics = nonEmptyFiles.flatMap((file) =>
+    createTerraformDiagnostics(file.terraformCode)
+      .filter((diagnostic) => !MODULE_WIDE_DIAGNOSTIC_CODES.has(diagnostic.code ?? ""))
+      .map((diagnostic) => addDiagnosticSource(diagnostic, file.fileName))
   );
+  const moduleDiagnostics = createTerraformDiagnostics(moduleSource.terraformCode, {
+    undefinedReferenceSeverity: "error"
+  })
+    .filter((diagnostic) => MODULE_WIDE_DIAGNOSTIC_CODES.has(diagnostic.code ?? ""))
+    .map((diagnostic) => addModuleDiagnosticSource(diagnostic, moduleSource.files));
+  const requiredProvidersDeclarations = findTerraformRequiredProvidersDeclarations(nonEmptyFiles);
+  const [firstRequiredProvidersDeclaration] = requiredProvidersDeclarations;
+  const duplicateRequiredProvidersDiagnostics = requiredProvidersDeclarations
+    .slice(1)
+    .map<TerraformDiagnostic>((declaration) => ({
+      severity: "error",
+      code: "terraform.module.duplicate_required_providers",
+      line: declaration.line,
+      sourceFileName: declaration.fileName,
+      message: `Terraform module에는 required_providers 블록을 하나만 선언할 수 있습니다. ${firstRequiredProvidersDeclaration?.fileName}:${firstRequiredProvidersDeclaration?.line}에서 이미 선언되었습니다.`
+    }));
+
+  return [
+    ...fileDiagnostics,
+    ...moduleDiagnostics,
+    ...duplicateRequiredProvidersDiagnostics
+  ];
 }
 
 export function createFirstBlockingTerraformDiagnostic(
@@ -528,12 +565,17 @@ function checkTopLevelBlockBodyLine(
   ];
 }
 
-function checkUndefinedReferences(terraformCode: string): TerraformDiagnostic[] {
+function checkUndefinedReferences(
+  terraformCode: string,
+  options: TerraformDiagnosticsOptions
+): TerraformDiagnostic[] {
   const diagnostics: TerraformDiagnostic[] = [];
   const lines = splitTerraformLines(terraformCode);
-  const declaredAddresses = new Set(
-    collectTerraformBlockHeaders(lines).map((header) => toReferenceAddressFromHeader(header))
-  );
+  const declaredAddresses =
+    options.declaredReferenceAddresses ??
+    new Set(
+      collectTerraformBlockHeaders(lines).map((header) => toReferenceAddressFromHeader(header))
+    );
   const reportedReferences = new Set<string>();
 
   lines.forEach((lineText, index) => {
@@ -552,7 +594,7 @@ function checkUndefinedReferences(terraformCode: string): TerraformDiagnostic[] 
 
       reportedReferences.add(referenceAddress);
       diagnostics.push({
-        severity: "warning",
+        severity: options.undefinedReferenceSeverity ?? "warning",
         code: "terraform.undefined_reference",
         line: index + 1,
         resourceAddress: referenceAddress,
@@ -1089,6 +1131,63 @@ function toValidationFiles(input: TerraformValidateRequest): TerraformValidation
       terraformCode: input.terraformCode
     }
   ];
+}
+
+type TerraformModuleSourceFile = TerraformValidationFile & {
+  readonly endLine: number;
+  readonly startLine: number;
+};
+
+function createTerraformModuleSource(files: readonly TerraformValidationFile[]): {
+  readonly files: readonly TerraformModuleSourceFile[];
+  readonly terraformCode: string;
+} {
+  let terraformCode = "";
+  const sourceFiles: TerraformModuleSourceFile[] = [];
+
+  for (const file of files) {
+    if (terraformCode.length > 0) {
+      terraformCode += "\n\n";
+    }
+
+    const startLine = countTerraformLines(terraformCode);
+    terraformCode += file.terraformCode;
+    sourceFiles.push({
+      ...file,
+      startLine,
+      endLine: startLine + countTerraformNewlines(file.terraformCode)
+    });
+  }
+
+  return { files: sourceFiles, terraformCode };
+}
+
+function addModuleDiagnosticSource(
+  diagnostic: TerraformDiagnostic,
+  files: readonly TerraformModuleSourceFile[]
+): TerraformDiagnostic {
+  const moduleLine = diagnostic.line;
+  const sourceFile = moduleLine === undefined
+    ? files[0]
+    : files.find((file) => moduleLine >= file.startLine && moduleLine <= file.endLine);
+
+  if (!sourceFile) {
+    return diagnostic;
+  }
+
+  return {
+    ...diagnostic,
+    sourceFileName: diagnostic.sourceFileName ?? sourceFile.fileName,
+    ...(moduleLine !== undefined ? { line: moduleLine - sourceFile.startLine + 1 } : {})
+  };
+}
+
+function countTerraformLines(terraformCode: string): number {
+  return countTerraformNewlines(terraformCode) + 1;
+}
+
+function countTerraformNewlines(terraformCode: string): number {
+  return terraformCode.match(/\n/g)?.length ?? 0;
 }
 
 function addDiagnosticSource(

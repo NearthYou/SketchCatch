@@ -2,7 +2,7 @@
   background: var(--workspace-surface-muted, #fafafa);
   color: var(--workspace-text, #171717);
   display: grid;
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
 }
@@ -33,8 +33,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 8px;
   min-height: 32px;
   padding: 0 8px;
@@ -42,10 +42,8 @@
 
 .resourceSettingsBackButton:hover,
 .resourceSettingsBackButton:focus-visible,
-.resourceListMoreButton:hover,
-.resourceListMoreButton:focus-visible,
-.resourceListConfigToggle:hover,
-.resourceListConfigToggle:focus-visible {
+.resourceListDisclosureButton:hover,
+.resourceListDisclosureButton:focus-visible {
   background: var(--workspace-surface-strong, #f0f0f3);
   outline: none;
 }
@@ -74,14 +72,14 @@
 
 .resourceListTitle span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(6px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.4;
   text-transform: uppercase;
 }
 
 .resourceListTitle h2 {
-  font-size: 16px;
+  font-size: calc(16px + var(--presentation-font-size-increase));
   line-height: 1.4;
   margin: 0;
 }
@@ -89,7 +87,7 @@
 .resourceListTitle > strong {
   background: var(--workspace-surface-strong, #f0f0f3);
   border-radius: 9999px;
-  font-size: 12px;
+  font-size: calc(9px + var(--presentation-font-size-increase));
   min-width: 36px;
   padding: 5px 9px;
   text-align: center;
@@ -144,12 +142,31 @@
   min-width: 0;
 }
 
-.resourceListIdentity strong {
-  font-size: 13px;
+.resourceListNameButton {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.4;
   overflow: hidden;
+  padding: 0;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.resourceListNameButton:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.resourceListNameButton:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--workspace-accent, #000000);
+  outline-offset: 2px;
 }
 
 .resourceListServiceIcon {
@@ -170,7 +187,22 @@
   width: 20px;
 }
 
-.resourceListMoreButton {
+.resourceListServiceIconImage {
+  height: 20px;
+  object-fit: contain;
+  width: 20px;
+}
+
+.resourceListServiceIconFallback {
+  align-items: center;
+  color: var(--workspace-text, #171717);
+  display: inline-flex;
+  height: 20px;
+  justify-content: center;
+  width: 20px;
+}
+
+.resourceListDisclosureButton {
   align-items: center;
   background: transparent;
   border: 0;
@@ -185,10 +217,19 @@
   width: 32px;
 }
 
+.resourceListDisclosureIcon,
+.resourceListDisclosureIconExpanded {
+  transition: transform 160ms ease;
+}
+
+.resourceListDisclosureIconExpanded {
+  transform: rotate(180deg);
+}
+
 .resourceListAddress {
   color: var(--workspace-muted, #60646c);
-  font-family: Inter, Geist, sans-serif;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: calc(9px + var(--presentation-font-size-increase));
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -200,6 +241,11 @@
   padding-top: 10px;
 }
 
+.resourceListValues[hidden],
+.resourceListNoValues[hidden] {
+  display: none;
+}
+
 .resourceListValueRow {
   align-items: start;
   display: grid;
@@ -209,37 +255,25 @@
 
 .resourceListValueRow span,
 .resourceListValueRow strong {
-  font-size: 12px;
+  font-size: calc(10px + var(--presentation-font-size-increase));
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .resourceListValueRow span {
   color: var(--workspace-muted, #60646c);
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .resourceListValueRow strong {
   color: var(--workspace-text, #171717);
-  font-weight: 600;
-}
-
-.resourceListConfigToggle {
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  color: var(--workspace-text, #171717);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  justify-self: start;
-  padding: 6px 8px;
+  font-weight: var(--presentation-font-weight-regular);
 }
 
 .resourceListNoValues {
   border-top: 1px solid var(--workspace-line, #f0f0f3);
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   padding-top: 10px;
 }
 
@@ -257,11 +291,11 @@
 
 .resourceListEmpty strong {
   color: var(--workspace-text, #171717);
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .resourceListEmpty span {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.5;
 }
 

@@ -1,12 +1,19 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { getDeploymentWorkerMode, requireS3BucketName } from "../config/env.js";
+import {
+  getDeploymentWorkerMode,
+  requireS3BucketName,
+  type DeploymentWorkerMode
+} from "../config/env.js";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient } from "../db/client.js";
 import type {
   DeployedResource,
   Deployment,
   DeploymentFailureExplanationResponse,
+  DeploymentLiveObservationArchitectureResponse,
   DeploymentLog,
+  DeploymentProgressResponse,
   Project,
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
@@ -30,6 +37,7 @@ import {
   type RunDeploymentApplyInput,
   type RunDeploymentApplyResult
 } from "../deployments/deployment-apply-service.js";
+import { DirectApplicationReleaseError } from "../deployments/direct-application-release-service.js";
 import {
   runDeploymentDestroyPlan as defaultRunDeploymentDestroyPlan,
   type RunDeploymentDestroyPlanInput,
@@ -40,8 +48,10 @@ import {
   type RunDeploymentDestroyInput,
   type RunDeploymentDestroyResult
 } from "../deployments/deployment-destroy-service.js";
+import { isDeploymentDestroySourceStatus } from "../deployments/deployment-destroy-eligibility.js";
 import {
   approveDeploymentPlan as defaultApproveDeploymentPlan,
+  revokeDeploymentApproval as defaultRevokeDeploymentApproval,
   type ApproveDeploymentPlanInput
 } from "../deployments/deployment-approval-service.js";
 import {
@@ -51,6 +61,7 @@ import {
   DeploymentNotFoundError,
   getDeployment,
   getDeploymentDeployedAt,
+  getDeploymentLiveObservationArchitecture,
   listDeployedResources,
   listProjectDeployments,
   listDeploymentLogs,
@@ -64,11 +75,14 @@ import {
   type ProjectAccessContext
 } from "../deployments/deployment-service.js";
 import {
+  createDeploymentPreparationKey,
   getDeploymentConsolePhase,
   resolveDeploymentPreparation,
   type DeploymentPreparationRepository
 } from "../deployments/deployment-preparation-service.js";
 import { createDeploymentFailureExplanation } from "../deployments/deployment-failure-explanation.js";
+import { createDeploymentProgressSnapshot } from "../deployments/deployment-progress-service.js";
+import { prepareInfrastructureRollback } from "../deployments/infrastructure-rollback-service.js";
 import {
   cancelTrackedDeploymentRun,
   startTrackedDeploymentRun
@@ -81,7 +95,9 @@ import {
   failDeploymentJob,
   markDeploymentJobDispatching,
   markDeploymentJobRunning,
+  recordDeploymentJobTaskArn,
   type DeploymentJobRecord,
+  type DeploymentJobOperation,
   type DeploymentJobRepository
 } from "../deployments/deployment-job-service.js";
 import {
@@ -89,6 +105,8 @@ import {
   createLocalDeploymentWorkerDispatcher,
   type DeploymentWorkerDispatcher
 } from "../deployments/deployment-worker-dispatcher.js";
+import { TerraformArtifactSafetyError } from "../deployments/terraform-artifact-safety.js";
+import { normalizeDeploymentLiveProfile } from "../deployments/deployment-plan-summary.js";
 import type {
   CreateLlmExplanation,
   LlmExplanationInput
@@ -104,26 +122,46 @@ import {
 } from "../deployments/deployment-runtime-cache.js";
 import type { RuntimeCache } from "../runtime-cache/index.js";
 import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
+import { ProjectBuildEnvironmentError } from "../build-environments/project-build-environment-service.js";
+import { prepareEcsBuildEnvironmentForPlan } from "../deployments/deployment-plan-build-environment.js";
+import {
+  acquireProjectExecutionLease,
+  recordProjectExecutionCoordinates,
+  recoverVerifiedTerminalProjectExecutionLease,
+  releaseProjectExecutionLease,
+  ProjectExecutionLeaseError,
+  type LeaseFence,
+  type ProjectExecutionLeaseRepository
+} from "../releases/project-execution-lease-service.js";
 
 type DeploymentRow = DeploymentRecord & {
   readonly currentPlanOperation?: Deployment["currentPlanOperation"];
+};
+
+type RepositoryAccessVerificationResult = {
+  buildEnvironment: {
+    repositoryVerificationStatus: "not_checked" | "verified" | "failed";
+    repositoryVerificationStatusReason: string | null;
+  } | null;
 };
 
 const createDeploymentParamsSchema = z.object({
   projectId: z.uuid()
 });
 
-const createDeploymentBodySchema = z.object({
-  architectureId: z.uuid(),
-  terraformArtifactId: z.uuid(),
-  awsConnectionId: z.uuid(),
-  liveProfile: z
-    .enum(["practice", "demo_web_service", "demo_web_service_with_rds"])
-    .default("practice"),
-  scope: z.enum(["infrastructure", "application", "full_stack"]).optional(),
-  targetKind: z.enum(["ecs_fargate", "lambda", "ec2_asg", "static_site"]).nullable().optional(),
-  source: z.enum(["direct", "gitops"]).optional()
-}).strict();
+const createDeploymentBodySchema = z
+  .object({
+    architectureId: z.uuid(),
+    terraformArtifactId: z.uuid(),
+    awsConnectionId: z.uuid(),
+    liveProfile: z
+      .enum(["demo_web_service", "demo_web_service_with_rds"])
+      .default("demo_web_service"),
+    scope: z.enum(["infrastructure", "application", "full_stack"]).optional(),
+    targetKind: z.enum(["ecs_fargate", "lambda", "ec2_asg", "static_site"]).nullable().optional(),
+    source: z.enum(["direct", "gitops"]).optional()
+  })
+  .strict();
 
 const prepareDeploymentBodySchema = z
   .object({
@@ -161,7 +199,7 @@ type DeploymentRouteOptions = {
   createDeploymentRepository?: (db: DatabaseClient["db"]) => DeploymentRepository;
   createDeploymentJobRepository?: (db: DatabaseClient["db"]) => DeploymentJobRepository;
   workerDispatcher?: DeploymentWorkerDispatcher;
-  workerDispatchMode?: "in_process" | "ecs";
+  workerDispatchMode?: DeploymentWorkerMode;
   pruneProjectDeploymentStorage?: (input: {
     db: DatabaseClient["db"];
     projectId: string;
@@ -174,8 +212,28 @@ type DeploymentRouteOptions = {
     input: RunDeploymentPlanInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentPlanResult>;
+  prepareProjectBuildEnvironment?: (input: {
+    architectureId: string;
+    db: DatabaseClient["db"];
+    projectId: string;
+    userId: string;
+  }) => Promise<void>;
+  verifyProjectRepositoryAccess?: (input: {
+    db: DatabaseClient["db"];
+    projectId: string;
+    userId: string;
+  }) => Promise<RepositoryAccessVerificationResult>;
+  retryApplicationFrontendRelease?: (input: {
+    db: DatabaseClient["db"];
+    deploymentId: string;
+    userId: string;
+  }) => Promise<void>;
   approveDeploymentPlan?: (
     input: ApproveDeploymentPlanInput,
+    repository: DeploymentRepository
+  ) => Promise<DeploymentRecord>;
+  revokeDeploymentApproval?: (
+    input: { deploymentId: string; accessContext: ProjectAccessContext },
     repository: DeploymentRepository
   ) => Promise<DeploymentRecord>;
   runDeploymentApply?: (
@@ -200,6 +258,11 @@ type DeploymentRequestContext = {
   db: DatabaseClient["db"];
   jobRepository: DeploymentJobRepository;
   repository: DeploymentRepository;
+};
+
+type ReservedRouteExecutionLease = {
+  fence: LeaseFence;
+  repository: ProjectExecutionLeaseRepository;
 };
 
 export type DeploymentLogStreamWritable = {
@@ -282,15 +345,13 @@ function createDefaultProjectDeploymentStoragePruner(
     });
 }
 
-function createDeploymentWorkerDispatch(
-  options: DeploymentRouteOptions | undefined
-): {
+function createDeploymentWorkerDispatch(options: DeploymentRouteOptions | undefined): {
   dispatcher: DeploymentWorkerDispatcher;
   enabled: boolean;
 } {
   const mode = options?.workerDispatchMode ?? getDeploymentWorkerMode();
 
-  if (mode !== "ecs") {
+  if (mode === "in_process") {
     return {
       dispatcher: createLocalDeploymentWorkerDispatcher(),
       enabled: false
@@ -298,16 +359,39 @@ function createDeploymentWorkerDispatch(
   }
 
   return {
-    dispatcher: options?.workerDispatcher ?? createConfiguredDeploymentWorkerDispatcher(),
+    dispatcher:
+      options?.workerDispatcher ??
+      (mode === "ecs"
+        ? createConfiguredDeploymentWorkerDispatcher()
+        : createLocalDeploymentWorkerDispatcher()),
     enabled: true
   };
 }
 
+async function isMatchingActiveDeploymentOperation(input: {
+  deployment: DeploymentRecord;
+  operation: DeploymentJobOperation;
+  jobRepository: DeploymentJobRepository;
+}): Promise<boolean> {
+  const activeJob = await input.jobRepository.findActiveDeploymentJob(input.deployment.id);
+
+  if (!activeJob) {
+    return false;
+  }
+
+  if (activeJob.operation === input.operation) {
+    return true;
+  }
+
+  throw new DeploymentConflictError(`Deployment ${activeJob.operation} is already running`);
+}
+
 async function dispatchDeploymentWorkerJob(
   input: {
-    failureStage: "init" | "plan" | "apply" | "destroy";
+    failureStage: "init" | "plan" | "apply" | "application_release" | "rollback" | "destroy";
     job: DeploymentJobRecord;
     staleFailureMessage: string;
+    leaseReservation?: ReservedRouteExecutionLease;
   },
   dispatcher: DeploymentWorkerDispatcher,
   jobRepository: DeploymentJobRepository,
@@ -322,6 +406,21 @@ async function dispatchDeploymentWorkerJob(
       throw new Error("Deployment worker dispatch did not return a task ARN");
     }
 
+    if (input.leaseReservation) {
+      await recordProjectExecutionCoordinates(
+        {
+          ...input.leaseReservation.fence,
+          activeWorkerTaskArn: dispatchResult.taskArn
+        },
+        input.leaseReservation.repository
+      );
+    }
+
+    await recordDeploymentJobTaskArn(
+      { jobId: input.job.id, ecsTaskArn: dispatchResult.taskArn },
+      jobRepository
+    );
+
     await markDeploymentJobRunning(
       {
         jobId: input.job.id,
@@ -334,13 +433,141 @@ async function dispatchDeploymentWorkerJob(
     await failDeploymentJob({ jobId: input.job.id, errorSummary }, jobRepository);
     await repository.failDeployment(input.job.deploymentId, {
       failureStage: input.failureStage,
-      errorSummary
+      errorSummary,
+      ...(input.leaseReservation
+        ? { leaseFence: input.leaseReservation.fence, fenceCheckedAt: new Date() }
+        : {})
     });
     throw error;
   }
 }
 
+async function reserveRouteExecutionLease(
+  deployment: DeploymentRecord,
+  holderId: string,
+  repository: DeploymentRepository
+): Promise<ReservedRouteExecutionLease | undefined> {
+  const leaseRepository = repository.projectExecutionLeaseRepository;
+  if (!leaseRepository) return undefined;
+  const lease = await acquireProjectExecutionLease(
+    {
+      projectId: deployment.projectId,
+      holderId,
+      source: "direct"
+    },
+    leaseRepository
+  );
+  return {
+    fence: {
+      projectId: lease.projectId,
+      holderId: lease.holderId,
+      fencingVersion: lease.fencingVersion
+    },
+    repository: leaseRepository
+  };
+}
+
+async function releaseReservedRouteExecutionLease(
+  reservation: ReservedRouteExecutionLease | undefined
+): Promise<void> {
+  if (!reservation) return;
+  await releaseProjectExecutionLease(reservation.fence, reservation.repository).catch(() => false);
+}
+
+async function failStoppedDeploymentWithRecoveredLease(
+  deployment: DeploymentRecord,
+  repository: DeploymentRepository
+): Promise<DeploymentRecord> {
+  const failure = {
+    failureStage: deployment.activeStage ?? ("apply" as const),
+    errorSummary:
+      "배포 워커 종료를 확인했습니다. Terraform 인프라 변경은 자동 롤백하지 않았으므로 현재 AWS 리소스와 state를 확인한 뒤 이전 버전 롤백 여부를 결정해 주세요."
+  };
+  const leaseRepository = repository.projectExecutionLeaseRepository;
+  if (!leaseRepository) {
+    const failed = await repository.failDeployment(deployment.id, failure);
+    if (!failed) throw new DeploymentNotFoundError("Deployment not found");
+    return failed;
+  }
+  const interrupted = await leaseRepository.find(deployment.projectId);
+  if (!interrupted || interrupted.status !== "active") {
+    const failed = await repository.failDeployment(deployment.id, failure);
+    if (!failed) throw new DeploymentNotFoundError("Deployment not found");
+    return failed;
+  }
+  if (
+    interrupted.source !== "direct" ||
+    (interrupted.holderId !== deployment.id && interrupted.holderId !== `destroy:${deployment.id}`)
+  ) {
+    throw new ProjectExecutionLeaseError(
+      "LEASE_RECOVERY_REQUIRED",
+      "중단된 배포가 현재 프로젝트 실행 잠금의 소유자가 아닙니다.",
+      interrupted.source
+    );
+  }
+  const recovered = await recoverVerifiedTerminalProjectExecutionLease(
+    {
+      projectId: interrupted.projectId,
+      expectedHolderId: interrupted.holderId,
+      expectedFencingVersion: interrupted.fencingVersion,
+      expectedActiveCodeBuildId: interrupted.activeCodeBuildId,
+      expectedActiveWorkerTaskArn: interrupted.activeWorkerTaskArn,
+      holderId: `cancel:direct:${deployment.id}:${randomUUID()}`,
+      source: "direct"
+    },
+    leaseRepository
+  );
+  const fence = {
+    projectId: recovered.projectId,
+    holderId: recovered.holderId,
+    fencingVersion: recovered.fencingVersion
+  };
+  const failed = await repository.failDeployment(deployment.id, {
+    ...failure,
+    leaseFence: fence,
+    fenceCheckedAt: new Date()
+  });
+  if (!failed) throw new DeploymentNotFoundError("Deployment not found");
+  const released = await releaseProjectExecutionLease(fence, leaseRepository);
+  if (!released) {
+    throw new ProjectExecutionLeaseError(
+      "LEASE_RECOVERY_REQUIRED",
+      "중단된 배포 상태는 저장했지만 프로젝트 실행 잠금을 해제하지 못했습니다.",
+      "direct"
+    );
+  }
+  return failed;
+}
+
 function handleDeploymentError(error: unknown, reply: FastifyReply) {
+  if (error instanceof ProjectExecutionLeaseError) {
+    return reply.status(409).send({
+      error: error.code,
+      message: error.message,
+      activeSource: error.activeSource
+    });
+  }
+  if (error instanceof ProjectBuildEnvironmentError) {
+    return reply.status(error.statusCode).send({
+      error: error.code,
+      message: error.message
+    });
+  }
+
+  if (error instanceof DirectApplicationReleaseError) {
+    return reply.status(409).send({
+      error: error.code ?? "APPLICATION_RELEASE_FRONTEND_RETRY_FAILED",
+      message: error.message
+    });
+  }
+
+  if (error instanceof TerraformArtifactSafetyError) {
+    return reply.status(409).send({
+      error: "terraform_artifact_unsafe",
+      message: error.message
+    });
+  }
+
   if (error instanceof DeploymentNotFoundError) {
     return reply.status(404).send({
       error: "not_found",
@@ -361,10 +588,7 @@ function handleDeploymentError(error: unknown, reply: FastifyReply) {
 function requireDeploymentPreparationRepository(
   repository: DeploymentRepository
 ): DeploymentRepository & DeploymentPreparationRepository {
-  if (
-    !repository.findProjectDraftForPreparation ||
-    !repository.findProjectTargetForPreparation
-  ) {
+  if (!repository.findProjectDraftForPreparation || !repository.findProjectTargetForPreparation) {
     throw new Error("Deployment preparation repository is not configured");
   }
 
@@ -378,7 +602,8 @@ async function toDeployment(
   const currentPlanOperation =
     row.currentPlanOperation ??
     (row.currentPlanArtifactId
-      ? (await repository.findDeploymentPlanArtifactById(row.currentPlanArtifactId))?.operation ?? null
+      ? ((await repository.findDeploymentPlanArtifactById(row.currentPlanArtifactId))?.operation ??
+        null)
       : null);
 
   return {
@@ -387,11 +612,17 @@ async function toDeployment(
     architectureId: row.architectureId,
     terraformArtifactId: row.terraformArtifactId,
     awsConnectionId: row.awsConnectionId,
-    liveProfile: row.liveProfile,
+    awsAccountIdSnapshot: row.awsAccountIdSnapshot,
+    awsRegionSnapshot: row.awsRegionSnapshot,
+    awsConnectionNameSnapshot: row.awsConnectionNameSnapshot,
+    liveProfile: normalizeDeploymentLiveProfile(row.liveProfile),
     scope: row.scope,
     targetKind: row.targetKind,
     source: row.source,
     releaseId: row.releaseId,
+    releaseCandidateId: row.releaseCandidateId,
+    rollbackOfDeploymentId: row.rollbackOfDeploymentId,
+    rollbackTargetDeploymentId: row.rollbackTargetDeploymentId,
     consolePhase: getDeploymentConsolePhase(row),
     preparedDraftRevision: row.preparedDraftRevision,
     preparedSnapshotHash: row.preparedSnapshotHash,
@@ -520,7 +751,10 @@ export async function registerDeploymentRoutes(
             );
           }
         } catch (error) {
-          request.log.warn({ error, projectId: params.projectId }, "Failed to prune deployment history");
+          request.log.warn(
+            { error, projectId: params.projectId },
+            "Failed to prune deployment history"
+          );
         }
       }
 
@@ -557,6 +791,15 @@ export async function registerDeploymentRoutes(
         },
         preparationRepository
       );
+      const preparationKey = createDeploymentPreparationKey({
+        awsConnectionId: body.awsConnectionId,
+        deploymentTargetFingerprint: preparation.deploymentTargetFingerprint,
+        preparedDraftRevision: preparation.preparedDraftRevision,
+        preparedSnapshotHash: preparation.preparedSnapshotHash,
+        projectId: params.projectId,
+        scope: preparation.scope,
+        targetKind: preparation.targetKind
+      });
       const deployment = await createDeployment(
         {
           projectId: params.projectId,
@@ -564,12 +807,13 @@ export async function registerDeploymentRoutes(
           architectureId: body.architectureId,
           terraformArtifactId: body.terraformArtifactId,
           awsConnectionId: body.awsConnectionId,
-          liveProfile: "practice",
+          liveProfile: preparation.liveProfile,
           scope: preparation.scope,
           targetKind: preparation.targetKind,
           source: "direct",
           preparedDraftRevision: preparation.preparedDraftRevision,
-          preparedSnapshotHash: preparation.preparedSnapshotHash
+          preparedSnapshotHash: preparation.preparedSnapshotHash,
+          preparationKey
         },
         repository
       );
@@ -663,6 +907,35 @@ export async function registerDeploymentRoutes(
   });
 
   app.get(
+    "/deployments/:deploymentId/live-observation-architecture",
+    async (
+      request,
+      reply
+    ): Promise<DeploymentLiveObservationArchitectureResponse | FastifyReply> => {
+      const params = deploymentParamsSchema.parse(request.params);
+      const { accessContext, repository } = await getDeploymentRequestContext(
+        request,
+        options,
+        getDeploymentDatabaseClient
+      );
+
+      try {
+        return reply.status(200).send(
+          await getDeploymentLiveObservationArchitecture(
+            {
+              deploymentId: params.deploymentId,
+              accessContext
+            },
+            repository
+          )
+        );
+      } catch (error) {
+        return handleDeploymentError(error, reply);
+      }
+    }
+  );
+
+  app.get(
     "/deployments/:deploymentId/failure-explanation",
     async (request, reply): Promise<DeploymentFailureExplanationResponse | FastifyReply> => {
       const params = deploymentParamsSchema.parse(request.params);
@@ -708,6 +981,27 @@ export async function registerDeploymentRoutes(
     }
   );
 
+  app.post("/deployments/:deploymentId/infrastructure-rollback", async (request, reply) => {
+    const params = deploymentParamsSchema.parse(request.params);
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+
+    try {
+      const deployment = await prepareInfrastructureRollback(
+        { deploymentId: params.deploymentId, accessContext },
+        repository
+      );
+      return reply.status(201).send({
+        deployment: await toDeployment(deployment, repository)
+      });
+    } catch (error) {
+      return handleDeploymentError(error, reply);
+    }
+  });
+
   app.post("/deployments/:deploymentId/init", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
     const { accessContext, jobRepository, repository } = await getDeploymentRequestContext(
@@ -729,6 +1023,19 @@ export async function registerDeploymentRoutes(
       await requireDeploymentInitArtifact(deployment, repository);
 
       if (deployment.status === "RUNNING") {
+        if (
+          workerDispatch.enabled &&
+          (await isMatchingActiveDeploymentOperation({
+            deployment,
+            operation: "init",
+            jobRepository
+          }))
+        ) {
+          return reply.status(202).send({
+            deployment: await toDeployment(deployment, repository)
+          });
+        }
+
         throw new DeploymentConflictError("Deployment init is already running");
       }
 
@@ -793,13 +1100,15 @@ export async function registerDeploymentRoutes(
 
   app.post("/deployments/:deploymentId/plan", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
-    const { accessContext, jobRepository, repository } = await getDeploymentRequestContext(
+    const { accessContext, db, jobRepository, repository } = await getDeploymentRequestContext(
       request,
       options,
       getDeploymentDatabaseClient
     );
-    const runDeploymentPlan = options?.runDeploymentPlan ?? defaultRunDeploymentPlan;
     const workerDispatch = createDeploymentWorkerDispatch(options);
+    let reservedLease: ReservedRouteExecutionLease | undefined;
+    let executionHandedOff = false;
+    let runningDeployment: DeploymentRecord | undefined;
 
     try {
       const deployment = await getDeployment(
@@ -812,13 +1121,21 @@ export async function registerDeploymentRoutes(
       await requireDeploymentInitArtifact(deployment, repository);
 
       if (deployment.status === "RUNNING") {
-        if (deployment.activeStage === "plan") {
+        const isSamePlanExecution =
+          workerDispatch.enabled &&
+          (await isMatchingActiveDeploymentOperation({
+            deployment,
+            operation: "plan",
+            jobRepository
+          }));
+
+        if (isSamePlanExecution || deployment.activeStage === "plan") {
           return reply.status(202).send({
             deployment: await toDeployment(deployment, repository)
           });
         }
 
-        throw new DeploymentConflictError("Deployment plan is already running");
+        throw new DeploymentConflictError("Another deployment operation is already running");
       }
 
       if (deployment.status === "SUCCESS" || deployment.status === "DESTROYED") {
@@ -826,6 +1143,14 @@ export async function registerDeploymentRoutes(
       }
 
       await requireNoRunningDeploymentInProject(deployment, repository);
+      reservedLease = await reserveRouteExecutionLease(deployment, deployment.id, repository);
+      runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
+
+      if (!runningDeployment) {
+        throw new DeploymentConflictError("Deployment plan could not be started");
+      }
+
+      const acceptedDeployment = await toDeployment(runningDeployment, repository);
 
       const queuedJob = workerDispatch.enabled
         ? await createDeploymentJob(
@@ -839,33 +1164,62 @@ export async function registerDeploymentRoutes(
           )
         : undefined;
 
-      const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
-
-      if (!runningDeployment) {
-        if (queuedJob) {
-          await failDeploymentJob(
-            {
-              jobId: queuedJob.id,
-              errorSummary: "Deployment plan could not be started"
-            },
-            jobRepository
-          );
-        }
-        throw new DeploymentConflictError("Deployment plan could not be started");
-      }
-
       if (queuedJob) {
         await dispatchDeploymentWorkerJob(
           {
             job: queuedJob,
             failureStage: "plan",
-            staleFailureMessage: "Deployment plan ECS worker dispatch failed"
+            staleFailureMessage: "Deployment plan ECS worker dispatch failed",
+            ...(reservedLease ? { leaseReservation: reservedLease } : {})
           },
           workerDispatch.dispatcher,
           jobRepository,
           repository
         );
       } else {
+        const runPreparedDeploymentPlan = async (
+          planInput: RunDeploymentPlanInput,
+          planRepository: DeploymentRepository
+        ): Promise<RunDeploymentPlanResult> => {
+          const prepareBuildEnvironment = () =>
+            prepareEcsBuildEnvironmentForPlan(
+              {
+                db,
+                deployment,
+                userId: accessContext.userId
+              },
+              {
+                ...(options?.prepareProjectBuildEnvironment
+                  ? { prepareProjectBuildEnvironment: options.prepareProjectBuildEnvironment }
+                  : {}),
+                ...(options?.verifyProjectRepositoryAccess
+                  ? { verifyProjectRepositoryAccess: options.verifyProjectRepositoryAccess }
+                  : {})
+              }
+            );
+
+          if (!options?.runDeploymentPlan) {
+            return defaultRunDeploymentPlan(planInput, planRepository, {
+              prepareBuildEnvironment
+            });
+          }
+
+          try {
+            await prepareBuildEnvironment();
+          } catch (error) {
+            await planRepository
+              .failDeployment(deployment.id, {
+                failureStage: "build_environment",
+                errorSummary:
+                  error instanceof ProjectBuildEnvironmentError
+                    ? error.message
+                    : "Deployment plan preparation failed"
+              })
+              .catch(() => undefined);
+            throw error;
+          }
+          return options.runDeploymentPlan(planInput, planRepository);
+        };
         startDeploymentPlanJob(
           {
             deploymentId: params.deploymentId,
@@ -873,18 +1227,116 @@ export async function registerDeploymentRoutes(
             startedFromStatus: deployment.status
           },
           repository,
-          runDeploymentPlan,
+          runPreparedDeploymentPlan,
           request.log
         );
       }
+      executionHandedOff = true;
 
       return reply.status(202).send({
-        deployment: await toDeployment(runningDeployment, repository)
+        deployment: acceptedDeployment
       });
     } catch (error) {
+      if (!executionHandedOff) {
+        if (runningDeployment) {
+          await repository
+            .failDeployment(runningDeployment.id, {
+              failureStage: "plan",
+              errorSummary:
+                error instanceof ProjectBuildEnvironmentError
+                  ? error.message
+                  : "Deployment plan preparation failed"
+            })
+            .catch(() => undefined);
+        }
+        await releaseReservedRouteExecutionLease(reservedLease);
+      }
       return handleDeploymentError(error, reply);
     }
   });
+
+  app.post(
+    "/deployments/:deploymentId/application-release/frontend/retry",
+    async (request, reply) => {
+      const params = deploymentParamsSchema.parse(request.params);
+      const { accessContext, db, jobRepository, repository } = await getDeploymentRequestContext(
+        request,
+        options,
+        getDeploymentDatabaseClient
+      );
+      const workerDispatch = createDeploymentWorkerDispatch(options);
+      let reservedLease: ReservedRouteExecutionLease | undefined;
+      let executionHandedOff = false;
+      try {
+        const deployment = await getDeployment(
+          { deploymentId: params.deploymentId, accessContext },
+          repository
+        );
+        if (
+          !options?.retryApplicationFrontendRelease &&
+          workerDispatch.enabled &&
+          (await isMatchingActiveDeploymentOperation({
+            deployment,
+            operation: "retry_application_frontend",
+            jobRepository
+          }))
+        ) {
+          return reply.status(202).send({
+            deployment: await toDeployment(deployment, repository)
+          });
+        }
+        const release = await repository.findRelease?.(deployment.id);
+        if (repository.findRelease && !release) {
+          throw new DeploymentConflictError("재시도할 앱 릴리즈를 찾을 수 없습니다.");
+        }
+        reservedLease = await reserveRouteExecutionLease(
+          deployment,
+          release?.id ?? deployment.id,
+          repository
+        );
+        if (options?.retryApplicationFrontendRelease) {
+          await options.retryApplicationFrontendRelease({
+            db,
+            deploymentId: params.deploymentId,
+            userId: accessContext.userId
+          });
+          await releaseReservedRouteExecutionLease(reservedLease);
+          return reply.status(204).send();
+        }
+        if (!workerDispatch.enabled) {
+          throw new DeploymentConflictError(
+            "웹 배포 재시도는 신뢰된 ECS deployment worker가 필요합니다."
+          );
+        }
+        const queuedJob = await createDeploymentJob(
+          {
+            deploymentId: deployment.id,
+            operation: "retry_application_frontend",
+            accessContext,
+            startedFromStatus: deployment.status,
+            startedFromFailureStage: deployment.failureStage
+          },
+          jobRepository
+        );
+        await dispatchDeploymentWorkerJob(
+          {
+            job: queuedJob,
+            failureStage: "application_release",
+            staleFailureMessage: "Application frontend retry worker dispatch failed",
+            ...(reservedLease ? { leaseReservation: reservedLease } : {})
+          },
+          workerDispatch.dispatcher,
+          jobRepository,
+          repository
+        );
+        executionHandedOff = true;
+        return reply.status(202).send({ deployment: await toDeployment(deployment, repository) });
+      } catch (error) {
+        if (!executionHandedOff) await releaseReservedRouteExecutionLease(reservedLease);
+        return handleDeploymentError(error, reply);
+      }
+    }
+  );
 
   app.post("/deployments/:deploymentId/approve", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
@@ -918,6 +1370,32 @@ export async function registerDeploymentRoutes(
     }
   });
 
+  app.post("/deployments/:deploymentId/revoke-approval", async (request, reply) => {
+    const params = deploymentParamsSchema.parse(request.params);
+    z.object({}).parse(request.body ?? {});
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+    const revokeApproval = options?.revokeDeploymentApproval;
+
+    try {
+      const input = {
+        deploymentId: params.deploymentId,
+        accessContext
+      };
+      const deployment = revokeApproval
+        ? await revokeApproval(input, repository)
+        : await defaultRevokeDeploymentApproval(input, repository);
+
+      return reply.status(200).send({
+        deployment: await toDeployment(deployment, repository)
+      });
+    } catch (error) {
+      return handleDeploymentError(error, reply);
+    }
+  });
   const handleDeploymentExecute = async (request: FastifyRequest, reply: FastifyReply) => {
     const params = deploymentParamsSchema.parse(request.params);
     z.object({}).parse(request.body ?? {});
@@ -928,6 +1406,8 @@ export async function registerDeploymentRoutes(
     );
     const runDeploymentApply = options?.runDeploymentApply ?? defaultRunDeploymentApply;
     const workerDispatch = createDeploymentWorkerDispatch(options);
+    let reservedLease: ReservedRouteExecutionLease | undefined;
+    let executionHandedOff = false;
 
     try {
       const deployment = await getDeployment(
@@ -938,8 +1418,22 @@ export async function registerDeploymentRoutes(
         repository
       );
       await requireDeploymentInitArtifact(deployment, repository);
+      if (
+        deployment.status === "RUNNING" &&
+        workerDispatch.enabled &&
+        (await isMatchingActiveDeploymentOperation({
+          deployment,
+          operation: "apply",
+          jobRepository
+        }))
+      ) {
+        return reply.status(202).send({
+          deployment: await toDeployment(deployment, repository)
+        });
+      }
       requireDeploymentCanStartApply(deployment);
       await requireNoRunningDeploymentInProject(deployment, repository);
+      reservedLease = await reserveRouteExecutionLease(deployment, deployment.id, repository);
 
       const queuedJob = workerDispatch.enabled
         ? await createDeploymentJob(
@@ -973,7 +1467,8 @@ export async function registerDeploymentRoutes(
           {
             job: queuedJob,
             failureStage: "apply",
-            staleFailureMessage: "Deployment apply ECS worker dispatch failed"
+            staleFailureMessage: "Deployment apply ECS worker dispatch failed",
+            ...(reservedLease ? { leaseReservation: reservedLease } : {})
           },
           workerDispatch.dispatcher,
           jobRepository,
@@ -991,11 +1486,13 @@ export async function registerDeploymentRoutes(
           request.log
         );
       }
+      executionHandedOff = true;
 
       return reply.status(202).send({
         deployment: await toDeployment(runningDeployment, repository)
       });
     } catch (error) {
+      if (!executionHandedOff) await releaseReservedRouteExecutionLease(reservedLease);
       return handleDeploymentError(error, reply);
     }
   };
@@ -1024,6 +1521,19 @@ export async function registerDeploymentRoutes(
         repository
       );
       await requireDeploymentInitArtifact(deployment, repository);
+      if (
+        deployment.status === "RUNNING" &&
+        workerDispatch.enabled &&
+        (await isMatchingActiveDeploymentOperation({
+          deployment,
+          operation: "destroy_plan",
+          jobRepository
+        }))
+      ) {
+        return reply.status(202).send({
+          deployment: await toDeployment(deployment, repository)
+        });
+      }
       requireDeploymentCanStartDestroyPlan(deployment);
       await requireNoRunningDeploymentInProject(deployment, repository);
 
@@ -1040,7 +1550,10 @@ export async function registerDeploymentRoutes(
           )
         : undefined;
 
-      const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
+      const runningDeployment = await repository.markDeploymentPlanRunning(
+        deployment.id,
+        "destroy"
+      );
 
       if (!runningDeployment) {
         if (queuedJob) {
@@ -1099,6 +1612,8 @@ export async function registerDeploymentRoutes(
     );
     const runDeploymentDestroy = options?.runDeploymentDestroy ?? defaultRunDeploymentDestroy;
     const workerDispatch = createDeploymentWorkerDispatch(options);
+    let reservedLease: ReservedRouteExecutionLease | undefined;
+    let executionHandedOff = false;
 
     try {
       const deployment = await getDeployment(
@@ -1109,8 +1624,29 @@ export async function registerDeploymentRoutes(
         repository
       );
       await requireDeploymentInitArtifact(deployment, repository);
+      if (
+        deployment.status === "RUNNING" &&
+        workerDispatch.enabled &&
+        (await isMatchingActiveDeploymentOperation({
+          deployment,
+          operation: "destroy",
+          jobRepository
+        }))
+      ) {
+        return reply.status(202).send({
+          deployment: await toDeployment(deployment, repository)
+        });
+      }
       await requireDeploymentCanStartDestroy(deployment, repository);
       await requireNoRunningDeploymentInProject(deployment, repository);
+      const destroyHolderId =
+        deployment.scope === "application"
+          ? (await repository.findRelease?.(deployment.id))?.id
+          : `destroy:${deployment.id}`;
+      if (!destroyHolderId) {
+        throw new DeploymentConflictError("정리할 앱 릴리즈를 찾을 수 없습니다.");
+      }
+      reservedLease = await reserveRouteExecutionLease(deployment, destroyHolderId, repository);
 
       const queuedJob = workerDispatch.enabled
         ? await createDeploymentJob(
@@ -1145,7 +1681,8 @@ export async function registerDeploymentRoutes(
           {
             job: queuedJob,
             failureStage: "destroy",
-            staleFailureMessage: "Deployment destroy ECS worker dispatch failed"
+            staleFailureMessage: "Deployment destroy ECS worker dispatch failed",
+            ...(reservedLease ? { leaseReservation: reservedLease } : {})
           },
           workerDispatch.dispatcher,
           jobRepository,
@@ -1164,11 +1701,13 @@ export async function registerDeploymentRoutes(
           request.log
         );
       }
+      executionHandedOff = true;
 
       return reply.status(202).send({
         deployment: await toDeployment(runningDeployment, repository)
       });
     } catch (error) {
+      if (!executionHandedOff) await releaseReservedRouteExecutionLease(reservedLease);
       return handleDeploymentError(error, reply);
     }
   });
@@ -1198,47 +1737,74 @@ export async function registerDeploymentRoutes(
           const activeJob = await jobRepository.findActiveDeploymentJob(params.deploymentId);
 
           if (activeJob) {
-            let stopped = false;
+            const stopResult = await workerDispatch.dispatcher.stop({
+              job: activeJob,
+              reason: "SketchCatch deployment cancellation requested"
+            });
 
-            if (activeJob.ecsTaskArn) {
-              const stopResult = await workerDispatch.dispatcher.stop({
-                job: activeJob,
-                reason: "SketchCatch deployment cancellation requested"
+            if (stopResult.errorSummary) {
+              request.log.warn(
+                {
+                  deploymentId: params.deploymentId,
+                  deploymentJobId: activeJob.id
+                },
+                stopResult.errorSummary
+              );
+
+              return reply.status(503).send({
+                error: "worker_unavailable",
+                message: stopResult.errorSummary
               });
-
-              if (stopResult.errorSummary) {
-                request.log.warn(
-                  {
-                    deploymentId: params.deploymentId,
-                    deploymentJobId: activeJob.id
-                  },
-                  stopResult.errorSummary
-                );
-
-                return reply.status(503).send({
-                  error: "worker_unavailable",
-                  message: stopResult.errorSummary
-                });
-              }
-
-              stopped = stopResult.stopped;
             }
+            const stopped = stopResult.stopped;
 
             await cancelDeploymentJob(
               {
                 jobId: activeJob.id,
                 errorSummary: stopped
-                  ? "Cancellation was requested and ECS StopTask was sent."
-                  : "Cancellation was requested, but no active ECS task was found."
+                  ? "Cancellation was requested and the ECS worker reached STOPPED."
+                  : "Cancellation was requested and no active ECS worker remained."
               },
               jobRepository
             );
 
-            if (stopped) {
+            if (
+              cancellationRequestedDeployment.activeStage === "preflight" ||
+              cancellationRequestedDeployment.activeStage === "application_release" ||
+              cancellationRequestedDeployment.activeStage === "rollback"
+            ) {
+              const recoveryJob = await createDeploymentJob(
+                {
+                  deploymentId: params.deploymentId,
+                  operation: "recover_application_release",
+                  accessContext,
+                  startedFromStatus: cancellationRequestedDeployment.status,
+                  startedFromFailureStage: cancellationRequestedDeployment.activeStage
+                },
+                jobRepository
+              );
+              await dispatchDeploymentWorkerJob(
+                {
+                  job: recoveryJob,
+                  failureStage: "rollback",
+                  staleFailureMessage: "Application release recovery worker dispatch failed"
+                },
+                workerDispatch.dispatcher,
+                jobRepository,
+                repository
+              );
               return reply.status(202).send({
                 deployment: await toDeployment(cancellationRequestedDeployment, repository)
               });
             }
+
+            const stoppedDeployment = await failStoppedDeploymentWithRecoveredLease(
+              cancellationRequestedDeployment,
+              repository
+            );
+            return reply.status(202).send({
+              deployment: await toDeployment(stoppedDeployment, repository)
+            });
           }
         }
 
@@ -1260,6 +1826,41 @@ export async function registerDeploymentRoutes(
       return reply.status(202).send({
         deployment: await toDeployment(cancellationRequestedDeployment, repository)
       });
+    } catch (error) {
+      return handleDeploymentError(error, reply);
+    }
+  });
+
+  app.get("/deployments/:deploymentId/progress", async (request, reply) => {
+    const params = deploymentParamsSchema.parse(request.params);
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+
+    try {
+      const row = await getDeployment(
+        {
+          deploymentId: params.deploymentId,
+          accessContext
+        },
+        repository
+      );
+      const [deployment, logRows] = await Promise.all([
+        toDeployment(row, repository),
+        repository.listDeploymentLogs(params.deploymentId)
+      ]);
+
+      return reply
+        .header("Cache-Control", "private, no-store")
+        .status(200)
+        .send({
+          progress: createDeploymentProgressSnapshot({
+            deployment,
+            logs: logRows.map(toDeploymentLog)
+          })
+        } satisfies DeploymentProgressResponse);
     } catch (error) {
       return handleDeploymentError(error, reply);
     }
@@ -1609,16 +2210,7 @@ function requireDeploymentCanStartDestroyPlan(deployment: DeploymentRecord): voi
     throw new DeploymentConflictError("Terraform state is required before destroy");
   }
 
-  if (deployment.status === "SUCCESS") {
-    return;
-  }
-
-  if (
-    deployment.status === "FAILED" &&
-    (deployment.failureStage === "plan" ||
-      deployment.failureStage === "apply" ||
-      deployment.failureStage === "destroy")
-  ) {
+  if (isDeploymentDestroySourceStatus(deployment.status)) {
     return;
   }
 
@@ -1711,7 +2303,10 @@ function startDeploymentDestroyPlanJob(
 ): void {
   startTrackedDeploymentRun(input.deploymentId, async (abortSignal) => {
     await runDeploymentDestroyPlan({ ...input, abortSignal }, repository).catch(() => {
-      log.error({ deploymentId: input.deploymentId }, "Deployment destroy plan background job failed");
+      log.error(
+        { deploymentId: input.deploymentId },
+        "Deployment destroy plan background job failed"
+      );
     });
   });
 }

@@ -8,7 +8,7 @@
 
 ## 기존 계약과의 관계
 
-- `007_AWS템플릿패턴_gg.md`의 실제 Catalog 항목만 사용한다는 원칙을 유지한다.
+- `../old/feat-infrastructure-template/007_AWS템플릿패턴_gg.md`의 실제 Catalog 항목만 사용한다는 원칙을 유지한다.
 - `013_AWS템플릿보드배치매핑_gg.md`와 `014_AWS템플릿Board실화면QA_gg.md`는 Design 레이어가 없던 103개 배포 노드의 기준선이다.
 - `013`의 “새 Design 노드를 만들지 않는다”는 당시 구현 범위는 이번 문서에서 presentation 전용 구조로 확장한다.
 - 기존 `resources`, `relationships`, parameter, Terraform reference는 기준선 그대로 유지한다.

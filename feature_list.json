@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-15",
+  "lastUpdated": "2026-07-22",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -303,7 +303,20 @@
         "desktop/mobile/reduced-motion 브라우저 흐름이 실제 snapshot 값과 lifecycle cleanup을 검증한다.",
         "실제 AWS apply/destroy는 별도 명시 승인이 있을 때만 수행한다."
       ],
-      "notes": "Implementation and automated verification merged in PR #382. External acceptance is deferred to issue #378 because the in-app browser blocks localhost and the current environment has no reachable AWS STS credentials. The feature flag remains false until credentialed Chromium and an approved AWS sandbox provide evidence."
+      "evidence": {
+        "lastVerified": "2026-07-22",
+        "commands": [
+          "pnpm --filter api exec tsx --test --test-concurrency=1 src/live-observations/redis-live-observation-store.integration.ts",
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "GitHub Actions production workflow 29876627509",
+          "Chrome acceptance: session c815c2b8-9eb9-44f2-aeba-0eec1f31394b, audience connected, request count +1 -> +2 -> +3"
+        ],
+        "notes": "Production API task definition 58 now accepts the optional audience application URL in Redis manifests. Fresh session creation, SSE continuity, one observed Fargate Task, real audience participation, repeat participation, and heartbeat receipt growth passed."
+      },
+      "notes": "Implementation merged in PR #382. On 2026-07-19 the approved non-production sandbox verified real CloudFront/ALB/ECS traffic and clean Destroy, and the local authenticated modal opened successfully. On 2026-07-22 the production manifest-contract repair restored fresh sessions and real audience receipt/heartbeat continuity. Status remains blocked only for the separately approved provider-confirmed scale-out cycle."
     },
     {
       "id": "PROJECT-RELEASE-LEDGER-001",
@@ -321,6 +334,7 @@
       "evidence": {
         "lastVerified": "2026-07-14",
         "commands": [
+          "pnpm --dir apps/web exec tsx --test features/workspace/delivery/project-deployment-target-state.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/cicd-return-navigation.test.ts",
           "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-service.test.ts src/routes/deployments.test.ts src/releases/application-release-identity.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/db/project-release-ledger-schema.test.ts",
           "pnpm --filter @sketchcatch/web test",
           "node scripts/check-db-migration-compatibility.mjs",
@@ -330,7 +344,7 @@
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "Project target, shared release ledger, authorization, structured build evidence, migration/backfill, History UI, and legacy Deployment adapters passed. API full suite has three unrelated Windows symlink fixture setup failures (EPERM); all #371-focused tests pass."
+        "notes": "Project target, shared release ledger, authorization, structured build evidence, migration/backfill, History UI, and legacy Deployment adapters passed. The target editor now lives in the shared Workspace Delivery feature, reports Runtime-specific missing fields, accepts saved Delivery Profile values, and seeds public Board analysis evidence before a GitHub Source Repository is connected. API full suite has three unrelated Windows symlink fixture setup failures (EPERM); all target-focused tests pass."
       },
       "notes": "Implemented in issue #371 on branch feature/sw/371-project-deployment-release-ledger. No cloud mutation was performed."
     },
@@ -348,16 +362,18 @@
         "Direct Deployment UI가 정확히 세 단계와 summary-first 운영 정보를 표시한다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-14",
+        "lastVerified": "2026-07-19",
         "commands": [
-          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-preparation-service.test.ts src/deployments/deployment-service.test.ts src/deployments/deployment-approval-service.test.ts src/routes/deployments.test.ts src/db/deployment-preparation-schema.test.ts",
-          "pnpm --filter @sketchcatch/web test",
-          "pnpm --filter @sketchcatch/api test",
-          "node scripts/check-db-migration-compatibility.mjs",
-          "PostgreSQL 16 temporary container: apply apps/api/drizzle/0000..0036 with psql ON_ERROR_STOP=1",
-          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Full"
+          "pnpm --filter @sketchcatch/api exec tsx --test src/build-environments/aws-project-build-environment-gateway.test.ts src/build-environments/project-build-environment-service.test.ts src/routes/deployments.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-three-stage-flow.test.ts features/workspace/repository-access-recovery.test.ts",
+          "DEPLOYMENT_WORKER_MODE=in_process pnpm --dir apps/api exec tsx --test src/build-environments/project-build-environment-service.test.ts \"src/deployments/**/*.test.ts\" \"src/git-cicd/**/*.test.ts\" src/routes/deployments.test.ts src/routes/git-cicd-handoffs.test.ts src/routes/git-cicd-infrastructure-runs.test.ts src/routes/git-cicd-readiness.test.ts src/routes/git-cicd-release-runs.test.ts",
+          "pnpm --dir apps/web exec node --import ./test-css-register.mjs --import tsx --test features/workspace/deployment-actions.test.ts features/workspace/deployment-preparation-error.test.ts features/workspace/deployment-presentation.test.ts features/workspace/deployment-three-stage-flow.test.ts",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
         ],
-        "notes": "Focused deployment contracts, Web 1,145/1,145, migration compatibility, PostgreSQL migrations, harness, lint, typecheck, and build passed. API passed 1,456/1,459; the only failures are three unchanged Windows symlink fixture setup EPERM errors."
+        "notes": "CodeBuild project reconciliation now recovers a managed ResourceAlreadyExists race. Preparation start and completion are atomic, so stale starts and late failures cannot replace a successful ready state for the same runtime fingerprint. Direct Deployment delegates build preparation and exact Repository checkout verification to the Plan API, and concurrent requests for the same Deployment join the one RUNNING Plan sequence before Terraform. Focused API and Web regressions, lint, typecheck, and build pass. Full pnpm test retains unrelated baseline failures in artifact heartbeat cleanup, Git/CI/CD schema expectations, resource-catalog expectations, and one external-link source-pattern test."
       },
       "notes": "Implemented in issue #372 on branch feature/sw/372-direct-deploy-three-stage. No cloud mutation was performed."
     },
@@ -378,7 +394,7 @@
         "lastVerified": "2026-07-14",
         "commands": [
           "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/ecs-gitops-release-reconciler.test.ts src/git-cicd/git-cicd-workflows.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/git-cicd-pipeline-run-service.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/routes/git-cicd-handoffs.test.ts",
-          "pnpm exec tsx .\\app\\projects\\[projectId]\\settings\\project-deployment-target-state.test.ts (from apps/web)",
+          "pnpm --dir apps/web exec tsx --test features/workspace/delivery/project-deployment-target-state.test.ts",
           "pnpm test",
           "pnpm migration:compatibility:check",
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Full"
@@ -404,7 +420,7 @@
         "lastVerified": "2026-07-14",
         "commands": [
           "pnpm --filter @sketchcatch/api exec tsx --test src/db/project-release-ledger-schema.test.ts src/git-cicd/git-cicd-workflows.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/lambda-gitops-release-reconciler.test.ts src/git-cicd/git-cicd-pipeline-run-service.test.ts src/releases/project-release-ledger-service.test.ts src/routes/git-cicd-handoffs.test.ts src/routes/project-release-ledger.test.ts",
-          "pnpm exec tsx .\\app\\projects\\[projectId]\\settings\\project-deployment-target-state.test.ts (from apps/web)",
+          "pnpm --dir apps/web exec tsx --test features/workspace/delivery/project-deployment-target-state.test.ts",
           "pnpm test",
           "pnpm migration:compatibility:check",
           "PostgreSQL 16 temporary container: apply migrations 0000..0038 with runtime migrator",
@@ -464,7 +480,7 @@
         "commands": [
           "pnpm --filter api exec tsx --test src/db/project-release-ledger-schema.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/source-repositories/repository-analysis.test.ts src/source-repositories/repository-analysis-failure.test.ts src/routes/git-cicd-handoffs.test.ts src/git-cicd/git-cicd-workflows.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/static-site-gitops-release-reconciler.test.ts",
           "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-cicd-console-layout.test.ts features/workspace/workspace-right-panel-layout.test.ts",
-          "pnpm --dir apps/web exec tsx app/projects/[projectId]/settings/project-deployment-target-state.test.ts",
+          "pnpm --dir apps/web exec tsx --test features/workspace/delivery/project-deployment-target-state.test.ts",
           "generated static workflow run blocks validated with Git for Windows bash -n",
           "pnpm migration:compatibility:check",
           "pnpm --filter api db:migrate (temporary PostgreSQL 16, migrations 0000-0040)",
@@ -557,23 +573,58 @@
         "AI Draft, Board 자동 정리, Reverse Engineering, Template 검토가 동일한 Compiler Interface를 사용한다.",
         "Template variant는 source fingerprint와 visual-only approval 범위가 일치할 때만 authored source 위에 적용된다.",
         "자동 정리는 미리보기·적용·취소·Undo 경계를 유지하며 승인 전 Board를 변경하지 않는다.",
-        "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다."
+        "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다.",
+        "Workspace AI는 클릭한 option만 의미 기록으로 누적하고 실제 Resource icon Orbit과 Compiler Diagram 최종 Preview를 분리하며 승인 전 Board를 변경하지 않는다.",
+        "Live Observation 하단은 현재 상태, 사용자 영향, 근거 기반 중요 신호 최대 3개와 사실·가능성·확인 불가를 구분하며 자동 변경하지 않는다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-16",
+        "lastVerified": "2026-07-19",
         "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/services/authoredTerraformArchitecturePresets.test.ts",
           "pnpm harness:check",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts src/routes/ai-architecture-draft-stream.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test --test-name-pattern \"does not answer the backend choice\" src/services/aiArchitectureDrafts.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-draft-clarification.test.ts features/workspace/workspace-ai-draft-stream.test.ts app/workspace/ai/use-ai-start-workflow.test.ts",
           "pnpm architecture-board-knowledge:check",
           "pnpm architecture-board-evidence:check",
           "pnpm architecture-board-evidence-review:check",
-          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/workspace-ai-start-client.test.ts app/workspace/ai/use-ai-start-workflow.test.ts app/workspace/repository/repository-start-client.test.ts features/architecture-board-compiler/architecture-board-compiler.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-compilation-preview.test.ts",
-          "pnpm --dir apps/web exec tsx --test features/workspace/workspace-ai-chat-consolidation.test.ts features/workspace/workspace-ai-chat-conversation.test.ts features/workspace/workspace-ai-chat-request.test.ts features/workspace/workspace-ai-chat-status.test.ts features/workspace/workspace-ai-context-bridge.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/workspace-ai-result-presentation.test.ts features/workspace/workspace-ai-workbench-contract.test.ts features/workspace/workspace-ai-workbench-state.test.ts features/workspace/workspace-api-abort.test.ts",
-          "pnpm --dir apps/api exec tsx --test src/services/aiLlmExplanation.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/ai-start-model.test.ts app/workspace/ai/ai-draft-progress-model.test.ts app/workspace/ai/ai-draft-progress-coordinator.test.ts app/workspace/ai/use-ai-start-workflow.test.ts app/workspace/ai/selected-option-model.test.ts app/workspace/ai/option-resource-presentation.test.ts app/workspace/ai/workspace-ai-presentation.test.ts app/workspace/ai/workspace-ai-route-entry.test.ts features/diagram-editor/diagram-editor-viewer-policy.test.ts features/workspace/workspace-ai-chat-request.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-compilation-preview.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/DiagramNodeView.test.ts features/diagram-editor/diagram-editor-layout.test.ts features/diagram-editor/diagram-editor-viewer-policy.test.ts",
+          "pnpm --filter @sketchcatch/web test",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-design-analysis-integration.test.ts features/workspace/workspace-design-analysis-presentation.test.ts features/workspace/deployment-three-stage-flow.test.ts",
+          "in-app Browser QA at 1440x900, 1024x768, 960x768, 958x768, and 390x844",
           "pnpm lint",
           "pnpm typecheck",
-          "pnpm build"
+          "pnpm build",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern natural-language apps/api/src/services/aiArchitectureDrafts.test.ts",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test apps/api/src/services/aiArchitecturePatchPreview.test.ts",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test apps/api/src/services/architectureResourceAliases.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test apps/web/features/workspace/workspace-ai-draft-clarification.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test apps/web/app/workspace/ai/use-ai-start-workflow.test.ts apps/web/app/workspace/ai/selected-option-model.test.ts apps/web/app/workspace/ai/workspace-ai-presentation.test.ts apps/web/features/workspace/workspace-ai-chat-suggestion-submission.test.ts",
+          ".\\node_modules\\.bin\\tsc.CMD --noEmit -p apps/api/tsconfig.json",
+          ".\\node_modules\\.bin\\tsc.CMD --noEmit -p apps/web/tsconfig.json",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern \"forwards accepted natural-language answers|understands natural-language clarification examples\" apps/api/src/services/aiArchitectureDrafts.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test apps/web/features/workspace/workspace-ai-chat-status.test.ts",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern \"which requirement to relax\" apps/api/src/services/aiArchitectureDrafts.test.ts",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test apps/api/src/services/aiArchitectureQBusiness.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern \"draft failures\" apps/web/features/workspace/workspace-ai-chat-consolidation.test.ts",
+          "pnpm --filter @sketchcatch/api --filter @sketchcatch/web typecheck",
+          "pnpm --filter @sketchcatch/api typecheck",
+          ".\\packages\\types\\node_modules\\.bin\\tsx.CMD --test packages/types/src/architecture-technology-stack.test.ts",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern \"structured Amazon Q context\" apps/api/src/services/aiArchitectureDrafts.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern \"common natural-language answers\" apps/web/features/workspace/workspace-ai-draft-clarification.test.ts",
+          "pnpm --filter @sketchcatch/types --filter @sketchcatch/api --filter @sketchcatch/web typecheck",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern \"explicitly requested (Subnet|Security Group)|Internet Gateway|SSM Parameter|changes Subnet parameters|changes compute and database sizing|selected (budget|database size|availability|management mode|upload type|realtime mode|security priority)|overrides invariant provider sizing\" apps/api/src/services/aiArchitectureDrafts.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test apps/web/features/workspace/workspace-ai-diagram-adapter.test.ts",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern \"overrides invariant provider sizing with selected budget values\" apps/api/src/services/aiArchitectureDrafts.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test apps/web/features/workspace/workspace-ai-diagram-adapter.test.ts apps/web/features/parameter-input/catalog-cardinality.test.ts apps/web/features/parameter-input/validation.test.ts",
+          "pnpm --filter @sketchcatch/web build",
+          "pnpm --dir apps/web exec tsx --test features/workspace/workspace-design-analysis-presentation.test.ts features/workspace/workspace-design-analysis-integration.test.ts",
+          "git diff --check",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-status.test.ts features/workspace/workspace-ai-error-progress.test.ts features/workspace/workspace-ai-workbench-contract.test.ts",
+          "local Chrome QA: 8% -> 10% -> 12% -> 15% -> 17% -> 100% complete"
         ],
-        "notes": "000 Compiler implementation is complete: the checked-in 29+1 knowledge artifact expands bounded geometry candidates, keeps source/requested-original/presentation/semantic selection explicit, forwards Reverse Engineering diagnostics, and fingerprint-gates visual-only Template variants. The 001 Workspace AI Workbench is also complete: three isolated modes, immutable proposal source guards, request cancellation identity, fresh-only Terraform approval, conditional transcript scrolling, desktop/mobile accessibility, and legacy chat CSS removal are verified. Workspace AI tests passed 100/100, Terraform provider-chain tests passed 8/8, root harness/lint/typecheck/build passed, and final review reported no findings. Chrome QA covered 375px, 768px, 1024px, and 1920px with no new console error. The aggregate feature remains in_progress only for the separately owned Compiler evidence and human-review queue."
+        "notes": "000 Compiler implementation remains complete: the checked-in 29+1 knowledge artifact expands bounded geometry candidates, keeps source/requested-original/presentation/semantic selection explicit, forwards Reverse Engineering diagnostics, and fingerprint-gates visual-only Template variants. `/workspace/ai` was rebuilt from the cleanup baseline with a semantic clicked-option trail, deterministic presentation-only Orbit sourced only from actual `/Resource-Icons_07312025/` catalog entries, and a Compiler-authoritative read-only final Diagram. The deleted progress card, requirement list, history panel, mobile tabs, and unused backend progress features remain absent. Focused Workspace AI/Compiler tests passed 94/94, full Web regression passed 545/545, and harness/lint/typecheck/build/diff checks passed. Browser QA covered desktop, breakpoint, tablet, and 390x844 mobile layouts, continuous Orbit response motion, the independent final reveal, pan/zoom, zero horizontal overflow, and zero new console errors or warnings after the viewer-anchor fix; Board application was not used. The aggregate feature remains in_progress only for the separately owned Compiler evidence and human-review queue. Natural-language clarification answers are now validated against their current question, rejected answers repeat that question, and accepted structured answers are forwarded to Amazon Q without question-text contamination; focused API tests passed 81/81 and focused Web tests passed 12/12. The backend clarification follow-up now rejects both unrelated recipe requests and API information requests that do not express a backend decision; the focused regression, live Web-to-API request, and API typecheck pass. All 15 required clarification questions now reject explanation-only answers, and both Workspace chat surfaces render an accepted natural-language answer as a disabled selected existing option or a new custom option; focused API tests pass 5/5, focused Web tests pass 6/6, and API/Web typechecks pass. Five additional clarification expressions now pass after expanding database, region, and upload semantics; five additional diagram patch instructions also produce the requested Preview graphs. Every supported resource type now has Korean natural-language aliases and generated variants, with complete alias coverage at 2/2 and patch regressions at 3/3. Cross-question free-form answers now require category-specific evidence across all 15 required questions, and rejected answers explain why before repeating the question; four focused API regressions, focused Web feedback/selection checks, and API/Web typechecks pass. Both chat surfaces show the accepted natural-language value in a dedicated row while disabling the answered question options. Traffic clarification now distinguishes daily visitor counts from concurrent-user counts, so daily 500 maps to medium while concurrent 500 maps to large; Spring Boot wording also reuses the existing complex business logic option. Diagram-generation progress now advances every 1.5 seconds through a fifth finalization stage instead of holding the intent step for 3 seconds. The `/workspace/ai` selected answer keeps its pressed styling without rendering a redundant selected-text suffix. Its generation progress step is owned by the persistent transcript and passed into the conditional card, preventing visible resets to the first stage. Repeated architecture validation failures outside Repository Fixed Template selection use the dedicated OpenAI conflict-diagnosis path. Repository board creation with a selected Fixed Template bypasses AI validation and clarification entirely, saves the selected Template directly, and still records Repository analysis provenance. Frontend and backend clarification answers now share a technology-stack classifier across types, API, and Web, so common framework names map to the existing static/SPA/SSR/mobile and simple/complex/microservices choices without inventing a new option; ambiguous database products do not infer data size. Design Analysis now appears at the bottom of Live Observation instead of as a separate right-panel mode, combining current-Board simulation and Pre-Deployment review in the runtime observation page; focused checks pass 33/33 and browser QA verifies the rendered order. Terraform error analysis now preserves a successful `100%` / `완료` gauge for 800ms after fast responses, while failed, cancelled, stale, and code-preparation error paths do not claim completion; focused checks pass 36/36 and local Chrome QA observed the 17% to 100% transition."
       },
       "notes": "Compiler proposals may diagnose but do not hard-reject requirement, deployment, Provider, or Terraform conflicts; application remains user-accepted and Deployment safety remains unchanged."
     },
@@ -666,6 +717,65 @@
       "notes": "The 5m30s total stretch target remains unmet; validation and API stabilization are the next measured bottlenecks."
     },
     {
+      "id": "USER-APPLICATION-ECR-BUILD-CACHE-001",
+      "priority": 1,
+      "area": "application-build",
+      "title": "Project-scoped ECR registry cache for user ECS applications",
+      "user_visible_behavior": "Repository가 연결된 ECS/Fargate 프로젝트는 첫 빌드의 Docker layer를 사용자 AWS 계정의 프로젝트 전용 ECR cache에 저장하고 다음 commit 빌드에서 재사용한다.",
+      "status": "blocked",
+      "blockedReason": "실제 warm-cache CodeBuild 시간 비교와 cache Repository cleanup 확인에는 사용자 AWS 계정 mutation 승인이 필요하며 이번 로컬 구현 요청에서는 실행하지 않았다.",
+      "verification": [
+        "프로젝트 ID에서 cache Repository와 platform별 mutable cache tag를 결정적으로 계산한다.",
+        "CodeBuild build-only role은 정확한 cache Repository의 layer read/write만 허용하고 ECS, 서비스 S3, CloudFront mutation 권한은 갖지 않는다.",
+        "server-generated BuildKit buildspec은 registry cache를 import/export하고 cache 오류는 검증을 생략하지 않은 cold build로 전환한다.",
+        "프로젝트 삭제와 AWS 연결 managed cleanup은 ownership tag를 다시 확인한 cache Repository만 force delete한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-17",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/build-environments/project-build-cache.test.ts src/build-environments/project-build-environment-service.test.ts src/build-environments/aws-project-build-environment-gateway.test.ts src/releases/preflight-buildspec.test.ts src/deployments/aws-codebuild-direct-application-release-gateway.test.ts src/aws-connections/aws-connection-service.test.ts src/aws-connections/aws-connection-managed-cleanup.test.ts src/projects/project-deletion-service.test.ts",
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "Focused cache protection line passed 62/62. Repository checks passed locally. A real warm-cache CodeBuild timing comparison was intentionally not run because it would mutate the connected AWS account; the code does not claim a measured duration reduction. Existing AWS connections must be deleted and reconnected once to receive the expanded CodeBuild permissions boundary."
+      },
+      "notes": "Cache images are never used as ECS release images. The immutable verified release candidate and trusted worker activation boundary remain unchanged."
+    },
+    {
+      "id": "DIRECT-FIRST-APPLICATION-RELEASE-001",
+      "priority": 1,
+      "area": "direct-deployment-git-cicd",
+      "title": "Direct first application release before Git/CI/CD installation",
+      "user_visible_behavior": "사용자는 Direct Deployment에서 최초 ECS/Fargate 앱을 실제로 공개한 뒤에만 후속 변경 자동 배포용 CI/CD 설치 PR을 만들 수 있다.",
+      "status": "blocked",
+      "blockedReason": "실제 AWS full_stack/application 배포와 GitHub 설치 PR merge trigger 수용 검증에는 외부 AWS/GitHub mutation 승인이 필요하며 이번 로컬 구현 요청에서는 실행하지 않았다.",
+      "verification": [
+        "신규 ECS/Fargate auto 배포는 build config가 있으면 full_stack을 선택하고, build config 누락을 infrastructure로 조용히 축소하지 않는다.",
+        "readiness는 승인된 Infrastructure Apply와 current target에 일치하는 healthy Direct ApplicationRelease를 별도 증거로 검증한다.",
+        "CI/CD handoff API는 provider 호출 직전에 target, release, Plan artifact를 다시 검증하고 최초 앱 증거가 없으면 명시적인 HTTP 409를 반환한다.",
+        "CI/CD의 최초 앱 CTA는 Direct application 또는 full_stack scope를 열고 실제 배포 성공 뒤에만 CI/CD로 돌아간다.",
+        "설치 PR workflow 변경만으로 App workflow가 실행되지 않으며 이후 실제 app path commit부터 실행된다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-17",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-preparation-service.test.ts src/deployments/deployment-apply-service.test.ts src/git-cicd/git-cicd-readiness-service.test.ts src/git-cicd/git-cicd-handoff-apply-evidence.test.ts src/git-cicd/git-cicd-handoff-initial-release.test.ts src/routes/git-cicd-handoffs.test.ts src/services/aiArchitectureDrafts.test.ts src/git-cicd/git-cicd-workflows-output-url.test.ts",
+          "pnpm --filter @sketchcatch/types exec tsx --test src/git-cicd-readiness-contract.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/cicd-handoff.test.ts features/workspace/cicd-return-command.test.ts features/workspace/deployment-console-state.test.ts features/workspace/deployment-presentation.test.ts",
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "Focused verification passed with API 186 tests, shared contract 1 test, and Web 41 tests. Live AWS deployment and GitHub PR merge acceptance were not repeated in this local implementation pass; the protected server and UI contracts are verified without external mutation."
+      },
+      "notes": "No DB migration is required. Infrastructure-only deployment remains supported but cannot satisfy the initial application release gate."
+    },
+    {
       "id": "REPOSITORY-ECS-REFERENCE-LAYOUT-001",
       "priority": 1,
       "area": "repository-analysis-board",
@@ -697,38 +807,36 @@
       "id": "REPOSITORY-ANALYSIS-DRAFT-FLOW-001",
       "priority": 1,
       "area": "repository-analysis-draft",
-      "title": "Korean repository recommendations with required inline CI/CD connection",
-      "user_visible_behavior": "Repository Analysis 추천에서 GitHub CI/CD를 연결하면 분석한 Repository가 자동 연결되고, callback 확인 버튼이 배포 타깃과 GitOps 설정을 모두 저장한 뒤 재분석 없이 기존 상태로 돌아가 Architecture Board 생성을 계속한다.",
+      "title": "Public Repository analysis with project provenance and one Workspace Delivery center",
+      "user_visible_behavior": "사용자는 공개 Repository를 GitHub 연결 없이 분석해 Board를 만들고, 비공개 또는 확인 불가 Repository만 GitHub 권한 복구 흐름으로 연결한다. Board 생성 후 GitHub, Repository, 배포 환경, CI/CD 준비 상태는 Workspace Delivery 한 곳에서 관리한다.",
       "status": "passing",
       "verification": [
-        "AI와 deterministic 추천 후보가 한국어 추천 이유와 고려할 점을 각각 최소 2개 제공한다.",
-        "추가 질문, 선택지, 이유가 한국어로 표시되고 알려진 구형 영문 질문도 한국어로 정규화된다.",
-        "CI/CD 인계 checkbox와 전역 설정 이동을 제거하고 같은 화면에서 분석 Repository에 고정된 GitHub App 설치를 시작한다.",
-        "CI/CD 연결 없이 확인하면 이동을 중단하고 확인 버튼 위에 작은 빨간 안내 문구를 표시한다.",
-        "GitHub callback은 Repository 재선택 없이 서명된 target만 자동 연결하며, 두 개별 저장 버튼 대신 하단 확인 버튼이 두 API를 순서대로 저장한 뒤 복귀한다.",
-        "Callback 완료 액션 바는 두 저장 결과를 설명하고 48px CTA, 저장 중 상태, 인라인 오류, 모바일 전체 너비를 제공한다.",
-        "nullable runtimeConfig와 잘못된 Repository URL은 TypeError 대신 제어된 배포 또는 Source Repository 오류로 차단한다.",
-        "30분짜리 일회성 browser resume state는 project와 active Repository가 일치할 때만 소비되며 API 재분석 없이 추천 상태를 복원한다.",
-        "어떤 추천 Template을 선택해도 callback 배포 타깃은 ECS Fargate이며 project slug, commit SHA, Dockerfile evidence로 필수 좌표를 채운다.",
-        "whiskend/audience-live-check의 명확한 컨테이너 근거는 AI confidence 재정렬 이후에도 ECS Fargate를 1순위로 유지한다."
+        "공개 Repository 분석과 Board 생성은 GitHub App installation 없이 완료된다.",
+        "잘못된 URL, 공개 조회 불가, branch 없음, rate limit, GitHub 장애를 안정적인 오류 코드로 구분한다.",
+        "Board가 어떤 Repository, branch, commit SHA 분석으로 만들어졌는지 프로젝트당 한 건의 RepositoryAnalysisRecord로 저장한다.",
+        "비공개 Repository 권한 복구는 입력한 owner/name과 정확히 같은 Repository만 연결하고 여러 installation을 임의 선택하지 않는다.",
+        "GitHub callback은 SourceRepository 연결까지만 수행하고 배포 타깃이나 모니터링 설정을 자동 저장하지 않는다.",
+        "전역 환경설정의 GitHub 버튼은 미연결 시 GitHub 연결하기, 연결 시 권한 추가를 표시한다.",
+        "전역 환경설정의 GitHub 빌드 연결은 사용자 확인 뒤 SketchCatch 관리 빌드 리소스만 정리하며 AWS 계정 연결과 배포 리소스는 유지한다.",
+        "Workspace Delivery 조회는 GitHub, 분석 출처, SourceRepository, 환경, 배포 타깃, 모니터링, 준비 상태를 변경 없이 조합한다.",
+        "기존 프로젝트 설정 URL과 배포 모달의 CI/CD 진입은 Workspace Delivery로 모인다.",
+        "Board 분석 commit과 마지막 인증 분석 commit이 다르면 비차단 경고만 표시하며 현재 GitHub head라고 단정하거나 Board를 자동 변경하지 않는다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-15",
+        "lastVerified": "2026-07-17",
         "commands": [
-          "pnpm --filter @sketchcatch/api exec tsx --test src/routes/public-repository-analysis-revision.test.ts src/source-repositories/github-app-state.test.ts src/source-repositories/github-target-connection.test.ts src/deployments/direct-application-release-output-url.test.ts src/git-cicd/git-cicd-workflows-output-url.test.ts",
-          "pnpm --filter @sketchcatch/web exec tsx --test app/integrations/github/callback/github-callback-state.test.ts app/workspace/repository/repository-analysis-resume.test.ts app/workspace/repository/repository-start-client.test.ts",
-          "pnpm --filter @sketchcatch/web exec tsx app/projects/[projectId]/settings/project-deployment-target-state.test.ts",
-          "pnpm --filter @sketchcatch/types exec tsx --test --test-name-pattern='ECS Fargate Board uses project-scoped runtime names' src/template-definitions.test.ts",
-          "live POST /api/ai/source-repository-analysis for https://github.com/whiskend/audience-live-check",
-          "authenticated in-app Browser verification of Repository Analysis recommendation and required inline CI/CD gate",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/db/repository-analysis-records-migration.test.ts src/routes/repository-analysis-records.test.ts src/routes/project-delivery-profile.test.ts src/delivery/project-delivery-profile-service.test.ts src/routes/public-repository-analysis-revision.test.ts src/source-repositories/github-target-connection.test.ts src/git-cicd/git-cicd-readiness-service.test.ts",
+          "pnpm --dir apps/api exec tsx --test src/aws-connections/aws-codeconnection-service.test.ts src/build-environments/project-build-environment-service.test.ts src/releases/project-execution-lease-service.test.ts",
+          "pnpm --dir apps/web exec tsx --test app/workspace/repository/repository-analysis-resume.test.ts app/workspace/repository/repository-analysis-record-payload.test.ts app/workspace/repository/repository-recovery-action.test.ts app/workspace/workspace-start-mode.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/delivery-repository-freshness.test.ts features/workspace/delivery/project-deployment-target-state.test.ts features/workspace/cicd-return-navigation.test.ts",
+          "pnpm --dir apps/web exec tsx --test features/dashboard/aws-connection-settings.test.ts",
           "pnpm lint",
           "pnpm typecheck",
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "Repository callback/resume/runtime focused tests passed: API 10/10, Web 12/12, ECS Board name 1/1. Callback-wide ECS defaults, ordered single-confirm saves, and completion action bar contracts passed focused callback tests 6/6. Null runtime configuration and malformed URL review regressions passed 7/7. Harness, lint, typecheck, and build passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template position/parent contract failures in packages/types."
+        "notes": "Focused API profile, provenance, permission, public-error, migration, read-only readiness, and GitHub build disconnect tests pass. Focused Web Delivery target, routing, return-path, recovery, resume, freshness, and AWS settings regressions pass. Harness, lint, typecheck, and production build pass. The shared target editor refreshes the read-only Delivery Profile after save and uses the Board's RepositoryAnalysisRecord before later SourceRepository analysis, without starting a deployment or Git handoff. GitHub build disconnect reuses the existing managed cleanup while preserving the AWS account connection and deployed resources. Full API and Web suites were not run for the small disconnect addition."
       },
-      "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. A temporary local visual-verification account was deleted after use."
+      "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. Migration 0050 adds repository_analysis_records."
     },
     {
       "id": "DEPLOYMENT-OPTIMIZATION-CONTRACT-434",
@@ -813,10 +921,13 @@
         "모든 deployable ResourceDefinition이 runtime convergence 적용 여부를 명시하고 지원 adapter 10종이 누락 없이 coverage test에 고정된다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-17",
+        "lastVerified": "2026-07-18",
         "commands": [
           "pnpm --filter @sketchcatch/types exec tsx --test src/runtime-convergence.test.ts src/resource-runtime-convergence-coverage.test.ts src/resource-definitions.test.ts src/project-release-ledger-contract.test.ts",
           "pnpm --filter @sketchcatch/api exec tsx --test src/runtime-convergence/runtime-convergence-contract.test.ts src/runtime-convergence/runtime-convergence-service.test.ts src/deployments/public-https-health-probe.test.ts src/deployments/aws-direct-runtime-inspector.test.ts src/deployments/direct-runtime-convergence.test.ts src/git-cicd/git-cicd-runtime-convergence-workflows.test.ts src/git-cicd/gitops-runtime-convergence.test.ts src/git-cicd/git-cicd-handoff-runtime-config.test.ts src/git-cicd/github-actions-release-evidence.test.ts src/git-cicd/gitops-release-reconciler.test.ts src/releases/project-release-ledger-runtime-target.test.ts src/db/schema-contract.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/current-repository-analysis.test.ts src/git-cicd/git-cicd-handoff-runtime-config.test.ts src/git-cicd/git-cicd-readiness-service.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test --test-reporter=dot \"src/git-cicd/**/*.test.ts\" src/source-repositories/current-repository-analysis.test.ts src/routes/git-cicd-handoffs.test.ts src/routes/git-cicd-infrastructure-runs.test.ts src/routes/git-cicd-readiness.test.ts src/routes/git-cicd-release-runs.test.ts",
+          "read-only live Project validation through createPostgresGitCicdHandoffRepository and assertGitOpsTarget",
           "createGitCicdAutomationFiles generated workflow syntax validation: Git Bash bash -n (45 scripts) and Python compile (10 heredocs)",
           "pnpm harness:check",
           "pnpm migration:compatibility:check",
@@ -827,9 +938,200 @@
           "pnpm build",
           "git diff --check"
         ],
-        "notes": "Focused runtime/resource/API coverage passes 79/79, including provider/account/region, pre-provider target, ECS capacity/status, Lambda health, rollback, handoff consistency, malformed URL, and provider revision metadata regressions. Generated Bash/Python syntax passes 45/10. Harness, migration compatibility, lint, typecheck, build, and diff checks pass. Root pnpm test remains non-green only on the same three pre-existing three-tier Template assertions (types 40/43); the full API suite passes 710/713 with only the three pre-existing Windows symlink EPERM setup failures."
+        "notes": "Focused runtime/resource/API coverage passes 79/79, including provider/account/region, pre-provider target, ECS capacity/status, Lambda health, rollback, handoff consistency, malformed URL, and provider revision metadata regressions. GitOps handoff and readiness now consume the linked RepositoryAnalysisRecord instead of silently discarding it in favor of nullable legacy SourceRepository analysis fields; canonical record/payload revision drift remains fail-closed. The live project read-only check resolves the current 40-character revision and apps/api/Dockerfile and passes assertGitOpsTarget. Generated Bash/Python syntax passes 45/10. Git/CI/CD focused tests, Direct route tests, Web deployment tests, harness, lint, typecheck, build, and diff checks pass."
       },
       "notes": "Migration 0046_runtime_convergence.sql and apps/api/drizzle/meta/_journal.json are changed after merged migration 0045. No secret, real credential, live AWS/cloud mutation, Terraform apply/destroy, user artifact upload, or Git handoff was executed."
+    },
+    {
+      "id": "PROJECT-DRAFT-CONCURRENCY-458",
+      "priority": 1,
+      "area": "project-draft",
+      "title": "ProjectDraft multi-tab optimistic concurrency",
+      "user_visible_behavior": "같은 프로젝트를 여러 탭에서 편집해도 오래된 탭이 최신 서버 Draft를 덮어쓰지 않으며, 충돌한 탭은 현재 편집을 유지하거나 서버 최신 상태를 다시 불러올 수 있다.",
+      "status": "passing",
+      "verification": [
+        "저장 요청이 마지막으로 읽은 expectedRevision을 필수로 전달하고 서버는 조건부 UPDATE 또는 충돌 없는 최초 INSERT만 허용한다.",
+        "오래된 revision과 최초 저장 경쟁은 409 Conflict를 반환하며 최신 DiagramJson과 Terraform files를 변경하지 않는다.",
+        "Workspace 새로고침은 no-store 서버 응답을 우선하고 서버 조회 실패를 오래된 IndexedDB 상태로 숨기지 않는다.",
+        "dirty 로컬 복구본은 클라이언트·서버 시계와 관계없이 사용자 선택 전까지 보존되고 자동 서버 저장이 차단되며, 서버 상태 선택 시에만 IndexedDB를 교체한다.",
+        "충돌 UI는 로컬 편집을 보존한 채 최신 상태 재로드와 현재 편집 유지 선택지를 제공하고 자동 checkpoint 재시도를 중단한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-17",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/routes/project-draft-schemas.test.ts src/routes/projects.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/project-draft-sync.test.ts features/workspace/project-draft-persistence.test.ts features/workspace/project-draft-save-status.test.ts features/workspace/project-draft-conflict.test.ts features/workspace/project-draft-recovery.test.ts features/workspace/project-draft-tab-cache.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/use-ai-start-workflow.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern=Repository.*saves app/workspace/repository/repository-start-client.test.ts",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check"
+        ],
+        "notes": "ProjectDraft focused API tests pass 32/32, focused Workspace tests pass 37/37, and AI/Repository entrypoint revision contract tests pass 2/2. Lint, source typecheck, the initial full build, harness, and diff checks pass. Review follow-up extracted the API save service, blocked legacy IndexedDB auto-save, removed stale Terraform files, preserved conflict status, separated each tab's local recovery key across tabs, refreshes, and duplicated tabs, migrated the legacy shared recovery row, and preserved every dirty local recovery draft behind an accessible local-or-server choice without client/server clock assumptions. Server choice now replaces the mounted Terraform editor without marking the restored server state dirty. A real Chromium three-tab flow passed with first save 200/revision 1, stale save 409 plus conflict dialog, server-latest browser refresh, conflict reload, and stable per-tab recovery keys. The current Webpack build compiles but its generated type check is blocked by pre-existing invalid helper exports in the architecture-draft and architecture-patch-preview Next route files. Full pnpm test was not run outside the sandbox because it includes sandbox E2E and Terraform tests; test:core was stopped after 11 minutes without runner termination and showed only unrelated existing failures in API CORS/error/schema/release-candidate tests."
+      },
+      "notes": "No DB schema or Drizzle migration changed. No secret, real credential, live cloud mutation, Terraform apply/destroy, deployment, or Git/CI/CD handoff was executed."
+    },
+    {
+      "id": "SITEWIDE-UX-467",
+      "priority": 2,
+      "area": "web-ux",
+      "title": "Site-wide navigation continuity and workspace panel recovery",
+      "user_visible_behavior": "내부 화면 이동과 인증 재검증 중 기존 UI를 유지하고, Workspace와 비용 관리 화면의 사용자 상태를 복원하며, 패널을 화면 가장자리 핸들로 쉽게 닫고 다시 열 수 있다.",
+      "status": "passing",
+      "verification": [
+        "내부 링크와 알림 이동은 전체 문서 새로고침 없이 클라이언트 탐색을 사용한다.",
+        "인증 백그라운드 재검증과 Workspace 로딩 중 기존 레이아웃이 유지된다.",
+        "동일한 Diagram, viewport, Terraform 파일 변경은 dirty 상태를 만들지 않는다.",
+        "프로젝트 썸네일과 비용 관리 URL 상태는 재진입과 뒤로 가기에서 복원된다.",
+        "Workspace 패널 너비와 열림 상태가 저장되고 viewer와 반응형 자동 접힘은 사용자 설정을 덮어쓰지 않는다.",
+        "좌우 패널 가장자리 핸들은 키보드와 스크린리더로 접근 가능하며 패널 너비를 따라 이동한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-18",
+        "commands": [
+          "per-commit focused Web contract and state tests for commits 1-26",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/presentation/presentation-typography.test.ts features/diagram-editor/DiagramNodeView.test.ts features/diagram-editor/diagram-editor-layout.test.ts features/workspace/live-observation-architecture.test.ts features/workspace/deployment-three-stage-flow.test.ts features/workspace/workspace-ai-workbench-contract.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/presentation/presentation-typography.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts",
+          "pnpm --filter @sketchcatch/web test",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts features/diagram-editor/diagram-editor-viewer-policy.test.ts features/diagram-editor/workspace-panel-preferences.test.ts",
+          "authenticated in-app Browser smoke check for Workspace panel edge handles",
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "All 26 planned implementation commits were verified before commit. Follow-ups remove the redundant top-bar panel toggles and keep manual Fit View's automatic viewport move out of ProjectDraft dirty state while preserving accessible edge handles, panel preferences, and direct user viewport persistence. Presentation typography now adds an auditable 6px to every explicit Web text size, resolves UI/code text to bundled Pretendard 1.3.9 through one shared token path, applies the same font/size/weight rules to the generated standalone S3 audience page, and reduces explicit text weights above 400 by one 100-point step; focused dependent tests pass 135/135 and the strengthened font audit passes 4/4. The focused dirty and cost regressions pass 77/77; harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 786/790, with four unrelated existing generated Architecture Board artifact line-ending and Resource catalog contract failures. Signed-in localhost QA confirmed cost tab, period, users, usage range, connection, direct URL entry, and browser history restoration."
+      },
+      "notes": "No DB schema, Drizzle migration, cloud mutation, deployment, or Git/CI/CD handoff was performed."
+    },
+    {
+      "id": "REPOSITORY-FIXED-TEMPLATE-RUNTIME-SECRET-001",
+      "priority": 1,
+      "area": "repository-deployment",
+      "title": "Repository Fixed Template runtime Secret convergence",
+      "user_visible_behavior": "Repository 분석에서 확인한 필수 runtime Secret이 Fixed Template Terraform과 ECS Task에 실제로 연결되고, 연결이 빠지거나 엇갈리면 Plan 전에 배포 준비가 중단된다.",
+      "status": "passing",
+      "verification": [
+        "Fixed Template이 CHECK_IN_SIGNING_SECRET용 생성 값, Secrets Manager Secret/Version, 최소 읽기 IAM policy, ECS Task mapping을 함께 만든다.",
+        "Secret Version, ECS execution role policy, Task Definition, ECS Service가 하나의 일관된 참조 체인을 이룬다.",
+        "full_stack 준비는 누락되거나 서로 다른 Secret, role, Task를 참조하는 Terraform을 Plan 전에 거절한다.",
+        "실패한 Deployment는 오래된 Apply Plan 승인 버튼을 숨기고 저장된 실제 실패 요약을 모든 단계에서 보여준다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-20",
+        "commands": [
+          "pnpm --filter @sketchcatch/types exec tsx --test src/template-definitions.test.ts src/terraform-provider-files.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-preparation-service.test.ts src/deployments/terraform-artifact-safety.test.ts src/services/terraform/diagram-to-terraform.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/repository/repository-start-client.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/deployment-actions.test.ts features/workspace/deployment-three-stage-flow.test.ts",
+          "Fixed Template to rendered Terraform runtime-Secret chain and artifact-safety assertion",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check"
+        ],
+        "notes": "Focused runtime-Secret, Terraform safety, Repository Fixed Template, and failed-deployment UI regressions pass. The rendered Fixed Template Terraform passes both the complete runtime-Secret reference-chain guard and the demo_web_service artifact safety gate. Lint and typecheck pass. Root build reported all five tasks successful but Turbo did not exit; direct Types/Config/UI/API/Web builds exited 0. Root pnpm test still exposes two unchanged stale Live Observation source-marker failures and one unchanged lease-heartbeat cancellation outside this workstream."
+      },
+      "notes": "No DB schema or migration changed. No cloud mutation, production deployment, Terraform apply/destroy, or Git/CI/CD handoff was performed. Existing saved Project Drafts require re-analysis and regeneration after production deployment."
+    },
+    {
+      "id": "CICD-REQUIRED-PARAMETERS-001",
+      "priority": 1,
+      "area": "git-cicd",
+      "title": "Server-derived CI/CD parameters and ECS web build settings",
+      "user_visible_behavior": "CI/CD PR 생성 전에 RDS 사용 여부와 Static Site/API URL을 검토하고, ECS API·Frontend 빌드 파라미터를 한 Advanced Settings에서 완성하며, 오래된 설정으로는 PR을 생성하지 않는다.",
+      "status": "passing",
+      "verification": [
+        "Delivery Profile은 readiness가 선택한 승인 Deployment의 Architecture와 확정 Target으로 RDS와 public HTTPS URL preview를 계산한다.",
+        "Handoff API는 optional client preview를 exact 비교하고 stale 값이면 provider 호출 전에 stable 409를 반환하며 provider와 저장 record에는 서버 계산값만 전달한다.",
+        "PR 검토는 RDS, Static Site URL, API Base URL을 평면으로 표시하고 stale 응답 시 Delivery Profile만 한 번 새로고침하며 자동 재시도하지 않는다.",
+        "ECS Advanced Settings는 API와 Frontend 빌드 필드를 검증하고 alias, package manager preset, Repository runtime Secret evidence를 보존한다.",
+        "Next Client 번들은 ECS helper를 확장자 없는 import로 해석하고 production build를 완료한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-22",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-handoff-configuration.test.ts src/delivery/project-delivery-profile-service.test.ts src/git-cicd/git-cicd-handoff-configuration-integration.test.ts src/routes/git-cicd-handoffs.test.ts src/routes/project-release-ledger.test.ts src/artifacts/application-artifact-identity.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/cicd-handoff.test.ts features/workspace/cicd-handoff-configuration-preview.test.ts features/workspace/delivery/ecs-web-build-config-state.test.ts features/workspace/delivery/project-deployment-target-state.test.ts features/workspace/delivery/project-deployment-target-editor.test.ts",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check"
+        ],
+        "notes": "The recorded focused API command passes 39/39 and the focused Web command passes 43/43, including approved-Plan preview gating, stale-refresh failure handling, complete ECS Web artifact identity, generic runtime Secret validation, and the extensionless Next import regression. Full lint, typecheck, API/Web production build, migration compatibility, harness, and diff checks pass."
+      },
+      "notes": "No DB schema or Drizzle migration changed. No secret value, cloud mutation, Terraform apply/destroy, deployment, GitHub PR, or Git/CI/CD handoff was executed."
+    },
+    {
+      "id": "DEPLOYMENT-LIVE-PROFILE-REMOVAL-001",
+      "priority": 1,
+      "area": "direct-deployment",
+      "title": "Legacy practice live profile removal",
+      "user_visible_behavior": "Direct Deployment는 별도 practice 실행 프로필 없이 demo_web_service를 기본으로 사용하고 기존 Deployment 기록도 같은 프로필로 안전하게 전환한다.",
+      "status": "passing",
+      "verification": [
+        "공유 타입과 생성 API가 demo_web_service 또는 demo_web_service_with_rds만 허용한다.",
+        "기존 practice DB 행은 demo_web_service로 변환된 뒤 PostgreSQL enum에서 제거된다.",
+        "호환 API/worker가 migration 전 기존 practice 행을 demo_web_service로 처리한다.",
+        "기본 live apply 프로필이 ECS Application Auto Scaling Target과 Policy를 허용한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-20",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/db/deployment-live-profile-migration.test.ts src/deployments/deployment-preparation-service.test.ts src/deployments/terraform-artifact-safety.test.ts src/routes/deployments.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check",
+          "GitHub Actions Deploy Production ECS run 29700391499 at app SHA 2da6ba32d28e98afcbfad0e9f591915a48b5b461",
+          "GitHub Actions Run Production Database Migrations run 29700681495",
+          "HTTPS GET https://sketchcatch.net/, /health, /health/db"
+        ],
+        "notes": "Focused API checks pass 130/130 and focused merged Web checks pass 31/31. Migration compatibility, lint, serial typecheck, build, harness, and diff checks pass. Production ECS run 29700391499 deployed the compatible API, Web, and worker image before migration run 29700681495 created snapshot sketchcatch-production-pre-migration-29700681495 and completed the one-off ECS migration task with exit code 0. All three HTTPS health checks return 200. The full API suite still exposes unrelated existing failures outside this workstream."
+      },
+      "notes": "Migration 0054 changes apps/api/drizzle/meta/_journal.json and is applied in production. No Terraform apply/destroy or user Git/CI/CD handoff was performed."
+    },
+    {
+      "id": "CICD-SETUP-CONVERGENCE-001",
+      "priority": 1,
+      "area": "git-cicd",
+      "title": "Resumable GitHub and AWS setup with safe PR retry",
+      "user_visible_behavior": "사용자는 한 번의 승인으로 Repository 설정, target branch 제한, AWS 신뢰 정책과 배포 PR을 준비하고, 중간 실패나 Pipeline 실패가 있어도 Direct Destroy·재배포 없이 같은 handoff에서 안전하게 다시 진행한다.",
+      "status": "passing",
+      "verification": [
+        "서버는 외부 변경 전에 draft handoff를 저장하고 Repository 설정, AWS trust, PR 순서로 실행한다.",
+        "GitHub Environment와 managed variables는 exact read-back을 통과하며 이미 같은 값은 write를 생략한다.",
+        "AWS trust는 Repository/Environment scoped Sid만 수렴시키고 다른 statement를 보존하며 DB 증거 저장 실패 시 PR 전에 중단한다.",
+        "열린 PR의 사용자 변경은 보존하고 닫힌 PR과 실패 Pipeline은 non-nested retry branch로 복구한다.",
+        "Phase 3은 Repository, AWS, PR 증거가 모두 검증된 뒤 완료되며 Phase 4가 실패 Pipeline retry action을 제공한다.",
+        "생성 workflow는 stale project ID를 외부 작업 전에 차단하고 HTTP 오류 본문을 보존한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-22",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/aws-role-diff-apply-service.test.ts src/git-cicd/git-cicd-handoff-configuration-integration.test.ts src/git-cicd/git-cicd-repository-settings-service.test.ts src/git-cicd/git-cicd-runtime-convergence-workflows.test.ts src/git-cicd/git-cicd-workflows-output-url.test.ts src/git-cicd/github-app-git-provider-project-asset-storage.test.ts src/routes/git-cicd-handoffs.test.ts src/source-repositories/github-app-client-pull-request.test.ts src/source-repositories/github-app-client-repository-settings.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test --test-reporter=dot \"src/git-cicd/**/*.test.ts\" src/routes/git-cicd-handoffs.test.ts src/routes/git-cicd-infrastructure-runs.test.ts src/routes/git-cicd-readiness.test.ts src/routes/git-cicd-release-runs.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-readiness-service.test.ts",
+          "pnpm --dir apps/web exec node --import ./test-css-register.mjs --import tsx --test features/workspace/cicd-handoff.test.ts features/workspace/cicd-readiness-presentation.test.ts features/workspace/cicd-handoff-configuration-preview.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/cicd-handoff-setup-client.test.ts",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check"
+        ],
+        "notes": "Focused setup/provider tests pass 42/42, the Git/CI/CD API regression set passes 246/246, readiness passes 96/96 including the previously failing CI cases, and focused Web tests pass 54/54. Root lint, typecheck, and all five production builds pass."
+      },
+      "notes": "No DB schema, Drizzle migration, dependency, secret, live GitHub/AWS mutation, PR merge, Terraform action, production deployment, or push was performed."
     }
   ]
 }

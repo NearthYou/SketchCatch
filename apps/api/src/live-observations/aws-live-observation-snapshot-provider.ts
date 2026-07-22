@@ -58,7 +58,12 @@ export type AwsLiveObservationSnapshotTarget = {
   logGroupNames: string[];
   capacityTarget:
     | { kind: "asg"; autoScalingGroupName: string }
-    | { kind: "ecs_fargate"; clusterName: string; serviceName: string; maxCapacity: number };
+    | {
+        kind: "ecs_fargate";
+        clusterName: string;
+        serviceName: string;
+        maxCapacity: number | null;
+      };
 };
 
 export type AwsLiveObservationSnapshotProvider = {
@@ -228,10 +233,9 @@ export function createAwsLiveObservationSnapshotProvider(
       )
     ]);
 
-    if (metrics.state !== "available" || !capacity || logs === null) {
-      const state = metrics.state === "delayed" ? "delayed" : "unavailable";
+    if (metrics.state === "unavailable" || !capacity || logs === null) {
       return emptySnapshot(
-        state,
+        "unavailable",
         metrics.observedAt ?? new Date(evaluatedAtMs).toISOString(),
         logs ?? []
       );
@@ -248,7 +252,7 @@ export function createAwsLiveObservationSnapshotProvider(
       capacity,
       logs,
       observedAt: metrics.observedAt,
-      state: "available"
+      state: metrics.state
     });
   };
   type CacheEntry =
@@ -264,17 +268,16 @@ export function createAwsLiveObservationSnapshotProvider(
   return {
     async observe(target, observationId) {
       const evaluatedAtMs = now();
-      for (const [key, entry] of cache) {
-        if (entry.state === "settled" && entry.expiresAtMs <= evaluatedAtMs) {
-          cache.delete(key);
-        }
-      }
       const key = createCacheKey(observationId, target);
       const cached = cache.get(key);
       if (cached) {
-        return cached.state === "pending"
-          ? parseLiveObservationProviderSnapshot(await cached.pending)
-          : parseLiveObservationProviderSnapshot(cached.snapshot);
+        if (cached.state === "pending") {
+          return parseLiveObservationProviderSnapshot(await cached.pending);
+        }
+        if (cached.expiresAtMs > evaluatedAtMs) {
+          return parseLiveObservationProviderSnapshot(cached.snapshot);
+        }
+        cache.delete(key);
       }
 
       if (cache.size >= cacheMaxEntries) {
@@ -295,7 +298,11 @@ export function createAwsLiveObservationSnapshotProvider(
         () => abortController.abort(),
         requestTimeoutMs
       );
-      const pending = observeFresh(target, evaluatedAtMs, abortController.signal)
+      const pending = observeFresh(
+        target,
+        evaluatedAtMs,
+        abortController.signal
+      )
         .catch(() => emptySnapshot("unavailable", new Date(evaluatedAtMs).toISOString()))
         .then((snapshot) => {
           const parsed = parseLiveObservationProviderSnapshot(snapshot);
@@ -332,7 +339,7 @@ function createCacheKey(
         "ecs",
         target.capacityTarget.clusterName,
         target.capacityTarget.serviceName,
-        target.capacityTarget.maxCapacity
+        target.capacityTarget.maxCapacity ?? "fixed"
       ].join(":");
   return [
     observationId,
@@ -370,8 +377,14 @@ async function observeMetrics(
   evaluatedAtMs: number,
   abortSignal: AbortSignal
 ): Promise<
-  | { state: "available"; requests: number; errors: number; latencySeconds: number; observedAt: string }
-  | { state: "delayed" | "unavailable"; observedAt: string | null }
+  | {
+      state: "available" | "delayed";
+      requests: number;
+      errors: number;
+      latencySeconds: number;
+      observedAt: string;
+    }
+  | { state: "unavailable"; observedAt: string | null }
 > {
   try {
     const response = await client.getMetricData({
@@ -457,11 +470,11 @@ async function observeMetrics(
     }
 
     const observedAtMs = periodStartMs + PERIOD_SECONDS * 1_000;
-    if (evaluatedAtMs - observedAtMs > PERIOD_SECONDS * 1_000) {
-      return { state: "delayed", observedAt: new Date(observedAtMs).toISOString() };
-    }
+    const state = evaluatedAtMs - observedAtMs > PERIOD_SECONDS * 1_000
+      ? "delayed" as const
+      : "available" as const;
     return {
-      state: "available",
+      state,
       requests,
       errors,
       latencySeconds: latency.value,
@@ -648,7 +661,7 @@ async function prepareDefaultCredentials(
     roleArn: target.roleArn,
     externalId: target.externalId,
     region: target.region,
-    roleSessionName: `sketchcatch-live-observation-${randomUUID()}`,
+    roleSessionName: `sketchcatch-live-obs-${randomUUID()}`,
     abortSignal
   });
 }

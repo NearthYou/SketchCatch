@@ -139,6 +139,17 @@ export function compileArchitectureBoard(
     operationIssues: semanticOperationResult.issues,
     signals: input.semanticContext?.signals ?? []
   };
+  const authoredSourceDiagram = input.sourceDiagram
+    ? cloneDiagram(input.sourceDiagram)
+    : undefined;
+  const authoredSourceArchitecture = authoredSourceDiagram
+    ? convertDiagramJsonToArchitectureJson(authoredSourceDiagram)
+    : undefined;
+  const hasAuthoritativeSourceDiagram = Boolean(
+    authoredSourceDiagram &&
+    authoredSourceArchitecture &&
+    sameAuthoredArchitectureSource(authoredSourceArchitecture, sourceArchitecture)
+  );
   const currentDiagram = input.currentDiagram ? cloneDiagram(input.currentDiagram) : undefined;
   const currentArchitecture = currentDiagram
     ? convertDiagramJsonToArchitectureJson(currentDiagram)
@@ -151,16 +162,17 @@ export function compileArchitectureBoard(
     architectureBoardKnowledge
   );
   const sourceDiagram =
-    (input.trigger === "board-auto-organize" || input.trigger === "template-review") &&
-    currentDiagram &&
-    currentArchitecture &&
-    sameArchitectureShape(currentArchitecture, sourceArchitecture)
-      ? currentDiagram
-      : convertArchitectureJsonToDiagramJson(sourceArchitecture);
-  // Only Board organization and Template review treat the current Diagram as the authored
-  // source. AI and reverse-engineering may keep node IDs/types while changing config or
-  // relationship labels, so their source candidate must be re-materialized instead of
-  // pairing the requested Architecture with stale Board values.
+    hasAuthoritativeSourceDiagram && authoredSourceDiagram
+      ? authoredSourceDiagram
+      : (input.trigger === "board-auto-organize" || input.trigger === "template-review") &&
+          currentDiagram &&
+          currentArchitecture &&
+          sameArchitectureShape(currentArchitecture, sourceArchitecture)
+        ? currentDiagram
+        : convertArchitectureJsonToDiagramJson(sourceArchitecture);
+  // A source Diagram supplied with the same Architecture is authoritative. Otherwise only
+  // Board organization and Template review treat the current Diagram as authored source.
+  // AI and reverse-engineering current Boards may contain stale config or relationship labels.
   const comparisonArchitecture = currentArchitecture ?? sourceArchitecture;
   const comparisonDiagram = currentDiagram ?? sourceDiagram ?? baseDiagram;
   const originalCandidate = createCandidate(
@@ -238,11 +250,13 @@ export function compileArchitectureBoard(
     semanticCandidate,
     ...patternCandidates
   ];
-  const selectableCandidates = sourceExactNeedsCompiledVariant
-    ? [presentationCandidate, semanticCandidate, ...patternCandidates]
-    : requestedOriginalCandidate
-      ? [requestedOriginalCandidate, presentationCandidate, semanticCandidate, ...patternCandidates]
-      : candidates;
+  const selectableCandidates = hasAuthoritativeSourceDiagram && semanticOperations.length === 0
+    ? [originalCandidate]
+    : sourceExactNeedsCompiledVariant
+      ? [presentationCandidate, semanticCandidate, ...patternCandidates]
+      : requestedOriginalCandidate
+        ? [requestedOriginalCandidate, presentationCandidate, semanticCandidate, ...patternCandidates]
+        : candidates;
   const selected = selectableCandidates.sort(
     (left, right) => left.quality.score - right.quality.score || left.id.localeCompare(right.id)
   )[0];
@@ -1225,13 +1239,17 @@ function getPolylineHalfwayPoint(points: readonly { readonly x: number; readonly
   return structuredClone(points[0]!);
 }
 
+// Preserve presentation roles so summary links do not distort main-flow layout quality.
 function evaluateDiagram(diagram: DiagramJson): AutomaticDiagramLayoutQuality {
   return evaluateAutomaticDiagramLayout({
     edges: diagram.edges.map((edge) => ({
       id: edge.id,
       sourceId: edge.sourceNodeId,
       targetId: edge.targetNodeId,
-      ...(edge.label === undefined ? {} : { label: edge.label })
+      ...(edge.label === undefined ? {} : { label: edge.label }),
+      ...(edge.metadata?.presentationRole === undefined
+        ? {}
+        : { metadata: { presentationRole: edge.metadata.presentationRole } })
     })),
     nodes: diagram.nodes
   });
@@ -2129,6 +2147,28 @@ function sameArchitectureShape(left: ArchitectureJson, right: ArchitectureJson):
       .sort((first, second) => first.id.localeCompare(second.id)),
     edges: architecture.edges
       .map((edge) => ({ id: edge.id, sourceId: edge.sourceId, targetId: edge.targetId }))
+      .sort((first, second) => first.id.localeCompare(second.id))
+  });
+  return sameValue(normalize(left), normalize(right));
+}
+
+function sameAuthoredArchitectureSource(left: ArchitectureJson, right: ArchitectureJson): boolean {
+  const normalize = (architecture: ArchitectureJson) => ({
+    nodes: architecture.nodes
+      .map((node) => ({
+        config: node.config,
+        id: node.id,
+        label: node.label,
+        resourceType: node.config["terraformResourceType"] ?? node.type
+      }))
+      .sort((first, second) => first.id.localeCompare(second.id)),
+    edges: architecture.edges
+      .map((edge) => ({
+        id: edge.id,
+        label: edge.label,
+        sourceId: edge.sourceId,
+        targetId: edge.targetId
+      }))
       .sort((first, second) => first.id.localeCompare(second.id))
   });
   return sameValue(normalize(left), normalize(right));

@@ -6,8 +6,10 @@ import type {
 } from "@sketchcatch/types";
 
 const BOARD_LAYOUT = {
+  ecsGroupGapX: 900,
   resourceGapX: 260,
   resourceGapY: 130,
+  globalEdgeStartY: 20,
   subnetGapX: 330,
   subnetGapY: 300,
   vpcGapX: 1120,
@@ -29,11 +31,18 @@ type LayoutSubnetChildrenInput = LayoutVpcChildrenInput & {
   readonly subnetAnchor: LayoutAnchor;
 };
 
-// 지원하지 않는 UNKNOWN은 보드 중앙에 뿌리지 않고 확인 필요 목록에만 남깁니다.
+// 관계가 있는 검토 전용 Resource는 구조를 읽을 수 있도록 보드에 남깁니다.
 export function createReverseEngineeringArchitectureJson(
   discoveredResources: readonly DiscoveredResource[]
 ): ArchitectureJson {
-  const boardResources = discoveredResources.filter(isBoardResource);
+  const evidenceRelationshipTargetIds = new Set(
+    discoveredResources.flatMap((resource) =>
+      (resource.relationships ?? []).map((relationship) => relationship.targetResourceId)
+    )
+  );
+  const boardResources = discoveredResources.filter((resource) =>
+    shouldAppearOnReverseEngineeringBoard(resource, evidenceRelationshipTargetIds)
+  );
   const boardResourceIds = new Set(boardResources.map((resource) => resource.id));
   const layoutByResourceId = createArchitectureLayout(boardResources);
 
@@ -50,7 +59,25 @@ function createArchitectureLayout(resources: readonly DiscoveredResource[]): Rea
   const layoutByResourceId = new Map<string, ArchitectureNodeLayout>();
   const resourcesById = new Map(resources.map((resource) => [resource.id, resource]));
   const vpcs = resources.filter((resource) => resource.resourceType === "VPC");
+  const ecsClusters = resources.filter((resource) => resource.resourceType === "ECS_CLUSTER");
+  const globalEdgeResources = resources.filter((resource) => resource.resourceType === "CLOUDFRONT");
   const independentResources: DiscoveredResource[] = [];
+
+  for (const [index, resource] of globalEdgeResources.entries()) {
+    layoutByResourceId.set(resource.id, {
+      label: createResourceLabel(resource),
+      positionX: BOARD_LAYOUT.vpcStartX + index * BOARD_LAYOUT.resourceGapX,
+      positionY: BOARD_LAYOUT.globalEdgeStartY
+    });
+  }
+
+  layoutEcsGroups({
+    clusters: ecsClusters,
+    layoutByResourceId,
+    resources,
+    resourcesById,
+    startX: BOARD_LAYOUT.vpcStartX + vpcs.length * BOARD_LAYOUT.vpcGapX
+  });
 
   for (const [vpcIndex, vpc] of vpcs.entries()) {
     const vpcAnchor = getVpcAnchor(vpcIndex);
@@ -73,12 +100,68 @@ function createArchitectureLayout(resources: readonly DiscoveredResource[]): Rea
   for (const [index, resource] of independentResources.entries()) {
     layoutByResourceId.set(resource.id, {
       label: createResourceLabel(resource),
-      positionX: BOARD_LAYOUT.vpcStartX + vpcs.length * BOARD_LAYOUT.vpcGapX + index * BOARD_LAYOUT.resourceGapX,
+      positionX:
+        BOARD_LAYOUT.vpcStartX +
+        vpcs.length * BOARD_LAYOUT.vpcGapX +
+        ecsClusters.length * BOARD_LAYOUT.ecsGroupGapX +
+        index * BOARD_LAYOUT.resourceGapX,
       positionY: BOARD_LAYOUT.vpcStartY
     });
   }
 
   return layoutByResourceId;
+}
+
+function layoutEcsGroups(input: {
+  readonly clusters: readonly DiscoveredResource[];
+  readonly layoutByResourceId: Map<string, ArchitectureNodeLayout>;
+  readonly resources: readonly DiscoveredResource[];
+  readonly resourcesById: ReadonlyMap<string, DiscoveredResource>;
+  readonly startX: number;
+}): void {
+  for (const [clusterIndex, cluster] of input.clusters.entries()) {
+    const groupStartX = input.startX + clusterIndex * BOARD_LAYOUT.ecsGroupGapX;
+    const services = input.resources.filter(
+      (resource) =>
+        resource.resourceType === "ECS_SERVICE" && referencesResource(resource, cluster)
+    );
+    const taskDefinitions = [
+      ...new Map(
+        services.flatMap((service) =>
+          (service.relationships ?? []).flatMap((relationship) => {
+            const target = input.resourcesById.get(relationship.targetResourceId);
+
+            return target?.resourceType === "ECS_TASK_DEFINITION" ? [[target.id, target] as const] : [];
+          })
+        )
+      ).values()
+    ];
+    const rowCount = Math.max(services.length, taskDefinitions.length, 1);
+
+    input.layoutByResourceId.set(cluster.id, {
+      label: createResourceLabel(cluster),
+      positionX: groupStartX + BOARD_LAYOUT.resourceGapX,
+      positionY: BOARD_LAYOUT.vpcStartY + Math.floor((rowCount - 1) / 2) * BOARD_LAYOUT.resourceGapY
+    });
+
+    for (const [index, taskDefinition] of taskDefinitions.entries()) {
+      if (!input.layoutByResourceId.has(taskDefinition.id)) {
+        input.layoutByResourceId.set(taskDefinition.id, {
+          label: createResourceLabel(taskDefinition),
+          positionX: groupStartX,
+          positionY: BOARD_LAYOUT.vpcStartY + index * BOARD_LAYOUT.resourceGapY
+        });
+      }
+    }
+
+    for (const [index, service] of services.entries()) {
+      input.layoutByResourceId.set(service.id, {
+        label: createResourceLabel(service),
+        positionX: groupStartX + BOARD_LAYOUT.resourceGapX * 2,
+        positionY: BOARD_LAYOUT.vpcStartY + index * BOARD_LAYOUT.resourceGapY
+      });
+    }
+  }
 }
 
 // VPC 안쪽에는 네트워크 구성요소, Subnet, 그 안의 서버/DB를 층으로 나눠 배치합니다.
@@ -186,18 +269,26 @@ function toResourceEdges(resource: DiscoveredResource, boardResourceIds: Readonl
   return edges;
 }
 
-// UNKNOWN은 발견 결과에는 남기지만, 자동 설계도 노드로는 올리지 않습니다.
-function isBoardResource(resource: DiscoveredResource): boolean {
-  return resource.resourceType !== "UNKNOWN";
+// 지원 여부와 분석 제외 상태보다 evidence 관계가 구조를 설명할 때만 검토 전용 Resource를 보드에 남깁니다.
+function shouldAppearOnReverseEngineeringBoard(
+  resource: DiscoveredResource,
+  evidenceRelationshipTargetIds: ReadonlySet<string>
+): boolean {
+  if (resource.resourceType !== "UNKNOWN" && !resource.analysisExcluded) {
+    return true;
+  }
+
+  return (resource.relationships?.length ?? 0) > 0 || evidenceRelationshipTargetIds.has(resource.id);
 }
 
-// VPC 바로 아래에 보여줄 네트워크 구성요소를 고릅니다.
+// VPC 바로 아래에는 네트워크 구성요소와 여러 Subnet에 걸치는 ALB를 배치합니다.
 function isVpcNetworkResource(resource: DiscoveredResource): boolean {
   return (
     resource.resourceType === "INTERNET_GATEWAY" ||
     resource.resourceType === "ROUTE_TABLE" ||
     resource.resourceType === "ROUTE_TABLE_ASSOCIATION" ||
-    resource.resourceType === "SECURITY_GROUP"
+    resource.resourceType === "SECURITY_GROUP" ||
+    resource.resourceType === "LOAD_BALANCER"
   );
 }
 
@@ -225,7 +316,11 @@ function isSubnetChildResource(
   subnet: DiscoveredResource,
   resourcesById: ReadonlyMap<string, DiscoveredResource>
 ): boolean {
-  if (resource.id === subnet.id || resource.resourceType === "SECURITY_GROUP") {
+  if (
+    resource.id === subnet.id ||
+    resource.resourceType === "SECURITY_GROUP" ||
+    resource.resourceType === "LOAD_BALANCER"
+  ) {
     return false;
   }
 

@@ -14,6 +14,7 @@ const designAreaNodeTypes = new Set([
   "aws_availability_zone",
   "design_region",
   "design-aws-account",
+  "design-group",
   "design_az",
   "design_group",
   "sketchcatch_region",

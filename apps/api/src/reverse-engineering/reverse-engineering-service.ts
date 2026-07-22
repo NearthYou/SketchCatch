@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { RESOURCE_TYPES } from "@sketchcatch/types";
 import type {
   AwsConnection,
+  ArchitectureJson,
+  DiscoveredResource,
+  ReverseEngineeringDraft,
+  ReverseEngineeringImportSuggestion,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScan,
   ReverseEngineeringScanLogLine,
@@ -19,6 +25,10 @@ import {
 import type { ProjectAccessContext, ProjectRecord } from "../deployments/deployment-service.js";
 import { createAwsProviderAdapter, type AwsProviderAdapter } from "./aws-provider-adapter.js";
 import { createAwsReverseEngineeringGateway } from "./aws-reverse-engineering-gateway.js";
+import {
+  createAwsResourceDisplayName,
+  createAwsResourceDisplayNameMap
+} from "./aws-resource-display-name.js";
 
 export type ReverseEngineeringScanRecord = typeof reverseEngineeringScans.$inferSelect;
 export type ReverseEngineeringScanLogRecord = typeof reverseEngineeringScanLogs.$inferSelect;
@@ -119,11 +129,377 @@ export type ReverseEngineeringScanJob = {
   run(): Promise<ReverseEngineeringScanResult>;
 };
 
+export type PersistedReverseEngineeringScanResult = Omit<
+  ReverseEngineeringScanResult,
+  "scan" | "reverseEngineeringDraft"
+> & {
+  scan?: ReverseEngineeringScan | undefined;
+  reverseEngineeringDraft?: unknown;
+};
+
+const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
+  "providerResourceId",
+  "providerResourceType",
+  "region",
+  "accountId",
+  "terraformResourceName",
+  "terraformResourceType"
+] as const;
+const REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS = ["displayName", "description"] as const;
+const RESOURCE_TYPE_SET = new Set<string>(RESOURCE_TYPES);
+
 export class ReverseEngineeringNotFoundError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ReverseEngineeringNotFoundError";
   }
+}
+
+// JSONB에 저장된 과거 스캔은 draft가 없을 수 있으므로, 읽을 때만 현재 응답 계약으로 보정합니다.
+export function normalizeReverseEngineeringScanResult(
+  scan: ReverseEngineeringScan,
+  persistedResult: PersistedReverseEngineeringScanResult
+): ReverseEngineeringScanResult {
+  const normalizationContext = createReadCompatibilityNormalizationContext(persistedResult);
+  const architectureJson = normalizeReadCompatibilityArchitecture(
+    persistedResult.architectureJson,
+    normalizationContext
+  );
+  const persistedDraft = persistedResult.reverseEngineeringDraft;
+  const draft = isUsableReverseEngineeringDraft(persistedDraft, scan.id)
+    ? normalizeReadCompatibilityDraft(persistedDraft, normalizationContext)
+    : createReadCompatibilityDraft(scan, architectureJson);
+
+  return {
+    ...persistedResult,
+    scan,
+    architectureJson,
+    reverseEngineeringDraft: draft,
+    importSuggestions: sanitizeImportSuggestions(
+      normalizationContext,
+      persistedResult.importSuggestions
+    )
+  };
+}
+
+type ReadCompatibilityNormalizationContext = {
+  readonly discoveredResourceById: ReadonlyMap<string, DiscoveredResource | null>;
+  readonly discoveredResourceByProviderResourceId: ReadonlyMap<
+    string,
+    DiscoveredResource | null
+  >;
+  readonly displayNameByProviderResourceId: ReadonlyMap<string, string>;
+  readonly reviewOnlyResourceIds: ReadonlySet<string>;
+};
+
+function createReadCompatibilityNormalizationContext(
+  persistedResult: PersistedReverseEngineeringScanResult
+): ReadCompatibilityNormalizationContext {
+  return {
+    discoveredResourceById: createUniqueDiscoveredResourceMap(
+      persistedResult.discoveredResources,
+      (resource) => resource.id
+    ),
+    discoveredResourceByProviderResourceId: createUniqueDiscoveredResourceMap(
+      persistedResult.discoveredResources,
+      (resource) => resource.providerResourceId
+    ),
+    displayNameByProviderResourceId: createAwsResourceDisplayNameMap(
+      persistedResult.discoveredResources
+    ),
+    reviewOnlyResourceIds: new Set([
+      ...persistedResult.discoveredResources
+        .filter(isReviewOnlyDiscoveredResource)
+        .map((resource) => resource.id),
+      ...persistedResult.analysisExclusions.map((exclusion) => exclusion.resourceId)
+    ])
+  };
+}
+
+function createUniqueDiscoveredResourceMap(
+  resources: readonly DiscoveredResource[],
+  getKey: (resource: DiscoveredResource) => string
+): ReadonlyMap<string, DiscoveredResource | null> {
+  const result = new Map<string, DiscoveredResource | null>();
+
+  for (const resource of resources) {
+    const key = getKey(resource).trim();
+
+    if (!key) {
+      continue;
+    }
+
+    result.set(key, result.has(key) ? null : resource);
+  }
+
+  return result;
+}
+
+function normalizeReadCompatibilityArchitecture(
+  architectureJson: ArchitectureJson,
+  context: ReadCompatibilityNormalizationContext
+): ArchitectureJson {
+  let changed = false;
+  const nodes = architectureJson.nodes.map((node) => {
+    const normalizedNode = normalizeReadCompatibilityNode(node, context);
+
+    changed ||= normalizedNode !== node;
+    return normalizedNode;
+  });
+
+  return changed ? { ...architectureJson, nodes } : architectureJson;
+}
+
+function normalizeReadCompatibilityNode(
+  node: ArchitectureJson["nodes"][number],
+  context: ReadCompatibilityNormalizationContext
+): ArchitectureJson["nodes"][number] {
+  const resource = findCorrelatedDiscoveredResource(node, context);
+
+  if (!resource) {
+    const label = createFailClosedLegacyNodeLabel(node);
+    const rawLabel = node.label?.trim() || node.id;
+    const rawProviderResourceId =
+      rawLabel.startsWith("arn:") &&
+      readNonEmptyConfigString(node.config["providerResourceId"]) === undefined
+        ? rawLabel
+        : undefined;
+    const config = {
+      ...node.config,
+      ...(rawProviderResourceId ? { providerResourceId: rawProviderResourceId } : {}),
+      analysisExcluded: true
+    };
+
+    if (node.label === label && isDeepStrictEqual(node.config, config)) {
+      return node;
+    }
+
+    return {
+      ...node,
+      label,
+      config
+    };
+  }
+
+  const analysisExcluded =
+    node.config["analysisExcluded"] === true || context.reviewOnlyResourceIds.has(resource.id);
+  const label =
+    context.displayNameByProviderResourceId.get(resource.providerResourceId) ??
+    createAwsResourceDisplayName(resource);
+  const config = {
+    ...resource.config,
+    ...node.config,
+    providerResourceType: resource.providerResourceType,
+    providerResourceId: resource.providerResourceId,
+    analysisExcluded
+  };
+
+  if (node.label === label && isDeepStrictEqual(node.config, config)) {
+    return node;
+  }
+
+  return {
+    ...node,
+    label,
+    config
+  };
+}
+
+function findCorrelatedDiscoveredResource(
+  node: ArchitectureJson["nodes"][number],
+  context: ReadCompatibilityNormalizationContext
+): DiscoveredResource | null {
+  const idMatch = context.discoveredResourceById.get(node.id);
+  const nodeProviderResourceId = readNonEmptyConfigString(
+    node.config["providerResourceId"]
+  );
+  const providerResourceIdMatch = nodeProviderResourceId
+    ? context.discoveredResourceByProviderResourceId.get(nodeProviderResourceId)
+    : undefined;
+
+  if (idMatch === null || providerResourceIdMatch === null) {
+    return null;
+  }
+
+  if (idMatch && providerResourceIdMatch && idMatch !== providerResourceIdMatch) {
+    return null;
+  }
+
+  if (idMatch && nodeProviderResourceId && idMatch.providerResourceId !== nodeProviderResourceId) {
+    return null;
+  }
+
+  const resource = providerResourceIdMatch ?? idMatch;
+
+  return resource && isUniquelyIndexedDiscoveredResource(resource, context) ? resource : null;
+}
+
+function isUniquelyIndexedDiscoveredResource(
+  resource: DiscoveredResource,
+  context: ReadCompatibilityNormalizationContext
+): boolean {
+  return (
+    context.discoveredResourceById.get(resource.id) === resource &&
+    context.discoveredResourceByProviderResourceId.get(resource.providerResourceId) === resource
+  );
+}
+
+function createFailClosedLegacyNodeLabel(
+  node: ArchitectureJson["nodes"][number]
+): string {
+  const label = node.label?.trim() || node.id;
+  const providerResourceId = label.startsWith("arn:")
+    ? label
+    : readNonEmptyConfigString(node.config["providerResourceId"]) ?? node.id;
+  const providerResourceType =
+    readNonEmptyConfigString(node.config["providerResourceType"]) ?? `AWS::${node.type}`;
+
+  return createAwsResourceDisplayName({
+    displayName: label,
+    providerResourceId,
+    providerResourceType
+  });
+}
+
+function readNonEmptyConfigString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function isReviewOnlyDiscoveredResource(resource: DiscoveredResource): boolean {
+  return resource.resourceType === "UNKNOWN" || resource.analysisExcluded === true;
+}
+
+function normalizeReadCompatibilityDraft(
+  draft: ReverseEngineeringDraft,
+  context: ReadCompatibilityNormalizationContext
+): ReverseEngineeringDraft {
+  const architectureJson = normalizeReadCompatibilityArchitecture(draft.architectureJson, context);
+
+  return architectureJson === draft.architectureJson ? draft : { ...draft, architectureJson };
+}
+
+function createReadCompatibilityDraft(
+  scan: ReverseEngineeringScan,
+  architectureJson: ArchitectureJson
+): ReverseEngineeringDraft {
+  return {
+    id: `draft-${scan.id}`,
+    scanId: scan.id,
+    architectureJson,
+    protectedValueKeys: [...REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS],
+    editableValueKeys: [...REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS],
+    createdAt: scan.completedAt ?? scan.updatedAt
+  };
+}
+
+function isUsableReverseEngineeringDraft(
+  value: unknown,
+  scanId: string
+): value is ReverseEngineeringDraft {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    isNonEmptyString(value.id) &&
+    value.scanId === scanId &&
+    isArchitectureJson(value.architectureJson) &&
+    isStringArray(value.protectedValueKeys) &&
+    isStringArray(value.editableValueKeys) &&
+    isNonEmptyString(value.createdAt)
+  );
+}
+
+function sanitizeImportSuggestions(
+  context: ReadCompatibilityNormalizationContext,
+  importSuggestions: ReverseEngineeringImportSuggestion[]
+): ReverseEngineeringImportSuggestion[] {
+  return importSuggestions.map((suggestion) => {
+    const resource = context.discoveredResourceById.get(suggestion.resourceId);
+    const isExecutableResource =
+      resource !== undefined &&
+      resource !== null &&
+      isUniquelyIndexedDiscoveredResource(resource, context) &&
+      !context.reviewOnlyResourceIds.has(resource.id);
+
+    if (isExecutableResource || !hasUnsafeImportHandoff(suggestion)) {
+      return suggestion;
+    }
+
+    return {
+      id: suggestion.id,
+      resourceId: suggestion.resourceId,
+      status: "manual_review",
+      handoffReady: false,
+      reason: suggestion.reason ?? "검토 전용 Resource는 Terraform import 또는 배포에 사용할 수 없습니다."
+    };
+  });
+}
+
+function hasUnsafeImportHandoff(suggestion: ReverseEngineeringImportSuggestion): boolean {
+  return (
+    suggestion.status === "ready" ||
+    suggestion.handoffReady ||
+    suggestion.terraformAddress !== undefined ||
+    suggestion.importCommand !== undefined ||
+    suggestion.terraformBlockDraft !== undefined
+  );
+}
+
+function isArchitectureJson(value: unknown): value is ArchitectureJson {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.nodes) &&
+    value.nodes.every(isArchitectureResourceNode) &&
+    Array.isArray(value.edges) &&
+    value.edges.every(isArchitectureResourceEdge)
+  );
+}
+
+function isArchitectureResourceNode(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isResourceType(value.type) &&
+    isFiniteNumber(value.positionX) &&
+    isFiniteNumber(value.positionY) &&
+    isRecord(value.config) &&
+    isOptionalString(value.label)
+  );
+}
+
+function isArchitectureResourceEdge(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isNonEmptyString(value.sourceId) &&
+    isNonEmptyString(value.targetId) &&
+    isOptionalString(value.label)
+  );
+}
+
+function isResourceType(value: unknown): value is ArchitectureJson["nodes"][number]["type"] {
+  return typeof value === "string" && RESOURCE_TYPE_SET.has(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // 스캔 row는 있지만 Provider 호출이 실패한 경우 404와 구분하기 위해 따로 던집니다.

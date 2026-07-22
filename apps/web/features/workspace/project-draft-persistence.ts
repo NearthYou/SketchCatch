@@ -1,4 +1,8 @@
-import type { DiagramJson, ProjectDraft, TerraformSyncFileInput } from "../../../../packages/types/src";
+import type {
+  DiagramJson,
+  ProjectDraft,
+  TerraformSyncFileInput
+} from "../../../../packages/types/src";
 
 const DATABASE_NAME = "sketchcatch-drafts";
 const DATABASE_VERSION = 1;
@@ -23,6 +27,7 @@ export type LocalProjectDraft = {
   projectId: string;
   diagramJson: DiagramJson;
   terraformFiles?: TerraformSyncFileInput[] | undefined;
+  baseServerRevision: number | null;
   revision: number;
   draftSavedAt: string;
   serverSavedAt?: string | undefined;
@@ -56,6 +61,7 @@ export function createLocalProjectDraft({
   projectId,
   diagramJson,
   terraformFiles,
+  baseServerRevision,
   previousDraft,
   savedAt
 }: {
@@ -63,6 +69,7 @@ export function createLocalProjectDraft({
   projectId: string;
   diagramJson: DiagramJson;
   terraformFiles?: TerraformSyncFileInput[] | undefined;
+  baseServerRevision?: number | null | undefined;
   previousDraft?: LocalProjectDraft | null | undefined;
   savedAt: string;
 }): LocalProjectDraft {
@@ -72,6 +79,7 @@ export function createLocalProjectDraft({
     projectId,
     diagramJson,
     ...(terraformFiles ? { terraformFiles } : {}),
+    baseServerRevision: previousDraft?.baseServerRevision ?? baseServerRevision ?? null,
     revision: (previousDraft?.revision ?? 0) + 1,
     draftSavedAt: savedAt,
     serverSavedAt: previousDraft?.serverSavedAt,
@@ -83,14 +91,22 @@ export function markDraftServerSaved(
   localDraft: LocalProjectDraft,
   serverDraft: ProjectDraft
 ): LocalProjectDraft {
-  return {
+  const syncedDraft: LocalProjectDraft = {
     ...localDraft,
     diagramJson: serverDraft.diagramJson,
-    ...(serverDraft.terraformFiles ? { terraformFiles: serverDraft.terraformFiles } : {}),
+    baseServerRevision: serverDraft.revision,
     revision: serverDraft.revision,
     serverSavedAt: serverDraft.serverSavedAt,
     dirty: false
   };
+
+  if (serverDraft.terraformFiles) {
+    syncedDraft.terraformFiles = serverDraft.terraformFiles;
+  } else {
+    delete syncedDraft.terraformFiles;
+  }
+
+  return syncedDraft;
 }
 
 export function chooseInitialDiagram({
@@ -102,22 +118,6 @@ export function chooseInitialDiagram({
   localDraft: LocalProjectDraft | null;
   fallbackDiagram: DiagramJson;
 }): InitialDiagramChoice {
-  if (serverDraft && localDraft) {
-    if (isLocalDraftNewerThanServerDraft(localDraft, serverDraft)) {
-      return {
-        diagramJson: localDraft.diagramJson,
-        ...(localDraft.terraformFiles ? { terraformFiles: localDraft.terraformFiles } : {}),
-        source: "local"
-      };
-    }
-
-    return {
-      diagramJson: serverDraft.diagramJson,
-      ...(serverDraft.terraformFiles ? { terraformFiles: serverDraft.terraformFiles } : {}),
-      source: "server"
-    };
-  }
-
   if (serverDraft) {
     return {
       diagramJson: serverDraft.diagramJson,
@@ -140,26 +140,6 @@ export function chooseInitialDiagram({
   };
 }
 
-function isLocalDraftNewerThanServerDraft(
-  localDraft: LocalProjectDraft,
-  serverDraft: ProjectDraft
-): boolean {
-  const localSavedAt = parseIsoDateTime(localDraft.draftSavedAt);
-  const serverSavedAt = parseIsoDateTime(serverDraft.serverSavedAt);
-
-  return localSavedAt !== null && (serverSavedAt === null || localSavedAt > serverSavedAt);
-}
-
-export function parseIsoDateTime(value: string | null | undefined): number | null {
-  if (!value) {
-    return null;
-  }
-
-  const timestamp = Date.parse(value);
-
-  return Number.isFinite(timestamp) ? timestamp : null;
-}
-
 export async function readWorkspaceClientMetadata(): Promise<WorkspaceClientMetadata | null> {
   return readRecord<WorkspaceClientMetadata>(CLIENT_METADATA_STORE, WORKSPACE_METADATA_ID);
 }
@@ -180,7 +160,10 @@ export async function readLocalProjectDraft(
   workspaceId: string,
   projectId: string
 ): Promise<LocalProjectDraft | null> {
-  return readRecord<LocalProjectDraft>(PROJECT_DRAFT_STORE, createDraftStorageKey(workspaceId, projectId));
+  return readRecord<LocalProjectDraft>(
+    PROJECT_DRAFT_STORE,
+    createDraftStorageKey(workspaceId, projectId)
+  );
 }
 
 export async function writeLocalProjectDraft(draft: LocalProjectDraft): Promise<void> {

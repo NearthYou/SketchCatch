@@ -8,6 +8,7 @@ import {
   connectGitHubSourceRepository,
   createGitHubInstallUrl,
   findTargetGitHubRepository,
+  SourceRepositoryConflictError,
   SourceRepositoryStateError,
   type GitHubInstallationConnectionRecord,
   type SourceRepositoryRecord,
@@ -151,4 +152,72 @@ test("connecting the same active target is idempotent", async () => {
 
   assert.equal(connected.id, existing.id);
   assert.equal(createdRecords.length, 0);
+});
+
+test("SourceRepository connection rejects a Repository that differs from the current Board provenance", async () => {
+  const target = candidate("NearthYou/SketchCatch");
+  let createCalls = 0;
+  const repository = {
+    async findAccessibleProject() {
+      return {} as never;
+    },
+    async findActiveGitHubInstallationConnection() {
+      return {} as GitHubInstallationConnectionRecord;
+    },
+    async connectGitHubInstallation() {
+      return {} as GitHubInstallationConnectionRecord;
+    },
+    async listProjectSourceRepositories() {
+      return [];
+    },
+    async findCurrentRepositoryAnalysisTarget() {
+      return { id: "analysis-1", owner: "nearthyou", name: "another-repository" };
+    },
+    async createActiveGitHubSourceRepository() {
+      createCalls += 1;
+      return {} as SourceRepositoryRecord;
+    }
+  } as unknown as SourceRepositoryRepository;
+  const githubAppClient = {
+    async listInstallations() {
+      return [{
+        installationId: "installation-1",
+        accountId: "github-user-1",
+        accountLogin: "NearthYou",
+        accountType: "User",
+        repositorySelection: "selected" as const,
+        htmlUrl: null
+      }];
+    },
+    async listInstallationRepositories() {
+      return [target];
+    }
+  } as unknown as GitHubAppClient;
+  const { state } = await createGitHubAppState({
+    scope: "project",
+    projectId: "project-1",
+    userId: "user-1",
+    targetRepository: { owner: "NearthYou", name: "SketchCatch" },
+    resumeKey: "resume-12345678",
+    secret: stateSecret
+  });
+
+  await assert.rejects(
+    connectGitHubSourceRepository(
+      {
+        projectId: "project-1",
+        installationId: "installation-1",
+        githubRepositoryId: target.githubRepositoryId,
+        state,
+        accessContext: { kind: "user", userId: "user-1" },
+        stateSecret
+      },
+      repository,
+      githubAppClient
+    ),
+    (error: unknown) =>
+      error instanceof SourceRepositoryConflictError &&
+      error.message === "GIT_APP_REPOSITORY_ANALYSIS_MISMATCH"
+  );
+  assert.equal(createCalls, 0);
 });

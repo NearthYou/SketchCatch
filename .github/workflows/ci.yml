@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -28,6 +30,36 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Check migration compatibility
+        env:
+          MIGRATION_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          node --test scripts/db-migration-history.test.mjs
+          pnpm migration:compatibility:check
+
+      - name: Check harness state
+        run: pnpm harness:check
+
+      - name: Test deployment and Git/CI/CD transitions
+        run: |
+          pnpm --dir apps/api exec tsx --test \
+            src/build-environments/project-build-environment-service.test.ts \
+            "src/deployments/**/*.test.ts" \
+            "src/git-cicd/**/*.test.ts" \
+            src/routes/deployments.test.ts \
+            src/routes/git-cicd-handoffs.test.ts \
+            src/routes/git-cicd-infrastructure-runs.test.ts \
+            src/routes/git-cicd-readiness.test.ts \
+            src/routes/git-cicd-release-runs.test.ts
+          pnpm --dir apps/web exec node \
+            --import ./test-css-register.mjs \
+            --import tsx \
+            --test \
+            features/workspace/deployment-actions.test.ts \
+            features/workspace/deployment-preparation-error.test.ts \
+            features/workspace/deployment-presentation.test.ts \
+            features/workspace/deployment-three-stage-flow.test.ts
 
       - name: Lint
         run: pnpm lint

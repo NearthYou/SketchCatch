@@ -2,7 +2,7 @@
   background: var(--workspace-surface, #ffffff);
   color: var(--workspace-text, #171717);
   display: grid;
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-family: var(--font-sans);
   grid-template-rows: auto;
   min-height: 0;
 }
@@ -37,16 +37,16 @@
 
 .terraformDiagnosticsHeader span {
   color: var(--workspace-muted, #60646c);
-  font-size: 10px;
-  font-weight: 700;
+  font-size: calc(10px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.4;
   text-transform: uppercase;
 }
 
 .terraformDiagnosticsHeader h3 {
   color: var(--workspace-text, #171717);
-  font-size: 16px;
-  font-weight: 700;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.4;
   margin: 0;
 }
@@ -55,8 +55,8 @@
 .terraformIssueCountError {
   border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 9999px;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   min-width: 28px;
   padding: 4px 8px;
   text-align: center;
@@ -75,10 +75,10 @@
 
 .terraformEmpty {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(10px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
-  padding: 16px 0;
+  padding: 8px 0 16px;
 }
 
 .terraformDiagnosticList {
@@ -131,14 +131,14 @@
 
 .terraformDiagnosticList strong {
   color: var(--workspace-text, #171717);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
 .terraformDiagnosticMessage {
   color: var(--workspace-muted, #60646c);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -155,8 +155,8 @@
 .terraformDiagnosticStale,
 .terraformDiagnosticMeta span {
   border-radius: 9999px;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1.3;
   padding: 3px 6px;
   white-space: nowrap;
@@ -200,8 +200,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   justify-self: start;
   min-height: 36px;

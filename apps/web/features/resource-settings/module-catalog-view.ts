@@ -17,6 +17,8 @@ export type ModuleCatalogGroup = {
   readonly modules: readonly CuratedModuleDefinition[];
 };
 
+const SIMPLE_MODULE_RESOURCE_LIMIT = 3;
+
 export function countModuleResources(moduleDefinition: CuratedModuleDefinition): number {
   return moduleDefinition.nodes.filter(({ kind }) => kind === "resource").length;
 }
@@ -59,10 +61,38 @@ export function createModuleCatalogGroups(input: {
       ...group,
       modules: [...group.modules].sort(compareModules)
     }))
-    .sort(
-      (left, right) =>
-        compareCatalogText(left.label, right.label) || compareCatalogText(left.key, right.key)
-    );
+    .sort(compareGroups);
+}
+
+function compareGroups(left: ModuleCatalogGroup, right: ModuleCatalogGroup): number {
+  const leftScore = createGroupSimplicityScore(left);
+  const rightScore = createGroupSimplicityScore(right);
+
+  return (
+    rightScore.simpleModuleCount - leftScore.simpleModuleCount ||
+    leftScore.averageResourceCount - rightScore.averageResourceCount ||
+    leftScore.maximumResourceCount - rightScore.maximumResourceCount ||
+    compareCatalogText(left.label, right.label) ||
+    compareCatalogText(left.key, right.key)
+  );
+}
+
+function createGroupSimplicityScore(group: ModuleCatalogGroup): {
+  readonly simpleModuleCount: number;
+  readonly averageResourceCount: number;
+  readonly maximumResourceCount: number;
+} {
+  const resourceCounts = group.modules.map(countModuleResources);
+
+  return {
+    simpleModuleCount: resourceCounts.filter(
+      (resourceCount) => resourceCount <= SIMPLE_MODULE_RESOURCE_LIMIT
+    ).length,
+    averageResourceCount:
+      resourceCounts.reduce((total, resourceCount) => total + resourceCount, 0) /
+      resourceCounts.length,
+    maximumResourceCount: Math.max(...resourceCounts)
+  };
 }
 
 function matchesModuleSearch(

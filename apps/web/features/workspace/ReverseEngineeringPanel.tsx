@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
@@ -12,6 +13,8 @@ import type {
   Project
 } from "../../../../packages/types/src";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
+import { useAuth } from "../../components/auth/auth-provider";
+import { invalidateProjectQueries } from "../../components/query/dashboard-query-invalidation";
 import {
   cancelReverseEngineeringScan,
   createArchitectureSnapshot,
@@ -19,13 +22,17 @@ import {
   createReverseEngineeringPreviewScan,
   createReverseEngineeringScan,
   deleteReverseEngineeringScan,
+  getAwsConnectionCloudFormationTemplate,
   getReverseEngineeringScan,
   listReverseEngineeringScanLogs,
-  saveProjectDraft
+  saveProjectDraft,
+  verifyAwsConnection
 } from "./api";
 import {
+  convertReverseEngineeringBoardToArchitectureJson,
   createReverseEngineeringBoardApplication,
-  type ReverseEngineeringBoardApplicationMode
+  type ReverseEngineeringBoardApplicationMode,
+  type ReverseEngineeringPlacement
 } from "./reverse-engineering-board-application";
 import {
   createReverseEngineeringBoardCandidates,
@@ -38,20 +45,30 @@ import {
   REVERSE_ENGINEERING_RESOURCE_SELECTIONS
 } from "./reverse-engineering-resource-types";
 import {
+  canStartReverseEngineeringScan,
+  getReverseEngineeringAwsConnectionRecovery
+} from "./reverse-engineering-aws-connection-readiness";
+import {
+  prepareReverseEngineeringImportPermissionUpdate,
+  reverifyReverseEngineeringImportPermission
+} from "./reverse-engineering-import-permissions";
+import {
   ReverseEngineeringResultPanel,
-  type ReverseEngineeringApplyState
+  type ReverseEngineeringApplyState,
+  type ReverseEngineeringPermissionUpdateState
 } from "./ReverseEngineeringResultPanel";
 import { ReverseEngineeringScanCriteriaForm } from "./ReverseEngineeringScanCriteriaForm";
 import { ReverseEngineeringScanHistoryPanel } from "./ReverseEngineeringScanHistoryPanel";
 import { useReverseEngineeringOptions } from "./useReverseEngineeringOptions";
 import { useReverseEngineeringScanHistory } from "./useReverseEngineeringScanHistory";
-import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 import styles from "./reverse-engineering.module.css";
 
 export type ReverseEngineeringPanelProps = {
   readonly context: DiagramEditorPanelContext;
   readonly createProjectOnApply?: boolean | undefined;
-  readonly onCandidatePanelChange?: ((state: ReverseEngineeringCandidatePanelState) => void) | undefined;
+  readonly onCandidatePanelChange?:
+    | ((state: ReverseEngineeringCandidatePanelState) => void)
+    | undefined;
   readonly projectId: string;
   readonly projectName: string;
 };
@@ -75,10 +92,12 @@ export function ReverseEngineeringPanel({
   projectId,
   projectName
 }: ReverseEngineeringPanelProps) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const router = useRouter();
-  const [selectedResourceTypes, setSelectedResourceTypes] = useState<ReverseEngineeringResourceSelection[]>([
-    REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
-  ]);
+  const [selectedResourceTypes, setSelectedResourceTypes] = useState<
+    ReverseEngineeringResourceSelection[]
+  >([REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION]);
   const [scanState, setScanState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanResponse, setScanResponse] = useState<ReverseEngineeringScanResponse | null>(null);
@@ -87,12 +106,17 @@ export function ReverseEngineeringPanel({
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [previewBaseDiagram, setPreviewBaseDiagram] = useState<DiagramJson | null>(null);
+  const [placement, setPlacement] = useState<ReverseEngineeringPlacement>("original");
+  const [permissionUpdateState, setPermissionUpdateState] =
+    useState<ReverseEngineeringPermissionUpdateState>("idle");
+  const [permissionUpdateMessage, setPermissionUpdateMessage] = useState<string | null>(null);
   const handleRequestError = useCallback((error: unknown) => {
     setErrorMessage(toErrorMessage(error));
   }, []);
   const {
     loadOptions,
     loadState,
+    awsConnections,
     projects,
     selectedAwsConnectionId,
     selectedProjectId,
@@ -119,15 +143,27 @@ export function ReverseEngineeringPanel({
   });
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
-  const selectedAwsConnection = verifiedAwsConnections.find(
-    (connection) => connection.id === selectedAwsConnectionId
+  const awsConnectionRecovery = useMemo(
+    () =>
+      getReverseEngineeringAwsConnectionRecovery({
+        connections: awsConnections,
+        selectedConnectionId: selectedAwsConnectionId
+      }),
+    [awsConnections, selectedAwsConnectionId]
   );
-  const canStartScan =
-    (createProjectOnApply || Boolean(selectedProject)) &&
-    Boolean(selectedAwsConnection) &&
-    selectedResourceTypes.length > 0 &&
-    loadState !== "loading" &&
-    scanState !== "loading";
+  const resolvedSelectedAwsConnectionId = awsConnectionRecovery.selectedConnectionId ?? "";
+  const selectedAwsConnection = verifiedAwsConnections.find(
+    (connection) => connection.id === resolvedSelectedAwsConnectionId
+  );
+  const canStartScan = canStartReverseEngineeringScan({
+    createProjectOnApply,
+    hasSelectedVerifiedConnection: Boolean(selectedAwsConnection),
+    hasSelectedProject: Boolean(selectedProject),
+    loadState,
+    recovery: awsConnectionRecovery,
+    scanState,
+    selectedResourceTypeCount: selectedResourceTypes.length
+  });
   const boardCandidates = useMemo(() => {
     if (!scanResponse?.result) {
       return [];
@@ -136,7 +172,9 @@ export function ReverseEngineeringPanel({
     return createReverseEngineeringBoardCandidates(scanResponse.result);
   }, [scanResponse]);
   const selectedCandidate =
-    boardCandidates.find((candidate) => candidate.id === selectedCandidateId) ?? boardCandidates[0] ?? null;
+    boardCandidates.find((candidate) => candidate.id === selectedCandidateId) ??
+    boardCandidates[0] ??
+    null;
   const selectedCandidateResult = useMemo(() => {
     if (!scanResponse?.result || !selectedCandidate) {
       return null;
@@ -161,17 +199,25 @@ export function ReverseEngineeringPanel({
     return createReverseEngineeringBoardApplication({
       currentDiagram: previewSourceDiagram,
       mode: "replace",
+      placement,
       result: selectedCandidateResult
     });
-  }, [previewSourceDiagram, selectedCandidateResult]);
+  }, [placement, previewSourceDiagram, selectedCandidateResult]);
+  const selectedCandidateAppendApplication = useMemo(() => {
+    if (!selectedCandidateResult || previewSourceDiagram.nodes.length === 0) {
+      return null;
+    }
+
+    return createReverseEngineeringBoardApplication({
+      currentDiagram: previewSourceDiagram,
+      mode: "append",
+      placement,
+      result: selectedCandidateResult
+    });
+  }, [placement, previewSourceDiagram, selectedCandidateResult]);
   const comparison = selectedCandidateApplication?.comparison ?? null;
   const hasDeletedSourceScan = useMemo(
-    () =>
-      hasDeletedReverseEngineeringSourceScan(
-        context.diagram,
-        scanHistory,
-        scanHistoryState
-      ),
+    () => hasDeletedReverseEngineeringSourceScan(context.diagram, scanHistory, scanHistoryState),
     [context.diagram, scanHistory, scanHistoryState]
   );
   const selectBoardCandidate = useCallback(
@@ -187,9 +233,11 @@ export function ReverseEngineeringPanel({
       const application = createReverseEngineeringBoardApplication({
         currentDiagram: previewSourceDiagram,
         mode: "replace",
+        placement: "original",
         result: candidateResult
       });
 
+      setPlacement("original");
       setSelectedCandidateId(candidateId);
       context.setPreviewDiagram(application.previewDiagram);
     },
@@ -228,9 +276,12 @@ export function ReverseEngineeringPanel({
     setErrorMessage(null);
     setApplyMessage(null);
     setApplyState("idle");
+    setPlacement("original");
     setSelectedCandidateId(null);
     setScanResponse(null);
     setLogs([]);
+    setPermissionUpdateState("idle");
+    setPermissionUpdateMessage(null);
     const baseDiagram = previewBaseDiagram ?? context.diagram;
     setPreviewBaseDiagram(baseDiagram);
     context.setPreviewDiagram(null);
@@ -258,9 +309,66 @@ export function ReverseEngineeringPanel({
         showFirstCandidatePreview(response.response.result, baseDiagram);
       }
       setScanState("idle");
-    } catch (error) {
+    } catch {
       setScanState("error");
-      setErrorMessage(toErrorMessage(error));
+      setErrorMessage("AWS에서 항목을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+  }
+
+  // 같은 AWS 연결의 CloudFormation 권한 갱신 화면만 열고, 승인 전에는 연결을 바꾸지 않습니다.
+  async function prepareImportPermissions(): Promise<void> {
+    if (!selectedAwsConnection || permissionUpdateState === "preparing") {
+      return;
+    }
+
+    setPermissionUpdateState("preparing");
+    setPermissionUpdateMessage(null);
+
+    try {
+      const nextState = await prepareReverseEngineeringImportPermissionUpdate({
+        connection: selectedAwsConnection,
+        downloadTemplate(fileName, templateBody) {
+          downloadTextFile(fileName, templateBody);
+        },
+        getTemplate: getAwsConnectionCloudFormationTemplate,
+        openExternal(url) {
+          window.open(url, "_blank", "noopener,noreferrer");
+        }
+      });
+
+      setPermissionUpdateState(nextState);
+      setPermissionUpdateMessage(
+        nextState === "awaiting_aws_approval"
+          ? "받은 파일로 기존 AWS 연결을 업데이트한 뒤 돌아와 주세요."
+          : "AWS에서 기존 연결의 권한을 업데이트한 뒤 돌아와 주세요."
+      );
+    } catch {
+      setPermissionUpdateState("error");
+      setPermissionUpdateMessage("권한 추가 화면을 열지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+  }
+
+  // 사용자가 AWS에서 승인한 뒤에만 같은 connection id를 다시 확인하고 같은 조건으로 재스캔합니다.
+  async function reverifyImportPermissions(): Promise<void> {
+    if (!selectedAwsConnection || permissionUpdateState === "rechecking") {
+      return;
+    }
+
+    setPermissionUpdateState("rechecking");
+    setPermissionUpdateMessage("기존 AWS 연결의 가져오기 권한을 확인하고 있어요.");
+
+    try {
+      await reverifyReverseEngineeringImportPermission({
+        connection: selectedAwsConnection,
+        verify: verifyAwsConnection
+      });
+      await loadOptions();
+      setPermissionUpdateState("success");
+      setPermissionUpdateMessage("권한을 확인했습니다. 같은 연결로 다시 가져올게요.");
+      await runScan();
+    } catch {
+      setPermissionUpdateState("error");
+      setPermissionUpdateMessage("아직 가져오기 권한을 확인하지 못했습니다.");
     }
   }
 
@@ -296,6 +404,7 @@ export function ReverseEngineeringPanel({
         setScanResponse(null);
         setLogs([]);
         setSelectedCandidateId(null);
+        setPlacement("original");
         setPreviewBaseDiagram(null);
         context.setPreviewDiagram(null);
       }
@@ -310,6 +419,7 @@ export function ReverseEngineeringPanel({
     setErrorMessage(null);
     setApplyMessage(null);
     setApplyState("idle");
+    setPlacement("original");
     const baseDiagram = previewBaseDiagram ?? context.diagram;
     setPreviewBaseDiagram(baseDiagram);
 
@@ -348,11 +458,18 @@ export function ReverseEngineeringPanel({
       return;
     }
 
-    const application = createReverseEngineeringBoardApplication({
-      currentDiagram: previewSourceDiagram,
-      mode,
-      result
-    });
+    if (result.architectureJson.nodes.length === 0) {
+      setApplyState("error");
+      setApplyMessage("보드에 표시할 항목이 없어요. 다시 스캔해 주세요.");
+      return;
+    }
+
+    const application =
+      mode === "replace" ? selectedCandidateApplication : selectedCandidateAppendApplication;
+
+    if (!application) {
+      return;
+    }
     const diagramToApply = createProjectOnApply
       ? application.diagram
       : attachReverseEngineeringSourceToDiagram(
@@ -367,13 +484,20 @@ export function ReverseEngineeringPanel({
     setPreviewBaseDiagram(diagramToApply);
 
     try {
-      const targetProject = createProjectOnApply ? await createProject({ name: projectName }) : null;
+      const targetProject = createProjectOnApply
+        ? await createProject({ name: projectName })
+        : null;
       const targetProjectId = targetProject?.id ?? projectId;
+
+      if (targetProject) {
+        await invalidateProjectQueries(queryClient, user?.id);
+      }
 
       if (createProjectOnApply && targetProject) {
         await saveProjectDraft({
           projectId: targetProject.id,
-          diagramJson: diagramToApply
+          diagramJson: diagramToApply,
+          expectedRevision: null
         });
       }
 
@@ -388,7 +512,7 @@ export function ReverseEngineeringPanel({
                 draftId: result.reverseEngineeringDraft.id
               }
             }),
-        architectureJson: convertDiagramJsonToArchitectureJson(diagramToApply)
+        architectureJson: convertReverseEngineeringBoardToArchitectureJson(diagramToApply, result)
       });
       setApplyState("saved");
       if (createProjectOnApply && targetProject) {
@@ -402,6 +526,25 @@ export function ReverseEngineeringPanel({
       setApplyState("error");
       setApplyMessage(toErrorMessage(error));
     }
+  }
+
+  // 선택만으로 저장하지 않고, 사용자가 요청한 배치만 Board 미리보기에 올립니다.
+  function previewPlacement(nextPlacement: ReverseEngineeringPlacement): void {
+    const result = selectedCandidateResult;
+
+    if (!result) {
+      return;
+    }
+
+    const application = createReverseEngineeringBoardApplication({
+      currentDiagram: previewSourceDiagram,
+      mode: "replace",
+      placement: nextPlacement,
+      result
+    });
+
+    setPlacement(nextPlacement);
+    context.setPreviewDiagram(application.previewDiagram);
   }
 
   // 스캔 직후에는 가장 앞의 후보를 기본 미리보기로 보여줍니다.
@@ -423,9 +566,11 @@ export function ReverseEngineeringPanel({
     const application = createReverseEngineeringBoardApplication({
       currentDiagram: baseDiagram,
       mode: "replace",
+      placement: "original",
       result: candidateResult
     });
 
+    setPlacement("original");
     setSelectedCandidateId(nextCandidate.id);
     context.setPreviewDiagram(application.previewDiagram);
   }
@@ -434,7 +579,8 @@ export function ReverseEngineeringPanel({
     <section className={styles.panel} aria-label="Reverse Engineering">
       <div className={styles.panelContent}>
         <ReverseEngineeringScanCriteriaForm
-          awsConnections={verifiedAwsConnections}
+          awsConnectionRecovery={awsConnectionRecovery}
+          awsConnections={awsConnections}
           canStartScan={canStartScan}
           createProjectOnApply={createProjectOnApply}
           isLoadingOptions={loadState === "loading"}
@@ -447,14 +593,15 @@ export function ReverseEngineeringPanel({
           onSelectedProjectChange={setSelectedProjectId}
           projects={projects}
           resourceTypes={REVERSE_ENGINEERING_RESOURCE_SELECTIONS}
-          selectedAwsConnectionId={selectedAwsConnectionId}
+          selectedAwsConnectionId={resolvedSelectedAwsConnectionId}
           selectedProjectId={selectedProjectId}
           selectedResourceTypes={selectedResourceTypes}
         />
         {errorMessage ? <p className={styles.error}>{errorMessage}</p> : null}
         {hasDeletedSourceScan ? (
           <p className={styles.warning}>
-            이 보드는 Reverse Engineering scan에서 시작됐습니다. 하지만 원본 scan 기록은 삭제됐습니다.
+            이 보드는 Reverse Engineering scan에서 시작됐습니다. 하지만 원본 scan 기록은
+            삭제됐습니다.
           </p>
         ) : null}
 
@@ -472,21 +619,32 @@ export function ReverseEngineeringPanel({
           />
         )}
 
-        {selectedCandidateResponse?.result && comparison && selectedCandidate && selectedCandidateApplication ? (
+        {selectedCandidateResponse?.result &&
+        comparison &&
+        selectedCandidate &&
+        selectedCandidateApplication ? (
           <ReverseEngineeringResultPanel
             applyMessage={applyMessage}
             applyState={applyState}
             boardCandidates={boardCandidates}
+            appendCompilation={selectedCandidateAppendApplication?.compilation ?? null}
             compilation={selectedCandidateApplication.compilation}
             comparison={comparison}
             createProjectOnApply={createProjectOnApply}
             hasCurrentBoardResources={previewSourceDiagram.nodes.length > 0}
             logs={logs}
             onAppendToCurrentBoard={() => void applyScanResult("append")}
+            onCompilePlacement={() => previewPlacement("compiled")}
+            onKeepOriginalPlacement={() => previewPlacement("original")}
             onOpenAsNewBoard={() => void applyScanResult("replace")}
+            onPrepareImportPermissions={() => void prepareImportPermissions()}
+            onReverifyImportPermissions={() => void reverifyImportPermissions()}
             onRetryScan={() => void runScan()}
+            permissionUpdateMessage={permissionUpdateMessage}
+            permissionUpdateState={permissionUpdateState}
             response={selectedCandidateResponse}
             selectedCandidateId={selectedCandidate.id}
+            placement={placement}
           />
         ) : (
           <section className={styles.section}>
@@ -549,7 +707,9 @@ async function runSavedScan({
     resourceTypes
   });
   const response =
-    startedResponse.result || startedResponse.scan.status === "failed" || startedResponse.scan.status === "cancelled"
+    startedResponse.result ||
+    startedResponse.scan.status === "failed" ||
+    startedResponse.scan.status === "cancelled"
       ? startedResponse
       : await pollReverseEngineeringScan(projectId, startedResponse.scan.id);
   const logs = await listReverseEngineeringScanLogs({
@@ -576,7 +736,11 @@ async function pollReverseEngineeringScan(
   for (let attempt = 0; attempt < SCAN_POLL_ATTEMPT_COUNT; attempt += 1) {
     const response = await getReverseEngineeringScan({ projectId, scanId });
 
-    if (response.result || response.scan.status === "failed" || response.scan.status === "cancelled") {
+    if (
+      response.result ||
+      response.scan.status === "failed" ||
+      response.scan.status === "cancelled"
+    ) {
       return response;
     }
 
@@ -589,6 +753,18 @@ async function pollReverseEngineeringScan(
 // scan polling 사이에 잠깐 기다려서 서버에 과하게 요청하지 않게 합니다.
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function downloadTextFile(fileName: string, contents: string): void {
+  const objectUrl = URL.createObjectURL(new Blob([contents], { type: "text/yaml;charset=utf-8" }));
+  const anchor = document.createElement("a");
+
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
 }
 
 // 프로젝트 생성 뒤에는 실제 프로젝트 id가 들어간 workspace 주소로 이동합니다.

@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  Plus,
   Settings,
   Shapes,
   WalletCards,
@@ -15,6 +14,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useAuth } from "../auth/auth-provider";
+import { shouldShowAuthenticatedShellFallback } from "../auth/auth-gate-state";
 import { ProductBrand } from "../ui/ProductBrand";
 import { ProductState } from "../ui/ProductState";
 
@@ -30,11 +30,10 @@ const DASHBOARD_NAV_ITEMS = [
 export function DashboardShell({ children }: { readonly children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout, status, user } = useAuth();
+  const { isRefreshing, logout, status, user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pageTitle = getDashboardPageTitle(pathname);
-  const shouldShowCreateAction =
-    pathname === "/dashboard" || pathname === "/dashboard/projects";
+  const shouldRenderTopbar = !DASHBOARD_NAV_ITEMS.some((item) => item.href === pathname);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -53,7 +52,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
     router.replace("/login");
   }
 
-  if (status !== "authenticated") {
+  if (shouldShowAuthenticatedShellFallback(status, user !== null)) {
     return (
       <main className="dashboardSessionState">
         <ProductBrand />
@@ -72,7 +71,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
   }
 
   return (
-    <div className="dashboardShell">
+    <div aria-busy={isRefreshing || undefined} className="dashboardShell">
       <aside
         aria-label="Dashboard navigation"
         className={isMobileMenuOpen ? "dashboardSidebar dashboardSidebarOpen" : "dashboardSidebar"}
@@ -138,30 +137,41 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
         />
       ) : null}
 
-      <div className="dashboardMainColumn">
-        <header className="dashboardTopbar">
-          <div className="dashboardTopbarTitle">
-            <button
-              aria-label="Dashboard 메뉴 열기"
-              className="dashboardMobileMenuButton"
-              onClick={() => setIsMobileMenuOpen(true)}
-              title="메뉴 열기"
-              type="button"
-            >
-              <Menu aria-hidden="true" size={20} />
-            </button>
-            <div>
-              <strong>{pageTitle}</strong>
+      <div
+        className={
+          shouldRenderTopbar
+            ? "dashboardMainColumn"
+            : "dashboardMainColumn dashboardMainColumnPrimaryRoute"
+        }
+      >
+        {shouldRenderTopbar ? (
+          <header className="dashboardTopbar">
+            <div className="dashboardTopbarTitle">
+              <button
+                aria-label="Dashboard 메뉴 열기"
+                className="dashboardMobileMenuButton"
+                onClick={() => setIsMobileMenuOpen(true)}
+                title="메뉴 열기"
+                type="button"
+              >
+                <Menu aria-hidden="true" size={20} />
+              </button>
+              <div>
+                <strong>{pageTitle}</strong>
+              </div>
             </div>
-          </div>
-
-          {shouldShowCreateAction ? (
-            <Link className="dashboardPrimaryAction" href="/workspace/new?fresh=1">
-              <Plus aria-hidden="true" size={17} />
-              <span>새 프로젝트</span>
-            </Link>
-          ) : null}
-        </header>
+          </header>
+        ) : (
+          <button
+            aria-label="Dashboard 메뉴 열기"
+            className="dashboardMobileMenuButton dashboardPrimaryRouteMenuButton"
+            onClick={() => setIsMobileMenuOpen(true)}
+            title="메뉴 열기"
+            type="button"
+          >
+            <Menu aria-hidden="true" size={20} />
+          </button>
+        )}
 
         <main className="dashboardContent">{children}</main>
       </div>

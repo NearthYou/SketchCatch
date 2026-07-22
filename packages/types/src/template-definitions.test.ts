@@ -91,6 +91,53 @@ test("each template builds a deterministic, connected DiagramJson with short Ter
   }
 });
 
+test("ECS Repository template wires required signing material into Secrets Manager and every Task", () => {
+  const diagram = buildTemplateDiagramJson("ecs-fargate-container-app", {
+    projectSlug: "audience-live-check",
+    shortId: "repo01",
+    requiredRuntimeSecrets: ["CHECK_IN_SIGNING_SECRET"]
+  });
+  const resourceNodes = diagram.nodes.filter((node) => node.kind === "resource");
+  const nodeByType = (resourceType: string) =>
+    resourceNodes.find((node) => node.parameters?.resourceType === resourceType);
+  const secretMaterial = nodeByType("random_password");
+  const secret = nodeByType("aws_secretsmanager_secret");
+  const secretVersion = nodeByType("aws_secretsmanager_secret_version");
+  const secretPolicy = resourceNodes.find(
+    (node) =>
+      node.parameters?.resourceType === "aws_iam_role_policy" &&
+      node.parameters.values.name === "audience-live-check-service-check-in-signing-read"
+  );
+  const task = nodeByType("aws_ecs_task_definition");
+  const taskContainers = JSON.parse(
+    String(task?.parameters?.values.containerDefinitions)
+  ) as Array<{
+    secrets?: Array<{ name?: string; valueFrom?: string }>;
+  }>;
+  const policy = JSON.parse(String(secretPolicy?.parameters?.values.policy)) as {
+    Statement: Array<{ Action: string[]; Resource: string }>;
+  };
+
+  assert.deepEqual(secretMaterial?.parameters?.values, { length: 48, special: false });
+  assert.equal(secret?.parameters?.values.recoveryWindowInDays, 0);
+  assert.equal(
+    secretVersion?.parameters?.values.secretId,
+    "aws_secretsmanager_secret.check_in_signing.id"
+  );
+  assert.equal(
+    secretVersion?.parameters?.values.secretString,
+    "random_password.check_in_signing.result"
+  );
+  assert.deepEqual(policy.Statement[0]?.Action, ["secretsmanager:GetSecretValue"]);
+  assert.equal(policy.Statement[0]?.Resource, "${aws_secretsmanager_secret.check_in_signing.arn}");
+  assert.deepEqual(taskContainers[0]?.secrets, [
+    {
+      name: "CHECK_IN_SIGNING_SECRET",
+      valueFrom: "${aws_secretsmanager_secret.check_in_signing.arn}"
+    }
+  ]);
+});
+
 test("Terraform local names add a deterministic suffix only for normalization collisions in the same block", () => {
   const resources = [
     {
@@ -245,14 +292,8 @@ test("a unique explicit Terraform local name remains exact in nodes and resolved
     const consumer = diagram.nodes.find((node) => node.type === "aws_example");
 
     assert.equal(bucket?.parameters?.resourceName, "captured_bucket");
-    assert.equal(
-      consumer?.parameters?.values.bucketAddress,
-      "aws_s3_bucket.captured_bucket"
-    );
-    assert.equal(
-      consumer?.parameters?.values.bucketId,
-      "aws_s3_bucket.captured_bucket.id"
-    );
+    assert.equal(consumer?.parameters?.values.bucketAddress, "aws_s3_bucket.captured_bucket");
+    assert.equal(consumer?.parameters?.values.bucketId, "aws_s3_bucket.captured_bucket.id");
   } finally {
     mutableDefinitions.splice(mutableDefinitions.indexOf(explicitTemplate), 1);
   }
@@ -288,9 +329,9 @@ test("ECS Fargate Board uses project-scoped runtime names", () => {
     projectSlug: "Audience Live Check",
     shortId: "repository"
   });
-  const values = (resourceType: string) => diagram.nodes.find(
-    (node) => node.parameters?.resourceType === resourceType
-  )?.parameters?.values;
+  const values = (resourceType: string) =>
+    diagram.nodes.find((node) => node.parameters?.resourceType === resourceType)?.parameters
+      ?.values;
 
   assert.equal(values("aws_ecr_repository")?.name, "audience-live-check-app");
   assert.equal(values("aws_ecs_cluster")?.name, "audience-live-check-cluster");
@@ -315,7 +356,10 @@ test("all built-in template references resolve through the final Terraform local
 
 test("repository template IDs are a closed union for registry lookup", () => {
   const templateId: RepositoryTemplateId = "static-web-hosting";
-  assert.equal(templateDefinitions.find((definition) => definition.id === templateId)?.id, templateId);
+  assert.equal(
+    templateDefinitions.find((definition) => definition.id === templateId)?.id,
+    templateId
+  );
 });
 
 test("each template contains the resources required by its deployable default", () => {
@@ -373,13 +417,19 @@ test("each template contains the resources required by its deployable default", 
     "aws_lb",
     "aws_lb_target_group",
     "aws_lb_listener",
+    "aws_cloudfront_distribution",
     "aws_ecr_repository",
-    "aws_cloudwatch_log_group"
+    "aws_cloudwatch_log_group",
+    "aws_appautoscaling_target",
+    "aws_appautoscaling_policy"
   ]) {
     assert.ok(ecsTypes.includes(requiredType), `ecs-fargate-container-app: ${requiredType}`);
   }
 
   const ecsDefinition = definitions.get("ecs-fargate-container-app");
+  assert.ok(ecsDefinition?.description.includes("실시간 관측"));
+  assert.ok(ecsDefinition?.tags.includes("CloudFront"));
+  assert.ok(ecsDefinition?.tags.includes("Auto Scaling"));
   const ecsTask = ecsDefinition?.resources.find((resource) => resource.id === "task");
   const ecsContainer = JSON.parse(String(ecsTask?.values.containerDefinitions))[0] as {
     image?: string;
@@ -401,6 +451,15 @@ test("each template contains the resources required by its deployable default", 
   const builtTask = builtEcs.nodes.find(
     (node) => node.parameters?.resourceType === "aws_ecs_task_definition"
   );
+  const builtScalingTarget = builtEcs.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_appautoscaling_target"
+  );
+  const builtScalingPolicy = builtEcs.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_appautoscaling_policy"
+  );
+  const builtCloudFront = builtEcs.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_cloudfront_distribution"
+  );
   const builtContainerDefinitions = String(builtTask?.parameters?.values.containerDefinitions);
   const builtContainer = JSON.parse(builtContainerDefinitions)[0] as {
     logConfiguration?: { options?: Record<string, string> };
@@ -419,6 +478,61 @@ test("each template contains the resources required by its deployable default", 
   assert.equal(
     builtEcs.edges.find((edge) => edge.id.endsWith("-task-log-group"))?.metadata?.presentationRole,
     "detail"
+  );
+  assert.equal(builtScalingTarget?.parameters?.values.minCapacity, 1);
+  assert.equal(builtScalingTarget?.parameters?.values.maxCapacity, 3);
+  assert.equal(
+    builtScalingTarget?.parameters?.values.resourceId,
+    "service/${aws_ecs_cluster.cluster.name}/${aws_ecs_service.service.name}"
+  );
+  assert.equal(
+    (
+      builtScalingPolicy?.parameters?.values.targetTrackingScalingPolicyConfiguration as
+        | { targetValue?: number }
+        | undefined
+    )?.targetValue,
+    10
+  );
+  assert.equal(
+    (
+      builtScalingPolicy?.parameters?.values.targetTrackingScalingPolicyConfiguration as
+        | {
+            predefinedMetricSpecification?: Array<{ resourceLabel?: string }>;
+          }
+        | undefined
+    )?.predefinedMetricSpecification?.[0]?.resourceLabel,
+    "${aws_lb.load_balancer.arn_suffix}/${aws_lb_target_group.target_group.arn_suffix}"
+  );
+  assert.equal(
+    (
+      builtCloudFront?.parameters?.values.origin as
+        | Array<{ domainName?: string; originId?: string }>
+        | undefined
+    )?.[0]?.domainName,
+    "aws_lb.load_balancer.dns_name"
+  );
+  assert.equal(
+    (
+      builtCloudFront?.parameters?.values.defaultCacheBehavior as
+        | Array<{ targetOriginId?: string; viewerProtocolPolicy?: string }>
+        | undefined
+    )?.[0]?.targetOriginId,
+    "fargate-alb"
+  );
+  assert.equal(
+    (
+      builtCloudFront?.parameters?.values.defaultCacheBehavior as
+        | Array<{ viewerProtocolPolicy?: string }>
+        | undefined
+    )?.[0]?.viewerProtocolPolicy,
+    "redirect-to-https"
+  );
+  assert.equal(builtCloudFront?.parameters?.values.orderedCacheBehavior, undefined);
+  assert.ok(
+    builtEcs.edges.some(
+      (edge) =>
+        edge.sourceNodeId.endsWith("-distribution") && edge.targetNodeId.endsWith("-load-balancer")
+    )
   );
 
   const eksTypes = resourceTypes("eks-container-app");

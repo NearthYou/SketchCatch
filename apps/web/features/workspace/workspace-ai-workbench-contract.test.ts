@@ -1,14 +1,20 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
+import { createWorkspaceOverlayNotifications } from "./workspace-overlay-notifications";
 
 const controllerSource = read("WorkspaceAiChatDock.tsx");
 const conversationSource = read("workspace-ai-chat-conversation.ts");
+const diagramEditorSource = read("../diagram-editor/DiagramEditor.tsx");
 const launcherSource = read("WorkspaceAiChatLauncher.tsx");
+const panelPiecesSource = read("WorkspaceAiPanelPieces.tsx");
 const launcherStyles = read("workspace-ai-chat-launcher.module.css");
+const projectManagerSource = read("ProjectWorkspaceDraftManager.tsx");
 const resultSource = read("WorkspaceAiWorkbenchResults.tsx");
+const rightPanelSource = read("WorkspaceRightPanel.tsx");
 const workbenchSource = read("WorkspaceAiWorkbench.tsx");
 const workbenchStyles = read("workspace-ai-workbench.module.css");
+const workspaceManagerSource = read("WorkspaceDraftManager.tsx");
 const workspaceStyles = read("workspace.module.css");
 
 test("AI chat controller delegates its outer surface to the AI Workbench", () => {
@@ -31,15 +37,37 @@ test("AI Workbench exposes the desktop mode rail and active work panel accessibl
   assert.match(workbenchSource, /aria-labelledby=\{`workspace-ai-chat-tab-/);
 });
 
+test("desktop AI Workbench navigation is icon-only and names the active mode in the header", () => {
+  assert.match(workbenchSource, /className=\{styles\.mobileTabList\}[\s\S]*?showLabels=\{true\}/);
+  assert.match(workbenchSource, /className=\{styles\.desktopModeRail\}[\s\S]*?showLabels=\{false\}/);
+  assert.match(workbenchSource, /aria-label=\{label\}/);
+  assert.match(workbenchSource, /title=\{label\}/);
+  assert.match(workbenchSource, /\{showLabels \? <span>\{label\}<\/span> : null\}/);
+  assert.match(workbenchSource, /<h2 id="workspace-ai-chat-title">\{activeScopeLabel\}<\/h2>/);
+  assert.match(workbenchStyles, /\.workWindow\s*\{[^}]*grid-template-columns:\s*48px minmax\(0, 1fr\);/s);
+});
+
 test("AI Workbench owns status, transcript, footer, and nonmodal desktop pointer behavior", () => {
-  assert.match(workbenchSource, /aria-live="polite"/);
+  assert.match(workbenchSource, /\{status \? \([\s\S]*aria-live="polite"/);
   assert.match(workbenchSource, /role="status"/);
+  assert.doesNotMatch(
+    workbenchSource,
+    /readyLabel|작업 선택 가능|입력 가능|작업을 시작할 수 있습니다/
+  );
   assert.match(workbenchSource, /data-terraform-leave-guard-ignore/);
   assert.match(workbenchSource, /ref=\{transcriptRef\}/);
   assert.match(workbenchSource, /\{children\}/);
   assert.match(workbenchSource, /\{footer\}/);
   assert.match(workbenchStyles, /\.overlay\s*\{[^}]*pointer-events:\s*none;/s);
   assert.match(workbenchStyles, /\.workWindow\s*\{[^}]*pointer-events:\s*auto;/s);
+  assert.match(
+    workbenchStyles,
+    /\.workArea\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto;/s
+  );
+  assert.match(
+    workbenchStyles,
+    /\.workAreaWithStatus\s*\{[^}]*grid-template-rows:\s*auto auto minmax\(0, 1fr\) auto;/s
+  );
 });
 
 test("AI Workbench shell uses only its dedicated visual token vocabulary", () => {
@@ -48,7 +76,11 @@ test("AI Workbench shell uses only its dedicated visual token vocabulary", () =>
   assert.doesNotMatch(workbenchStyles, /gradient\(/);
   assert.doesNotMatch(workbenchStyles, /(?:text-shadow|filter:\s*drop-shadow|--[^:]*glow)/i);
 
-  const pixelFontSizes = [...workbenchStyles.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)].map(
+  const pixelFontSizes = [
+    ...workbenchStyles.matchAll(
+      /font-size:\s*calc\((\d+(?:\.\d+)?)px \+ var\(--presentation-font-size-increase\)\)/g
+    )
+  ].map(
     ([, size]) => Number(size)
   );
   assert.ok(pixelFontSizes.length > 0);
@@ -70,6 +102,11 @@ test("AI chat controller uses only the new Workbench transcript and workflow pre
   assert.match(controllerSource, /styles\.composer/);
 });
 
+test("Board approval actions keep their explanation readable in the chat panel", () => {
+  assert.doesNotMatch(workbenchStyles, /\.approvalTray\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;/s);
+  assert.doesNotMatch(workbenchStyles, /\.approvalActions\s*\{[^}]*justify-content:\s*flex-end;/s);
+});
+
 test("AI Workbench owns dedicated result primitives and code-diff presentation", () => {
   assert.match(resultSource, /createTerraformPreviewPresentation/);
   assert.match(resultSource, /createTerraformIssuePresentation/);
@@ -77,6 +114,59 @@ test("AI Workbench owns dedicated result primitives and code-diff presentation",
   assert.match(resultSource, /styles\.technicalDetails/);
   assert.match(resultSource, /styles\.codeDiff/);
   assert.doesNotMatch(resultSource, /WorkspaceAiPanelPieces|workspace\.module\.css/);
+});
+
+test("다이어그램 AI 설명은 다음 행동을 별도 섹션으로 표시하지 않는다", () => {
+  const legacyExplanationSource = panelPiecesSource.slice(
+    panelPiecesSource.indexOf("export function WorkspaceAiExplanation"),
+    panelPiecesSource.indexOf("export function WorkspaceAiGuardrailWarnings")
+  );
+
+  assert.doesNotMatch(
+    legacyExplanationSource,
+    /<WorkspaceAiTextList title="다음 행동"/
+  );
+  assert.doesNotMatch(
+    resultSource,
+    /<WorkspaceAiWorkbenchTechnicalList items=\{explanation\.nextActions\} title="다음 행동"/
+  );
+});
+
+test("에이전트 리뷰는 Amazon Q 응답 전에도 단계별 진행 상태를 표시한다", () => {
+  assert.match(controllerSource, /WorkspaceAiWorkbenchReviewProgress/);
+  assert.match(controllerSource, /terraformPreviewExplanation\?\.state === "loading"/);
+  assert.match(resultSource, /Amazon Q 검토를 진행하고 있습니다/);
+  assert.match(workbenchStyles, /\.reviewProgressSteps/);
+  assert.match(workbenchStyles, /\.reviewProgressSpinner/);
+});
+
+test("오류 분석 게이지는 완료 시 100%를 잠시 표시한 뒤 숨긴다", () => {
+  assert.match(controllerSource, /WorkspaceAiWorkbenchTerraformIssueProgress/);
+  assert.match(
+    controllerSource,
+    /<WorkspaceAiWorkbenchTerraformIssueProgress[\s\S]*?completed=\{terraformIssueBatchProgress\?\.completed \?\? 0\}[\s\S]*?didComplete=\{didTerraformIssueAnalysisComplete\}[\s\S]*?isRunning=\{isTerraformIssueAnalysisRunning\}[\s\S]*?total=\{terraformIssueBatchProgress\?\.total \?\? 1\}/
+  );
+  assert.doesNotMatch(
+    controllerSource,
+    /isTerraformIssueAnalysisRunning\s*\?\s*\([\s\S]*?<WorkspaceAiWorkbenchTerraformIssueProgress/
+  );
+  assert.match(resultSource, /getTerraformIssueAnalysisProgressTransition/);
+  assert.match(resultSource, /getTerraformIssueAnalysisProgressPresentation/);
+  assert.match(resultSource, /TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS/);
+  assert.match(resultSource, /useWorkspaceAiProgressElapsed\(phase === "running", completed\)/);
+  assert.match(
+    resultSource,
+    /if \(transition\.phase !== phase\) \{[\s\S]*?setPhase\(transition\.phase\);[\s\S]*?\}\s*\}, \[didComplete, isRunning, phase\]\);[\s\S]*?if \(phase !== "complete"\) return;[\s\S]*?window\.setTimeout\([\s\S]*?setPhase\("hidden"\)[\s\S]*?TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS[\s\S]*?\}, \[phase\]\);/
+  );
+  assert.match(workbenchStyles, /\.terraformIssueProgressGauge/);
+  assert.match(workbenchStyles, /\.terraformIssueProgressIndicator/);
+});
+
+test("오류 분석 코드 준비 예외는 완료 상태로 오인되지 않는다", () => {
+  assert.match(
+    controllerSource,
+    /async function analyzeTerraformIssue\([\s\S]*?try \{\s*const terraformCode = resolveTerraformIssueCode\([\s\S]*?\);[\s\S]*?catch \(error\)/
+  );
 });
 
 test("draft composer grows to a six-line maximum and is absent from unsupported scopes", () => {
@@ -148,7 +238,67 @@ test("legacy AI chat selectors are removed from the shared workspace stylesheet"
 test("closing the Workbench restores focus to its launcher", () => {
   assert.match(
     controllerSource,
-    /const closeChatDock = useCallback\(\(\) => \{[\s\S]*?setOpen\(false\);[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?launcherButtonRef\.current\?\.focus\(\);/
+    /const closeChatDock = useCallback\(\(\) => \{[\s\S]*?onOpenChange\(false\);[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?launcherButtonRef\.current\?\.focus\(\);/
+  );
+});
+
+test("opening another workspace panel closes the controlled AI Workbench", () => {
+  for (const managerSource of [projectManagerSource, workspaceManagerSource]) {
+    assert.match(managerSource, /const \[isAiChatOpen, setAiChatOpen\] = useState\(false\);/);
+    assert.match(
+      managerSource,
+      /<WorkspaceAiChatDock[\s\S]*?isBlockedByWorkspaceOverlay=\{isBlockingPanelOpen\}[\s\S]*?isOpen=\{isAiChatOpen\}[\s\S]*?onOpenChange=\{setAiChatOpen\}/
+    );
+    assert.match(managerSource, /onWorkspacePanelOpen=\{closeAiChat\}/);
+    assert.match(
+      managerSource,
+      /<WorkspaceRightPanel[\s\S]*?onBlockingPanelOpenChange=\{setBlockingPanelOpen\}[\s\S]*?onPanelOpenRequest=\{closeAiChat\}/
+    );
+  }
+
+  assert.match(controllerSource, /if \(isBlockedByWorkspaceOverlay\) \{\s*return null;\s*\}/);
+  assert.match(
+    rightPanelSource,
+    /overlayNotificationsRef\.current\?\.notifyBlockingPanel\(\s*isDeploymentConsoleOpen \|\| isLiveObservationOpen\s*\);/
+  );
+  assert.match(rightPanelSource, /const openLiveObservation[\s\S]*?onPanelOpenRequest\(\);/);
+  assert.match(
+    diagramEditorSource,
+    /const previewAutomaticOrganization = useCallback\(\(\) => \{[\s\S]*?onWorkspacePanelOpen\?\.\(\);/
+  );
+});
+
+test("workspace overlay notifications do not reset when parent callback identities change", () => {
+  const firstBlockingCalls: boolean[] = [];
+  const firstDeploymentCalls: boolean[] = [];
+  const nextBlockingCalls: boolean[] = [];
+  const nextDeploymentCalls: boolean[] = [];
+  const notifications = createWorkspaceOverlayNotifications(
+    (isOpen) => firstBlockingCalls.push(isOpen),
+    (isOpen) => firstDeploymentCalls.push(isOpen)
+  );
+
+  notifications.notifyBlockingPanel(true);
+  notifications.notifyDeploymentConsole(true);
+  notifications.setCallbacks(
+    (isOpen) => nextBlockingCalls.push(isOpen),
+    (isOpen) => nextDeploymentCalls.push(isOpen)
+  );
+
+  assert.deepEqual(firstBlockingCalls, [true]);
+  assert.deepEqual(firstDeploymentCalls, [true]);
+  assert.deepEqual(nextBlockingCalls, []);
+  assert.deepEqual(nextDeploymentCalls, []);
+
+  notifications.notifyBlockingPanel(true);
+  notifications.notifyDeploymentConsole(true);
+  notifications.reset();
+
+  assert.deepEqual(nextBlockingCalls, [true, false]);
+  assert.deepEqual(nextDeploymentCalls, [true, false]);
+  assert.match(
+    rightPanelSource,
+    /useEffect\(\s*\(\) => \(\) => \{\s*overlayNotificationsRef\.current\?\.reset\(\);\s*\},\s*\[\]\s*\);/
   );
 });
 
@@ -170,6 +320,10 @@ test("mobile focus trap ignores roving tabs that are not keyboard focusable", ()
 });
 
 test("transcript follows new content only while the reader is near the bottom", () => {
+  assert.match(
+    controllerSource,
+    /suggestionSelection !== undefined[\s\S]*?transcriptShouldFollowRef\.current = true;[\s\S]*?setMessages\(nextMessages\)/
+  );
   assert.match(workbenchSource, /onScroll=\{onTranscriptScroll\}/);
   assert.match(controllerSource, /transcriptShouldFollowRef/);
   assert.match(controllerSource, /isWorkspaceAiTranscriptNearBottom/);

@@ -7,7 +7,7 @@ import {
 
 export const generatedArchitectureBoardKnowledgeArtifact = {
   version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
-  hash: "fnv1a-52d6177f",
+  hash: "fnv1a-7d1bd3b5",
   cases: [
     {
       "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -318,7 +318,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "nodeCount": 10,
       "edgeCount": 7,
-      "areaCount": 0,
+      "areaCount": 2,
       "parentedNodeCount": 0,
       "maxContainmentDepth": 0,
       "meanAreaChildDensity": 0,
@@ -474,10 +474,10 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "nodeCount": 28,
       "edgeCount": 3,
-      "areaCount": 18,
+      "areaCount": 19,
       "parentedNodeCount": 21,
       "maxContainmentDepth": 4,
-      "meanAreaChildDensity": 1.167,
+      "meanAreaChildDensity": 1.105,
       "meanAreaPadding": 33.571,
       "meanSiblingGap": 84.444,
       "meanVerticalGap": 22.593,
@@ -809,23 +809,22 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         "aws_s3_bucket",
         "aws_s3_bucket_object",
         "brainboard_shape",
-        "region",
-        "text"
+        "region"
       ],
-      "nodeCount": 8,
+      "nodeCount": 6,
       "edgeCount": 2,
       "areaCount": 3,
-      "parentedNodeCount": 7,
+      "parentedNodeCount": 5,
       "maxContainmentDepth": 2,
-      "meanAreaChildDensity": 2.333,
-      "meanAreaPadding": 67.143,
-      "meanSiblingGap": 82.143,
-      "meanVerticalGap": 67.857,
-      "meanNodeWidth": 293.75,
-      "meanNodeHeight": 173.75,
-      "meanAspectRatio": 1.848,
-      "meanCaptionWidth": 41.125,
-      "meanZIndex": 3.5,
+      "meanAreaChildDensity": 1.667,
+      "meanAreaPadding": 88,
+      "meanSiblingGap": 115,
+      "meanVerticalGap": 95,
+      "meanNodeWidth": 343.333,
+      "meanNodeHeight": 211.667,
+      "meanAspectRatio": 1.659,
+      "meanCaptionWidth": 78.167,
+      "meanZIndex": 2.833,
       "meanEdgeLength": 195,
       "meanEdgeWaypointCount": 2,
       "routedEdgeRatio": 1,
@@ -878,6 +877,9 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "id": "repository:ecs-fargate-container-app",
       "nodeTypes": [
         "aws-region",
+        "aws_appautoscaling_policy",
+        "aws_appautoscaling_target",
+        "aws_cloudfront_distribution",
         "aws_cloudwatch_log_group",
         "aws_ecr_repository",
         "aws_ecs_cluster",
@@ -897,26 +899,26 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         "design-user-client",
         "design_group"
       ],
-      "nodeCount": 24,
-      "edgeCount": 18,
+      "nodeCount": 27,
+      "edgeCount": 21,
       "areaCount": 9,
-      "parentedNodeCount": 22,
+      "parentedNodeCount": 24,
       "maxContainmentDepth": 3,
-      "meanAreaChildDensity": 2.444,
-      "meanAreaPadding": 80.364,
-      "meanSiblingGap": 85.217,
-      "meanVerticalGap": 27.826,
-      "meanNodeWidth": 317.667,
-      "meanNodeHeight": 184.667,
-      "meanAspectRatio": 1.479,
-      "meanCaptionWidth": 104.417,
-      "meanZIndex": 0.833,
-      "meanEdgeLength": 385.653,
+      "meanAreaChildDensity": 2.667,
+      "meanAreaPadding": 81.333,
+      "meanSiblingGap": 81.538,
+      "meanVerticalGap": 24.615,
+      "meanNodeWidth": 308,
+      "meanNodeHeight": 174.815,
+      "meanAspectRatio": 1.482,
+      "meanCaptionWidth": 110.185,
+      "meanZIndex": 0.852,
+      "meanEdgeLength": 374.203,
       "meanEdgeWaypointCount": 0,
       "routedEdgeRatio": 0,
-      "horizontalFlowRatio": 0.889,
-      "supportNodeRatio": 0.208,
-      "viewportAspectRatio": 2.619,
+      "horizontalFlowRatio": 0.905,
+      "supportNodeRatio": 0.222,
+      "viewportAspectRatio": 2.81,
       "whitespaceRatio": 0
     },
     {
@@ -1818,8 +1820,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "rotation": 0,
           "size": {
-            "width": 1700,
-            "height": 1339.798
+            "width": 1380,
+            "height": 744.443
           },
           "zIndex": 0,
           "kind": "design",
@@ -1833,8 +1835,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c"
           },
           "position": {
-            "x": 819.687,
-            "y": 922.961
+            "x": 668.95,
+            "y": 585.458
           },
           "rotation": 0,
           "size": {
@@ -1861,8 +1863,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c"
           },
           "position": {
-            "x": 268.237,
-            "y": 587.301
+            "x": 117.5,
+            "y": 249.798
           },
           "rotation": 0,
           "size": {
@@ -1894,8 +1896,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "rotation": 0,
           "size": {
-            "width": 1535,
-            "height": 1250
+            "width": 1215,
+            "height": 654.645
           },
           "zIndex": 2,
           "kind": "resource",
@@ -1919,23 +1921,23 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "top",
           "zIndex": 3,
           "route": {
-            "svgPath": "M848.237,808.384 L849.687,922.961",
+            "svgPath": "M697.5,470.881 L698.95,585.458",
             "sourcePoint": {
-              "x": 848.237,
-              "y": 808.384
+              "x": 697.5,
+              "y": 470.881
             },
             "targetPoint": {
-              "x": 849.687,
-              "y": 922.961
+              "x": 698.95,
+              "y": 585.458
             },
             "waypoints": [
               {
-                "x": 848.237,
-                "y": 808.384
+                "x": 697.5,
+                "y": 470.881
               },
               {
-                "x": 849.687,
-                "y": 922.961
+                "x": 698.95,
+                "y": 585.458
               }
             ],
             "arrowDirection": "source-to-target",
@@ -2406,7 +2408,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "y": 0
           },
           "size": {
-            "width": 1960,
+            "width": 1876,
             "height": 1560
           },
           "type": "aws-region",
@@ -2590,7 +2592,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "y": 120
           },
           "size": {
-            "width": 1760,
+            "width": 1676,
             "height": 1360
           },
           "type": "aws_vpc",
@@ -2775,8 +2777,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c"
           },
           "position": {
-            "x": 698.983,
-            "y": 725.029
+            "x": 117.5,
+            "y": 375.494
           },
           "rotation": 0,
           "size": {
@@ -2803,8 +2805,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c"
           },
           "position": {
-            "x": 698.983,
-            "y": 599.333
+            "x": 117.5,
+            "y": 249.798
           },
           "rotation": 0,
           "size": {
@@ -2836,8 +2838,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "rotation": 0,
           "size": {
-            "width": 1700,
-            "height": 1339.798
+            "width": 280,
+            "height": 534.478
           },
           "zIndex": 0,
           "kind": "design",
@@ -2856,8 +2858,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "rotation": 0,
           "size": {
-            "width": 1535,
-            "height": 1250
+            "width": 115,
+            "height": 444.68
           },
           "zIndex": 2,
           "kind": "resource",
@@ -2881,23 +2883,23 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "bottom",
           "zIndex": 4,
           "route": {
-            "svgPath": "M728.983,725.029 L728.983,659.333",
+            "svgPath": "M147.5,375.494 L147.5,309.798",
             "sourcePoint": {
-              "x": 728.983,
-              "y": 725.029
+              "x": 147.5,
+              "y": 375.494
             },
             "targetPoint": {
-              "x": 728.983,
-              "y": 659.333
+              "x": 147.5,
+              "y": 309.798
             },
             "waypoints": [
               {
-                "x": 728.983,
-                "y": 725.029
+                "x": 147.5,
+                "y": 375.494
               },
               {
-                "x": 728.983,
-                "y": 659.333
+                "x": 147.5,
+                "y": 309.798
               }
             ],
             "arrowDirection": "source-to-target",
@@ -2972,8 +2974,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             }
           },
           "position": {
-            "x": 800,
-            "y": 360
+            "x": 720,
+            "y": 240
           },
           "size": {
             "width": 240,
@@ -3022,8 +3024,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             }
           },
           "position": {
-            "x": 800,
-            "y": 760
+            "x": 720,
+            "y": 640
           },
           "size": {
             "width": 240,
@@ -3061,8 +3063,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             }
           },
           "position": {
-            "x": 880,
-            "y": 1160
+            "x": 800,
+            "y": 1040
           },
           "size": {
             "width": 124,
@@ -3111,8 +3113,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             }
           },
           "position": {
-            "x": 800,
-            "y": 1080
+            "x": 720,
+            "y": 960
           },
           "size": {
             "width": 240,
@@ -3141,8 +3143,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             }
           },
           "position": {
-            "x": 240,
-            "y": 1080
+            "x": 160,
+            "y": 960
           },
           "size": {
             "width": 400,
@@ -3171,8 +3173,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             }
           },
           "position": {
-            "x": 1200,
-            "y": 1080
+            "x": 1120,
+            "y": 960
           },
           "size": {
             "width": 400,
@@ -3203,8 +3205,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             }
           },
           "position": {
-            "x": 1640,
-            "y": 1160
+            "x": 1560,
+            "y": 1040
           },
           "size": {
             "width": 124,
@@ -3223,8 +3225,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "template-three-tier-web-app-vpc"
           },
           "position": {
-            "x": 160,
-            "y": 1000
+            "x": 80,
+            "y": 880
           },
           "size": {
             "width": 560,
@@ -3243,8 +3245,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "template-three-tier-web-app-vpc"
           },
           "position": {
-            "x": 1120,
-            "y": 1000
+            "x": 1040,
+            "y": 880
           },
           "size": {
             "width": 560,
@@ -3266,8 +3268,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "y": 0
           },
           "size": {
-            "width": 1880,
-            "height": 1560
+            "width": 1800,
+            "height": 1440
           },
           "type": "aws-region",
           "zIndex": 0
@@ -3296,8 +3298,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "y": 120
           },
           "size": {
-            "width": 1760,
-            "height": 1360
+            "width": 1680,
+            "height": 1240
           },
           "type": "aws_vpc",
           "zIndex": 1

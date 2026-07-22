@@ -107,6 +107,44 @@ test("unknown conflicts use a neutral state-conflict message", () => {
   );
 });
 
+test("deployment prepare explains an incomplete Repository runtime Secret mapping", () => {
+  const error = new ApiClientError(409, {
+    error: "conflict",
+    message:
+      "CHECK_IN_SIGNING_SECRET is required by the Repository build contract but the Terraform runtime Secret mapping is incomplete"
+  });
+
+  assert.equal(
+    getApiErrorMessage(error, "배포 검토를 시작하지 못했습니다."),
+    "Repository가 요구하는 CHECK_IN_SIGNING_SECRET이 현재 Terraform 초안에 연결되지 않았습니다. Repository를 다시 분석하고 Fixed Template Board를 다시 생성·저장한 뒤 검증을 실행해 주세요."
+  );
+});
+
+test("deployment prepare explains a missing application target before worker execution", () => {
+  const error = new ApiClientError(
+    409,
+    {
+      error: "conflict",
+      message: "A confirmed project deployment target is required for application deployment"
+    },
+    {
+      method: "POST",
+      path: "/api/projects/project-id/deployments/prepare",
+      requestId: "req-target-required"
+    }
+  );
+
+  const message = getApiErrorMessage(error, "배포 검토를 시작하지 못했습니다.", {
+    developerMode: true
+  });
+
+  assert.match(message, /Source Repository/u);
+  assert.match(message, /프로젝트 배포 타깃/u);
+  assert.match(message, /실패 단계: 배포 범위 및 타깃 확인/u);
+  assert.match(message, /worker 로그/u);
+  assert.doesNotMatch(message, /Terraform state\/output/u);
+});
+
 test("public AI requests use the same visible request diagnostics", async (context) => {
   const originalFetch = globalThis.fetch;
   context.after(() => {
@@ -133,4 +171,74 @@ test("public AI requests use the same visible request diagnostics", async (conte
       return true;
     }
   );
+});
+
+test("development errors include the failed demo stage, safe server cause, and concrete checks", () => {
+  const error = new ApiClientError(
+    502,
+    {
+      error: "internal_server_error",
+      message: "The role with name SketchCatchCodeBuild-demo cannot be found"
+    },
+    {
+      method: "POST",
+      path: "/api/projects/project-id/build-environment/prepare",
+      requestId: "req-build-env"
+    }
+  );
+
+  const message = getApiErrorMessage(error, "빌드 환경을 준비하지 못했습니다.", {
+    developerMode: true
+  });
+
+  assert.match(message, /개발자 진단/u);
+  assert.match(message, /실패 단계: AWS 빌드 환경 준비/u);
+  assert.match(message, /SketchCatchCodeBuild-demo cannot be found/u);
+  assert.match(message, /CodeBuild project와 service role/u);
+  assert.match(message, /AWS Connector for GitHub/u);
+  assert.match(message, /요청 ID req-build-env/u);
+});
+
+test("development AWS connection errors point developers to CloudFormation and IAM evidence", () => {
+  const error = new ApiClientError(
+    500,
+    {
+      error: "internal_server_error",
+      message: "AssumeRole returned AccessDenied"
+    },
+    {
+      method: "POST",
+      path: "/api/aws/connections/connection-id/verify-created-role",
+      requestId: "req-aws-role"
+    }
+  );
+
+  const message = getApiErrorMessage(error, "AWS Role 검증에 실패했습니다.", {
+    developerMode: true
+  });
+
+  assert.match(message, /실패 단계: AWS 계정 연결/u);
+  assert.match(message, /AssumeRole returned AccessDenied/u);
+  assert.match(message, /CloudFormation Stack 상태.*Trust Policy/u);
+});
+
+test("AWS connection failures translate each actionable STS category", () => {
+  const cases = [
+    ["AWS SSO credentials are unavailable or expired", /AWS SSO.*로그인/u],
+    ["AWS STS request timed out", /AWS STS.*시간이 초과/u],
+    ["AWS STS request was throttled", /일시적으로 제한/u],
+    ["AWS STS request validation failed", /Role ARN.*연결 설정/u]
+  ] as const;
+
+  for (const [serverMessage, expectedMessage] of cases) {
+    const error = new ApiClientError(500, {
+      error: "internal_server_error",
+      message: serverMessage
+    });
+
+    assert.match(
+      getApiErrorMessage(error, "AWS Role 검증에 실패했습니다.", { developerMode: false }),
+      expectedMessage
+    );
+  }
 });

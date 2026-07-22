@@ -262,6 +262,10 @@ function collectRepositoryArchitectureFacts(
   for (const file of snapshot.files) {
     const text = file.content.normalize("NFKC").toLowerCase();
     const clauses = text.split(/(?:\r?\n)+|(?<=[.!?])\s+/u);
+    const supportsStatelessScaleOut =
+      /scale|expand|auto\s*scal|autoscal|확장/iu.test(text) &&
+      /1\s*(?:tasks?|개)[^\n.]{0,80}(?:(?:maximum\s+(?:of\s+)?|max(?:imum)?\s*)?3\s*(?:tasks?|개))/iu.test(text) &&
+      /stateless|without\s+(?:sticky\s+sessions?|redis)|공유\s*저장소\s*없이|스티키\s*세션[^\n.]{0,30}(?:불필요|필요하지)/iu.test(text);
 
     if (/\bs3\b/.test(text) && /cloudfront/.test(text) && /(static|vite|정적)/u.test(text)) {
       addFact({ kind: "frontend_delivery", value: "s3_cloudfront_static", sourcePath: file.path });
@@ -284,8 +288,17 @@ function collectRepositoryArchitectureFacts(
     if (clauses.some((clause) => /\balb\b|application load balancer/.test(clause) && /\btls\b|https/.test(clause))) {
       addFact({ kind: "transport_security", value: "alb_tls_termination", sourcePath: file.path });
     }
-    if (/(?:fargate\s+task|task)[^\n.]{0,50}(?:1\s*개|one|single)|(?:1\s*개|one|single)[^\n.]{0,30}(?:ecs\s+)?fargate\s+task|(?:기본값|default)[^\n.]{0,50}(?:1\s*개|one|single)[^\n.]{0,30}(?:fargate\s+task|task)/u.test(text)) {
+    if (supportsStatelessScaleOut) {
+      addFact({ kind: "runtime_scale", value: "autoscaling_1_3", sourcePath: file.path });
+    } else if (/(?:fargate\s+task|task)[^\n.]{0,50}(?:1\s*개|one|single)|(?:1\s*개|one|single)[^\n.]{0,30}(?:ecs\s+)?fargate\s+task|(?:기본값|default)[^\n.]{0,50}(?:1\s*개|one|single)[^\n.]{0,30}(?:fargate\s+task|task)/u.test(text)) {
       addFact({ kind: "runtime_scale", value: "single_task", sourcePath: file.path });
+    }
+    if (/\bcheck_in_signing_secret\b/iu.test(text)) {
+      addFact({
+        kind: "runtime_secret",
+        value: "CHECK_IN_SIGNING_SECRET",
+        sourcePath: file.path
+      });
     }
     if (clauses.some((clause) => /terraform|aws\s+(?:resource|리소스)/u.test(clause) && hasExclusionLanguage(clause))) {
       addFact({ kind: "infrastructure_definition", value: "not_in_repository", sourcePath: file.path });

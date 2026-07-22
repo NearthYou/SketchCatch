@@ -1,0 +1,190 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { Deployment, LiveObservationV2Snapshot } from "@sketchcatch/types";
+
+import { LiveObservationSignalDashboard } from "./LiveObservationSignalDashboard";
+
+test("현재 상태와 사용자 영향을 먼저 보여주고 중요 신호는 세 개 이하로 렌더링한다", () => {
+  const html = renderDashboard(
+    snapshot({
+      capacity: { desired: 3, healthy: 1, max: 4, running: 3 },
+      errorRate: 2.5,
+      logs: [
+        {
+          message: "database connection failed requestId=one",
+          timestamp: "2026-07-21T01:00:00.000Z"
+        },
+        {
+          message: "database connection failed requestId=two",
+          timestamp: "2026-07-21T01:01:00.000Z"
+        }
+      ]
+    })
+  );
+
+  const signalHeadingIndex = html.indexOf('id="live-observation-signals-heading"');
+  assert.ok(html.indexOf("현재 상태") < signalHeadingIndex);
+  assert.ok(html.indexOf("일부 사용자가 요청을 완료하지 못할 수 있어요.") < signalHeadingIndex);
+  assert.equal((html.match(/aria-pressed=/g) ?? []).length, 3);
+  assert.match(html, /확인된 사실/);
+  assert.match(html, /가능성이 높은 원인/);
+  assert.match(html, /아직 확인할 수 없는 부분/);
+});
+
+test("대표 로그는 닫힌 disclosure 뒤에서만 열 수 있고 가짜 대응 버튼을 만들지 않는다", () => {
+  const html = renderDashboard(
+    snapshot({
+      logs: [
+        {
+          message: "database connection failed requestId=one",
+          timestamp: "2026-07-21T01:00:00.000Z"
+        },
+        {
+          message: "database connection failed requestId=two",
+          timestamp: "2026-07-21T01:01:00.000Z"
+        }
+      ]
+    })
+  );
+
+  assert.match(html, /<details/);
+  assert.match(html, /원문 로그 보기/);
+  assert.doesNotMatch(html, /CloudWatch 상세 열기|자동 적용|Terraform 변경|배포하기/);
+});
+
+test("오류·경고·복구·확인 로그를 한 화면에서 묶고 근거 없는 리소스 chip은 만들지 않는다", () => {
+  const html = renderDashboard(
+    snapshot({
+      logs: [
+        { message: "request failed", timestamp: "2026-07-21T01:00:00.000Z" },
+        { message: "warning retrying request", timestamp: "2026-07-21T01:01:00.000Z" },
+        { message: "service recovered", timestamp: "2026-07-21T01:02:00.000Z" },
+        { message: "worker started", timestamp: "2026-07-21T01:03:00.000Z" }
+      ]
+    })
+  );
+
+  assert.match(html, /오류 표현이 기록됐어요/);
+  assert.match(html, /확인이 필요한 경고가 기록됐어요/);
+  assert.match(html, /정상화 신호가 기록됐어요/);
+  assert.match(html, /확인이 필요한 로그가 기록됐어요/);
+  assert.doesNotMatch(html, /관련 리소스/);
+});
+
+test("두 종류의 실제 시각이 있을 때만 접힌 사고 흐름을 보여준다", () => {
+  const html = renderDashboard(snapshot({ errorRate: 2.5 }), {
+    completedAt: "2026-07-21T00:55:00.000Z"
+  } as Deployment);
+
+  assert.match(html, /사고 흐름 보기/);
+  assert.match(html, /시간이 가깝다고 원인 관계를 뜻하지는 않아요/);
+});
+
+test("관측 전에는 확인 중 상태와 안내만 보여주고 문제를 만들어내지 않는다", () => {
+  const html = renderToStaticMarkup(
+    createElement(LiveObservationSignalDashboard, {
+      deployment: null,
+      snapshot: null
+    })
+  );
+
+  assert.match(html, /관측을 시작하면 상태를 확인할 수 있어요/);
+  assert.match(html, /관측 데이터가 아직 없어요/);
+  assert.equal((html.match(/aria-pressed=/g) ?? []).length, 0);
+});
+
+test("참여 요청이 도착하면 상태 요약을 확인 중에서 요청 확인으로 바꾼다", () => {
+  const observedAt = "2026-07-21T01:02:00.000Z";
+  const value = snapshot({});
+  value.latestObservation = null;
+  value.live = {
+    ...value.live,
+    acceptedEventCount: 2,
+    observedAt
+  };
+
+  const html = renderDashboard(value);
+
+  assert.match(html, /data-status="observed"/);
+  assert.match(html, /현재 상태 · 요청 확인/);
+  assert.match(html, /참여 요청을 확인했어요/);
+  assert.match(html, /참여 요청 2건/);
+  assert.doesNotMatch(html, /현재 큰 문제는 확인되지 않았어요/);
+});
+
+test("실행 가능한 용량 수정안은 신호가 없어도 명시적 Project Draft 행동으로 보여준다", () => {
+  const html = renderToStaticMarkup(
+    createElement(LiveObservationSignalDashboard, {
+      deployment: null,
+      recommendedAction: {
+        actionLabel: "Project Draft 수정",
+        boundary: "수정안을 저장해도 실제 AWS에는 바로 반영되지 않아요.",
+        description: "최대 실행 수를 2개에서 3개로 늘리는 수정안을 검토할 수 있어요.",
+        isApplying: false,
+        isLoading: false,
+        onAction: () => undefined,
+        title: "용량 설정을 확인해 보세요"
+      },
+      snapshot: null
+    })
+  );
+
+  assert.match(html, /다음 확인/);
+  assert.match(html, /Project Draft 수정/);
+  assert.match(html, /실제 AWS에는 바로 반영되지 않아요/);
+  assert.doesNotMatch(html, /자동 배포|AWS에 적용/);
+});
+
+function renderDashboard(
+  value: LiveObservationV2Snapshot,
+  deployment: Deployment | null = null
+): string {
+  return renderToStaticMarkup(
+    createElement(LiveObservationSignalDashboard, {
+      deployment,
+      snapshot: value
+    })
+  );
+}
+
+function snapshot(overrides: {
+  readonly availability?: number | null;
+  readonly capacity?: {
+    readonly desired: number | null;
+    readonly healthy: number | null;
+    readonly max: number | null;
+    readonly running: number | null;
+  };
+  readonly errorRate?: number | null;
+  readonly logs?: readonly { readonly message: string; readonly timestamp: string }[];
+}): LiveObservationV2Snapshot {
+  const observedAt = "2026-07-21T01:00:00.000Z";
+  return {
+    latestObservation: {
+      observedAt,
+      payload: {
+        availability: overrides.availability ?? 100,
+        capacity: overrides.capacity ?? { desired: 1, healthy: 1, max: 2, running: 1 },
+        errorRate: overrides.errorRate ?? 0,
+        logs: [...(overrides.logs ?? [])],
+        observedAt,
+        p95LatencyMs: 120,
+        requests: 12,
+        state: "available"
+      }
+    },
+    live: {
+      acceptedEventCount: 2,
+      observedAt,
+      pressureLevel: "normal",
+      pressurePercent: 10,
+      projectedRequestsPerMinute: 12,
+      rollingRequestsPerSecond: 0.2
+    },
+    observationId: "observation-1",
+    status: "active",
+    terminalAt: null
+  };
+}

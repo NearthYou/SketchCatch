@@ -16,7 +16,7 @@
   box-sizing: border-box;
   color: #777c85;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   height: 100%;
   line-height: 1.6;
   list-style: none;
@@ -29,7 +29,7 @@
 
 .terraformLineNumberError {
   color: #fca5a5;
-  font-weight: 700;
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .terraformSyntaxHighlightLayer {
@@ -47,7 +47,7 @@
   box-sizing: border-box;
   color: #d7e4f7;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   left: 0;
   line-height: 1.6;
   margin: 0;
@@ -113,7 +113,7 @@
   caret-color: #ffffff;
   color: transparent;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   height: 100%;
   line-height: 1.6;
   max-height: 100%;

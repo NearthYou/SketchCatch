@@ -7,8 +7,7 @@ import {
   createDraftStorageKey,
   createLocalProjectDraft,
   isWorkspaceCloudPlatform,
-  markDraftServerSaved,
-  parseIsoDateTime
+  markDraftServerSaved
 } from "./project-draft-persistence";
 
 const emptyDiagram: DiagramJson = {
@@ -53,7 +52,7 @@ test("isWorkspaceCloudPlatform accepts supported start form choices", () => {
 });
 
 test("createLocalProjectDraft marks edits dirty and increments local revision", () => {
-  const terraformFiles = [{ fileName: "main.tf", terraformCode: "variable \"cidr\" {}" }];
+  const terraformFiles = [{ fileName: "main.tf", terraformCode: 'variable "cidr" {}' }];
   const draft = createLocalProjectDraft({
     workspaceId: "workspace-1",
     projectId: "project-1",
@@ -64,6 +63,7 @@ test("createLocalProjectDraft marks edits dirty and increments local revision", 
       workspaceId: "workspace-1",
       projectId: "project-1",
       diagramJson: emptyDiagram,
+      baseServerRevision: 4,
       dirty: false,
       revision: 4,
       draftSavedAt: "2026-06-24T00:00:00.000Z",
@@ -74,24 +74,35 @@ test("createLocalProjectDraft marks edits dirty and increments local revision", 
 
   assert.equal(draft.key, "workspace-1:project-1");
   assert.equal(draft.dirty, true);
+  assert.equal(draft.baseServerRevision, 4);
   assert.equal(draft.revision, 5);
   assert.equal(draft.draftSavedAt, "2026-06-24T01:00:00.000Z");
   assert.deepEqual(draft.diagramJson, editedDiagram);
   assert.deepEqual(draft.terraformFiles, terraformFiles);
 });
 
-test("chooseInitialDiagram keeps Terraform files from the selected newer draft", () => {
+test("chooseInitialDiagram keeps Terraform files from the selected server draft", () => {
+  const serverTerraformFiles = [
+    { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "main" {}' }
+  ];
   const localDraft = makeLocalProjectDraft({
     diagramJson: editedDiagram,
+    dirty: false,
     draftSavedAt: "2026-06-24T01:01:00.000Z",
-    terraformFiles: [{ fileName: "main.tf", terraformCode: "variable \"cidr\" {}" }]
+    terraformFiles: [{ fileName: "main.tf", terraformCode: 'variable "cidr" {}' }]
   });
 
-  assert.deepEqual(chooseInitialDiagram({
-    serverDraft: makeProjectDraft({ serverSavedAt: "2026-06-24T01:00:00.000Z" }),
-    localDraft,
-    fallbackDiagram: emptyDiagram
-  }).terraformFiles, localDraft.terraformFiles);
+  assert.deepEqual(
+    chooseInitialDiagram({
+      serverDraft: makeProjectDraft({
+        serverSavedAt: "2026-06-24T01:00:00.000Z",
+        terraformFiles: serverTerraformFiles
+      }),
+      localDraft,
+      fallbackDiagram: emptyDiagram
+    }).terraformFiles,
+    serverTerraformFiles
+  );
 });
 
 test("markDraftServerSaved clears dirty state and mirrors server revision", () => {
@@ -118,7 +129,18 @@ test("markDraftServerSaved clears dirty state and mirrors server revision", () =
   assert.equal(syncedDraft.serverSavedAt, "2026-06-24T01:01:00.000Z");
 });
 
-test("chooseInitialDiagram prefers the local draft when it is newer than the server draft", () => {
+test("markDraftServerSaved removes stale local Terraform files when the server draft has none", () => {
+  const savedDraft = markDraftServerSaved(
+    makeLocalProjectDraft({
+      terraformFiles: [{ fileName: "main.tf", terraformCode: 'resource "aws_vpc" "main" {}' }]
+    }),
+    makeProjectDraft({ terraformFiles: undefined })
+  );
+
+  assert.equal("terraformFiles" in savedDraft, false);
+});
+
+test("chooseInitialDiagram uses the server draft instead of a newer dirty local draft", () => {
   const serverDraft = makeProjectDraft({
     diagramJson: emptyDiagram,
     serverSavedAt: "2026-06-24T01:00:00.000Z"
@@ -136,13 +158,13 @@ test("chooseInitialDiagram prefers the local draft when it is newer than the ser
       fallbackDiagram: emptyDiagram
     }),
     {
-      diagramJson: editedDiagram,
-      source: "local"
+      diagramJson: emptyDiagram,
+      source: "server"
     }
   );
 });
 
-test("chooseInitialDiagram prefers the server draft when it is newer than a dirty local draft", () => {
+test("chooseInitialDiagram uses the server draft when the server changed later", () => {
   const serverDraft = makeProjectDraft({
     diagramJson: editedDiagram,
     serverSavedAt: "2026-06-24T01:01:00.000Z"
@@ -191,7 +213,7 @@ test("chooseInitialDiagram uses the server draft when save times are equal", () 
   );
 });
 
-test("chooseInitialDiagram treats a newer empty local board as a valid draft", () => {
+test("chooseInitialDiagram uses the server draft instead of a newer dirty empty board", () => {
   const serverDraft = makeProjectDraft({
     diagramJson: editedDiagram,
     serverSavedAt: "2026-06-24T01:00:00.000Z"
@@ -209,16 +231,10 @@ test("chooseInitialDiagram treats a newer empty local board as a valid draft", (
       fallbackDiagram: editedDiagram
     }),
     {
-      diagramJson: emptyDiagram,
-      source: "local"
+      diagramJson: editedDiagram,
+      source: "server"
     }
   );
-});
-
-test("parseIsoDateTime returns null for missing runtime timestamp values", () => {
-  assert.equal(parseIsoDateTime(null), null);
-  assert.equal(parseIsoDateTime(undefined), null);
-  assert.equal(parseIsoDateTime(""), null);
 });
 
 function makeProjectDraft(overrides: Partial<ProjectDraft> = {}): ProjectDraft {
@@ -245,6 +261,7 @@ function makeLocalProjectDraft(overrides: Partial<LocalProjectDraft> = {}): Loca
     revision: 1,
     draftSavedAt: "2026-06-24T01:00:00.000Z",
     dirty: true,
-    ...overrides
+    ...overrides,
+    baseServerRevision: overrides.baseServerRevision ?? 1
   };
 }

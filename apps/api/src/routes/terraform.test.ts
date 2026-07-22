@@ -604,6 +604,263 @@ resource "aws_instance" "web" {
   await app.close();
 });
 
+test("POST /api/terraform/validate rejects duplicate required_providers across module files", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "providers.tf",
+          terraformCode: `terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+    }
+  }
+}`
+        },
+        {
+          fileName: "main.tf",
+          terraformCode: `terraform {
+  required_providers {
+    archive = {
+      source = "hashicorp/archive"
+    }
+  }
+}
+
+resource "aws_s3_bucket" "assets" {}`
+        }
+      ]
+    }
+  });
+
+  const body = response.json() as TerraformValidateResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(
+    body.diagnostics.map((diagnostic) => ({
+      code: diagnostic.code,
+      line: diagnostic.line,
+      sourceFileName: diagnostic.sourceFileName
+    })),
+    [
+      {
+        code: "terraform.module.duplicate_required_providers",
+        line: 2,
+        sourceFileName: "main.tf"
+      }
+    ]
+  );
+  assert.match(body.diagnostics[0]?.message ?? "", /providers\.tf:2/);
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate resolves references and duplicate addresses across module files", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [{ id: ACTIVE_USER_ID, deletedAt: null }]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+
+  const validResponse = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "network.tf",
+          terraformCode: `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}`
+        },
+        {
+          fileName: "main.tf",
+          terraformCode: `resource "aws_subnet" "public" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.1.0/24"
+}`
+        }
+      ]
+    }
+  });
+  const validBody = validResponse.json() as TerraformValidateResponse;
+
+  assert.equal(validResponse.statusCode, 200);
+  assert.equal(
+    validBody.diagnostics.some(
+      (diagnostic) => diagnostic.code === "terraform.undefined_reference"
+    ),
+    false
+  );
+
+  const duplicateResponse = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "network.tf",
+          terraformCode: `resource "aws_vpc" "main" {}`
+        },
+        {
+          fileName: "main.tf",
+          terraformCode: `resource "aws_vpc" "main" {}`
+        }
+      ]
+    }
+  });
+  const duplicateBody = duplicateResponse.json() as TerraformValidateResponse;
+  const duplicateDiagnostic = duplicateBody.diagnostics.find(
+    (diagnostic) => diagnostic.code === "terraform.duplicate_address"
+  );
+
+  assert.deepEqual(
+    duplicateDiagnostic && {
+      line: duplicateDiagnostic.line,
+      sourceFileName: duplicateDiagnostic.sourceFileName
+    },
+    { line: 1, sourceFileName: "main.tf" }
+  );
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate returns a blocking diagnostic instead of 500 for dangling outputs", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [{ id: ACTIVE_USER_ID, deletedAt: null }]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "outputs.tf",
+          terraformCode: `output "cloudfront_url" {
+  value = aws_cloudfront_distribution.distribution.domain_name
+}`
+        }
+      ]
+    }
+  });
+  const body = response.json() as TerraformValidateResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(
+    body.diagnostics
+      .filter((diagnostic) => diagnostic.code === "terraform.undefined_reference")
+      .map((diagnostic) => ({
+        resourceAddress: diagnostic.resourceAddress,
+        severity: diagnostic.severity,
+        sourceFileName: diagnostic.sourceFileName
+      })),
+    [
+      {
+        resourceAddress: "aws_cloudfront_distribution.distribution",
+        severity: "error",
+        sourceFileName: "outputs.tf"
+      }
+    ]
+  );
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate keeps syntax validation isolated per module file", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [{ id: ACTIVE_USER_ID, deletedAt: null }]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "open.tf",
+          terraformCode: `resource "aws_vpc" "main" {`
+        },
+        {
+          fileName: "close.tf",
+          terraformCode: `}`
+        }
+      ]
+    }
+  });
+  const body = response.json() as TerraformValidateResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(
+    body.diagnostics
+      .filter((diagnostic) => diagnostic.code === "terraform.unbalanced")
+      .map((diagnostic) => diagnostic.sourceFileName),
+    ["open.tf", "close.tf"]
+  );
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate rejects a duplicate required_providers in the merged artifact", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [{ id: ACTIVE_USER_ID, deletedAt: null }]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: `terraform {
+  required_providers {
+    aws = { source = "hashicorp/aws" }
+  }
+}
+
+terraform {
+  required_providers {
+    archive = { source = "hashicorp/archive" }
+  }
+}`
+    }
+  });
+  const body = response.json() as TerraformValidateResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(
+    body.diagnostics
+      .filter((diagnostic) => diagnostic.code === "terraform.module.duplicate_required_providers")
+      .map((diagnostic) => ({ line: diagnostic.line, sourceFileName: diagnostic.sourceFileName })),
+    [{ line: 8, sourceFileName: "main.tf" }]
+  );
+
+  await app.close();
+});
+
 test("POST /api/terraform/validate rejects legacy validation mode fields", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [

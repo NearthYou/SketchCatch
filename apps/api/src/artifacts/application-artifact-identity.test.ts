@@ -145,6 +145,71 @@ test("canonical build evidence ordering uses code points instead of the host loc
     .digest("hex");
 
   assert.equal(createApplicationArtifactIdentity(input).buildConfigSha256, expectedHash);
+
+  const explicitLegacyNull = structuredClone(input);
+  explicitLegacyNull.confirmedBuildConfig.ecsWeb = null;
+  assert.equal(
+    createApplicationArtifactIdentity(explicitLegacyNull).buildConfigSha256,
+    expectedHash
+  );
+});
+
+test("canonical fingerprint includes every ECS web build setting", () => {
+  const baseline = createInput();
+  baseline.confirmedBuildConfig.ecsWeb = createEcsWebBuildConfig();
+  const baselineFingerprint = createApplicationArtifactIdentity(baseline).artifactFingerprint;
+
+  const mutations: Array<(input: ApplicationArtifactFingerprintInput) => void> = [
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.api.sourceRoot = "apps/backend";
+    },
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.api.dockerfilePath = "apps/api/Dockerfile.release";
+    },
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.api.containerPort = 8080;
+    },
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.api.healthCheckPath = "/ready";
+    },
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.api.requiredRuntimeSecrets = ["DATABASE_URL"];
+    },
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.frontend.sourceRoot = "apps/client";
+    },
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.frontend.packageManifestPath =
+        "apps/web/package.release.json";
+    },
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.frontend.lockfilePath = "apps/web/package-lock.json";
+    },
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.frontend.packageManager = "npm";
+    },
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.frontend.packageManagerVersion = "10.9.2";
+    },
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.frontend.installPreset = "npm_ci";
+    },
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.frontend.buildPreset = "npm_build";
+    },
+    (input) => {
+      input.confirmedBuildConfig.ecsWeb!.frontend.outputPath = "apps/web/build";
+    }
+  ];
+
+  for (const mutate of mutations) {
+    const changed = structuredClone(baseline);
+    mutate(changed);
+    assert.notEqual(
+      createApplicationArtifactIdentity(changed).artifactFingerprint,
+      baselineFingerprint
+    );
+  }
 });
 
 test("canonical fingerprint rejects secret-shaped inputs and commit mismatches", () => {
@@ -201,4 +266,26 @@ function toCanonicalValue(value: unknown): unknown {
     );
   }
   return value;
+}
+
+function createEcsWebBuildConfig() {
+  return {
+    api: {
+      sourceRoot: "apps/api",
+      dockerfilePath: "apps/api/Dockerfile",
+      containerPort: 3001,
+      healthCheckPath: "/health",
+      requiredRuntimeSecrets: ["CHECK_IN_SIGNING_SECRET"]
+    },
+    frontend: {
+      sourceRoot: "apps/web",
+      packageManifestPath: "apps/web/package.json",
+      lockfilePath: "pnpm-lock.yaml",
+      packageManager: "pnpm" as const,
+      packageManagerVersion: "11.8.0",
+      installPreset: "pnpm_frozen_lockfile" as const,
+      buildPreset: "pnpm_build" as const,
+      outputPath: "apps/web/dist"
+    }
+  };
 }

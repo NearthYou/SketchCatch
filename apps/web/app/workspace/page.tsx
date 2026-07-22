@@ -8,14 +8,17 @@ import {
 } from "../../features/workspace/workspace-diagram-fixtures";
 import { WorkspaceAuthGate } from "./workspace-auth-gate";
 import { resolveInitialWorkspaceRightPanelView } from "./workspace-start-mode";
+import { resolveInitialCicdReturnCommand } from "../../features/workspace/cicd-return-command";
 
 type WorkspacePageProps = {
   readonly searchParams?: Promise<{
     readonly boardZoom?: string | string[] | undefined;
     readonly cloudPlatform?: string | string[] | undefined;
     readonly diagramFixture?: string | string[] | undefined;
+    readonly deploymentView?: string | string[] | undefined;
     readonly projectId?: string | string[] | undefined;
     readonly projectName?: string | string[] | undefined;
+    readonly readinessKey?: string | string[] | undefined;
     readonly localCacheWorkspaceId?: string | string[] | undefined;
     readonly startMode?: string | string[] | undefined;
     readonly sourceRepositoryId?: string | string[] | undefined;
@@ -36,15 +39,23 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
     const projectName = getSingleSearchParam(params?.projectName)?.trim();
     const cloudPlatform = getSingleSearchParam(params?.cloudPlatform);
     const localCacheWorkspaceId = getSingleSearchParam(params?.localCacheWorkspaceId)?.trim();
+    const initialCicdReturnCommand = resolveInitialCicdReturnCommand({
+      currentProjectId: projectId,
+      requestedProjectId: projectId,
+      projectName,
+      deploymentView: getSingleSearchParam(params?.deploymentView),
+      readinessKey: getSingleSearchParam(params?.readinessKey)
+    });
 
     return (
       <WorkspaceAuthGate>
         <ProjectWorkspaceDraftManager
           cloudPlatform={isWorkspaceCloudPlatform(cloudPlatform) ? cloudPlatform : undefined}
+          initialCicdReturnCommand={initialCicdReturnCommand ?? undefined}
           initialRightPanelView={initialRightPanelView}
           localCacheWorkspaceId={localCacheWorkspaceId || undefined}
           projectId={projectId}
-          projectName={projectName || "Project workspace"}
+          projectName={projectName || undefined}
           repositoryAnalysisHandoff={
             sourceRepositoryId
               ? {

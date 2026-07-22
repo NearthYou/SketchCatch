@@ -528,6 +528,7 @@ check(
 for (const sid of [
   "AllowProjectArtifacts",
   "AllowDeploymentArtifacts",
+  "ListProjectArtifactVersions",
   "AllowAwsConnectionCloudFormationTemplates",
   "AllowSketchCatchAwsConnectionAssumeRole",
   "RunWorkerTask",
@@ -539,6 +540,48 @@ for (const sid of [
   check(
     new RegExp(`sid\\s*=\\s*\"${sid}\"`).test(runtimeIam),
     `runtime ecs_task policy must retain ${sid}`
+  );
+}
+check(
+  /sid\s*=\s*"AllowProjectArtifacts"[\s\S]*?s3:DeleteObjectVersion[\s\S]*?resources\s*=\s*\["arn:aws:s3:::\$\{var\.artifact_bucket_name\}\/projects\/\*"\]/.test(
+    runtimeIam
+  ),
+  "API task role must delete every version of project artifacts"
+);
+check(
+  /sid\s*=\s*"AllowDeploymentArtifacts"[\s\S]*?s3:DeleteObjectVersion[\s\S]*?resources\s*=\s*\["arn:aws:s3:::\$\{var\.artifact_bucket_name\}\/deployments\/\*"\]/.test(
+    runtimeIam
+  ),
+  "API task role must delete every version of deployment artifacts"
+);
+check(
+  /sid\s*=\s*"ListProjectArtifactVersions"[\s\S]*?s3:ListBucketVersions[\s\S]*?projects\/\*[\s\S]*?deployments\/\*/.test(
+    runtimeIam
+  ),
+  "API task role must list project and deployment artifact versions by prefix"
+);
+for (const policyName of ["ecs_task", "ecs_worker_task"]) {
+  const policyBody =
+    runtimeIam.match(
+      new RegExp(
+        "data\\s+\"aws_iam_policy_document\"\\s+\"" + policyName + "\"\\s*\\{([\\s\\S]*?)\\}\\s*resource\\s+\"aws_iam_role_policy\"\\s+\"" + policyName + "\""
+      )
+    )?.[1] ?? "";
+  const deploymentArtifactStatement =
+    policyBody.match(
+      /statement\s*\{\s*sid\s*=\s*"AllowDeploymentArtifacts"([\s\S]*?)\n\s{2}\}/
+    )?.[0] ?? "";
+  for (const action of ["s3:PutObject", "s3:ListMultipartUploadParts", "s3:AbortMultipartUpload"]) {
+    check(
+      deploymentArtifactStatement.includes(`"${action}"`),
+      `runtime ${policyName} AllowDeploymentArtifacts must allow ${action} for release candidate finalization`
+    );
+  }
+  check(
+    deploymentArtifactStatement.includes(
+      'resources = ["arn:aws:s3:::${var.artifact_bucket_name}/deployments/*"]'
+    ),
+    `runtime ${policyName} AllowDeploymentArtifacts must stay scoped to deployments/*`
   );
 }
 

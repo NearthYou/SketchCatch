@@ -11,6 +11,7 @@ import {
   type AwsConnectionStsGateway
 } from "../aws-connections/aws-connection-test-service.js";
 import { assertDeploymentDestroyPreconditions } from "./deployment-approval-service.js";
+import { isDeploymentDestroySourceStatus } from "./deployment-destroy-eligibility.js";
 import { createAwsCodeBuildDirectApplicationReleaseGateway } from "./aws-codebuild-direct-application-release-gateway.js";
 import {
   rollbackDirectApplicationRelease,
@@ -22,12 +23,11 @@ import {
   type DeploymentApplyArtifactStorage
 } from "./deployment-apply-artifact-storage.js";
 import {
-  appendTerraformDurationLog,
   runLoggedDeploymentOperation
 } from "./deployment-duration-logs.js";
+import { createDeploymentTerraformLiveLogWriter } from "./deployment-terraform-live-logs.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
-  appendDeploymentLogs,
   DeploymentConflictError,
   DeploymentNotFoundError,
   getDeployment,
@@ -52,6 +52,12 @@ import {
   restoreTerraformLockFile,
   uploadTerraformLockFile
 } from "./terraform-lock-file-workspace.js";
+import {
+  acquireProjectExecutionLease,
+  heartbeatProjectExecutionLease,
+  recordProjectExecutionCoordinates,
+  releaseProjectExecutionLease
+} from "../releases/project-execution-lease-service.js";
 
 const defaultPlanFileName = "tfplan";
 
@@ -61,6 +67,7 @@ export type RunDeploymentDestroyInput = {
   startedFromStatus?: DeploymentStatus;
   startedFromFailureStage?: DeploymentFailureStage | null;
   abortSignal?: AbortSignal;
+  workerTaskArn?: string;
 };
 
 export type RunDeploymentDestroyOptions = {
@@ -81,6 +88,7 @@ export type RunDeploymentDestroyOptions = {
     cleanupPlan: ApplicationCleanupPlanSummary;
     abortSignal?: AbortSignal;
     repository: DeploymentRepository;
+    retainProjectLease?: boolean;
   }) => Promise<void>;
 };
 
@@ -121,6 +129,9 @@ export async function runDeploymentDestroy(
   let deploymentId: string | undefined;
   let destroySucceeded = false;
   let failureRecorded = false;
+  let destroyLeaseFence:
+    | { projectId: string; holderId: string; fencingVersion: number }
+    | undefined;
   const terraform: RunDeploymentDestroyResult["terraform"] = {
     init: null,
     destroy: null
@@ -138,7 +149,7 @@ export async function runDeploymentDestroy(
     const sourceStatus = input.startedFromStatus ?? deployment.status;
     const sourceFailureStage = input.startedFromFailureStage ?? deployment.failureStage;
 
-    if (!isDestroyRunnableStatus(sourceStatus, sourceFailureStage)) {
+    if (!isDeploymentDestroySourceStatus(sourceStatus)) {
       throw new DeploymentConflictError("Deployment cannot be destroyed in this state");
     }
 
@@ -155,6 +166,28 @@ export async function runDeploymentDestroy(
         executeApplicationCleanup,
         terraform
       });
+    }
+
+    if (repository.projectExecutionLeaseRepository) {
+      const lease = await acquireProjectExecutionLease(
+        {
+          projectId: deployment.projectId,
+          holderId: `destroy:${deployment.id}`,
+          source: "direct"
+        },
+        repository.projectExecutionLeaseRepository
+      );
+      destroyLeaseFence = {
+        projectId: lease.projectId,
+        holderId: lease.holderId,
+        fencingVersion: lease.fencingVersion
+      };
+      if (input.workerTaskArn) {
+        await recordProjectExecutionCoordinates(
+          { ...destroyLeaseFence, activeWorkerTaskArn: input.workerTaskArn },
+          repository.projectExecutionLeaseRepository
+        );
+      }
     }
 
     const [terraformArtifact, currentPlanArtifact, awsConnection] = await Promise.all([
@@ -233,17 +266,22 @@ export async function runDeploymentDestroy(
 
     let sequence = await repository.getNextDeploymentLogSequence(deployment.id);
 
-    terraform.init = await runTerraformInit(workspace.workdir, {
-      env: awsCredentials.env,
-      signal: input.abortSignal
-    });
-    sequence = await appendTerraformDestroyOutput({
+    const initLogWriter = createDeploymentTerraformLiveLogWriter({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
-      label: "terraform init",
-      result: terraform.init,
+      stage: "destroy",
       repository
+    });
+    terraform.init = await runTerraformInit(workspace.workdir, {
+      env: awsCredentials.env,
+      onOutputLine: initLogWriter.onOutputLine,
+      signal: input.abortSignal,
+      timeoutMs: terraformMutationTimeoutMs
+    });
+    sequence = await initLogWriter.complete({
+      label: "terraform init",
+      result: terraform.init
     });
 
     if (terraform.init.cancelled) {
@@ -281,19 +319,28 @@ export async function runDeploymentDestroy(
     });
     sequence = lockUpload.sequence;
 
-    terraform.destroy = await runTerraformApply(workspace.workdir, {
-      env: awsCredentials.env,
-      planFileName: defaultPlanFileName,
-      timeoutMs: terraformMutationTimeoutMs,
-      signal: input.abortSignal
-    });
-    sequence = await appendTerraformDestroyOutput({
+    const destroyLogWriter = createDeploymentTerraformLiveLogWriter({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
-      label: "terraform apply tfplan",
-      result: terraform.destroy,
+      stage: "destroy",
       repository
+    });
+    terraform.destroy = await runWithDestroyLeaseHeartbeat(
+      destroyLeaseFence,
+      repository,
+      () =>
+        runTerraformApply(workspace!.workdir, {
+          env: awsCredentials.env,
+          planFileName: defaultPlanFileName,
+          onOutputLine: destroyLogWriter.onOutputLine,
+          timeoutMs: terraformMutationTimeoutMs,
+          signal: input.abortSignal
+        })
+    );
+    sequence = await destroyLogWriter.complete({
+      label: "terraform apply tfplan",
+      result: terraform.destroy
     });
 
     if (terraform.destroy.cancelled) {
@@ -354,7 +401,16 @@ export async function runDeploymentDestroy(
 
     throw error;
   } finally {
-    await cleanupPreparedTerraformWorkspace({ workspace, workspacePromise });
+    try {
+      await cleanupPreparedTerraformWorkspace({ workspace, workspacePromise });
+    } finally {
+      if (destroyLeaseFence && repository.projectExecutionLeaseRepository) {
+        await releaseProjectExecutionLease(
+          destroyLeaseFence,
+          repository.projectExecutionLeaseRepository
+        ).catch(() => false);
+      }
+    }
   }
 }
 
@@ -372,6 +428,9 @@ async function runApplicationOnlyDestroy(input: {
   >;
   terraform: RunDeploymentDestroyResult["terraform"];
 }): Promise<RunDeploymentDestroyResult> {
+  let applicationLeaseFence:
+    | { projectId: string; holderId: string; fencingVersion: number }
+    | undefined;
   let workspace: PreparedTerraformWorkspace | undefined;
   let workspacePromise: Promise<PreparedTerraformWorkspace> | undefined;
   try {
@@ -403,6 +462,27 @@ async function runApplicationOnlyDestroy(input: {
       workspacePromise
     ]);
     const cleanupPlan = parseApplicationCleanupPlan(planBuffer, input.deployment);
+    if (input.repository.projectExecutionLeaseRepository) {
+      const lease = await acquireProjectExecutionLease(
+        {
+          projectId: input.deployment.projectId,
+          holderId: cleanupPlan.releaseId,
+          source: "direct"
+        },
+        input.repository.projectExecutionLeaseRepository
+      );
+      applicationLeaseFence = {
+        projectId: lease.projectId,
+        holderId: lease.holderId,
+        fencingVersion: lease.fencingVersion
+      };
+      if (input.input.workerTaskArn) {
+        await recordProjectExecutionCoordinates(
+          { ...applicationLeaseFence, activeWorkerTaskArn: input.input.workerTaskArn },
+          input.repository.projectExecutionLeaseRepository
+        );
+      }
+    }
     const terraformArtifactContent = await input.readTerraformArtifactFile(
       preparedWorkspace.mainFilePath
     );
@@ -442,6 +522,7 @@ async function runApplicationOnlyDestroy(input: {
             accessContext: input.input.accessContext,
             cleanupPlan,
             repository: input.repository,
+            ...(applicationLeaseFence ? { retainProjectLease: true } : {}),
             ...(input.input.abortSignal ? { abortSignal: input.input.abortSignal } : {})
           })
       });
@@ -466,7 +547,16 @@ async function runApplicationOnlyDestroy(input: {
     if (!completed) throw new DeploymentNotFoundError("Deployment not found");
     return { deployment: completed, terraform: input.terraform };
   } finally {
-    await cleanupPreparedTerraformWorkspace({ workspace, workspacePromise });
+    try {
+      await cleanupPreparedTerraformWorkspace({ workspace, workspacePromise });
+    } finally {
+      if (applicationLeaseFence && input.repository.projectExecutionLeaseRepository) {
+        await releaseProjectExecutionLease(
+          applicationLeaseFence,
+          input.repository.projectExecutionLeaseRepository
+        ).catch(() => false);
+      }
+    }
   }
 }
 
@@ -476,6 +566,7 @@ async function defaultExecuteApplicationCleanup(input: {
   cleanupPlan: ApplicationCleanupPlanSummary;
   abortSignal?: AbortSignal;
   repository: DeploymentRepository;
+  retainProjectLease?: boolean;
 }): Promise<void> {
   const currentRelease = await input.repository.findRelease?.(input.deployment.id);
   if (
@@ -493,6 +584,7 @@ async function defaultExecuteApplicationCleanup(input: {
     {
       deploymentId: input.deployment.id,
       userId: input.accessContext.userId,
+      ...(input.retainProjectLease ? { retainProjectLease: true } : {}),
       ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
     },
     requireDirectApplicationReleaseRepository(input.repository),
@@ -502,6 +594,36 @@ async function defaultExecuteApplicationCleanup(input: {
     throw new DeploymentConflictError(
       "Application cleanup did not restore the previous runtime revision"
     );
+  }
+}
+
+async function runWithDestroyLeaseHeartbeat<T>(
+  fence: { projectId: string; holderId: string; fencingVersion: number } | undefined,
+  repository: DeploymentRepository,
+  operation: () => Promise<T>
+): Promise<T> {
+  const leaseRepository = repository.projectExecutionLeaseRepository;
+  if (!fence || !leaseRepository) return operation();
+  let heartbeatError: unknown;
+  let heartbeatInFlight = Promise.resolve();
+  const timer = setInterval(() => {
+    heartbeatInFlight = heartbeatInFlight.then(async () => {
+      if (heartbeatError) return;
+      try {
+        await heartbeatProjectExecutionLease(fence, leaseRepository);
+      } catch (error) {
+        heartbeatError = error;
+      }
+    });
+  }, 30_000);
+  timer.unref?.();
+  try {
+    const result = await operation();
+    await heartbeatInFlight;
+    if (heartbeatError) throw heartbeatError;
+    return result;
+  } finally {
+    clearInterval(timer);
   }
 }
 
@@ -571,6 +693,8 @@ function requireDirectApplicationReleaseRepository(
     !repository.savePreparedRelease ||
     !repository.saveCompletedRelease ||
     !repository.saveFailedRelease ||
+    !repository.savePartialRelease ||
+    !repository.saveCancelledRelease ||
     !repository.resetReleaseForRetry
   ) {
     throw new DeploymentConflictError("Direct application release repository is unavailable");
@@ -582,21 +706,10 @@ function requireDirectApplicationReleaseRepository(
     savePreparedRelease: repository.savePreparedRelease.bind(repository),
     saveCompletedRelease: repository.saveCompletedRelease.bind(repository),
     saveFailedRelease: repository.saveFailedRelease.bind(repository),
+    savePartialRelease: repository.savePartialRelease.bind(repository),
+    saveCancelledRelease: repository.saveCancelledRelease.bind(repository),
     resetReleaseForRetry: repository.resetReleaseForRetry.bind(repository)
   };
-}
-
-function isDestroyRunnableStatus(
-  sourceStatus: DeploymentStatus,
-  sourceFailureStage: DeploymentFailureStage | null
-): boolean {
-  return (
-    sourceStatus === "SUCCESS" ||
-    (sourceStatus === "FAILED" &&
-      (sourceFailureStage === "plan" ||
-        sourceFailureStage === "apply" ||
-        sourceFailureStage === "destroy"))
-  );
 }
 
 async function requireDeploymentTerraformArtifact(
@@ -711,74 +824,7 @@ async function failDeploymentDestroyRun(input: {
   };
 }
 
-async function appendTerraformDestroyOutput(input: {
-  deploymentId: string;
-  accessContext: ProjectAccessContext;
-  sequence: number;
-  label: string;
-  result: TerraformRunResult;
-  repository: DeploymentRepository;
-}): Promise<number> {
-  let nextSequence = await appendOutputLines({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: input.sequence,
-    output: input.result.stdout,
-    level: "INFO",
-    repository: input.repository
-  });
 
-  nextSequence = await appendOutputLines({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: nextSequence,
-    output: input.result.stderr,
-    level: input.result.exitCode === 0 ? "WARN" : "ERROR",
-    repository: input.repository
-  });
-
-  return appendTerraformDurationLog({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: nextSequence,
-    stage: "destroy",
-    label: input.label,
-    result: input.result,
-    repository: input.repository
-  });
-}
-
-async function appendOutputLines(input: {
-  deploymentId: string;
-  accessContext: ProjectAccessContext;
-  sequence: number;
-  output: string;
-  level: "INFO" | "WARN" | "ERROR";
-  repository: DeploymentRepository;
-}): Promise<number> {
-  const lines = splitOutputLines(input.output);
-
-  if (lines.length === 0) {
-    return input.sequence;
-  }
-
-  await appendDeploymentLogs(
-    {
-      deploymentId: input.deploymentId,
-      accessContext: input.accessContext,
-      logs: lines.map((line, index) => ({
-        sequence: input.sequence + index,
-        stage: "destroy",
-        level: input.level,
-        message: line,
-        relatedResourceId: null
-      }))
-    },
-    input.repository
-  );
-
-  return input.sequence + lines.length;
-}
 
 function splitOutputLines(output: string): string[] {
   return output

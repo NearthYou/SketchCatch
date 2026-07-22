@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const diagramEditorSource = readFileSync(
   fileURLToPath(new URL("./DiagramEditor.tsx", import.meta.url)),
   "utf8"
-);
+).replaceAll("\r\n", "\n");
 const diagramEditorStyles = readFileSync(
   fileURLToPath(new URL("./diagram-editor.module.css", import.meta.url)),
   "utf8"
@@ -29,18 +29,28 @@ const workspaceProjectBarSource = readFileSync(
 );
 
 test("diagram editor uses partial box selection for overlapping area nodes", () => {
-  assert.match(diagramEditorSource, /selectionOnDrag=\{interactionMode === "select" && !isPreviewActive\}/);
+  assert.match(
+    diagramEditorSource,
+    /selectionOnDrag=\{interactionMode === "select" && !isPreviewActive\}/
+  );
   assert.match(diagramEditorSource, /selectionMode=\{SelectionMode\.Partial\}/);
 });
 
 test("clicking any interactive flow node replaces the current single selection", () => {
-  const handleFlowNodeClickStart = diagramEditorSource.indexOf("const handleFlowNodeClick = useCallback(");
-  const handleFlowNodeClickEnd = diagramEditorSource.indexOf("const handleFlowNodeDoubleClick = useCallback(");
+  const handleFlowNodeClickStart = diagramEditorSource.indexOf(
+    "const handleFlowNodeClick = useCallback("
+  );
+  const handleFlowNodeClickEnd = diagramEditorSource.indexOf(
+    "const handleFlowNodeDoubleClick = useCallback("
+  );
 
   assert.notEqual(handleFlowNodeClickStart, -1);
   assert.notEqual(handleFlowNodeClickEnd, -1);
 
-  const handleFlowNodeClickSource = diagramEditorSource.slice(handleFlowNodeClickStart, handleFlowNodeClickEnd);
+  const handleFlowNodeClickSource = diagramEditorSource.slice(
+    handleFlowNodeClickStart,
+    handleFlowNodeClickEnd
+  );
 
   assert.match(handleFlowNodeClickSource, /setSelectedNodeIds\(\[node\.id\]\)/);
   assert.match(diagramEditorSource, /onNodeClick:\s*handleFlowNodeClick/);
@@ -63,15 +73,24 @@ test("controlled React Flow selection reuses state when selection membership is 
 
 test("diagram editor commits the Flow-node cache after mapping rather than during render", () => {
   const flowNodesStart = diagramEditorSource.indexOf("  const flowNodes = useMemo(");
-  const flowNodeCacheEffectStart = diagramEditorSource.indexOf("  useEffect(() => {", flowNodesStart);
-  const flowEdgesStart = diagramEditorSource.indexOf("  const flowEdges = useMemo(", flowNodesStart);
+  const flowNodeCacheEffectStart = diagramEditorSource.indexOf(
+    "  useEffect(() => {",
+    flowNodesStart
+  );
+  const flowEdgesStart = diagramEditorSource.indexOf(
+    "  const flowEdges = useMemo(",
+    flowNodesStart
+  );
 
   assert.notEqual(flowNodesStart, -1);
   assert.notEqual(flowNodeCacheEffectStart, -1);
   assert.notEqual(flowEdgesStart, -1);
 
   const flowNodeMappingSource = diagramEditorSource.slice(flowNodesStart, flowNodeCacheEffectStart);
-  const flowNodeCacheEffectSource = diagramEditorSource.slice(flowNodeCacheEffectStart, flowEdgesStart);
+  const flowNodeCacheEffectSource = diagramEditorSource.slice(
+    flowNodeCacheEffectStart,
+    flowEdgesStart
+  );
 
   assert.match(
     diagramEditorSource,
@@ -104,7 +123,10 @@ test("direct node drags leave preview position updates to onNodeDrag", () => {
     "applyLiveDiagramUpdate((currentDiagram) =>"
   );
 
-  assert.match(handleNodesChangeSource, /if \(dragSnapshot && directNodeDragIds\) \{\s*return;\s*\}/);
+  assert.match(
+    handleNodesChangeSource,
+    /if \(dragSnapshot && directNodeDragIds\) \{\s*return;\s*\}/
+  );
   assert.notEqual(selectionChangesIndex, -1);
   assert.notEqual(selectionStateUpdateIndex, -1);
   assert.notEqual(directDragReturnIndex, -1);
@@ -130,7 +152,10 @@ test("direct node drag coalesces preview work to animation frames and flushes th
     diagramEditorSource,
     /const nodeDragPreviewFrameRef = useRef<number \| null>\(null\);/
   );
-  assert.match(queueNodeDragPreviewSource, /pendingNodeDragPreviewRef\.current = \{ draggedNodeId, nodes \};/);
+  assert.match(
+    queueNodeDragPreviewSource,
+    /pendingNodeDragPreviewRef\.current = \{ draggedNodeId, nodes \};/
+  );
   assert.match(
     queueNodeDragPreviewSource,
     /if \(nodeDragPreviewFrameRef\.current !== null\) \{\s*return;\s*\}/
@@ -139,7 +164,10 @@ test("direct node drag coalesces preview work to animation frames and flushes th
     queueNodeDragPreviewSource,
     /nodeDragPreviewFrameRef\.current = window\.requestAnimationFrame\(\(\) => \{[\s\S]*?nodeDragPreviewFrameRef\.current = null;[\s\S]*?pendingNodeDragPreviewRef\.current = null;[\s\S]*?commitNodeDragPreview\(/
   );
-  assert.match(handleNodeDragStopSource, /const previewNodes = flushNodeDragPreview\(node\.id, nodes\);/);
+  assert.match(
+    handleNodeDragStopSource,
+    /const previewNodes = flushNodeDragPreview\(node\.id, nodes\);/
+  );
   assert.match(
     diagramEditorSource,
     /useEffect\(\(\) => \(\) => cancelQueuedNodeDragPreview\(\), \[cancelQueuedNodeDragPreview\]\);/
@@ -148,7 +176,8 @@ test("direct node drag coalesces preview work to animation frames and flushes th
 
 test("source-exact geometry policy and explicit live-route staleness reach React Flow", () => {
   assert.equal(
-    diagramEditorSource.match(/geometryPolicy: visibleDiagram\.presentation\?\.geometryPolicy/g)?.length,
+    diagramEditorSource.match(/geometryPolicy: visibleDiagram\.presentation\?\.geometryPolicy/g)
+      ?.length,
     2
   );
   assert.match(
@@ -174,9 +203,18 @@ test("every persisted node geometry mutation invalidates incident authored route
     ["const handleResizeEnd = useCallback(", "const flowNodeHandlers = useMemo"],
     ["const handleNodesChange = useCallback", "const handleEdgesChange = useCallback"],
     ["const finishAreaBlankDrag = useCallback(", "const handleCanvasPointerDown = useCallback"],
-    ["const handleNodeDragStop = useCallback(", "const clearConnectionActivityOnRelease = useCallback"],
-    ["const finalizeAreaBlankDragWithoutAnimation = useCallback(", "const finalizeNodeDragWithoutAnimation = useCallback"],
-    ["const finalizeNodeDragWithoutAnimation = useCallback(", "const finalizeActiveDragWithoutAnimation = useCallback"],
+    [
+      "const handleNodeDragStop = useCallback(",
+      "const clearConnectionActivityOnRelease = useCallback"
+    ],
+    [
+      "const finalizeAreaBlankDragWithoutAnimation = useCallback(",
+      "const finalizeNodeDragWithoutAnimation = useCallback"
+    ],
+    [
+      "const finalizeNodeDragWithoutAnimation = useCallback(",
+      "const finalizeActiveDragWithoutAnimation = useCallback"
+    ],
     ["const handleDrop = useCallback(", "const handleDragOver = useCallback"],
     ["const deleteSelection = useCallback(", "const copySelectedNodes = useCallback"]
   ] as const;
@@ -210,17 +248,41 @@ test("edge type changes clear authored routes while style-only changes preserve 
 
 test("diagram editor restores select mode after temporary middle-button pan", () => {
   assert.match(diagramEditorSource, /getTemporaryPanReleaseMode/);
-  assert.match(diagramEditorSource, /window\.addEventListener\("pointerup",\s*restoreTemporaryPanMode\)/);
-  assert.match(diagramEditorSource, /window\.addEventListener\("pointercancel",\s*restoreTemporaryPanMode\)/);
+  assert.match(
+    diagramEditorSource,
+    /window\.addEventListener\("pointerup",\s*restoreTemporaryPanMode\)/
+  );
+  assert.match(
+    diagramEditorSource,
+    /window\.addEventListener\("pointercancel",\s*restoreTemporaryPanMode\)/
+  );
 });
 
 test("diagram editor clears active connection handles on fallback release events", () => {
-  assert.match(diagramEditorSource, /window\.addEventListener\("pointerup",\s*clearConnectionActivityOnRelease\)/);
-  assert.match(diagramEditorSource, /window\.addEventListener\("mouseup",\s*clearConnectionActivityOnRelease\)/);
-  assert.match(diagramEditorSource, /window\.addEventListener\("pointercancel",\s*resetConnectionStateOnCancel\)/);
-  assert.match(diagramEditorSource, /window\.addEventListener\("blur",\s*resetConnectionStateOnCancel\)/);
-  assert.match(diagramEditorSource, /window\.removeEventListener\("pointerup",\s*clearConnectionActivityOnRelease\)/);
-  assert.match(diagramEditorSource, /window\.removeEventListener\("blur",\s*resetConnectionStateOnCancel\)/);
+  assert.match(
+    diagramEditorSource,
+    /window\.addEventListener\("pointerup",\s*clearConnectionActivityOnRelease\)/
+  );
+  assert.match(
+    diagramEditorSource,
+    /window\.addEventListener\("mouseup",\s*clearConnectionActivityOnRelease\)/
+  );
+  assert.match(
+    diagramEditorSource,
+    /window\.addEventListener\("pointercancel",\s*resetConnectionStateOnCancel\)/
+  );
+  assert.match(
+    diagramEditorSource,
+    /window\.addEventListener\("blur",\s*resetConnectionStateOnCancel\)/
+  );
+  assert.match(
+    diagramEditorSource,
+    /window\.removeEventListener\("pointerup",\s*clearConnectionActivityOnRelease\)/
+  );
+  assert.match(
+    diagramEditorSource,
+    /window\.removeEventListener\("blur",\s*resetConnectionStateOnCancel\)/
+  );
 });
 
 test("diagram editor makes click-to-connect and nearby target acquisition explicit", () => {
@@ -237,9 +299,8 @@ test("palette drag preview and drop use the same Area size transformer", () => {
     /import \{ scalePaletteAreaNodeSize \} from "\.\/palette-area-node-size";/
   );
   assert.equal(
-    diagramEditorSource.match(
-      /scalePaletteAreaNodeSize\(\s*createDiagramNodeFromPayload\(/g
-    )?.length,
+    diagramEditorSource.match(/scalePaletteAreaNodeSize\(\s*createDiagramNodeFromPayload\(/g)
+      ?.length,
     2
   );
 });
@@ -269,7 +330,7 @@ test("diagram editor restores the light canvas with a restrained two-level grid"
   );
 });
 
-test("diagram editor exposes project, save, and panel controls in one stable top bar", () => {
+test("diagram editor keeps project and save controls in the top bar without duplicate panel toggles", () => {
   const projectBarBlock = getCssBlock(".projectBar");
   const saveStatusBlock = getCssBlock(".projectBarSaveStatus");
 
@@ -278,10 +339,13 @@ test("diagram editor exposes project, save, and panel controls in one stable top
   assert.match(diagramEditorSource, /saveStatus = "편집 중"/);
   assert.match(diagramEditorSource, /<WorkspaceProjectBar/);
   assert.match(diagramEditorSource, /onSave:\s*onDiagramSaveRequest/);
-  assert.match(diagramEditorSource, /onToggleLeftPanel:\s*toggleLeftPanel/);
-  assert.match(diagramEditorSource, /onToggleRightPanel:\s*toggleRightPanel/);
+  assert.doesNotMatch(diagramEditorSource, /onToggleLeftPanel:\s*toggleLeftPanel/);
+  assert.doesNotMatch(diagramEditorSource, /onToggleRightPanel:\s*toggleRightPanel/);
 
-  assert.match(workspaceProjectBarSource, /import \{ ProductBrand \} from "\.\.\/\.\.\/components\/ui\/ProductBrand"/);
+  assert.match(
+    workspaceProjectBarSource,
+    /import \{ ProductBrand \} from "\.\.\/\.\.\/components\/ui\/ProductBrand"/
+  );
   assert.match(workspaceProjectBarSource, /<ProductBrand href=\{workspace\.dashboardHref\} \/>/);
   assert.doesNotMatch(
     workspaceProjectBarSource,
@@ -289,8 +353,10 @@ test("diagram editor exposes project, save, and panel controls in one stable top
   );
   assert.match(workspaceProjectBarSource, /className=\{styles\.projectBarSaveStatus\}/);
   assert.match(workspaceProjectBarSource, /aria-label="지금 저장"/);
-  assert.match(workspaceProjectBarSource, /"리소스 패널 열기"/);
-  assert.match(workspaceProjectBarSource, /"Inspector 열기"/);
+  assert.doesNotMatch(workspaceProjectBarSource, /PanelLeft(?:Close|Open)/);
+  assert.doesNotMatch(workspaceProjectBarSource, /PanelRight(?:Close|Open)/);
+  assert.doesNotMatch(workspaceProjectBarSource, /"리소스 패널 열기"/);
+  assert.doesNotMatch(workspaceProjectBarSource, /"Inspector 열기"/);
 
   assert.match(projectBarBlock, /grid-column:\s*1 \/ -1;/);
   assert.match(projectBarBlock, /height:\s*64px;/);
@@ -302,10 +368,79 @@ test("workspace shell docks both panels and collapses them on compact screens", 
   const compactRule = getCssRuleContaining("@media (max-width: 1120px)");
 
   assert.match(editorShellBlock, /grid-template-rows:\s*64px minmax\(0, 1fr\);/);
-  assert.match(diagramEditorStyles, /\.leftRail\s*\{[^}]*grid-row:\s*2;[^}]*position:\s*relative;/s);
-  assert.match(diagramEditorStyles, /\.rightRail\s*\{[^}]*grid-row:\s*2;[^}]*position:\s*relative;/s);
+  assert.match(
+    diagramEditorStyles,
+    /\.leftRail\s*\{[^}]*grid-row:\s*2;[^}]*position:\s*relative;/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /\.rightRail\s*\{[^}]*grid-row:\s*2;[^}]*position:\s*relative;/s
+  );
   assert.match(compactRule, /grid-template-columns:\s*0 minmax\(0, 1fr\) 0;/);
   assert.match(diagramEditorSource, /matchMedia\("\(max-width: 1120px\)"\)/);
+});
+
+test("editor derives contextual read-mode panels while viewer mode stays isolated", () => {
+  assert.match(diagramEditorSource, /deriveInitialWorkspacePanelState\(\{\s*hasDiagramNodes:/);
+  assert.doesNotMatch(diagramEditorSource, /\{ leftPanelOpen: nextOpen \}/);
+  assert.doesNotMatch(diagramEditorSource, /\{ rightPanelOpen: nextOpen \}/);
+  assert.match(
+    diagramEditorSource,
+    /collapsePanelsForCompactViewport[\s\S]*?setLeftPanelOpen\(false\);[\s\S]*?setRightPanelOpen\(false\);/
+  );
+  assert.match(
+    diagramEditorSource,
+    /restoreContextualPanelState[\s\S]*?setLeftPanelOpen\(initialPanelState\.leftPanelOpen\);[\s\S]*?setRightPanelOpen\(initialPanelState\.rightPanelOpen\);/
+  );
+});
+
+test("diagram connections are available only after the user enables connection mode", () => {
+  assert.match(
+    diagramEditorSource,
+    /const \[isConnectionToolEnabled, setConnectionToolEnabled\] = useState\(false\);/
+  );
+  assert.match(diagramEditorSource, /<Link2 aria-hidden="true" size=\{16\} \/>/);
+  assert.match(diagramEditorSource, /aria-label="연결 모드"/);
+  assert.match(diagramEditorSource, /aria-pressed=\{isConnectionToolEnabled\}/);
+  assert.match(
+    diagramEditorSource,
+    /nodesConnectable=\{\s*interactionMode === "select" &&\s*isConnectionToolEnabled &&\s*!isPreviewActive\s*\}/
+  );
+  assert.match(diagramEditorSource, /isConnectionToolEnabled,/);
+  assert.match(
+    diagramEditorSource,
+    /const handleSelectTool = useCallback\(\(\) => \{\s*resetConnectionStateOnCancel\(\);\s*setConnectionToolEnabled\(false\);\s*setInteractionMode\("select"\);/
+  );
+});
+
+test("editor exposes accessible panel handles that follow the docked panel widths", () => {
+  assert.match(
+    diagramEditorSource,
+    /aria-label=\{isLeftPanelOpen \? "왼쪽 패널 닫기" : "왼쪽 패널 열기"\}/
+  );
+  assert.match(
+    diagramEditorSource,
+    /aria-label=\{isRightPanelOpen \? "오른쪽 패널 닫기" : "오른쪽 패널 열기"\}/
+  );
+  assert.match(diagramEditorSource, /aria-expanded=\{isLeftPanelOpen\}/);
+  assert.match(diagramEditorSource, /aria-expanded=\{isRightPanelOpen\}/);
+  assert.match(diagramEditorSource, /!viewerPolicy\.isViewer/);
+  assert.match(
+    diagramEditorStyles,
+    /\.leftPanelEdgeHandle\s*\{[^}]*left:\s*var\(--left-panel-width\);/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /\.rightPanelEdgeHandle\s*\{[^}]*right:\s*var\(--right-panel-width\);/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /\.editorShellLeftCollapsed \.leftPanelEdgeHandle\s*\{[^}]*left:\s*0;/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /\.editorShellRightCollapsed \.rightPanelEdgeHandle\s*\{[^}]*right:\s*0;/s
+  );
 });
 
 test("compact workspace refits the board without changing the saved DiagramJson", () => {
@@ -314,6 +449,10 @@ test("compact workspace refits the board without changing the saved DiagramJson"
   assert.match(
     diagramEditorSource,
     /const handleMoveEnd[\s\S]*?persistViewportAfterMove\([\s\S]*?automaticViewportMoveRequestIdRef\.current/
+  );
+  assert.match(
+    diagramEditorSource,
+    /persistViewportAfterMove\(\s*\{[\s\S]*?isPreviewActive,[\s\S]*?isViewer: viewerPolicy\.isViewer/
   );
   assert.match(
     diagramEditorSource,
@@ -330,13 +469,42 @@ test("compact workspace refits the board without changing the saved DiagramJson"
   );
 });
 
-test("fit view uses the unobscured board frame and visual resource bounds", () => {
+test("live Diagram updates ignore structurally unchanged results", () => {
   assert.match(
     diagramEditorSource,
-    /getViewportForBounds\(\s*getDiagramVisualBounds\(currentNodes\),\s*frame\.width,\s*frame\.height/s
+    /const applyLiveDiagramUpdate[\s\S]*?const before = diagramRef\.current;[\s\S]*?if \(areDiagramsEqual\(before, after\)\) \{\s*return;/
   );
+});
+
+test("fit view uses the unobscured board frame and complete diagram visual bounds", () => {
+  assert.match(
+    diagramEditorSource,
+    /const visualBounds = getDiagramVisualBounds\(currentNodes, flowEdges\);[\s\S]*?getViewportForBounds\(\s*visualBounds,\s*frame\.width,\s*frame\.height,\s*fitMinimumZoom/s
+  );
+  assert.match(diagramEditorSource, /getFitViewMinimumZoom\([\s\S]*?FIT_VIEW_PADDING/);
+  assert.match(diagramEditorSource, /setFlowMinimumZoom\(fitMinimumZoom\);/);
+  assert.doesNotMatch(diagramEditorSource, /flowInstance\.fitView\(fitOptions\)/);
   assert.match(diagramEditorSource, /offsetBoardViewportToFrame/);
   assert.doesNotMatch(diagramEditorSource, /const fitViewWidth = editorBounds/);
+});
+
+test("manual Fit View does not mark the editable draft dirty", () => {
+  assert.match(
+    diagramEditorSource,
+    /const handleFitView = useCallback\(\(\) => \{[\s\S]*?fitVisibleDiagram\(false\);/
+  );
+  assert.doesNotMatch(
+    diagramEditorSource,
+    /const handleFitView = useCallback\(\(\) => \{[\s\S]*?fitVisibleDiagram\(!isPreviewActive\);/
+  );
+});
+
+test("automatic organization preview stays at the lower-left of the board workspace", () => {
+  assert.match(diagramEditorStyles, /\.workspace\s*\{[\s\S]*?position:\s*relative;/);
+  assert.match(
+    diagramEditorStyles,
+    /\.compilerPreviewNotice\s*\{[\s\S]*?bottom:\s*12px;[\s\S]*?left:\s*12px;[\s\S]*?right:\s*auto;/
+  );
 });
 
 test("viewport controls use the React Flow instance received from onInit", () => {
@@ -349,19 +517,25 @@ test("viewport controls use the React Flow instance received from onInit", () =>
   );
   assert.match(diagramEditorSource, /const handleZoomIn[\s\S]*?getFlowInstance\(\)\.zoomIn/);
   assert.match(diagramEditorSource, /const handleZoomOut[\s\S]*?getFlowInstance\(\)\.zoomOut/);
-  assert.match(diagramEditorSource, /const fitVisibleDiagram[\s\S]*?const flowInstance = getFlowInstance\(\)/);
+  assert.match(
+    diagramEditorSource,
+    /const fitVisibleDiagram[\s\S]*?const flowInstance = getFlowInstance\(\)/
+  );
 });
 
 test("a single node click opens the matching resource inspector", () => {
   assert.match(
     diagramEditorSource,
-    /const handleFlowNodeClick[\s\S]*?setSelectedNodeIds\(\[node\.id\]\);[\s\S]*?setInspectedNodeId\(node\.id\);[\s\S]*?setRightPanelOpen\(true\);/
+    /const handleFlowNodeClick[\s\S]*?setSelectedNodeIds\(\[node\.id\]\);[\s\S]*?setInspectedNodeId\(node\.id\);[\s\S]*?updateRightPanelOpen\(true\);/
   );
 });
 
 test("reverse preview can opt into read-only resource inspection", () => {
   assert.match(diagramEditorSource, /allowPreviewInspection = false/);
-  assert.match(diagramEditorSource, /elementsSelectable=\{!isPreviewActive \|\| allowPreviewInspection\}/);
+  assert.match(
+    diagramEditorSource,
+    /elementsSelectable=\{!isPreviewActive \|\| allowPreviewInspection\}/
+  );
   assert.match(
     diagramEditorSource,
     /!isPreviewActive \|\| allowPreviewInspection\s*\? \{ onNodeClick: handleFlowNodeClick \}/s
@@ -369,7 +543,11 @@ test("reverse preview can opt into read-only resource inspection", () => {
 });
 
 test("a dedicated workflow can replace the default empty board guidance", () => {
-  assert.match(diagramEditorSource, /emptyBoardDescription = "왼쪽 Resource에서 필요한 항목을 끌어오세요\."/);
+  assert.match(
+    diagramEditorSource,
+    /emptyBoardDescription = "왼쪽 패널에서 필요한 항목을 끌어오세요\."/
+  );
+  assert.doesNotMatch(diagramEditorSource, /emptyBoardDescription = "[^"]*Resource/);
   assert.match(diagramEditorSource, /<span>\{emptyBoardDescription\}<\/span>/);
 });
 
@@ -380,7 +558,9 @@ test("a preview-only workflow can hide the project save action", () => {
 });
 
 test("collapsed right panel does not leave the mobile fixed rail shell visible", () => {
-  const collapsedMobileRightRailRule = getCssRuleContaining(".editorShellRightCollapsed .rightRail");
+  const collapsedMobileRightRailRule = getCssRuleContaining(
+    ".editorShellRightCollapsed .rightRail"
+  );
 
   assert.match(collapsedMobileRightRailRule, /background:\s*transparent;/);
   assert.match(collapsedMobileRightRailRule, /border:\s*0;/);
@@ -439,23 +619,23 @@ test("area node header uses a rounded icon without a bottom divider", () => {
   const metaBlock = getCssBlock(".areaNodeHeaderMeta");
   const iconBlock = getCssBlock(".areaNodeHeaderIcon");
 
+  assert.match(areaBlock, /--area-body-background:\s*transparent;/);
+  assert.match(areaBlock, /--area-border-width:\s*1px;/);
   assert.match(
     areaBlock,
-    /--area-body-background:\s*transparent;/
+    /--area-border-color:\s*var\(--node-border-color, var\(--board-border\)\);/
   );
-  assert.match(areaBlock, /--area-border-width:\s*1px;/);
-  assert.match(areaBlock, /--area-border-color:\s*var\(--node-border-color, var\(--board-border\)\);/);
   assert.match(areaBlock, /background:\s*var\(--area-body-background\);/);
   assert.match(areaBlock, /border-radius:\s*10px;/);
   assert.match(headerBlock, /height:\s*34px;/);
-  assert.match(headerBlock, /font-size:\s*14px;/);
-  assert.match(headerBlock, /font-weight:\s*650;/);
-  assert.match(headerBlock, /left:\s*0;/);
-  assert.match(headerBlock, /top:\s*0;/);
   assert.match(
     headerBlock,
-    /background:\s*transparent;/
+    /font-size:\s*calc\(14px \+ var\(--presentation-font-size-increase\)\);/
   );
+  assert.match(headerBlock, /font-weight:\s*var\(--presentation-font-weight-bold\);/);
+  assert.match(headerBlock, /left:\s*0;/);
+  assert.match(headerBlock, /top:\s*0;/);
+  assert.match(headerBlock, /background:\s*transparent;/);
   assert.match(headerContentBlock, /background:\s*var\(--board-surface\);/);
   assert.match(headerContentBlock, /border-radius:\s*6px;/);
   assert.doesNotMatch(headerBlock, /board-surface-subtle/);
@@ -473,9 +653,7 @@ test("area node header uses a rounded icon without a bottom divider", () => {
 });
 
 test("React Flow parents do not override per-node and per-edge stacking", () => {
-  const parentLayerRule = getCssRuleContaining(
-    ".canvasPanel :global(.react-flow__nodes),"
-  );
+  const parentLayerRule = getCssRuleContaining(".canvasPanel :global(.react-flow__nodes),");
 
   assert.match(parentLayerRule, /position:\s*absolute;/);
   assert.doesNotMatch(parentLayerRule, /z-index:/);
@@ -503,7 +681,8 @@ test("Board viewport transitions honor reduced motion", () => {
   assert.match(diagramEditorSource, /duration:\s*getBoardMotionDuration\(180\)/);
 });
 
-test("edge labels use a quantized 75 percent canvas LOD", () => {
+test("edge labels preserve a 12px screen-space size across canvas LOD", () => {
+  const edgeTextRule = getCssRuleContaining(".canvasPanel :global(.react-flow__edge-text)");
   const compactTextRule = getCssRuleContaining(
     ".canvasPanelEdgeLabelsCompact :global(.react-flow__edge-text)"
   );
@@ -514,7 +693,10 @@ test("edge labels use a quantized 75 percent canvas LOD", () => {
     ".canvasPanelEdgeLabelsCompact :global(.react-flow__edge:hover .react-flow__edge-text)"
   );
 
-  assert.match(diagramEditorSource, /const boardZoom = useStore\(\(state\) => state\.transform\[2\]\);/);
+  assert.match(
+    diagramEditorSource,
+    /const boardZoom = useStore\(\(state\) => state\.transform\[2\]\);/
+  );
   assert.match(diagramEditorSource, /const showAllEdgeLabels = boardZoom >= EDGE_LABEL_MIN_ZOOM;/);
   assert.match(
     diagramEditorSource,
@@ -523,8 +705,8 @@ test("edge labels use a quantized 75 percent canvas LOD", () => {
   assert.match(compactTextRule, /opacity:\s*0;/);
   assert.match(compactTextRule, /visibility:\s*hidden;/);
   assert.match(
-    diagramEditorStyles,
-    /\.canvasPanelEdgeLabelsCompact :global\(\.react-flow__edge-text\)\s*\{[^}]*font-size:\s*calc\(12px \* var\(--board-lod-label-scale\)\) !important;/s
+    edgeTextRule,
+    /font-size:\s*calc\(\s*calc\(12px \* var\(--board-lod-label-scale\)\) \+ var\(--presentation-font-size-increase\)\s*\) !important;/
   );
   assert.match(compactBackgroundRule, /opacity:\s*0;/);
   assert.match(compactBackgroundRule, /visibility:\s*hidden;/);
@@ -589,7 +771,10 @@ test("manual resize relies on node size effects to refresh React Flow internals"
 });
 
 test("diagram editor applies the shared geometry policy at every diagram entry point", () => {
-  assert.match(diagramEditorSource, /import \{ normalizeDiagramResourceNodeGeometry \} from "\.\/resource-node-geometry";/);
+  assert.match(
+    diagramEditorSource,
+    /import \{ normalizeDiagramResourceNodeGeometry \} from "\.\/resource-node-geometry";/
+  );
   assert.match(
     diagramEditorSource,
     /useState<DiagramJson>\(\(\) =>\s*normalizeDiagramResourceNodeGeometry\(cloneDiagram\(initialDiagram \?\? EMPTY_DIAGRAM\)\)\s*\)/s
@@ -600,7 +785,7 @@ test("diagram editor applies the shared geometry policy at every diagram entry p
   );
   assert.match(
     diagramEditorSource,
-    /const nextDiagram = normalizeDiagramResourceNodeGeometry\(cloneDiagram\(initialDiagram \?\? EMPTY_DIAGRAM\)\);/
+    /const nextDiagram = normalizeDiagramResourceNodeGeometry\(\s*cloneDiagram\(initialDiagram \?\? EMPTY_DIAGRAM\)\s*\);/
   );
   assert.match(
     diagramEditorSource,
@@ -612,8 +797,28 @@ test("diagram editor applies the shared geometry policy at every diagram entry p
   );
 });
 
+test("equivalent diagram prop replacements do not invalidate pending AI proposals", () => {
+  const replaceDiagramStart = diagramEditorSource.indexOf("const replaceDiagram = useCallback(");
+  const replaceDiagramEnd = diagramEditorSource.indexOf("const getDiagramRevision = useCallback");
+  const replaceDiagramSource = diagramEditorSource.slice(replaceDiagramStart, replaceDiagramEnd);
+
+  assert.notEqual(replaceDiagramStart, -1);
+  assert.notEqual(replaceDiagramEnd, -1);
+  assert.match(
+    replaceDiagramSource,
+    /if \(areDiagramsEqual\(diagramRef\.current, nextDiagram\)\) \{[\s\S]*?diagramRef\.current = nextDiagram;[\s\S]*?setDiagram\(nextDiagram\);[\s\S]*?return;/
+  );
+  assert.ok(
+    replaceDiagramSource.indexOf("areDiagramsEqual") <
+      replaceDiagramSource.indexOf("diagramRevisionRef.current += 1")
+  );
+});
+
 test("diagram editor gives exact fixture zoom priority over initial fit-view", () => {
-  assert.match(diagramEditorSource, /const normalizedInitialBoardZoom = parseBoardZoom\(initialBoardZoom\);/);
+  assert.match(
+    diagramEditorSource,
+    /const normalizedInitialBoardZoom = parseBoardZoom\(initialBoardZoom\);/
+  );
   assert.match(diagramEditorSource, /getCenteredBoardViewport\(/);
   assert.match(diagramEditorSource, /shouldApplyInitialBoardZoomRef\.current/);
   assert.match(diagramEditorSource, /reactFlow\.setViewport\(viewport, \{ duration: 0 \}\)/);
@@ -649,14 +854,8 @@ test("source-exact entries consume a pending source viewport once and otherwise 
     diagramEditorSource,
     /import \{[\s\S]*applyInitialSourceViewBoxViewport,[\s\S]*getSourceViewBoxMinimumZoom,[\s\S]*\} from "\.\/board-viewport";/
   );
-  assert.match(
-    diagramEditorSource,
-    /const shouldApplySourceViewportRef = useRef\(true\);/
-  );
-  assert.match(
-    diagramEditorSource,
-    /const wasSourceViewBoxViewportRef = useRef\(false\);/
-  );
+  assert.match(diagramEditorSource, /const shouldApplySourceViewportRef = useRef\(true\);/);
+  assert.match(diagramEditorSource, /const wasSourceViewBoxViewportRef = useRef\(false\);/);
   assert.notEqual(consumePendingIndex, -1);
   assert.notEqual(applyPendingIndex, -1);
   assert.ok(consumePendingIndex < applyPendingIndex);
@@ -707,14 +906,20 @@ test("source viewport requests are renewed by prop replacement, preview, and app
 });
 
 test("source-exact boards lower min zoom conditionally without changing the legacy zoom contract", () => {
-  assert.match(diagramEditorSource, /const \[boardMinimumZoom, setBoardMinimumZoom\] = useState\(0\.25\);/);
+  assert.match(
+    diagramEditorSource,
+    /const \[boardMinimumZoom, setBoardMinimumZoom\] = useState\(0\.25\);/
+  );
   assert.match(
     diagramEditorSource,
     /getSourceViewBoxMinimumZoom\(presentation\.sourceViewBox, frame\)/
   );
   assert.match(diagramEditorSource, /minZoom=\{boardMinimumZoom\}/);
   assert.match(diagramEditorSource, /maxZoom=\{2\}/);
-  assert.match(diagramEditorSource, /const normalizedInitialBoardZoom = parseBoardZoom\(initialBoardZoom\);/);
+  assert.match(
+    diagramEditorSource,
+    /const normalizedInitialBoardZoom = parseBoardZoom\(initialBoardZoom\);/
+  );
   assert.match(
     diagramEditorSource,
     /const hasSourceViewBoxViewport =\s*visibleDiagram\.presentation\?\.geometryPolicy === "source-exact" &&\s*visibleDiagram\.presentation\.sourceViewBox !== undefined;/
@@ -739,7 +944,7 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
     /import \{ getDiagramVisualBounds \} from "\.\/resource-node-visual-footprint";/
   );
   assert.match(diagramEditorSource, /getDiagramVisualBounds\(\[targetNode\]\)/);
-  assert.match(diagramEditorSource, /getDiagramVisualBounds\(currentNodes\)/);
+  assert.match(diagramEditorSource, /getDiagramVisualBounds\(currentNodes, flowEdges\)/);
   assert.match(
     diagramEditorSource,
     /getDiagramVisualBounds\(previewDiagram\?\.nodes \?\? diagramRef\.current\.nodes\)/
@@ -752,15 +957,18 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
   );
   assert.match(
     diagramEditorSource,
-    /offsetBoardViewportToFrame\(\s*getViewportForBounds\(\s*getDiagramVisualBounds\(currentNodes\),\s*frame\.width,\s*frame\.height,/s
+    /const visualBounds = getDiagramVisualBounds\(currentNodes, flowEdges\);[\s\S]*?offsetBoardViewportToFrame\(\s*getViewportForBounds\(\s*visualBounds,\s*frame\.width,\s*frame\.height,/s
   );
   assert.match(diagramEditorSource, /getUnobscuredBoardViewportFrame\(/);
   assert.match(diagramEditorSource, /BOARD_VIEWPORT_TOP_INSET/);
   assert.match(diagramEditorSource, /BOARD_VIEWPORT_BOTTOM_INSET/);
-  assert.match(diagramEditorSource, /rebaseBoardViewport\(reactFlow\.getViewport\(\), previousFrame, nextFrame\)/);
   assert.match(
     diagramEditorSource,
-    /<div className=\{styles\.leftRail\} ref=\{leftRailRef\}>/
+    /rebaseBoardViewport\(reactFlow\.getViewport\(\), previousFrame, nextFrame\)/
+  );
+  assert.match(
+    diagramEditorSource,
+    /<div[^>]*className=\{styles\.leftRail\}[^>]*ref=\{leftRailRef\}[^>]*>/
   );
   assert.doesNotMatch(diagramEditorSource, /collapsedLeftPanel/);
 });
@@ -787,6 +995,27 @@ test("deleting a Resource refits the Security Group scopes that referenced it", 
   assert.match(
     deleteSelectionSource,
     /refitSecurityGroupScopesForTargetChanges\(\{\s*changedNodeIds: deletedNodeIds,\s*currentNodes: nodesWithReconciledAreas,\s*previousNodes: currentDiagram\.nodes\s*\}\)/s
+  );
+});
+
+test("diagram copy shortcuts preserve native text copy and only intercept selected nodes", () => {
+  const handleKeyDownSource = getSourceBlock(
+    diagramEditorSource,
+    "const handleKeyDown = useCallback(",
+    'useEffect(() => {\n    window.addEventListener("keydown", handleKeyDown);'
+  );
+
+  assert.match(
+    diagramEditorSource,
+    /import \{ resolveDiagramCopyShortcut \} from "\.\/diagram-keyboard-shortcuts";/
+  );
+  assert.match(
+    handleKeyDownSource,
+    /resolveDiagramCopyShortcut\(\{[\s\S]*selectedNodeCount: selectedNodeIds\.length,[\s\S]*selectedText: window\.getSelection\(\)\?\.toString\(\) \?\? ""[\s\S]*\}\)/
+  );
+  assert.match(
+    handleKeyDownSource,
+    /if \(copyShortcutResolution === "copy_nodes"\) \{\s*event\.preventDefault\(\);\s*copySelectedNodes\(\);\s*return;\s*\}/
   );
 });
 
@@ -823,22 +1052,30 @@ test("Area auto expansion is a persistent pressed toolbar preference after canva
   assert.match(diagramEditorSource, /<Expand aria-hidden="true" size=\{16\} \/>/);
 });
 
-test("canvas tools dock vertically along the left center", () => {
+test("canvas tools dock vertically along the left center without overlapping panel handles", () => {
   const canvasToolbarRule = getCssBlock(".canvasToolbar");
+  const viewerCanvasToolbarRule = getCssBlock(".editorShellViewer .canvasToolbar");
+  const panelEdgeHandleRule = getCssBlock(".panelEdgeHandle");
   const toolbarGroupRule = getCssBlock(".toolbarGroup");
 
   assert.match(canvasToolbarRule, /display:\s*flex;/);
   assert.match(canvasToolbarRule, /flex-direction:\s*column;/);
-  assert.match(canvasToolbarRule, /left:\s*16px;/);
+  assert.match(canvasToolbarRule, /left:\s*calc\(var\(--panel-edge-handle-width\) \+ 12px\);/);
   assert.match(canvasToolbarRule, /top:\s*50%;/);
   assert.match(canvasToolbarRule, /transform:\s*translateY\(-50%\);/);
   assert.doesNotMatch(canvasToolbarRule, /bottom:/);
   assert.doesNotMatch(canvasToolbarRule, /translateX/);
+  assert.match(panelEdgeHandleRule, /width:\s*var\(--panel-edge-handle-width\);/);
+  assert.match(viewerCanvasToolbarRule, /left:\s*16px;/);
   assert.match(toolbarGroupRule, /display:\s*inline-flex;/);
   assert.match(toolbarGroupRule, /flex-direction:\s*column;/);
   assert.match(
     diagramEditorStyles,
-    /@media \(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*\{[^}]*left:\s*10px;[^}]*max-height:\s*calc\(100% - 20px\);/s
+    /@media \(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*\{[^}]*left:\s*calc\(var\(--panel-edge-handle-width\) \+ 10px\);[^}]*max-height:\s*calc\(100% - 20px\);/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /@media \(max-width:\s*640px\)[\s\S]*?\.editorShellViewer \.canvasToolbar\s*\{[^}]*left:\s*10px;/s
   );
 });
 

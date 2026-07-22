@@ -39,6 +39,8 @@ test("runDeploymentWorkerJob executes a running job with validated access contex
     {
       operation: "apply",
       deploymentId,
+      workerTaskArn:
+        "arn:aws:ecs:ap-northeast-2:555980271919:task/sketchcatch-production-cluster/task-id",
       accessContext: { kind: "user", userId },
       startedFromStatus: "PENDING",
       startedFromFailureStage: null
@@ -46,6 +48,24 @@ test("runDeploymentWorkerJob executes a running job with validated access contex
   ]);
   assert.equal(finalJob.status, "SUCCEEDED");
   assert.equal(finalJob.completedAt, fixedNow);
+});
+
+test("runDeploymentWorkerJob forwards its cancellation signal to the operation", async () => {
+  const repository = new FakeDeploymentJobRepository();
+  const controller = new AbortController();
+  let receivedSignal: AbortSignal | undefined;
+  repository.add(createJob());
+
+  await runDeploymentWorkerJob(
+    { jobId, abortSignal: controller.signal },
+    repository,
+    async (input) => {
+      receivedSignal = input.abortSignal;
+      return { status: "PENDING", errorSummary: null };
+    }
+  );
+
+  assert.equal(receivedSignal, controller.signal);
 });
 
 test("runDeploymentWorkerJob rejects a job that is not running", async () => {
@@ -63,6 +83,37 @@ test("runDeploymentWorkerJob rejects a job that is not running", async () => {
 
   assert.equal(operationCalls, 0);
   assert.equal(repository.get(jobId)?.status, "QUEUED");
+});
+
+test("runDeploymentWorkerJob waits for a locally spawned job to finish dispatching", async () => {
+  const repository = new FakeDeploymentJobRepository();
+  const calls: DeploymentWorkerOperationInput[] = [];
+  let reads = 0;
+  repository.add(createJob({ status: "DISPATCHING", ecsTaskArn: null }));
+  const findDeploymentJobById = repository.findDeploymentJobById.bind(repository);
+  repository.findDeploymentJobById = async (candidateJobId) => {
+    reads += 1;
+    if (reads === 2) {
+      await repository.markDeploymentJobRunning(candidateJobId, {
+        ecsTaskArn: "local-process:4321"
+      });
+    }
+    return findDeploymentJobById(candidateJobId);
+  };
+
+  const finalJob = await runDeploymentWorkerJob(
+    { jobId },
+    repository,
+    async (input) => {
+      calls.push(input);
+      return { status: "PENDING", errorSummary: null };
+    },
+    { wait: async () => undefined, dispatchWaitAttempts: 2 }
+  );
+
+  assert.equal(reads, 2);
+  assert.equal(calls[0]?.workerTaskArn, "local-process:4321");
+  assert.equal(finalJob.status, "SUCCEEDED");
 });
 
 test("runDeploymentWorkerJob rejects an access context that does not match the requester", async () => {

@@ -11,7 +11,10 @@ import type {
 } from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 
+export type ArchitectureAwsRegion = "ap-northeast-1" | "ap-northeast-2";
+
 export type ArchitectureRequirementResolution = {
+  readonly awsRegion: ArchitectureAwsRegion;
   readonly selectedDraftPattern: ArchitectureDraftPattern;
   readonly intent: ArchitectureIntent;
   readonly servicePurpose: ArchitectureServicePurpose;
@@ -330,6 +333,7 @@ export function resolveArchitectureRequirement(
   if (hasPromptSignal) {
     return {
       selectedDraftPattern: selectDraftPattern(requirementFacts),
+      awsRegion: resolveArchitectureAwsRegion(request.prompt),
       intent,
       servicePurpose,
       capabilities,
@@ -351,6 +355,14 @@ export function resolveArchitectureRequirement(
   }
 
   throw new AmbiguousArchitecturePromptError();
+}
+
+function resolveArchitectureAwsRegion(prompt: string): ArchitectureAwsRegion {
+  const normalizedPrompt = normalizePrompt(prompt);
+
+  return /(?:ap-northeast-1|tokyo|japan|\uB3C4\uCFC4|\uC77C\uBCF8)/u.test(normalizedPrompt)
+    ? "ap-northeast-1"
+    : "ap-northeast-2";
 }
 
 function selectDraftPattern(requirementFacts: readonly ArchitectureRequirementFact[]): ArchitectureDraftPattern {
@@ -879,6 +891,13 @@ function createOperatingProfile(
       : lowBudgetKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))
         ? "low"
         : "normal";
+  const trafficProfile = resolveOperatingTrafficProfile(normalizedPrompt);
+  const budgetProfile = resolveOperatingBudgetProfile(normalizedPrompt, budgetLevel);
+  const databaseProfile = resolveOperatingDatabaseProfile(normalizedPrompt, factSet.has("database"));
+  const managementProfile = resolveOperatingManagementProfile(normalizedPrompt);
+  const availabilityProfile = resolveOperatingAvailabilityProfile(normalizedPrompt);
+  const uploadProfile = resolveOperatingUploadProfile(normalizedPrompt, factSet.has("file_upload"));
+  const realtimeProfile = resolveOperatingRealtimeProfile(normalizedPrompt);
 
   return {
     budgetLevel,
@@ -890,8 +909,73 @@ function createOperatingProfile(
       factSet.has("database") ||
       highSecurityKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))
         ? "high"
-        : "basic"
+        : "basic",
+    budgetProfile,
+    trafficProfile,
+    databaseProfile,
+    managementProfile,
+    availabilityProfile,
+    uploadProfile,
+    realtimeProfile
   };
+}
+
+function resolveOperatingTrafficProfile(prompt: string): ArchitectureDraftOperatingProfile["trafficProfile"] {
+  if (/(bursty|event\s+(?:spike|burst)|급변동|이벤트성\s*급증|예측\s*불가)/iu.test(prompt)) return "bursty";
+  if (/(large\s+traffic|대규모\s*(?:트래픽|\(일)|10,?000|동시\s*500|concurrent\s*500)/iu.test(prompt)) return "large";
+  if (/(medium\s+traffic|중간\s*규모\s*(?:트래픽|\(일)|1,?000|동시\s*50|concurrent\s*50)/iu.test(prompt)) return "medium";
+  return "small";
+}
+
+function resolveOperatingBudgetProfile(
+  prompt: string,
+  budgetLevel: ArchitectureDraftOperatingProfile["budgetLevel"]
+): ArchitectureDraftOperatingProfile["budgetProfile"] {
+  if (/(enterprise|200만원\s*이상|엔터프라이즈)/iu.test(prompt)) return "enterprise";
+  if (/(50\s*-\s*200\s*(?:manwon|만원)|high\s+(?:budget|performance)|고성능)/iu.test(prompt)) return "high";
+  if (/(10\s*-\s*50\s*(?:manwon|만원)|moderate|normal\s+budget|적당한\s*성능)/iu.test(prompt)) return "normal";
+  return budgetLevel;
+}
+
+function resolveOperatingDatabaseProfile(
+  prompt: string,
+  hasDatabase: boolean
+): ArchitectureDraftOperatingProfile["databaseProfile"] {
+  if (!hasDatabase) return "none";
+  if (/(100gb\s*(?:이상|or\s*more)|대용량\s*데이터|large\s+database|complex\s+quer)/iu.test(prompt)) return "large";
+  if (/(10gb\s*(?:~-|~|to)\s*100gb|중간\s*규모\s*데이터|medium\s+database)/iu.test(prompt)) return "medium";
+  return "small";
+}
+
+function resolveOperatingManagementProfile(prompt: string): ArchitectureDraftOperatingProfile["managementProfile"] {
+  if (/(직접\s*관리|서버\s*직접\s*운영|self[-\s]*managed|direct\s+management)/iu.test(prompt)) return "self_managed";
+  if (/(fully\s*managed|serverless|관리\s*최소|완전\s*관리형|서버리스)/iu.test(prompt)) return "fully_managed";
+  if (/(semi[-\s]*managed|some\s+server|반관리)/iu.test(prompt)) return "semi_managed";
+  return "unknown";
+}
+
+function resolveOperatingAvailabilityProfile(prompt: string): ArchitectureDraftOperatingProfile["availabilityProfile"] {
+  if (/(99\.99|절대\s*안\s*됨|almost\s+no\s+downtime)/iu.test(prompt)) return "99.99";
+  if (/(99\.9|월\s*1시간|1\s*hour)/iu.test(prompt)) return "99.9";
+  if (/(99%|하루\s*몇\s*시간|few\s+hours)/iu.test(prompt)) return "99";
+  return "none";
+}
+
+function resolveOperatingUploadProfile(
+  prompt: string,
+  hasFileUpload: boolean
+): ArchitectureDraftOperatingProfile["uploadProfile"] {
+  if (!hasFileUpload) return "none";
+  if (/(large\s+file|100mb|대용량\s*(?:파일|업로드))/iu.test(prompt)) return "large";
+  if (/(mixed\s+files?|documents?|video|동영상|문서|다양한\s*파일)/iu.test(prompt)) return "mixed";
+  return "image";
+}
+
+function resolveOperatingRealtimeProfile(prompt: string): ArchitectureDraftOperatingProfile["realtimeProfile"] {
+  if (/(data\s+updates?|주식|게임|데이터\s*업데이트)/iu.test(prompt)) return "data_updates";
+  if (/(notification|notify|알림)/iu.test(prompt)) return "notification";
+  if (/(chat|채팅)/iu.test(prompt)) return "chat";
+  return "none";
 }
 
 function includesAny(normalizedPrompt: string, keywords: readonly string[]): boolean {
@@ -977,7 +1061,7 @@ function prefersNoDatabase(normalizedPrompt: string): boolean {
 
 function hasNegatedTerm(normalizedPrompt: string, terms: readonly string[]): boolean {
   const negationPattern =
-    "필요\\s*없|필요없|필요하지\\s*않|안\\s*필요|불필요|없이|없는|빼|제외|말고|안\\s*써|안써|쓰지\\s*않|no|without|not\\s+needed|not\\s+need|does\\s+not\\s+need|don't\\s+need|dont\\s+need";
+    "필요\\s*없|필요없|필요하지\\s*않|안\\s*필요|불필요|없이|없는|빼|제외|말고|안\\s*써|안써|쓰지\\s*않|\\bno\\b|\\bwithout\\b|not\\s+needed|not\\s+need|does\\s+not\\s+need|don't\\s+need|dont\\s+need";
 
   return terms.some((term) => {
     const escapedTerm = escapeRegExp(term.toLowerCase());
@@ -1027,7 +1111,36 @@ function findUnsupportedRequirementMatches(prompt: string): UnsupportedRequireme
   return UNSUPPORTED_REQUIREMENT_RULES.filter(
     (rule) =>
       rule.keywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase())) &&
+      !isDeferredMultiRegionRoadmapSelection(normalizedPrompt, rule) &&
       !isCoveredBySupportedExplicitResource(rule, explicitResourceTypes)
+  );
+}
+
+// 현재는 단일 리전을 선택하고 다중 리전은 향후 계획으로만 남긴 답변을 구분합니다.
+function isDeferredMultiRegionRoadmapSelection(
+  normalizedPrompt: string,
+  rule: UnsupportedRequirementRule
+): boolean {
+  if (rule.label !== "멀티 리전") {
+    return false;
+  }
+
+  const latestMultiRegionLine = normalizedPrompt
+    .split(/\r?\n/u)
+    .filter((line) => /(?:다중|멀티)\s*리전|multi[ -]?region/iu.test(line))
+    .at(-1);
+
+  if (latestMultiRegionLine === undefined) {
+    return false;
+  }
+
+  return (
+    /(?:mvp(?:는|은)?\s*)?단일\s*리전.{0,40}(?:추후|향후|나중).{0,40}(?:다중|멀티)\s*리전/iu.test(
+      latestMultiRegionLine
+    ) ||
+    /(?:mvp\s+)?(?:is\s+)?single[ -]?region.{0,40}(?:future|later|eventually|roadmap).{0,40}multi[ -]?region/iu.test(
+      latestMultiRegionLine
+    )
   );
 }
 
@@ -1201,7 +1314,7 @@ function hasNegatedResourceAlias(normalizedPrompt: string, alias: string): boole
 
   const escapedAlias = escapeRegExp(alias);
   const nearbyNegationPattern =
-    "(?:쓰지\\s*마|쓰지\\s*말|사용\\s*안|없이|없는|제외|빼고|말고|no|without|not\\s+using)";
+    "(?:쓰지\\s*마|쓰지\\s*말|사용\\s*안|없이|없는|제외|빼고|말고|\\bno\\b|\\bwithout\\b|not\\s+using)";
 
   return new RegExp(
     `(?:${escapedAlias}.{0,24}${nearbyNegationPattern}|${nearbyNegationPattern}.{0,24}${escapedAlias})`,

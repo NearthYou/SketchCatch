@@ -1,6 +1,7 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { useReducer } from "react";
+import { useReducer, useRef } from "react";
 import type {
   ApplicationRelease,
   AiPreDeploymentAnalysisResult,
@@ -12,31 +13,37 @@ import type {
   DeploymentScope,
   DiagramJson,
   DeploymentLog,
+  ProjectBuildEnvironment,
   TerraformDiagnostic,
   TerraformSourceLocation,
   TerraformOutput
 } from "@sketchcatch/types";
 import {
+  Activity,
   AlertCircle,
-  Check,
+  Box,
   CheckCircle2,
-  CircleDot,
-  Clipboard,
-  ClipboardCheck,
-  Clock3,
+  ChevronRight,
   Code2,
-  Info,
+  RotateCw,
+  Search,
+  Settings,
   ShieldCheck,
-  Trash2
+  Target,
+  Trash2,
+  X
 } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
   approveDeploymentPlan,
+  revokeDeploymentApproval,
   cancelDeployment as cancelDeploymentRun,
   executeDeployment,
   getAiPreDeploymentDeepScan,
+  getProjectDeploymentTarget,
+  getProjectBuildEnvironment,
   listApplicationReleases,
   listAwsConnections,
   listDeploymentResources,
@@ -44,7 +51,8 @@ import {
   listDeployments,
   listTerraformOutputs,
   prepareDeployment,
-  runDeploymentInit,
+  prepareInfrastructureRollback,
+  retryDeploymentFrontend,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
   runDeploymentPlan,
@@ -54,9 +62,10 @@ import {
 } from "./api";
 import {
   getDeploymentActionState,
+  getInfrastructureRollbackTarget,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
-  hasCompleteDeploymentApprovalSnapshot,
+  selectDeploymentCleanupTargets,
   shouldAutoRefreshDeployment,
   shouldShowDeploymentInfoValue,
   type DeploymentLogMessageToken
@@ -71,21 +80,43 @@ import {
 } from "./pre-deployment-diagnostics";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { PreparedWorkspaceDeploymentArtifacts } from "./workspace-deployment-artifacts";
-import { getDeploymentPreparationErrorMessage } from "./deployment-preparation-error";
+import {
+  getDeploymentPreparationErrorMessage,
+  getDeploymentRuntimeSecretPrerequisite,
+  getDeploymentTargetPrerequisite,
+  type DeploymentTargetPrerequisite
+} from "./deployment-preparation-error";
 import type { RequestState } from "./workspace-right-panel.types";
 import { canLoadDeploymentData, type DeploymentAvailability } from "./deployment-availability";
 import {
+  createResetPreDeploymentCheckState,
   getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
-  shouldStartQueuedApplyPlan,
+  hasDeploymentDraftChanges,
+  resolveSelectedDirectDeploymentStepId,
+  shouldShowDeploymentValidationActions,
+  requiresProjectBuildEnvironment,
   type DirectDeploymentStepId
 } from "./deployment-console-state";
 import {
+  filterDeploymentHistoryEntries,
+  getDeploymentHistoryEntries,
+  getDeploymentFailureDeveloperCheck,
   getDeploymentStatusPresentation,
-  getRecentDeploymentResultTitle,
-  type DeploymentStatusTone
+  resolveDeploymentReadinessScope,
+  type DeploymentHistoryFilter
 } from "./deployment-presentation";
+import { getDeploymentDurationLabel } from "./deployment-duration";
+import {
+  beginDeploymentHistoryDetailsLoad,
+  completeDeploymentHistoryDetailsLoad,
+  failDeploymentHistoryDetailsLoad,
+  initialDeploymentHistoryDetailsState,
+  selectDeploymentLogView
+} from "./deployment-history-details";
 import { DeploymentOutputLinks } from "./DeploymentOutputLinks";
+import { DeploymentProgressBar } from "./DeploymentProgressBar";
+import type { DeploymentProgressOperation } from "./deployment-progress";
 import {
   getSafeDeploymentLinks,
   getVisibleDeploymentOutputs,
@@ -95,6 +126,7 @@ import {
 import styles from "./workspace.module.css";
 
 type DeploymentRuntimeSnapshot = {
+  readonly buildEnvironment: ProjectBuildEnvironment | null;
   readonly deployments: Deployment[];
   readonly releases: ApplicationRelease[];
   readonly logs: DeploymentLog[];
@@ -102,8 +134,11 @@ type DeploymentRuntimeSnapshot = {
   readonly outputs: TerraformOutput[];
   readonly outputsDeploymentId: string | null;
 };
-type DeploymentPanelSnapshot = DeploymentRuntimeSnapshot & {
+type DeploymentPanelSnapshot = {
   readonly awsConnections: AwsConnection[];
+  readonly buildEnvironment: ProjectBuildEnvironment | null;
+  readonly deployments: Deployment[];
+  readonly releases: ApplicationRelease[];
 };
 
 export type DeploymentPreDeploymentCheckState = {
@@ -122,11 +157,15 @@ export const initialPreDeploymentCheckState: DeploymentPreDeploymentCheckState =
 export type DirectDeploymentScreenProps = {
   readonly confirmationDismissRequestId?: number | undefined;
   readonly deploymentAvailability: DeploymentAvailability;
+  readonly deploymentTargetSavedRevision?: number | undefined;
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
-  readonly onCancel?: (() => void) | undefined;
   readonly onConfirmationStateChange?: ((isOpen: boolean) => void) | undefined;
+  readonly onApplyPlanApproved?: ((deployment: Deployment) => void) | undefined;
+  readonly onDeploymentSucceeded?: ((deployment: Deployment) => void) | undefined;
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
+  readonly onOpenDeliverySetup?: (() => void) | undefined;
+  readonly onOpenLiveObservation?: (() => void) | undefined;
   readonly onPrepareDeploymentArtifacts: () => Promise<PreparedWorkspaceDeploymentArtifacts>;
   readonly onPreDeploymentCheckStateChange: Dispatch<
     SetStateAction<DeploymentPreDeploymentCheckState>
@@ -134,67 +173,117 @@ export type DirectDeploymentScreenProps = {
   readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
   readonly preDeploymentCheckState: DeploymentPreDeploymentCheckState;
   readonly projectId: string;
+  readonly projectName?: string | undefined;
+  readonly refreshRequestId?: number | undefined;
+  readonly requestedScope?: "application" | "full_stack" | null | undefined;
+  readonly projectDraftRevision?: number | null | undefined;
 };
 
 // Direct Deployment reports only Resources that can enter the Terraform execution graph.
 export function DirectDeploymentScreen({
   confirmationDismissRequestId = 0,
   deploymentAvailability,
+  deploymentTargetSavedRevision = 0,
   diagramJson,
   hasUnsavedDeploymentBaseline,
-  onCancel,
+  onApplyPlanApproved,
+  onDeploymentSucceeded,
   onConfirmationStateChange,
+  onOpenDeliverySetup,
   onOpenFindingTerraformSource,
+  onOpenLiveObservation,
   onPrepareDeploymentArtifacts,
   onPreDeploymentCheckStateChange,
   onValidateTerraformDiagnostics,
   preDeploymentCheckState,
-  projectId
+  projectId,
+  projectName = "",
+  refreshRequestId = 0,
+  requestedScope = null,
+  projectDraftRevision = null
 }: DirectDeploymentScreenProps) {
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
+  const [buildEnvironment, setBuildEnvironment] = useState<ProjectBuildEnvironment | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [applicationReleases, setApplicationReleases] = useState<ApplicationRelease[]>([]);
   const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
-  const [deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
+  const [_deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
   const [terraformOutputState, dispatchTerraformOutputState] = useReducer(
     reduceDeploymentOutputState,
     initialDeploymentOutputState
   );
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedScope, setSelectedScope] = useState<DeploymentScope | "auto">("auto");
+  const [autoScopeRequestDeploymentId, setAutoScopeRequestDeploymentId] = useState("");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
-  const [queuedApplyPlanDeploymentId, setQueuedApplyPlanDeploymentId] = useState("");
+  const [selectedHistoryDeploymentId, setSelectedHistoryDeploymentId] = useState("");
+  const [deploymentHistoryFilter, setDeploymentHistoryFilter] =
+    useState<DeploymentHistoryFilter>("all");
+  const [deploymentHistorySearchQuery, setDeploymentHistorySearchQuery] = useState("");
+  const [deploymentHistoryDetails, setDeploymentHistoryDetails] = useState(
+    initialDeploymentHistoryDetailsState
+  );
+  const [showDeploymentScopeEditor, setShowDeploymentScopeEditor] = useState(false);
+  const handledConfirmationDismissRequestIdRef = useRef(confirmationDismissRequestId);
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
-  const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
+  const [showInfrastructureRollbackConfirmation, setShowInfrastructureRollbackConfirmation] =
+    useState(false);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [failedActionStepId, setFailedActionStepId] =
+    useState<DirectDeploymentStepId | null>(null);
+  const [snapshotErrorMessage, setSnapshotErrorMessage] = useState("");
+  const [detailErrorMessage, setDetailErrorMessage] = useState("");
+  const [isInitialSnapshotLoading, setIsInitialSnapshotLoading] = useState(false);
+  const actionInFlightRef = useRef(false);
+  const pendingAutoAdvanceDeploymentIdRef = useRef("");
+  const latestDetailsDeploymentIdRef = useRef("");
+  const [deploymentTargetPrerequisite, setDeploymentTargetPrerequisite] =
+    useState<DeploymentTargetPrerequisite | null>(null);
+  const [activeProgress, setActiveProgress] = useState<{
+    readonly operation: DeploymentProgressOperation;
+  } | null>(null);
   const [selectedDirectStepId, setSelectedDirectStepId] =
     useState<DirectDeploymentStepId>("validation");
-  const isDeploymentOverlayOpen = true;
+  const completionCandidateDeploymentIdsRef = useRef(new Set<string>());
+  const hasLoadedDeploymentPanelRef = useRef(false);
+
+  useEffect(() => {
+    if (requestedScope) {
+      setSelectedScope(requestedScope);
+      setAutoScopeRequestDeploymentId("");
+    }
+  }, [requestedScope]);
+
+  useEffect(() => {
+    setDeploymentTargetPrerequisite(null);
+  }, [deploymentTargetSavedRevision, projectId, selectedAwsConnectionId, selectedScope]);
 
   const verifiedAwsConnections = useMemo(
     () => awsConnections.filter((connection) => connection.status === "verified"),
     [awsConnections]
   );
+  const selectedAwsConnection = useMemo(
+    () =>
+      verifiedAwsConnections.find((connection) => connection.id === selectedAwsConnectionId) ??
+      null,
+    [selectedAwsConnectionId, verifiedAwsConnections]
+  );
   const deploymentScopeOptions = useMemo<SelectMenuOption[]>(
     () => [
       {
-        detail: "저장된 Terraform과 확인된 프로젝트 실행 타깃을 기준으로 결정",
         label: "자동 감지",
         value: "auto"
       },
       {
-        detail: "Terraform 인프라만 배포",
         label: "인프라",
         value: "infrastructure"
       },
       {
-        detail: "확인된 프로젝트 애플리케이션 타깃만 배포",
         label: "애플리케이션",
         value: "application"
       },
       {
-        detail: "인프라와 애플리케이션을 한 프로젝트 릴리즈로 배포",
         label: "전체 스택",
         value: "full_stack"
       }
@@ -208,9 +297,47 @@ export function DirectDeploymentScreen({
       ),
     [applicationReleases]
   );
+  const deploymentHistoryEntries = useMemo(
+    () => getDeploymentHistoryEntries(deployments),
+    [deployments]
+  );
+  const hasDeploymentHistory = deploymentHistoryEntries.length > 0;
+  const filteredDeploymentHistoryEntries = useMemo(
+    () => filterDeploymentHistoryEntries(deploymentHistoryEntries, deploymentHistoryFilter),
+    [deploymentHistoryEntries, deploymentHistoryFilter]
+  );
+  const visibleDeploymentHistoryEntries = useMemo(() => {
+    const normalizedQuery = deploymentHistorySearchQuery.trim().toLocaleLowerCase("ko-KR");
+
+    if (!normalizedQuery) {
+      return filteredDeploymentHistoryEntries;
+    }
+
+    return filteredDeploymentHistoryEntries.filter(({ deployment, versionLabel }) =>
+      [versionLabel, deployment.id, formatDeploymentScope(deployment.scope)].some((value) =>
+        value.toLocaleLowerCase("ko-KR").includes(normalizedQuery)
+      )
+    );
+  }, [deploymentHistorySearchQuery, filteredDeploymentHistoryEntries]);
   const selectedDeployment = useMemo(
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
+  );
+  const cleanupDeployments = useMemo(
+    () => selectDeploymentCleanupTargets(deployments),
+    [deployments]
+  );
+
+  const selectedApplicationRelease = useMemo(
+    () =>
+      sortedApplicationReleases.find(
+        (release) => release.deploymentId === selectedDeployment?.id
+      ) ?? null,
+    [selectedDeployment?.id, sortedApplicationReleases]
+  );
+  const infrastructureRollbackTarget = useMemo(
+    () => getInfrastructureRollbackTarget(selectedDeployment, deployments),
+    [deployments, selectedDeployment]
   );
   const terraformOutputs = useMemo(
     () => getVisibleDeploymentOutputs(terraformOutputState, selectedDeploymentId),
@@ -220,22 +347,77 @@ export function DirectDeploymentScreen({
     () => getSafeDeploymentLinks(terraformOutputs),
     [terraformOutputs]
   );
-  const canStartDeploymentReview = selectedAwsConnectionId.length > 0 && requestState !== "loading";
+  const hasLoadedSelectedHistoryDetails =
+    deploymentHistoryDetails.deploymentId === selectedHistoryDeploymentId &&
+    deploymentHistoryDetails.requestState === "success";
+  const loadedHistoryDeploymentLogs = hasLoadedSelectedHistoryDetails
+    ? deploymentHistoryDetails.logs
+    : [];
+  const historyDeploymentResources = hasLoadedSelectedHistoryDetails
+    ? deploymentHistoryDetails.resources
+    : [];
+  const historyTerraformOutputs = hasLoadedSelectedHistoryDetails
+    ? deploymentHistoryDetails.outputs
+    : [];
+  const historyDetailsIsLoading =
+    selectedHistoryDeploymentId.length > 0 &&
+    (deploymentHistoryDetails.deploymentId !== selectedHistoryDeploymentId ||
+      deploymentHistoryDetails.requestState === "loading");
+  const historyDetailsErrorMessage =
+    deploymentHistoryDetails.deploymentId === selectedHistoryDeploymentId &&
+    deploymentHistoryDetails.requestState === "error"
+      ? deploymentHistoryDetails.errorMessage
+      : "";
+  const deploymentLogView = selectDeploymentLogView({
+    currentDeploymentId: selectedDeploymentId,
+    currentLogs: deploymentLogs,
+    historyDeploymentId: selectedHistoryDeploymentId,
+    historyErrorMessage: historyDetailsErrorMessage,
+    historyIsLoading: historyDetailsIsLoading,
+    historyLogs: loadedHistoryDeploymentLogs
+  });
+  const historyDeploymentOutputLinks = useMemo(
+    () => getSafeDeploymentLinks(historyTerraformOutputs),
+    [historyTerraformOutputs]
+  );
+  const canStartDeploymentReview =
+    selectedAwsConnectionId.length > 0 &&
+    requestState !== "loading" &&
+    !isInitialSnapshotLoading;
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
-  const deploymentActions = getDeploymentActionState(selectedDeployment, requestState);
+  const canReconcileAcceptedPlan = Boolean(
+    requestState === "error" &&
+      failedActionStepId === "validation" &&
+      selectedDeployment &&
+      pendingAutoAdvanceDeploymentIdRef.current === selectedDeployment.id &&
+      (selectedDeployment.status === "RUNNING" || selectedDeployment.currentPlanArtifactId)
+  );
+  const reconciledRequestState: RequestState = canReconcileAcceptedPlan
+    ? selectedDeployment?.status === "RUNNING"
+      ? "loading"
+      : "idle"
+    : requestState;
+  const deploymentActions = getDeploymentActionState(
+    selectedDeployment,
+    reconciledRequestState
+  );
+
+  const cleanupActionTargets = cleanupDeployments.map((deployment) => ({
+    actions: getDeploymentActionState(deployment, requestState),
+    deployment
+  }));
   const canRunPlan = deploymentActions.canRunApplyPlan;
   const canApprovePlan = deploymentActions.canApprovePlan;
   const canApply = deploymentActions.canApply;
-  const canRunDestroyPlan = deploymentActions.canRunDestroyPlan;
-  const canDestroy = deploymentActions.canDestroy;
+
   const canCancelDeployment = deploymentActions.canCancelDeployment;
   const shouldShowApplyButton = deploymentActions.shouldShowApplyButton;
-  const shouldShowDestroyPlanButton = deploymentActions.shouldShowDestroyPlanButton;
-  const shouldShowDestroyButton = deploymentActions.shouldShowDestroyButton;
-  const deploymentActionHint = selectedDeployment
-    ? getDeploymentActionHint(selectedDeployment)
-    : "";
-  const DeploymentBaselineIcon = hasUnsavedDeploymentBaseline ? Clipboard : ClipboardCheck;
+
+  const hasCurrentDeploymentChanges = hasDeploymentDraftChanges({
+    currentDraftRevision: projectDraftRevision,
+    hasUnsavedWorkspaceChanges: hasUnsavedDeploymentBaseline,
+    preparedDraftRevision: selectedDeployment?.preparedDraftRevision ?? null
+  });
   const shouldAutoRefreshSelectedDeployment = shouldAutoRefreshDeployment(selectedDeployment);
   const preDeploymentAnalysis = preDeploymentCheckState.analysis;
   const preDeploymentState = preDeploymentCheckState.requestState;
@@ -256,58 +438,59 @@ export function DirectDeploymentScreen({
   const directDeploymentFlow = getDirectDeploymentFlow({
     actions: deploymentActions,
     deployment: selectedDeployment,
-    hasUnsavedBaseline: hasUnsavedDeploymentBaseline,
+    failedStepId: failedActionStepId,
+    hasUnsavedBaseline: hasCurrentDeploymentChanges,
     preflightState: directPreflightState,
+    reconciledRequestState,
     requestState
   });
-  const recentResultTitle = getRecentDeploymentResultTitle(selectedDeployment);
-  const recentResultStatus = selectedDeployment
-    ? getDeploymentStatusPresentation(selectedDeployment.status)
-    : null;
-  const recentResultStage = selectedDeployment
-    ? (selectedDeployment.failureStage ?? selectedDeployment.activeStage)
-    : null;
+  const deploymentProgressIsStarting = Boolean(
+    activeProgress &&
+    (reconciledRequestState === "loading" ||
+      preDeploymentState === "loading" ||
+      (selectedDeployment?.status === "PENDING" && !selectedDeployment.currentPlanArtifactId))
+  );
+  const deploymentFailureDeveloperCheck = getDeploymentFailureDeveloperCheck(
+    selectedDeployment?.failureStage ?? null,
+    process.env.NODE_ENV,
+    selectedDeployment?.errorSummary
+  );
+  const needsBuildEnvironment = requiresProjectBuildEnvironment(selectedDeployment);
 
   useEffect(() => {
-    setSelectedDirectStepId(directDeploymentFlow.activeStepId);
-  }, [directDeploymentFlow.activeStepId]);
+    if (
+      reconciledRequestState === "idle" &&
+      selectedDeployment &&
+      pendingAutoAdvanceDeploymentIdRef.current === selectedDeployment.id &&
+      directDeploymentFlow.activeStepId === "approval"
+    ) {
+      pendingAutoAdvanceDeploymentIdRef.current = "";
+      setRequestState("idle");
+      setFailedActionStepId(null);
+      setErrorMessage("");
+      setSelectedDirectStepId("approval");
+    }
+  }, [directDeploymentFlow.activeStepId, reconciledRequestState, selectedDeployment]);
 
   useEffect(() => {
-    if (!queuedApplyPlanDeploymentId || !selectedDeployment) {
-      return;
-    }
-
     if (
-      selectedDeployment.id === queuedApplyPlanDeploymentId &&
-      (selectedDeployment.currentPlanArtifactId ||
-        selectedDeployment.status === "FAILED" ||
-        selectedDeployment.status === "CANCELLED")
+      selectedDeployment?.status === "SUCCESS" &&
+      completionCandidateDeploymentIdsRef.current.delete(selectedDeployment.id)
     ) {
-      setQueuedApplyPlanDeploymentId("");
-      return;
+      onDeploymentSucceeded?.(selectedDeployment);
     }
+  }, [onDeploymentSucceeded, selectedDeployment]);
 
+  useEffect(() => {
     if (
-      !canRunPlan ||
-      !shouldStartQueuedApplyPlan({
-        deployment: selectedDeployment,
-        queuedDeploymentId: queuedApplyPlanDeploymentId,
-        requestState
-      })
+      selectedHistoryDeploymentId &&
+      !visibleDeploymentHistoryEntries.some(
+        ({ deployment }) => deployment.id === selectedHistoryDeploymentId
+      )
     ) {
-      return;
+      setSelectedHistoryDeploymentId("");
     }
-
-    setQueuedApplyPlanDeploymentId("");
-    void startTerraformPlan();
-  }, [
-    canRunPlan,
-    queuedApplyPlanDeploymentId,
-    requestState,
-    selectedDeployment?.currentPlanArtifactId,
-    selectedDeployment?.id,
-    selectedDeployment?.status
-  ]);
+  }, [selectedHistoryDeploymentId, visibleDeploymentHistoryEntries]);
 
   useEffect(() => {
     if (shouldShowApplyButton) {
@@ -316,20 +499,30 @@ export function DirectDeploymentScreen({
   }, [shouldShowApplyButton]);
 
   useEffect(() => {
-    onConfirmationStateChange?.(showApplyConfirmation || showDestroyConfirmation);
-  }, [onConfirmationStateChange, showApplyConfirmation, showDestroyConfirmation]);
+    onConfirmationStateChange?.(showApplyConfirmation || showInfrastructureRollbackConfirmation);
+  }, [onConfirmationStateChange, showApplyConfirmation, showInfrastructureRollbackConfirmation]);
 
   useEffect(() => {
-    if (confirmationDismissRequestId > 0) {
-      setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
+    if (confirmationDismissRequestId === handledConfirmationDismissRequestIdRef.current) {
+      return;
     }
+
+    handledConfirmationDismissRequestIdRef.current = confirmationDismissRequestId;
+    setShowApplyConfirmation(false);
+    setShowInfrastructureRollbackConfirmation(false);
   }, [confirmationDismissRequestId]);
 
   const loadDeploymentRuntimeSnapshot =
     useCallback(async (): Promise<DeploymentRuntimeSnapshot> => {
-      const [nextDeployments, nextReleases, nextLogs, nextResources, nextOutputs] =
-        await Promise.all([
+      const [
+        nextBuildEnvironment,
+        nextDeployments,
+        nextReleases,
+        nextLogs,
+        nextResources,
+        nextOutputs
+      ] = await Promise.all([
+          getProjectBuildEnvironment(projectId),
           listDeployments(projectId),
           listApplicationReleases(projectId),
           selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([]),
@@ -340,6 +533,7 @@ export function DirectDeploymentScreen({
         ]);
 
       return {
+        buildEnvironment: nextBuildEnvironment,
         deployments: nextDeployments,
         releases: nextReleases,
         logs: nextLogs,
@@ -351,6 +545,7 @@ export function DirectDeploymentScreen({
 
   const applyDeploymentRuntimeSnapshot = useCallback(
     (snapshot: DeploymentRuntimeSnapshot): void => {
+      setBuildEnvironment(snapshot.buildEnvironment);
       setDeployments(snapshot.deployments);
       setApplicationReleases(snapshot.releases);
       setDeploymentLogs(snapshot.logs);
@@ -369,16 +564,21 @@ export function DirectDeploymentScreen({
   );
 
   const loadDeploymentPanelSnapshot = useCallback(async (): Promise<DeploymentPanelSnapshot> => {
-    const [nextConnections, runtimeSnapshot] = await Promise.all([
-      listAwsConnections(),
-      loadDeploymentRuntimeSnapshot()
-    ]);
+    const [nextConnections, nextBuildEnvironment, nextDeployments, nextReleases] =
+      await Promise.all([
+        listAwsConnections(),
+        getProjectBuildEnvironment(projectId),
+        listDeployments(projectId),
+        listApplicationReleases(projectId)
+      ]);
 
     return {
-      ...runtimeSnapshot,
-      awsConnections: nextConnections
+      awsConnections: nextConnections,
+      buildEnvironment: nextBuildEnvironment,
+      deployments: nextDeployments,
+      releases: nextReleases
     };
-  }, [loadDeploymentRuntimeSnapshot]);
+  }, [projectId]);
 
   const applyDeploymentPanelSnapshot = useCallback(
     (snapshot: DeploymentPanelSnapshot): void => {
@@ -387,43 +587,55 @@ export function DirectDeploymentScreen({
       );
 
       setAwsConnections(snapshot.awsConnections);
-      applyDeploymentRuntimeSnapshot(snapshot);
+      setBuildEnvironment(snapshot.buildEnvironment);
+      setDeployments(snapshot.deployments);
+      setApplicationReleases(snapshot.releases);
       setSelectedAwsConnectionId((currentId) =>
         snapshot.awsConnections.some((connection) => connection.id === currentId)
           ? currentId
           : (latestVerifiedConnection?.id ?? "")
       );
     },
-    [applyDeploymentRuntimeSnapshot]
+    []
   );
 
   useEffect(() => {
     if (!canLoadDeploymentData(deploymentAvailability)) {
-      setErrorMessage("");
-      setRequestState("idle");
+      setSnapshotErrorMessage("");
+      setIsInitialSnapshotLoading(false);
       return;
     }
 
     let cancelled = false;
 
     async function loadDeploymentData(): Promise<void> {
-      await runRequest(async () => {
+      setIsInitialSnapshotLoading(true);
+      setSnapshotErrorMessage("");
+      try {
         const snapshot = await loadDeploymentPanelSnapshot();
-
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         applyDeploymentPanelSnapshot(snapshot);
-
         const latestVerifiedConnection = snapshot.awsConnections.find(
           (connection) => connection.status === "verified"
         );
         const latestDeployment = snapshot.deployments[0];
 
-        setSelectedAwsConnectionId((currentId) => currentId || latestVerifiedConnection?.id || "");
+        setSelectedAwsConnectionId(
+          (currentId) => currentId || latestVerifiedConnection?.id || ""
+        );
         setSelectedDeploymentId((currentId) => currentId || latestDeployment?.id || "");
-      }, "배포 정보를 불러오지 못했습니다.");
+        if (!hasLoadedDeploymentPanelRef.current) {
+          hasLoadedDeploymentPanelRef.current = true;
+          setSelectedDirectStepId(latestDeployment?.consolePhase ?? "validation");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSnapshotErrorMessage(getApiErrorMessage(error, "배포 정보를 불러오지 못했습니다."));
+        }
+      } finally {
+        if (!cancelled) setIsInitialSnapshotLoading(false);
+      }
     }
 
     void loadDeploymentData();
@@ -431,41 +643,53 @@ export function DirectDeploymentScreen({
     return () => {
       cancelled = true;
     };
-  }, [applyDeploymentPanelSnapshot, deploymentAvailability, loadDeploymentPanelSnapshot]);
+  }, [
+    applyDeploymentPanelSnapshot,
+    deploymentAvailability,
+    loadDeploymentPanelSnapshot,
+    refreshRequestId
+  ]);
 
   useEffect(() => {
-    if (!selectedDeploymentId) {
-      setDeploymentLogs([]);
-      setDeploymentResources([]);
-      dispatchTerraformOutputState({ type: "clear", deploymentId: null });
-      setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
-      return;
-    }
+    setDeploymentLogs([]);
+    setDeploymentResources([]);
+    dispatchTerraformOutputState({
+      type: "clear",
+      deploymentId: selectedDeploymentId || null
+    });
+    setShowApplyConfirmation(false);
+  }, [selectedDeploymentId]);
+
+  useEffect(() => {
+    if (!selectedDeploymentId) return;
 
     let cancelled = false;
-    dispatchTerraformOutputState({ type: "clear", deploymentId: selectedDeploymentId });
 
     async function loadApplyDetails(): Promise<void> {
-      await runRequest(async () => {
+      setDetailErrorMessage("");
+      try {
         const [logs, resources, outputs] = await Promise.all([
           listDeploymentLogs(selectedDeploymentId),
           listDeploymentResources(selectedDeploymentId),
           listTerraformOutputs(selectedDeploymentId)
         ]);
 
+        if (cancelled) return;
+        setDeploymentLogs(logs);
+        setDeploymentResources(resources);
+        dispatchTerraformOutputState({
+          type: "loaded",
+          deploymentId: selectedDeploymentId,
+          outputs
+        });
+        setShowApplyConfirmation(false);
+      } catch (error) {
         if (!cancelled) {
-          setDeploymentLogs(logs);
-          setDeploymentResources(resources);
-          dispatchTerraformOutputState({
-            type: "loaded",
-            deploymentId: selectedDeploymentId,
-            outputs
-          });
-          setShowApplyConfirmation(false);
-          setShowDestroyConfirmation(false);
+          setDetailErrorMessage(
+            getApiErrorMessage(error, "배포 세부정보를 불러오지 못했습니다.")
+          );
         }
-      }, "배포 로그를 불러오지 못했습니다.");
+      }
     }
 
     void loadApplyDetails();
@@ -473,7 +697,50 @@ export function DirectDeploymentScreen({
     return () => {
       cancelled = true;
     };
-  }, [selectedDeploymentId]);
+  }, [selectedDeploymentId, refreshRequestId]);
+
+  useEffect(() => {
+    if (!selectedHistoryDeploymentId) {
+      setDeploymentHistoryDetails(initialDeploymentHistoryDetailsState);
+      return;
+    }
+
+    const deploymentId = selectedHistoryDeploymentId;
+    let cancelled = false;
+    setDeploymentHistoryDetails(beginDeploymentHistoryDetailsLoad(deploymentId));
+
+    void Promise.all([
+      listDeploymentLogs(deploymentId),
+      listDeploymentResources(deploymentId),
+      listTerraformOutputs(deploymentId)
+    ])
+      .then(([logs, resources, outputs]) => {
+        if (!cancelled) {
+          setDeploymentHistoryDetails((current) =>
+            completeDeploymentHistoryDetailsLoad(current, {
+              deploymentId,
+              logs,
+              outputs,
+              resources
+            })
+          );
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setDeploymentHistoryDetails((current) =>
+            failDeploymentHistoryDetailsLoad(current, {
+              deploymentId,
+              errorMessage: getApiErrorMessage(error, "배포 버전 상세를 불러오지 못했습니다.")
+            })
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedHistoryDeploymentId]);
 
   useEffect(() => {
     if (!selectedDeploymentId || selectedDeployment?.status !== "RUNNING") {
@@ -491,7 +758,9 @@ export function DirectDeploymentScreen({
       }
     }).catch((error) => {
       if (!controller.signal.aborted) {
-        setErrorMessage(getApiErrorMessage(error, "Deployment 로그 스트림 연결에 실패했습니다."));
+        setDetailErrorMessage(
+          getApiErrorMessage(error, "Deployment 로그 스트림 연결에 실패했습니다.")
+        );
       }
     });
 
@@ -520,10 +789,13 @@ export function DirectDeploymentScreen({
 
         if (!cancelled) {
           applyDeploymentRuntimeSnapshot(snapshot);
+          setSnapshotErrorMessage("");
         }
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(getApiErrorMessage(error, "Deployment 상태 자동 갱신에 실패했습니다."));
+          setSnapshotErrorMessage(
+            getApiErrorMessage(error, "Deployment 상태 자동 갱신에 실패했습니다.")
+          );
         }
       } finally {
         isRefreshing = false;
@@ -546,17 +818,71 @@ export function DirectDeploymentScreen({
     shouldAutoRefreshSelectedDeployment
   ]);
 
-  async function runRequest(request: () => Promise<void>, fallbackMessage: string): Promise<void> {
+  async function runAction<T>(
+    stepId: DirectDeploymentStepId,
+    request: () => Promise<T>,
+    fallbackMessage: string
+  ): Promise<T | null> {
+    if (actionInFlightRef.current) return null;
+    actionInFlightRef.current = true;
     setRequestState("loading");
     setErrorMessage("");
+    setFailedActionStepId(null);
 
     try {
-      await request();
+      const result = await request();
       setRequestState("idle");
+      return result;
     } catch (error) {
       setRequestState("error");
-      setErrorMessage(getApiErrorMessage(error, fallbackMessage));
+      setFailedActionStepId(stepId);
+      setSelectedDirectStepId(stepId);
+      setErrorMessage(getDeploymentPreparationErrorMessage(error, fallbackMessage));
+      return null;
+    } finally {
+      actionInFlightRef.current = false;
+      setActiveProgress(null);
     }
+  }
+
+  function refreshDeploymentDetails(deploymentId: string): void {
+    latestDetailsDeploymentIdRef.current = deploymentId;
+    setDetailErrorMessage("");
+    void Promise.all([
+      listDeploymentLogs(deploymentId),
+      listDeploymentResources(deploymentId),
+      listTerraformOutputs(deploymentId)
+    ])
+      .then(([logs, resources, outputs]) => {
+        if (latestDetailsDeploymentIdRef.current !== deploymentId) return;
+        setDeploymentLogs(logs);
+        setDeploymentResources(resources);
+        dispatchTerraformOutputState({ type: "loaded", deploymentId, outputs });
+      })
+      .catch((error) => {
+        if (latestDetailsDeploymentIdRef.current === deploymentId) {
+          setDetailErrorMessage(
+            getApiErrorMessage(
+              error,
+              "작업은 접수됐지만 최신 로그와 Output을 불러오지 못했습니다."
+            )
+          );
+        }
+      });
+  }
+
+  function refreshBuildEnvironmentAfterPlan(deployment: Deployment): void {
+    if (!requiresProjectBuildEnvironment(deployment)) return;
+    void getProjectBuildEnvironment(projectId)
+      .then(setBuildEnvironment)
+      .catch((error) => {
+        setDetailErrorMessage(
+          getApiErrorMessage(
+            error,
+            "Plan은 접수됐지만 빌드 환경 상태를 다시 불러오지 못했습니다."
+          )
+        );
+      });
   }
 
   async function runPreDeploymentCheck(
@@ -565,17 +891,16 @@ export function DirectDeploymentScreen({
     const preparedBoardSnapshot = createWorkspaceAiBoardSnapshot(preparedArtifacts.diagramJson);
 
     if (!preparedBoardSnapshot.hasResources) {
-      updatePreDeploymentCheckState({
-        errorMessage: "Architecture Board에 Resource가 있어야 실행할 수 있습니다.",
-        requestState: "error"
-      });
+      onPreDeploymentCheckStateChange(
+        createResetPreDeploymentCheckState(
+          "error",
+          "Architecture Board에 Resource가 있어야 실행할 수 있습니다."
+        )
+      );
       return false;
     }
 
-    updatePreDeploymentCheckState({
-      errorMessage: "",
-      requestState: "loading"
-    });
+    onPreDeploymentCheckStateChange(createResetPreDeploymentCheckState("loading"));
 
     try {
       const currentTerraformDiagnostics = await onValidateTerraformDiagnostics();
@@ -615,10 +940,12 @@ export function DirectDeploymentScreen({
       }
       return true;
     } catch (error) {
-      updatePreDeploymentCheckState({
-        errorMessage: getApiErrorMessage(error, "배포 전 검사 중 오류가 발생했습니다."),
-        requestState: "error"
-      });
+      onPreDeploymentCheckStateChange(
+        createResetPreDeploymentCheckState(
+          "error",
+          getApiErrorMessage(error, "배포 전 검증 중 오류가 발생했습니다.")
+        )
+      );
       return false;
     }
   }
@@ -669,110 +996,125 @@ export function DirectDeploymentScreen({
   }
 
   async function runDeploymentReviewStep(): Promise<void> {
-    if (!canRunDeploymentReviewStep) {
+    if (!canRunDeploymentReviewStep || actionInFlightRef.current) {
       return;
     }
 
-    setRequestState("loading");
-    setErrorMessage("");
-    let preparedArtifacts: PreparedWorkspaceDeploymentArtifacts;
+    setActiveProgress({ operation: "plan" });
+    setDeploymentTargetPrerequisite(null);
+    await runAction("validation", async () => {
+      const target = await getProjectDeploymentTarget(projectId);
+      const targetPrerequisite = getDeploymentTargetPrerequisite({
+        awsConnectionId: selectedAwsConnectionId,
+        diagramJson,
+        scope: selectedScope,
+        target
+      });
+      if (targetPrerequisite) {
+        setDeploymentTargetPrerequisite(targetPrerequisite);
+        return;
+      }
 
-    try {
-      preparedArtifacts = await onPrepareDeploymentArtifacts();
-      setRequestState("idle");
-    } catch (error) {
-      setRequestState("error");
-      const fallbackMessage = getApiErrorMessage(
-        error,
-        "프로젝트 저장과 배포 준비에 실패했습니다."
-      );
-      setErrorMessage(getDeploymentPreparationErrorMessage(error, fallbackMessage));
-      return;
-    }
+      const preparedArtifacts = await onPrepareDeploymentArtifacts();
+      const synchronizedTargetPrerequisite = getDeploymentTargetPrerequisite({
+        awsConnectionId: selectedAwsConnectionId,
+        diagramJson: preparedArtifacts.diagramJson,
+        scope: selectedScope,
+        target
+      });
+      if (synchronizedTargetPrerequisite) {
+        setDeploymentTargetPrerequisite(synchronizedTargetPrerequisite);
+        return;
+      }
 
-    const checkPassed = await runPreDeploymentCheck(preparedArtifacts);
+      const runtimeSecretPrerequisite = getDeploymentRuntimeSecretPrerequisite({
+        diagramJson: preparedArtifacts.diagramJson,
+        scope: selectedScope,
+        target
+      });
+      if (runtimeSecretPrerequisite) {
+        setDeploymentTargetPrerequisite(runtimeSecretPrerequisite);
+        return;
+      }
 
-    if (!checkPassed) {
-      return;
-    }
+      const checkPassed = await runPreDeploymentCheck(preparedArtifacts);
+      if (!checkPassed) return;
 
-    await startDeploymentReview(preparedArtifacts);
+      await startDeploymentReview(preparedArtifacts);
+    }, "프로젝트 저장·검증과 Terraform Plan을 시작하지 못했습니다.");
   }
 
   async function startDeploymentReview(
     savedArtifacts: PreparedWorkspaceDeploymentArtifacts
-  ): Promise<void> {
-    if (!canStartDeploymentReview) {
-      return;
-    }
-
+  ): Promise<Deployment> {
     dispatchTerraformOutputState({ type: "clear", deploymentId: null });
-    await runRequest(async () => {
-      const snapshot = await loadDeploymentPanelSnapshot();
+    const requestedDeploymentScope = selectedScope;
+    const preparedDeployment = await prepareDeployment({
+      projectId,
+      architectureId: savedArtifacts.architecture.id,
+      terraformArtifactId: savedArtifacts.terraformArtifact.id,
+      awsConnectionId: selectedAwsConnectionId,
+      draftRevision: savedArtifacts.preparedDraftRevision,
+      scope: requestedDeploymentScope
+    });
+    setAutoScopeRequestDeploymentId(
+      requestedDeploymentScope === "auto" ? preparedDeployment.id : ""
+    );
+    setDeployments((currentDeployments) => [
+      preparedDeployment,
+      ...currentDeployments.filter((deployment) => deployment.id !== preparedDeployment.id)
+    ]);
+    setSelectedDeploymentId(preparedDeployment.id);
+    pendingAutoAdvanceDeploymentIdRef.current = preparedDeployment.id;
 
-      applyDeploymentPanelSnapshot(snapshot);
-      setSelectedDeploymentId("");
-
-      const deployment = await prepareDeployment({
-        projectId,
-        architectureId: savedArtifacts.architecture.id,
-        terraformArtifactId: savedArtifacts.terraformArtifact.id,
-        awsConnectionId: selectedAwsConnectionId,
-        draftRevision: savedArtifacts.preparedDraftRevision,
-        scope: selectedScope
-      });
-      let shouldQueueApplyPlan = false;
-      const prewarmedDeployment = await runDeploymentInit(deployment.id)
-        .then((runningDeployment) => {
-          shouldQueueApplyPlan = true;
-          return runningDeployment;
-        })
-        .catch(() => deployment);
-
-      setDeployments((currentDeployments) => [prewarmedDeployment, ...currentDeployments]);
-      setSelectedDeploymentId(prewarmedDeployment.id);
-      setQueuedApplyPlanDeploymentId(shouldQueueApplyPlan ? prewarmedDeployment.id : "");
-      setDeploymentLogs([]);
-      setDeploymentResources([]);
-      dispatchTerraformOutputState({
-        type: "clear",
-        deploymentId: prewarmedDeployment.id
-      });
-      setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
-    }, "배포 검토를 시작하지 못했습니다.");
+    const plannedDeployment =
+      preparedDeployment.currentPlanArtifactId &&
+      preparedDeployment.currentPlanOperation === "apply"
+      ? preparedDeployment
+      : await runDeploymentPlan(preparedDeployment.id);
+    setDeployments((currentDeployments) => [
+      plannedDeployment,
+      ...currentDeployments.filter((deployment) => deployment.id !== plannedDeployment.id)
+    ]);
+    setSelectedDeploymentId(plannedDeployment.id);
+    if (plannedDeployment.consolePhase === "approval") {
+      pendingAutoAdvanceDeploymentIdRef.current = "";
+      setSelectedDirectStepId("approval");
+    }
+    refreshBuildEnvironmentAfterPlan(plannedDeployment);
+    refreshDeploymentDetails(plannedDeployment.id);
+    setShowApplyConfirmation(false);
+    return plannedDeployment;
   }
 
   async function startTerraformPlan(): Promise<void> {
-    if (!selectedDeployment || !canRunPlan) {
+    if (!selectedDeployment || !canRunPlan || actionInFlightRef.current) {
       return;
     }
 
-    setQueuedApplyPlanDeploymentId("");
+    setActiveProgress({ operation: "plan" });
 
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: selectedDeployment.id
     });
-    await runRequest(async () => {
-      const deployment = await runDeploymentPlan(selectedDeployment.id);
+    pendingAutoAdvanceDeploymentIdRef.current = selectedDeployment.id;
+    const deployment = await runAction(
+      "validation",
+      () => runDeploymentPlan(selectedDeployment.id),
+      "Terraform Plan을 시작하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
         )
       );
       setSelectedDeploymentId(deployment.id);
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(deployment.id),
-        listDeploymentResources(deployment.id),
-        listTerraformOutputs(deployment.id)
-      ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
+      refreshBuildEnvironmentAfterPlan(deployment);
+      refreshDeploymentDetails(deployment.id);
       setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
-    }, "Terraform Plan을 시작하지 못했습니다.");
+    }
   }
 
   async function approveCurrentPlan(): Promise<void> {
@@ -780,27 +1122,58 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    setActiveProgress(null);
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: selectedDeployment.id
     });
-    await runRequest(async () => {
-      const deployment = await approveDeploymentPlan(selectedDeployment.id);
+    const deployment = await runAction(
+      "approval",
+      () => approveDeploymentPlan(selectedDeployment.id),
+      "Terraform Plan을 승인하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
         )
       );
       setSelectedDeploymentId(deployment.id);
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(deployment.id),
-        listDeploymentResources(deployment.id),
-        listTerraformOutputs(deployment.id)
-      ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
-    }, "Terraform Plan을 승인하지 못했습니다.");
+      setSelectedDirectStepId("deployment");
+      if (deployment.currentPlanOperation === "apply") {
+        onApplyPlanApproved?.(deployment);
+      }
+      refreshBuildEnvironmentAfterPlan(deployment);
+      refreshDeploymentDetails(deployment.id);
+    }
+  }
+
+  async function revokeCurrentPlanApproval(): Promise<void> {
+    if (!selectedDeployment || !selectedDeployment.approvedAt || requestState === "loading") {
+      return;
+    }
+
+    setActiveProgress(null);
+    dispatchTerraformOutputState({
+      type: "clear",
+      deploymentId: selectedDeployment.id
+    });
+    const deployment = await runAction(
+      "approval",
+      () => revokeDeploymentApproval(selectedDeployment.id),
+      "Plan 승인을 취소하지 못했습니다."
+    );
+    if (deployment) {
+      setDeployments((currentDeployments) =>
+        currentDeployments.map((currentDeployment) =>
+          currentDeployment.id === deployment.id ? deployment : currentDeployment
+        )
+      );
+      setSelectedDeploymentId(deployment.id);
+      setSelectedDirectStepId("approval");
+      setShowApplyConfirmation(false);
+      refreshDeploymentDetails(deployment.id);
+    }
   }
 
   async function startTerraformApply(): Promise<void> {
@@ -808,12 +1181,18 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    setActiveProgress({ operation: "apply" });
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: selectedDeployment.id
     });
-    await runRequest(async () => {
-      const deployment = await executeDeployment(selectedDeployment.id);
+    completionCandidateDeploymentIdsRef.current.add(selectedDeployment.id);
+    const deployment = await runAction(
+      "deployment",
+      () => executeDeployment(selectedDeployment.id),
+      "Terraform Apply를 시작하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -821,29 +1200,35 @@ export function DirectDeploymentScreen({
       );
       setSelectedDeploymentId(deployment.id);
       setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(deployment.id),
-        listDeploymentResources(deployment.id),
-        listTerraformOutputs(deployment.id)
-      ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
-    }, "Terraform Apply를 시작하지 못했습니다.");
+      refreshDeploymentDetails(deployment.id);
+      if (
+        deployment.status === "SUCCESS" &&
+        completionCandidateDeploymentIdsRef.current.delete(deployment.id)
+      ) {
+        onDeploymentSucceeded?.(deployment);
+      }
+    }
   }
 
-  async function startTerraformDestroyPlan(): Promise<void> {
-    if (!selectedDeployment || !canRunDestroyPlan) {
+  async function startTerraformDestroyPlan(targetDeployment: Deployment): Promise<void> {
+    const targetActions = getDeploymentActionState(targetDeployment, requestState);
+
+    if (!targetActions.canRunDestroyPlan) {
       return;
     }
 
+    setActiveProgress({ operation: "destroy-plan" });
     dispatchTerraformOutputState({
       type: "clear",
-      deploymentId: selectedDeployment.id
+      deploymentId: targetDeployment.id
     });
-    await runRequest(async () => {
-      const deployment = await runDeploymentDestroyPlan(selectedDeployment.id);
+    pendingAutoAdvanceDeploymentIdRef.current = targetDeployment.id;
+    const deployment = await runAction(
+      "validation",
+      () => runDeploymentDestroyPlan(targetDeployment.id),
+      "Terraform Destroy Plan을 시작하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -851,29 +1236,27 @@ export function DirectDeploymentScreen({
       );
       setSelectedDeploymentId(deployment.id);
       setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(deployment.id),
-        listDeploymentResources(deployment.id),
-        listTerraformOutputs(deployment.id)
-      ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
-    }, "Terraform Destroy Plan을 시작하지 못했습니다.");
+      refreshDeploymentDetails(deployment.id);
+    }
   }
 
-  async function startTerraformDestroy(): Promise<void> {
-    if (!selectedDeployment || !canDestroy) {
+  async function startTerraformDestroy(targetDeployment: Deployment): Promise<void> {
+    if (!getDeploymentActionState(targetDeployment, requestState).canDestroy) {
       return;
     }
 
+    setSelectedDeploymentId(targetDeployment.id);
+    setActiveProgress({ operation: "destroy" });
     dispatchTerraformOutputState({
       type: "clear",
-      deploymentId: selectedDeployment.id
+      deploymentId: targetDeployment.id
     });
-    await runRequest(async () => {
-      const deployment = await runDeploymentDestroy(selectedDeployment.id);
+    const deployment = await runAction(
+      "deployment",
+      () => runDeploymentDestroy(targetDeployment.id),
+      "Terraform Destroy를 시작하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -881,16 +1264,39 @@ export function DirectDeploymentScreen({
       );
       setSelectedDeploymentId(deployment.id);
       setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
-      const [logs, resources, outputs] = await Promise.all([
-        listDeploymentLogs(deployment.id),
-        listDeploymentResources(deployment.id),
-        listTerraformOutputs(deployment.id)
+      refreshDeploymentDetails(deployment.id);
+    }
+  }
+
+  async function startInfrastructureRollbackPlan(): Promise<void> {
+    if (!selectedDeployment || !infrastructureRollbackTarget || requestState === "loading") {
+      return;
+    }
+
+    dispatchTerraformOutputState({ type: "clear", deploymentId: null });
+    const planned = await runAction("validation", async () => {
+      const prepared = await prepareInfrastructureRollback(selectedDeployment.id);
+      setDeployments((currentDeployments) => [
+        prepared,
+        ...currentDeployments.filter((deployment) => deployment.id !== prepared.id)
       ]);
-      setDeploymentLogs(logs);
-      setDeploymentResources(resources);
-      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
-    }, "Terraform Destroy를 시작하지 못했습니다.");
+      setSelectedDeploymentId(prepared.id);
+      setDeploymentLogs([]);
+      setDeploymentResources([]);
+      setShowInfrastructureRollbackConfirmation(false);
+      setShowApplyConfirmation(false);
+      pendingAutoAdvanceDeploymentIdRef.current = prepared.id;
+
+      return runDeploymentPlan(prepared.id);
+    }, "이전 인프라 버전의 Terraform Plan을 생성하지 못했습니다.");
+    if (planned) {
+      setDeployments((currentDeployments) =>
+        currentDeployments.map((deployment) =>
+          deployment.id === planned.id ? planned : deployment
+        )
+      );
+      refreshDeploymentDetails(planned.id);
+    }
   }
 
   async function cancelSelectedDeployment(): Promise<void> {
@@ -902,157 +1308,137 @@ export function DirectDeploymentScreen({
       type: "clear",
       deploymentId: selectedDeployment.id
     });
-    await runRequest(async () => {
-      const deployment = await cancelDeploymentRun(selectedDeployment.id);
+    const deployment = await runAction(
+      directDeploymentFlow.activeStepId,
+      () => cancelDeploymentRun(selectedDeployment.id),
+      "Deployment 실행 취소를 요청하지 못했습니다."
+    );
+    if (deployment) {
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
         )
       );
       setSelectedDeploymentId(deployment.id);
-      const logs = await listDeploymentLogs(deployment.id);
-      setDeploymentLogs(logs);
-    }, "Deployment 실행 취소를 요청하지 못했습니다.");
+      refreshDeploymentDetails(deployment.id);
+    }
+  }
+
+  async function retrySelectedDeploymentFrontend(): Promise<void> {
+    if (
+      !selectedDeployment ||
+      selectedDeployment.status !== "PARTIALLY_FAILED" ||
+      selectedApplicationRelease?.status !== "partially_failed"
+    ) {
+      return;
+    }
+    const retried = await runAction(
+      "deployment",
+      async () => {
+        await retryDeploymentFrontend(selectedDeployment.id);
+        return true;
+      },
+      "웹 배포를 다시 시도하지 못했습니다."
+    );
+    if (retried) {
+      void loadDeploymentRuntimeSnapshot()
+        .then((snapshot) => {
+          applyDeploymentRuntimeSnapshot(snapshot);
+          setSnapshotErrorMessage("");
+        })
+        .catch((error) => {
+          setSnapshotErrorMessage(
+            getApiErrorMessage(error, "재시도는 접수됐지만 최신 상태를 불러오지 못했습니다.")
+          );
+        });
+    }
+  }
+
+  function selectDeploymentHistoryFilter(filter: DeploymentHistoryFilter): void {
+    setDeploymentHistoryFilter(filter);
+    setSelectedHistoryDeploymentId("");
   }
 
   const renderSetupSection = () => {
-    const selectedStep =
-      directDeploymentFlow.steps.find((step) => step.id === selectedDirectStepId) ??
-      directDeploymentFlow.steps[0]!;
-    const activeStepIndex = directDeploymentFlow.steps.findIndex(
-      (step) => step.id === directDeploymentFlow.activeStepId
+    const resolvedSelectedDirectStepId = resolveSelectedDirectDeploymentStepId(
+      directDeploymentFlow,
+      selectedDirectStepId
     );
-    const selectedAwsConnection =
-      verifiedAwsConnections.find((connection) => connection.id === selectedAwsConnectionId) ??
-      null;
+    const selectedStep =
+      directDeploymentFlow.steps.find((step) => step.id === resolvedSelectedDirectStepId) ??
+      directDeploymentFlow.steps[0]!;
     const requestError =
       selectedStep.id === "validation" && preDeploymentState === "error"
         ? preDeploymentErrorMessage
-        : requestState === "error"
+        : reconciledRequestState === "error"
           ? errorMessage
-          : "";
+          : detailErrorMessage || snapshotErrorMessage;
+    const validationIsBusy =
+      isInitialSnapshotLoading ||
+      reconciledRequestState === "loading" ||
+      preDeploymentState === "loading";
+    const readinessScope = resolveDeploymentReadinessScope({
+      autoScopeRequestDeploymentId,
+      hasCurrentDeploymentChanges,
+      selectedDeployment,
+      selectedScope
+    });
 
     function renderDirectStepContent(stepId: DirectDeploymentStepId) {
       if (stepId === "validation") {
-        const validationIsBusy = requestState === "loading" || preDeploymentState === "loading";
-        const settingsStatus = hasUnsavedDeploymentBaseline
-          ? { label: "변경사항 있음", tone: "warning" as const }
-          : { label: "변경사항 없음", tone: "success" as const };
-        const planStatus = validationIsBusy
-          ? { label: "실행 중", tone: "running" as const }
-          : hasCurrentPlan
-            ? { label: "성공", tone: "success" as const }
-            : { label: "실행 전", tone: "neutral" as const };
-
         return (
           <>
-            <div className={styles.deploymentStepHeading}>
-              <span>1단계</span>
-              <h3>배포 검증</h3>
-              <p>배포 전에 설정을 저장하고 Terraform Plan과 안전 검사를 실행합니다.</p>
-            </div>
-            <section className={styles.deploymentSettingsCard}>
-              <h3>배포 설정</h3>
-              <div className={styles.deploymentStageSettings}>
-                <div className={styles.deploymentLabeledField}>
-                  <label htmlFor="deployment-scope-select">실행 타깃 결정 방식</label>
-                  <SelectMenu
-                    ariaLabel="실행 타깃 결정 방식"
-                    disabled={requestState === "loading"}
-                    emptyLabel="실행 타깃 없음"
-                    id="deployment-scope-select"
-                    onChange={(value) => setSelectedScope(value as DeploymentScope | "auto")}
-                    options={deploymentScopeOptions}
-                    size={isDeploymentOverlayOpen ? "large" : "regular"}
-                    tone="workspace"
-                    value={selectedScope}
-                  />
-                  <p>
-                    저장된 Terraform과 확인된 프로젝트 실행 타깃을 기준으로 실행 대상을 결정합니다.
-                  </p>
+            {needsBuildEnvironment &&
+            buildEnvironment?.repositoryVerificationStatus === "failed" ? (
+              <div className={styles.deploymentValidationError} role="alert">
+                <strong>Repository 빌드 권한 확인 필요</strong>
+                <p>
+                  {buildEnvironment.sourceRepositoryUrl} · 요청 commit{" "}
+                  {buildEnvironment.repositoryVerificationRequestedCommitSha ?? "확인 불가"} ·
+                  실제 checkout {buildEnvironment.repositoryVerificationResolvedCommitSha ?? "실패"}
+                </p>
+                <p>
+                  AWS {selectedAwsConnection?.accountId ?? "계정 확인 불가"} ·{" "}
+                  {selectedAwsConnection?.region ?? "region 확인 불가"}
+                </p>
+                <p>
+                  {buildEnvironment.repositoryVerificationStatusReason ??
+                    "CodeBuild가 프로젝트 Repository의 확정 commit을 checkout하지 못했습니다."}
+                </p>
+                <div className={styles.deploymentValidationActions}>
+                  <Link href="/dashboard/settings#github-account-connection">
+                    GitHub Repository 권한 확인
+                  </Link>
+                  <Link href="/dashboard/settings#aws-codebuild-github-authorization">
+                    AWS GitHub 권한 다시 연결
+                  </Link>
+                  <button
+                    disabled={!canRunPlan || requestState === "loading"}
+                    onClick={() => void startTerraformPlan()}
+                    type="button"
+                  >
+                    Repository 빌드 권한 다시 확인
+                  </button>
                 </div>
               </div>
-            </section>
-            <section className={styles.deploymentValidationSummary}>
-              <h3>검증 요약</h3>
-              <div className={styles.deploymentValidationSummaryGrid}>
-                <DeploymentSummaryItem label="설정 상태">
-                  <DeploymentStatusBadge label={settingsStatus.label} tone={settingsStatus.tone} />
-                </DeploymentSummaryItem>
-                <DeploymentSummaryItem label="변경 범위">
-                  <code className={styles.deploymentScopeCode}>
-                    {selectedDeployment?.scope ?? selectedScope}
-                  </code>
-                </DeploymentSummaryItem>
-                <DeploymentSummaryItem label="Terraform Plan">
-                  <DeploymentStatusBadge label={planStatus.label} tone={planStatus.tone} />
-                </DeploymentSummaryItem>
-              </div>
-              {selectedDeployment?.planSummary ? (
-                <PlanSummaryRows deployment={selectedDeployment} />
-              ) : null}
-            </section>
+            ) : null}
             {preDeploymentAnalysis !== null && !hasStalePreDeploymentAnalysis ? (
               <DeploymentPreDeploymentSummary
                 analysis={preDeploymentAnalysis}
                 onOpenFindingTerraformSource={onOpenFindingTerraformSource}
               />
             ) : null}
-            <div className={styles.deploymentStepActionBar}>
-              <p>
-                <Info size={16} aria-hidden="true" />
-                {selectedStep.disabledReason ?? "검증 단계에서는 실제 리소스를 변경하지 않습니다."}
-              </p>
-              {!selectedDeployment ||
-              hasUnsavedDeploymentBaseline ||
-              directPreflightState === "idle" ? (
-                <div className={styles.deploymentValidationActions}>
-                  {onCancel ? (
-                    <button
-                      className={styles.deploymentSecondaryButton}
-                      disabled={validationIsBusy}
-                      onClick={onCancel}
-                      type="button"
-                    >
-                      취소
-                    </button>
-                  ) : null}
-                  <button
-                    aria-busy={validationIsBusy}
-                    className={styles.deploymentPrimaryButton}
-                    disabled={!canRunDeploymentReviewStep}
-                    onClick={() => void runDeploymentReviewStep()}
-                    type="button"
-                  >
-                    <DeploymentBaselineIcon size={16} aria-hidden="true" />
-                    {validationIsBusy ? "저장 및 검증 실행 중" : "저장 후 검증 실행"}
-                  </button>
-                </div>
-              ) : !hasCurrentPlan ? (
-                <button
-                  aria-busy={requestState === "loading"}
-                  className={styles.deploymentPrimaryButton}
-                  disabled={!canRunPlan}
-                  onClick={() => void startTerraformPlan()}
-                  type="button"
-                >
-                  <DashboardIcon name="rocket" />
-                  {requestState === "loading" ? "Plan 생성 중" : "Plan 생성"}
-                </button>
-              ) : null}
-            </div>
           </>
         );
       }
 
       if (stepId === "approval") {
+        if (!deploymentActions.shouldShowApprovePlanButton) {
+          return null;
+        }
+
         return (
           <>
-            <div className={styles.deploymentStepHeading}>
-              <span>2단계</span>
-              <h3>승인</h3>
-              <p>범위, 변경량, 차단 사유와 비용 경고를 확인한 뒤 Plan을 승인합니다.</p>
-            </div>
             <div className={styles.deploymentStepSummary}>
               <InfoRow label="범위" value={selectedDeployment?.scope ?? "확인 필요"} />
               <InfoRow
@@ -1081,164 +1467,353 @@ export function DirectDeploymentScreen({
                 />
               </div>
             </details>
-            <div className={styles.deploymentStepActionBar}>
-              <p>{selectedStep.disabledReason ?? "승인된 스냅샷만 실행할 수 있습니다."}</p>
-              <button
-                className={styles.deploymentPrimaryButton}
-                disabled={!canApprovePlan}
-                onClick={() => void approveCurrentPlan()}
-                type="button"
-              >
-                <ShieldCheck size={16} aria-hidden="true" />
-                {requestState === "loading" ? "승인 처리 중" : "Plan 승인"}
-              </button>
-            </div>
           </>
         );
       }
 
       return (
         <>
-          <div className={styles.deploymentStepHeading}>
-            <span>3단계</span>
-            <h3>배포</h3>
-            <p>승인된 스냅샷을 실행하고 상태, 릴리즈 버전, Output URL을 확인합니다.</p>
-          </div>
-          <div className={styles.deploymentStepSummary}>
-            <InfoRow label="상태" value={selectedDeployment?.status ?? "대기"} />
-            <InfoRow label="범위" value={selectedDeployment?.scope ?? "대기"} />
-            <InfoRow label="현재 작업" value={primaryDeploymentStepStatus} />
-            {selectedDeployment?.planSummary ? (
-              <PlanSummaryRows deployment={selectedDeployment} />
+          <div className={styles.deploymentResultOverview}>
+            <div
+              className={styles.deploymentStepSummary}
+              data-has-output-links={deploymentOutputLinks.length > 0}
+            >
+              <InfoRow label="상태" value={selectedDeployment?.status ?? "대기"} />
+              <InfoRow label="현재 작업" value={primaryDeploymentStepStatus} />
+              <OptionalInfoRow
+                label="릴리즈"
+                value={
+                  applicationReleases.find(
+                    (release) => release.deploymentId === selectedDeployment?.id
+                  )?.version ?? null
+                }
+              />
+            </div>
+            {deploymentOutputLinks.length > 0 ? (
+              <DeploymentOutputLinks
+                links={deploymentOutputLinks}
+                scopeKey={selectedDeploymentId || null}
+                onOpenLiveObservation={onOpenLiveObservation}
+              />
             ) : null}
-            <OptionalInfoRow
-              label="릴리즈"
-              value={
-                applicationReleases.find(
-                  (release) => release.deploymentId === selectedDeployment?.id
-                )?.version ?? null
-              }
-            />
           </div>
-          {deploymentOutputLinks.length > 0 ? (
-            <DeploymentOutputLinks
-              links={deploymentOutputLinks}
-              scopeKey={selectedDeploymentId || null}
-            />
+          {selectedDeployment?.status === "PARTIALLY_FAILED" &&
+          selectedApplicationRelease?.status === "partially_failed" ? (
+            <div className={styles.deploymentPartialFailureCallout} role="alert">
+              <AlertCircle size={18} aria-hidden="true" />
+              <div>
+                <strong>앱 API는 새 버전이지만 웹 화면 반영이 완료되지 않았습니다.</strong>
+                <p>
+                  현재 주소와 QR, Live Observation은 계속 사용할 수 있지만 웹 화면은 이전 버전일 수
+                  있습니다. 같은 검증 Artifact로 웹 배포 단계만 다시 실행합니다.
+                </p>
+                {selectedApplicationRelease.failureStage ? (
+                  <small>
+                    실패 단계:{" "}
+                    {formatApplicationReleaseFailureStage(selectedApplicationRelease.failureStage)}
+                  </small>
+                ) : null}
+              </div>
+            </div>
           ) : null}
           {showApplyConfirmation && selectedDeployment ? (
             <div className={styles.deploymentApplyConfirm}>
-              <h3>배포 실행 확인</h3>
+              <h3>최종 실행 대상</h3>
               <InfoRow
                 label="AWS account"
                 value={selectedDeployment.approvedAwsAccountId ?? "없음"}
               />
               <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
               <p>승인된 Plan과 프로젝트 스냅샷이 일치할 때만 실행됩니다.</p>
+            </div>
+          ) : null}
+          {showInfrastructureRollbackConfirmation &&
+          selectedDeployment &&
+          infrastructureRollbackTarget ? (
+            <div className={styles.deploymentApplyConfirm} role="dialog">
+              <h3>이전 인프라 버전으로 Plan 생성</h3>
+              <p>
+                {formatDate(infrastructureRollbackTarget.createdAt)}에 성공한 Terraform 구성을 현재
+                state에 대입해 새로운 Plan을 만듭니다.
+              </p>
+              <p>
+                예전 Plan을 재사용하거나 자동 Apply하지 않습니다. 새 Plan의 생성·변경·삭제 내용을
+                확인하고 다시 승인해야 합니다.
+              </p>
               <div className={styles.deploymentApplyActions}>
                 <button
                   className={styles.deploymentSecondaryButton}
-                  onClick={() => setShowApplyConfirmation(false)}
+                  onClick={() => setShowInfrastructureRollbackConfirmation(false)}
                   type="button"
                 >
                   취소
                 </button>
                 <button
                   className={styles.deploymentPrimaryButton}
-                  disabled={!canApply}
-                  onClick={startTerraformApply}
+                  disabled={requestState === "loading"}
+                  onClick={() => void startInfrastructureRollbackPlan()}
                   type="button"
                 >
-                  <DashboardIcon name="rocket" />
-                  배포 실행
+                  <RotateCw size={16} aria-hidden="true" />새 Rollback Plan 생성
                 </button>
               </div>
             </div>
           ) : null}
-          {showDestroyConfirmation && selectedDeployment ? (
-            <div className={styles.deploymentDestroyConfirm}>
-              <h3>정리 실행 확인</h3>
-              <p>승인된 Destroy Plan으로 프로젝트 리소스를 정리합니다.</p>
-              <div className={styles.deploymentApplyActions}>
-                <button
-                  className={styles.deploymentSecondaryButton}
-                  onClick={() => setShowDestroyConfirmation(false)}
-                  type="button"
-                >
-                  취소
-                </button>
-                <button
-                  className={styles.deploymentDangerButton}
-                  disabled={!canDestroy}
-                  onClick={startTerraformDestroy}
-                  type="button"
-                >
-                  <Trash2 size={16} aria-hidden="true" />
-                  정리 실행
-                </button>
-              </div>
-            </div>
-          ) : null}
+        </>
+      );
+    }
+
+    function renderDirectStepActions(stepId: DirectDeploymentStepId) {
+      if (stepId === "validation") {
+        return (
           <div className={styles.deploymentStepActionBar}>
-            <p>{selectedStep.disabledReason ?? deploymentActionHint}</p>
             {selectedDeployment?.status === "RUNNING" ? (
               <button
                 className={styles.deploymentSecondaryButton}
+                data-active="true"
+                data-action="cancel-execution"
+                data-tone={
+                  activeProgress?.operation === "destroy" ||
+                  selectedDeployment.currentPlanOperation === "destroy"
+                    ? "danger"
+                    : "default"
+                }
                 disabled={!canCancelDeployment}
                 onClick={cancelSelectedDeployment}
                 type="button"
               >
                 실행 취소
               </button>
-            ) : shouldShowDestroyPlanButton ? (
+            ) : selectedDeployment?.status === "PARTIALLY_FAILED" &&
+              selectedApplicationRelease?.status === "partially_failed" ? (
               <button
-                className={styles.deploymentSecondaryButton}
-                disabled={!canRunDestroyPlan}
-                onClick={() => void startTerraformDestroyPlan()}
+                aria-busy={requestState === "loading"}
+                className={styles.deploymentPrimaryButton}
+                disabled={requestState === "loading"}
+                onClick={() => void retrySelectedDeploymentFrontend()}
                 type="button"
               >
-                Destroy Plan 생성
+                <RotateCw size={16} aria-hidden="true" />
+                {requestState === "loading"
+                  ? "웹 배포 다시 시도 중"
+                  : "같은 빌드 결과로 웹 배포 재시도"}
               </button>
-            ) : shouldShowDestroyButton ? (
-              <button
-                className={styles.deploymentDangerButton}
-                disabled={!canDestroy}
-                onClick={() => setShowDestroyConfirmation(true)}
-                type="button"
-              >
-                정리 실행 검토
-              </button>
-            ) : (
+            ) : infrastructureRollbackTarget ? (
               <button
                 className={styles.deploymentPrimaryButton}
-                disabled={!canApply}
-                onClick={() => setShowApplyConfirmation(true)}
+                disabled={requestState === "loading"}
+                onClick={() => setShowInfrastructureRollbackConfirmation(true)}
                 type="button"
               >
-                <DashboardIcon name="rocket" />
-                배포 실행 검토
+                <RotateCw size={16} aria-hidden="true" />
+                이전 인프라 버전으로 Plan 생성
               </button>
-            )}
+            ) : shouldShowDeploymentValidationActions({
+                deploymentStatus: selectedDeployment?.status ?? null,
+                hasUnsavedBaseline: hasCurrentDeploymentChanges,
+                preflightState: directPreflightState
+              }) ? (
+              <div className={styles.deploymentValidationActions}>
+                {cleanupActionTargets.map(({ actions, deployment }) =>
+                  actions.shouldShowDestroyPlanButton ? (
+                    <button
+                      aria-busy={
+                        activeProgress?.operation === "destroy-plan" && requestState === "loading"
+                      }
+                      className={styles.deploymentSecondaryButton}
+                      data-action="destroy-plan"
+                      data-active={
+                        activeProgress?.operation === "destroy-plan" && requestState === "loading"
+                      }
+                      disabled={!actions.canRunDestroyPlan}
+                      key={deployment.id}
+                      onClick={() => void startTerraformDestroyPlan(deployment)}
+                      type="button"
+                    >
+                      <Trash2 size={16} aria-hidden="true" />
+                      {getCleanupPlanActionLabel(deployment, cleanupDeployments.length)}
+                    </button>
+                  ) : null
+                )}
+                <button
+                  aria-busy={validationIsBusy}
+                  className={styles.deploymentPrimaryButton}
+                  data-active={validationIsBusy}
+                  disabled={!canRunDeploymentReviewStep}
+                  onClick={() => void runDeploymentReviewStep()}
+                  type="button"
+                >
+                  {validationIsBusy
+                    ? hasCurrentDeploymentChanges
+                      ? "저장 후 검증 중"
+                      : "검증 실행 중"
+                    : hasCurrentDeploymentChanges
+                      ? "저장 후 검증"
+                      : "검증 실행"}
+                </button>
+              </div>
+            ) : !hasCurrentPlan ? (
+              <button
+                aria-busy={requestState === "loading"}
+                className={styles.deploymentPrimaryButton}
+                data-active={activeProgress?.operation === "plan" && requestState === "loading"}
+                disabled={!canRunPlan}
+                onClick={() => void startTerraformPlan()}
+                type="button"
+              >
+                {requestState === "loading" ? "검증 실행 중" : "검증 실행"}
+              </button>
+            ) : null}
           </div>
-        </>
+        );
+      }
+
+      if (stepId === "approval") {
+        return (
+          <div className={styles.deploymentStepActionBar}>
+            <button
+              aria-busy={requestState === "loading"}
+              className={styles.deploymentPrimaryButton}
+              data-active={requestState === "loading"}
+              disabled={!canApprovePlan}
+              onClick={() => void approveCurrentPlan()}
+              type="button"
+            >
+              <ShieldCheck size={16} aria-hidden="true" />
+              {requestState === "loading" ? "승인 처리 중" : deploymentActions.approvePlanLabel}
+            </button>
+          </div>
+        );
+      }
+
+      return (
+        <div className={styles.deploymentStepActionBar}>
+          {selectedDeployment?.status === "RUNNING" ? (
+            <button
+              className={styles.deploymentSecondaryButton}
+              data-active="true"
+              data-action="cancel-execution"
+              data-tone={
+                activeProgress?.operation === "destroy" ||
+                selectedDeployment.currentPlanOperation === "destroy"
+                  ? "danger"
+                  : "default"
+              }
+              disabled={!canCancelDeployment}
+              onClick={cancelSelectedDeployment}
+              type="button"
+            >
+              실행 취소
+            </button>
+          ) : (
+            <div className={styles.deploymentValidationActions}>
+              {cleanupActionTargets.flatMap(({ actions, deployment }) => {
+                const buttons: ReactNode[] = [];
+
+                if (actions.shouldShowDestroyPlanButton) {
+                  buttons.push(
+                    <button
+                      aria-busy={
+                        activeProgress?.operation === "destroy-plan" && requestState === "loading"
+                      }
+                      className={styles.deploymentSecondaryButton}
+                      data-action="destroy-plan"
+                      data-active={
+                        activeProgress?.operation === "destroy-plan" && requestState === "loading"
+                      }
+                      disabled={!actions.canRunDestroyPlan}
+                      key={`${deployment.id}:plan`}
+                      onClick={() => void startTerraformDestroyPlan(deployment)}
+                      type="button"
+                    >
+                      {getCleanupPlanActionLabel(deployment, cleanupDeployments.length)}
+                    </button>
+                  );
+                }
+
+                if (actions.shouldShowDestroyButton) {
+                  buttons.push(
+                    <button
+                      aria-busy={
+                        activeProgress?.operation === "destroy" && requestState === "loading"
+                      }
+                      className={styles.deploymentDangerButton}
+                      data-active={
+                        activeProgress?.operation === "destroy" && requestState === "loading"
+                      }
+                      data-tone="danger"
+                      disabled={!actions.canDestroy}
+                      key={`${deployment.id}:destroy`}
+                      onClick={() => void startTerraformDestroy(deployment)}
+                      type="button"
+                    >
+                      {getCleanupExecutionActionLabel(deployment, cleanupDeployments.length)}
+                    </button>
+                  );
+                }
+
+                return buttons;
+              })}
+              {showApplyConfirmation && selectedDeployment ? (
+                <>
+                  <button
+                    aria-busy={activeProgress?.operation === "apply" && requestState === "loading"}
+                    className={styles.deploymentPrimaryButton}
+                    data-active={
+                      activeProgress?.operation === "apply" && requestState === "loading"
+                    }
+                    disabled={!canApply}
+                    onClick={startTerraformApply}
+                    type="button"
+                  >
+                    <DashboardIcon name="rocket" />
+                    배포 실행
+                  </button>
+                  <button
+                    aria-busy={requestState === "loading" && activeProgress === null}
+                    className={styles.deploymentSecondaryButton}
+                    data-action="revoke-approval"
+                    data-active={requestState === "loading" && activeProgress === null}
+                    disabled={requestState === "loading"}
+                    onClick={() => void revokeCurrentPlanApproval()}
+                    type="button"
+                  >
+                    Plan 승인 취소
+                  </button>
+                </>
+              ) : null}
+            </div>
+          )}
+        </div>
       );
     }
 
     return (
       <section className={styles.deploymentConsoleGrid} aria-label="Direct Deployment">
+        <header className={styles.deploymentPageHeader}>
+          <div className={styles.deploymentPageHeading}>
+            <h1>배포</h1>
+            {projectName || selectedAwsConnection?.region ? (
+              <p className={styles.deploymentPageContext}>
+                {[projectName, selectedAwsConnection?.region].filter(Boolean).join(" · ")}
+              </p>
+            ) : null}
+          </div>
+          {renderDirectStepActions(selectedStep.id)}
+        </header>
+
         <nav className={styles.deploymentStepNavigation} aria-label="Direct Deployment 단계">
           <ol>
             {directDeploymentFlow.steps.map((step, index) => {
-              const isCompleted = step.state === "done";
-              const connectorState =
-                directDeploymentFlow.steps[index - 1]?.state === "done"
-                  ? "done"
-                  : index <= activeStepIndex
-                    ? "active"
-                    : "idle";
+              const supportLabel =
+                step.id === "validation"
+                  ? "변경 확인"
+                  : step.id === "approval"
+                    ? "결과 승인"
+                    : "배포 적용";
 
               return (
-                <li data-connector-state={connectorState} key={step.id}>
+                <li key={step.id}>
                   <button
                     aria-current={
                       step.id === directDeploymentFlow.activeStepId ? "step" : undefined
@@ -1250,12 +1825,10 @@ export function DirectDeploymentScreen({
                     onClick={() => setSelectedDirectStepId(step.id)}
                     type="button"
                   >
-                    <span className={styles.deploymentStepIndex}>
-                      {isCompleted ? <Check size={16} aria-hidden="true" /> : index + 1}
-                    </span>
+                    <span className={styles.deploymentStepIndex}>{index + 1}</span>
                     <span>
                       <strong>{step.label}</strong>
-                      <small>{step.statusLabel}</small>
+                      <small>{supportLabel}</small>
                     </span>
                   </button>
                 </li>
@@ -1264,183 +1837,552 @@ export function DirectDeploymentScreen({
           </ol>
         </nav>
 
+        <dl className={styles.deploymentReadinessSummary}>
+          <div>
+            <dt>
+              <Target aria-hidden="true" className={styles.deploymentReadinessIcon} size={20} />
+              실행 대상:
+            </dt>
+            <dd>{readinessScope ? formatDeploymentScope(readinessScope) : "검증 후 결정"}</dd>
+          </div>
+          <div data-tone="accent">
+            <dt>
+              <Activity aria-hidden="true" className={styles.deploymentReadinessIcon} size={20} />
+              감지 방식:
+            </dt>
+            <dd>
+              <span>{selectedScope === "auto" ? "자동" : "수동"}</span>
+              {selectedStep.id === "validation" ? (
+                <button
+                  aria-controls="deployment-scope-editor"
+                  aria-expanded={showDeploymentScopeEditor}
+                  onClick={() => setShowDeploymentScopeEditor((isOpen) => !isOpen)}
+                  type="button"
+                >
+                  변경
+                </button>
+              ) : null}
+            </dd>
+          </div>
+          <div data-tone={hasCurrentDeploymentChanges ? "success" : "neutral"}>
+            <dt>
+              <Settings aria-hidden="true" className={styles.deploymentReadinessIcon} size={20} />
+              설정 변경:
+            </dt>
+            <dd>{hasCurrentDeploymentChanges ? "있음" : "없음"}</dd>
+          </div>
+          <div>
+            <dt>
+              <Box aria-hidden="true" className={styles.deploymentReadinessIcon} size={20} />
+              앱 빌드:
+            </dt>
+            <dd>
+              {readinessScope
+                ? readinessScope === "infrastructure"
+                  ? "불필요"
+                  : "필요"
+                : "검증 후 결정"}
+            </dd>
+          </div>
+        </dl>
+
+        {showDeploymentScopeEditor && selectedStep.id === "validation" ? (
+          <div className={styles.deploymentScopeEditor} id="deployment-scope-editor">
+            <div>
+              <strong>실행 대상 감지 방식</strong>
+              <span>자동 감지를 유지하거나 실행 범위를 직접 선택합니다.</span>
+            </div>
+            <SelectMenu
+              ariaLabel="실행 대상 감지 방식"
+              disabled={requestState === "loading"}
+              emptyLabel="실행 대상 없음"
+              id="deployment-scope-select"
+                  onChange={(value) => {
+                    setSelectedScope(value as DeploymentScope | "auto");
+                    setAutoScopeRequestDeploymentId("");
+                    setShowDeploymentScopeEditor(false);
+                  }}
+              options={deploymentScopeOptions}
+              size="regular"
+              tone="workspace"
+              value={selectedScope}
+            />
+          </div>
+        ) : null}
+
         <article className={styles.deploymentStepWorkspace} data-state={selectedStep.state}>
+          <DeploymentProgressBar
+            deployment={selectedDeployment}
+            isStarting={deploymentProgressIsStarting}
+            operationHint={activeProgress?.operation ?? null}
+          />
           {renderDirectStepContent(selectedStep.id)}
-          {requestError ? (
+          {deploymentLogView.source === "current" &&
+          selectedDeployment?.status === "RUNNING" ? (
+            <details className={styles.deploymentDisclosure}>
+              <summary>
+                <span>현재 실행 로그</span>
+                <small>{deploymentLogs.length}줄</small>
+              </summary>
+              <div className={styles.deploymentDisclosureBody}>
+                <section
+                  aria-label="현재 실행 로그 세부 내용"
+                  className={styles.deploymentSection}
+                >
+                  <DeploymentLogList logs={deploymentLogs} />
+                </section>
+              </div>
+            </details>
+          ) : null}
+          {deploymentTargetPrerequisite ? (
+            <div className={styles.deploymentValidationError} role="alert">
+              <strong>{deploymentTargetPrerequisite.title}</strong>
+              <p>{deploymentTargetPrerequisite.message}</p>
+              {deploymentTargetPrerequisite.action === "repository_analysis" ? (
+                <div className={styles.deploymentValidationActions}>
+                  <Link href={createRepositoryReanalysisHref(projectId, projectName)}>
+                    Repository 다시 분석
+                  </Link>
+                </div>
+              ) : onOpenDeliverySetup ? (
+                <div className={styles.deploymentValidationActions}>
+                  <button onClick={onOpenDeliverySetup} type="button">
+                    CI/CD 설정으로 이동
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : requestError ? (
             <p className={styles.deploymentStageAlert} role="alert">
               {requestError}
             </p>
           ) : null}
-          {selectedStep.id === "deployment" && selectedDeployment?.status === "FAILED" ? (
+          {selectedDeployment?.status === "FAILED" ? (
             <p className={styles.deploymentStageAlert} role="alert">
+              <strong>선택한 배포 실패 · </strong>
               {selectedDeployment.errorSummary ??
                 "배포가 실패했습니다. 배포 기록에서 원인을 확인하세요."}
+              {deploymentFailureDeveloperCheck
+                ? ` 개발자 확인: ${deploymentFailureDeveloperCheck}`
+                : ""}
             </p>
           ) : null}
         </article>
-
-        <aside className={styles.deploymentRecentResultCard} role="status" aria-live="polite">
-          <h3>{recentResultTitle}</h3>
-          {selectedDeployment && recentResultStatus ? (
-            <>
-              <DeploymentStatusBadge
-                label={recentResultStatus.label}
-                tone={recentResultStatus.tone}
-              />
-              <dl className={styles.deploymentRecentResultFacts}>
-                <div>
-                  <dt>실행 범위</dt>
-                  <dd>
-                    <code>{selectedDeployment.scope}</code>
-                  </dd>
-                </div>
-                {recentResultStage ? (
-                  <div>
-                    <dt>{selectedDeployment.status === "FAILED" ? "실패 단계" : "실행 단계"}</dt>
-                    <dd>{formatDeploymentStage(recentResultStage)}</dd>
-                  </div>
-                ) : null}
-                <div>
-                  <dt>차단 상태</dt>
-                  <dd>
-                    {selectedDeployment.isBlocked
-                      ? (selectedDeployment.blockedReason ?? "차단됨")
-                      : "차단 없음"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>실행 시각</dt>
-                  <dd>{formatDate(selectedDeployment.createdAt)}</dd>
-                </div>
-              </dl>
-              {selectedDeployment.errorSummary ? (
-                <p className={styles.deploymentRecentResultError}>
-                  <AlertCircle size={16} aria-hidden="true" />
-                  <span>{selectedDeployment.errorSummary}</span>
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className={styles.deploymentRecentResultEmpty}>
-              아직 실행 결과가 없습니다. 검증을 실행하면 현재 상태가 여기에 표시됩니다.
-            </p>
-          )}
-        </aside>
       </section>
     );
   };
 
-  const renderResultsSection = () => (
-    <section className={styles.deploymentSection}>
-      <h3>리소스와 Output</h3>
-      {deploymentResources.length === 0 ? (
-        <p className={styles.deploymentHint}>아직 기록된 AWS 리소스가 없습니다.</p>
-      ) : (
-        <div className={styles.deploymentResultRows}>
-          {deploymentResources.map((resource) => (
-            <article className={styles.deploymentResultRow} key={resource.id}>
-              <strong>{resource.terraformAddress}</strong>
-              <span className={styles.deploymentResultMeta}>{resource.terraformType}</span>
-              <span className={styles.deploymentResultValue}>
-                {resource.resourceId ?? "resource id 없음"}
-              </span>
-            </article>
-          ))}
-        </div>
-      )}
-      {terraformOutputs.length === 0 ? (
-        <p className={styles.deploymentHint}>Terraform output이 없습니다.</p>
-      ) : (
-        <>
-          <DeploymentOutputLinks
-            links={deploymentOutputLinks}
-            scopeKey={selectedDeploymentId || null}
-          />
+  const renderResultsSection = () => {
+    if (historyDetailsIsLoading) {
+      return (
+        <section
+          aria-busy="true"
+          aria-label="리소스와 Output 세부 내용"
+          className={styles.deploymentSection}
+        >
+          <p className={styles.deploymentHint} role="status">
+            선택한 배포 버전의 리소스와 Output을 불러오는 중입니다.
+          </p>
+        </section>
+      );
+    }
+
+    if (historyDetailsErrorMessage) {
+      return (
+        <section aria-label="리소스와 Output 세부 내용" className={styles.deploymentSection}>
+          <p className={styles.deploymentRecentResultError} role="alert">
+            {historyDetailsErrorMessage}
+          </p>
+        </section>
+      );
+    }
+
+    return (
+      <section aria-label="리소스와 Output 세부 내용" className={styles.deploymentSection}>
+        {historyDeploymentResources.length === 0 ? (
+          <p className={styles.deploymentHint}>아직 기록된 AWS 리소스가 없습니다.</p>
+        ) : (
           <div className={styles.deploymentResultRows}>
-            {terraformOutputs.map((output) => (
-              <article className={styles.deploymentResultRow} key={output.id}>
-                <strong>{output.name}</strong>
-                <span className={styles.deploymentResultMeta}>
-                  {output.sensitive ? "sensitive" : "plain"}
+            {historyDeploymentResources.map((resource) => (
+              <article className={styles.deploymentResultRow} key={resource.id}>
+                <strong>{resource.terraformAddress}</strong>
+                <span className={styles.deploymentResultMeta}>{resource.terraformType}</span>
+                <span className={styles.deploymentResultValue}>
+                  {resource.resourceId ?? "resource id 없음"}
                 </span>
-                <span className={styles.deploymentResultValue}>{formatOutputValue(output)}</span>
               </article>
             ))}
           </div>
-        </>
-      )}
-    </section>
-  );
-
-  const renderLogsSection = () => (
-    <section className={styles.deploymentSection}>
-      <h3>전체 로그</h3>
-      <DeploymentLogList logs={deploymentLogs} />
-    </section>
-  );
-
-  const renderApplicationReleaseHistory = () => (
-    <section className={styles.deploymentHistorySection} id="deployment-history">
-      <div className={styles.deploymentSectionHeader}>
-        <h3>배포 이력</h3>
-        <small>{applicationReleases.length}건</small>
-      </div>
-      {applicationReleases.length === 0 ? (
-        <div className={styles.deploymentHistoryEmpty}>
-          <strong>아직 배포 이력이 없습니다.</strong>
-          <p>첫 번째 배포가 완료되면 이곳에 표시됩니다.</p>
-        </div>
-      ) : (
-        <div className={styles.deploymentResultRows}>
-          {sortedApplicationReleases.map((release) => {
-            const outputUrl = getSafeReleaseOutputUrl(release.outputUrl);
-            return (
-              <article className={styles.deploymentResultRow} key={release.id}>
-                <strong>{release.version}</strong>
-                <span className={styles.deploymentResultMeta}>
-                  {formatDeploymentSource(release.source)} ·{" "}
-                  {formatApplicationReleaseStatus(release.status)} · {release.runtimeTargetKind}
-                </span>
-                <span className={styles.deploymentResultValue}>
-                  {formatShortReleaseIdentity(release)}
-                </span>
-                {release.providerRevision ? (
-                  <span className={styles.deploymentResultValue}>
-                    {release.providerRevision.resourceType}: {release.providerRevision.revisionId}
+        )}
+        {historyTerraformOutputs.length === 0 ? (
+          <p className={styles.deploymentHint}>Terraform output이 없습니다.</p>
+        ) : (
+          <>
+            <DeploymentOutputLinks
+              links={historyDeploymentOutputLinks}
+              scopeKey={selectedHistoryDeploymentId || null}
+              onOpenLiveObservation={onOpenLiveObservation}
+            />
+            <div className={styles.deploymentResultRows}>
+              {historyTerraformOutputs.map((output) => (
+                <article className={styles.deploymentResultRow} key={output.id}>
+                  <strong>{output.name}</strong>
+                  <span className={styles.deploymentResultMeta}>
+                    {output.sensitive ? "sensitive" : "plain"}
                   </span>
-                ) : null}
-                {outputUrl ? (
-                  <a href={outputUrl} rel="noreferrer" target="_blank">
-                    {outputUrl}
-                  </a>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
+                  <span className={styles.deploymentResultValue}>{formatOutputValue(output)}</span>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+    );
+  };
+
+  const renderLogsSection = () => {
+    if (historyDetailsIsLoading) {
+      return (
+        <section
+          aria-busy="true"
+          aria-label="전체 로그 세부 내용"
+          className={styles.deploymentSection}
+        >
+          <p className={styles.deploymentHint} role="status">
+            선택한 배포 버전의 로그를 불러오는 중입니다.
+          </p>
+        </section>
+      );
+    }
+
+    if (historyDetailsErrorMessage) {
+      return (
+        <section aria-label="전체 로그 세부 내용" className={styles.deploymentSection}>
+          <p className={styles.deploymentRecentResultError} role="alert">
+            {historyDetailsErrorMessage}
+          </p>
+        </section>
+      );
+    }
+
+    return (
+      <section aria-label="전체 로그 세부 내용" className={styles.deploymentSection}>
+        <DeploymentLogList logs={loadedHistoryDeploymentLogs} />
+      </section>
+    );
+  };
+
+  const renderDeploymentHistory = () => {
+    const selectedEntry =
+      visibleDeploymentHistoryEntries.find(
+        ({ deployment }) => deployment.id === selectedHistoryDeploymentId
+      ) ?? null;
+    const deployment = selectedEntry?.deployment;
+    const release = deployment
+      ? sortedApplicationReleases.find((candidate) => candidate.deploymentId === deployment.id)
+      : undefined;
+    const status = deployment ? getDeploymentStatusPresentation(deployment.status) : null;
+    const outputUrl = getSafeReleaseOutputUrl(release?.outputUrl ?? null);
+
+    return (
+      <section className={styles.deploymentHistorySection} id="deployment-history">
+        <header className={styles.deploymentHistoryHeader}>
+          <h2>배포 이력</h2>
+          <div className={styles.deploymentHistoryTools}>
+            <label className={styles.deploymentHistoryFilterControl}>
+              <span className={styles.deploymentHistoryTableCaption}>상태 필터</span>
+              <select
+                aria-label="상태 필터"
+                onChange={(event) =>
+                  selectDeploymentHistoryFilter(event.target.value as DeploymentHistoryFilter)
+                }
+                value={deploymentHistoryFilter}
+              >
+                <option value="all">모든 상태</option>
+                <option value="complete">완료</option>
+                <option value="failed">실패</option>
+              </select>
+            </label>
+            <label className={styles.deploymentHistorySearch}>
+              <Search aria-hidden="true" size={17} />
+              <span className={styles.deploymentHistoryTableCaption}>배포 이력 검색</span>
+              <input
+                onChange={(event) => setDeploymentHistorySearchQuery(event.target.value)}
+                placeholder="버전 ID 또는 실행 범위 검색"
+                type="search"
+                value={deploymentHistorySearchQuery}
+              />
+            </label>
+          </div>
+        </header>
+        {!hasDeploymentHistory ? (
+          <div className={styles.deploymentHistoryEmpty}>
+            <strong>아직 배포 이력이 없습니다.</strong>
+            <p>검증과 승인을 거쳐 배포를 실행하면 이곳에 기록됩니다.</p>
+          </div>
+        ) : null}
+        {hasDeploymentHistory ? (
+          <div className={styles.deploymentHistoryBody} data-drawer-open={Boolean(selectedEntry)}>
+            <div className={styles.deploymentHistoryTableRegion}>
+              <table className={styles.deploymentHistoryTable}>
+                <caption className={styles.deploymentHistoryTableCaption}>
+                  배포 이력 목록
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">상태</th>
+                    <th scope="col">실행 시각</th>
+                    <th scope="col">변경 결과</th>
+                    <th scope="col">대상</th>
+                    <th scope="col">버전 ID</th>
+                    <th scope="col">소요 시간</th>
+                    <th scope="col">상세</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleDeploymentHistoryEntries.length === 0 ? (
+                    <tr>
+                      <td colSpan={7}>
+                        <div className={styles.deploymentHistoryFilteredEmpty}>
+                          <strong>선택한 조건에 맞는 배포가 없습니다.</strong>
+                          <span>상태 필터나 검색어를 바꿔 확인하세요.</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                  {visibleDeploymentHistoryEntries.map(({ deployment, versionLabel }) => {
+                    const rowStatus = getDeploymentStatusPresentation(deployment.status);
+                    const isSelected = deployment.id === selectedHistoryDeploymentId;
+                    const StatusIcon = rowStatus.tone === "error" ? AlertCircle : CheckCircle2;
+
+                    return (
+                      <tr
+                        data-selected={isSelected ? "true" : undefined}
+                        key={deployment.id}
+                        onClick={() => setSelectedHistoryDeploymentId(deployment.id)}
+                      >
+                        <td>
+                          <span
+                            className={styles.deploymentHistoryStatus}
+                            data-tone={rowStatus.tone}
+                          >
+                            <StatusIcon aria-hidden="true" size={16} />
+                            {rowStatus.label}
+                          </span>
+                        </td>
+                        <td>
+                          <time dateTime={deployment.createdAt}>
+                            {formatDate(deployment.createdAt)}
+                          </time>
+                        </td>
+                        <td>{formatDeploymentChangeSummary(deployment.planSummary)}</td>
+                        <td>{formatDeploymentScope(deployment.scope)}</td>
+                        <td>
+                          <code title={versionLabel}>{versionLabel}</code>
+                        </td>
+                        <td>{getDeploymentDurationLabel(deployment)}</td>
+                        <td>
+                          <button
+                            aria-label={`${formatDate(deployment.createdAt)} 배포 상세 보기`}
+                            aria-pressed={isSelected}
+                            onClick={() => setSelectedHistoryDeploymentId(deployment.id)}
+                            title={versionLabel}
+                            type="button"
+                          >
+                            <ChevronRight aria-hidden="true" size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {selectedHistoryDeploymentId.length > 0 && deployment && selectedEntry && status ? (
+              <aside
+                aria-label="배포 상세"
+                className={styles.deploymentHistoryDetailPanel}
+                key={deployment.id}
+              >
+                <header className={styles.deploymentHistoryDetailHeader}>
+                  <div>
+                    <span
+                      className={styles.deploymentHistoryStatus}
+                      data-tone={status.tone}
+                    >
+                      {status.tone === "error" ? (
+                        <AlertCircle aria-hidden="true" size={16} />
+                      ) : (
+                        <CheckCircle2 aria-hidden="true" size={16} />
+                      )}
+                      {status.label}
+                    </span>
+                    <h3>{status.tone === "error" ? "배포 실패" : "배포 완료"}</h3>
+                  </div>
+                  <button
+                    aria-label="배포 상세 닫기"
+                    onClick={() => setSelectedHistoryDeploymentId("")}
+                    type="button"
+                  >
+                    <X aria-hidden="true" size={18} />
+                  </button>
+                </header>
+                <div className={styles.deploymentHistoryDetailContent}>
+                  <dl className={styles.deploymentHistoryDetailFacts}>
+                    <div>
+                      <dt>실행 시각</dt>
+                      <dd>
+                        <time dateTime={deployment.createdAt}>
+                          {formatDate(deployment.createdAt)}
+                        </time>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>변경 결과</dt>
+                      <dd>{formatDeploymentChangeSummary(deployment.planSummary)}</dd>
+                    </div>
+                    <div>
+                      <dt>대상</dt>
+                      <dd>{formatDeploymentScope(deployment.scope)}</dd>
+                    </div>
+                    <div>
+                      <dt>버전 ID</dt>
+                      <dd>
+                        <code title={selectedEntry.versionLabel}>{selectedEntry.versionLabel}</code>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>소요 시간</dt>
+                      <dd>{getDeploymentDurationLabel(deployment)}</dd>
+                    </div>
+                  </dl>
+                  {outputUrl ? (
+                    <a
+                      className={styles.deploymentHistoryOutputLink}
+                      href={outputUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      배포된 서비스 열기
+                    </a>
+                  ) : null}
+                  <details className={styles.deploymentHistoryTechnical}>
+                    <summary>기술 정보</summary>
+                    <dl>
+                      {release ? (
+                        <div>
+                          <dt>앱 릴리즈</dt>
+                          <dd>
+                            {release.version} · {formatApplicationReleaseStatus(release.status)}
+                          </dd>
+                        </div>
+                      ) : null}
+                      {deployment.approvedByUserId ? (
+                        <div>
+                          <dt>요청자</dt>
+                          <dd>{deployment.approvedByUserId}</dd>
+                        </div>
+                      ) : null}
+                      <div>
+                        <dt>Deployment ID</dt>
+                        <dd>
+                          <code title={deployment.id}>{deployment.id}</code>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Terraform artifact</dt>
+                        <dd>
+                          <code title={deployment.terraformArtifactId}>
+                            {deployment.terraformArtifactId}
+                          </code>
+                        </dd>
+                      </div>
+                      {release ? (
+                        <>
+                          <div>
+                            <dt>Commit</dt>
+                            <dd>
+                              <code title={release.commitSha}>
+                                {formatShortHash(release.commitSha)}
+                              </code>
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Digest</dt>
+                            <dd>
+                              <code title={release.artifactDigest}>
+                                sha256:{formatShortHash(release.artifactDigest)}
+                              </code>
+                            </dd>
+                          </div>
+                          {release.artifactId ? (
+                            <div>
+                              <dt>Build artifact</dt>
+                              <dd>
+                                <code title={release.artifactId}>{release.artifactId}</code>
+                              </dd>
+                            </div>
+                          ) : null}
+                          <div>
+                            <dt>배포 방식</dt>
+                            <dd>{formatDeploymentSource(release.source)}</dd>
+                          </div>
+                        </>
+                      ) : null}
+                      {release?.providerRevision ? (
+                        <div>
+                          <dt>{release.providerRevision.resourceType}</dt>
+                          <dd>
+                            <code title={release.providerRevision.revisionId}>
+                              {release.providerRevision.revisionId}
+                            </code>
+                          </dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                  </details>
+                  <details className={styles.deploymentHistoryTechnical}>
+                    <summary>
+                      <span>리소스와 Output</span>
+                      <small>
+                        {historyDetailsIsLoading
+                          ? "불러오는 중"
+                          : historyDetailsErrorMessage
+                            ? "불러오기 실패"
+                            : `${historyDeploymentResources.length + historyTerraformOutputs.length}건`}
+                      </small>
+                    </summary>
+                    <div className={styles.deploymentHistoryDrawerDisclosureBody}>
+                      {renderResultsSection()}
+                    </div>
+                  </details>
+                  <details className={styles.deploymentHistoryTechnical}>
+                    <summary>
+                      <span>전체 로그</span>
+                      <small>
+                        {historyDetailsIsLoading
+                          ? "불러오는 중"
+                          : historyDetailsErrorMessage
+                            ? "불러오기 실패"
+                            : `${loadedHistoryDeploymentLogs.length}줄`}
+                      </small>
+                    </summary>
+                    <div className={styles.deploymentHistoryDrawerDisclosureBody}>
+                      {renderLogsSection()}
+                    </div>
+                  </details>
+                </div>
+              </aside>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    );
+  };
 
   const renderHistoryView = () => (
     <div className={styles.deploymentHistoryGrid}>
-      {renderApplicationReleaseHistory()}
-      <div className={styles.deploymentHistorySecondary}>
-        <details className={styles.deploymentDisclosure}>
-          <summary>
-            <span>리소스와 Output</span>
-            <small>{deploymentResources.length + terraformOutputs.length}건</small>
-          </summary>
-          <div className={styles.deploymentDisclosureBody}>{renderResultsSection()}</div>
-        </details>
-        <details className={styles.deploymentDisclosure}>
-          <summary>
-            <span>전체 로그</span>
-            <small>{deploymentLogs.length}줄</small>
-          </summary>
-          <div className={styles.deploymentDisclosureBody}>{renderLogsSection()}</div>
-        </details>
-      </div>
+      {renderDeploymentHistory()}
     </div>
   );
 
@@ -1458,9 +2400,9 @@ export function DirectDeploymentScreen({
           Local workspace에서는 AWS 연결과 Deployment 기록을 만들지 않습니다. 프로젝트를 만든 뒤
           저장된 Terraform artifact를 기준으로 배포를 시작하세요.
         </p>
-        <a className={styles.deploymentPrimaryButton} href="/workspace/new">
+        <Link className={styles.deploymentPrimaryButton} href="/workspace/new">
           프로젝트로 저장
-        </a>
+        </Link>
       </section>
     </div>
   );
@@ -1480,51 +2422,54 @@ function DeploymentPreDeploymentSummary({
   const gateLevel = getPreDeploymentGateLevel(analysis);
 
   return (
-    <div className={styles.deploymentPreflightSummary} data-level={gateLevel}>
-      <div className={styles.deploymentGateHeader}>
+    <details className={styles.deploymentPreflightSummary} data-level={gateLevel}>
+      <summary className={styles.deploymentGateHeader}>
         <span className={styles.deploymentGateBadge}>{gateLevel.toUpperCase()}</span>
         <strong>배포 안전성 검사 결과</strong>
+        <span className={styles.deploymentPreflightChevron} aria-hidden="true" />
+      </summary>
+      <div className={styles.deploymentPreflightBody}>
+        <p>{analysis.summary}</p>
+        {analysis.deepScan ? (
+          <p className={styles.deploymentHint} data-testid="pre-deployment-deep-scan-status">
+            {analysis.deepScan.status === "running"
+              ? "핵심 안전검사 완료 · Trivy 심층검사 진행 중"
+              : analysis.deepScan.status === "complete"
+                ? "핵심 안전검사 및 Trivy 심층검사 완료 · 결과 병합됨"
+                : analysis.deepScan.status === "failed"
+                  ? (analysis.deepScan.message ?? "Trivy 심층검사를 완료하지 못했습니다.")
+                  : "핵심 안전검사 완료"}
+          </p>
+        ) : null}
+        <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
+          <span>
+            <strong>{analysis.findings.length}</strong>
+            발견 항목
+          </span>
+          <span>
+            <strong>{failCount}</strong>
+            실패
+          </span>
+          <span>
+            <strong>{warningCount}</strong>
+            주의
+          </span>
+        </div>
+        {analysis.findings.length > 0 ? (
+          <ul className={styles.deploymentPreflightFindings}>
+            {analysis.findings.map((finding) => (
+              <DeploymentPreDeploymentFindingItem
+                finding={finding}
+                key={finding.id}
+                onOpenFindingTerraformSource={onOpenFindingTerraformSource}
+              />
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.deploymentHint}>표시할 Check Finding이 없습니다.</p>
+        )}
       </div>
-      <p>{analysis.summary}</p>
-      {analysis.deepScan ? (
-        <p className={styles.deploymentHint} data-testid="pre-deployment-deep-scan-status">
-          {analysis.deepScan.status === "running"
-            ? "핵심 안전검사 완료 · Trivy 심층검사 진행 중"
-            : analysis.deepScan.status === "complete"
-              ? "핵심 안전검사 및 Trivy 심층검사 완료 · 결과 병합됨"
-              : analysis.deepScan.status === "failed"
-                ? (analysis.deepScan.message ?? "Trivy 심층검사를 완료하지 못했습니다.")
-                : "핵심 안전검사 완료"}
-        </p>
-      ) : null}
-      <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
-        <span>
-          <strong>{analysis.findings.length}</strong>
-          발견 항목
-        </span>
-        <span>
-          <strong>{failCount}</strong>
-          실패
-        </span>
-        <span>
-          <strong>{warningCount}</strong>
-          주의
-        </span>
-      </div>
-      {analysis.findings.length > 0 ? (
-        <ul className={styles.deploymentPreflightFindings}>
-          {analysis.findings.map((finding) => (
-            <DeploymentPreDeploymentFindingItem
-              finding={finding}
-              key={finding.id}
-              onOpenFindingTerraformSource={onOpenFindingTerraformSource}
-            />
-          ))}
-        </ul>
-      ) : (
-        <p className={styles.deploymentHint}>표시할 Check Finding이 없습니다.</p>
-      )}
-    </div>
+    </details>
   );
 }
 
@@ -1681,47 +2626,6 @@ function countChecklistItems(
   return analysis.checklist.filter((item) => item.status === status).length;
 }
 
-function DeploymentSummaryItem({
-  children,
-  label
-}: {
-  readonly children: ReactNode;
-  readonly label: string;
-}) {
-  return (
-    <div className={styles.deploymentValidationSummaryItem}>
-      <span>{label}</span>
-      {children}
-    </div>
-  );
-}
-
-function DeploymentStatusBadge({
-  label,
-  tone
-}: {
-  readonly label: string;
-  readonly tone: DeploymentStatusTone | "warning";
-}) {
-  const StatusIcon =
-    tone === "error"
-      ? AlertCircle
-      : tone === "success"
-        ? CheckCircle2
-        : tone === "running"
-          ? Clock3
-          : tone === "warning"
-            ? AlertCircle
-            : CircleDot;
-
-  return (
-    <span className={styles.deploymentStatusBadge} data-tone={tone}>
-      <StatusIcon size={14} aria-hidden="true" />
-      {label}
-    </span>
-  );
-}
-
 function InfoRow({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div>
@@ -1810,27 +2714,6 @@ function formatRiskLevel(level: "high" | "medium" | "low"): string {
   return "낮음";
 }
 
-function formatDeploymentStage(
-  stage: Deployment["activeStage"] | Deployment["failureStage"]
-): string | null {
-  if (!stage) {
-    return null;
-  }
-
-  const labels: Record<NonNullable<Deployment["failureStage"]>, string> = {
-    apply: "Terraform Apply",
-    approval: "승인",
-    aws_connection: "AWS 연결",
-    destroy: "Terraform Destroy",
-    init: "초기화",
-    mock_run: "실행 점검",
-    plan: "Terraform Plan",
-    validate: "검증"
-  };
-
-  return labels[stage];
-}
-
 function formatDeploymentSource(source: ApplicationRelease["source"]): string {
   return source === "gitops" ? "CI/CD" : "Direct";
 }
@@ -1841,12 +2724,37 @@ function formatApplicationReleaseStatus(status: ApplicationRelease["status"]): s
     cancelled: "취소됨",
     deploying: "배포 중",
     failed: "실패",
+    partially_cancelled: "부분 취소",
+    partially_failed: "부분 실패",
     pending: "대기 중",
+    retrying: "웹 배포 재시도 중",
     rolled_back: "롤백됨",
     succeeded: "성공"
   };
 
   return labels[status];
+}
+
+function formatApplicationReleaseFailureStage(
+  stage: NonNullable<ApplicationRelease["failureStage"]>
+): string {
+  const labels: Record<NonNullable<ApplicationRelease["failureStage"]>, string> = {
+    candidate_upload: "검증 Artifact 저장",
+    cloudfront_invalidation: "CloudFront 캐시 갱신",
+    ecr_publish: "ECR 이미지 반영",
+    ecs_activation: "ECS 새 버전 활성화",
+    ecs_health: "ECS Health Check",
+    frontend_activation: "웹 index 활성화",
+    frontend_upload: "웹 asset 업로드",
+    preflight_api_build: "API 사전 빌드",
+    preflight_api_health: "API 사전 Health Check",
+    preflight_checkout: "Repository checkout",
+    preflight_frontend_build: "웹 사전 빌드",
+    public_health: "공개 URL 최종 확인",
+    rollback: "ECS 자동 복구",
+    runtime_verification: "배포 Resource 재검증"
+  };
+  return labels[stage];
 }
 
 function getPrimaryDeploymentStepStatus(deployment: Deployment | null): string {
@@ -1881,58 +2789,22 @@ function getPrimaryDeploymentStepStatus(deployment: Deployment | null): string {
   return "실행 준비됨";
 }
 
-function getDeploymentActionHint(deployment: Deployment): string {
-  if (deployment.status === "DESTROYED") {
-    return "Cleanup destroy가 완료되었습니다. Deployment 결과와 state pointer가 정리되었습니다.";
+function getCleanupPlanActionLabel(deployment: Deployment, targetCount: number): string {
+  if (targetCount <= 1) {
+    return "Destroy Plan 생성";
   }
 
-  if (deployment.approvedAt && !hasCompleteDeploymentApprovalSnapshot(deployment)) {
-    const actionLabel = deployment.currentPlanOperation === "destroy" ? "Destroy" : "Apply";
+  return deployment.scope === "application"
+    ? "애플리케이션 Destroy Plan 생성"
+    : "인프라 Destroy Plan 생성";
+}
 
-    return `승인 스냅샷이 불완전합니다. Terraform Plan을 다시 실행하고 승인한 뒤 ${actionLabel}를 진행하세요.`;
+function getCleanupExecutionActionLabel(deployment: Deployment, targetCount: number): string {
+  if (targetCount <= 1) {
+    return "Destroy 실행";
   }
 
-  if (deployment.currentPlanOperation === "destroy" && deployment.approvedAt) {
-    return "승인된 Destroy Plan이 준비되었습니다. 실제 삭제 전 AWS 계정과 삭제 변경 내용을 다시 확인하세요.";
-  }
-
-  if (
-    deployment.currentPlanOperation === "destroy" &&
-    deployment.isBlocked &&
-    deployment.blockedBy === "missing_approval"
-  ) {
-    return "Destroy Plan 내용을 확인한 뒤 승인할 수 있습니다. 승인 전에는 AWS 리소스를 삭제하지 않습니다.";
-  }
-
-  if (deployment.status === "RUNNING") {
-    if (deployment.cancelRequestedAt) {
-      return "취소 요청을 보냈습니다. Terraform 프로세스가 멈추면 상태가 갱신됩니다.";
-    }
-
-    return "Terraform 작업이 진행 중입니다. 상태와 로그가 자동으로 갱신됩니다.";
-  }
-
-  if (deployment.approvedAt) {
-    if (deployment.status === "SUCCESS") {
-      return "Apply가 완료되었습니다. 생성된 리소스와 Terraform output을 아래에서 확인할 수 있습니다.";
-    }
-
-    return "승인된 Plan이 준비되었습니다. Apply 실행 전 AWS 계정과 변경 내용을 다시 확인하세요.";
-  }
-
-  if (!deployment.currentPlanArtifactId) {
-    return "Terraform Plan을 먼저 실행하면 승인 버튼이 표시됩니다.";
-  }
-
-  if (deployment.isBlocked && deployment.blockedBy === "missing_approval") {
-    return "Plan 내용을 확인한 뒤 승인할 수 있습니다.";
-  }
-
-  if (deployment.isBlocked) {
-    return "현재 Plan은 승인 전에 차단 사유를 해결해야 합니다.";
-  }
-
-  return "";
+  return deployment.scope === "application" ? "애플리케이션 Destroy 실행" : "인프라 Destroy 실행";
 }
 
 function mergeDeploymentLog(logs: DeploymentLog[], log: DeploymentLog): DeploymentLog[] {
@@ -1949,7 +2821,7 @@ function DeploymentLogList({ logs }: { readonly logs: DeploymentLog[] }) {
   }
 
   return (
-    <ol aria-label="Deployment logs" className={styles.deploymentLogList}>
+    <ol aria-label="Deployment logs" className={styles.deploymentLogList} tabIndex={0}>
       {logs.map((log) => {
         const prefix = `${String(log.sequence).padStart(3, "0")}  ${log.stage
           .toUpperCase()
@@ -1991,10 +2863,6 @@ function getDeploymentLogTokenClassName(token: DeploymentLogMessageToken): strin
   }
 }
 
-function formatShortReleaseIdentity(release: ApplicationRelease): string {
-  return `commit ${release.commitSha.slice(0, 12)} · sha256:${release.artifactDigest.slice(0, 12)}`;
-}
-
 function getSafeReleaseOutputUrl(value: string | null): string | null {
   if (!value) return null;
   try {
@@ -2033,6 +2901,35 @@ function formatOutputValue(output: TerraformOutput): string {
   return JSON.stringify(output.value);
 }
 
+function formatDeploymentChangeSummary(summary: Deployment["planSummary"]): string {
+  if (!summary) {
+    return "변경 정보 없음";
+  }
+
+  const changes = [
+    ["추가", summary.createCount],
+    ["수정", summary.updateCount],
+    ["교체", summary.replaceCount],
+    ["삭제", summary.deleteCount]
+  ]
+    .filter(([, count]) => Number(count) > 0)
+    .map(([label, count]) => `${label} ${count}개`);
+
+  return changes.length > 0 ? changes.join(" · ") : "변경 없음";
+}
+
+function formatDeploymentScope(scope: DeploymentScope): string {
+  if (scope === "infrastructure") {
+    return "인프라";
+  }
+
+  if (scope === "application") {
+    return "애플리케이션";
+  }
+
+  return "전체 스택";
+}
+
 function formatDate(value: string): string {
   const date = new Date(value);
 
@@ -2044,4 +2941,13 @@ function formatDate(value: string): string {
     dateStyle: "short",
     timeStyle: "short"
   });
+}
+
+function createRepositoryReanalysisHref(projectId: string, projectName: string): string {
+  const params = new URLSearchParams({ projectId });
+  if (projectName.trim()) {
+    params.set("projectName", projectName.trim());
+  }
+
+  return `/workspace/repository?${params.toString()}`;
 }

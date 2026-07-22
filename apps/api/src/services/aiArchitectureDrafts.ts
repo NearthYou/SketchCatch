@@ -2,7 +2,8 @@ import type {
   AiArchitectureDraftResult,
   AiBillingMode,
   AiProviderMetadata,
-  ArchitectureDraftProgressStage,
+  ArchitectureDraftCandidateExclusion,
+  ArchitectureDraftProgressSnapshot,
   ArchitectureDraftClarification,
   ArchitectureJson,
   CreateArchitectureDraftRequest,
@@ -13,7 +14,10 @@ import type {
   TemplateDefinition,
   TemplateId
 } from "@sketchcatch/types";
-import { getTemplateDefinitionById } from "@sketchcatch/types";
+import {
+  getTemplateDefinitionById,
+  resolveArchitectureTechnologyStackCategory
+} from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import type { RuntimeCache } from "../runtime-cache/index.js";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
@@ -23,13 +27,17 @@ import {
   parseArchitectureIntentPlan,
   type ArchitectureIntentPlan
 } from "./aiArchitectureRequirementNormalizer.js";
+import { createOpenAiArchitectureConflictResolverProviderFromEnv } from "./aiArchitectureConflictResolver.js";
 import {
   createArchitectureResourceDeploymentConfig,
   SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG,
   SUPPORTED_ARCHITECTURE_RESOURCE_TYPES
 } from "./aiArchitectureResourceCatalog.js";
 import { planPracticeArchitecture } from "./aiArchitectureRequirementDraftBuilder.js";
-import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditions.js";
+import {
+  applyOperatingConditionConfig,
+  applyOperatingConditionConfigToArchitecture
+} from "./aiArchitectureOperatingConditions.js";
 import {
   ArchitectureDraftGenerationError,
   createInternalArchitectureGenerationError,
@@ -42,6 +50,7 @@ import {
   resolveArchitectureOperationalRequirements,
   validateArchitectureOperationalRequirements
 } from "./aiArchitectureOperationalRequirements.js";
+import { convertDiagramJsonToArchitectureJson } from "./diagram-to-architecture.js";
 import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
 import { createArchitectureDraftFallbackExplanation } from "./aiLlmExplanationFallbacks.js";
@@ -59,6 +68,11 @@ import {
   estimateAiUsage,
   maskSecretsForAi
 } from "./aiProviderSafety.js";
+import {
+  createAuthoredTerraformArchitectureDiagram,
+  findAuthoredTerraformArchitecturePreset,
+  type AuthoredTerraformArchitecturePreset
+} from "./authoredTerraformArchitecturePresets.js";
 
 const ARCHITECTURE_DRAFT_TARGET = "architecture_draft";
 
@@ -82,6 +96,28 @@ const PREVIEW_NODE_LAYOUT_SIZES: Partial<Record<ResourceType, LayoutSize>> = {
 };
 const PREVIEW_AREA_RESOURCE_TYPES = new Set<ResourceType>(["VPC", "SUBNET"]);
 const PREVIEW_BOUNDARY_RESOURCE_TYPES = new Set<ResourceType>(["INTERNET_GATEWAY"]);
+const EXCLUDABLE_CANDIDATE_RESOURCE_TYPES = new Set<ResourceType>([
+  "S3",
+  "CLOUDFRONT",
+  "CLOUDWATCH_LOG_GROUP",
+  "CLOUDWATCH_METRIC_ALARM",
+  "CLOUDWATCH_DASHBOARD",
+  "CLOUDTRAIL",
+  "XRAY_GROUP",
+  "XRAY_SAMPLING_RULE",
+  "SNS_TOPIC",
+  "SQS_QUEUE",
+  "EVENTBRIDGE_RULE",
+  "SCHEDULER_SCHEDULE",
+  "CODEBUILD_PROJECT",
+  "CODEDEPLOY_APP",
+  "CODEPIPELINE",
+  "CODESTAR_CONNECTION",
+  "ECR_REPOSITORY",
+  "CONFIG_RULE",
+  "SHIELD_PROTECTION",
+  "GUARDDUTY_DETECTOR"
+]);
 const PREVIEW_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
 const RESOURCE_TYPE_TERRAFORM_NAMES: Partial<Record<ResourceType, string>> = {
@@ -187,30 +223,66 @@ type AmazonQArchitectureDraftResponse =
 export type CreateArchitectureDraftResponseFactory = (
   request: CreateArchitectureDraftRequest,
   options?: {
-    readonly onProgress?: ((stage: ArchitectureDraftProgressStage) => void) | undefined;
+    readonly onProgress?: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined;
   }
 ) => Promise<CreateArchitectureDraftResponse> | CreateArchitectureDraftResponse;
 
 export type CreateAmazonQArchitectureDraftResponseOptions = {
   readonly provider?: AiTextProvider | undefined;
+  readonly conflictClarificationProvider?: AiTextProvider | undefined;
   readonly requirementNormalizerProvider?: AiTextProvider | undefined;
   readonly creditPolicy?: AiCreditPolicy | undefined;
-  readonly onProgress?: ((stage: ArchitectureDraftProgressStage) => void) | undefined;
+  readonly onProgress?: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined;
 };
 
 // 자연어 요청을 보드가 열 수 있는 ArchitectureJson 초안으로 바꾸는 1차 진입점입니다.
 export function createArchitectureDraft(input: string | CreateArchitectureDraftRequest): AiArchitectureDraftResult {
   const request = normalizeArchitectureDraftRequest(input);
+  const candidateDraft = createArchitectureDraftCandidateProjection(request);
 
+  return applyArchitectureDraftCandidateExclusions(
+    candidateDraft,
+    resolveAuthorizedCandidateExclusions(
+      candidateDraft.architectureJson,
+      request.candidateExclusions
+    )
+  );
+}
+
+function createArchitectureDraftCandidateProjection(
+  request: CreateArchitectureDraftRequest
+): AiArchitectureDraftResult {
   const resolution = resolveArchitectureRequirement(request);
   const resourceQuantities = resolveArchitectureResourceQuantities(request.prompt);
   const draft = planPracticeArchitecture(resolution, resourceQuantities);
   const configuredDraft = applyOperatingConditionConfig(draft, resolution.operatingProfile);
 
-  return applyArchitectureDraftRequestPolicies(
+  return applyArchitectureDraftBaseRequestPolicies(
     applyGuardrailMetadata(configuredDraft, request, resolution),
     request
   );
+}
+
+function authorizeArchitectureDraftRequest(
+  request: CreateArchitectureDraftRequest
+): CreateArchitectureDraftRequest {
+  if (request.candidateExclusions === undefined) {
+    return request;
+  }
+
+  try {
+    const candidateDraft = createArchitectureDraftCandidateProjection(request);
+    return {
+      ...request,
+      candidateExclusions:
+        resolveAuthorizedCandidateExclusions(
+          candidateDraft.architectureJson,
+          request.candidateExclusions
+        ) ?? []
+    };
+  } catch {
+    return { ...request, candidateExclusions: [] };
+  }
 }
 
 // GitHub 링크 요청도 결국 가벼운 텍스트 근거를 모아 자연어 초안 생성 흐름을 재사용합니다.
@@ -239,6 +311,7 @@ export function createConfiguredAmazonQArchitectureDraftResponse(input: {
   readonly runtimeCache?: RuntimeCache | undefined;
 } = {}): CreateArchitectureDraftResponseFactory {
   const regions = resolveAiProviderRegions(process.env);
+  const creditPolicy = readAiCreditPolicyFromEnv();
   const provider =
     process.env.NODE_ENV === "test"
       ? undefined
@@ -248,8 +321,13 @@ export function createConfiguredAmazonQArchitectureDraftResponse(input: {
         });
   const requirementNormalizerProvider =
     process.env.NODE_ENV === "test" ? undefined : createOpenAiRequirementNormalizerProviderFromEnv();
+  const conflictClarificationProvider =
+    process.env.NODE_ENV === "test" ? undefined : createOpenAiArchitectureConflictResolverProviderFromEnv();
 
-  if (provider !== undefined) {
+  if (
+    provider !== undefined
+    && shouldWarmConfiguredAmazonQArchitectureDraftProvider(creditPolicy)
+  ) {
     void warmAmazonQArchitectureDraftProvider(provider).catch((error: unknown) => {
       input.onWarmupError?.(error);
     });
@@ -258,10 +336,17 @@ export function createConfiguredAmazonQArchitectureDraftResponse(input: {
   return (request, operationOptions) =>
     createAmazonQArchitectureDraftResponse(request, {
       provider,
+      conflictClarificationProvider,
       requirementNormalizerProvider,
-      creditPolicy: readAiCreditPolicyFromEnv(),
+      creditPolicy,
       onProgress: operationOptions?.onProgress
     });
+}
+
+export function shouldWarmConfiguredAmazonQArchitectureDraftProvider(
+  creditPolicy: AiCreditPolicy
+): boolean {
+  return creditPolicy.billingMode === "aws_credit_only" && creditPolicy.amazonQ;
 }
 
 // 선택된 Template이 있으면 Amazon Q payload와 prompt에 고정 결정으로 함께 전달합니다.
@@ -269,33 +354,55 @@ export async function createAmazonQArchitectureDraftResponse(
   input: string | CreateArchitectureDraftRequest,
   options: CreateAmazonQArchitectureDraftResponseOptions = {}
 ): Promise<CreateArchitectureDraftResponse> {
-  const request = normalizeArchitectureDraftRequest(input);
+  let request = authorizeArchitectureDraftRequest(
+    normalizeArchitectureDraftRequest(input)
+  );
   const creditPolicy = options.creditPolicy ?? readAiCreditPolicyFromEnv();
   const provider = options.provider;
+  const progressReporter = createArchitectureDraftProgressReporter(request, options.onProgress);
 
-  reportArchitectureDraftProgress(options.onProgress, "preparing_requirements");
+  const missingQuestion = findMissingRequiredQuestion(request);
+
+  if (missingQuestion !== null) {
+    return createArchitectureDraftClarification(
+      missingQuestion.question,
+      request,
+      creditPolicy.billingMode,
+      missingQuestion.invalidAnswer
+    );
+  }
+
+  const authoredPreset = findAuthoredTerraformArchitecturePreset(request.prompt);
+  if (authoredPreset !== null) {
+    await reportFallbackDraftProgress(progressReporter, options.onProgress);
+    return createAuthoredTerraformArchitectureResponse(authoredPreset);
+  }
+
+  request = withArchitectureDraftDefaults(
+    withAcceptedArchitectureClarificationAnswers(request)
+  );
+  const conditionalQuestion = findConditionalArchitectureQuestion(request.prompt);
+
+  if (conditionalQuestion !== null) {
+    return createArchitectureDraftClarification(
+      conditionalQuestion,
+      request,
+      creditPolicy.billingMode,
+      request.clarificationAnswers?.some((answer) => answer.questionId === conditionalQuestion.id) ?? false
+    );
+  }
 
   if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
+    await reportFallbackDraftProgress(progressReporter, options.onProgress);
     return createFallbackArchitectureDraftResponse(request, "credit_not_confirmed", creditPolicy.billingMode);
   }
 
   if (provider === undefined) {
+    await reportFallbackDraftProgress(progressReporter, options.onProgress);
     return createFallbackArchitectureDraftResponse(request, "provider_not_configured", creditPolicy.billingMode);
   }
 
-  const missingQuestion = findMissingRequiredQuestion(request.prompt);
-
-  if (missingQuestion !== null) {
-    return createArchitectureDraftClarification(missingQuestion, request, provider, creditPolicy.billingMode);
-  }
-
-  const conditionalQuestion = findConditionalArchitectureQuestion(request.prompt);
-
-  if (conditionalQuestion !== null) {
-    return createArchitectureDraftClarification(conditionalQuestion, request, provider, creditPolicy.billingMode);
-  }
-
-  reportArchitectureDraftProgress(options.onProgress, "normalizing_requirements");
+  progressReporter.reportCandidates();
   const architectureDecisionSpace = createArchitectureDecisionSpace(request.prompt);
   const providerNormalizedRequirement = await createNormalizedArchitectureIntentPlan({
     prompt: request.prompt,
@@ -317,6 +424,12 @@ export async function createAmazonQArchitectureDraftResponse(
   const payload = maskSecretsForAi({
     architectureBrief,
     architectureDecisionSpace,
+    ...(request.clarificationAnswers === undefined
+      ? {}
+      : { clarificationAnswers: request.clarificationAnswers }),
+    ...(request.candidateExclusions === undefined
+      ? {}
+      : { candidateExclusions: request.candidateExclusions }),
     ...(normalizedRequirement === null ? {} : { normalizedRequirement }),
     fixedTemplateSelection,
     prompt: request.prompt,
@@ -328,7 +441,7 @@ export async function createAmazonQArchitectureDraftResponse(
   try {
     let activePayload = payload;
     let retryUsed = false;
-    reportArchitectureDraftProgress(options.onProgress, "querying_amazon_q");
+    progressReporter.reportCandidates();
     let response = await generateArchitectureDraftProviderResponse(provider, {
       target: ARCHITECTURE_DRAFT_TARGET,
       instructions: createAmazonQArchitectureDraftInstructions(),
@@ -336,11 +449,12 @@ export async function createAmazonQArchitectureDraftResponse(
         request.prompt,
         architectureDecisionSpace,
         normalizedRequirement,
-        fixedTemplateSelection
+        fixedTemplateSelection,
+        request.candidateExclusions
       ),
       payload: activePayload
     });
-    reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
+    progressReporter.reportCandidates();
     let parsedResponse = applyOperationalPolicyToProviderResponse(
       parseArchitectureDraftProviderResponse(response.text),
       request.prompt,
@@ -348,13 +462,21 @@ export async function createAmazonQArchitectureDraftResponse(
     );
 
     if (parsedResponse.status === "preview") {
-      const validationIssues = findAmazonQPreviewValidationIssues(request.prompt, parsedResponse, normalizedRequirement);
+      const validationIssues = findAmazonQPreviewValidationIssues(
+        request.prompt,
+        parsedResponse,
+        normalizedRequirement,
+        request.candidateExclusions
+      );
 
       if (validationIssues.length > 0) {
         retryUsed = true;
         activePayload = maskSecretsForAi({
           architectureBrief,
           architectureDecisionSpace,
+          ...(request.candidateExclusions === undefined
+            ? {}
+            : { candidateExclusions: request.candidateExclusions }),
           ...(normalizedRequirement === null ? {} : { normalizedRequirement }),
           fixedTemplateSelection,
           prompt: request.prompt,
@@ -364,7 +486,7 @@ export async function createAmazonQArchitectureDraftResponse(
           supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
           supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
         });
-        reportArchitectureDraftProgress(options.onProgress, "querying_amazon_q");
+        progressReporter.reportCandidates();
         response = await generateArchitectureDraftProviderResponse(provider, {
           target: ARCHITECTURE_DRAFT_TARGET,
           instructions: createAmazonQArchitectureDraftInstructions(),
@@ -373,12 +495,13 @@ export async function createAmazonQArchitectureDraftResponse(
             architectureDecisionSpace,
             normalizedRequirement,
             fixedTemplateSelection,
+            request.candidateExclusions,
             validationIssues,
             parsedResponse.architectureJson
           ),
           payload: activePayload
         });
-        reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
+        progressReporter.reportCandidates();
         parsedResponse = applyOperationalPolicyToProviderResponse(
           parseArchitectureDraftProviderResponse(response.text),
           request.prompt,
@@ -387,11 +510,24 @@ export async function createAmazonQArchitectureDraftResponse(
 
         const retryValidationIssues =
           parsedResponse.status === "preview"
-            ? findAmazonQPreviewValidationIssues(request.prompt, parsedResponse, normalizedRequirement)
+            ? findAmazonQPreviewValidationIssues(
+                request.prompt,
+                parsedResponse,
+                normalizedRequirement,
+                request.candidateExclusions
+              )
             : [];
 
         if (parsedResponse.status === "preview" && retryValidationIssues.length > 0) {
-          throw createRequirementsUnsatisfiedError(retryValidationIssues);
+          if (!isUsableCandidateArchitecture(parsedResponse.architectureJson)) {
+            await reportFallbackDraftProgress(progressReporter, options.onProgress);
+            return createFallbackArchitectureDraftResponse(
+              request,
+              "invalid_response",
+              creditPolicy.billingMode
+            );
+          }
+          throw createRequirementsUnsatisfiedError(retryValidationIssues, parsedResponse.architectureJson);
         }
       }
     }
@@ -406,6 +542,7 @@ export async function createAmazonQArchitectureDraftResponse(
     if (parsedResponse.status === "needs_clarification") {
       return {
         status: "needs_clarification",
+        questionId: createProviderClarificationQuestionId(parsedResponse.question),
         question: parsedResponse.question,
         suggestions: [...(parsedResponse.suggestions ?? [])],
         providerMetadata
@@ -414,7 +551,7 @@ export async function createAmazonQArchitectureDraftResponse(
 
     if (parsedResponse.status === "plan") {
       try {
-        reportArchitectureDraftProgress(options.onProgress, "building_diagram");
+        progressReporter.reportCandidates();
         return applyArchitectureDraftRequestPolicies(
           createAmazonQPlanDraftResult(
             parsedResponse,
@@ -439,6 +576,9 @@ export async function createAmazonQArchitectureDraftResponse(
         activePayload = maskSecretsForAi({
           architectureBrief,
           architectureDecisionSpace,
+          ...(request.candidateExclusions === undefined
+            ? {}
+            : { candidateExclusions: request.candidateExclusions }),
           ...(normalizedRequirement === null ? {} : { normalizedRequirement }),
           fixedTemplateSelection,
           prompt: request.prompt,
@@ -448,7 +588,7 @@ export async function createAmazonQArchitectureDraftResponse(
           supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
           supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
         });
-        reportArchitectureDraftProgress(options.onProgress, "querying_amazon_q");
+        progressReporter.reportCandidates();
         response = await generateArchitectureDraftProviderResponse(provider, {
           target: ARCHITECTURE_DRAFT_TARGET,
           instructions: createAmazonQArchitectureDraftInstructions(),
@@ -457,12 +597,13 @@ export async function createAmazonQArchitectureDraftResponse(
             architectureDecisionSpace,
             normalizedRequirement,
             fixedTemplateSelection,
+            request.candidateExclusions,
             validationIssues,
             previousPlan
           ),
           payload: activePayload
         });
-        reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
+        progressReporter.reportCandidates();
         parsedResponse = parseArchitectureDraftProviderResponse(response.text);
 
         if (parsedResponse.status !== "plan") {
@@ -481,7 +622,7 @@ export async function createAmazonQArchitectureDraftResponse(
           outputCharacters: response.outputCharacters ?? response.text.length
         });
 
-        reportArchitectureDraftProgress(options.onProgress, "building_diagram");
+        progressReporter.reportCandidates();
         return applyArchitectureDraftRequestPolicies(
           createAmazonQPlanDraftResult(
             parsedResponse,
@@ -494,12 +635,28 @@ export async function createAmazonQArchitectureDraftResponse(
       }
     }
 
-    reportArchitectureDraftProgress(options.onProgress, "building_diagram");
+    progressReporter.reportCandidates();
     return applyArchitectureDraftRequestPolicies(
       createAmazonQDraftResult(parsedResponse, providerMetadata),
       request
     );
   } catch (error) {
+    if (
+      error instanceof ArchitectureDraftGenerationError &&
+      error.kind === "requirements_unsatisfied"
+    ) {
+      return createRequirementConflictClarification({
+        architectureDecisionSpace,
+        billingMode: creditPolicy.billingMode,
+        conflictClarificationProvider: options.conflictClarificationProvider,
+        failedArchitectureJson: readFailedArchitectureJson(error),
+        fixedTemplateSelection,
+        normalizedRequirement,
+        request,
+        validationIssues: error.issues
+      });
+    }
+
     if (error instanceof ArchitectureDraftGenerationError) {
       throw error;
     }
@@ -508,6 +665,78 @@ export async function createAmazonQArchitectureDraftResponse(
   }
 }
 
+function readFailedArchitectureJson(error: ArchitectureDraftGenerationError): ArchitectureJson | undefined {
+  const cause = (error as Error & { readonly cause?: unknown }).cause;
+
+  return isObject(cause) && Array.isArray(cause.nodes) && Array.isArray(cause.edges)
+    ? cause as ArchitectureJson
+    : undefined;
+}
+
+async function createRequirementConflictClarification(input: {
+  readonly architectureDecisionSpace: ArchitectureDecisionSpace;
+  readonly billingMode: AiBillingMode;
+  readonly conflictClarificationProvider?: AiTextProvider | undefined;
+  readonly failedArchitectureJson?: ArchitectureJson | undefined;
+  readonly fixedTemplateSelection: FixedTemplateSelection | null;
+  readonly normalizedRequirement: ArchitectureIntentPlan | null;
+  readonly request: CreateArchitectureDraftRequest;
+  readonly validationIssues: readonly string[];
+}): Promise<ArchitectureDraftClarification> {
+  const provider = input.conflictClarificationProvider;
+
+  if (provider === undefined) {
+    return createRequirementConflictFallbackClarification(input.validationIssues, input.request, input.billingMode);
+  }
+
+  const payload = maskSecretsForAi({
+    architectureDecisionSpace: input.architectureDecisionSpace,
+    ...(input.request.clarificationAnswers === undefined
+      ? {}
+      : { clarificationAnswers: input.request.clarificationAnswers }),
+    fixedTemplateSelection: input.fixedTemplateSelection,
+    ...(input.failedArchitectureJson === undefined
+      ? {}
+      : { failedArchitectureJson: input.failedArchitectureJson }),
+    normalizedRequirement: input.normalizedRequirement,
+    prompt: input.request.prompt,
+    repositoryEvidence: input.request.repositoryEvidence,
+    task: "requirement_conflict_clarification",
+    validationIssues: input.validationIssues
+  });
+
+  try {
+    const response = await generateArchitectureDraftProviderResponse(provider, {
+      target: ARCHITECTURE_DRAFT_TARGET,
+      instructions: createOpenAiRequirementConflictInstructions(),
+      prompt: createOpenAiRequirementConflictPrompt(
+        input.request.prompt,
+        input.architectureDecisionSpace,
+        input.normalizedRequirement,
+        input.fixedTemplateSelection,
+        input.validationIssues,
+        input.failedArchitectureJson
+      ),
+      payload
+    });
+    const parsedResponse = parseRequirementConflictClarification(response.text);
+
+    return {
+      status: "needs_clarification",
+      questionId: createRequirementConflictClarificationQuestionId(parsedResponse.question),
+      question: parsedResponse.question,
+      suggestions: [...(parsedResponse.suggestions ?? [])],
+      providerMetadata: createAiProviderMetadata({
+        provider,
+        billingMode: input.billingMode,
+        payload,
+        outputCharacters: response.outputCharacters ?? response.text.length
+      })
+    };
+  } catch {
+    return createRequirementConflictFallbackClarification(input.validationIssues, input.request, input.billingMode);
+  }
+}
 async function generateArchitectureDraftProviderResponse(
   provider: AiTextProvider,
   input: Parameters<AiTextProvider["generate"]>[0]
@@ -521,6 +750,110 @@ async function generateArchitectureDraftProviderResponse(
 
     throw createProviderUnavailableError(error);
   }
+}
+
+function parseRequirementConflictClarification(
+  text: string
+): AmazonQArchitectureDraftClarification {
+  const normalizedText = text.trim();
+
+  if (isNoRelevantInformationResponse(normalizedText)) {
+    throw createProviderResponseInvalidError(
+      new Error("Requirement conflict diagnosis did not contain relevant information")
+    );
+  }
+
+  try {
+    const parsed = JSON.parse(extractJsonObject(normalizedText)) as unknown;
+    if (
+      isObject(parsed) &&
+      typeof parsed.question === "string" &&
+      parsed.question.trim().length > 0
+    ) {
+      const suggestions = readStringArray(parsed.suggestions);
+      requireRequirementConflictClarificationChoices(suggestions);
+
+      return {
+        status: "needs_clarification",
+        question: parsed.question.trim(),
+        suggestions
+      };
+    }
+
+    if (isObject(parsed) && typeof parsed.status === "string") {
+      throw createProviderResponseInvalidError(
+        new Error("Requirement conflict response did not include a clarification question")
+      );
+    }
+  } catch (error) {
+    if (error instanceof ArchitectureDraftGenerationError) {
+      throw error;
+    }
+  }
+
+  const questionLines: string[] = [];
+  const suggestions: string[] = [];
+  for (const rawLine of normalizedText.split(/\r?\n/u)) {
+    const line = rawLine.trim();
+    if (line.length === 0 || /^```/u.test(line)) continue;
+
+    const suggestionMatch = line.match(/^(?:[-*•]|\d+[.)])\s+(.+)$/u);
+    if (suggestionMatch?.[1]) {
+      suggestions.push(suggestionMatch[1].trim());
+      continue;
+    }
+    if (/^(?:선택지|options?)\s*:?$/iu.test(line)) continue;
+    questionLines.push(line);
+  }
+
+  const question = questionLines.join(" ").trim();
+  if (question.length === 0) {
+    throw createProviderResponseInvalidError(
+      new Error("Requirement conflict diagnosis was empty")
+    );
+  }
+  requireRequirementConflictClarificationChoices(suggestions);
+
+  return {
+    status: "needs_clarification",
+    question,
+    suggestions
+  };
+}
+function createRequirementConflictFallbackClarification(
+  validationIssues: readonly string[],
+  request: CreateArchitectureDraftRequest,
+  billingMode: AiBillingMode
+): ArchitectureDraftClarification {
+  const issueSummary = validationIssues.slice(0, 2).join(" ").trim();
+
+  return {
+    status: "needs_clarification",
+    questionId: "architecture_validation_conflict",
+    question: issueSummary.length > 0
+      ? `현재 요구사항과 선택한 설계 조건을 함께 만족시키지 못했습니다. ${issueSummary} 어떤 조건을 우선할까요?`
+      : "현재 요구사항과 선택한 설계 조건을 함께 만족시키지 못했습니다. 어떤 조건을 우선할까요?",
+    suggestions: [
+      "선택한 템플릿을 유지하고 Repository 제한 조건을 다시 확인",
+      "Repository 제한 조건을 유지하고 템플릿 또는 운영 조건을 조정",
+      "요구사항을 유지한 채 지원 가능한 표현으로 다시 시도"
+    ],
+    providerMetadata: createFallbackProviderMetadata(request, billingMode)
+  };
+}
+
+function requireRequirementConflictClarificationChoices(suggestions: readonly string[]): void {
+  if (suggestions.length < 2 || suggestions.length > 4) {
+    throw createProviderResponseInvalidError(
+      new Error("Requirement conflict diagnosis must include two to four choices")
+    );
+  }
+}
+
+function isNoRelevantInformationResponse(value: string): boolean {
+  return /(?:could not|couldn't|cannot|can't) find relevant information|not enough information/iu.test(
+    value
+  );
 }
 
 function parseArchitectureDraftProviderResponse(text: string): AmazonQArchitectureDraftResponse {
@@ -552,9 +885,12 @@ function applyOperationalPolicyToProviderResponse(
   return {
     ...response,
     architectureJson: applyArchitectureParameterCompletenessDefaults(
-      applyArchitectureOperationalPolicy(
-        requirementSanitizedArchitectureJson,
-        resolveArchitectureOperationalRequirements(prompt)
+      applyOperatingConditionConfigToArchitecture(
+        applyArchitectureOperationalPolicy(
+          requirementSanitizedArchitectureJson,
+          resolveArchitectureOperationalRequirements(prompt)
+        ),
+        resolveArchitectureRequirement({ prompt }).operatingProfile
       )
     )
   };
@@ -628,6 +964,52 @@ function sanitizeArchitecturePreviewForRequirement(
   };
 }
 
+function removeDanglingArchitectureEdges(
+  architectureJson: ArchitectureJson
+): ArchitectureJson {
+  const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
+
+  return {
+    nodes: architectureJson.nodes,
+    edges: architectureJson.edges.filter(
+      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+    )
+  };
+}
+
+function connectRequiredCloudFrontUploadDelivery(
+  architectureJson: ArchitectureJson
+): ArchitectureJson {
+  const cloudFronts = architectureJson.nodes.filter((node) => node.type === "CLOUDFRONT");
+  const uploadBuckets = architectureJson.nodes.filter(
+    (node) =>
+      node.type === "S3" &&
+      (
+        node.config.bucketPurpose === "user_uploads" ||
+        /upload|media|attachment/iu.test(`${node.id} ${node.label ?? ""}`)
+      )
+  );
+  const edges = [...architectureJson.edges];
+
+  for (const cloudFront of cloudFronts) {
+    for (const uploadBucket of uploadBuckets) {
+      if (
+        !edges.some(
+          (edge) => edge.sourceId === cloudFront.id && edge.targetId === uploadBucket.id
+        )
+      ) {
+        edges.push({
+          id: `canonical-${cloudFront.id}-to-${uploadBucket.id}`,
+          sourceId: cloudFront.id,
+          targetId: uploadBucket.id,
+          label: "private media delivery origin"
+        });
+      }
+    }
+  }
+
+  return { nodes: architectureJson.nodes, edges };
+}
 function applyArchitectureParameterCompletenessDefaults(
   architectureJson: ArchitectureJson
 ): ArchitectureJson {
@@ -647,10 +1029,10 @@ function applyArchitectureParameterCompletenessDefaults(
         ...node,
         config: {
           ...node.config,
-          functionName: node.config.functionName ?? "practice-api-handler",
-          role: node.config.role ?? lambdaRoleArn,
-          handler: node.config.handler ?? "index.handler",
-          runtime: node.config.runtime ?? "nodejs20.x"
+          functionName: withRequiredArchitectureConfigDefault(node.config.functionName, "practice-api-handler"),
+          role: withRequiredArchitectureConfigDefault(node.config.role, lambdaRoleArn),
+          handler: withRequiredArchitectureConfigDefault(node.config.handler, "index.handler"),
+          runtime: withRequiredArchitectureConfigDefault(node.config.runtime, "nodejs20.x")
         }
       };
     }
@@ -665,24 +1047,24 @@ function applyArchitectureParameterCompletenessDefaults(
         ...node,
         config: {
           ...node.config,
-          enabled: node.config.enabled ?? true,
+          enabled: withRequiredArchitectureConfigDefault(node.config.enabled, true),
           originResourceId,
-          origin: node.config.origin ?? {
+          origin: withRequiredArchitectureConfigDefault(node.config.origin, {
             domainName: `${originResourceId}.s3.amazonaws.com`,
             originId: "static-assets"
-          },
-          defaultCacheBehavior: node.config.defaultCacheBehavior ?? {
+          }),
+          defaultCacheBehavior: withRequiredArchitectureConfigDefault(node.config.defaultCacheBehavior, {
             allowedMethods: ["GET", "HEAD", "OPTIONS"],
             cachedMethods: ["GET", "HEAD"],
             targetOriginId: "static-assets",
             viewerProtocolPolicy: "redirect-to-https"
-          },
-          restrictions: node.config.restrictions ?? {
+          }),
+          restrictions: withRequiredArchitectureConfigDefault(node.config.restrictions, {
             geoRestriction: [{ restrictionType: "none" }]
-          },
-          viewerCertificate: node.config.viewerCertificate ?? {
+          }),
+          viewerCertificate: withRequiredArchitectureConfigDefault(node.config.viewerCertificate, {
             cloudfrontDefaultCertificate: true
-          }
+          })
         }
       };
     }
@@ -692,18 +1074,18 @@ function applyArchitectureParameterCompletenessDefaults(
         ...node,
         config: {
           ...node.config,
-          allocatedStorage: node.config.allocatedStorage ?? 20,
-          engine: node.config.engine ?? "postgres",
-          instanceClass: node.config.instanceClass ?? "db.t4g.micro",
-          username: node.config.username ?? "admin",
-          password: node.config.password ?? "var.db_password",
-          dbName: node.config.dbName ?? "appdb",
-          publiclyAccessible: node.config.publiclyAccessible ?? false,
-          storageEncrypted: node.config.storageEncrypted ?? true,
-          storageType: node.config.storageType ?? "gp3",
-          backupRetentionPeriod: node.config.backupRetentionPeriod ?? 7,
-          deletionProtection: node.config.deletionProtection ?? true,
-          skipFinalSnapshot: node.config.skipFinalSnapshot ?? false
+          allocatedStorage: withRequiredArchitectureConfigDefault(node.config.allocatedStorage, 20),
+          engine: withRequiredArchitectureConfigDefault(node.config.engine, "postgres"),
+          instanceClass: withRequiredArchitectureConfigDefault(node.config.instanceClass, "db.t4g.micro"),
+          username: withRequiredArchitectureConfigDefault(node.config.username, "admin"),
+          password: withRequiredArchitectureConfigDefault(node.config.password, "var.db_password"),
+          dbName: withRequiredArchitectureConfigDefault(node.config.dbName, "appdb"),
+          publiclyAccessible: withRequiredArchitectureConfigDefault(node.config.publiclyAccessible, false),
+          storageEncrypted: withRequiredArchitectureConfigDefault(node.config.storageEncrypted, true),
+          storageType: withRequiredArchitectureConfigDefault(node.config.storageType, "gp3"),
+          backupRetentionPeriod: withRequiredArchitectureConfigDefault(node.config.backupRetentionPeriod, 7),
+          deletionProtection: withRequiredArchitectureConfigDefault(node.config.deletionProtection, true),
+          skipFinalSnapshot: withRequiredArchitectureConfigDefault(node.config.skipFinalSnapshot, false)
         }
       };
     }
@@ -713,14 +1095,14 @@ function applyArchitectureParameterCompletenessDefaults(
         ...node,
         config: {
           ...node.config,
-          name: node.config.name ?? "practice-board-data",
-          billingMode: node.config.billingMode ?? "PAY_PER_REQUEST",
-          hashKey: node.config.hashKey ?? "pk",
-          rangeKey: node.config.rangeKey ?? "sk",
-          attribute: node.config.attribute ?? [
+          name: withRequiredArchitectureConfigDefault(node.config.name, "practice-board-data"),
+          billingMode: withRequiredArchitectureConfigDefault(node.config.billingMode, "PAY_PER_REQUEST"),
+          hashKey: withRequiredArchitectureConfigDefault(node.config.hashKey, "pk"),
+          rangeKey: withRequiredArchitectureConfigDefault(node.config.rangeKey, "sk"),
+          attribute: withRequiredArchitectureConfigDefault(node.config.attribute, [
             { name: "pk", type: "S" },
             { name: "sk", type: "S" }
-          ]
+          ])
         }
       };
     }
@@ -734,15 +1116,67 @@ function applyArchitectureParameterCompletenessDefaults(
   };
 }
 
-function reportArchitectureDraftProgress(
-  onProgress: ((stage: ArchitectureDraftProgressStage) => void) | undefined,
-  stage: ArchitectureDraftProgressStage
-): void {
-  try {
-    onProgress?.(stage);
-  } catch {
-    // Progress reporting is observational and must never interrupt Q generation.
+function withRequiredArchitectureConfigDefault(
+  value: unknown,
+  fallback: unknown
+): unknown {
+  return isMeaningfulArchitectureConfigValue(value) ? value : fallback;
+}
+
+function isMeaningfulArchitectureConfigValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+type ArchitectureDraftProgressReporter = {
+  readonly reportCandidates: () => void;
+};
+
+async function reportFallbackDraftProgress(
+  progressReporter: ArchitectureDraftProgressReporter,
+  onProgress: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined
+): Promise<void> {
+  progressReporter.reportCandidates();
+  if (onProgress !== undefined) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
+}
+
+function createArchitectureDraftProgressReporter(
+  request: CreateArchitectureDraftRequest,
+  onProgress: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined
+): ArchitectureDraftProgressReporter {
+  let sequence = 0;
+  let reported = false;
+
+  function reportCandidates(): void {
+    if (onProgress === undefined || reported) {
+      return;
+    }
+
+    try {
+      const provisionalArchitectureJson = structuredClone(
+        createArchitectureDraft(request).architectureJson
+      );
+      const snapshot: ArchitectureDraftProgressSnapshot = {
+        sequence: ++sequence,
+        provisionalArchitectureJson,
+        excludableCandidateIds: resolveExcludableCandidateIds(
+          provisionalArchitectureJson
+        )
+      };
+
+      reported = true;
+      onProgress(snapshot);
+    } catch {
+      // Candidate reporting is observational and must never interrupt final generation.
+    }
+  }
+
+  return { reportCandidates };
 }
 
 function readArchitectureDraftErrorMessage(error: unknown): string {
@@ -766,11 +1200,15 @@ function createAmazonQDraftResult(
   response: AmazonQArchitectureDraftPreview,
   providerMetadata: AiProviderMetadata
 ): AiArchitectureDraftResult {
-  const highlights = [...(response.highlights ?? response.explanations ?? [])].slice(0, 5);
+  const title = createKoreanArchitectureDraftTitle(response.title, response.architectureJson);
+  const highlights = createKoreanArchitectureDraftHighlights(
+    response.highlights ?? response.explanations ?? [],
+    response.architectureJson
+  );
   const nextActions = [...(response.nextActions ?? [])].slice(0, 5);
   const llmExplanation: LlmExplanation = {
     target: ARCHITECTURE_DRAFT_TARGET,
-    summary: response.summary ?? `${response.title} Architecture Draft를 생성했습니다.`,
+    summary: createKoreanArchitectureDraftSummary(response.summary, title),
     highlights,
     nextActions,
     fallbackUsed: false,
@@ -779,7 +1217,7 @@ function createAmazonQDraftResult(
 
   return {
     architectureJson: response.architectureJson,
-    title: response.title,
+    title,
     metadata: {
       source: "amazon_q",
       confidence: "medium",
@@ -788,6 +1226,83 @@ function createAmazonQDraftResult(
     },
     llmExplanation
   };
+}
+
+function createKoreanArchitectureDraftTitle(
+  title: string,
+  _architectureJson: ArchitectureJson
+): string {
+  const localizedArchitectureDraft = title
+    .trim()
+    .replace(/\bArchitecture\s+Draft\b/giu, "아키텍처 초안");
+
+  return localizedArchitectureDraft || "클라우드 아키텍처 초안";
+}
+
+function createKoreanArchitectureDraftSummary(
+  summary: string | undefined,
+  localizedTitle: string
+): string {
+  const trimmedSummary = summary?.trim();
+  if (
+    trimmedSummary
+    && !/\bArchitecture\s+Draft\b/iu.test(trimmedSummary)
+    && (
+      /[가-힣]/u.test(trimmedSummary)
+      || !/[가-힣]/u.test(localizedTitle)
+    )
+  ) {
+    return trimmedSummary;
+  }
+
+  return `${localizedTitle}을 생성했습니다.`;
+}
+
+function createKoreanArchitectureDraftHighlights(
+  highlights: readonly string[],
+  architectureJson: ArchitectureJson
+): string[] {
+  const localizedHighlights = highlights.flatMap((highlight) => {
+    const trimmedHighlight = highlight.trim();
+    const selectedPattern = trimmedHighlight.match(
+      /^Verified pattern selected:\s*(.+?)\.?$/iu
+    )?.[1];
+
+    if (selectedPattern) {
+      return [`검증된 아키텍처 패턴을 선택했습니다: ${selectedPattern}.`];
+    }
+    if (/^Security guardrail:/iu.test(trimmedHighlight)) {
+      return [
+        "보안 기준: 최소 권한 IAM, 지원되는 리소스의 프라이빗 배치, 저장 데이터 암호화, 비밀 관리형 자격 증명과 제한된 로그 보존 기간을 적용합니다."
+      ];
+    }
+    if (/^Cost guardrail:/iu.test(trimmedHighlight)) {
+      return [
+        "비용 기준: 트래픽, 가용성, 보안 또는 명시적인 요구사항에 필요한 경우에만 이중화와 유료 보안 서비스를 추가합니다."
+      ];
+    }
+    if (/^Terminate public traffic with an ACM-managed TLS certificate/iu.test(trimmedHighlight)) {
+      return [
+        "공개 트래픽은 ACM 관리형 TLS 인증서에서 종료하고 배포 전에 인증서를 검증합니다."
+      ];
+    }
+    if (/[가-힣]/u.test(trimmedHighlight)) {
+      return [trimmedHighlight];
+    }
+
+    return [];
+  });
+
+  if (localizedHighlights.length > 0) {
+    return localizedHighlights.slice(0, 5);
+  }
+
+  const resourceTypes = [...new Set(architectureJson.nodes.map(({ type }) => type))].slice(0, 6);
+  return [
+    resourceTypes.length > 0
+      ? `요구사항을 반영해 ${resourceTypes.join(", ")} 리소스 중심의 아키텍처를 구성했습니다.`
+      : "입력한 요구사항을 반영해 클라우드 아키텍처를 구성했습니다."
+  ];
 }
 
 function createFallbackArchitectureDraftResponse(
@@ -807,15 +1322,37 @@ function createFallbackArchitectureDraftResponse(
   };
 }
 
+function createAuthoredTerraformArchitectureResponse(
+  preset: AuthoredTerraformArchitecturePreset
+): AiArchitectureDraftResult {
+  const diagramJson = createAuthoredTerraformArchitectureDiagram(preset);
+
+  return {
+    architectureJson: convertDiagramJsonToArchitectureJson(diagramJson),
+    diagramJson,
+    title: preset.title,
+    metadata: {
+      source: "template_fallback",
+      confidence: "high",
+      assumptions: [
+        "이 데모 문구는 후속 답변과 무관하게 승인된 고정 배포 아키텍처를 사용합니다."
+      ],
+      explanations: [
+        "S3와 CloudFront 정적 사이트, ALB와 ECS Fargate API, ECR, CloudWatch, Secrets Manager 구성을 고정했습니다."
+      ],
+      authoredSourceId: preset.id
+    }
+  };
+}
+
 const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] = [
   {
     id: "website_type",
-    question: "어떤 종류의 웹사이트인가요?",
+    question: "웹사이트 유형은?",
     suggestions: [
-      "정적 사이트 (블로그, 포트폴리오, 회사 소개페이지)",
-      "동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)",
-      "SPA (Single Page Application) (React/Vue 등)",
-      "API 서버 (모바일 앱 백엔드)"
+      "정적 사이트 (블로그, 포트폴리오)",
+      "동적 웹 애플리케이션 (쇼핑몰, 게시판)",
+      "API 서버 (모바일 백엔드)"
     ],
     isAnswered: isWebsiteTypeAnswered
   },
@@ -823,10 +1360,9 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
     id: "traffic",
     question: "예상 트래픽 규모는?",
     suggestions: [
-      "소규모 (일 100명 미만, 동시 10명 미만)",
-      "중간 규모 (일 1,000명, 동시 50명)",
-      "대규모 (일 10,000명 이상, 동시 500명 이상)",
-      "급변동 (평상시 적지만 이벤트 시 급증)"
+      "소규모 (일 100명 미만)",
+      "중간 규모 (일 1,000명)",
+      "대규모 (일 10,000명 이상)"
     ],
     isAnswered: isTrafficAnswered
   },
@@ -835,42 +1371,18 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
     question: "데이터베이스가 필요한가요?",
     suggestions: [
       "필요 없음 (정적 콘텐츠만)",
-      "간단한 데이터 (사용자 정보, 게시글 등 < 10GB)",
-      "중간 규모 데이터 (10GB ~ 100GB)",
-      "대용량 데이터 (100GB 이상, 복잡한 쿼리)"
+      "간단한 데이터 (< 10GB)",
+      "대용량 데이터 (> 100GB)"
     ],
     isAnswered: isDatabaseAnswered
-  },
-  {
-    id: "frontend",
-    question: "프론트엔드 기술은?",
-    suggestions: [
-      "HTML/CSS/JS만 (순수 웹)",
-      "React/Vue/Angular (SPA 프레임워크)",
-      "Next.js/Nuxt.js (SSR 필요)",
-      "모바일 앱 (웹뷰 또는 네이티브)"
-    ],
-    isAnswered: isFrontendAnswered
-  },
-  {
-    id: "backend",
-    question: "백엔드가 필요한가요?",
-    suggestions: [
-      "필요 없음 (정적 사이트)",
-      "간단한 API (Node.js, Python Flask 등)",
-      "복잡한 비즈니스 로직 (Spring Boot, Django 등)",
-      "마이크로서비스 (여러 서비스 분리)"
-    ],
-    isAnswered: isBackendAnswered
   },
   {
     id: "region",
     question: "주요 사용자 지역은?",
     suggestions: [
-      "한국만 (서울 리전)",
-      "아시아 태평양 (도쿄, 싱가포르 포함)",
-      "글로벌 (미국, 유럽 포함)",
-      "특정 지역 (중국, 일본 등)"
+      "한국만",
+      "아시아 태평양",
+      "글로벌"
     ],
     isAnswered: isRegionAnswered
   },
@@ -878,99 +1390,21 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
     id: "budget",
     question: "월 예산 범위는?",
     suggestions: [
-      "10만원 미만 (최소 비용)",
-      "10-50만원 (적당한 성능)",
-      "50-200만원 (고성능)",
-      "200만원 이상 (엔터프라이즈급)"
+      "10만원 미만",
+      "10-50만원",
+      "50만원 이상"
     ],
     isAnswered: isBudgetAnswered
   },
   {
-    id: "ssl",
-    question: "SSL 인증서(HTTPS)가 필요한가요?",
-    suggestions: [
-      "필수 (보안 중요)",
-      "선택사항 (HTTP도 괜찮음)",
-      "모르겠음 (추천해주세요)"
-    ],
-    isAnswered: isSslAnswered
-  },
-  {
-    id: "file_upload",
-    question: "파일 업로드 기능이 있나요? (이미지, 문서 등)",
-    suggestions: [
-      "없음 (텍스트만)",
-      "이미지만 (프로필, 게시글 이미지)",
-      "다양한 파일 (문서, 동영상 포함)",
-      "대용량 파일 (100MB 이상)"
-    ],
-    isAnswered: isFileUploadAnswered
-  },
-  {
-    id: "realtime",
-    question: "실시간 기능이 필요한가요? (채팅, 알림 등)",
-    suggestions: [
-      "필요 없음",
-      "실시간 채팅",
-      "실시간 알림",
-      "실시간 데이터 업데이트 (주식, 게임 등)"
-    ],
-    isAnswered: isRealtimeAnswered
-  },
-  {
     id: "management_preference",
-    question: "관리 복잡도 선호도는?",
+    question: "관리 복잡도 선호는?",
     suggestions: [
-      "완전 관리형 (서버리스, 관리 최소화)",
+      "완전 관리형 (서버리스)",
       "반관리형 (일부 서버 관리)",
-      "직접 관리 (서버 직접 운영)",
-      "모르겠음 (추천해주세요)"
+      "직접 관리"
     ],
     isAnswered: isManagementPreferenceAnswered
-  },
-  {
-    id: "page_loading_time",
-    question: "페이지 로딩 시간 목표는?",
-    suggestions: [
-      "1초 이내 (매우 빠름)",
-      "3초 이내 (적당함)",
-      "5초 이내 (느려도 괜찮음)",
-      "상관없음"
-    ],
-    isAnswered: isPageLoadingTimeAnswered
-  },
-  {
-    id: "website_size",
-    question: "전체 웹사이트 크기는?",
-    suggestions: [
-      "10MB 미만 (간단한 사이트)",
-      "10MB-100MB (일반적인 사이트)",
-      "100MB-1GB (이미지 많은 사이트)",
-      "1GB 이상 (동영상 포함)"
-    ],
-    isAnswered: isWebsiteSizeAnswered
-  },
-  {
-    id: "traffic_pattern",
-    question: "트래픽 패턴은?",
-    suggestions: [
-      "일정함 (하루 종일 비슷)",
-      "시간대별 차이 (낮에 많음)",
-      "이벤트성 급증 (특정 시기에만)",
-      "예측 불가"
-    ],
-    isAnswered: isTrafficPatternAnswered
-  },
-  {
-    id: "downtime_tolerance",
-    question: "서비스 중단 허용 시간은?",
-    suggestions: [
-      "절대 안됨 (99.99% 가용성)",
-      "월 1시간 이내 (99.9% 가용성)",
-      "월 8시간 이내 (99% 가용성)",
-      "상관없음"
-    ],
-    isAnswered: isDowntimeToleranceAnswered
   }
 ];
 function isWebsiteTypeAnswered(prompt: string): boolean {
@@ -984,6 +1418,7 @@ function isMobileAppPrompt(prompt: string): boolean {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
 
   return (
+    resolveArchitectureTechnologyStackCategory("frontend", normalizedPrompt) === "frontend_mobile" ||
     /(?:mobile\s+app|app\s+store|play\s*store|google\s*play|모바일\s*앱|네이티브|웹뷰|플레이스토어|구글\s*플레이|앱\s*스토어)/iu.test(
       normalizedPrompt
     ) || hasStandaloneMobileAppCreationPrompt(normalizedPrompt)
@@ -1010,20 +1445,6 @@ function isDatabaseAnswered(prompt: string): boolean {
   return hasPromptTerm(prompt, ["database", " db", "rds", "postgres", "postgresql", "mysql", "dynamodb", "데이터베이스", "간단한 데이터", "중간 규모 데이터", "대용량 데이터", "정적 콘텐츠", "사용자 정보", "게시글", "?곗씠", "肄섑뀗", "寃뚯떆", "10gb", "100gb"]);
 }
 
-function isFrontendAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["frontend", "html", "css", "javascript", " js", "react", "vue", "angular", "next.js", "nuxt", "ssr", "프론트엔드", "순수 웹", "모바일", "웹뷰", "네이티브", "?꾨줎", "?쒖닔", "?밸럭"]);
-}
-
-function isBackendAnswered(prompt: string): boolean {
-  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
-
-  if (resolveBackendProfile(normalizedPrompt) !== undefined) {
-    return true;
-  }
-
-  return hasPromptTerm(prompt, ["backend", "api", "node.js", "nodejs", "python", "flask", "spring", "django", "microservice", "백엔드", "간단한 api", "복잡한 비즈니스", "마이크로서비스", "諛깆뿏", "媛꾨떒", "蹂듭옟", "留덉씠"]);
-}
-
 function isRegionAnswered(prompt: string): boolean {
   return hasPromptTerm(prompt, ["region", "korea", "seoul", "ap-northeast-2", "asia", "global", "worldwide", "us", "europe", "한국", "서울", "아시아", "태평양", "글로벌", "미국", "유럽", "중국", "일본", "?쒓뎅", "?쒖슱", "?꾩떆", "湲濡", "誘멸뎅", "?좊읇", "以묎뎅", "?쇰낯"]);
 }
@@ -1032,36 +1453,8 @@ function isBudgetAnswered(prompt: string): boolean {
   return hasPromptTerm(prompt, ["budget", "cost", "krw", "usd", "monthly", "예산", "비용", "만원", "최소 비용", "적당한 성능", "고성능", "?덉궛", "鍮꾩슜", "留뚯썝", "理쒖냼", "怨좎꽦"]) || /\$\s*\d+|\b\d+\s*(?:usd|krw|monthly)\b/iu.test(prompt);
 }
 
-function isSslAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["ssl", "https", "http", "domain", "인증서", "보안", "선택사항", "?몄쬆", "蹂댁븞", "?좏깮"]);
-}
-
-function isFileUploadAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["file upload", "upload", "image", "document", "file", "100mb", "파일", "업로드", "이미지", "문서", "동영상", "텍스트만", "?뚯씪", "?낅줈", "?띿뒪?몃쭔", "?대?吏", "臾몄꽌", "?숈쁺"]);
-}
-
-function isRealtimeAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["realtime", "real-time", "chat", "notification", "websocket", "sse", "실시간", "채팅", "알림", "데이터 업데이트", "?ㅼ떆", "梨꾪똿", "?뚮┝", "?낅뜲"]);
-}
-
 function isManagementPreferenceAnswered(prompt: string): boolean {
   return hasPromptTerm(prompt, ["managed", "serverless", "management", "operations", "관리", "서버리스", "완전 관리형", "반관리형", "직접 관리", "愿由", "?쒕쾭由", "諛섍?由", "吏곸젒"]);
-}
-
-function isPageLoadingTimeAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["loading time", "loading", "로딩", "1초", "3초", "5초", "?섏씠吏", "濡쒕뵫", "1珥", "3珥", "5珥"]) || /\b[135]\s*seconds?\b/iu.test(prompt);
-}
-
-function isWebsiteSizeAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["10mb", "100mb", "1gb", "website size", "웹사이트 크기", "간단한 사이트", "일반적인 사이트", "이미지 많은", "동영상 포함", "?뱀궗?댄듃", "?ш린", "媛꾨떒", "?쇰컲", "?대?吏", "?숈쁺"]);
-}
-
-function isTrafficPatternAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["traffic pattern", "steady", "time of day", "event spike", "unpredictable", "트래픽 패턴", "일정함", "시간대별", "이벤트성", "예측 불가", "?몃옒", "?⑦꽩", "?쇱젙", "?쒓컙", "?대깽", "?덉륫"]);
-}
-
-function isDowntimeToleranceAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["downtime", "availability", "99.99", "99.9", "99%", "서비스 중단", "허용 시간", "절대 안됨", "가용성", "상관없음", "?쒕퉬", "以묐떒", "?덈?", "?곴??놁쓬"]);
 }
 
 function hasPromptTerm(prompt: string, terms: readonly string[]): boolean {
@@ -1070,13 +1463,434 @@ function hasPromptTerm(prompt: string, terms: readonly string[]): boolean {
   return terms.some((term) => normalizedPrompt.includes(term.normalize("NFKC").toLowerCase()));
 }
 
-function findMissingRequiredQuestion(prompt: string): RequiredArchitectureQuestion | null {
-  if (hasExplicitArchitectureBrief(prompt)) {
-    return null;
+function createRequirementConflictClarificationQuestionId(question: string): string {
+  let hash = 2_166_136_261;
+  for (const character of question.normalize("NFKC")) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return `architecture_conflict_${(hash >>> 0).toString(36)}`;
+}
+function createProviderClarificationQuestionId(question: string): string {
+  let hash = 2_166_136_261;
+  for (const character of question.normalize("NFKC")) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return `amazon_q_follow_up_${(hash >>> 0).toString(36)}`;
+}
+
+function withArchitectureDraftDefaults(
+  request: CreateArchitectureDraftRequest
+): CreateArchitectureDraftRequest {
+  const normalizedPrompt = request.prompt.normalize("NFKC").toLowerCase();
+  const defaults: string[] = [];
+
+  if (!hasExplicitSslDecision(normalizedPrompt)) {
+    defaults.push("SSL/HTTPS: required.");
+  }
+  if (!hasExplicitPageLoadingTarget(normalizedPrompt)) {
+    defaults.push("Page loading time target: within 3 seconds.");
+  }
+  if (!hasExplicitAvailabilityTarget(normalizedPrompt)) {
+    defaults.push("Availability: 99.9%; allow up to one hour of downtime per month.");
+  }
+  if (
+    requiresRealtime(normalizedPrompt)
+    && !hasRealtimeImplementationDecision(normalizedPrompt)
+  ) {
+    defaults.push("Realtime implementation: WebSocket.");
+  }
+  if (
+    requiresUploadStorage(normalizedPrompt)
+    && !hasFileUploadImplementationDecision(normalizedPrompt)
+  ) {
+    defaults.push("File upload implementation: private S3 object storage with CloudFront delivery.");
   }
 
-  return REQUIRED_ARCHITECTURE_QUESTIONS.find((question) => !isRequiredArchitectureQuestionAnswered(question, prompt)) ?? null;
+  if (defaults.length === 0) return request;
+
+  return {
+    ...request,
+    prompt: `${request.prompt}\n\nDefault architecture assumptions (apply only when the user did not specify a different value):\n${defaults
+      .map((value) => `- ${value}`)
+      .join("\n")}`
+  };
 }
+
+function hasExplicitSslDecision(normalizedPrompt: string): boolean {
+  return /(?:(?:https|ssl|tls|\uC778\uC99D\uC11C)[\s\S]{0,60}(?:required|mandatory|optional|not\s+required|\uD544\uC218|\uC120\uD0DD|\uBD88\uD544\uC694|\uAD1C\uCC2E)|(?:required|mandatory|optional|not\s+required|\uD544\uC218|\uC120\uD0DD|\uBD88\uD544\uC694)[\s\S]{0,60}(?:https|ssl|tls|\uC778\uC99D\uC11C)|http\s*(?:only|\uB9CC)|http\uB3C4\s*\uAD1C\uCC2E)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function hasExplicitPageLoadingTarget(normalizedPrompt: string): boolean {
+  const subject = "(?:page\\s*(?:load|loading)|loading\\s*time|\\uD398\\uC774\\uC9C0\\s*\\uB85C\\uB529|\\uB85C\\uB529\\s*\\uC2DC\\uAC04|\\uB85C\\uB529)";
+  const target = "(?:\\d+(?:\\.\\d+)?\\s*(?:seconds?|secs?|\\uCD08)|no\\s+preference|does(?:n't|\\s+not)\\s+matter|\\uC0C1\\uAD00\\uC5C6\\uC74C)";
+
+  return new RegExp(subject + "[\\s\\S]{0,60}" + target + "|" + target + "[\\s\\S]{0,60}" + subject, "iu").test(
+    normalizedPrompt
+  );
+}
+
+function hasExplicitAvailabilityTarget(normalizedPrompt: string): boolean {
+  const subject = "(?:availability|downtime|\\uAC00\\uC6A9\\uC131|\\uC11C\\uBE44\\uC2A4\\s*\\uC911\\uB2E8|\\uC911\\uB2E8\\s*\\uD5C8\\uC6A9)";
+  const target = "(?:\\d+(?:\\.\\d+)?\\s*%|\\d+(?:\\.\\d+)?\\s*(?:hours?|minutes?|\\uC2DC\\uAC04|\\uBD84)|no\\s+preference|does(?:n't|\\s+not)\\s+matter|\\uC0C1\\uAD00\\uC5C6\\uC74C)";
+
+  return new RegExp(subject + "[\\s\\S]{0,80}" + target + "|" + target + "[\\s\\S]{0,80}" + subject, "iu").test(
+    normalizedPrompt
+  );
+}
+
+function hasFileUploadImplementationDecision(normalizedPrompt: string): boolean {
+  const uploadContext = "(?:file\\s*uploads?|image\\s*uploads?|photo\\s*uploads?|upload(?:ed|ing)?\\s+files?|\\uD30C\\uC77C\\s*\\uC5C5\\uB85C\\uB4DC|\\uC774\\uBBF8\\uC9C0\\s*\\uC5C5\\uB85C\\uB4DC|\\uC0AC\\uC9C4\\s*\\uC5C5\\uB85C\\uB4DC|\\uC5C5\\uB85C\\uB4DC\\s*\\uAE30\\uB2A5|\\uD30C\\uC77C\\s*\\uCCA8\\uBD80)";
+  const storage = "(?:\\bs3\\b|object\\s*storage|blob\\s*storage|azure\\s*blob|google\\s*cloud\\s*storage|\\bgcs\\b|\\befs\\b|\\uC624\\uBE0C\\uC81D\\uD2B8\\s*\\uC2A4\\uD1A0\\uB9AC\\uC9C0|\\uAC1D\\uCCB4\\s*\\uC2A4\\uD1A0\\uB9AC\\uC9C0|\\uD30C\\uC77C\\s*\\uC11C\\uBC84)";
+  const uploadFirst = new RegExp(uploadContext + "[^\\n.;\\u3002]{0,100}" + storage, "iu");
+  const storageFirst = new RegExp(
+    storage + "\\s*(?:\\uC5D0|\\uB85C|for|as|used\\s+for|stores?)\\s*(?:the\\s+)?" + uploadContext,
+    "iu"
+  );
+
+  return uploadFirst.test(normalizedPrompt) || storageFirst.test(normalizedPrompt);
+}
+function withAcceptedArchitectureClarificationAnswers(
+  request: CreateArchitectureDraftRequest
+): CreateArchitectureDraftRequest {
+  const answers = request.clarificationAnswers;
+  if (answers === undefined || answers.length === 0) return request;
+  return {
+    ...request,
+    prompt: `${request.prompt}\n\nAccepted architecture clarification answers:\n${answers
+      .map((answer) => `- ${answer.questionId}: ${formatAcceptedArchitectureClarificationAnswer(answer)}`)
+      .join("\n")}`
+  };
+}
+
+function formatAcceptedArchitectureClarificationAnswer(
+  answer: NonNullable<CreateArchitectureDraftRequest["clarificationAnswers"]>[number]
+): string {
+  const trimmedAnswer = answer.answer.trim();
+  const canonicalSuggestion = findCanonicalClarificationSuggestion(
+    answer.questionId,
+    trimmedAnswer
+  );
+  if (canonicalSuggestion !== undefined) return canonicalSuggestion;
+  if (answer.questionId !== "budget") return trimmedAnswer;
+
+  const monthlyBudgetManwon = resolveConversationalMonthlyBudgetManwon(trimmedAnswer);
+  if (monthlyBudgetManwon === undefined || /(?:원|만원|krw|usd|달러)/iu.test(trimmedAnswer)) {
+    return trimmedAnswer;
+  }
+
+  return `${trimmedAnswer} (월 ${monthlyBudgetManwon}만원으로 해석)`;
+}
+
+function findCanonicalClarificationSuggestion(
+  questionId: string,
+  answer: string
+): string | undefined {
+  const question = REQUIRED_ARCHITECTURE_QUESTIONS.find(({ id }) => id === questionId);
+  if (question === undefined) return undefined;
+
+  const normalizedAnswer = answer.normalize("NFKC").trim().toLowerCase();
+  const exactSuggestion = question.suggestions.find(
+    (suggestion) => suggestion.normalize("NFKC").trim().toLowerCase() === normalizedAnswer
+  );
+  if (exactSuggestion !== undefined) return exactSuggestion;
+
+  const stackCategory = resolveArchitectureTechnologyStackCategory(questionId, normalizedAnswer);
+  if (stackCategory !== null) {
+    const stackPatternByCategory: Record<typeof stackCategory, RegExp> = {
+      frontend_static: /(?:html|css|javascript|순수\s*웹)/iu,
+      frontend_spa: /(?:spa|react|vue|angular|프레임워크)/iu,
+      frontend_ssr: /(?:next|nuxt|ssr)/iu,
+      frontend_mobile: /(?:모바일|웹뷰|네이티브)/iu,
+      backend_simple_api: /(?:간단한\s*api|node|python\s*flask)/iu,
+      backend_complex: /(?:복잡한\s*비즈니스\s*로직|spring\s*boot|django)/iu,
+      backend_microservices: /(?:microservice|마이크로서비스)/iu
+    };
+    return question.suggestions.find((suggestion) =>
+      stackPatternByCategory[stackCategory].test(suggestion)
+    );
+  }
+
+  if (questionId === "traffic") {
+    const trafficProfile = resolveExplicitTrafficProfile(normalizedAnswer);
+    if (trafficProfile !== undefined) {
+      const profilePattern = trafficProfile === "small"
+        ? /(?:small|소규모)/iu
+        : trafficProfile === "medium"
+          ? /(?:medium|중간\s*규모)/iu
+          : /(?:large|대규모)/iu;
+      return question.suggestions.find((suggestion) => profilePattern.test(suggestion));
+    }
+  }
+  if (questionId === "backend" && /(?:spring\s*boot|스프링\s*부트|django|장고)/iu.test(normalizedAnswer)) {
+    return question.suggestions.find((suggestion) =>
+      /(?:complex\s*business|복잡한\s*비즈니스\s*로직)/iu.test(suggestion)
+    );
+  }
+  if (questionId === "region" && /(?:hong\s*kong|홍콩)/iu.test(normalizedAnswer)) {
+    return question.suggestions.find((suggestion) =>
+      /(?:asia\s*pacific|아시아\s*태평양)/iu.test(suggestion)
+    );
+  }
+  if (
+    questionId === "website_size"
+    && /(?:간단|단순)(?:한)?\s*(?:웹)?사이트/u.test(normalizedAnswer)
+  ) {
+    return question.suggestions.find((suggestion) => /10mb\s*미만/iu.test(suggestion));
+  }
+  if (
+    (questionId === "file_upload" || questionId === "realtime")
+    && isNaturalNegativeClarificationAnswer(normalizedAnswer)
+  ) {
+    return question.suggestions.find((suggestion) =>
+      /^(?:없음|필요\s*없음)/u.test(suggestion)
+    );
+  }
+
+  return undefined;
+}
+
+type MissingRequiredArchitectureQuestion = {
+  readonly question: RequiredArchitectureQuestion;
+  readonly invalidAnswer: boolean;
+};
+
+function findMissingRequiredQuestion(
+  request: CreateArchitectureDraftRequest
+): MissingRequiredArchitectureQuestion | null {
+  if (hasExplicitArchitectureBrief(request.prompt)) return null;
+  const answersByQuestionId = new Map(
+    (request.clarificationAnswers ?? []).map((answer) => [answer.questionId, answer.answer])
+  );
+  for (const question of REQUIRED_ARCHITECTURE_QUESTIONS) {
+    if (isRequiredArchitectureQuestionAnswered(question, request.prompt)) continue;
+    const answer = answersByQuestionId.get(question.id);
+    if (answer !== undefined && isClarificationAnswerValid(question, answer)) continue;
+    return { question, invalidAnswer: answer !== undefined };
+  }
+  return null;
+}
+
+function isClarificationAnswerValid(
+  question: RequiredArchitectureQuestion,
+  answer: string
+): boolean {
+  const normalizedAnswer = answer.normalize("NFKC").trim().toLowerCase();
+  if (normalizedAnswer.length === 0 || isClearlyUnrelatedClarificationAnswer(normalizedAnswer)) {
+    return false;
+  }
+  if (question.suggestions.some(
+    (suggestion) => suggestion.normalize("NFKC").trim().toLowerCase() === normalizedAnswer
+  )) {
+    return true;
+  }
+  if (isClarificationInformationRequest(normalizedAnswer)) {
+    return false;
+  }
+  if (
+    resolveArchitectureTechnologyStackCategory(question.id, normalizedAnswer) !== null
+  ) {
+    return true;
+  }
+  if (question.id === "backend") {
+    return isBackendClarificationAnswerValid(normalizedAnswer);
+  }
+  switch (question.id) {
+    case "website_type":
+      return hasPromptTerm(normalizedAnswer, [
+        "static", "dynamic", "single page", "spa", "api server", "api 서버",
+        "정적", "동적", "블로그", "포트폴리오", "회사 소개", "웹 애플리케이션",
+        "쇼핑", "커머스", "마켓", "포털", "검색", "커뮤니티", "소셜", "예약",
+        "배달", "교육", "강의", "스트리밍", "대시보드", "관리자", "saas",
+        "네이버", "쿠팡", "당근", "카카오", "유튜브"
+      ]);
+    case "traffic":
+      return hasTrafficClarificationEvidence(normalizedAnswer);
+    case "database":
+      return isNaturalBooleanAnswer(normalizedAnswer) || hasPromptTerm(normalizedAnswer, [
+        "database", "postgres", "postgresql", "mysql", "dynamodb", "rds", "db를", "db가",
+        "데이터베이스", "사용자 정보", "회원가입", "회원 정보", "주문 내역", "결제 내역",
+        "데이터 저장", "저장해야", "게시글"
+      ]);
+    case "ssl":
+      return isNaturalBooleanAnswer(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, ["ssl", "https", "http", "인증서", "도메인"])
+        || /보안(?:이|은|을| 때문에)?\s*(?:중요|필수|필요)/u.test(normalizedAnswer);
+    case "file_upload":
+      return isNaturalBooleanAnswer(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, [
+          "file upload", "upload", "파일 업로드", "이미지 업로드", "문서 업로드", "동영상 업로드",
+          "대용량 파일", "텍스트만", "프로필 사진", "사진을 올", "파일을 올", "문서를 올",
+          "영상을 올", "첨부"
+        ]);
+    case "realtime":
+      return isNaturalBooleanAnswer(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, ["realtime", "real-time", "실시간", "채팅", "알림", "websocket", "sse", "데이터 업데이트"]);
+    case "frontend":
+      return hasPromptTerm(normalizedAnswer, [
+        "html", "css", "javascript", "react", "vue", "angular", "next.js", "nuxt",
+        "리액트", "뷰", "앵귤러", "넥스트", "일반 웹", "순수 자바스크립트",
+        "모바일 앱", "웹뷰", "네이티브"
+      ]) || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "region":
+      return hasPromptTerm(normalizedAnswer, [
+        "국내", "해외", "전 세계", "전세계", "가까운 곳", "한국", "서울", "일본", "도쿄",
+        "싱가포르", "홍콩", "hong kong", "중국", "미국", "유럽", "아시아"
+      ])
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "budget":
+      return hasBudgetClarificationEvidence(normalizedAnswer)
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "management_preference":
+      return hasPromptTerm(normalizedAnswer, [
+        "managed", "serverless", "완전 관리", "반관리", "서버리스", "관리 맡",
+        "운영 맡", "관리 신경", "운영 신경", "직접 관리", "직접 운영", "서버 직접"
+      ]) || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "page_loading_time":
+      return hasPageLoadingClarificationEvidence(normalizedAnswer)
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "website_size":
+      return hasWebsiteSizeClarificationEvidence(normalizedAnswer)
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "traffic_pattern":
+      return hasPromptTerm(normalizedAnswer, [
+        "traffic pattern", "steady", "time of day", "event spike", "unpredictable",
+        "트래픽 패턴", "일정", "낮에", "낮 시간", "밤에", "저녁에", "주말",
+        "이벤트", "특정 시기", "몰려", "예측 불가"
+      ]) || hasUncertainPreferenceAnswer(normalizedAnswer);
+    case "downtime_tolerance":
+      return hasDowntimeClarificationEvidence(normalizedAnswer)
+        || hasUncertainPreferenceAnswer(normalizedAnswer);
+    default:
+      return false;
+  }
+}
+
+function hasTrafficClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "traffic", "concurrent", "daily", "트래픽", "소규모", "중간 규모", "대규모",
+    "급변동", "동시 사용자", "동접", "방문자", "사용자가 적", "이용자가 적",
+    "적게", "적은", "많지", "보통", "많은", "몰릴", "초기", "처음"
+  ]) || /\d[\d,]*\s*(?:명|users?|visitors?|requests?)/iu.test(answer);
+}
+
+function hasBudgetClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "budget", "cost", "monthly", "예산", "비용", "월 비용", "저렴", "싸게",
+    "최소 비용", "넉넉한 예산", "비용은 보통", "적당한 비용"
+  ])
+    || /(?:\$\s*\d|\d[\d,.]*\s*(?:원|만원|달러|usd|krw))/iu.test(answer)
+    || resolveConversationalMonthlyBudgetManwon(answer) !== undefined;
+}
+
+function resolveConversationalMonthlyBudgetManwon(answer: string): number | undefined {
+  const normalizedAnswer = answer.normalize("NFKC").toLowerCase();
+  const monthlyAmountPattern = /(?:한\s*달|매달|매월|월간|월)(?:에|마다)?(?:\s*(?:예산|비용)(?:은|이|을|으로)?)?\s*(?:약|한)?\s*(\d+(?:[,.]\d+)?)/giu;
+
+  for (const match of normalizedAnswer.matchAll(monthlyAmountPattern)) {
+    if (match.index === undefined) continue;
+    const amountText = match[1];
+    if (amountText === undefined) continue;
+    const trailingText = normalizedAnswer.slice(match.index + match[0].length);
+    if (/^\s*(?:명|사용자|시간|분|초|일|회|건|gb|mb|tb|%|퍼센트)/iu.test(trailingText)) {
+      continue;
+    }
+
+    const amount = Number(amountText.replaceAll(",", ""));
+    if (Number.isFinite(amount) && amount >= 0) return amount;
+  }
+
+  return undefined;
+}
+
+function hasPageLoadingClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "loading", "load time", "로딩", "페이지 속도", "페이지가 빠", "빠르게 열",
+    "빨랐", "느려도", "즉시 열"
+  ]) || /\d+(?:\.\d+)?\s*(?:초|seconds?|ms|milliseconds?)(?:\s*이내)?/iu.test(answer);
+}
+
+function hasWebsiteSizeClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "website size", "site size", "웹사이트 크기", "사이트 크기", "사이트 용량",
+    "콘텐츠 용량", "작은 사이트", "간단한 사이트", "간단한 웹사이트", "단순한 사이트",
+    "크지 않은 사이트", "이미지가 많", "사진이 많",
+    "동영상이 많", "영상이 많", "콘텐츠가 많"
+  ]) || /\d+(?:\.\d+)?\s*(?:kb|mb|gb|tb)\b/iu.test(answer);
+}
+
+function hasDowntimeClarificationEvidence(answer: string): boolean {
+  return hasPromptTerm(answer, [
+    "downtime", "availability", "서비스 중단", "중단 허용", "가용성", "무중단",
+    "중단되면 안", "중단되면 큰일", "잠깐 중단", "중단돼도", "중단되어도"
+  ]) || /(?:99(?:\.\d+)?\s*%|(?:월|한 달)\s*\d+\s*시간)/u.test(answer);
+}
+
+function isClarificationInformationRequest(answer: string): boolean {
+  return /(?:무엇인지|뭐야|뭔지|무슨 뜻|설명(?:해|해줘|해주세요)|알려\s*(?:줘|주세요)|what\s+is|tell\s+me|explain)/iu.test(answer);
+}
+function isBackendClarificationAnswerValid(answer: string): boolean {
+  if (hasUncertainPreferenceAnswer(answer)) {
+    return true;
+  }
+
+  if (/(?:무엇인지|뭐야|뭔지|알려 *줘|설명해|what +is|tell +me|explain)/iu.test(answer)) {
+    return false;
+  }
+
+  if (isNaturalBooleanAnswer(answer)) {
+    return true;
+  }
+
+  if (hasPromptTerm(answer, [
+    "no backend",
+    "backend not required",
+    "static site",
+    "simple api",
+    "complex business logic",
+    "microservice",
+    "node.js",
+    "nodejs",
+    "python flask",
+    "spring boot",
+    "스프링 boot",
+    "스프링 부트",
+    "스프링부트",
+    "django",
+    "백엔드 필요 없음",
+    "정적 사이트",
+    "간단한 api",
+    "복잡한 비즈니스 로직",
+    "마이크로서비스"
+  ])) {
+    return true;
+  }
+
+  const hasBackendSubject = hasPromptTerm(answer, ["backend", "api", "server", "백엔드", "서버"]);
+  const hasBackendDecision = /(?:필요|사용|쓰|선택|구현|만들|넣|빼|제외|없이|원해|해 *줘)/u.test(answer);
+  return hasBackendSubject && hasBackendDecision;
+}
+
+function isNaturalBooleanAnswer(answer: string): boolean {
+  return /^(?:(?:네|예|응|맞아|맞아요)(?:[\s,.!]|$)|(?:아니|아니요)(?:[\s,.!]|$)|(?:필요(?:해|해요|합니다|하지\s*않(?:아|아요)?|없(?:어|어요)?)|안\s*필요(?:해|해요)?|없어|없어요|있어|있어요|있음|없음)(?:[\s,.!]|$))/u.test(answer)
+    || hasUncertainPreferenceAnswer(answer);
+}
+
+function isNaturalNegativeClarificationAnswer(answer: string): boolean {
+  return /^(?:(?:아니|아니요)|(?:필요\s*)?없(?:어|어요|음)|안\s*필요(?:해|해요)?)(?:[\s,.!]|$)/u.test(answer);
+}
+
+function hasUncertainPreferenceAnswer(answer: string): boolean {
+  return /^(?:(?:잘\s*)?모르겠|추천(?:해\s*줘|해주세요|해줘)?|상관\s*없|아무거나)(?:[\s,.!]|$)/u.test(answer);
+}
+
+function isClearlyUnrelatedClarificationAnswer(answer: string): boolean {
+  return hasPromptTerm(answer, ["김치찌개", "된장찌개", "부대찌개", "날씨", "점심 메뉴"]);
+}
+
 
 function findConditionalArchitectureQuestion(prompt: string): RequiredArchitectureQuestion | null {
   if (hasExplicitArchitectureBrief(prompt)) {
@@ -1170,21 +1984,21 @@ function isRequiredArchitectureQuestionAnswered(question: RequiredArchitectureQu
 function createArchitectureDraftClarification(
   question: RequiredArchitectureQuestion,
   request: CreateArchitectureDraftRequest,
-  provider: AiTextProvider,
-  billingMode: AiBillingMode
+  billingMode: AiBillingMode,
+  invalidAnswer = false
 ): ArchitectureDraftClarification {
   return {
     status: "needs_clarification",
     question: question.question,
+    questionId: question.id,
     suggestions: question.suggestions,
-    providerMetadata: createAiProviderMetadata({
-      provider,
-      billingMode,
-      payload: {
-        prompt: request.prompt,
-        missingQuestionId: question.id
-      }
-    })
+    ...(invalidAnswer
+      ? {
+          validationMessage:
+            "입력하신 답변이 현재 질문과 관련이 없어 반영하지 않았어요. 질문에 맞게 다시 답해주세요."
+        }
+      : {}),
+    providerMetadata: createFallbackProviderMetadata(request, billingMode)
   };
 }
 
@@ -1478,6 +2292,8 @@ function createAmazonQArchitectureDraftInstructions(): string {
   return [
     "You are Amazon Q assisting SketchCatch, an IaC operations service.",
     "Return JSON only. Do not wrap the response in markdown.",
+    "Write every user-facing string in Korean, including title, question, suggestions, summary, highlights, nextActions, assumptions, explanations, and requirementCoverage prose.",
+    "Technical identifiers and AWS service names may remain in English, but explanatory sentences must be Korean.",
     "Choose a cost- and security-conscious Practice Architecture from the provided ArchitectureDecisionSpace.",
     "SketchCatch is provider-neutral, AWS-first for the MVP, and Terraform-first.",
     "Do not perform deployment, apply, update, delete, or destroy actions.",
@@ -1512,7 +2328,8 @@ function createAmazonQArchitectureDraftPrompt(
   prompt: string,
   architectureDecisionSpace: ArchitectureDecisionSpace,
   normalizedRequirement: ArchitectureIntentPlan | null,
-  fixedTemplateSelection: FixedTemplateSelection | null
+  fixedTemplateSelection: FixedTemplateSelection | null,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
 ): string {
   return [
     createAmazonQArchitectureDraftInstructions(),
@@ -1524,8 +2341,47 @@ function createAmazonQArchitectureDraftPrompt(
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
     createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    createCandidateExclusionPromptSection(candidateExclusions),
     "User requirement prompt:",
     prompt
+  ].join("\n\n");
+}
+
+function createOpenAiRequirementConflictInstructions(): string {
+  return [
+    "You are OpenAI resolving a structured SketchCatch architecture validation failure.",
+    "Return JSON only in the needs_clarification shape. Do not wrap the response in markdown.",
+    "Write every user-facing string in Korean. AWS service names and technical identifiers may remain in English.",
+    "Use only the supplied original requirement, accepted answers, and SketchCatch validation issues as evidence.",
+    "Do not invent a conflict or decide which requirement to discard on the user's behalf.",
+    "Explain the concrete requirements that conflict, or explicitly say when the evidence only proves an implementation or representation failure rather than a logical conflict.",
+    "Ask exactly one question that lets the user choose which requirement to preserve.",
+    "Return 2 to 4 suggestions. Each suggestion must state what will be preserved and what will be relaxed or retried.",
+    "Do not generate an architecture, plan, deployment action, or explanatory fields outside the clarification shape.",
+    'The required JSON shape is: {"status":"needs_clarification","question":"string","suggestions":["string"]}'
+  ].join("\n");
+}
+
+function createOpenAiRequirementConflictPrompt(
+  prompt: string,
+  architectureDecisionSpace: ArchitectureDecisionSpace,
+  normalizedRequirement: ArchitectureIntentPlan | null,
+  fixedTemplateSelection: FixedTemplateSelection | null,
+  validationIssues: readonly string[],
+  failedArchitectureJson: ArchitectureJson | undefined
+): string {
+  return [
+    createOpenAiRequirementConflictInstructions(),
+    "Original user requirement prompt:",
+    prompt,
+    createNormalizedArchitectureIntentPlanPromptSection(normalizedRequirement),
+    "ArchitectureDecisionSpace:",
+    JSON.stringify(architectureDecisionSpace, null, 2),
+    createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    "Failed ArchitectureJson from the final validation attempt:",
+    failedArchitectureJson === undefined ? "Not available." : JSON.stringify(failedArchitectureJson, null, 2),
+    "SketchCatch validation issues from the failed architecture attempts:",
+    ...validationIssues.map((issue) => `- ${issue}`)
   ].join("\n\n");
 }
 
@@ -1535,6 +2391,7 @@ function createAmazonQArchitectureDraftRepairPrompt(
   architectureDecisionSpace: ArchitectureDecisionSpace,
   normalizedRequirement: ArchitectureIntentPlan | null,
   fixedTemplateSelection: FixedTemplateSelection | null,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined,
   validationIssues: readonly string[],
   previousArchitectureJson: ArchitectureJson
 ): string {
@@ -1550,6 +2407,7 @@ function createAmazonQArchitectureDraftRepairPrompt(
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
     createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    createCandidateExclusionPromptSection(candidateExclusions),
     "Validation issues:",
     ...validationIssues.map((issue) => `- ${issue}`),
     "Original user requirement prompt:",
@@ -1564,6 +2422,7 @@ function createAmazonQArchitecturePlanRepairPrompt(
   architectureDecisionSpace: ArchitectureDecisionSpace,
   normalizedRequirement: ArchitectureIntentPlan | null,
   fixedTemplateSelection: FixedTemplateSelection | null,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined,
   validationIssues: readonly string[],
   previousPlan: Record<string, unknown>
 ): string {
@@ -1576,6 +2435,7 @@ function createAmazonQArchitecturePlanRepairPrompt(
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
     createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    createCandidateExclusionPromptSection(candidateExclusions),
     "Validation issues:",
     ...validationIssues.map((issue) => `- ${issue}`),
     "Previous invalid plan:",
@@ -1583,6 +2443,21 @@ function createAmazonQArchitecturePlanRepairPrompt(
     "Original user requirement prompt:",
     prompt
   ].join("\n\n");
+}
+
+function createCandidateExclusionPromptSection(
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
+): string {
+  if (candidateExclusions === undefined || candidateExclusions.length === 0) {
+    return "";
+  }
+
+  return [
+    "Server-authorized Draft Candidate Exclusions:",
+    "These exclusions are binding and supersede matching earlier resource requirements.",
+    "Do not include any ResourceNode whose type matches an excluded candidate. Choose a valid alternative topology or return needs_clarification when no valid alternative exists.",
+    JSON.stringify(candidateExclusions, null, 2)
+  ].join("\n");
 }
 
 function createNormalizedArchitectureIntentPlanPromptSection(
@@ -1892,6 +2767,7 @@ function applyRepositoryEvidencePriorityToRequirementPlan(
 
   const factKeys = new Set(evidence.facts.map((fact) => `${fact.kind}:${fact.value}`));
   const hasFact = (kind: string, value: string): boolean => factKeys.has(`${kind}:${value}`);
+  const scalesToThree = hasFact("runtime_scale", "autoscaling_1_3");
   const requiredResources = new Set<string>();
   const resourceQuantities: Record<string, number> = {};
   for (const resourceType of [
@@ -1918,7 +2794,7 @@ function applyRepositoryEvidencePriorityToRequirementPlan(
   if (hasFact("excluded_capability", "database")) {
     requiredResources.delete("RDS");
   }
-  if (hasFact("runtime_scale", "single_task")) {
+  if (hasFact("runtime_scale", "single_task") || scalesToThree) {
     resourceQuantities.ECS_SERVICE = 1;
     resourceQuantities.ECS_TASK_DEFINITION = 1;
     resourceQuantities.LOAD_BALANCER_TARGET_GROUP = 1;
@@ -1933,10 +2809,10 @@ function applyRepositoryEvidencePriorityToRequirementPlan(
       ...(plan.runtimeTopology ?? {}),
       trafficEntry: "LOAD_BALANCER",
       compute: "ECS_FARGATE",
-      ...(hasFact("runtime_scale", "single_task") ? { computeCount: 1 } : {}),
+      ...(hasFact("runtime_scale", "single_task") || scalesToThree ? { computeCount: 1 } : {}),
       placement: "private_subnets",
       spreadAcrossPrivateSubnets: true,
-      autoScaling: false
+      autoScaling: scalesToThree
     },
     forbiddenCapabilities: mergeUniqueTextItems(plan.forbiddenCapabilities, [
       "ec2_runtime",
@@ -1946,10 +2822,14 @@ function applyRepositoryEvidencePriorityToRequirementPlan(
     ...(hasFact("excluded_capability", "database") ? { database: "none" } : {}),
     availability: undefined,
     amazonQBrief: mergeUniqueTextItems(plan.amazonQBrief, [
-      "Repository evidence is authoritative: keep one Fargate task unless the user explicitly overrides it.",
+      scalesToThree
+        ? "Repository evidence is authoritative: start with one Fargate task and allow request-based scaling up to three tasks."
+        : "Repository evidence is authoritative: keep one Fargate task unless the user explicitly overrides it.",
       "Use GitHub Actions as an external delivery actor; do not add AWS-native CI/CD pipeline resources.",
       "Place the internet-facing ALB in two public subnets and the Fargate service in two private app subnets.",
-      "Use one cost-conscious NAT gateway for private task image pulls and log delivery; do not add autoscaling or persistence."
+      scalesToThree
+        ? "Use one cost-conscious NAT gateway for private task image pulls and log delivery; keep persistence out of the runtime path."
+        : "Use one cost-conscious NAT gateway for private task image pulls and log delivery; do not add autoscaling or persistence."
     ])
   };
 }
@@ -1978,10 +2858,274 @@ function applyArchitectureDraftRequestPolicies(
   draft: AiArchitectureDraftResult,
   request: CreateArchitectureDraftRequest
 ): AiArchitectureDraftResult {
+  const policyDraft = applyArchitectureDraftBaseRequestPolicies(draft, request);
+  let authorizedCandidateExclusions:
+    | readonly ArchitectureDraftCandidateExclusion[]
+    | undefined;
+
+  try {
+    const candidateDraft = createArchitectureDraftCandidateProjection(request);
+    authorizedCandidateExclusions = resolveAuthorizedCandidateExclusions(
+      candidateDraft.architectureJson,
+      request.candidateExclusions
+    );
+  } catch {
+    // Candidate authorization is observational and must not interrupt final generation.
+  }
+
+  const candidateFilteredDraft = applyArchitectureDraftCandidateExclusions(
+    policyDraft,
+    authorizedCandidateExclusions
+  );
+
+  return {
+    ...candidateFilteredDraft,
+    architectureJson: connectRequiredCloudFrontUploadDelivery(
+      removeDanglingArchitectureEdges(candidateFilteredDraft.architectureJson)
+    )
+  };
+}
+
+function applyArchitectureDraftBaseRequestPolicies(
+  draft: AiArchitectureDraftResult,
+  request: CreateArchitectureDraftRequest
+): AiArchitectureDraftResult {
   return applyStrictRepositoryEvidencePolicy(
     applyFixedTemplateSelection(draft, request.templateId),
     request
   );
+}
+
+function resolveAuthorizedCandidateExclusions(
+  candidateArchitectureJson: ArchitectureJson,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
+): readonly ArchitectureDraftCandidateExclusion[] | undefined {
+  if (candidateExclusions === undefined) {
+    return undefined;
+  }
+
+  try {
+    const excludableCandidateIds = new Set(
+      resolveExcludableCandidateIds(candidateArchitectureJson)
+    );
+    const candidateById = new Map(
+      candidateArchitectureJson.nodes.map((node) => [node.id, node] as const)
+    );
+
+    return candidateExclusions.filter((exclusion) => {
+      if (!excludableCandidateIds.has(exclusion.candidateId)) {
+        return false;
+      }
+
+      const candidate = candidateById.get(exclusion.candidateId);
+      return candidate !== undefined
+        && candidate.type === exclusion.resourceType
+        && readArchitectureCandidateLabel(candidate) === exclusion.label;
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveExcludableCandidateIds(
+  architectureJson: ArchitectureJson
+): string[] {
+  return architectureJson.nodes
+    .filter((candidate) => {
+      if (!EXCLUDABLE_CANDIDATE_RESOURCE_TYPES.has(candidate.type)) {
+        return false;
+      }
+
+      const architectureWithoutCandidateType = excludeArchitectureResourceTypes(
+        architectureJson,
+        new Set([candidate.type])
+      );
+      return isUsableCandidateArchitecture(
+        architectureWithoutCandidateType,
+        architectureJson
+      );
+    })
+    .map(({ id }) => id);
+}
+
+function readArchitectureCandidateLabel(
+  candidate: ArchitectureJson["nodes"][number]
+): string {
+  return candidate.label?.trim() || candidate.type;
+}
+
+function excludeArchitectureResourceTypes(
+  architectureJson: ArchitectureJson,
+  excludedResourceTypes: ReadonlySet<ResourceType>
+): ArchitectureJson {
+  const nodes = architectureJson.nodes.filter(
+    (node) => !excludedResourceTypes.has(node.type)
+  );
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges = architectureJson.edges.filter(
+    (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+  );
+
+  return { nodes, edges };
+}
+
+function isUsableCandidateArchitecture(
+  architectureJson: ArchitectureJson,
+  sourceArchitectureJson: ArchitectureJson = architectureJson
+): boolean {
+  if (architectureJson.nodes.length === 0) {
+    return false;
+  }
+
+  const nodeIds = new Set(architectureJson.nodes.map(({ id }) => id));
+  if (
+    nodeIds.size !== architectureJson.nodes.length
+    || !architectureJson.edges.every(
+      ({ sourceId, targetId }) => nodeIds.has(sourceId) && nodeIds.has(targetId)
+    )
+  ) {
+    return false;
+  }
+
+  const removedCandidates = sourceArchitectureJson.nodes.filter(
+    ({ id }) => !nodeIds.has(id)
+  );
+  if (removedCandidates.length === 0) {
+    return true;
+  }
+
+  const removedCandidateIds = new Set(removedCandidates.map(({ id }) => id));
+  if (
+    sourceArchitectureJson.edges.some(
+      ({ sourceId, targetId }) => nodeIds.has(sourceId) && removedCandidateIds.has(targetId)
+    )
+  ) {
+    return false;
+  }
+
+  return !architectureJson.nodes.some((node) =>
+    readNestedConfigStringValues(node.config).some((value) =>
+      removedCandidates.some((candidate) =>
+        matchesArchitectureCandidateConfigReference(value, candidate)
+      )
+    )
+  );
+}
+
+function readNestedConfigStringValues(value: unknown): string[] {
+  if (typeof value === "string") {
+    return value.trim().length === 0 ? [] : [value];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(readNestedConfigStringValues);
+  }
+  if (value === null || typeof value !== "object") {
+    return [];
+  }
+
+  return Object.values(value).flatMap(readNestedConfigStringValues);
+}
+
+function matchesArchitectureCandidateConfigReference(
+  rawReferenceValue: string,
+  candidate: ArchitectureJson["nodes"][number]
+): boolean {
+  const referenceValue = normalizeReferenceValue(rawReferenceValue);
+  if (referenceValue === candidate.id) {
+    return true;
+  }
+
+  const configuredTerraformResourceType = candidate.config.terraformResourceType;
+  const terraformResourceType =
+    typeof configuredTerraformResourceType === "string"
+      ? configuredTerraformResourceType
+      : resourceDefinitions.find(
+        (definition) => definition.resourceType === candidate.type
+      )?.terraform.resourceType;
+  if (!terraformResourceType) {
+    return false;
+  }
+
+  const configuredTerraformResourceName = candidate.config.terraformResourceName;
+  const resourceNames = new Set([
+    candidate.id,
+    candidate.id.replace(/-/gu, "_"),
+    ...(typeof configuredTerraformResourceName === "string"
+      ? [configuredTerraformResourceName]
+      : [])
+  ]);
+
+  return [...resourceNames].some((resourceName) => {
+    const resourceAddress = `${terraformResourceType}.${resourceName}`;
+    const dataAddress = `data.${resourceAddress}`;
+    return referenceValue === resourceAddress
+      || referenceValue.startsWith(`${resourceAddress}.`)
+      || referenceValue === dataAddress
+      || referenceValue.startsWith(`${dataAddress}.`);
+  });
+}
+
+function applyArchitectureDraftCandidateExclusions(
+  draft: AiArchitectureDraftResult,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
+): AiArchitectureDraftResult {
+  if (candidateExclusions === undefined) {
+    return draft;
+  }
+
+  try {
+    const excludedResourceTypes = new Set(
+      candidateExclusions.map(({ resourceType }) => resourceType)
+    );
+    if (excludedResourceTypes.size === 0) {
+      return draft;
+    }
+    const architectureJson = excludeArchitectureResourceTypes(
+      draft.architectureJson,
+      excludedResourceTypes
+    );
+    if (!isUsableCandidateArchitecture(architectureJson, draft.architectureJson)) {
+      return appendCandidateExclusionMetadata(draft, candidateExclusions, false);
+    }
+
+    return appendCandidateExclusionMetadata({
+      ...draft,
+      architectureJson
+    }, candidateExclusions, true);
+  } catch {
+    return draft;
+  }
+}
+
+function appendCandidateExclusionMetadata(
+  draft: AiArchitectureDraftResult,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[],
+  applied: boolean
+): AiArchitectureDraftResult {
+  const candidates = candidateExclusions.map(
+    ({ candidateId, resourceType, label }) =>
+      `${label.trim() || resourceType} (${resourceType}, ${candidateId})`
+  );
+  if (candidates.length === 0) {
+    return draft;
+  }
+
+  const constraintDescription = candidates.join(", ");
+  const assumption = applied
+    ? `진행 프리뷰에서 승인된 후보 제외 제약을 반영했습니다: ${constraintDescription}`
+    : `후보 제외 제약은 남은 구조를 사용할 수 없게 만들어 적용하지 않았습니다: ${constraintDescription}`;
+  const explanation = applied
+    ? `서버가 발급한 후보 id/type/label을 확인한 뒤 Resource 유형 제외를 적용했습니다: ${constraintDescription}`
+    : `서버가 발급한 후보 제외를 확인했지만 빈 구조 또는 끊어진 참조를 피하기 위해 적용하지 않았습니다: ${constraintDescription}`;
+
+  return {
+    ...draft,
+    metadata: {
+      ...draft.metadata,
+      assumptions: [...new Set([...draft.metadata.assumptions, assumption])],
+      explanations: [...new Set([...draft.metadata.explanations, explanation])]
+    }
+  };
 }
 
 function applyStrictRepositoryEvidencePolicy(
@@ -1996,16 +3140,27 @@ function applyStrictRepositoryEvidencePolicy(
 
   const factKeys = new Set(evidence.facts.map((fact) => `${fact.kind}:${fact.value}`));
   const hasFact = (kind: string, value: string): boolean => factKeys.has(`${kind}:${value}`);
+  const scalesToThree = hasFact("runtime_scale", "autoscaling_1_3");
+  const usesCheckInSigningSecret = hasFact(
+    "runtime_secret",
+    "CHECK_IN_SIGNING_SECRET"
+  );
   const templatePrefix = "fixed-template-ecs-fargate-container-app-";
   const fixedTemplateDraft = applyFixedTemplateSelection(
     { ...draft, architectureJson: { nodes: [], edges: [] } },
     request.templateId
   );
-  const strictEvidenceManagedTemplateResourceIds = new Set(["repository", "log-group"]);
+  const strictEvidenceManagedTemplateResourceIds = new Set([
+    "repository",
+    "log-group",
+    ...(hasFact("frontend_delivery", "s3_cloudfront_static") ? ["distribution"] : [])
+  ]);
+  const scalingTemplateResourceIds = new Set(["scaling-target", "scaling-policy"]);
   const coreNodes = fixedTemplateDraft.architectureJson.nodes.filter(
     (node) =>
       node.id.startsWith(templatePrefix) &&
-      !strictEvidenceManagedTemplateResourceIds.has(String(node.config.templateResourceId ?? ""))
+      !strictEvidenceManagedTemplateResourceIds.has(String(node.config.templateResourceId ?? "")) &&
+      (scalesToThree || !scalingTemplateResourceIds.has(String(node.config.templateResourceId ?? "")))
   );
   const nodeByTemplateResourceId = new Map(
     coreNodes.flatMap((node) =>
@@ -2030,7 +3185,7 @@ function applyStrictRepositoryEvidencePolicy(
   const apiName = `${deploymentName}-api`;
   const logGroupName = `/ecs/${apiName}`;
   const managedServicesAreaId = "repository-managed-services";
-  const hasManagedServices = staticDelivery || usesEcr || usesCloudWatch;
+  const hasManagedServices = staticDelivery || usesEcr || usesCloudWatch || usesCheckInSigningSecret;
   const vpcId = coreNodeId("vpc");
   const publicSubnetAId = coreNodeId("subnet-a");
   const publicSubnetBId = coreNodeId("subnet-b");
@@ -2050,6 +3205,10 @@ function applyStrictRepositoryEvidencePolicy(
   const webBucketPolicyId = "repository-web-bucket-policy";
   const ecrId = "repository-ecr";
   const logGroupId = "repository-ecs-logs";
+  const checkInSecretMaterialId = "repository-check-in-secret-material";
+  const checkInSecretId = "repository-check-in-signing-secret";
+  const checkInSecretVersionId = "repository-check-in-signing-secret-version";
+  const checkInSecretPolicyId = "repository-check-in-signing-secret-policy";
   const vpcRef = `aws_vpc.${vpcId}.id`;
   const publicSubnetRefs = [publicSubnetAId, publicSubnetBId].map(
     (id) => `aws_subnet.${id}.id`
@@ -2195,6 +3354,7 @@ function applyStrictRepositoryEvidencePolicy(
           bucketPrefix: `${deploymentName}-web-`,
           bucketPurpose: "static_website_origin",
           publicAccessBlock: true,
+          versioningEnabled: true,
           forceDestroy: true
         }
       },
@@ -2218,7 +3378,7 @@ function applyStrictRepositoryEvidencePolicy(
       {
         id: webBootstrapObjectId,
         type: "S3",
-        label: "Bootstrap Index (CI/CD replaces)",
+        label: "Bootstrap Index (release in progress)",
         positionX: 760,
         positionY: 280,
         config: {
@@ -2228,7 +3388,8 @@ function applyStrictRepositoryEvidencePolicy(
           bucket: `aws_s3_bucket.${webAssetsId}.id`,
           key: "index.html",
           contentType: "text/html; charset=utf-8",
-          content: "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Application deployment ready</title><body><main><h1>Application deployment ready</h1><p>GitHub Actions will replace this bootstrap document with apps/web/dist.</p></main></body></html>"
+          releaseManagedContent: true,
+          content: "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Application deployment is in progress</title><body><main><h1>Application deployment is in progress</h1><p>SketchCatch is deploying the approved application release.</p></main></body></html>"
         }
       },
       {
@@ -2283,15 +3444,15 @@ function applyStrictRepositoryEvidencePolicy(
             cachedMethods: ["GET", "HEAD"],
             cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6"
           }],
-          orderedCacheBehavior: [{
-            pathPattern: "/api/*",
+          orderedCacheBehavior: ["/api/*", "/health"].map((pathPattern) => ({
+            pathPattern,
             targetOriginId: "api-alb",
             viewerProtocolPolicy: "redirect-to-https",
             allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
             cachedMethods: ["GET", "HEAD"],
             cachePolicyId: "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
             originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac"
-          }],
+          })),
           restrictions: [{ geoRestriction: [{ restrictionType: "none" }] }],
           viewerCertificate: [{ cloudfrontDefaultCertificate: true }]
         }
@@ -2362,6 +3523,76 @@ function applyStrictRepositoryEvidencePolicy(
     });
   }
 
+  if (usesCheckInSigningSecret) {
+    additionalNodes.push(
+      {
+        id: checkInSecretMaterialId,
+        type: "RANDOM_PASSWORD",
+        label: "Generated Check-in Signing Material",
+        positionX: 1380,
+        positionY: 280,
+        config: {
+          terraformResourceType: "random_password",
+          terraformResourceName: "check_in_signing",
+          parentAreaNodeId: managedServicesAreaId,
+          length: 48,
+          special: false
+        }
+      },
+      {
+        id: checkInSecretId,
+        type: "SECRETS_MANAGER_SECRET",
+        label: "Check-in Signing Secret",
+        positionX: 1560,
+        positionY: 140,
+        config: {
+          terraformResourceType: "aws_secretsmanager_secret",
+          terraformResourceName: "check_in_signing",
+          parentAreaNodeId: managedServicesAreaId,
+          namePrefix: `${deploymentName}/check-in-signing-`,
+          recoveryWindowInDays: 0
+        }
+      },
+      {
+        id: checkInSecretVersionId,
+        type: "SECRETS_MANAGER_SECRET",
+        label: "Generated Signing Secret Version",
+        positionX: 1580,
+        positionY: 280,
+        config: {
+          terraformResourceType: "aws_secretsmanager_secret_version",
+          terraformResourceName: "check_in_signing",
+          parentAreaNodeId: managedServicesAreaId,
+          secretId: `aws_secretsmanager_secret.${checkInSecretId}.id`,
+          secretString: `random_password.${checkInSecretMaterialId}.result`
+        }
+      },
+      {
+        id: checkInSecretPolicyId,
+        type: "IAM_POLICY",
+        label: "ECS Signing Secret Read Policy",
+        positionX: 1780,
+        positionY: 280,
+        config: {
+          terraformResourceType: "aws_iam_role_policy",
+          terraformResourceName: "check_in_signing_read",
+          parentAreaNodeId: managedServicesAreaId,
+          name: `${deploymentName}-check-in-signing-read`,
+          role: `aws_iam_role.${coreNodeId("execution-role")}.id`,
+          policy: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [{
+              Sid: "ReadCheckInSigningSecret",
+              Effect: "Allow",
+              Action: ["secretsmanager:GetSecretValue"],
+              Resource: `\${aws_secretsmanager_secret.${checkInSecretId}.arn}`
+            }]
+          })
+        }
+      }
+    );
+  }
+
   additionalNodes.push({
     id: "repository-browser",
     type: "UNKNOWN",
@@ -2379,7 +3610,9 @@ function applyStrictRepositoryEvidencePolicy(
   additionalNodes.push({
     id: fargateRuntimeId,
     type: "UNKNOWN",
-    label: "Fargate Task (1, Private App A/B)",
+    label: scalesToThree
+      ? "Fargate Tasks (1–3, Private App A/B)"
+      : "Fargate Task (1, Private App A/B)",
     positionX: 460,
     positionY: 1140,
     config: {
@@ -2560,9 +3793,15 @@ function applyStrictRepositoryEvidencePolicy(
             ...node.config,
             ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
             family: apiName,
-            dependsOn: usesCloudWatch
-              ? [`aws_cloudwatch_log_group.${logGroupId}`]
-              : undefined,
+            dependsOn: [
+              ...(usesCloudWatch ? [`aws_cloudwatch_log_group.${logGroupId}`] : []),
+              ...(usesCheckInSigningSecret
+                ? [
+                    `aws_secretsmanager_secret_version.${checkInSecretVersionId}`,
+                    `aws_iam_role_policy.${checkInSecretPolicyId}`
+                  ]
+                : [])
+            ],
             containerDefinitions: JSON.stringify([{
               name: "api",
               image: "public.ecr.aws/docker/library/nginx:1.27-alpine",
@@ -2579,9 +3818,16 @@ function applyStrictRepositoryEvidencePolicy(
                       name: "WEB_ORIGIN",
                       value: `https://\${aws_cloudfront_distribution.${cloudFrontId}.domain_name}`
                     }]
-                  : []),
-                { name: "INSTANCE_ID", value: "fargate" }
+                  : [])
               ],
+              ...(usesCheckInSigningSecret
+                ? {
+                    secrets: [{
+                      name: "CHECK_IN_SIGNING_SECRET",
+                      valueFrom: `\${aws_secretsmanager_secret.${checkInSecretId}.arn}`
+                    }]
+                  }
+                : {}),
               ...(usesCloudWatch
                 ? {
                     logConfiguration: {
@@ -2607,7 +3853,7 @@ function applyStrictRepositoryEvidencePolicy(
             ...node.config,
             name: `${deploymentName}-service`,
             parentAreaNodeId: coreNodeId("task-security-group"),
-            desiredCount: singleTask ? 1 : node.config.desiredCount,
+            desiredCount: singleTask || scalesToThree ? 1 : node.config.desiredCount,
             networkConfiguration: {
               subnets: privateAppSubnetRefs,
               securityGroups: [`aws_security_group.${coreNodeId("task-security-group")}.id`],
@@ -2617,6 +3863,39 @@ function applyStrictRepositoryEvidencePolicy(
               targetGroupArn: `aws_lb_target_group.${coreNodeId("target-group")}.arn`,
               containerName: "api",
               containerPort
+            }
+          }
+        };
+      case "scaling-target":
+        return {
+          ...node,
+          label: "Fargate Task Capacity 1–3",
+          positionX: 1780,
+          positionY: 420,
+          config: {
+            ...node.config,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
+            minCapacity: 1,
+            maxCapacity: 3
+          }
+        };
+      case "scaling-policy":
+        return {
+          ...node,
+          label: "10 Requests per Target",
+          positionX: 1560,
+          positionY: 420,
+          config: {
+            ...node.config,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
+            targetTrackingScalingPolicyConfiguration: {
+              targetValue: 10,
+              scaleInCooldown: 60,
+              scaleOutCooldown: 30,
+              predefinedMetricSpecification: [{
+                predefinedMetricType: "ALBRequestCountPerTarget",
+                resourceLabel: `\${aws_lb.${coreNodeId("load-balancer")}.arn_suffix}/\${aws_lb_target_group.${coreNodeId("target-group")}.arn_suffix}`
+              }]
             }
           }
         };
@@ -2686,7 +3965,9 @@ function applyStrictRepositoryEvidencePolicy(
   });
   const nodes = [...updatedCoreNodes, ...additionalNodes];
   const nodeIds = new Set(nodes.map((node) => node.id));
-  const edges: ArchitectureJson["edges"] = [];
+  const edges: ArchitectureJson["edges"] = fixedTemplateDraft.architectureJson.edges.filter(
+    (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+  );
   const edgePairs = new Set(edges.map((edge) => `${edge.sourceId}->${edge.targetId}`));
   const connect = (sourceId: string, targetId: string, label: string): void => {
     const pair = `${sourceId}->${targetId}`;
@@ -2721,7 +4002,7 @@ function applyStrictRepositoryEvidencePolicy(
     connect(
       cloudFrontId,
       coreNodeId("alb-security-group"),
-      "proxies /api/* to ALB over HTTP"
+      "proxies /api/* and /health to ALB over HTTP"
     );
   } else {
     connect("repository-browser", coreNodeId("alb-security-group"), "API -> ALB SG: TCP 80");
@@ -2738,6 +4019,16 @@ function applyStrictRepositoryEvidencePolicy(
   connect(coreNodeId("cluster"), coreNodeId("service"), "runs the API service");
   connect(coreNodeId("task"), coreNodeId("service"), "defines the deployed revision");
   connect(coreNodeId("service"), fargateRuntimeId, "schedules desired task in private app subnets");
+  if (scalesToThree) {
+    connect(coreNodeId("service"), coreNodeId("scaling-target"), "scales desired task count 1–3");
+    connect(coreNodeId("scaling-target"), coreNodeId("scaling-policy"), "tracks ALB requests per target");
+  }
+  if (usesCheckInSigningSecret) {
+    connect(checkInSecretMaterialId, checkInSecretVersionId, "generates isolated signing material");
+    connect(checkInSecretId, checkInSecretVersionId, "stores the generated secret version");
+    connect(checkInSecretPolicyId, coreNodeId("execution-role"), "allows this secret only");
+    connect(checkInSecretId, coreNodeId("task"), "injects CHECK_IN_SIGNING_SECRET by ARN");
+  }
   if (usesEcr) {
     connect(ecrId, fargateRuntimeId, "application revisions pull API image from ECR");
   }
@@ -2775,6 +4066,12 @@ function applyStrictRepositoryEvidencePolicy(
           : []),
         ...(usesEcr
           ? ["The initial Terraform apply uses a public 8080 /health smoke image because the new ECR repository is empty; the first application release registers the repository image as a new ECS task definition revision."]
+          : []),
+        ...(usesCheckInSigningSecret
+          ? ["Terraform generates CHECK_IN_SIGNING_SECRET during Apply, stores it in Secrets Manager, and injects the same secret ARN into every ECS task without exposing the value in repository analysis or build logs."]
+          : []),
+        ...(usesCheckInSigningSecret
+          ? ["INSTANCE_ID is intentionally not fixed in the task definition; the application can use each task hostname for servedBy observability."]
           : []),
         ...(staticDelivery
           ? ["Terraform uploads a bootstrap index.html so the CloudFront URL is immediately healthy; CI/CD replaces it with apps/web/dist and invalidates CloudFront."]
@@ -3105,27 +4402,78 @@ function createAmazonQArchitectureBrief(prompt: string): string {
 function findAmazonQPreviewValidationIssues(
   prompt: string,
   preview: AmazonQArchitectureDraftPreview,
-  normalizedRequirement: ArchitectureIntentPlan | null
+  normalizedRequirement: ArchitectureIntentPlan | null,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
 ): string[] {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const architectureJson = preview.architectureJson;
   const nodeTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const excludedResourceTypes = new Set(
+    (candidateExclusions ?? []).map(({ resourceType }) => resourceType)
+  );
   const issues: string[] = [];
+
+  if (!isUsableCandidateArchitecture(architectureJson)) {
+    issues.push(
+      "The preview must contain at least one usable ResourceNode with unique ids and no dangling edges. Regenerate a non-empty valid topology or return needs_clarification."
+    );
+  }
 
   if (requiresServerlessOnlyArchitecture(normalizedPrompt) && nodeTypes.has("EC2")) {
     issues.push("The user requested serverless or no EC2, but the preview includes EC2. Regenerate without EC2 and use serverless supported resources such as LAMBDA and API_GATEWAY_REST_API when compute is needed.");
   }
 
-  issues.push(...findRequirementCoverageValidationIssues(normalizedPrompt, preview, normalizedRequirement));
+  issues.push(
+    ...findCandidateExclusionValidationIssues(
+      architectureJson,
+      candidateExclusions
+    )
+  );
+  issues.push(
+    ...findRequirementCoverageValidationIssues(
+      normalizedPrompt,
+      preview,
+      normalizedRequirement,
+      excludedResourceTypes
+    )
+  );
   issues.push(...findArchitectureLayoutValidationIssues(architectureJson));
 
   return issues;
 }
 
+function findCandidateExclusionValidationIssues(
+  architectureJson: ArchitectureJson,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
+): string[] {
+  if (candidateExclusions === undefined || candidateExclusions.length === 0) {
+    return [];
+  }
+
+  const includedResourceTypes = new Set(
+    architectureJson.nodes.map(({ type }) => type)
+  );
+  const violatedExclusions = candidateExclusions.filter(({ resourceType }) =>
+    includedResourceTypes.has(resourceType)
+  );
+  if (violatedExclusions.length === 0) {
+    return [];
+  }
+
+  return [
+    `The preview violates the server-authorized candidate exclusion: ${violatedExclusions
+      .map(({ candidateId, resourceType, label }) =>
+        `${label.trim() || resourceType} (${resourceType}, ${candidateId})`
+      )
+      .join(", ")}. Regenerate without those ResourceNode types or return needs_clarification when no valid alternative exists.`
+  ];
+}
+
 function findRequirementCoverageValidationIssues(
   normalizedPrompt: string,
   preview: AmazonQArchitectureDraftPreview,
-  normalizedRequirement: ArchitectureIntentPlan | null
+  normalizedRequirement: ArchitectureIntentPlan | null,
+  excludedResourceTypes: ReadonlySet<ResourceType> = new Set<ResourceType>()
 ): string[] {
   const issues: string[] = [];
   const architectureJson = preview.architectureJson;
@@ -3144,11 +4492,24 @@ function findRequirementCoverageValidationIssues(
     issues.push("Requirement coverage missing: Amazon Q must record the selected pattern and rejected/alternative pattern rationale.");
   }
 
-  issues.push(...findExplicitResourceTypeValidationIssues(normalizedPrompt, architectureJson));
-  issues.push(...findRequestedResourceQuantityValidationIssues(normalizedPrompt, architectureJson));
+  issues.push(
+    ...findExplicitResourceTypeValidationIssues(
+      normalizedPrompt,
+      architectureJson,
+      excludedResourceTypes
+    )
+  );
+  issues.push(
+    ...findRequestedResourceQuantityValidationIssues(
+      normalizedPrompt,
+      architectureJson,
+      excludedResourceTypes
+    )
+  );
   issues.push(...findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson));
   issues.push(
     ...findNormalizedRequirementValidationIssues(normalizedRequirement, architectureJson, {
+      excludedResourceTypes,
       validateSubnetSpread: false,
       validateVisualSpread: false
     })
@@ -3230,6 +4591,7 @@ function findNormalizedRequirementValidationIssues(
   normalizedRequirement: ArchitectureIntentPlan | null,
   architectureJson: ArchitectureJson,
   options: {
+    readonly excludedResourceTypes?: ReadonlySet<ResourceType>;
     readonly validateSubnetSpread?: boolean;
     readonly validateVisualSpread?: boolean;
   } = {}
@@ -3240,8 +4602,10 @@ function findNormalizedRequirementValidationIssues(
 
   const issues: string[] = [];
   const actualResourceTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const excludedResourceTypes = options.excludedResourceTypes ?? new Set<ResourceType>();
   const missingResourceTypes = (normalizedRequirement.requiredResources ?? []).filter(
     (resourceType) =>
+      !excludedResourceTypes.has(resourceType as ResourceType) &&
       !isResourceTypeForbiddenByPlan(normalizedRequirement, resourceType as ResourceType) &&
       !actualResourceTypes.has(resourceType as ResourceType)
   );
@@ -3255,7 +4619,10 @@ function findNormalizedRequirementValidationIssues(
   for (const [resourceType, quantity] of Object.entries(normalizedRequirement.resourceQuantities ?? {})) {
     const requiredResourceType = resourceType as ResourceType;
 
-    if (isResourceTypeForbiddenByPlan(normalizedRequirement, requiredResourceType)) {
+    if (
+      excludedResourceTypes.has(requiredResourceType)
+      || isResourceTypeForbiddenByPlan(normalizedRequirement, requiredResourceType)
+    ) {
       continue;
     }
 
@@ -3366,6 +4733,12 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     patternIds.add("serverless-api");
     requiredResources.add("API_GATEWAY_REST_API");
     requiredResources.add("LAMBDA");
+    if (resolveRealtimeTransport(normalizedPrompt) === "websocket") {
+      requiredResources.add("API_GATEWAY_WEBSOCKET_API");
+      requiredResources.add("API_GATEWAY_V2_ROUTE");
+      requiredResources.add("API_GATEWAY_V2_INTEGRATION");
+      requiredResources.add("API_GATEWAY_V2_STAGE");
+    }
     requiredResources.add("LAMBDA_PERMISSION");
     requiredResources.add("IAM_ROLE");
     requiredResources.add("IAM_POLICY");
@@ -3378,6 +4751,12 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     patternIds.add("serverless-api");
     requiredResources.add("API_GATEWAY_REST_API");
     requiredResources.add("LAMBDA");
+    if (resolveRealtimeTransport(normalizedPrompt) === "websocket") {
+      requiredResources.add("API_GATEWAY_WEBSOCKET_API");
+      requiredResources.add("API_GATEWAY_V2_ROUTE");
+      requiredResources.add("API_GATEWAY_V2_INTEGRATION");
+      requiredResources.add("API_GATEWAY_V2_STAGE");
+    }
     forbiddenCapabilities.add("ec2_runtime");
     forbiddenCapabilities.add("load_balancer");
 
@@ -3768,21 +5147,203 @@ function sanitizeMergedRuntimeTopology(
   return Object.keys(sanitized).length === 0 ? undefined : sanitized;
 }
 
+const STATIC_SITE_ALLOWED_RESOURCE_TYPES = new Set<ResourceType>([
+  "S3",
+  "CLOUDFRONT",
+  "ROUTE53_RECORD",
+  "ACM_CERTIFICATE",
+  "ACM_CERTIFICATE_VALIDATION",
+  "WAF_WEB_ACL",
+  "WAF_WEB_ACL_ASSOCIATION"
+]);
+
+const BACKEND_RUNTIME_RESOURCE_TYPES = new Set<ResourceType>([
+  "API_GATEWAY_REST_API",
+  "API_GATEWAY_RESOURCE",
+  "API_GATEWAY_METHOD",
+  "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
+  "API_GATEWAY_STAGE",
+  "API_GATEWAY_WEBSOCKET_API",
+  "API_GATEWAY_V2_ROUTE",
+  "API_GATEWAY_V2_INTEGRATION",
+  "API_GATEWAY_V2_STAGE",
+  "LAMBDA",
+  "LAMBDA_PERMISSION",
+  "EC2",
+  "AMI",
+  "IAM_INSTANCE_PROFILE",
+  "LAUNCH_TEMPLATE",
+  "AUTO_SCALING_GROUP",
+  "AUTO_SCALING_POLICY",
+  "ECR_REPOSITORY",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION",
+  "ECS_CAPACITY_PROVIDER",
+  "EKS_CLUSTER",
+  "EKS_NODE_GROUP",
+  "LOAD_BALANCER",
+  "LOAD_BALANCER_LISTENER",
+  "LOAD_BALANCER_TARGET_GROUP"
+]);
+
+const MANAGED_SERVERLESS_EXCLUDED_RESOURCE_TYPES = new Set<ResourceType>([
+  "EC2",
+  "AMI",
+  "IAM_INSTANCE_PROFILE",
+  "LAUNCH_TEMPLATE",
+  "AUTO_SCALING_GROUP",
+  "AUTO_SCALING_POLICY",
+  "ECR_REPOSITORY",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION",
+  "ECS_CAPACITY_PROVIDER",
+  "EKS_CLUSTER",
+  "EKS_NODE_GROUP",
+  "LOAD_BALANCER",
+  "LOAD_BALANCER_LISTENER",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "APPLICATION_AUTO_SCALING_TARGET",
+  "APPLICATION_AUTO_SCALING_POLICY",
+  "INTERNET_GATEWAY",
+  "ELASTIC_IP",
+  "NAT_GATEWAY",
+  "ROUTE_TABLE",
+  "ROUTE_TABLE_ASSOCIATION"
+]);
+
+function applyAcceptedAnswerPriorityToRequirementPlan(
+  plan: ArchitectureIntentPlan | null,
+  prompt: string
+): ArchitectureIntentPlan | null {
+  if (plan === null) return null;
+
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const patternIds = new Set(plan.patternIds ?? []);
+  const requiredResources = new Set(plan.requiredResources ?? []);
+  const forbiddenCapabilities = new Set(plan.forbiddenCapabilities ?? []);
+  const resourceQuantities = { ...(plan.resourceQuantities ?? {}) };
+  let runtimeTopology = plan.runtimeTopology;
+  const explicitResourceTypes = new Set(findExplicitResourceTypesInPrompt(normalizedPrompt));
+  const hasExplicitBackendResource = [...explicitResourceTypes].some((resourceType) =>
+    BACKEND_RUNTIME_RESOURCE_TYPES.has(resourceType)
+  );
+
+  if (requiresStaticDeliveryArchitecture(normalizedPrompt) && !hasExplicitBackendResource) {
+    patternIds.delete("serverless-api");
+    patternIds.delete("ecs-fargate");
+    patternIds.delete("alb-asg-ec2");
+    patternIds.delete("multi-az-rds");
+    patternIds.add("spa-cloudfront-s3");
+
+    for (const resourceType of [...requiredResources]) {
+      if (
+        !STATIC_SITE_ALLOWED_RESOURCE_TYPES.has(resourceType as ResourceType) &&
+        !explicitResourceTypes.has(resourceType as ResourceType)
+      ) {
+        requiredResources.delete(resourceType);
+      }
+    }
+    requiredResources.add("CLOUDFRONT");
+    requiredResources.add("S3");
+    for (const resourceType of Object.keys(resourceQuantities)) {
+      if (!requiredResources.has(resourceType as ResourceType)) {
+        delete resourceQuantities[resourceType];
+      }
+    }
+    resourceQuantities.S3 = 1;
+    resourceQuantities.CLOUDFRONT = 1;
+    forbiddenCapabilities.add("backend_runtime");
+    forbiddenCapabilities.add("container_runtime");
+    forbiddenCapabilities.add("database");
+    forbiddenCapabilities.add("ec2_runtime");
+    forbiddenCapabilities.add("file_upload");
+    forbiddenCapabilities.add("load_balancer");
+    forbiddenCapabilities.add("realtime");
+    runtimeTopology = undefined;
+  }
+
+  const backendProfile = resolveBackendProfile(normalizedPrompt);
+  const fullyManagedServerless =
+    resolveManagementProfile(normalizedPrompt) === "fully_managed" &&
+    backendProfile !== undefined &&
+    backendProfile !== "none" &&
+    !hasPromptTerm(normalizedPrompt, [
+      "ecs fargate",
+      "fargate service",
+      "fargate task",
+      "eks cluster",
+      "kubernetes"
+    ]);
+
+  if (fullyManagedServerless) {
+    patternIds.delete("ecs-fargate");
+    patternIds.delete("alb-asg-ec2");
+    patternIds.add("serverless-api");
+    requiredResources.add("API_GATEWAY_REST_API");
+    requiredResources.add("LAMBDA");
+    if (resolveRealtimeTransport(normalizedPrompt) === "websocket") {
+      requiredResources.add("API_GATEWAY_WEBSOCKET_API");
+      requiredResources.add("API_GATEWAY_V2_ROUTE");
+      requiredResources.add("API_GATEWAY_V2_INTEGRATION");
+      requiredResources.add("API_GATEWAY_V2_STAGE");
+    }
+
+    for (const resourceType of MANAGED_SERVERLESS_EXCLUDED_RESOURCE_TYPES) {
+      requiredResources.delete(resourceType);
+      delete resourceQuantities[resourceType];
+    }
+
+    if (patternIds.has("multi-az-rds") || requiredResources.has("RDS")) {
+      resourceQuantities.SUBNET = 2;
+      resourceQuantities.SECURITY_GROUP = 1;
+    }
+    for (const resourceType of [
+      "IAM_ROLE",
+      "IAM_POLICY",
+      "CLOUDWATCH_LOG_GROUP",
+      "CLOUDWATCH_METRIC_ALARM"
+    ] as const) {
+      if (requiredResources.has(resourceType)) {
+        resourceQuantities[resourceType] = 1;
+      }
+    }
+    forbiddenCapabilities.add("container_runtime");
+    forbiddenCapabilities.add("ec2_runtime");
+    forbiddenCapabilities.add("load_balancer");
+    runtimeTopology = {
+      trafficEntry: "API_GATEWAY_REST_API",
+      compute: "LAMBDA"
+    };
+  }
+
+  return {
+    ...plan,
+    patternIds: [...patternIds],
+    requiredResources: [...requiredResources],
+    resourceQuantities,
+    forbiddenCapabilities: [...forbiddenCapabilities],
+    ...(runtimeTopology === undefined ? { runtimeTopology: undefined } : { runtimeTopology })
+  };
+}
+
 function createAmazonQPlanDraftResult(
   response: AmazonQArchitectureDraftPlan,
   request: CreateArchitectureDraftRequest,
   normalizedRequirement: ArchitectureIntentPlan | null,
   providerMetadata: AiProviderMetadata
 ): AiArchitectureDraftResult {
-  const providerPlanIsCanonical = (response.plan.patternIds?.length ?? 0) > 0;
   const plan = applyRepositoryEvidencePriorityToRequirementPlan(
     applyFixedTemplatePriorityToRequirementPlan(
       normalizeArchitecturePlanTopologyInvariants(
-        reconcileCanonicalProviderPlan(
-          providerPlanIsCanonical
-            ? response.plan
-            : mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
-          response.plan
+        applyAcceptedAnswerPriorityToRequirementPlan(
+          reconcileCanonicalProviderPlan(
+            mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
+            response.plan
+          ),
+          request.prompt
         ),
         request.prompt
       ),
@@ -3818,10 +5379,12 @@ function createAmazonQPlanDraftResult(
     connectedCanonicalArchitectureJson,
     plan?.runtimeTopology
   );
-  const materializedArchitectureJson = applyArchitectureParameterCompletenessDefaults(applyArchitectureOperationalPolicy(
-    topologyConnectedArchitectureJson,
-    resolveArchitectureOperationalRequirements(request.prompt)
-  ));
+  const materializedArchitectureJson = applyArchitectureParameterCompletenessDefaults(
+    applyArchitectureOperationalPolicy(
+      topologyConnectedArchitectureJson,
+      resolveArchitectureOperationalRequirements(request.prompt)
+    )
+  );
   const architectureJson = applyStrictRepositoryEvidencePolicy(
     {
       architectureJson: materializedArchitectureJson,
@@ -3830,13 +5393,22 @@ function createAmazonQPlanDraftResult(
     },
     request
   ).architectureJson;
-  const validationIssues = usesStrictEcsRepositoryEvidence(request)
-    ? findStrictRepositoryEvidenceValidationIssues(request, architectureJson)
-    : findMaterializedArchitecturePlanValidationIssues(
-        request.prompt,
-        plan,
-        architectureJson
-      );
+  const validationIssues = [
+    ...(usesStrictEcsRepositoryEvidence(request)
+      ? findStrictRepositoryEvidenceValidationIssues(request, architectureJson)
+      : findMaterializedArchitecturePlanValidationIssues(
+          request.prompt,
+          plan,
+          architectureJson,
+          request.candidateExclusions
+        )),
+    ...(usesStrictEcsRepositoryEvidence(request)
+      ? findCandidateExclusionValidationIssues(
+          architectureJson,
+          request.candidateExclusions
+        )
+      : [])
+  ];
 
   if (validationIssues.length > 0) {
     throw createRequirementsUnsatisfiedError(validationIssues);
@@ -3847,10 +5419,11 @@ function createAmazonQPlanDraftResult(
     createDeterministicArchitectureAssumptions(request.prompt)
   );
   const explanations = [...(response.explanations ?? [])];
+  const title = createKoreanArchitectureDraftTitle(response.title, architectureJson);
 
   return {
     architectureJson,
-    title: response.title,
+    title,
     metadata: {
       ...requestDraft.metadata,
       source: "amazon_q",
@@ -3859,8 +5432,8 @@ function createAmazonQPlanDraftResult(
     },
     llmExplanation: {
       target: ARCHITECTURE_DRAFT_TARGET,
-      summary: `${response.title} Architecture Draft를 생성했습니다.`,
-      highlights: explanations.slice(0, 5),
+      summary: `${title}을 생성했습니다.`,
+      highlights: createKoreanArchitectureDraftHighlights(explanations, architectureJson),
       nextActions: ["Terraform IaC Preview에서 생성 가능한 설정과 참조를 검토하세요."],
       fallbackUsed: false,
       providerMetadata
@@ -3883,6 +5456,7 @@ function createDeterministicArchitectureAssumptions(prompt: string): string[] {
   return assumptions;
 }
 
+// 최종 `직접 관리` 선택은 Provider plan의 EC2 금지보다 우선하도록 맞춥니다.
 function normalizeArchitecturePlanTopologyInvariants(
   plan: ArchitectureIntentPlan | null,
   prompt: string
@@ -3898,6 +5472,11 @@ function normalizeArchitecturePlanTopologyInvariants(
   );
   const usesSelfManagedEc2 =
     !usesEksRuntime && requiresSelfManagedEc2Architecture(normalizedPrompt);
+  const forbiddenCapabilities = usesSelfManagedEc2
+    ? plan.forbiddenCapabilities?.filter(
+        (capability) => capability.toLowerCase() !== "ec2_runtime"
+      )
+    : plan.forbiddenCapabilities;
 
   if (usesSelfManagedEc2) {
     patternIds.delete("ecs-fargate");
@@ -4177,6 +5756,7 @@ function normalizeArchitecturePlanTopologyInvariants(
 
   return {
     ...plan,
+    ...(forbiddenCapabilities === undefined ? {} : { forbiddenCapabilities }),
     patternIds: [...patternIds],
     requiredResources: [...requiredResources],
     resourceQuantities,
@@ -4341,17 +5921,33 @@ function applyArchitecturePlanExclusions(
 function findMaterializedArchitecturePlanValidationIssues(
   prompt: string,
   plan: ArchitectureIntentPlan | null,
-  architectureJson: ArchitectureJson
+  architectureJson: ArchitectureJson,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
 ): string[] {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const nodeTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const excludedResourceTypes = new Set(
+    (candidateExclusions ?? []).map(({ resourceType }) => resourceType)
+  );
   const materializedPatternIds = new Set(plan?.patternIds ?? []);
   const planForbidsEc2Runtime = (plan?.forbiddenCapabilities ?? []).some(
     (capability) => capability.toLowerCase() === "ec2_runtime"
   );
   const issues = [
-    ...findExplicitResourceTypeValidationIssues(normalizedPrompt, architectureJson),
-    ...findRequestedResourceQuantityValidationIssues(normalizedPrompt, architectureJson),
+    ...findCandidateExclusionValidationIssues(
+      architectureJson,
+      candidateExclusions
+    ),
+    ...findExplicitResourceTypeValidationIssues(
+      normalizedPrompt,
+      architectureJson,
+      excludedResourceTypes
+    ),
+    ...findRequestedResourceQuantityValidationIssues(
+      normalizedPrompt,
+      architectureJson,
+      excludedResourceTypes
+    ),
     ...(planForbidsEc2Runtime
       ? []
       : findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson, {
@@ -4359,7 +5955,10 @@ function findMaterializedArchitecturePlanValidationIssues(
         })),
     ...(materializedPatternIds.has("alb-asg-ec2")
       ? []
-      : findNormalizedRequirementValidationIssues(plan, architectureJson, { validateVisualSpread: false })),
+      : findNormalizedRequirementValidationIssues(plan, architectureJson, {
+          excludedResourceTypes,
+          validateVisualSpread: false
+        })),
     ...findOperationalRequirementTopologyValidationIssues(normalizedPrompt, architectureJson),
     ...findCanonicalPatternMaterializationIssues(normalizedPrompt, plan, architectureJson)
   ];
@@ -4391,6 +5990,11 @@ function findStrictRepositoryEvidenceValidationIssues(
   const factKeys = new Set(facts.map((fact) => `${fact.kind}:${fact.value}`));
   const hasFact = (kind: string, value: string): boolean => factKeys.has(`${kind}:${value}`);
   const issues: string[] = [];
+  const scalesToThree = hasFact("runtime_scale", "autoscaling_1_3");
+  const usesCheckInSigningSecret = hasFact(
+    "runtime_secret",
+    "CHECK_IN_SIGNING_SECRET"
+  );
   const nodeTypes = new Set(architectureJson.nodes.map((node) => node.type));
   const requiredTypes = new Set<ResourceType>([
     "ECS_CLUSTER",
@@ -4407,6 +6011,15 @@ function findStrictRepositoryEvidenceValidationIssues(
   }
   if (hasFact("container_registry", "ecr")) requiredTypes.add("ECR_REPOSITORY");
   if (hasFact("observability", "cloudwatch")) requiredTypes.add("CLOUDWATCH_LOG_GROUP");
+  if (scalesToThree) {
+    requiredTypes.add("APPLICATION_AUTO_SCALING_TARGET");
+    requiredTypes.add("APPLICATION_AUTO_SCALING_POLICY");
+  }
+  if (usesCheckInSigningSecret) {
+    requiredTypes.add("RANDOM_PASSWORD");
+    requiredTypes.add("SECRETS_MANAGER_SECRET");
+    requiredTypes.add("IAM_POLICY");
+  }
 
   const missingTypes = [...requiredTypes].filter((resourceType) => !nodeTypes.has(resourceType));
   if (missingTypes.length > 0) {
@@ -4414,14 +6027,16 @@ function findStrictRepositoryEvidenceValidationIssues(
   }
 
   const forbiddenTypes = new Set<ResourceType>([
-    "APPLICATION_AUTO_SCALING_TARGET",
-    "APPLICATION_AUTO_SCALING_POLICY",
     "CODESTAR_CONNECTION",
     "CODEPIPELINE",
     "CODEBUILD_PROJECT",
     "CODEDEPLOY_APP",
     "CODEDEPLOY_DEPLOYMENT_GROUP"
   ]);
+  if (!scalesToThree) {
+    forbiddenTypes.add("APPLICATION_AUTO_SCALING_TARGET");
+    forbiddenTypes.add("APPLICATION_AUTO_SCALING_POLICY");
+  }
   if (hasFact("excluded_capability", "database")) {
     forbiddenTypes.add("RDS");
     forbiddenTypes.add("RDS_CLUSTER");
@@ -4444,7 +6059,14 @@ function findStrictRepositoryEvidenceValidationIssues(
     forbiddenTypes.add("COGNITO_USER_POOL_CLIENT");
   }
 
-  const unexpectedTypes = [...forbiddenTypes].filter((resourceType) => nodeTypes.has(resourceType));
+  const unexpectedTypes = [...new Set(
+    architectureJson.nodes
+      .filter(
+        (node) =>
+          forbiddenTypes.has(node.type) && node.config.templateId !== request.templateId
+      )
+      .map((node) => node.type)
+  )];
   if (unexpectedTypes.length > 0) {
     issues.push(`Strict repository evidence contains unsupported inferred resources: ${unexpectedTypes.join(", ")}.`);
   }
@@ -4453,6 +6075,27 @@ function findStrictRepositoryEvidenceValidationIssues(
     const services = architectureJson.nodes.filter((node) => node.type === "ECS_SERVICE");
     if (services.length !== 1 || services[0]?.config.desiredCount !== 1) {
       issues.push("Strict repository evidence requires exactly one ECS service with desiredCount 1.");
+    }
+  }
+
+  if (scalesToThree) {
+    const services = architectureJson.nodes.filter((node) => node.type === "ECS_SERVICE");
+    const targets = architectureJson.nodes.filter(
+      (node) => node.type === "APPLICATION_AUTO_SCALING_TARGET"
+    );
+    const policies = architectureJson.nodes.filter(
+      (node) => node.type === "APPLICATION_AUTO_SCALING_POLICY"
+    );
+    if (services.length !== 1 || services[0]?.config.desiredCount !== 1) {
+      issues.push("Strict repository evidence requires one ECS service starting at desiredCount 1.");
+    }
+    if (
+      targets.length !== 1 ||
+      targets[0]?.config.minCapacity !== 1 ||
+      targets[0]?.config.maxCapacity !== 3 ||
+      policies.length !== 1
+    ) {
+      issues.push("Strict repository evidence requires ECS Service Auto Scaling capacity 1–3.");
     }
   }
 
@@ -5178,20 +6821,24 @@ function findRuntimeTopologyValidationIssues(
 
 function findExplicitResourceTypeValidationIssues(
   normalizedPrompt: string,
-  architectureJson: ArchitectureJson
+  architectureJson: ArchitectureJson,
+  excludedResourceTypes: ReadonlySet<ResourceType> = new Set<ResourceType>()
 ): string[] {
   const requestedResourceTypes = findExplicitResourceTypesInPrompt(normalizedPrompt).filter(
     (resourceType) =>
-      !explicitlyForbidsEc2Runtime(normalizedPrompt) ||
-      ![
-        "EC2",
-        "AMI",
-        "IAM_INSTANCE_PROFILE",
-        "LAUNCH_TEMPLATE",
-        "AUTO_SCALING_GROUP",
-        "AUTO_SCALING_POLICY",
-        "ECS_CAPACITY_PROVIDER"
-      ].includes(resourceType)
+      !excludedResourceTypes.has(resourceType)
+      && (
+        !explicitlyForbidsEc2Runtime(normalizedPrompt)
+        || ![
+          "EC2",
+          "AMI",
+          "IAM_INSTANCE_PROFILE",
+          "LAUNCH_TEMPLATE",
+          "AUTO_SCALING_GROUP",
+          "AUTO_SCALING_POLICY",
+          "ECS_CAPACITY_PROVIDER"
+        ].includes(resourceType)
+      )
   );
   const actualResourceTypes = new Set(architectureJson.nodes.map((node) => node.type));
   const missingResourceTypes = requestedResourceTypes.filter((resourceType) => !actualResourceTypes.has(resourceType));
@@ -5207,8 +6854,13 @@ function findExplicitResourceTypeValidationIssues(
 
 function findRequestedResourceQuantityValidationIssues(
   normalizedPrompt: string,
-  architectureJson: ArchitectureJson
+  architectureJson: ArchitectureJson,
+  excludedResourceTypes: ReadonlySet<ResourceType> = new Set<ResourceType>()
 ): string[] {
+  if (excludedResourceTypes.has("EC2")) {
+    return [];
+  }
+
   const requestedQuantities = resolveArchitectureResourceQuantities(normalizedPrompt);
   const ec2NodeCount = architectureJson.nodes.filter((node) => node.type === "EC2").length;
 
@@ -8105,7 +9757,13 @@ function connectCanonicalPatternTopologies(
     connect("API_GATEWAY_DEPLOYMENT", "API_GATEWAY_STAGE", "publishes");
     connect("IAM_ROLE", "LAMBDA", "authorizes");
     connect("LAMBDA", "CLOUDWATCH_LOG_GROUP", "logs");
-    connect("LAMBDA", "S3", "image upload objects");
+    const lambda = nodesByType.get("LAMBDA")?.[0];
+    const uploadBucket = (nodesByType.get("S3") ?? []).find(
+      (node) => node.config.bucketPurpose === "user_uploads"
+    );
+    if (lambda !== undefined && uploadBucket !== undefined) {
+      connectIds(lambda.id, uploadBucket.id, "stores upload objects");
+    }
   }
 
   if (patternIds.includes("spa-cloudfront-s3")) {
@@ -8197,7 +9855,13 @@ function connectCanonicalPatternTopologies(
     }
   }
 
-  connect("S3", "LAMBDA", "object event");
+  const uploadEventBucket = (nodesByType.get("S3") ?? []).find(
+    (node) => node.config.bucketPurpose === "user_uploads"
+  );
+  const uploadEventLambda = nodesByType.get("LAMBDA")?.[0];
+  if (uploadEventBucket !== undefined && uploadEventLambda !== undefined) {
+    connectIds(uploadEventBucket.id, uploadEventLambda.id, "object event");
+  }
   connect("LAMBDA", "SQS_QUEUE", "enqueues");
   connect("LAMBDA", "DYNAMODB_TABLE", "writes");
   connect("SQS_QUEUE", "ECS_SERVICE", "work queue");
@@ -8333,6 +9997,11 @@ function explicitlyForbidsEc2Runtime(normalizedPrompt: string): boolean {
   return hasPromptTerm(normalizedPrompt, [
     "without ec2",
     "no ec2",
+    "do not use ec2",
+    "don't use ec2",
+    "not using ec2",
+    "exclude ec2",
+    "omit ec2",
     "no ec2 capacity",
     "ec2 excluded",
     "ec2 is excluded",
@@ -8340,7 +10009,12 @@ function explicitlyForbidsEc2Runtime(normalizedPrompt: string): boolean {
     "serverless runtime",
     "lambda only",
     "ec2 없이",
+    "ec2 사용 안",
+    "ec2 안 씀",
+    "ec2 안씀",
+    "ec2 쓰지 않",
     "ec2는 사용하지 않",
+    "ec2 필요 없",
     "ec2는 필요 없",
     "ec2 제외"
   ]);
@@ -8351,22 +10025,66 @@ function resolveTrafficProfile(normalizedPrompt: string): ArchitectureAnswerProf
     return "bursty";
   }
 
-  if (/(large\s+traffic|10,?000|500\+|대규모|일\s*10,?000|동시\s*500)/iu.test(normalizedPrompt)) {
-    return "large";
-  }
+  if (/(large\s+traffic|대규모)/iu.test(normalizedPrompt)) return "large";
+  if (/(medium\s+traffic|중간\s*규모)/iu.test(normalizedPrompt)) return "medium";
+  if (/(small\s+traffic|소규모)/iu.test(normalizedPrompt)) return "small";
 
-  if (/(medium\s+traffic|1,?000|concurrent\s+50|중간\s*규모|일\s*1,?000|동시\s*50|동접자?\s*1000)/iu.test(normalizedPrompt)) {
-    return "medium";
-  }
+  const explicitTrafficProfile = resolveExplicitTrafficProfile(normalizedPrompt);
+  if (explicitTrafficProfile !== undefined) return explicitTrafficProfile;
 
-  if (/(small\s+traffic|under\s+10|100명\s*미만|소규모|동시\s*10명\s*미만)/iu.test(normalizedPrompt)) {
-    return "small";
-  }
+  if (/(10,?000|500\+|일\s*10,?000|동시\s*500)/iu.test(normalizedPrompt)) return "large";
+  if (/(1,?000|concurrent\s+50|일\s*1,?000|동시\s*50|동접자?\s*1000)/iu.test(normalizedPrompt)) return "medium";
+  if (/(under\s+10|100명\s*미만|동시\s*10명\s*미만)/iu.test(normalizedPrompt)) return "small";
 
   return undefined;
 }
 
+function resolveExplicitTrafficProfile(
+  value: string
+): Exclude<ArchitectureAnswerProfile["traffic"], "bursty" | undefined> | undefined {
+  const dailyCount = extractTrafficCount(
+    value,
+    /(?:일일|하루|daily|일(?=\s*\d))[^\d]{0,20}(\d[\d,]*)(?:\s*명)?(?:\s*(미만|이하|이상|\+))?/iu
+  );
+  const concurrentCount = extractTrafficCount(
+    value,
+    /(?:동시|동접|concurrent)[^\d]{0,20}(\d[\d,]*)(?:\s*명)?(?:\s*(미만|이하|이상|\+))?/iu
+  );
+  const profiles = [
+    dailyCount === undefined ? undefined : classifyTrafficCount(dailyCount, 100, 10_000),
+    concurrentCount === undefined ? undefined : classifyTrafficCount(concurrentCount, 10, 500)
+  ].filter((profile): profile is "small" | "medium" | "large" => profile !== undefined);
+
+  if (profiles.includes("large")) return "large";
+  if (profiles.includes("medium")) return "medium";
+  return profiles.includes("small") ? "small" : undefined;
+}
+
+function extractTrafficCount(value: string, pattern: RegExp): number | undefined {
+  const match = value.match(pattern);
+  const countText = match?.[1];
+  if (countText === undefined) return undefined;
+  const count = Number(countText.replaceAll(",", ""));
+  if (!Number.isFinite(count)) return undefined;
+  return match?.[2] === "미만" || match?.[2] === "이하" ? Math.max(0, count - 1) : count;
+}
+
+function classifyTrafficCount(
+  count: number,
+  smallUpperBound: number,
+  largeLowerBound: number
+): "small" | "medium" | "large" {
+  if (count < smallUpperBound) return "small";
+  return count < largeLowerBound ? "medium" : "large";
+}
+
 function resolveFrontendProfile(normalizedPrompt: string): ArchitectureAnswerProfile["frontend"] {
+  const stackCategory = resolveArchitectureTechnologyStackCategory("frontend", normalizedPrompt);
+  if (stackCategory === "frontend_mobile") return "mobile";
+  if (stackCategory === "frontend_ssr") return "ssr";
+  if (stackCategory === "frontend_spa") return "spa";
+  if (stackCategory === "frontend_static") return "static";
+
   if (isMobileAppPrompt(normalizedPrompt)) {
     return "mobile";
   }
@@ -8390,6 +10108,11 @@ function resolveBackendProfile(normalizedPrompt: string): ArchitectureAnswerProf
   if (requiresNoBackend(normalizedPrompt)) {
     return "none";
   }
+
+  const stackCategory = resolveArchitectureTechnologyStackCategory("backend", normalizedPrompt);
+  if (stackCategory === "backend_microservices") return "microservices";
+  if (stackCategory === "backend_complex") return "complex";
+  if (stackCategory === "backend_simple_api") return "simple_api";
 
   if (/(microservice|마이크로서비스)/iu.test(normalizedPrompt)) {
     return "microservices";
@@ -8423,7 +10146,7 @@ function resolveRegionProfile(normalizedPrompt: string): ArchitectureAnswerProfi
     return "global";
   }
 
-  if (/(asia\s*pacific|apac|tokyo|singapore|아시아\s*태평양|도쿄|싱가포르)/iu.test(normalizedPrompt)) {
+  if (/(asia\s*pacific|apac|tokyo|singapore|hong\s*kong|아시아\s*태평양|도쿄|싱가포르|홍콩)/iu.test(normalizedPrompt)) {
     return "apac";
   }
 
@@ -8457,6 +10180,10 @@ function resolveUploadProfile(normalizedPrompt: string): ArchitectureAnswerProfi
 
   if (requiresImageUpload(normalizedPrompt)) {
     return "image";
+  }
+
+  if (/(?:file\s*upload|upload\s+files?|파일\s*업로드|업로드\s*기능|파일을\s*올|파일\s*첨부)/iu.test(normalizedPrompt)) {
+    return "mixed";
   }
 
   return undefined;
@@ -8563,6 +10290,14 @@ function resolveAvailabilityProfile(normalizedPrompt: string): ArchitectureAnswe
 }
 
 function resolveBudgetProfile(normalizedPrompt: string): ArchitectureAnswerProfile["budget"] {
+  const conversationalMonthlyBudgetManwon = resolveConversationalMonthlyBudgetManwon(normalizedPrompt);
+  if (conversationalMonthlyBudgetManwon !== undefined) {
+    if (conversationalMonthlyBudgetManwon < 10) return "low";
+    if (conversationalMonthlyBudgetManwon <= 50) return "normal";
+    if (conversationalMonthlyBudgetManwon < 200) return "high";
+    return "enterprise";
+  }
+
   if (hasLowMonthlyBudget(normalizedPrompt) || /(minimum\s+cost|very\s+low|10만원\s*미만|최소\s*비용)/iu.test(normalizedPrompt)) {
     return "low";
   }
@@ -8677,11 +10412,10 @@ function requiresGlobalDeploymentScopeDecision(normalizedPrompt: string): boolea
 }
 
 function hasRealtimeImplementationDecision(normalizedPrompt: string): boolean {
-  return /(websocket|web\s*socket|sse|server-sent\s*events|polling|api\s*gateway|\uC6F9\uC18C\uCF13|\uC5F0\uACB0\s*\uACBD\uB85C|\uD3F4\uB9C1)/iu.test(
+  return /(websocket|web\s*socket|sse|server-sent\s*events|polling|\uC6F9\uC18C\uCF13|\uC5F0\uACB0\s*\uACBD\uB85C|\uD3F4\uB9C1)/iu.test(
     normalizedPrompt
   );
 }
-
 type RealtimeTransport = "polling" | "sse" | "websocket";
 
 function requiresHttpsTransport(normalizedPrompt: string): boolean {
@@ -8817,7 +10551,8 @@ function requiresInferredSimpleBackend(normalizedPrompt: string): boolean {
 }
 
 function requiresSpaFrontend(normalizedPrompt: string): boolean {
-  return /(spa|single\s*page|react|vue|angular)/iu.test(normalizedPrompt);
+  return resolveArchitectureTechnologyStackCategory("frontend", normalizedPrompt) === "frontend_spa"
+    || /(spa|single\s*page|react|vue|angular)/iu.test(normalizedPrompt);
 }
 
 function requiresSsrFrontend(normalizedPrompt: string): boolean {
@@ -8831,7 +10566,8 @@ function requiresUploadStorage(normalizedPrompt: string): boolean {
 }
 
 function requiresComplexBackend(normalizedPrompt: string): boolean {
-  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
+  const stackCategory = resolveArchitectureTechnologyStackCategory("backend", normalizedPrompt);
+  return stackCategory === "backend_complex" || stackCategory === "backend_microservices" || /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
     normalizedPrompt
   );
 }
@@ -8964,7 +10700,8 @@ function hasExplicitDatabaseMarker(normalizedPrompt: string): boolean {
 }
 
 function hasExplicitComplexBackendMarker(normalizedPrompt: string): boolean {
-  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
+  const stackCategory = resolveArchitectureTechnologyStackCategory("backend", normalizedPrompt);
+  return stackCategory === "backend_complex" || stackCategory === "backend_microservices" || /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
     normalizedPrompt
   );
 }

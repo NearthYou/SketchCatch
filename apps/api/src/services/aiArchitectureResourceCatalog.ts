@@ -54,6 +54,57 @@ function createDeploymentConfig(terraformResourceType: string): Record<string, u
       return {
         name: "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
       };
+    case "aws_vpc":
+      return {
+        cidrBlock: "10.0.0.0/16",
+        enableDnsSupport: true,
+        enableDnsHostnames: true,
+        instanceTenancy: "default"
+      };
+    case "aws_subnet":
+      return {
+        vpcId: "aws_vpc.vpc_main.id",
+        cidrBlock: "10.0.1.0/24",
+        availabilityZone: "ap-northeast-2a",
+        mapPublicIpOnLaunch: false
+      };
+    case "aws_internet_gateway":
+      return {
+        vpcId: "aws_vpc.vpc_main.id"
+      };
+    case "aws_route_table":
+      return {
+        vpcId: "aws_vpc.vpc_main.id"
+      };
+    case "aws_route_table_association":
+      return {
+        subnetId: "aws_subnet.private_app_subnet_a.id",
+        routeTableId: "aws_route_table.route_table.id"
+      };
+    case "aws_nat_gateway":
+      return {
+        subnetId: "aws_subnet.private_app_subnet_a.id",
+        allocationId: "aws_eip.nat_elastic_ip.id"
+      };
+    case "aws_eip":
+      return {
+        domain: "vpc"
+      };
+    case "aws_security_group":
+      return {
+        name: "sketchcatch-security-group",
+        description: "Security group for the explicitly requested workload",
+        vpcId: "aws_vpc.vpc_main.id"
+      };
+    case "aws_security_group_rule":
+      return {
+        type: "ingress",
+        securityGroupId: "aws_security_group.security_group.id",
+        protocol: "tcp",
+        fromPort: 443,
+        toPort: 443,
+        cidrBlocks: ["10.0.0.0/16"]
+      };
     case "aws_codebuild_project":
       return {
         name: "sketchcatch-build",

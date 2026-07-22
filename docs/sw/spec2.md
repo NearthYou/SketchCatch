@@ -135,7 +135,10 @@ Direct Deployment와 Git/CI/CD가 공유하는 릴리즈 원장이다.
 - `web_push_subscriptions`: 사용자별 암호화된 Push subscription
 - Live Observation manifest/capability의 source of truth는 서버 저장소와 Runtime Cache 계약으로 유지
 
-기존 `liveProfile`은 nullable legacy 필드로 남긴다. `practice`는 `infrastructure`, 기존 demo web service 계열은 `ecs_fargate` 기반 프로젝트 타깃으로 backfill한다. migration은 expand, compatible code, backfill, contract 순서를 지킨다.
+`liveProfile`은 `demo_web_service | demo_web_service_with_rds` non-null 계약을 사용한다.
+`0054_remove_practice_live_profile.sql`은 기존 `practice` 행을 `demo_web_service`로
+backfill한 뒤 PostgreSQL enum에서 해당 값을 제거한다. `scope`, `targetKind`, `source`는
+`liveProfile`과 분리된 계약으로 유지하며 compatible code, backfill, contract 순서를 지킨다.
 
 ## API 계약
 

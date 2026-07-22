@@ -179,6 +179,7 @@ test("Live Observation v2 app composition exposes Store routes and removes legac
         async authorize() {
           return {
             audienceOrigin: "https://sketchcatch.example.com",
+            receipt: async () => ({ accepted: true, acceptedEventCount: 1 }),
             request: async () => ({ accepted: true, acceptedEventCount: 1 })
           };
         },
@@ -224,7 +225,10 @@ test("Live Observation v2 app composition exposes Store routes and removes legac
     url: `/api/deployments/${deploymentId}/live-observations`
   });
   assert.equal(created.statusCode, 201);
-  assert.equal(created.json().session.audienceUrl, `https://sketchcatch.example.com/observe/${observationId}`);
+  assert.equal(
+    created.json().session.audienceUrl,
+    `https://sketchcatch.example.com/observe/${observationId}`
+  );
 
   const bootstrap = await app.inject({
     method: "POST",
@@ -285,7 +289,7 @@ test("OPTIONS preflight allows notification read PATCH requests", async () => {
 
 test("OPTIONS preflight allows the configured public web origin", async () => {
   const previousPublicBaseUrl = process.env.SKETCHCATCH_PUBLIC_BASE_URL;
-  process.env.SKETCHCATCH_PUBLIC_BASE_URL = "http://127.0.0.1:3002";
+  process.env.SKETCHCATCH_PUBLIC_BASE_URL = "https://127.0.0.1:3002";
   const app = buildApp();
 
   try {
@@ -293,14 +297,14 @@ test("OPTIONS preflight allows the configured public web origin", async () => {
       headers: {
         "access-control-request-headers": "content-type,authorization",
         "access-control-request-method": "POST",
-        origin: "http://127.0.0.1:3002"
+        origin: "https://127.0.0.1:3002"
       },
       method: "OPTIONS",
       url: "/api/projects/11111111-1111-4111-8111-111111111111/source-repositories"
     });
 
     assert.equal(response.statusCode, 204);
-    assert.equal(response.headers["access-control-allow-origin"], "http://127.0.0.1:3002");
+    assert.equal(response.headers["access-control-allow-origin"], "https://127.0.0.1:3002");
     assert.equal(response.headers["access-control-allow-credentials"], "true");
   } finally {
     if (previousPublicBaseUrl === undefined) {
@@ -341,6 +345,33 @@ test("production 500 responses do not expose internal error messages", async () 
     } else {
       process.env.S3_BUCKET_NAME = previousS3BucketName;
     }
+    await app.close();
+  }
+});
+
+test("development 500 responses expose a masked root cause for developer diagnostics", async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "development";
+  const app = buildApp({
+    runtimeEnv: createLiveObservationRuntimeEnv({ nodeEnv: "development" })
+  });
+
+  app.get("/developer-boom", async () => {
+    throw new Error(
+      "CodeBuild role lookup failed: aws_secret_access_key=do-not-expose-this role=SketchCatchCodeBuild-demo"
+    );
+  });
+
+  try {
+    const response = await app.inject({ method: "GET", url: "/developer-boom" });
+
+    assert.equal(response.statusCode, 500);
+    assert.deepEqual(response.json(), {
+      error: "internal_server_error",
+      message: "CodeBuild role lookup failed: [REDACTED] role=SketchCatchCodeBuild-demo"
+    });
+  } finally {
+    process.env.NODE_ENV = previousNodeEnv;
     await app.close();
   }
 });
@@ -439,9 +470,7 @@ function assertErrorResponse(
   assert.equal(typeof body.message, "string");
 }
 
-function createLiveObservationRuntimeEnv(
-  overrides: Partial<RuntimeEnv> = {}
-): RuntimeEnv {
+function createLiveObservationRuntimeEnv(overrides: Partial<RuntimeEnv> = {}): RuntimeEnv {
   return {
     awsRegion: "ap-northeast-2",
     authTokenSecret: process.env.AUTH_TOKEN_SECRET,

@@ -55,9 +55,11 @@ const workerAccessContextSchema = z
 export type DeploymentWorkerOperationInput = {
   operation: DeploymentJobOperation;
   deploymentId: string;
+  workerTaskArn: string | null;
   accessContext: ProjectAccessContext;
   startedFromStatus: DeploymentStatus;
   startedFromFailureStage: DeploymentFailureStage | null;
+  abortSignal?: AbortSignal;
 };
 
 export type DeploymentWorkerOperationResult = {
@@ -117,14 +119,34 @@ export function requireDeploymentWorkerJobId(env: NodeJS.ProcessEnv): string {
 }
 
 export async function runDeploymentWorkerJob(
-  input: { jobId: string },
+  input: { jobId: string; abortSignal?: AbortSignal },
   jobRepository: DeploymentJobRepository,
-  runOperation: RunDeploymentWorkerOperation
+  runOperation: RunDeploymentWorkerOperation,
+  options: {
+    wait?: (milliseconds: number) => Promise<void>;
+    dispatchWaitAttempts?: number;
+  } = {}
 ): Promise<DeploymentJobRecord> {
-  const job = await jobRepository.findDeploymentJobById(input.jobId);
+  const wait =
+    options.wait ??
+    ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  const dispatchWaitAttempts = options.dispatchWaitAttempts ?? 50;
+  let job = await jobRepository.findDeploymentJobById(input.jobId);
 
   if (!job) {
     throw new DeploymentJobNotFoundError("Deployment worker job not found");
+  }
+
+  for (
+    let attempt = 1;
+    job.status === "DISPATCHING" && attempt < dispatchWaitAttempts;
+    attempt += 1
+  ) {
+    await wait(100);
+    job = await jobRepository.findDeploymentJobById(input.jobId);
+    if (!job) {
+      throw new DeploymentJobNotFoundError("Deployment worker job not found");
+    }
   }
 
   if (job.status !== "RUNNING") {
@@ -134,7 +156,7 @@ export async function runDeploymentWorkerJob(
   let operationInput: DeploymentWorkerOperationInput;
 
   try {
-    operationInput = createOperationInput(job);
+    operationInput = createOperationInput(job, input.abortSignal);
   } catch (error) {
     return failRunningJob(job, error, jobRepository);
   }
@@ -152,13 +174,19 @@ export async function runDeploymentWorkerJob(
 
 export function createDeploymentWorkerOperationRunner(
   deploymentRepository: DeploymentRepository,
-  services: DeploymentWorkerServices = defaultDeploymentWorkerServices
+  serviceOverrides: Partial<DeploymentWorkerServices> = {}
 ): RunDeploymentWorkerOperation {
+  const services: DeploymentWorkerServices = {
+    ...defaultDeploymentWorkerServices,
+    ...serviceOverrides
+  };
   return async (input) => {
     const commonInput = {
       deploymentId: input.deploymentId,
       accessContext: input.accessContext,
-      startedFromStatus: input.startedFromStatus
+      startedFromStatus: input.startedFromStatus,
+      ...(input.workerTaskArn ? { workerTaskArn: input.workerTaskArn } : {}),
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
     };
 
     let result: { deployment: DeploymentRecord };
@@ -202,7 +230,10 @@ export function createDeploymentWorkerOperationRunner(
   };
 }
 
-function createOperationInput(job: DeploymentJobRecord): DeploymentWorkerOperationInput {
+function createOperationInput(
+  job: DeploymentJobRecord,
+  abortSignal?: AbortSignal
+): DeploymentWorkerOperationInput {
   const accessContextResult = workerAccessContextSchema.safeParse(job.accessContext);
 
   if (!accessContextResult.success) {
@@ -218,9 +249,11 @@ function createOperationInput(job: DeploymentJobRecord): DeploymentWorkerOperati
   return {
     operation: job.operation,
     deploymentId: job.deploymentId,
+    workerTaskArn: job.ecsTaskArn,
     accessContext: accessContextResult.data,
     startedFromStatus: job.startedFromStatus,
-    startedFromFailureStage: job.startedFromFailureStage
+    startedFromFailureStage: job.startedFromFailureStage,
+    ...(abortSignal ? { abortSignal } : {})
   };
 }
 

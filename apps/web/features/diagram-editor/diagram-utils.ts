@@ -62,7 +62,38 @@ export function cloneDiagram(diagram: DiagramJson): DiagramJson {
 }
 
 export function areDiagramsEqual(first: DiagramJson, second: DiagramJson): boolean {
-  return JSON.stringify(first) === JSON.stringify(second);
+  return areDiagramValuesEqual(first, second);
+}
+
+function areDiagramValuesEqual(first: unknown, second: unknown): boolean {
+  if (Object.is(first, second)) {
+    return true;
+  }
+
+  if (typeof first !== "object" || first === null || typeof second !== "object" || second === null) {
+    return false;
+  }
+
+  if (Array.isArray(first) || Array.isArray(second)) {
+    return (
+      Array.isArray(first) &&
+      Array.isArray(second) &&
+      first.length === second.length &&
+      first.every((value, index) => areDiagramValuesEqual(value, second[index]))
+    );
+  }
+
+  const firstEntries = Object.entries(first);
+  const secondKeys = Object.keys(second);
+
+  return (
+    firstEntries.length === secondKeys.length &&
+    firstEntries.every(
+      ([key, value]) =>
+        Object.prototype.hasOwnProperty.call(second, key) &&
+        areDiagramValuesEqual(value, Reflect.get(second, key))
+    )
+  );
 }
 
 export function clearAuthoredRoutesForNodeIds(
@@ -346,6 +377,14 @@ export function removeEdgesFromDiagram(diagram: DiagramJson, edgeIds: readonly s
 }
 
 export function updateDiagramViewport(diagram: DiagramJson, viewport: DiagramJson["viewport"]): DiagramJson {
+  if (
+    diagram.viewport.x === viewport.x &&
+    diagram.viewport.y === viewport.y &&
+    diagram.viewport.zoom === viewport.zoom
+  ) {
+    return diagram;
+  }
+
   return {
     ...diagram,
     viewport: { ...viewport }

@@ -151,9 +151,7 @@ test("reconcileDeploymentStartup fails stale dispatch jobs without task ARNs", a
     },
     jobs,
     deployments,
-    async () => {
-      throw new Error("Task inspection should not run without an ARN");
-    }
+    async () => ({ state: "MISSING", lastStatus: null })
   );
 
   assert.equal(jobs.failedJobs.length, 1);
@@ -161,6 +159,28 @@ test("reconcileDeploymentStartup fails stale dispatch jobs without task ARNs", a
   assert.deepEqual(deployments.excludedDeploymentIds, []);
   assert.equal(result.failedJobCount, 1);
   assert.equal(result.recoveredDeploymentCount, 1);
+});
+
+test("reconcileDeploymentStartup preserves a worker discovered by startedBy after ARN persistence was interrupted", async () => {
+  const jobs = new FakeStartupJobStore([
+    createJob({
+      status: "DISPATCHING",
+      ecsTaskArn: null,
+      updatedAt: new Date("2026-07-10T00:00:00.000Z")
+    })
+  ]);
+  const deployments = new FakeInterruptedDeploymentStore();
+
+  const result = await reconcileDeploymentStartup(
+    { workerMode: "ecs", now, dispatchGracePeriodMs: 5 * 60_000 },
+    jobs,
+    deployments,
+    async () => ({ state: "ACTIVE", lastStatus: "RUNNING" })
+  );
+
+  assert.equal(jobs.failedJobs.length, 0);
+  assert.deepEqual(deployments.excludedDeploymentIds, [deploymentId]);
+  assert.equal(result.activeDeploymentCount, 1);
 });
 
 test("reconcileDeploymentStartup preserves recent queued jobs during the dispatch grace period", async () => {
@@ -244,6 +264,32 @@ test("reconcileDeploymentStartup keeps the existing in-process recovery behavior
 
   assert.deepEqual(deployments.excludedDeploymentIds, []);
   assert.equal(jobs.listCalls, 0);
+  assert.equal(result.recoveredDeploymentCount, 1);
+});
+
+test("reconcileDeploymentStartup recovers interrupted application release before generic failure", async () => {
+  const jobs = new FakeStartupJobStore([createJob()]);
+  const deployments = new FakeInterruptedDeploymentStore();
+  const recoveryCalls: string[][] = [];
+
+  const result = await reconcileDeploymentStartup(
+    {
+      workerMode: "ecs",
+      now,
+      dispatchGracePeriodMs: 5 * 60_000
+    },
+    jobs,
+    deployments,
+    async () => ({ state: "STOPPED", lastStatus: "STOPPED" }),
+    undefined,
+    async ({ excludeDeploymentIds }) => {
+      recoveryCalls.push([...excludeDeploymentIds]);
+      return { recoveredDeploymentIds: [deploymentId], retryDeploymentIds: [] };
+    }
+  );
+
+  assert.deepEqual(recoveryCalls, [[]]);
+  assert.deepEqual(deployments.excludedDeploymentIds, [deploymentId]);
   assert.equal(result.recoveredDeploymentCount, 1);
 });
 

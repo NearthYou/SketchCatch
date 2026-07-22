@@ -1,0 +1,78 @@
+.moduleCatalogCard {
+  display: grid;
+  gap: 0 !important;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.moduleCatalogThumbnail {
+  border-bottom: 1px solid var(--workspace-line);
+}
+
+.moduleCatalogContent {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.moduleCatalogCopy {
+  display: grid;
+  gap: 4px;
+}
+
+.moduleCatalogCopy h3 {
+  color: var(--workspace-text);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  line-height: 1.35;
+  margin: 0;
+}
+
+.moduleCatalogResourceSummary strong {
+  color: var(--workspace-text);
+  font-size: calc(10px + var(--presentation-font-size-increase));
+  line-height: 1.35;
+  margin: 0;
+}
+
+.moduleCatalogCopy p {
+  color: var(--workspace-muted);
+  font-size: calc(9px + var(--presentation-font-size-increase));
+  line-height: 1.45;
+  margin: 0;
+}
+
+.moduleCatalogMetadata,
+.moduleCatalogResourceSummary p {
+  color: var(--workspace-muted);
+  font-size: calc(6px + var(--presentation-font-size-increase));
+  line-height: 1.45;
+  margin: 0;
+}
+
+.moduleCatalogMetadata {
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.moduleCatalogResourceSummary {
+  display: grid;
+  gap: 3px;
+}
+
+.moduleCatalogAddButton {
+  background: var(--workspace-text);
+  border: 0;
+  border-radius: 6px;
+  color: var(--workspace-surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  min-height: 36px;
+  width: 100%;
+}
+
+.moduleCatalogAddButton:hover,
+.moduleCatalogAddButton:focus-visible {
+  background: var(--workspace-accent);
+  outline: none;
+}

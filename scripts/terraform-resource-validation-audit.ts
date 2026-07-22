@@ -31,15 +31,28 @@ async function main(): Promise<void> {
 
   if (options.format === "json") {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-    return;
+  } else {
+    process.stdout.write(`${renderTerraformResourceValidationAuditMarkdown(report)}\n`);
   }
 
-  process.stdout.write(`${renderTerraformResourceValidationAuditMarkdown(report)}\n`);
+  const failures = report.results.filter(
+    ({ status }) =>
+      status !== "validate_passed" &&
+      status !== "excluded_area_node" &&
+      status !== "excluded_data_source"
+  );
+
+  if (failures.length > 0) {
+    process.stderr.write(
+      `[terraform:audit:validate] ${failures.length} of ${report.results.length} candidates failed Terraform validation.\n`
+    );
+    process.exitCode = 1;
+  }
 }
 
 function parseCliOptions(args: readonly string[]): CliOptions {
   let format: CliOptions["format"] = "markdown";
-  let includeDataSources = false;
+  let includeDataSources = true;
   let keepWorkdir = false;
   let providerVersion: string | undefined;
   let terraformBinary: string | undefined;
@@ -52,6 +65,11 @@ function parseCliOptions(args: readonly string[]): CliOptions {
 
     if (arg === "--include-data-sources") {
       includeDataSources = true;
+      continue;
+    }
+
+    if (arg === "--exclude-data-sources") {
+      includeDataSources = false;
       continue;
     }
 

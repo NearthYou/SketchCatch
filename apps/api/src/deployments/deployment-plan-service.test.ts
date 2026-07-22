@@ -22,17 +22,25 @@ import {
 import { runDeploymentPlan } from "./deployment-plan-service.js";
 import { analyzePreDeploymentCheck } from "../services/aiPreDeploymentCheck.js";
 import { createCachedTerraformSecurityScanner } from "../services/terraform/trivy-terraform-scan.js";
+import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
 import type {
   DeploymentPlanArtifactStorage,
   UploadDeploymentPlanArtifactInput,
   UploadedDeploymentPlanArtifact
 } from "./deployment-plan-artifact-storage.js";
-import { terraformMutationTimeoutMs } from "./terraform-runner.js";
+import { terraformInitTimeoutMs, terraformMutationTimeoutMs } from "./terraform-runner.js";
+import { DirectApplicationReleaseError } from "./direct-application-release-service.js";
+import type {
+  ProjectExecutionLeaseRecord,
+  ProjectExecutionLeaseRepository
+} from "../releases/project-execution-lease-service.js";
 import {
   createDeploymentPlanOptimizationEvidence,
   createTerraformDesiredStateIdentity,
   type DeploymentPlanOptimizationEvidence
 } from "./deployment-optimization.js";
+
+delete process.env.S3_BUCKET_NAME;
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -42,10 +50,11 @@ const awsConnectionId = "77777777-7777-4777-8777-777777777777";
 const userId = "55555555-5555-4555-8555-555555555555";
 const planArtifactId = "99999999-9999-4999-8999-999999999999";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
-const terraformArtifactContent = "terraform { required_version = \">= 1.6.0\" }\n";
+const terraformArtifactContent = 'terraform { required_version = ">= 1.6.0" }\n';
 const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 
 class FakeDeploymentRepository implements DeploymentRepository {
+  readonly activeStages: Array<NonNullable<DeploymentRecord["activeStage"]>> = [];
   readonly savedPlans: SaveDeploymentPlanInput[] = [];
   readonly failedDeployments: Array<{
     deploymentId: string;
@@ -58,6 +67,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   terraformArtifact: TerraformArtifactRecord | undefined = createTerraformArtifactRecord();
   planArtifact: DeploymentPlanArtifactRecord | undefined = createDeploymentPlanArtifactRecord();
   awsConnection: AwsConnection | undefined = createVerifiedAwsConnection();
+  relatedDeployments: DeploymentRecord[] = [];
   logs: DeploymentLogRecord[] = [];
   throwOnSaveDeploymentPlan = false;
   readonly accessibleUserIds = new Set([userId]);
@@ -121,11 +131,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 
   async findDeploymentById(candidateDeploymentId: string) {
-    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
-      return undefined;
-    }
-
-    return this.deployment;
+    return this.deployment?.id === candidateDeploymentId
+      ? this.deployment
+      : this.relatedDeployments.find((deployment) => deployment.id === candidateDeploymentId);
   }
 
   async findDeploymentPlanArtifactById(
@@ -139,7 +147,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
-    return this.deployment ? [this.deployment] : [];
+    return this.deployment
+      ? [this.deployment, ...this.relatedDeployments]
+      : this.relatedDeployments;
   }
 
   updateDeploymentStatus: DeploymentRepository["updateDeploymentStatus"] = async (
@@ -228,6 +238,16 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  async markDeploymentActiveStage(
+    candidateDeploymentId: string,
+    activeStage: NonNullable<DeploymentRecord["activeStage"]>
+  ) {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) return undefined;
+    this.activeStages.push(activeStage);
+    this.deployment = { ...this.deployment, activeStage, updatedAt: fixedNow };
+    return this.deployment;
+  }
+
   markDeploymentInitSucceeded: DeploymentRepository["markDeploymentInitSucceeded"] = async () =>
     this.deployment;
 
@@ -274,7 +294,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
   approveDeployment: DeploymentRepository["approveDeployment"] = async () => this.deployment;
 
-  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+  saveDeploymentApplyResults: DeploymentRepository["saveDeploymentApplyResults"] = async (
     candidateDeploymentId,
     input
   ) => {
@@ -284,9 +304,24 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     this.deployment = {
       ...this.deployment,
-      status: "SUCCESS",
       stateObjectKey: input.stateObjectKey,
       resultWarningSummary: input.resultWarningSummary,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "SUCCESS",
       failureStage: null,
       errorSummary: null,
       updatedAt: fixedNow
@@ -416,6 +451,15 @@ class FakeDeploymentRepository implements DeploymentRepository {
 class FakePlanArtifactStorage implements DeploymentPlanArtifactStorage {
   readonly uploads: UploadDeploymentPlanArtifactInput[] = [];
   readonly deletes: string[] = [];
+  readonly downloadedStates: Array<{ deploymentId: string; objectKey: string }> = [];
+
+  async downloadDeploymentState(input: {
+    deploymentId: string;
+    objectKey: string;
+  }): Promise<Buffer> {
+    this.downloadedStates.push(input);
+    return Buffer.from('{"version":4,"serial":7}');
+  }
   readonly optimizationEvidenceUploads: DeploymentPlanOptimizationEvidence[] = [];
   planContent = Buffer.from("reusable tfplan");
   uploadedPlanSha256 = "0".repeat(64);
@@ -456,6 +500,73 @@ class FakePlanArtifactStorage implements DeploymentPlanArtifactStorage {
   }
 }
 
+function createPlanLeaseRepository(options: { failHeartbeatAt: number }): {
+  repository: ProjectExecutionLeaseRepository;
+  readonly releases: number;
+} {
+  let record: ProjectExecutionLeaseRecord | undefined;
+  let heartbeatCount = 0;
+  let releases = 0;
+  const repository: ProjectExecutionLeaseRepository = {
+    async acquire(input) {
+      record = {
+        projectId: input.projectId,
+        holderId: input.holderId,
+        source: input.source,
+        fencingVersion: 1,
+        status: "active",
+        activeCodeBuildId: null,
+        activeWorkerTaskArn: null,
+        heartbeatAt: input.now,
+        expiresAt: input.expiresAt,
+        createdAt: input.now,
+        updatedAt: input.now
+      };
+      return record;
+    },
+    async find() {
+      return record;
+    },
+    async heartbeat(input) {
+      heartbeatCount += 1;
+      if (heartbeatCount >= options.failHeartbeatAt || !record) return undefined;
+      record = {
+        ...record,
+        heartbeatAt: input.now,
+        expiresAt: input.expiresAt,
+        updatedAt: input.now
+      };
+      return record;
+    },
+    async setExecutionCoordinates(input) {
+      if (!record) return undefined;
+      record = {
+        ...record,
+        ...(input.activeCodeBuildId === undefined
+          ? {}
+          : { activeCodeBuildId: input.activeCodeBuildId }),
+        ...(input.activeWorkerTaskArn === undefined
+          ? {}
+          : { activeWorkerTaskArn: input.activeWorkerTaskArn }),
+        updatedAt: input.now
+      };
+      return record;
+    },
+    async release(input) {
+      if (!record || input.fencingVersion !== record.fencingVersion) return false;
+      releases += 1;
+      record = { ...record, status: "released", updatedAt: input.now };
+      return true;
+    }
+  };
+  return {
+    repository,
+    get releases() {
+      return releases;
+    }
+  };
+}
+
 function createDeploymentRecord(
   id = deploymentId,
   overrides: Partial<DeploymentRecord> = {}
@@ -465,12 +576,19 @@ function createDeploymentRecord(
     projectId,
     architectureId,
     terraformArtifactId,
+    preparationKey: null,
     awsConnectionId,
-    liveProfile: "practice",
+    awsAccountIdSnapshot: "123456789012",
+    awsRegionSnapshot: "ap-northeast-2",
+    awsConnectionNameSnapshot: "123456789012",
+    liveProfile: "demo_web_service",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",
     releaseId: null,
+    releaseCandidateId: null,
+    rollbackOfDeploymentId: null,
+    rollbackTargetDeploymentId: null,
     preparedDraftRevision: null,
     preparedSnapshotHash: null,
     currentPlanArtifactId: null,
@@ -504,6 +622,128 @@ function createDeploymentRecord(
   };
 }
 
+test("infrastructure rollback plan restores the current state while planning the previous configuration", async () => {
+  const sourceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const targetId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    rollbackOfDeploymentId: sourceId,
+    rollbackTargetDeploymentId: targetId,
+    createdAt: new Date("2026-07-15T12:00:00.000Z")
+  });
+  repository.relatedDeployments = [
+    createDeploymentRecord(sourceId, {
+      status: "FAILED",
+      stateObjectKey: `deployments/${sourceId}/state/terraform.tfstate`,
+      createdAt: new Date("2026-07-15T11:00:00.000Z")
+    }),
+    createDeploymentRecord(targetId, {
+      status: "SUCCESS",
+      stateObjectKey: `deployments/${targetId}/state/terraform.tfstate`,
+      createdAt: new Date("2026-07-15T10:00:00.000Z")
+    })
+  ];
+  const stateWrites: Array<{ filePath: string; content: Buffer }> = [];
+  const stateDownloads: Array<{ deploymentId: string; objectKey: string }> = [];
+
+  const result = await runDeploymentPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage: new FakePlanArtifactStorage(),
+      rollbackStateStorage: {
+        async downloadDeploymentState(input) {
+          stateDownloads.push(input);
+          return Buffer.from('{"lineage":"current"}');
+        }
+      },
+      writeTerraformStateFile: async (filePath, content) => {
+        stateWrites.push({ filePath, content: Buffer.from(content) });
+      },
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-rollback-plan",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-rollback-plan/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformPlan: async () => createRunnerResult("plan"),
+      runTerraformShowJson: async () => createRunnerResult("show", { stdout: createPlanJson([]) })
+    }
+  );
+
+  assert.equal(result.deployment.status, "PENDING");
+  assert.deepEqual(stateDownloads, [
+    {
+      deploymentId: sourceId,
+      objectKey: `deployments/${sourceId}/state/terraform.tfstate`
+    }
+  ]);
+  assert.equal(stateWrites[0]?.filePath.endsWith("terraform.tfstate"), true);
+  assert.equal(stateWrites[0]?.content.toString("utf8"), '{"lineage":"current"}');
+});
+
+test("a new redeployment plan restores and records the latest project state baseline", async () => {
+  const previousDeploymentId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const previousStateObjectKey = `deployments/${previousDeploymentId}/state/terraform.tfstate`;
+  const previousState = Buffer.from('{"version":4,"lineage":"lineage-before-redeploy","serial":7}');
+  const repository = new FakeDeploymentRepository();
+  repository.relatedDeployments = [
+    createDeploymentRecord(previousDeploymentId, {
+      status: "SUCCESS",
+      stateObjectKey: previousStateObjectKey,
+      createdAt: new Date("2025-12-31T00:00:00.000Z")
+    })
+  ];
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  planArtifactStorage.downloadDeploymentState = async (input) => {
+    planArtifactStorage.downloadedStates.push(input);
+    return previousState;
+  };
+  const stateWrites: Buffer[] = [];
+
+  const result = await runDeploymentPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage,
+      writeTerraformStateFile: async (_filePath, content) => {
+        stateWrites.push(Buffer.from(content));
+      },
+      readTerraformStateFile: async () => previousState,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-redeployment-plan",
+        mainFilePath: "C:/tmp/sketchcatch-redeployment-plan/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformPlan: async () => createRunnerResult("plan"),
+      runTerraformShowJson: async () => createRunnerResult("show", { stdout: createPlanJson([]) })
+    }
+  );
+
+  assert.equal(result.deployment.status, "PENDING");
+  assert.deepEqual(planArtifactStorage.downloadedStates, [
+    { deploymentId: previousDeploymentId, objectKey: previousStateObjectKey }
+  ]);
+  assert.equal(stateWrites[0]?.equals(previousState), true);
+  const savedPlanArtifact = repository.savedPlans[0]?.planArtifact as unknown as
+    | Record<string, unknown>
+    | undefined;
+  assert.equal(savedPlanArtifact?.stateBaselineDeploymentId, previousDeploymentId);
+  assert.equal(savedPlanArtifact?.stateObjectKey, previousStateObjectKey);
+  assert.equal(savedPlanArtifact?.stateSerial, 7);
+});
+
 function createDeploymentPlanArtifactRecord(
   overrides: Partial<DeploymentPlanArtifactRecord> = {}
 ): DeploymentPlanArtifactRecord {
@@ -517,6 +757,10 @@ function createDeploymentPlanArtifactRecord(
     sha256: "0".repeat(64),
     accountId: "123456789012",
     region: "ap-northeast-2",
+    stateBaselineDeploymentId: null,
+    stateObjectKey: null,
+    stateLineageSha256: null,
+    stateSerial: null,
     createdAt: fixedNow,
     ...overrides
   };
@@ -551,6 +795,8 @@ function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRec
     userId,
     name: "Test Project",
     description: null,
+    deletionStartedAt: null,
+    deletionErrorSummary: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides
@@ -703,6 +949,9 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
       planArtifactStorage,
       readTerraformArtifactFile: async () => planTerraformArtifactContent,
       analyzePreDeployment: () => createAnalysis(),
+      prepareBuildEnvironment: async () => {
+        runnerStages.push("build-environment");
+      },
       prepareApplicationArtifact: async () => {
         runnerStages.push("application-artifact");
         return {
@@ -730,9 +979,18 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
         };
       },
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
-      runTerraformInit: async () => {
+      runTerraformInit: async (_workdir, options) => {
+        assert.equal(options?.timeoutMs, terraformInitTimeoutMs);
         runnerStages.push("init");
-        return createRunnerResult("init");
+        assert.ok(options?.onOutputLine);
+        const initLines = ["init 1", "init 2", "init 3", "init 4", "init 5"];
+
+        for (const line of initLines) {
+          await options.onOutputLine({ line, stream: "stdout" });
+        }
+
+        assert(repository.logs.some((log) => log.message === "init 5"));
+        return createRunnerResult("init", { stdout: `${initLines.join("\n")}\n` });
       },
       runTerraformPlan: async (_workdir, options) => {
         assert.equal(options?.timeoutMs, terraformMutationTimeoutMs);
@@ -759,7 +1017,14 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
     }
   );
 
-  assert.deepEqual(runnerStages, ["application-artifact", "init", "plan", "show-json"]);
+  assert.deepEqual(runnerStages, [
+    "build-environment",
+    "application-artifact",
+    "init",
+    "plan",
+    "show-json"
+  ]);
+  assert.deepEqual(repository.activeStages, ["preflight", "plan"]);
   assert.equal(cleanupCalled, true);
   assert.equal(result.deployment.status, "PENDING");
   assert.equal(result.deployment.currentPlanArtifactId, planArtifactId);
@@ -802,12 +1067,14 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
     objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
     sha256: "0".repeat(64),
     accountId: "123456789012",
-    region: "ap-northeast-2"
+    region: "ap-northeast-2",
+    stateBaselineDeploymentId: null,
+    stateObjectKey: null,
+    stateLineageSha256: null,
+    stateSerial: null
   });
   assert.equal(planArtifactStorage.uploads[0]?.planFilePath.endsWith("tfplan"), true);
-  const nonDurationLogs = repository.logs.filter(
-    (log) => !log.message.startsWith("[duration]")
-  );
+  const nonDurationLogs = repository.logs.filter((log) => !log.message.startsWith("[duration]"));
   assert.deepEqual(
     nonDurationLogs
       .filter((log) => !log.message.startsWith("[optimization]"))
@@ -817,7 +1084,11 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
         message: log.message
       })),
     [
-      { stage: "init", level: "INFO", message: "init ok" },
+      { stage: "init", level: "INFO", message: "init 1" },
+      { stage: "init", level: "INFO", message: "init 2" },
+      { stage: "init", level: "INFO", message: "init 3" },
+      { stage: "init", level: "INFO", message: "init 4" },
+      { stage: "init", level: "INFO", message: "init 5" },
       {
         stage: "plan",
         level: "INFO",
@@ -829,8 +1100,7 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
   assert(
     nonDurationLogs.some(
       (log) =>
-        log.message ===
-        "[optimization] event=plan_decision outcome=execute reason=cache_miss"
+        log.message === "[optimization] event=plan_decision outcome=execute reason=cache_miss"
     )
   );
   assert(
@@ -856,7 +1126,42 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
       log.message.startsWith("[duration] deployment plan save completed in ")
     )
   );
-  assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
+  assert.equal(
+    repository.logs.some((log) => log.message.includes("resource_changes")),
+    false
+  );
+});
+
+test("runDeploymentPlan records application preflight failures separately from Terraform plan failures", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  let terraformWorkspacePrepared = false;
+
+  await assert.rejects(
+    runDeploymentPlan({ deploymentId, accessContext: createAccessContext() }, repository, {
+      prepareApplicationArtifact: async () => {
+        throw new DirectApplicationReleaseError(
+          "The frontend production build failed",
+          "PREFLIGHT_FRONTEND_BUILD_FAILED"
+        );
+      },
+      prepareTerraformWorkspace: async () => {
+        terraformWorkspacePrepared = true;
+        throw new Error("Terraform must not start after a failed preflight");
+      }
+    }),
+    (error) =>
+      error instanceof DirectApplicationReleaseError &&
+      error.code === "PREFLIGHT_FRONTEND_BUILD_FAILED"
+  );
+
+  assert.equal(terraformWorkspacePrepared, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "preflight");
+  assert.match(repository.deployment?.errorSummary ?? "", /frontend production build/i);
 });
 
 test("runDeploymentPlan cleans a prepared workspace when a parallel prerequisite fails", async () => {
@@ -869,10 +1174,7 @@ test("runDeploymentPlan cleans a prepared workspace when a parallel prerequisite
 
   await assert.rejects(
     () =>
-      runDeploymentPlan(
-        { deploymentId, accessContext: createAccessContext() },
-        repository,
-        {
+      runDeploymentPlan({ deploymentId, accessContext: createAccessContext() }, repository, {
           planArtifactStorage: new FakePlanArtifactStorage(),
           prepareTerraformWorkspace: async () => {
             await new Promise<void>((resolve) => setImmediate(resolve));
@@ -885,8 +1187,7 @@ test("runDeploymentPlan cleans a prepared workspace when a parallel prerequisite
               }
             };
           }
-        }
-      ),
+      }),
     /connection lookup failed/
   );
 
@@ -952,6 +1253,7 @@ test("application scope writes an immutable release approval plan without runnin
   });
   assert.equal(result.terraform.init, null);
   assert.equal(result.terraform.plan, null);
+  assert.deepEqual(repository.activeStages, ["preflight", "plan"]);
   assert.match(writtenPlan?.filePath ?? "", /application-release-plan\.json$/);
   assert.deepEqual(JSON.parse(writtenPlan?.content ?? "{}"), {
     schemaVersion: 1,
@@ -964,7 +1266,91 @@ test("application scope writes an immutable release approval plan without runnin
     commitSha: "c".repeat(40),
     artifactDigest: "d".repeat(64)
   });
-  assert.match(planArtifactStorage.uploads[0]?.planFilePath ?? "", /application-release-plan\.json$/);
+  assert.match(
+    planArtifactStorage.uploads[0]?.planFilePath ?? "",
+    /application-release-plan\.json$/
+  );
+});
+
+test("application plan rejects a lost lease fence before saving the approval artifact", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "application",
+    targetKind: "ecs_fargate"
+  });
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  const lease = createPlanLeaseRepository({ failHeartbeatAt: 2 });
+
+  await assert.rejects(
+    runDeploymentPlan({ deploymentId, accessContext: createAccessContext() }, repository, {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage,
+      projectExecutionLeaseRepository: lease.repository,
+      leaseHeartbeatIntervalMs: 60_000,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareApplicationArtifact: async () => ({
+        releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        runtimeTargetKind: "ecs_fargate",
+        version: "1.0.0",
+        commitSha: "c".repeat(40),
+        artifactDigest: "d".repeat(64)
+      }),
+      writeApplicationPlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-application-plan-fence",
+        mainFilePath: "C:/tmp/sketchcatch-application-plan-fence/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      })
+    }),
+    /project release lease/i
+  );
+
+  assert.equal(planArtifactStorage.uploads.length, 1);
+  assert.equal(planArtifactStorage.deletes.length, 1);
+  assert.equal(repository.savedPlans.length, 0);
+  assert.equal(lease.releases, 1);
+});
+
+test("plan heartbeat failure aborts without a stale terminal write or lease release", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "application",
+    targetKind: "ecs_fargate"
+  });
+  const lease = createPlanLeaseRepository({ failHeartbeatAt: 1 });
+
+  await assert.rejects(
+    runDeploymentPlan({ deploymentId, accessContext: createAccessContext() }, repository, {
+      projectExecutionLeaseRepository: lease.repository,
+      leaseHeartbeatIntervalMs: 1,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareApplicationArtifact: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        return {
+          releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          runtimeTargetKind: "ecs_fargate",
+          version: "1.0.0",
+          commitSha: "c".repeat(40),
+          artifactDigest: "d".repeat(64)
+        };
+      },
+      writeApplicationPlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-application-plan-heartbeat",
+        mainFilePath: "C:/tmp/sketchcatch-application-plan-heartbeat/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      })
+    }),
+    /project release lease/i
+  );
+
+  assert.equal(repository.savedPlans.length, 0);
+  assert.equal(repository.failedDeployments.length, 0);
+  assert.equal(lease.releases, 0);
 });
 
 test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credentials", async () => {
@@ -1015,8 +1401,248 @@ test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credential
   assert.equal(terraformRan, false);
   assert.equal(repository.deployment?.status, "FAILED");
   assert.equal(repository.deployment?.failureStage, "plan");
-  assert.match(repository.deployment?.errorSummary ?? "", /data source "aws_region" is not allowed/);
+  assert.match(
+    repository.deployment?.errorSummary ?? "",
+    /data source "aws_region" is not allowed/
+  );
   assert.equal(planArtifactStorage.uploads.length, 0);
+});
+
+test("Terraform module validation blocks dangling output references across the prepared bundle", () => {
+  const diagnostics = createTerraformValidationDiagnostics({
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: `output "cloudfront_url" {
+  value = aws_cloudfront_distribution.distribution.domain_name
+}`
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.code === "terraform.undefined_reference"),
+    [
+      {
+        code: "terraform.undefined_reference",
+        line: 2,
+        message:
+          "aws_cloudfront_distribution.distribution reference가 현재 Terraform 코드에 선언되어 있지 않습니다.",
+        resourceAddress: "aws_cloudfront_distribution.distribution",
+        severity: "error",
+        sourceFileName: "main.tf"
+      }
+    ]
+  );
+});
+
+test("Terraform module validation resolves resource references declared in another file", () => {
+  const diagnostics = createTerraformValidationDiagnostics({
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "resources.tf",
+        terraformCode: `resource "aws_s3_bucket" "site" {
+  bucket = "example-site"
+}`
+      },
+      {
+        fileName: "outputs.tf",
+        terraformCode: `output "bucket_name" {
+  value = aws_s3_bucket.site.bucket
+}`
+      }
+    ]
+  });
+
+  assert.equal(
+    diagnostics.some((diagnostic) => diagnostic.code === "terraform.undefined_reference"),
+    false
+  );
+});
+
+test("runDeploymentPlan rejects dangling output references before preparing AWS credentials", async () => {
+  const repository = new FakeDeploymentRepository();
+  let cleanupCalled = false;
+  let credentialsPrepared = false;
+  let terraformRan = false;
+
+  await assert.rejects(
+    () =>
+      runDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          readTerraformArtifactFile: async () => `output "cloudfront_url" {
+  value = aws_cloudfront_distribution.distribution.domain_name
+}`,
+          analyzePreDeployment: () => createAnalysis(),
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-terraform-dangling-output-plan",
+            mainFilePath: "C:/tmp/sketchcatch-terraform-dangling-output-plan/main.tf",
+            terraformFiles: [],
+            cleanup: async () => {
+              cleanupCalled = true;
+            }
+          }),
+          prepareTerraformAwsCredentialEnv: async () => {
+            credentialsPrepared = true;
+            throw new Error("AWS credentials should not be prepared");
+          },
+          runTerraformInit: async () => {
+            terraformRan = true;
+            throw new Error("Terraform init should not run");
+          }
+        }
+      ),
+    /undeclared resource reference.*aws_cloudfront_distribution\.distribution/i
+  );
+
+  assert.equal(cleanupCalled, true);
+  assert.equal(credentialsPrepared, false);
+  assert.equal(terraformRan, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "plan");
+});
+
+test("runDeploymentPlan blocks an uploaded Terraform bundle matching an analysis-excluded Architecture resource before init", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.architecture = createArchitectureRecord({
+    nodes: [
+      {
+        id: "legacy-lambda",
+        type: "LAMBDA",
+        label: "Legacy Lambda",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          analysisExcluded: true,
+          terraformResourceType: "aws_lambda_function",
+          terraformResourceName: "legacy_lambda"
+        }
+      },
+      {
+        id: "supported-vpc",
+        type: "VPC",
+        label: "VPC",
+        positionX: 120,
+        positionY: 0,
+        config: {}
+      }
+    ],
+    edges: []
+  });
+  const artifactContent = `resource "aws_vpc" "main" {}
+resource "aws_lambda_function" "legacy_lambda" {}`;
+  let terraformInitRan = false;
+  let terraformPlanRan = false;
+
+  await assert.rejects(
+    () =>
+      runDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          planArtifactStorage: new FakePlanArtifactStorage(),
+          readTerraformArtifactFile: async () => artifactContent,
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-analysis-excluded-plan",
+            mainFilePath: "C:/tmp/sketchcatch-analysis-excluded-plan/main.tf",
+            terraformFiles: [
+              { fileName: "network.tf", terraformCode: 'resource "aws_vpc" "main" {}' },
+              {
+                fileName: "compute.tf",
+                terraformCode: `resource /* provider type */
+"aws_lambda_function"
+// logical name
+"legacy_lambda"
+{}`
+              }
+            ],
+            cleanup: async () => undefined
+          }),
+          prepareTerraformAwsCredentialEnv: async () => {
+            throw new Error("AWS credentials must not be prepared for an excluded resource");
+          },
+          runTerraformInit: async () => {
+            terraformInitRan = true;
+            return createRunnerResult("init");
+          },
+          runTerraformPlan: async () => {
+            terraformPlanRan = true;
+            return createRunnerResult("plan");
+          }
+        }
+      ),
+    /analysis-excluded resource/i
+  );
+
+  assert.equal(terraformInitRan, false);
+  assert.equal(terraformPlanRan, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "plan");
+});
+
+test("runDeploymentPlan keeps a supported VPC eligible when no excluded identity matches", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.architecture = createArchitectureRecord({
+    nodes: [
+      {
+        id: "supported-vpc",
+        type: "VPC",
+        label: "VPC",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          terraformResourceType: "aws_vpc",
+          terraformResourceName: "main"
+        }
+      }
+    ],
+    edges: []
+  });
+  const vpcTerraform = 'resource "aws_vpc" "main" {}';
+  let terraformPlanRan = false;
+
+  const result = await runDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      planArtifactStorage: new FakePlanArtifactStorage(),
+      readTerraformArtifactFile: async () => vpcTerraform,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-supported-vpc-plan",
+        mainFilePath: "C:/tmp/sketchcatch-supported-vpc-plan/main.tf",
+        terraformFiles: [{ fileName: "main.tf", terraformCode: vpcTerraform }],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () =>
+        createRunnerResult("init", {
+          exitCode: 1,
+          stderr: "provider install intentionally stopped after exclusion guard"
+        }),
+      runTerraformPlan: async () => {
+        terraformPlanRan = true;
+        return createRunnerResult("plan");
+      }
+    }
+  );
+
+  assert.equal(result.terraform.init?.exitCode, 1);
+  assert.equal(terraformPlanRan, false);
+  assert.equal(result.deployment.failureStage, "init");
+  assert.doesNotMatch(result.deployment.errorSummary ?? "", /analysis-excluded resource/i);
 });
 
 test("runDeploymentPlan reuses a verified pending plan without rerunning Plan or PreDeployment", async () => {
@@ -1067,9 +1693,7 @@ test("runDeploymentPlan reuses a verified pending plan without rerunning Plan or
         driftVerifiedAt: fixedNow.toISOString(),
         planSummary,
         preDeploymentResult: { findings: [] },
-        resourceChanges: [
-          { resourceAddress: "aws_s3_bucket.assets", action: "create" }
-        ]
+        resourceChanges: [{ resourceAddress: "aws_s3_bucket.assets", action: "create" }]
       })
     )
   );
@@ -1281,8 +1905,7 @@ test("runDeploymentPlan executes concurrent Plan requests for one deployment onl
       await planGate;
       return createRunnerResult("plan");
     },
-    runTerraformShowJson: async () =>
-      createRunnerResult("show", { stdout: createPlanJson([]) })
+    runTerraformShowJson: async () => createRunnerResult("show", { stdout: createPlanJson([]) })
   };
 
   const first = runDeploymentPlan(
@@ -1505,7 +2128,8 @@ test("runDeploymentPlan feeds Terraform artifact content into Trivy-backed safet
               line: 13,
               resourceAddress: "aws_security_group.open_ssh"
             },
-            title: "Security groups should not allow unrestricted ingress to SSH or RDP from any IP address.",
+            title:
+              "Security groups should not allow unrestricted ingress to SSH or RDP from any IP address.",
             description: "Public SSH is exposed.",
             recommendation: "Restrict SSH to a trusted CIDR."
           }
@@ -1650,7 +2274,10 @@ test("runDeploymentPlan marks plan validation failures failed and masks secret o
   assert.equal(result.deployment.errorSummary, "Error: [REDACTED]");
   assert.equal(showJsonRan, false);
   assert.equal(planArtifactStorage.uploads.length, 0);
-  assert.equal(repository.logs.some((log) => log.message.includes("super-secret")), false);
+  assert.equal(
+    repository.logs.some((log) => log.message.includes("super-secret")),
+    false
+  );
 });
 
 test("runDeploymentPlan stops at init failures before plan", async () => {

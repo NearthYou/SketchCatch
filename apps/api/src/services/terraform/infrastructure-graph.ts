@@ -105,6 +105,10 @@ function toInfrastructureGraphNode(
     return null;
   }
 
+  if (node.parameters.values?.["analysisExcluded"] === true) {
+    return null;
+  }
+
   const terraformBlockType = node.parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
   const resourceDefinition = getResourceDefinitionByTerraform(
     terraformBlockType,

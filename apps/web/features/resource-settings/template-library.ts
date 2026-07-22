@@ -21,6 +21,7 @@ import {
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
 import { materializeTemplateDiagram } from "./template-resource-materializer";
+import { applyBoardTemplatePresentationCorrections } from "./template-presentation-corrections";
 import { getTemplateThumbnailAsset } from "./template-thumbnail-manifest";
 import { getBrainboardTemplateThumbnailAsset } from "./brainboard-template-thumbnail-manifest";
 
@@ -88,8 +89,9 @@ const LIVE_OBSERVATION_MANAGED_USER_DATA_BASE64 =
 
 const LIVE_OBSERVATION_AUDIENCE_HTML = [
   '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
-  "<title>SketchCatch Service</title><style>body{max-width:680px;margin:0 auto;padding:56px 24px;font:16px/1.6 Pretendard,sans-serif;color:#172033;background:#fafafa}",
-  "main{padding:32px;border:1px solid #dcdee0;border-radius:16px;background:#fff}</style></head>",
+  '<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css">',
+  "<title>SketchCatch Service</title><style>body{max-width:680px;margin:0 auto;padding:56px 24px;font:400 22px/1.6 Pretendard,sans-serif;color:#172033;background:#fafafa}",
+  "h1{font-size:38px;font-weight:700}main{padding:32px;border:1px solid #dcdee0;border-radius:16px;background:#fff}</style></head>",
   "<body><main><h1>서비스가 준비되었습니다.</h1><p>공개 요청은 SketchCatch에서 발급한 QR 페이지를 사용해주세요.</p></main></body></html>",
 ].join("");
 
@@ -467,7 +469,7 @@ const legacyBoardTemplates: readonly RawBoardTemplate[] = [
           resourceName: "traffic",
           type: "aws_cloudwatch_log_group",
           values: {
-            name: "/sketchcatch/demo/sc-lo/traffic",
+            namePrefix: "/sketchcatch/demo/sc-lo/traffic-",
             retentionInDays: 1,
             tags: { SketchCatchDemo: "true" }
           }
@@ -613,7 +615,6 @@ const legacyBoardTemplates: readonly RawBoardTemplate[] = [
           values: {
             adjustmentType: "ChangeInCapacity",
             autoscalingGroupName: "aws_autoscaling_group.api.name",
-            cooldown: 180,
             estimatedInstanceWarmup: 60,
             name: "sketchcatch-live-observation-scale-out",
             policyType: "StepScaling",
@@ -735,7 +736,7 @@ const brainboardBoardTemplates: readonly AvailableBoardTemplate[] = brainboardTe
   .map((entry) => {
     const evidence = entry.source;
     const descriptions: Readonly<Record<string, string>> = {
-      "[Training] AWS onboarding": "AWS에서 EKS 클러스터와 노드 그룹, 네이티브 VPC CNI 네트워크를 구성합니다. 클러스터와 노드 그룹에 필요한 IAM 역할을 포함하며, 인터넷 게이트웨이를 통해 서브넷으로 트래픽을 전달합니다.",
+      "AWS onboarding": "AWS에서 EKS 클러스터와 노드 그룹, 네이티브 VPC CNI 네트워크를 구성합니다. 클러스터와 노드 그룹에 필요한 IAM 역할을 포함하며, 인터넷 게이트웨이를 통해 서브넷으로 트래픽을 전달합니다.",
       "AWS Kubernetes cluster with native CNIs": "AWS에서 EKS 클러스터와 노드 그룹, 네이티브 VPC CNI 네트워크를 구성합니다. 클러스터와 노드 그룹에 필요한 IAM 역할을 포함하며, 인터넷 게이트웨이를 통해 서브넷으로 트래픽을 전달합니다.",
       "AWS VPC with subnet and security groups on 2 AZs": "여러 서비스와 인스턴스, 데이터베이스를 호스팅할 수 있는 기본 네트워크 구성입니다. 하나의 리전에 있는 두 가용 영역과 VPC, 서브넷, 보안 그룹으로 구성하며 필요에 따라 가용 영역을 추가할 수 있습니다.",
       "AWS serverless architecture with CDN": "S3와 API Gateway, CloudFront를 사용해 정적 콘텐츠를 제공하는 서버리스 아키텍처입니다.",
@@ -779,7 +780,15 @@ const brainboardBoardTemplates: readonly AvailableBoardTemplate[] = brainboardTe
 
 const boardTemplates: readonly BoardTemplate[] = [
   ...repositoryBoardTemplates,
-  ...brainboardBoardTemplates
+  ...brainboardBoardTemplates,
+  ...legacyBoardTemplates
+    .filter((template) => template.id === "template-live-observation")
+    .map((template): AvailableBoardTemplate => ({
+      ...template,
+      availability: "available",
+      diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson)),
+      terraformFiles: []
+    }))
 ];
 
 // 페이지와 보드 모달은 실제 Board 캡처로 검토한 authored geometry를 같은 목록에서 사용한다.
@@ -796,6 +805,20 @@ export function isBoardTemplateAvailable(
   template: BoardTemplate
 ): template is AvailableBoardTemplate {
   return template.availability === "available";
+}
+
+// Template 내용과 설명·태그·Terraform seed를 함께 fingerprint해 선택 상태의 revision으로 사용합니다.
+export function getBoardTemplateVersion(template: AvailableBoardTemplate): string {
+  return `v-${createTemplateVersionHash(
+    JSON.stringify({
+      description: template.description,
+      diagramJson: template.diagramJson,
+      id: template.id,
+      tags: template.tags,
+      terraformFiles: template.terraformFiles,
+      title: template.title
+    })
+  )}`;
 }
 
 export function reviewAvailableBoardTemplate(
@@ -841,18 +864,22 @@ export function listLegacyBoardTemplates(): readonly AvailableBoardTemplate[] {
 
 export function buildBoardTemplateDiagram(
   templateId: string | undefined,
-  input: { readonly projectSlug: string; readonly shortId: string }
+  input: {
+    readonly projectSlug: string;
+    readonly requiredRuntimeSecrets?: readonly string[];
+    readonly shortId: string;
+  }
 ): DiagramJson | undefined {
   // New Boards must retain the reviewed layout instead of re-running the generic topology arranger.
   const definitionId = resolveTemplateDefinitionId(templateId);
   const definition = templateDefinitions.find((candidate) => candidate.id === definitionId);
   if (definition) {
-    return materializeTemplateDiagram(
+    return materializeBoardTemplateDiagram(
+      definition.id,
       resolveApprovedBoardTemplateDiagram(
         definition.id,
         buildTemplateDiagramJson(definition.id, input)
-      ),
-      "authored"
+      )
     );
   }
 
@@ -861,12 +888,12 @@ export function buildBoardTemplateDiagram(
       candidate.id === templateId && candidate.availability === "available"
   );
   return brainboardTemplate
-    ? materializeTemplateDiagram(
+    ? materializeBoardTemplateDiagram(
+        brainboardTemplate.id,
         resolveApprovedBoardTemplateDiagram(
           brainboardTemplate.id,
           cloneDiagramJson(brainboardTemplate.diagramJson)
-        ),
-        "authored"
+        )
       )
     : undefined;
 }
@@ -1002,13 +1029,31 @@ function cloneBoardTemplate(template: BoardTemplate): BoardTemplate {
 function cloneAvailableBoardTemplate(template: AvailableBoardTemplate): AvailableBoardTemplate {
   return {
     ...template,
-    diagramJson: materializeTemplateDiagram(
-      resolveApprovedBoardTemplateDiagram(template.id, cloneDiagramJson(template.diagramJson)),
-      "authored"
+    diagramJson: materializeBoardTemplateDiagram(
+      template.id,
+      resolveApprovedBoardTemplateDiagram(template.id, cloneDiagramJson(template.diagramJson))
     ),
     tags: [...template.tags],
     terraformFiles: template.terraformFiles.map((file) => ({ ...file }))
   };
+}
+
+function createTemplateVersionHash(value: string): string {
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function materializeBoardTemplateDiagram(templateId: string, diagram: DiagramJson): DiagramJson {
+  return applyBoardTemplatePresentationCorrections(
+    templateId,
+    materializeTemplateDiagram(diagram, "authored")
+  );
 }
 
 // localStorage에 저장된 템플릿 덮어쓰기 백업을 읽습니다.

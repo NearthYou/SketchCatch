@@ -8,7 +8,7 @@ import type {
   LlmExplanation
 } from "@sketchcatch/types";
 import type { ReactNode } from "react";
-import { ArrowRight, Code2, ListChecks } from "lucide-react";
+import { Code2, ListChecks } from "lucide-react";
 import { SelectMenu } from "../../components/ui/SelectMenu";
 import {
   createWorkspaceAiExplanationBadge,
@@ -103,7 +103,7 @@ export function WorkspaceAiRequestMessage({
   return null;
 }
 
-// LLM 설명을 요약, 핵심, 다음 행동 순서로 한 번씩만 묶어 보여줍니다.
+// LLM 설명을 요약과 핵심으로 한 번씩만 묶어 보여줍니다.
 export function WorkspaceAiExplanation({ explanation }: { readonly explanation: LlmExplanation | undefined }) {
   if (explanation === undefined) {
     return null;
@@ -120,9 +120,6 @@ export function WorkspaceAiExplanation({ explanation }: { readonly explanation: 
         <WorkspaceAiTextList title="종합 평가" items={[explanation.wellArchitectedConclusion]} />
       ) : null}
       {explanation.highlights.length > 0 ? <WorkspaceAiTextList title="핵심" items={explanation.highlights} /> : null}
-      {explanation.nextActions.length > 0 ? (
-        <WorkspaceAiTextList title="다음 행동" items={explanation.nextActions} />
-      ) : null}
     </div>
   );
 }
@@ -252,43 +249,17 @@ export function WorkspaceAiTerraformPreviewResult({
     <div className={styles.aiStructuredResult}>
       <section className={styles.aiResultLead}>
         <h3>검토 요약</h3>
-        <p>{result.summary}</p>
+        <ul className={styles.aiReviewSummaryList}>
+          {result.summaryItems.map((item) => (
+            <li data-tone={item.tone} key={item.id}>
+              <strong>{item.label}</strong>
+              <p>{item.text}</p>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <WorkspaceAiResultChecks checks={result.checks} />
-
-      <WorkspaceAiResultNextStep>{result.nextStep}</WorkspaceAiResultNextStep>
-
-      <WorkspaceAiTechnicalDetails>
-        <dl className={styles.aiTechnicalMeta}>
-          <div>
-            <dt>원문 요약</dt>
-            <dd>{result.technical.rawSummary}</dd>
-          </div>
-          <div>
-            <dt>원문 권장 사항</dt>
-            <dd>{result.technical.rawRecommendation}</dd>
-          </div>
-          {result.technical.provider ? (
-            <div>
-              <dt>응답 제공자</dt>
-              <dd>{result.technical.provider}</dd>
-            </div>
-          ) : null}
-        </dl>
-        {result.technical.resources.length > 0 ? (
-          <WorkspaceAiTechnicalList title="감지한 리소스" items={result.technical.resources} />
-        ) : null}
-        {result.technical.providerAttempts.length > 0 ? (
-          <WorkspaceAiTechnicalList
-            title="AI 제공자 시도 이력"
-            items={result.technical.providerAttempts}
-          />
-        ) : null}
-        {result.technical.findings.length > 0 ? (
-          <WorkspaceAiTechnicalList title="점검 원문" items={result.technical.findings} />
-        ) : null}
-      </WorkspaceAiTechnicalDetails>
     </div>
   );
 }
@@ -319,24 +290,28 @@ export function WorkspaceAiResultChecks({
                   <span>{getWorkspaceAiResultSeverityLabel(item.severity)}</span>
                 ) : null}
               </div>
-              <p>{item.summary}</p>
-              {item.action && item.action !== item.summary ? <p>{item.action}</p> : null}
+              <dl className={styles.aiResultCheckDetails}>
+                <div>
+                  <dt>
+                    {item.severity === "high" || item.severity === "medium"
+                      ? "문제"
+                      : item.severity === "low"
+                        ? "잘된 점"
+                        : "내용"}
+                  </dt>
+                  <dd>{item.summary}</dd>
+                </div>
+                {item.action && item.action !== item.summary ? (
+                  <div>
+                    <dt>{item.severity === "low" ? "확인된 설정" : "필요한 조치"}</dt>
+                    <dd>{item.action}</dd>
+                  </div>
+                ) : null}
+              </dl>
             </div>
           </li>
         ))}
       </ul>
-    </section>
-  );
-}
-
-export function WorkspaceAiResultNextStep({ children }: { readonly children: ReactNode }) {
-  return (
-    <section className={`${styles.aiResultSection} ${styles.aiResultNextStep}`}>
-      <div className={styles.aiResultSectionTitle}>
-        <ArrowRight aria-hidden="true" size={16} />
-        <h4>다음 단계</h4>
-      </div>
-      <p>{children}</p>
     </section>
   );
 }

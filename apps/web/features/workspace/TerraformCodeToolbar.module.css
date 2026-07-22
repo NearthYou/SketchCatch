@@ -20,15 +20,6 @@
   min-width: 0;
 }
 
-.terraformToolbarLabel {
-  color: #60646c;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
 .terraformFilePicker {
   min-width: 0;
   position: relative;
@@ -45,12 +36,12 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-weight: 700;
+  font-weight: var(--presentation-font-weight-bold);
   justify-content: center;
 }
 
 .terraformFileButton {
-  font-size: 13px;
+  font-size: calc(11px + var(--presentation-font-size-increase));
   gap: 8px;
   height: 36px;
   max-width: min(220px, 48vw);
@@ -108,7 +99,7 @@
   border-radius: 8px;
   color: #171717;
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   min-height: 36px;
   min-width: 0;
   padding: 8px 10px;
@@ -134,7 +125,7 @@
   color: #171717;
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   min-height: 34px;
   overflow: hidden;
   padding: 7px 10px;
@@ -146,7 +137,7 @@
 .terraformFileOptionActive {
   background: #171717;
   color: #ffffff;
-  font-weight: 700;
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .terraformFileOption:not(.terraformFileOptionActive):hover,
@@ -157,7 +148,7 @@
 
 .terraformFileEmpty {
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   padding: 10px;
 }
 
@@ -174,8 +165,8 @@
   align-items: center;
   color: #171717;
   display: flex;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 8px;
   min-width: 0;
 }

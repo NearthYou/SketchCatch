@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  DeploymentLiveObservationManifestV2,
   ApiErrorCode,
   CreateLiveObservationV2Response,
   LiveObservationV2Session,
@@ -42,7 +43,9 @@ export function createLiveObservationV2Service(options: {
       if (
         record?.status !== "valid" ||
         !record.manifest ||
-        record.manifest.adapter.version !== 2
+        (record.manifest.adapter.version !== 2 &&
+          record.manifest.adapter.version !== 3 &&
+          record.manifest.adapter.version !== 4)
       ) {
         throw serviceError("LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE");
       }
@@ -115,14 +118,45 @@ function toPublicSession(
   session: LiveObservationStoreActiveSession,
   audienceBaseUrl: string
 ): LiveObservationV2Session {
+  const audienceApplicationUrl = getAudienceApplicationUrl(session.manifest);
   return {
     id: session.observationId,
     deploymentId: session.deploymentId,
     status: session.status,
-    audienceUrl: `${audienceBaseUrl}/observe/${session.observationId}`,
+    audienceUrl: audienceApplicationUrl
+      ? createAudienceApplicationUrl(
+          audienceApplicationUrl,
+          audienceBaseUrl,
+          session.observationId
+        )
+      : `${audienceBaseUrl}/observe/${session.observationId}`,
     createdAt: session.createdAt,
     expiresAt: session.expiresAt
   };
+}
+
+function getAudienceApplicationUrl(
+  manifest: DeploymentLiveObservationManifestV2
+): string | null {
+  if (manifest.endpoints.audienceApplicationUrl) {
+    return manifest.endpoints.audienceApplicationUrl;
+  }
+  return manifest.adapter.version === 4
+    ? `https://${manifest.adapter.payload.cloudFrontDomainName}`
+    : null;
+}
+
+function createAudienceApplicationUrl(
+  audienceApplicationUrl: string,
+  audienceBaseUrl: string,
+  observationId: string
+): string {
+  const applicationUrl = new URL(audienceApplicationUrl);
+  applicationUrl.searchParams.set(
+    "sketchcatch_observation_url",
+    new URL(`/api/live-observations/public/${observationId}`, `${audienceBaseUrl}/`).toString()
+  );
+  return applicationUrl.toString();
 }
 
 function toActiveSnapshot(session: LiveObservationStoreActiveSession): LiveObservationV2Snapshot {
@@ -149,13 +183,7 @@ function toTerminalSnapshot(
 
 function parseAudienceBaseUrl(value: string): string {
   const url = new URL(value);
-  if (
-    url.protocol !== "https:" ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  ) {
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
     throw new Error("Invalid Live Observation audience base URL");
   }
   return url.toString().replace(/\/$/, "");

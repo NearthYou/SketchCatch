@@ -1,4 +1,4 @@
-import { createPrivateKey } from "node:crypto";
+import { createHash, createPrivateKey } from "node:crypto";
 import { importPKCS8, SignJWT } from "jose";
 import type {
   GitCicdHandoffStatus,
@@ -42,6 +42,7 @@ export type GitHubAppCreatePullRequestInput = {
   commitMessage: string;
   pullRequestTitle: string;
   pullRequestBody: string;
+  expectedPullRequestHeadSha?: string | null | undefined;
   files: GitHubAppPullRequestFile[];
 };
 
@@ -50,6 +51,7 @@ export type GitHubAppCreatePullRequestResult = {
   pullRequestNumber: number;
   pullRequestHeadSha: string;
   commitSha: string;
+  sourceBranch?: string;
 };
 
 export type GitHubRepositorySettingsInput = {
@@ -57,12 +59,14 @@ export type GitHubRepositorySettingsInput = {
   owner: string;
   name: string;
   environmentName: string;
+  targetBranch: string;
   variables: Record<string, string>;
 };
 
 export type GitHubRepositorySettingsResult = {
   environmentName: string;
   variables: string[];
+  verified: boolean;
 };
 
 export type GitHubRepositoryRefInput = {
@@ -88,6 +92,7 @@ export type GitHubWorkflowRunSummary = {
   commitMessage: string;
   branch: string;
   workflowName: string;
+  workflowPath: string;
   runUrl: string;
   status: string;
   conclusion: string | null;
@@ -169,6 +174,14 @@ export class GitHubApiRequestError extends Error {
     readonly responseBody: string
   ) {
     super(`GitHub API request failed: ${statusCode}`);
+  }
+}
+
+export class GitHubRepositorySettingsVerificationError extends Error {
+  readonly name = "GitHubRepositorySettingsVerificationError";
+
+  constructor(readonly settingName: string) {
+    super(`GitHub repository setting did not match after apply: ${settingName}`);
   }
 }
 
@@ -320,13 +333,44 @@ type GitHubPutContentsResponse = {
   };
 };
 
+type GitHubRepositoryVariableResponse = {
+  readonly name?: unknown;
+  readonly value?: unknown;
+};
+
+type GitHubEnvironmentResponse = {
+  readonly name?: unknown;
+  readonly deployment_branch_policy?: {
+    readonly protected_branches?: unknown;
+    readonly custom_branch_policies?: unknown;
+  } | null;
+};
+
+type GitHubDeploymentBranchPolicy = {
+  readonly id?: unknown;
+  readonly name?: unknown;
+  readonly type?: unknown;
+};
+
+type GitHubDeploymentBranchPoliciesResponse = {
+  readonly branch_policies?: GitHubDeploymentBranchPolicy[];
+};
+
 type GitHubPullRequestResponse = {
   readonly html_url?: unknown;
   readonly number?: unknown;
   readonly head?: {
     readonly sha?: unknown;
+    readonly ref?: unknown;
+    readonly repo?: {
+      readonly full_name?: unknown;
+    };
+  };
+  readonly base?: {
+    readonly ref?: unknown;
   };
   readonly merged?: unknown;
+  readonly merged_at?: unknown;
   readonly state?: unknown;
   readonly merge_commit_sha?: unknown;
 };
@@ -343,6 +387,7 @@ type GitHubWorkflowRunApiResponse = {
   readonly head_branch?: unknown;
   readonly html_url?: unknown;
   readonly name?: unknown;
+  readonly path?: unknown;
   readonly status?: unknown;
   readonly conclusion?: unknown;
   readonly created_at?: unknown;
@@ -353,6 +398,9 @@ type GitHubWorkflowRunApiResponse = {
 
 export type GitHubActionsReadClient = {
   listBranchWorkflowRuns(input: GitHubWorkflowRunReadInput): Promise<GitHubWorkflowRunSummary[]>;
+  getWorkflowRun(
+    input: GitHubRepositoryInput & { runId: number }
+  ): Promise<GitHubWorkflowRunSummary>;
   listCommitFiles(input: GitHubRepositoryRefInput & { commitSha: string }): Promise<string[]>;
   listWorkflowJobs(
     input: GitHubRepositoryInput & { runId: number }
@@ -449,6 +497,14 @@ export function createGitHubAppClient(
         if (pageRuns.length < githubActionsRunPageSize) break;
       }
       return runs;
+    },
+
+    async getWorkflowRun(input) {
+      const response = await requestWithInstallationToken<GitHubWorkflowRunApiResponse>(
+        input.installationId,
+        createRepositoryPath(input, `/actions/runs/${input.runId}`)
+      );
+      return toWorkflowRunSummary(response);
     },
 
     async listCommitFiles(input) {
@@ -681,49 +737,116 @@ export function createGitHubAppClient(
 
     async createPullRequest(input) {
       const targetSha = await getOrCreateTargetBranchSha(input, requestWithInstallationToken);
+      const relatedPullRequests = await listRelatedPullRequests(
+        input,
+        requestWithInstallationToken
+      );
+      const openPullRequest = relatedPullRequests.find(
+        (pullRequest) => pullRequest.state === "open"
+      );
+      let hasUnsafeOpenPullRequest = false;
 
-      await createSourceBranchIfNeeded(input, targetSha, requestWithInstallationToken);
+      if (openPullRequest) {
+        const openSourceBranch = readPullRequestSourceBranch(openPullRequest);
+        const openBranchSha = openSourceBranch
+          ? await getRepositoryBranchSha(input, openSourceBranch, requestWithInstallationToken)
+          : null;
 
-      let lastCommitSha = targetSha;
-      let changedFileCount = 0;
-
-      for (const file of input.files) {
-        const sourceFile = await getRepositoryContent(
-          input,
-          file.path,
-          input.sourceBranch,
-          requestWithInstallationToken
-        );
-
-        if (sourceFile && isSameGitHubFileContent(sourceFile, file.content)) {
-          continue;
+        if (
+          openSourceBranch &&
+          openBranchSha &&
+          await pullRequestFilesMatchRef(
+            input,
+            openSourceBranch,
+            requestWithInstallationToken
+          )
+        ) {
+          return createPullRequestResult(
+            openPullRequest,
+            openSourceBranch,
+            openBranchSha
+          );
         }
 
-        const putResponse = await requestWithInstallationToken<GitHubPutContentsResponse>(
-          input.installationId,
-          createRepositoryPath(input, `/contents/${encodePath(file.path)}`),
-          {
-            method: "PUT",
-            body: {
-              message: input.commitMessage,
-              content: Buffer.from(file.content, "utf8").toString("base64"),
-              branch: input.sourceBranch,
-              ...(sourceFile?.sha ? { sha: sourceFile.sha } : {})
-            }
-          }
-        );
+        const ownsOpenPullRequest =
+          openSourceBranch !== null &&
+          openBranchSha !== null &&
+          input.expectedPullRequestHeadSha === openBranchSha &&
+          await handoffManifestMatchesRef(
+            input,
+            openSourceBranch,
+            requestWithInstallationToken
+          );
 
-        lastCommitSha = readRequiredString(putResponse.commit?.sha, "commit sha");
-        changedFileCount += 1;
+        if (openSourceBranch && openBranchSha && ownsOpenPullRequest) {
+          const update = await updatePullRequestFiles(
+            input,
+            openSourceBranch,
+            openBranchSha,
+            requestWithInstallationToken
+          );
+          const pullRequestNumber = readRequiredNumber(
+            openPullRequest.number,
+            "pull request number"
+          );
+          const refreshedPullRequest = await requestWithInstallationToken<GitHubPullRequestResponse>(
+            input.installationId,
+            createRepositoryPath(input, `/pulls/${pullRequestNumber}`),
+            {
+              method: "PATCH",
+              body: {
+                title: input.pullRequestTitle,
+                body: input.pullRequestBody,
+                base: input.targetBranch
+              }
+            }
+          );
+
+          return createPullRequestResult(
+            refreshedPullRequest,
+            openSourceBranch,
+            update.lastCommitSha
+          );
+        }
+
+        hasUnsafeOpenPullRequest = true;
       }
 
-      if (changedFileCount === 0) {
-        const error = new Error("No Git/CI/CD handoff file changes were needed") as Error & {
-          statusCode?: number;
-        };
+      const mergedPullRequest = hasUnsafeOpenPullRequest
+        ? undefined
+        : relatedPullRequests.find(isMergedPullRequest);
 
-        error.statusCode = 409;
-        throw error;
+      if (
+        mergedPullRequest &&
+        await pullRequestFilesMatchRef(
+          input,
+          input.targetBranch,
+          requestWithInstallationToken
+        )
+      ) {
+        return createPullRequestResult(
+          mergedPullRequest,
+          readPullRequestSourceBranch(mergedPullRequest) ?? input.sourceBranch,
+          targetSha,
+          readRequiredString(mergedPullRequest.head?.sha, "pull request head sha")
+        );
+      }
+
+      const sourceBranch = await createSafePullRequestSourceBranch(
+        input,
+        targetSha,
+        relatedPullRequests,
+        requestWithInstallationToken
+      );
+      const update = await updatePullRequestFiles(
+        input,
+        sourceBranch,
+        targetSha,
+        requestWithInstallationToken
+      );
+
+      if (update.changedFileCount === 0) {
+        throw createNoPullRequestFileChangesError();
       }
 
       const pullRequest = await requestWithInstallationToken<GitHubPullRequestResponse>(
@@ -734,39 +857,120 @@ export function createGitHubAppClient(
           body: {
             title: input.pullRequestTitle,
             body: input.pullRequestBody,
-            head: input.sourceBranch,
+            head: sourceBranch,
             base: input.targetBranch
           }
         }
       );
 
-      return {
-        pullRequestUrl: readRequiredString(pullRequest.html_url, "pull request url"),
-        pullRequestNumber: readRequiredNumber(pullRequest.number, "pull request number"),
-        pullRequestHeadSha: readRequiredString(pullRequest.head?.sha, "pull request head sha"),
-        commitSha: lastCommitSha
-      };
+      return createPullRequestResult(pullRequest, sourceBranch, update.lastCommitSha);
     },
 
     async applyRepositorySettings(input) {
-      await requestWithInstallationToken<Record<string, never>>(
-        input.installationId,
-        createRepositoryPath(input, `/environments/${encodeURIComponent(input.environmentName)}`),
-        {
-          method: "PUT",
-          body: {}
-        }
+      const environmentPath = createRepositoryPath(
+        input,
+        `/environments/${encodeURIComponent(input.environmentName)}`
       );
+      const currentEnvironment = await getRepositoryEnvironment(
+        input,
+        requestWithInstallationToken
+      );
+
+      if (!isExactRepositoryEnvironment(currentEnvironment, input.environmentName)) {
+        await requestWithInstallationToken<GitHubEnvironmentResponse>(
+          input.installationId,
+          environmentPath,
+          {
+            method: "PUT",
+            body: {
+              deployment_branch_policy: {
+                protected_branches: false,
+                custom_branch_policies: true
+              }
+            }
+          }
+        );
+      }
+
+      const currentPolicies = await listDeploymentBranchPolicies(
+        input,
+        requestWithInstallationToken
+      );
+
+      if (!hasExactTargetBranchPolicy(currentPolicies, input.targetBranch)) {
+        for (const policy of currentPolicies) {
+          const policyId = readRequiredNumber(policy.id, "deployment branch policy id");
+          await requestWithInstallationToken<Record<string, never>>(
+            input.installationId,
+            `${createDeploymentBranchPoliciesPath(input)}/${policyId}`,
+            { method: "DELETE" }
+          );
+        }
+
+        await requestWithInstallationToken<GitHubDeploymentBranchPolicy>(
+          input.installationId,
+          createDeploymentBranchPoliciesPath(input),
+          {
+            method: "POST",
+            body: { name: input.targetBranch, type: "branch" }
+          }
+        );
+      }
 
       const variableNames = Object.keys(input.variables).sort();
 
       for (const variableName of variableNames) {
-        await upsertRepositoryVariable(input, variableName, requestWithInstallationToken);
+        if (isBlankRepositoryVariable(input.variables[variableName])) {
+          await deleteRepositoryVariableIfPresent(
+            input,
+            variableName,
+            requestWithInstallationToken
+          );
+        } else {
+          await upsertRepositoryVariable(input, variableName, requestWithInstallationToken);
+        }
+      }
+
+      const environment = await getRepositoryEnvironment(
+        input,
+        requestWithInstallationToken
+      );
+      const policies = await listDeploymentBranchPolicies(
+        input,
+        requestWithInstallationToken
+      );
+
+      if (
+        !isExactRepositoryEnvironment(environment, input.environmentName) ||
+        !hasExactTargetBranchPolicy(policies, input.targetBranch)
+      ) {
+        throw new GitHubRepositorySettingsVerificationError(input.environmentName);
+      }
+
+      for (const variableName of variableNames) {
+        const expectedValue = input.variables[variableName];
+        const variable = await getRepositoryVariable(
+          input,
+          variableName,
+          requestWithInstallationToken
+        );
+
+        if (isBlankRepositoryVariable(expectedValue)) {
+          if (variable !== null) {
+            throw new GitHubRepositorySettingsVerificationError(variableName);
+          }
+          continue;
+        }
+
+        if (variable?.name !== variableName || variable.value !== expectedValue) {
+          throw new GitHubRepositorySettingsVerificationError(variableName);
+        }
       }
 
       return {
         environmentName: input.environmentName,
-        variables: variableNames
+        variables: variableNames,
+        verified: true
       };
     },
 
@@ -874,6 +1078,7 @@ function toWorkflowRunSummary(run: GitHubWorkflowRunApiResponse): GitHubWorkflow
     commitMessage: readRequiredString(run.head_commit?.message, "workflow run commit message"),
     branch: readRequiredString(run.head_branch, "workflow run branch"),
     workflowName: readRequiredString(run.name, "workflow run name"),
+    workflowPath: readRequiredString(run.path, "workflow run path"),
     runUrl: readRequiredString(run.html_url, "workflow run url"),
     status,
     conclusion: typeof run.conclusion === "string" ? run.conclusion : null,
@@ -1154,34 +1359,284 @@ async function createInitialTargetBranch(
   return commitSha;
 }
 
-async function createSourceBranchIfNeeded(
+async function listRelatedPullRequests(
   input: GitHubAppCreatePullRequestInput,
-  targetSha: string,
   requestWithInstallationToken: <T>(
     installationId: string,
     path: string,
     init?: Omit<GitHubRequestInit, "token" | "authScheme">
   ) => Promise<T>
-): Promise<void> {
-  try {
-    await requestWithInstallationToken<GitHubRefResponse>(
-      input.installationId,
-      createRepositoryPath(input, "/git/refs"),
-      {
-        method: "POST",
-        body: {
-          ref: `refs/heads/${input.sourceBranch}`,
-          sha: targetSha
-        }
-      }
+): Promise<GitHubPullRequestResponse[]> {
+  const params = new URLSearchParams({
+    state: "all",
+    base: input.targetBranch,
+    sort: "updated",
+    direction: "desc",
+    per_page: "100"
+  });
+  const pullRequests = await requestWithInstallationToken<GitHubPullRequestResponse[]>(
+    input.installationId,
+    createRepositoryPath(input, `/pulls?${params.toString()}`)
+  );
+  const repositoryFullName = `${input.owner}/${input.name}`.toLowerCase();
+  const retryBranchPrefix = `${getManagedSourceBranchBase(input)}-retry-`;
+
+  return pullRequests.filter((pullRequest) => {
+    const sourceBranch = readPullRequestSourceBranch(pullRequest);
+    const sourceRepository = typeof pullRequest.head?.repo?.full_name === "string"
+      ? pullRequest.head.repo.full_name.toLowerCase()
+      : "";
+
+    return (
+      pullRequest.base?.ref === input.targetBranch &&
+      sourceRepository === repositoryFullName &&
+      sourceBranch !== null &&
+      (sourceBranch === input.sourceBranch || sourceBranch.startsWith(retryBranchPrefix))
     );
+  });
+}
+
+function readPullRequestSourceBranch(pullRequest: GitHubPullRequestResponse): string | null {
+  return typeof pullRequest.head?.ref === "string" && pullRequest.head.ref
+    ? pullRequest.head.ref
+    : null;
+}
+
+function isMergedPullRequest(pullRequest: GitHubPullRequestResponse): boolean {
+  return (
+    pullRequest.state === "closed" &&
+    (pullRequest.merged === true ||
+      (typeof pullRequest.merged_at === "string" && pullRequest.merged_at.length > 0))
+  );
+}
+
+async function getRepositoryBranchSha(
+  input: Pick<GitHubAppCreatePullRequestInput, "installationId" | "owner" | "name">,
+  branch: string,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<string | null> {
+  try {
+    const branchRef = await requestWithInstallationToken<GitHubRefResponse>(
+      input.installationId,
+      createRepositoryPath(input, `/git/ref/heads/${encodeURIComponent(branch)}`)
+    );
+
+    return readRequiredString(branchRef.object?.sha, "source branch sha");
   } catch (error) {
-    if (isHttpStatus(error, 422)) {
-      return;
+    if (isHttpStatus(error, 404)) {
+      return null;
     }
 
     throw error;
   }
+}
+
+async function createSafePullRequestSourceBranch(
+  input: GitHubAppCreatePullRequestInput,
+  targetSha: string,
+  relatedPullRequests: readonly GitHubPullRequestResponse[],
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<string> {
+  const managedBranchBase = getManagedSourceBranchBase(input);
+  const usedPullRequestBranches = new Set(
+    relatedPullRequests.flatMap((pullRequest) => {
+      const branch = readPullRequestSourceBranch(pullRequest);
+      return branch ? [branch] : [];
+    })
+  );
+  const candidates = relatedPullRequests.length === 0
+    ? [managedBranchBase]
+    : [];
+
+  for (let retryNumber = 2; retryNumber <= 100; retryNumber += 1) {
+    candidates.push(createRetryBranchName(managedBranchBase, retryNumber));
+  }
+
+  for (const candidate of candidates) {
+    if (usedPullRequestBranches.has(candidate)) {
+      continue;
+    }
+
+    if (await getRepositoryBranchSha(input, candidate, requestWithInstallationToken)) {
+      continue;
+    }
+
+    try {
+      await requestWithInstallationToken<GitHubRefResponse>(
+        input.installationId,
+        createRepositoryPath(input, "/git/refs"),
+        {
+          method: "POST",
+          body: {
+            ref: `refs/heads/${candidate}`,
+            sha: targetSha
+          }
+        }
+      );
+      return candidate;
+    } catch (error) {
+      if (!isHttpStatus(error, 422)) {
+        throw error;
+      }
+    }
+  }
+
+  const error = new Error("No available SketchCatch pull request branch was found") as Error & {
+    statusCode?: number;
+  };
+  error.statusCode = 409;
+  throw error;
+}
+
+function getManagedSourceBranchBase(input: GitHubAppCreatePullRequestInput): string {
+  if (input.sourceBranch.startsWith("sketchcatch/")) {
+    return input.sourceBranch.replace(/-retry-\d+$/u, "");
+  }
+
+  const readableBranch = input.sourceBranch
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 80) || "handoff";
+  const fingerprint = createHash("sha256")
+    .update(`${input.owner}/${input.name}:${input.targetBranch}:${input.sourceBranch}`)
+    .digest("hex")
+    .slice(0, 12);
+
+  return `sketchcatch/retry/${readableBranch}-${fingerprint}`;
+}
+
+function createRetryBranchName(branchBase: string, retryNumber: number): string {
+  const suffix = `-retry-${retryNumber}`;
+  return `${branchBase.slice(0, 240 - suffix.length)}${suffix}`;
+}
+
+async function updatePullRequestFiles(
+  input: GitHubAppCreatePullRequestInput,
+  sourceBranch: string,
+  initialCommitSha: string,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<{ lastCommitSha: string; changedFileCount: number }> {
+  let lastCommitSha = initialCommitSha;
+  let changedFileCount = 0;
+
+  for (const file of input.files) {
+    const sourceFile = await getRepositoryContent(
+      input,
+      file.path,
+      sourceBranch,
+      requestWithInstallationToken
+    );
+
+    if (sourceFile && isSameGitHubFileContent(sourceFile, file.content)) {
+      continue;
+    }
+
+    const putResponse = await requestWithInstallationToken<GitHubPutContentsResponse>(
+      input.installationId,
+      createRepositoryPath(input, `/contents/${encodePath(file.path)}`),
+      {
+        method: "PUT",
+        body: {
+          message: input.commitMessage,
+          content: Buffer.from(file.content, "utf8").toString("base64"),
+          branch: sourceBranch,
+          ...(sourceFile?.sha ? { sha: sourceFile.sha } : {})
+        }
+      }
+    );
+
+    lastCommitSha = readRequiredString(putResponse.commit?.sha, "commit sha");
+    changedFileCount += 1;
+  }
+
+  return { lastCommitSha, changedFileCount };
+}
+
+async function pullRequestFilesMatchRef(
+  input: GitHubAppCreatePullRequestInput,
+  ref: string,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<boolean> {
+  for (const file of input.files) {
+    const repositoryFile = await getRepositoryContent(
+      input,
+      file.path,
+      ref,
+      requestWithInstallationToken
+    );
+
+    if (!repositoryFile || !isSameGitHubFileContent(repositoryFile, file.content)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function handoffManifestMatchesRef(
+  input: GitHubAppCreatePullRequestInput,
+  ref: string,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<boolean> {
+  const manifests = input.files.filter((file) => file.path.endsWith("/ci-cd/handoff.json"));
+  const manifest = manifests[0];
+
+  if (!manifest || manifests.length !== 1) {
+    return false;
+  }
+
+  const repositoryFile = await getRepositoryContent(
+    input,
+    manifest.path,
+    ref,
+    requestWithInstallationToken
+  );
+
+  return repositoryFile !== null && isSameGitHubFileContent(repositoryFile, manifest.content);
+}
+
+function createPullRequestResult(
+  pullRequest: GitHubPullRequestResponse,
+  sourceBranch: string,
+  commitSha: string,
+  pullRequestHeadSha: string = commitSha
+): GitHubAppCreatePullRequestResult {
+  return {
+    pullRequestUrl: readRequiredString(pullRequest.html_url, "pull request url"),
+    pullRequestNumber: readRequiredNumber(pullRequest.number, "pull request number"),
+    pullRequestHeadSha,
+    commitSha,
+    sourceBranch
+  };
+}
+
+function createNoPullRequestFileChangesError(): Error {
+  const error = new Error("No Git/CI/CD handoff file changes were needed") as Error & {
+    statusCode?: number;
+  };
+  error.statusCode = 409;
+  return error;
 }
 
 function isSameGitHubFileContent(file: GitHubContentsResponse, nextContent: string): boolean {
@@ -1241,7 +1696,13 @@ async function upsertRepositoryVariable(
   };
 
   try {
-    await requestWithInstallationToken<Record<string, never>>(input.installationId, variablePath);
+    const currentVariable = await requestWithInstallationToken<GitHubRepositoryVariableResponse>(
+      input.installationId,
+      variablePath
+    );
+    if (currentVariable.name === variableName && currentVariable.value === body.value) {
+      return;
+    }
     await requestWithInstallationToken<Record<string, never>>(input.installationId, variablePath, {
       method: "PATCH",
       body
@@ -1260,6 +1721,149 @@ async function upsertRepositoryVariable(
       }
     );
   }
+}
+
+async function deleteRepositoryVariableIfPresent(
+  input: GitHubRepositorySettingsInput,
+  variableName: string,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<void> {
+  const currentVariable = await getRepositoryVariable(
+    input,
+    variableName,
+    requestWithInstallationToken
+  );
+
+  if (currentVariable === null) {
+    return;
+  }
+
+  try {
+    await requestWithInstallationToken<Record<string, never>>(
+      input.installationId,
+      createRepositoryPath(
+        input,
+        `/actions/variables/${encodeURIComponent(variableName)}`
+      ),
+      { method: "DELETE" }
+    );
+  } catch (error) {
+    if (!isHttpStatus(error, 404)) {
+      throw error;
+    }
+  }
+}
+
+async function getRepositoryVariable(
+  input: GitHubRepositorySettingsInput,
+  variableName: string,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<GitHubRepositoryVariableResponse | null> {
+  try {
+    return await requestWithInstallationToken<GitHubRepositoryVariableResponse>(
+      input.installationId,
+      createRepositoryPath(
+        input,
+        `/actions/variables/${encodeURIComponent(variableName)}`
+      )
+    );
+  } catch (error) {
+    if (isHttpStatus(error, 404)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function isBlankRepositoryVariable(value: string | undefined): boolean {
+  return value === undefined || value.trim().length === 0;
+}
+
+async function getRepositoryEnvironment(
+  input: GitHubRepositorySettingsInput,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<GitHubEnvironmentResponse | null> {
+  try {
+    return await requestWithInstallationToken<GitHubEnvironmentResponse>(
+      input.installationId,
+      createRepositoryPath(
+        input,
+        `/environments/${encodeURIComponent(input.environmentName)}`
+      )
+    );
+  } catch (error) {
+    if (isHttpStatus(error, 404)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function isExactRepositoryEnvironment(
+  environment: GitHubEnvironmentResponse | null,
+  expectedName: string
+): boolean {
+  return (
+    environment?.name === expectedName &&
+    environment.deployment_branch_policy?.protected_branches === false &&
+    environment.deployment_branch_policy.custom_branch_policies === true
+  );
+}
+
+async function listDeploymentBranchPolicies(
+  input: GitHubRepositorySettingsInput,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<GitHubDeploymentBranchPolicy[]> {
+  const policies: GitHubDeploymentBranchPolicy[] = [];
+
+  for (let page = 1; ; page += 1) {
+    const response = await requestWithInstallationToken<GitHubDeploymentBranchPoliciesResponse>(
+      input.installationId,
+      `${createDeploymentBranchPoliciesPath(input)}?per_page=100&page=${page}`
+    );
+    const pagePolicies = response.branch_policies ?? [];
+    policies.push(...pagePolicies);
+
+    if (pagePolicies.length < 100) {
+      return policies;
+    }
+  }
+}
+
+function createDeploymentBranchPoliciesPath(input: GitHubRepositorySettingsInput): string {
+  return createRepositoryPath(
+    input,
+    `/environments/${encodeURIComponent(input.environmentName)}/deployment-branch-policies`
+  );
+}
+
+function hasExactTargetBranchPolicy(
+  policies: readonly GitHubDeploymentBranchPolicy[],
+  targetBranch: string
+): boolean {
+  return (
+    policies.length === 1 &&
+    policies[0]?.name === targetBranch &&
+    (policies[0]?.type === undefined || policies[0]?.type === "branch")
+  );
 }
 
 function createRepositoryPath(

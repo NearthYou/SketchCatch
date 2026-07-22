@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GitHubInstalledRepositoryCandidate, SourceRepository } from "@sketchcatch/types";
 import { useAuth } from "../../../../components/auth/auth-provider";
@@ -14,6 +15,10 @@ import {
   listGitHubInstalledRepositories,
   listSourceRepositories
 } from "../../../../features/workspace/api";
+import {
+  deriveGitHubInstallationAccessState,
+  type GitHubInstallationAccessState
+} from "../../../../features/workspace/github-installation-access-state";
 import { GitHubRepositoryConnectionPanel } from "./github-repository-connection-panel";
 import { RepositoryAnalysisResult } from "./repository-analysis-result";
 import {
@@ -28,7 +33,14 @@ import styles from "./project-source-repository.module.css";
 type RequestState = "idle" | "loading" | "error";
 
 // 프로젝트의 source repository 선택과 분석만 담당하며 GitHub App 권한은 전역 설정에 맡깁니다.
-export function ProjectSourceRepositoryClient({ projectId }: { readonly projectId: string }) {
+export function ProjectSourceRepositoryClient({
+  projectId,
+  safeReturnTo = null
+}: {
+  readonly projectId: string;
+  readonly safeReturnTo?: string | null | undefined;
+}) {
+  const router = useRouter();
   const { status: authStatus } = useAuth();
   const [projectName, setProjectName] = useState("Project");
   const [sourceRepositories, setSourceRepositories] = useState<SourceRepository[]>([]);
@@ -41,14 +53,14 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
   const [repositoryState, setRepositoryState] = useState<RequestState>("idle");
   const [actionState, setActionState] = useState<RequestState>("idle");
   const [analysisState, setAnalysisState] = useState<RequestState>("idle");
-  const [hasGitHubAccountConnection, setHasGitHubAccountConnection] = useState<boolean | null>(
-    null
-  );
+  const [githubInstallationAccess, setGitHubInstallationAccess] =
+    useState<GitHubInstallationAccessState | null>(null);
   const [showRepositoryCandidates, setShowRepositoryCandidates] = useState(false);
   const [pendingRepository, setPendingRepository] =
     useState<GitHubInstalledRepositoryCandidate | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [accountErrorMessage, setAccountErrorMessage] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
   const repositoryChangeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const dialogCancelButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -103,11 +115,11 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
     setAccountErrorMessage("");
 
     try {
-      const installations = await listGitHubAccountInstallations();
-      setHasGitHubAccountConnection(installations.length > 0);
+      const response = await listGitHubAccountInstallations();
+      setGitHubInstallationAccess(deriveGitHubInstallationAccessState(response));
       setAccountState("idle");
     } catch (error) {
-      setHasGitHubAccountConnection(null);
+      setGitHubInstallationAccess(null);
       setAccountState("error");
       setAccountErrorMessage(
         getApiErrorMessage(error, "GitHub App 연결 상태를 불러오지 못했습니다.")
@@ -130,11 +142,15 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
     }
   }
 
-  async function connectRepository(repository: GitHubInstalledRepositoryCandidate): Promise<void> {
-    if (!installationState || repository.archived) return;
+  async function connectRepository(
+    repository: GitHubInstalledRepositoryCandidate,
+    returnAfterSuccess: boolean
+  ): Promise<boolean> {
+    if (!installationState || repository.archived) return false;
 
     setActionState("loading");
     setErrorMessage("");
+    setStatusMessage("");
 
     try {
       const connectedRepository = await connectGitHubSourceRepository({
@@ -150,26 +166,37 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
       ]);
       setShowRepositoryCandidates(false);
       setActionState("idle");
+      if (returnAfterSuccess) {
+        setPendingRepository(null);
+      }
+      setStatusMessage("GitHub repository를 프로젝트에 연결했습니다.");
+      if (returnAfterSuccess && safeReturnTo) {
+        router.replace(safeReturnTo);
+      }
+      return true;
     } catch (error) {
       setActionState("error");
       setErrorMessage(getApiErrorMessage(error, "GitHub repository를 프로젝트에 연결하지 못했습니다."));
+      return false;
     }
   }
 
   function requestRepositoryConnection(repository: GitHubInstalledRepositoryCandidate): void {
+    if (loadState !== "idle") return;
+
     if (shouldConfirmRepositoryChange(activeRepository, repository)) {
       setPendingRepository(repository);
       return;
     }
 
-    void connectRepository(repository);
+    void connectRepository(repository, activeRepository === null);
   }
 
   async function confirmRepositoryChange(): Promise<void> {
     if (!pendingRepository) return;
 
-    await connectRepository(pendingRepository);
-    setPendingRepository(null);
+    const didConnect = await connectRepository(pendingRepository, true);
+    if (!didConnect) return;
     requestAnimationFrame(() => repositoryChangeTriggerRef.current?.focus());
   }
 
@@ -253,7 +280,7 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
                 <DashboardIcon name="search" />
                 <span>{analysisState === "loading" ? "Repository 분석 중" : "Repository 분석"}</span>
               </button>
-              {hasGitHubAccountConnection ? (
+              {githubInstallationAccess?.status === "connected" ? (
                 <button
                   className="dashboardSecondaryButton"
                   disabled={actionState === "loading"}
@@ -284,7 +311,7 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
           <p className="dashboardMessage" role="status">GitHub App 연결 상태를 확인하는 중입니다.</p>
         ) : null}
 
-        {hasGitHubAccountConnection === false ? (
+        {githubInstallationAccess?.status === "connection_required" ? (
           <div className="dashboardStateBand">
             <strong>GitHub App 연결이 필요합니다.</strong>
             <p>로그인 방식과 관계없이 GitHub App을 연결한 뒤 프로젝트 repository를 선택할 수 있습니다.</p>
@@ -294,6 +321,14 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
             >
               GitHub App 연결
             </Link>
+          </div>
+        ) : null}
+
+        {githubInstallationAccess?.status === "server_not_configured" ||
+        githubInstallationAccess?.status === "connection_setup_not_configured" ? (
+          <div className="dashboardStateBand">
+            <strong>GitHub App 서버 설정이 필요합니다.</strong>
+            <p>서버 설정이 완료된 뒤 이 프로젝트의 repository 연결을 다시 확인해 주세요.</p>
           </div>
         ) : null}
 
@@ -310,7 +345,9 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
           </div>
         ) : null}
 
-        {hasGitHubAccountConnection && (!activeRepository || showRepositoryCandidates) ? (
+        {githubInstallationAccess?.status === "connected" &&
+        loadState === "idle" &&
+        (!activeRepository || showRepositoryCandidates) ? (
           <GitHubRepositoryConnectionPanel
             actionState={actionState}
             installationState={installationState}
@@ -321,6 +358,7 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
           />
         ) : null}
 
+        {statusMessage ? <p className="dashboardMessage" role="status">{statusMessage}</p> : null}
         {errorMessage ? <p className="dashboardMessage" role="alert">{errorMessage}</p> : null}
       </section>
 

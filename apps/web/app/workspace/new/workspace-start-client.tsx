@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
   Bot,
   Boxes,
+  Check,
   CloudDownload,
   GitBranch,
   LayoutPanelTop,
@@ -17,6 +19,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } 
 import { BoardThumbnailImage } from "../../../components/architecture-board/BoardThumbnailImage";
 import { TemplateGallery } from "../../../components/templates/TemplateGallery";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
+import { useAuth } from "../../../components/auth/auth-provider";
+import { invalidateProjectQueries } from "../../../components/query/dashboard-query-invalidation";
 import {
   createProject,
   deleteProject,
@@ -27,11 +31,9 @@ import {
   createWorkspaceStartSingleFlight,
   type WorkspaceStartSingleFlight
 } from "../../../features/workspace/workspace-start-single-flight";
-import { markTerraformSourceAuthoritative } from "../../../features/workspace/terraform-panel-utils";
 import {
   getBoardTemplateRelationshipCount,
   getBoardTemplateResourceCount,
-  isBoardTemplateAvailable,
   listBoardTemplates,
   type AvailableBoardTemplate,
   type BoardTemplate
@@ -41,6 +43,17 @@ import {
   resolveWorkspaceStartAction,
   type WorkspaceStartKind
 } from "./workspace-start-options";
+import {
+  createTemplateProjectDraft,
+  createWorkspaceStartTemplateSelection,
+  resolveWorkspaceStartTemplate,
+  resolveWorkspaceStartTemplateView
+} from "./workspace-start-template-flow";
+import {
+  createWorkspaceTargetEnvironmentOptions,
+  DEFAULT_WORKSPACE_TARGET_ENVIRONMENT,
+  type WorkspaceTargetEnvironment
+} from "../../../features/workspace/workspace-target-environment";
 import styles from "./workspace-start.module.css";
 
 const AI_START_DRAFT_STORAGE_KEY = "sketchcatch.newProjectDraft";
@@ -65,62 +78,74 @@ type WorkspaceStartForm = {
   readonly projectName: string;
   readonly selectedKind: WorkspaceStartKind;
   readonly selectedTemplateId: string | null;
+  readonly selectedTemplateVersion: string | null;
 };
-
-type TemplateStartView = "catalog" | "detail" | null;
 
 const startModeOptions = createWorkspaceStartOptions();
 const mainStartOptions = startModeOptions.filter((option) => option.kind !== "blank");
 const blankStartOption = startModeOptions.find((option) => option.kind === "blank");
 const boardTemplates = listBoardTemplates();
+const targetEnvironmentOptions = createWorkspaceTargetEnvironmentOptions();
 
 // 프로젝트 이름과 시작 방식을 받아 알맞은 생성 흐름으로 연결합니다.
 export function WorkspaceStartClient({
   initialFreshStart = false,
   initialStartKind,
-  initialTemplateId
+  initialTemplateId,
+  initialTemplateVersion
 }: {
   readonly initialFreshStart?: boolean | undefined;
   readonly initialStartKind?: WorkspaceStartKind | undefined;
   readonly initialTemplateId?: string | undefined;
+  readonly initialTemplateVersion?: string | undefined;
 } = {}) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const [title, setTitle] = useState("");
+  const initialTemplate = resolveWorkspaceStartTemplate(boardTemplates, {
+    templateId: initialTemplateId ?? null,
+    templateVersion: initialTemplateVersion ?? null
+  });
+  const initialTemplateSelection = createWorkspaceStartTemplateSelection(initialTemplate);
   const projectNameInputRef = useRef<HTMLInputElement>(null);
   const [startSingleFlight] = useState<WorkspaceStartSingleFlight>(() =>
     createWorkspaceStartSingleFlight()
   );
 
   const [selectedKind, setSelectedKind] = useState<WorkspaceStartKind>(initialStartKind ?? "ai");
+  const [selectedTargetEnvironment, setSelectedTargetEnvironment] =
+    useState<WorkspaceTargetEnvironment>(DEFAULT_WORKSPACE_TARGET_ENVIRONMENT);
   const [isStartFormHydrated, setIsStartFormHydrated] = useState(initialStartKind !== undefined);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    boardTemplates.some(
-      (template) => template.id === initialTemplateId && isBoardTemplateAvailable(template)
-    )
-      ? (initialTemplateId ?? null)
-      : null
+    initialTemplateSelection.templateId
+  );
+  const [selectedTemplateVersion, setSelectedTemplateVersion] = useState<string | null>(
+    initialTemplateSelection.templateVersion
   );
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(
-    boardTemplates.some(
-      (template) => template.id === initialTemplateId && isBoardTemplateAvailable(template)
-    )
-      ? (initialTemplateId ?? null)
-      : null
+    initialTemplateSelection.templateId
   );
-  const [templateStartView, setTemplateStartView] = useState<TemplateStartView>(() =>
-    initialStartKind === "template" ? "catalog" : null
+  const [templateStartView, setTemplateStartView] = useState(() =>
+    resolveWorkspaceStartTemplateView(initialStartKind, initialTemplate)
   );
   const [errorMessage, setErrorMessage] = useState("");
   const [projectNameError, setProjectNameError] = useState("");
   const [submittingKind, setSubmittingKind] = useState<WorkspaceStartKind | null>(null);
-  const selectedTemplate = useMemo(() => {
-    const template = boardTemplates.find((candidate) => candidate.id === selectedTemplateId);
-    return template && isBoardTemplateAvailable(template) ? template : null;
-  }, [selectedTemplateId]);
+  const selectedTemplate = useMemo(
+    () =>
+      resolveWorkspaceStartTemplate(boardTemplates, {
+        templateId: selectedTemplateId,
+        templateVersion: selectedTemplateVersion
+      }),
+    [selectedTemplateId, selectedTemplateVersion]
+  );
   const previewTemplate = useMemo(() => {
-    const template = boardTemplates.find((candidate) => candidate.id === previewTemplateId);
-    return template && isBoardTemplateAvailable(template) ? template : null;
-  }, [previewTemplateId]);
+    return resolveWorkspaceStartTemplate(boardTemplates, {
+      templateId: previewTemplateId,
+      templateVersion: previewTemplateId === selectedTemplateId ? selectedTemplateVersion : null
+    });
+  }, [previewTemplateId, selectedTemplateId, selectedTemplateVersion]);
   const isSubmitting = submittingKind !== null;
 
   useEffect(() => {
@@ -140,15 +165,14 @@ export function WorkspaceStartClient({
     if (storedForm) {
       setTitle(storedForm.projectName);
       setSelectedKind(storedForm.selectedKind);
-      const restoredTemplateId =
-        boardTemplates.some(
-          (template) =>
-            template.id === storedForm.selectedTemplateId && isBoardTemplateAvailable(template)
-        )
-          ? storedForm.selectedTemplateId
-          : null;
-      setSelectedTemplateId(restoredTemplateId);
-      setPreviewTemplateId(restoredTemplateId);
+      const restoredTemplate = resolveWorkspaceStartTemplate(boardTemplates, {
+        templateId: storedForm.selectedTemplateId,
+        templateVersion: storedForm.selectedTemplateVersion
+      });
+      const restoredSelection = createWorkspaceStartTemplateSelection(restoredTemplate);
+      setSelectedTemplateId(restoredSelection.templateId);
+      setSelectedTemplateVersion(restoredSelection.templateVersion);
+      setPreviewTemplateId(restoredSelection.templateId);
     } else {
       const aiDraft = readAiStartDraft();
       if (aiDraft?.projectName) {
@@ -164,8 +188,13 @@ export function WorkspaceStartClient({
       return;
     }
 
-    writeWorkspaceStartForm({ projectName: title, selectedKind, selectedTemplateId });
-  }, [isStartFormHydrated, selectedKind, selectedTemplateId, title]);
+    writeWorkspaceStartForm({
+      projectName: title,
+      selectedKind,
+      selectedTemplateId,
+      selectedTemplateVersion
+    });
+  }, [isStartFormHydrated, selectedKind, selectedTemplateId, selectedTemplateVersion, title]);
 
   // 명시된 시작 방식을 즉시 실행하고 같은 순간의 다른 시작 요청은 한 번만 처리합니다.
   async function handleContinue(
@@ -211,6 +240,7 @@ export function WorkspaceStartClient({
         try {
           const project = await createProject({ name: projectName });
           createdProjectId = project.id;
+          await invalidateProjectQueries(queryClient, user?.id);
 
           if (action.kind === "createRepositoryProject") {
             clearWorkspaceStartForm();
@@ -224,12 +254,8 @@ export function WorkspaceStartClient({
 
           if (action.kind === "createProject" && action.openMode === "template" && template) {
             await saveProjectDraft({
-              diagramJson:
-                template.terraformFiles.length > 0
-                  ? markTerraformSourceAuthoritative(template.diagramJson)
-                  : template.diagramJson,
-              projectId: project.id,
-              terraformFiles: template.terraformFiles.map((file) => ({ ...file }))
+              ...createTemplateProjectDraft({ projectId: project.id, template }),
+              expectedRevision: null
             });
           }
 
@@ -284,13 +310,30 @@ export function WorkspaceStartClient({
     return false;
   }
 
+  function handleTitleChange(value: string): void {
+    setTitle(value);
+    setProjectNameError("");
+    setErrorMessage("");
+  }
+
   function selectTemplate(templateId: string): void {
     if (!validateProjectName()) {
       return;
     }
 
-    setSelectedTemplateId(templateId);
-    setPreviewTemplateId(templateId);
+    const template = resolveWorkspaceStartTemplate(boardTemplates, {
+      templateId,
+      templateVersion: null
+    });
+
+    if (!template) {
+      return;
+    }
+
+    const selection = createWorkspaceStartTemplateSelection(template);
+    setSelectedTemplateId(selection.templateId);
+    setSelectedTemplateVersion(selection.templateVersion);
+    setPreviewTemplateId(selection.templateId);
     setTemplateStartView("detail");
     setErrorMessage("");
   }
@@ -301,11 +344,7 @@ export function WorkspaceStartClient({
         <TemplateCatalog
           onBack={() => setTemplateStartView(null)}
           onSelect={selectTemplate}
-          onTitleChange={(value) => {
-            setTitle(value);
-            setProjectNameError("");
-            setErrorMessage("");
-          }}
+          onTitleChange={handleTitleChange}
           projectNameError={projectNameError}
           projectNameInputRef={projectNameInputRef}
           selectedTemplateId={previewTemplateId}
@@ -324,7 +363,11 @@ export function WorkspaceStartClient({
           onStart={() => void handleContinue("template", previewTemplate)}
           errorMessage={errorMessage}
           isSubmitting={isSubmitting}
+          onTitleChange={handleTitleChange}
+          projectNameError={projectNameError}
+          projectNameInputRef={projectNameInputRef}
           template={previewTemplate}
+          title={title}
         />
       </WorkspaceStartFrame>
     );
@@ -341,44 +384,49 @@ export function WorkspaceStartClient({
           <ProjectNameField
             error={projectNameError}
             inputRef={projectNameInputRef}
-            onChange={(value) => {
-              setTitle(value);
-              setProjectNameError("");
-              setErrorMessage("");
-            }}
+            onChange={handleTitleChange}
             title={title}
           />
 
-          <div className={styles.optionList} role="group" aria-label="프로젝트 시작 방식">
-            {mainStartOptions.map((option) => {
-              const Icon = START_MODE_ICONS[option.kind];
-              const isOptionSubmitting = submittingKind === option.kind;
+          <TargetEnvironmentField
+            disabled={isSubmitting}
+            onChange={setSelectedTargetEnvironment}
+            value={selectedTargetEnvironment}
+          />
 
-              return (
-                <button
-                  aria-busy={isOptionSubmitting}
-                  className={styles.option}
-                  disabled={isSubmitting}
-                  key={option.kind}
-                  onClick={() => startWithKind(option.kind)}
-                  type="button"
-                >
-                  <span className={styles.optionIcon}>
-                    {isOptionSubmitting ? (
-                      <LoaderCircle aria-hidden="true" className={styles.spinner} size={20} />
-                    ) : (
-                      <Icon aria-hidden="true" size={20} />
-                    )}
-                  </span>
-                  <span className={styles.optionCopy}>
-                    <strong>{option.title}</strong>
-                    <small>{option.description}</small>
-                  </span>
-                  {option.kind === "reverse" ? <em>AWS Role 필요</em> : null}
-                </button>
-              );
-            })}
-          </div>
+          <section className={styles.startMethods} aria-labelledby="workspace-start-method-title">
+            <h2 id="workspace-start-method-title">시작 방식</h2>
+            <div className={styles.optionList} role="group" aria-label="프로젝트 시작 방식">
+              {mainStartOptions.map((option) => {
+                const Icon = START_MODE_ICONS[option.kind];
+                const isOptionSubmitting = submittingKind === option.kind;
+
+                return (
+                  <button
+                    aria-busy={isOptionSubmitting}
+                    className={styles.option}
+                    disabled={isSubmitting}
+                    key={option.kind}
+                    onClick={() => startWithKind(option.kind)}
+                    type="button"
+                  >
+                    <span className={styles.optionIcon}>
+                      {isOptionSubmitting ? (
+                        <LoaderCircle aria-hidden="true" className={styles.spinner} size={20} />
+                      ) : (
+                        <Icon aria-hidden="true" size={20} />
+                      )}
+                    </span>
+                    <span className={styles.optionCopy}>
+                      <strong>{option.title}</strong>
+                      <small>{option.description}</small>
+                    </span>
+                    {option.kind === "reverse" ? <em>AWS Role 필요</em> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
 
           <div className={styles.actions}>
             {blankStartOption ? (
@@ -409,6 +457,48 @@ export function WorkspaceStartClient({
         </section>
       </div>
     </WorkspaceStartFrame>
+  );
+}
+
+function TargetEnvironmentField({
+  disabled,
+  onChange,
+  value
+}: {
+  readonly disabled: boolean;
+  readonly onChange: (value: WorkspaceTargetEnvironment) => void;
+  readonly value: WorkspaceTargetEnvironment;
+}) {
+  return (
+    <fieldset className={styles.targetEnvironmentField} disabled={disabled}>
+      <legend>배포 대상 환경</legend>
+      <div className={styles.targetEnvironmentOptions}>
+        {targetEnvironmentOptions.map((option) => {
+          const isSelected = option.id === value;
+
+          return (
+            <label
+              className={
+                isSelected
+                  ? `${styles.targetEnvironmentOption} ${styles.targetEnvironmentOptionSelected}`
+                  : styles.targetEnvironmentOption
+              }
+              key={option.id}
+            >
+              <input
+                checked={isSelected}
+                name="workspace-target-environment"
+                onChange={() => onChange(option.id)}
+                type="radio"
+                value={option.id}
+              />
+              <span>{option.label}</span>
+              {isSelected ? <Check aria-hidden="true" size={18} strokeWidth={3} /> : null}
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 
@@ -554,13 +644,21 @@ function TemplateDetail({
   onBack,
   onStart,
   isSubmitting,
-  template
+  onTitleChange,
+  projectNameError,
+  projectNameInputRef,
+  template,
+  title
 }: {
   readonly errorMessage: string;
   readonly onBack: () => void;
   readonly onStart: () => void;
   readonly isSubmitting: boolean;
+  readonly onTitleChange: (value: string) => void;
+  readonly projectNameError: string;
+  readonly projectNameInputRef: RefObject<HTMLInputElement | null>;
   readonly template: AvailableBoardTemplate;
+  readonly title: string;
 }) {
   return (
     <div className={styles.templateFlow}>
@@ -570,19 +668,35 @@ function TemplateDetail({
       </button>
 
       <section className={styles.templateDetail} aria-labelledby="template-detail-title">
-        <div className={styles.detailPreviewFrame}>
-          <BoardThumbnailImage
-            alt={`${template.title} Architecture 미리보기`}
-            className={styles.detailPreview}
-            src={template.thumbnailSrc ?? null}
-          />
-        </div>
-
         <div className={styles.detailContent}>
           <div className={styles.detailHeading}>
             <span className={styles.eyebrow}>Selected template</span>
             <h1 id="template-detail-title">{template.title}</h1>
             <p>{template.description}</p>
+          </div>
+
+          <div className={styles.detailActionArea}>
+            <ProjectNameField
+              error={projectNameError}
+              inputRef={projectNameInputRef}
+              onChange={onTitleChange}
+              title={title}
+            />
+            {errorMessage ? (
+              <p className={styles.errorMessage} role="alert">
+                {errorMessage}
+              </p>
+            ) : null}
+            <button
+              aria-busy={isSubmitting}
+              className={styles.detailStartAction}
+              disabled={isSubmitting}
+              onClick={onStart}
+              type="button"
+            >
+              {isSubmitting ? "처리 중" : "이 템플릿으로 시작"}
+              {isSubmitting ? null : <ArrowRight aria-hidden="true" size={17} />}
+            </button>
           </div>
 
           <dl className={styles.detailStats}>
@@ -601,24 +715,14 @@ function TemplateDetail({
               <span key={tag}>{tag}</span>
             ))}
           </div>
+        </div>
 
-          <div className={styles.detailActionArea}>
-            {errorMessage ? (
-              <p className={styles.errorMessage} role="alert">
-                {errorMessage}
-              </p>
-            ) : null}
-            <button
-              aria-busy={isSubmitting}
-              className={styles.detailStartAction}
-              disabled={isSubmitting}
-              onClick={onStart}
-              type="button"
-            >
-              {isSubmitting ? "처리 중" : "이 템플릿으로 시작"}
-              {isSubmitting ? null : <ArrowRight aria-hidden="true" size={17} />}
-            </button>
-          </div>
+        <div className={styles.detailPreviewFrame}>
+          <BoardThumbnailImage
+            alt={`${template.title} Architecture 미리보기`}
+            className={styles.detailPreview}
+            src={template.thumbnailSrc ?? null}
+          />
         </div>
       </section>
     </div>
@@ -637,11 +741,15 @@ function readWorkspaceStartForm(): WorkspaceStartForm | null {
     const candidate = value as Partial<WorkspaceStartForm>;
     return typeof candidate.projectName === "string" &&
       isWorkspaceStartKind(candidate.selectedKind) &&
-      (candidate.selectedTemplateId === null || typeof candidate.selectedTemplateId === "string")
+      (candidate.selectedTemplateId === null || typeof candidate.selectedTemplateId === "string") &&
+      (candidate.selectedTemplateVersion === undefined ||
+        candidate.selectedTemplateVersion === null ||
+        typeof candidate.selectedTemplateVersion === "string")
       ? {
           projectName: candidate.projectName,
           selectedKind: candidate.selectedKind,
-          selectedTemplateId: candidate.selectedTemplateId
+          selectedTemplateId: candidate.selectedTemplateId,
+          selectedTemplateVersion: candidate.selectedTemplateVersion ?? null
         }
       : null;
   } catch {

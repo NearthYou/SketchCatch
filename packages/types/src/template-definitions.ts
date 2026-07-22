@@ -96,6 +96,7 @@ export type TemplateDefinition = {
 export type BuildTemplateDiagramInput = {
   readonly projectSlug: string;
   readonly shortId: string;
+  readonly requiredRuntimeSecrets?: readonly string[];
 };
 
 export type EcsFargateRuntimeNames = {
@@ -499,11 +500,14 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       "task-role": layoutInSupportGrid(1840, 120, 0, 1, "global-iam-group"),
       repository: layoutInSupportGrid(1840, 480, 0, 0, "definition-ops-group"),
       "log-group": layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group"),
+      distribution: layoutAt(240, 360),
       "load-balancer": layoutAt(640, 360, "vpc"),
       "target-group": layoutAt(1080, 360, "vpc"),
       listener: layoutAt(880, 360, "vpc"),
       task: layoutInSupportGrid(1840, 480, 1, 0, "definition-ops-group"),
-      service: layoutAt(1400, 360, "cluster")
+      service: layoutAt(1400, 360, "cluster"),
+      "scaling-target": layoutInSupportGrid(1840, 480, 1, 1, "definition-ops-group"),
+      "scaling-policy": layoutInSupportGrid(1840, 480, 2, 0, "definition-ops-group")
     },
     routing: {
       "vpc-igw": layoutRoute("handle-left", "handle-right"),
@@ -513,11 +517,14 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       "alb-sg-load-balancer": layoutRoute("handle-bottom", "handle-top"),
       "alb-sg-task-sg": layoutRoute("handle-bottom", "handle-top"),
       "task-sg-service": layoutRoute("handle-bottom", "handle-top"),
+      "distribution-load-balancer": layoutRoute("handle-right", "handle-left"),
       "load-balancer-listener": layoutRoute("handle-right", "handle-left"),
       "listener-target-group": layoutRoute("handle-right", "handle-left"),
       "target-group-service": layoutRoute("handle-right", "handle-left"),
       "cluster-service": layoutRoute("handle-right", "handle-left"),
       "service-task": layoutRoute("handle-right", "handle-left"),
+      "service-scaling-target": layoutRoute("handle-right", "handle-left"),
+      "scaling-target-policy": layoutRoute("handle-right", "handle-left"),
       "repository-task": layoutRoute("handle-bottom", "handle-top"),
       "task-log-group": layoutRoute("handle-right", "handle-left"),
       "task-role": layoutRoute("handle-top", "handle-bottom")
@@ -535,7 +542,9 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
           [
             layoutInSupportGrid(1840, 480, 0, 0, "definition-ops-group"),
             layoutInSupportGrid(1840, 480, 1, 0, "definition-ops-group"),
-            layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group")
+            layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group"),
+            layoutInSupportGrid(1840, 480, 1, 1, "definition-ops-group"),
+            layoutInSupportGrid(1840, 480, 2, 0, "definition-ops-group")
           ],
           "region"
         ),
@@ -560,7 +569,9 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
         [
           layoutInSupportGrid(1840, 480, 0, 0, "definition-ops-group"),
           layoutInSupportGrid(1840, 480, 1, 0, "definition-ops-group"),
-          layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group")
+          layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group"),
+          layoutInSupportGrid(1840, 480, 1, 1, "definition-ops-group"),
+          layoutInSupportGrid(1840, 480, 2, 0, "definition-ops-group")
         ],
         "region"
       ),
@@ -578,9 +589,9 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
       )
     },
     presentationEdges: {
-      "user-load-balancer": presentationEdge(
+      "user-distribution": presentationEdge(
         "user",
-        "load-balancer",
+        "distribution",
         "requests",
         "handle-right",
         "handle-left"
@@ -1278,8 +1289,9 @@ export const templateDefinitions = [
   createTemplate({
     id: "ecs-fargate-container-app",
     title: "ECS Fargate Container App",
-    description: "ECS Fargate와 Application Load Balancer를 사용하는 컨테이너 앱입니다.",
-    tags: ["ECS", "Fargate", "ALB"],
+    description:
+      "CloudFront HTTPS, Application Load Balancer, ECS Fargate, 요청 기반 Service Auto Scaling으로 실시간 관측을 검증하는 컨테이너 앱입니다.",
+    tags: ["ECS", "Fargate", "CloudFront", "Auto Scaling", "Live Observation"],
     resources: [
       resource("vpc", "VPC", "aws", "aws_vpc", 300, 80, {
         cidrBlock: "10.30.0.0/16",
@@ -1413,6 +1425,49 @@ export const templateDefinitions = [
         protocol: "HTTP",
         defaultAction: { type: "forward", targetGroupArn: "@ref:target-group.arn" }
       }),
+      resource(
+        "distribution",
+        "Live Observation HTTPS",
+        "aws",
+        "aws_cloudfront_distribution",
+        100,
+        820,
+        {
+          enabled: true,
+          priceClass: "PriceClass_100",
+          origin: [
+            {
+              domainName: "@ref:load-balancer.dns_name",
+              originId: "fargate-alb",
+              customOriginConfig: {
+                httpPort: 80,
+                httpsPort: 443,
+                originProtocolPolicy: "http-only",
+                originSslProtocols: ["TLSv1.2"]
+              }
+            }
+          ],
+          defaultCacheBehavior: [
+            {
+              allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+              cachedMethods: ["GET", "HEAD", "OPTIONS"],
+              targetOriginId: "fargate-alb",
+              viewerProtocolPolicy: "redirect-to-https",
+              compress: true,
+              minTtl: 0,
+              defaultTtl: 0,
+              maxTtl: 0,
+              forwardedValues: {
+                queryString: true,
+                headers: ["*"],
+                cookies: { forward: "all" }
+              }
+            }
+          ],
+          restrictions: [{ geoRestriction: { restrictionType: "none" } }],
+          viewerCertificate: [{ cloudfrontDefaultCertificate: true }]
+        }
+      ),
       resource("task", "ECS Task Definition", "aws", "aws_ecs_task_definition", 700, 660, {
         family: "fargate-app",
         networkMode: "awsvpc",
@@ -1456,7 +1511,48 @@ export const templateDefinitions = [
           containerPort: 80
         },
         dependsOn: ["@address:listener"]
-      })
+      }),
+      resource(
+        "scaling-target",
+        "Fargate Task Capacity 1–3",
+        "aws",
+        "aws_appautoscaling_target",
+        1100,
+        660,
+        {
+          minCapacity: 1,
+          maxCapacity: 3,
+          resourceId: "service/${@ref:cluster.name}/${@ref:service.name}",
+          scalableDimension: "ecs:service:DesiredCount",
+          serviceNamespace: "ecs"
+        }
+      ),
+      resource(
+        "scaling-policy",
+        "10 requests / target",
+        "aws",
+        "aws_appautoscaling_policy",
+        1300,
+        660,
+        {
+          name: "${@ref:service.name}-requests",
+          policyType: "TargetTrackingScaling",
+          resourceId: "@ref:scaling-target.resource_id",
+          scalableDimension: "@ref:scaling-target.scalable_dimension",
+          serviceNamespace: "@ref:scaling-target.service_namespace",
+          targetTrackingScalingPolicyConfiguration: {
+            targetValue: 10,
+            scaleInCooldown: 60,
+            scaleOutCooldown: 30,
+            predefinedMetricSpecification: [
+              {
+                predefinedMetricType: "ALBRequestCountPerTarget",
+                resourceLabel: "${@ref:load-balancer.arn_suffix}/${@ref:target-group.arn_suffix}"
+              }
+            ]
+          }
+        }
+      )
     ],
     relationships: [
       relationship("vpc-subnet-a", "vpc", "subnet-a", "contains"),
@@ -1469,10 +1565,13 @@ export const templateDefinitions = [
       relationship("alb-sg-task-sg", "alb-security-group", "task-security-group", "allows tcp/80"),
       relationship("task-sg-service", "task-security-group", "service", "applies to"),
       relationship("load-balancer-listener", "load-balancer", "listener", "listens"),
+      relationship("distribution-load-balancer", "distribution", "load-balancer", "HTTPS entry"),
       relationship("listener-target-group", "listener", "target-group", "forwards"),
       relationship("target-group-service", "target-group", "service", "routes"),
       relationship("cluster-service", "cluster", "service", "runs"),
       relationship("service-task", "service", "task", "uses"),
+      relationship("service-scaling-target", "service", "scaling-target", "scales"),
+      relationship("scaling-target-policy", "scaling-target", "scaling-policy", "tracks requests"),
       // The zero-step default stays on the public nginx image until an image is pushed to this ECR repository.
       relationship("repository-task", "repository", "task", "optional image source"),
       relationship("task-log-group", "task", "log-group", "writes logs"),
@@ -1710,10 +1809,24 @@ export function buildTemplateDiagramJson(
 ): DiagramJson {
   // Keep project metadata out of Terraform local names so Board labels and deployable identity remain separate.
   const definition = getTemplateDefinitionById(templateId);
+  const ecsRuntimeExtension =
+    templateId === "ecs-fargate-container-app"
+      ? createEcsFargateRuntimeSecretExtension(input)
+      : null;
   const resources =
     templateId === "ecs-fargate-container-app"
-      ? applyEcsFargateRuntimeNames(definition.resources, input.projectSlug)
+      ? [
+          ...applyEcsFargateRuntimeNames(
+            applyEcsFargateRuntimeSecretTaskContract(definition.resources, ecsRuntimeExtension),
+            input.projectSlug
+          ),
+          ...(ecsRuntimeExtension?.resources ?? [])
+        ]
       : definition.resources;
+  const relationships = [
+    ...definition.relationships,
+    ...(ecsRuntimeExtension?.relationships ?? [])
+  ];
   const resourceById = new Map(resources.map((resource) => [resource.id, resource]));
   const resourceNames = createTemplateTerraformResourceNames(resources);
   const nodeIdByResourceId = new Map(
@@ -1743,7 +1856,7 @@ export function buildTemplateDiagramJson(
       )
     ],
     edges: [
-      ...definition.relationships.map((relationship) => {
+      ...relationships.map((relationship) => {
         const presentationRole = getTemplateRelationshipPresentationRole(
           templateId,
           relationship.id
@@ -1783,6 +1896,187 @@ export function buildTemplateDiagramJson(
         }
       : {})
   };
+}
+
+type EcsFargateRuntimeSecretExtension = {
+  readonly resources: readonly TemplateResourceDefinition[];
+  readonly relationships: readonly TemplateRelationship[];
+};
+
+const CHECK_IN_SIGNING_SECRET = "CHECK_IN_SIGNING_SECRET";
+const CHECK_IN_SECRET_MATERIAL_RESOURCE_ID = "check-in-signing-material";
+const CHECK_IN_SECRET_RESOURCE_ID = "check-in-signing-secret";
+const CHECK_IN_SECRET_VERSION_RESOURCE_ID = "check-in-signing-secret-version";
+const CHECK_IN_SECRET_POLICY_RESOURCE_ID = "check-in-signing-secret-policy";
+
+function createEcsFargateRuntimeSecretExtension(
+  input: BuildTemplateDiagramInput
+): EcsFargateRuntimeSecretExtension | null {
+  if (!input.requiredRuntimeSecrets?.includes(CHECK_IN_SIGNING_SECRET)) {
+    return null;
+  }
+
+  const runtimeNames = createEcsFargateRuntimeNames(input.projectSlug);
+  const secretReadPolicy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Sid: "ReadCheckInSigningSecret",
+        Effect: "Allow",
+        Action: ["secretsmanager:GetSecretValue"],
+        Resource: `\${@ref:${CHECK_IN_SECRET_RESOURCE_ID}.arn}`
+      }
+    ]
+  });
+
+  return {
+    resources: [
+      {
+        ...resource(
+          CHECK_IN_SECRET_MATERIAL_RESOURCE_ID,
+          "Generated Check-in Signing Material",
+          "aws",
+          "random_password",
+          1320,
+          500,
+          { length: 48, special: false }
+        ),
+        terraformResourceName: "check_in_signing"
+      },
+      {
+        ...resource(
+          CHECK_IN_SECRET_RESOURCE_ID,
+          "Check-in Signing Secret",
+          "aws",
+          "aws_secretsmanager_secret",
+          1480,
+          500,
+          {
+            namePrefix: `${runtimeNames.serviceName}/check-in-signing-`,
+            recoveryWindowInDays: 0
+          }
+        ),
+        terraformResourceName: "check_in_signing"
+      },
+      {
+        ...resource(
+          CHECK_IN_SECRET_VERSION_RESOURCE_ID,
+          "Generated Signing Secret Version",
+          "aws",
+          "aws_secretsmanager_secret_version",
+          1640,
+          500,
+          {
+            secretId: `@ref:${CHECK_IN_SECRET_RESOURCE_ID}.id`,
+            secretString: `@ref:${CHECK_IN_SECRET_MATERIAL_RESOURCE_ID}.result`
+          }
+        ),
+        terraformResourceName: "check_in_signing"
+      },
+      {
+        ...resource(
+          CHECK_IN_SECRET_POLICY_RESOURCE_ID,
+          "ECS Signing Secret Read Policy",
+          "aws",
+          "aws_iam_role_policy",
+          1800,
+          500,
+          {
+            name: `${runtimeNames.serviceName}-check-in-signing-read`,
+            role: "@ref:execution-role.id",
+            policy: secretReadPolicy
+          }
+        ),
+        terraformResourceName: "check_in_signing_read"
+      }
+    ],
+    relationships: [
+      relationship(
+        "check-in-secret-material-version",
+        CHECK_IN_SECRET_MATERIAL_RESOURCE_ID,
+        CHECK_IN_SECRET_VERSION_RESOURCE_ID,
+        "generates"
+      ),
+      relationship(
+        "check-in-secret-version",
+        CHECK_IN_SECRET_RESOURCE_ID,
+        CHECK_IN_SECRET_VERSION_RESOURCE_ID,
+        "stores"
+      ),
+      relationship(
+        "check-in-secret-policy-execution-role",
+        CHECK_IN_SECRET_POLICY_RESOURCE_ID,
+        "execution-role",
+        "grants read"
+      ),
+      relationship(
+        "check-in-secret-task",
+        CHECK_IN_SECRET_RESOURCE_ID,
+        "task",
+        `injects ${CHECK_IN_SIGNING_SECRET}`
+      )
+    ]
+  };
+}
+
+function applyEcsFargateRuntimeSecretTaskContract(
+  resources: readonly TemplateResourceDefinition[],
+  extension: EcsFargateRuntimeSecretExtension | null
+): readonly TemplateResourceDefinition[] {
+  if (!extension) {
+    return resources;
+  }
+
+  return resources.map((resource) => {
+    if (resource.id !== "task") {
+      return resource;
+    }
+
+    return {
+      ...resource,
+      values: {
+        ...resource.values,
+        dependsOn: [
+          `@address:${CHECK_IN_SECRET_VERSION_RESOURCE_ID}`,
+          `@address:${CHECK_IN_SECRET_POLICY_RESOURCE_ID}`
+        ],
+        containerDefinitions: addCheckInSigningSecretToContainerDefinitions(
+          resource.values.containerDefinitions
+        )
+      }
+    };
+  });
+}
+
+function addCheckInSigningSecretToContainerDefinitions(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  try {
+    const definitions: unknown = JSON.parse(value);
+    if (!Array.isArray(definitions)) {
+      return value;
+    }
+
+    return JSON.stringify(
+      definitions.map((definition, index) =>
+        index === 0 && isTemplateRecord(definition)
+          ? {
+              ...definition,
+              secrets: [
+                {
+                  name: CHECK_IN_SIGNING_SECRET,
+                  valueFrom: `\${@ref:${CHECK_IN_SECRET_RESOURCE_ID}.arn}`
+                }
+              ]
+            }
+          : definition
+      )
+    );
+  } catch {
+    return value;
+  }
 }
 
 export function createEcsFargateRuntimeNames(projectSlug: string): EcsFargateRuntimeNames {

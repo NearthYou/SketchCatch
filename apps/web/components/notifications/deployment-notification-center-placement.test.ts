@@ -23,13 +23,13 @@ const rootLayoutSource = readFileSync(
   "utf8"
 );
 
-test("only editor routes move deployment notifications into the Workspace project bar", () => {
+test("Workspace editor and AI routes dock deployment notifications in their top bar", () => {
   assert.equal(getDeploymentNotificationCenterPlacement("/workspace"), "workspace");
+  assert.equal(getDeploymentNotificationCenterPlacement("/workspace/ai"), "workspace");
   assert.equal(getDeploymentNotificationCenterPlacement("/workspace/reverse"), "workspace");
   assert.equal(getDeploymentNotificationCenterPlacement("/dashboard"), "floating");
   assert.equal(getDeploymentNotificationCenterPlacement("/workspace/new"), "floating");
   assert.equal(getDeploymentNotificationCenterPlacement("/workspace/repository"), "floating");
-  assert.equal(getDeploymentNotificationCenterPlacement("/workspace/ai"), "floating");
 });
 
 test("the root notification provider renders one shared surface in the route-specific location", () => {
@@ -38,7 +38,10 @@ test("the root notification provider renders one shared surface in the route-spe
     /<DeploymentNotificationCenter>\{children\}<\/DeploymentNotificationCenter>/
   );
   assert.equal(rootLayoutSource.match(/<DeploymentNotificationCenter>/g)?.length, 1);
-  assert.match(centerSource, /import \{ usePathname \} from "next\/navigation";/);
+  assert.match(
+    centerSource,
+    /import \{ usePathname, useRouter \} from "next\/navigation";/
+  );
   assert.match(
     centerSource,
     /import \{ getDeploymentNotificationCenterPlacement \} from "\.\/notification-center-placement";/

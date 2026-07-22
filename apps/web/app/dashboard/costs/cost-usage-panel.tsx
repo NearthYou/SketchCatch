@@ -3,7 +3,6 @@
 import { AlertTriangle, RefreshCw, TrendingUp, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
-  AwsConnection,
   CostUsageAnalysisRange,
   CostUsageAnalysisResponse,
   CostUsageTrendPoint
@@ -33,13 +32,11 @@ import {
   normalizeCostUsageProjectKey,
   selectCostUsageProject
 } from "../../../features/costs/cost-usage-project-view";
-import { createCostRequestCoordinator } from "../../../features/costs/cost-request-coordinator";
 import { createCostUsageDisplayCopy } from "../../../features/costs/cost-usage-copy";
-import { listAwsConnections, listCostUsageAnalysis } from "../../../features/workspace/api";
+import { useCostUsageQuery } from "../../../features/costs/cost-queries";
+import { useAwsConnectionsQuery } from "../../../features/dashboard/connection-queries";
 import { CostMetric, formatUsd } from "./cost-dashboard-presentation";
 import styles from "../dashboard-tools.module.css";
-
-type CostLoadState = "loading" | "ready" | "error";
 
 const COST_USAGE_RANGE_OPTIONS: readonly SelectMenuOption[] = [
   { label: "최근 7일", value: "7d" },
@@ -47,15 +44,45 @@ const COST_USAGE_RANGE_OPTIONS: readonly SelectMenuOption[] = [
   { label: "이번 달", value: "month_to_date" }
 ];
 
-export function CostUsagePanel() {
-  const [connections, setConnections] = useState<readonly AwsConnection[]>([]);
-  const [selectedConnectionId, setSelectedConnectionId] = useState("");
-  const [selectedProjectKey, setSelectedProjectKey] = useState(COST_USAGE_ALL_PROJECTS_KEY);
-  const [range, setRange] = useState<CostUsageAnalysisRange>("30d");
-  const [data, setData] = useState<CostUsageAnalysisResponse | null>(null);
-  const [loadState, setLoadState] = useState<CostLoadState>("loading");
-  const [errorMessage, setErrorMessage] = useState("");
-  const requestCoordinatorRef = useRef(createCostRequestCoordinator());
+export function CostUsagePanel({
+  onConnectionChange,
+  onConnectionNormalize,
+  onProjectChange,
+  onProjectNormalize,
+  onRangeChange,
+  range,
+  selectedConnectionId,
+  selectedProjectKey
+}: {
+  readonly onConnectionChange: (connectionId: string) => void;
+  readonly onConnectionNormalize: (connectionId: string) => void;
+  readonly onProjectChange: (projectKey: string) => void;
+  readonly onProjectNormalize: (projectKey: string) => void;
+  readonly onRangeChange: (range: CostUsageAnalysisRange) => void;
+  readonly range: CostUsageAnalysisRange;
+  readonly selectedConnectionId: string;
+  readonly selectedProjectKey: string;
+}) {
+  const connectionsQuery = useAwsConnectionsQuery();
+  const connections = useMemo(
+    () => getVerifiedCostUsageAwsConnections(connectionsQuery.data ?? []),
+    [connectionsQuery.data]
+  );
+  const effectiveConnectionId = connections.some(
+    (connection) => connection.id === selectedConnectionId
+  )
+    ? selectedConnectionId
+    : connections[0]?.id ?? "";
+  const usageQuery = useCostUsageQuery({
+    connectionId: effectiveConnectionId,
+    enabled: connectionsQuery.isSuccess,
+    range
+  });
+  const data: CostUsageAnalysisResponse | null = usageQuery.data ?? null;
+  const isFetching = connectionsQuery.isFetching || usageQuery.isFetching;
+  const queryError = connectionsQuery.error ?? usageQuery.error;
+  const refetchUsage = () =>
+    connectionsQuery.isError ? connectionsQuery.refetch() : usageQuery.refetch();
   const projectOptions = useMemo(() => createCostUsageProjectOptions(data?.projectCosts ?? []), [data]);
   const projectSelectOptions = useMemo<readonly SelectMenuOption[]>(
     () => [
@@ -122,17 +149,6 @@ export function CostUsagePanel() {
   const serviceBars = useMemo(() => createServiceCostBars(scopedServiceCosts), [scopedServiceCosts]);
   const monthlyBars = useMemo(() => createCostUsageMonthlyBars(scopedMonthlyTrend), [scopedMonthlyTrend]);
   const monthlyHasEstimate = monthlyBars.some((bar) => bar.isEstimated);
-  const monthlyHasActual = monthlyBars.some((bar) => !bar.isEstimated);
-  const monthlyScopeLabel = selectedProject
-    ? `${selectedProject.projectName} · ${monthlyHasEstimate
-        ? monthlyHasActual ? "실측·추정 혼합" : "추정 배분"
-        : "태그 실측"}`
-    : data?.dataSource === "sample" ? "AWS 계정 전체 · 예시" : "AWS 계정 전체";
-  const monthlyEstimateNote = selectedProject && monthlyHasEstimate
-    ? "‘추정’으로 표시된 월은 선택 기간의 프로젝트 비용 비율로 배분한 값입니다."
-    : data?.dataSource === "sample"
-      ? "AWS 실제 사용량을 연결하면 월별 실측 데이터로 교체됩니다."
-      : null;
   const savings = useMemo(() => sumEstimatedMonthlySavings(scopedRecommendations), [scopedRecommendations]);
   const currentCost = selectedProject?.amount ?? data?.totalCost.amount;
   const forecastCost = useMemo(
@@ -148,46 +164,39 @@ export function CostUsagePanel() {
     [data, selectedProject]
   );
 
-  async function loadCosts(nextRange = range, connectionId = selectedConnectionId): Promise<void> {
-    const request = requestCoordinatorRef.current.begin();
-    setLoadState("loading");
-    setErrorMessage("");
-    try {
-      const loadedConnections = getVerifiedCostUsageAwsConnections(
-        await listAwsConnections({ signal: request.signal })
-      );
-      if (!request.isCurrent()) return;
-      const selectedId = loadedConnections.some((connection) => connection.id === connectionId)
-        ? connectionId
-        : loadedConnections[0]?.id ?? "";
-      const result = await listCostUsageAnalysis({
-        range: nextRange,
-        ...(selectedId ? { awsConnectionId: selectedId } : {})
-      }, { signal: request.signal });
-      if (!request.isCurrent()) return;
-      setConnections(loadedConnections);
-      setSelectedConnectionId(selectedId);
-      setSelectedProjectKey((current) => normalizeCostUsageProjectKey(result.projectCosts, current));
-      setData(result);
-      setLoadState("ready");
-    } catch (error) {
-      if (request.signal.aborted || !request.isCurrent()) return;
-      setErrorMessage(error instanceof Error ? error.message : "실제 사용량을 불러오지 못했습니다.");
-      setLoadState("error");
-    }
-  }
-
-  useEffect(() => () => requestCoordinatorRef.current.dispose(), []);
   useEffect(() => {
-    void loadCosts("30d", "");
-  }, []);
+    if (
+      connectionsQuery.isSuccess &&
+      effectiveConnectionId !== selectedConnectionId
+    ) {
+      onConnectionNormalize(effectiveConnectionId);
+    }
+  }, [
+    connectionsQuery.isSuccess,
+    effectiveConnectionId,
+    onConnectionNormalize,
+    selectedConnectionId
+  ]);
 
-  if (loadState === "loading" && !data) {
-    return <ProductState description="성공 배포 프로젝트의 AWS 사용량을 확인하고 있습니다." kind="loading" title="실제 사용량 불러오는 중" />;
+  useEffect(() => {
+    if (data) {
+      const normalizedProjectKey = normalizeCostUsageProjectKey(
+        data.projectCosts,
+        selectedProjectKey
+      );
+
+      if (normalizedProjectKey !== selectedProjectKey) {
+        onProjectNormalize(normalizedProjectKey);
+      }
+    }
+  }, [data, onProjectNormalize, selectedProjectKey]);
+
+  if (queryError && !data) {
+    return <ProductState action={<button onClick={() => void refetchUsage()} type="button">다시 시도</button>} description={queryError instanceof Error ? queryError.message : "실제 사용량을 불러오지 못했습니다."} kind="error" title="실제 사용량을 불러오지 못했습니다" />;
   }
 
-  if (loadState === "error" && !data) {
-    return <ProductState action={<button onClick={() => void loadCosts()} type="button">다시 시도</button>} description={errorMessage} kind="error" title="실제 사용량을 불러오지 못했습니다" />;
+  if ((connectionsQuery.isPending || usageQuery.isPending) && !data) {
+    return <ProductState description="성공 배포 프로젝트의 AWS 사용량을 확인하고 있습니다." kind="loading" title="실제 사용량 불러오는 중" />;
   }
 
   if (data?.projectCosts.length === 0) {
@@ -195,11 +204,11 @@ export function CostUsagePanel() {
       <ProductState
         action={
           <button
-            disabled={loadState === "loading"}
-            onClick={() => void loadCosts()}
+            disabled={isFetching}
+            onClick={() => void usageQuery.refetch()}
             type="button"
           >
-            {loadState === "loading" ? "새로고침 중" : "새로고침"}
+            {isFetching ? "새로고침 중" : "새로고침"}
           </button>
         }
         description="프로젝트를 배포하면 AWS Cost Explorer와 CloudWatch 기반 실제 사용량이 여기에 표시됩니다."
@@ -218,7 +227,7 @@ export function CostUsagePanel() {
             <SelectMenu
               ariaLabel="실제 사용량 배포 프로젝트 선택"
               emptyLabel="배포 프로젝트 선택"
-              onChange={setSelectedProjectKey}
+              onChange={onProjectChange}
               options={projectSelectOptions}
               size="large"
               tone="surface"
@@ -231,13 +240,12 @@ export function CostUsagePanel() {
               ariaLabel="실제 사용량 AWS 연결 선택"
               emptyLabel="AWS 연결 선택"
               onChange={(id) => {
-                setSelectedConnectionId(id);
-                void loadCosts(range, id);
+                onConnectionChange(id);
               }}
               options={connectionSelectOptions}
               size="large"
               tone="surface"
-              value={selectedConnectionId}
+              value={effectiveConnectionId}
             />
           </div>
           <div className={styles.controlField}>
@@ -247,8 +255,7 @@ export function CostUsagePanel() {
               emptyLabel="기간 선택"
               onChange={(value) => {
                 const nextRange = value as CostUsageAnalysisRange;
-                setRange(nextRange);
-                void loadCosts(nextRange);
+                onRangeChange(nextRange);
               }}
               options={COST_USAGE_RANGE_OPTIONS}
               size="large"
@@ -258,21 +265,20 @@ export function CostUsagePanel() {
           </div>
         </div>
         <button
-          aria-busy={loadState === "loading"}
-          aria-label={loadState === "loading" ? "실제 사용량 새로고침 중" : "실제 사용량 새로고침"}
+          aria-busy={isFetching}
+          aria-label={isFetching ? "실제 사용량 새로고침 중" : "실제 사용량 새로고침"}
           className={styles.iconAction}
-          data-loading={loadState === "loading"}
-          disabled={loadState === "loading"}
-          onClick={() => void loadCosts()}
-          title={loadState === "loading" ? "새로고침 중" : "새로고침"}
+          data-loading={isFetching}
+          disabled={isFetching}
+          onClick={() => void usageQuery.refetch()}
+          title={isFetching ? "새로고침 중" : "새로고침"}
           type="button"
         >
           <RefreshCw aria-hidden="true" size={17} />
         </button>
       </div>
 
-      {displayCopy.sampleNotice ? <p className="dashboardInformationBand" role="status">{displayCopy.sampleNotice}</p> : null}
-      {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}
+      {queryError ? <p className={styles.errorBand}>{queryError instanceof Error ? queryError.message : "실제 사용량을 갱신하지 못했습니다."}</p> : null}
 
       <section className={styles.metricGrid}>
         <CostMetric icon={<WalletCards size={18} />} label={selectedProject ? `${selectedProject.projectName} ${displayCopy.metricCostLabel}` : displayCopy.metricCostLabel} value={formatUsd(currentCost)} />
@@ -285,14 +291,12 @@ export function CostUsagePanel() {
           <div className={styles.monthlyComparisonHeader}>
             <div>
               <h2>월별 비교</h2>
-              <p>최근 6개월의 월별 비용과 이번 달 예상 비용을 비교합니다.</p>
             </div>
-            <span>{monthlyScopeLabel}</span>
           </div>
 
           <div className={styles.monthlyComparisonGrid}>
-            <MonthlySummaryCard label={monthlyHasEstimate ? "전월 비용" : "전월 실제"} note={monthlyHasEstimate ? "추정 포함" : undefined} value={formatUsd(scopedMonthlyComparison.previousMonthActual.amount)} />
-            <MonthlySummaryCard label="이번 달 사용" note="집계 중" value={formatUsd(scopedMonthlyComparison.currentMonthToDate.amount)} />
+            <MonthlySummaryCard label={monthlyHasEstimate ? "전월 비용" : "전월 실제"} value={formatUsd(scopedMonthlyComparison.previousMonthActual.amount)} />
+            <MonthlySummaryCard label="이번 달 누적 사용" value={formatUsd(scopedMonthlyComparison.currentMonthToDate.amount)} />
             <MonthlySummaryCard label="월말 예상" value={formatUsd(scopedMonthlyComparison.currentMonthForecast.amount)} />
             <MonthlySummaryCard
               direction={scopedMonthlyComparison.forecastChangeAmount.amount > 0 ? "up" : scopedMonthlyComparison.forecastChangeAmount.amount < 0 ? "down" : "flat"}
@@ -309,26 +313,21 @@ export function CostUsagePanel() {
                   <strong>{formatUsd(bar.amount)}</strong>
                   <div className={styles.monthlyBarTrack}>
                     <i
+                      data-estimated={bar.isEstimated}
                       data-partial={bar.isPartial}
                       style={{ height: `${Math.max(bar.amount > 0 ? 4 : 0, bar.heightPercentage)}%` }}
                     />
                   </div>
-                  <span>
-                    {bar.label}
-                    {bar.isPartial || bar.isEstimated
-                      ? <small>{[bar.isPartial ? "집계 중" : "", bar.isEstimated ? "추정" : ""].filter(Boolean).join(" · ")}</small>
-                      : null}
-                  </span>
+                  <span>{bar.label}</span>
                 </div>
               ))}
             </div>
           </div>
-          {monthlyEstimateNote ? <p className={styles.monthlyEstimateNote}>{monthlyEstimateNote}</p> : null}
         </section>
       ) : null}
 
       <section className={styles.chartSection}>
-        <div><h2>일별 실제 비용</h2><span>{data?.startDate} - {data?.endDate}</span></div>
+        <div><h2>{data?.dataSource === "sample" ? "일별 비용" : "일별 실제 비용"}</h2><span>{data?.startDate} - {data?.endDate}</span></div>
         {scopedDailyTrend.length === 0
           ? <p>표시할 비용이 없습니다.</p>
           : <CostUsageChart dailyTrend={scopedDailyTrend} />}

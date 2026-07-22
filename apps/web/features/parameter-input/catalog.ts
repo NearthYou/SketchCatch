@@ -37,6 +37,18 @@ const blockTypeParameterDefinitions: Record<
   string,
   readonly ParameterCatalogDefinition[]
 > = {
+  [createTerraformParameterCatalogKey("data", "aws_ssm_parameter")]: [
+    required("name", "name", "Parameter name", "/sketchcatch/audit"),
+    boolean("withDecryption", "with_decryption", "Decrypt SecureString")
+  ],
+  [createTerraformParameterCatalogKey("data", "aws_ec2_managed_prefix_list")]: [
+    required(
+      "name",
+      "name",
+      "Managed prefix list name",
+      "com.amazonaws.ap-northeast-2.s3"
+    )
+  ],
   [createTerraformParameterCatalogKey("data", "aws_iam_policy")]: [
     core(
       "arn",
@@ -802,6 +814,302 @@ const priorityResourceFallbacks: Record<string, readonly ParameterCatalogDefinit
 } satisfies Record<string, readonly ParameterCatalogDefinition[]>;
 
 const terraformValidateRequiredAdditions = {
+  aws_appautoscaling_target: {
+    removeNames: ["name", "tags"],
+    definitions: [
+      number("maxCapacity", "max_capacity", "Maximum capacity", true, "2"),
+      number("minCapacity", "min_capacity", "Minimum capacity", true, "1"),
+      required("resourceId", "resource_id", "Scalable resource ID", "service/audit-cluster/audit-service"),
+      select(
+        "scalableDimension",
+        "scalable_dimension",
+        "Scalable dimension",
+        ["ecs:service:DesiredCount"],
+        true
+      ),
+      select("serviceNamespace", "service_namespace", "Service namespace", ["ecs"], true)
+    ]
+  },
+  aws_appautoscaling_policy: {
+    removeNames: ["tags"],
+    definitions: [
+      required("name", "name", "Policy name", "audit-target-tracking"),
+      select("policyType", "policy_type", "Policy type", ["TargetTrackingScaling"], true),
+      required("resourceId", "resource_id", "Scalable resource ID", "service/audit-cluster/audit-service"),
+      select(
+        "scalableDimension",
+        "scalable_dimension",
+        "Scalable dimension",
+        ["ecs:service:DesiredCount"],
+        true
+      ),
+      select("serviceNamespace", "service_namespace", "Service namespace", ["ecs"], true),
+      nestedBlock(
+        "targetTrackingScalingPolicyConfiguration",
+        "target_tracking_scaling_policy_configuration",
+        "Target tracking configuration",
+        [
+          number("targetValue", "target_value", "Target value", true, "50"),
+          nestedBlock(
+            "predefinedMetricSpecification",
+            "predefined_metric_specification",
+            "Predefined metric",
+            [
+              select(
+                "predefinedMetricType",
+                "predefined_metric_type",
+                "Metric type",
+                ["ECSServiceAverageCPUUtilization"],
+                true
+              )
+            ]
+          )
+        ]
+      )
+    ]
+  },
+  aws_api_gateway_authorizer: {
+    removeNames: ["tags"],
+    definitions: [
+      required("name", "name", "Authorizer name", "sketchcatch-authorizer"),
+      ref("restApiId", "rest_api_id", "REST API", ["aws_api_gateway_rest_api"], true, "id"),
+      select("type", "type", "Authorizer type", ["TOKEN", "REQUEST", "COGNITO_USER_POOLS"])
+    ]
+  },
+  aws_ecs_capacity_provider: {
+    definitions: [
+      nestedBlock(
+        "autoScalingGroupProvider",
+        "auto_scaling_group_provider",
+        "Auto Scaling group provider",
+        [
+          ref(
+            "autoScalingGroupArn",
+            "auto_scaling_group_arn",
+            "Auto Scaling group",
+            ["aws_autoscaling_group"],
+            true,
+            "arn"
+          )
+        ]
+      )
+    ]
+  },
+  aws_eks_fargate_profile: {
+    removeNames: ["name"],
+    definitions: [
+      ref("clusterName", "cluster_name", "EKS cluster", ["aws_eks_cluster"], true, "name"),
+      required("fargateProfileName", "fargate_profile_name", "Fargate profile name", "audit-profile"),
+      ref(
+        "podExecutionRoleArn",
+        "pod_execution_role_arn",
+        "Pod execution role",
+        ["aws_iam_role"],
+        true,
+        "arn"
+      ),
+      nestedBlock("selector", "selector", "Pod selector", [
+        required("namespace", "namespace", "Namespace", "default")
+      ])
+    ]
+  },
+  aws_security_group_rule: {
+    removeNames: ["cidrBlocks"],
+    definitions: [list("cidrBlocks", "cidr_blocks", "CIDR blocks", true)]
+  },
+  aws_autoscaling_group: {
+    removeNames: ["launchTemplate"],
+    definitions: [
+      nestedBlock(
+        "launchTemplate",
+        "launch_template",
+        "Launch template",
+        [
+          ref("id", "id", "Launch template", ["aws_launch_template"], true, "id"),
+          core("version", "version", "Version", "$Latest")
+        ]
+      )
+    ]
+  },
+  aws_autoscaling_policy: {
+    removeNames: ["adjustmentType", "scalingAdjustment"],
+    definitions: [
+      select(
+        "adjustmentType",
+        "adjustment_type",
+        "Adjustment type",
+        ["ChangeInCapacity"]
+      ),
+      number("scalingAdjustment", "scaling_adjustment", "Scaling adjustment", false, "1")
+    ]
+  },
+  aws_ebs_volume: {
+    removeNames: ["size"],
+    definitions: [number("size", "size", "Size (GiB)", true, "8")]
+  },
+  aws_instance: {
+    removeNames: ["instanceType"],
+    definitions: [
+      select(
+        "instanceType",
+        "instance_type",
+        "Instance type",
+        ["t3.micro", "t3.small", "t3.medium"],
+        true
+      )
+    ]
+  },
+  aws_lambda_function: {
+    definitions: [
+      field({
+        name: "inlineSource",
+        terraformName: "inline_source",
+        label: "Inline source",
+        core: true,
+        placeholder: "export const handler = async () => ({ statusCode: 200 });",
+        description: "배포 가능한 zip을 생성하기 위한 Lambda 기본 소스입니다."
+      })
+    ]
+  },
+  aws_cloudwatch_event_rule: {
+    removeNames: ["scheduleExpression"],
+    definitions: [
+      required("scheduleExpression", "schedule_expression", "Schedule expression", "rate(1 day)")
+    ]
+  },
+  aws_s3_bucket_lifecycle_configuration: {
+    definitions: [
+      nestedBlock("rule", "rule", "Lifecycle rules", [
+        required("id", "id", "Rule ID", "expire-old-objects"),
+        select("status", "status", "Status", ["Enabled", "Disabled"], true),
+        nestedBlock("filter", "filter", "Filter", [])
+      ], true, true)
+    ]
+  },
+  aws_api_gateway_deployment: {
+    removeNames: ["stageName"],
+    definitions: []
+  },
+  aws_cognito_user_pool: {
+    definitions: [required("name", "name", "User pool name", "sketchcatch-users")]
+  },
+  aws_cognito_user_pool_client: {
+    removeNames: ["tags"],
+    definitions: [
+      required("name", "name", "Client name", "sketchcatch-client"),
+      ref("userPoolId", "user_pool_id", "User pool", ["aws_cognito_user_pool"], true, "id")
+    ]
+  },
+  aws_s3_bucket_website_configuration: {
+    removeNames: ["name", "tags"],
+    definitions: [
+      ref("bucket", "bucket", "S3 bucket", ["aws_s3_bucket"], true, "id"),
+      nestedBlock("indexDocument", "index_document", "Index document", [
+        required("suffix", "suffix", "Index suffix", "index.html")
+      ]),
+      nestedBlock("errorDocument", "error_document", "Error document", [
+        required("key", "key", "Error document key", "error.html")
+      ], false)
+    ]
+  },
+  aws_codestarconnections_connection: {
+    definitions: [
+      required("name", "name", "Connection name", "sketchcatch-github"),
+      select("providerType", "provider_type", "Provider type", ["GitHub"], true)
+    ]
+  },
+  aws_sfn_state_machine: {
+    definitions: [
+      required("name", "name", "State machine name", "sketchcatch-state-machine"),
+      ref("roleArn", "role_arn", "Execution role", ["aws_iam_role"], true, "arn"),
+      required(
+        "definition",
+        "definition",
+        "State machine definition",
+        '{"StartAt":"Done","States":{"Done":{"Type":"Succeed"}}}'
+      )
+    ]
+  },
+  kubernetes_namespace: {
+    definitions: [
+      nestedBlock("metadata", "metadata", "Metadata", [
+        required("name", "name", "Namespace name", "sketchcatch")
+      ])
+    ]
+  },
+  kubernetes_deployment: {
+    definitions: [
+      nestedBlock("metadata", "metadata", "Metadata", [
+        required("name", "name", "Deployment name", "web")
+      ]),
+      nestedBlock("spec", "spec", "Deployment spec", [
+        number("replicas", "replicas", "Replicas", false, "1"),
+        nestedBlock("selector", "selector", "Selector", [
+          field({
+            name: "matchLabels",
+            terraformName: "match_labels",
+            label: "Match labels",
+            type: "map",
+            inputKind: "key-value",
+            required: true
+          })
+        ]),
+        nestedBlock("template", "template", "Pod template", [
+          nestedBlock("metadata", "metadata", "Metadata", [
+            field({
+              name: "labels",
+              terraformName: "labels",
+              label: "Labels",
+              type: "map",
+              inputKind: "key-value",
+              required: true
+            })
+          ]),
+          nestedBlock("spec", "spec", "Pod spec", [
+            nestedBlock(
+              "container",
+              "container",
+              "Containers",
+              [
+                required("name", "name", "Container name", "web"),
+                required("image", "image", "Container image", "nginx:stable")
+              ],
+              true,
+              true
+            )
+          ])
+        ])
+      ])
+    ]
+  },
+  kubernetes_service: {
+    definitions: [
+      nestedBlock("metadata", "metadata", "Metadata", [
+        required("name", "name", "Service name", "web")
+      ]),
+      nestedBlock("spec", "spec", "Service spec", [
+        field({
+          name: "selector",
+          terraformName: "selector",
+          label: "Selector",
+          type: "map",
+          inputKind: "key-value",
+          required: true
+        }),
+        nestedBlock(
+          "port",
+          "port",
+          "Ports",
+          [
+            number("port", "port", "Port", true, "80"),
+            number("targetPort", "target_port", "Target port", false, "80")
+          ],
+          true,
+          true
+        )
+      ])
+    ]
+  },
   aws_api_gateway_resource: {
     removeNames: ["parentId"],
     definitions: [
@@ -1238,7 +1546,11 @@ function createResourceParameterCatalog(): ParameterCatalog["resources"] {
   };
 
   for (const definition of resourceDefinitions) {
-    if (!definition.capabilities.parameterPanel || resources[definition.terraform.resourceType]) {
+    if (
+      !definition.capabilities.parameterPanel ||
+      definition.terraform.blockType !== "resource" ||
+      resources[definition.terraform.resourceType]
+    ) {
       continue;
     }
 

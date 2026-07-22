@@ -4,7 +4,7 @@
   border-bottom: 1px solid #f0f0f3;
   color: #60646c;
   display: flex;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   gap: 12px;
   justify-content: space-between;
   min-height: 38px;
@@ -15,7 +15,7 @@
 .terraformStatusSynced {
   align-items: center;
   display: inline-flex;
-  font-weight: 700;
+  font-weight: var(--presentation-font-weight-bold);
   gap: 6px;
   min-width: 0;
   white-space: nowrap;
@@ -28,6 +28,10 @@
   flex: 0 0 auto;
   height: 6px;
   width: 6px;
+}
+
+.terraformPreviewSummary {
+  font-size: calc(12px + var(--presentation-font-size-increase) - 3px);
 }
 
 .terraformStatusEdited {
@@ -50,8 +54,8 @@
 .terraformSaveBannerError {
   align-items: center;
   display: flex;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 10px;
   justify-content: space-between;
   line-height: 1.35;

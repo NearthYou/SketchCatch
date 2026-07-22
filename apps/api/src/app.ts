@@ -1,8 +1,4 @@
-import Fastify, {
-  type FastifyInstance,
-  type FastifyReply,
-  type FastifyRequest
-} from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { ZodError } from "zod";
 import type { ApiErrorCode } from "@sketchcatch/types";
 import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
@@ -13,6 +9,7 @@ import type { CostUsageAnalysisProvider } from "./services/cost-usage-analysis.j
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
 import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
 import { registerHealthRoutes } from "./routes/health.js";
+import { maskDeploymentMessage } from "./deployments/log-masking.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
@@ -25,10 +22,27 @@ import {
   registerSourceRepositoryRoutes,
   type SourceRepositoryRouteOptions
 } from "./routes/source-repositories.js";
+import {
+  registerRepositoryAnalysisRecordRoutes,
+  type RepositoryAnalysisRecordRouteOptions
+} from "./routes/repository-analysis-records.js";
+import {
+  registerProjectDeliveryProfileRoutes,
+  type ProjectDeliveryProfileRouteOptions
+} from "./routes/project-delivery-profile.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerLiveObservationV2Routes } from "./routes/live-observations-v2.js";
 import { registerLiveObservationPublicCollectorRoutes } from "./routes/live-observation-public-collector.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
+import { registerGitCicdReadinessRoutes } from "./routes/git-cicd-readiness.js";
+import {
+  registerGitHubReleaseRunRoutes,
+  type GitHubReleaseRunRouteOptions
+} from "./routes/git-cicd-release-runs.js";
+import {
+  registerGitHubInfrastructureRunRoutes,
+  type GitHubInfrastructureRunRouteOptions
+} from "./routes/git-cicd-infrastructure-runs.js";
 import { registerCostRoutes } from "./routes/costs.js";
 import {
   registerNotificationRoutes,
@@ -49,11 +63,12 @@ import {
   type RuntimeEnv
 } from "./config/env.js";
 import { createGitHubAppClient } from "./source-repositories/github-app-client.js";
-import {
-  registerTerraformRoutes,
-  type TerraformRouteOptions
-} from "./routes/terraform.js";
+import { registerTerraformRoutes, type TerraformRouteOptions } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
+import {
+  registerProjectBuildEnvironmentRoutes,
+  type ProjectBuildEnvironmentRouteOptions
+} from "./routes/project-build-environments.js";
 import {
   registerReverseEngineeringRoutes,
   type ReverseEngineeringRouteOptions
@@ -63,10 +78,7 @@ import {
   createInMemoryRateLimiter,
   type RateLimiter
 } from "./rate-limit/in-memory-rate-limiter.js";
-import {
-  createRuntimeCacheFromEnv,
-  type RuntimeCache
-} from "./runtime-cache/index.js";
+import { createRuntimeCacheFromEnv, type RuntimeCache } from "./runtime-cache/index.js";
 import {
   createLiveObservationV2Runtime,
   type LiveObservationV2Runtime
@@ -80,25 +92,27 @@ const fallbackCorsAllowedHeaders = "content-type,authorization";
 const sensitiveHeaderRedactionPaths = [
   "headers.authorization",
   "headers.cookie",
-  "headers[\"set-cookie\"]",
+  'headers["set-cookie"]',
   "req.headers.authorization",
   "req.headers.cookie",
-  "req.headers[\"set-cookie\"]",
+  'req.headers["set-cookie"]',
   "request.headers.authorization",
   "request.headers.cookie",
-  "request.headers[\"set-cookie\"]",
+  'request.headers["set-cookie"]',
   "res.headers.authorization",
   "res.headers.cookie",
-  "res.headers[\"set-cookie\"]",
+  'res.headers["set-cookie"]',
   "response.headers.authorization",
   "response.headers.cookie",
-  "response.headers[\"set-cookie\"]"
+  'response.headers["set-cookie"]'
 ];
 
-export function createApiLoggerOptions(options: {
-  nodeEnv?: string | undefined;
-  stream?: { write(message: string): void } | undefined;
-} = {}) {
+export function createApiLoggerOptions(
+  options: {
+    nodeEnv?: string | undefined;
+    stream?: { write(message: string): void } | undefined;
+  } = {}
+) {
   if ((options.nodeEnv ?? process.env.NODE_ENV) === "test") {
     return false;
   }
@@ -128,6 +142,23 @@ export type BuildAppOptions = {
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
   projectReleaseLedgerRoutes?: Pick<ProjectReleaseLedgerRouteOptions, "createRepository">;
+  projectBuildEnvironmentRoutes?: Pick<
+    ProjectBuildEnvironmentRouteOptions,
+    "createRepository" | "gateway" | "generateId" | "now"
+  >;
+  gitHubReleaseRunRoutes?: Pick<
+    GitHubReleaseRunRouteOptions,
+    "repository" | "executor" | "verifyIdentity" | "now" | "generateId"
+  >;
+  gitHubInfrastructureRunRoutes?: Pick<
+    GitHubInfrastructureRunRouteOptions,
+    | "repository"
+    | "executionLeaseRepository"
+    | "githubActionsClient"
+    | "verifyIdentity"
+    | "now"
+    | "generateId"
+  >;
   sourceRepositoryRoutes?: Pick<
     SourceRepositoryRouteOptions,
     | "createSourceRepositoryRepository"
@@ -137,6 +168,8 @@ export type BuildAppOptions = {
     | "githubRepositoryEvidenceReader"
     | "sourceRepositoryAnalysisRateLimiter"
   >;
+  repositoryAnalysisRecordRoutes?: Pick<RepositoryAnalysisRecordRouteOptions, "createService">;
+  projectDeliveryProfileRoutes?: Pick<ProjectDeliveryProfileRouteOptions, "getProfile">;
   runtimeCache?: RuntimeCache;
   runtimeEnv?: RuntimeEnv;
   liveObservationV2Runtime?: LiveObservationV2Runtime;
@@ -193,13 +226,12 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       }
     });
   const liveObservationV2Runtime = liveObservationEnabled
-    ? options.liveObservationV2Runtime ??
+    ? (options.liveObservationV2Runtime ??
       createLiveObservationV2Runtime({
         getDatabaseClient: getAppDatabaseClient,
         keyring: liveObservationKeyring!,
-        runtimeCache,
         runtimeEnv
-      })
+      }))
     : undefined;
   const notificationRuntime = createDeploymentNotificationRuntime({
     getDatabaseClient: getAppDatabaseClient,
@@ -231,11 +263,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     stopNotificationOutboxJob?.();
   });
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
       reply.status(400).send({
         error: "bad_request",
-        message: error.message
+        message: maskDeploymentMessage(error.message)
       });
       return;
     }
@@ -243,7 +275,17 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     const statusCode = getErrorStatusCode(error);
 
     if (statusCode >= 500) {
-      app.log.error(error instanceof Error ? error : getErrorMessage(error));
+      app.log.error(
+        {
+          errorMessage: maskDeploymentMessage(getErrorMessage(error)),
+          errorName: error instanceof Error ? error.name : "UnknownError",
+          ...getErrorCauseLogFields(error),
+          method: request.method,
+          path: request.url.split("?", 1)[0],
+          requestId: request.id
+        },
+        "API request failed"
+      );
     }
 
     reply.status(statusCode).send({
@@ -300,8 +342,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(registerNotificationRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
-    createService:
-      options.notificationRoutes?.createService ?? notificationRuntime.createService,
+    createService: options.notificationRoutes?.createService ?? notificationRuntime.createService,
     pushConfig: options.notificationRoutes?.pushConfig ?? notificationRuntime.pushConfig,
     ...(options.notificationRoutes?.requireUserId
       ? { requireUserId: options.notificationRoutes.requireUserId }
@@ -311,6 +352,16 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
     ...options.sourceRepositoryRoutes
+  });
+  app.register(registerRepositoryAnalysisRecordRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.repositoryAnalysisRecordRoutes
+  });
+  app.register(registerProjectDeliveryProfileRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.projectDeliveryProfileRoutes
   });
   app.register(registerDeploymentRoutes, {
     prefix: "/api",
@@ -341,6 +392,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       enabled: true
     });
   }
+  app.register(registerGitCicdReadinessRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient
+  });
   app.register(registerGitCicdHandoffRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
@@ -353,14 +408,27 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     gitCicdRunProvider: createGitHubActionsRunProvider(githubAppClient),
     runtimeCache
   });
+  app.register(registerGitHubReleaseRunRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.gitHubReleaseRunRoutes
+  });
+  app.register(registerGitHubInfrastructureRunRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    githubActionsClient: githubAppClient,
+    ...options.gitHubInfrastructureRunRoutes
+  });
   app.register(registerCostRoutes, createCostRouteOptions(options, getAppDatabaseClient));
-  app.register(
-    registerTerraformRoutes,
-    createTerraformRouteOptions(options, getAppDatabaseClient)
-  );
+  app.register(registerTerraformRoutes, createTerraformRouteOptions(options, getAppDatabaseClient));
   app.register(registerAwsConnectionRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
+  });
+  app.register(registerProjectBuildEnvironmentRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.projectBuildEnvironmentRoutes
   });
   app.register(registerReverseEngineeringRoutes, {
     prefix: "/api",
@@ -400,7 +468,10 @@ function createAiRouteOptions(
     runtimeCache,
     getDatabaseClient,
     ...(options.sourceRepositoryRoutes?.createSourceRepositoryRepository
-      ? { createSourceRepositoryRepository: options.sourceRepositoryRoutes.createSourceRepositoryRepository }
+      ? {
+          createSourceRepositoryRepository:
+            options.sourceRepositoryRoutes.createSourceRepositoryRepository
+        }
       : {}),
     ...(options.analyzePreDeploymentCheck !== undefined
       ? { analyzePreDeploymentCheck: options.analyzePreDeploymentCheck }
@@ -408,14 +479,18 @@ function createAiRouteOptions(
     ...(options.createArchitectureDraftResponse !== undefined
       ? { createArchitectureDraftResponse: options.createArchitectureDraftResponse }
       : {}),
-    ...(options.createLlmExplanation === undefined ? {} : { createLlmExplanation: options.createLlmExplanation }),
+    ...(options.createLlmExplanation === undefined
+      ? {}
+      : { createLlmExplanation: options.createLlmExplanation }),
     ...(options.createSafetyFindingExplanation === undefined
       ? {}
       : { createSafetyFindingExplanation: options.createSafetyFindingExplanation }),
     ...(options.safetyExplanationTimeoutMs === undefined
       ? {}
       : { safetyExplanationTimeoutMs: options.safetyExplanationTimeoutMs }),
-    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
+    ...(options.pricingRateProvider === undefined
+      ? {}
+      : { pricingRateProvider: options.pricingRateProvider })
   };
 }
 
@@ -431,8 +506,12 @@ function createCostRouteOptions(
   return {
     prefix: "/api",
     getDatabaseClient,
-    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider }),
-    ...(options.costUsageProvider === undefined ? {} : { costUsageProvider: options.costUsageProvider })
+    ...(options.pricingRateProvider === undefined
+      ? {}
+      : { pricingRateProvider: options.pricingRateProvider }),
+    ...(options.costUsageProvider === undefined
+      ? {}
+      : { costUsageProvider: options.costUsageProvider })
   };
 }
 
@@ -506,17 +585,56 @@ function getErrorMessage(error: unknown): string {
 
   return "Unexpected error";
 }
+function getErrorCauseLogFields(error: unknown): {
+  readonly errorCauseMessage?: string;
+  readonly errorCauseName?: string;
+  readonly errorCauseRequestId?: string;
+  readonly errorCauseStatusCode?: number;
+} {
+  const cause = error instanceof Error ? error.cause : undefined;
+  if (cause === undefined) {
+    return {};
+  }
+
+  const fields: {
+    errorCauseMessage: string;
+    errorCauseName: string;
+    errorCauseRequestId?: string;
+    errorCauseStatusCode?: number;
+  } = {
+    errorCauseMessage: maskDeploymentMessage(getErrorMessage(cause)),
+    errorCauseName: cause instanceof Error ? cause.name : "UnknownError"
+  };
+
+  if (typeof cause !== "object" || cause === null || !("$metadata" in cause)) {
+    return fields;
+  }
+
+  const metadata = cause.$metadata;
+  if (typeof metadata !== "object" || metadata === null) {
+    return fields;
+  }
+
+  if ("requestId" in metadata && typeof metadata.requestId === "string") {
+    fields.errorCauseRequestId = metadata.requestId;
+  }
+  if ("httpStatusCode" in metadata && typeof metadata.httpStatusCode === "number") {
+    fields.errorCauseStatusCode = metadata.httpStatusCode;
+  }
+
+  return fields;
+}
 
 function getResponseErrorMessage(statusCode: number, error: unknown): string {
   if (hasExposedMessage(error)) {
-    return getErrorMessage(error);
+    return maskDeploymentMessage(getErrorMessage(error));
   }
 
   if (statusCode >= 500 && process.env.NODE_ENV === "production") {
     return "Internal server error";
   }
 
-  return getErrorMessage(error);
+  return maskDeploymentMessage(getErrorMessage(error));
 }
 
 function hasExposedMessage(error: unknown): error is { readonly exposeMessage: true } {

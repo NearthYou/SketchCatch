@@ -5,14 +5,12 @@ export function CicdLogsView({
   errorMessage,
   isLoading,
   logs,
-  onOpenLiveObservation,
   onRetry,
   run
 }: {
   readonly errorMessage: string;
   readonly isLoading: boolean;
   readonly logs: readonly GitCicdPipelineLog[];
-  readonly onOpenLiveObservation?: (() => void) | undefined;
   readonly onRetry: () => void;
   readonly run: GitCicdPipelineRun | null;
 }) {
@@ -20,16 +18,11 @@ export function CicdLogsView({
     <section className={styles.cicdLogs} aria-label="CI/CD logs">
       <div className={styles.deploymentSectionHeader}>
         <div>
-          <h3>CI/CD logs</h3>
+          <h4>CI/CD logs</h4>
           <p>선택한 commit의 GitHub Actions 단계 로그입니다.</p>
         </div>
         <div className={styles.deploymentHeaderActions}>
           <button className={styles.deploymentSecondaryButton} onClick={onRetry} type="button">로그 다시 시도</button>
-          {onOpenLiveObservation ? (
-            <button className={styles.deploymentSecondaryButton} onClick={onOpenLiveObservation} type="button">
-              Runtime logs는 Live Observation에서 보기
-            </button>
-          ) : null}
         </div>
       </div>
       {errorMessage ? (

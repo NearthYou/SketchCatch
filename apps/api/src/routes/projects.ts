@@ -2,9 +2,15 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import type { ApiErrorResponse, ArchitectureJson } from "@sketchcatch/types";
+import type {
+  ApiErrorResponse,
+  ArchitectureJson,
+  ProjectDraftConflictResponse
+} from "@sketchcatch/types";
 import { RESOURCE_TYPES } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
+import { createAwsConnectionManagedCleanup } from "../aws-connections/aws-connection-managed-cleanup.js";
+import type { CleanupAwsConnectionManagedResources } from "../aws-connections/aws-connection-service.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-workspace.js";
 import {
@@ -25,7 +31,11 @@ import {
   projects,
   touchUpdatedAt
 } from "../db/schema.js";
-import { getNextDraftRevision, toProjectDraft } from "../modules/projects/project-drafts.js";
+import { toProjectDraft } from "../modules/projects/project-drafts.js";
+import {
+  ProjectDraftRevisionMissingError,
+  saveProjectDraftRevision
+} from "../modules/projects/project-draft-save-service.js";
 import { saveProjectDraftBodySchema } from "./project-draft-schemas.js";
 
 const createProjectBodySchema = z.object({
@@ -153,6 +163,7 @@ type ProjectRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  cleanupManagedResources?: CleanupAwsConnectionManagedResources;
 };
 
 export async function registerProjectRoutes(
@@ -163,6 +174,8 @@ export async function registerProjectRoutes(
   const projectAssetStorage = options.projectAssetStorage ?? createProjectAssetStorage();
   const projectDeletionStorage =
     options.projectDeletionStorage ?? createProjectDeletionStorage(projectAssetStorage);
+  const cleanupManagedResources =
+    options.cleanupManagedResources ?? createAwsConnectionManagedCleanup();
 
   app.addContentTypeParser(
     ["image/png", "image/webp"],
@@ -276,6 +289,7 @@ export async function registerProjectRoutes(
       db,
       projectId: params.id,
       storage: projectDeletionStorage,
+      cleanupManagedResources,
       userId: currentUserId
     });
 
@@ -290,7 +304,17 @@ export async function registerProjectRoutes(
       );
     }
 
-    return reply.status(200).send(result);
+    if (!result.managedCleanupCompleted) {
+      request.log.warn(
+        { projectId: params.id },
+        "AWS managed project build cleanup was incomplete; local project records were deleted"
+      );
+    }
+
+    return reply.status(200).send({
+      deleted: result.deleted,
+      cleanup: result.cleanup
+    });
   });
 
   app.post("/projects/:id/architectures", async (request, reply) => {
@@ -362,9 +386,9 @@ export async function registerProjectRoutes(
       .from(projectDrafts)
       .where(eq(projectDrafts.projectId, params.id));
 
-    return {
+    return reply.header("Cache-Control", "private, no-store").send({
       draft: draft ? toProjectDraft(draft) : null
-    };
+    });
   });
 
   app.put("/projects/:id/draft", async (request, reply) => {
@@ -382,48 +406,26 @@ export async function registerProjectRoutes(
       return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
     }
 
-    const [existingDraft] = await db
-      .select({ revision: projectDrafts.revision })
-      .from(projectDrafts)
-      .where(eq(projectDrafts.projectId, params.id));
-    const now = new Date();
-    const revision = getNextDraftRevision(existingDraft?.revision);
-
-    const [draft] = await db
-      .insert(projectDrafts)
-      .values({
-        id: randomUUID(),
+    try {
+      const result = await saveProjectDraftRevision({
+        db,
+        input: body,
         projectId: params.id,
-        diagramJson: body.diagramJson,
-        terraformFiles: body.terraformFiles ?? null,
-        revision,
-        serverSavedAt: now,
-        updatedAt: now
-      })
-      .onConflictDoUpdate({
-        target: projectDrafts.projectId,
-        set: {
-          diagramJson: body.diagramJson,
-          terraformFiles: body.terraformFiles ?? null,
-          revision,
-          serverSavedAt: now,
-          updatedAt: now
-        }
-      })
-      .returning();
+        userId: currentUserId
+      });
 
-    if (!draft) {
-      throw new Error("Failed to save project draft");
+      if (result.status === "conflict") {
+        return sendProjectDraftConflict(reply, result.currentDraft);
+      }
+
+      return { draft: toProjectDraft(result.draft) };
+    } catch (error) {
+      if (error instanceof ProjectDraftRevisionMissingError) {
+        return sendConflict(reply, error.message);
+      }
+
+      throw error;
     }
-
-    await db
-      .update(projects)
-      .set(touchUpdatedAt)
-      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
-
-    return {
-      draft: toProjectDraft(draft)
-    };
   });
 
   app.post("/projects/:id/assets/presigned-upload", async (request, reply) => {
@@ -523,9 +525,7 @@ export async function registerProjectRoutes(
       }
 
       const body = request.body;
-      const byteSize = Buffer.isBuffer(body)
-        ? body.byteLength
-        : Buffer.byteLength(body, "utf-8");
+      const byteSize = Buffer.isBuffer(body) ? body.byteLength : Buffer.byteLength(body, "utf-8");
 
       if (asset.byteSize !== null && byteSize !== asset.byteSize) {
         return sendConflict(reply, "업로드된 파일 크기가 요청한 artifact 크기와 다릅니다.");
@@ -540,7 +540,10 @@ export async function registerProjectRoutes(
           !projectThumbnailContentTypes.has(asset.contentType) ||
           requestContentType !== asset.contentType
         ) {
-          return sendBadRequest(reply, "Thumbnail은 등록한 형식과 일치하는 PNG 또는 WebP여야 합니다.");
+          return sendBadRequest(
+            reply,
+            "Thumbnail은 등록한 형식과 일치하는 PNG 또는 WebP여야 합니다."
+          );
         }
       }
 
@@ -787,10 +790,7 @@ async function pruneUploadedProjectThumbnails({
       }
     });
   } catch (error) {
-    log.warn(
-      { error, projectId },
-      "Failed to list superseded project thumbnails"
-    );
+    log.warn({ error, projectId }, "Failed to list superseded project thumbnails");
   }
 }
 
@@ -821,11 +821,41 @@ function sendConflict(reply: FastifyReply, message: string): FastifyReply {
   return reply.status(409).send(response);
 }
 
+function sendProjectDraftConflict(
+  reply: FastifyReply,
+  draft: typeof projectDrafts.$inferSelect
+): FastifyReply {
+  const response: ProjectDraftConflictResponse = {
+    error: "conflict",
+    message: "다른 탭에서 이 프로젝트가 변경되었습니다.",
+    currentRevision: draft.revision,
+    currentServerSavedAt: draft.serverSavedAt.toISOString()
+  };
+
+  return reply.status(409).send(response);
+}
+
 function createProjectDeletionStorage(storage: ProjectAssetStorage): ProjectDeletionStorage {
+  const deletePrefix = storage.deletePrefix?.bind(storage);
+
   return {
     async deleteObject(objectKey) {
       await storage.deleteObject({ objectKey });
-    }
+    },
+    async deleteObjectVersion(objectKey, versionId) {
+      if (storage.deleteObjectVersion) {
+        await storage.deleteObjectVersion({ objectKey, versionId });
+        return;
+      }
+      await storage.deleteObject({ objectKey });
+    },
+    ...(deletePrefix
+      ? {
+          async deletePrefix(input: { prefix: string }) {
+            await deletePrefix(input);
+          }
+        }
+      : {})
   };
 }
 

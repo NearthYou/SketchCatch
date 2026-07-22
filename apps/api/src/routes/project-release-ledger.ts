@@ -41,6 +41,41 @@ const evidenceSchema = z
     path: repositoryPathSchema
   })
   .strict();
+const ecsWebBuildConfigSchema = z
+  .object({
+    api: z
+      .object({
+        sourceRoot: repositoryPathSchema,
+        dockerfilePath: repositoryPathSchema,
+        containerPort: z.number().int().min(1).max(65_535),
+        healthCheckPath: z
+          .string()
+          .trim()
+          .regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/)
+          .max(512),
+        requiredRuntimeSecrets: z
+          .array(z.string().regex(/^[A-Z][A-Z0-9_]{0,127}$/))
+          .max(32)
+          .optional()
+      })
+      .strict(),
+    frontend: z
+      .object({
+        sourceRoot: repositoryPathSchema,
+        packageManifestPath: repositoryPathSchema,
+        lockfilePath: repositoryPathSchema,
+        packageManager: z.enum(["npm", "pnpm", "yarn"]),
+        packageManagerVersion: z
+          .string()
+          .trim()
+          .regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/),
+        installPreset: z.enum(["pnpm_frozen_lockfile", "npm_ci", "yarn_frozen_lockfile"]),
+        buildPreset: z.enum(["pnpm_build", "npm_build", "yarn_build"]),
+        outputPath: repositoryPathSchema
+      })
+      .strict()
+  })
+  .strict();
 const confirmedBuildConfigSchema = z
   .object({
     sourceRoot: repositoryPathSchema,
@@ -57,7 +92,12 @@ const confirmedBuildConfigSchema = z
     ]),
     artifactOutputPath: nullableRepositoryPathSchema,
     runtimeEntrypoint: z.string().trim().min(1).max(512).nullable(),
-    healthCheckPath: z.string().trim().regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/).max(512).nullable(),
+    healthCheckPath: z
+      .string()
+      .trim()
+      .regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/)
+      .max(512)
+      .nullable(),
     dockerfilePath: nullableRepositoryPathSchema,
     packageManifestPath: nullableRepositoryPathSchema,
     samTemplatePath: nullableRepositoryPathSchema,
@@ -66,17 +106,34 @@ const confirmedBuildConfigSchema = z
     exactSemVerTag: z.string().trim().min(1).max(128).nullable(),
     manifestVersion: z.string().trim().min(1).max(128).nullable(),
     confirmedCommitSha: commitShaSchema,
-    confirmedAt: z.iso.datetime({ offset: true })
+    confirmedAt: z.iso.datetime({ offset: true }),
+    ecsWeb: ecsWebBuildConfigSchema.nullish()
   })
   .strict();
 const ecsFargateRuntimeConfigSchema = z
   .object({
     runtimeTargetKind: z.literal("ecs_fargate"),
     codeBuildProjectName: z.string().trim().min(2).max(255),
+    buildEnvironmentId: z.string().trim().min(1).max(36).nullish(),
     ecrRepositoryName: z.string().trim().min(1).max(256),
+    ecrRepositoryArn: z.string().trim().min(1).max(2_048).nullish(),
+    ecrRepositoryUrl: z.string().trim().min(1).max(2_048).nullish(),
     clusterName: z.string().trim().min(1).max(255),
     serviceName: z.string().trim().min(1).max(255),
     containerName: z.string().trim().min(1).max(255),
+    containerPort: z.number().int().min(1).max(65_535).optional(),
+    taskDefinitionFamily: z.string().trim().min(1).max(255).nullish(),
+    taskDefinitionArn: z.string().trim().min(1).max(2_048).nullish(),
+    taskRoleArn: z.string().trim().min(1).max(2_048).nullish(),
+    executionRoleArn: z.string().trim().min(1).max(2_048).nullish(),
+    targetGroupArn: z.string().trim().min(1).max(2_048).nullish(),
+    loadBalancerArn: z.string().trim().min(1).max(2_048).nullish(),
+    loadBalancerDnsName: z.string().trim().min(1).max(253).nullish(),
+    apiOriginUrl: z.url().max(2_048).nullish(),
+    frontendBucketName: z.string().trim().min(3).max(63).nullish(),
+    cloudFrontDistributionId: z.string().trim().min(3).max(32).nullish(),
+    cloudFrontDomainName: z.string().trim().min(1).max(253).nullish(),
+    logGroupNames: z.array(z.string().trim().min(1).max(512)).max(20).optional(),
     outputUrl: credentialFreeHttpsUrlSchema.nullable()
   })
   .strict();
@@ -122,7 +179,11 @@ const putTargetBodySchema = z
   .object({
     provider: z.literal("aws"),
     connectionId: z.uuid(),
-    region: z.string().trim().regex(/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/).max(32),
+    region: z
+      .string()
+      .trim()
+      .regex(/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/)
+      .max(32),
     runtimeTargetKind: z.enum(["ecs_fargate", "lambda", "ec2_asg", "static_site"]),
     confirmedBuildConfig: confirmedBuildConfigSchema,
     runtimeConfig: deploymentRuntimeConfigSchema.nullable(),
@@ -272,7 +333,12 @@ function toApplicationRelease(row: ApplicationReleaseRecord): ApplicationRelease
     commitSha: row.commitSha,
     artifactDigestAlgorithm: row.artifactDigestAlgorithm,
     artifactDigest: row.artifactDigest,
+    releaseCandidateId: row.releaseCandidateId,
+    compositeDigest: row.compositeDigest,
     providerRevision: row.providerRevision,
+    frontendEvidence: row.frontendEvidence,
+    failureStage: row.failureStage,
+    baselineReleaseId: row.baselineReleaseId,
     outputUrl: row.outputUrl,
     status: row.status,
     healthEvidence: row.healthEvidence,

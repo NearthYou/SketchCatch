@@ -1,9 +1,12 @@
 import {
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectVersionsCommand,
   PutObjectCommand,
   S3ServiceException,
+  type ObjectIdentifier,
   type S3Client
 } from "@aws-sdk/client-s3";
 import { getS3Client } from "../s3/client.js";
@@ -61,6 +64,65 @@ export function createS3ProjectAssetStorage(
       );
     },
 
+    async deleteObjectVersion(input) {
+      await s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: bucketName,
+          Key: input.objectKey,
+          VersionId: input.versionId
+        })
+      );
+    },
+
+    async deletePrefix(input) {
+      assertProjectDeletionPrefix(input.prefix);
+      let previousBatchFingerprint: string | null = null;
+
+      while (true) {
+        const listed = await s3Client.send(
+          new ListObjectVersionsCommand({
+            Bucket: bucketName,
+            Prefix: input.prefix,
+            MaxKeys: 1000
+          })
+        );
+        const objectVersions = collectObjectVersions(listed.Versions, listed.DeleteMarkers);
+        const listedObjectCount =
+          (listed.Versions?.length ?? 0) + (listed.DeleteMarkers?.length ?? 0);
+
+        if (objectVersions.length !== listedObjectCount) {
+          throw new Error("S3 returned an object version without a key or version ID");
+        }
+
+        if (objectVersions.length === 0) {
+          return;
+        }
+
+        const batchFingerprint = objectVersions
+          .map((object) => `${object.Key}\0${object.VersionId}`)
+          .sort()
+          .join("\n");
+        if (batchFingerprint === previousBatchFingerprint) {
+          throw new Error("S3 object versions remained after a successful delete response");
+        }
+        previousBatchFingerprint = batchFingerprint;
+
+        const deleted = await s3Client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucketName,
+            Delete: {
+              Objects: objectVersions,
+              Quiet: true
+            }
+          })
+        );
+
+        if ((deleted.Errors?.length ?? 0) > 0) {
+          throw new Error("Failed to delete every S3 object version under the project prefix");
+        }
+      }
+    },
+
     async objectExists(input) {
       try {
         const object = await s3Client.send(
@@ -80,6 +142,34 @@ export function createS3ProjectAssetStorage(
       }
     }
   };
+}
+
+function collectObjectVersions(
+  versions: ReadonlyArray<{ Key?: string | undefined; VersionId?: string | undefined }> | undefined,
+  deleteMarkers:
+    | ReadonlyArray<{ Key?: string | undefined; VersionId?: string | undefined }>
+    | undefined
+): ObjectIdentifier[] {
+  return [...(versions ?? []), ...(deleteMarkers ?? [])].flatMap((object) =>
+    object.Key && object.VersionId
+      ? [
+          {
+            Key: object.Key,
+            VersionId: object.VersionId
+          }
+        ]
+      : []
+  );
+}
+
+function assertProjectDeletionPrefix(prefix: string): void {
+  if (
+    !/^(?:projects|deployments)\/[A-Za-z0-9_-]+\/$/u.test(prefix) ||
+    prefix.includes("\0") ||
+    prefix.includes("\\")
+  ) {
+    throw new Error("Project artifact deletion prefix is invalid");
+  }
 }
 
 function isS3ObjectMissingError(error: unknown): boolean {

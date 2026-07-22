@@ -32,6 +32,8 @@ import {
   appendTerraformDurationLog,
   runLoggedDeploymentOperation
 } from "./deployment-duration-logs.js";
+import { isDeploymentDestroySourceStatus } from "./deployment-destroy-eligibility.js";
+import { createDeploymentTerraformLiveLogWriter } from "./deployment-terraform-live-logs.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
   appendDeploymentLogs,
@@ -162,9 +164,13 @@ export async function runDeploymentDestroyPlan(
     const sourceStatus = input.startedFromStatus ?? deployment.status;
     const sourceFailureStage = input.startedFromFailureStage ?? deployment.failureStage;
     const sourceErrorSummary = input.startedFromErrorSummary ?? deployment.errorSummary;
+    const preserveSourceFailure = shouldPreserveDeploymentFailureAfterDestroyPlan(
+      sourceStatus,
+      sourceFailureStage
+    );
     failureStage = resolveDestroyPlanFailureStage(sourceStatus, sourceFailureStage);
 
-    assertDeploymentCanStartDestroyPlan(deployment, sourceStatus, sourceFailureStage);
+    assertDeploymentCanStartDestroyPlan(deployment, sourceStatus);
 
     if (deployment.scope === "application") {
       return await saveApplicationCleanupPlan({
@@ -240,7 +246,10 @@ export async function runDeploymentDestroyPlan(
       deployment.status === "RUNNING" && input.startedFromStatus !== undefined;
 
     if (!wasPreMarkedRunning) {
-      const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
+      const runningDeployment = await repository.markDeploymentPlanRunning(
+        deployment.id,
+        "destroy"
+      );
 
       if (!runningDeployment) {
         throw new DeploymentConflictError("Deployment destroy plan could not be started");
@@ -249,18 +258,22 @@ export async function runDeploymentDestroyPlan(
 
     let sequence = await repository.getNextDeploymentLogSequence(deployment.id);
 
-    terraform.init = await runTerraformInit(workspace.workdir, {
-      env: awsCredentials.env,
-      signal: input.abortSignal
-    });
-    sequence = await appendTerraformOutput({
+    const initLogWriter = createDeploymentTerraformLiveLogWriter({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
       stage: "init",
-      label: "terraform init",
-      result: terraform.init,
       repository
+    });
+    terraform.init = await runTerraformInit(workspace.workdir, {
+      env: awsCredentials.env,
+      onOutputLine: initLogWriter.onOutputLine,
+      signal: input.abortSignal,
+      timeoutMs: terraformMutationTimeoutMs
+    });
+    sequence = await initLogWriter.complete({
+      label: "terraform init",
+      result: terraform.init
     });
 
     if (terraform.init.cancelled) {
@@ -298,20 +311,23 @@ export async function runDeploymentDestroyPlan(
     });
     sequence = lockUpload.sequence;
 
-    terraform.plan = await runTerraformDestroyPlan(workspace.workdir, {
-      env: awsCredentials.env,
-      planFileName: defaultPlanFileName,
-      signal: input.abortSignal,
-      timeoutMs: terraformMutationTimeoutMs
-    });
-    sequence = await appendTerraformOutput({
+    const planLogWriter = createDeploymentTerraformLiveLogWriter({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
       stage: "plan",
-      label: "terraform plan -destroy",
-      result: terraform.plan,
       repository
+    });
+    terraform.plan = await runTerraformDestroyPlan(workspace.workdir, {
+      env: awsCredentials.env,
+      onOutputLine: planLogWriter.onOutputLine,
+      planFileName: defaultPlanFileName,
+      signal: input.abortSignal,
+      timeoutMs: terraformMutationTimeoutMs
+    });
+    sequence = await planLogWriter.complete({
+      label: "terraform plan -destroy",
+      result: terraform.plan
     });
 
     if (terraform.plan.cancelled) {
@@ -431,9 +447,9 @@ export async function runDeploymentDestroyPlan(
             isBlocked: false,
             blockedBy: null,
             blockedReason: null,
-            terminalStatus: sourceStatus === "FAILED" ? "FAILED" : "SUCCESS",
-            failureStage: sourceStatus === "FAILED" ? sourceFailureStage : null,
-            errorSummary: sourceStatus === "FAILED" ? sourceErrorSummary : null
+            terminalStatus: preserveSourceFailure ? "FAILED" : "SUCCESS",
+            failureStage: preserveSourceFailure ? sourceFailureStage : null,
+            errorSummary: preserveSourceFailure ? sourceErrorSummary : null
           })
       });
       const updatedDeployment = planSave.result;
@@ -501,6 +517,10 @@ async function saveApplicationCleanupPlan(input: {
   >;
   terraform: RunDeploymentDestroyPlanResult["terraform"];
 }): Promise<RunDeploymentDestroyPlanResult> {
+  const preserveSourceFailure = shouldPreserveDeploymentFailureAfterDestroyPlan(
+    input.sourceStatus,
+    input.sourceFailureStage
+  );
   const [artifact, awsConnection, cleanupPlan] = await Promise.all([
     requireDeploymentTerraformArtifact(input.deployment, input.repository),
     requireDeploymentAwsConnection(input.deployment, input.accessContext, input.repository),
@@ -530,7 +550,10 @@ async function saveApplicationCleanupPlan(input: {
     const wasPreMarkedRunning =
       input.deployment.status === "RUNNING" && input.sourceStatus !== input.deployment.status;
     if (!wasPreMarkedRunning) {
-      const running = await input.repository.markDeploymentPlanRunning(input.deployment.id);
+      const running = await input.repository.markDeploymentPlanRunning(
+        input.deployment.id,
+        "destroy"
+      );
       if (!running) {
         throw new DeploymentConflictError("Application cleanup plan could not be started");
       }
@@ -602,9 +625,9 @@ async function saveApplicationCleanupPlan(input: {
           isBlocked: false,
           blockedBy: null,
           blockedReason: null,
-          terminalStatus: input.sourceStatus === "FAILED" ? "FAILED" : "SUCCESS",
-          failureStage: input.sourceStatus === "FAILED" ? input.sourceFailureStage : null,
-          errorSummary: input.sourceStatus === "FAILED" ? input.sourceErrorSummary : null
+          terminalStatus: preserveSourceFailure ? "FAILED" : "SUCCESS",
+          failureStage: preserveSourceFailure ? input.sourceFailureStage : null,
+          errorSummary: preserveSourceFailure ? input.sourceErrorSummary : null
         })
     });
     if (!saved.result) throw new DeploymentNotFoundError("Deployment not found");
@@ -670,27 +693,15 @@ function readMetadataRecord(value: unknown): Record<string, unknown> {
 
 function assertDeploymentCanStartDestroyPlan(
   deployment: DeploymentRecord,
-  sourceStatus: DeploymentStatus,
-  sourceFailureStage: DeploymentFailureStage | null
+  sourceStatus: DeploymentStatus
 ): void {
   if (deployment.scope !== "application" && !deployment.stateObjectKey) {
     throw new DeploymentConflictError("Terraform state is required before destroy");
   }
 
-  if (sourceStatus === "SUCCESS") {
-    return;
+  if (!isDeploymentDestroySourceStatus(sourceStatus)) {
+    throw new DeploymentConflictError("Deployment cannot be destroyed in this state");
   }
-
-  if (
-    sourceStatus === "FAILED" &&
-    (sourceFailureStage === "plan" ||
-      sourceFailureStage === "apply" ||
-      sourceFailureStage === "destroy")
-  ) {
-    return;
-  }
-
-  throw new DeploymentConflictError("Deployment cannot be destroyed in this state");
 }
 
 function assertDestroyCleanupArtifactHasNotDrifted(input: {
@@ -849,6 +860,16 @@ async function failDeploymentDestroyPlan(
   return failedDeployment;
 }
 
+function shouldPreserveDeploymentFailureAfterDestroyPlan(
+  sourceStatus: DeploymentStatus,
+  sourceFailureStage: DeploymentFailureStage | null
+): boolean {
+  return (
+    sourceStatus === "FAILED" &&
+    (sourceFailureStage === "apply" || sourceFailureStage === "destroy")
+  );
+}
+
 function resolveDestroyPlanFailureStage(
   sourceStatus: DeploymentStatus,
   sourceFailureStage: DeploymentFailureStage | null
@@ -859,45 +880,6 @@ function resolveDestroyPlanFailureStage(
     : "plan";
 }
 
-async function appendTerraformOutput(input: {
-  deploymentId: string;
-  accessContext: ProjectAccessContext;
-  sequence: number;
-  stage: "init" | "plan";
-  label: string;
-  result: TerraformRunResult;
-  repository: DeploymentRepository;
-}): Promise<number> {
-  let nextSequence = await appendOutputLines({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: input.sequence,
-    stage: input.stage,
-    output: input.result.stdout,
-    level: "INFO",
-    repository: input.repository
-  });
-
-  nextSequence = await appendOutputLines({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: nextSequence,
-    stage: input.stage,
-    output: input.result.stderr,
-    level: input.result.exitCode === 0 ? "WARN" : "ERROR",
-    repository: input.repository
-  });
-
-  return appendTerraformDurationLog({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: nextSequence,
-    stage: input.stage,
-    label: input.label,
-    result: input.result,
-    repository: input.repository
-  });
-}
 
 async function appendTerraformErrorOutput(input: {
   deploymentId: string;

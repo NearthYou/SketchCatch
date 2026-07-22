@@ -37,7 +37,7 @@ import {
   hasAuthoritativeTerraformSource,
   markTerraformSourceAuthoritative,
   parseTerraformFiles,
-  removeTerraformBlocksByAddress,
+  removeTerraformBlocksAndDependentOutputsByAddress,
   toTerraformRefreshFingerprint,
   type TerraformSaveBanner,
   type TerraformVirtualFile
@@ -239,6 +239,7 @@ export type TerraformFilesReplacementRequest = {
   readonly diagramFingerprint: string;
   readonly files: readonly TerraformSyncFileInput[];
   readonly id: number;
+  readonly notifyFilesChange?: boolean | undefined;
 };
 
 // Terraform 생성, 검증, 저장 상태를 관리하고 화면 전용 컴포넌트에 결과만 전달합니다.
@@ -1214,7 +1215,9 @@ export const TerraformCodePanel = forwardRef<
     setIsTerraformPreviewStale(!hasSourceSeed);
     setStatusMessage(hasSourceSeed ? "원본 Terraform seed 적용됨" : "Terraform Preview 생성 대기");
     setRequestState("idle");
-    onTerraformFilesChange?.(toTerraformValidationFiles(nextFiles));
+    if (replacement.notifyFilesChange !== false) {
+      onTerraformFilesChange?.(toTerraformValidationFiles(nextFiles));
+    }
     onDirtyChange(false);
     onTerraformFilesReplacementApplied?.(replacement.id);
   }, [
@@ -1277,7 +1280,10 @@ export const TerraformCodePanel = forwardRef<
       return;
     }
 
-    const nextFiles = removeTerraformBlocksByAddress(terraformFiles, deletedAddresses);
+    const nextFiles = removeTerraformBlocksAndDependentOutputsByAddress(
+      terraformFiles,
+      deletedAddresses
+    );
     const didRemoveBlock = nextFiles.some((file, index) => file !== terraformFiles[index]);
 
     if (!didRemoveBlock) {
@@ -1464,27 +1470,27 @@ export const TerraformCodePanel = forwardRef<
 
   function handleCodeChange(nextCode: string): void {
     codeVersionRef.current += 1;
-    setTerraformFiles((currentFiles) =>
-      currentFiles.map((file) => {
-        if (inspectedBlock && file.fileName === inspectedBlock.fileName) {
-          return {
-            fileName: file.fileName,
-            code: `${file.code.slice(0, inspectedBlock.startOffset)}${nextCode}${file.code.slice(
-              inspectedBlock.endOffset
-            )}`
-          };
-        }
+    const nextFiles = terraformFiles.map((file) => {
+      if (inspectedBlock && file.fileName === inspectedBlock.fileName) {
+        return {
+          fileName: file.fileName,
+          code: `${file.code.slice(0, inspectedBlock.startOffset)}${nextCode}${file.code.slice(
+            inspectedBlock.endOffset
+          )}`
+        };
+      }
 
-        if (!inspectedBlock && file.fileName === activeFileName) {
-          return {
-            fileName: file.fileName,
-            code: nextCode
-          };
-        }
+      if (!inspectedBlock && file.fileName === activeFileName) {
+        return {
+          fileName: file.fileName,
+          code: nextCode
+        };
+      }
 
-        return file;
-      })
-    );
+      return file;
+    });
+    setTerraformFiles(nextFiles);
+    onTerraformFilesChange?.(toTerraformValidationFiles(nextFiles));
 
     setHasLocalEdits(true);
     setIsTerraformPreviewStale(

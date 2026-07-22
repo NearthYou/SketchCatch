@@ -1,15 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowRight, Plus } from "lucide-react";
 import { getWorkspaceHref } from "../../components/dashboard/api-project-card";
 import { ProductState } from "../../components/ui/ProductState";
 import { getApiErrorMessage } from "../../lib/api-client";
-import {
-  type DashboardOverviewData,
-  loadDashboardOverviewData
-} from "./dashboard-overview-data";
 import {
   DashboardMetric,
   DashboardOverviewEmpty,
@@ -20,75 +15,68 @@ import {
   getDeploymentTone,
   ProjectOverviewRow
 } from "./dashboard-overview-parts";
-
-type DashboardOverviewState =
-  | { readonly status: "loading" }
-  | { readonly message: string; readonly status: "error" }
-  | { readonly data: DashboardOverviewData; readonly status: "empty" | "ready" };
+import { useDashboardOverviewQuery } from "./dashboard-overview-query";
 
 // 프로젝트, 비용, 연결, 배포 상태를 한 번에 모아 Dashboard 행동으로 연결합니다.
 export function DashboardOverview() {
-  const [state, setState] = useState<DashboardOverviewState>({ status: "loading" });
-  const [reloadCount, setReloadCount] = useState(0);
+  const overviewQuery = useDashboardOverviewQuery();
+  const overviewHeader = (
+    <header className="dashboardPageHeader dashboardPageHeaderCompact">
+      <div>
+        <h1>작업 현황</h1>
+      </div>
+      <Link className="dashboardPrimaryAction" href="/workspace/new?fresh=1">
+        <Plus aria-hidden="true" size={17} />
+        <span>새 프로젝트</span>
+      </Link>
+    </header>
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-
-    // 화면이 살아 있는 동안만 비동기 결과를 반영합니다.
-    async function loadOverview(): Promise<void> {
-      setState({ status: "loading" });
-
-      try {
-        const data = await loadDashboardOverviewData();
-
-        if (!cancelled) {
-          setState({ data, status: data.projects.length === 0 ? "empty" : "ready" });
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setState({
-            message: getApiErrorMessage(error, "Dashboard 데이터를 불러오지 못했습니다."),
-            status: "error"
-          });
-        }
-      }
-    }
-
-    void loadOverview();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadCount]);
-
-  if (state.status === "loading") {
-    return <DashboardOverviewLoading />;
-  }
-
-  if (state.status === "error") {
+  if (overviewQuery.isPending) {
     return (
-      <ProductState
-        action={
-          <button
-            className="dashboardSecondaryButton"
-            onClick={() => setReloadCount((count) => count + 1)}
-            type="button"
-          >
-            다시 시도
-          </button>
-        }
-        description={state.message}
-        kind="error"
-        title="Dashboard를 불러오지 못했습니다"
-      />
+      <div className="dashboardOverview" aria-label="Dashboard 로딩">
+        {overviewHeader}
+        <DashboardOverviewLoading />
+      </div>
     );
   }
 
-  if (state.status === "empty") {
-    return <DashboardOverviewEmpty />;
+  if (overviewQuery.isError && !overviewQuery.data) {
+    return (
+      <div className="dashboardOverview">
+        {overviewHeader}
+        <ProductState
+          action={
+            <button
+              className="dashboardSecondaryButton"
+              onClick={() => void overviewQuery.refetch()}
+              type="button"
+            >
+              다시 시도
+            </button>
+          }
+          description={getApiErrorMessage(
+            overviewQuery.error,
+            "Dashboard 데이터를 불러오지 못했습니다."
+          )}
+          kind="error"
+          title="Dashboard를 불러오지 못했습니다"
+        />
+      </div>
+    );
   }
 
-  const { data } = state;
+  const data = overviewQuery.data;
+
+  if (!data || data.projects.length === 0) {
+    return (
+      <div className="dashboardOverview">
+        {overviewHeader}
+        <DashboardOverviewEmpty />
+      </div>
+    );
+  }
+
   const verifiedAwsConnectionCount =
     data.awsConnections?.filter((connection) => connection.status === "verified").length ?? null;
   const latestDeploymentItem = data.recentDeployments[0] ?? null;
@@ -96,11 +84,7 @@ export function DashboardOverview() {
 
   return (
     <div className="dashboardOverview">
-      <header className="dashboardPageHeader dashboardPageHeaderCompact">
-        <div>
-          <h1>작업 현황</h1>
-        </div>
-      </header>
+      {overviewHeader}
 
       {data.partialWarnings.length > 0 ? (
         <section className="dashboardPartialWarning" aria-label="일부 데이터 로딩 실패">

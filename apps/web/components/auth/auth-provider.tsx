@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from "react";
 import type { AuthResponse, LoginRequest, SignupRequest, User } from "@sketchcatch/types";
@@ -23,10 +24,15 @@ import {
   readStoredAuthSession,
   writeStoredAuthSession
 } from "../../lib/auth-storage";
+import {
+  getAuthReloadPhase,
+  shouldClearAuthAfterReloadError
+} from "./auth-reload-policy";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 type AuthContextValue = {
+  isRefreshing: boolean;
   login: (payload: LoginRequest) => Promise<AuthResponse>;
   logout: () => Promise<void>;
   reloadUser: () => Promise<void>;
@@ -40,9 +46,17 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<User | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const hasResolvedInitialSessionRef = useRef(false);
 
   const reloadUser = useCallback(async () => {
-    setStatus("loading");
+    const phase = getAuthReloadPhase(hasResolvedInitialSessionRef.current);
+
+    if (phase === "initial") {
+      setStatus("loading");
+    } else {
+      setIsRefreshing(true);
+    }
 
     try {
       const storedSession = readStoredAuthSession();
@@ -58,10 +72,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await requestCurrentUser();
       setUser(response.user);
       setStatus("authenticated");
-    } catch {
-      clearStoredAuthSession();
-      setUser(null);
-      setStatus("unauthenticated");
+    } catch (error) {
+      if (shouldClearAuthAfterReloadError({ error, phase })) {
+        clearStoredAuthSession();
+        setUser(null);
+        setStatus("unauthenticated");
+      }
+    } finally {
+      hasResolvedInitialSessionRef.current = true;
+      setIsRefreshing(false);
     }
   }, []);
 
@@ -72,6 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (payload: LoginRequest) => {
     const response = await requestLogin(payload);
     writeStoredAuthSession(response.session);
+    hasResolvedInitialSessionRef.current = true;
+    setIsRefreshing(false);
     setUser(response.user);
     setStatus("authenticated");
 
@@ -81,6 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signup = useCallback(async (payload: SignupRequest) => {
     const response = await requestSignup(payload);
     writeStoredAuthSession(response.session);
+    hasResolvedInitialSessionRef.current = true;
+    setIsRefreshing(false);
     setUser(response.user);
     setStatus("authenticated");
 
@@ -92,6 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await requestLogout();
     } finally {
       clearStoredAuthSession();
+      hasResolvedInitialSessionRef.current = true;
+      setIsRefreshing(false);
       setUser(null);
       setStatus("unauthenticated");
     }
@@ -99,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(
     () => ({
+      isRefreshing,
       login,
       logout,
       reloadUser,
@@ -106,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       user
     }),
-    [login, logout, reloadUser, signup, status, user]
+    [isRefreshing, login, logout, reloadUser, signup, status, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

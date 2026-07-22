@@ -3,6 +3,7 @@ import type {
   AiPreDeploymentAnalysisResult,
   AiPreDeploymentCheckRequest,
   AiPreDeploymentDeepScanResponse,
+  AiProviderMetadata,
   AiSafetyExplanation,
   ApplicationRelease,
   ApplicationReleaseListResponse,
@@ -12,12 +13,17 @@ import type {
   AnalyzeSourceRepositoryRequest,
   ApiErrorCode,
   ApiErrorResponse,
+  ArchitectureDraftProgressSnapshot,
+  ArchitectureDraftStreamEvent,
+  ArchitectureJson,
   ArchitecturePatchPreviewResponse,
   ArchitectureSnapshot,
   ApproveDeploymentPlanRequest,
   AwsConnectionCloudFormationTemplateResponse,
+  AwsConnectionDeletionPreviewResponse,
   AwsConnection,
   AwsConnectionListResponse,
+  AwsCodeConnectionResponse,
   CostEstimatePeriod,
   CostProjectEstimateListResponse,
   CostUsageAnalysisRange,
@@ -41,7 +47,9 @@ import type {
   CreateProjectRequest,
   CreateReverseEngineeringScanRequest,
   DeleteProjectRequest,
+  DisconnectAwsCodeConnectionRequest,
   DeleteProjectResponse,
+  DeleteAwsConnectionRequest,
   DesignSimulationResult,
   DeployedResource,
   Deployment,
@@ -50,6 +58,9 @@ import type {
   DeploymentListResponse,
   DeploymentLog,
   DeploymentLogListResponse,
+  DeploymentLiveObservationArchitectureResponse,
+  DeploymentProgressResponse,
+  DeploymentProgressSnapshot,
   DeploymentResourceListResponse,
   DeploymentResponse,
   DiagramJson,
@@ -58,7 +69,6 @@ import type {
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
   GitCicdHandoffResponse,
-  GitCicdGitHubOAuthStartResponse,
   GitCicdMonitoringConfig,
   GitCicdMonitoringConfigResponse,
   GitCicdPipelineLogListResponse,
@@ -67,11 +77,13 @@ import type {
   GitCicdPipelineRunListResponse,
   GitCicdPipelineRunRefreshResponse,
   GitCicdPipelineRunResponse,
+  GitCicdReadinessResponse,
+  GitCicdReadinessSnapshot,
+  GitCicdReleaseRunResponse,
   GitCicdRepositorySettingsApplyResponse,
   GitCicdAwsRoleDiffApplyResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
-  GitHubInstallationConnection,
   GitHubInstallationUserAuthorizationUrlResponse,
   ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationsResponse,
@@ -88,10 +100,16 @@ import type {
   ProjectResponse,
   ProjectDeploymentTarget,
   ProjectDeploymentTargetResponse,
+  ProjectDeliveryProfile,
+  ProjectDeliveryProfileResponse,
+  ProjectBuildEnvironment,
+  ProjectBuildEnvironmentResponse,
   PrepareDeploymentRequest,
   PutProjectDeploymentTargetRequest,
   RecommendRepositoryTemplateRequest,
   RecommendRepositoryTemplateResponse,
+  RepositoryAnalysisRecord,
+  RepositoryAnalysisRecordResponse,
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
   SourceRepository,
@@ -106,6 +124,7 @@ import type {
   ReverseEngineeringScanLogListResponse,
   ReverseEngineeringScanResponse,
   SaveProjectDraftRequest,
+  SaveRepositoryAnalysisRecordRequest,
   TerraformDiagnostic,
   TerraformOutput,
   TerraformOutputListResponse,
@@ -121,15 +140,39 @@ import type {
   VerifyAwsConnectionRequest,
   VerifyAwsConnectionResponse
 } from "../../../../packages/types/src";
+import { RESOURCE_TYPES } from "../../../../packages/types/src";
 import {
   ApiClientError,
   apiFetch,
   buildApiUrl,
+  createApiRequestContext,
+  createConnectionError,
+  toApiClientError,
   type ApiRequestContext
 } from "../../lib/api-client";
 import { readStoredAuthSession } from "../../lib/auth-storage";
 
 const AI_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api").replace(/\/+$/, "");
+const API_ERROR_CODES = [
+  "bad_request",
+  "unauthorized",
+  "not_found",
+  "conflict",
+  "github_app_permission_required",
+  "too_many_requests",
+  "unprocessable_entity",
+  "bad_gateway",
+  "service_unavailable",
+  "internal_server_error",
+  "LIVE_OBSERVATION_DISABLED",
+  "LIVE_OBSERVATION_CACHE_UNAVAILABLE",
+  "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE",
+  "LIVE_OBSERVATION_GONE",
+  "LIVE_OBSERVATION_NOT_FOUND",
+  "LIVE_OBSERVATION_OUTPUT_INVALID",
+  "LIVE_OBSERVATION_RATE_LIMITED"
+] as const satisfies readonly ApiErrorCode[];
+const API_ERROR_CODE_SET = new Set<string>(API_ERROR_CODES);
 
 type AiTerraformErrorExplanationRequest = {
   readonly diagnostic?: TerraformDiagnostic | undefined;
@@ -141,6 +184,12 @@ type AiTerraformErrorExplanationRequest = {
 
 type PublicAiRequestOptions = {
   readonly signal?: AbortSignal | undefined;
+};
+
+export type ArchitectureDraftStreamOptions = PublicAiRequestOptions & {
+  readonly onProgress?:
+    | ((snapshot: ArchitectureDraftProgressSnapshot) => void)
+    | undefined;
 };
 
 type ArchitectureSnapshotResponse = {
@@ -178,6 +227,16 @@ export async function getProjectDeploymentTarget(
   return response.target;
 }
 
+export async function getProjectDeliveryProfile(
+  projectId: string
+): Promise<ProjectDeliveryProfile> {
+  const response = await apiFetch<ProjectDeliveryProfileResponse>(
+    `/projects/${encodeURIComponent(projectId)}/delivery-profile`,
+    { auth: true }
+  );
+  return response.profile;
+}
+
 export async function putProjectDeploymentTarget(
   projectId: string,
   target: PutProjectDeploymentTargetRequest
@@ -190,10 +249,13 @@ export async function putProjectDeploymentTarget(
   return response.target;
 }
 
-export async function listApplicationReleases(projectId: string): Promise<ApplicationRelease[]> {
+export async function listApplicationReleases(
+  projectId: string,
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<ApplicationRelease[]> {
   const response = await apiFetch<ApplicationReleaseListResponse>(
     `/projects/${encodeURIComponent(projectId)}/releases`,
-    { auth: true }
+    { auth: true, ...(options.signal ? { signal: options.signal } : {}) }
   );
   return response.releases;
 }
@@ -232,7 +294,8 @@ export async function getProjectDetails(projectId: string): Promise<ProjectDetai
 
 export async function getProjectDraft(projectId: string): Promise<ProjectDraftResponse> {
   return apiFetch<ProjectDraftResponse>(`/projects/${encodeURIComponent(projectId)}/draft`, {
-    auth: true
+    auth: true,
+    cache: "no-store"
   });
 }
 
@@ -244,7 +307,10 @@ class ProjectThumbnailFetchError extends Error {
 }
 
 // 인증된 Project의 최신 실제 Board 캡처를 raster Blob으로 읽습니다.
-export async function fetchProjectThumbnail(projectId: string): Promise<Blob | null> {
+export async function fetchProjectThumbnail(
+  projectId: string,
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<Blob | null> {
   const headers = new Headers({ Accept: "image/webp,image/png" });
   const session = readStoredAuthSession();
 
@@ -257,7 +323,8 @@ export async function fetchProjectThumbnail(projectId: string): Promise<Blob | n
     {
       cache: "no-store",
       credentials: "include",
-      headers
+      headers,
+      ...(options.signal ? { signal: options.signal } : {})
     }
   );
 
@@ -275,6 +342,7 @@ export async function fetchProjectThumbnail(projectId: string): Promise<Blob | n
 export async function saveProjectDraft({
   projectId,
   diagramJson,
+  expectedRevision,
   terraformFiles
 }: {
   projectId: string;
@@ -284,9 +352,39 @@ export async function saveProjectDraft({
     method: "PUT",
     body: {
       diagramJson,
+      expectedRevision,
       ...(terraformFiles !== undefined ? { terraformFiles } : {})
     }
   });
+}
+
+export async function getRepositoryAnalysisRecord(
+  projectId: string
+): Promise<RepositoryAnalysisRecord | null> {
+  const response = await apiFetch<RepositoryAnalysisRecordResponse>(
+    `/projects/${encodeURIComponent(projectId)}/repository-analysis-record`,
+    { auth: true }
+  );
+  return response.record;
+}
+
+export async function saveRepositoryAnalysisRecord(
+  projectId: string,
+  input: SaveRepositoryAnalysisRecordRequest
+): Promise<RepositoryAnalysisRecord> {
+  const response = await apiFetch<RepositoryAnalysisRecordResponse>(
+    `/projects/${encodeURIComponent(projectId)}/repository-analysis-record`,
+    {
+      auth: true,
+      method: "PUT",
+      body: input
+    }
+  );
+
+  if (!response.record) {
+    throw new Error("Repository Analysis Record was not saved");
+  }
+  return response.record;
 }
 
 export async function createArchitectureSnapshot({
@@ -459,6 +557,49 @@ export async function createAiArchitectureDraft(
   );
 }
 
+// 새 프로젝트 첫 초안에서만 사용하는 NDJSON progress 경계입니다.
+// 기존 JSON 함수는 Repository/기존 프로젝트 호출 호환을 위해 별도로 유지합니다.
+export async function createAiArchitectureDraftStream(
+  input: CreateArchitectureDraftRequest,
+  options: ArchitectureDraftStreamOptions = {}
+): Promise<CreateArchitectureDraftResponse> {
+  const prompt = input.prompt.trim();
+
+  if (prompt.length === 0) {
+    throw new ApiClientError(400, {
+      error: "bad_request",
+      message: "Requirement Prompt를 먼저 입력해주세요."
+    });
+  }
+
+  const path = "/ai/architecture-draft/stream";
+  const requestContext = createPublicAiRequestContext(path);
+  const headers = createPublicAiHeaders("application/x-ndjson");
+  let response: Response;
+
+  try {
+    response = await fetch(`${AI_API_BASE_URL}${path}`, {
+      body: JSON.stringify({ ...input, prompt }),
+      credentials: "include",
+      headers,
+      method: "POST",
+      ...(options.signal ? { signal: options.signal } : {})
+    });
+  } catch (error) {
+    if (isPublicAiAbort(error, options.signal)) {
+      throw error;
+    }
+
+    throw createPublicAiConnectionError(requestContext);
+  }
+
+  if (!response.ok) {
+    throw await readPublicAiError(response, requestContext);
+  }
+
+  return readArchitectureDraftStream(response, requestContext, options.onProgress);
+}
+
 export async function analyzePublicSourceRepository(
   input: AnalyzeSourceRepositoryRequest
 ): Promise<SourceRepositoryAnalysisResult> {
@@ -561,18 +702,8 @@ async function postPublicAiJson<ResponseBody>(
   body: Record<string, unknown>,
   options: PublicAiRequestOptions = {}
 ): Promise<ResponseBody> {
-  const requestContext: ApiRequestContext = {
-    method: "POST",
-    path: new URL(`${AI_API_BASE_URL}${path}`, "http://sketchcatch.local").pathname
-  };
-  const headers = new Headers({
-    "Content-Type": "application/json"
-  });
-  const session = readStoredAuthSession();
-
-  if (session) {
-    headers.set("Authorization", `Bearer ${session.accessToken}`);
-  }
+  const requestContext = createPublicAiRequestContext(path);
+  const headers = createPublicAiHeaders("application/json");
 
   let response: Response;
 
@@ -585,22 +716,11 @@ async function postPublicAiJson<ResponseBody>(
       ...(options.signal ? { signal: options.signal } : {})
     });
   } catch (error) {
-    if (
-      options.signal?.aborted === true ||
-      (error instanceof Error && error.name === "AbortError")
-    ) {
+    if (isPublicAiAbort(error, options.signal)) {
       throw error;
     }
 
-    throw new ApiClientError(
-      0,
-      {
-        error: "internal_server_error",
-        message:
-          "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요."
-      },
-      requestContext
-    );
+    throw createPublicAiConnectionError(requestContext);
   }
 
   if (!response.ok) {
@@ -608,6 +728,485 @@ async function postPublicAiJson<ResponseBody>(
   }
 
   return response.json() as Promise<ResponseBody>;
+}
+
+async function readArchitectureDraftStream(
+  response: Response,
+  requestContext: ApiRequestContext,
+  onProgress: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined
+): Promise<CreateArchitectureDraftResponse> {
+  if (response.body === null) {
+    throw createInvalidArchitectureDraftStreamError(requestContext);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: CreateArchitectureDraftResponse | undefined;
+  let terminalSeen = false;
+  let completed = false;
+
+  const consumeLine = (line: string): void => {
+    const trimmedLine = line.trim();
+    if (trimmedLine.length === 0) {
+      return;
+    }
+
+    if (terminalSeen) {
+      throw createInvalidArchitectureDraftStreamError(requestContext);
+    }
+
+    let parsedEvent: unknown;
+    try {
+      parsedEvent = JSON.parse(trimmedLine) as unknown;
+    } catch {
+      throw createInvalidArchitectureDraftStreamError(requestContext);
+    }
+
+    if (!isArchitectureDraftStreamEvent(parsedEvent)) {
+      throw createInvalidArchitectureDraftStreamError(requestContext);
+    }
+    const event = parsedEvent;
+
+    if (event.type === "progress") {
+      onProgress?.(event.snapshot);
+      return;
+    }
+
+    if (event.type === "result") {
+      terminalSeen = true;
+      result = event.result;
+      return;
+    }
+
+    if (event.type === "error") {
+      terminalSeen = true;
+      throw new ApiClientError(event.error.statusCode, event.error, requestContext);
+    }
+
+    throw createInvalidArchitectureDraftStreamError(requestContext);
+  };
+
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        buffer += decoder.decode();
+        break;
+      }
+
+      buffer += decoder.decode(chunk.value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        consumeLine(line);
+      }
+    }
+
+    consumeLine(buffer);
+    if (result === undefined) {
+      throw createInvalidArchitectureDraftStreamError(requestContext);
+    }
+
+    completed = true;
+    return result;
+  } finally {
+    if (!completed) {
+      try {
+        await reader.cancel();
+      } catch {
+        // Preserve the parse, validation, or abort error that ended consumption.
+      }
+    }
+    reader.releaseLock();
+  }
+}
+
+function createPublicAiRequestContext(path: string): ApiRequestContext {
+  return {
+    method: "POST",
+    path: new URL(`${AI_API_BASE_URL}${path}`, "http://sketchcatch.local").pathname
+  };
+}
+
+function createPublicAiHeaders(accept: string): Headers {
+  const headers = new Headers({
+    Accept: accept,
+    "Content-Type": "application/json"
+  });
+  const session = readStoredAuthSession();
+
+  if (session) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  }
+
+  return headers;
+}
+
+function isPublicAiAbort(error: unknown, signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true || (error instanceof Error && error.name === "AbortError");
+}
+
+function createPublicAiConnectionError(requestContext: ApiRequestContext): ApiClientError {
+  return new ApiClientError(
+    0,
+    {
+      error: "internal_server_error",
+      message:
+        "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요."
+    },
+    requestContext
+  );
+}
+
+function createInvalidArchitectureDraftStreamError(
+  requestContext: ApiRequestContext
+): ApiClientError {
+  return new ApiClientError(
+    500,
+    {
+      error: "internal_server_error",
+      message: "아키텍처 생성 응답을 확인하지 못했습니다. 다시 시도해주세요."
+    },
+    requestContext
+  );
+}
+
+function isArchitectureDraftStreamEvent(value: unknown): value is ArchitectureDraftStreamEvent {
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return false;
+  }
+
+  if (value.type === "progress") {
+    return (
+      "snapshot" in value &&
+      isArchitectureDraftProgressSnapshot(value.snapshot)
+    );
+  }
+
+  if (value.type === "result") {
+    return "result" in value && isCreateArchitectureDraftResponse(value.result);
+  }
+
+  if (value.type === "error") {
+    return (
+      "error" in value &&
+      typeof value.error === "object" &&
+      value.error !== null &&
+      "statusCode" in value.error &&
+      typeof value.error.statusCode === "number" &&
+      "error" in value.error &&
+      isApiErrorCode(value.error.error) &&
+      "message" in value.error &&
+      typeof value.error.message === "string"
+    );
+  }
+
+  return false;
+}
+
+function isArchitectureDraftProgressSnapshot(
+  value: unknown
+): value is ArchitectureDraftProgressSnapshot {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "sequence" in value &&
+    Number.isSafeInteger(value.sequence) &&
+    typeof value.sequence === "number" &&
+    value.sequence > 0 &&
+    "provisionalArchitectureJson" in value &&
+    isArchitectureJson(value.provisionalArchitectureJson) &&
+    "excludableCandidateIds" in value &&
+    isStringArray(value.excludableCandidateIds)
+  );
+}
+
+function isCreateArchitectureDraftResponse(
+  value: unknown
+): value is CreateArchitectureDraftResponse {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  if ("status" in value) {
+    return (
+      value.status === "needs_clarification" &&
+      "questionId" in value &&
+      typeof value.questionId === "string" &&
+      "question" in value &&
+      typeof value.question === "string" &&
+      "suggestions" in value &&
+      isStringArray(value.suggestions) &&
+      (!("validationMessage" in value) ||
+        value.validationMessage === undefined ||
+        typeof value.validationMessage === "string") &&
+      "providerMetadata" in value &&
+      isAiProviderMetadata(value.providerMetadata)
+    );
+  }
+
+  return (
+    "architectureJson" in value &&
+    isArchitectureJson(value.architectureJson) &&
+    "title" in value &&
+    typeof value.title === "string" &&
+    "metadata" in value &&
+    isArchitectureDraftMetadata(value.metadata) &&
+    (!("diagramJson" in value) ||
+      value.diagramJson === undefined ||
+      isDiagramJson(value.diagramJson)) &&
+    (!("llmExplanation" in value) ||
+      value.llmExplanation === undefined ||
+      isLlmExplanation(value.llmExplanation))
+  );
+}
+
+function isArchitectureDraftMetadata(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "source" in value &&
+    typeof value.source === "string" &&
+    "confidence" in value &&
+    (value.confidence === "low" || value.confidence === "medium" || value.confidence === "high") &&
+    "assumptions" in value &&
+    isStringArray(value.assumptions) &&
+    "explanations" in value &&
+    isStringArray(value.explanations) &&
+    (!("guardrailWarnings" in value) ||
+      value.guardrailWarnings === undefined ||
+      (Array.isArray(value.guardrailWarnings) &&
+        value.guardrailWarnings.every(
+          (warning) =>
+            isRecord(warning) &&
+            typeof warning.code === "string" &&
+            typeof warning.message === "string"
+        ))) &&
+    (!("capabilities" in value) ||
+      value.capabilities === undefined ||
+      isStringArray(value.capabilities)) &&
+    (!("requirementFacts" in value) ||
+      value.requirementFacts === undefined ||
+      isStringArray(value.requirementFacts)) &&
+    (!("architectureIntent" in value) ||
+      value.architectureIntent === undefined ||
+      isRecord(value.architectureIntent)) &&
+    (!("operatingProfile" in value) ||
+      value.operatingProfile === undefined ||
+      isRecord(value.operatingProfile)) &&
+    (!("authoredSourceId" in value) ||
+      value.authoredSourceId === undefined ||
+      value.authoredSourceId === "audience-live-check")
+  );
+}
+
+function isLlmExplanation(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.target === "string" &&
+    typeof value.summary === "string" &&
+    isStringArray(value.highlights) &&
+    isStringArray(value.nextActions) &&
+    typeof value.fallbackUsed === "boolean" &&
+    (value.fallbackReason === undefined || typeof value.fallbackReason === "string") &&
+    (value.wellArchitectedConclusion === undefined ||
+      typeof value.wellArchitectedConclusion === "string") &&
+    (value.codeSuggestion === undefined ||
+      (isRecord(value.codeSuggestion) &&
+        typeof value.codeSuggestion.currentCode === "string" &&
+        typeof value.codeSuggestion.suggestedCode === "string" &&
+        typeof value.codeSuggestion.rationale === "string")) &&
+    (value.providerMetadata === undefined || isAiProviderMetadata(value.providerMetadata))
+  );
+}
+
+function isAiProviderMetadata(value: unknown): value is AiProviderMetadata {
+  return (
+    isRecord(value) &&
+    (value.provider === "bedrock" ||
+      value.provider === "amazon_q" ||
+      value.provider === "amazon_transcribe" ||
+      value.provider === "openai" ||
+      value.provider === "fallback") &&
+    (value.service === "bedrock_runtime" ||
+      value.service === "amazon_q_business" ||
+      value.service === "amazon_transcribe" ||
+      value.service === "openai_responses" ||
+      value.service === "rule_fallback") &&
+    (value.model === undefined || typeof value.model === "string") &&
+    typeof value.routeTarget === "string" &&
+    typeof value.cacheHit === "boolean" &&
+    typeof value.cacheKey === "string" &&
+    isEstimatedUsage(value.estimatedUsage) &&
+    (value.billingMode === "aws_credit_only" ||
+      value.billingMode === "standard" ||
+      value.billingMode === "disabled") &&
+    (value.attempts === undefined ||
+      (Array.isArray(value.attempts) &&
+        value.attempts.every(
+          (attempt) =>
+            isRecord(attempt) &&
+            typeof attempt.provider === "string" &&
+            typeof attempt.service === "string" &&
+            (attempt.status === "succeeded" ||
+              attempt.status === "fallback" ||
+              attempt.status === "skipped" ||
+              attempt.status === "failed") &&
+            (attempt.fallbackReason === undefined ||
+              typeof attempt.fallbackReason === "string")
+        ))) &&
+    typeof value.generatedAt === "string"
+  );
+}
+
+function isEstimatedUsage(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value.inputCharacters) &&
+    isFiniteNumber(value.inputTokensEstimate) &&
+    (value.outputCharacters === undefined || isFiniteNumber(value.outputCharacters)) &&
+    (value.outputTokensEstimate === undefined || isFiniteNumber(value.outputTokensEstimate))
+  );
+}
+
+function isArchitectureJson(value: unknown): value is ArchitectureJson {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("nodes" in value) ||
+    !Array.isArray(value.nodes) ||
+    !("edges" in value) ||
+    !Array.isArray(value.edges)
+  ) {
+    return false;
+  }
+
+  return (
+    value.nodes.every(
+      (node) =>
+        typeof node === "object" &&
+        node !== null &&
+        "id" in node &&
+        typeof node.id === "string" &&
+        "type" in node &&
+        isResourceType(node.type) &&
+        (!("label" in node) || node.label === undefined || typeof node.label === "string") &&
+        "positionX" in node &&
+        typeof node.positionX === "number" &&
+        Number.isFinite(node.positionX) &&
+        "positionY" in node &&
+        typeof node.positionY === "number" &&
+        Number.isFinite(node.positionY) &&
+        "config" in node &&
+        typeof node.config === "object" &&
+        node.config !== null &&
+        !Array.isArray(node.config)
+    ) &&
+    value.edges.every(
+      (edge) =>
+        typeof edge === "object" &&
+        edge !== null &&
+        "id" in edge &&
+        typeof edge.id === "string" &&
+        "sourceId" in edge &&
+        typeof edge.sourceId === "string" &&
+        "targetId" in edge &&
+        typeof edge.targetId === "string" &&
+        (!("label" in edge) || edge.label === undefined || typeof edge.label === "string")
+    )
+  );
+}
+
+function isDiagramJson(value: unknown): value is DiagramJson {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.nodes) &&
+    value.nodes.every(isDiagramNode) &&
+    Array.isArray(value.edges) &&
+    value.edges.every(isDiagramEdge) &&
+    isDiagramViewport(value.viewport) &&
+    (value.variables === undefined || Array.isArray(value.variables)) &&
+    (value.presentation === undefined || isRecord(value.presentation))
+  );
+}
+
+function isDiagramNode(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.type === "string" &&
+    (value.kind === "resource" || value.kind === "design") &&
+    isDiagramPoint(value.position) &&
+    isDiagramSize(value.size) &&
+    typeof value.label === "string" &&
+    typeof value.locked === "boolean" &&
+    isFiniteNumber(value.zIndex) &&
+    (value.iconUrl === undefined || typeof value.iconUrl === "string") &&
+    (value.rotation === undefined || isFiniteNumber(value.rotation)) &&
+    (value.style === undefined || isRecord(value.style)) &&
+    (value.metadata === undefined || isRecord(value.metadata)) &&
+    (value.parameters === undefined || isDiagramNodeParameters(value.parameters))
+  );
+}
+
+function isDiagramNodeParameters(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.resourceType === "string" &&
+    typeof value.resourceName === "string" &&
+    typeof value.fileName === "string" &&
+    isRecord(value.values) &&
+    (value.terraformBlockType === undefined || typeof value.terraformBlockType === "string") &&
+    (value.terraformSourceAuthority === undefined ||
+      value.terraformSourceAuthority === "workspace-seed") &&
+    (value.invalid === undefined || typeof value.invalid === "boolean")
+  );
+}
+
+function isDiagramEdge(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.sourceNodeId === "string" &&
+    typeof value.targetNodeId === "string" &&
+    (value.sourceHandleId === undefined || typeof value.sourceHandleId === "string") &&
+    (value.targetHandleId === undefined || typeof value.targetHandleId === "string") &&
+    (value.label === undefined || typeof value.label === "string") &&
+    (value.type === undefined || typeof value.type === "string") &&
+    (value.style === undefined || isRecord(value.style)) &&
+    (value.metadata === undefined || isRecord(value.metadata)) &&
+    (value.route === undefined || isRecord(value.route)) &&
+    (value.zIndex === undefined || isFiniteNumber(value.zIndex))
+  );
+}
+
+function isDiagramViewport(value: unknown): boolean {
+  return isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y) && isFiniteNumber(value.zoom);
+}
+
+function isDiagramPoint(value: unknown): boolean {
+  return isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y);
+}
+
+function isDiagramSize(value: unknown): boolean {
+  return isRecord(value) && isFiniteNumber(value.width) && isFiniteNumber(value.height);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isResourceType(value: unknown): boolean {
+  return typeof value === "string" && (RESOURCE_TYPES as readonly string[]).includes(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 // API 서버의 JSON 오류를 공용 에러 타입으로 유지해 화면별 메시지 fallback에 덮이지 않게 합니다.
@@ -653,15 +1252,7 @@ function isPublicAiErrorBody(value: unknown): value is ApiErrorResponse {
 }
 
 function isApiErrorCode(value: unknown): value is ApiErrorCode {
-  return (
-    value === "bad_request" ||
-    value === "unauthorized" ||
-    value === "not_found" ||
-    value === "conflict" ||
-    value === "github_oauth_required" ||
-    value === "too_many_requests" ||
-    value === "internal_server_error"
-  );
+  return typeof value === "string" && API_ERROR_CODE_SET.has(value);
 }
 
 export async function createAwsConnectionSetup({
@@ -677,14 +1268,35 @@ export async function createAwsConnectionSetup({
 }
 
 export async function listAwsConnections(
-  options: { readonly signal?: AbortSignal | undefined } = {}
+  options: {
+    readonly includeUnverified?: boolean | undefined;
+    readonly signal?: AbortSignal | undefined;
+  } = {}
 ): Promise<AwsConnection[]> {
-  const response = await apiFetch<AwsConnectionListResponse>("/aws/connections", {
+  const query = options.includeUnverified ? "?includeUnverified=true" : "";
+  const response = await apiFetch<unknown>(`/aws/connections${query}`, {
     auth: true,
     ...(options.signal ? { signal: options.signal } : {})
   });
 
-  return response.awsConnections;
+  if (Array.isArray(response)) {
+    return response as AwsConnection[];
+  }
+  if (!response || typeof response !== "object") {
+    return [];
+  }
+
+  const { awsConnections } = response as Partial<AwsConnectionListResponse>;
+  return Array.isArray(awsConnections) ? awsConnections : [];
+}
+
+export async function listAwsConnectionSettings(
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<AwsConnectionListResponse> {
+  return apiFetch<AwsConnectionListResponse>("/aws/connections", {
+    auth: true,
+    ...(options.signal ? { signal: options.signal } : {})
+  });
 }
 
 export async function testAwsConnection(
@@ -740,11 +1352,65 @@ export async function verifyAwsConnectionCreatedRole({
   );
 }
 
-export async function deleteAwsConnection(connectionId: string): Promise<void> {
+export async function getAwsConnectionDeletionPreview(
+  connectionId: string
+): Promise<AwsConnectionDeletionPreviewResponse> {
+  return apiFetch<AwsConnectionDeletionPreviewResponse>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/deletion-preview`,
+    { auth: true }
+  );
+}
+
+export async function deleteAwsConnection(
+  connectionId: string,
+  input: DeleteAwsConnectionRequest
+): Promise<void> {
   await apiFetch<void>(`/aws/connections/${encodeURIComponent(connectionId)}`, {
     auth: true,
-    method: "DELETE"
+    method: "DELETE",
+    body: input
   });
+}
+
+export async function getAwsCodeConnection(
+  connectionId: string
+): Promise<AwsCodeConnectionResponse> {
+  return apiFetch<AwsCodeConnectionResponse>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection`,
+    { auth: true }
+  );
+}
+
+export async function createAwsCodeConnection(
+  connectionId: string
+): Promise<AwsCodeConnectionResponse> {
+  return apiFetch<AwsCodeConnectionResponse>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection`,
+    { auth: true, method: "POST" }
+  );
+}
+
+export async function refreshAwsCodeConnection(
+  connectionId: string
+): Promise<AwsCodeConnectionResponse> {
+  return apiFetch<AwsCodeConnectionResponse>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection/refresh`,
+    { auth: true, method: "POST" }
+  );
+}
+
+export async function disconnectAwsCodeConnection(
+  connectionId: string,
+  input: DisconnectAwsCodeConnectionRequest
+): Promise<void> {
+  await apiFetch<void>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection`,
+    {
+      auth: true,
+      method: "DELETE",
+      body: input
+    }
+  );
 }
 
 export async function getAwsConnectionCloudFormationTemplate({
@@ -928,6 +1594,47 @@ export async function prepareDeployment({
   return response.deployment;
 }
 
+export async function getProjectBuildEnvironment(
+  projectId: string
+): Promise<ProjectBuildEnvironment | null> {
+  const response = await apiFetch<ProjectBuildEnvironmentResponse>(
+    `/projects/${encodeURIComponent(projectId)}/build-environment`,
+    { auth: true }
+  );
+
+  return response.buildEnvironment;
+}
+
+export async function prepareProjectBuildEnvironment(
+  projectId: string
+): Promise<ProjectBuildEnvironment> {
+  const response = await apiFetch<ProjectBuildEnvironmentResponse>(
+    `/projects/${encodeURIComponent(projectId)}/build-environment/prepare`,
+    { auth: true, method: "POST" }
+  );
+
+  if (!response.buildEnvironment) {
+    throw new Error("빌드 환경 준비 결과를 확인하지 못했습니다.");
+  }
+
+  return response.buildEnvironment;
+}
+
+export async function verifyProjectRepositoryAccess(
+  projectId: string
+): Promise<ProjectBuildEnvironment> {
+  const response = await apiFetch<ProjectBuildEnvironmentResponse>(
+    `/projects/${encodeURIComponent(projectId)}/build-environment/verify-repository-access`,
+    { auth: true, method: "POST" }
+  );
+
+  if (!response.buildEnvironment) {
+    throw new Error("GitHub repository 접근 검증 결과를 확인하지 못했습니다.");
+  }
+
+  return response.buildEnvironment;
+}
+
 export async function listDeployments(
   projectId: string,
   options: { readonly signal?: AbortSignal | undefined } = {}
@@ -950,6 +1657,16 @@ export async function createLiveObservation(
   return apiFetch<CreateLiveObservationV2Response>(
     `/deployments/${encodeURIComponent(deploymentId)}/live-observations`,
     { auth: true, method: "POST", ...(signal ? { signal } : {}) }
+  );
+}
+
+export function getLiveObservationArchitecture(
+  deploymentId: string,
+  signal?: AbortSignal
+): Promise<DeploymentLiveObservationArchitectureResponse> {
+  return apiFetch(
+    `/deployments/${encodeURIComponent(deploymentId)}/live-observation-architecture`,
+    { auth: true, ...(signal ? { signal } : {}) }
   );
 }
 
@@ -1072,25 +1789,40 @@ async function readLiveObservationSnapshotStream(input: {
   readonly signal: AbortSignal;
   readonly onSnapshot: (snapshot: LiveObservationV2Snapshot) => void;
 }): Promise<LiveObservationV2Snapshot["status"] | null> {
+  const path = `/deployments/${encodeURIComponent(input.deploymentId)}/live-observations/${encodeURIComponent(input.observationId)}/stream`;
+  const requestContext = createApiRequestContext(path);
   const session = readStoredAuthSession();
   const headers = new Headers({ Accept: "text/event-stream" });
   if (session) {
     headers.set("Authorization", `Bearer ${session.accessToken}`);
   }
 
-  const response = await fetch(
-    buildApiUrl(
-      `/deployments/${encodeURIComponent(input.deploymentId)}/live-observations/${encodeURIComponent(input.observationId)}/stream`
-    ),
-    {
+  let response: Response;
+  try {
+    response = await fetch(buildApiUrl(path), {
       credentials: "include",
       headers,
       signal: input.signal
-    }
-  );
+    });
+  } catch (error) {
+    if (input.signal.aborted) throw error;
+    throw createConnectionError(requestContext);
+  }
 
-  if (!response.ok || !response.body) {
-    throw new Error("Live Observation stream request failed");
+  if (!response.ok) {
+    throw await toApiClientError(response, requestContext);
+  }
+
+  if (!response.body) {
+    const requestId = response.headers.get("x-request-id")?.trim();
+    throw new ApiClientError(
+      response.status,
+      {
+        error: "internal_server_error",
+        message: "Live Observation stream response body is missing"
+      },
+      requestId ? { ...requestContext, requestId } : requestContext
+    );
   }
 
   let finalStatus: LiveObservationV2Snapshot["status"] | null = null;
@@ -1127,6 +1859,17 @@ export async function getGitCicdMonitoringConfig(
   );
 
   return response.config;
+}
+
+export async function refreshGitCicdReadiness(
+  projectId: string
+): Promise<GitCicdReadinessSnapshot> {
+  const response = await apiFetch<GitCicdReadinessResponse>(
+    `/projects/${encodeURIComponent(projectId)}/git-cicd/readiness/refresh`,
+    { auth: true, method: "POST" }
+  );
+
+  return response.readiness;
 }
 
 export async function updateGitCicdMonitoringConfig(
@@ -1188,6 +1931,16 @@ export async function getGitCicdPipelineRun(pipelineRunId: string): Promise<GitC
   return response.run;
 }
 
+export async function retryGitCicdFrontendRelease(
+  pipelineRunId: string
+): Promise<GitCicdReleaseRunResponse["run"]> {
+  const response = await apiFetch<GitCicdReleaseRunResponse>(
+    `/git-cicd/release-runs/${encodeURIComponent(pipelineRunId)}/frontend/retry`,
+    { auth: true, method: "POST" }
+  );
+  return response.run;
+}
+
 export async function listGitCicdPipelineLogs(
   pipelineRunId: string,
   sinceSequence: number
@@ -1229,39 +1982,24 @@ export async function createGitCicdHandoff({
   return response.handoff;
 }
 
+export async function setupGitCicdHandoff(handoffId: string): Promise<GitCicdHandoff> {
+  const response = await apiFetch<GitCicdHandoffResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/setup`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+
+  return response.handoff;
+}
+
 export async function applyGitCicdRepositorySettings(
   handoffId: string
 ): Promise<GitCicdRepositorySettingsApplyResponse> {
   return apiFetch<GitCicdRepositorySettingsApplyResponse>(
     `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/repository-settings/apply`,
-    {
-      auth: true,
-      method: "POST",
-      body: {}
-    }
-  );
-}
-
-export async function createGitCicdGitHubOAuthStartUrl(
-  handoffId: string
-): Promise<GitCicdGitHubOAuthStartResponse> {
-  return apiFetch<GitCicdGitHubOAuthStartResponse>(
-    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/github-oauth/start`,
-    {
-      auth: true,
-      method: "POST",
-      body: {}
-    }
-  );
-}
-
-export async function applyGitCicdRepositorySettingsWithGitHubOAuth(
-  handoffId: string
-): Promise<GitCicdRepositorySettingsApplyResponse> {
-  return apiFetch<GitCicdRepositorySettingsApplyResponse>(
-    `/git-cicd-handoffs/${encodeURIComponent(
-      handoffId
-    )}/repository-settings/apply-with-github-oauth`,
     {
       auth: true,
       method: "POST",
@@ -1349,13 +2087,11 @@ export async function createGitHubAccountInstallUrl(): Promise<GitHubAppInstallU
   });
 }
 
-export async function listGitHubAccountInstallations(): Promise<GitHubInstallationConnection[]> {
-  const response = await apiFetch<ListGitHubInstallationsResponse>(
+export async function listGitHubAccountInstallations(): Promise<ListGitHubInstallationsResponse> {
+  return apiFetch<ListGitHubInstallationsResponse>(
     "/source-repositories/github/installations",
     { auth: true }
   );
-
-  return response.installations;
 }
 
 export async function createGitHubExistingInstallationCallbackUrl(
@@ -1526,6 +2262,22 @@ export async function runDeploymentPlan(deploymentId: string): Promise<Deploymen
   return response.deployment;
 }
 
+export async function prepareInfrastructureRollback(deploymentId: string): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/infrastructure-rollback`,
+    { auth: true, method: "POST" }
+  );
+
+  return response.deployment;
+}
+
+export async function retryDeploymentFrontend(deploymentId: string): Promise<void> {
+  await apiFetch<void>(
+    `/deployments/${encodeURIComponent(deploymentId)}/application-release/frontend/retry`,
+    { auth: true, method: "POST" }
+  );
+}
+
 export async function approveDeploymentPlan(
   deploymentId: string,
   acknowledgedWarningIds: ApproveDeploymentPlanRequest["acknowledgedWarningIds"] = []
@@ -1538,6 +2290,19 @@ export async function approveDeploymentPlan(
       body: {
         acknowledgedWarningIds
       }
+    }
+  );
+
+  return response.deployment;
+}
+
+export async function revokeDeploymentApproval(deploymentId: string): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/revoke-approval`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
     }
   );
 
@@ -1568,6 +2333,22 @@ export async function executeDeployment(deploymentId: string): Promise<Deploymen
   );
 
   return response.deployment;
+}
+
+export async function getDeploymentProgressSnapshot(
+  deploymentId: string,
+  signal?: AbortSignal
+): Promise<DeploymentProgressSnapshot> {
+  const response = await apiFetch<DeploymentProgressResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/progress`,
+    {
+      auth: true,
+      cache: "no-store",
+      ...(signal ? { signal } : {})
+    }
+  );
+
+  return response.progress;
 }
 
 export async function runDeploymentDestroyPlan(deploymentId: string): Promise<Deployment> {
@@ -1681,11 +2462,15 @@ export async function listDeploymentResources(deploymentId: string): Promise<Dep
   return response.resources;
 }
 
-export async function listTerraformOutputs(deploymentId: string): Promise<TerraformOutput[]> {
+export async function listTerraformOutputs(
+  deploymentId: string,
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<TerraformOutput[]> {
   const response = await apiFetch<TerraformOutputListResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/outputs`,
     {
-      auth: true
+      auth: true,
+      ...(options.signal ? { signal: options.signal } : {})
     }
   );
 

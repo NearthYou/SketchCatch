@@ -19,6 +19,10 @@ import type {
 } from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { createArchitectureResourceDeploymentConfig } from "./aiArchitectureResourceCatalog.js";
+import {
+  getNaturalLanguageResourceAliases,
+  RESOURCE_TYPE_KOREAN_NAMES
+} from "./architectureResourceAliases.js";
 import { createNormalizedAiCacheKey, estimateAiUsage } from "./aiProviderSafety.js";
 import {
   createBedrockTextProvider,
@@ -444,12 +448,21 @@ const RESOURCE_DEFINITION_KEYWORDS = resourceDefinitions
     label: formatGeneratedResourceLabel(definition.id)
   }));
 
+const NATURAL_LANGUAGE_RESOURCE_KEYWORDS = (
+  Object.keys(RESOURCE_TYPE_KOREAN_NAMES) as Exclude<ResourceType, "UNKNOWN">[]
+).map((resourceType) => ({
+  resourceType,
+  keywords: getNaturalLanguageResourceAliases(resourceType),
+  label: RESOURCE_TYPE_KOREAN_NAMES[resourceType]
+}));
+
 const RESOURCE_KEYWORDS: readonly {
   readonly resourceType: ResourceType;
   readonly keywords: readonly string[];
   readonly label: string;
 }[] = [
   ...MANUAL_RESOURCE_KEYWORDS,
+  ...NATURAL_LANGUAGE_RESOURCE_KEYWORDS,
   ...RESOURCE_DEFINITION_KEYWORDS.map((item) => ({
     resourceType: item.definition.resourceType,
     keywords: item.keywords,
@@ -636,6 +649,9 @@ LAMBDA:
 LOAD_BALANCER:
 - config.internal
 
+CLOUDFRONT:
+- config.signingBehavior
+
 AUTO_SCALING_GROUP:
 - config.minSize
 - config.maxSize
@@ -754,6 +770,7 @@ const PATCH_PLAN_ALLOWED_OPERATION_PATHS: Readonly<Partial<Record<ResourceType, 
   SECURITY_GROUP: ["config.ingress", "config.egress"],
   LAMBDA: ["config.runtime", "config.memorySize", "config.timeout"],
   LOAD_BALANCER: ["config.internal"],
+  CLOUDFRONT: ["config.signingBehavior"],
   AUTO_SCALING_GROUP: ["config.minSize", "config.maxSize", "config.desiredCapacity"]
 };
 
@@ -1799,6 +1816,14 @@ function createPatchPlanOperations(
     }
   }
 
+  if (isCloudFrontOriginAccessControl(targetNode)) {
+    const signingBehavior = findCloudFrontOacSigningBehavior(normalizedInstruction);
+
+    if (signingBehavior !== undefined) {
+      return [{ op: "set_value", path: "config.signingBehavior", value: signingBehavior }];
+    }
+  }
+
   if (targetNode.type === "AUTO_SCALING_GROUP") {
     const desiredCapacity = findCapacityValue(normalizedInstruction, [
       "desired",
@@ -2631,7 +2656,8 @@ function resolveTarget(
     intent.connectionTargetResourceId === undefined &&
     intent.skipConnection !== true &&
     architectureJson.nodes.length > 0 &&
-    !hasAddResourcePurpose(intent)
+    !hasAddResourcePurpose(intent) &&
+    !hasUnambiguousLoadBalancerTarget(architectureJson, intent)
   ) {
     return {
       status: "needs_clarification",
@@ -2727,6 +2753,19 @@ function nodeSearchAliases(node: ResourceNode): string[] {
 
 function getAddResourcePurposeSuggestions(resourceType: ResourceType): readonly string[] {
   return ADD_RESOURCE_PURPOSE_SUGGESTIONS[resourceType] ?? GENERIC_ADD_RESOURCE_PURPOSE_SUGGESTIONS;
+}
+
+function hasUnambiguousLoadBalancerTarget(
+  architectureJson: ArchitectureJson,
+  intent: ArchitecturePatchIntent
+): boolean {
+  if (intent.resourceType !== "LOAD_BALANCER") {
+    return false;
+  }
+
+  return architectureJson.nodes.filter((node) =>
+    ["EC2", "ECS_SERVICE", "LAMBDA", "AUTO_SCALING_GROUP"].includes(node.type)
+  ).length === 1;
 }
 
 function hasAddResourcePurpose(intent: ArchitecturePatchIntent): boolean {
@@ -3350,6 +3389,17 @@ function inferConnection(
     return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
   }
 
+  if (newNode.type === "LOAD_BALANCER") {
+    const targetNode = findBestNode(existingNodes, [
+      "EC2",
+      "ECS_SERVICE",
+      "LAMBDA",
+      "AUTO_SCALING_GROUP"
+    ]);
+
+    return targetNode ? { sourceNode: newNode, targetNode } : undefined;
+  }
+
   if (
     newNode.type === "CLOUDFRONT" &&
     isStaticSiteIntent(normalizeSearchText(intent.instruction))
@@ -3626,6 +3676,14 @@ function createModificationConfig(
     }
   }
 
+  if (isCloudFrontOriginAccessControl(targetNode)) {
+    const signingBehavior = findCloudFrontOacSigningBehavior(normalizedInstruction);
+
+    if (signingBehavior !== undefined) {
+      updates.signingBehavior = signingBehavior;
+    }
+  }
+
   if (resourceType === "AUTO_SCALING_GROUP") {
     const desiredCapacity = findCapacityValue(normalizedInstruction, [
       "desired",
@@ -3662,6 +3720,50 @@ function createModificationConfig(
   return {
     naturalLanguageChangeRequest: intent.instruction
   };
+}
+
+function isCloudFrontOriginAccessControl(node: ResourceNode): boolean {
+  return node.type === "CLOUDFRONT" && node.config.terraformResourceType === "aws_cloudfront_origin_access_control";
+}
+
+function findCloudFrontOacSigningBehavior(
+  normalizedInstruction: string
+): "always" | "never" | "no-override" | undefined {
+  if (
+    !includesAnyPhrase(normalizedInstruction, [
+      "signing behavior",
+      "signing_behavior",
+      "signing",
+      "서명 동작",
+      "서명 행동"
+    ])
+  ) {
+    return undefined;
+  }
+
+  if (includesAnyPhrase(normalizedInstruction, ["no-override", "no override"])) {
+    return "no-override";
+  }
+
+  if (
+    includesAnyPhrase(normalizedInstruction, [
+      "never",
+      "disable",
+      "off",
+      "안하도록",
+      "안 하도록",
+      "사용 안",
+      "비활성"
+    ])
+  ) {
+    return "never";
+  }
+
+  if (includesAnyPhrase(normalizedInstruction, ["always", "enable", "on", "항상", "활성"])) {
+    return "always";
+  }
+
+  return undefined;
 }
 
 const EC2_INSTANCE_SIZE_ORDER = [

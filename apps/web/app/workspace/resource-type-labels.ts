@@ -58,6 +58,7 @@ const resourceTypeLabels: Record<ResourceType, string> = {
   AMPLIFY_APP: "Amplify App",
   DB_SUBNET_GROUP: "DB Subnet Group",
   SECRETS_MANAGER_SECRET: "Secrets Manager Secret",
+  RANDOM_PASSWORD: "Generated Secret Value",
   VPC_ENDPOINT: "VPC Endpoint",
   CLOUDWATCH_LOG_GROUP: "CloudWatch Log Group",
   CLOUDWATCH_LOG_STREAM: "CloudWatch Log Stream",

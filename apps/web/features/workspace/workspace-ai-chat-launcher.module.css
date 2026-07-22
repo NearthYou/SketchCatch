@@ -13,9 +13,9 @@
   color: var(--ai-workbench-launcher-text);
   cursor: pointer;
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 700;
-  font-family: "Pretendard", "Noto Sans KR", "Inter", "Geist", sans-serif;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  font-family: var(--font-sans);
   gap: 7px;
   min-height: 40px;
   justify-content: center;

@@ -4,15 +4,26 @@ import type {
   LlmExplanation,
   TerraformDiagnostic
 } from "@sketchcatch/types";
-import type { ReactNode } from "react";
-import { ArrowRight, Code2, ListChecks } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ArrowRight, Code2, ListChecks, X } from "lucide-react";
 import {
   createTerraformIssuePresentation,
-  createTerraformPreviewPresentation,
   createWorkspaceAiExplanationBadge,
   getWorkspaceAiResultSeverityLabel,
+  createTerraformPreviewPresentation,
   type WorkspaceAiResultCheck
 } from "./workspace-ai-result-presentation";
+import {
+  architectureDraftGenerationSteps,
+  getArchitectureDraftGenerationProgressStep,
+  getTerraformIssueAnalysisProgressPresentation,
+  getTerraformIssueAnalysisProgressTransition,
+  getTerraformPreviewReviewProgressStep,
+  terraformPreviewReviewSteps,
+  TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS,
+  type TerraformIssueAnalysisProgressPhase,
+  type WorkspaceAiProgressStep
+} from "./workspace-ai-chat-status";
 import styles from "./workspace-ai-workbench.module.css";
 
 export type AiRequestState = "idle" | "loading" | "error";
@@ -43,6 +54,202 @@ export function WorkspaceAiWorkbenchRequestMessage({
   return null;
 }
 
+export function WorkspaceAiWorkbenchDraftProgress({
+  currentStep,
+  onCancel
+}: {
+  readonly currentStep?: number | undefined;
+  readonly onCancel?: (() => void) | undefined;
+}) {
+  const elapsedMs = useWorkspaceAiProgressElapsed(currentStep === undefined);
+  const resolvedCurrentStep = currentStep ?? getArchitectureDraftGenerationProgressStep(elapsedMs);
+
+  return (
+    <WorkspaceAiWorkbenchProgress
+      currentStep={resolvedCurrentStep}
+      notice="AI 응답이 도착하면 검증된 다이어그램 초안을 바로 표시합니다."
+      onCancel={onCancel}
+      steps={architectureDraftGenerationSteps}
+      title="AI가 다이어그램을 구성하고 있습니다"
+    />
+  );
+}
+
+export function WorkspaceAiWorkbenchReviewProgress({ elapsedMs }: { readonly elapsedMs: number }) {
+  return (
+    <WorkspaceAiWorkbenchProgress
+      currentStep={getTerraformPreviewReviewProgressStep(elapsedMs)}
+      notice="Amazon Q 응답이 도착하면 여섯 가지 기준의 검토 결과를 바로 표시합니다."
+      steps={terraformPreviewReviewSteps}
+      title="Amazon Q 검토를 진행하고 있습니다"
+    />
+  );
+}
+
+export function WorkspaceAiWorkbenchTerraformIssueProgress({
+  completed,
+  didComplete,
+  isRunning,
+  total
+}: {
+  readonly completed: number;
+  readonly didComplete: boolean;
+  readonly isRunning: boolean;
+  readonly total: number;
+}) {
+  const [phase, setPhase] = useState<TerraformIssueAnalysisProgressPhase>(() =>
+    isRunning ? "running" : "hidden"
+  );
+
+  useEffect(() => {
+    const transition = getTerraformIssueAnalysisProgressTransition({
+      currentPhase: phase,
+      didComplete,
+      isRunning
+    });
+
+    if (transition.phase !== phase) {
+      setPhase(transition.phase);
+    }
+  }, [didComplete, isRunning, phase]);
+
+  useEffect(() => {
+    if (phase !== "complete") return;
+
+    const timerId = window.setTimeout(() => {
+      setPhase("hidden");
+    }, TERRAFORM_ISSUE_ANALYSIS_COMPLETION_DURATION_MS);
+
+    return () => window.clearTimeout(timerId);
+  }, [phase]);
+
+  const elapsedMs = useWorkspaceAiProgressElapsed(phase === "running", completed);
+  const presentation = getTerraformIssueAnalysisProgressPresentation({
+    completed,
+    elapsedMs,
+    phase,
+    total
+  });
+
+  if (presentation === null) {
+    return null;
+  }
+
+  const { label, progress } = presentation;
+  const accessibleLabel =
+    label === "완료" ? `오류 분석 완료 ${progress}%` : `오류 분석 예상 진행률 ${progress}%`;
+
+  return (
+    <div
+      aria-label={accessibleLabel}
+      aria-valuemax={100}
+      aria-valuemin={0}
+      aria-valuenow={progress}
+      className={styles.terraformIssueProgress}
+      role="progressbar"
+    >
+      <div className={styles.terraformIssueProgressGauge}>
+        <svg aria-hidden="true" viewBox="0 0 44 44">
+          <circle
+            className={styles.terraformIssueProgressTrack}
+            cx="22"
+            cy="22"
+            r="18"
+          />
+          <circle
+            className={styles.terraformIssueProgressIndicator}
+            cx="22"
+            cy="22"
+            pathLength="100"
+            r="18"
+            strokeDasharray="100"
+            strokeDashoffset={100 - progress}
+          />
+        </svg>
+        <span aria-hidden="true" className={styles.terraformIssueProgressValue}>
+          {progress}%
+        </span>
+      </div>
+      <span aria-hidden="true" className={styles.terraformIssueProgressLabel}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function WorkspaceAiWorkbenchProgress({
+  currentStep,
+  notice,
+  onCancel,
+  steps,
+  title
+}: {
+  readonly currentStep: number;
+  readonly notice: string;
+  readonly onCancel?: (() => void) | undefined;
+  readonly steps: readonly WorkspaceAiProgressStep[];
+  readonly title: string;
+}) {
+  const activeStep = steps[currentStep];
+
+  return (
+    <div className={styles.reviewProgress}>
+      <div aria-live="polite" className={styles.reviewProgressHeader} role="status">
+        <span aria-hidden="true" className={styles.reviewProgressSpinner} />
+        <div>
+          <strong>{title}</strong>
+          <span>{activeStep?.description}</span>
+        </div>
+      </div>
+      <ol className={styles.reviewProgressSteps}>
+        {steps.map((step, index) => {
+          const state =
+            index < currentStep ? "complete" : index === currentStep ? "active" : "pending";
+
+          return (
+            <li
+              aria-current={state === "active" ? "step" : undefined}
+              data-state={state}
+              key={step.label}
+            >
+              <span aria-hidden="true" className={styles.reviewProgressMarker} />
+              <div>
+                <strong>{step.label}</strong>
+                <span>{step.description}</span>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <div className={styles.reviewProgressFooter}>
+        <p className={styles.reviewProgressNotice}>{notice}</p>
+        {onCancel ? (
+          <button className={styles.cancelButton} onClick={onCancel} type="button">
+            <X aria-hidden="true" size={14} /> 요청 취소
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function useWorkspaceAiProgressElapsed(enabled = true, resetKey?: unknown): number {
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    setElapsedMs(0);
+    const startedAt = Date.now();
+    const timerId = window.setInterval(() => {
+      setElapsedMs(Date.now() - startedAt);
+    }, 500);
+
+    return () => window.clearInterval(timerId);
+  }, [enabled, resetKey]);
+
+  return elapsedMs;
+}
+
 export function WorkspaceAiWorkbenchExplanation({
   explanation
 }: {
@@ -68,9 +275,6 @@ export function WorkspaceAiWorkbenchExplanation({
       {explanation.highlights.length > 0 ? (
         <WorkspaceAiWorkbenchTechnicalList items={explanation.highlights} title="핵심" />
       ) : null}
-      {explanation.nextActions.length > 0 ? (
-        <WorkspaceAiWorkbenchTechnicalList items={explanation.nextActions} title="다음 행동" />
-      ) : null}
     </section>
   );
 }
@@ -86,52 +290,20 @@ export function WorkspaceAiWorkbenchTerraformPreviewResult({
     <div className={styles.result}>
       <section className={styles.resultLead}>
         <h3>검토 요약</h3>
-        <p>{result.summary}</p>
+        <ul className={styles.reviewSummaryList}>
+          {result.summaryItems.map((item) => (
+            <li data-tone={item.tone} key={item.id}>
+              <strong>{item.label}</strong>
+              <p>{item.text}</p>
+            </li>
+          ))}
+        </ul>
       </section>
 
-      <WorkspaceAiWorkbenchResultChecks checks={result.checks} />
-      <WorkspaceAiWorkbenchNextStep>{result.nextStep}</WorkspaceAiWorkbenchNextStep>
-
-      <WorkspaceAiWorkbenchTechnicalDetails>
-        <dl className={styles.technicalMeta}>
-          <div>
-            <dt>원문 요약</dt>
-            <dd>{result.technical.rawSummary}</dd>
-          </div>
-          <div>
-            <dt>원문 권장 사항</dt>
-            <dd>{result.technical.rawRecommendation}</dd>
-          </div>
-          {result.technical.provider ? (
-            <div>
-              <dt>응답 제공자</dt>
-              <dd>{result.technical.provider}</dd>
-            </div>
-          ) : null}
-        </dl>
-        {result.technical.resources.length > 0 ? (
-          <WorkspaceAiWorkbenchTechnicalList
-            items={result.technical.resources}
-            title="감지한 리소스"
-          />
-        ) : null}
-        {result.technical.providerAttempts.length > 0 ? (
-          <WorkspaceAiWorkbenchTechnicalList
-            items={result.technical.providerAttempts}
-            title="AI 제공자 시도 이력"
-          />
-        ) : null}
-        {result.technical.findings.length > 0 ? (
-          <WorkspaceAiWorkbenchTechnicalList
-            items={result.technical.findings}
-            title="점검 원문"
-          />
-        ) : null}
-      </WorkspaceAiWorkbenchTechnicalDetails>
+      <WorkspaceAiWorkbenchReviewChecks checks={result.checks} />
     </div>
   );
 }
-
 export function WorkspaceAiWorkbenchTerraformIssueResult({
   diagnostic,
   explanation,
@@ -147,46 +319,37 @@ export function WorkspaceAiWorkbenchTerraformIssueResult({
     <div className={styles.result}>
       <section className={styles.resultLead}>
         <h3>{result.title}</h3>
-        <p>{result.summary}</p>
+        {result.summary ? <p>{result.summary}</p> : null}
       </section>
-
-      <WorkspaceAiWorkbenchResultChecks checks={result.checks} />
-      <WorkspaceAiWorkbenchNextStep>{result.nextStep}</WorkspaceAiWorkbenchNextStep>
 
       <WorkspaceAiWorkbenchTechnicalDetails>
         <dl className={styles.technicalMeta}>
           <div>
-            <dt>문제 위치</dt>
+            <dt>오류 위치</dt>
             <dd>{result.location}</dd>
           </div>
           <div>
             <dt>오류 유형</dt>
-            <dd>{result.technical.errorType}</dd>
+            <dd>
+              <code>{result.technical.errorType}</code>
+            </dd>
           </div>
-          <div>
-            <dt>원문 오류</dt>
-            <dd>{result.technical.rawMessage}</dd>
-          </div>
-          <div>
-            <dt>분석 원인</dt>
-            <dd>{result.technical.likelyCause}</dd>
-          </div>
-          <div>
-            <dt>분석 방식</dt>
-            <dd>{result.technical.providerLabel}</dd>
-          </div>
-          {result.technical.providerNotice ? (
-            <div>
-              <dt>응답 상태</dt>
-              <dd>{result.technical.providerNotice}</dd>
-            </div>
-          ) : null}
         </dl>
+
+        <section className={styles.technicalSection}>
+          <strong>분석한 원인</strong>
+          <p>{result.technical.likelyCause}</p>
+        </section>
+
+        <section className={styles.technicalSection}>
+          <strong>Terraform 원문 오류</strong>
+          <code className={styles.technicalRawError}>{result.technical.rawMessage}</code>
+        </section>
 
         {result.technical.nextActions.length > 0 ? (
           <WorkspaceAiWorkbenchTechnicalList
             items={result.technical.nextActions}
-            title="상세 해결 절차"
+            title="해결 절차"
           />
         ) : null}
 
@@ -216,7 +379,9 @@ export function WorkspaceAiWorkbenchTerraformIssueResult({
             <section>
               <strong>수정할 코드</strong>
               <pre>
-                <code>{formatTerraformIssuePreviewCode(result.technical.codePreview.nextCode)}</code>
+                <code>
+                  {formatTerraformIssuePreviewCode(result.technical.codePreview.nextCode)}
+                </code>
               </pre>
             </section>
           </div>
@@ -226,7 +391,59 @@ export function WorkspaceAiWorkbenchTerraformIssueResult({
   );
 }
 
-function WorkspaceAiWorkbenchResultChecks({
+function WorkspaceAiWorkbenchReviewChecks({
+  checks
+}: {
+  readonly checks: readonly WorkspaceAiResultCheck[];
+}) {
+  if (checks.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className={styles.resultSection}>
+      <div className={styles.resultSectionTitle}>
+        <ListChecks aria-hidden="true" size={16} />
+        <h4>확인할 점</h4>
+      </div>
+      <ul className={styles.reviewCheckList}>
+        {checks.map((item) => (
+          <li data-severity={item.severity} key={item.id}>
+            <span aria-hidden="true" className={styles.checkMark} />
+            <div>
+              <div className={styles.reviewCheckHeading}>
+                <strong>{item.label}</strong>
+                {item.severity ? (
+                  <span>{getWorkspaceAiResultSeverityLabel(item.severity)}</span>
+                ) : null}
+              </div>
+              <dl className={styles.reviewCheckDetails}>
+                <div>
+                  <dt>
+                    {item.severity === "high" || item.severity === "medium"
+                      ? "문제"
+                      : item.severity === "low"
+                        ? "잘된 점"
+                        : "내용"}
+                  </dt>
+                  <dd>{item.summary}</dd>
+                </div>
+                {item.action && item.action !== item.summary ? (
+                  <div>
+                    <dt>{item.severity === "low" ? "확인된 설정" : "필요한 조치"}</dt>
+                    <dd>{item.action}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function _WorkspaceAiWorkbenchResultChecks({
   checks
 }: {
   readonly checks: readonly WorkspaceAiResultCheck[];
@@ -262,7 +479,7 @@ function WorkspaceAiWorkbenchResultChecks({
   );
 }
 
-function WorkspaceAiWorkbenchNextStep({ children }: { readonly children: ReactNode }) {
+function _WorkspaceAiWorkbenchNextStep({ children }: { readonly children: ReactNode }) {
   return (
     <section className={`${styles.resultSection} ${styles.nextStep}`}>
       <div className={styles.resultSectionTitle}>
@@ -275,11 +492,17 @@ function WorkspaceAiWorkbenchNextStep({ children }: { readonly children: ReactNo
 }
 
 function WorkspaceAiWorkbenchTechnicalDetails({ children }: { readonly children: ReactNode }) {
+  const [isOpen, setIsOpen] = useState(false);
+
   return (
-    <details className={styles.technicalDetails}>
+    <details
+      className={styles.technicalDetails}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+      open={isOpen}
+    >
       <summary>
         <Code2 aria-hidden="true" size={16} />
-        기술 정보 보기
+        {isOpen ? "원문 분석 접기" : "원문 분석 다시 보기"}
       </summary>
       <div className={styles.technicalDetailsBody}>{children}</div>
     </details>
@@ -296,11 +519,11 @@ function WorkspaceAiWorkbenchTechnicalList({
   return (
     <div className={styles.technicalList}>
       <strong>{title}</strong>
-      <ul>
+      <ol>
         {items.map((item, index) => (
           <li key={`${title}-${index}-${item}`}>{item}</li>
         ))}
-      </ul>
+      </ol>
     </div>
   );
 }

@@ -53,13 +53,13 @@
   background: var(--color-surface-strong);
   color: var(--color-body);
   cursor: pointer;
-  text-align: left;
+  text-align: center;
   z-index: 1;
 }
 
 .costTab strong {
   color: var(--color-ink);
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .costTab[aria-selected="true"] {
@@ -120,13 +120,13 @@
 .costProjectCard h2 {
   margin: 12px 0 5px;
   color: var(--color-ink);
-  font-size: 18px;
+  font-size: calc(18px + var(--presentation-font-size-increase));
 }
 
 .costProjectCard p {
   margin: 0;
   color: var(--color-body);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.5;
   word-break: keep-all;
 }
@@ -138,8 +138,8 @@
   padding: 4px 9px;
   background: var(--color-surface-strong);
   color: var(--color-ink);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
 }
 
 .projectCostValue,
@@ -153,23 +153,23 @@
 .projectCostValue span,
 .costUnavailable span {
   color: var(--color-body);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
 .projectCostValue strong {
   color: var(--color-ink);
-  font-size: 28px;
+  font-size: calc(28px + var(--presentation-font-size-increase));
   font-variant-numeric: tabular-nums;
 }
 
 .projectCostValue small {
   color: var(--color-body);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
 .costUnavailable strong {
   color: var(--color-ink);
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .controlRow {
@@ -184,8 +184,8 @@
   min-width: 220px;
   gap: 6px;
   color: var(--color-body);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .controlField {
@@ -193,8 +193,8 @@
   gap: 6px;
   min-width: 220px;
   color: var(--color-body);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .controlRow select,
@@ -211,13 +211,13 @@
 .controlRow input {
   min-height: 44px;
   padding-inline: 16px;
-  font-size: 16px;
+  font-size: calc(16px + var(--presentation-font-size-increase));
 }
 
 .fieldError {
   color: var(--color-error);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
 }
 
@@ -232,7 +232,7 @@
   background: var(--color-primary);
   color: var(--color-on-primary);
   cursor: pointer;
-  font-weight: 700;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .primaryAction:disabled { cursor: not-allowed; opacity: 0.45; }
@@ -246,7 +246,10 @@
 
 .metricCard {
   display: grid;
-  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 8px;
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-card);
   padding: 20px;
@@ -255,8 +258,8 @@
 }
 
 .metricCard svg { color: var(--color-body); }
-.metricCard span { color: var(--color-body); font-size: 13px; }
-.metricCard strong { color: var(--color-ink); font-size: 28px; letter-spacing: 0; }
+.metricCard span { min-width: 0; overflow: hidden; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); text-overflow: ellipsis; white-space: nowrap; }
+.metricCard strong { grid-column: 1 / -1; color: var(--color-ink); font-size: calc(28px + var(--presentation-font-size-increase)); letter-spacing: 0; }
 
 .monthlyComparisonSection {
   display: grid;
@@ -275,9 +278,7 @@
   gap: 20px;
 }
 
-.monthlyComparisonHeader h2 { margin: 0; color: var(--color-ink); font-size: 16px; }
-.monthlyComparisonHeader p { margin: 5px 0 0; color: var(--color-body); font-size: 13px; line-height: 1.5; }
-.monthlyComparisonHeader > span { flex: none; border-radius: var(--radius-pill); padding: 5px 9px; background: var(--color-surface-strong); color: var(--color-body); font-size: 12px; font-weight: 700; }
+.monthlyComparisonHeader h2 { margin: 0; color: var(--color-ink); font-size: calc(16px + var(--presentation-font-size-increase)); }
 
 .monthlyComparisonGrid {
   display: grid;
@@ -286,22 +287,21 @@
 }
 
 .monthlySummaryCard { display: grid; gap: 8px; border: 1px solid var(--color-hairline); border-radius: var(--radius-control); padding: 14px; background: var(--color-surface); }
-.monthlySummaryCard > span { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; color: var(--color-body); font-size: 12px; font-weight: 600; }
-.monthlySummaryCard small { border-radius: var(--radius-pill); padding: 3px 6px; background: var(--color-surface-strong); color: var(--color-body); font-size: 12px; white-space: nowrap; }
-.monthlySummaryCard strong { color: var(--color-ink); font-size: 20px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; white-space: nowrap; }
+.monthlySummaryCard > span { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(600 - var(--presentation-font-weight-reduction)); }
+.monthlySummaryCard small { border-radius: var(--radius-pill); padding: 3px 6px; background: var(--color-surface-strong); color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); white-space: nowrap; }
+.monthlySummaryCard strong { color: var(--color-ink); font-size: calc(20px + var(--presentation-font-size-increase)); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; white-space: nowrap; }
 .monthlySummaryCard[data-direction="up"] strong { color: var(--color-error); }
 .monthlySummaryCard[data-direction="down"] strong { color: var(--color-success); }
 
-.monthlyChartViewport { overflow-x: auto; padding: 4px 0 2px; }
-.monthlyChart { display: grid; min-width: 520px; height: 190px; grid-template-columns: repeat(6, minmax(64px, 1fr)); gap: 12px; }
-.monthlyBar { display: grid; min-width: 0; grid-template-rows: 26px minmax(0, 1fr) 32px; gap: 5px; text-align: center; }
-.monthlyBar > strong { overflow: hidden; color: var(--color-body); font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.monthlyChartViewport { overflow: visible; padding: 4px 0 2px; }
+.monthlyChart { display: grid; width: 100%; min-width: 0; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: clamp(4px, 1.5vw, 12px); }
+.monthlyBar { display: grid; min-width: 0; grid-template-rows: auto 96px auto; gap: 5px; text-align: center; }
+.monthlyBar > strong { overflow: hidden; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-variant-numeric: tabular-nums; font-weight: calc(600 - var(--presentation-font-weight-reduction)); text-overflow: ellipsis; white-space: nowrap; }
 .monthlyBarTrack { display: flex; min-height: 0; align-items: flex-end; justify-content: center; border-bottom: 1px solid var(--color-hairline-strong); background: linear-gradient(to top, transparent 49%, var(--color-hairline) 50%, transparent 51%); }
 .monthlyBarTrack i { display: block; width: min(46px, 68%); border-radius: 7px 7px 2px 2px; background: var(--color-ink); transition: height 180ms ease; }
+.monthlyBarTrack i[data-estimated="true"] { background: repeating-linear-gradient(135deg, var(--color-ink) 0 8px, var(--color-body) 8px 10px); }
 .monthlyBarTrack i[data-partial="true"] { background: repeating-linear-gradient(135deg, var(--color-ink) 0 6px, var(--color-body) 6px 10px); }
-.monthlyBar > span { display: grid; justify-items: center; color: var(--color-ink); font-size: 12px; font-weight: 700; }
-.monthlyBar > span small { color: var(--color-body); font-size: 12px; font-weight: 600; }
-.monthlyEstimateNote { margin: -4px 0 0; color: var(--color-body); font-size: 12px; line-height: 1.5; }
+.monthlyBar > span { display: grid; justify-items: center; color: var(--color-ink); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 
 .chartSection,
 .listSection,
@@ -327,9 +327,9 @@
 .chartSection h2,
 .listSection h2,
 .settingsSection h2,
-.sectionHeading h2 { margin: 0; color: var(--color-ink); font-size: 16px; }
+.sectionHeading h2 { margin: 0; color: var(--color-ink); font-size: calc(16px + var(--presentation-font-size-increase)); }
 .chartSection span,
-.sectionHeading span { color: var(--color-body); font-size: 12px; }
+.sectionHeading span { color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); }
 .costChart {
   display: block;
   width: 100%;
@@ -351,9 +351,9 @@
 
 .chartAxisLabel {
   fill: var(--color-body);
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: calc(500 - var(--presentation-font-weight-reduction));
 }
 
 .chartLine {
@@ -374,14 +374,14 @@
 
 .twoColumn { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .listSection { display: grid; align-content: start; gap: 10px; }
-.costBar { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 8px; padding-bottom: 9px; overflow: hidden; color: var(--color-body); font-size: 13px; }
+.costBar { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 8px; padding-bottom: 9px; overflow: hidden; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); }
 .costBar strong { color: var(--color-ink); }
 .costBar i { position: absolute; bottom: 0; left: 0; height: 3px; border-radius: var(--radius-pill); background: var(--color-ink); }
 .recommendation { display: grid; gap: 5px; border-top: 1px solid var(--color-hairline); padding-top: 10px; }
-.recommendation span { color: var(--color-warning); font-size: 12px; font-weight: 700; }
-.recommendation strong { font-size: 13px; }
-.recommendation p { margin: 0; color: var(--color-body); font-size: 12px; line-height: 1.45; }
-.recommendation small { color: var(--color-success); font-size: 12px; }
+.recommendation span { color: var(--color-warning); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
+.recommendation strong { font-size: calc(13px + var(--presentation-font-size-increase)); }
+.recommendation p { margin: 0; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); line-height: 1.45; }
+.recommendation small { color: var(--color-success); font-size: calc(12px + var(--presentation-font-size-increase)); }
 
 .settingsSection > header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
 .settingsSection > header > svg {
@@ -389,24 +389,193 @@
   height: 20px;
   flex: 0 0 20px;
 }
-.settingsSection p { margin: 3px 0 0; color: var(--color-body); font-size: 13px; }
+.settingsSection p { margin: 3px 0 0; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); }
+.connectionFlow {
+  overflow: hidden;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-card);
+  background: var(--color-canvas);
+  box-shadow: var(--shadow-card);
+}
+.connectionFlowStep { position: relative; }
+.connectionFlowStep:not(:last-child) { border-bottom: 1px solid var(--color-hairline); }
+.connectionFlowStep:not(:last-child)::after {
+  position: absolute;
+  z-index: 1;
+  top: 48px;
+  bottom: -17px;
+  left: 33px;
+  width: 1px;
+  background: var(--color-hairline-strong);
+  content: "";
+  pointer-events: none;
+}
+.connectionFlowStep[data-expanded="true"][data-state="current"],
+.connectionFlowStep[data-expanded="true"][data-state="error"] {
+  box-shadow: inset 2px 0 0 var(--color-text-link);
+}
+.connectionStepHeader {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 34px minmax(0, 1fr) auto 20px;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  padding: 16px 18px;
+  background: transparent;
+  color: var(--color-ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.connectionStepHeader:disabled { cursor: default; }
+.connectionStepHeader:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -3px; }
+.connectionStepMarker {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-canvas);
+  color: var(--color-body);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+}
+.connectionFlowStep[data-state="complete"] .connectionStepMarker {
+  border-color: var(--color-success);
+  background: var(--color-success);
+  color: var(--color-on-primary);
+}
+.connectionFlowStep[data-state="current"] .connectionStepMarker,
+.connectionFlowStep[data-state="error"] .connectionStepMarker {
+  border-color: var(--color-text-link);
+  background: var(--color-text-link);
+  color: var(--color-on-primary);
+}
+.connectionFlowStep[data-state="locked"] .connectionStepMarker {
+  background: var(--color-surface-strong);
+  color: var(--color-body);
+}
+.connectionStepHeading { display: grid; min-width: 0; gap: 3px; }
+.connectionStepTitle { display: flex; min-width: 0; align-items: center; gap: 9px; }
+.connectionStepTitle > svg { width: 20px; height: 20px; flex: 0 0 20px; }
+.connectionStepTitle h2 { margin: 0; font-size: calc(16px + var(--presentation-font-size-increase)); }
+.connectionStepSummary {
+  overflow: hidden;
+  color: var(--color-body);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connectionStepStatus {
+  border-radius: var(--radius-pill);
+  padding: 4px 8px;
+  background: var(--color-surface-strong);
+  color: var(--color-body);
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  white-space: nowrap;
+}
+.connectionStepStatus[data-state="complete"] { background: var(--color-success-surface); color: var(--color-success); }
+.connectionStepStatus[data-state="current"] { background: #eef6ff; color: var(--color-text-link); }
+.connectionStepStatus[data-state="error"] { background: var(--color-warning-surface); color: var(--color-warning); }
+.connectionStepChevron { transition: transform 160ms ease; }
+.connectionStepChevron[data-expanded="true"] { transform: rotate(180deg); }
+.connectionStepBody { padding: 0 20px 20px 72px; }
+.embeddedSettingsSection,
+.connectionStepControls { display: grid; gap: 16px; }
+.embeddedSettingsDescription { margin: 0; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); }
+.embeddedSettingsSection p,
+.connectionStepControls > p { margin: 0; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); }
+.inlineSetupSection {
+  border: 0;
+  border-top: 1px solid var(--color-hairline);
+  border-radius: 0;
+  padding: 18px 0 0;
+  background: transparent;
+  box-shadow: none;
+}
 .setupSection { display: grid; gap: 14px; }
 .setupSection > div { display: flex; align-items: center; gap: 10px; }
-.setupSection > div > span { display: grid; width: 24px; height: 24px; flex: none; place-items: center; border-radius: var(--radius-pill); background: var(--color-ink); color: var(--color-on-primary); font-size: 12px; font-weight: 700; }
-.setupSection p { margin: 3px 0 0; color: var(--color-body); font-size: 12px; }
-.setupSection a { display: inline-flex; width: fit-content; align-items: center; gap: 6px; color: var(--color-text-link); font-size: 13px; font-weight: 700; text-decoration: none; }
+.setupSection > div > span { display: grid; width: 24px; height: 24px; flex: none; place-items: center; border-radius: var(--radius-pill); background: var(--color-ink); color: var(--color-on-primary); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
+.setupSection p { margin: 3px 0 0; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); }
+.setupSection a { display: inline-flex; width: fit-content; align-items: center; gap: 6px; color: var(--color-text-link); font-size: calc(13px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); text-decoration: none; }
 .setupSection label { display: grid; gap: 6px; }
-.setupSection pre { max-height: 220px; overflow: auto; border-radius: var(--radius-card); padding: 14px; background: var(--color-surface-dark); color: var(--color-on-primary); font-family: var(--font-code); font-size: 12px; white-space: pre-wrap; }
+.setupSection pre { max-height: 220px; overflow: auto; border-radius: var(--radius-card); padding: 14px; background: var(--color-surface-dark); color: var(--color-on-primary); font-family: var(--font-code); font-size: calc(12px + var(--presentation-font-size-increase)); white-space: pre-wrap; }
 
 .connectionList > p { color: var(--color-body); }
 .connectionList > article { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; border-top: 1px solid var(--color-hairline); padding: 14px 0; }
-.connectionList article strong { font-size: 14px; }
-.connectionList article p { margin: 3px 0 0; overflow-wrap: anywhere; color: var(--color-body); font-size: 12px; }
-.connectionStatus { display: flex; align-items: center; gap: 5px; border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-surface-strong); color: var(--color-body); font-size: 12px; font-weight: 700; }
+.connectionList article strong { font-size: calc(14px + var(--presentation-font-size-increase)); }
+.connectionList article p { margin: 3px 0 0; overflow-wrap: anywhere; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); }
+.connectionStatus { display: flex; align-items: center; gap: 5px; border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-surface-strong); color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .connectionStatus[data-status="verified"] { background: var(--color-success-surface); color: var(--color-success); }
+.cleanupRetryList { border-color: var(--color-warning); background: var(--color-warning-surface); }
+.cleanupRetryList > .cleanupRetryGuidance { margin: -6px 0 8px; color: var(--color-ink); font-size: calc(13px + var(--presentation-font-size-increase)); line-height: 1.5; }
+.connectionStatus[data-status="cleanup-retry"] { background: var(--color-warning-surface); color: var(--color-warning); }
 .rowActions { display: flex; gap: 7px; }
-.rowActions button { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 10px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-size: 12px; font-weight: 700; }
+.rowActions button { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 10px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .rowActions button[data-danger="true"] { border-color: var(--color-error); color: var(--color-error); }
+.buildConnectionReady,
+.buildConnectionPending { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
+.buildConnectionReady { color: var(--color-success); }
+.buildConnectionReady button,
+.buildConnectionPending button { min-height: 36px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 11px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
+.buildConnectionReady > span { border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-success-surface); color: var(--color-success); }
+.buildConnectionPending > span { border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-warning-surface); color: var(--color-warning); }
+.buildConnectionReady a,
+.buildConnectionPending a { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border-radius: var(--radius-control); padding: 0 11px; background: var(--color-ink); color: var(--color-on-primary); text-decoration: none; }
+.buildConnectionError { display: grid; width: 100%; gap: 10px; }
+.buildConnectionErrorSummary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-control);
+  padding: 12px 14px;
+  background: var(--color-warning-surface);
+  color: var(--color-ink);
+}
+.buildConnectionErrorSummary > svg { flex: 0 0 18px; color: var(--color-warning); }
+.buildConnectionErrorSummary strong { font-size: calc(13px + var(--presentation-font-size-increase)); }
+.buildConnectionErrorSummary p { margin: 3px 0 0; color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); }
+.buildConnectionErrorDetails { color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); }
+.buildConnectionErrorDetails summary { width: fit-content; cursor: pointer; color: var(--color-ink); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
+.buildConnectionErrorDetails p { margin: 7px 0 0; overflow-wrap: anywhere; }
+.buildConnectionErrorActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.buildConnectionErrorActions > button:not(.primaryAction) {
+  min-height: 36px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  padding: 0 11px;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  cursor: pointer;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+}
+.buildConnectionErrorActions > button[data-danger="true"] { border-color: var(--color-error); color: var(--color-error); }
+
+.modalBackdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(13 17 23 / 46%); z-index: 100; }
+.modalCard { position: relative; display: grid; width: min(100%, 440px); gap: 12px; border: 1px solid var(--color-hairline); border-radius: var(--radius-card); padding: 24px; background: var(--color-canvas); box-shadow: var(--shadow-card); }
+.modalCard > svg { color: var(--color-ink); }
+.modalCard h2 { margin: 0; color: var(--color-ink); font-size: calc(19px + var(--presentation-font-size-increase)); }
+.modalCard p { margin: 0; color: var(--color-body); font-size: calc(14px + var(--presentation-font-size-increase)); line-height: 1.55; }
+.modalClose { position: absolute; top: 12px; right: 12px; display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--color-body); cursor: pointer; }
+.modalActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.modalActions > button:not(.primaryAction) { min-height: 42px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 14px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
+.modalActions > .dangerAction { border-color: var(--color-error); background: var(--color-error); color: var(--color-on-primary); }
+.cleanupPreview { display: grid; gap: 8px; border: 1px solid var(--color-hairline); border-radius: var(--radius-control); padding: 14px; background: var(--color-surface-strong); }
+.cleanupPreview strong { color: var(--color-ink); font-size: calc(13px + var(--presentation-font-size-increase)); }
+.cleanupPreview ul { display: grid; gap: 4px; margin: 0; padding-left: 20px; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); line-height: 1.45; }
+.cleanupPreview p { font-size: calc(13px + var(--presentation-font-size-increase)); }
+.modalCard .cleanupBlocker { border-left: 3px solid var(--color-error); padding: 9px 10px; background: var(--color-error-surface); color: var(--color-ink); font-weight: calc(600 - var(--presentation-font-weight-reduction)); }
+.cleanupError { display: grid; gap: 6px; border-left: 3px solid var(--color-error); padding: 10px 12px; background: var(--color-error-surface); color: var(--color-ink); }
+.cleanupError strong { font-size: calc(13px + var(--presentation-font-size-increase)); }
+.cleanupError details { color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); }
+.cleanupError summary { cursor: pointer; font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
+.cleanupError details p { margin-top: 6px; overflow-wrap: anywhere; }
 
 .githubSettingsMessage {
   border-top: 1px solid var(--color-hairline);
@@ -436,8 +605,8 @@
   background: var(--color-canvas);
   color: var(--color-ink);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   text-decoration: none;
 }
 
@@ -456,7 +625,7 @@
 
 .githubInstallationDetails strong {
   color: var(--color-ink);
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 .githubInstallationDetails p {
@@ -502,12 +671,22 @@
   .githubSettingsError { align-items: stretch; flex-direction: column; }
   .githubSettingsActions { justify-content: stretch; }
   .githubSettingsActions .primaryAction { width: 100%; }
+  .connectionStepHeader { grid-template-columns: 30px minmax(0, 1fr) 18px; padding-inline: 14px; }
+  .connectionStepMarker { grid-column: 1; grid-row: 1 / span 2; }
+  .connectionStepHeading { grid-column: 2; grid-row: 1; }
+  .connectionStepStatus { width: fit-content; grid-column: 2; grid-row: 2; }
+  .connectionStepChevron { grid-column: 3; grid-row: 1 / span 2; }
+  .connectionStepBody { padding: 0 14px 16px 58px; }
+  .connectionFlowStep:not(:last-child)::after { left: 29px; }
+  .buildConnectionErrorActions { justify-content: stretch; }
+  .buildConnectionErrorActions > button { flex: 1 1 auto; }
   .rowActions { flex-wrap: wrap; }
   .monthlyComparisonHeader { display: grid; }
-  .monthlyComparisonHeader > span { width: fit-content; }
   .monthlyComparisonGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .monthlyChart { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 16px; }
 }
 
 @media (max-width: 460px) {
   .monthlyComparisonGrid { grid-template-columns: 1fr; }
+  .monthlyChart { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

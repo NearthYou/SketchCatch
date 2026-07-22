@@ -17,7 +17,9 @@ import { REPOSITORY_DEPLOYMENT_TYPES } from "@sketchcatch/types";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
+import { getDeveloperErrorMessage } from "../network/developer-error-message.js";
 import {
+  requireGitHubAppClientConfig,
   requireGitHubAppConfig,
   requireGitHubAppUserAuthorizationConfig,
   requireGitHubAppStateSecret
@@ -141,6 +143,7 @@ type GitHubAppRouteRuntime = {
 };
 
 let cachedDefaultGitHubAppRouteRuntime: GitHubAppRouteRuntime | null = null;
+let cachedDefaultGitHubAppClient: ReturnType<typeof createGitHubAppClient> | null = null;
 const defaultSourceRepositoryAnalysisRateLimiter = createInMemoryRateLimiter({
   limit: 10,
   windowMs: 60_000
@@ -265,16 +268,31 @@ export async function registerSourceRepositoryRoutes(
     );
 
     try {
-      const runtime = getGitHubAppRouteRuntime(options);
+      const githubAppClient = getGitHubInstallationReadClient(options);
+      const connectionSetup = getGitHubConnectionSetupAvailability(options);
       const result = await listGitHubAccountInstallations(
         { accessContext },
         repository,
-        runtime.githubAppClient
+        githubAppClient
       );
-      const response: ListGitHubInstallationsResponse = result;
-
-      return reply.status(200).send(response);
+      return reply.status(200).send({
+        availability: {
+          connectionSetup,
+          installationRead: "ready"
+        },
+        installations: result.installations
+      } satisfies ListGitHubInstallationsResponse);
     } catch (error) {
+      if (isGitHubAppConfigurationError(error)) {
+        return reply.status(200).send({
+          availability: {
+            connectionSetup: "not_configured",
+            installationRead: "not_configured"
+          },
+          installations: []
+        } satisfies ListGitHubInstallationsResponse);
+      }
+
       return handleSourceRepositoryError(error, reply);
     }
   });
@@ -288,6 +306,7 @@ export async function registerSourceRepositoryRoutes(
 
     try {
       const runtime = getGitHubAppRouteRuntime(options);
+      requireGitHubConnectionSetup(options);
       const result = await createGitHubAccountInstallUrl({
         accessContext,
         appSlug: runtime.appSlug,
@@ -317,6 +336,7 @@ export async function registerSourceRepositoryRoutes(
 
     try {
       const runtime = getGitHubAppRouteRuntime(options);
+      requireGitHubConnectionSetup(options);
       const result = await createGitHubInstallUrl(
         {
           projectId: params.projectId,
@@ -623,33 +643,57 @@ function getGitHubAppRouteRuntime(
     };
   }
 
-  if (!cachedDefaultGitHubAppRouteRuntime) {
+  let defaultRuntime = cachedDefaultGitHubAppRouteRuntime;
+  if (!defaultRuntime) {
     const config = requireGitHubAppConfig();
-    const githubAppClient = createGitHubAppClient({
-      appId: config.appId,
-      privateKey: config.privateKey
-    });
+    const githubAppClient =
+      cachedDefaultGitHubAppClient ??
+      createGitHubAppClient({
+        appId: config.appId,
+        privateKey: config.privateKey
+      });
+    cachedDefaultGitHubAppClient = githubAppClient;
 
-    cachedDefaultGitHubAppRouteRuntime = {
+    defaultRuntime = {
       appSlug: config.appSlug,
       callbackUrl: config.callbackUrl,
       stateSecret: requireGitHubAppStateSecret(),
       githubAppClient,
       githubRepositoryEvidenceReader: githubAppClient
     };
+    cachedDefaultGitHubAppRouteRuntime = defaultRuntime;
   }
 
   return {
-    appSlug: options?.githubAppSlug ?? cachedDefaultGitHubAppRouteRuntime.appSlug,
-    callbackUrl: options?.githubAppCallbackUrl ?? cachedDefaultGitHubAppRouteRuntime.callbackUrl,
+    appSlug: options?.githubAppSlug ?? defaultRuntime.appSlug,
+    callbackUrl: options?.githubAppCallbackUrl ?? defaultRuntime.callbackUrl,
     stateSecret:
-      options?.githubAppStateSecret ?? cachedDefaultGitHubAppRouteRuntime.stateSecret,
+      options?.githubAppStateSecret ?? defaultRuntime.stateSecret,
     githubAppClient:
-      options?.githubAppClient ?? cachedDefaultGitHubAppRouteRuntime.githubAppClient,
+      options?.githubAppClient ?? defaultRuntime.githubAppClient,
     githubRepositoryEvidenceReader:
       options?.githubRepositoryEvidenceReader ??
-      cachedDefaultGitHubAppRouteRuntime.githubRepositoryEvidenceReader
+      defaultRuntime.githubRepositoryEvidenceReader
   };
+}
+
+function getGitHubInstallationReadClient(
+  options: SourceRepositoryRouteOptions | undefined
+): GitHubAppClient {
+  if (options?.githubAppClient) {
+    return options.githubAppClient;
+  }
+
+  if (cachedDefaultGitHubAppRouteRuntime) {
+    return cachedDefaultGitHubAppRouteRuntime.githubAppClient;
+  }
+
+  if (!cachedDefaultGitHubAppClient) {
+    const config = requireGitHubAppClientConfig();
+    cachedDefaultGitHubAppClient = createGitHubAppClient(config);
+  }
+
+  return cachedDefaultGitHubAppClient;
 }
 
 // 분석 route에 정적 evidence reader가 없으면 설정 충돌로 명확히 중단한다.
@@ -752,14 +796,14 @@ function handleSourceRepositoryError(error: unknown, reply: FastifyReply) {
   }
 
   if (error instanceof GitHubApiRequestError) {
-    const message =
+    const stableMessage =
       error.statusCode === 401 || error.statusCode === 403
         ? "GIT_APP_AUTHENTICATION_FAILED"
         : "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE";
 
     return reply.status(409).send({
       error: "conflict",
-      message
+      message: getDeveloperErrorMessage(error, stableMessage)
     });
   }
 
@@ -771,6 +815,48 @@ function handleSourceRepositoryError(error: unknown, reply: FastifyReply) {
   }
 
   throw error;
+}
+
+function isGitHubAppConfigurationError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return [
+    "GIT_APP_ID ",
+    "GIT_APP_SLUG ",
+    "GIT_APP_PRIVATE_KEY_BASE64 ",
+    "GIT_APP_CALLBACK_URL ",
+    "GIT_APP_CLIENT_ID ",
+    "GIT_APP_CLIENT_SECRET ",
+    "GIT_APP_STATE_SECRET ",
+    "AUTH_TOKEN_SECRET "
+  ].some((prefix) => error.message.startsWith(prefix));
+}
+
+function getGitHubConnectionSetupAvailability(
+  options: SourceRepositoryRouteOptions | undefined
+): "ready" | "not_configured" {
+  try {
+    requireGitHubConnectionSetup(options);
+    return "ready";
+  } catch (error) {
+    if (isGitHubAppConfigurationError(error)) {
+      return "not_configured";
+    }
+
+    throw error;
+  }
+}
+
+function requireGitHubConnectionSetup(
+  options: SourceRepositoryRouteOptions | undefined
+): GitHubAppUserAuthorizationConfig {
+  getGitHubAppRouteRuntime(options);
+  return (
+    options?.githubAppUserAuthorizationConfig ??
+    requireGitHubAppUserAuthorizationConfig()
+  );
 }
 
 function isSourceRepositorySchemaMismatchError(error: unknown): boolean {

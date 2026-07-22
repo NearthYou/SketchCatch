@@ -52,6 +52,26 @@ _Avoid_: Template candidate list, AI-owned Template selection
 A proposed Practice Architecture that has not yet been accepted, corrected, or saved by the user.
 _Avoid_: AI result, generated diagram, draft infrastructure
 
+**Selected Option Trail**:
+An ordered, current-conversation record of assistant-provided options that the user explicitly selected. A single-choice question contributes at most one selection. Direct Requirement Input, Voice Requirement Input, and Draft Candidate Exclusion are not part of the trail, and the trail does not express progress, completeness, or approval.
+_Avoid_: Progress tracker, requirement checklist, saved preference profile
+
+**Decorative Resource Orbit**:
+A presentation-only arrangement of actual AWS Resource icons that responds deterministically to the Selected Option Trail while an Architecture Draft is being explored. Icons keep orbiting, briefly react to conversation events, and visually converge as accepted answers accumulate. This convergence is not a measured completion percentage and does not assert Resource accuracy, recommendation, candidacy, relationships, or quantities. The decoration is discarded when the final compiled result becomes available.
+_Avoid_: Architecture Draft, Resource recommendation, Draft Progress View, provisional Architecture Board
+
+**Workspace AI Convergence Transition**:
+The presentation-only transition in which decorative orbit rings disappear, AWS icons gather into one point while the Architecture Draft is being compiled, and the point yields to the actual Compiled Architecture Preview only after Compiler success. Decorative icons are never reused as final Resources.
+_Avoid_: Draft completion percentage, Resource morph, server progress graph
+
+**Compiled Architecture Preview**:
+A read-only view of the Architecture Board Compiler proposal produced from an Architecture Draft and represented with the Resource Catalog's actual icons. It is available only after successful compilation, shows the same Diagram proposed for saving, and cannot change a Project or Architecture Board until the user explicitly applies it. Its default user summary contains one plain-language architecture sentence, Resource and connection counts, and at most three check items; additional safety items remain accessible through `View All`, while Compiler provenance and internal processing metadata stay out of the user surface.
+_Avoid_: Decorative Resource Orbit, editable Architecture Board, applied Architecture
+
+**Draft Candidate Exclusion**:
+An explicit, reversible user choice tied to an actual server-provided candidate identity and label that constrains subsequent Architecture Draft recommendations during the current conversation. It is independent of the Selected Option Trail and Decorative Resource Orbit, and it never modifies the Architecture Board or accepts the remaining candidates.
+_Avoid_: Selected option, decorative Resource removal, Resource deletion, Architecture Draft acceptance
+
 **AI Architecture Recommendation**:
 The service capability that interprets a Requirement Prompt, proposes an Architecture Draft, explains the trade-offs, and lets the user accept it onto the Architecture Board.
 _Avoid_: Chatbot answer, auto-generated diagram, magic design
@@ -132,6 +152,10 @@ _Avoid_: AI JSON, canvas state, diagram data
 The capability that may infer, add, remove, or change Resources, relationships, configuration, containment, and visual presentation to produce a reorganized Architecture Board proposal. Its proposal may conflict with explicit requirements, accepted deployment state, or provider and IaC validity.
 _Avoid_: Auto layout, coordinate cleanup, diagram beautifier
 
+**Board Auto Arrange**:
+A user-requested visual cleanup that may change only position, size, presentation grouping, and edge routing. It never adds, removes, or changes Resources, relationships, or configuration. `Keep Original` closes the preview without mutation, while `Use This Arrangement` is the single explicit approval that applies the preview without a second confirmation dialog.
+_Avoid_: Architecture improvement, Resource optimization, automatic fix
+
 **Compilation Distance**:
 The relative amount of semantic and visual change between an input Practice Architecture and an Architecture Board Compiler proposal. Resource deletion has greater distance than configuration, relationship, containment, size, or position changes.
 _Avoid_: Edit count, visual difference
@@ -139,6 +163,18 @@ _Avoid_: Edit count, visual difference
 **Reverse Engineering**:
 The service capability that scans existing cloud Resources through provider adapters, reconstructs them as a Practice Architecture, and prepares an IaC handoff path through IaC Preview and import suggestions.
 _Avoid_: Resource list, AWS scan, diagram import
+
+**Imported Architecture Original**:
+The Reverse Engineering result that preserves the discovered Resources, relationships, and configuration exactly, while applying only a deterministic collision-free initial position because cloud providers do not store Architecture Board coordinates. It is distinct from Board Auto Arrange and any semantic Compiler proposal.
+_Avoid_: Raw provider response, automatically improved architecture, Compiler result
+
+**AWS Import Access Update**:
+A user-approved permission update for an existing verified AWS connection so Reverse Engineering can read supported services. It keeps the same connection identity, does not create a duplicate connection, and re-verifies the same role after the user approves the AWS-side update.
+_Avoid_: New AWS connection, automatic IAM mutation, reconnect account
+
+**Partial Architecture Import**:
+A usable Reverse Engineering result containing every Resource successfully discovered even when one or more supported services could not be read. The Board remains visible and the UI gives a short notice plus an AWS Import Access Update action instead of blocking the result or exposing provider errors. `Use Imported Items Only` is the single explicit approval for applying this incomplete result and makes the incompleteness visible without a second confirmation dialog.
+_Avoid_: Failed import, complete architecture, raw scan error
 
 **IaC Preview**:
 The generated infrastructure-as-code representation of a Practice Architecture before the user approves deployment.
@@ -161,7 +197,7 @@ The review step that evaluates a Practice Architecture for cost, security, permi
 _Avoid_: Validation, review, inspection
 
 **Deployment Safety Gate**:
-The approval boundary that blocks high-risk cloud changes before Deployment while allowing lower-risk Check Findings to proceed only after explicit user acknowledgement.
+The pre-deployment review boundary that records deterministic Check Findings and presents them before approval. In the current implementation, High severity alone does not set the Plan summary to blocked; approval-blocking enforcement by risk severity remains planned. Separate approval and apply boundaries still prevent unapproved execution.
 _Avoid_: Warning popup, AI blocker, safety modal
 
 **Check Finding**:
@@ -183,6 +219,14 @@ _Avoid_: AI backend, Bedrock automation, model magic
 **Design Simulation**:
 An analysis that estimates request flow, bottlenecks, failure exposure, cost pressure, and capacity from the Infrastructure Graph under stated assumptions.
 _Avoid_: Monitoring, load test, benchmark
+
+**Live Observation**:
+An opt-in, time-bounded read-only session for viewing a successful Deployment's verified live request evidence, AWS observation snapshot, and runtime logs without changing the Deployment or its Resources.
+_Avoid_: CloudWatch replacement, traffic generator, automatic remediation
+
+**Live Observation Signal Dashboard**:
+A compact, deterministic lower dashboard that selects at most three evidence-backed signals from the current Live Observation session and separates confirmed facts, cautious possibilities, and unknowns. Signal selection is not an AI call. For elevated request pressure, a separate read-only Design Simulation may explain an available capacity action; only explicit user approval may update the Project Draft, never the Deployment, AWS Resources, Plan/Apply, or Architecture Board.
+_Avoid_: AI diagnosis, metric wall, automatic fix, CloudWatch clone
 
 **Design Version**:
 A saved version of a Practice Architecture and its IaC Preview that can be compared with another version.

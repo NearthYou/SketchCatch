@@ -1,7 +1,7 @@
 "use client";
 
 import { Calculator, FolderKanban, RefreshCw, ServerCog } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   CostEstimatePeriod,
   CostProjectEstimateListResponse
@@ -21,12 +21,9 @@ import {
   MIN_EXPECTED_USER_COUNT,
   normalizeExpectedUserCount
 } from "../../../features/costs/cost-estimate-input";
-import { createCostRequestCoordinator } from "../../../features/costs/cost-request-coordinator";
-import { listCostProjectEstimates } from "../../../features/workspace/api";
+import { useCostEstimateQuery } from "../../../features/costs/cost-queries";
 import { CostMetric, formatUsd } from "./cost-dashboard-presentation";
 import styles from "../dashboard-tools.module.css";
-
-type CostLoadState = "loading" | "ready" | "error";
 
 const COST_ESTIMATE_PERIOD_OPTIONS: readonly SelectMenuOption[] = [
   { label: "하루", value: "day" },
@@ -34,15 +31,24 @@ const COST_ESTIMATE_PERIOD_OPTIONS: readonly SelectMenuOption[] = [
   { label: "한 달", value: "month" }
 ];
 
-export function CostEstimatePanel() {
-  const [period, setPeriod] = useState<CostEstimatePeriod>("month");
-  const [expectedUserCount, setExpectedUserCount] = useState(1000);
-  const [expectedUserCountInput, setExpectedUserCountInput] = useState("1000");
+export function CostEstimatePanel({
+  expectedUserCount,
+  expectedUserCountInput,
+  onExpectedUserCountChange,
+  onExpectedUserCountInputChange,
+  onPeriodChange,
+  period
+}: {
+  readonly expectedUserCount: number;
+  readonly expectedUserCountInput: string;
+  readonly onExpectedUserCountChange: (value: number) => void;
+  readonly onExpectedUserCountInputChange: (value: string) => void;
+  readonly onPeriodChange: (period: CostEstimatePeriod) => void;
+  readonly period: CostEstimatePeriod;
+}) {
   const [expectedUserCountError, setExpectedUserCountError] = useState("");
-  const [data, setData] = useState<CostProjectEstimateListResponse | null>(null);
-  const [loadState, setLoadState] = useState<CostLoadState>("loading");
-  const [errorMessage, setErrorMessage] = useState("");
-  const requestCoordinatorRef = useRef(createCostRequestCoordinator());
+  const estimateQuery = useCostEstimateQuery({ expectedUserCount, period });
+  const data: CostProjectEstimateListResponse | null = estimateQuery.data ?? null;
   const projects = useMemo(
     () => selectUndeployedCostProjects(data?.projects ?? []),
     [data]
@@ -57,32 +63,6 @@ export function CostEstimatePanel() {
   );
   const estimatableCount = useMemo(() => countEstimatableCostProjects(projects), [projects]);
 
-  async function loadEstimates(
-    nextPeriod = period,
-    nextExpectedUserCount = expectedUserCount
-  ): Promise<void> {
-    const request = requestCoordinatorRef.current.begin();
-    setLoadState("loading");
-    setErrorMessage("");
-
-    try {
-      const result = await listCostProjectEstimates(
-        {
-          expectedUserCount: nextExpectedUserCount,
-          period: nextPeriod
-        },
-        { signal: request.signal }
-      );
-      if (!request.isCurrent()) return;
-      setData(result);
-      setLoadState("ready");
-    } catch (error) {
-      if (request.signal.aborted || !request.isCurrent()) return;
-      setErrorMessage(error instanceof Error ? error.message : "예상 비용을 불러오지 못했습니다.");
-      setLoadState("error");
-    }
-  }
-
   function applyExpectedUserCount(): void {
     const normalized = normalizeExpectedUserCount(expectedUserCountInput);
 
@@ -92,22 +72,16 @@ export function CostEstimatePanel() {
     }
 
     setExpectedUserCountError("");
-    setExpectedUserCount(normalized);
-    setExpectedUserCountInput(String(normalized));
-    void loadEstimates(period, normalized);
+    onExpectedUserCountChange(normalized);
+    onExpectedUserCountInputChange(String(normalized));
   }
 
-  useEffect(() => () => requestCoordinatorRef.current.dispose(), []);
-  useEffect(() => {
-    void loadEstimates("month", 1000);
-  }, []);
-
-  if (loadState === "loading" && !data) {
+  if (estimateQuery.isPending && !data) {
     return <ProductState description="프로젝트 아키텍처를 기준으로 예상 비용을 계산하고 있습니다." kind="loading" title="예상 비용 계산 중" />;
   }
 
-  if (loadState === "error" && !data) {
-    return <ProductState action={<button onClick={() => void loadEstimates()} type="button">다시 시도</button>} description={errorMessage} kind="error" title="예상 비용을 불러오지 못했습니다" />;
+  if (estimateQuery.isError && !data) {
+    return <ProductState action={<button onClick={() => void estimateQuery.refetch()} type="button">다시 시도</button>} description={estimateQuery.error instanceof Error ? estimateQuery.error.message : "예상 비용을 불러오지 못했습니다."} kind="error" title="예상 비용을 불러오지 못했습니다" />;
   }
 
   return (
@@ -124,7 +98,7 @@ export function CostEstimatePanel() {
               min={MIN_EXPECTED_USER_COUNT}
               onBlur={applyExpectedUserCount}
               onChange={(event) => {
-                setExpectedUserCountInput(event.target.value);
+                onExpectedUserCountInputChange(event.target.value);
                 setExpectedUserCountError("");
               }}
               onKeyDown={(event) => {
@@ -147,8 +121,7 @@ export function CostEstimatePanel() {
               emptyLabel="표시 기간 선택"
               onChange={(value) => {
                 const nextPeriod = value as CostEstimatePeriod;
-                setPeriod(nextPeriod);
-                void loadEstimates(nextPeriod);
+                onPeriodChange(nextPeriod);
               }}
               options={COST_ESTIMATE_PERIOD_OPTIONS}
               size="large"
@@ -158,20 +131,20 @@ export function CostEstimatePanel() {
           </div>
         </div>
         <button
-          aria-busy={loadState === "loading"}
-          aria-label={loadState === "loading" ? "예상 비용 새로고침 중" : "예상 비용 새로고침"}
+          aria-busy={estimateQuery.isFetching}
+          aria-label={estimateQuery.isFetching ? "예상 비용 새로고침 중" : "예상 비용 새로고침"}
           className={styles.iconAction}
-          data-loading={loadState === "loading"}
-          disabled={loadState === "loading"}
-          onClick={() => void loadEstimates()}
-          title={loadState === "loading" ? "새로고침 중" : "새로고침"}
+          data-loading={estimateQuery.isFetching}
+          disabled={estimateQuery.isFetching}
+          onClick={() => void estimateQuery.refetch()}
+          title={estimateQuery.isFetching ? "새로고침 중" : "새로고침"}
           type="button"
         >
           <RefreshCw aria-hidden="true" size={17} />
         </button>
       </div>
 
-      {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}
+      {estimateQuery.isError ? <p className={styles.errorBand}>{estimateQuery.error instanceof Error ? estimateQuery.error.message : "예상 비용을 갱신하지 못했습니다."}</p> : null}
 
       <section className={styles.metricGrid}>
         <CostMetric icon={<Calculator size={18} />} label={`${getPeriodLabel(period)} 예상 비용`} value={formatUsd(periodTotal.amount)} />
@@ -199,7 +172,6 @@ export function CostEstimatePanel() {
                 <div className={styles.projectCostValue}>
                   <span>{getPeriodLabel(period)} 예상</span>
                   <strong>{formatUsd(costEstimate.totalEstimate.amount)}</strong>
-                  <small>{costEstimate.resources.length}개 리소스 · {costEstimate.pricingSource === "aws_pricing_api" ? "AWS Pricing API" : "보수적 추정 단가"}</small>
                 </div>
               )}
             </article>

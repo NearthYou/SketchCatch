@@ -1,19 +1,23 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   APPLICATION_ARTIFACT_CONTRACT_VERSION,
   type ApplicationArtifact,
   type ApplicationReleaseProviderRevision,
+  type ApplicationReleaseFailureStage,
   type ApplicationReleaseStatus,
+  type CompositeReleaseDigest,
   type ConfirmedBuildConfig,
   type DeploymentScope,
   type DeploymentSource,
   type JsonValue,
+  type FrontendReleaseEvidence,
   type ProjectDeploymentRuntimeConfig,
   type RuntimeAdapterKind,
   type RuntimeConvergenceOutcome,
   type RuntimeDeploymentTarget,
   type RuntimeTargetKind
 } from "@sketchcatch/types";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, gt, inArray } from "drizzle-orm";
 import { createApplicationArtifactIdentity } from "../artifacts/application-artifact-identity.js";
 import {
   applicationArtifactKindForRuntime,
@@ -28,13 +32,29 @@ import { createPostgresApplicationArtifactRegistryRepository } from "../artifact
 import type { Database } from "../db/client.js";
 import {
   applicationReleases,
+  awsCodeConnections,
   awsConnections,
   deployments,
   projectDeploymentTargets,
+  projectBuildEnvironments,
+  projectExecutionLeases,
   projects,
+  releaseCandidates,
   sourceRepositories
 } from "../db/schema.js";
+import type { LeaseFence } from "../releases/project-execution-lease-service.js";
 import { resolveApplicationReleaseVersion } from "../releases/application-release-identity.js";
+import { createPreparedReleaseSnapshotHash } from "./deployment-preparation-service.js";
+import {
+  EcsFargateOutputReconciliationError,
+  assertEcsFargateRuntimeInventory,
+  createEcsFargateRuntimeCoordinatesFingerprint,
+  reconcileEcsFargateRuntimeConfig,
+  resolveEcsFargateRuntimeOutputs,
+  type ResolvedEcsFargateRuntimeOutputs,
+  type TerraformOutputForEcsReconciliation,
+  type TerraformResourceForEcsReconciliation
+} from "./ecs-fargate-output-reconciliation.js";
 import {
   DeploymentTargetFingerprintMismatchError,
   resolveAwsDeploymentTargetIdentity
@@ -55,6 +75,18 @@ export type DirectApplicationReleaseContext = {
     installationId: string;
     owner: string;
     name: string;
+  } | null;
+  buildEnvironment?: {
+    id: string;
+    awsConnectionId: string;
+    awsCodeConnectionId: string;
+    codeConnectionArn: string;
+    codeBuildProjectName: string;
+    codeBuildServiceRoleArn: string;
+    permissionsBoundaryArn: string;
+    sourceRepositoryUrl: string;
+    runtimeFingerprint: string;
+    status: "ready";
   } | null;
   deployment: {
     id: string;
@@ -87,13 +119,13 @@ export type DirectApplicationArtifact = {
   metadata: Record<string, string | number | boolean | null>;
 };
 
-export type DirectApplicationReleaseRecord = {
+export type ApplicationReleaseRecord = {
   id: string;
   projectId: string;
   artifactId: string | null;
-  deploymentId: string;
-  pipelineRunId: null;
-  source: "direct";
+  deploymentId: string | null;
+  pipelineRunId: string | null;
+  source: "direct" | "gitops";
   runtimeTargetKind: RuntimeTargetKind;
   runtimeAdapterKind: RuntimeAdapterKind | null;
   deploymentTargetFingerprint: string | null;
@@ -102,7 +134,12 @@ export type DirectApplicationReleaseRecord = {
   commitSha: string;
   artifactDigestAlgorithm: "sha256";
   artifactDigest: string;
+  releaseCandidateId: string | null;
+  baselineReleaseId?: string | null;
+  compositeDigest: CompositeReleaseDigest | null;
   providerRevision: ApplicationReleaseProviderRevision | null;
+  frontendEvidence: FrontendReleaseEvidence | null;
+  failureStage: ApplicationReleaseFailureStage | null;
   outputUrl: string | null;
   status: ApplicationReleaseStatus;
   healthEvidence: JsonValue | null;
@@ -113,16 +150,22 @@ export type DirectApplicationReleaseRecord = {
   updatedAt: Date;
 };
 
-export type DirectApplicationReleaseRepository = {
+export type DirectApplicationReleaseRecord = ApplicationReleaseRecord & {
+  deploymentId: string;
+  pipelineRunId: null;
+  source: "direct";
+};
+
+export type ApplicationReleaseExecutionRepository<
+  TRelease extends ApplicationReleaseRecord = ApplicationReleaseRecord
+> = {
   readonly artifactRegistry: ApplicationArtifactRegistryRepository;
   findContext(
     deploymentId: string,
     userId: string
   ): Promise<DirectApplicationReleaseContext | undefined>;
-  findRelease(deploymentId: string): Promise<DirectApplicationReleaseRecord | undefined>;
-  savePreparedRelease(
-    input: DirectApplicationReleaseRecord
-  ): Promise<DirectApplicationReleaseRecord>;
+  findRelease(executionId: string): Promise<TRelease | undefined>;
+  savePreparedRelease(input: ApplicationReleaseRecord): Promise<TRelease>;
   saveCompletedRelease(input: {
     releaseId: string;
     runtimeAdapterKind: RuntimeAdapterKind;
@@ -133,25 +176,77 @@ export type DirectApplicationReleaseRepository = {
     healthEvidence: JsonValue;
     rollbackEvidence: JsonValue | null;
     status: "succeeded" | "rolled_back";
+    frontendEvidence?: FrontendReleaseEvidence | null;
+    failureStage?: ApplicationReleaseFailureStage | null;
     completedAt: Date;
     updatedAt: Date;
-  }): Promise<DirectApplicationReleaseRecord>;
+    leaseFence?: LeaseFence;
+  }): Promise<TRelease>;
   saveFailedRelease(input: {
     releaseId: string;
     completedAt: Date;
     updatedAt: Date;
-  }): Promise<DirectApplicationReleaseRecord>;
+    leaseFence?: LeaseFence;
+  }): Promise<TRelease>;
+  savePartialRelease(input: {
+    releaseId: string;
+    runtimeAdapterKind: RuntimeAdapterKind;
+    deploymentTargetFingerprint: string;
+    convergenceOutcome: RuntimeConvergenceOutcome;
+    providerRevision: ApplicationReleaseProviderRevision;
+    outputUrl: string;
+    healthEvidence: JsonValue;
+    frontendEvidence: FrontendReleaseEvidence | null;
+    failureStage: ApplicationReleaseFailureStage;
+    completedAt: Date;
+    updatedAt: Date;
+    leaseFence?: LeaseFence;
+  }): Promise<TRelease>;
+  saveCancelledRelease?(input: {
+    releaseId: string;
+    status: "cancelled" | "partially_cancelled";
+    runtimeAdapterKind?: RuntimeAdapterKind;
+    deploymentTargetFingerprint?: string;
+    convergenceOutcome?: RuntimeConvergenceOutcome | null;
+    providerRevision?: ApplicationReleaseProviderRevision;
+    outputUrl?: string;
+    healthEvidence?: JsonValue;
+    rollbackEvidence?: JsonValue | null;
+    frontendEvidence?: FrontendReleaseEvidence | null;
+    failureStage?: ApplicationReleaseFailureStage | null;
+    completedAt: Date;
+    updatedAt: Date;
+    leaseFence?: LeaseFence;
+  }): Promise<TRelease>;
   resetReleaseForRetry(input: {
     releaseId: string;
     providerRevision: ApplicationReleaseProviderRevision;
+    deploymentTargetFingerprint?: string;
     updatedAt: Date;
-  }): Promise<DirectApplicationReleaseRecord>;
+  }): Promise<TRelease>;
+};
+
+export type DirectApplicationReleaseRepository =
+  ApplicationReleaseExecutionRepository<DirectApplicationReleaseRecord>;
+
+export type DirectApplicationOutputReconciliationRepository = Pick<
+  DirectApplicationReleaseRepository,
+  "findContext" | "findRelease"
+> & {
+  reconcileEcsFargateOutput(input: {
+    releaseId: string;
+    projectId: string;
+    expectedCoordinatesFingerprint: string;
+    outputs: ResolvedEcsFargateRuntimeOutputs;
+    updatedAt: Date;
+  }): Promise<"updated" | "unchanged">;
 };
 
 export type DirectApplicationReleaseGateway = {
   prepareArtifact(
     context: DirectApplicationReleaseContext,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    options?: { retainProjectLease?: boolean }
   ): Promise<DirectApplicationArtifact>;
   verifyArtifact(
     context: DirectApplicationReleaseContext,
@@ -173,13 +268,16 @@ export type DirectApplicationReleaseGateway = {
     outputUrl: string;
     healthEvidence: JsonValue;
     rollbackEvidence: JsonValue | null;
-    status: "succeeded" | "rolled_back";
+    status: "succeeded" | "rolled_back" | "partially_failed" | "cancelled" | "partially_cancelled";
+    frontendEvidence?: FrontendReleaseEvidence | null;
+    failureStage?: ApplicationReleaseFailureStage | null;
   }>;
   rollbackArtifact(input: {
     context: DirectApplicationReleaseContext;
     artifact: DirectApplicationArtifact;
     release: DirectApplicationReleaseRecord;
     abortSignal?: AbortSignal;
+    retainProjectLease?: boolean;
   }): Promise<{
     providerRevision: ApplicationReleaseProviderRevision;
     outputUrl: string;
@@ -187,10 +285,30 @@ export type DirectApplicationReleaseGateway = {
     rollbackEvidence: JsonValue | null;
     status: "rolled_back";
   }>;
+  retryFrontend?(input: {
+    context: DirectApplicationReleaseContext;
+    release: ApplicationReleaseRecord;
+  }): Promise<{
+    status: "succeeded" | "partially_failed";
+    failureStage?: ApplicationReleaseFailureStage | null;
+  }>;
+  finalizeAlreadyActiveArtifact?(input: {
+    context: DirectApplicationReleaseContext;
+    artifact: DirectApplicationArtifact;
+    leaseFence: LeaseFence;
+  }): Promise<void>;
+  cleanupArtifact?(input: {
+    context: DirectApplicationReleaseContext;
+    artifact: DirectApplicationArtifact;
+    mode: "success" | "terminal_failure";
+  }): Promise<void>;
 };
 
 export class DirectApplicationReleaseError extends Error {
-  constructor(message: string, readonly code: string | null = null) {
+  constructor(
+    message: string,
+    readonly code: string | null = null
+  ) {
     super(message);
     this.name = "DirectApplicationReleaseError";
   }
@@ -198,7 +316,7 @@ export class DirectApplicationReleaseError extends Error {
 
 export function createPostgresDirectApplicationReleaseRepository(
   db: Database
-): DirectApplicationReleaseRepository {
+): DirectApplicationReleaseRepository & DirectApplicationOutputReconciliationRepository {
   return {
     artifactRegistry: createPostgresApplicationArtifactRegistryRepository(db),
     async findContext(deploymentId, userId) {
@@ -215,14 +333,25 @@ export function createPostgresDirectApplicationReleaseRepository(
           runtimeTarget: projectDeploymentTargets.runtimeTarget,
           deploymentTargetFingerprint: projectDeploymentTargets.deploymentTargetFingerprint,
           roleArn: awsConnections.roleArn,
-          externalId: awsConnections.externalId,
           accountId: awsConnections.accountId,
+          externalId: awsConnections.externalId,
           region: awsConnections.region,
           sourceRepositoryId: sourceRepositories.id,
           sourceRepositoryProvider: sourceRepositories.provider,
           sourceRepositoryInstallationId: sourceRepositories.githubInstallationId,
           sourceRepositoryOwner: sourceRepositories.owner,
-          sourceRepositoryName: sourceRepositories.name
+          sourceRepositoryName: sourceRepositories.name,
+          buildEnvironmentId: projectBuildEnvironments.id,
+          buildEnvironmentAwsConnectionId: projectBuildEnvironments.awsConnectionId,
+          buildEnvironmentAwsCodeConnectionId: projectBuildEnvironments.awsCodeConnectionId,
+          buildEnvironmentCodeConnectionArn: awsCodeConnections.connectionArn,
+          buildEnvironmentCodeConnectionStatus: awsCodeConnections.status,
+          buildEnvironmentProjectName: projectBuildEnvironments.codeBuildProjectName,
+          buildEnvironmentServiceRoleArn: projectBuildEnvironments.codeBuildServiceRoleArn,
+          buildEnvironmentPermissionsBoundaryArn: projectBuildEnvironments.permissionsBoundaryArn,
+          buildEnvironmentSourceUrl: projectBuildEnvironments.sourceRepositoryUrl,
+          buildEnvironmentFingerprint: projectBuildEnvironments.runtimeFingerprint,
+          buildEnvironmentStatus: projectBuildEnvironments.status
         })
         .from(deployments)
         .innerJoin(projects, eq(projects.id, deployments.projectId))
@@ -246,6 +375,14 @@ export function createPostgresDirectApplicationReleaseRepository(
             eq(sourceRepositories.status, "active")
           )
         )
+        .leftJoin(
+          projectBuildEnvironments,
+          eq(projectBuildEnvironments.projectId, deployments.projectId)
+        )
+        .leftJoin(
+          awsCodeConnections,
+          eq(awsCodeConnections.id, projectBuildEnvironments.awsCodeConnectionId)
+        )
         .where(
           and(
             eq(deployments.id, deploymentId),
@@ -260,7 +397,8 @@ export function createPostgresDirectApplicationReleaseRepository(
         !row.confirmedBuildConfig ||
         !row.runtimeConfig ||
         row.runtimeConfig.runtimeTargetKind !== row.runtimeTargetKind
-      ) return undefined;
+      )
+        return undefined;
       const sourceRepository =
         row.sourceRepositoryProvider === "github" &&
         row.sourceRepositoryId &&
@@ -277,6 +415,31 @@ export function createPostgresDirectApplicationReleaseRepository(
           : null;
       return {
         sourceRepository,
+        buildEnvironment:
+          row.buildEnvironmentId &&
+          row.buildEnvironmentAwsConnectionId &&
+          row.buildEnvironmentAwsCodeConnectionId &&
+          row.buildEnvironmentCodeConnectionArn &&
+          row.buildEnvironmentCodeConnectionStatus === "AVAILABLE" &&
+          row.buildEnvironmentProjectName &&
+          row.buildEnvironmentServiceRoleArn &&
+          row.buildEnvironmentPermissionsBoundaryArn &&
+          row.buildEnvironmentSourceUrl &&
+          row.buildEnvironmentFingerprint &&
+          row.buildEnvironmentStatus === "ready"
+            ? {
+                id: row.buildEnvironmentId,
+                awsConnectionId: row.buildEnvironmentAwsConnectionId,
+                awsCodeConnectionId: row.buildEnvironmentAwsCodeConnectionId,
+                codeConnectionArn: row.buildEnvironmentCodeConnectionArn,
+                codeBuildProjectName: row.buildEnvironmentProjectName,
+                codeBuildServiceRoleArn: row.buildEnvironmentServiceRoleArn,
+                permissionsBoundaryArn: row.buildEnvironmentPermissionsBoundaryArn,
+                sourceRepositoryUrl: row.buildEnvironmentSourceUrl,
+                runtimeFingerprint: row.buildEnvironmentFingerprint,
+                status: "ready" as const
+              }
+            : null,
         deployment: {
           id: row.deploymentId,
           projectId: row.projectId,
@@ -311,18 +474,239 @@ export function createPostgresDirectApplicationReleaseRepository(
         );
       return release?.deploymentId ? toDirectReleaseRecord(release) : undefined;
     },
-    async savePreparedRelease(input) {
+    async reconcileEcsFargateOutput(input) {
       return db.transaction(async (transaction) => {
+        const [target] = await transaction
+          .select({
+            accountId: awsConnections.accountId,
+            confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig,
+            deploymentTargetFingerprint: projectDeploymentTargets.deploymentTargetFingerprint,
+            region: projectDeploymentTargets.region,
+            runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind,
+            runtimeConfig: projectDeploymentTargets.runtimeConfig,
+            runtimeTarget: projectDeploymentTargets.runtimeTarget
+          })
+          .from(projectDeploymentTargets)
+          .innerJoin(awsConnections, eq(awsConnections.id, projectDeploymentTargets.connectionId))
+          .where(eq(projectDeploymentTargets.projectId, input.projectId))
+          .for("update");
+        if (
+          target?.runtimeTargetKind !== "ecs_fargate" ||
+          target.runtimeConfig?.runtimeTargetKind !== "ecs_fargate" ||
+          !target.confirmedBuildConfig ||
+          !target.accountId
+        ) {
+          throw new DirectApplicationReleaseError(
+            "Direct deployment runtime does not match the confirmed project target"
+          );
+        }
+
+        const [preparedRelease] = await transaction
+          .select({
+            id: applicationReleases.id,
+            deploymentTargetFingerprint: applicationReleases.deploymentTargetFingerprint,
+            providerRevision: applicationReleases.providerRevision
+          })
+          .from(applicationReleases)
+          .where(
+            and(
+              eq(applicationReleases.id, input.releaseId),
+              eq(applicationReleases.projectId, input.projectId),
+              eq(applicationReleases.source, "direct"),
+              eq(applicationReleases.status, "pending")
+            )
+          )
+          .for("update");
+        const preparedCoordinatesFingerprint = readMetadataString(
+          preparedRelease?.providerRevision?.metadata,
+          "ecsRuntimeCoordinatesFingerprint"
+        );
+        const preparedOutputUrl = readMetadataString(
+          preparedRelease?.providerRevision?.metadata,
+          "ecsPreparedOutputUrl"
+        );
+        if (
+          !preparedRelease?.providerRevision ||
+          preparedCoordinatesFingerprint !== input.expectedCoordinatesFingerprint
+        ) {
+          throw new DirectApplicationReleaseError(
+            "Prepared ECS release changed before output synchronization",
+            "DEPLOYMENT_OUTPUT_URL_CONFLICT"
+          );
+        }
+
+        const reconciliation = reconcileEcsFargateOutputAfterPartialSynchronization(
+          target.runtimeConfig,
+          input
+        );
+        const preparedRuntimeConfig = reconciliation.recoveredPartialSynchronization
+          ? toPreparedEcsFargateRuntimeConfig(reconciliation.runtimeConfig, preparedOutputUrl)
+          : target.runtimeConfig;
+        const preparedTargetIdentity = resolveAwsDeploymentTargetIdentity({
+          projectId: input.projectId,
+          accountId: target.accountId,
+          region: target.region,
+          runtimeConfig: preparedRuntimeConfig,
+          healthCheckPath: target.confirmedBuildConfig.healthCheckPath
+        });
+        if (
+          preparedRelease.deploymentTargetFingerprint !==
+          preparedTargetIdentity.deploymentTargetFingerprint
+        ) {
+          throw new DirectApplicationReleaseError(
+            "Prepared release deployment target no longer matches the Terraform output transition",
+            "DEPLOYMENT_OUTPUT_URL_CONFLICT"
+          );
+        }
+        const identity = resolveAwsDeploymentTargetIdentity({
+          projectId: input.projectId,
+          accountId: target.accountId,
+          region: target.region,
+          runtimeConfig: reconciliation.runtimeConfig,
+          healthCheckPath: target.confirmedBuildConfig.healthCheckPath
+        });
+        const reconciledCoordinatesFingerprint = createEcsFargateRuntimeCoordinatesFingerprint(
+          reconciliation.runtimeConfig
+        );
+        const targetChanged =
+          reconciliation.changed ||
+          !isDeepStrictEqual(identity.target, target.runtimeTarget) ||
+          identity.deploymentTargetFingerprint !== target.deploymentTargetFingerprint;
+        const preparedReleaseChanged =
+          preparedRelease.deploymentTargetFingerprint !== identity.deploymentTargetFingerprint ||
+          preparedCoordinatesFingerprint !== reconciledCoordinatesFingerprint;
+        if (!targetChanged && !preparedReleaseChanged) {
+          return "unchanged";
+        }
+
+        if (targetChanged) {
+          const [updated] = await transaction
+            .update(projectDeploymentTargets)
+            .set({
+              runtimeConfig: reconciliation.runtimeConfig,
+              runtimeTarget: identity.target,
+              deploymentTargetFingerprint: identity.deploymentTargetFingerprint,
+              updatedAt: input.updatedAt
+            })
+            .where(
+              and(
+                eq(projectDeploymentTargets.projectId, input.projectId),
+                eq(projectDeploymentTargets.runtimeTargetKind, "ecs_fargate")
+              )
+            )
+            .returning({ projectId: projectDeploymentTargets.projectId });
+          if (!updated) {
+            throw new DirectApplicationReleaseError(
+              "ECS runtime output URL target was not updated"
+            );
+          }
+        }
+        if (preparedReleaseChanged) {
+          const [updatedRelease] = await transaction
+            .update(applicationReleases)
+            .set({
+              deploymentTargetFingerprint: identity.deploymentTargetFingerprint,
+              providerRevision: {
+                ...preparedRelease.providerRevision,
+                metadata: {
+                  ...preparedRelease.providerRevision.metadata,
+                  ecsRuntimeCoordinatesFingerprint: reconciledCoordinatesFingerprint
+                }
+              },
+              updatedAt: input.updatedAt
+            })
+            .where(
+              and(
+                eq(applicationReleases.id, preparedRelease.id),
+                eq(applicationReleases.projectId, input.projectId),
+                eq(applicationReleases.source, "direct"),
+                eq(applicationReleases.status, "pending")
+              )
+            )
+            .returning({ id: applicationReleases.id });
+          if (!updatedRelease) {
+            throw new DirectApplicationReleaseError(
+              "Prepared application release target fingerprint was not updated"
+            );
+          }
+        }
+        return "updated";
+      });
+    },
+    async savePreparedRelease(input) {
+      assertDirectApplicationReleaseRecord(input);
+      return db.transaction(async (transaction) => {
+        let preparedSnapshotHash: string | undefined;
+        if (input.releaseCandidateId) {
+          const [candidate] = await transaction
+            .select()
+            .from(releaseCandidates)
+            .where(
+              and(
+                eq(releaseCandidates.id, input.releaseCandidateId),
+                eq(releaseCandidates.projectId, input.projectId),
+                eq(releaseCandidates.deploymentId, input.deploymentId),
+                eq(releaseCandidates.status, "pending")
+              )
+            );
+          const [deployment] = await transaction
+            .select({ preparedSnapshotHash: deployments.preparedSnapshotHash })
+            .from(deployments)
+            .where(eq(deployments.id, input.deploymentId))
+            .for("update");
+          if (
+            !candidate ||
+            !deployment ||
+            candidate.expiresAt <= input.updatedAt ||
+            candidate.compositeDigest !== input.compositeDigest?.value
+          ) {
+            throw new DirectApplicationReleaseError(
+              "Release candidate changed or expired before it was linked to the deployment"
+            );
+          }
+          preparedSnapshotHash = createPreparedReleaseSnapshotHash({
+            candidateId: candidate.id,
+            commitSha: candidate.commitSha,
+            compositeDigest: candidate.compositeDigest,
+            configFingerprint: candidate.configFingerprint
+          });
+        }
+        const [baseline] = input.deploymentTargetFingerprint
+          ? await transaction
+              .select({ id: applicationReleases.id })
+              .from(applicationReleases)
+              .where(
+                and(
+                  eq(applicationReleases.projectId, input.projectId),
+                  eq(applicationReleases.runtimeTargetKind, input.runtimeTargetKind),
+                  eq(
+                    applicationReleases.deploymentTargetFingerprint,
+                    input.deploymentTargetFingerprint
+                  ),
+                  eq(applicationReleases.status, "succeeded")
+                )
+              )
+              .orderBy(desc(applicationReleases.completedAt), desc(applicationReleases.createdAt))
+              .limit(1)
+          : [];
         const [release] = await transaction
           .insert(applicationReleases)
-          .values(input)
+          .values({
+            ...input,
+            baselineReleaseId: baseline?.id ?? null
+          })
           .returning();
         if (!release?.deploymentId) {
           throw new DirectApplicationReleaseError("Prepared application release was not saved");
         }
         const [linked] = await transaction
           .update(deployments)
-          .set({ releaseId: release.id, updatedAt: input.updatedAt })
+          .set({
+            releaseId: release.id,
+            releaseCandidateId: input.releaseCandidateId,
+            ...(preparedSnapshotHash ? { preparedSnapshotHash } : {}),
+            updatedAt: input.updatedAt
+          })
           .where(
             and(
               eq(deployments.id, input.deploymentId),
@@ -338,62 +722,163 @@ export function createPostgresDirectApplicationReleaseRepository(
       });
     },
     async saveCompletedRelease(input) {
-      const [release] = await db
-        .update(applicationReleases)
-        .set({
-          runtimeAdapterKind: input.runtimeAdapterKind,
-          deploymentTargetFingerprint: input.deploymentTargetFingerprint,
-          convergenceOutcome: input.convergenceOutcome,
-          providerRevision: input.providerRevision,
-          outputUrl: input.outputUrl,
-          healthEvidence: input.healthEvidence,
-          rollbackEvidence: input.rollbackEvidence,
-          status: input.status,
-          completedAt: input.completedAt,
-          updatedAt: input.updatedAt
-        })
-        .where(
-          and(
-            eq(applicationReleases.id, input.releaseId),
-            eq(applicationReleases.source, "direct"),
-            eq(applicationReleases.status, "pending")
-          )
-        )
-        .returning();
-      if (!release?.deploymentId) {
-        throw new DirectApplicationReleaseError(
-          "Application release was not pending or no longer exists"
-        );
-      }
-      return toDirectReleaseRecord(release);
+      return runWithOptionalReleaseFence(
+        db,
+        input.leaseFence,
+        input.updatedAt,
+        async (executor) => {
+          const [release] = await executor
+            .update(applicationReleases)
+            .set({
+              runtimeAdapterKind: input.runtimeAdapterKind,
+              deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+              convergenceOutcome: input.convergenceOutcome,
+              providerRevision: input.providerRevision,
+              outputUrl: input.outputUrl,
+              healthEvidence: input.healthEvidence,
+              rollbackEvidence: input.rollbackEvidence,
+              frontendEvidence: input.frontendEvidence ?? null,
+              failureStage: input.failureStage ?? null,
+              status: input.status,
+              completedAt: input.completedAt,
+              updatedAt: input.updatedAt
+            })
+            .where(
+              and(
+                eq(applicationReleases.id, input.releaseId),
+                eq(applicationReleases.source, "direct"),
+                input.status === "rolled_back"
+                  ? inArray(applicationReleases.status, ["pending", "succeeded"])
+                  : eq(applicationReleases.status, "pending")
+              )
+            )
+            .returning();
+          if (!release?.deploymentId) {
+            throw new DirectApplicationReleaseError(
+              "Application release was not pending or no longer exists"
+            );
+          }
+          return toDirectReleaseRecord(release);
+        }
+      );
     },
     async saveFailedRelease(input) {
-      const [release] = await db
-        .update(applicationReleases)
-        .set({
-          status: "failed",
-          healthEvidence: { state: "failed" },
-          completedAt: input.completedAt,
-          updatedAt: input.updatedAt
-        })
-        .where(
-          and(
-            eq(applicationReleases.id, input.releaseId),
-            eq(applicationReleases.source, "direct"),
-            eq(applicationReleases.status, "pending")
-          )
-        )
-        .returning();
-      if (!release?.deploymentId) {
-        throw new DirectApplicationReleaseError("Failed application release was not saved");
-      }
-      return toDirectReleaseRecord(release);
+      return runWithOptionalReleaseFence(
+        db,
+        input.leaseFence,
+        input.updatedAt,
+        async (executor) => {
+          const [release] = await executor
+            .update(applicationReleases)
+            .set({
+              status: "failed",
+              healthEvidence: { state: "failed" },
+              completedAt: input.completedAt,
+              updatedAt: input.updatedAt
+            })
+            .where(
+              and(
+                eq(applicationReleases.id, input.releaseId),
+                eq(applicationReleases.source, "direct"),
+                eq(applicationReleases.status, "pending")
+              )
+            )
+            .returning();
+          if (!release?.deploymentId) {
+            throw new DirectApplicationReleaseError("Failed application release was not saved");
+          }
+          return toDirectReleaseRecord(release);
+        }
+      );
+    },
+    async savePartialRelease(input) {
+      return runWithOptionalReleaseFence(
+        db,
+        input.leaseFence,
+        input.updatedAt,
+        async (executor) => {
+          const [release] = await executor
+            .update(applicationReleases)
+            .set({
+              runtimeAdapterKind: input.runtimeAdapterKind,
+              deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+              convergenceOutcome: input.convergenceOutcome,
+              providerRevision: input.providerRevision,
+              outputUrl: input.outputUrl,
+              healthEvidence: input.healthEvidence,
+              frontendEvidence: input.frontendEvidence,
+              failureStage: input.failureStage,
+              completedAt: input.completedAt,
+              updatedAt: input.updatedAt
+            })
+            .where(
+              and(
+                eq(applicationReleases.id, input.releaseId),
+                eq(applicationReleases.source, "direct"),
+                eq(applicationReleases.status, "partially_failed")
+              )
+            )
+            .returning();
+          if (!release?.deploymentId) {
+            throw new DirectApplicationReleaseError("Partial application release was not saved");
+          }
+          return toDirectReleaseRecord(release);
+        }
+      );
+    },
+    async saveCancelledRelease(input) {
+      return runWithOptionalReleaseFence(
+        db,
+        input.leaseFence,
+        input.updatedAt,
+        async (executor) => {
+          const [release] = await executor
+            .update(applicationReleases)
+            .set({
+              status: input.status,
+              ...(input.runtimeAdapterKind ? { runtimeAdapterKind: input.runtimeAdapterKind } : {}),
+              ...(input.deploymentTargetFingerprint
+                ? { deploymentTargetFingerprint: input.deploymentTargetFingerprint }
+                : {}),
+              ...(input.convergenceOutcome !== undefined
+                ? { convergenceOutcome: input.convergenceOutcome }
+                : {}),
+              ...(input.providerRevision ? { providerRevision: input.providerRevision } : {}),
+              ...(input.outputUrl ? { outputUrl: input.outputUrl } : {}),
+              ...(input.healthEvidence ? { healthEvidence: input.healthEvidence } : {}),
+              ...(input.rollbackEvidence !== undefined
+                ? { rollbackEvidence: input.rollbackEvidence }
+                : {}),
+              ...(input.frontendEvidence !== undefined
+                ? { frontendEvidence: input.frontendEvidence }
+                : {}),
+              ...(input.failureStage !== undefined ? { failureStage: input.failureStage } : {}),
+              completedAt: input.completedAt,
+              updatedAt: input.updatedAt
+            })
+            .where(
+              and(
+                eq(applicationReleases.id, input.releaseId),
+                eq(applicationReleases.source, "direct"),
+                inArray(applicationReleases.status, ["pending", "partially_cancelled"])
+              )
+            )
+            .returning();
+          if (!release?.deploymentId) {
+            throw new DirectApplicationReleaseError("Cancelled application release was not saved");
+          }
+          return toDirectReleaseRecord(release);
+        }
+      );
     },
     async resetReleaseForRetry(input) {
       const [release] = await db
         .update(applicationReleases)
         .set({
           providerRevision: input.providerRevision,
+          ...(input.deploymentTargetFingerprint
+            ? { deploymentTargetFingerprint: input.deploymentTargetFingerprint }
+            : {}),
           status: "pending",
           convergenceOutcome: null,
           healthEvidence: null,
@@ -402,10 +887,7 @@ export function createPostgresDirectApplicationReleaseRepository(
           updatedAt: input.updatedAt
         })
         .where(
-          and(
-            eq(applicationReleases.id, input.releaseId),
-            eq(applicationReleases.source, "direct")
-          )
+          and(eq(applicationReleases.id, input.releaseId), eq(applicationReleases.source, "direct"))
         )
         .returning();
       if (!release?.deploymentId) {
@@ -416,21 +898,144 @@ export function createPostgresDirectApplicationReleaseRepository(
   };
 }
 
-export async function prepareDirectApplicationRelease(
-  input: { deploymentId: string; userId: string; abortSignal?: AbortSignal },
-  repository: DirectApplicationReleaseRepository,
+export async function reconcileDirectApplicationReleaseOutput(
+  input: {
+    deploymentId: string;
+    userId: string;
+    outputs: readonly TerraformOutputForEcsReconciliation[];
+    resources: readonly TerraformResourceForEcsReconciliation[];
+    accountId: string;
+    region: string;
+  },
+  repository: DirectApplicationOutputReconciliationRepository,
+  now: () => Date = () => new Date()
+): Promise<string | null> {
+  const context = await requireContext(input, repository);
+  if (
+    context.deployment.scope !== "full_stack" ||
+    context.target.runtimeTargetKind !== "ecs_fargate"
+  ) {
+    return null;
+  }
+  assertContextMatchesTarget(context);
+
+  const release = await repository.findRelease(input.deploymentId);
+  const expectedCoordinatesFingerprint = readMetadataString(
+    release?.providerRevision?.metadata,
+    "ecsRuntimeCoordinatesFingerprint"
+  );
+  if (
+    !release ||
+    release.status !== "pending" ||
+    release.providerRevision?.resourceType !== "codebuild_artifact" ||
+    !expectedCoordinatesFingerprint
+  ) {
+    throw new DirectApplicationReleaseError(
+      "Prepared ECS artifact coordinates are unavailable for output reconciliation",
+      "DEPLOYMENT_OUTPUT_URL_CONFLICT"
+    );
+  }
+
+  const resolvedOutputs = resolveEcsFargateRuntimeOutputs(input.outputs);
+  if (context.connection.region !== input.region) {
+    throw new DirectApplicationReleaseError(
+      "Approved AWS region does not match the deployment runtime",
+      "DEPLOYMENT_OUTPUT_URL_CONFLICT"
+    );
+  }
+  assertEcsFargateRuntimeInventory(resolvedOutputs, input.resources, {
+    accountId: input.accountId,
+    region: input.region
+  });
+  await repository.reconcileEcsFargateOutput({
+    releaseId: release.id,
+    projectId: context.deployment.projectId,
+    expectedCoordinatesFingerprint,
+    outputs: resolvedOutputs,
+    updatedAt: now()
+  });
+  return resolvedOutputs.outputUrl;
+}
+
+export async function prepareApplicationRelease<
+  TRelease extends ApplicationReleaseRecord = ApplicationReleaseRecord
+>(
+  input: {
+    executionId: string;
+    userId: string;
+    abortSignal?: AbortSignal;
+    retainProjectLease?: boolean;
+  },
+  repository: ApplicationReleaseExecutionRepository<TRelease>,
   gateway: DirectApplicationReleaseGateway,
   createId: () => string,
   now: () => Date = () => new Date()
-): Promise<DirectApplicationReleaseRecord | null> {
-  const context = await requireContext(input, repository);
+): Promise<TRelease | null> {
+  const context = await requireContext(
+    { deploymentId: input.executionId, userId: input.userId },
+    repository
+  );
   if (context.deployment.scope === "infrastructure") return null;
   assertContextMatchesTarget(context);
+  if (
+    context.deployment.scope !== "full_stack" ||
+    context.target.runtimeTargetKind !== "ecs_fargate"
+  ) {
+    assertRuntimeOutputUrl(context);
+  }
 
-  const existing = await repository.findRelease(input.deploymentId);
+  const existing = await repository.findRelease(input.executionId);
   if (existing) {
-    if (existing.status === "pending") return existing;
+    if (existing.status === "pending") {
+      if (context.target.runtimeConfig.runtimeTargetKind !== "ecs_fargate") return existing;
+      const retryDeploymentTargetFingerprint = resolveFullStackRetryDeploymentTargetFingerprint(
+        context,
+        existing
+      );
+      const expectedFingerprint = createEcsFargateRuntimeCoordinatesFingerprint(
+        context.target.runtimeConfig
+      );
+      const preparedFingerprint = readMetadataString(
+        existing.providerRevision?.metadata,
+        "ecsRuntimeCoordinatesFingerprint"
+      );
+      if (
+        preparedFingerprint === expectedFingerprint &&
+        hasPreparedEcsOutputUrlMetadata(existing.providerRevision?.metadata) &&
+        (!retryDeploymentTargetFingerprint ||
+          existing.deploymentTargetFingerprint === retryDeploymentTargetFingerprint)
+      ) {
+        return existing;
+      }
+      if (
+        existing.providerRevision?.resourceType !== "codebuild_artifact" ||
+        !existing.providerRevision.artifactReference
+      ) {
+        throw new DirectApplicationReleaseError(
+          "Pending ECS application release does not retain immutable build evidence"
+        );
+      }
+      return repository.resetReleaseForRetry({
+        releaseId: existing.id,
+        ...(retryDeploymentTargetFingerprint
+          ? { deploymentTargetFingerprint: retryDeploymentTargetFingerprint }
+          : {}),
+        providerRevision: {
+          ...existing.providerRevision,
+          metadata: {
+            ...existing.providerRevision.metadata,
+            ecsRuntimeCoordinatesFingerprint: expectedFingerprint,
+            ...createEcsPreparedOutputUrlMetadata(context.target.runtimeConfig)
+          }
+        },
+        updatedAt: now()
+      });
+    }
     if (["failed", "rolled_back", "cancelled"].includes(existing.status)) {
+      const retryDeploymentTargetFingerprint = resolveFullStackRetryDeploymentTargetFingerprint(
+        context,
+        existing
+      );
       const preparedBuildRevisionId = readMetadataString(
         existing.providerRevision?.metadata,
         "preparedBuildRevisionId"
@@ -448,6 +1053,9 @@ export async function prepareDirectApplicationRelease(
       }
       return repository.resetReleaseForRetry({
         releaseId: existing.id,
+        ...(retryDeploymentTargetFingerprint
+          ? { deploymentTargetFingerprint: retryDeploymentTargetFingerprint }
+          : {}),
         providerRevision: {
           provider: "aws",
           resourceType: existing.artifactId ? "application_artifact" : "codebuild_artifact",
@@ -455,9 +1063,15 @@ export async function prepareDirectApplicationRelease(
           artifactReference: existing.providerRevision.artifactReference,
           metadata: {
             ...existing.providerRevision.metadata,
-            ...(preparedBuildRevisionId
-              ? { preparedBuildRevisionId }
-              : {})
+            ...(context.target.runtimeConfig.runtimeTargetKind === "ecs_fargate"
+              ? {
+                  ecsRuntimeCoordinatesFingerprint: createEcsFargateRuntimeCoordinatesFingerprint(
+                    context.target.runtimeConfig
+                  ),
+                  ...createEcsPreparedOutputUrlMetadata(context.target.runtimeConfig)
+                }
+              : {}),
+            ...(preparedBuildRevisionId ? { preparedBuildRevisionId } : {})
           }
         },
         updatedAt: now()
@@ -485,41 +1099,83 @@ export async function prepareDirectApplicationRelease(
     buildInputs: {}
   });
   let preparedArtifact: DirectApplicationArtifact | undefined;
-  const resolved = await resolveApplicationArtifact({
-    projectId: context.deployment.projectId,
-    sourceRepositoryId: context.sourceRepository.id,
-    identity,
-    expectedLocation: {
-      provider: "aws",
-      accountId: context.connection.accountId,
-      region: context.connection.region,
-      storageNamespace: resolveExpectedStorageNamespace(context),
-      ownershipScope: `project:${context.deployment.projectId}`
-    },
-    now: timestamp,
-    repository: repository.artifactRegistry,
-    verifier: {
-      verify: (artifact) => gateway.verifyArtifact(context, artifact, input.abortSignal)
-    },
-    build: async () => {
-      preparedArtifact = await gateway.prepareArtifact(context, input.abortSignal);
-      validateArtifact(preparedArtifact, buildConfig.confirmedCommitSha);
-      return {
-        digest: preparedArtifact.digest,
-        location: createProviderLocation(context, preparedArtifact.reference)
-      };
-    }
-  });
-  const artifact = resolved.artifact;
+  let registeredArtifact: ApplicationArtifact | undefined;
+  let reuseOutcome: "built" | "reused" | "preflight" = "preflight";
+  const usesPreApplyArtifact =
+    context.target.runtimeTargetKind === "ecs_fargate" &&
+    (context.deployment.scope === "full_stack" || Boolean(buildConfig.ecsWeb));
+
+  if (usesPreApplyArtifact) {
+    preparedArtifact = await gateway.prepareArtifact(
+      context,
+      input.abortSignal,
+      input.retainProjectLease ? { retainProjectLease: true } : undefined
+    );
+    validateArtifact(preparedArtifact, buildConfig.confirmedCommitSha);
+  } else {
+    const resolved = await resolveApplicationArtifact({
+      projectId: context.deployment.projectId,
+      sourceRepositoryId: context.sourceRepository.id,
+      identity,
+      expectedLocation: {
+        provider: "aws",
+        accountId: context.connection.accountId,
+        region: context.connection.region,
+        storageNamespace: resolveExpectedStorageNamespace(context),
+        ownershipScope: `project:${context.deployment.projectId}`
+      },
+      now: timestamp,
+      repository: repository.artifactRegistry,
+      verifier: {
+        verify: (artifact) => gateway.verifyArtifact(context, artifact, input.abortSignal)
+      },
+      build: async () => {
+        preparedArtifact = await gateway.prepareArtifact(
+          context,
+          input.abortSignal,
+          input.retainProjectLease ? { retainProjectLease: true } : undefined
+        );
+        validateArtifact(preparedArtifact, buildConfig.confirmedCommitSha);
+        return {
+          digest: preparedArtifact.digest,
+          location: createProviderLocation(context, preparedArtifact.reference)
+        };
+      }
+    });
+    registeredArtifact = resolved.artifact;
+    reuseOutcome = resolved.outcome;
+  }
+
+  const commitSha = registeredArtifact?.commitSha ?? preparedArtifact?.commitSha;
+  const artifactDigest = registeredArtifact?.digest ?? preparedArtifact?.digest;
+  const artifactReference =
+    registeredArtifact?.location.artifactReference ?? preparedArtifact?.reference;
+  const executionRevisionId = registeredArtifact?.id ?? preparedArtifact?.buildRevisionId;
+  if (!commitSha || !artifactDigest || !artifactReference || !executionRevisionId) {
+    throw new DirectApplicationReleaseError("Prepared application artifact evidence is incomplete");
+  }
   const preparedBuildRevisionId = preparedArtifact?.buildRevisionId;
+  const releaseCandidateId = readMetadataString(preparedArtifact?.metadata, "releaseCandidateId");
+  const candidateApiDigest = readMetadataString(preparedArtifact?.metadata, "apiOciDigest");
+  const candidateFrontendManifestDigest = readMetadataString(
+    preparedArtifact?.metadata,
+    "frontendManifestDigest"
+  );
+  const compositeDigest =
+    releaseCandidateId && candidateApiDigest && candidateFrontendManifestDigest
+      ? {
+          algorithm: "sha256" as const,
+          value: artifactDigest,
+          apiOciDigest: candidateApiDigest,
+          frontendManifestDigest: candidateFrontendManifestDigest
+        }
+      : null;
 
   return repository.savePreparedRelease({
     id: createId(),
     projectId: context.deployment.projectId,
-    artifactId: artifact.id,
-    deploymentId: context.deployment.id,
-    pipelineRunId: null,
-    source: "direct",
+    artifactId: registeredArtifact?.id ?? null,
+    ...createReleaseExecutionCoordinates(context),
     runtimeTargetKind: context.target.runtimeTargetKind,
     runtimeAdapterKind: targetIdentity.adapterKind,
     deploymentTargetFingerprint: targetIdentity.deploymentTargetFingerprint,
@@ -527,24 +1183,38 @@ export async function prepareDirectApplicationRelease(
     version: resolveApplicationReleaseVersion({
       exactSemVerTag: buildConfig.exactSemVerTag,
       manifestVersion: buildConfig.manifestVersion,
-      commitSha: artifact.commitSha
+      commitSha
     }),
-    commitSha: artifact.commitSha.toLowerCase(),
+    commitSha: commitSha.toLowerCase(),
     artifactDigestAlgorithm: "sha256",
-    artifactDigest: artifact.digest,
+    artifactDigest,
+    releaseCandidateId,
+    compositeDigest,
     providerRevision: {
       provider: "aws",
-      resourceType: "application_artifact",
-      revisionId: artifact.id,
-      artifactReference: artifact.location.artifactReference,
+      resourceType: registeredArtifact ? "application_artifact" : "codebuild_artifact",
+      revisionId: executionRevisionId,
+      artifactReference,
       metadata: {
         ...(preparedArtifact?.metadata ?? {}),
-        applicationArtifactId: artifact.id,
-        artifactFingerprint: artifact.artifactFingerprint,
+        ...(registeredArtifact ? { applicationArtifactId: registeredArtifact.id } : {}),
+        artifactFingerprint:
+          registeredArtifact?.artifactFingerprint ?? identity.artifactFingerprint,
+        preparedArtifactReference: artifactReference,
         ...(preparedBuildRevisionId ? { preparedBuildRevisionId } : {}),
-        reuseOutcome: resolved.outcome
+        reuseOutcome,
+        ...(context.target.runtimeConfig.runtimeTargetKind === "ecs_fargate"
+          ? {
+              ecsRuntimeCoordinatesFingerprint: createEcsFargateRuntimeCoordinatesFingerprint(
+                context.target.runtimeConfig
+              ),
+              ...createEcsPreparedOutputUrlMetadata(context.target.runtimeConfig)
+            }
+          : {})
       }
     },
+    frontendEvidence: null,
+    failureStage: null,
     outputUrl: null,
     status: "pending",
     healthEvidence: null,
@@ -556,23 +1226,58 @@ export async function prepareDirectApplicationRelease(
   });
 }
 
-export async function executeDirectApplicationRelease(
-  input: { deploymentId: string; userId: string; abortSignal?: AbortSignal },
+export async function prepareDirectApplicationRelease(
+  input: {
+    deploymentId: string;
+    userId: string;
+    abortSignal?: AbortSignal;
+    retainProjectLease?: boolean;
+  },
   repository: DirectApplicationReleaseRepository,
   gateway: DirectApplicationReleaseGateway,
+  createId: () => string,
   now: () => Date = () => new Date()
 ): Promise<DirectApplicationReleaseRecord | null> {
-  const context = await requireContext(input, repository);
+  return prepareApplicationRelease(
+    {
+      executionId: input.deploymentId,
+      userId: input.userId,
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
+      ...(input.retainProjectLease ? { retainProjectLease: true } : {})
+    },
+    repository,
+    gateway,
+    createId,
+    now
+  );
+}
+
+export async function executeApplicationRelease<
+  TRelease extends ApplicationReleaseRecord = ApplicationReleaseRecord
+>(
+  input: {
+    executionId: string;
+    userId: string;
+    abortSignal?: AbortSignal;
+    leaseFence?: LeaseFence;
+  },
+  repository: ApplicationReleaseExecutionRepository<TRelease>,
+  gateway: DirectApplicationReleaseGateway,
+  now: () => Date = () => new Date()
+): Promise<TRelease | null> {
+  const context = await requireContext(
+    { deploymentId: input.executionId, userId: input.userId },
+    repository
+  );
   if (context.deployment.scope === "infrastructure") return null;
   assertContextMatchesTarget(context);
+  assertRuntimeOutputUrl(context);
 
-  const release = await repository.findRelease(input.deploymentId);
+  const release = await repository.findRelease(input.executionId);
   const providerRevision = release?.providerRevision ?? null;
   if (
     !release ||
-    !["codebuild_artifact", "application_artifact"].includes(
-      providerRevision?.resourceType ?? ""
-    )
+    !["codebuild_artifact", "application_artifact"].includes(providerRevision?.resourceType ?? "")
   ) {
     throw new DirectApplicationReleaseError(
       "A prepared application artifact is required before runtime release"
@@ -595,10 +1300,7 @@ export async function executeDirectApplicationRelease(
     providerRevision.metadata,
     "preparedBuildRevisionId"
   );
-  const artifactFingerprint = readMetadataString(
-    providerRevision.metadata,
-    "artifactFingerprint"
-  );
+  const artifactFingerprint = readMetadataString(providerRevision.metadata, "artifactFingerprint");
   if (!artifactFingerprint || !/^[a-f0-9]{64}$/u.test(artifactFingerprint)) {
     throw new DirectApplicationReleaseError(
       "Prepared application artifact fingerprint is missing or invalid"
@@ -613,6 +1315,7 @@ export async function executeDirectApplicationRelease(
     metadata: providerRevision.metadata
   };
   validateArtifact(artifact, context.target.confirmedBuildConfig.confirmedCommitSha);
+  const desiredRuntimeArtifact = resolveDirectRuntimeArtifact(context, artifact);
 
   const targetIdentity = resolveDirectTargetIdentity(context);
   if (
@@ -623,57 +1326,194 @@ export async function executeDirectApplicationRelease(
       "Prepared release deployment target fingerprint no longer matches the confirmed target"
     );
   }
+  let rolloutResult:
+    | Awaited<ReturnType<DirectApplicationReleaseGateway["deployArtifact"]>>
+    | undefined;
   const runtimeGateway = createDirectRuntimeProviderGateway({
     gateway,
     context,
     target: targetIdentity.target,
     artifact,
     now,
+    recordRolloutResult(result) {
+      rolloutResult = result;
+    },
     ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
   });
   let convergence: RuntimeConvergenceResult;
   try {
     convergence = await createRuntimeConvergenceService({
-      adapters: createRuntimeConvergenceAdapterRegistry(
-        createRuntimeGatewayRecord(runtimeGateway)
-      ),
+      adapters: createRuntimeConvergenceAdapterRegistry(createRuntimeGatewayRecord(runtimeGateway)),
       now
     }).converge({
       scope: targetIdentity.scope,
       target: targetIdentity.target,
       artifact: {
-        artifactFingerprint,
-        digestAlgorithm: "sha256",
-        digest: artifact.digest,
-        reference: artifact.reference
+        ...desiredRuntimeArtifact,
+        artifactFingerprint
       }
     });
   } catch (error) {
     const timestamp = now();
+    if (rolloutResult?.status === "cancelled" && repository.saveCancelledRelease) {
+      const cancelledRelease = await repository.saveCancelledRelease({
+        releaseId: release.id,
+        status: "cancelled",
+        runtimeAdapterKind: targetIdentity.adapterKind,
+        deploymentTargetFingerprint: targetIdentity.deploymentTargetFingerprint,
+        convergenceOutcome: null,
+        providerRevision: {
+          ...rolloutResult.providerRevision,
+          metadata: {
+            ...rolloutResult.providerRevision.metadata,
+            artifactFingerprint,
+            ...(preparedBuildRevisionId ? { preparedBuildRevisionId } : {})
+          }
+        },
+        outputUrl: rolloutResult.outputUrl,
+        healthEvidence: rolloutResult.healthEvidence,
+        rollbackEvidence: rolloutResult.rollbackEvidence,
+        frontendEvidence: rolloutResult.frontendEvidence ?? null,
+        failureStage: rolloutResult.failureStage ?? null,
+        completedAt: timestamp,
+        updatedAt: timestamp,
+        ...(input.leaseFence ? { leaseFence: input.leaseFence } : {})
+      });
+      await gateway
+        .cleanupArtifact?.({ context, artifact, mode: "terminal_failure" })
+        .catch(() => undefined);
+      return cancelledRelease;
+    }
+    if (input.abortSignal?.aborted && repository.saveCancelledRelease) {
+      const cancelledRelease = await repository.saveCancelledRelease({
+        releaseId: release.id,
+        status: "cancelled",
+        completedAt: timestamp,
+        updatedAt: timestamp,
+        ...(input.leaseFence ? { leaseFence: input.leaseFence } : {})
+      });
+      await gateway
+        .cleanupArtifact?.({ context, artifact, mode: "terminal_failure" })
+        .catch(() => undefined);
+      return cancelledRelease;
+    }
     if (error instanceof RuntimeRolloutRolledBackError) {
-      return repository.saveCompletedRelease({
+      const rolledBackRelease = await repository.saveCompletedRelease({
         releaseId: release.id,
         runtimeAdapterKind: targetIdentity.adapterKind,
         deploymentTargetFingerprint: targetIdentity.deploymentTargetFingerprint,
         convergenceOutcome: null,
-        providerRevision: toDirectProviderRevision(error.currentState.providerRevision),
+        providerRevision: {
+          ...toDirectProviderRevision(error.currentState.providerRevision),
+          metadata: {
+            ...error.currentState.providerRevision.metadata,
+            artifactFingerprint,
+            ...(preparedBuildRevisionId ? { preparedBuildRevisionId } : {})
+          }
+        },
         outputUrl: resolveDirectOutputUrl(context),
         healthEvidence: error.currentState.healthEvidence,
         rollbackEvidence: error.currentState.rollbackEvidence,
+        frontendEvidence: rolloutResult?.frontendEvidence ?? null,
+        failureStage: rolloutResult?.failureStage ?? "ecs_health",
         status: "rolled_back",
         completedAt: timestamp,
-        updatedAt: timestamp
+        updatedAt: timestamp,
+        ...(input.leaseFence ? { leaseFence: input.leaseFence } : {})
       });
+      await gateway
+        .cleanupArtifact?.({ context, artifact, mode: "terminal_failure" })
+        .catch(() => undefined);
+      return rolledBackRelease;
     }
     await repository.saveFailedRelease({
       releaseId: release.id,
       completedAt: timestamp,
-      updatedAt: timestamp
+      updatedAt: timestamp,
+      ...(input.leaseFence ? { leaseFence: input.leaseFence } : {})
     });
+    await gateway
+      .cleanupArtifact?.({ context, artifact, mode: "terminal_failure" })
+      .catch(() => undefined);
     throw error;
   }
+
+  if (rolloutResult?.status === "partially_failed") {
+    const timestamp = now();
+    if (!rolloutResult.failureStage) {
+      throw new DirectApplicationReleaseError("Partial release failure stage is missing");
+    }
+    return repository.savePartialRelease({
+      releaseId: release.id,
+      runtimeAdapterKind: convergence.adapterKind,
+      deploymentTargetFingerprint: convergence.deploymentTargetFingerprint,
+      convergenceOutcome: convergence.outcome,
+      providerRevision: {
+        ...rolloutResult.providerRevision,
+        metadata: {
+          ...rolloutResult.providerRevision.metadata,
+          artifactFingerprint,
+          ...(preparedBuildRevisionId ? { preparedBuildRevisionId } : {})
+        }
+      },
+      outputUrl: rolloutResult.outputUrl,
+      healthEvidence: appendConvergenceEvidence(rolloutResult.healthEvidence, convergence),
+      frontendEvidence: rolloutResult.frontendEvidence ?? null,
+      failureStage: rolloutResult.failureStage,
+      completedAt: timestamp,
+      updatedAt: timestamp,
+      ...(input.leaseFence ? { leaseFence: input.leaseFence } : {})
+    });
+  }
+  if (rolloutResult?.status === "cancelled" || rolloutResult?.status === "partially_cancelled") {
+    const timestamp = now();
+    if (!repository.saveCancelledRelease) {
+      throw new DirectApplicationReleaseError("Cancelled release repository is unavailable");
+    }
+    const cancelledRelease = await repository.saveCancelledRelease({
+      releaseId: release.id,
+      status: rolloutResult.status,
+      runtimeAdapterKind: convergence.adapterKind,
+      deploymentTargetFingerprint: convergence.deploymentTargetFingerprint,
+      convergenceOutcome: convergence.outcome,
+      providerRevision: {
+        ...rolloutResult.providerRevision,
+        metadata: {
+          ...rolloutResult.providerRevision.metadata,
+          artifactFingerprint,
+          ...(preparedBuildRevisionId ? { preparedBuildRevisionId } : {})
+        }
+      },
+      outputUrl: rolloutResult.outputUrl,
+      healthEvidence: appendConvergenceEvidence(rolloutResult.healthEvidence, convergence),
+      rollbackEvidence: rolloutResult.rollbackEvidence,
+      frontendEvidence: rolloutResult.frontendEvidence ?? null,
+      failureStage: rolloutResult.failureStage ?? null,
+      completedAt: timestamp,
+      updatedAt: timestamp,
+      ...(input.leaseFence ? { leaseFence: input.leaseFence } : {})
+    });
+    await gateway
+      .cleanupArtifact?.({ context, artifact, mode: "terminal_failure" })
+      .catch(() => undefined);
+    return cancelledRelease;
+  }
+
   const timestamp = now();
-  return repository.saveCompletedRelease({
+  if (convergence.outcome === "already_active" && release.releaseCandidateId) {
+    if (!input.leaseFence || !gateway.finalizeAlreadyActiveArtifact) {
+      throw new DirectApplicationReleaseError(
+        "An active execution fence is required to finalize an already-active ReleaseCandidate",
+        "APPLICATION_RELEASE_CANDIDATE_FENCE_REQUIRED"
+      );
+    }
+    await gateway.finalizeAlreadyActiveArtifact({
+      context,
+      artifact,
+      leaseFence: input.leaseFence
+    });
+  }
+  const completedRelease = await repository.saveCompletedRelease({
     releaseId: release.id,
     runtimeAdapterKind: convergence.adapterKind,
     deploymentTargetFingerprint: convergence.deploymentTargetFingerprint,
@@ -681,21 +1521,129 @@ export async function executeDirectApplicationRelease(
     providerRevision: {
       ...toDirectProviderRevision(convergence.providerRevision),
       metadata: {
+        ...providerRevision.metadata,
         ...convergence.providerRevision.metadata,
+        artifactFingerprint,
         ...(preparedBuildRevisionId ? { preparedBuildRevisionId } : {})
       }
     },
-    outputUrl: resolveDirectOutputUrl(context),
+    outputUrl: rolloutResult?.outputUrl ?? resolveDirectOutputUrl(context),
     healthEvidence: appendConvergenceEvidence(convergence.healthEvidence, convergence),
     rollbackEvidence: convergence.rollbackEvidence,
+    frontendEvidence: rolloutResult?.frontendEvidence ?? null,
+    failureStage: rolloutResult?.failureStage ?? null,
     status: "succeeded",
     completedAt: timestamp,
-    updatedAt: timestamp
+    updatedAt: timestamp,
+    ...(input.leaseFence ? { leaseFence: input.leaseFence } : {})
   });
+  await gateway
+    .cleanupArtifact?.({
+      context,
+      artifact,
+      mode: "success"
+    })
+    .catch(() => undefined);
+  return completedRelease;
+}
+
+export async function executeDirectApplicationRelease(
+  input: {
+    deploymentId: string;
+    userId: string;
+    abortSignal?: AbortSignal;
+    leaseFence?: LeaseFence;
+  },
+  repository: DirectApplicationReleaseRepository,
+  gateway: DirectApplicationReleaseGateway,
+  now: () => Date = () => new Date()
+): Promise<DirectApplicationReleaseRecord | null> {
+  return executeApplicationRelease(
+    {
+      executionId: input.deploymentId,
+      userId: input.userId,
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
+      ...(input.leaseFence ? { leaseFence: input.leaseFence } : {})
+    },
+    repository,
+    gateway,
+    now
+  );
+}
+
+export async function retryDirectApplicationFrontendRelease(
+  input: { deploymentId: string; userId: string },
+  repository: DirectApplicationReleaseRepository,
+  gateway: DirectApplicationReleaseGateway
+): Promise<DirectApplicationReleaseRecord> {
+  const context = await requireContext(input, repository);
+  assertContextMatchesTarget(context);
+  assertRuntimeOutputUrl(context);
+  if (
+    context.deployment.source !== "direct" ||
+    context.target.runtimeTargetKind !== "ecs_fargate"
+  ) {
+    throw new DirectApplicationReleaseError(
+      "Frontend retry is available only for Direct ECS/Fargate releases",
+      "APPLICATION_RELEASE_FRONTEND_RETRY_UNSUPPORTED"
+    );
+  }
+  const release = await repository.findRelease(input.deploymentId);
+  if (
+    !release ||
+    release.status !== "partially_failed" ||
+    !release.releaseCandidateId ||
+    !isFrontendReleaseFailureStage(release.failureStage)
+  ) {
+    throw new DirectApplicationReleaseError(
+      "Frontend retry requires an ECS-healthy partial frontend failure",
+      "APPLICATION_RELEASE_FRONTEND_RETRY_NOT_ALLOWED"
+    );
+  }
+  if (!gateway.retryFrontend) {
+    throw new DirectApplicationReleaseError(
+      "Frontend retry gateway is unavailable",
+      "APPLICATION_RELEASE_FRONTEND_RETRY_UNAVAILABLE"
+    );
+  }
+  const result = await gateway.retryFrontend({ context, release });
+  const updated = await repository.findRelease(input.deploymentId);
+  if (
+    !updated ||
+    (result.status === "succeeded"
+      ? updated.status !== "succeeded"
+      : updated.status !== "partially_failed")
+  ) {
+    throw new DirectApplicationReleaseError(
+      "Frontend retry result was not saved",
+      "APPLICATION_RELEASE_FRONTEND_RETRY_PERSISTENCE_FAILED"
+    );
+  }
+  return updated;
+}
+
+function isFrontendReleaseFailureStage(
+  stage: ApplicationReleaseFailureStage | null
+): stage is
+  | "frontend_upload"
+  | "frontend_activation"
+  | "cloudfront_invalidation"
+  | "public_health" {
+  return (
+    stage === "frontend_upload" ||
+    stage === "frontend_activation" ||
+    stage === "cloudfront_invalidation" ||
+    stage === "public_health"
+  );
 }
 
 export async function rollbackDirectApplicationRelease(
-  input: { deploymentId: string; userId: string; abortSignal?: AbortSignal },
+  input: {
+    deploymentId: string;
+    userId: string;
+    abortSignal?: AbortSignal;
+    retainProjectLease?: boolean;
+  },
   repository: DirectApplicationReleaseRepository,
   gateway: DirectApplicationReleaseGateway,
   now: () => Date = () => new Date()
@@ -703,6 +1651,7 @@ export async function rollbackDirectApplicationRelease(
   const context = await requireContext(input, repository);
   if (context.deployment.scope === "infrastructure") return null;
   assertContextMatchesTarget(context);
+  assertRuntimeOutputUrl(context);
 
   const release = await repository.findRelease(input.deploymentId);
   if (!release) {
@@ -729,7 +1678,9 @@ export async function rollbackDirectApplicationRelease(
   const artifact: DirectApplicationArtifact = {
     commitSha: release.commitSha,
     digest: release.artifactDigest,
-    reference: release.providerRevision.artifactReference,
+    reference:
+      readMetadataString(release.providerRevision.metadata, "preparedArtifactReference") ??
+      release.providerRevision.artifactReference,
     buildRevisionId: artifactExecutionRevisionId,
     metadata: release.providerRevision.metadata
   };
@@ -738,6 +1689,7 @@ export async function rollbackDirectApplicationRelease(
     context,
     artifact,
     release,
+    ...(input.retainProjectLease ? { retainProjectLease: true } : {}),
     ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
   });
   validateRuntimeResult(result, context, artifact);
@@ -770,9 +1722,100 @@ function readMetadataString(metadata: JsonValue | undefined, key: string): strin
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+function hasPreparedEcsOutputUrlMetadata(metadata: JsonValue | undefined): boolean {
+  if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) return false;
+  const value = metadata["ecsPreparedOutputUrl"];
+  return value === null || (typeof value === "string" && value.trim().length > 0);
+}
+
+function reconcileEcsFargateOutputAfterPartialSynchronization(
+  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }>,
+  input: {
+    expectedCoordinatesFingerprint: string;
+    outputs: ResolvedEcsFargateRuntimeOutputs;
+  }
+) {
+  try {
+    return {
+      ...reconcileEcsFargateRuntimeConfig(runtimeConfig, input),
+      recoveredPartialSynchronization: false
+    };
+  } catch (error) {
+    if (!(error instanceof EcsFargateOutputReconciliationError)) throw error;
+    const currentCoordinatesFingerprint =
+      createEcsFargateRuntimeCoordinatesFingerprint(runtimeConfig);
+    if (currentCoordinatesFingerprint === input.expectedCoordinatesFingerprint) throw error;
+    try {
+      const recovered = reconcileEcsFargateRuntimeConfig(runtimeConfig, {
+        ...input,
+        expectedCoordinatesFingerprint: currentCoordinatesFingerprint
+      });
+      if (!recovered.changed) {
+        return { ...recovered, recoveredPartialSynchronization: true };
+      }
+    } catch {
+      // The original mismatch remains the most accurate failure.
+    }
+    throw error;
+  }
+}
+
+function toPreparedEcsFargateRuntimeConfig(
+  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }>,
+  preparedOutputUrl: string | null
+): Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }> {
+  return {
+    ...runtimeConfig,
+    outputUrl: preparedOutputUrl
+  };
+}
+
+function createEcsPreparedOutputUrlMetadata(
+  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }>
+): { ecsPreparedOutputUrl: string | null } {
+  return { ecsPreparedOutputUrl: runtimeConfig.outputUrl };
+}
+
+function resolveFullStackRetryDeploymentTargetFingerprint(
+  context: DirectApplicationReleaseContext,
+  release: ApplicationReleaseRecord
+): string | undefined {
+  if (
+    context.deployment.scope !== "full_stack" ||
+    context.target.runtimeConfig.runtimeTargetKind !== "ecs_fargate"
+  ) {
+    return undefined;
+  }
+
+  const currentIdentity = resolveDirectTargetIdentity(context);
+  if (
+    !release.deploymentTargetFingerprint ||
+    release.deploymentTargetFingerprint === currentIdentity.deploymentTargetFingerprint
+  ) {
+    return currentIdentity.deploymentTargetFingerprint;
+  }
+
+  const preparedIdentity = resolveAwsDeploymentTargetIdentity({
+    projectId: context.deployment.projectId,
+    accountId: context.connection.accountId,
+    region: context.connection.region,
+    runtimeConfig: toPreparedEcsFargateRuntimeConfig(
+      context.target.runtimeConfig,
+      readMetadataString(release.providerRevision?.metadata, "ecsPreparedOutputUrl")
+    ),
+    healthCheckPath: context.target.confirmedBuildConfig.healthCheckPath
+  });
+  if (release.deploymentTargetFingerprint !== preparedIdentity.deploymentTargetFingerprint) {
+    throw new DirectApplicationReleaseError(
+      "Prepared release deployment target fingerprint no longer matches the confirmed target"
+    );
+  }
+  return currentIdentity.deploymentTargetFingerprint;
+}
+
 async function requireContext(
   input: { deploymentId: string; userId: string },
-  repository: DirectApplicationReleaseRepository
+  repository: Pick<DirectApplicationReleaseRepository, "findContext">
 ): Promise<DirectApplicationReleaseContext> {
   const context = await repository.findContext(input.deploymentId, input.userId);
   if (!context) throw new DirectApplicationReleaseError("Direct deployment target was not found");
@@ -785,7 +1828,6 @@ function assertContextMatchesTarget(
   sourceRepository: NonNullable<DirectApplicationReleaseContext["sourceRepository"]>;
 } {
   if (
-    context.deployment.source !== "direct" ||
     !context.sourceRepository ||
     context.deployment.targetKind !== context.target.runtimeTargetKind ||
     context.target.runtimeConfig?.runtimeTargetKind !== context.target.runtimeTargetKind
@@ -794,10 +1836,28 @@ function assertContextMatchesTarget(
       "Direct deployment runtime does not match the confirmed project target"
     );
   }
+}
 
+function createReleaseExecutionCoordinates(
+  context: DirectApplicationReleaseContext
+): Pick<ApplicationReleaseRecord, "deploymentId" | "pipelineRunId" | "source"> {
+  return context.deployment.source === "gitops"
+    ? {
+        deploymentId: null,
+        pipelineRunId: context.deployment.id,
+        source: "gitops"
+      }
+    : {
+        deploymentId: context.deployment.id,
+        pipelineRunId: null,
+        source: "direct"
+      };
+}
+
+function assertRuntimeOutputUrl(context: DirectApplicationReleaseContext): void {
   if (
-    context.target.runtimeConfig?.runtimeTargetKind === "ecs_fargate" &&
-    !context.target.runtimeConfig?.outputUrl
+    context.target.runtimeConfig.runtimeTargetKind === "ecs_fargate" &&
+    !context.target.runtimeConfig.outputUrl
   ) {
     throw new DirectApplicationReleaseError(
       "DEPLOYMENT_OUTPUT_URL_REQUIRED",
@@ -806,9 +1866,7 @@ function assertContextMatchesTarget(
   }
 }
 
-function resolveExpectedStorageNamespace(
-  context: DirectApplicationReleaseContext
-): string | null {
+function resolveExpectedStorageNamespace(context: DirectApplicationReleaseContext): string | null {
   const runtime = context.target.runtimeConfig;
   if (runtime.runtimeTargetKind === "ecs_fargate") return runtime.ecrRepositoryName;
   if (runtime.runtimeTargetKind === "static_site") return runtime.hostingBucketName;
@@ -823,9 +1881,10 @@ function createProviderLocation(
   let storageNamespace: string;
 
   if (runtime.runtimeTargetKind === "ecs_fargate") {
-    const match = /^(\d{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com(?:\.cn)?\/(.+)@sha256:[a-f0-9]{64}$/u.exec(
-      artifactReference
-    );
+    const match =
+      /^(\d{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com(?:\.cn)?\/(.+)@sha256:[a-f0-9]{64}$/u.exec(
+        artifactReference
+      );
     if (
       !match?.[1] ||
       !match[2] ||
@@ -840,16 +1899,17 @@ function createProviderLocation(
     }
     storageNamespace = match[3];
   } else {
-    const match = /^s3:\/\/([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])\/(.+)$/u.exec(
-      artifactReference
-    );
+    const match = /^s3:\/\/([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])\/(.+)$/u.exec(artifactReference);
     if (!match?.[1] || !match[2]) {
       throw new DirectApplicationReleaseError(
         "Prepared application artifact must use an approved provider object reference"
       );
     }
     storageNamespace = match[1];
-    if (runtime.runtimeTargetKind === "static_site" && storageNamespace !== runtime.hostingBucketName) {
+    if (
+      runtime.runtimeTargetKind === "static_site" &&
+      storageNamespace !== runtime.hostingBucketName
+    ) {
       throw new DirectApplicationReleaseError(
         "Prepared static artifact does not belong to the approved hosting bucket"
       );
@@ -897,12 +1957,46 @@ function validateRuntimeResult(
     result.providerRevision.resourceType === "codebuild_artifact" ||
     result.providerRevision.artifactReference !== artifact.reference ||
     result.outputUrl !== expectedOutputUrl ||
-    (result.status === "succeeded" ? state !== "healthy" : state !== "restored")
+    (["succeeded", "partially_failed", "partially_cancelled"].includes(result.status)
+      ? state !== "healthy"
+      : state !== "restored")
   ) {
     throw new DirectApplicationReleaseError(
       "Observed AWS runtime revision does not match the prepared application artifact"
     );
   }
+}
+
+async function runWithOptionalReleaseFence<T>(
+  db: Database,
+  fence: LeaseFence | undefined,
+  now: Date,
+  operation: (executor: Database) => Promise<T>
+): Promise<T> {
+  if (!fence) return operation(db);
+  return db.transaction(async (transaction) => {
+    const executor = transaction as unknown as Database;
+    const [lease] = await executor
+      .select({ projectId: projectExecutionLeases.projectId })
+      .from(projectExecutionLeases)
+      .where(
+        and(
+          eq(projectExecutionLeases.projectId, fence.projectId),
+          eq(projectExecutionLeases.holderId, fence.holderId),
+          eq(projectExecutionLeases.fencingVersion, fence.fencingVersion),
+          eq(projectExecutionLeases.status, "active"),
+          gt(projectExecutionLeases.expiresAt, now)
+        )
+      )
+      .for("update");
+    if (!lease) {
+      throw new DirectApplicationReleaseError(
+        "Stale recovery cannot save a terminal application release",
+        "LEASE_FENCE_REJECTED"
+      );
+    }
+    return operation(executor);
+  });
 }
 
 function resolveDirectTargetIdentity(context: DirectApplicationReleaseContext) {
@@ -932,6 +2026,9 @@ function createDirectRuntimeProviderGateway(input: {
   readonly target: RuntimeDeploymentTarget;
   readonly artifact: DirectApplicationArtifact;
   readonly now: () => Date;
+  readonly recordRolloutResult: (
+    result: Awaited<ReturnType<DirectApplicationReleaseGateway["deployArtifact"]>>
+  ) => void;
   readonly abortSignal?: AbortSignal | undefined;
 }): RuntimeProviderGateway {
   return {
@@ -952,6 +2049,7 @@ function createDirectRuntimeProviderGateway(input: {
         artifact: input.artifact,
         ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
       });
+      input.recordRolloutResult(result);
       validateRuntimeResult(result, input.context, input.artifact);
       const state: RuntimeProviderCurrentState = {
         adapterKind: input.target.adapterKind,
@@ -964,10 +2062,8 @@ function createDirectRuntimeProviderGateway(input: {
         },
         target: input.target,
         artifact: {
-          artifactFingerprint: requireArtifactFingerprint(input.artifact),
-          digestAlgorithm: "sha256",
-          digest: input.artifact.digest,
-          reference: input.artifact.reference
+          ...rolloutInput.artifact,
+          artifactFingerprint: requireArtifactFingerprint(input.artifact)
         },
         providerRevision: result.providerRevision,
         health: {
@@ -979,6 +2075,9 @@ function createDirectRuntimeProviderGateway(input: {
       };
       if (result.status === "rolled_back") {
         throw new RuntimeRolloutRolledBackError(state);
+      }
+      if (result.status === "cancelled") {
+        throw new DirectApplicationReleaseError("Runtime rollout was cancelled after rollback");
       }
       return state;
     }
@@ -1007,6 +2106,35 @@ function requireArtifactFingerprint(artifact: DirectApplicationArtifact): string
     throw new DirectApplicationReleaseError("Application artifact fingerprint is required");
   }
   return artifact.artifactFingerprint;
+}
+
+function resolveDirectRuntimeArtifact(
+  context: DirectApplicationReleaseContext,
+  artifact: DirectApplicationArtifact
+): RuntimeProviderCurrentState["artifact"] {
+  const artifactFingerprint = requireArtifactFingerprint(artifact);
+  const apiOciDigest = readMetadataString(artifact.metadata, "apiOciDigest");
+  const releaseCandidateId = readMetadataString(artifact.metadata, "releaseCandidateId");
+  const runtime = context.target.runtimeConfig;
+  if (
+    runtime.runtimeTargetKind === "ecs_fargate" &&
+    releaseCandidateId &&
+    apiOciDigest &&
+    /^[a-f0-9]{64}$/u.test(apiOciDigest)
+  ) {
+    return {
+      artifactFingerprint,
+      digestAlgorithm: "sha256",
+      digest: apiOciDigest,
+      reference: `${context.connection.accountId}.dkr.ecr.${context.connection.region}.amazonaws.com/${runtime.ecrRepositoryName}@sha256:${apiOciDigest}`
+    };
+  }
+  return {
+    artifactFingerprint,
+    digestAlgorithm: "sha256",
+    digest: artifact.digest,
+    reference: artifact.reference
+  };
 }
 
 function resolveDirectOutputUrl(context: DirectApplicationReleaseContext): string {
@@ -1078,13 +2206,7 @@ function toDirectProviderRevision(
 function toDirectReleaseRecord(
   release: typeof applicationReleases.$inferSelect
 ): DirectApplicationReleaseRecord {
-  if (
-    !release.deploymentId ||
-    release.source !== "direct" ||
-    release.pipelineRunId !== null
-  ) {
-    throw new DirectApplicationReleaseError("Application release is not a Direct release");
-  }
+  assertDirectApplicationReleaseRecord(release);
   const deploymentId = release.deploymentId;
   return {
     ...release,
@@ -1092,4 +2214,12 @@ function toDirectReleaseRecord(
     pipelineRunId: null,
     source: "direct"
   };
+}
+
+function assertDirectApplicationReleaseRecord(
+  release: ApplicationReleaseRecord
+): asserts release is DirectApplicationReleaseRecord {
+  if (!release.deploymentId || release.source !== "direct" || release.pipelineRunId !== null) {
+    throw new DirectApplicationReleaseError("Application release is not a Direct release");
+  }
 }

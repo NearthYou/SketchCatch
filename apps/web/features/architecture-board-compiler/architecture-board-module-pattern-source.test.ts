@@ -109,6 +109,56 @@ test("공통 presentation Area 아래의 독립된 named pattern occurrence를 �
   assert.ok(candidates.every((candidate) => candidate.nodes.some(({ id }) => id === region.id)));
 });
 
+test("Resource Area도 선택된 child에 맞춰 같은 inset으로 bottom-up refit한다", () => {
+  assert.equal(typeof extractCandidates, "function", "candidate extraction test seam must exist");
+  const region = {
+    ...areaNode("region"),
+    size: { width: 1_800, height: 1_000 }
+  } satisfies DiagramNode;
+  const vpc = {
+    ...resourceNode("vpc", "aws_vpc", 100, region.id),
+    position: { x: 100, y: 100 },
+    size: { width: 1_200, height: 700 }
+  } satisfies DiagramNode;
+  const anchor = {
+    ...resourceNode("anchor", "service_anchor", 200, vpc.id),
+    position: { x: 200, y: 220 }
+  } satisfies DiagramNode;
+  const member = {
+    ...resourceNode("member", "service_member", 400, vpc.id),
+    position: { x: 400, y: 320 }
+  } satisfies DiagramNode;
+  const unselected = {
+    ...resourceNode("unselected", "unselected", 1_100, vpc.id),
+    position: { x: 1_100, y: 700 }
+  } satisfies DiagramNode;
+  const diagram: DiagramJson = {
+    nodes: [region, vpc, anchor, member, unselected],
+    edges: [diagramEdge("pair", anchor.id, member.id)],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const seed: TestSeed = {
+    id: "service-pair",
+    title: "Service Pair",
+    description: "test",
+    lenses: [{ kind: "functional", key: "compute", label: "컴퓨트" }],
+    requiredResourceTypeGroups: [["service_anchor"], ["service_member"]],
+    includedResourceTypes: ["service_anchor", "service_member"]
+  };
+
+  const [candidate] = extractCandidates!(seed, { id: "repository:resource-area", diagram });
+  assert.ok(candidate);
+  const candidateNodeById = new Map(candidate.nodes.map((node) => [node.id, node]));
+
+  assert.deepEqual(candidateNodeById.get(vpc.id)?.position, { x: 100, y: 100 });
+  assert.deepEqual(candidateNodeById.get(vpc.id)?.size, { width: 500, height: 320 });
+  assert.deepEqual(candidateNodeById.get(region.id)?.position, { x: 0, y: 0 });
+  assert.deepEqual(candidateNodeById.get(region.id)?.size, { width: 1_100, height: 620 });
+  assert.equal(candidateNodeById.get(vpc.id)?.metadata?.parentAreaNodeId, region.id);
+  assert.equal(candidateNodeById.get(anchor.id)?.metadata?.parentAreaNodeId, vpc.id);
+  assert.equal(candidateNodeById.get(member.id)?.metadata?.parentAreaNodeId, vpc.id);
+});
+
 test("geometry medoid는 중복 type node를 좌표 순서가 아니라 구조적 role로 정렬한다", () => {
   assert.equal(typeof createFingerprint, "function", "structural fingerprint test seam must exist");
   assert.equal(typeof selectMedoid, "function", "geometry medoid test seam must exist");

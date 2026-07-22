@@ -14,10 +14,13 @@ import {
   createTerraformBlockAddress,
   createTerraformBlockIdentityKey
 } from "./terraform-identity.js";
+import { scanTerraformBlockIdentities } from "./terraform-block-identity-parser.js";
+import { findAnalysisExcludedTerraformConflicts } from "./analysis-excluded-terraform-guard.js";
 import { isSilentlyPreservedTerraformBlockType } from "./terraform-configuration-blocks.js";
 import { isSupportedTerraformFunctionExpression } from "./terraform-function-expressions.js";
 import {
   isGenericTerraformNestedBlock,
+  isTerraformLifecycleIgnoreChangesAttribute,
   isTerraformNestedBlockAttribute,
   isTerraformSingleNestedBlockAttribute
 } from "./terraform-nested-blocks.js";
@@ -35,6 +38,8 @@ const REFERENCE_PATTERN =
   /^(?:var|local|each|count|path|terraform)\.[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$|^module\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$|^(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$|^data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 const DEPENDENCY_ADDRESS_PATTERN =
   /^(?:(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|module\.[A-Za-z0-9_-]+)$/;
+const RESOURCE_REFERENCE_PATTERN =
+  /^([A-Za-z_][A-Za-z0-9_-]*)\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 const TERRAFORM_UTILITY_BLOCK_KEYS = new Set(["resource/random_password", "resource/terraform_data"]);
 type ParsedBlock = {
   blockType: TerraformBlockType;
@@ -66,6 +71,13 @@ type TerraformSyncInput =
       terraformFiles?: TerraformSyncFileInput[] | undefined;
     };
 
+export type TerraformBlockIdentityInput =
+  | string
+  | {
+      terraformCode: string;
+      terraformFiles?: TerraformSyncFileInput[] | undefined;
+    };
+
 type CreateCandidateProposal = Extract<
   TerraformDiagramChangeProposal,
   { kind: "create_candidate" }
@@ -88,6 +100,28 @@ export function syncTerraformToDiagramJson(
       .map((block) => block.address)
   );
   const getPreservedResourceAddresses = (): string[] => Array.from(preservedResourceAddressSet);
+  const analysisExcludedConflicts = findAnalysisExcludedTerraformConflicts(
+    diagramJson,
+    listTerraformBlockIdentities(input)
+  );
+
+  if (analysisExcludedConflicts.length > 0) {
+    return {
+      diagramJson,
+      diagnostics: [
+        ...parseResult.diagnostics,
+        ...analysisExcludedConflicts.map((conflict) => ({
+          severity: "error" as const,
+          code: "terraform.sync.analysis_excluded_resource",
+          nodeId: conflict.nodeId,
+          resourceAddress: conflict.resourceAddress,
+          message: `${conflict.resourceAddress}는 확인 필요 Resource와 일치하므로 Terraform 동기화를 진행할 수 없습니다.`
+        }))
+      ],
+      preservedResourceAddresses: getPreservedResourceAddresses(),
+      proposals: []
+    };
+  }
 
   if (parseResult.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     return {
@@ -592,6 +626,15 @@ function isKnownTerraformUtilityBlock(identity: TerraformBlockIdentity): boolean
   );
 }
 
+function isKnownTerraformUtilityReference(literal: string): boolean {
+  const resourceType = RESOURCE_REFERENCE_PATTERN.exec(literal)?.[1];
+
+  return (
+    resourceType !== undefined &&
+    TERRAFORM_UTILITY_BLOCK_KEYS.has(`${DEFAULT_TERRAFORM_BLOCK_TYPE}/${resourceType}`)
+  );
+}
+
 function normalizeComparisonValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => normalizeComparisonValue(item));
@@ -661,13 +704,36 @@ function parseTerraformInput(input: TerraformSyncInput): ParseResult {
   return { blocks, diagnostics, ignoredConfigurationBlockCount };
 }
 
+export function listTerraformBlockIdentities(
+  input: TerraformBlockIdentityInput
+): TerraformBlockIdentity[] {
+  const files = toTerraformSyncFiles(input);
+  const identities = new Map<string, TerraformBlockIdentity>();
+
+  for (const file of files) {
+    for (const identity of scanTerraformBlockIdentities(file.terraformCode)) {
+      identities.set(createTerraformBlockIdentityKey(identity), identity);
+    }
+  }
+
+  return [...identities.values()];
+}
+
 function isTerraformSyncInputBlank(input: TerraformSyncInput): boolean {
-  const files =
-    typeof input === "string" || input.terraformFiles === undefined || input.terraformFiles.length === 0
-      ? [typeof input === "string" ? input : input.terraformCode]
-      : input.terraformFiles.map((file) => file.terraformCode);
+  const files = toTerraformSyncFiles(input).map((file) => file.terraformCode);
 
   return files.every((terraformCode) => terraformCode.trim().length === 0);
+}
+
+function toTerraformSyncFiles(input: TerraformBlockIdentityInput): TerraformSyncFileInput[] {
+  return typeof input === "string" || input.terraformFiles === undefined || input.terraformFiles.length === 0
+    ? [
+        {
+          fileName: "main.tf",
+          terraformCode: typeof input === "string" ? input : input.terraformCode
+        }
+      ]
+    : input.terraformFiles;
 }
 
 function parseTerraformBlocks(sourceFileName: string, terraformCode: string): ParseResult {
@@ -1038,7 +1104,9 @@ function parseAttributes(
       valueText,
       bodyLine.line,
       resourceAddress,
-      terraformName === "depends_on"
+      terraformName === "depends_on",
+      resourceType !== undefined &&
+        isTerraformLifecycleIgnoreChangesAttribute(resourceType, terraformName, parentPath)
     );
 
     if (parsedValue.diagnostic) {
@@ -1160,7 +1228,8 @@ function parseAttributeValue(
   valueText: string,
   line: number,
   resourceAddress: string,
-  allowDependencyAddress = false
+  allowDependencyAddress = false,
+  allowBareIdentifier = false
 ): { value?: unknown; diagnostic?: TerraformDiagnostic } {
   const trimmedValueText = valueText.trim();
 
@@ -1168,7 +1237,7 @@ function parseAttributeValue(
     return { value: trimmedValueText };
   }
 
-  const parser = new HclValueParser(valueText, allowDependencyAddress);
+  const parser = new HclValueParser(valueText, allowDependencyAddress, allowBareIdentifier);
   const value = parser.parseValue();
 
   if (value.status === "unsupported") {
@@ -1222,7 +1291,8 @@ class HclValueParser {
 
   constructor(
     private readonly source: string,
-    private readonly allowDependencyAddress = false
+    private readonly allowDependencyAddress = false,
+    private readonly allowBareIdentifier = false
   ) {}
 
   parseValue(): ValueParseResult {
@@ -1415,7 +1485,9 @@ class HclValueParser {
 
     if (
       REFERENCE_PATTERN.test(literal) ||
-      (this.allowDependencyAddress && DEPENDENCY_ADDRESS_PATTERN.test(literal))
+      isKnownTerraformUtilityReference(literal) ||
+      (this.allowDependencyAddress && DEPENDENCY_ADDRESS_PATTERN.test(literal)) ||
+      (this.allowBareIdentifier && IDENTIFIER_PATTERN.test(literal))
     ) {
       return { status: "ok", value: literal };
     }

@@ -19,13 +19,13 @@
 .kicker {
   margin: 0 0 8px;
   color: #0d74ce;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
 }
 
 .panel h1 {
   margin: 0;
-  font-size: 30px;
+  font-size: calc(30px + var(--presentation-font-size-increase));
   line-height: 1.25;
 }
 
@@ -42,8 +42,8 @@
   border-radius: 8px;
   background: #171717;
   color: #ffffff;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: calc(16px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   cursor: pointer;
   transition: opacity 140ms ease, transform 140ms ease;
 }

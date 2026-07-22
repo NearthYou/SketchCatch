@@ -29,6 +29,7 @@ type FlowMapperOptions = {
   readonly activeConnectionSourceNodeId?: string | null | undefined;
   readonly edges?: readonly DiagramEdge[] | undefined;
   readonly geometryPolicy?: DiagramGeometryPolicy | undefined;
+  readonly isConnectionToolEnabled?: boolean;
   readonly isPreview?: boolean;
   readonly previewAnnotations?: DiagramPreviewAnnotations | undefined;
   readonly staleAuthoredRouteNodeIds?: ReadonlySet<string> | undefined;
@@ -38,6 +39,7 @@ type FlowNodeRenderState = {
   readonly areaDepth: number;
   readonly isAreaDropTarget: boolean;
   readonly isConnectionActive: boolean;
+  readonly isConnectionToolEnabled: boolean;
   readonly isDimmed: boolean;
   readonly isPreview: boolean;
   readonly isValidConnectionTarget: boolean;
@@ -89,6 +91,7 @@ export function toFlowNodes(
   const selectedNodeIdSet = new Set(selectedNodeIds);
   const shouldDimUnselectedNodes = selectedNodeIds.length > 0;
   const isPreview = options.isPreview === true;
+  const isConnectionToolEnabled = !isPreview && options.isConnectionToolEnabled !== false;
   const previewAnnotations = options.previewAnnotations;
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
@@ -113,6 +116,7 @@ export function toFlowNodes(
       areaDepth: isArea ? getAreaAncestorDepth(node, nodeById) : 0,
       isAreaDropTarget,
       isConnectionActive,
+      isConnectionToolEnabled,
       isDimmed,
       isPreview,
       isValidConnectionTarget,
@@ -134,6 +138,7 @@ export function toFlowNodes(
         isDimmed: renderState.isDimmed,
         isPreview: renderState.isPreview,
         isAreaDropTarget: renderState.isAreaDropTarget,
+        isValidConnectionTarget: renderState.isValidConnectionTarget,
         previewState: renderState.previewState,
         selected: renderState.selected
       }),
@@ -155,7 +160,7 @@ export function toFlowNodes(
       selected: renderState.selected,
       draggable: !renderState.isPreview && !node.locked,
       selectable: !renderState.isPreview,
-      connectable: !renderState.isPreview && !node.locked,
+      connectable: renderState.isConnectionToolEnabled && !node.locked,
       deletable: !renderState.isPreview,
       width: node.size.width,
       height: node.size.height,
@@ -188,6 +193,7 @@ function canReuseFlowNode(
 
   const data = cached.data;
   const canEdit = !state.isPreview && !state.node.locked;
+  const canConnect = state.isConnectionToolEnabled && !state.node.locked;
 
   return (
     data.node === state.node &&
@@ -210,7 +216,7 @@ function canReuseFlowNode(
     cached.selected === state.selected &&
     cached.draggable === canEdit &&
     cached.selectable === !state.isPreview &&
-    cached.connectable === canEdit &&
+    cached.connectable === canConnect &&
     cached.deletable === !state.isPreview &&
     cached.zIndex === state.zIndex
   );
@@ -248,13 +254,10 @@ export function toFlowEdges(
       };
       const arrowDirection = edge.route?.arrowDirection ?? "source-to-target";
       const hasStartMarker = Boolean(
-        edge.route &&
-          (arrowDirection === "target-to-source" || arrowDirection === "bidirectional")
+        edge.route && (arrowDirection === "target-to-source" || arrowDirection === "bidirectional")
       );
       const hasEndMarker =
-        !edge.route ||
-        arrowDirection === "source-to-target" ||
-        arrowDirection === "bidirectional";
+        !edge.route || arrowDirection === "source-to-target" || arrowDirection === "bidirectional";
       const sourceNode = nodeById.get(edge.sourceNodeId);
       const targetNode = nodeById.get(edge.targetNodeId);
       const storedHandles = getStoredLogicalHandles(edge);
@@ -284,8 +287,8 @@ export function toFlowEdges(
           isAnimated: !isPreview && edgeStyle.animated === true,
           isAuthoredRouteStale: Boolean(
             edge.route &&
-              (options.staleAuthoredRouteNodeIds?.has(edge.sourceNodeId) ||
-                options.staleAuthoredRouteNodeIds?.has(edge.targetNodeId))
+            (options.staleAuthoredRouteNodeIds?.has(edge.sourceNodeId) ||
+              options.staleAuthoredRouteNodeIds?.has(edge.targetNodeId))
           ),
           pathKind: normalizeEdgeKind(edge.type),
           previewState
@@ -303,8 +306,8 @@ export function toFlowEdges(
         labelStyle: {
           fill: "#172033",
           fontFamily: "var(--workspace-font)",
-          fontSize: 12,
-          fontWeight: 600
+          fontSize: "calc(12px + var(--presentation-font-size-increase))",
+          fontWeight: "var(--presentation-font-weight-bold)"
         },
         selectable: !isPreview,
         deletable: !isPreview,
@@ -358,6 +361,7 @@ function getFlowNodeAriaLabel(
     readonly isDimmed: boolean;
     readonly isPreview: boolean;
     readonly isAreaDropTarget: boolean;
+    readonly isValidConnectionTarget: boolean;
     readonly previewState: DiagramPreviewState | undefined;
     readonly selected: boolean;
   }
@@ -369,7 +373,8 @@ function getFlowNodeAriaLabel(
     state.isDimmed ? "흐리게 표시됨" : undefined,
     state.isPreview ? "미리보기" : undefined,
     getPreviewStateLabel(state.previewState),
-    state.isAreaDropTarget ? "배치 대상" : undefined
+    state.isAreaDropTarget ? "배치 대상" : undefined,
+    state.isValidConnectionTarget ? "연결 대상" : undefined
   ].filter((value): value is string => value !== undefined);
 
   return [label, ...states].join(", ");

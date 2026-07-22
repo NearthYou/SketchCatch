@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { getDeveloperErrorMessage } from "../network/developer-error-message.js";
 import {
   LiveObservationV2ServiceError,
   type LiveObservationV2Service
@@ -39,9 +40,8 @@ export async function registerLiveObservationV2Routes(
     app.post("/deployments/:deploymentId/live-observations", (_request, reply) =>
       sendDisabled(reply)
     );
-    app.get(
-      "/deployments/:deploymentId/live-observations/:observationId",
-      (_request, reply) => sendDisabled(reply)
+    app.get("/deployments/:deploymentId/live-observations/:observationId", (_request, reply) =>
+      sendDisabled(reply)
     );
     app.get(
       "/deployments/:deploymentId/live-observations/:observationId/stream",
@@ -65,26 +65,23 @@ export async function registerLiveObservationV2Routes(
     }
   });
 
-  app.get(
-    "/deployments/:deploymentId/live-observations/:observationId",
-    async (request, reply) => {
-      try {
-        const params = observationParamsSchema.parse(request.params);
-        await options.requireDeploymentAccess(request, params.deploymentId);
-        await options.refreshObservation(request, params.deploymentId, params.observationId);
-        return reply
-          .status(200)
-          .send(
-            await options.liveObservationService.readSession(
-              params.deploymentId,
-              params.observationId
-            )
-          );
-      } catch (error) {
-        return handleError(error, reply);
-      }
+  app.get("/deployments/:deploymentId/live-observations/:observationId", async (request, reply) => {
+    try {
+      const params = observationParamsSchema.parse(request.params);
+      await options.requireDeploymentAccess(request, params.deploymentId);
+      await options.refreshObservation(request, params.deploymentId, params.observationId);
+      return reply
+        .status(200)
+        .send(
+          await options.liveObservationService.readSession(
+            params.deploymentId,
+            params.observationId
+          )
+        );
+    } catch (error) {
+      return handleError(error, reply);
     }
-  );
+  });
 
   app.get(
     "/deployments/:deploymentId/live-observations/:observationId/stream",
@@ -149,6 +146,7 @@ async function streamSnapshots(input: {
 
   let closed = false;
   let updating = false;
+  let refreshingProvider = false;
   const timers: {
     snapshot?: NodeJS.Timeout;
     heartbeat?: NodeJS.Timeout;
@@ -160,21 +158,26 @@ async function streamSnapshots(input: {
     if (timers.heartbeat) clearInterval(timers.heartbeat);
     if (!input.reply.raw.writableEnded && !input.reply.raw.destroyed) input.reply.raw.end();
   };
+  const refreshProvider = async () => {
+    if (closed || refreshingProvider) return;
+    refreshingProvider = true;
+    try {
+      await input.refreshObservation(input.request, input.deploymentId, input.observationId);
+    } catch {
+      // Store receipts remain the immediate signal; provider evidence is best-effort corroboration.
+    } finally {
+      refreshingProvider = false;
+    }
+  };
+
   const writeSnapshot = async () => {
     if (closed || updating) return;
     updating = true;
     try {
-      await input.refreshObservation(
-        input.request,
-        input.deploymentId,
-        input.observationId
-      );
-      const response = await input.service.readSession(
-        input.deploymentId,
-        input.observationId
-      );
+      const response = await input.service.readSession(input.deploymentId, input.observationId);
       if (closed) return;
       input.reply.raw.write(`event: snapshot\ndata: ${JSON.stringify(response.snapshot)}\n\n`);
+      void refreshProvider();
       if (response.snapshot.status !== "active") close();
     } catch (error) {
       if (
@@ -185,7 +188,7 @@ async function streamSnapshots(input: {
         input.reply.raw.write(
           `event: error\ndata: ${JSON.stringify({
             error: "LIVE_OBSERVATION_CACHE_UNAVAILABLE",
-            message: "Live Observation session request failed"
+            message: getDeveloperErrorMessage(error, "Live Observation session request failed")
           })}\n\n`
         );
       }
@@ -224,7 +227,7 @@ function handleError(error: unknown, reply: FastifyReply) {
   if (error instanceof LiveObservationV2ServiceError) {
     return reply.status(statusFor(error.code)).send({
       error: error.code,
-      message: "Live Observation session request failed"
+      message: getDeveloperErrorMessage(error, "Live Observation session request failed")
     });
   }
   throw error;

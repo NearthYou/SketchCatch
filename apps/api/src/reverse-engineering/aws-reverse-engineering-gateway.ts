@@ -13,7 +13,9 @@ import {
 import {
   CloudFrontClient,
   ListDistributionsCommand,
+  type DefaultCacheBehavior,
   type DistributionSummary,
+  type ForwardedValues,
   type ListDistributionsCommandOutput
 } from "@aws-sdk/client-cloudfront";
 import {
@@ -34,6 +36,26 @@ import {
   type DescribeLoadBalancersCommandOutput,
   type LoadBalancer
 } from "@aws-sdk/client-elastic-load-balancing-v2";
+import {
+  ClusterField,
+  DescribeClustersCommand,
+  DescribeServicesCommand,
+  DescribeTaskDefinitionCommand,
+  ECSClient,
+  ListClustersCommand,
+  ListServicesCommand,
+  type Cluster,
+  type ClusterConfiguration,
+  type ContainerDefinition,
+  type DescribeClustersCommandOutput,
+  type DescribeServicesCommandOutput,
+  type DescribeTaskDefinitionCommandOutput,
+  type Failure,
+  type ListClustersCommandOutput,
+  type ListServicesCommandOutput,
+  type Service,
+  type TaskDefinition
+} from "@aws-sdk/client-ecs";
 import {
   IAMClient,
   ListInstanceProfilesCommand,
@@ -120,6 +142,13 @@ export type AwsReverseEngineeringGatewayOptions = {
   fetchXml?: typeof fetch;
 };
 
+export type AwsReverseEngineeringReaderPlan = {
+  readonly loadBalancers: boolean;
+  readonly cloudFrontDistributions: boolean;
+  readonly ecsResources: boolean;
+  readonly unknownResources: boolean;
+};
+
 export type AwsS3ReadClient = {
   send(command: object): Promise<unknown>;
 };
@@ -151,6 +180,13 @@ export type AwsElbReadClientFactory = (
   region: string,
   credentials: TerraformAwsCredentialEnv
 ) => AwsElbReadClient;
+export type AwsEcsReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsEcsReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsEcsReadClient;
 export type AwsLambdaReadClient = {
   send(command: object): Promise<unknown>;
 };
@@ -233,6 +269,7 @@ export function createAwsReverseEngineeringGateway(
       );
       const credentials = preparedCredentials.env;
       const fetchXml = options.fetchXml ?? fetch;
+      const readerPlan = createAwsReverseEngineeringReaderPlan(input);
       const resourceGroups = await Promise.all([
         readResourceGroup(input, "VPC", () => describeVpcs(input.region, credentials, fetchXml)),
         readResourceGroup(input, "SUBNET", () => describeSubnets(input.region, credentials, fetchXml)),
@@ -248,12 +285,37 @@ export function createAwsReverseEngineeringGateway(
         readResourceGroup(input, "EC2", () => describeInstances(input.region, credentials, fetchXml)),
         readResourceGroup(input, "RDS", () => describeRdsInstances(input.region, credentials, fetchXml)),
         readResourceGroup(input, "S3", () => listBucketsWithDetails(input.region, credentials)),
-        readUnknownResourceGroup(input, credentials)
+        ...(readerPlan.loadBalancers
+          ? [
+              readResourceGroup(input, "LOAD_BALANCER", () =>
+                listApplicationLoadBalancers(input.region, credentials)
+              )
+            ]
+          : []),
+        ...(readerPlan.cloudFrontDistributions
+          ? [
+              readResourceGroup(input, "CLOUDFRONT", () =>
+                listCloudFrontDistributions(input.region, credentials)
+              )
+            ]
+          : []),
+        ...(readerPlan.ecsResources
+          ? [readEcsResourcesWithDiagnostics(input.region, credentials)]
+          : []),
+        ...(readerPlan.unknownResources ? [readUnknownResourceGroup(input, credentials)] : [])
       ]);
 
+      const records = resolveEcsRelationships(
+        resolveCloudFrontOriginRelationships(
+          uniqueDiscoveredRecordsByProviderId(resourceGroups.flatMap((group) => group.records))
+        )
+      );
+
       return {
-        records: resourceGroups.flatMap((group) => group.records),
-        scanErrors: resourceGroups.flatMap((group) => group.scanErrors)
+        records,
+        scanErrors: deduplicateReverseEngineeringScanErrors(
+          resourceGroups.flatMap((group) => group.scanErrors)
+        )
       };
     }
   };
@@ -288,6 +350,27 @@ async function readUnknownResourceGroup(
   }
 
   return listUnknownResources(input, credentials);
+}
+
+// 정식 reader와 UNKNOWN inventory의 경계를 한 곳에서 계산해 같은 서비스를 두 번 읽지 않습니다.
+export function createAwsReverseEngineeringReaderPlan(
+  input: AwsProviderScanInput
+): AwsReverseEngineeringReaderPlan {
+  return {
+    loadBalancers: shouldReadResourceGroup(input, "LOAD_BALANCER"),
+    cloudFrontDistributions: shouldReadResourceGroup(input, "CLOUDFRONT"),
+    ecsResources: shouldReadEcsResourceGroup(input),
+    unknownResources: shouldReadUnknownResourceGroup(input)
+  };
+}
+
+function shouldReadEcsResourceGroup(input: AwsProviderScanInput): boolean {
+  return (
+    input.resourceTypes.includes("ALL") ||
+    input.resourceTypes.includes("ECS_CLUSTER") ||
+    input.resourceTypes.includes("ECS_SERVICE") ||
+    input.resourceTypes.includes("ECS_TASK_DEFINITION")
+  );
 }
 
 async function describeVpcs(
@@ -616,6 +699,7 @@ export async function readResourceExplorerResourcesWithDiagnostics(
 // UNKNOWN 보조 조회 하나가 실패해도 다른 UNKNOWN 조회 결과는 계속 살립니다.
 async function readUnknownResourceRecords(
   resourceType: ResourceType,
+  serviceKey: string,
   read: () => Promise<AwsDiscoveredResourceRecord[]>
 ): Promise<AwsProviderDiscoveryResult> {
   try {
@@ -623,7 +707,7 @@ async function readUnknownResourceRecords(
   } catch (error) {
     return {
       records: [],
-      scanErrors: [toScanError(resourceType, error)]
+      scanErrors: [toScanError(resourceType, error, serviceKey)]
     };
   }
 }
@@ -638,72 +722,82 @@ async function listUnknownResources(
   if (input.resourceTypes.includes("ALL") || input.resourceTypes.includes("UNKNOWN")) {
     reads.push(
       readResourceExplorerResourcesWithDiagnostics(input.region, credentials),
-      readUnknownResourceRecords("UNKNOWN", () => listTaggedUnknownResources(input.region, credentials)),
-      readUnknownResourceRecords("UNKNOWN", () =>
-        listApplicationLoadBalancersAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "resource-groups-tagging", () =>
+        listTaggedUnknownResources(input.region, credentials)
       ),
-      readUnknownResourceRecords("UNKNOWN", () =>
-        listCloudFrontDistributionsAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("UNKNOWN", "iam", () =>
+        listIamRolesAsUnknown(input.region, credentials)
       ),
-      readUnknownResourceRecords("UNKNOWN", () => listIamRolesAsUnknown(input.region, credentials)),
-      readUnknownResourceRecords("UNKNOWN", () => listKmsKeysAsUnknown(input.region, credentials)),
-      readUnknownResourceRecords("UNKNOWN", () =>
+      readUnknownResourceRecords("UNKNOWN", "kms", () =>
+        listKmsKeysAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", "cloudwatch-logs", () =>
         listCloudWatchLogGroupsAsUnknown(input.region, credentials)
       ),
-      readUnknownResourceRecords("UNKNOWN", () =>
+      readUnknownResourceRecords("UNKNOWN", "api-gateway", () =>
         listApiGatewayRestApisAsUnknown(input.region, credentials)
       ),
-      readUnknownResourceRecords("UNKNOWN", () => listAmiImagesAsUnknown(input.region, credentials)),
-      readUnknownResourceRecords("UNKNOWN", () => listIamPoliciesAsUnknown(input.region, credentials)),
-      readUnknownResourceRecords("UNKNOWN", () =>
+      readUnknownResourceRecords("UNKNOWN", "ec2", () =>
+        listAmiImagesAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", "iam", () =>
+        listIamPoliciesAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", "iam", () =>
         listIamInstanceProfilesAsUnknown(input.region, credentials)
       ),
-      readUnknownResourceRecords("UNKNOWN", () =>
+      readUnknownResourceRecords("UNKNOWN", "cloudwatch", () =>
         listCloudWatchMetricAlarmsAsUnknown(input.region, credentials)
       ),
-      readUnknownResourceRecords("UNKNOWN", () =>
+      readUnknownResourceRecords("UNKNOWN", "lambda", () =>
         listLambdaPermissionsAsUnknown(input.region, credentials)
       )
     );
   }
 
   if (input.resourceTypes.includes("AMI")) {
-    reads.push(readUnknownResourceRecords("AMI", () => listAmiImagesAsUnknown(input.region, credentials)));
-  }
-
-  if (input.resourceTypes.includes("CLOUDFRONT")) {
     reads.push(
-      readUnknownResourceRecords("CLOUDFRONT", () =>
-        listCloudFrontDistributionsAsUnknown(input.region, credentials)
+      readUnknownResourceRecords("AMI", "ec2", () =>
+        listAmiImagesAsUnknown(input.region, credentials)
       )
     );
   }
 
   if (input.resourceTypes.includes("IAM_ROLE")) {
-    reads.push(readUnknownResourceRecords("IAM_ROLE", () => listIamRolesAsUnknown(input.region, credentials)));
+    reads.push(
+      readUnknownResourceRecords("IAM_ROLE", "iam", () =>
+        listIamRolesAsUnknown(input.region, credentials)
+      )
+    );
   }
 
   if (input.resourceTypes.includes("IAM_POLICY")) {
     reads.push(
-      readUnknownResourceRecords("IAM_POLICY", () => listIamPoliciesAsUnknown(input.region, credentials))
+      readUnknownResourceRecords("IAM_POLICY", "iam", () =>
+        listIamPoliciesAsUnknown(input.region, credentials)
+      )
     );
   }
 
   if (input.resourceTypes.includes("IAM_INSTANCE_PROFILE")) {
     reads.push(
-      readUnknownResourceRecords("IAM_INSTANCE_PROFILE", () =>
+      readUnknownResourceRecords("IAM_INSTANCE_PROFILE", "iam", () =>
         listIamInstanceProfilesAsUnknown(input.region, credentials)
       )
     );
   }
 
   if (input.resourceTypes.includes("KMS_KEY")) {
-    reads.push(readUnknownResourceRecords("KMS_KEY", () => listKmsKeysAsUnknown(input.region, credentials)));
+    reads.push(
+      readUnknownResourceRecords("KMS_KEY", "kms", () =>
+        listKmsKeysAsUnknown(input.region, credentials)
+      )
+    );
   }
 
   if (input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP")) {
     reads.push(
-      readUnknownResourceRecords("CLOUDWATCH_LOG_GROUP", () =>
+      readUnknownResourceRecords("CLOUDWATCH_LOG_GROUP", "cloudwatch-logs", () =>
         listCloudWatchLogGroupsAsUnknown(input.region, credentials)
       )
     );
@@ -711,7 +805,7 @@ async function listUnknownResources(
 
   if (input.resourceTypes.includes("CLOUDWATCH_METRIC_ALARM")) {
     reads.push(
-      readUnknownResourceRecords("CLOUDWATCH_METRIC_ALARM", () =>
+      readUnknownResourceRecords("CLOUDWATCH_METRIC_ALARM", "cloudwatch", () =>
         listCloudWatchMetricAlarmsAsUnknown(input.region, credentials)
       )
     );
@@ -719,7 +813,7 @@ async function listUnknownResources(
 
   if (input.resourceTypes.includes("API_GATEWAY_REST_API")) {
     reads.push(
-      readUnknownResourceRecords("API_GATEWAY_REST_API", () =>
+      readUnknownResourceRecords("API_GATEWAY_REST_API", "api-gateway", () =>
         listApiGatewayRestApisAsUnknown(input.region, credentials)
       )
     );
@@ -730,12 +824,16 @@ async function listUnknownResources(
     input.resourceTypes.includes("UNKNOWN") ||
     input.resourceTypes.includes("LAMBDA")
   ) {
-    reads.push(readUnknownResourceRecords("LAMBDA", () => listLambdaFunctionsAsUnknown(input.region, credentials)));
+    reads.push(
+      readUnknownResourceRecords("LAMBDA", "lambda", () =>
+        listLambdaFunctionsAsUnknown(input.region, credentials)
+      )
+    );
   }
 
   if (input.resourceTypes.includes("LAMBDA_PERMISSION")) {
     reads.push(
-      readUnknownResourceRecords("LAMBDA_PERMISSION", () =>
+      readUnknownResourceRecords("LAMBDA_PERMISSION", "lambda", () =>
         listLambdaPermissionsAsUnknown(input.region, credentials)
       )
     );
@@ -744,13 +842,472 @@ async function listUnknownResources(
   const discoveryResults = await Promise.all(reads);
 
   return {
-    records: uniqueDiscoveredRecordsByProviderId(discoveryResults.flatMap((result) => result.records)),
-    scanErrors: discoveryResults.flatMap((result) => result.scanErrors)
+    records: uniqueDiscoveredRecordsByProviderId(
+      discoveryResults
+        .flatMap((result) => result.records)
+        .filter((record) => !isReverseEngineeringPromotedResourceArn(record.providerResourceId))
+    ),
+    scanErrors: deduplicateReverseEngineeringScanErrors(
+      discoveryResults.flatMap((result) => result.scanErrors)
+    )
   };
 }
 
-// ALB는 태그가 없어도 자주 쓰이기 때문에 ELBv2 API로 직접 읽어 UNKNOWN 후보로 남깁니다.
-export async function listApplicationLoadBalancersAsUnknown(
+const ECS_DESCRIBE_CLUSTERS_BATCH_SIZE = 100;
+const ECS_DESCRIBE_SERVICES_BATCH_SIZE = 10;
+
+// ECS는 Cluster를 기준으로 Service와 Task Definition 증거를 한 번의 family scan으로 모읍니다.
+export async function readEcsResourcesWithDiagnostics(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsEcsReadClientFactory = createDefaultEcsReadClient
+): Promise<AwsProviderDiscoveryResult> {
+  const client = createClient(region, credentials);
+  const scanErrors: ReverseEngineeringScanError[] = [];
+  let clusterArns: string[];
+
+  try {
+    clusterArns = await listAllEcsClusterArns(client);
+  } catch (error) {
+    return { records: [], scanErrors: [toScanError("ECS_CLUSTER", error)] };
+  }
+
+  const clusters = await describeEcsClusters(client, clusterArns, scanErrors);
+  const clusterRecords = clusters.flatMap((cluster) => toEcsClusterRecord(cluster, region));
+  const serviceRecords: AwsDiscoveredResourceRecord[] = [];
+  const taskDefinitionArns = new Set<string>();
+
+  for (const cluster of clusters) {
+    const clusterArn = cluster.clusterArn;
+    if (!clusterArn) {
+      continue;
+    }
+
+    try {
+      const serviceArns = await listAllEcsServiceArns(client, clusterArn);
+      const services = await describeEcsServices(
+        client,
+        cluster,
+        serviceArns,
+        scanErrors
+      );
+
+      for (const service of services) {
+        const record = toEcsServiceRecord(service, cluster, region);
+        if (!record) {
+          continue;
+        }
+
+        serviceRecords.push(record);
+        const taskDefinitionArn = getNonEmptyStringValue(record.config["taskDefinitionArn"]);
+        if (taskDefinitionArn) {
+          taskDefinitionArns.add(taskDefinitionArn);
+        }
+      }
+    } catch (error) {
+      scanErrors.push(toScanError("ECS_SERVICE", error));
+    }
+  }
+
+  const taskDefinitionRecords: AwsDiscoveredResourceRecord[] = [];
+  for (const taskDefinitionArn of taskDefinitionArns) {
+    try {
+      const response = await sendEcsCommand<DescribeTaskDefinitionCommandOutput>(
+        client,
+        new DescribeTaskDefinitionCommand({ taskDefinition: taskDefinitionArn })
+      );
+      const record = response.taskDefinition
+        ? toEcsTaskDefinitionRecord(response.taskDefinition, region)
+        : null;
+
+      if (record) {
+        taskDefinitionRecords.push(record);
+      } else {
+        scanErrors.push(
+          toScanError(
+            "ECS_TASK_DEFINITION",
+            new Error(`DescribeTaskDefinition returned no task definition for ${taskDefinitionArn}`)
+          )
+        );
+      }
+    } catch (error) {
+      scanErrors.push(toScanError("ECS_TASK_DEFINITION", error));
+    }
+  }
+
+  return {
+    records: resolveEcsRelationships([
+      ...clusterRecords,
+      ...serviceRecords,
+      ...taskDefinitionRecords
+    ]),
+    scanErrors
+  };
+}
+
+async function listAllEcsClusterArns(client: AwsEcsReadClient): Promise<string[]> {
+  const clusterArns: string[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const response = await sendEcsCommand<ListClustersCommandOutput>(
+      client,
+      new ListClustersCommand({ nextToken })
+    );
+    clusterArns.push(...(response.clusterArns ?? []).filter(isNonEmptyString));
+    nextToken = getNonEmptyStringValue(response.nextToken) ?? undefined;
+  } while (nextToken);
+
+  return [...new Set(clusterArns)];
+}
+
+async function describeEcsClusters(
+  client: AwsEcsReadClient,
+  clusterArns: readonly string[],
+  scanErrors: ReverseEngineeringScanError[]
+): Promise<Cluster[]> {
+  const clusters: Cluster[] = [];
+
+  for (const clusterArnBatch of chunkValues(clusterArns, ECS_DESCRIBE_CLUSTERS_BATCH_SIZE)) {
+    try {
+      const response = await sendEcsCommand<DescribeClustersCommandOutput>(
+        client,
+        new DescribeClustersCommand({
+          clusters: clusterArnBatch,
+          include: [ClusterField.CONFIGURATIONS]
+        })
+      );
+      clusters.push(...(response.clusters ?? []));
+      scanErrors.push(
+        ...(response.failures ?? []).map((failure) =>
+          toScanError("ECS_CLUSTER", toEcsFailureError(failure))
+        )
+      );
+    } catch (error) {
+      scanErrors.push(toScanError("ECS_CLUSTER", error));
+    }
+  }
+
+  return clusters;
+}
+
+async function listAllEcsServiceArns(
+  client: AwsEcsReadClient,
+  clusterArn: string
+): Promise<string[]> {
+  const serviceArns: string[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const response = await sendEcsCommand<ListServicesCommandOutput>(
+      client,
+      new ListServicesCommand({ cluster: clusterArn, nextToken })
+    );
+    serviceArns.push(...(response.serviceArns ?? []).filter(isNonEmptyString));
+    nextToken = getNonEmptyStringValue(response.nextToken) ?? undefined;
+  } while (nextToken);
+
+  return [...new Set(serviceArns)];
+}
+
+async function describeEcsServices(
+  client: AwsEcsReadClient,
+  cluster: Cluster,
+  serviceArns: readonly string[],
+  scanErrors: ReverseEngineeringScanError[]
+): Promise<Service[]> {
+  const services: Service[] = [];
+
+  for (const serviceArnBatch of chunkValues(serviceArns, ECS_DESCRIBE_SERVICES_BATCH_SIZE)) {
+    try {
+      const response = await sendEcsCommand<DescribeServicesCommandOutput>(
+        client,
+        new DescribeServicesCommand({
+          cluster: cluster.clusterArn,
+          services: serviceArnBatch
+        })
+      );
+      services.push(...(response.services ?? []));
+      scanErrors.push(
+        ...(response.failures ?? []).map((failure) =>
+          toScanError("ECS_SERVICE", toEcsFailureError(failure))
+        )
+      );
+    } catch (error) {
+      scanErrors.push(toScanError("ECS_SERVICE", error));
+    }
+  }
+
+  return services;
+}
+
+function toEcsClusterRecord(
+  cluster: Cluster,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const arn = cluster.clusterArn;
+  if (!arn) {
+    return [];
+  }
+
+  return [
+    {
+      providerResourceType: "AWS::ECS::Cluster",
+      providerResourceId: arn,
+      displayName: cluster.clusterName ?? arn,
+      region: parseAwsArn(arn).region || fallbackRegion,
+      config: compactRecord({
+        arn,
+        name: cluster.clusterName,
+        status: cluster.status,
+        configuration: normalizeEcsClusterConfiguration(cluster.configuration),
+        capacityProviders: normalizeStringArray(cluster.capacityProviders)
+      }),
+      relationships: []
+    }
+  ];
+}
+
+function normalizeEcsClusterConfiguration(
+  configuration: ClusterConfiguration | undefined
+): Record<string, unknown> | undefined {
+  if (!configuration) {
+    return undefined;
+  }
+
+  const executeCommand = configuration.executeCommandConfiguration;
+  const logConfiguration = executeCommand?.logConfiguration;
+  const managedStorage = configuration.managedStorageConfiguration;
+  const normalized = compactRecord({
+    executeCommandConfiguration: executeCommand
+      ? compactRecord({
+          kmsKeyId: executeCommand.kmsKeyId,
+          logging: executeCommand.logging,
+          logConfiguration: logConfiguration
+            ? compactRecord({
+                cloudWatchEncryptionEnabled: logConfiguration.cloudWatchEncryptionEnabled,
+                cloudWatchLogGroupName: logConfiguration.cloudWatchLogGroupName,
+                s3BucketName: logConfiguration.s3BucketName,
+                s3EncryptionEnabled: logConfiguration.s3EncryptionEnabled,
+                s3KeyPrefix: logConfiguration.s3KeyPrefix
+              })
+            : undefined
+        })
+      : undefined,
+    managedStorageConfiguration: managedStorage
+      ? compactRecord({
+          kmsKeyId: managedStorage.kmsKeyId,
+          fargateEphemeralStorageKmsKeyId: managedStorage.fargateEphemeralStorageKmsKeyId
+        })
+      : undefined
+  });
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function toEcsServiceRecord(
+  service: Service,
+  cluster: Cluster,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord | null {
+  const arn = service.serviceArn;
+  if (!arn) {
+    return null;
+  }
+
+  const clusterArn = service.clusterArn ?? cluster.clusterArn;
+  const taskDefinitionArn = getNonEmptyStringValue(service.taskDefinition) ?? undefined;
+
+  return {
+    providerResourceType: "AWS::ECS::Service",
+    providerResourceId: arn,
+    displayName: service.serviceName ?? arn,
+    region: parseAwsArn(arn).region || fallbackRegion,
+    config: compactRecord({
+      arn,
+      name: service.serviceName,
+      clusterArn,
+      clusterName: cluster.clusterName,
+      taskDefinitionArn,
+      desiredCount: service.desiredCount,
+      launchType: service.launchType,
+      capacityProviderStrategy: normalizeEcsCapacityProviderStrategy(
+        service.capacityProviderStrategy
+      ),
+      networkConfiguration: normalizeEcsNetworkConfiguration(service),
+      loadBalancers: normalizeEcsLoadBalancers(service)
+    }),
+    relationships: []
+  };
+}
+
+function normalizeEcsCapacityProviderStrategy(
+  strategy: Service["capacityProviderStrategy"]
+): Record<string, unknown>[] | undefined {
+  const normalized = (strategy ?? [])
+    .map((item) =>
+      compactRecord({
+        capacityProvider: item.capacityProvider,
+        base: item.base,
+        weight: item.weight
+      })
+    )
+    .filter((item) => getNonEmptyStringValue(item["capacityProvider"]) !== null);
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeEcsNetworkConfiguration(service: Service): Record<string, unknown> | undefined {
+  const awsvpc = service.networkConfiguration?.awsvpcConfiguration;
+  if (!awsvpc) {
+    return undefined;
+  }
+
+  return {
+    awsvpcConfiguration: compactRecord({
+      subnets: normalizeStringArray(awsvpc.subnets),
+      securityGroups: normalizeStringArray(awsvpc.securityGroups),
+      assignPublicIp: awsvpc.assignPublicIp
+    })
+  };
+}
+
+function normalizeEcsLoadBalancers(service: Service): Record<string, unknown>[] | undefined {
+  const loadBalancers = (service.loadBalancers ?? [])
+    .map((loadBalancer) =>
+      compactRecord({
+        targetGroupArn: loadBalancer.targetGroupArn,
+        loadBalancerName: loadBalancer.loadBalancerName,
+        containerName: loadBalancer.containerName,
+        containerPort: loadBalancer.containerPort
+      })
+    )
+    .filter((loadBalancer) => Object.keys(loadBalancer).length > 0);
+
+  return loadBalancers.length > 0 ? loadBalancers : undefined;
+}
+
+function toEcsTaskDefinitionRecord(
+  taskDefinition: TaskDefinition,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord | null {
+  const arn = taskDefinition.taskDefinitionArn;
+  if (!arn) {
+    return null;
+  }
+
+  const normalizedContainers = normalizeEcsContainerDefinitions(
+    taskDefinition.containerDefinitions
+  );
+
+  return {
+    providerResourceType: "AWS::ECS::TaskDefinition",
+    providerResourceId: arn,
+    displayName:
+      taskDefinition.family && taskDefinition.revision !== undefined
+        ? `${taskDefinition.family}:${taskDefinition.revision}`
+        : taskDefinition.family ?? arn,
+    region: parseAwsArn(arn).region || fallbackRegion,
+    config: compactRecord({
+      arn,
+      family: taskDefinition.family,
+      revision: taskDefinition.revision,
+      networkMode: taskDefinition.networkMode,
+      requiresCompatibilities: normalizeStringArray(taskDefinition.requiresCompatibilities),
+      cpu: taskDefinition.cpu,
+      memory: taskDefinition.memory,
+      containerDefinitions: normalizedContainers.definitions,
+      executionRoleArn: taskDefinition.executionRoleArn,
+      taskRoleArn: taskDefinition.taskRoleArn,
+      requiresManualEnvironmentInput:
+        normalizedContainers.requiresManualEnvironmentInput || undefined
+    }),
+    relationships: []
+  };
+}
+
+function normalizeEcsContainerDefinitions(
+  containerDefinitions: ContainerDefinition[] | undefined
+): {
+  definitions: Record<string, unknown>[];
+  requiresManualEnvironmentInput: boolean;
+} {
+  let requiresManualEnvironmentInput = false;
+  const definitions = (containerDefinitions ?? []).map((container) => {
+    if ((container.environment?.length ?? 0) > 0) {
+      requiresManualEnvironmentInput = true;
+    }
+
+    const secrets = (container.secrets ?? []).flatMap((secret) => {
+      if (!isNonEmptyString(secret.name) || !isNonEmptyString(secret.valueFrom)) {
+        requiresManualEnvironmentInput = true;
+        return [];
+      }
+
+      return [{ name: secret.name, valueFrom: secret.valueFrom }];
+    });
+    const portMappings = (container.portMappings ?? [])
+      .map((portMapping) =>
+        compactRecord({
+          name: portMapping.name,
+          containerPort: portMapping.containerPort,
+          hostPort: portMapping.hostPort,
+          protocol: portMapping.protocol,
+          appProtocol: portMapping.appProtocol
+        })
+      )
+      .filter((portMapping) => Object.keys(portMapping).length > 0);
+
+    return compactRecord({
+      name: container.name,
+      image: container.image,
+      cpu: container.cpu,
+      memory: container.memory,
+      memoryReservation: container.memoryReservation,
+      essential: container.essential,
+      portMappings: portMappings.length > 0 ? portMappings : undefined,
+      secrets: secrets.length > 0 ? secrets : undefined,
+      readonlyRootFilesystem: container.readonlyRootFilesystem,
+      user: container.user,
+      workingDirectory: container.workingDirectory
+    });
+  });
+
+  return { definitions, requiresManualEnvironmentInput };
+}
+
+function chunkValues<T>(values: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
+function toEcsFailureError(failure: Failure): Error {
+  const message = [failure.reason, failure.detail, failure.arn].filter(isNonEmptyString).join(": ");
+
+  return new Error(message || "Amazon ECS가 Resource 조회 실패를 반환했습니다.");
+}
+
+function normalizeStringArray(values: readonly string[] | undefined): string[] | undefined {
+  const normalized = (values ?? []).filter(isNonEmptyString);
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function getNonEmptyStringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return getNonEmptyStringValue(value) !== null;
+}
+
+// ALB는 태그가 없어도 자주 쓰이므로 ELBv2 API를 정식 reader로 사용합니다.
+export async function listApplicationLoadBalancers(
   region: string,
   credentials: TerraformAwsCredentialEnv,
   createClient: AwsElbReadClientFactory = createDefaultElbReadClient
@@ -766,7 +1323,7 @@ export async function listApplicationLoadBalancersAsUnknown(
     );
 
     records.push(...(response.LoadBalancers ?? []).flatMap((loadBalancer) =>
-      toUnknownLoadBalancerRecord(loadBalancer, region)
+      toApplicationLoadBalancerRecord(loadBalancer, region)
     ));
     marker = response.NextMarker && response.NextMarker.length > 0 ? response.NextMarker : undefined;
   } while (marker);
@@ -826,7 +1383,8 @@ export async function listLambdaPermissionsAsUnknown(
   return records;
 }
 
-export async function listCloudFrontDistributionsAsUnknown(
+// CloudFront는 global 서비스지만 연결 계정의 credentials로 읽고 결과 region은 global로 고정합니다.
+export async function listCloudFrontDistributions(
   region: string,
   credentials: TerraformAwsCredentialEnv,
   createClient: AwsCloudFrontReadClientFactory = createDefaultCloudFrontReadClient
@@ -841,7 +1399,7 @@ export async function listCloudFrontDistributionsAsUnknown(
       new ListDistributionsCommand({ Marker: marker })
     );
 
-    records.push(...(response.DistributionList?.Items ?? []).flatMap(toUnknownCloudFrontDistributionRecord));
+    records.push(...(response.DistributionList?.Items ?? []).flatMap(toCloudFrontDistributionRecord));
     marker = response.DistributionList?.NextMarker;
   } while (marker);
 
@@ -1060,6 +1618,20 @@ function createDefaultElbReadClient(
   };
 }
 
+function createDefaultEcsReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsEcsReadClient {
+  const client = new ECSClient({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
+
+  return {
+    send: (command) => client.send(command as Parameters<ECSClient["send"]>[0])
+  };
+}
+
 function createDefaultLambdaReadClient(
   region: string,
   credentials: TerraformAwsCredentialEnv
@@ -1190,6 +1762,10 @@ async function sendElbCommand<TOutput>(client: AwsElbReadClient, command: object
   return (await client.send(command)) as TOutput;
 }
 
+async function sendEcsCommand<TOutput>(client: AwsEcsReadClient, command: object): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
 async function sendLambdaCommand<TOutput>(
   client: AwsLambdaReadClient,
   command: object
@@ -1237,18 +1813,29 @@ async function sendCloudWatchCommand<TOutput>(
   return (await client.send(command)) as TOutput;
 }
 
-function toUnknownLoadBalancerRecord(
+function toApplicationLoadBalancerRecord(
   loadBalancer: LoadBalancer,
   fallbackRegion: string
 ): AwsDiscoveredResourceRecord[] {
   const arn = loadBalancer.LoadBalancerArn;
 
-  if (!arn) {
+  if (!arn || loadBalancer.Type !== "application") {
     return [];
   }
 
   const vpcId = loadBalancer.VpcId;
   const securityGroupIds = loadBalancer.SecurityGroups ?? [];
+  const availabilityZones = (loadBalancer.AvailabilityZones ?? []).flatMap((availabilityZone) => {
+    const availabilityZoneName = availabilityZone.ZoneName;
+    const subnetId = availabilityZone.SubnetId;
+
+    return availabilityZoneName || subnetId
+      ? [{ ...(availabilityZoneName ? { availabilityZone: availabilityZoneName } : {}), ...(subnetId ? { subnetId } : {}) }]
+      : [];
+  });
+  const subnetIds = availabilityZones.flatMap((availabilityZone) =>
+    typeof availabilityZone.subnetId === "string" ? [availabilityZone.subnetId] : []
+  );
   const relationships = [
     ...(vpcId ? [{ type: "depends_on" as const, targetProviderResourceId: vpcId }] : []),
     ...securityGroupIds.map((securityGroupId) => ({
@@ -1265,17 +1852,13 @@ function toUnknownLoadBalancerRecord(
       region: fallbackRegion,
       config: {
         arn,
-        availabilityZones: loadBalancer.AvailabilityZones,
-        canonicalHostedZoneId: loadBalancer.CanonicalHostedZoneId,
-        createdTime: loadBalancer.CreatedTime?.toISOString(),
-        customerOwnedIpv4Pool: loadBalancer.CustomerOwnedIpv4Pool,
+        availabilityZones,
         dnsName: loadBalancer.DNSName,
         ipAddressType: loadBalancer.IpAddressType,
         name: loadBalancer.LoadBalancerName,
-        providerParameters: toProviderParameterSnapshot(loadBalancer),
         scheme: loadBalancer.Scheme,
         securityGroupIds,
-        state: loadBalancer.State,
+        subnetIds,
         type: loadBalancer.Type,
         vpcId
       },
@@ -1416,7 +1999,7 @@ function toUnknownLambdaPermissionRecord(
   };
 }
 
-function toUnknownCloudFrontDistributionRecord(
+function toCloudFrontDistributionRecord(
   distribution: DistributionSummary
 ): AwsDiscoveredResourceRecord[] {
   const arn = distribution.ARN;
@@ -1425,24 +2008,145 @@ function toUnknownCloudFrontDistributionRecord(
     return [];
   }
 
+  const arnParts = parseAwsArn(arn);
+
   return [
     {
       providerResourceType: "AWS::CloudFront::Distribution",
       providerResourceId: arn,
       displayName: distribution.DomainName ?? distribution.Id ?? arn,
       region: "global",
-      config: {
+      config: compactRecord({
+        accountId: arnParts.accountId || undefined,
         arn,
         comment: distribution.Comment,
+        defaultCacheBehavior: normalizeCloudFrontDefaultCacheBehavior(
+          distribution.DefaultCacheBehavior
+        ),
         domainName: distribution.DomainName,
         enabled: distribution.Enabled,
         id: distribution.Id,
-        providerParameters: toProviderParameterSnapshot(distribution),
-        status: distribution.Status
-      },
+        origin: normalizeCloudFrontOrigins(distribution),
+        restrictions: normalizeCloudFrontRestrictions(distribution),
+        status: distribution.Status,
+        viewerCertificate: normalizeCloudFrontViewerCertificate(distribution)
+      }),
       relationships: []
     }
   ];
+}
+
+function normalizeCloudFrontOrigins(distribution: DistributionSummary): Record<string, unknown>[] {
+  return (distribution.Origins?.Items ?? []).map((origin) =>
+    compactRecord({
+      connectionAttempts: origin.ConnectionAttempts,
+      connectionTimeout: origin.ConnectionTimeout,
+      customOriginConfig: origin.CustomOriginConfig
+        ? compactRecord({
+            httpPort: origin.CustomOriginConfig.HTTPPort,
+            httpsPort: origin.CustomOriginConfig.HTTPSPort,
+            originKeepaliveTimeout: origin.CustomOriginConfig.OriginKeepaliveTimeout,
+            originProtocolPolicy: origin.CustomOriginConfig.OriginProtocolPolicy,
+            originReadTimeout: origin.CustomOriginConfig.OriginReadTimeout,
+            originSslProtocols: origin.CustomOriginConfig.OriginSslProtocols?.Items
+          })
+        : undefined,
+      domainName: origin.DomainName,
+      originAccessControlId: origin.OriginAccessControlId,
+      originId: origin.Id,
+      originPath: origin.OriginPath,
+      s3OriginConfig: origin.S3OriginConfig
+        ? compactRecord({ originAccessIdentity: origin.S3OriginConfig.OriginAccessIdentity })
+        : undefined,
+      vpcOriginConfig: origin.VpcOriginConfig
+        ? compactRecord({
+            originKeepaliveTimeout: origin.VpcOriginConfig.OriginKeepaliveTimeout,
+            originReadTimeout: origin.VpcOriginConfig.OriginReadTimeout,
+            ownerAccountId: origin.VpcOriginConfig.OwnerAccountId,
+            vpcOriginId: origin.VpcOriginConfig.VpcOriginId
+          })
+        : undefined
+    })
+  );
+}
+
+function normalizeCloudFrontDefaultCacheBehavior(
+  behavior: DefaultCacheBehavior | undefined
+): Record<string, unknown> | undefined {
+  if (!behavior) {
+    return undefined;
+  }
+
+  return compactRecord({
+    allowedMethods: behavior.AllowedMethods?.Items,
+    cachePolicyId: behavior.CachePolicyId,
+    cachedMethods: behavior.AllowedMethods?.CachedMethods?.Items,
+    compress: behavior.Compress,
+    defaultTtl: behavior.DefaultTTL,
+    fieldLevelEncryptionId: behavior.FieldLevelEncryptionId,
+    forwardedValues: normalizeCloudFrontForwardedValues(behavior.ForwardedValues),
+    maxTtl: behavior.MaxTTL,
+    minTtl: behavior.MinTTL,
+    originRequestPolicyId: behavior.OriginRequestPolicyId,
+    realtimeLogConfigArn: behavior.RealtimeLogConfigArn,
+    responseHeadersPolicyId: behavior.ResponseHeadersPolicyId,
+    smoothStreaming: behavior.SmoothStreaming,
+    targetOriginId: behavior.TargetOriginId,
+    trustedKeyGroups: behavior.TrustedKeyGroups?.Items,
+    trustedSigners: behavior.TrustedSigners?.Items,
+    viewerProtocolPolicy: behavior.ViewerProtocolPolicy
+  });
+}
+
+function normalizeCloudFrontForwardedValues(
+  forwardedValues: ForwardedValues | undefined
+): Record<string, unknown> | undefined {
+  if (!forwardedValues) {
+    return undefined;
+  }
+
+  return compactRecord({
+    cookies: forwardedValues.Cookies
+      ? compactRecord({
+          forward: forwardedValues.Cookies.Forward,
+          whitelistedNames: forwardedValues.Cookies.WhitelistedNames?.Items
+        })
+      : undefined,
+    headers: forwardedValues.Headers?.Items,
+    queryString: forwardedValues.QueryString,
+    queryStringCacheKeys: forwardedValues.QueryStringCacheKeys?.Items
+  });
+}
+
+function normalizeCloudFrontRestrictions(
+  distribution: DistributionSummary
+): Record<string, unknown> | undefined {
+  const geoRestriction = distribution.Restrictions?.GeoRestriction;
+
+  return geoRestriction
+    ? {
+        geoRestriction: compactRecord({
+          locations: geoRestriction.Items,
+          restrictionType: geoRestriction.RestrictionType
+        })
+      }
+    : undefined;
+}
+
+function normalizeCloudFrontViewerCertificate(
+  distribution: DistributionSummary
+): Record<string, unknown> | undefined {
+  const certificate = distribution.ViewerCertificate;
+
+  return certificate
+    ? compactRecord({
+        acmCertificateArn: certificate.ACMCertificateArn,
+        cloudfrontDefaultCertificate: certificate.CloudFrontDefaultCertificate,
+        iamCertificateId: certificate.IAMCertificateId,
+        minimumProtocolVersion: certificate.MinimumProtocolVersion,
+        sslSupportMethod: certificate.SSLSupportMethod
+      })
+    : undefined;
 }
 
 function toUnknownAmiImageRecord(image: Image, fallbackRegion: string): AwsDiscoveredResourceRecord[] {
@@ -1863,6 +2567,224 @@ function isKnownTaggedResourceArn(arn: string): boolean {
   );
 }
 
+// 정식 reader가 담당하는 ARN은 Resource Explorer/Tagging의 UNKNOWN 결과에서 다시 만들지 않습니다.
+export function isReverseEngineeringPromotedResourceArn(arn: string): boolean {
+  if (!arn.startsWith("arn:")) {
+    return false;
+  }
+
+  const parsedArn = parseAwsArn(arn);
+
+  return (
+    (parsedArn.service === "elasticloadbalancing" &&
+      parsedArn.resourceKind === "loadbalancer" &&
+      parsedArn.resourceName.startsWith("app/")) ||
+    (parsedArn.service === "cloudfront" && parsedArn.resourceKind === "distribution") ||
+    (parsedArn.service === "ecs" &&
+      ["cluster", "service", "task-definition"].includes(parsedArn.resourceKind))
+  );
+}
+
+// ECS 관계는 API 응답의 명시적인 ID가 같은 scan record로 확인될 때만 Board로 전달합니다.
+export function resolveEcsRelationships(
+  records: AwsDiscoveredResourceRecord[]
+): AwsDiscoveredResourceRecord[] {
+  const providerResourceIds = new Set(records.map((record) => record.providerResourceId));
+
+  return records.map((record) => {
+    if (record.providerResourceType !== "AWS::ECS::Service") {
+      return record;
+    }
+
+    const candidateRelationships: AwsDiscoveredResourceRecord["relationships"] = [
+      ...record.relationships,
+      ...createEcsRelationship(record.config["clusterArn"], "depends_on"),
+      ...createEcsRelationship(record.config["taskDefinitionArn"], "depends_on")
+    ];
+    const networkConfiguration = isRecordValue(record.config["networkConfiguration"])
+      ? record.config["networkConfiguration"]
+      : null;
+    const awsvpcConfiguration = networkConfiguration && isRecordValue(
+      networkConfiguration["awsvpcConfiguration"]
+    )
+      ? networkConfiguration["awsvpcConfiguration"]
+      : null;
+
+    if (awsvpcConfiguration) {
+      candidateRelationships.push(
+        ...createEcsRelationships(awsvpcConfiguration["subnets"], "attached_to"),
+        ...createEcsRelationships(awsvpcConfiguration["securityGroups"], "attached_to")
+      );
+    }
+
+    const loadBalancers = Array.isArray(record.config["loadBalancers"])
+      ? record.config["loadBalancers"].filter(isRecordValue)
+      : [];
+    candidateRelationships.push(
+      ...loadBalancers.flatMap((loadBalancer) =>
+        createEcsRelationship(loadBalancer["targetGroupArn"], "attached_to")
+      )
+    );
+
+    return {
+      ...record,
+      relationships: uniqueDiscoveredRelationships(
+        candidateRelationships.filter((relationship) =>
+          providerResourceIds.has(relationship.targetProviderResourceId)
+        )
+      )
+    };
+  });
+}
+
+function createEcsRelationship(
+  providerResourceId: unknown,
+  type: AwsDiscoveredResourceRecord["relationships"][number]["type"]
+): AwsDiscoveredResourceRecord["relationships"] {
+  const normalizedId = getNonEmptyStringValue(providerResourceId);
+
+  return normalizedId ? [{ type, targetProviderResourceId: normalizedId }] : [];
+}
+
+function createEcsRelationships(
+  providerResourceIds: unknown,
+  type: AwsDiscoveredResourceRecord["relationships"][number]["type"]
+): AwsDiscoveredResourceRecord["relationships"] {
+  return Array.isArray(providerResourceIds)
+    ? providerResourceIds.flatMap((providerResourceId) =>
+        createEcsRelationship(providerResourceId, type)
+      )
+    : [];
+}
+
+// CloudFront origin의 명시적인 domain/ARN이 같은 scan record와 일치할 때만 관계를 추가합니다.
+export function resolveCloudFrontOriginRelationships(
+  records: AwsDiscoveredResourceRecord[]
+): AwsDiscoveredResourceRecord[] {
+  const originCandidates = records.filter(
+    (record) =>
+      record.providerResourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer" ||
+      record.providerResourceType === "AWS::S3::Bucket"
+  );
+
+  return records.map((record) => {
+    if (record.providerResourceType !== "AWS::CloudFront::Distribution") {
+      return record;
+    }
+
+    const origins = Array.isArray(record.config["origin"])
+      ? record.config["origin"].filter(isRecordValue)
+      : [];
+    const resolvedRelationships = origins.flatMap((origin) => {
+      const candidate = originCandidates.find((resource) => originExplicitlyReferencesResource(origin, resource));
+
+      return candidate
+        ? [{ type: "depends_on" as const, targetProviderResourceId: candidate.providerResourceId }]
+        : [];
+    });
+
+    return {
+      ...record,
+      relationships: uniqueDiscoveredRelationships([
+        ...record.relationships,
+        ...resolvedRelationships
+      ])
+    };
+  });
+}
+
+function originExplicitlyReferencesResource(
+  origin: Record<string, unknown>,
+  resource: AwsDiscoveredResourceRecord
+): boolean {
+  const explicitOriginIds = [origin["arn"], origin["originArn"], origin["providerResourceId"]]
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  if (explicitOriginIds.includes(resource.providerResourceId)) {
+    return true;
+  }
+
+  const domainName = origin["domainName"];
+  if (typeof domainName !== "string" || domainName.length === 0) {
+    return false;
+  }
+
+  if (resource.providerResourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer") {
+    return resource.config["dnsName"] === domainName;
+  }
+
+  return (
+    resource.providerResourceType === "AWS::S3::Bucket" &&
+    isS3OriginDomainForBucket(domainName, resource.providerResourceId)
+  );
+}
+
+function isS3OriginDomainForBucket(domainName: string, bucketName: string): boolean {
+  const normalizedDomainName = domainName.toLowerCase().replace(/\.$/, "");
+  const normalizedBucketName = bucketName.toLowerCase();
+  const endpointSuffix = normalizedDomainName.endsWith(".amazonaws.com.cn")
+    ? ".amazonaws.com.cn"
+    : normalizedDomainName.endsWith(".amazonaws.com")
+      ? ".amazonaws.com"
+      : null;
+
+  if (!endpointSuffix || !normalizedDomainName.startsWith(`${normalizedBucketName}.`)) {
+    return false;
+  }
+
+  const endpoint = normalizedDomainName.slice(
+    normalizedBucketName.length + 1,
+    -endpointSuffix.length
+  );
+
+  return isAwsS3Endpoint(endpoint);
+}
+
+function isAwsS3Endpoint(endpoint: string): boolean {
+  if (
+    endpoint === "s3" ||
+    endpoint === "s3-accelerate" ||
+    endpoint === "s3-accelerate.dualstack"
+  ) {
+    return true;
+  }
+
+  if (endpoint.startsWith("s3.dualstack.")) {
+    return isAwsRegion(endpoint.slice("s3.dualstack.".length));
+  }
+
+  if (endpoint.startsWith("s3-website.")) {
+    return isAwsRegion(endpoint.slice("s3-website.".length));
+  }
+
+  if (endpoint.startsWith("s3-website-")) {
+    return isAwsRegion(endpoint.slice("s3-website-".length));
+  }
+
+  if (endpoint.startsWith("s3.")) {
+    return isAwsRegion(endpoint.slice("s3.".length));
+  }
+
+  return endpoint.startsWith("s3-") && isAwsRegion(endpoint.slice("s3-".length));
+}
+
+function isAwsRegion(value: string): boolean {
+  return /^[a-z]{2}(?:-gov)?-[a-z0-9-]+-\d+$/.test(value);
+}
+
+function uniqueDiscoveredRelationships(
+  relationships: AwsDiscoveredResourceRecord["relationships"]
+): AwsDiscoveredResourceRecord["relationships"] {
+  return [
+    ...new Map(
+      relationships.map((relationship) => [
+        `${relationship.type}:${relationship.targetProviderResourceId}`,
+        relationship
+      ])
+    ).values()
+  ];
+}
+
 function uniqueDiscoveredRecordsByProviderId(
   records: AwsDiscoveredResourceRecord[]
 ): AwsDiscoveredResourceRecord[] {
@@ -1876,6 +2798,16 @@ function uniqueDiscoveredRecordsByProviderId(
     seenProviderResourceIds.add(record.providerResourceId);
     return true;
   });
+}
+
+function compactRecord(values: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(values).filter(([, value]) => value !== undefined)
+  );
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function toAwsSdkCredentials(credentials: TerraformAwsCredentialEnv) {
@@ -1942,7 +2874,6 @@ export function shouldReadUnknownResourceGroup(input: AwsProviderScanInput): boo
     input.resourceTypes.includes("AMI") ||
     input.resourceTypes.includes("LAMBDA") ||
     input.resourceTypes.includes("LAMBDA_PERMISSION") ||
-    input.resourceTypes.includes("CLOUDFRONT") ||
     input.resourceTypes.includes("IAM_ROLE") ||
     input.resourceTypes.includes("IAM_POLICY") ||
     input.resourceTypes.includes("IAM_INSTANCE_PROFILE") ||
@@ -1958,31 +2889,112 @@ export function maskReverseEngineeringSensitiveText(text: string): string {
   return text.replace(/\b(\d{4})\d{8}\b/g, "$1********");
 }
 
-// AWS 오류 메시지를 화면에 보여줄 수 있는 scanErrors reason으로 줄입니다.
-function toScanError(resourceType: ResourceType, error: unknown): ReverseEngineeringScanError {
-  const message = maskReverseEngineeringSensitiveText(
+// 동일 AWS 서비스에서 여러 reader가 함께 실패해도 사용자에게는 한 번만 알립니다.
+export function deduplicateReverseEngineeringScanErrors(
+  scanErrors: readonly ReverseEngineeringScanError[]
+): ReverseEngineeringScanError[] {
+  const uniqueErrors = new Map<string, ReverseEngineeringScanError>();
+
+  for (const scanError of scanErrors) {
+    if (!uniqueErrors.has(scanError.id)) {
+      uniqueErrors.set(scanError.id, scanError);
+    }
+  }
+
+  return [...uniqueErrors.values()];
+}
+
+function getReverseEngineeringAwsServiceKey(resourceType: ResourceType): string {
+  switch (resourceType) {
+    case "VPC":
+    case "SUBNET":
+    case "INTERNET_GATEWAY":
+    case "ROUTE_TABLE":
+    case "ROUTE_TABLE_ASSOCIATION":
+    case "SECURITY_GROUP":
+    case "EC2":
+    case "AMI":
+      return "ec2";
+    case "LOAD_BALANCER":
+      return "elastic-load-balancing";
+    case "RDS":
+      return "rds";
+    case "S3":
+      return "s3";
+    case "CLOUDFRONT":
+      return "cloudfront";
+    case "ECS_CLUSTER":
+    case "ECS_SERVICE":
+    case "ECS_TASK_DEFINITION":
+      return "ecs";
+    case "IAM_ROLE":
+    case "IAM_POLICY":
+    case "IAM_INSTANCE_PROFILE":
+      return "iam";
+    case "KMS_KEY":
+      return "kms";
+    case "CLOUDWATCH_LOG_GROUP":
+      return "cloudwatch-logs";
+    case "CLOUDWATCH_METRIC_ALARM":
+      return "cloudwatch";
+    case "API_GATEWAY_REST_API":
+      return "api-gateway";
+    case "LAMBDA":
+    case "LAMBDA_PERMISSION":
+      return "lambda";
+    default:
+      return resourceType.toLowerCase().replaceAll("_", "-");
+  }
+}
+
+function normalizeReverseEngineeringAwsServiceKey(serviceKey: string): string {
+  return serviceKey.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function formatSafeScanErrorMessage(reason: ReverseEngineeringScanError["reason"]): string {
+  switch (reason) {
+    case "permission_denied":
+      return "이 서비스를 읽을 권한이 부족합니다.";
+    case "expired_credential":
+      return "AWS 연결 확인이 필요합니다.";
+    case "invalid_region":
+      return "선택한 AWS Region을 확인해 주세요.";
+    case "throttled":
+      return "AWS 요청이 잠시 제한되었습니다.";
+    default:
+      return "이 서비스를 읽지 못했습니다.";
+  }
+}
+
+// 원문 AWS 오류는 reason 판별에만 사용하고 공개 scan 결과에는 남기지 않습니다.
+function toScanError(
+  resourceType: ResourceType,
+  error: unknown,
+  serviceKey = getReverseEngineeringAwsServiceKey(resourceType)
+): ReverseEngineeringScanError {
+  const providerMessage = maskReverseEngineeringSensitiveText(
     error instanceof Error ? error.message : "AWS 리소스를 읽지 못했습니다."
   );
-  const reason = classifyScanErrorReason(message);
+  const reason = classifyScanErrorReason(providerMessage);
 
   return {
-    id: `scan-error-${resourceType.toLowerCase()}`,
+    id: `scan-error-service-${normalizeReverseEngineeringAwsServiceKey(serviceKey)}`,
     resourceType,
     stage: "provider_api",
     reason,
-    message,
+    message: formatSafeScanErrorMessage(reason),
     retryable: reason === "throttled" || reason === "provider_error"
   };
 }
 
 // Resource Explorer 상태 문제는 전체 가져오기 범위가 줄어든다는 설명을 덧붙입니다.
 function toResourceExplorerScanError(error: unknown): ReverseEngineeringScanError {
-  const baseError = toScanError("UNKNOWN", error);
+  const baseError = toScanError("UNKNOWN", error, "resource-explorer-2");
 
   return {
     ...baseError,
     id: "scan-error-resource-explorer",
-    message: `Resource Explorer 조회 실패: ${baseError.message}. Resource Explorer가 꺼져 있거나 조회 권한이 없으면 전체 가져오기 범위가 줄어듭니다.`,
+    message: "Resource Explorer를 읽지 못했습니다.",
     retryable: baseError.reason === "throttled"
   };
 }

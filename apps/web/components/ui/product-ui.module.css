@@ -2,8 +2,8 @@
   align-items: center;
   color: var(--color-ink);
   display: inline-flex;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: calc(18px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   gap: 7px;
   line-height: 1;
   min-width: 0;
@@ -88,12 +88,12 @@
 
 .stateCopy strong {
   color: var(--color-ink);
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   line-height: 1.4;
 }
 
 .stateCopy p {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
   line-height: 1.5;
   margin: 0;
 }
@@ -108,8 +108,8 @@
   border-radius: 9999px;
   color: var(--color-body);
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   line-height: 1;
   min-height: 24px;
   padding: 0 9px;

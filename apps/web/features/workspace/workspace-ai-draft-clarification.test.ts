@@ -1,0 +1,253 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { ArchitectureDraftClarification } from "@sketchcatch/types";
+import {
+  createArchitectureDraftClarificationAnswerReceipt,
+  createArchitectureDraftClarificationMessage,
+  resolveAcceptedArchitectureDraftClarificationSelection,
+  withArchitectureDraftClarificationAnswer
+} from "./workspace-ai-draft-clarification";
+
+const clarification: ArchitectureDraftClarification = {
+  status: "needs_clarification",
+  questionId: "website_type",
+  question: "어떤 종류의 웹사이트인가요?",
+  suggestions: ["정적 웹사이트", "동적 웹 애플리케이션"],
+  providerMetadata: {
+    provider: "amazon_q",
+    service: "amazon_q_business",
+    routeTarget: "architecture_draft",
+    cacheHit: false,
+    cacheKey: "test-cache-key",
+    estimatedUsage: {
+      inputCharacters: 10,
+      inputTokensEstimate: 3
+    },
+    billingMode: "aws_credit_only",
+    generatedAt: "2026-07-18T00:00:00.000Z"
+  }
+};
+
+test("natural-language clarification answers are structured without appending the question to the prompt", () => {
+  const request = withArchitectureDraftClarificationAnswer(
+    {
+      prompt: "웹사이트를 만들고 싶어요.",
+      templateId: "three-tier-web-app"
+    },
+    clarification,
+    "네이버 쇼핑몰 같은 사이트를 만들고 싶어"
+  );
+
+  assert.equal(request.prompt, "웹사이트를 만들고 싶어요.");
+  assert.equal(request.templateId, "three-tier-web-app");
+  assert.deepEqual(request.clarificationAnswers, [
+    {
+      questionId: "website_type",
+      answer: "네이버 쇼핑몰 같은 사이트를 만들고 싶어"
+    }
+  ]);
+});
+
+test("retrying a rejected clarification replaces only that question answer", () => {
+  const request = withArchitectureDraftClarificationAnswer(
+    {
+      prompt: "웹사이트를 만들고 싶어요.",
+      clarificationAnswers: [{ questionId: "website_type", answer: "김치찌개" }]
+    },
+    clarification,
+    "쇼핑몰을 만들고 싶어요"
+  );
+
+  assert.deepEqual(request.clarificationAnswers, [
+    { questionId: "website_type", answer: "쇼핑몰을 만들고 싶어요" }
+  ]);
+});
+
+test("rejected answers display the validation message before repeating the question", () => {
+  assert.equal(
+    createArchitectureDraftClarificationMessage({
+      ...clarification,
+      validationMessage: "답변을 이해하지 못했어요. 다시 답해주세요."
+    }),
+    "답변을 이해하지 못했어요. 다시 답해주세요.\n\n어떤 종류의 웹사이트인가요?"
+  );
+});
+
+test("accepted free-form answers show the question-to-requirement mapping", () => {
+  const receipt = createArchitectureDraftClarificationAnswerReceipt(
+    {
+      ...clarification,
+      question: "What kind of website?",
+      suggestions: ["Static website", "Dynamic web app"]
+    },
+    "A marketplace like Naver Shopping",
+    {
+      ...clarification,
+      questionId: "traffic",
+      question: "Expected traffic?"
+    }
+  );
+
+  assert.equal(
+    receipt,
+    "\uC790\uC5F0\uC5B4 \uB2F5\uBCC0 \uBC18\uC601\nWhat kind of website? \u2192 A marketplace like Naver Shopping"
+  );
+});
+
+test("selected answers are identified and rejected answers do not get an applied receipt", () => {
+  const selectedReceipt = createArchitectureDraftClarificationAnswerReceipt(
+    {
+      ...clarification,
+      question: "What kind of website?",
+      suggestions: ["Static website", "Dynamic web app"]
+    },
+    "Dynamic web app",
+    {
+      architectureJson: { edges: [], nodes: [] },
+      title: "Draft",
+      metadata: {
+        assumptions: [],
+        confidence: "high",
+        explanations: [],
+        guardrailWarnings: [],
+        source: "prompt"
+      }
+    }
+  );
+  const rejectedReceipt = createArchitectureDraftClarificationAnswerReceipt(
+    clarification,
+    "unrelated",
+    { ...clarification, validationMessage: "Please answer again." }
+  );
+
+  assert.equal(selectedReceipt?.startsWith("\uC120\uD0DD \uB2F5\uBCC0 \uBC18\uC601\n"), true);
+  assert.equal(rejectedReceipt, null);
+});
+test("accepted natural-language answers resolve to an existing option or a checked custom option", () => {
+  const nextQuestion = { ...clarification, questionId: "traffic", question: "Expected traffic?" };
+  const websiteClarification = {
+    ...clarification,
+    suggestions: ["정적 사이트 (블로그, 포트폴리오)", "동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)", "SPA (React/Vue 등)", "API 서버 (모바일 앱 백엔드)"]
+  };
+  assert.deepEqual(
+    resolveAcceptedArchitectureDraftClarificationSelection(
+      websiteClarification, "네이버 쇼핑몰 같은 사이트를 만들고 싶어", nextQuestion
+    ),
+    { label: "동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)", matchedSuggestion: true }
+  );
+  assert.deepEqual(
+    resolveAcceptedArchitectureDraftClarificationSelection(
+      { ...clarification, questionId: "budget", question: "월 예산 범위는?", suggestions: ["10만원 미만 (최소 비용)", "10-50만원 (적당한 성능)"] },
+      "저렴하게 시작할래", nextQuestion
+    ),
+    { label: "저렴하게 시작할래", matchedSuggestion: false }
+  );
+  assert.equal(
+    resolveAcceptedArchitectureDraftClarificationSelection(
+      clarification, "김치찌개", { ...clarification, validationMessage: "다시 답해주세요." }
+    ),
+    null
+  );
+});
+
+test("common natural-language answers select the matching existing option", () => {
+  const nextQuestion = { ...clarification, questionId: "budget", question: "월 예산 범위는?" };
+  const scenarios = [
+    {
+      questionId: "region",
+      question: "주요 사용자 지역은?",
+      suggestions: ["한국만 (서울 리전)", "아시아 태평양 (도쿄, 싱가포르 포함)", "글로벌 (미국, 유럽 포함)"],
+      answer: "홍콩만",
+      expected: "아시아 태평양 (도쿄, 싱가포르 포함)"
+    },
+    {
+      questionId: "website_size",
+      question: "전체 웹사이트 크기는?",
+      suggestions: ["10MB 미만 (간단한 사이트)", "10MB-100MB (일반적인 사이트)"],
+      answer: "간단한 사이트야",
+      expected: "10MB 미만 (간단한 사이트)"
+    },
+    {
+      questionId: "file_upload",
+      question: "파일 업로드 기능이 있나요?",
+      suggestions: ["없음 (텍스트만)", "이미지만 (프로필, 게시글 이미지)"],
+      answer: "없어",
+      expected: "없음 (텍스트만)"
+    },
+    {
+      questionId: "realtime",
+      question: "실시간 기능이 필요한가요?",
+      suggestions: ["필요 없음", "실시간 채팅", "실시간 알림"],
+      answer: "아니",
+      expected: "필요 없음"
+    },
+    {
+      questionId: "traffic",
+      question: "예상 트래픽 규모는?",
+      suggestions: [
+        "소규모 (일 100명 미만, 동시 10명 미만)",
+        "중간 규모 (일 1,000명, 동시 50명)",
+        "대규모 (일 10,000명 이상, 동시 500명 이상)"
+      ],
+      answer: "일일 500명 정도",
+      expected: "중간 규모 (일 1,000명, 동시 50명)"
+    },
+    {
+      questionId: "traffic",
+      question: "예상 트래픽 규모는?",
+      suggestions: [
+        "소규모 (일 100명 미만, 동시 10명 미만)",
+        "중간 규모 (일 1,000명, 동시 50명)",
+        "대규모 (일 10,000명 이상, 동시 500명 이상)"
+      ],
+      answer: "동시 접속자 500명 정도",
+      expected: "대규모 (일 10,000명 이상, 동시 500명 이상)"
+    },
+    {
+      questionId: "frontend",
+      question: "프론트엔드 기술은?",
+      suggestions: [
+        "HTML/CSS/JS만 (순수 웹)",
+        "React/Vue/Angular (SPA 프레임워크)",
+        "Next.js/Nuxt.js (SSR 필요)",
+        "모바일 앱 (웹뷰 또는 네이티브)"
+      ],
+      answer: "Svelte 쓸 거야",
+      expected: "React/Vue/Angular (SPA 프레임워크)"
+    },
+    {
+      questionId: "backend",
+      question: "백엔드가 필요한가요?",
+      suggestions: [
+        "필요 없음 (정적 사이트)",
+        "간단한 API (Node.js, Python Flask 등)",
+        "복잡한 비즈니스 로직 (Spring Boot, Django 등)",
+        "마이크로서비스 (여러 서비스 분리)"
+      ],
+      answer: "FastAPI 썼어",
+      expected: "간단한 API (Node.js, Python Flask 등)"
+    },    {
+      questionId: "backend",
+      question: "백엔드가 필요한가요?",
+      suggestions: [
+        "필요 없음 (정적 사이트)",
+        "간단한 API (Node.js, Python Flask 등)",
+        "복잡한 비즈니스 로직 (Spring Boot, Django 등)",
+        "마이크로서비스 (여러 서비스 분리)"
+      ],
+      answer: "스프링부트 썼어",
+      expected: "복잡한 비즈니스 로직 (Spring Boot, Django 등)"
+    }
+  ] as const;
+
+  for (const scenario of scenarios) {
+    assert.deepEqual(
+      resolveAcceptedArchitectureDraftClarificationSelection(
+        { ...clarification, ...scenario, suggestions: [...scenario.suggestions] },
+        scenario.answer,
+        nextQuestion
+      ),
+      { label: scenario.expected, matchedSuggestion: true }
+    );
+  }
+});

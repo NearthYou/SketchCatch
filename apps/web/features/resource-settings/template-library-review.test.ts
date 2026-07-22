@@ -61,3 +61,51 @@ test("승인된 visual-only Template review variant만 gallery/start diagram res
   assert.deepEqual(resolved, candidate.session.proposal.diagram);
   assert.deepEqual(candidate.template.diagramJson, sourceBefore);
 });
+
+test("AWS onboarding template does not expose the Training prefix", () => {
+  const template = listBoardTemplates().find(
+    (candidate) => candidate.id === "brainboard-training-aws-onboarding"
+  );
+
+  assert.ok(template);
+  if (!template) return;
+
+  assert.equal(template.title, "AWS onboarding");
+});
+
+test("Live Observation template is the last item in the dashboard catalog", () => {
+  const templates = listBoardTemplates();
+  const template = templates.at(-1);
+
+  assert.equal(template?.id, "template-live-observation");
+  assert.equal(template?.title, "실시간 트래픽 · ASG 관측");
+});
+
+test("Live Observation scaling policy omits the unbounded cooldown", () => {
+  const template = listBoardTemplates()
+    .filter(isBoardTemplateAvailable)
+    .find((candidate) => candidate.id === "template-live-observation");
+  const policy = template?.diagramJson.nodes.find(
+    (node) => node.id === "template-live-policy"
+  );
+
+  assert.ok(policy?.parameters);
+  assert.equal(policy?.parameters?.values.cooldown, undefined);
+  assert.equal(policy?.parameters?.values.estimatedInstanceWarmup, 60);
+});
+
+test("Live Observation log group uses a unique prefix for each project deployment", () => {
+  const template = listBoardTemplates()
+    .filter(isBoardTemplateAvailable)
+    .find((candidate) => candidate.id === "template-live-observation");
+  const logGroup = template?.diagramJson.nodes.find(
+    (node) => node.id === "template-live-log-group"
+  );
+
+  assert.ok(logGroup?.parameters);
+  assert.equal(logGroup?.parameters?.values.name, undefined);
+  assert.equal(
+    logGroup?.parameters?.values.namePrefix,
+    "/sketchcatch/demo/sc-lo/traffic-"
+  );
+});

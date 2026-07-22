@@ -1,0 +1,1358 @@
+.root {
+  --workspace-error: var(--color-error, #b42318);
+  --cicd-primary: #171717;
+  --cicd-primary-strong: #303030;
+  --cicd-accent: #0d74ce;
+  --cicd-accent-strong: #0755d6;
+  --cicd-highlight-soft: #f3f4f6;
+  --cicd-background: #ffffff;
+  --cicd-surface: #ffffff;
+  --cicd-text: #171717;
+  --cicd-muted: #60646c;
+  --cicd-line: #dfe3e8;
+  --cicd-line-strong: #c9d0d9;
+  --cicd-success: #16834a;
+  --workspace-accent: var(--cicd-primary);
+  --workspace-accent-active: var(--cicd-primary-strong);
+  background: var(--cicd-background);
+  color: var(--cicd-text);
+  display: grid;
+  margin: 0 auto;
+  max-width: 1320px;
+  min-height: 100%;
+  min-width: 0;
+  padding: 24px 48px 48px;
+  width: 100%;
+}
+
+.header {
+  align-items: center;
+  display: flex;
+  min-height: 48px;
+  padding-bottom: 16px;
+}
+
+.header h2 {
+  color: var(--cicd-text);
+  font-size: var(
+    --deployment-console-page-title-size,
+    calc(28px + var(--presentation-font-size-increase))
+  );
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.globalLastRefreshed {
+  color: var(--cicd-muted);
+  font-size: var(
+    --deployment-console-meta-size,
+    calc(13px + var(--presentation-font-size-increase))
+  );
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.globalLastRefreshedCompact {
+  display: none;
+}
+
+.console {
+  gap: 16px;
+  padding-top: 0;
+}
+
+.statusBoard {
+  background: var(--cicd-surface);
+  border: 1px solid var(--cicd-line);
+  border-radius: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.nextTask {
+  align-items: center;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 112px;
+  padding: 20px 24px;
+}
+
+.nextTaskCopy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.nextTaskCopy > span {
+  color: var(--cicd-text);
+  font-size: var(
+    --deployment-console-meta-size,
+    calc(13px + var(--presentation-font-size-increase))
+  );
+  font-weight: var(--presentation-font-weight-bold);
+  letter-spacing: 0.06em;
+}
+
+.nextTaskCopy > strong {
+  color: var(--cicd-text);
+  font-size: var(
+    --deployment-console-feature-title-size,
+    calc(22px + var(--presentation-font-size-increase))
+  );
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+}
+
+.nextTaskCopy > p {
+  color: var(--cicd-muted);
+  font-size: var(
+    --deployment-console-context-size,
+    calc(13px + var(--presentation-font-size-increase))
+  );
+  line-height: 1.5;
+  margin: 0;
+}
+
+.nextTaskAction {
+  align-items: center;
+  background: var(--cicd-primary);
+  border: 1px solid var(--cicd-primary);
+  border-radius: 7px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: var(
+    --deployment-console-primary-action-size,
+    calc(16px + var(--presentation-font-size-increase))
+  );
+  font-weight: var(--presentation-font-weight-bold);
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+  white-space: nowrap;
+}
+
+.nextTaskAction:hover:not(:disabled) {
+  background: var(--cicd-primary-strong);
+  border-color: var(--cicd-primary-strong);
+}
+
+.nextTaskAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.phaseProgress {
+  border-top: 1px solid var(--cicd-line);
+  min-height: 120px;
+  padding: 24px 28px;
+}
+
+.phaseProgress ol {
+  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  min-height: 64px;
+  padding: 0;
+}
+
+.phaseProgress li {
+  align-items: center;
+  color: var(--cicd-muted);
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  min-height: 64px;
+  min-width: 0;
+  padding: 0 12px;
+  position: relative;
+}
+
+.phaseCopy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  position: relative;
+  text-align: left;
+  z-index: 1;
+}
+
+.phaseName {
+  color: var(--cicd-text);
+  font-size: 20px;
+  font-weight: var(--presentation-font-weight-bold);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phaseStatus {
+  color: var(--cicd-muted);
+  display: block;
+  font-size: 14px;
+  font-weight: var(--presentation-font-weight-regular);
+  line-height: 1.35;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phaseProgress li[data-current="true"] .phaseStatus {
+  color: var(--cicd-accent);
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.phaseProgress li[data-tone="complete"] .phaseStatus,
+.phaseProgress li[data-tone="success"] .phaseStatus {
+  color: var(--cicd-success);
+}
+
+.phaseProgress li[data-tone="error"] .phaseStatus {
+  color: var(--workspace-error);
+}
+
+.phaseMarker {
+  align-items: center;
+  background: var(--cicd-surface);
+  border: 1px solid var(--cicd-line-strong);
+  border-radius: 9px;
+  color: #59616d;
+  display: inline-flex;
+  flex: 0 0 60px;
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--presentation-font-weight-bold);
+  height: 60px;
+  justify-content: center;
+  line-height: 1;
+  position: relative;
+  width: 60px;
+  z-index: 1;
+}
+
+.phaseProgress li[data-current="true"] .phaseMarker {
+  background: var(--cicd-accent);
+  border-color: var(--cicd-accent);
+  color: #ffffff;
+}
+
+.phaseProgress li[data-tone="complete"] .phaseMarker,
+.phaseProgress li[data-tone="success"] .phaseMarker {
+  background: #ecf8f1;
+  border-color: #a7d8bf;
+  color: #16834a;
+}
+
+.phaseProgress li[data-tone="error"] .phaseMarker {
+  background: #fff1f0;
+  border-color: #e7aaa5;
+  color: #b42318;
+}
+
+.accordionPanel {
+  background: var(--cicd-surface);
+  border: 1px solid var(--cicd-line);
+  border-radius: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.accordionPanelHeader {
+  align-items: center;
+  border-bottom: 1px solid var(--cicd-line);
+  display: flex;
+  min-height: 48px;
+  padding: 0 20px;
+}
+
+.accordionPanelHeader h3 {
+  color: var(--cicd-text);
+  font-size: var(
+    --deployment-console-section-title-size,
+    calc(18px + var(--presentation-font-size-increase))
+  );
+  line-height: 1.35;
+  margin: 0;
+}
+
+.accordionItem {
+  border-bottom: 1px solid var(--cicd-line);
+  min-width: 0;
+  scroll-margin-top: 72px;
+}
+
+.accordionItem:last-child {
+  border-bottom: 0;
+}
+
+.accordionRow {
+  align-items: stretch;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 64px;
+}
+
+.accordionItem[data-current="true"] .accordionRow {
+  background: var(--cicd-highlight-soft);
+}
+
+.accordionHeading {
+  display: flex;
+  margin: 0;
+  min-width: 0;
+}
+
+.accordionToggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--cicd-text);
+  cursor: pointer;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 34px minmax(210px, 0.75fr) minmax(0, 1.25fr) 18px;
+  min-height: 64px;
+  min-width: 0;
+  padding: 8px 20px;
+  text-align: left;
+  width: 100%;
+}
+
+.accordionToggle:hover {
+  background: var(--cicd-highlight-soft);
+}
+
+.accordionPhase {
+  color: var(--cicd-muted);
+  font-size: var(
+    --deployment-console-meta-size,
+    calc(13px + var(--presentation-font-size-increase))
+  );
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--presentation-font-weight-bold);
+  letter-spacing: 0.04em;
+}
+
+.accordionItem[data-current="true"] .accordionPhase {
+  color: var(--cicd-text);
+}
+
+.accordionTitle {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.accordionTitle > strong {
+  font-size: var(
+    --deployment-console-row-title-size,
+    calc(16px + var(--presentation-font-size-increase))
+  );
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accordionStatus {
+  align-items: center;
+  color: var(--cicd-muted);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: var(
+    --deployment-console-meta-size,
+    calc(13px + var(--presentation-font-size-increase))
+  );
+  font-weight: var(--presentation-font-weight-bold);
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.accordionStatus i {
+  background: currentColor;
+  border-radius: 50%;
+  display: block;
+  height: 7px;
+  width: 7px;
+}
+
+.accordionStatus[data-tone="current"] {
+  color: var(--cicd-text);
+}
+
+.accordionStatus[data-tone="complete"],
+.accordionStatus[data-tone="success"] {
+  color: var(--cicd-success);
+}
+
+.accordionStatus[data-tone="error"] {
+  color: var(--workspace-error);
+}
+
+.accordionStatus[data-tone="pending"] {
+  color: var(--cicd-muted);
+}
+
+.accordionMetadata {
+  min-width: 0;
+}
+
+.accordionSingleMeta,
+.accordionMetadata {
+  color: var(--cicd-muted);
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accordionChevron {
+  color: var(--cicd-muted);
+  transition: transform 160ms ease;
+}
+
+.accordionChevron[data-open="true"] {
+  transform: rotate(180deg);
+}
+
+.accordionHeaderAction {
+  align-items: center;
+  display: flex;
+  padding: 8px 16px 8px 0;
+}
+
+.accordionBody {
+  background: var(--cicd-surface);
+  border-top: 1px solid var(--cicd-line);
+}
+
+.accordionBody > :not(.taskList) {
+  padding: 20px 24px;
+}
+
+.accordionContent {
+  display: grid;
+  gap: 16px;
+}
+
+.taskList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.taskRow {
+  border-bottom: 1px solid var(--cicd-line);
+  margin: 0;
+  min-width: 0;
+}
+
+.taskRow:last-child {
+  border-bottom: 0;
+}
+
+.taskRowButton,
+.taskRowStatic {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--cicd-text);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(78px, auto) minmax(104px, auto);
+  min-height: 64px;
+  min-width: 0;
+  padding: 10px 20px 10px 54px;
+  text-align: left;
+  width: 100%;
+}
+
+.taskRowButton {
+  cursor: pointer;
+}
+
+.taskRowButton:hover {
+  background: var(--cicd-highlight-soft);
+}
+
+.taskRowContent {
+  align-items: baseline;
+  display: grid;
+  gap: 3px 20px;
+  grid-template-columns: minmax(124px, 0.5fr) minmax(0, 1.5fr);
+  min-width: 0;
+}
+
+.taskRowLabel {
+  color: var(--cicd-muted);
+  font-size: var(
+    --deployment-console-body-size,
+    calc(15px + var(--presentation-font-size-increase))
+  );
+  line-height: 1.4;
+}
+
+.taskRowValue {
+  color: var(--cicd-text);
+  font-size: var(
+    --deployment-console-body-size,
+    calc(15px + var(--presentation-font-size-increase))
+  );
+  line-height: 1.4;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskRowDetail {
+  color: var(--cicd-muted);
+  font-size: var(
+    --deployment-console-meta-size,
+    calc(13px + var(--presentation-font-size-increase))
+  );
+  grid-column: 2;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskRowStatus {
+  align-items: center;
+  color: var(--cicd-muted);
+  display: inline-flex;
+  font-size: var(
+    --deployment-console-meta-size,
+    calc(13px + var(--presentation-font-size-increase))
+  );
+  font-weight: var(--presentation-font-weight-bold);
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.taskRowStatus::before {
+  background: currentColor;
+  border-radius: 50%;
+  content: "";
+  height: 7px;
+  width: 7px;
+}
+
+.taskRowStatus[data-tone="current"] {
+  color: var(--cicd-text);
+}
+
+.taskRowStatus[data-tone="complete"],
+.taskRowStatus[data-tone="success"] {
+  color: var(--cicd-success);
+}
+
+.taskRowStatus[data-tone="error"] {
+  color: var(--workspace-error);
+}
+
+.taskRowAction {
+  align-items: center;
+  color: var(--cicd-accent);
+  display: inline-flex;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  gap: 2px;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.taskRowDisabledReason {
+  color: var(--cicd-muted);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  grid-column: 3;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.consoleUnavailable {
+  background: var(--color-error-surface);
+  color: var(--workspace-error);
+  display: grid;
+  gap: 4px;
+  padding: 18px 20px;
+}
+
+.consoleUnavailable strong {
+  font-size: calc(13px + var(--presentation-font-size-increase));
+}
+
+.consoleUnavailable span {
+  color: var(--cicd-muted);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+}
+
+.emptyStateHint {
+  color: var(--cicd-muted);
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+  margin: 0;
+}
+
+.emptyStateHint > span {
+  margin-left: 8px;
+}
+
+.settingsDrawer {
+  background: transparent;
+  border: 0;
+  height: 100dvh;
+  margin: 0 0 0 auto;
+  max-height: none;
+  max-width: none;
+  overflow: hidden;
+  padding: 0;
+  width: min(500px, 100vw);
+}
+
+.settingsDrawer::backdrop {
+  background: rgba(23, 32, 51, 0.32);
+}
+
+.settingsDrawerPanel {
+  background: var(--cicd-surface);
+  border-left: 1px solid var(--cicd-line);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+}
+
+.settingsDrawerHeader {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--cicd-line);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 80px;
+  padding: 18px 20px 16px 24px;
+}
+
+.settingsDrawerHeader h3 {
+  color: var(--cicd-text);
+  font-size: calc(18px + var(--presentation-font-size-increase));
+  line-height: 1.35;
+  margin: 0;
+}
+
+.settingsDrawerHeader p {
+  color: var(--cicd-muted);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+.settingsDrawerClose {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--cicd-muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 44px;
+  justify-content: center;
+  margin-top: -6px;
+  width: 44px;
+}
+
+.settingsDrawerClose:hover {
+  background: var(--cicd-background);
+  border-color: var(--cicd-line);
+  color: var(--cicd-text);
+}
+
+.settingsDrawerBody {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.drawerFormContent {
+  display: grid;
+  gap: 20px;
+}
+
+.repositoryConnectionForm,
+.repositoryConnectionNotice {
+  display: grid;
+  gap: 20px;
+}
+
+.repositoryConnectionNotice {
+  align-content: start;
+}
+
+.repositoryConnectionNotice strong {
+  color: var(--cicd-text);
+  font-size: calc(16px + var(--presentation-font-size-increase));
+}
+
+.repositoryConnectionNotice p,
+.repositoryFieldHint,
+.repositoryInlineStatus {
+  color: var(--cicd-muted);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+  margin: 0;
+}
+
+.repositorySettingsLink {
+  align-items: center;
+  align-self: start;
+  background: var(--cicd-primary);
+  border: 1px solid var(--cicd-primary);
+  border-radius: 7px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  text-decoration: none;
+}
+
+.repositorySettingsLink:hover {
+  background: var(--cicd-primary-strong);
+  border-color: var(--cicd-primary-strong);
+}
+
+.repositoryFields {
+  display: grid;
+  gap: 16px;
+}
+
+.repositoryField {
+  display: grid;
+  gap: 7px;
+}
+
+.repositoryField > span {
+  color: var(--cicd-text);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.repositoryField select,
+.repositoryField input {
+  background: var(--cicd-surface);
+  border: 1px solid var(--cicd-line-strong);
+  border-radius: 7px;
+  color: var(--cicd-text);
+  font: inherit;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  min-height: 44px;
+  padding: 0 12px;
+  width: 100%;
+}
+
+.repositoryField input[readonly] {
+  background: var(--cicd-background);
+  color: var(--cicd-muted);
+}
+
+.repositoryField select:disabled,
+.repositoryField input:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.repositoryFormError {
+  background: var(--color-error-surface);
+  border: 1px solid color-mix(in srgb, var(--workspace-error) 24%, transparent);
+  border-radius: 7px;
+  color: var(--workspace-error);
+  display: grid;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.repositoryFormError p {
+  margin: 0;
+}
+
+.repositoryFormError button {
+  align-items: center;
+  align-self: start;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 7px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: var(--presentation-font-weight-bold);
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.repositoryFormActions {
+  border-top: 1px solid var(--cicd-line);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 20px;
+}
+
+.repositoryPrimaryButton,
+.repositorySecondaryButton {
+  align-items: center;
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  justify-content: center;
+  min-height: 44px;
+  min-width: 88px;
+  padding: 0 16px;
+}
+
+.repositoryPrimaryButton {
+  background: var(--cicd-primary);
+  border: 1px solid var(--cicd-primary);
+  color: #ffffff;
+}
+
+.repositoryPrimaryButton:hover:not(:disabled) {
+  background: var(--cicd-primary-strong);
+  border-color: var(--cicd-primary-strong);
+}
+
+.repositorySecondaryButton {
+  background: var(--cicd-surface);
+  border: 1px solid var(--cicd-line-strong);
+  color: var(--cicd-text);
+}
+
+.repositorySecondaryButton:hover:not(:disabled) {
+  background: var(--cicd-background);
+}
+
+.repositoryPrimaryButton:disabled,
+.repositorySecondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.cardHeading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.cardHeading h4 {
+  color: var(--cicd-text);
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  margin: 0;
+}
+
+.cardHeading > strong {
+  color: var(--cicd-text);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+}
+
+.cardHeading > strong[data-ready="true"] {
+  color: var(--cicd-success);
+}
+
+.card > p {
+  color: var(--cicd-muted);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+  margin: 14px 0 0;
+}
+
+.connectionSummary {
+  scroll-margin-top: 64px;
+}
+
+.connectionFacts {
+  display: grid;
+  margin: 0;
+}
+
+.connectionFacts > div {
+  border-bottom: 1px solid var(--cicd-line);
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 0;
+}
+
+.connectionFacts dt,
+.automaticSummaryGrid dt {
+  color: var(--cicd-muted);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.connectionFacts dd,
+.automaticSummaryGrid dd {
+  color: var(--cicd-text);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.connectionFacts a {
+  color: var(--cicd-accent-strong);
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.automaticSetupSection {
+  border-top: 1px solid var(--cicd-line);
+  display: grid;
+  gap: 12px;
+  padding-top: 20px;
+}
+
+.automaticSetupSection h4 {
+  color: var(--cicd-text);
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  margin: 0;
+}
+
+.automaticSummaryGrid {
+  display: grid;
+  margin: 0;
+}
+
+.automaticSummaryGrid > div {
+  border-bottom: 1px solid var(--cicd-line);
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 0;
+}
+
+.automaticSummaryGrid > div:last-child {
+  border-bottom: 0;
+}
+
+.error,
+.message {
+  border-radius: 7px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+}
+
+.error {
+  background: var(--color-error-surface);
+  border: 1px solid color-mix(in srgb, var(--workspace-error) 24%, transparent);
+  color: var(--workspace-error);
+}
+
+.message {
+  background: var(--cicd-surface);
+  border: 1px solid var(--cicd-line);
+  color: var(--cicd-text);
+}
+
+.message p {
+  margin: 0;
+}
+
+.message button {
+  background: var(--cicd-primary);
+  border: 1px solid var(--cicd-primary);
+  border-radius: 7px;
+  color: #ffffff;
+  font-weight: var(--presentation-font-weight-bold);
+  margin-top: 10px;
+  min-height: 44px;
+  padding: 8px 14px;
+}
+
+.loadingState {
+  display: grid;
+  gap: 16px;
+}
+
+.loadingStatus {
+  color: var(--cicd-muted);
+  font-size: calc(14px + var(--presentation-font-size-increase));
+}
+
+.loadingStatusBoard,
+.loadingChecklist {
+  background: var(--cicd-surface);
+  border: 1px solid var(--cicd-line);
+  border-radius: 8px;
+}
+
+.loadingStatusBoard {
+  align-items: center;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) 148px;
+  min-height: 112px;
+  padding: 20px 24px;
+}
+
+.loadingStatusBoard > div {
+  display: grid;
+  gap: 8px;
+}
+
+.loadingStatusBoard i,
+.loadingChecklist i {
+  background: #e9edf2;
+  border-radius: 4px;
+  display: block;
+  height: 12px;
+}
+
+.loadingLineShort {
+  width: 72px;
+}
+
+.loadingLineTitle {
+  height: 22px !important;
+  width: min(280px, 74%);
+}
+
+.loadingLineBody {
+  width: min(440px, 92%);
+}
+
+.loadingAction {
+  height: 44px !important;
+  width: 148px;
+}
+
+.loadingChecklist {
+  overflow: hidden;
+}
+
+.loadingChecklist > strong {
+  display: block;
+  font-size: calc(20px + var(--presentation-font-size-increase));
+  padding: 14px 20px;
+}
+
+.loadingChecklist > div {
+  align-items: center;
+  border-top: 1px solid var(--cicd-line);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  min-height: 64px;
+  padding: 0 20px;
+}
+
+.loadingChecklist > div > span {
+  color: var(--cicd-muted);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+}
+
+.loadingChecklist > div > i {
+  max-width: 320px;
+}
+
+.accordionBody :global(.dashboardPanel),
+.settingsDrawerBody :global(.dashboardPanel) {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.accordionBody :global(.dashboardPanelKicker),
+.settingsDrawerBody :global(.dashboardPanelKicker) {
+  display: none;
+}
+
+.accordionBody :global(.cicdSettings),
+.settingsDrawerBody :global(.cicdSettings) {
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.root :global(.deploymentPrimaryButton) {
+  color: #ffffff;
+}
+
+.root :global(.deploymentPrimaryButton:not(:disabled):hover),
+.root :global(.deploymentPrimaryButton:not(:disabled):focus-visible) {
+  background: var(--cicd-primary-strong);
+  border-color: var(--cicd-primary-strong);
+  box-shadow: none;
+  color: #ffffff;
+}
+
+.settingsDrawerBody :global(button),
+.settingsDrawerBody :global(select),
+.settingsDrawerBody :global(input:not([type])),
+.settingsDrawerBody :global(input[type="text"]),
+.accordionBody :global(button),
+.accordionBody :global(select),
+.accordionBody :global(input:not([type])),
+.accordionBody :global(input[type="text"]) {
+  min-height: 44px;
+}
+
+.nextTaskAction:focus-visible,
+.accordionToggle:focus-visible,
+.taskRowButton:focus-visible,
+.settingsDrawerClose:focus-visible,
+.settingsDrawerBody :global(button:focus-visible),
+.settingsDrawerBody :global(select:focus-visible),
+.settingsDrawerBody :global(input:focus-visible),
+.accordionBody :global(button:focus-visible),
+.accordionBody :global(select:focus-visible),
+.accordionBody :global(input:focus-visible),
+.accordionBody :global(summary:focus-visible),
+.connectionFacts a:focus-visible,
+.message button:focus-visible {
+  outline: 2px solid var(--cicd-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1200px) {
+  .phaseProgress {
+    padding: 20px 16px;
+  }
+
+  .phaseProgress li {
+    gap: 10px;
+    padding: 0 6px;
+  }
+
+  .phaseMarker {
+    flex-basis: 54px;
+    font-size: 27px;
+    height: 54px;
+    width: 54px;
+  }
+
+  .phaseName {
+    font-size: 18px;
+  }
+
+  .phaseStatus {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 900px) {
+  .root {
+    padding: 20px 24px 40px;
+  }
+
+  .accordionToggle {
+    grid-template-columns: 34px minmax(190px, 1fr) 18px;
+  }
+
+  .accordionMetadata {
+    display: none;
+  }
+
+  .taskRowButton,
+  .taskRowStatic {
+    padding-left: 20px;
+  }
+
+  .phaseProgress {
+    padding: 20px 12px;
+  }
+
+  .phaseProgress li {
+    gap: 10px;
+    padding: 0 6px;
+  }
+
+  .phaseMarker {
+    flex-basis: 50px;
+    font-size: 25px;
+    height: 50px;
+    width: 50px;
+  }
+
+  .phaseName {
+    font-size: 16px;
+  }
+
+  .phaseStatus {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .root {
+    padding: 16px 14px 32px;
+  }
+
+  .globalLastRefreshed {
+    font-size: calc(13px + var(--presentation-font-size-increase));
+  }
+
+  .globalLastRefreshedFull {
+    display: none;
+  }
+
+  .globalLastRefreshedCompact {
+    display: inline;
+  }
+
+  .loadingStatusBoard {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px;
+  }
+
+  .loadingAction {
+    width: 100%;
+  }
+
+  .nextTask {
+    align-items: stretch;
+    gap: 16px;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px;
+  }
+
+  .nextTaskAction {
+    width: 100%;
+  }
+
+  .phaseProgress {
+    min-height: 0;
+    padding: 16px 18px;
+  }
+
+  .phaseProgress ol {
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .phaseProgress li {
+    gap: 14px;
+    justify-content: flex-start;
+    padding: 0;
+  }
+
+  .phaseName {
+    font-size: 18px;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .phaseStatus {
+    font-size: 13px;
+  }
+
+  .phaseMarker {
+    flex-basis: 48px;
+    font-size: 24px;
+    height: 48px;
+    width: 48px;
+  }
+
+  .accordionPanelHeader {
+    padding: 0 16px;
+  }
+
+  .accordionRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .accordionToggle {
+    gap: 10px;
+    grid-template-columns: 30px minmax(0, 1fr) 18px;
+    padding: 10px 16px;
+  }
+
+  .accordionTitle {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .accordionHeaderAction {
+    border-top: 1px solid var(--cicd-line);
+    justify-content: flex-end;
+    padding: 8px 16px;
+  }
+
+  .accordionBody > :not(.taskList) {
+    padding: 18px 16px;
+  }
+
+  .taskRowButton,
+  .taskRowStatic {
+    align-items: start;
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 14px 16px;
+  }
+
+  .taskRowContent {
+    align-items: start;
+    gap: 3px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .taskRowDetail {
+    grid-column: 1;
+  }
+
+  .taskRowAction {
+    justify-content: flex-start;
+  }
+
+  .taskRowDisabledReason {
+    grid-column: 1;
+    text-align: left;
+  }
+
+  .settingsDrawerHeader {
+    padding-left: 18px;
+  }
+
+  .settingsDrawerBody {
+    padding: 20px 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nextTaskAction,
+  .accordionChevron {
+    transition: none;
+  }
+}

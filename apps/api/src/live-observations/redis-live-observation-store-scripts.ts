@@ -87,12 +87,13 @@ local function manifestJson(value, deploymentId)
   local endpoints = manifest.endpoints
   local pressure = manifest.pressure
   local adapter = manifest.adapter
+  local endpointCount = endpoints.audienceApplicationUrl == nil and 2 or 3
   if not exactObjectKeys(provenance, {
     deploymentId = true, terraformArtifactSha256 = true, awsConnectionId = true,
     region = true, verifiedAt = true
   }, 5) or not exactObjectKeys(endpoints, {
-    audienceBaseUrl = true, trafficUrl = true
-  }, 2) or not exactObjectKeys(pressure, {
+    audienceBaseUrl = true, audienceApplicationUrl = true, trafficUrl = true
+  }, endpointCount) or not exactObjectKeys(pressure, {
     metric = true, target = true, windowSeconds = true
   }, 3) or not exactObjectKeys(adapter, {
     kind = true, version = true, payload = true
@@ -134,6 +135,89 @@ local function manifestJson(value, deploymentId)
     }, payloadCount) and type(payload.trafficHostname) == 'string' and
       type(payload.loadBalancerDnsName) == 'string' and type(payload.loadBalancerArn) == 'string' and
       type(payload.targetGroupArn) == 'string' and validLogs and validCapacity
+  elseif adapter.kind == 'aws-live-observation' and adapter.version == 3 then
+    local payloadCount = payload.logGroupNames == nil and 16 or 17
+    local validLogs = payload.logGroupNames == nil
+    if type(payload.logGroupNames) == 'table' then
+      validLogs = #payload.logGroupNames <= 10
+      for index = 1, #payload.logGroupNames do
+        if type(payload.logGroupNames[index]) ~= 'string' or payload.logGroupNames[index] == '' then
+          validLogs = false
+        end
+      end
+    end
+    local capacity = payload.capacityTarget
+    local validCapacity = type(capacity) == 'table' and
+      capacity.kind == 'ecs_fargate' and exactObjectKeys(capacity, {
+        kind = true, clusterName = true, serviceName = true, maxCapacity = true
+      }, 4) and type(capacity.clusterName) == 'string' and
+      type(capacity.serviceName) == 'string' and type(capacity.maxCapacity) == 'number' and
+      capacity.maxCapacity > 0 and math.floor(capacity.maxCapacity) == capacity.maxCapacity
+    validAdapter = exactObjectKeys(payload, {
+      cloudFrontDistributionId = true, cloudFrontDomainName = true,
+      frontendBucketName = true, defaultOriginId = true, originAccessControlId = true,
+      apiOriginId = true, apiPathPattern = true, healthPathPattern = true,
+      frontendBucketPublicAccessBlocked = true, bucketPolicyAllowsCloudFrontRead = true,
+      topologyVerifiedAt = true, frontendState = true, loadBalancerDnsName = true,
+      loadBalancerArn = true, targetGroupArn = true, logGroupNames = true,
+      capacityTarget = true
+    }, payloadCount) and type(payload.cloudFrontDistributionId) == 'string' and
+      type(payload.cloudFrontDomainName) == 'string' and type(payload.frontendBucketName) == 'string' and
+      type(payload.defaultOriginId) == 'string' and type(payload.originAccessControlId) == 'string' and
+      type(payload.apiOriginId) == 'string' and payload.apiPathPattern == '/api/*' and
+      payload.healthPathPattern == '/health' and payload.frontendBucketPublicAccessBlocked == true and
+      payload.bucketPolicyAllowsCloudFrontRead == true and type(payload.topologyVerifiedAt) == 'string' and
+      (payload.frontendState == 'current' or payload.frontendState == 'may_be_previous') and
+      type(payload.loadBalancerDnsName) == 'string' and type(payload.loadBalancerArn) == 'string' and
+      type(payload.targetGroupArn) == 'string' and validLogs and validCapacity
+  elseif adapter.kind == 'aws-live-observation' and adapter.version == 4 then
+    local payloadCount = payload.logGroupNames == nil and 16 or 17
+    local validLogs = payload.logGroupNames == nil
+    if type(payload.logGroupNames) == 'table' then
+      validLogs = #payload.logGroupNames <= 10
+      for index = 1, #payload.logGroupNames do
+        if type(payload.logGroupNames[index]) ~= 'string' or payload.logGroupNames[index] == '' then
+          validLogs = false
+        end
+      end
+    end
+    local capacity = payload.capacityTarget
+    local scaling = type(capacity) == 'table' and capacity.scaling or nil
+    local validScaling = type(scaling) == 'table' and
+      ((scaling.mode == 'fixed' and exactObjectKeys(scaling, {
+        mode = true
+      }, 1)) or
+      (scaling.mode == 'service_auto_scaling' and exactObjectKeys(scaling, {
+        mode = true, minCapacity = true, maxCapacity = true,
+        metric = true, targetValue = true
+      }, 5) and type(scaling.minCapacity) == 'number' and scaling.minCapacity >= 0 and
+        math.floor(scaling.minCapacity) == scaling.minCapacity and
+        type(scaling.maxCapacity) == 'number' and scaling.maxCapacity > 0 and
+        math.floor(scaling.maxCapacity) == scaling.maxCapacity and
+        (type(scaling.metric) == 'string' or scaling.metric == cjson.null) and
+        (type(scaling.targetValue) == 'number' or scaling.targetValue == cjson.null)))
+    local validCapacity = type(capacity) == 'table' and
+      capacity.kind == 'ecs_fargate' and exactObjectKeys(capacity, {
+        kind = true, clusterName = true, serviceName = true, scaling = true
+      }, 4) and type(capacity.clusterName) == 'string' and
+      type(capacity.serviceName) == 'string' and validScaling
+    validAdapter = exactObjectKeys(payload, {
+      cloudFrontDistributionId = true, cloudFrontDomainName = true,
+      frontendBucketName = true, defaultOriginId = true, originAccessControlId = true,
+      apiOriginId = true, apiPathPattern = true, healthPathPattern = true,
+      frontendBucketPublicAccessBlocked = true, bucketPolicyAllowsCloudFrontRead = true,
+      topologyVerifiedAt = true, frontendState = true, loadBalancerDnsName = true,
+      loadBalancerArn = true, targetGroupArn = true, logGroupNames = true,
+      capacityTarget = true
+    }, payloadCount) and type(payload.cloudFrontDistributionId) == 'string' and
+      type(payload.cloudFrontDomainName) == 'string' and type(payload.frontendBucketName) == 'string' and
+      type(payload.defaultOriginId) == 'string' and type(payload.originAccessControlId) == 'string' and
+      type(payload.apiOriginId) == 'string' and payload.apiPathPattern == '/api/*' and
+      payload.healthPathPattern == '/health' and payload.frontendBucketPublicAccessBlocked == true and
+      payload.bucketPolicyAllowsCloudFrontRead == true and type(payload.topologyVerifiedAt) == 'string' and
+      (payload.frontendState == 'current' or payload.frontendState == 'may_be_previous') and
+      type(payload.loadBalancerDnsName) == 'string' and type(payload.loadBalancerArn) == 'string' and
+      type(payload.targetGroupArn) == 'string' and validLogs and validCapacity
   end
   return manifest.schemaVersion == 2 and manifest.provider == 'aws' and validAdapter and
     provenance.deploymentId == deploymentId and canonicalUuid(provenance.deploymentId) and
@@ -143,7 +227,9 @@ local function manifestJson(value, deploymentId)
     string.len(provenance.terraformArtifactSha256) == 64 and
     type(provenance.region) == 'string' and provenance.region ~= '' and
     type(provenance.verifiedAt) == 'string' and
-    type(endpoints.audienceBaseUrl) == 'string' and type(endpoints.trafficUrl) == 'string' and
+    type(endpoints.audienceBaseUrl) == 'string' and
+    (endpoints.audienceApplicationUrl == nil or type(endpoints.audienceApplicationUrl) == 'string') and
+    type(endpoints.trafficUrl) == 'string' and
     pressure.metric == 'requests_per_target_per_minute' and
     pressure.target == 60 and pressure.windowSeconds == 60
 end

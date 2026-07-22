@@ -10,13 +10,55 @@ export const REVERSE_ENGINEERING_RESOURCE_TYPES: ResourceType[] = [
   "SECURITY_GROUP",
   "EC2",
   "RDS",
-  "S3"
+  "S3",
+  "LOAD_BALANCER",
+  "CLOUDFRONT",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION"
 ];
 
 export const REVERSE_ENGINEERING_RESOURCE_SELECTIONS: ReverseEngineeringResourceSelection[] = [
   REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION,
   ...REVERSE_ENGINEERING_RESOURCE_TYPES
 ];
+
+const RESOURCE_SELECTION_LABELS: Readonly<Partial<Record<ResourceType, string>>> = {
+  VPC: "네트워크(VPC)",
+  SUBNET: "서브넷",
+  INTERNET_GATEWAY: "인터넷 게이트웨이",
+  ROUTE_TABLE: "라우팅 테이블",
+  SECURITY_GROUP: "보안 그룹",
+  EC2: "가상 서버(EC2)",
+  RDS: "데이터베이스(RDS)",
+  S3: "파일 저장소(S3)",
+  LOAD_BALANCER: "애플리케이션 로드 밸런서(ALB)",
+  CLOUDFRONT: "콘텐츠 전송(CloudFront)",
+  ECS_CLUSTER: "컨테이너 클러스터(ECS)",
+  ECS_SERVICE: "컨테이너 서비스(ECS)",
+  ECS_TASK_DEFINITION: "컨테이너 작업 정의(ECS)",
+  UNKNOWN: "확인 전용 AWS Resource"
+};
+
+export function formatReverseEngineeringResourceSelectionLabel(
+  resourceType: ReverseEngineeringResourceSelection
+): string {
+  return resourceType === REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
+    ? "전체"
+    : formatReverseEngineeringResourceTypeLabel(resourceType);
+}
+
+export function formatReverseEngineeringResourceTypeLabel(resourceType: ResourceType): string {
+  return RESOURCE_SELECTION_LABELS[resourceType] ?? "AWS Resource";
+}
+
+export function getReverseEngineeringSelectionHelp(
+  selection: ReverseEngineeringResourceSelection
+): string {
+  return selection === REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
+    ? "현재 지원 Resource와 확인 전용 AWS Resource를 함께 읽습니다."
+    : "선택한 정식 지원 Resource만 읽습니다.";
+}
 
 // API의 `ALL` 값은 모든 리소스를 뜻하므로, 화면에서도 개별 항목이 모두 선택된 상태로 보입니다.
 export function isReverseEngineeringResourceSelectionChecked(
