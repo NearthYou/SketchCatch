@@ -131,6 +131,12 @@ export const AWS_IMPORT_READERS = [
     actions: ["lambda:ListFunctions", "lambda:GetPolicy"]
   },
   {
+    serviceKey: "eventbridge",
+    displayName: "EventBridge",
+    tier: "expanded",
+    actions: ["events:ListRules", "events:ListTargetsByRule"]
+  },
+  {
     serviceKey: "ami",
     displayName: "AMI",
     tier: "expanded",

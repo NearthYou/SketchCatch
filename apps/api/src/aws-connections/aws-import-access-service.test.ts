@@ -776,7 +776,7 @@ test("checkImportReads persists serviceKey outcomes and maps public labels from 
     iam: "permission_denied"
   });
   assert.equal(fixture.getRecord()?.policyStackId, "policy-stack-id");
-  assert.equal(fixture.getRecord()?.policyContractVersion, "1");
+  assert.equal(fixture.getRecord()?.policyContractVersion, "2");
   assert.match(fixture.getRecord()?.policyTemplateHash ?? "", /^[0-9a-f]{64}$/u);
   assert.match(fixture.getRecord()?.policyFingerprint ?? "", /^[0-9a-f]{64}$/u);
   assert.doesNotMatch(JSON.stringify(fixture.getRecord()), /AccessDenied|RequestId|arn:aws/u);

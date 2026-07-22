@@ -33,3 +33,12 @@ test("import policy fingerprint addresses the exact deterministic document", () 
   assert.match(expected, /^[a-f0-9]{64}$/u);
   assert.equal(getAwsImportPolicyFingerprint(), getAwsImportPolicyFingerprint());
 });
+
+test("EventBridge import reader는 Rule과 Target을 읽는 최소 권한만 요청한다", () => {
+  const reader = AWS_IMPORT_READERS.find((candidate) => candidate.serviceKey === "eventbridge");
+
+  assert.equal(reader?.displayName, "EventBridge");
+  assert.equal(reader?.tier, "expanded");
+  assert.deepEqual(reader?.actions, ["events:ListRules", "events:ListTargetsByRule"]);
+  assert.doesNotMatch(JSON.stringify(reader), /Create|Put|Delete|Tag/u);
+});

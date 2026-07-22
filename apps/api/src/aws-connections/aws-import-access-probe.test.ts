@@ -8,6 +8,7 @@ import {
 import {
   AWS_IMPORT_PROBE_EXECUTORS,
   probeAwsImportAccess,
+  probeEventBridge,
   probeLambda,
   probeResourceExplorer,
   probeS3,
@@ -176,6 +177,56 @@ test("core permission is update_required and expanded missing setup remains dist
     )?.outcome,
     "not_configured"
   );
+});
+
+test("EventBridge 권한 거부는 전체 가져오기를 막지 않고 서비스별 제한으로 남긴다", async () => {
+  const executors = createExecutors(async (_context, serviceKey) =>
+    String(serviceKey) === "eventbridge" ? "permission_denied" : "success"
+  );
+  const result = await probeAwsImportAccess(
+    { connection },
+    {
+      executors,
+      async assumeRole() {
+        return {
+          accessKeyId: "temporary-access-key",
+          secretAccessKey: "temporary-secret-key",
+          sessionToken: "temporary-session-token"
+        };
+      }
+    }
+  );
+
+  assert.equal(result.status, "limited");
+  assert.deepEqual(result.limitedServiceLabels, ["EventBridge"]);
+  assert.equal(
+    result.serviceResults.find((service) => service.serviceKey === "eventbridge")?.outcome,
+    "permission_denied"
+  );
+});
+
+test("EventBridge probe는 Rule 한 page와 첫 Rule의 Target 한 page만 읽는다", async () => {
+  const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
+
+  const outcome = await probeEventBridge({
+    async send(command) {
+      const value = command as { constructor: { name: string }; input: Record<string, unknown> };
+      calls.push({ name: value.constructor.name, input: value.input });
+      return calls.length === 1
+        ? { Rules: [{ Name: "nightly", EventBusName: "default" }] }
+        : { Targets: [] };
+    }
+  });
+
+  assert.equal(outcome, "success");
+  assert.deepEqual(calls.map((call) => call.name), [
+    "ListRulesCommand",
+    "ListTargetsByRuleCommand"
+  ]);
+  assert.equal(calls[0]?.input["Limit"], 1);
+  assert.equal(calls[1]?.input["Limit"], 1);
+  assert.equal(calls[1]?.input["Rule"], "nightly");
+  assert.equal(calls[1]?.input["EventBusName"], "default");
 });
 
 test("Resource Explorer uses GetDefaultView then GetView then one Search", async () => {

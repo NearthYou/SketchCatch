@@ -18,6 +18,11 @@ import {
   ElasticLoadBalancingV2Client
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import {
+  EventBridgeClient,
+  ListRulesCommand,
+  ListTargetsByRuleCommand
+} from "@aws-sdk/client-eventbridge";
+import {
   DescribeClustersCommand,
   DescribeServicesCommand,
   DescribeTaskDefinitionCommand,
@@ -143,6 +148,7 @@ export const AWS_IMPORT_PROBE_EXECUTORS: ReadonlyMap<
   ["cloudwatch", probeCloudWatch],
   ["apigateway", probeApiGateway],
   ["lambda", probeLambdaExecutor],
+  ["eventbridge", probeEventBridgeExecutor],
   ["ami", probeAmi]
 ]);
 
@@ -541,6 +547,35 @@ export async function probeLambda(
     if (errorName(error) === "ResourceNotFoundException") return "success";
     throw error;
   }
+  return "success";
+}
+
+/** gg: EventBridge는 Rule 한 건과 그 Rule의 Target 한 page만 읽어 최소 권한을 검증합니다. */
+async function probeEventBridgeExecutor(
+  context: AwsImportProbeExecutorContext
+): Promise<AwsImportProbeOutcome> {
+  const client = bindAbortSignal(
+    new EventBridgeClient({ region: context.region, credentials: context.credentials }),
+    context.abortSignal
+  );
+  return probeEventBridge({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+}
+
+export async function probeEventBridge(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  const listed = await client.send(new ListRulesCommand({ Limit: 1 })) as {
+    Rules?: Array<{ Name?: string; EventBusName?: string }>;
+  };
+  const rule = listed.Rules?.[0];
+  if (!rule?.Name) return "success";
+  await client.send(new ListTargetsByRuleCommand({
+    Rule: rule.Name,
+    EventBusName: rule.EventBusName,
+    Limit: 1
+  }));
   return "success";
 }
 
