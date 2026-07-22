@@ -101,6 +101,19 @@ import {
   type RestApi
 } from "@aws-sdk/client-api-gateway";
 import {
+  EventBridgeClient,
+  ListEventBusesCommand,
+  ListRulesCommand,
+  ListTagsForResourceCommand,
+  ListTargetsByRuleCommand,
+  type ListEventBusesCommandOutput,
+  type ListRulesCommandOutput,
+  type ListTagsForResourceCommandOutput,
+  type ListTargetsByRuleCommandOutput,
+  type Rule,
+  type Target
+} from "@aws-sdk/client-eventbridge";
+import {
   GetBucketEncryptionCommand,
   GetBucketLocationCommand,
   GetBucketPolicyStatusCommand,
@@ -152,6 +165,7 @@ export type AwsReverseEngineeringReaderPlan = {
   readonly loadBalancers: boolean;
   readonly cloudFrontDistributions: boolean;
   readonly ecsResources: boolean;
+  readonly eventBridgeResources: boolean;
   readonly unknownResources: boolean;
 };
 
@@ -309,6 +323,13 @@ export type AwsCloudWatchReadClientFactory = (
   region: string,
   credentials: TerraformAwsCredentialEnv
 ) => AwsCloudWatchReadClient;
+export type AwsEventBridgeReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsEventBridgeReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsEventBridgeReadClient;
 
 type LambdaPolicyStatement = {
   readonly Sid?: string;
@@ -389,12 +410,17 @@ export function createAwsReverseEngineeringGateway(
         ...(readerPlan.ecsResources
           ? [readEcsResourcesWithDiagnostics(input.region, credentials)]
           : []),
+        ...(readerPlan.eventBridgeResources
+          ? [readEventBridgeResourcesWithDiagnostics(input.region, credentials)]
+          : []),
         ...(readerPlan.unknownResources ? [readUnknownResourceGroup(input, credentials)] : [])
       ]);
 
       const records = resolveEcsRelationships(
         resolveCloudFrontOriginRelationships(
-          uniqueDiscoveredRecordsByProviderId(resourceGroups.flatMap((group) => group.records))
+          resolveEventBridgeTargetRelationships(
+            uniqueDiscoveredRecordsByProviderId(resourceGroups.flatMap((group) => group.records))
+          )
         )
       );
 
@@ -456,6 +482,7 @@ export function createAwsReverseEngineeringReaderPlan(
     loadBalancers: shouldReadResourceGroup(input, "LOAD_BALANCER"),
     cloudFrontDistributions: shouldReadResourceGroup(input, "CLOUDFRONT"),
     ecsResources: shouldReadEcsResourceGroup(input),
+    eventBridgeResources: shouldReadEventBridgeResourceGroup(input),
     unknownResources: shouldReadUnknownResourceGroup(input)
   };
 }
@@ -466,6 +493,15 @@ function shouldReadEcsResourceGroup(input: AwsProviderScanInput): boolean {
     input.resourceTypes.includes("ECS_CLUSTER") ||
     input.resourceTypes.includes("ECS_SERVICE") ||
     input.resourceTypes.includes("ECS_TASK_DEFINITION")
+  );
+}
+
+// gg: Rule과 Target은 한 reader에서 함께 읽어 중복 ListRules 호출을 막습니다.
+function shouldReadEventBridgeResourceGroup(input: AwsProviderScanInput): boolean {
+  return (
+    input.resourceTypes.includes("ALL") ||
+    input.resourceTypes.includes("EVENTBRIDGE_RULE") ||
+    input.resourceTypes.includes("EVENTBRIDGE_TARGET")
   );
 }
 
@@ -830,6 +866,259 @@ function normalizeS3BucketRegion(
   fallbackRegion: string
 ): string {
   return locationConstraint && locationConstraint.length > 0 ? locationConstraint : fallbackRegion;
+}
+
+/** gg: Event Bus, Rule, Target page를 끝까지 읽고 실패한 page 전까지의 결과를 보존합니다. */
+export async function readEventBridgeResourcesWithDiagnostics(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsEventBridgeReadClientFactory = createDefaultEventBridgeReadClient
+): Promise<AwsProviderDiscoveryResult> {
+  const client = createClient(region, credentials);
+  const busPages = await collectAwsPages(async (nextToken) => {
+    const response = await sendEventBridgeCommand<ListEventBusesCommandOutput>(
+      client,
+      new ListEventBusesCommand({
+        Limit: 100,
+        ...(nextToken ? { NextToken: nextToken } : {})
+      })
+    );
+    return { items: response.EventBuses ?? [], nextToken: response.NextToken };
+  });
+  const scanErrors: ReverseEngineeringScanError[] = busPages.failure
+    ? [toScanErrorFromPageFailure("EVENTBRIDGE_RULE", busPages.failure, "eventbridge")]
+    : [];
+  const eventBusNames = [
+    ...new Set([
+      "default",
+      ...busPages.items.flatMap((eventBus) => {
+        const name = getNonEmptyStringValue(eventBus.Name);
+        return name ? [name] : [];
+      })
+    ])
+  ];
+  const ruleEntries: Array<{ rule: Rule; eventBusName: string }> = [];
+  for (const eventBusName of eventBusNames) {
+    const rulePages = await collectAwsPages(async (nextToken) => {
+      const response = await sendEventBridgeCommand<ListRulesCommandOutput>(
+        client,
+        new ListRulesCommand({
+          EventBusName: eventBusName,
+          Limit: 100,
+          ...(nextToken ? { NextToken: nextToken } : {})
+        })
+      );
+      return { items: response.Rules ?? [], nextToken: response.NextToken };
+    });
+    if (rulePages.failure) {
+      scanErrors.push(
+        toScanErrorFromPageFailure("EVENTBRIDGE_RULE", rulePages.failure, "eventbridge")
+      );
+    }
+    ruleEntries.push(...rulePages.items.map((rule) => ({ rule, eventBusName })));
+  }
+
+  const records: AwsDiscoveredResourceRecord[] = [];
+  for (const { rule, eventBusName: scannedEventBusName } of ruleEntries) {
+    const ruleName = getNonEmptyStringValue(rule.Name);
+    const ruleArn = getNonEmptyStringValue(rule.Arn);
+    let tags: Array<{ key: string; value: string }> = [];
+    let tagsReadComplete = false;
+    if (ruleArn) {
+      try {
+        const tagResponse = await sendEventBridgeCommand<ListTagsForResourceCommandOutput>(
+          client,
+          new ListTagsForResourceCommand({ ResourceARN: ruleArn })
+        );
+        tags = (tagResponse.Tags ?? []).flatMap((tag) =>
+          typeof tag.Key === "string" &&
+          tag.Key.length > 0 &&
+          typeof tag.Value === "string"
+            ? [{ key: tag.Key, value: tag.Value }]
+            : []
+        );
+        tagsReadComplete = true;
+      } catch (error) {
+        scanErrors.push(toScanError("EVENTBRIDGE_RULE", error, "eventbridge"));
+      }
+    }
+
+    const eventBusName =
+      getNonEmptyStringValue(rule.EventBusName) ?? scannedEventBusName;
+    const ruleRecord = toEventBridgeRuleRecord(
+      rule,
+      region,
+      eventBusName,
+      tags,
+      tagsReadComplete
+    );
+    if (!ruleRecord) {
+      continue;
+    }
+    records.push(ruleRecord);
+    if (!ruleName) {
+      continue;
+    }
+
+    const targetPages = await collectAwsPages(async (nextToken) => {
+      const response = await sendEventBridgeCommand<ListTargetsByRuleCommandOutput>(
+        client,
+        new ListTargetsByRuleCommand({
+          Rule: ruleName,
+          EventBusName: eventBusName,
+          Limit: 100,
+          ...(nextToken ? { NextToken: nextToken } : {})
+        })
+      );
+      return { items: response.Targets ?? [], nextToken: response.NextToken };
+    });
+    if (targetPages.failure) {
+      scanErrors.push(
+        toScanErrorFromPageFailure(
+          "EVENTBRIDGE_TARGET",
+          targetPages.failure,
+          "eventbridge"
+        )
+      );
+    }
+    records.push(
+      ...targetPages.items.flatMap((target) =>
+        toEventBridgeTargetRecord(target, ruleRecord, ruleName, eventBusName, region)
+      )
+    );
+  }
+
+  return {
+    records,
+    scanErrors: deduplicateReverseEngineeringScanErrors(scanErrors)
+  };
+}
+
+function createDefaultEventBridgeReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsEventBridgeReadClient {
+  const client = new EventBridgeClient({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
+  return {
+    send: (command) => client.send(command as Parameters<EventBridgeClient["send"]>[0])
+  };
+}
+
+function toEventBridgeRuleRecord(
+  rule: Rule,
+  fallbackRegion: string,
+  eventBusName: string,
+  tags: Array<{ key: string; value: string }> = [],
+  tagsReadComplete = false
+): AwsDiscoveredResourceRecord | null {
+  const name = getNonEmptyStringValue(rule.Name);
+  const providerResourceId = getNonEmptyStringValue(rule.Arn) ??
+    (name ? `eventbridge-rule:${eventBusName}/${name}` : null);
+  if (!providerResourceId) {
+    return null;
+  }
+
+  return {
+    providerResourceType: "AWS::Events::Rule",
+    providerResourceId,
+    displayName: name ?? providerResourceId,
+    region: fallbackRegion,
+    config: compactRecord({
+      name,
+      description: rule.Description,
+      eventBusName,
+      eventPattern: rule.EventPattern,
+      scheduleExpression: rule.ScheduleExpression,
+      state: rule.State,
+      tagsReadComplete,
+      hasRoleArn: getNonEmptyStringValue(rule.RoleArn) ? true : undefined,
+      managedBy: rule.ManagedBy,
+      tags: tags.length > 0 ? tags : undefined
+    }),
+    relationships: []
+  };
+}
+
+function toEventBridgeTargetRecord(
+  target: Target,
+  ruleRecord: AwsDiscoveredResourceRecord,
+  ruleName: string,
+  eventBusName: string,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const targetId = getNonEmptyStringValue(target.Id);
+  if (!targetId) {
+    return [];
+  }
+
+  const targetArn = getNonEmptyStringValue(target.Arn);
+  return [
+    {
+      providerResourceType: "AWS::Events::Target",
+      providerResourceId: createEventBridgeTargetProviderResourceId(
+        eventBusName,
+        ruleName,
+        targetId
+      ),
+      displayName: targetId,
+      region: fallbackRegion,
+      config: compactRecord({
+        targetId,
+        ruleName,
+        eventBusName,
+        ruleProviderResourceId: ruleRecord.providerResourceId,
+        targetArn,
+        hasRoleArn: getNonEmptyStringValue(target.RoleArn) ? true : undefined,
+        hasInput: getNonEmptyStringValue(target.Input) ? true : undefined,
+        hasInputPath: getNonEmptyStringValue(target.InputPath) ? true : undefined,
+        hasInputTransformer: target.InputTransformer ? true : undefined,
+        hasDeadLetterConfig: target.DeadLetterConfig ? true : undefined,
+        hasRetryPolicy: target.RetryPolicy ? true : undefined,
+        hasAdvancedParameters: hasEventBridgeTargetAdvancedParameters(target)
+          ? true
+          : undefined
+      }),
+      relationships: [
+        { type: "depends_on", targetProviderResourceId: ruleRecord.providerResourceId },
+        ...(targetArn
+          ? [{ type: "attached_to" as const, targetProviderResourceId: targetArn }]
+          : [])
+      ]
+    }
+  ];
+}
+
+// gg: 단순 Target 외의 서비스별 전달 설정은 값 자체를 저장하지 않고 존재 여부만 남깁니다.
+function hasEventBridgeTargetAdvancedParameters(target: Target): boolean {
+  return [
+    target.KinesisParameters,
+    target.RunCommandParameters,
+    target.EcsParameters,
+    target.BatchParameters,
+    target.SqsParameters,
+    target.HttpParameters,
+    target.RedshiftDataParameters,
+    target.SageMakerPipelineParameters,
+    target.AppSyncParameters
+  ].some((value) => value !== undefined);
+}
+
+function createEventBridgeTargetProviderResourceId(
+  eventBusName: string,
+  ruleName: string,
+  targetId: string
+): string {
+  return `eventbridge-target:${eventBusName}/${ruleName}/${targetId}`;
+}
+
+async function sendEventBridgeCommand<TOutput>(
+  client: AwsEventBridgeReadClient,
+  command: object
+): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
 }
 
 // `ALL` 선택에서 지원 목록 밖 tagged 리소스를 UNKNOWN 후보로 남겨 사용자가 놓치지 않게 합니다.
@@ -2873,9 +3162,169 @@ export function isReverseEngineeringPromotedResourceArn(arn: string): boolean {
       parsedArn.resourceKind === "loadbalancer" &&
       parsedArn.resourceName.startsWith("app/")) ||
     (parsedArn.service === "cloudfront" && parsedArn.resourceKind === "distribution") ||
+    (parsedArn.service === "events" && parsedArn.resourceKind === "rule") ||
     (parsedArn.service === "ecs" &&
       ["cluster", "service", "task-definition"].includes(parsedArn.resourceKind))
   );
+}
+
+type EventBridgeTargetReferenceMetadata = {
+  readonly terraformResourceType: string;
+  readonly terraformAttribute: "arn";
+};
+
+/** gg: Target ARN이 이번 scan의 관리 가능한 리소스와 정확히 일치할 때만 Board 관계와 참조를 승인합니다. */
+export function resolveEventBridgeTargetRelationships(
+  records: AwsDiscoveredResourceRecord[]
+): AwsDiscoveredResourceRecord[] {
+  const recordsByProviderId = new Map(
+    records.map((record) => [record.providerResourceId, record])
+  );
+  const recordsByRelationshipIdentity = new Map(
+    records.map((record) => [
+      createEventBridgeRelationshipIdentity(record.providerResourceId),
+      record
+    ])
+  );
+
+  return records.map((record) => {
+    if (record.providerResourceType !== "AWS::Events::Target") {
+      return record;
+    }
+
+    const ruleProviderResourceId = getNonEmptyStringValue(
+      record.config["ruleProviderResourceId"]
+    );
+    const targetProviderResourceId = getNonEmptyStringValue(
+      record.config["targetArn"] ?? record.config["targetProviderResourceId"]
+    );
+    const targetRecord = targetProviderResourceId
+      ? recordsByProviderId.get(targetProviderResourceId) ??
+        recordsByRelationshipIdentity.get(
+          createEventBridgeRelationshipIdentity(targetProviderResourceId)
+        )
+      : undefined;
+    const ruleRecord = ruleProviderResourceId
+      ? recordsByProviderId.get(ruleProviderResourceId)
+      : undefined;
+    const resolvedTargetProviderResourceId =
+      targetRecord?.providerResourceId ?? targetProviderResourceId;
+    const targetReference = targetRecord
+      ? getEventBridgeTargetReferenceMetadata(targetRecord)
+      : null;
+    const candidateRelationships: AwsDiscoveredResourceRecord["relationships"] = [
+      ...record.relationships,
+      ...(ruleProviderResourceId
+        ? [{ type: "depends_on" as const, targetProviderResourceId: ruleProviderResourceId }]
+        : []),
+      ...(resolvedTargetProviderResourceId
+        ? [{ type: "attached_to" as const, targetProviderResourceId: resolvedTargetProviderResourceId }]
+        : [])
+    ];
+
+    return {
+      ...record,
+      config: compactRecord({
+        targetId: record.config["targetId"],
+        ruleName: record.config["ruleName"],
+        eventBusName: record.config["eventBusName"],
+        ruleProviderResourceId,
+        targetProviderResourceId: resolvedTargetProviderResourceId,
+        ruleReferenceReady: isEventBridgeRuleReferenceReady(ruleRecord),
+        hasRoleArn: hasEventBridgeTargetRisk(record.config, "hasRoleArn", "roleArn"),
+        hasInput: hasEventBridgeTargetRisk(record.config, "hasInput", "input"),
+        hasInputPath: hasEventBridgeTargetRisk(
+          record.config,
+          "hasInputPath",
+          "inputPath"
+        ),
+        hasInputTransformer: hasEventBridgeTargetRisk(
+          record.config,
+          "hasInputTransformer",
+          "inputTransformer"
+        ),
+        hasDeadLetterConfig: hasEventBridgeTargetRisk(
+          record.config,
+          "hasDeadLetterConfig",
+          "deadLetterConfig"
+        ),
+        hasRetryPolicy: hasEventBridgeTargetRisk(
+          record.config,
+          "hasRetryPolicy",
+          "retryPolicy"
+        ),
+        hasAdvancedParameters:
+          record.config["hasAdvancedParameters"] === true ||
+          EVENTBRIDGE_TARGET_ADVANCED_CONFIG_KEYS.some(
+            (key) => record.config[key] !== undefined
+          )
+            ? true
+            : undefined,
+        targetReferenceReady: targetReference !== null,
+        targetTerraformResourceType: targetReference?.terraformResourceType,
+        targetTerraformAttribute: targetReference?.terraformAttribute
+      }),
+      relationships: uniqueDiscoveredRelationships(
+        candidateRelationships.filter((relationship) =>
+          recordsByProviderId.has(relationship.targetProviderResourceId)
+        )
+      )
+    };
+  });
+}
+
+// gg: CloudWatch Logs ARN의 선택적 `:*` suffix만 제거해 EventBridge Target ARN과 맞춥니다.
+function createEventBridgeRelationshipIdentity(providerResourceId: string): string {
+  return providerResourceId.includes(":log-group:") && providerResourceId.endsWith(":*")
+    ? providerResourceId.slice(0, -2)
+    : providerResourceId;
+}
+
+function isEventBridgeRuleReferenceReady(
+  record: AwsDiscoveredResourceRecord | undefined
+): boolean {
+  return Boolean(
+    record?.providerResourceType === "AWS::Events::Rule" &&
+    record.config["tagsReadComplete"] === true &&
+    record.config["hasRoleArn"] !== true &&
+    !getNonEmptyStringValue(record.config["managedBy"])
+  );
+}
+
+const EVENTBRIDGE_TARGET_ADVANCED_CONFIG_KEYS = [
+  "kinesisParameters",
+  "runCommandParameters",
+  "ecsParameters",
+  "batchParameters",
+  "sqsParameters",
+  "httpParameters",
+  "redshiftDataParameters",
+  "sageMakerPipelineParameters",
+  "appSyncParameters"
+] as const;
+
+function hasEventBridgeTargetRisk(
+  config: Record<string, unknown>,
+  markerKey: string,
+  sourceKey: string
+): true | undefined {
+  return config[markerKey] === true || config[sourceKey] !== undefined ? true : undefined;
+}
+
+// gg: 현재 Terraform projection이 실제로 선언할 수 있는 대상만 Target ARN 참조로 승격합니다.
+function getEventBridgeTargetReferenceMetadata(
+  record: AwsDiscoveredResourceRecord
+): EventBridgeTargetReferenceMetadata | null {
+  if (
+    record.providerResourceType === "AWS::Logs::LogGroup" &&
+    getNonEmptyStringValue(record.config["logGroupName"]) &&
+    record.config["hasKmsKey"] !== true &&
+    !getNonEmptyStringValue(record.config["kmsKeyId"])
+  ) {
+    return { terraformResourceType: "aws_cloudwatch_log_group", terraformAttribute: "arn" };
+  }
+
+  return null;
 }
 
 // ECS 관계는 API 응답의 명시적인 ID가 같은 scan record로 확인될 때만 Board로 전달합니다.
@@ -3128,6 +3577,7 @@ const DEDICATED_RECORD_DETAIL_KEY_BY_PROVIDER_RESOURCE_TYPE = new Map<string, st
   ["AWS::Logs::LogGroup", "logGroupName"],
   ["AWS::ApiGateway::RestApi", "name"],
   ["AWS::CloudWatch::Alarm", "alarmName"],
+  ["AWS::Events::Rule", "name"],
   ["AWS::Lambda::Function", "functionName"],
   ["AWS::IAM::Role", "roleName"],
   ["AWS::IAM::Policy", "policyName"],
@@ -3301,6 +3751,9 @@ function getReverseEngineeringAwsServiceKey(resourceType: ResourceType): string 
       return "cloudwatch-logs";
     case "CLOUDWATCH_METRIC_ALARM":
       return "cloudwatch";
+    case "EVENTBRIDGE_RULE":
+    case "EVENTBRIDGE_TARGET":
+      return "eventbridge";
     case "API_GATEWAY_REST_API":
       return "api-gateway";
     case "LAMBDA":

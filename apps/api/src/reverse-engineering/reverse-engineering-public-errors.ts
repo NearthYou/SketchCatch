@@ -14,6 +14,7 @@ const SERVICE_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   ec2: "EC2",
   ecs: "ECS",
   "elastic-load-balancing": "Elastic Load Balancing",
+  eventbridge: "EventBridge",
   iam: "IAM",
   kms: "KMS",
   lambda: "Lambda",
@@ -184,6 +185,8 @@ function getServiceKeyByResourceType(resourceType: ResourceType | "UNKNOWN"): st
     KMS_KEY: "kms",
     CLOUDWATCH_LOG_GROUP: "cloudwatch-logs",
     CLOUDWATCH_METRIC_ALARM: "cloudwatch",
+    EVENTBRIDGE_RULE: "eventbridge",
+    EVENTBRIDGE_TARGET: "eventbridge",
     API_GATEWAY_REST_API: "api-gateway",
     LAMBDA: "lambda",
     LAMBDA_PERMISSION: "lambda"

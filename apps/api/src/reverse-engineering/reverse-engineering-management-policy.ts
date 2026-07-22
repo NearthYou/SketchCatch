@@ -19,6 +19,8 @@ const AUTOMATED_MANAGED_RESOURCE_TYPES = new Set<ResourceType>([
   "RDS",
   "S3",
   "CLOUDWATCH_LOG_GROUP",
+  "EVENTBRIDGE_RULE",
+  "EVENTBRIDGE_TARGET",
   "LOAD_BALANCER",
   "CLOUDFRONT",
   "ECS_CLUSTER",
@@ -81,6 +83,13 @@ export function classifyReverseEngineeringManagement(
   }
 
   if (isSecurityGroupRequiringMapping(resource)) {
+    return "needs_mapping";
+  }
+
+  if (
+    isEventBridgeRuleRequiringMapping(resource) ||
+    isEventBridgeTargetRequiringMapping(resource)
+  ) {
     return "needs_mapping";
   }
 
@@ -174,6 +183,77 @@ export function isKmsConnectedCloudWatchLogGroup(
   return (
     resource.resourceType === "CLOUDWATCH_LOG_GROUP" &&
     (resource.config["hasKmsKey"] === true || hasNonEmptyString(resource.config["kmsKeyId"]))
+  );
+}
+
+/** AWS 관리 Rule 또는 별도 실행 Role이 필요한 Rule은 자동 Terraform 관리에서 제외합니다. */
+export function isEventBridgeRuleRequiringMapping(
+  resource: Pick<DiscoveredResource, "resourceType" | "config">
+): boolean {
+  if (resource.resourceType !== "EVENTBRIDGE_RULE") {
+    return false;
+  }
+
+  return (
+    resource.config["tagsReadComplete"] !== true ||
+    resource.config["hasRoleArn"] === true ||
+    hasNonEmptyString(resource.config["managedBy"])
+  );
+}
+
+/** Rule과 대상 리소스를 안전한 Terraform 참조로 만들 수 없는 Target은 수동 검토로 닫습니다. */
+export function isEventBridgeTargetRequiringMapping(
+  resource: Pick<DiscoveredResource, "resourceType" | "config">
+): boolean {
+  if (resource.resourceType !== "EVENTBRIDGE_TARGET") {
+    return false;
+  }
+
+  const riskyMarkers = [
+    "hasRoleArn",
+    "hasInput",
+    "hasInputPath",
+    "hasInputTransformer",
+    "hasDeadLetterConfig",
+    "hasRetryPolicy",
+    "hasAdvancedParameters"
+  ] as const;
+  const hasInternalReferences =
+    isTerraformAttributeReference(
+      resource.config["ruleTerraformReference"],
+      "aws_cloudwatch_event_rule",
+      "name"
+    ) &&
+    isTerraformArnReference(resource.config["targetTerraformReference"]);
+  const hasProjectedReferences =
+    isTerraformAttributeReference(
+      resource.config["rule"],
+      "aws_cloudwatch_event_rule",
+      "name"
+    ) && isTerraformArnReference(resource.config["arn"]);
+
+  return (
+    riskyMarkers.some((key) => resource.config[key] === true) ||
+    (!hasInternalReferences && !hasProjectedReferences)
+  );
+}
+
+/** 서버가 만든 `type.name.attribute` Terraform 참조 형식만 관리 근거로 인정합니다. */
+function isTerraformAttributeReference(
+  value: unknown,
+  resourceType: string,
+  attribute: string
+): boolean {
+  return (
+    typeof value === "string" &&
+    new RegExp(`^${resourceType}\\.[a-z_][a-z0-9_]*\\.${attribute}$`, "u").test(value)
+  );
+}
+
+function isTerraformArnReference(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    /^aws_[a-z0-9_]+\.[a-z_][a-z0-9_]*\.arn$/u.test(value)
   );
 }
 

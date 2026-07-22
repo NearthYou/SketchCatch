@@ -25,6 +25,8 @@ import {
 } from "./reverse-engineering-terraform-projection.js";
 import {
   isCloudWatchMetricAlarmRequiringMapping,
+  isEventBridgeRuleRequiringMapping,
+  isEventBridgeTargetRequiringMapping,
   isKmsConnectedCloudWatchLogGroup,
   isSecurityGroupRequiringMapping
 } from "./reverse-engineering-management-policy.js";
@@ -90,6 +92,7 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::CloudWatch::Alarm", "CLOUDWATCH_METRIC_ALARM"],
   ["AWS::ApiGateway::RestApi", "API_GATEWAY_REST_API"],
   ["AWS::Events::Rule", "EVENTBRIDGE_RULE"],
+  ["AWS::Events::Target", "EVENTBRIDGE_TARGET"],
   ["AWS::ElasticLoadBalancingV2::LoadBalancer", "LOAD_BALANCER"],
   ["AWS::CloudFront::Distribution", "CLOUDFRONT"],
   ["AWS::ECS::Cluster", "ECS_CLUSTER"],
@@ -101,6 +104,8 @@ const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_REST_API",
   "CLOUDWATCH_METRIC_ALARM",
   "CLOUDWATCH_LOG_GROUP",
+  "EVENTBRIDGE_RULE",
+  "EVENTBRIDGE_TARGET",
   "LOAD_BALANCER",
   "CLOUDFRONT",
   "ECS_CLUSTER",
@@ -119,6 +124,8 @@ const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
   "RDS",
   "S3",
   "CLOUDWATCH_LOG_GROUP",
+  "EVENTBRIDGE_RULE",
+  "EVENTBRIDGE_TARGET",
   "LOAD_BALANCER",
   "CLOUDFRONT",
   "ECS_CLUSTER",
@@ -292,6 +299,44 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
   [
     "AWS::Logs::LogGroup",
     new Set(["logGroupClass", "logGroupName", "retentionInDays"])
+  ],
+  [
+    "AWS::Events::Rule",
+    new Set([
+      "name",
+      "description",
+      "eventBusName",
+      "eventPattern",
+      "scheduleExpression",
+      "state",
+      "tags",
+      "tagsReadComplete",
+      "hasRoleArn",
+      "managedBy"
+    ])
+  ],
+  [
+    "AWS::Events::Target",
+    new Set([
+      "targetId",
+      "ruleName",
+      "eventBusName",
+      "hasRoleArn",
+      "hasInput",
+      "hasInputPath",
+      "hasInputTransformer",
+      "hasDeadLetterConfig",
+      "hasRetryPolicy",
+      "hasAdvancedParameters",
+      "targetReferenceReady",
+      "ruleReferenceReady",
+      "targetTerraformResourceType",
+      "targetTerraformAttribute",
+      "ruleTerraformReference",
+      "targetTerraformReference",
+      "rule",
+      "arn"
+    ])
   ]
 ]);
 const OMIT_PUBLIC_VALUE = Symbol("omit-public-value");
@@ -390,6 +435,47 @@ function createResourceIdMap(records: AwsDiscoveredResourceRecord[]): ReadonlyMa
   return new Map(records.map((record) => [record.providerResourceId, createNodeId(record)]));
 }
 
+/** 확인된 Rule과 대상 node를 실제 Terraform 참조식으로 바꿔 Target 값에만 넣습니다. */
+function createEventBridgeTargetTerraformReferenceConfig(
+  record: AwsDiscoveredResourceRecord,
+  storedConfig: Record<string, unknown>,
+  idMap: ReadonlyMap<string, string>
+): Record<string, unknown> {
+  const ruleProviderResourceId = getNonEmptyString(record.config["ruleProviderResourceId"]);
+  const targetProviderResourceId = getNonEmptyString(
+    record.config["targetProviderResourceId"]
+  );
+  const ruleResourceId = ruleProviderResourceId
+    ? idMap.get(ruleProviderResourceId)
+    : undefined;
+  const targetResourceId = targetProviderResourceId
+    ? idMap.get(targetProviderResourceId)
+    : undefined;
+  const targetTerraformResourceType = getNonEmptyString(
+    storedConfig["targetTerraformResourceType"]
+  );
+  const targetTerraformAttribute = getNonEmptyString(
+    storedConfig["targetTerraformAttribute"]
+  );
+
+  if (
+    storedConfig["targetReferenceReady"] !== true ||
+    storedConfig["ruleReferenceReady"] !== true ||
+    !ruleResourceId ||
+    !targetResourceId ||
+    !targetTerraformResourceType ||
+    targetTerraformAttribute !== "arn"
+  ) {
+    return { ...storedConfig, targetReferenceReady: false };
+  }
+
+  return {
+    ...storedConfig,
+    ruleTerraformReference: `aws_cloudwatch_event_rule.${createStableTerraformResourceName(ruleResourceId)}.name`,
+    targetTerraformReference: `${targetTerraformResourceType}.${createStableTerraformResourceName(targetResourceId)}.arn`
+  };
+}
+
 // gg: 공개 결과는 비밀 config를 제거하고 서버 전용 결과만 안전 판정에 필요한 원본을 남깁니다.
 function toDiscoveredResource(
   record: AwsDiscoveredResourceRecord,
@@ -398,7 +484,11 @@ function toDiscoveredResource(
   resultVisibility: "public" | "private"
 ): DiscoveredResource {
   const resourceType = resolveAwsResourceType(record);
-  const config = createAwsStoredResourceConfig(record, resultVisibility);
+  const storedConfig = createAwsStoredResourceConfig(record, resultVisibility);
+  const config =
+    resourceType === "EVENTBRIDGE_TARGET"
+      ? createEventBridgeTargetTerraformReferenceConfig(record, storedConfig, idMap)
+      : storedConfig;
   const baseResource: DiscoveredResource = {
     id: createNodeId(record),
     provider: "aws",
@@ -433,6 +523,17 @@ function toDiscoveredResource(
   }
 
   if (isSecurityGroupRequiringMapping(baseResource)) {
+    return {
+      ...baseResource,
+      analysisExcluded: true,
+      importSuggestionStatus: "manual_review"
+    };
+  }
+
+  if (
+    isEventBridgeRuleRequiringMapping(baseResource) ||
+    isEventBridgeTargetRequiringMapping(baseResource)
+  ) {
     return {
       ...baseResource,
       analysisExcluded: true,
@@ -516,6 +617,10 @@ function createAnalysisExclusions(
           ? "알림 동작 대상 또는 계산식 지표 연결이 남아 있어 보드에만 표시됩니다."
           : isSecurityGroupRequiringMapping(resource)
             ? "접근 규칙의 대상과 범위를 모두 확인하지 못해 보드에만 표시됩니다."
+            : isEventBridgeRuleRequiringMapping(resource)
+              ? "AWS가 관리하거나 별도 실행 Role을 쓰는 EventBridge Rule은 자동으로 수정할 수 없어 보드에만 표시됩니다."
+              : isEventBridgeTargetRequiringMapping(resource)
+                ? "EventBridge Target의 전달 설정이나 대상 연결을 안전하게 다시 만들 수 없어 보드에만 표시됩니다."
           : "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
     }));
 }
@@ -553,6 +658,28 @@ function createImportSuggestions(
         resourceId: resource.id,
         status: "manual_review",
         reason: "접근 규칙의 대상과 범위를 모두 확인한 뒤 안전하게 수정할 수 있습니다.",
+        handoffReady: false
+      };
+    }
+
+    if (isEventBridgeRuleRequiringMapping(resource)) {
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "manual_review",
+        reason:
+          "AWS가 관리하거나 별도 실행 Role을 쓰는 EventBridge Rule은 자동으로 수정하지 않습니다.",
+        handoffReady: false
+      };
+    }
+
+    if (isEventBridgeTargetRequiringMapping(resource)) {
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "manual_review",
+        reason:
+          "EventBridge Target의 전달 설정과 대상 연결을 확인한 뒤 안전하게 수정할 수 있습니다.",
         handoffReady: false
       };
     }
@@ -619,6 +746,29 @@ function createImportSuggestions(
 
 // gg: 각 Resource가 Terraform에서 요구하는 실제 import ID만 선택해 잘못된 대상을 막습니다.
 function getStableTerraformImportId(resource: DiscoveredResource): string | null {
+  if (resource.resourceType === "EVENTBRIDGE_RULE") {
+    const ruleName = getValidEventBridgeName(resource.config["name"]);
+    const eventBusName = getValidEventBridgeName(resource.config["eventBusName"]);
+
+    return ruleName && eventBusName
+      ? eventBusName === "default"
+        ? ruleName
+        : `${eventBusName}/${ruleName}`
+      : null;
+  }
+
+  if (resource.resourceType === "EVENTBRIDGE_TARGET") {
+    const targetId = getValidEventBridgeName(resource.config["targetId"]);
+    const ruleName = getValidEventBridgeName(resource.config["ruleName"]);
+    const eventBusName = getValidEventBridgeName(resource.config["eventBusName"]);
+
+    return targetId && ruleName && eventBusName
+      ? eventBusName === "default"
+        ? `${ruleName}/${targetId}`
+        : `${eventBusName}/${ruleName}/${targetId}`
+      : null;
+  }
+
   if (resource.resourceType === "CLOUDWATCH_METRIC_ALARM") {
     return getNonEmptyString(resource.config["alarmName"]);
   }
@@ -662,7 +812,11 @@ function getStableTerraformImportId(resource: DiscoveredResource): string | null
 
 // gg: 자동 import를 만들 수 없는 이유를 Resource별로 짧고 정확하게 설명합니다.
 function createMissingImportIdReason(resourceType: ResourceType): string {
-  return resourceType === "CLOUDWATCH_LOG_GROUP"
+  return resourceType === "EVENTBRIDGE_RULE"
+    ? "Terraform import에 필요한 EventBridge bus name과 rule name이 없습니다."
+    : resourceType === "EVENTBRIDGE_TARGET"
+      ? "Terraform import에 필요한 EventBridge bus, rule, target ID가 없습니다."
+      : resourceType === "CLOUDWATCH_LOG_GROUP"
     ? "Terraform import에 필요한 CloudWatch log group name이 없습니다."
     : resourceType === "CLOUDFRONT"
     ? "Terraform import에 필요한 CloudFront distribution ID가 없습니다."
@@ -675,6 +829,13 @@ function createMissingImportIdReason(resourceType: ResourceType): string {
           : resourceType === "ECS_TASK_DEFINITION"
             ? "보안상 ECS Task Definition의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
             : "Terraform import에 필요한 provider Resource ID가 없습니다.";
+}
+
+/** Terraform import 경로를 모호하게 만들지 않는 단순 EventBridge 이름만 허용합니다. */
+function getValidEventBridgeName(value: unknown): string | null {
+  const name = getNonEmptyString(value);
+
+  return name && /^[A-Za-z0-9._-]+$/u.test(name) ? name : null;
 }
 
 function isApplicationLoadBalancerArn(value: string): boolean {
@@ -867,6 +1028,32 @@ function getMissingTerraformResourceFields(
 
   if (resourceType === "CLOUDWATCH_LOG_GROUP") {
     return getNonEmptyString(config["logGroupName"]) ? [] : ["logGroupName"];
+  }
+
+  if (resourceType === "EVENTBRIDGE_RULE") {
+    return [
+      ...(getValidEventBridgeName(config["name"]) ? [] : ["name"]),
+      ...(getValidEventBridgeName(config["eventBusName"]) ? [] : ["eventBusName"]),
+      ...(getNonEmptyString(config["state"]) ? [] : ["state"]),
+      ...(getNonEmptyString(config["eventPattern"]) ||
+      getNonEmptyString(config["scheduleExpression"])
+        ? []
+        : ["eventPattern/scheduleExpression"])
+    ];
+  }
+
+  if (resourceType === "EVENTBRIDGE_TARGET") {
+    return [
+      ...(getValidEventBridgeName(config["targetId"]) ? [] : ["targetId"]),
+      ...(getValidEventBridgeName(config["ruleName"]) ? [] : ["ruleName"]),
+      ...(getValidEventBridgeName(config["eventBusName"]) ? [] : ["eventBusName"]),
+      ...(getNonEmptyString(config["ruleTerraformReference"])
+        ? []
+        : ["ruleTerraformReference"]),
+      ...(getNonEmptyString(config["targetTerraformReference"])
+        ? []
+        : ["targetTerraformReference"])
+    ];
   }
 
   if (resourceType === "LOAD_BALANCER") {

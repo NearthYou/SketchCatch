@@ -30,6 +30,8 @@ const TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE = new Map<ResourceType, string>([
   ["S3", "aws_s3_bucket"],
   ["CLOUDWATCH_METRIC_ALARM", "aws_cloudwatch_metric_alarm"],
   ["CLOUDWATCH_LOG_GROUP", "aws_cloudwatch_log_group"],
+  ["EVENTBRIDGE_RULE", "aws_cloudwatch_event_rule"],
+  ["EVENTBRIDGE_TARGET", "aws_cloudwatch_event_target"],
   ["LOAD_BALANCER", "aws_lb"],
   ["CLOUDFRONT", "aws_cloudfront_distribution"],
   ["ECS_CLUSTER", "aws_ecs_cluster"],
@@ -188,6 +190,23 @@ function createTerraformValues(resource: DiscoveredResource): ResourceConfig {
         threshold: config["threshold"],
         treatMissingData: config["treatMissingData"],
         unit: config["unit"]
+      });
+    case "EVENTBRIDGE_RULE":
+      return compactConfig({
+        name: config["name"],
+        description: config["description"],
+        eventBusName: config["eventBusName"],
+        eventPattern: config["eventPattern"],
+        scheduleExpression: config["scheduleExpression"],
+        state: config["state"],
+        tags: normalizeTerraformTags(config["tags"])
+      });
+    case "EVENTBRIDGE_TARGET":
+      return compactConfig({
+        targetId: config["targetId"],
+        eventBusName: config["eventBusName"],
+        rule: config["ruleTerraformReference"] ?? config["rule"],
+        arn: config["targetTerraformReference"] ?? config["arn"]
       });
     case "LOAD_BALANCER":
       return compactConfig({

@@ -880,24 +880,28 @@ test("ALB와 CloudFront reader 선택은 ALL 및 직접 선택에만 한 번씩 
     loadBalancers: true,
     cloudFrontDistributions: true,
     ecsResources: true,
+    eventBridgeResources: true,
     unknownResources: true
   });
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["LOAD_BALANCER"])), {
     loadBalancers: true,
     cloudFrontDistributions: false,
     ecsResources: false,
+    eventBridgeResources: false,
     unknownResources: false
   });
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["CLOUDFRONT"])), {
     loadBalancers: false,
     cloudFrontDistributions: true,
     ecsResources: false,
+    eventBridgeResources: false,
     unknownResources: false
   });
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["UNKNOWN"])), {
     loadBalancers: false,
     cloudFrontDistributions: false,
     ecsResources: false,
+    eventBridgeResources: false,
     unknownResources: true
   });
 
@@ -910,9 +914,28 @@ test("ALB와 CloudFront reader 선택은 ALL 및 직접 선택에만 한 번씩 
       loadBalancers: false,
       cloudFrontDistributions: false,
       ecsResources: true,
+      eventBridgeResources: false,
       unknownResources: false
     });
   }
+});
+
+test("EventBridge reader 선택은 ALL과 Rule/Target 동시 선택에서도 한 번만 켜진다", () => {
+  assert.equal(
+    createAwsReverseEngineeringReaderPlan(scanInput(["ALL"])).eventBridgeResources,
+    true
+  );
+  assert.equal(
+    createAwsReverseEngineeringReaderPlan(
+      scanInput(["EVENTBRIDGE_RULE", "EVENTBRIDGE_TARGET"])
+    ).eventBridgeResources,
+    true
+  );
+  assert.equal(
+    createAwsReverseEngineeringReaderPlan(scanInput(["EVENTBRIDGE_RULE"]))
+      .eventBridgeResources,
+    true
+  );
 });
 
 test("같은 AWS 서비스의 반복 실패는 사용자 결과에서 한 번만 남긴다", () => {
