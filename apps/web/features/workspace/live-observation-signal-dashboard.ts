@@ -16,6 +16,7 @@ export type LiveObservationSignalStatus =
   | "normal"
   | "warning"
   | "critical"
+  | "observed"
   | "checking"
   | "unknown";
 
@@ -60,7 +61,10 @@ export type LiveObservationSignal = {
   readonly importance: string;
   readonly lastObservedAt?: string | undefined;
   readonly possibleCauses: readonly LiveObservationPossibleCause[];
-  readonly status: Exclude<LiveObservationSignalStatus, "normal" | "checking" | "unknown">;
+  readonly status: Exclude<
+    LiveObservationSignalStatus,
+    "normal" | "observed" | "checking" | "unknown"
+  >;
   readonly timeline: readonly LiveObservationTimelineEvent[];
   readonly title: string;
   readonly unknowns: readonly LiveObservationUnknown[];
@@ -106,13 +110,27 @@ export function createLiveObservationSignalDashboardModel(
 
   const providerSnapshot = snapshot.latestObservation?.payload;
   if (!providerSnapshot) {
-    return { logGroups: [], signals: [], status: getAwaitingProviderStatus() };
+    return {
+      logGroups: [],
+      signals: [],
+      status: hasAcceptedLiveEvents(snapshot)
+        ? (getStorePressureStatus(snapshot) ??
+          getObservedRequestStatus(snapshot, "AWS 상태는 아직 확인 중이에요."))
+        : getAwaitingProviderStatus()
+    };
   }
   if (providerSnapshot.state === "unavailable") {
-    return { logGroups: [], signals: [], status: getUnavailableStatus(providerSnapshot) };
+    return { logGroups: [], signals: [], status: getUnavailableStatus(providerSnapshot, snapshot) };
   }
   if (providerSnapshot.state === "delayed") {
-    return { logGroups: [], signals: [], status: getDelayedStatus(providerSnapshot) };
+    return {
+      logGroups: [],
+      signals: [],
+      status: hasAcceptedLiveEvents(snapshot)
+        ? (getStorePressureStatus(snapshot) ??
+          getObservedRequestStatus(snapshot, "AWS 최신 상태가 늦게 도착해 다시 확인 중이에요."))
+        : getDelayedStatus(providerSnapshot)
+    };
   }
 
   const logGroups = groupLiveObservationLogs(providerSnapshot.logs);
@@ -630,6 +648,16 @@ function getAvailableStatus(input: {
   }
 
   if (!hasCurrentHealthEvidence(input.providerSnapshot)) {
+    if (hasAcceptedLiveEvents(input.snapshot)) {
+      return (
+        getStorePressureStatus(input.snapshot) ??
+        getObservedRequestStatus(
+          input.snapshot,
+          "AWS 상태를 판단할 관측값은 아직 확인 중이에요.",
+          unknowns
+        )
+      );
+    }
     return {
       dataNote: "지금 받은 값만으로는 상태를 확인할 수 없어요.",
       lastObservedAt,
@@ -646,6 +674,46 @@ function getAvailableStatus(input: {
     title: "현재 큰 문제는 확인되지 않았어요",
     unknowns,
     userImpact: "현재 확인한 요청과 서버 상태에서 큰 문제는 보이지 않아요."
+  };
+}
+
+/** Shows confirmed application traffic without converting it into a provider health decision. */
+function getObservedRequestStatus(
+  snapshot: LiveObservationV2Snapshot,
+  providerNote: string,
+  unknowns: readonly LiveObservationUnknown[] = [
+    createUnknown("전체 AWS 상태는 아직 확인 중이에요.")
+  ]
+): LiveObservationDashboardStatus {
+  return {
+    dataNote: `참여 요청 ${snapshot.live.acceptedEventCount}건을 확인했어요. ${providerNote}`,
+    lastObservedAt: snapshot.live.observedAt,
+    status: "observed",
+    title: "참여 요청을 확인했어요",
+    unknowns,
+    userImpact: "앱의 응답은 확인했지만 전체 AWS 상태는 아직 확인 중이에요."
+  };
+}
+
+function hasAcceptedLiveEvents(snapshot: LiveObservationV2Snapshot): boolean {
+  return snapshot.live.acceptedEventCount > 0;
+}
+
+/** Keeps Store pressure visible while provider health remains unknown, without declaring an incident. */
+function getStorePressureStatus(
+  snapshot: LiveObservationV2Snapshot
+): LiveObservationDashboardStatus | null {
+  const level = snapshot.live.pressureLevel;
+  if (level === "normal" || !hasAcceptedLiveEvents(snapshot)) return null;
+  const critical = level === "critical";
+
+  return {
+    dataNote: `참여 요청 ${snapshot.live.acceptedEventCount}건을 확인했어요. AWS 상태는 아직 확인 중이에요.`,
+    lastObservedAt: snapshot.live.observedAt,
+    status: "observed",
+    title: critical ? "참여 요청이 급격히 늘고 있어요" : "참여 요청이 빠르게 늘고 있어요",
+    unknowns: [createUnknown("AWS 상태를 확인하기 전에는 요청 증가의 원인을 확정할 수 없어요.")],
+    userImpact: "요청이 계속 늘면 일부 응답이 느려질 수 있어요."
   };
 }
 
@@ -722,14 +790,24 @@ function getDelayedStatus(
 
 /** Keeps provider failures separate from application incidents because the snapshot did not establish either condition. */
 function getUnavailableStatus(
-  providerSnapshot: LiveObservationProviderSnapshot
+  providerSnapshot: LiveObservationProviderSnapshot,
+  snapshot: LiveObservationV2Snapshot
 ): LiveObservationDashboardStatus {
+  const acceptedEventNote = hasAcceptedLiveEvents(snapshot)
+    ? `참여 요청 ${snapshot.live.acceptedEventCount}건은 확인했지만 `
+    : "";
   return {
-    dataNote: "AWS 관측값을 받지 못했어요.",
-    lastObservedAt: providerSnapshot.observedAt ?? undefined,
+    dataNote: `${acceptedEventNote}AWS 관측값을 받지 못했어요.`,
+    lastObservedAt: providerSnapshot.observedAt ?? snapshot.live.observedAt,
     status: "unknown",
     title: "현재 데이터로는 서비스 상태를 확인할 수 없어요",
-    unknowns: [createUnknown("관측값이 없어 사용자 영향과 원인을 확인할 수 없어요.")],
+    unknowns: [
+      createUnknown(
+        hasAcceptedLiveEvents(snapshot)
+          ? `참여 요청 ${snapshot.live.acceptedEventCount}건 외의 관측값이 없어 사용자 영향과 원인을 확인할 수 없어요.`
+          : "관측값이 없어 사용자 영향과 원인을 확인할 수 없어요."
+      )
+    ],
     userImpact: "현재 사용자 영향은 아직 확인할 수 없어요."
   };
 }

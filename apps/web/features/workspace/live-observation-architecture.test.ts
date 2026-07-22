@@ -61,6 +61,38 @@ test("keeps every deployed Architecture Resource and edge endpoint in the read-o
   }
 });
 
+test("replaces internal Terraform resource labels with stable Korean role names", () => {
+  const internalLabels = new Map([
+    ["cloudfront", "cdn_web"],
+    ["alb", "alb_fixed_template_ecs_fargate_container_app"],
+    ["target-group", "tg_fixed_template_ecs_fargate_container_app"],
+    ["service", "ecs_service_fixed_template_fargate_container_app"]
+  ]);
+  const internalArchitecture: ArchitectureJson = {
+    ...architecture,
+    nodes: architecture.nodes.map((node) => ({
+      ...node,
+      label: internalLabels.get(node.id) ?? node.label
+    }))
+  };
+
+  const model = createLiveObservationArchitectureModel(internalArchitecture, null);
+  const diagramLabelById = new Map(model.diagram.nodes.map((node) => [node.id, node.label]));
+  const resourceLabelById = new Map(model.resources.map((resource) => [resource.id, resource.label]));
+
+  assert.equal(diagramLabelById.get("cloudfront"), "웹 배포");
+  assert.equal(diagramLabelById.get("alb"), "로드 밸런서");
+  assert.equal(diagramLabelById.get("target-group"), "앱 트래픽 대상");
+  assert.equal(diagramLabelById.get("service"), "앱 서버");
+  assert.equal(resourceLabelById.get("service"), "앱 서버");
+  assert.equal(
+    [...diagramLabelById.values(), ...resourceLabelById.values()].some((label) =>
+      label.includes("fixed_template")
+    ),
+    false
+  );
+});
+
 test("marks supported resources configured before a session and keeps unsupported resources visible", () => {
   const model = createLiveObservationArchitectureModel(architecture, null);
   const stateById = new Map(
