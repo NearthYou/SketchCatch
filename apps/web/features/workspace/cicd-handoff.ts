@@ -205,15 +205,17 @@ export function selectGitCicdSourceDeployment(
 export function selectGitCicdHandoffForSetup(
   handoffs: readonly GitCicdHandoff[],
   sourceDeploymentId: string | null,
-  acceptedPlanId: string | null
+  acceptedPlanId: string | null,
+  sourceRepositoryId: string | null
 ): GitCicdHandoff | null {
-  if (!sourceDeploymentId || !acceptedPlanId) return null;
+  if (!sourceDeploymentId || !acceptedPlanId || !sourceRepositoryId) return null;
   return (
     handoffs
       .filter(
         (handoff) =>
           handoff.sourceDeploymentId === sourceDeploymentId &&
-          handoff.userAcceptedChangeId === acceptedPlanId
+          handoff.userAcceptedChangeId === acceptedPlanId &&
+          handoff.sourceRepositoryId === sourceRepositoryId
       )
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null
   );
