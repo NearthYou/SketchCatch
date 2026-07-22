@@ -24,6 +24,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Localize marked Workspace resource labels
+
+- Replaced the marked Workspace labels with `리소스`, `템플릿`, `Terraform 리소스 검색`, and `보드 내 리소스`, including matching accessibility labels.
+- Lint, typecheck, build, final harness, and diff checks pass. The focused source test could not start because the current workspace does not provide the `tsx` executable.
+- No shared contract, database migration, dependency, deployment, cloud mutation, or Git/CI/CD handoff change was made.
+
 ### 2026-07-22 - Align CI/CD readiness phase boundaries
 
 - Completed the task-focused four-phase CI/CD redesign and aligned the Phase 2 header and rows with the server-owned verified AWS target, Region, runtime, and current Repository build config.

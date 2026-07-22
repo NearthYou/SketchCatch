@@ -36,10 +36,10 @@ export function ResourceListPanel({
   }
 
   return (
-    <section className={styles.resourceListPanel} aria-label="보드 Resource 목록">
+    <section className={styles.resourceListPanel} aria-label="보드 내 리소스 목록">
       <header className={styles.resourceListTitle}>
         <div>
-          <h2>보드 Resource</h2>
+          <h2>보드 내 리소스</h2>
         </div>
         <strong>{items.length}개</strong>
       </header>
