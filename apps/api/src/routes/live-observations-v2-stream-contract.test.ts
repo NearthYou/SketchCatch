@@ -21,8 +21,8 @@ test("streams the Store snapshot before starting provider corroboration", () => 
   assert.doesNotMatch(writeSnapshot, /await input\.refreshObservation/);
 });
 
-test("pushes live Store snapshots twice per second without increasing provider polling", () => {
-  assert.match(routeSource, /const LIVE_SNAPSHOT_INTERVAL_MS = 500;/);
+test("pushes live Store snapshots every 2.5 seconds without increasing provider polling", () => {
+  assert.match(routeSource, /const LIVE_SNAPSHOT_INTERVAL_MS = 2_500;/);
   assert.match(
     routeSource,
     /setInterval\(\(\) => void writeSnapshot\(\), LIVE_SNAPSHOT_INTERVAL_MS\)/

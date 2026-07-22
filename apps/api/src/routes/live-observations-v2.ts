@@ -9,7 +9,7 @@ import {
 const deploymentParamsSchema = z.object({ deploymentId: z.uuid() });
 const observationParamsSchema = deploymentParamsSchema.extend({ observationId: z.uuid() });
 const streamQuerySchema = z.object({ once: z.enum(["true", "false"]).optional() });
-const LIVE_SNAPSHOT_INTERVAL_MS = 500;
+const LIVE_SNAPSHOT_INTERVAL_MS = 2_500;
 
 type EnabledLiveObservationV2RouteOptions = {
   readonly enabled: true;
