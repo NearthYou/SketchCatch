@@ -57,6 +57,7 @@ import {
   listIamRolesAsUnknown,
   listLambdaFunctionsAsUnknown,
   listLambdaPermissionsAsUnknown,
+  listTaggedUnknownResources,
   readEcsResourcesWithDiagnostics,
   readResourceExplorerResourcesWithDiagnostics,
   resolveCloudFrontOriginRelationships,
@@ -539,6 +540,18 @@ test("NAT Gateway 직접 선택은 NAT와 같은 scan의 Subnet/EIP만 dependenc
   assert.equal(shouldReadResourceGroup(allInput, "NAT_GATEWAY"), true);
 });
 
+test("Target Group과 Listener 직접 선택은 Terraform 참조에 필요한 VPC를 함께 읽는다", () => {
+  const targetGroupInput = scanInput(["LOAD_BALANCER_TARGET_GROUP"]);
+  const listenerInput = scanInput(["LOAD_BALANCER_LISTENER"]);
+  const loadBalancerInput = scanInput(["LOAD_BALANCER"]);
+
+  assert.equal(shouldReadResourceGroup(targetGroupInput, "VPC"), true);
+  assert.equal(shouldReadResourceGroup(listenerInput, "VPC"), true);
+  assert.equal(shouldReadResourceGroup(loadBalancerInput, "VPC"), false);
+  assert.equal(shouldReadResourceGroup(targetGroupInput, "SUBNET"), false);
+  assert.equal(shouldReadResourceGroup(listenerInput, "SECURITY_GROUP"), false);
+});
+
 test("Route Table Association 직접 선택과 ALL은 기존 DescribeRouteTables reader를 함께 사용한다", async () => {
   assert.equal(
     shouldReadResourceGroup(scanInput(["ROUTE_TABLE_ASSOCIATION"]), "ROUTE_TABLE"),
@@ -740,18 +753,29 @@ test("반복 Route Table page의 Association record를 provider ID 기준으로 
   assert.equal(records[1]?.relationships.length, 2);
 });
 
-test("ALL 스캔은 generic EIP/NAT ARN보다 전용 Query 설정을 우선해 한 번만 남긴다", () => {
+test("ALL 스캔은 실제 generic EIP/NAT ARN보다 전용 Query 설정을 우선해 한 번만 남긴다", async () => {
   const allocationId = "eipalloc-0123456789abcdef0";
   const natGatewayId = "nat-0123456789abcdef0";
+  const [genericEip] = await listTaggedUnknownResources(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send() {
+        return {
+          ResourceTagMappingList: [
+            {
+              ResourceARN:
+                `arn:aws:ec2:ap-northeast-2:123456789012:elastic-ip/${allocationId}`,
+              Tags: [{ Key: "owner", Value: "platform" }]
+            }
+          ]
+        };
+      }
+    })
+  );
+  assert.equal(genericEip?.providerResourceType, "AWS::EC2::EIP");
   const records = uniqueDiscoveredRecordsByProviderId([
-    {
-      ...safeRecord(
-        "AWS::EC2::EIP",
-        `arn:aws:ec2:ap-northeast-2:123456789012:eip-allocation/${allocationId}`,
-        "EIP · generic"
-      ),
-      config: { tags: [{ key: "owner", value: "platform" }] }
-    },
+    genericEip!,
     {
       ...safeRecord("AWS::EC2::EIP", allocationId, "egress-ip"),
       config: {
@@ -833,6 +857,36 @@ test("같은 scan NAT가 allocation을 점유할 때만 EIP association을 NAT�
   ]);
   assert.equal(records[1]?.config["associationTargetType"], "ec2_or_eni");
   assert.deepEqual(records[1]?.relationships, []);
+});
+
+test("AWS 서비스 관리 EIP는 같은 scan NAT가 보여도 NAT 관리 대상으로 승격하지 않는다", () => {
+  const allocationId = "eipalloc-0123456789abcdef0";
+  const natGatewayId = "nat-0123456789abcdef0";
+  const records = resolveNatGatewayElasticIpRelationships([
+    {
+      ...safeRecord("AWS::EC2::EIP", allocationId, "service-managed"),
+      config: {
+        allocationId,
+        associationTargetType: "service_managed",
+        domain: "vpc"
+      }
+    },
+    {
+      ...safeRecord("AWS::EC2::NatGateway", natGatewayId, "regional-nat"),
+      config: {
+        allocationIds: [allocationId],
+        connectivityType: "public",
+        natGatewayId,
+        primaryAllocationId: allocationId,
+        state: "available",
+        subnetId: "subnet-0123456789abcdef0"
+      },
+      relationships: [{ type: "depends_on", targetProviderResourceId: allocationId }]
+    }
+  ]);
+
+  assert.equal(records[0]?.config["associationTargetType"], "service_managed");
+  assert.deepEqual(records[0]?.relationships, []);
 });
 
 test("all EC2 Query readers and RDS follow their response pagination token", async () => {
@@ -1217,7 +1271,7 @@ test("ALL 스캔은 generic Alarm보다 이름과 Metric 설정이 있는 전용
   assert.deepEqual(records[0], detailedRecord);
 });
 
-test("ALB와 CloudFront reader 선택은 ALL 및 직접 선택에만 한 번씩 포함한다", () => {
+test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞춰 켠다", () => {
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["ALL"])), {
     loadBalancers: true,
     cloudFrontDistributions: true,
@@ -1230,8 +1284,20 @@ test("ALB와 CloudFront reader 선택은 ALL 및 직접 선택에만 한 번씩 
     cloudFrontDistributions: false,
     ecsResources: false,
     eventBridgeResources: false,
-    unknownResources: false
+    unknownResources: true
   });
+  for (const resourceType of [
+    "LOAD_BALANCER_TARGET_GROUP",
+    "LOAD_BALANCER_LISTENER"
+  ] as const) {
+    assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput([resourceType])), {
+      loadBalancers: true,
+      cloudFrontDistributions: false,
+      ecsResources: false,
+      eventBridgeResources: false,
+      unknownResources: true
+    });
+  }
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["CLOUDFRONT"])), {
     loadBalancers: false,
     cloudFrontDistributions: true,
@@ -2018,12 +2084,12 @@ test("CloudFront S3 origin은 AWS endpoint suffix가 아닌 lookalike hostname�
   assert.deepEqual(resolvedCloudFront?.relationships, []);
 });
 
-test("정식 reader가 맡는 ARN만 UNKNOWN inventory에서 제외한다", () => {
+test("fallback이 필요한 ELBv2 ARN은 UNKNOWN inventory에 남긴다", () => {
   assert.equal(
     isReverseEngineeringPromotedResourceArn(
       "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one"
     ),
-    true
+    false
   );
   assert.equal(
     isReverseEngineeringPromotedResourceArn(

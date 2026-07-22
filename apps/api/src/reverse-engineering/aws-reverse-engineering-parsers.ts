@@ -151,6 +151,11 @@ export function parseNatGatewaysFromXml(
       (addresses.length === 1 && extractTag(addresses[0] ?? "", "isPrimary") === null
         ? addresses[0]
         : undefined);
+    const hasNonReadyAddressStatus = addresses.some((address) => {
+      const status = extractTag(address, "status")?.trim().toLowerCase();
+
+      return status !== undefined && status !== "succeeded";
+    });
 
     return {
       providerResourceType: "AWS::EC2::NatGateway",
@@ -159,6 +164,7 @@ export function parseNatGatewaysFromXml(
       region,
       config: {
         allocationIds,
+        ...(hasNonReadyAddressStatus ? { addressStatusesReady: false } : {}),
         ...compactConfigRecord({
           connectivityType: extractTag(item, "connectivityType"),
           natGatewayId,

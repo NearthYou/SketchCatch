@@ -469,6 +469,66 @@ test("Route Table Association은 같은 scan의 관리 가능한 Subnet과 Route
   }
 });
 
+test("Route Table의 NAT 경로는 같은 scan의 관리 가능한 NAT Terraform 참조를 사용한다", () => {
+  const subnet = resource("SUBNET", {
+    id: "resource-subnet-private",
+    providerResourceType: "AWS::EC2::Subnet",
+    providerResourceId: "subnet-private",
+    config: {
+      vpcId: "vpc-main",
+      cidrBlock: "10.0.1.0/24",
+      availabilityZone: "ap-northeast-2a",
+      mapPublicIpOnLaunch: false,
+      assignIpv6AddressOnCreation: false
+    }
+  });
+  const nat = resource("NAT_GATEWAY", {
+    id: "resource-nat-private",
+    providerResourceType: "AWS::EC2::NatGateway",
+    providerResourceId: "nat-0123456789abcdef0",
+    config: {
+      allocationIds: [],
+      connectivityType: "private",
+      natGatewayId: "nat-0123456789abcdef0",
+      state: "available",
+      subnetId: "subnet-private"
+    },
+    relationships: [
+      { type: "contains", targetResourceId: subnet.id, label: "contains" }
+    ]
+  });
+  const routeTable = resource("ROUTE_TABLE", {
+    id: "resource-rtb-private",
+    providerResourceType: "AWS::EC2::RouteTable",
+    providerResourceId: "rtb-private",
+    config: {
+      vpcId: "vpc-main",
+      routes: [
+        {
+          destinationCidrBlock: "0.0.0.0/0",
+          natGatewayId: "nat-0123456789abcdef0"
+        }
+      ]
+    },
+    relationships: [
+      { type: "depends_on", targetResourceId: nat.id, label: "depends_on" }
+    ]
+  });
+
+  const projection = createReverseEngineeringTerraformProjection(routeTable, [
+    subnet,
+    nat,
+    routeTable
+  ]);
+
+  assert.deepEqual(projection.terraformValues["route"], [
+    {
+      cidrBlock: "0.0.0.0/0",
+      natGatewayId: "aws_nat_gateway.resource_nat_private.id"
+    }
+  ]);
+});
+
 test("public NAT과 연결 EIP는 같은 scan의 Subnet 및 primary/all EIP 참조로만 투영한다", () => {
   const subnet = resource("SUBNET", {
     id: "resource-subnet-main",

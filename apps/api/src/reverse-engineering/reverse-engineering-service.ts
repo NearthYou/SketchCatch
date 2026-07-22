@@ -223,7 +223,8 @@ export function normalizeReverseEngineeringScanResult(
   );
   const architectureJson = sanitizeReadCompatibilityArchitecture(
     normalizedArchitectureJson,
-    publicResourceIdMap
+    publicResourceIdMap,
+    normalizationContext
   );
   const persistedDraft = persistedResult.reverseEngineeringDraft;
   const scanErrors = sanitizeReverseEngineeringScanErrors(persistedResult.scanErrors);
@@ -235,7 +236,8 @@ export function normalizeReverseEngineeringScanResult(
       ? architectureJson
       : sanitizeReadCompatibilityArchitecture(
           normalizedDraft.architectureJson,
-          publicResourceIdMap
+          publicResourceIdMap,
+          normalizationContext
         );
   const publicDraftId = sanitizePublicStructuredId(
     normalizedDraft.id,
@@ -354,9 +356,11 @@ function sanitizeReadCompatibilityDiscoveredResource(
 
 function sanitizeReadCompatibilityArchitecture(
   architectureJson: ArchitectureJson,
-  publicResourceIdMap: ReadonlyMap<string, string>
+  publicResourceIdMap: ReadonlyMap<string, string>,
+  context: ReadCompatibilityNormalizationContext
 ): ArchitectureJson {
   const nodes = architectureJson.nodes.map((node) => {
+    const sourceResource = findCorrelatedDiscoveredResource(node, context) ?? undefined;
     const providerResourceType = getNodeProviderResourceType(node);
     const rawProviderResourceId =
       readNonEmptyConfigString(node.config["providerResourceId"]) ??
@@ -373,6 +377,8 @@ function sanitizeReadCompatibilityArchitecture(
       config,
       node,
       providerResourceType,
+      sourceResource,
+      sameScanResources: context.discoveredResources,
       publicProviderResourceId: rawProviderResourceId
         ? createAwsPublicProviderResourceId(identity)
         : node.id
@@ -426,6 +432,8 @@ function sanitizePublicTerraformProjection(input: {
   node: ArchitectureJson["nodes"][number];
   providerResourceType: string;
   publicProviderResourceId: string;
+  sourceResource?: DiscoveredResource | undefined;
+  sameScanResources: readonly DiscoveredResource[];
 }): Record<string, unknown> {
   const terraformBlockType = input.node.config["terraformBlockType"];
   const terraformResourceType = readNonEmptyConfigString(
@@ -452,18 +460,27 @@ function sanitizePublicTerraformProjection(input: {
   const resourceType = RESOURCE_TYPE_SET.has(input.node.type)
     ? (input.node.type as ResourceType)
     : undefined;
+  const projectionResource =
+    resourceType && input.sourceResource?.resourceType === resourceType
+      ? input.sourceResource
+      : resourceType
+        ? {
+            id: input.node.id,
+            provider: "aws" as const,
+            providerResourceType: input.providerResourceType,
+            providerResourceId: input.publicProviderResourceId,
+            region: "global",
+            displayName: input.node.label ?? input.node.id,
+            resourceType,
+            config: input.config
+          }
+        : undefined;
   const terraformValues =
-    hasCanonicalIdentity && resourceType
-      ? createReverseEngineeringTerraformValues({
-          id: input.node.id,
-          provider: "aws",
-          providerResourceType: input.providerResourceType,
-          providerResourceId: input.publicProviderResourceId,
-          region: "global",
-          displayName: input.node.label ?? input.node.id,
-          resourceType,
-          config: input.config
-        })
+    hasCanonicalIdentity && projectionResource
+      ? createReverseEngineeringTerraformValues(
+          projectionResource,
+          input.sameScanResources
+        )
       : {};
 
   return {

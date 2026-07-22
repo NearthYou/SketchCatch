@@ -351,6 +351,14 @@ function normalizeReverseEngineeringResourceConfig(
     return { ...node.config };
   }
 
+  if (node.iac.resourceType === "aws_eip") {
+    return normalizeReverseEngineeringElasticIpConfig(node.config);
+  }
+
+  if (node.iac.resourceType === "aws_nat_gateway") {
+    return normalizeReverseEngineeringNatGatewayConfig(node.config);
+  }
+
   if (node.iac.resourceType === "aws_lb") {
     return normalizeReverseEngineeringLoadBalancerConfig(node.config);
   }
@@ -381,6 +389,8 @@ function normalizeReverseEngineeringResourceConfig(
 // gg: 전용 AWS reader가 만든 config만 Reverse Engineering 정규화 대상으로 인정합니다.
 function isReverseEngineeringResourceConfig(config: Record<string, unknown>): boolean {
   return (
+    config["providerResourceType"] === "AWS::EC2::EIP" ||
+    config["providerResourceType"] === "AWS::EC2::NatGateway" ||
     config["providerResourceType"] === "AWS::ElasticLoadBalancingV2::LoadBalancer" ||
     config["providerResourceType"] === "AWS::CloudFront::Distribution" ||
     config["providerResourceType"] === "AWS::ECS::Cluster" ||
@@ -388,6 +398,29 @@ function isReverseEngineeringResourceConfig(config: Record<string, unknown>): bo
     config["providerResourceType"] === "AWS::ECS::TaskDefinition" ||
     config["providerResourceType"] === "AWS::Logs::LogGroup"
   );
+}
+
+// gg: EIP 조회 식별자와 현재 연결 상태는 import용 증거일 뿐 새 Terraform 인수가 아닙니다.
+function normalizeReverseEngineeringElasticIpConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  return compactTerraformConfig({
+    domain: config["domain"],
+    tags: config["tags"]
+  });
+}
+
+// gg: NAT 원본 상태 대신 same-scan 검증이 끝난 Subnet/EIP Terraform 참조만 렌더링합니다.
+function normalizeReverseEngineeringNatGatewayConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  return compactTerraformConfig({
+    subnetId: config["subnetId"],
+    allocationId: config["allocationId"],
+    secondaryAllocationIds: config["secondaryAllocationIds"],
+    connectivityType: config["connectivityType"],
+    tags: config["tags"]
+  });
 }
 
 // gg: 로그 이름, 보존 기간, KMS 연결만 Terraform 관리값으로 전달합니다.

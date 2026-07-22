@@ -172,6 +172,25 @@ test("단일 EIP public NAT은 optional isPrimary가 없어도 그 EIP를 primar
   assert.equal(record?.config["primaryAllocationId"], "eipalloc-abcdef01234567890");
 });
 
+test("NAT 주소가 전이 또는 실패 상태이면 자동 관리 준비가 되지 않은 것으로 표시한다", () => {
+  const [record] = parseNatGatewaysFromXml(
+    `<DescribeNatGatewaysResponse><natGatewaySet><item>
+      <natGatewayId>nat-abcdef01234567890</natGatewayId>
+      <subnetId>subnet-0123456789abcdef0</subnetId>
+      <state>available</state>
+      <connectivityType>public</connectivityType>
+      <natGatewayAddressSet><item>
+        <allocationId>eipalloc-0123456789abcdef0</allocationId>
+        <isPrimary>true</isPrimary>
+        <status>associating</status>
+      </item></natGatewayAddressSet>
+    </item></natGatewaySet></DescribeNatGatewaysResponse>`,
+    "ap-northeast-2"
+  );
+
+  assert.equal(record?.config["addressStatusesReady"], false);
+});
+
 test("Route Table XML에서 테이블과 subnet/main/gateway association을 각각 보존한다", () => {
   const records = parseRouteTablesFromXml(
     `<DescribeRouteTablesResponse>

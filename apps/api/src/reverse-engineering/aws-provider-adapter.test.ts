@@ -1327,12 +1327,226 @@ test("AWS 서비스 관리 EIP는 Terraform 관리와 import에서 제외한다"
   assertManualImportWithoutIdentity(suggestion);
 });
 
+test("NAT만 선택하면 해당 NAT가 참조하는 Subnet과 EIP만 함께 가져온다", async () => {
+  const selectedSubnetId = "subnet-0123456789abcdef0";
+  const unrelatedSubnetId = "subnet-fedcba98765432100";
+  const selectedAllocationId = "eipalloc-0123456789abcdef0";
+  const unrelatedAllocationId = "eipalloc-fedcba98765432100";
+  const natGatewayId = "nat-0123456789abcdef0";
+  const records = [
+    record({
+      providerResourceType: "AWS::EC2::Subnet",
+      providerResourceId: selectedSubnetId,
+      displayName: "selected-subnet",
+      config: { vpcId: "vpc-main", cidrBlock: "10.0.1.0/24" }
+    }),
+    record({
+      providerResourceType: "AWS::EC2::Subnet",
+      providerResourceId: unrelatedSubnetId,
+      displayName: "unrelated-subnet",
+      config: { vpcId: "vpc-main", cidrBlock: "10.0.2.0/24" }
+    }),
+    record({
+      providerResourceType: "AWS::EC2::EIP",
+      providerResourceId: selectedAllocationId,
+      displayName: "selected-eip",
+      config: {
+        allocationId: selectedAllocationId,
+        associationTargetType: "nat_gateway",
+        domain: "vpc"
+      },
+      relationships: [{ type: "depends_on", targetProviderResourceId: natGatewayId }]
+    }),
+    record({
+      providerResourceType: "AWS::EC2::EIP",
+      providerResourceId: unrelatedAllocationId,
+      displayName: "unrelated-eip",
+      config: {
+        allocationId: unrelatedAllocationId,
+        associationTargetType: "unassociated",
+        domain: "vpc"
+      }
+    }),
+    record({
+      providerResourceType: "AWS::EC2::NatGateway",
+      providerResourceId: natGatewayId,
+      displayName: "selected-nat",
+      config: {
+        allocationIds: [selectedAllocationId],
+        connectivityType: "public",
+        natGatewayId,
+        primaryAllocationId: selectedAllocationId,
+        state: "available",
+        subnetId: selectedSubnetId
+      },
+      relationships: [
+        { type: "contains", targetProviderResourceId: selectedSubnetId },
+        { type: "depends_on", targetProviderResourceId: selectedAllocationId }
+      ]
+    })
+  ];
+
+  const result = await scanWithSelection(records, ["NAT_GATEWAY"]);
+
+  assert.deepEqual(
+    result.discoveredResources.map((resource) => resource.providerResourceId).sort(),
+    [natGatewayId, selectedAllocationId, selectedSubnetId].sort()
+  );
+  assert.equal(
+    result.discoveredResources.some(
+      (resource) =>
+        resource.providerResourceId === unrelatedSubnetId ||
+        resource.providerResourceId === unrelatedAllocationId
+    ),
+    false
+  );
+});
+
+test("Target Group만 선택하면 연결된 VPC만 의존 리소스로 함께 가져온다", async () => {
+  const selectedVpcId = "vpc-orders";
+  const unrelatedVpcId = "vpc-unrelated";
+  const targetGroupArn =
+    "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/orders/1111111111111111";
+  const result = await scanWithSelection(
+    [
+      record({
+        providerResourceType: "AWS::EC2::VPC",
+        providerResourceId: selectedVpcId,
+        displayName: "orders-vpc",
+        config: { cidrBlock: "10.0.0.0/16", enableDnsSupport: true }
+      }),
+      record({
+        providerResourceType: "AWS::EC2::VPC",
+        providerResourceId: unrelatedVpcId,
+        displayName: "unrelated-vpc",
+        config: { cidrBlock: "10.1.0.0/16", enableDnsSupport: true }
+      }),
+      record({
+        providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        providerResourceId: ALB_ARN,
+        displayName: "orders-alb",
+        config: {
+          name: "orders-alb",
+          type: "application",
+          ipAddressType: "ipv4",
+          scheme: "internet-facing",
+          subnetIds: ["subnet-orders"],
+          vpcId: selectedVpcId
+        },
+        relationships: [{ type: "depends_on", targetProviderResourceId: selectedVpcId }]
+      }),
+      record({
+        providerResourceType: "AWS::ElasticLoadBalancingV2::TargetGroup",
+        providerResourceId: targetGroupArn,
+        displayName: "orders-api",
+        config: {
+          name: "orders-api",
+          port: 8080,
+          protocol: "HTTP",
+          targetType: "ip",
+          vpcId: selectedVpcId
+        },
+        relationships: [
+          { type: "depends_on", targetProviderResourceId: selectedVpcId },
+          { type: "attached_to", targetProviderResourceId: ALB_ARN }
+        ]
+      })
+    ],
+    ["LOAD_BALANCER_TARGET_GROUP"]
+  );
+
+  assert.equal(
+    result.discoveredResources.some(
+      (resource) => resource.providerResourceId === selectedVpcId
+    ),
+    true
+  );
+  assert.equal(
+    result.discoveredResources.some(
+      (resource) => resource.providerResourceId === unrelatedVpcId
+    ),
+    false
+  );
+});
+
+test("Listener만 선택하면 연결된 ALB Target Group VPC만 함께 가져온다", async () => {
+  const selectedVpcId = "vpc-orders";
+  const unrelatedVpcId = "vpc-unrelated";
+  const targetGroupArn =
+    "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/orders/1111111111111111";
+  const unrelatedTargetGroupArn =
+    "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/unrelated/2222222222222222";
+  const listenerArn =
+    "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener/app/shared/1111111111111111/listener";
+  const result = await scanWithSelection(
+    [
+      record({
+        providerResourceType: "AWS::EC2::VPC",
+        providerResourceId: selectedVpcId,
+        displayName: "orders-vpc",
+        config: { cidrBlock: "10.0.0.0/16" }
+      }),
+      record({
+        providerResourceType: "AWS::EC2::VPC",
+        providerResourceId: unrelatedVpcId,
+        displayName: "unrelated-vpc",
+        config: { cidrBlock: "10.1.0.0/16" }
+      }),
+      record({
+        providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        providerResourceId: ALB_ARN,
+        displayName: "orders-alb",
+        config: { name: "orders-alb", type: "application", vpcId: selectedVpcId }
+      }),
+      record({
+        providerResourceType: "AWS::ElasticLoadBalancingV2::TargetGroup",
+        providerResourceId: targetGroupArn,
+        displayName: "orders-api",
+        config: { name: "orders-api", vpcId: selectedVpcId },
+        relationships: [
+          { type: "depends_on", targetProviderResourceId: selectedVpcId },
+          { type: "attached_to", targetProviderResourceId: ALB_ARN }
+        ]
+      }),
+      record({
+        providerResourceType: "AWS::ElasticLoadBalancingV2::TargetGroup",
+        providerResourceId: unrelatedTargetGroupArn,
+        displayName: "unrelated-api",
+        config: { name: "unrelated-api", vpcId: unrelatedVpcId }
+      }),
+      record({
+        providerResourceType: "AWS::ElasticLoadBalancingV2::Listener",
+        providerResourceId: listenerArn,
+        displayName: "HTTP:80",
+        config: { port: 80, protocol: "HTTP", simpleForwardAction: true },
+        relationships: [
+          { type: "depends_on", targetProviderResourceId: ALB_ARN },
+          { type: "attached_to", targetProviderResourceId: targetGroupArn }
+        ]
+      })
+    ],
+    ["LOAD_BALANCER_LISTENER"]
+  );
+
+  assert.deepEqual(
+    result.discoveredResources.map((resource) => resource.displayName).sort(),
+    ["orders-vpc", "orders-alb", "orders-api", "HTTP:80"].sort()
+  );
+});
+
 async function scan(records: AwsDiscoveredResourceRecord[]): Promise<ReverseEngineeringScanResult> {
+  return scanWithSelection(records, ["ALL"]);
+}
+
+async function scanWithSelection(
+  records: AwsDiscoveredResourceRecord[],
+  resourceTypes: ReverseEngineeringScanResult["scan"]["resourceTypes"]
+): Promise<ReverseEngineeringScanResult> {
   return createAwsProviderAdapter({
     async discoverResources() {
       return records;
     }
-  }).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
+  }).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes });
 }
 
 async function scanPrivate(

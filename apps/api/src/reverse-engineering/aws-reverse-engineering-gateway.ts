@@ -35,10 +35,26 @@ import {
   type Image
 } from "@aws-sdk/client-ec2";
 import {
+  DescribeListenerAttributesCommand,
+  DescribeListenersCommand,
+  DescribeLoadBalancerAttributesCommand,
   DescribeLoadBalancersCommand,
+  DescribeTagsCommand,
+  DescribeTargetGroupAttributesCommand,
+  DescribeTargetGroupsCommand,
   ElasticLoadBalancingV2Client,
+  type Action,
+  type DescribeListenerAttributesCommandOutput,
+  type DescribeListenersCommandOutput,
+  type DescribeLoadBalancerAttributesCommandOutput,
   type DescribeLoadBalancersCommandOutput,
-  type LoadBalancer
+  type DescribeTagsCommandOutput,
+  type DescribeTargetGroupAttributesCommandOutput,
+  type DescribeTargetGroupsCommandOutput,
+  type Listener,
+  type LoadBalancer,
+  type TagDescription,
+  type TargetGroup
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import {
   ClusterField,
@@ -158,6 +174,11 @@ import {
   parseVpcsFromXml
 } from "./aws-reverse-engineering-parsers.js";
 import { sendAwsQuery } from "./aws-reverse-engineering-query.js";
+
+type ElasticLoadBalancingAttribute = {
+  readonly Key?: string | undefined;
+  readonly Value?: string | undefined;
+};
 
 export type AwsReverseEngineeringGatewayOptions = {
   fetchXml?: typeof fetch;
@@ -392,16 +413,7 @@ export function createAwsReverseEngineeringGateway(
           listBucketsWithDetails(input.region, credentials, undefined, reportPageFailure)
         ),
         ...(readerPlan.loadBalancers
-          ? [
-              readResourceGroup(input, "LOAD_BALANCER", (reportPageFailure) =>
-                listApplicationLoadBalancers(
-                  input.region,
-                  credentials,
-                  undefined,
-                  reportPageFailure
-                )
-              )
-            ]
+          ? [readElasticLoadBalancingResourcesWithDiagnostics(input, input.region, credentials)]
           : []),
         ...(readerPlan.cloudFrontDistributions
           ? [
@@ -489,12 +501,22 @@ export function createAwsReverseEngineeringReaderPlan(
   input: AwsProviderScanInput
 ): AwsReverseEngineeringReaderPlan {
   return {
-    loadBalancers: shouldReadResourceGroup(input, "LOAD_BALANCER"),
+    loadBalancers: shouldReadElasticLoadBalancingResourceGroup(input),
     cloudFrontDistributions: shouldReadResourceGroup(input, "CLOUDFRONT"),
     ecsResources: shouldReadEcsResourceGroup(input),
     eventBridgeResources: shouldReadEventBridgeResourceGroup(input),
     unknownResources: shouldReadUnknownResourceGroup(input)
   };
+}
+
+/** gg: ALB family 선택 하나라도 있으면 같은 reader에서 안전한 의존 리소스를 함께 읽습니다. */
+function shouldReadElasticLoadBalancingResourceGroup(input: AwsProviderScanInput): boolean {
+  return (
+    input.resourceTypes.includes("ALL") ||
+    input.resourceTypes.includes("LOAD_BALANCER") ||
+    input.resourceTypes.includes("LOAD_BALANCER_TARGET_GROUP") ||
+    input.resourceTypes.includes("LOAD_BALANCER_LISTENER")
+  );
 }
 
 function shouldReadEcsResourceGroup(input: AwsProviderScanInput): boolean {
@@ -1358,6 +1380,15 @@ async function listUnknownResources(
         listLambdaPermissionsAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
+  } else if (shouldReadElasticLoadBalancingResourceGroup(input)) {
+    reads.push(
+      readResourceExplorerResourcesWithDiagnostics(input.region, credentials).then((result) =>
+        filterGenericElasticLoadBalancingFallback(input, result)
+      ),
+      readUnknownResourceRecords("UNKNOWN", "resource-groups-tagging", (reportPageFailure) =>
+        listTaggedUnknownResources(input.region, credentials, undefined, reportPageFailure)
+      ).then((result) => filterGenericElasticLoadBalancingFallback(input, result))
+    );
   }
 
   if (input.resourceTypes.includes("AMI")) {
@@ -1480,6 +1511,29 @@ async function listUnknownResources(
     ),
     scanErrors: deduplicateReverseEngineeringScanErrors(
       discoveryResults.flatMap((result) => result.scanErrors)
+    )
+  };
+}
+
+/** gg: 개별 ELBv2 선택에서는 generic inventory 중 선택 Resource와 안전 의존 후보만 남깁니다. */
+function filterGenericElasticLoadBalancingFallback(
+  input: AwsProviderScanInput,
+  result: AwsProviderDiscoveryResult
+): AwsProviderDiscoveryResult {
+  const providerResourceTypes = new Set([
+    "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    ...(shouldReadElasticLoadBalancingTargetGroups(input)
+      ? ["AWS::ElasticLoadBalancingV2::TargetGroup"]
+      : []),
+    ...(shouldReadElasticLoadBalancingListeners(input)
+      ? ["AWS::ElasticLoadBalancingV2::Listener"]
+      : [])
+  ]);
+
+  return {
+    ...result,
+    records: result.records.filter((record) =>
+      providerResourceTypes.has(record.providerResourceType)
     )
   };
 }
@@ -1931,6 +1985,302 @@ function isNonEmptyString(value: unknown): value is string {
   return getNonEmptyStringValue(value) !== null;
 }
 
+const ELBV2_TAG_BATCH_SIZE = 20;
+
+/** gg: ALB family를 한 client로 읽고 page·상세 조회 실패를 Resource별 incomplete 근거로 남깁니다. */
+export async function readElasticLoadBalancingResourcesWithDiagnostics(
+  input: AwsProviderScanInput,
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsElbReadClientFactory = createDefaultElbReadClient
+): Promise<AwsProviderDiscoveryResult> {
+  const client = createClient(region, credentials);
+  const scanErrors: ReverseEngineeringScanError[] = [];
+  const loadBalancerPages = await listApplicationLoadBalancerPages(client);
+  if (loadBalancerPages.failure) {
+    scanErrors.push(
+      toScanErrorFromPageFailure("LOAD_BALANCER", loadBalancerPages.failure)
+    );
+  }
+  const loadBalancers = loadBalancerPages.items.filter(
+    (loadBalancer) => loadBalancer.Type === "application" && Boolean(loadBalancer.LoadBalancerArn)
+  );
+  const records: AwsDiscoveredResourceRecord[] = loadBalancers.flatMap((loadBalancer) =>
+    toApplicationLoadBalancerRecord(loadBalancer, region)
+  );
+
+  if (shouldReadElasticLoadBalancingTargetGroups(input)) {
+    const targetGroupPages = await listTargetGroupPages(client);
+    if (targetGroupPages.failure) {
+      scanErrors.push(
+        toScanErrorFromPageFailure(
+          "LOAD_BALANCER_TARGET_GROUP",
+          targetGroupPages.failure
+        )
+      );
+    }
+    records.push(
+      ...targetGroupPages.items.flatMap((targetGroup) =>
+        toLoadBalancerTargetGroupRecord(targetGroup, region)
+      )
+    );
+  }
+
+  if (shouldReadElasticLoadBalancingListeners(input)) {
+    for (const loadBalancer of loadBalancers) {
+      const loadBalancerArn = getNonEmptyStringValue(loadBalancer.LoadBalancerArn);
+      if (!loadBalancerArn) continue;
+      const listenerPages = await listListenerPages(client, loadBalancerArn);
+      if (listenerPages.failure) {
+        scanErrors.push(
+          toScanErrorFromPageFailure("LOAD_BALANCER_LISTENER", listenerPages.failure)
+        );
+      }
+      records.push(
+        ...listenerPages.items.flatMap((listener) =>
+          toLoadBalancerListenerRecord(listener, region)
+        )
+      );
+    }
+  }
+
+  await readElasticLoadBalancingAttributes(records, client, scanErrors);
+  await readElasticLoadBalancingTags(records, client, scanErrors);
+
+  return { records, scanErrors };
+}
+
+/** gg: Target Group은 직접 선택, Listener 의존, 전체 선택에서만 상세 조회합니다. */
+function shouldReadElasticLoadBalancingTargetGroups(input: AwsProviderScanInput): boolean {
+  return (
+    input.resourceTypes.includes("ALL") ||
+    input.resourceTypes.includes("LOAD_BALANCER_TARGET_GROUP") ||
+    input.resourceTypes.includes("LOAD_BALANCER_LISTENER")
+  );
+}
+
+/** gg: Listener는 직접 또는 전체 선택에서만 읽고 그 의존 ALB/TG는 같은 scan에 유지합니다. */
+function shouldReadElasticLoadBalancingListeners(input: AwsProviderScanInput): boolean {
+  return (
+    input.resourceTypes.includes("ALL") ||
+    input.resourceTypes.includes("LOAD_BALANCER_LISTENER")
+  );
+}
+
+/** gg: ALB pagination primitive를 기존 단독 reader와 family reader가 공유합니다. */
+async function listApplicationLoadBalancerPages(
+  client: AwsElbReadClient
+): Promise<AwsPageResult<LoadBalancer>> {
+  return collectAwsPages(async (marker) => {
+    const response = await sendElbCommand<DescribeLoadBalancersCommandOutput>(
+      client,
+      new DescribeLoadBalancersCommand({ Marker: marker })
+    );
+    return {
+      items: response.LoadBalancers ?? [],
+      nextToken: response.NextMarker
+    };
+  });
+}
+
+/** gg: Target Group page token을 원문 없이 동일한 page collector로 처리합니다. */
+async function listTargetGroupPages(
+  client: AwsElbReadClient
+): Promise<AwsPageResult<TargetGroup>> {
+  return collectAwsPages(async (marker) => {
+    const response = await sendElbCommand<DescribeTargetGroupsCommandOutput>(
+      client,
+      new DescribeTargetGroupsCommand({ Marker: marker })
+    );
+    return {
+      items: response.TargetGroups ?? [],
+      nextToken: response.NextMarker
+    };
+  });
+}
+
+/** gg: 한 ALB의 Listener page를 끝까지 읽고 앞 page를 later failure에도 보존합니다. */
+async function listListenerPages(
+  client: AwsElbReadClient,
+  loadBalancerArn: string
+): Promise<AwsPageResult<Listener>> {
+  return collectAwsPages(async (marker) => {
+    const response = await sendElbCommand<DescribeListenersCommandOutput>(
+      client,
+      new DescribeListenersCommand({ LoadBalancerArn: loadBalancerArn, Marker: marker })
+    );
+    return {
+      items: response.Listeners ?? [],
+      nextToken: response.NextMarker
+    };
+  });
+}
+
+/** gg: Resource별 attribute API를 순차 bounded read하고 실패 Resource만 안전하게 닫습니다. */
+async function readElasticLoadBalancingAttributes(
+  records: AwsDiscoveredResourceRecord[],
+  client: AwsElbReadClient,
+  scanErrors: ReverseEngineeringScanError[]
+): Promise<void> {
+  for (const record of records) {
+    try {
+      const attributes = await readElasticLoadBalancingResourceAttributes(record, client);
+      record.config = {
+        ...record.config,
+        reverseEngineeringDetailsVersion: 1,
+        attributesReadComplete: true,
+        attributes: normalizeElasticLoadBalancingAttributes(attributes),
+        ...createElasticLoadBalancingTerraformAttributeConfig(record, attributes)
+      };
+    } catch (error) {
+      record.config = markElasticLoadBalancingIncomplete(record.config, "attributes");
+      scanErrors.push(toScanError(resolveElasticLoadBalancingResourceType(record), error));
+    }
+  }
+}
+
+/** gg: Resource 종류에 맞는 attribute command만 만들어 raw SDK 응답은 즉시 버립니다. */
+async function readElasticLoadBalancingResourceAttributes(
+  record: AwsDiscoveredResourceRecord,
+  client: AwsElbReadClient
+): Promise<readonly ElasticLoadBalancingAttribute[]> {
+  if (record.providerResourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer") {
+    const response = await sendElbCommand<DescribeLoadBalancerAttributesCommandOutput>(
+      client,
+      new DescribeLoadBalancerAttributesCommand({
+        LoadBalancerArn: record.providerResourceId
+      })
+    );
+    return response.Attributes ?? [];
+  }
+  if (record.providerResourceType === "AWS::ElasticLoadBalancingV2::TargetGroup") {
+    const response = await sendElbCommand<DescribeTargetGroupAttributesCommandOutput>(
+      client,
+      new DescribeTargetGroupAttributesCommand({
+        TargetGroupArn: record.providerResourceId
+      })
+    );
+    return response.Attributes ?? [];
+  }
+
+  const response = await sendElbCommand<DescribeListenerAttributesCommandOutput>(
+    client,
+    new DescribeListenerAttributesCommand({ ListenerArn: record.providerResourceId })
+  );
+  return response.Attributes ?? [];
+}
+
+/** gg: 현재 Terraform projection이 쓰는 숫자 attribute만 정확히 변환합니다. */
+function createElasticLoadBalancingTerraformAttributeConfig(
+  record: AwsDiscoveredResourceRecord,
+  attributes: readonly ElasticLoadBalancingAttribute[]
+): Record<string, unknown> {
+  if (record.providerResourceType !== "AWS::ElasticLoadBalancingV2::TargetGroup") {
+    return {};
+  }
+
+  const deregistrationDelay = Number(
+    attributes.find((attribute) => attribute.Key === "deregistration_delay.timeout_seconds")
+      ?.Value
+  );
+  return Number.isFinite(deregistrationDelay) && deregistrationDelay >= 0
+    ? { deregistrationDelay }
+    : {};
+}
+
+/** gg: AWS attribute 배열은 빈 key를 버린 단순 key/value 객체로만 보존합니다. */
+function normalizeElasticLoadBalancingAttributes(
+  attributes: readonly ElasticLoadBalancingAttribute[]
+): Record<string, string> {
+  return Object.fromEntries(
+    attributes.flatMap((attribute) => {
+      const key = getNonEmptyStringValue(attribute.Key);
+      const value = getNonEmptyStringValue(attribute.Value);
+      return key && value ? [[key, value]] : [];
+    })
+  );
+}
+
+/** gg: ELB DescribeTags 최대 20 ARN 제한을 지키고 batch 실패 대상만 incomplete로 표시합니다. */
+async function readElasticLoadBalancingTags(
+  records: AwsDiscoveredResourceRecord[],
+  client: AwsElbReadClient,
+  scanErrors: ReverseEngineeringScanError[]
+): Promise<void> {
+  for (const recordBatch of chunkValues(records, ELBV2_TAG_BATCH_SIZE)) {
+    const resourceArns = recordBatch.map((record) => record.providerResourceId);
+    try {
+      const response = await sendElbCommand<DescribeTagsCommandOutput>(
+        client,
+        new DescribeTagsCommand({ ResourceArns: resourceArns })
+      );
+      const tagsByArn = new Map(
+        (response.TagDescriptions ?? []).flatMap((description) => {
+          const arn = getNonEmptyStringValue(description.ResourceArn);
+          return arn ? [[arn, normalizeElasticLoadBalancingTags(description)]] : [];
+        })
+      );
+      for (const record of recordBatch) {
+        record.config = {
+          ...record.config,
+          reverseEngineeringDetailsVersion: 1,
+          tagsReadComplete: true,
+          tags: tagsByArn.get(record.providerResourceId) ?? []
+        };
+      }
+    } catch (error) {
+      for (const record of recordBatch) {
+        record.config = markElasticLoadBalancingIncomplete(record.config, "tags");
+      }
+      for (const resourceType of new Set(
+        recordBatch.map(resolveElasticLoadBalancingResourceType)
+      )) {
+        scanErrors.push(toScanError(resourceType, error));
+      }
+    }
+  }
+}
+
+/** gg: ELB tag의 빈 key/value를 제외하고 공개 가능한 문자열만 남깁니다. */
+function normalizeElasticLoadBalancingTags(
+  description: TagDescription
+): Array<{ key: string; value: string }> {
+  return (description.Tags ?? []).flatMap((tag) => {
+    const key = getNonEmptyStringValue(tag.Key);
+    const value = getNonEmptyStringValue(tag.Value);
+    return key && value ? [{ key, value }] : [];
+  });
+}
+
+/** gg: 상세 조회 실패 종류를 중복 없이 누적해 관리 판정을 fail-close합니다. */
+function markElasticLoadBalancingIncomplete(
+  config: Record<string, unknown>,
+  detail: "attributes" | "tags"
+): Record<string, unknown> {
+  const currentDetails = Array.isArray(config["reverseEngineeringIncompleteDetails"])
+    ? config["reverseEngineeringIncompleteDetails"].filter(isNonEmptyString)
+    : [];
+  return {
+    ...config,
+    reverseEngineeringDetailsVersion: 1,
+    [`${detail}ReadComplete`]: false,
+    reverseEngineeringIncompleteDetails: [...new Set([...currentDetails, detail])]
+  };
+}
+
+/** gg: ELB provider type을 화면과 scan error가 쓰는 정식 ResourceType으로 좁힙니다. */
+function resolveElasticLoadBalancingResourceType(
+  record: AwsDiscoveredResourceRecord
+): ResourceType {
+  if (record.providerResourceType === "AWS::ElasticLoadBalancingV2::TargetGroup") {
+    return "LOAD_BALANCER_TARGET_GROUP";
+  }
+  if (record.providerResourceType === "AWS::ElasticLoadBalancingV2::Listener") {
+    return "LOAD_BALANCER_LISTENER";
+  }
+  return "LOAD_BALANCER";
+}
+
 // ALB는 태그가 없어도 자주 쓰이므로 ELBv2 API를 정식 reader로 사용합니다.
 export async function listApplicationLoadBalancers(
   region: string,
@@ -1939,21 +2289,12 @@ export async function listApplicationLoadBalancers(
   reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
-  const result = await collectAwsPages(async (marker) => {
-    const response = await sendElbCommand<DescribeLoadBalancersCommandOutput>(
-      client,
-      new DescribeLoadBalancersCommand({ Marker: marker })
-    );
-    return {
-      items: (response.LoadBalancers ?? []).flatMap((loadBalancer) =>
-        toApplicationLoadBalancerRecord(loadBalancer, region)
-      ),
-      nextToken: response.NextMarker
-    };
-  });
+  const result = await listApplicationLoadBalancerPages(client);
 
   if (result.failure) reportPageFailure(result.failure);
-  return result.items;
+  return result.items.flatMap((loadBalancer) =>
+    toApplicationLoadBalancerRecord(loadBalancer, region)
+  );
 }
 
 // Lambda도 태그 없이 쓰이는 경우가 많아서 ListFunctions 결과를 UNKNOWN 후보로 남깁니다.
@@ -2511,6 +2852,120 @@ function toApplicationLoadBalancerRecord(
       relationships
     }
   ];
+}
+
+/** gg: HTTP/HTTPS Target Group 응답을 health check와 ALB/VPC 관계가 있는 전용 record로 줄입니다. */
+function toLoadBalancerTargetGroupRecord(
+  targetGroup: TargetGroup,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const arn = getNonEmptyStringValue(targetGroup.TargetGroupArn);
+  if (!arn) return [];
+  const vpcId = getNonEmptyStringValue(targetGroup.VpcId);
+  const loadBalancerArns = (targetGroup.LoadBalancerArns ?? []).filter(isNonEmptyString);
+  const healthCheck = compactRecord({
+    enabled: targetGroup.HealthCheckEnabled,
+    protocol: targetGroup.HealthCheckProtocol,
+    port: targetGroup.HealthCheckPort,
+    path: targetGroup.HealthCheckPath,
+    matcher: targetGroup.Matcher?.HttpCode,
+    interval: targetGroup.HealthCheckIntervalSeconds,
+    timeout: targetGroup.HealthCheckTimeoutSeconds,
+    healthyThreshold: targetGroup.HealthyThresholdCount,
+    unhealthyThreshold: targetGroup.UnhealthyThresholdCount
+  });
+
+  return [
+    {
+      providerResourceType: "AWS::ElasticLoadBalancingV2::TargetGroup",
+      providerResourceId: arn,
+      displayName: targetGroup.TargetGroupName ?? arn,
+      region: fallbackRegion,
+      config: compactRecord({
+        arn,
+        name: targetGroup.TargetGroupName,
+        targetGroupName: targetGroup.TargetGroupName,
+        protocol: targetGroup.Protocol,
+        port: targetGroup.Port,
+        vpcId,
+        healthCheck,
+        targetType: targetGroup.TargetType,
+        loadBalancerArns,
+        ipAddressType: targetGroup.IpAddressType,
+        protocolVersion: targetGroup.ProtocolVersion
+      }),
+      relationships: [
+        ...(vpcId
+          ? [{ type: "depends_on" as const, targetProviderResourceId: vpcId }]
+          : []),
+        ...loadBalancerArns.map((loadBalancerArn) => ({
+          type: "attached_to" as const,
+          targetProviderResourceId: loadBalancerArn
+        }))
+      ]
+    }
+  ];
+}
+
+/** gg: Listener는 원본 action ARN을 관계로만 옮기고 단순 forward 여부만 config에 남깁니다. */
+function toLoadBalancerListenerRecord(
+  listener: Listener,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const arn = getNonEmptyStringValue(listener.ListenerArn);
+  const loadBalancerArn = getNonEmptyStringValue(listener.LoadBalancerArn);
+  if (!arn || !loadBalancerArn) return [];
+  const forwardTargetGroupArn = getSimpleForwardTargetGroupArn(listener.DefaultActions);
+
+  return [
+    {
+      providerResourceType: "AWS::ElasticLoadBalancingV2::Listener",
+      providerResourceId: arn,
+      displayName: `${listener.Protocol ?? "Listener"}:${listener.Port ?? "unknown"}`,
+      region: fallbackRegion,
+      config: compactRecord({
+        arn,
+        loadBalancerArn,
+        port: listener.Port,
+        protocol: listener.Protocol,
+        defaultAction: forwardTargetGroupArn ? { type: "forward" } : undefined,
+        simpleForwardAction: Boolean(forwardTargetGroupArn),
+        hasAdvancedDefaultAction: forwardTargetGroupArn ? undefined : true
+      }),
+      relationships: [
+        { type: "depends_on", targetProviderResourceId: loadBalancerArn },
+        ...(forwardTargetGroupArn
+          ? [{ type: "attached_to" as const, targetProviderResourceId: forwardTargetGroupArn }]
+          : [])
+      ]
+    }
+  ];
+}
+
+/** gg: 정확히 하나의 단일 forward 대상만 관리 가능한 Target Group 관계로 인정합니다. */
+function getSimpleForwardTargetGroupArn(
+  defaultActions: readonly Action[] | undefined
+): string | null {
+  if (!defaultActions || defaultActions.length !== 1) return null;
+  const [action] = defaultActions;
+  if (!action || action.Type !== "forward") return null;
+  const directArn = getNonEmptyStringValue(action.TargetGroupArn);
+  const forwardTargets = (action.ForwardConfig?.TargetGroups ?? []).flatMap((target) => {
+    const targetArn = getNonEmptyStringValue(target.TargetGroupArn);
+    return targetArn ? [{ arn: targetArn, weight: target.Weight }] : [];
+  });
+  const uniqueTargetArns = new Set([
+    ...(directArn ? [directArn] : []),
+    ...forwardTargets.map((target) => target.arn)
+  ]);
+  const hasWeightedOrStickyAction =
+    forwardTargets.some(
+      (target) => target.weight !== undefined && target.weight !== 1
+    ) || action.ForwardConfig?.TargetGroupStickinessConfig?.Enabled === true;
+
+  return uniqueTargetArns.size === 1 && !hasWeightedOrStickyAction
+    ? [...uniqueTargetArns][0] ?? null
+    : null;
 }
 
 function toUnknownLambdaFunctionRecord(
@@ -3181,6 +3636,7 @@ const AWS_PROVIDER_RESOURCE_TYPE_BY_ARN_KIND = new Map<string, string>([
   ["cloudfront:origin-access-control", "AWS::CloudFront::OriginAccessControl"],
   ["cloudwatch:alarm", "AWS::CloudWatch::Alarm"],
   ["ec2:eip-allocation", "AWS::EC2::EIP"],
+  ["ec2:elastic-ip", "AWS::EC2::EIP"],
   ["ec2:image", "AWS::EC2::Image"],
   ["ec2:instance", "AWS::EC2::Instance"],
   ["ec2:internet-gateway", "AWS::EC2::InternetGateway"],
@@ -3238,9 +3694,6 @@ export function isReverseEngineeringPromotedResourceArn(arn: string): boolean {
   const parsedArn = parseAwsArn(arn);
 
   return (
-    (parsedArn.service === "elasticloadbalancing" &&
-      parsedArn.resourceKind === "loadbalancer" &&
-      parsedArn.resourceName.startsWith("app/")) ||
     (parsedArn.service === "cloudfront" && parsedArn.resourceKind === "distribution") ||
     (parsedArn.service === "events" && parsedArn.resourceKind === "rule") ||
     (parsedArn.service === "ecs" &&
@@ -3644,6 +4097,10 @@ export function resolveNatGatewayElasticIpRelationships(
       return record;
     }
 
+    if (record.config["associationTargetType"] === "service_managed") {
+      return record;
+    }
+
     const allocationId = getNonEmptyStringValue(record.config["allocationId"]);
     const natGatewayIds = allocationId
       ? [...new Set(natGatewayIdsByAllocationId.get(allocationId) ?? [])]
@@ -3855,6 +4312,12 @@ const DEDICATED_RECORD_DETAIL_KEY_BY_PROVIDER_RESOURCE_TYPE = new Map<string, st
   ["AWS::KMS::Key", "keyId"]
 ]);
 
+const ELASTIC_LOAD_BALANCING_PROVIDER_RESOURCE_TYPES = new Set([
+  "AWS::ElasticLoadBalancingV2::LoadBalancer",
+  "AWS::ElasticLoadBalancingV2::TargetGroup",
+  "AWS::ElasticLoadBalancingV2::Listener"
+]);
+
 // gg: generic inventory보다 같은 Resource의 전용 reader가 가진 관리 가능 설정을 우선합니다.
 function shouldPreferDedicatedRecord(
   existingRecord: AwsDiscoveredResourceRecord,
@@ -3862,6 +4325,13 @@ function shouldPreferDedicatedRecord(
 ): boolean {
   if (existingRecord.providerResourceType !== candidateRecord.providerResourceType) {
     return false;
+  }
+
+  if (ELASTIC_LOAD_BALANCING_PROVIDER_RESOURCE_TYPES.has(existingRecord.providerResourceType)) {
+    return (
+      getElasticLoadBalancingRecordPreference(candidateRecord) >
+      getElasticLoadBalancingRecordPreference(existingRecord)
+    );
   }
 
   const detailKey = DEDICATED_RECORD_DETAIL_KEY_BY_PROVIDER_RESOURCE_TYPE.get(
@@ -3873,6 +4343,21 @@ function shouldPreferDedicatedRecord(
     getNonEmptyStringValue(existingRecord.config[detailKey]) === null &&
     getNonEmptyStringValue(candidateRecord.config[detailKey]) !== null
   );
+}
+
+/** gg: complete dedicated > generic fallback > incomplete dedicated 순서로 한 Resource만 남깁니다. */
+function getElasticLoadBalancingRecordPreference(
+  record: AwsDiscoveredResourceRecord
+): number {
+  if (record.config["reverseEngineeringDetailsVersion"] !== 1) {
+    return 1;
+  }
+
+  return record.config["attributesReadComplete"] === true &&
+    record.config["tagsReadComplete"] === true &&
+    !Array.isArray(record.config["reverseEngineeringIncompleteDetails"])
+    ? 2
+    : 0;
 }
 
 function compactRecord(values: Record<string, unknown>): Record<string, unknown> {
@@ -3945,6 +4430,9 @@ export function shouldReadResourceGroup(input: AwsProviderScanInput, resourceTyp
   return (
     input.resourceTypes.includes("ALL") ||
     input.resourceTypes.includes(resourceType) ||
+    (resourceType === "VPC" &&
+      (input.resourceTypes.includes("LOAD_BALANCER_TARGET_GROUP") ||
+        input.resourceTypes.includes("LOAD_BALANCER_LISTENER"))) ||
     ((resourceType === "SUBNET" || resourceType === "ELASTIC_IP") &&
       input.resourceTypes.includes("NAT_GATEWAY")) ||
     ((resourceType === "ROUTE_TABLE" || resourceType === "SUBNET") &&
@@ -3966,6 +4454,9 @@ export function shouldReadUnknownResourceGroup(input: AwsProviderScanInput): boo
     input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP") ||
     input.resourceTypes.includes("CLOUDWATCH_METRIC_ALARM") ||
     input.resourceTypes.includes("API_GATEWAY_REST_API")
+    || input.resourceTypes.includes("LOAD_BALANCER")
+    || input.resourceTypes.includes("LOAD_BALANCER_TARGET_GROUP")
+    || input.resourceTypes.includes("LOAD_BALANCER_LISTENER")
   );
 }
 

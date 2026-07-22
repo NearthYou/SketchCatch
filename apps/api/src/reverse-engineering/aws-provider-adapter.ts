@@ -99,6 +99,8 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::Events::Rule", "EVENTBRIDGE_RULE"],
   ["AWS::Events::Target", "EVENTBRIDGE_TARGET"],
   ["AWS::ElasticLoadBalancingV2::LoadBalancer", "LOAD_BALANCER"],
+  ["AWS::ElasticLoadBalancingV2::TargetGroup", "LOAD_BALANCER_TARGET_GROUP"],
+  ["AWS::ElasticLoadBalancingV2::Listener", "LOAD_BALANCER_LISTENER"],
   ["AWS::CloudFront::Distribution", "CLOUDFRONT"],
   ["AWS::ECS::Cluster", "ECS_CLUSTER"],
   ["AWS::ECS::Service", "ECS_SERVICE"],
@@ -115,6 +117,8 @@ const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
   "EVENTBRIDGE_RULE",
   "EVENTBRIDGE_TARGET",
   "LOAD_BALANCER",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "LOAD_BALANCER_LISTENER",
   "CLOUDFRONT",
   "ECS_CLUSTER",
   "ECS_SERVICE",
@@ -138,6 +142,8 @@ const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
   "EVENTBRIDGE_RULE",
   "EVENTBRIDGE_TARGET",
   "LOAD_BALANCER",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "LOAD_BALANCER_LISTENER",
   "CLOUDFRONT",
   "ECS_CLUSTER",
   "ECS_SERVICE",
@@ -146,7 +152,9 @@ const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
 const SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES = new Set<ResourceType>([
   "ROUTE_TABLE_ASSOCIATION",
   "ELASTIC_IP",
-  "NAT_GATEWAY"
+  "NAT_GATEWAY",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "LOAD_BALANCER_LISTENER"
 ]);
 const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
   "providerResourceId",
@@ -180,6 +188,7 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
   [
     "AWS::EC2::NatGateway",
     new Set([
+      "addressStatusesReady",
       "allocationIds",
       "connectivityType",
       "natGatewayId",
@@ -233,17 +242,60 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
   [
     "AWS::ElasticLoadBalancingV2::LoadBalancer",
     new Set([
+      "attributes",
+      "attributesReadComplete",
       "availabilityZones",
       "dnsName",
       "ipAddressType",
       "loadBalancerType",
       "name",
+      "reverseEngineeringDetailsVersion",
+      "reverseEngineeringIncompleteDetails",
       "scheme",
       "securityGroupIds",
       "subnetIds",
       "subnetMapping",
+      "tags",
+      "tagsReadComplete",
       "type",
       "vpcId"
+    ])
+  ],
+  [
+    "AWS::ElasticLoadBalancingV2::TargetGroup",
+    new Set([
+      "attributes",
+      "attributesReadComplete",
+      "deregistrationDelay",
+      "healthCheck",
+      "ipAddressType",
+      "name",
+      "port",
+      "protocol",
+      "protocolVersion",
+      "reverseEngineeringDetailsVersion",
+      "reverseEngineeringIncompleteDetails",
+      "tags",
+      "tagsReadComplete",
+      "targetGroupName",
+      "targetType",
+      "vpcId"
+    ])
+  ],
+  [
+    "AWS::ElasticLoadBalancingV2::Listener",
+    new Set([
+      "attributes",
+      "attributesReadComplete",
+      "defaultAction",
+      "hasAdvancedDefaultAction",
+      "port",
+      "protocol",
+      "reverseEngineeringDetailsVersion",
+      "reverseEngineeringIncompleteDetails",
+      "simpleForwardAction",
+      "tags",
+      "tagsReadComplete"
     ])
   ],
   [
@@ -464,16 +516,118 @@ function filterMultiplexedReaderRecordsForOutput(
   input: AwsProviderScanInput,
   records: readonly AwsDiscoveredResourceRecord[]
 ): AwsDiscoveredResourceRecord[] {
-  if (
-    input.resourceTypes.includes("ALL") ||
-    input.resourceTypes.includes("ROUTE_TABLE_ASSOCIATION")
-  ) {
+  if (input.resourceTypes.includes("ALL")) {
     return [...records];
   }
 
-  return records.filter(
-    (record) => record.providerResourceType !== "AWS::EC2::RouteTableAssociation"
+  const selectedResourceTypes = new Set(input.resourceTypes);
+  const listenerDependencyIds = new Set(
+    records
+      .filter(
+        (record) =>
+          record.providerResourceType === "AWS::ElasticLoadBalancingV2::Listener"
+      )
+      .flatMap((record) =>
+        record.relationships.map((relationship) => relationship.targetProviderResourceId)
+      )
   );
+  const selectedTargetGroups = records.filter(
+    (record) =>
+      record.providerResourceType === "AWS::ElasticLoadBalancingV2::TargetGroup" &&
+      (selectedResourceTypes.has("LOAD_BALANCER_TARGET_GROUP") ||
+        listenerDependencyIds.has(record.providerResourceId))
+  );
+  const selectedTargetGroupIds = new Set(
+    selectedTargetGroups.map((record) => record.providerResourceId)
+  );
+  const targetGroupDependencyIds = new Set(
+    selectedTargetGroups.flatMap((record) =>
+      record.relationships.map((relationship) => relationship.targetProviderResourceId)
+    )
+  );
+  const selectedLoadBalancerIds = new Set(
+    records
+      .filter(
+        (record) =>
+          record.providerResourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer" &&
+          (selectedResourceTypes.has("LOAD_BALANCER") ||
+            listenerDependencyIds.has(record.providerResourceId) ||
+            targetGroupDependencyIds.has(record.providerResourceId))
+      )
+      .map((record) => record.providerResourceId)
+  );
+  const elasticLoadBalancingVpcIds = new Set(
+    records
+      .filter(
+        (record) =>
+          selectedTargetGroupIds.has(record.providerResourceId) ||
+          selectedLoadBalancerIds.has(record.providerResourceId)
+      )
+      .map((record) => getNonEmptyString(record.config["vpcId"]))
+      .filter((value): value is string => value !== null)
+  );
+  const natDependencyIds = new Set(
+    records
+      .filter((record) => record.providerResourceType === "AWS::EC2::NatGateway")
+      .flatMap((record) => [
+        getNonEmptyString(record.config["subnetId"]),
+        ...getStringValues(record.config["allocationIds"]),
+        ...record.relationships.map((relationship) => relationship.targetProviderResourceId)
+      ])
+      .filter((value): value is string => value !== null)
+  );
+
+  return records.filter((record) => {
+    if (
+      record.providerResourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer" &&
+      !selectedResourceTypes.has("LOAD_BALANCER") &&
+      !selectedLoadBalancerIds.has(record.providerResourceId)
+    ) {
+      return false;
+    }
+
+    if (
+      record.providerResourceType === "AWS::ElasticLoadBalancingV2::TargetGroup" &&
+      !selectedResourceTypes.has("LOAD_BALANCER_TARGET_GROUP") &&
+      !listenerDependencyIds.has(record.providerResourceId)
+    ) {
+      return false;
+    }
+
+    if (
+      record.providerResourceType === "AWS::EC2::VPC" &&
+      !selectedResourceTypes.has("VPC") &&
+      (selectedResourceTypes.has("LOAD_BALANCER_TARGET_GROUP") ||
+        selectedResourceTypes.has("LOAD_BALANCER_LISTENER"))
+    ) {
+      return elasticLoadBalancingVpcIds.has(record.providerResourceId);
+    }
+
+    if (
+      record.providerResourceType === "AWS::EC2::RouteTableAssociation" &&
+      !selectedResourceTypes.has("ROUTE_TABLE_ASSOCIATION")
+    ) {
+      return false;
+    }
+
+    if (
+      selectedResourceTypes.has("NAT_GATEWAY") &&
+      record.providerResourceType === "AWS::EC2::Subnet" &&
+      !selectedResourceTypes.has("SUBNET")
+    ) {
+      return natDependencyIds.has(record.providerResourceId);
+    }
+
+    if (
+      selectedResourceTypes.has("NAT_GATEWAY") &&
+      record.providerResourceType === "AWS::EC2::EIP" &&
+      !selectedResourceTypes.has("ELASTIC_IP")
+    ) {
+      return natDependencyIds.has(record.providerResourceId);
+    }
+
+    return true;
+  });
 }
 
 // 예전 gateway 배열 응답과 새 부분 실패 응답을 같은 모양으로 맞춥니다.
@@ -901,6 +1055,14 @@ function createTerraformCreationValidationFindings(
 
 function getNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getStringValues(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (entry): entry is string => typeof entry === "string" && entry.trim().length > 0
+      )
+    : [];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

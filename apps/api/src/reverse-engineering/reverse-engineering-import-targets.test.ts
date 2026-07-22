@@ -664,6 +664,107 @@ test("같은 scan 참조가 없는 과거 EIP/NAT handoff는 import 대상에서
   }
 });
 
+test("같은 scan ALB 관계가 없는 과거 Target Group과 Listener handoff는 import에서 제외한다", async () => {
+  const scenarios = [
+    {
+      resource: {
+        id: "resource-orphan-target-group",
+        providerResourceType: "AWS::ElasticLoadBalancingV2::TargetGroup",
+        providerResourceId:
+          "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/orders/b1c2d3e4f5a6b7c8",
+        displayName: "orders-api",
+        resourceType: "LOAD_BALANCER_TARGET_GROUP" as const,
+        config: {
+          name: "orders-api",
+          port: 8080,
+          protocol: "HTTP",
+          targetType: "ip",
+          vpcId: "vpc-orders",
+          healthCheck: {
+            enabled: true,
+            protocol: "HTTP",
+            port: "traffic-port",
+            path: "/health",
+            matcher: "200-399",
+            interval: 30,
+            timeout: 5,
+            healthyThreshold: 2,
+            unhealthyThreshold: 2
+          },
+          reverseEngineeringDetailsVersion: 1,
+          attributesReadComplete: true,
+          tagsReadComplete: true,
+          attributes: {},
+          tags: []
+        },
+        relationships: [
+          { type: "depends_on" as const, targetResourceId: "missing-vpc" },
+          { type: "connects_to" as const, targetResourceId: "missing-alb" }
+        ]
+      },
+      terraformType: "aws_lb_target_group",
+      terraformName: "resource_orphan_target_group"
+    },
+    {
+      resource: {
+        id: "resource-orphan-listener",
+        providerResourceType: "AWS::ElasticLoadBalancingV2::Listener",
+        providerResourceId:
+          "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener/app/orders/a1b2c3d4e5f6a7b8/c1d2e3f4a5b6c7d8",
+        displayName: "HTTP:80",
+        resourceType: "LOAD_BALANCER_LISTENER" as const,
+        config: {
+          port: 80,
+          protocol: "HTTP",
+          defaultAction: { type: "forward" },
+          simpleForwardAction: true,
+          reverseEngineeringDetailsVersion: 1,
+          attributesReadComplete: true,
+          tagsReadComplete: true,
+          attributes: {},
+          tags: []
+        },
+        relationships: [
+          { type: "depends_on" as const, targetResourceId: "missing-alb" },
+          { type: "connects_to" as const, targetResourceId: "missing-target-group" }
+        ]
+      },
+      terraformType: "aws_lb_listener",
+      terraformName: "resource_orphan_listener"
+    }
+  ];
+
+  for (const scenario of scenarios) {
+    const scanResult = result(scenario.resource);
+    scanResult.importSuggestions = [
+      {
+        id: `import-${scenario.resource.id}`,
+        resourceId: scenario.resource.id,
+        status: "ready",
+        handoffReady: true,
+        terraformAddress: `${scenario.terraformType}.${scenario.terraformName}`,
+        importCommand:
+          `terraform import ${scenario.terraformType}.${scenario.terraformName} ${scenario.resource.providerResourceId}`
+      }
+    ];
+
+    const targets = await resolveVerifiedImportTargets(
+      {
+        projectId: "project-1",
+        accessContext,
+        diagramJson: diagram({
+          id: scenario.resource.id,
+          resourceType: scenario.terraformType,
+          resourceName: scenario.terraformName
+        })
+      },
+      repositoryWith(scanResult)
+    );
+
+    assert.deepEqual(targets, [], scenario.resource.resourceType);
+  }
+});
+
 function repositoryWith(
   scanResult: ReverseEngineeringScanResult,
   overrides: Partial<{ id: string; projectId: string; status: string }> = {}

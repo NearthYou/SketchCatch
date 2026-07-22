@@ -9,7 +9,22 @@ import type {
 } from "@sketchcatch/types";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
+const REVERSE_ENGINEERING_RENDERABLE_CONFIG_KEYS = new Map<string, ReadonlySet<string>>([
+  ["aws_eip", new Set(["domain", "tags"])],
+  [
+    "aws_nat_gateway",
+    new Set([
+      "allocationId",
+      "connectivityType",
+      "secondaryAllocationIds",
+      "subnetId",
+      "tags"
+    ])
+  ]
+]);
 const NON_RENDERABLE_TERRAFORM_CONFIG_KEYS = new Set([
+  "analysisExcluded",
+  "analysis_excluded",
   "applicationPurpose",
   "application_purpose",
   "bucketPurpose",
@@ -173,12 +188,26 @@ function filterRenderableConfigValues(
   resourceType: string | undefined,
   values: Record<string, unknown>
 ): Record<string, unknown> {
+  const reverseEngineeringAllowedKeys = isReverseEngineeringConfig(values)
+    ? REVERSE_ENGINEERING_RENDERABLE_CONFIG_KEYS.get(resourceType ?? "")
+    : undefined;
+
   return Object.fromEntries(
     Object.entries(values).filter(
       ([key, value]) =>
         !NON_RENDERABLE_TERRAFORM_CONFIG_KEYS.has(key) &&
+        (reverseEngineeringAllowedKeys === undefined || reverseEngineeringAllowedKeys.has(key)) &&
         !isInvalidAutoscalingGroupDesiredCapacity(resourceType, key, value)
     )
+  );
+}
+
+function isReverseEngineeringConfig(values: Record<string, unknown>): boolean {
+  return (
+    values["reverseEngineeringSourceKind"] === "saved_scan" ||
+    values["reverse_engineering_source_kind"] === "saved_scan" ||
+    typeof values["providerResourceType"] === "string" ||
+    typeof values["provider_resource_type"] === "string"
   );
 }
 

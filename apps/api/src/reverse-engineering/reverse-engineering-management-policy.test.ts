@@ -114,6 +114,7 @@ test("available NAT은 connectivity별 완전한 allocation 경계만 자동 관
     { ...publicNat, state: "pending" },
     { ...publicNat, primaryAllocationId: undefined },
     { ...publicNat, allocationIds: [publicNat.allocationIds[1]] },
+    { ...publicNat, addressStatusesReady: false },
     { ...privateNat, allocationIds: ["eipalloc-0123456789abcdef0"] },
     { ...privateNat, connectivityType: "unsupported" }
   ]) {

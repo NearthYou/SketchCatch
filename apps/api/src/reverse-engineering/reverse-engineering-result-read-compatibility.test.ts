@@ -787,6 +787,109 @@ test("같은 scan 참조가 사라진 과거 EIP/NAT의 Terraform identity를 �
   }
 });
 
+test("같은 scan 참조가 완전한 public NAT은 읽기 보정 후에도 EIP 참조를 유지한다", () => {
+  const legacyResult = createLegacyResult();
+  const subnetId = "subnet-0123456789abcdef0";
+  const primaryAllocationId = "eipalloc-0123456789abcdef0";
+  const secondaryAllocationId = "eipalloc-fedcba98765432100";
+  const natGatewayId = "nat-0123456789abcdef0";
+  const subnet = {
+    id: "resource-subnet-main",
+    provider: "aws" as const,
+    providerResourceType: "AWS::EC2::Subnet",
+    providerResourceId: subnetId,
+    region: "ap-northeast-2",
+    displayName: "private-a",
+    resourceType: "SUBNET" as const,
+    config: {
+      vpcId: "vpc-main",
+      cidrBlock: "10.0.1.0/24",
+      availabilityZone: "ap-northeast-2a",
+      assignIpv6AddressOnCreation: false,
+      mapPublicIpOnLaunch: false
+    }
+  };
+  const eips = [primaryAllocationId, secondaryAllocationId].map((allocationId, index) => ({
+    id: `resource-eip-${index + 1}`,
+    provider: "aws" as const,
+    providerResourceType: "AWS::EC2::EIP",
+    providerResourceId: allocationId,
+    region: "ap-northeast-2",
+    displayName: `egress-${index + 1}`,
+    resourceType: "ELASTIC_IP" as const,
+    config: {
+      allocationId,
+      associationTargetType: "nat_gateway",
+      domain: "vpc"
+    },
+    relationships: [
+      { type: "depends_on" as const, targetResourceId: "resource-nat-main", label: "depends_on" }
+    ]
+  }));
+  const nat = {
+    id: "resource-nat-main",
+    provider: "aws" as const,
+    providerResourceType: "AWS::EC2::NatGateway",
+    providerResourceId: natGatewayId,
+    region: "ap-northeast-2",
+    displayName: "public-egress",
+    resourceType: "NAT_GATEWAY" as const,
+    config: {
+      allocationIds: [primaryAllocationId, secondaryAllocationId],
+      connectivityType: "public",
+      natGatewayId,
+      primaryAllocationId,
+      state: "available",
+      subnetId
+    },
+    relationships: [
+      { type: "contains" as const, targetResourceId: subnet.id, label: "contains" },
+      ...eips.map((eip) => ({
+        type: "depends_on" as const,
+        targetResourceId: eip.id,
+        label: "depends_on"
+      }))
+    ]
+  };
+  const resources = [subnet, ...eips, nat];
+  legacyResult.discoveredResources.push(...resources);
+  legacyResult.architectureJson.nodes.push(
+    ...resources.map((resource, index) => ({
+      id: resource.id,
+      type: resource.resourceType,
+      label: resource.displayName,
+      positionX: 720 + index * 120,
+      positionY: 80,
+      config: {
+        providerResourceId: resource.providerResourceId,
+        terraformBlockType: "resource" as const,
+        terraformResourceType:
+          resource.resourceType === "SUBNET"
+            ? "aws_subnet"
+            : resource.resourceType === "ELASTIC_IP"
+              ? "aws_eip"
+              : "aws_nat_gateway",
+        terraformResourceName: resource.id.replaceAll("-", "_"),
+        terraformFileName: "reverse-engineering",
+        reverseEngineeringManagement: "managed"
+      }
+    }))
+  );
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const natNode = result.architectureJson.nodes.find((node) => node.id === nat.id);
+
+  assert.equal(natNode?.config["reverseEngineeringManagement"], "managed");
+  assert.equal(natNode?.config["terraformResourceType"], "aws_nat_gateway");
+  assert.equal(
+    natNode?.config["allocationId"],
+    "aws_eip.resource_eip_1.id"
+  );
+  assert.deepEqual(natNode?.config["secondaryAllocationIds"], [
+    "aws_eip.resource_eip_2.id"
+  ]);
+});
+
 test("유일하게 연결된 지원 Resource가 아닌 과거 import handoff는 안전하게 제거한다", () => {
   const unmatchedResult = createLegacyResult();
   unmatchedResult.importSuggestions.push({

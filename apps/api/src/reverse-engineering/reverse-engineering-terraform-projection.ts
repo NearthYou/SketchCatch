@@ -36,6 +36,8 @@ const TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE = new Map<ResourceType, string>([
   ["EVENTBRIDGE_RULE", "aws_cloudwatch_event_rule"],
   ["EVENTBRIDGE_TARGET", "aws_cloudwatch_event_target"],
   ["LOAD_BALANCER", "aws_lb"],
+  ["LOAD_BALANCER_TARGET_GROUP", "aws_lb_target_group"],
+  ["LOAD_BALANCER_LISTENER", "aws_lb_listener"],
   ["CLOUDFRONT", "aws_cloudfront_distribution"],
   ["ECS_CLUSTER", "aws_ecs_cluster"],
   ["ECS_SERVICE", "aws_ecs_service"],
@@ -45,7 +47,9 @@ const TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE = new Map<ResourceType, string>([
 const SAME_SCAN_REFERENCE_RESOURCE_TYPES = new Set<ResourceType>([
   "ROUTE_TABLE_ASSOCIATION",
   "ELASTIC_IP",
-  "NAT_GATEWAY"
+  "NAT_GATEWAY",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "LOAD_BALANCER_LISTENER"
 ]);
 
 /** 기존 AWS 리소스를 보드에서 편집 가능한 Terraform identity와 명시적 인수로 투영한다. */
@@ -144,7 +148,7 @@ export function createReverseEngineeringTerraformValues(
     case "ROUTE_TABLE":
       return compactConfig({
         vpcId: config["vpcId"],
-        route: normalizeRouteTableRoutes(config["routes"]),
+        route: normalizeRouteTableRoutes(resource, config["routes"], sameScanResources),
         tags: normalizeTerraformTags(config["tags"])
       });
     case "ROUTE_TABLE_ASSOCIATION":
@@ -249,6 +253,10 @@ export function createReverseEngineeringTerraformValues(
         subnetMapping: config["subnetMapping"],
         tags: normalizeTerraformTags(config["tags"])
       });
+    case "LOAD_BALANCER_TARGET_GROUP":
+      return createLoadBalancerTargetGroupTerraformValues(resource, sameScanResources);
+    case "LOAD_BALANCER_LISTENER":
+      return createLoadBalancerListenerTerraformValues(resource, sameScanResources);
     case "CLOUDFRONT":
       return compactConfig({
         comment: config["comment"],
@@ -294,6 +302,73 @@ export function createReverseEngineeringTerraformValues(
     default:
       return {};
   }
+}
+
+/** gg: Target Group은 같은 scan의 관리 가능한 VPC와 정확히 한 ALB 관계가 있을 때만 투영합니다. */
+function createLoadBalancerTargetGroupTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  if (!sameScanResources) return {};
+  const vpc = findSameScanManagedTarget(
+    resource,
+    sameScanResources,
+    "VPC",
+    resource.config["vpcId"]
+  );
+  const loadBalancer = findSameScanRelatedManagedTarget(
+    resource,
+    sameScanResources,
+    "LOAD_BALANCER"
+  );
+  if (!vpc || !loadBalancer) return {};
+
+  return compactConfig({
+    name: resource.config["name"],
+    port: resource.config["port"],
+    protocol: resource.config["protocol"],
+    targetType: resource.config["targetType"],
+    vpcId: createTerraformIdReference("aws_vpc", vpc),
+    deregistrationDelay: resource.config["deregistrationDelay"],
+    healthCheck: resource.config["healthCheck"],
+    tags: normalizeTerraformTags(resource.config["tags"])
+  });
+}
+
+/** gg: HTTP Listener는 같은 scan의 관리 가능한 ALB와 Target Group을 ARN 참조로 연결합니다. */
+function createLoadBalancerListenerTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  if (!sameScanResources) return {};
+  const loadBalancer = findSameScanRelatedManagedTarget(
+    resource,
+    sameScanResources,
+    "LOAD_BALANCER"
+  );
+  const targetGroup = findSameScanRelatedManagedTarget(
+    resource,
+    sameScanResources,
+    "LOAD_BALANCER_TARGET_GROUP",
+    true
+  );
+  if (!loadBalancer || !targetGroup) return {};
+
+  return compactConfig({
+    loadBalancerArn: createTerraformArnReference("aws_lb", loadBalancer),
+    port: resource.config["port"],
+    protocol: resource.config["protocol"],
+    defaultAction: [
+      {
+        type: "forward",
+        targetGroupArn: createTerraformArnReference(
+          "aws_lb_target_group",
+          targetGroup
+        )
+      }
+    ],
+    tags: normalizeTerraformTags(resource.config["tags"])
+  });
 }
 
 /** Association은 같은 scan에서 관리 가능한 두 대상의 Terraform identity가 있을 때만 투영한다. */
@@ -477,6 +552,25 @@ function findSameScanManagedTarget(
     : undefined;
 }
 
+/** gg: node 관계로 확인된 같은 scan 대상이 정확히 하나일 때만 Terraform 참조를 허용합니다. */
+function findSameScanRelatedManagedTarget(
+  source: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[],
+  resourceType: ResourceType,
+  requireCompleteProjection = false
+): DiscoveredResource | undefined {
+  const candidates = sameScanResources.filter(
+    (candidate) => candidate.resourceType === resourceType && hasRelationshipTo(source, candidate)
+  );
+  const target = candidates.length === 1 ? candidates[0] : undefined;
+  if (!target) return undefined;
+
+  const management = requireCompleteProjection
+    ? createReverseEngineeringTerraformProjection(target, sameScanResources).management
+    : classifyReverseEngineeringManagement(target);
+  return management === "managed" ? target : undefined;
+}
+
 function hasRelationshipTo(source: DiscoveredResource, target: DiscoveredResource): boolean {
   return (source.relationships ?? []).some(
     (relationship) => relationship.targetResourceId === target.id
@@ -488,6 +582,14 @@ function createTerraformIdReference(
   resource: DiscoveredResource
 ): string {
   return `${terraformResourceType}.${createStableTerraformResourceName(resource.id)}.id`;
+}
+
+/** gg: same-scan Resource의 안정적인 Terraform ARN 참조를 만듭니다. */
+function createTerraformArnReference(
+  terraformResourceType: string,
+  resource: DiscoveredResource
+): string {
+  return `${terraformResourceType}.${createStableTerraformResourceName(resource.id)}.arn`;
 }
 
 function getNonEmptyString(value: unknown): string | null {
@@ -586,7 +688,11 @@ function readFirstAttachmentVpcId(value: unknown): string | undefined {
 }
 
 /** AWS Route Table 관찰값을 aws_route_table의 route nested block으로 바꾼다. */
-function normalizeRouteTableRoutes(value: unknown): Record<string, unknown>[] | undefined {
+function normalizeRouteTableRoutes(
+  routeTable: DiscoveredResource,
+  value: unknown,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): Record<string, unknown>[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }
@@ -596,12 +702,30 @@ function normalizeRouteTableRoutes(value: unknown): Record<string, unknown>[] | 
       return [];
     }
 
+    const natGatewayId = getNonEmptyString(route["natGatewayId"]);
+    const sameScanNatGateway =
+      natGatewayId && sameScanResources
+        ? findSameScanManagedTarget(
+            routeTable,
+            sameScanResources,
+            "NAT_GATEWAY",
+            natGatewayId
+          )
+        : undefined;
+    const managedNatGateway =
+      sameScanNatGateway && sameScanResources &&
+      createReverseEngineeringTerraformProjection(sameScanNatGateway, sameScanResources)
+        .management === "managed"
+        ? sameScanNatGateway
+        : undefined;
     const normalized = compactConfig({
       cidrBlock: route["destinationCidrBlock"],
       ipv6CidrBlock: route["destinationIpv6CidrBlock"],
       gatewayId: route["gatewayId"],
       instanceId: route["instanceId"],
-      natGatewayId: route["natGatewayId"],
+      natGatewayId: managedNatGateway
+        ? createTerraformIdReference("aws_nat_gateway", managedNatGateway)
+        : route["natGatewayId"],
       networkInterfaceId: route["networkInterfaceId"]
     });
     return Object.keys(normalized).length > 0 ? [normalized] : [];

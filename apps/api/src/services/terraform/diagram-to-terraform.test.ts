@@ -1741,6 +1741,95 @@ test("Reverse Engineering CloudWatch Log Group은 관리 가능한 값만 Terraf
   );
 });
 
+test("Reverse Engineering EIP과 NAT는 Board 경로에서도 생성 가능한 Terraform 값만 렌더링한다", () => {
+  const diagram: DiagramJson = {
+    nodes: [
+      {
+        id: "resource-eip-primary",
+        type: "aws_eip",
+        kind: "resource",
+        label: "egress-primary",
+        position: { x: 0, y: 0 },
+        size: { width: 240, height: 120 },
+        locked: false,
+        zIndex: 1,
+        parameters: {
+          resourceType: "aws_eip",
+          resourceName: "resource_eip_primary",
+          fileName: "reverse-engineering",
+          values: {
+            domain: "vpc",
+            tags: { Name: "egress-primary" },
+            allocationId: "eipalloc-0123456789abcdef0",
+            associationTargetType: "nat_gateway",
+            publicIp: "203.0.113.10",
+            analysisExcluded: false,
+            providerResourceType: "AWS::EC2::EIP",
+            providerResourceId: "eipalloc-0123456789abcdef0",
+            reverseEngineeringSourceKind: "saved_scan",
+            reverseEngineeringObservedConfig: { state: "attached" }
+          }
+        }
+      },
+      {
+        id: "resource-nat-main",
+        type: "aws_nat_gateway",
+        kind: "resource",
+        label: "public-egress",
+        position: { x: 280, y: 0 },
+        size: { width: 240, height: 120 },
+        locked: false,
+        zIndex: 2,
+        parameters: {
+          resourceType: "aws_nat_gateway",
+          resourceName: "resource_nat_main",
+          fileName: "reverse-engineering",
+          values: {
+            subnetId: "aws_subnet.resource_subnet_main.id",
+            allocationId: "aws_eip.resource_eip_primary.id",
+            secondaryAllocationIds: ["aws_eip.resource_eip_secondary.id"],
+            connectivityType: "public",
+            tags: { Name: "public-egress" },
+            allocationIds: [
+              "eipalloc-0123456789abcdef0",
+              "eipalloc-fedcba98765432100"
+            ],
+            natGatewayId: "nat-0123456789abcdef0",
+            primaryAllocationId: "eipalloc-0123456789abcdef0",
+            state: "available",
+            analysisExcluded: false,
+            providerResourceType: "AWS::EC2::NatGateway",
+            providerResourceId: "nat-0123456789abcdef0",
+            reverseEngineeringSourceKind: "saved_scan",
+            reverseEngineeringObservedConfig: { state: "available" }
+          }
+        }
+      }
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(
+    buildInfrastructureGraphFromDiagramJson(diagram)
+  );
+
+  assert.match(terraform, /resource "aws_eip" "resource_eip_primary" \{/);
+  assert.match(terraform, /domain\s+= "vpc"/);
+  assert.match(terraform, /resource "aws_nat_gateway" "resource_nat_main" \{/);
+  assert.match(terraform, /subnet_id\s+= aws_subnet\.resource_subnet_main\.id/);
+  assert.match(terraform, /allocation_id\s+= aws_eip\.resource_eip_primary\.id/);
+  assert.match(
+    terraform,
+    /secondary_allocation_ids = \[[\s\S]*aws_eip\.resource_eip_secondary\.id/
+  );
+  assert.match(terraform, /connectivity_type\s+= "public"/);
+  assert.doesNotMatch(
+    terraform,
+    /analysis_excluded|(?:^|\s)allocation_ids\s+=|association_target_type|nat_gateway_id|primary_allocation_id|provider_resource|public_ip|reverse_engineering|(?:^|\s)state\s+=/
+  );
+});
+
 test("Reverse Engineering ECS Service는 classic ELB를 elb_name으로 렌더링하고 불완전한 binding은 생략한다", () => {
   const graph: InfrastructureGraph = {
     nodes: [

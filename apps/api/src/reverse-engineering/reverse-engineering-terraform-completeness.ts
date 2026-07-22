@@ -96,6 +96,7 @@ function getMissingTerraformResourceFields(
       config["primaryAllocationId"]
     );
     const commonFields = [
+      ...(config["addressStatusesReady"] === false ? ["addressState=succeeded"] : []),
       ...(getValidNatGatewayId(config["natGatewayId"]) ? [] : ["natGatewayId"]),
       ...(getNonEmptyString(config["subnetId"]) ? [] : ["subnetId"]),
       ...(config["state"] === "available" ? [] : ["state=available"]),
@@ -235,6 +236,7 @@ function getMissingTerraformResourceFields(
 
   if (resourceType === "LOAD_BALANCER") {
     return [
+      ...getMissingElasticLoadBalancingDetails(config, false),
       ...(getNonEmptyString(config["name"]) ? [] : ["name"]),
       ...((getNonEmptyString(config["loadBalancerType"]) ??
       getNonEmptyString(config["type"]))
@@ -245,6 +247,37 @@ function getMissingTerraformResourceFields(
       ...(hasSupportedLoadBalancerIpAddressType(config["ipAddressType"])
         ? []
         : ["ipAddressType"])
+    ];
+  }
+
+  if (resourceType === "LOAD_BALANCER_TARGET_GROUP") {
+    return [
+      ...getMissingElasticLoadBalancingDetails(config, true),
+      ...(getNonEmptyString(config["name"]) ? [] : ["name"]),
+      ...(isValidTcpPort(config["port"]) ? [] : ["port"]),
+      ...(["HTTP", "HTTPS"].includes(String(config["protocol"]))
+        ? []
+        : ["protocol=HTTP/HTTPS"]),
+      ...(["instance", "ip"].includes(String(config["targetType"]))
+        ? []
+        : ["targetType=instance/ip"]),
+      ...(getNonEmptyString(config["vpcId"]) ? [] : ["vpcId"]),
+      ...(hasCompleteLoadBalancerTargetGroupHealthCheck(config["healthCheck"])
+        ? []
+        : ["healthCheck"])
+    ];
+  }
+
+  if (resourceType === "LOAD_BALANCER_LISTENER") {
+    return [
+      ...getMissingElasticLoadBalancingDetails(config, true),
+      ...(isValidTcpPort(config["port"]) ? [] : ["port"]),
+      ...(config["protocol"] === "HTTP" ? [] : ["protocol=HTTP"]),
+      ...(config["simpleForwardAction"] === true &&
+      config["hasAdvancedDefaultAction"] !== true &&
+      isSimpleForwardAction(config["defaultAction"])
+        ? []
+        : ["defaultAction=single-forward"])
     ];
   }
 
@@ -371,6 +404,18 @@ function getStableTerraformImportId(
     return isApplicationLoadBalancerArn(providerResourceId) ? providerResourceId : null;
   }
 
+  if (resource.resourceType === "LOAD_BALANCER_TARGET_GROUP") {
+    const providerResourceId = resource.providerResourceId.trim();
+
+    return isLoadBalancerTargetGroupArn(providerResourceId) ? providerResourceId : null;
+  }
+
+  if (resource.resourceType === "LOAD_BALANCER_LISTENER") {
+    const providerResourceId = resource.providerResourceId.trim();
+
+    return isLoadBalancerListenerArn(providerResourceId) ? providerResourceId : null;
+  }
+
   if (resource.resourceType === "ECS_CLUSTER") {
     const providerResourceId = resource.providerResourceId.trim();
 
@@ -396,6 +441,20 @@ function getStableTerraformImportId(
 
 function isApplicationLoadBalancerArn(value: string): boolean {
   return /^arn:[^:]+:elasticloadbalancing:[^:]+:[^:]+:loadbalancer\/app\/.+/.test(value);
+}
+
+/** gg: Target Group import에는 AWS가 반환한 exact ARN만 허용합니다. */
+function isLoadBalancerTargetGroupArn(value: string): boolean {
+  return /^arn:[^:]+:elasticloadbalancing:[^:]+:\d{12}:targetgroup\/[A-Za-z0-9-]+\/[A-Za-z0-9]+$/u.test(
+    value
+  );
+}
+
+/** gg: Listener import에는 application load balancer Listener ARN만 허용합니다. */
+function isLoadBalancerListenerArn(value: string): boolean {
+  return /^arn:[^:]+:elasticloadbalancing:[^:]+:\d{12}:listener\/app\/[A-Za-z0-9-]+\/[A-Za-z0-9]+\/[A-Za-z0-9]+$/u.test(
+    value
+  );
 }
 
 function isEcsClusterArn(value: string): boolean {
@@ -441,6 +500,57 @@ function getIncompleteDetailFields(config: Record<string, unknown>): string[] {
   }
 
   return detailNames.map((detailName) => `details.${detailName}`);
+}
+
+/** gg: 새 ELBv2 reader는 attributes와 tags 완전성 marker를 모두 가져야 합니다. */
+function getMissingElasticLoadBalancingDetails(
+  config: Record<string, unknown>,
+  requireVersion: boolean
+): string[] {
+  if (config["reverseEngineeringDetailsVersion"] !== 1) {
+    return requireVersion ? ["details"] : [];
+  }
+
+  return [
+    ...(config["attributesReadComplete"] === true && isRecord(config["attributes"])
+      ? []
+      : ["details.attributes"]),
+    ...(config["tagsReadComplete"] === true && Array.isArray(config["tags"])
+      ? []
+      : ["details.tags"])
+  ];
+}
+
+/** gg: Target Group health check의 provider 필수값을 재생성 가능한 형태로 확인합니다. */
+function hasCompleteLoadBalancerTargetGroupHealthCheck(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value["enabled"] === "boolean" &&
+    ["HTTP", "HTTPS"].includes(String(value["protocol"])) &&
+    getNonEmptyString(value["port"]) !== null &&
+    getNonEmptyString(value["path"]) !== null &&
+    getNonEmptyString(value["matcher"]) !== null &&
+    isPositiveInteger(value["interval"]) &&
+    isPositiveInteger(value["timeout"]) &&
+    isPositiveInteger(value["healthyThreshold"]) &&
+    isPositiveInteger(value["unhealthyThreshold"])
+  );
+}
+
+/** gg: Listener의 공개 action marker는 단일 forward 구조만 허용합니다. */
+function isSimpleForwardAction(value: unknown): boolean {
+  return isRecord(value) && value["type"] === "forward";
+}
+
+/** gg: ELBv2 port는 AWS가 허용하는 정수 범위만 완전한 값입니다. */
+function isValidTcpPort(value: unknown): boolean {
+  return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 65_535;
+}
+
+/** gg: health check 횟수와 시간은 양의 정수만 허용합니다. */
+function isPositiveInteger(value: unknown): boolean {
+  return Number.isInteger(value) && Number(value) > 0;
 }
 
 function hasCompleteInternetGatewayAttachments(value: unknown): boolean {
