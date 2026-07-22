@@ -324,10 +324,13 @@ sandbox deploy, rollback, artifact cleanup은 공통 승인 게이트가 있는 
 
 ### Git/CI/CD 자동 배포 PR 산출물
 
-Git/CI/CD 설치 PR은 인프라·앱 최초 Direct Deployment의 승인 Plan에서 생성한다. PR 생성 전에는 승인 Plan, active Source Repository, valid monitoring config, verified AWS connection, confirmed build config, runtime coordinates, 안전한 ECS HTTPS Output URL을 모두 재검증한다.
+Git/CI/CD 설치 PR은 인프라·앱 최초 Direct Deployment의 승인 Plan에서 생성한다. PR 생성 전에는 승인 Plan, active Source Repository, valid monitoring config, verified AWS connection, confirmed build config, runtime coordinates, 안전한 ECS HTTPS Output URL을 모두 재검증한다. Workspace의 기본 동작은 handoff를 `draft`로 먼저 저장하고 Repository 설정 → AWS Role trust → PR 순서로 한 번에 처리한다.
 
-- `repository-settings/apply`: GitHub Environment와 Actions variables를 GitHub App installation token으로 생성/갱신한다. 권한이 부족하면 `github_app_permission_required`로 차단하고 App 권한 보강을 안내한다.
-- `aws-role-diff/apply`: 사용자가 승인한 GitHub OIDC trust policy diff만 IAM role에 적용하고, 다시 읽어서 검증한다.
+- `POST /api/git-cicd-handoffs/:handoffId/setup`: 중간 실패나 닫힌 PR이 있는 동일 handoff를 재개한다. 열린 PR은 저장된 head SHA와 handoff manifest ownership이 일치할 때만 갱신하고, 사용자 변경이 있거나 닫힌 PR이면 기존 branch를 보존한 채 새 retry branch와 PR로 복구한다. 이전 Pipeline이 실패했거나 PR이 닫혔다면 안정적인 실패 식별값을 담은 retry-only file을 추가해, retry PR merge가 ECS App workflow를 실제로 다시 시작하게 한다. 최초 설치 PR에는 이 file을 만들지 않는다.
+- Repository 설정: GitHub Environment, target branch 전용 custom deployment branch policy와 Actions variables를 GitHub App installation token으로 수렴시킨 뒤 exact read-back을 통과해야 완료된다. 이미 일치하는 값은 write를 생략한다. 빈 managed variable은 삭제하고 absence를 확인해 과거 Static Site URL/API Base URL이 남지 않게 한다.
+- AWS Role trust: Repository/Environment별 scoped Sid의 GitHub OIDC statement만 추가·교체하고, 같은 Role의 다른 statement를 보존한다. exact 상태면 IAM write를 생략하고, 변경 시 다시 읽어 검증한다. 검증 증거가 handoff에 저장되지 않으면 PR 단계로 진행하지 않는다. 통합 설정 버튼에 대한 한 번의 사용자 승인이 Repository와 AWS 변경 전체의 승인 경계다.
+- 과거 `pipeline_running`/`pipeline_success` handoff에 새 검증 증거가 없으면 setup endpoint가 Repository/AWS 증거만 보완하고 기존 PR/Pipeline 상태는 유지한다. `pipeline_failed`는 Phase 4의 retry action으로 같은 endpoint를 다시 호출한다.
+- 생성 workflow는 AWS credential 또는 SketchCatch 실행 API를 사용하기 전에 `SKETCHCATCH_PROJECT_ID`가 생성 당시 project ID와 같은지 검사하고, API 호출은 `curl --fail-with-body`로 오류 본문을 남긴다.
 - `scripts/smoke/git-cicd-auto-deploy.ps1`은 위 두 apply 단계, pipeline status, static URL marker 확인을 report JSON으로 남긴다.
 - 실제 PR merge, Infra `workflow_dispatch`, Terraform apply, S3 release, ASG Instance Refresh, destroy는 비용과 credential, cleanup 승인이 있는 live smoke에서만 완료 증거로 인정한다.
 
@@ -347,7 +350,7 @@ Infra Workflow는 Terraform 실행 전 OIDC로 Infra Run API에 repository, ref,
 
 Infra와 Destroy workflow는 Terraform root에 backend 선언이 없으면 임시 `backend "s3"` 선언을 추가합니다. 이미 선언이 있으면 `s3`인지 검증하고 다른 backend는 중복 선언이나 local state fallback 없이 실패시킵니다.
 
-Repository settings와 IAM role 변경은 preview JSON으로 PR에 남깁니다. 실제 repository variables/environment 설정과 AWS role trust/policy 변경은 GitHub App installation 권한, AWS role diff 승인, secret masking을 통과한 별도 mutation path에서만 수행해야 합니다. 로그인용 GitHub OAuth token은 Repository 변경에 사용하지 않습니다.
+Repository settings와 IAM role 변경은 preview JSON으로 PR에 남깁니다. 실제 repository variables/environment 설정과 AWS role trust/policy 변경은 GitHub App installation 권한, 통합 설정에 대한 user-accepted change, secret masking을 통과한 server mutation path에서만 수행합니다. 로그인용 GitHub OAuth token은 Repository 변경에 사용하지 않습니다. PR merge와 workflow 실행은 이 통합 승인에 포함되지 않습니다.
 
 ## 프로젝트 배포 non-production sandbox E2E
 

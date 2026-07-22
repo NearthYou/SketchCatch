@@ -14,7 +14,6 @@ const settingsDrawerSource = readFileSync(
   "utf8"
 );
 const handoffPanelSource = readFileSync(new URL("./CicdHandoffPanel.tsx", import.meta.url), "utf8");
-const changeReviewSource = readFileSync(new URL("./CicdChangeReview.tsx", import.meta.url), "utf8");
 const shellSource = readFileSync(new URL("./DeploymentConsoleShell.tsx", import.meta.url), "utf8");
 const rightPanelSource = readFileSync(
   new URL("./WorkspaceRightPanel.tsx", import.meta.url),
@@ -183,15 +182,17 @@ test("PR 생성은 승인 Plan, 최초 배포, Repository와 모니터링 계약
   assert.match(cicdConsoleSource, /buildGitCicdHandoffRequest\(\{/);
 });
 
-test("external settings require an exact preview confirmation before apply", () => {
-  assert.match(handoffPanelSource, /<CicdChangeReview/);
-  assert.doesNotMatch(handoffPanelSource, />\s*Repository 설정 적용\s*</);
-  assert.doesNotMatch(handoffPanelSource, />\s*AWS Role 변경 적용\s*</);
-  assert.match(changeReviewSource, /getRepositorySettingsPreviewRevision/);
-  assert.match(changeReviewSource, /getAwsRoleDiffPreviewRevision/);
-  assert.match(changeReviewSource, /confirmedRepositoryRevision === repositoryRevision/);
-  assert.match(changeReviewSource, /isBusy \|\| !canApplyRepository/);
-  assert.match(changeReviewSource, /이름만 표시/);
+test("one setup approval resumes server-owned Repository, AWS, and PR convergence", () => {
+  assert.doesNotMatch(handoffPanelSource, /<CicdChangeReview/);
+  assert.doesNotMatch(handoffPanelSource, /Repository 설정 적용|AWS Role 변경 적용/);
+  assert.match(handoffPanelSource, /Repository 설정/);
+  assert.match(handoffPanelSource, /AWS 신뢰 정책/);
+  assert.match(handoffPanelSource, /repositorySettingsPreview\?\.verified/);
+  assert.match(handoffPanelSource, /awsRoleDiff.*verified/su);
+  assert.match(handoffPanelSource, /설정 적용 및 PR 생성/);
+  assert.match(handoffPanelSource, /설정 계속하기/);
+  assert.match(cicdConsoleSource, /setupGitCicdHandoff/);
+  assert.match(cicdConsoleSource, /existingHandoff\s*\?/);
 });
 
 test("deployment modal renders Delivery in its existing CI/CD screen", () => {

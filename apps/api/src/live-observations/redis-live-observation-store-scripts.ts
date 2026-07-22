@@ -87,12 +87,13 @@ local function manifestJson(value, deploymentId)
   local endpoints = manifest.endpoints
   local pressure = manifest.pressure
   local adapter = manifest.adapter
+  local endpointCount = endpoints.audienceApplicationUrl == nil and 2 or 3
   if not exactObjectKeys(provenance, {
     deploymentId = true, terraformArtifactSha256 = true, awsConnectionId = true,
     region = true, verifiedAt = true
   }, 5) or not exactObjectKeys(endpoints, {
-    audienceBaseUrl = true, trafficUrl = true
-  }, 2) or not exactObjectKeys(pressure, {
+    audienceBaseUrl = true, audienceApplicationUrl = true, trafficUrl = true
+  }, endpointCount) or not exactObjectKeys(pressure, {
     metric = true, target = true, windowSeconds = true
   }, 3) or not exactObjectKeys(adapter, {
     kind = true, version = true, payload = true
@@ -226,7 +227,9 @@ local function manifestJson(value, deploymentId)
     string.len(provenance.terraformArtifactSha256) == 64 and
     type(provenance.region) == 'string' and provenance.region ~= '' and
     type(provenance.verifiedAt) == 'string' and
-    type(endpoints.audienceBaseUrl) == 'string' and type(endpoints.trafficUrl) == 'string' and
+    type(endpoints.audienceBaseUrl) == 'string' and
+    (endpoints.audienceApplicationUrl == nil or type(endpoints.audienceApplicationUrl) == 'string') and
+    type(endpoints.trafficUrl) == 'string' and
     pressure.metric == 'requests_per_target_per_minute' and
     pressure.target == 60 and pressure.windowSeconds == 60
 end

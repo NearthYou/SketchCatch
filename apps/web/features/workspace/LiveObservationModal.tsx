@@ -25,6 +25,7 @@ import {
   getSelectedLiveObservationOutputUrl,
   type LiveObservationSelection
 } from "./live-observation";
+import { getLiveObservationStreamErrorMessage } from "./live-observation-errors";
 import { createLiveObservationDesignSimulationRequest } from "./live-observation-ai-recommendation";
 import { useLiveObservationQueries } from "./live-observation-queries";
 import {
@@ -378,9 +379,9 @@ export function LiveObservationModal({
     void streamLiveObservationSnapshots({
       deploymentId: selectedSession.deploymentId,
       observationId: selectedSession.id,
-      onError: () => {
+      onError: (failure) => {
         if (!abortController.signal.aborted) {
-          setStreamErrorMessage("관측 상태 연결이 지연되고 있습니다. 자동으로 다시 연결합니다.");
+          setStreamErrorMessage(getLiveObservationStreamErrorMessage(failure));
         }
       },
       onSnapshot: (nextSnapshot) => {

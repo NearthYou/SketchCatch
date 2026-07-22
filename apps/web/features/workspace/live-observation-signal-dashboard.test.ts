@@ -75,16 +75,17 @@ test("확인한 요청이 없으면 0% 오류율과 100% 응답 가능 비율을
     })
   });
 
-  assert.equal(model.status.status, "checking");
+  assert.equal(model.status.status, "observed");
+  assert.notEqual(model.status.status, "normal");
   assert.ok(model.status.unknowns.some((item) => item.text.includes("확인된 요청")));
 });
 
 test("지연된 관측값과 확인할 수 없는 관측값을 구분한다", () => {
   const delayed = createLiveObservationSignalDashboardModel({
-    snapshot: createSnapshot({
+    snapshot: withoutAcceptedEvents(createSnapshot({
       state: "delayed",
       observedAt: "2026-07-21T00:45:00.000Z"
-    })
+    }))
   });
   const unavailable = createLiveObservationSignalDashboardModel({
     snapshot: createSnapshot({ state: "unavailable" })
@@ -93,6 +94,74 @@ test("지연된 관측값과 확인할 수 없는 관측값을 구분한다", ()
   assert.equal(delayed.status.status, "checking");
   assert.equal(unavailable.status.status, "unknown");
   assert.notEqual(delayed.status.title, unavailable.status.title);
+});
+
+test("AWS 상태가 아직 없어도 수락한 참여 요청을 중립 상태로 즉시 보여준다", () => {
+  const observedAt = "2026-07-21T01:02:00.000Z";
+  const snapshot = createSnapshot();
+  snapshot.latestObservation = null;
+  snapshot.live = {
+    ...snapshot.live,
+    acceptedEventCount: 2,
+    observedAt
+  };
+
+  const model = createLiveObservationSignalDashboardModel({ snapshot });
+
+  assert.equal(model.status.status, "observed");
+  assert.equal(model.status.title, "참여 요청을 확인했어요");
+  assert.equal(model.status.lastObservedAt, observedAt);
+  assert.match(model.status.dataNote ?? "", /참여 요청 2건/);
+  assert.match(model.status.dataNote ?? "", /AWS 상태는 아직 확인 중/);
+  assert.doesNotMatch(`${model.status.title} ${model.status.userImpact}`, /정상|문제없/);
+});
+
+test("실제 AWS 상태 판정은 참여 요청 확인 상태보다 우선한다", () => {
+  const critical = createLiveObservationSignalDashboardModel({
+    snapshot: createSnapshot({ errorRate: 12 })
+  });
+  const normal = createLiveObservationSignalDashboardModel({
+    snapshot: createSnapshot({ errorRate: 0 })
+  });
+  const unavailable = createLiveObservationSignalDashboardModel({
+    snapshot: createSnapshot({ state: "unavailable" })
+  });
+
+  assert.equal(critical.status.status, "critical");
+  assert.equal(normal.status.status, "normal");
+  assert.equal(unavailable.status.status, "unknown");
+});
+
+test("AWS 상태가 없을 때 요청 압력을 서비스 장애로 단정하지 않는다", () => {
+  const highSnapshot = createSnapshot();
+  highSnapshot.latestObservation = null;
+  highSnapshot.live = { ...highSnapshot.live, pressureLevel: "high" };
+  const criticalSnapshot = createSnapshot();
+  criticalSnapshot.latestObservation = null;
+  criticalSnapshot.live = { ...criticalSnapshot.live, pressureLevel: "critical" };
+
+  assert.equal(
+    createLiveObservationSignalDashboardModel({ snapshot: highSnapshot }).status.status,
+    "observed"
+  );
+  assert.equal(
+    createLiveObservationSignalDashboardModel({ snapshot: criticalSnapshot }).status.status,
+    "observed"
+  );
+  assert.match(
+    createLiveObservationSignalDashboardModel({ snapshot: criticalSnapshot }).status.title,
+    /요청이 급격히 늘고/
+  );
+});
+
+test("AWS 관측 불가 상태가 우선하되 확인된 참여 요청 수를 숨기지 않는다", () => {
+  const model = createLiveObservationSignalDashboardModel({
+    snapshot: createSnapshot({ state: "unavailable" })
+  });
+
+  assert.equal(model.status.status, "unknown");
+  assert.match(model.status.dataNote ?? "", /참여 요청 2건/);
+  assert.match(model.status.dataNote ?? "", /AWS 관측값을 받지 못/);
 });
 
 test("비교 기준이 없는 응답 시간은 문제 신호로 만들지 않는다", () => {
@@ -223,4 +292,14 @@ function runtimeLog(
   message: string
 ): LiveObservationProviderSnapshot["logs"][number] {
   return { message, timestamp };
+}
+
+function withoutAcceptedEvents(snapshot: LiveObservationV2Snapshot): LiveObservationV2Snapshot {
+  return {
+    ...snapshot,
+    live: {
+      ...snapshot.live,
+      acceptedEventCount: 0
+    }
+  };
 }

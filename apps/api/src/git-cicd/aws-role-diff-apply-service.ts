@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   GetRoleCommand,
   IAMClient,
@@ -231,6 +231,14 @@ async function applyResolvedGitCicdAwsRoleDiff(
   repository: GitCicdHandoffRepository,
   gateway: AwsRoleDiffGateway
 ): Promise<GitCicdAwsRoleDiffApplyResponse> {
+  const persistAutomationMetadata = repository.updateHandoffAutomationMetadata;
+
+  if (!persistAutomationMetadata) {
+    throw new AwsRoleDiffApplyError(
+      "AWS role trust policy verification evidence cannot be persisted"
+    );
+  }
+
   const now = input.now ?? (() => new Date());
   const approvedDiff: GitCicdAwsRoleDiff = diff.approved
     ? diff
@@ -242,11 +250,14 @@ async function applyResolvedGitCicdAwsRoleDiff(
       };
 
   const currentPolicy = await gateway.getAssumeRolePolicy(diff.roleArn);
-  const nextPolicy = mergeGitHubOidcTrustStatement(currentPolicy, approvedDiff);
+  let verifiedPolicy = currentPolicy;
 
-  await gateway.updateAssumeRolePolicy(diff.roleArn, nextPolicy);
+  if (!policyHasGitHubOidcStatement(currentPolicy, approvedDiff)) {
+    const nextPolicy = mergeGitHubOidcTrustStatement(currentPolicy, approvedDiff);
+    await gateway.updateAssumeRolePolicy(diff.roleArn, nextPolicy);
+    verifiedPolicy = await gateway.getAssumeRolePolicy(diff.roleArn);
+  }
 
-  const verifiedPolicy = await gateway.getAssumeRolePolicy(diff.roleArn);
   const verified = policyHasGitHubOidcStatement(verifiedPolicy, approvedDiff);
   const appliedAt = now().toISOString();
 
@@ -254,7 +265,7 @@ async function applyResolvedGitCicdAwsRoleDiff(
     throw new AwsRoleDiffApplyError("AWS role trust policy update could not be verified");
   }
 
-  await repository.updateHandoffAutomationMetadata?.(handoffId, {
+  const persistedHandoff = await persistAutomationMetadata.call(repository, handoffId, {
     awsRoleDiff: {
       ...approvedDiff,
       applied: true,
@@ -262,6 +273,12 @@ async function applyResolvedGitCicdAwsRoleDiff(
       verified: true
     }
   });
+
+  if (persistedHandoff?.awsRoleDiff?.verified !== true) {
+    throw new AwsRoleDiffApplyError(
+      "AWS role trust policy verification evidence was not persisted"
+    );
+  }
 
   return {
     applied: true,
@@ -315,7 +332,9 @@ function mergeGitHubOidcTrustStatement(
   const statements = normalizeStatements(policy.Statement);
   const nextStatement = createGitHubOidcTrustStatement(diff);
   const retainedStatements = statements.filter(
-    (statement) => !isSketchCatchGitHubOidcStatement(statement)
+    (statement) =>
+      statement.Sid !== createScopedGitHubOidcStatementId(diff) &&
+      !isMatchingLegacyGitHubOidcStatement(statement, diff)
   );
 
   return {
@@ -327,7 +346,7 @@ function mergeGitHubOidcTrustStatement(
 
 function createGitHubOidcTrustStatement(diff: GitCicdAwsRoleDiff): Record<string, unknown> {
   return {
-    Sid: "SketchCatchGitHubActionsOidc",
+    Sid: createScopedGitHubOidcStatementId(diff),
     Effect: "Allow",
     Principal: {
       Federated: `arn:aws:iam::${parseAwsAccountId(diff.roleArn ?? "")}:oidc-provider/token.actions.githubusercontent.com`
@@ -348,22 +367,68 @@ function policyHasGitHubOidcStatement(
   policy: Record<string, unknown>,
   diff: GitCicdAwsRoleDiff
 ): boolean {
-  return normalizeStatements(policy.Statement).some((statement) => {
-    const condition = readRecord(statement.Condition);
-    const stringEquals = readRecord(condition.StringEquals);
+  const scopedStatementId = createScopedGitHubOidcStatementId(diff);
+  const statements = normalizeStatements(policy.Statement);
+  const scopedStatements = statements.filter(
+    (statement) => statement.Sid === scopedStatementId
+  );
 
-    return (
-      isSketchCatchGitHubOidcStatement(statement) &&
-      stringEquals["token.actions.githubusercontent.com:aud"] ===
-        diff.requiredTrustConditions["token.actions.githubusercontent.com:aud"] &&
-      stringEquals["token.actions.githubusercontent.com:sub"] ===
-        diff.requiredTrustConditions["token.actions.githubusercontent.com:sub"]
-    );
-  });
+  return (
+    scopedStatements.length === 1 &&
+    githubOidcStatementMatches(scopedStatements[0] ?? {}, diff) &&
+    !statements.some((statement) => isMatchingLegacyGitHubOidcStatement(statement, diff))
+  );
 }
 
-function isSketchCatchGitHubOidcStatement(statement: Record<string, unknown>): boolean {
-  return statement.Sid === "SketchCatchGitHubActionsOidc";
+function createScopedGitHubOidcStatementId(diff: GitCicdAwsRoleDiff): string {
+  const scope = `${diff.repository}\n${diff.environmentName}`;
+  const digest = createHash("sha256").update(scope).digest("hex").slice(0, 24);
+
+  return `SketchCatchGitHubActionsOidc${digest}`;
+}
+
+function isMatchingLegacyGitHubOidcStatement(
+  statement: Record<string, unknown>,
+  diff: GitCicdAwsRoleDiff
+): boolean {
+  return (
+    statement.Sid === "SketchCatchGitHubActionsOidc" &&
+    githubOidcStatementMatches(statement, diff)
+  );
+}
+
+function githubOidcStatementMatches(
+  statement: Record<string, unknown>,
+  diff: GitCicdAwsRoleDiff
+): boolean {
+  const principal = readRecord(statement.Principal);
+  const condition = readRecord(statement.Condition);
+  const stringEquals = readRecord(condition.StringEquals);
+
+  return (
+    hasExactKeys(statement, ["Sid", "Effect", "Principal", "Action", "Condition"]) &&
+    statement.Effect === "Allow" &&
+    statement.Action === "sts:AssumeRoleWithWebIdentity" &&
+    hasExactKeys(principal, ["Federated"]) &&
+    principal.Federated ===
+      `arn:aws:iam::${parseAwsAccountId(diff.roleArn ?? "")}:oidc-provider/token.actions.githubusercontent.com` &&
+    hasExactKeys(condition, ["StringEquals"]) &&
+    hasExactKeys(stringEquals, [
+      "token.actions.githubusercontent.com:aud",
+      "token.actions.githubusercontent.com:sub"
+    ]) &&
+    stringEquals["token.actions.githubusercontent.com:aud"] ===
+      diff.requiredTrustConditions["token.actions.githubusercontent.com:aud"] &&
+    stringEquals["token.actions.githubusercontent.com:sub"] ===
+      diff.requiredTrustConditions["token.actions.githubusercontent.com:sub"]
+  );
+}
+
+function hasExactKeys(record: Record<string, unknown>, expectedKeys: readonly string[]): boolean {
+  return (
+    JSON.stringify(Object.keys(record).sort()) ===
+    JSON.stringify([...expectedKeys].sort())
+  );
 }
 
 function normalizeStatements(value: unknown): Record<string, unknown>[] {

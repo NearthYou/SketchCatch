@@ -1,6 +1,7 @@
 import type {
   CreateGitCicdHandoffRequest,
   Deployment,
+  GitCicdHandoff,
   GitCicdHandoffConfigurationPreview,
   GitCicdReadinessAction,
   GitCicdDeploymentTargetReadinessKey,
@@ -201,6 +202,23 @@ export function selectGitCicdSourceDeployment(
   );
 }
 
+export function selectGitCicdHandoffForSetup(
+  handoffs: readonly GitCicdHandoff[],
+  sourceDeploymentId: string | null,
+  acceptedPlanId: string | null
+): GitCicdHandoff | null {
+  if (!sourceDeploymentId || !acceptedPlanId) return null;
+  return (
+    handoffs
+      .filter(
+        (handoff) =>
+          handoff.sourceDeploymentId === sourceDeploymentId &&
+          handoff.userAcceptedChangeId === acceptedPlanId
+      )
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null
+  );
+}
+
 export function getGitCicdHandoffReadiness(input: {
   readonly projectId: string;
   readonly projectName?: string | null | undefined;
@@ -278,6 +296,19 @@ export function isGitCicdHandoffReady(
   return Boolean(input.readiness?.ready && !input.isRefreshing && !input.hasError);
 }
 
+export function isGitCicdHandoffSetupComplete(handoff: GitCicdHandoff | null): boolean {
+  if (!handoff) return false;
+  const repositorySettingsVerified = handoff.repositorySettingsPreview?.verified === true;
+  const awsTrustVerified =
+    handoff.awsRoleDiff === null ||
+    handoff.awsRoleDiff === undefined ||
+    handoff.awsRoleDiff.verified === true;
+  const pullRequestReady =
+    Boolean(handoff.pullRequestUrl) && handoff.status !== "draft" && handoff.status !== "cancelled";
+
+  return repositorySettingsVerified && awsTrustVerified && pullRequestReady;
+}
+
 export function isGitCicdHandoffCreationEnabled(input: {
   readonly hasApprovedApplyPlanArtifact: boolean;
   readonly hasConfigurationPreview: boolean;
@@ -297,7 +328,6 @@ export function isGitCicdHandoffCreationEnabled(input: {
     input.hasMonitoringConfig &&
     input.hasSourceDeployment &&
     input.hasApprovedApplyPlanArtifact &&
-    !input.hasExistingHandoff &&
     !input.isBusy
   );
 }

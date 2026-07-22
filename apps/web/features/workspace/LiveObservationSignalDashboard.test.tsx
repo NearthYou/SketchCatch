@@ -95,6 +95,25 @@ test("관측 전에는 확인 중 상태와 안내만 보여주고 문제를 만
   assert.equal((html.match(/aria-pressed=/g) ?? []).length, 0);
 });
 
+test("참여 요청이 도착하면 상태 요약을 확인 중에서 요청 확인으로 바꾼다", () => {
+  const observedAt = "2026-07-21T01:02:00.000Z";
+  const value = snapshot({});
+  value.latestObservation = null;
+  value.live = {
+    ...value.live,
+    acceptedEventCount: 2,
+    observedAt
+  };
+
+  const html = renderDashboard(value);
+
+  assert.match(html, /data-status="observed"/);
+  assert.match(html, /현재 상태 · 요청 확인/);
+  assert.match(html, /참여 요청을 확인했어요/);
+  assert.match(html, /참여 요청 2건/);
+  assert.doesNotMatch(html, /현재 큰 문제는 확인되지 않았어요/);
+});
+
 test("실행 가능한 용량 수정안은 신호가 없어도 명시적 Project Draft 행동으로 보여준다", () => {
   const html = renderToStaticMarkup(
     createElement(LiveObservationSignalDashboard, {

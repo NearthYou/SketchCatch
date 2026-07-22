@@ -1,4 +1,5 @@
 import type { DiagramJson, DiagramNode, LiveObservationV2Snapshot } from "@sketchcatch/types";
+import { presentLiveObservationDiagramResourceLabels } from "./live-observation-resource-presentation";
 
 const TRAFFIC_SOURCE_TYPES = new Set([
   "aws_apigatewayv2_api",
@@ -83,11 +84,12 @@ export function createLiveObservationDiagramModel(
   diagram: DiagramJson,
   snapshot: LiveObservationV2Snapshot | null
 ): LiveObservationDiagramModel {
-  const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
-  const predecessors = createPredecessorMap(diagram);
-  const successors = createSuccessorMap(diagram);
+  const presentedDiagram = presentLiveObservationDiagramResourceLabels(diagram);
+  const nodeById = new Map(presentedDiagram.nodes.map((node) => [node.id, node]));
+  const predecessors = createPredecessorMap(presentedDiagram);
+  const successors = createSuccessorMap(presentedDiagram);
   const capacityBindings = createCapacityBindings(
-    diagram,
+    presentedDiagram,
     nodeById,
     predecessors,
     successors
