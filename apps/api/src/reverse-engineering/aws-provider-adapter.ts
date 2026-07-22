@@ -55,6 +55,11 @@ export type AwsDiscoveredResourceRecord = {
   region: string;
   config: Record<string, unknown>;
   relationships: AwsDiscoveredRelationship[];
+  serverOnly?: {
+    readonly providerResourceId?: string;
+    readonly terraformImportId?: string;
+    readonly config?: Readonly<Record<string, unknown>>;
+  };
 };
 
 export type AwsProviderDiscoveryResult = {
@@ -730,7 +735,7 @@ function toDiscoveredResource(
     providerResourceType: record.providerResourceType,
     providerResourceId:
       resultVisibility === "private"
-        ? record.providerResourceId
+        ? (record.serverOnly?.providerResourceId ?? record.providerResourceId)
         : createAwsPublicProviderResourceId(record),
     region: record.region,
     displayName,
@@ -1285,18 +1290,30 @@ function sanitizePublicIamOwnershipConfig(
   return ownershipTags.length > 0 ? { ...publicConfig, tags: ownershipTags } : publicConfig;
 }
 
-// gg: 서버 전용 결과도 allowlist를 지키되 KMS 로그를 관리 대상에서 막을 판정 근거는 보존합니다.
+// gg: 상세 reader의 AWS 원본은 private scan에만 합쳐 정책·환경값·import ID가 공개 응답으로 새지 않게 합니다.
 function createAwsStoredResourceConfig(
-  record: Pick<AwsDiscoveredResourceRecord, "providerResourceType" | "config">,
+  record: Pick<AwsDiscoveredResourceRecord, "providerResourceType" | "config" | "serverOnly">,
   resultVisibility: "public" | "private"
 ): Record<string, unknown> {
   const publicConfig = createAwsPublicResourceConfig(record);
-  if (resultVisibility !== "private" || record.providerResourceType !== "AWS::Logs::LogGroup") {
+  if (resultVisibility !== "private") {
     return publicConfig;
   }
 
-  const kmsKeyId = getNonEmptyString(record.config["kmsKeyId"]);
-  return kmsKeyId ? { ...publicConfig, kmsKeyId } : publicConfig;
+  const kmsKeyId =
+    record.providerResourceType === "AWS::Logs::LogGroup"
+      ? getNonEmptyString(record.config["kmsKeyId"])
+      : null;
+  const privateConfig = {
+    ...publicConfig,
+    ...(kmsKeyId ? { kmsKeyId } : {}),
+    ...(record.serverOnly?.config ?? {}),
+    ...(record.serverOnly?.terraformImportId
+      ? { terraformImportId: record.serverOnly.terraformImportId }
+      : {})
+  };
+
+  return privateConfig;
 }
 
 // gg: 공개 결과에는 KMS ARN 대신 암호화 연결 여부만 남겨 안전한 관리 경계를 전달합니다.

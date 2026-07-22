@@ -152,6 +152,43 @@ test("서버 전용 Reverse Engineering 결과는 나중 Terraform import에 필
   assert.equal(result.importSuggestions[0]?.importCommand?.split(" ").at(-1), ALB_ARN);
 });
 
+test("상세 reader의 AWS 원본과 import ID는 서버 결과에만 합친다", async () => {
+  const lambdaArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-api";
+  const detailedRecord = {
+    providerResourceType: "AWS::Lambda::Function",
+    providerResourceId: "aws-detail-ref-lambda-orders",
+    displayName: "orders-api",
+    region: "ap-northeast-2",
+    config: {
+      functionName: "orders-api",
+      packageType: "Image",
+      environmentValuesRedacted: true
+    },
+    relationships: [],
+    serverOnly: {
+      providerResourceId: lambdaArn,
+      terraformImportId: "orders-api",
+      config: {
+        environmentVariables: { API_TOKEN: "synthetic-never-public" },
+        imageUri: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/orders:stable"
+      }
+    }
+  } as unknown as AwsDiscoveredResourceRecord;
+
+  const publicResult = await scan([detailedRecord]);
+  const privateResult = await scanPrivate([detailedRecord]);
+
+  assert.doesNotMatch(JSON.stringify(publicResult), /123456789012|synthetic-never-public/iu);
+  assert.equal(
+    privateResult.discoveredResources[0]?.providerResourceId,
+    lambdaArn
+  );
+  assert.equal(privateResult.discoveredResources[0]?.config["terraformImportId"], "orders-api");
+  assert.deepEqual(privateResult.discoveredResources[0]?.config["environmentVariables"], {
+    API_TOKEN: "synthetic-never-public"
+  });
+});
+
 test("규칙 source를 완전히 읽지 못한 Security Group은 자동 import에서 제외한다", async () => {
   const result = await scan([
     record({
