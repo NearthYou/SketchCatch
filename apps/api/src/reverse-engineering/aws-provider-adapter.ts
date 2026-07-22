@@ -30,6 +30,7 @@ import {
   isKmsConnectedCloudWatchLogGroup,
   isSecurityGroupRequiringMapping
 } from "./reverse-engineering-management-policy.js";
+import { getReverseEngineeringTerraformCompleteness } from "./reverse-engineering-terraform-completeness.js";
 
 export type AwsProviderScanInput = {
   provider: CloudProvider;
@@ -706,41 +707,34 @@ function createImportSuggestions(
       };
     }
 
-    const terraformResourceName = createStableTerraformResourceName(resource.id);
-    const terraformAddress = `${terraformResourceType}.${terraformResourceName}`;
-    const terraformBlockDraft = `resource "${terraformResourceType}" "${terraformResourceName}" {}`;
-    const importId = getStableTerraformImportId(resource);
-    const missingTerraformFields = getMissingTerraformCreationFields(
-      resource.resourceType,
-      resource.config
-    );
-
-    if (!importId) {
-      return {
-        id: `import-${resource.id}`,
-        resourceId: resource.id,
-        status: "manual_review",
-        terraformAddress,
-        terraformBlockDraft,
-        reason:
-          missingTerraformFields.length > 0
-            ? `${createMissingImportIdReason(resource.resourceType)} 새 Terraform 생성에는 ${missingTerraformFields.join(", ")} 값이 필요합니다.`
-            : createMissingImportIdReason(resource.resourceType),
-        handoffReady: false
-      };
-    }
+    const { importId, missingCreationFields: missingTerraformFields } =
+      getReverseEngineeringTerraformCompleteness(resource);
 
     if (missingTerraformFields.length > 0) {
       return {
         id: `import-${resource.id}`,
         resourceId: resource.id,
         status: "manual_review",
-        terraformAddress,
-        importCommand: `terraform import ${terraformAddress} ${importId}`,
-        reason: `Terraform 생성과 배포에 필요한 ${missingTerraformFields.join(", ")} 값이 없습니다.`,
+        reason: importId
+          ? `Terraform 생성과 배포에 필요한 ${missingTerraformFields.join(", ")} 값이 없습니다.`
+          : `${createMissingImportIdReason(resource.resourceType)} 새 Terraform 생성에는 ${missingTerraformFields.join(", ")} 값이 필요합니다.`,
         handoffReady: false
       };
     }
+
+    if (!importId) {
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "manual_review",
+        reason: createMissingImportIdReason(resource.resourceType),
+        handoffReady: false
+      };
+    }
+
+    const terraformResourceName = createStableTerraformResourceName(resource.id);
+    const terraformAddress = `${terraformResourceType}.${terraformResourceName}`;
+    const terraformBlockDraft = `resource "${terraformResourceType}" "${terraformResourceName}" {}`;
 
     return {
       id: `import-${resource.id}`,
@@ -752,72 +746,6 @@ function createImportSuggestions(
       handoffReady: true
     };
   });
-}
-
-// gg: 각 Resource가 Terraform에서 요구하는 실제 import ID만 선택해 잘못된 대상을 막습니다.
-function getStableTerraformImportId(resource: DiscoveredResource): string | null {
-  if (resource.resourceType === "EVENTBRIDGE_RULE") {
-    const ruleName = getValidEventBridgeName(resource.config["name"]);
-    const eventBusName = getValidEventBridgeName(resource.config["eventBusName"]);
-
-    return ruleName && eventBusName
-      ? eventBusName === "default"
-        ? ruleName
-        : `${eventBusName}/${ruleName}`
-      : null;
-  }
-
-  if (resource.resourceType === "EVENTBRIDGE_TARGET") {
-    const targetId = getValidEventBridgeName(resource.config["targetId"]);
-    const ruleName = getValidEventBridgeName(resource.config["ruleName"]);
-    const eventBusName = getValidEventBridgeName(resource.config["eventBusName"]);
-
-    return targetId && ruleName && eventBusName
-      ? eventBusName === "default"
-        ? `${ruleName}/${targetId}`
-        : `${eventBusName}/${ruleName}/${targetId}`
-      : null;
-  }
-
-  if (resource.resourceType === "CLOUDWATCH_METRIC_ALARM") {
-    return getNonEmptyString(resource.config["alarmName"]);
-  }
-
-  if (resource.resourceType === "CLOUDWATCH_LOG_GROUP") {
-    return getNonEmptyString(resource.config["logGroupName"]);
-  }
-
-  if (resource.resourceType === "CLOUDFRONT") {
-    return getNonEmptyString(resource.config["id"]);
-  }
-
-  if (resource.resourceType === "LOAD_BALANCER") {
-    const providerResourceId = resource.providerResourceId.trim();
-
-    return isApplicationLoadBalancerArn(providerResourceId) ? providerResourceId : null;
-  }
-
-  if (resource.resourceType === "ECS_CLUSTER") {
-    const providerResourceId = resource.providerResourceId.trim();
-
-    return isEcsClusterArn(providerResourceId) ? providerResourceId : null;
-  }
-
-  if (resource.resourceType === "ECS_SERVICE") {
-    return getEcsServiceImportId(resource);
-  }
-
-  if (resource.resourceType === "ECS_TASK_DEFINITION") {
-    const providerResourceId = resource.providerResourceId.trim();
-
-    return isEcsTaskDefinitionArn(providerResourceId) ? providerResourceId : null;
-  }
-
-  if (/^aws-ref-[a-f0-9]{24}$/u.test(resource.providerResourceId)) {
-    return null;
-  }
-
-  return getNonEmptyString(resource.providerResourceId);
 }
 
 // gg: 자동 import를 만들 수 없는 이유를 Resource별로 짧고 정확하게 설명합니다.
@@ -841,49 +769,6 @@ function createMissingImportIdReason(resourceType: ResourceType): string {
             : "Terraform import에 필요한 provider Resource ID가 없습니다.";
 }
 
-/** Terraform import 경로를 모호하게 만들지 않는 단순 EventBridge 이름만 허용합니다. */
-function getValidEventBridgeName(value: unknown): string | null {
-  const name = getNonEmptyString(value);
-
-  return name && /^[A-Za-z0-9._-]+$/u.test(name) ? name : null;
-}
-
-function isApplicationLoadBalancerArn(value: string): boolean {
-  return /^arn:[^:]+:elasticloadbalancing:[^:]+:[^:]+:loadbalancer\/app\/.+/.test(value);
-}
-
-function isEcsClusterArn(value: string): boolean {
-  return /^arn:[^:]+:ecs:[^:]+:\d{12}:cluster\/[A-Za-z0-9_-]+$/.test(value);
-}
-
-function isEcsTaskDefinitionArn(value: string): boolean {
-  return /^arn:[^:]+:ecs:[^:]+:\d{12}:task-definition\/[A-Za-z0-9_-]+:\d+$/.test(value);
-}
-
-function getEcsServiceImportId(resource: DiscoveredResource): string | null {
-  const serviceArnMatch = /^arn:[^:]+:ecs:[^:]+:\d{12}:service\/([^/]+)(?:\/([^/]+))?$/.exec(
-    resource.providerResourceId.trim()
-  );
-  const clusterArnMatch = /^arn:[^:]+:ecs:[^:]+:\d{12}:cluster\/([^/]+)$/.exec(
-    getNonEmptyString(resource.config["clusterArn"]) ?? ""
-  );
-  const clusterName =
-    getValidEcsName(resource.config["clusterName"]) ??
-    getValidEcsName(clusterArnMatch?.[1]) ??
-    getValidEcsName(serviceArnMatch?.[2] ? serviceArnMatch[1] : undefined);
-  const serviceName =
-    getValidEcsName(resource.config["name"]) ??
-    getValidEcsName(serviceArnMatch?.[2] ?? serviceArnMatch?.[1]);
-
-  return clusterName && serviceName ? `${clusterName}/${serviceName}` : null;
-}
-
-function getValidEcsName(value: unknown): string | null {
-  const name = getNonEmptyString(value);
-
-  return name && /^[A-Za-z0-9_-]+$/.test(name) ? name : null;
-}
-
 function createTerraformCreationValidationFindings(
   discoveredResources: DiscoveredResource[]
 ): CheckFinding[] {
@@ -892,7 +777,8 @@ function createTerraformCreationValidationFindings(
       return [];
     }
 
-    const missingFields = getMissingTerraformCreationFields(resource.resourceType, resource.config);
+    const { missingCreationFields: missingFields } =
+      getReverseEngineeringTerraformCompleteness(resource);
     if (missingFields.length === 0) {
       return [];
     }
@@ -912,440 +798,8 @@ function createTerraformCreationValidationFindings(
   });
 }
 
-// gg: 관찰값만으로 새 Terraform을 안전하게 만들 수 있는지 필수값을 확인합니다.
-function getMissingTerraformCreationFields(
-  resourceType: ResourceType,
-  config: Record<string, unknown>
-): string[] {
-  const incompleteDetailFields = getIncompleteDetailFields(config);
-
-  return [
-    ...incompleteDetailFields,
-    ...getMissingTerraformResourceFields(resourceType, config)
-  ];
-}
-
-// gg: Resource 종류별 실제 관찰값이 같은 Terraform 리소스를 만들 최소 조건을 확인합니다.
-function getMissingTerraformResourceFields(
-  resourceType: ResourceType,
-  config: Record<string, unknown>
-): string[] {
-  if (resourceType === "VPC") {
-    return [
-      ...(getNonEmptyString(config["cidrBlock"]) ? [] : ["cidrBlock"]),
-      ...(getNonEmptyString(config["instanceTenancy"]) ? [] : ["instanceTenancy"])
-    ];
-  }
-
-  if (resourceType === "SUBNET") {
-    return [
-      ...(getNonEmptyString(config["vpcId"]) ? [] : ["vpcId"]),
-      ...(getNonEmptyString(config["cidrBlock"]) ? [] : ["cidrBlock"]),
-      ...(getNonEmptyString(config["availabilityZone"]) ? [] : ["availabilityZone"]),
-      ...(typeof config["mapPublicIpOnLaunch"] === "boolean"
-        ? []
-        : ["mapPublicIpOnLaunch"]),
-      ...(typeof config["assignIpv6AddressOnCreation"] === "boolean"
-        ? []
-        : ["assignIpv6AddressOnCreation"])
-    ];
-  }
-
-  if (resourceType === "INTERNET_GATEWAY") {
-    return hasCompleteInternetGatewayAttachments(config["attachments"])
-      ? []
-      : ["attachments"];
-  }
-
-  if (resourceType === "ROUTE_TABLE") {
-    return [
-      ...(getNonEmptyString(config["vpcId"]) ? [] : ["vpcId"]),
-      ...(hasCompleteRouteTableRoutes(config["routes"]) ? [] : ["routes"])
-    ];
-  }
-
-  if (resourceType === "EC2") {
-    return [
-      ...(getNonEmptyString(config["imageId"]) ? [] : ["imageId"]),
-      ...(getNonEmptyString(config["instanceType"]) ? [] : ["instanceType"]),
-      ...(getNonEmptyString(config["subnetId"]) ? [] : ["subnetId"]),
-      ...(getStringArray(config["securityGroupIds"]).length > 0
-        ? []
-        : ["securityGroupIds"]),
-      ...(hasKnownEc2MonitoringState(config["monitoringState"])
-        ? []
-        : ["monitoringState"])
-    ];
-  }
-
-  if (resourceType === "RDS") {
-    return [
-      ...(isPositiveNumber(config["allocatedStorage"]) ? [] : ["allocatedStorage"]),
-      ...(getNonEmptyString(config["availabilityZone"]) ? [] : ["availabilityZone"]),
-      ...(isNonNegativeNumber(config["backupRetentionPeriod"])
-        ? []
-        : ["backupRetentionPeriod"]),
-      ...(getNonEmptyString(config["dbInstanceClass"]) ? [] : ["dbInstanceClass"]),
-      ...(getNonEmptyString(config["dbSubnetGroupName"]) ? [] : ["dbSubnetGroupName"]),
-      ...(typeof config["deletionProtection"] === "boolean"
-        ? []
-        : ["deletionProtection"]),
-      ...(getNonEmptyString(config["engine"]) ? [] : ["engine"]),
-      ...(getNonEmptyString(config["engineVersion"]) ? [] : ["engineVersion"]),
-      ...(typeof config["multiAz"] === "boolean" ? [] : ["multiAz"]),
-      ...(typeof config["publiclyAccessible"] === "boolean"
-        ? []
-        : ["publiclyAccessible"]),
-      ...(typeof config["storageEncrypted"] === "boolean"
-        ? []
-        : ["storageEncrypted"]),
-      ...(getNonEmptyString(config["storageType"]) ? [] : ["storageType"]),
-      ...(getStringArray(config["vpcSecurityGroupIds"]).length > 0
-        ? []
-        : ["vpcSecurityGroupIds"])
-    ];
-  }
-
-  if (resourceType === "S3") {
-    return [];
-  }
-
-  if (resourceType === "CLOUDWATCH_METRIC_ALARM") {
-    return [
-      ...(getNonEmptyString(config["alarmName"]) ? [] : ["alarmName"]),
-      ...(getNonEmptyString(config["comparisonOperator"])
-        ? []
-        : ["comparisonOperator"]),
-      ...(isPositiveNumber(config["evaluationPeriods"])
-        ? []
-        : ["evaluationPeriods"]),
-      ...(typeof config["threshold"] === "number" && Number.isFinite(config["threshold"])
-        ? []
-        : ["threshold"]),
-      ...(getNonEmptyString(config["metricName"]) ? [] : ["metricName"]),
-      ...(getNonEmptyString(config["namespace"]) ? [] : ["namespace"]),
-      ...(isPositiveNumber(config["period"]) ? [] : ["period"]),
-      ...((getNonEmptyString(config["statistic"]) ??
-        getNonEmptyString(config["extendedStatistic"]))
-        ? []
-        : ["statistic/extendedStatistic"])
-    ];
-  }
-
-  if (resourceType === "API_GATEWAY_REST_API") {
-    return getNonEmptyString(config["name"]) ? [] : ["name"];
-  }
-
-  if (resourceType === "CLOUDWATCH_LOG_GROUP") {
-    return getNonEmptyString(config["logGroupName"]) ? [] : ["logGroupName"];
-  }
-
-  if (resourceType === "EVENTBRIDGE_RULE") {
-    return [
-      ...(getValidEventBridgeName(config["name"]) ? [] : ["name"]),
-      ...(getValidEventBridgeName(config["eventBusName"]) ? [] : ["eventBusName"]),
-      ...(getNonEmptyString(config["state"]) ? [] : ["state"]),
-      ...(getNonEmptyString(config["eventPattern"]) ||
-      getNonEmptyString(config["scheduleExpression"])
-        ? []
-        : ["eventPattern/scheduleExpression"])
-    ];
-  }
-
-  if (resourceType === "EVENTBRIDGE_TARGET") {
-    return [
-      ...(getValidEventBridgeName(config["targetId"]) ? [] : ["targetId"]),
-      ...(getValidEventBridgeName(config["ruleName"]) ? [] : ["ruleName"]),
-      ...(getValidEventBridgeName(config["eventBusName"]) ? [] : ["eventBusName"]),
-      ...(getNonEmptyString(config["ruleTerraformReference"])
-        ? []
-        : ["ruleTerraformReference"]),
-      ...(getNonEmptyString(config["targetTerraformReference"])
-        ? []
-        : ["targetTerraformReference"])
-    ];
-  }
-
-  if (resourceType === "LOAD_BALANCER") {
-    return [
-      ...(getNonEmptyString(config["name"]) ? [] : ["name"]),
-      ...((getNonEmptyString(config["loadBalancerType"]) ?? getNonEmptyString(config["type"]))
-        ? []
-        : ["type"]),
-      ...(getNonEmptyString(config["scheme"]) ? [] : ["scheme"]),
-      ...(hasLoadBalancerSubnetPlacement(config) ? [] : ["subnetIds/subnetMapping"]),
-      ...(hasSupportedLoadBalancerIpAddressType(config["ipAddressType"]) ? [] : ["ipAddressType"])
-    ];
-  }
-
-  if (resourceType === "CLOUDFRONT") {
-    const hasVpcOrigin = hasCloudFrontVpcOrigin(config["origin"]);
-
-    return [
-      ...(typeof config["enabled"] === "boolean" ? [] : ["enabled"]),
-      ...(hasCloudFrontOrigin(config["origin"])
-        ? []
-        : [hasVpcOrigin ? "origin.vpcOriginConfig" : "origin"]),
-      ...(hasCloudFrontDefaultCacheBehavior(config["defaultCacheBehavior"])
-        ? []
-        : ["defaultCacheBehavior"]),
-      ...(hasGeoRestriction(config["restrictions"]) ? [] : ["restrictions"]),
-      ...(hasCloudFrontViewerCertificate(config["viewerCertificate"]) ? [] : ["viewerCertificate"])
-    ];
-  }
-
-  if (resourceType === "ECS_CLUSTER") {
-    return getValidEcsName(config["name"]) ? [] : ["name"];
-  }
-
-  if (resourceType === "ECS_SERVICE") {
-    return [
-      ...(getValidEcsName(config["name"]) ? [] : ["name"]),
-      ...(getNonEmptyString(config["clusterArn"]) ? [] : ["clusterArn"]),
-      ...(getNonEmptyString(config["taskDefinitionArn"]) ? [] : ["taskDefinitionArn"]),
-      ...(isNonNegativeNumber(config["desiredCount"]) ? [] : ["desiredCount"]),
-      ...(getNonEmptyString(config["launchType"]) ||
-      hasEcsCapacityProviderStrategy(config["capacityProviderStrategy"])
-        ? []
-        : ["launchType/capacityProviderStrategy"]),
-      ...(hasEcsNetworkConfiguration(config["networkConfiguration"])
-        ? []
-        : ["networkConfiguration"]),
-      ...getMissingEcsServiceLoadBalancerFields(config["loadBalancers"])
-    ];
-  }
-
-  if (resourceType === "ECS_TASK_DEFINITION") {
-    return [
-      ...(getValidEcsName(config["family"]) ? [] : ["family"]),
-      ...(hasEcsContainerDefinitions(config["containerDefinitions"])
-        ? []
-        : ["containerDefinitions"]),
-      ...(getNonEmptyString(config["networkMode"]) ? [] : ["networkMode"]),
-      ...(getStringArray(config["requiresCompatibilities"]).length > 0
-        ? []
-        : ["requiresCompatibilities"]),
-      ...(getNonEmptyString(config["cpu"]) ? [] : ["cpu"]),
-      ...(getNonEmptyString(config["memory"]) ? [] : ["memory"]),
-      ...(config["requiresManualEnvironmentInput"] === true
-        ? ["containerDefinitions.environment"]
-        : [])
-    ];
-  }
-
-  return [];
-}
-
-// gg: 세부 조회 실패 marker가 있으면 누락 원인을 사용자 검토 항목으로 바꿉니다.
-function getIncompleteDetailFields(config: Record<string, unknown>): string[] {
-  const marker = config["reverseEngineeringIncompleteDetails"];
-  if (marker === undefined) {
-    return [];
-  }
-  if (!Array.isArray(marker)) {
-    return ["details"];
-  }
-
-  const detailNames = getStringArray(marker);
-  if (detailNames.length !== marker.length) {
-    return ["details"];
-  }
-
-  return detailNames.map((detailName) => `details.${detailName}`);
-}
-
-// gg: 분리된 Internet Gateway도 허용하되 attachment가 있으면 VPC ID를 반드시 확인합니다.
-function hasCompleteInternetGatewayAttachments(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (attachment) =>
-        isRecord(attachment) && getNonEmptyString(attachment["vpcId"]) !== null
-    )
-  );
-}
-
-// gg: Route마다 목적지와 다음 홉을 모두 읽은 경우에만 같은 Route Table을 만들 수 있습니다.
-function hasCompleteRouteTableRoutes(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every((route) => {
-      if (!isRecord(route)) {
-        return false;
-      }
-
-      const hasDestination =
-        getNonEmptyString(route["destinationCidrBlock"]) !== null ||
-        getNonEmptyString(route["destinationIpv6CidrBlock"]) !== null;
-      const hasTarget = [
-        "gatewayId",
-        "instanceId",
-        "natGatewayId",
-        "networkInterfaceId"
-      ].some((key) => getNonEmptyString(route[key]) !== null);
-
-      return hasDestination && hasTarget;
-    })
-  );
-}
-
-// gg: EC2 상세 monitoring 상태를 Terraform boolean으로 바꿀 수 있을 때만 완전한 관찰값입니다.
-function hasKnownEc2MonitoringState(value: unknown): boolean {
-  return value === "enabled" || value === "disabled";
-}
-
-function hasEcsCapacityProviderStrategy(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every((item) => isRecord(item) && getValidEcsName(item["capacityProvider"]) !== null)
-  );
-}
-
-function hasEcsNetworkConfiguration(value: unknown): boolean {
-  if (!isRecord(value) || !isRecord(value["awsvpcConfiguration"])) {
-    return false;
-  }
-
-  return (
-    getStringArray(value["awsvpcConfiguration"]["subnets"]).length > 0 &&
-    getStringArray(value["awsvpcConfiguration"]["securityGroups"]).length > 0
-  );
-}
-
-function getMissingEcsServiceLoadBalancerFields(value: unknown): string[] {
-  if (value === undefined || (Array.isArray(value) && value.length === 0)) {
-    return [];
-  }
-
-  if (!Array.isArray(value) || !value.every(isRecord)) {
-    return ["loadBalancers"];
-  }
-
-  const missingFields = new Set<string>();
-  for (const loadBalancer of value) {
-    const targetGroupArn = getNonEmptyString(loadBalancer["targetGroupArn"]);
-    const loadBalancerName = getNonEmptyString(loadBalancer["loadBalancerName"]);
-
-    if ((targetGroupArn === null) === (loadBalancerName === null)) {
-      missingFields.add("loadBalancers.targetGroupArn/loadBalancerName");
-    }
-    if (getNonEmptyString(loadBalancer["containerName"]) === null) {
-      missingFields.add("loadBalancers.containerName");
-    }
-    if (!isEcsContainerPort(loadBalancer["containerPort"])) {
-      missingFields.add("loadBalancers.containerPort");
-    }
-  }
-
-  return [...missingFields];
-}
-
-function isEcsContainerPort(value: unknown): boolean {
-  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65_535;
-}
-
-function hasEcsContainerDefinitions(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every(
-      (container) =>
-        isRecord(container) &&
-        getValidEcsName(container["name"]) !== null &&
-        getNonEmptyString(container["image"]) !== null
-    )
-  );
-}
-
-function isNonNegativeNumber(value: unknown): boolean {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
-}
-
-function hasCloudFrontOrigin(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every(
-      (origin) =>
-        isRecord(origin) &&
-        !hasCloudFrontVpcOriginConfig(origin) &&
-        getNonEmptyString(origin["originId"]) !== null &&
-        getNonEmptyString(origin["domainName"]) !== null
-    )
-  );
-}
-
-function hasCloudFrontVpcOrigin(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    value.some((origin) => isRecord(origin) && hasCloudFrontVpcOriginConfig(origin))
-  );
-}
-
-function hasCloudFrontVpcOriginConfig(origin: Record<string, unknown>): boolean {
-  return isRecord(origin["vpcOriginConfig"]) || isRecord(origin["VpcOriginConfig"]);
-}
-
-function hasLoadBalancerSubnetPlacement(config: Record<string, unknown>): boolean {
-  if (getStringArray(config["subnetIds"]).length > 0) {
-    return true;
-  }
-
-  return (
-    Array.isArray(config["subnetMapping"]) &&
-    config["subnetMapping"].length > 0 &&
-    config["subnetMapping"].every(
-      (mapping) => isRecord(mapping) && getNonEmptyString(mapping["subnetId"]) !== null
-    )
-  );
-}
-
-function hasSupportedLoadBalancerIpAddressType(value: unknown): boolean {
-  return value === "ipv4" || value === "dualstack" || value === "dualstack-without-public-ipv4";
-}
-
-function hasCloudFrontDefaultCacheBehavior(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    getNonEmptyString(value["targetOriginId"]) !== null &&
-    getNonEmptyString(value["viewerProtocolPolicy"]) !== null &&
-    getStringArray(value["allowedMethods"]).length > 0 &&
-    getStringArray(value["cachedMethods"]).length > 0 &&
-    (isRecord(value["forwardedValues"]) || getNonEmptyString(value["cachePolicyId"]) !== null)
-  );
-}
-
-function hasGeoRestriction(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    isRecord(value["geoRestriction"]) &&
-    getNonEmptyString(value["geoRestriction"]["restrictionType"]) !== null
-  );
-}
-
-function hasCloudFrontViewerCertificate(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    (typeof value["cloudfrontDefaultCertificate"] === "boolean" ||
-      getNonEmptyString(value["acmCertificateArn"]) !== null ||
-      getNonEmptyString(value["iamCertificateId"]) !== null)
-  );
-}
-
 function getNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function getStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-    : [];
-}
-
-function isPositiveNumber(value: unknown): boolean {
-  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

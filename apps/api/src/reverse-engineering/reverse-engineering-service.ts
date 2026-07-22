@@ -51,7 +51,7 @@ import {
   isCloudWatchMetricAlarmRequiringMapping,
   isKmsConnectedCloudWatchLogGroup
 } from "./reverse-engineering-management-policy.js";
-import { createReverseEngineeringTerraformProjection } from "./reverse-engineering-terraform-projection.js";
+import { createReverseEngineeringTerraformValues } from "./reverse-engineering-terraform-projection.js";
 
 export type ReverseEngineeringScanRecord = typeof reverseEngineeringScans.$inferSelect;
 export type ReverseEngineeringScanLogRecord = typeof reverseEngineeringScanLogs.$inferSelect;
@@ -435,7 +435,7 @@ function sanitizePublicTerraformProjection(input: {
     : undefined;
   const terraformValues =
     hasCanonicalIdentity && resourceType
-      ? createReverseEngineeringTerraformProjection({
+      ? createReverseEngineeringTerraformValues({
           id: input.node.id,
           provider: "aws",
           providerResourceType: input.providerResourceType,
@@ -444,7 +444,7 @@ function sanitizePublicTerraformProjection(input: {
           displayName: input.node.label ?? input.node.id,
           resourceType,
           config: input.config
-        }).terraformValues
+        })
       : {};
 
   return {

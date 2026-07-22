@@ -5,17 +5,50 @@ import { classifyReverseEngineeringManagement } from "./reverse-engineering-mana
 
 test("자동 지원 워크로드와 AMI를 Terraform 관리 경계에 맞게 분류한다", () => {
   assert.equal(classifyReverseEngineeringManagement(resource("S3")), "managed");
-  assert.equal(classifyReverseEngineeringManagement(resource("ECS_SERVICE")), "managed");
   assert.equal(
-    classifyReverseEngineeringManagement(resource("CLOUDWATCH_LOG_GROUP")),
+    classifyReverseEngineeringManagement(
+      resource("ECS_SERVICE", {
+        name: "customer-api",
+        clusterArn: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/customer",
+        taskDefinitionArn:
+          "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/customer-api:1",
+        desiredCount: 1,
+        launchType: "FARGATE",
+        networkConfiguration: {
+          awsvpcConfiguration: {
+            subnets: ["subnet-a"],
+            securityGroups: ["sg-api"]
+          }
+        }
+      })
+    ),
     "managed"
   );
   assert.equal(
-    classifyReverseEngineeringManagement(resource("API_GATEWAY_REST_API")),
+    classifyReverseEngineeringManagement(
+      resource("CLOUDWATCH_LOG_GROUP", { logGroupName: "/ecs/customer-api" })
+    ),
     "managed"
   );
   assert.equal(
-    classifyReverseEngineeringManagement(resource("CLOUDWATCH_METRIC_ALARM")),
+    classifyReverseEngineeringManagement(
+      resource("API_GATEWAY_REST_API", { name: "customer-api" })
+    ),
+    "managed"
+  );
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("CLOUDWATCH_METRIC_ALARM", {
+        alarmName: "api-request-count",
+        comparisonOperator: "GreaterThanThreshold",
+        evaluationPeriods: 1,
+        threshold: 100,
+        metricName: "RequestCount",
+        namespace: "AWS/ApiGateway",
+        period: 60,
+        statistic: "Sum"
+      })
+    ),
     "managed"
   );
   assert.equal(classifyReverseEngineeringManagement(resource("AMI")), "reference");
@@ -111,7 +144,9 @@ test("KMS 연결 Log Group은 보드에만 남기고 암호화되지 않은 Log 
     "needs_mapping"
   );
   assert.equal(
-    classifyReverseEngineeringManagement(resource("CLOUDWATCH_LOG_GROUP")),
+    classifyReverseEngineeringManagement(
+      resource("CLOUDWATCH_LOG_GROUP", { logGroupName: "/ecs/customer-api" })
+    ),
     "managed"
   );
 });

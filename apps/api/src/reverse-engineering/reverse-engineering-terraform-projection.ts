@@ -58,7 +58,7 @@ export function createReverseEngineeringTerraformProjection(
     terraformResourceType,
     terraformResourceName: createStableTerraformResourceName(resource.id),
     terraformFileName: "reverse-engineering",
-    terraformValues: createTerraformValues(resource)
+    terraformValues: createReverseEngineeringTerraformValues(resource)
   };
 }
 
@@ -82,7 +82,9 @@ export function createStableTerraformResourceName(resourceId: string): string {
 }
 
 /** Resource 종류별로 AWS 관찰값 중 Terraform에서 실제로 선언할 값만 allowlist한다. */
-function createTerraformValues(resource: DiscoveredResource): ResourceConfig {
+export function createReverseEngineeringTerraformValues(
+  resource: DiscoveredResource
+): ResourceConfig {
   const { config } = resource;
 
   switch (resource.resourceType) {

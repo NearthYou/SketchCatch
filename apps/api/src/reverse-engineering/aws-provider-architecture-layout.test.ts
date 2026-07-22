@@ -176,7 +176,15 @@ test("ALB는 VPC 상위 서비스로, CloudFront는 global edge 영역의 suppor
       region: "ap-northeast-2",
       displayName: "orders",
       resourceType: "LOAD_BALANCER",
-      config: { vpcId: "vpc-1", securityGroupIds: ["sg-alb"], subnetIds: ["subnet-a"] },
+      config: {
+        name: "orders",
+        loadBalancerType: "application",
+        scheme: "internet-facing",
+        ipAddressType: "ipv4",
+        vpcId: "vpc-1",
+        securityGroupIds: ["sg-alb"],
+        subnetIds: ["subnet-a"]
+      },
       relationships: [
         { type: "depends_on", targetResourceId: "vpc-1" },
         { type: "connects_to", targetResourceId: "sg-alb" }
@@ -190,7 +198,20 @@ test("ALB는 VPC 상위 서비스로, CloudFront는 global edge 영역의 suppor
       region: "global",
       displayName: "d111111abcdef8.cloudfront.net",
       resourceType: "CLOUDFRONT",
-      config: { id: "EDISTRIBUTION" },
+      config: {
+        id: "EDISTRIBUTION",
+        enabled: true,
+        origin: [{ originId: "orders", domainName: "orders.example.com" }],
+        defaultCacheBehavior: {
+          targetOriginId: "orders",
+          viewerProtocolPolicy: "redirect-to-https",
+          allowedMethods: ["GET", "HEAD"],
+          cachedMethods: ["GET", "HEAD"],
+          cachePolicyId: "cache-policy"
+        },
+        restrictions: { geoRestriction: { restrictionType: "none" } },
+        viewerCertificate: { cloudfrontDefaultCertificate: true }
+      },
       relationships: [{ type: "depends_on", targetResourceId: "alb-1" }]
     }
   ]);

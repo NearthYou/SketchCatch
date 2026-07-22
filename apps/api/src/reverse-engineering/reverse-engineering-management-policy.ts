@@ -1,4 +1,5 @@
 import type { DiscoveredResource, ResourceType } from "@sketchcatch/types";
+import { getReverseEngineeringTerraformCompleteness } from "./reverse-engineering-terraform-completeness.js";
 
 export type ReverseEngineeringManagementDecision =
   | "managed"
@@ -55,7 +56,7 @@ const SKETCHCATCH_IMPORT_STACK_NAME_PATTERN =
 export function classifyReverseEngineeringManagement(
   resource: Pick<
     DiscoveredResource,
-    "providerResourceType" | "displayName" | "resourceType" | "config"
+    "providerResourceId" | "providerResourceType" | "displayName" | "resourceType" | "config"
   >
 ): ReverseEngineeringManagementDecision {
   if (isSketchCatchControlResource(resource)) {
@@ -91,6 +92,13 @@ export function classifyReverseEngineeringManagement(
     isEventBridgeTargetRequiringMapping(resource)
   ) {
     return "needs_mapping";
+  }
+
+  if (AUTOMATED_MANAGED_RESOURCE_TYPES.has(resource.resourceType)) {
+    const completeness = getReverseEngineeringTerraformCompleteness(resource);
+    if (completeness.missingCreationFields.length > 0 || !completeness.importId) {
+      return "needs_mapping";
+    }
   }
 
   return AUTOMATED_MANAGED_RESOURCE_TYPES.has(resource.resourceType)
