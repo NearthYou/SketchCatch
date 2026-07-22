@@ -86,9 +86,29 @@ const issuedV4Actions = [
   "events:ListEventBuses"
 ].sort();
 
-test("Policy contract v5는 Role 연결 관계 읽기만 추가하고 발급된 v1-v4 권한은 보존한다", () => {
-  assert.equal(AWS_IMPORT_POLICY_CONTRACT_VERSION, "5");
-  assert.deepEqual(Object.keys(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION), ["1", "2", "3", "4", "5"]);
+const issuedV5Actions = [
+  ...issuedV4Actions,
+  "iam:ListAttachedRolePolicies"
+].sort();
+
+const issuedV6AddedActions = [
+  "application-autoscaling:ListTagsForResource",
+  "cloudfront:ListTagsForResource",
+  "cloudwatch:ListTagsForResource",
+  "elasticloadbalancing:DescribeListenerAttributes",
+  "elasticloadbalancing:DescribeListenerCertificates",
+  "elasticloadbalancing:DescribeLoadBalancerAttributes",
+  "elasticloadbalancing:DescribeTags",
+  "elasticloadbalancing:DescribeTargetGroupAttributes",
+  "logs:ListTagsForResource"
+].sort();
+
+test("Policy contract v6는 topology metadata 읽기만 추가하고 발급된 v1-v5 권한은 보존한다", () => {
+  assert.equal(AWS_IMPORT_POLICY_CONTRACT_VERSION, "6");
+  assert.deepEqual(
+    Object.keys(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION),
+    ["1", "2", "3", "4", "5", "6"]
+  );
   assert.deepEqual(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["1"], issuedV1Actions);
   assert.deepEqual(
     [...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["2"]].sort(),
@@ -104,17 +124,21 @@ test("Policy contract v5는 Role 연결 관계 읽기만 추가하고 발급된 
   );
   assert.deepEqual(
     [...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["5"]].sort(),
+    issuedV5Actions
+  );
+  assert.deepEqual(
+    [...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["6"]].sort(),
     [...createAwsImportReadPolicyDocument().Statement[0].Action].sort()
   );
   assert.deepEqual(
-    AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["5"]
-      .filter((action) => !issuedV4Actions.includes(action))
+    AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["6"]
+      .filter((action) => !issuedV5Actions.includes(action))
       .sort(),
-    ["iam:ListAttachedRolePolicies"]
+    issuedV6AddedActions
   );
   assert.doesNotMatch(
-    JSON.stringify(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["5"]),
-    /GetSecretValue|Create|Update|Put|Delete|TagResource|UntagResource/u
+    JSON.stringify(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["6"]),
+    /GetSecretValue|Create|Update|Put|Delete|(?:^|:)TagResource|UntagResource/u
   );
 });
 
@@ -157,6 +181,6 @@ test("policy template contract is deterministic, immutable, and hash-verifiable"
   assert.equal(first.postVerification.templateSha256, expectedHash);
   assert.equal(first.postVerification.policyFingerprint, first.policyFingerprint);
   assert.equal(first.postVerification.targetRoleArn, connectionFixture.targetRoleArn);
-  assert.equal(first.contractVersion, "5");
-  assert.equal(first.postVerification.contractVersion, "5");
+  assert.equal(first.contractVersion, "6");
+  assert.equal(first.postVerification.contractVersion, "6");
 });

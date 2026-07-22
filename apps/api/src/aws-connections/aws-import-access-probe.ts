@@ -2,17 +2,27 @@ import { randomUUID } from "node:crypto";
 import {
   ApplicationAutoScalingClient,
   DescribeScalableTargetsCommand,
-  DescribeScalingPoliciesCommand
+  DescribeScalingPoliciesCommand,
+  ListTagsForResourceCommand as ListApplicationAutoScalingTagsForResourceCommand
 } from "@aws-sdk/client-application-auto-scaling";
 import { GetRestApisCommand, APIGatewayClient } from "@aws-sdk/client-api-gateway";
 import {
   CloudFrontClient,
   GetOriginAccessControlCommand,
   ListDistributionsCommand,
-  ListOriginAccessControlsCommand
+  ListOriginAccessControlsCommand,
+  ListTagsForResourceCommand as ListCloudFrontTagsForResourceCommand
 } from "@aws-sdk/client-cloudfront";
-import { DescribeAlarmsCommand, CloudWatchClient } from "@aws-sdk/client-cloudwatch";
-import { DescribeLogGroupsCommand, CloudWatchLogsClient } from "@aws-sdk/client-cloudwatch-logs";
+import {
+  DescribeAlarmsCommand,
+  CloudWatchClient,
+  ListTagsForResourceCommand as ListCloudWatchTagsForResourceCommand
+} from "@aws-sdk/client-cloudwatch";
+import {
+  DescribeLogGroupsCommand,
+  CloudWatchLogsClient,
+  ListTagsForResourceCommand as ListLogGroupTagsForResourceCommand
+} from "@aws-sdk/client-cloudwatch-logs";
 import {
   DescribeAddressesCommand,
   DescribeImagesCommand,
@@ -26,8 +36,13 @@ import {
   EC2Client
 } from "@aws-sdk/client-ec2";
 import {
+  DescribeListenerAttributesCommand,
+  DescribeListenerCertificatesCommand,
   DescribeListenersCommand,
+  DescribeLoadBalancerAttributesCommand,
   DescribeLoadBalancersCommand,
+  DescribeTagsCommand as DescribeElbv2TagsCommand,
+  DescribeTargetGroupAttributesCommand,
   DescribeTargetGroupsCommand,
   ElasticLoadBalancingV2Client
 } from "@aws-sdk/client-elastic-load-balancing-v2";
@@ -469,14 +484,31 @@ export async function probeElbv2Topology(
   };
   const loadBalancerArn = listed.LoadBalancers?.[0]?.LoadBalancerArn;
   if (!loadBalancerArn) return "success";
-  await client.send(new DescribeTargetGroupsCommand({
+  await client.send(new DescribeLoadBalancerAttributesCommand({ LoadBalancerArn: loadBalancerArn }));
+  await client.send(new DescribeElbv2TagsCommand({ ResourceArns: [loadBalancerArn] }));
+  const targetGroups = await client.send(new DescribeTargetGroupsCommand({
     LoadBalancerArn: loadBalancerArn,
     PageSize: 1
-  }));
-  await client.send(new DescribeListenersCommand({
+  })) as { TargetGroups?: Array<{ TargetGroupArn?: string }> };
+  const targetGroupArn = targetGroups.TargetGroups?.[0]?.TargetGroupArn;
+  if (targetGroupArn) {
+    await client.send(new DescribeTargetGroupAttributesCommand({ TargetGroupArn: targetGroupArn }));
+    await client.send(new DescribeElbv2TagsCommand({ ResourceArns: [targetGroupArn] }));
+  }
+  const listeners = await client.send(new DescribeListenersCommand({
     LoadBalancerArn: loadBalancerArn,
     PageSize: 1
-  }));
+  })) as { Listeners?: Array<{ ListenerArn?: string; Protocol?: string }> };
+  const listener = listeners.Listeners?.[0];
+  if (listener?.ListenerArn) {
+    await client.send(new DescribeListenerAttributesCommand({ ListenerArn: listener.ListenerArn }));
+    if (listener.Protocol === "HTTPS" || listener.Protocol === "TLS") {
+      await client.send(new DescribeListenerCertificatesCommand({
+        ListenerArn: listener.ListenerArn,
+        PageSize: 1
+      }));
+    }
+  }
   return "success";
 }
 
@@ -516,7 +548,13 @@ async function probeCloudFront(context: AwsImportProbeExecutorContext): Promise<
 export async function probeCloudFrontTopology(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  await client.send(new ListDistributionsCommand({ MaxItems: 1 }));
+  const distributions = await client.send(new ListDistributionsCommand({ MaxItems: 1 })) as {
+    DistributionList?: { Items?: Array<{ ARN?: string }> };
+  };
+  const distributionArn = distributions.DistributionList?.Items?.[0]?.ARN;
+  if (distributionArn) {
+    await client.send(new ListCloudFrontTagsForResourceCommand({ Resource: distributionArn }));
+  }
   const listed = await client.send(new ListOriginAccessControlsCommand({ MaxItems: 1 })) as {
     OriginAccessControlList?: { Items?: Array<{ Id?: string }> };
   };
@@ -607,6 +645,7 @@ export async function probeApplicationAutoScaling(
       ResourceId?: string;
       ScalableDimension?: "ecs:service:DesiredCount";
       ServiceNamespace?: "ecs";
+      ScalableTargetARN?: string;
     }>;
   };
   const target = listed.ScalableTargets?.[0];
@@ -616,6 +655,11 @@ export async function probeApplicationAutoScaling(
       ScalableDimension: target.ScalableDimension,
       ServiceNamespace: target.ServiceNamespace,
       MaxResults: 1
+    }));
+  }
+  if (target?.ScalableTargetARN) {
+    await client.send(new ListApplicationAutoScalingTagsForResourceCommand({
+      ResourceARN: target.ScalableTargetARN
     }));
   }
   return "success";
@@ -690,7 +734,23 @@ async function probeLogs(context: AwsImportProbeExecutorContext): Promise<AwsImp
     new CloudWatchLogsClient({ region: context.region, credentials: context.credentials }),
     context.abortSignal
   );
-  await client.send(new DescribeLogGroupsCommand({ limit: 1 }));
+  return probeLogsMetadata({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+}
+
+/** gg: 첫 Log Group ARN의 tag metadata만 읽고 다음 page는 따르지 않습니다. */
+export async function probeLogsMetadata(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  const listed = await client.send(new DescribeLogGroupsCommand({ limit: 1 })) as {
+    logGroups?: Array<{ arn?: string; logGroupArn?: string }>;
+  };
+  const logGroup = listed.logGroups?.[0];
+  const resourceArn = logGroup?.logGroupArn ?? logGroup?.arn?.replace(/:\*$/u, "");
+  if (resourceArn) {
+    await client.send(new ListLogGroupTagsForResourceCommand({ resourceArn }));
+  }
   return "success";
 }
 
@@ -700,7 +760,24 @@ async function probeCloudWatch(context: AwsImportProbeExecutorContext): Promise<
     new CloudWatchClient({ region: context.region, credentials: context.credentials }),
     context.abortSignal
   );
-  await client.send(new DescribeAlarmsCommand({ MaxRecords: 1 }));
+  return probeCloudWatchMetadata({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+}
+
+/** gg: 첫 Alarm ARN의 tag metadata만 읽고 다음 page는 따르지 않습니다. */
+export async function probeCloudWatchMetadata(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  const listed = await client.send(new DescribeAlarmsCommand({ MaxRecords: 1 })) as {
+    CompositeAlarms?: Array<{ AlarmArn?: string }>;
+    MetricAlarms?: Array<{ AlarmArn?: string }>;
+  };
+  const resourceArn = listed.CompositeAlarms?.[0]?.AlarmArn ??
+    listed.MetricAlarms?.[0]?.AlarmArn;
+  if (resourceArn) {
+    await client.send(new ListCloudWatchTagsForResourceCommand({ ResourceARN: resourceArn }));
+  }
   return "success";
 }
 

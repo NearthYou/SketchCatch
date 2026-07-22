@@ -62,8 +62,13 @@ export const AWS_IMPORT_READERS = [
     tier: "core",
     actions: [
       "elasticloadbalancing:DescribeLoadBalancers",
+      "elasticloadbalancing:DescribeLoadBalancerAttributes",
       "elasticloadbalancing:DescribeTargetGroups",
-      "elasticloadbalancing:DescribeListeners"
+      "elasticloadbalancing:DescribeTargetGroupAttributes",
+      "elasticloadbalancing:DescribeListeners",
+      "elasticloadbalancing:DescribeListenerAttributes",
+      "elasticloadbalancing:DescribeListenerCertificates",
+      "elasticloadbalancing:DescribeTags"
     ]
   },
   {
@@ -84,6 +89,7 @@ export const AWS_IMPORT_READERS = [
     tier: "core",
     actions: [
       "cloudfront:ListDistributions",
+      "cloudfront:ListTagsForResource",
       "cloudfront:ListOriginAccessControls",
       "cloudfront:GetOriginAccessControl"
     ]
@@ -106,7 +112,8 @@ export const AWS_IMPORT_READERS = [
     tier: "expanded",
     actions: [
       "application-autoscaling:DescribeScalableTargets",
-      "application-autoscaling:DescribeScalingPolicies"
+      "application-autoscaling:DescribeScalingPolicies",
+      "application-autoscaling:ListTagsForResource"
     ]
   },
   {
@@ -146,13 +153,13 @@ export const AWS_IMPORT_READERS = [
     serviceKey: "logs",
     displayName: "CloudWatch Logs",
     tier: "expanded",
-    actions: ["logs:DescribeLogGroups"]
+    actions: ["logs:DescribeLogGroups", "logs:ListTagsForResource"]
   },
   {
     serviceKey: "cloudwatch",
     displayName: "CloudWatch",
     tier: "expanded",
-    actions: ["cloudwatch:DescribeAlarms"]
+    actions: ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"]
   },
   {
     serviceKey: "apigateway",
