@@ -1,9 +1,16 @@
-export function findAppendOnlyMigrationHistoryFailures(baseEntries, currentEntries) {
+export function findAppendOnlyMigrationHistoryFailures(
+  baseEntries,
+  currentEntries,
+  { allowedHistoricalInsertions = [] } = {}
+) {
   if (baseEntries.length === 0) return [];
 
   const failures = [];
   const baseTags = new Set(baseEntries.map((entry) => entry.tag));
   const currentByTag = new Map(currentEntries.map((entry) => [entry.tag, entry]));
+  const allowedHistoricalInsertionKeys = new Set(
+    allowedHistoricalInsertions.map((entry) => `${entry.tag}:${entry.when}`)
+  );
   const latestBaseTimestamp = Math.max(...baseEntries.map((entry) => entry.when));
 
   for (const baseEntry of baseEntries) {
@@ -19,7 +26,12 @@ export function findAppendOnlyMigrationHistoryFailures(baseEntries, currentEntri
 
   failures.push(
     ...currentEntries
-      .filter((entry) => !baseTags.has(entry.tag) && entry.when <= latestBaseTimestamp)
+      .filter(
+        (entry) =>
+          !baseTags.has(entry.tag) &&
+          entry.when <= latestBaseTimestamp &&
+          !allowedHistoricalInsertionKeys.has(`${entry.tag}:${entry.when}`)
+      )
       .map(
         (entry) =>
           `${entry.tag} was inserted at ${entry.when}, not after deployed migration timestamp ${latestBaseTimestamp}`

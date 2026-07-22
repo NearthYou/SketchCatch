@@ -26,6 +26,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Unblock the dev-to-main release migration history check
+
+- Confirmed release PR #534 failed only because main legitimately lacks the historically skipped `0044_github_codebuild_release_plane` entry while already containing `0045` and `0046`.
+- The compatibility guard now permits that one recovery only when its tag, timestamp, and LF-normalized SQL SHA256 match the reviewed migration exactly; every other historical insertion and any timestamp drift remain blocked.
+- Five migration-history regressions, the exact main-baseline compatibility command, harness, lint, typecheck, build, and diff checks pass. No migration file, journal, schema, dependency, secret, or cloud resource changed.
+
+
 ### 2026-07-22 - Repair the production Live Observation manifest contract
 
 - Reproduced the post-reboot production failure with a fresh ECS task: session creation succeeded, but the first read returned HTTP 503 `LIVE_OBSERVATION_CACHE_UNAVAILABLE`.
