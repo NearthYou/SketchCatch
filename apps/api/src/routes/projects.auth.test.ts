@@ -960,6 +960,9 @@ test("concurrent Terraform uploads keep DB metadata aligned with the winning sto
   const firstTerraformCode = 'resource "aws_s3_bucket" "first" {}\n';
   const secondTerraformCode = 'resource "aws_s3_bucket" "second" {}\n';
   const storedObjects = new Map<string, Buffer | string>();
+  const versionByObjectKey = new Map<string, string>();
+  const deletedObjectVersions: Array<{ objectKey: string; versionId: string }> = [];
+  const unversionedDeletes: string[] = [];
   let releaseWrites: (() => void) | undefined;
   const bothWritesStarted = new Promise<void>((resolve) => {
     releaseWrites = resolve;
@@ -988,14 +991,22 @@ test("concurrent Terraform uploads keep DB metadata aligned with the winning sto
       async putObject(input) {
         storedObjects.set(input.objectKey, input.body);
         writeCount += 1;
+        const versionId = `version-${writeCount}`;
+        versionByObjectKey.set(input.objectKey, versionId);
 
         if (writeCount === 2) {
           releaseWrites?.();
         }
 
         await bothWritesStarted;
+        return { versionId };
       },
       async deleteObject(input) {
+        unversionedDeletes.push(input.objectKey);
+        storedObjects.delete(input.objectKey);
+      },
+      async deleteObjectVersion(input) {
+        deletedObjectVersions.push(input);
         storedObjects.delete(input.objectKey);
       }
     })
@@ -1028,9 +1039,121 @@ test("concurrent Terraform uploads keep DB metadata aligned with the winning sto
 
   assert.ok(winningBody === firstTerraformCode || winningBody === secondTerraformCode);
   assert.equal(confirmedAsset?.byteSize, Buffer.byteLength(winningBody));
+  assert.deepEqual(unversionedDeletes, []);
+  assert.equal(deletedObjectVersions.length, 1);
+  assert.equal(
+    deletedObjectVersions[0]?.versionId,
+    versionByObjectKey.get(deletedObjectVersions[0]?.objectKey ?? "")
+  );
 
   await app.close();
 });
+
+for (const scenario of [
+  {
+    name: "DB 확정은 성공했지만 응답이 실패하면 확정된 candidate를 성공으로 돌려준다",
+    finalizeFailure: "after_commit" as const,
+    failReread: false,
+    expectedStatus: 204,
+    expectedUploadStatus: "uploaded" as const,
+    expectCandidateDeleted: false
+  },
+  {
+    name: "DB 확정 전에 실패하고 pending이면 candidate 실제 버전을 정리한다",
+    finalizeFailure: "before_commit" as const,
+    failReread: false,
+    expectedStatus: 500,
+    expectedUploadStatus: "pending" as const,
+    expectCandidateDeleted: true
+  },
+  {
+    name: "DB 확정 예외 뒤 다른 winner가 보이면 candidate 실제 버전을 정리한다",
+    finalizeFailure: "other_winner" as const,
+    failReread: false,
+    expectedStatus: 409,
+    expectedUploadStatus: "uploaded" as const,
+    expectCandidateDeleted: true
+  },
+  {
+    name: "DB 확정과 재조회가 모두 실패한 모호 상태에서는 candidate를 삭제하지 않는다",
+    finalizeFailure: "before_commit" as const,
+    failReread: true,
+    expectedStatus: 500,
+    expectedUploadStatus: "pending" as const,
+    expectCandidateDeleted: false
+  }
+]) {
+  test(scenario.name, async () => {
+    const terraformCode = 'resource "aws_s3_bucket" "site" {}\n';
+    const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
+    const deletedObjectVersions: Array<{ objectKey: string; versionId: string }> = [];
+    const unversionedDeletes: string[] = [];
+    const fakeDb = new ProjectRouteFakeDb({
+      activeUserId: ACTIVE_USER_ID,
+      requestedProjectAssetId: ACTIVE_ASSET_ID,
+      requestedProjectId: ACTIVE_PROJECT_ID,
+      users: [makeUser({ id: ACTIVE_USER_ID })],
+      projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+      projectAssets: [
+        makeProjectAsset({
+          id: ACTIVE_ASSET_ID,
+          projectId: ACTIVE_PROJECT_ID,
+          assetType: "terraform_file",
+          contentType: "text/plain",
+          byteSize: Buffer.byteLength(terraformCode),
+          uploadStatus: "pending"
+        })
+      ],
+      projectAssetFinalizeFailure: scenario.finalizeFailure,
+      failProjectAssetReadAfterFinalizeFailure: scenario.failReread
+    });
+    const app = buildApp({
+      getDatabaseClient: () => fakeDb.client,
+      projectAssetStorage: createProjectAssetStorageStub({
+        async putObject(input) {
+          putObjectRequests.push(input);
+          return { versionId: "candidate-version" };
+        },
+        async deleteObject(input) {
+          unversionedDeletes.push(input.objectKey);
+        },
+        async deleteObjectVersion(input) {
+          deletedObjectVersions.push(input);
+        }
+      })
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+      headers: {
+        ...(await authHeaders(ACTIVE_USER_ID)),
+        "content-type": "text/plain"
+      },
+      payload: terraformCode
+    });
+    const candidateObjectKey = putObjectRequests[0]?.objectKey ?? "";
+    const currentAsset = fakeDb.projectAssetRows[0];
+
+    assert.equal(response.statusCode, scenario.expectedStatus);
+    assert.equal(currentAsset?.uploadStatus, scenario.expectedUploadStatus);
+    assert.deepEqual(unversionedDeletes, []);
+    assert.deepEqual(
+      deletedObjectVersions,
+      scenario.expectCandidateDeleted
+        ? [{ objectKey: candidateObjectKey, versionId: "candidate-version" }]
+        : []
+    );
+    if (scenario.finalizeFailure === "after_commit") {
+      assert.equal(currentAsset?.objectKey, candidateObjectKey);
+    }
+    if (scenario.finalizeFailure === "other_winner") {
+      assert.notEqual(currentAsset?.objectKey, candidateObjectKey);
+    }
+
+    await app.close();
+  });
+}
 
 test("PUT Terraform upload stores server-verified Reverse Engineering imports in the canonical bundle", async () => {
   const providersTerraformCode = 'terraform { required_version = ">= 1.5.0" }\n';
@@ -2263,6 +2386,9 @@ class ProjectRouteFakeDb {
   >;
   operationLog: string[];
   failArchitectureInsert: boolean;
+  projectAssetFinalizeFailure: "after_commit" | "before_commit" | "other_winner" | undefined;
+  failProjectAssetReadAfterFinalizeFailure: boolean;
+  projectAssetFinalizeFailed: boolean;
   client: DatabaseClient;
 
   // gg: route 테스트에서 preview·Scan row까지 같은 fake transaction state로 보존합니다.
@@ -2281,6 +2407,8 @@ class ProjectRouteFakeDb {
     reverseEngineeringScanPreviews?: ReverseEngineeringPreviewRow[];
     reverseEngineeringScans?: ReverseEngineeringScanRow[];
     failArchitectureInsert?: boolean;
+    projectAssetFinalizeFailure?: "after_commit" | "before_commit" | "other_winner";
+    failProjectAssetReadAfterFinalizeFailure?: boolean;
   }) {
     this.activeUserId = data.activeUserId;
     this.requestedProjectAssetId = data.requestedProjectAssetId;
@@ -2298,6 +2426,10 @@ class ProjectRouteFakeDb {
     this.clearedDeploymentPlanPointers = [];
     this.operationLog = [];
     this.failArchitectureInsert = data.failArchitectureInsert ?? false;
+    this.projectAssetFinalizeFailure = data.projectAssetFinalizeFailure;
+    this.failProjectAssetReadAfterFinalizeFailure =
+      data.failProjectAssetReadAfterFinalizeFailure ?? false;
+    this.projectAssetFinalizeFailed = false;
     this.client = {
       db: this.createDb() as Database,
       pool: {
@@ -2445,6 +2577,26 @@ class ProjectRouteFakeDb {
                 projectAssetValues.uploadStatus === "uploaded" &&
                 typeof projectAssetValues.objectKey === "string";
 
+              if (
+                requiresPendingUpload &&
+                (this.projectAssetFinalizeFailure === "before_commit" ||
+                  this.projectAssetFinalizeFailure === "other_winner")
+              ) {
+                this.projectAssetFinalizeFailed = true;
+                if (this.projectAssetFinalizeFailure === "other_winner") {
+                  this.projectAssetRows = this.projectAssetRows.map((asset) =>
+                    asset.id === this.requestedProjectAssetId
+                      ? {
+                          ...asset,
+                          objectKey: `projects/${asset.projectId}/.attempt-other-winner`,
+                          uploadStatus: "uploaded"
+                        }
+                      : asset
+                  );
+                }
+                throw new Error("project asset finalize failed");
+              }
+
               this.projectAssetRows = this.projectAssetRows.map((asset) => {
                 const shouldUpdate =
                   (!this.requestedProjectId || asset.projectId === this.requestedProjectId) &&
@@ -2494,6 +2646,14 @@ class ProjectRouteFakeDb {
 
             return {
               returning: async (selection?: Record<string, unknown>) => {
+                if (
+                  table === projectAssets &&
+                  this.projectAssetFinalizeFailure === "after_commit"
+                ) {
+                  this.projectAssetFinalizeFailed = true;
+                  throw new Error("project asset finalize response failed");
+                }
+
                 if (table === projects && selection && "startedAt" in selection) {
                   return (updatedRows as ProjectRow[]).map((project) => ({
                     startedAt: project.deletionStartedAt
@@ -2611,6 +2771,13 @@ class ProjectRouteFakeDb {
     }
 
     if (table === projectAssets) {
+      if (
+        this.projectAssetFinalizeFailed &&
+        this.failProjectAssetReadAfterFinalizeFailure
+      ) {
+        throw new Error("project asset reread failed");
+      }
+
       return this.projectAssetRows.filter(
         (asset) =>
           (!this.requestedProjectId || asset.projectId === this.requestedProjectId) &&

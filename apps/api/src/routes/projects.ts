@@ -784,39 +784,86 @@ export async function registerProjectRoutes(
 
       const candidateObjectKey = buildUploadAttemptObjectKey(asset.objectKey);
 
-      await projectAssetStorage.putObject({
+      const uploadedCandidate = await projectAssetStorage.putObject({
         objectKey: candidateObjectKey,
         contentType: storedContentType,
         body: storedBody
       });
+      const candidateVersionId = uploadedCandidate?.versionId;
 
-      const [confirmedAsset] = await db
-        .update(projectAssets)
-        .set({
-          objectKey: candidateObjectKey,
-          uploadStatus: "uploaded",
-          fileName: storedFileName,
-          contentType: storedContentType,
-          byteSize: storedByteSize
-        })
-        .where(
-          and(
-            eq(projectAssets.id, params.assetId),
-            eq(projectAssets.projectId, params.id),
-            eq(projectAssets.uploadStatus, "pending")
+      let confirmedAsset: typeof projectAssets.$inferSelect | undefined;
+
+      try {
+        [confirmedAsset] = await db
+          .update(projectAssets)
+          .set({
+            objectKey: candidateObjectKey,
+            uploadStatus: "uploaded",
+            fileName: storedFileName,
+            contentType: storedContentType,
+            byteSize: storedByteSize
+          })
+          .where(
+            and(
+              eq(projectAssets.id, params.assetId),
+              eq(projectAssets.projectId, params.id),
+              eq(projectAssets.uploadStatus, "pending")
+            )
           )
-        )
-        .returning();
+          .returning();
+      } catch (finalizeError) {
+        let currentAsset: typeof projectAssets.$inferSelect | undefined;
+
+        try {
+          [currentAsset] = await db
+            .select()
+            .from(projectAssets)
+            .where(
+              and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id))
+            );
+        } catch (rereadError) {
+          request.log.warn(
+            {
+              error: rereadError,
+              finalizeError,
+              objectKey: candidateObjectKey,
+              projectId: params.id
+            },
+            "Project asset upload outcome remained ambiguous after finalize failure"
+          );
+          throw finalizeError;
+        }
+
+        if (
+          currentAsset?.uploadStatus === "uploaded" &&
+          currentAsset.objectKey === candidateObjectKey
+        ) {
+          return reply.status(204).send();
+        }
+
+        await cleanupProjectAssetUploadCandidate({
+          log: request.log,
+          objectKey: candidateObjectKey,
+          projectId: params.id,
+          storage: projectAssetStorage,
+          versionId: candidateVersionId
+        });
+
+        if (currentAsset?.uploadStatus === "uploaded") {
+          return sendConflict(reply, "같은 파일의 다른 업로드가 먼저 완료되었습니다.");
+        }
+
+        throw finalizeError;
+      }
 
       if (!confirmedAsset) {
-        try {
-          await projectAssetStorage.deleteObject({ objectKey: candidateObjectKey });
-        } catch (error) {
-          request.log.warn(
-            { error, objectKey: candidateObjectKey, projectId: params.id },
-            "Failed to delete a losing project asset upload"
-          );
-        }
+        await cleanupProjectAssetUploadCandidate({
+          log: request.log,
+          objectKey: candidateObjectKey,
+          projectId: params.id,
+          storage: projectAssetStorage,
+          versionId: candidateVersionId
+        });
 
         return sendConflict(reply, "같은 파일의 다른 업로드가 먼저 완료되었습니다.");
       }
@@ -1146,4 +1193,30 @@ function buildUploadAttemptObjectKey(objectKey: string): string {
     lastSeparatorIndex === -1 ? "" : objectKey.slice(0, lastSeparatorIndex + 1);
 
   return `${parentPrefix}.attempt-${randomUUID()}`;
+}
+
+/** gg: 실패한 후보는 S3 VersionId가 있으면 실제 버전을, 아니면 일반 객체를 최선 노력으로 지웁니다. */
+async function cleanupProjectAssetUploadCandidate(input: {
+  log: FastifyRequest["log"];
+  objectKey: string;
+  projectId: string;
+  storage: ProjectAssetStorage;
+  versionId: string | undefined;
+}): Promise<void> {
+  try {
+    if (input.versionId && input.storage.deleteObjectVersion) {
+      await input.storage.deleteObjectVersion({
+        objectKey: input.objectKey,
+        versionId: input.versionId
+      });
+      return;
+    }
+
+    await input.storage.deleteObject({ objectKey: input.objectKey });
+  } catch (error) {
+    input.log.warn(
+      { error, objectKey: input.objectKey, projectId: input.projectId },
+      "Failed to delete a losing project asset upload"
+    );
+  }
 }
