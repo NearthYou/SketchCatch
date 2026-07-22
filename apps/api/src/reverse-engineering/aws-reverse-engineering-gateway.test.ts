@@ -39,8 +39,10 @@ import {
   collectAwsPages,
   createAwsReverseEngineeringReaderPlan,
   deduplicateReverseEngineeringScanErrors,
+  describeAddresses,
   describeInstances,
   describeInternetGateways,
+  describeNatGateways,
   describeRdsInstances,
   describeRouteTables,
   describeSecurityGroups,
@@ -58,6 +60,7 @@ import {
   readEcsResourcesWithDiagnostics,
   readResourceExplorerResourcesWithDiagnostics,
   resolveCloudFrontOriginRelationships,
+  resolveNatGatewayElasticIpRelationships,
   shouldReadResourceGroup,
   uniqueDiscoveredRecordsByProviderId
 } from "./aws-reverse-engineering-gateway.js";
@@ -125,6 +128,20 @@ const awsQueryReaderScenarios = [
     read: describeSubnets
   },
   {
+    name: "Elastic IP",
+    kind: "address",
+    idPrefix: "eipalloc",
+    requestToken: "NextToken",
+    read: describeAddresses
+  },
+  {
+    name: "NAT Gateway",
+    kind: "nat_gateway",
+    idPrefix: "nat",
+    requestToken: "NextToken",
+    read: describeNatGateways
+  },
+  {
     name: "Internet Gateway",
     kind: "internet_gateway",
     idPrefix: "igw",
@@ -176,6 +193,10 @@ function createAwsQueryPageXml(
       return `<DescribeVpcsResponse><vpcSet><item><vpcId>${id}</vpcId></item></vpcSet>${token}</DescribeVpcsResponse>`;
     case "subnet":
       return `<DescribeSubnetsResponse><subnetSet><item><subnetId>${id}</subnetId></item></subnetSet>${token}</DescribeSubnetsResponse>`;
+    case "address":
+      return `<DescribeAddressesResponse><addressesSet><item><allocationId>${id}</allocationId><domain>vpc</domain><publicIp>203.0.113.10</publicIp></item></addressesSet>${token}</DescribeAddressesResponse>`;
+    case "nat_gateway":
+      return `<DescribeNatGatewaysResponse><natGatewaySet><item><natGatewayId>${id}</natGatewayId><subnetId>subnet-reader</subnetId><state>available</state><connectivityType>private</connectivityType></item></natGatewaySet>${token}</DescribeNatGatewaysResponse>`;
     case "internet_gateway":
       return `<DescribeInternetGatewaysResponse><internetGatewaySet><item><internetGatewayId>${id}</internetGatewayId></item></internetGatewaySet>${token}</DescribeInternetGatewaysResponse>`;
     case "route_table":
@@ -499,6 +520,25 @@ test("AWS Query parses EC2 nextToken and RDS Marker without retaining response X
   );
 });
 
+test("NAT Gateway 직접 선택은 NAT와 같은 scan의 Subnet/EIP만 dependency로 읽는다", () => {
+  const natInput = scanInput(["NAT_GATEWAY"]);
+
+  assert.equal(shouldReadResourceGroup(natInput, "NAT_GATEWAY"), true);
+  assert.equal(shouldReadResourceGroup(natInput, "SUBNET"), true);
+  assert.equal(shouldReadResourceGroup(natInput, "ELASTIC_IP"), true);
+  assert.equal(shouldReadResourceGroup(natInput, "VPC"), false);
+  assert.equal(shouldReadResourceGroup(natInput, "ROUTE_TABLE"), false);
+
+  const eipInput = scanInput(["ELASTIC_IP"]);
+  assert.equal(shouldReadResourceGroup(eipInput, "ELASTIC_IP"), true);
+  assert.equal(shouldReadResourceGroup(eipInput, "NAT_GATEWAY"), false);
+  assert.equal(shouldReadResourceGroup(eipInput, "SUBNET"), false);
+
+  const allInput = scanInput(["ALL"]);
+  assert.equal(shouldReadResourceGroup(allInput, "ELASTIC_IP"), true);
+  assert.equal(shouldReadResourceGroup(allInput, "NAT_GATEWAY"), true);
+});
+
 test("Route Table Association 직접 선택과 ALL은 기존 DescribeRouteTables reader를 함께 사용한다", async () => {
   assert.equal(
     shouldReadResourceGroup(scanInput(["ROUTE_TABLE_ASSOCIATION"]), "ROUTE_TABLE"),
@@ -700,7 +740,102 @@ test("반복 Route Table page의 Association record를 provider ID 기준으로 
   assert.equal(records[1]?.relationships.length, 2);
 });
 
-test("all six EC2 Query readers and RDS follow their response pagination token", async () => {
+test("ALL 스캔은 generic EIP/NAT ARN보다 전용 Query 설정을 우선해 한 번만 남긴다", () => {
+  const allocationId = "eipalloc-0123456789abcdef0";
+  const natGatewayId = "nat-0123456789abcdef0";
+  const records = uniqueDiscoveredRecordsByProviderId([
+    {
+      ...safeRecord(
+        "AWS::EC2::EIP",
+        `arn:aws:ec2:ap-northeast-2:123456789012:eip-allocation/${allocationId}`,
+        "EIP · generic"
+      ),
+      config: { tags: [{ key: "owner", value: "platform" }] }
+    },
+    {
+      ...safeRecord("AWS::EC2::EIP", allocationId, "egress-ip"),
+      config: {
+        allocationId,
+        associationTargetType: "unassociated",
+        domain: "vpc",
+        tags: [{ key: "Name", value: "egress-ip" }]
+      }
+    },
+    {
+      ...safeRecord(
+        "AWS::EC2::NatGateway",
+        `arn:aws:ec2:ap-northeast-2:123456789012:natgateway/${natGatewayId}`,
+        "NAT Gateway · generic"
+      ),
+      config: { tags: [{ key: "owner", value: "network" }] }
+    },
+    {
+      ...safeRecord("AWS::EC2::NatGateway", natGatewayId, "public-egress"),
+      config: {
+        allocationIds: [allocationId],
+        connectivityType: "public",
+        natGatewayId,
+        primaryAllocationId: allocationId,
+        state: "available",
+        subnetId: "subnet-0123456789abcdef0",
+        tags: [{ key: "Name", value: "public-egress" }]
+      }
+    }
+  ]);
+
+  assert.equal(records.length, 2);
+  assert.equal(records[0]?.providerResourceId, allocationId);
+  assert.equal(records[0]?.config["allocationId"], allocationId);
+  assert.deepEqual(records[0]?.config["tags"], [
+    { key: "owner", value: "platform" },
+    { key: "Name", value: "egress-ip" }
+  ]);
+  assert.equal(records[1]?.providerResourceId, natGatewayId);
+  assert.equal(records[1]?.config["natGatewayId"], natGatewayId);
+});
+
+test("같은 scan NAT가 allocation을 점유할 때만 EIP association을 NAT로 해석한다", () => {
+  const allocationId = "eipalloc-0123456789abcdef0";
+  const natGatewayId = "nat-0123456789abcdef0";
+  const records = resolveNatGatewayElasticIpRelationships([
+    {
+      ...safeRecord("AWS::EC2::EIP", allocationId, allocationId),
+      config: { allocationId, associationTargetType: "ec2_or_eni", domain: "vpc" }
+    },
+    {
+      ...safeRecord("AWS::EC2::EIP", "eipalloc-fedcba98765432100", "unsupported"),
+      config: {
+        allocationId: "eipalloc-fedcba98765432100",
+        associationTargetType: "ec2_or_eni",
+        domain: "vpc"
+      }
+    },
+    {
+      ...safeRecord("AWS::EC2::NatGateway", natGatewayId, natGatewayId),
+      config: {
+        allocationIds: [allocationId],
+        connectivityType: "public",
+        natGatewayId,
+        primaryAllocationId: allocationId,
+        state: "available",
+        subnetId: "subnet-0123456789abcdef0"
+      },
+      relationships: [
+        { type: "contains", targetProviderResourceId: "subnet-0123456789abcdef0" },
+        { type: "depends_on", targetProviderResourceId: allocationId }
+      ]
+    }
+  ]);
+
+  assert.equal(records[0]?.config["associationTargetType"], "nat_gateway");
+  assert.deepEqual(records[0]?.relationships, [
+    { type: "depends_on", targetProviderResourceId: natGatewayId }
+  ]);
+  assert.equal(records[1]?.config["associationTargetType"], "ec2_or_eni");
+  assert.deepEqual(records[1]?.relationships, []);
+});
+
+test("all EC2 Query readers and RDS follow their response pagination token", async () => {
   for (const scenario of awsQueryReaderScenarios) {
     const bodies: string[] = [];
     let page = 0;

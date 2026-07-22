@@ -88,6 +88,88 @@ export function parseSubnetsFromXml(xml: string, region: string): AwsDiscoveredR
   });
 }
 
+// EIP는 Terraform import에 필요한 allocation ID와 공개 가능한 상태만 남깁니다.
+export function parseAddressesFromXml(
+  xml: string,
+  region: string
+): AwsDiscoveredResourceRecord[] {
+  return extractSetItems(xml, "addressesSet").map((item) => {
+    const allocationId = extractTag(item, "allocationId");
+    const publicIp = extractTag(item, "publicIp");
+    const providerResourceId = allocationId ?? publicIp;
+
+    if (!providerResourceId) {
+      throw new Error("AWS response missing allocationId and publicIp");
+    }
+
+    const hasUnsupportedAssociation = [
+      "associationId",
+      "instanceId",
+      "networkInterfaceId"
+    ].some((tagName) => extractTag(item, tagName) !== null);
+
+    return {
+      providerResourceType: "AWS::EC2::EIP",
+      providerResourceId,
+      displayName: extractNameTag(item) ?? providerResourceId,
+      region,
+      config: {
+        ...compactConfigRecord({
+          allocationId,
+          domain: extractTag(item, "domain"),
+          publicIp
+        }),
+        associationTargetType: hasUnsupportedAssociation ? "ec2_or_eni" : "unassociated",
+        tags: extractTags(item)
+      },
+      relationships: []
+    };
+  });
+}
+
+// NAT Gateway는 subnet과 EIP 참조를 재구성하는 데 필요한 bounded 설정만 남깁니다.
+export function parseNatGatewaysFromXml(
+  xml: string,
+  region: string
+): AwsDiscoveredResourceRecord[] {
+  return extractSetItems(xml, "natGatewaySet").map((item) => {
+    const natGatewayId = extractRequiredTag(item, "natGatewayId");
+    const subnetId = extractTag(item, "subnetId");
+    const addresses = extractSetItems(item, "natGatewayAddressSet");
+    const allocationIds = addresses
+      .map((address) => extractTag(address, "allocationId"))
+      .filter((allocationId): allocationId is string => allocationId !== null);
+    const primaryAddress = addresses.find(
+      (address) => extractBooleanTag(address, "isPrimary") === true
+    );
+
+    return {
+      providerResourceType: "AWS::EC2::NatGateway",
+      providerResourceId: natGatewayId,
+      displayName: extractNameTag(item) ?? natGatewayId,
+      region,
+      config: {
+        allocationIds,
+        ...compactConfigRecord({
+          connectivityType: extractTag(item, "connectivityType"),
+          natGatewayId,
+          primaryAllocationId: primaryAddress
+            ? extractTag(primaryAddress, "allocationId")
+            : null,
+          state: extractTag(item, "state"),
+          subnetId,
+          vpcId: extractTag(item, "vpcId")
+        }),
+        tags: extractTags(item)
+      },
+      relationships: [
+        ...(subnetId ? [createRelationship("contains", subnetId)] : []),
+        ...allocationIds.map((allocationId) => createRelationship("depends_on", allocationId))
+      ]
+    };
+  });
+}
+
 // AWS Internet Gateway XML을 VPC 연결 정보가 있는 Resource 후보로 바꿉니다.
 export function parseInternetGatewaysFromXml(
   xml: string,
@@ -122,9 +204,13 @@ export function parseRouteTablesFromXml(
     const gatewayIds = extractRepeatedTags(item, "gatewayId").filter((gatewayId) =>
       gatewayId.startsWith("igw-")
     );
+    const natGatewayIds = extractRepeatedTags(item, "natGatewayId").filter((natGatewayId) =>
+      natGatewayId.startsWith("nat-")
+    );
     const relationships = [
       ...(vpcId ? [createRelationship("contains", vpcId)] : []),
-      ...gatewayIds.map((gatewayId) => createRelationship("depends_on", gatewayId))
+      ...gatewayIds.map((gatewayId) => createRelationship("depends_on", gatewayId)),
+      ...natGatewayIds.map((natGatewayId) => createRelationship("depends_on", natGatewayId))
     ];
 
     const routeTable: AwsDiscoveredResourceRecord = {
@@ -617,6 +703,15 @@ function extractNameTag(xml: string): string | null {
   const nameTag = tagItems.find((item) => extractTag(item, "key") === "Name");
 
   return nameTag ? extractTag(nameTag, "value") : null;
+}
+
+function extractTags(xml: string): Array<{ key: string; value: string }> {
+  return extractSetItems(xml, "tagSet").flatMap((item) => {
+    const key = extractTag(item, "key");
+    const value = extractTag(item, "value");
+
+    return key !== null && value !== null ? [{ key, value }] : [];
+  });
 }
 
 // 필수 XML 태그가 없으면 파싱 실패로 처리합니다.

@@ -56,6 +56,12 @@ import {
   createReverseEngineeringTerraformValues
 } from "./reverse-engineering-terraform-projection.js";
 
+const READ_COMPATIBILITY_CONTEXTUAL_RESOURCE_TYPES = new Set<ResourceType>([
+  "ROUTE_TABLE_ASSOCIATION",
+  "ELASTIC_IP",
+  "NAT_GATEWAY"
+]);
+
 export type ReverseEngineeringScanRecord = typeof reverseEngineeringScans.$inferSelect;
 export type ReverseEngineeringScanLogRecord = typeof reverseEngineeringScanLogs.$inferSelect;
 export type ReverseEngineeringScanPreviewRecord =
@@ -316,7 +322,8 @@ function sanitizeReadCompatibilityDiscoveredResource(
   const needsManualMapping =
     isKmsConnectedCloudWatchLogGroup(resource) ||
     isCloudWatchMetricAlarmRequiringMapping(resource) ||
-    (resource.resourceType === "ROUTE_TABLE_ASSOCIATION" && management !== "managed");
+    (READ_COMPATIBILITY_CONTEXTUAL_RESOURCE_TYPES.has(resource.resourceType) &&
+      management !== "managed");
   const analysisExcluded =
     resource.analysisExcluded === true || management !== "managed";
 

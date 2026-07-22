@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DiscoveredResource, ResourceType } from "@sketchcatch/types";
+import { getReverseEngineeringTerraformCompleteness } from "./reverse-engineering-terraform-completeness.js";
 import { createReverseEngineeringTerraformProjection } from "./reverse-engineering-terraform-projection.js";
 
 test("기존 S3를 안정적인 Terraform 주소와 실제 편집값으로 투영한다", () => {
@@ -465,6 +466,238 @@ test("Route Table Association은 같은 scan의 관리 가능한 Subnet과 Route
       createReverseEngineeringTerraformProjection(association, sameScanResources),
       { management: "needs_mapping", terraformValues: {} }
     );
+  }
+});
+
+test("public NAT과 연결 EIP는 같은 scan의 Subnet 및 primary/all EIP 참조로만 투영한다", () => {
+  const subnet = resource("SUBNET", {
+    id: "resource-subnet-main",
+    providerResourceType: "AWS::EC2::Subnet",
+    providerResourceId: "subnet-0123456789abcdef0",
+    config: {
+      vpcId: "vpc-0123456789abcdef0",
+      cidrBlock: "10.0.1.0/24",
+      availabilityZone: "ap-northeast-2a",
+      mapPublicIpOnLaunch: false,
+      assignIpv6AddressOnCreation: false
+    }
+  });
+  const nat = resource("NAT_GATEWAY", {
+    id: "resource-nat-main",
+    providerResourceType: "AWS::EC2::NatGateway",
+    providerResourceId: "nat-0123456789abcdef0",
+    config: {
+      allocationIds: ["eipalloc-0123456789abcdef0", "eipalloc-fedcba98765432100"],
+      connectivityType: "public",
+      natGatewayId: "nat-0123456789abcdef0",
+      primaryAllocationId: "eipalloc-0123456789abcdef0",
+      state: "available",
+      subnetId: "subnet-0123456789abcdef0",
+      tags: [{ key: "Name", value: "public-egress" }]
+    },
+    relationships: [
+      { type: "contains", targetResourceId: subnet.id, label: "contains" },
+      { type: "depends_on", targetResourceId: "resource-eip-primary", label: "depends_on" },
+      { type: "depends_on", targetResourceId: "resource-eip-secondary", label: "depends_on" }
+    ]
+  });
+  const primaryEip = resource("ELASTIC_IP", {
+    id: "resource-eip-primary",
+    providerResourceType: "AWS::EC2::EIP",
+    providerResourceId: "eipalloc-0123456789abcdef0",
+    config: {
+      allocationId: "eipalloc-0123456789abcdef0",
+      associationTargetType: "nat_gateway",
+      domain: "vpc",
+      tags: [{ key: "Name", value: "egress-primary" }]
+    },
+    relationships: [
+      { type: "depends_on", targetResourceId: nat.id, label: "depends_on" }
+    ]
+  });
+  const secondaryEip = resource("ELASTIC_IP", {
+    id: "resource-eip-secondary",
+    providerResourceType: "AWS::EC2::EIP",
+    providerResourceId: "eipalloc-fedcba98765432100",
+    config: {
+      allocationId: "eipalloc-fedcba98765432100",
+      associationTargetType: "nat_gateway",
+      domain: "vpc"
+    },
+    relationships: [
+      { type: "depends_on", targetResourceId: nat.id, label: "depends_on" }
+    ]
+  });
+  const allResources = [subnet, nat, primaryEip, secondaryEip];
+
+  assert.deepEqual(createReverseEngineeringTerraformProjection(nat, allResources), {
+    management: "managed",
+    terraformBlockType: "resource",
+    terraformResourceType: "aws_nat_gateway",
+    terraformResourceName: "resource_nat_main",
+    terraformFileName: "reverse-engineering",
+    terraformValues: {
+      subnetId: "aws_subnet.resource_subnet_main.id",
+      allocationId: "aws_eip.resource_eip_primary.id",
+      secondaryAllocationIds: ["aws_eip.resource_eip_secondary.id"],
+      connectivityType: "public",
+      tags: { Name: "public-egress" }
+    }
+  });
+  assert.deepEqual(createReverseEngineeringTerraformProjection(primaryEip, allResources), {
+    management: "managed",
+    terraformBlockType: "resource",
+    terraformResourceType: "aws_eip",
+    terraformResourceName: "resource_eip_primary",
+    terraformFileName: "reverse-engineering",
+    terraformValues: { domain: "vpc", tags: { Name: "egress-primary" } }
+  });
+
+  for (const sameScanResources of [
+    undefined,
+    [nat, primaryEip, secondaryEip],
+    [subnet, nat, primaryEip],
+    [subnet, nat, secondaryEip]
+  ]) {
+    assert.deepEqual(createReverseEngineeringTerraformProjection(nat, sameScanResources), {
+      management: "needs_mapping",
+      terraformValues: {}
+    });
+  }
+});
+
+test("private NAT은 같은 scan Subnet만 있으면 EIP 없이 투영한다", () => {
+  const subnet = resource("SUBNET", {
+    id: "resource-subnet-private",
+    providerResourceType: "AWS::EC2::Subnet",
+    providerResourceId: "subnet-fedcba98765432100",
+    config: {
+      vpcId: "vpc-0123456789abcdef0",
+      cidrBlock: "10.0.2.0/24",
+      availabilityZone: "ap-northeast-2a",
+      mapPublicIpOnLaunch: false,
+      assignIpv6AddressOnCreation: false
+    }
+  });
+  const nat = resource("NAT_GATEWAY", {
+    id: "resource-nat-private",
+    providerResourceType: "AWS::EC2::NatGateway",
+    providerResourceId: "nat-fedcba98765432100",
+    config: {
+      allocationIds: [],
+      connectivityType: "private",
+      natGatewayId: "nat-fedcba98765432100",
+      state: "available",
+      subnetId: "subnet-fedcba98765432100"
+    },
+    relationships: [
+      { type: "contains", targetResourceId: subnet.id, label: "contains" }
+    ]
+  });
+
+  assert.deepEqual(createReverseEngineeringTerraformProjection(nat, [subnet, nat]), {
+    management: "managed",
+    terraformBlockType: "resource",
+    terraformResourceType: "aws_nat_gateway",
+    terraformResourceName: "resource_nat_private",
+    terraformFileName: "reverse-engineering",
+    terraformValues: {
+      subnetId: "aws_subnet.resource_subnet_private.id",
+      connectivityType: "private"
+    }
+  });
+});
+
+test("EIP/NAT은 unsupported association, 불완전 same-scan, 비가용 상태에서 identity를 닫는다", () => {
+  const unsupportedEip = resource("ELASTIC_IP", {
+    providerResourceType: "AWS::EC2::EIP",
+    providerResourceId: "eipalloc-0123456789abcdef0",
+    config: {
+      allocationId: "eipalloc-0123456789abcdef0",
+      associationTargetType: "ec2_or_eni",
+      domain: "vpc"
+    }
+  });
+  const orphanNatEip = resource("ELASTIC_IP", {
+    id: "resource-orphan-nat-eip",
+    providerResourceType: "AWS::EC2::EIP",
+    providerResourceId: "eipalloc-fedcba98765432100",
+    config: {
+      allocationId: "eipalloc-fedcba98765432100",
+      associationTargetType: "nat_gateway",
+      domain: "vpc"
+    },
+    relationships: []
+  });
+  const failedNat = resource("NAT_GATEWAY", {
+    providerResourceType: "AWS::EC2::NatGateway",
+    providerResourceId: "nat-0123456789abcdef0",
+    config: {
+      allocationIds: ["eipalloc-0123456789abcdef0"],
+      connectivityType: "public",
+      natGatewayId: "nat-0123456789abcdef0",
+      primaryAllocationId: "eipalloc-0123456789abcdef0",
+      state: "failed",
+      subnetId: "subnet-0123456789abcdef0"
+    }
+  });
+
+  for (const candidate of [unsupportedEip, orphanNatEip, failedNat]) {
+    assert.deepEqual(createReverseEngineeringTerraformProjection(candidate, [candidate]), {
+      management: "needs_mapping",
+      terraformValues: {}
+    });
+  }
+});
+
+test("EIP/NAT import ID는 공개 config의 eipalloc-*와 nat-*만 허용한다", () => {
+  assert.equal(
+    getReverseEngineeringTerraformCompleteness(
+      resource("ELASTIC_IP", {
+        providerResourceId: "aws-ref-public",
+        config: {
+          allocationId: "eipalloc-0123456789abcdef0",
+          associationTargetType: "unassociated",
+          domain: "vpc"
+        }
+      })
+    ).importId,
+    "eipalloc-0123456789abcdef0"
+  );
+  assert.equal(
+    getReverseEngineeringTerraformCompleteness(
+      resource("NAT_GATEWAY", {
+        providerResourceId: "aws-ref-public",
+        config: {
+          allocationIds: [],
+          connectivityType: "private",
+          natGatewayId: "nat-0123456789abcdef0",
+          state: "available",
+          subnetId: "subnet-0123456789abcdef0"
+        }
+      })
+    ).importId,
+    "nat-0123456789abcdef0"
+  );
+
+  for (const candidate of [
+    resource("ELASTIC_IP", {
+      providerResourceId:
+        "arn:aws:ec2:ap-northeast-2:123456789012:eip-allocation/eipalloc-0123456789abcdef0",
+      config: { associationTargetType: "unassociated", domain: "vpc" }
+    }),
+    resource("NAT_GATEWAY", {
+      providerResourceId:
+        "arn:aws:ec2:ap-northeast-2:123456789012:natgateway/nat-0123456789abcdef0",
+      config: {
+        allocationIds: [],
+        connectivityType: "private",
+        state: "available",
+        subnetId: "subnet-0123456789abcdef0"
+      }
+    })
+  ]) {
+    assert.equal(getReverseEngineeringTerraformCompleteness(candidate).importId, null);
   }
 });
 

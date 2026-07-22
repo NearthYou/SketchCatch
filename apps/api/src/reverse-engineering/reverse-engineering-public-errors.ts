@@ -169,6 +169,8 @@ function getServiceKeyByResourceType(resourceType: ResourceType | "UNKNOWN"): st
     INTERNET_GATEWAY: "ec2",
     ROUTE_TABLE: "ec2",
     ROUTE_TABLE_ASSOCIATION: "ec2",
+    ELASTIC_IP: "ec2",
+    NAT_GATEWAY: "ec2",
     SECURITY_GROUP: "ec2",
     EC2: "ec2",
     AMI: "ec2",

@@ -54,6 +54,76 @@ test("자동 지원 워크로드와 AMI를 Terraform 관리 경계에 맞게 분
   assert.equal(classifyReverseEngineeringManagement(resource("AMI")), "reference");
 });
 
+test("EIP는 VPC allocation과 unassociated/NAT association만 자동 관리한다", () => {
+  const baseConfig = {
+    allocationId: "eipalloc-0123456789abcdef0",
+    domain: "vpc"
+  };
+
+  for (const associationTargetType of ["unassociated", "nat_gateway"]) {
+    assert.equal(
+      classifyReverseEngineeringManagement(
+        resource("ELASTIC_IP", { ...baseConfig, associationTargetType })
+      ),
+      "managed"
+    );
+  }
+
+  for (const config of [
+    { ...baseConfig, associationTargetType: "ec2_or_eni" },
+    { ...baseConfig, associationTargetType: "unknown" },
+    { ...baseConfig, domain: "standard", associationTargetType: "unassociated" },
+    { domain: "vpc", associationTargetType: "unassociated" }
+  ]) {
+    assert.equal(
+      classifyReverseEngineeringManagement(resource("ELASTIC_IP", config)),
+      "needs_mapping"
+    );
+  }
+});
+
+test("available NAT은 connectivity별 완전한 allocation 경계만 자동 관리한다", () => {
+  const publicNat = {
+    allocationIds: ["eipalloc-0123456789abcdef0", "eipalloc-fedcba98765432100"],
+    connectivityType: "public",
+    natGatewayId: "nat-0123456789abcdef0",
+    primaryAllocationId: "eipalloc-0123456789abcdef0",
+    state: "available",
+    subnetId: "subnet-0123456789abcdef0"
+  };
+  const privateNat = {
+    allocationIds: [],
+    connectivityType: "private",
+    natGatewayId: "nat-fedcba98765432100",
+    state: "available",
+    subnetId: "subnet-fedcba98765432100"
+  };
+
+  assert.equal(
+    classifyReverseEngineeringManagement(resource("NAT_GATEWAY", publicNat)),
+    "managed"
+  );
+  assert.equal(
+    classifyReverseEngineeringManagement(resource("NAT_GATEWAY", privateNat)),
+    "managed"
+  );
+
+  for (const config of [
+    { ...publicNat, state: "failed" },
+    { ...publicNat, state: "deleted" },
+    { ...publicNat, state: "pending" },
+    { ...publicNat, primaryAllocationId: undefined },
+    { ...publicNat, allocationIds: [publicNat.allocationIds[1]] },
+    { ...privateNat, allocationIds: ["eipalloc-0123456789abcdef0"] },
+    { ...privateNat, connectivityType: "unsupported" }
+  ]) {
+    assert.equal(
+      classifyReverseEngineeringManagement(resource("NAT_GATEWAY", config)),
+      "needs_mapping"
+    );
+  }
+});
+
 test("규칙 원본의 완전성을 확인한 Security Group만 자동 관리한다", () => {
   assert.equal(
     classifyReverseEngineeringManagement(

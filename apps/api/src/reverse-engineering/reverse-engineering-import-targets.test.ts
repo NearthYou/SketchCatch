@@ -589,6 +589,81 @@ test("같은 scan에 Subnet과 Route Table이 없는 과거 Association handoff�
   assert.deepEqual(targets, []);
 });
 
+test("같은 scan 참조가 없는 과거 EIP/NAT handoff는 import 대상에서 제외한다", async () => {
+  const scenarios = [
+    {
+      resource: {
+        id: "resource-orphan-eip",
+        providerResourceType: "AWS::EC2::EIP",
+        providerResourceId: "eipalloc-0123456789abcdef0",
+        displayName: "orphan-eip",
+        resourceType: "ELASTIC_IP" as const,
+        config: {
+          allocationId: "eipalloc-0123456789abcdef0",
+          associationTargetType: "nat_gateway",
+          domain: "vpc"
+        },
+        relationships: [
+          { type: "depends_on" as const, targetResourceId: "missing-nat", label: "depends_on" }
+        ]
+      },
+      terraformType: "aws_eip",
+      terraformName: "resource_orphan_eip"
+    },
+    {
+      resource: {
+        id: "resource-orphan-nat",
+        providerResourceType: "AWS::EC2::NatGateway",
+        providerResourceId: "nat-0123456789abcdef0",
+        displayName: "orphan-nat",
+        resourceType: "NAT_GATEWAY" as const,
+        config: {
+          allocationIds: [],
+          connectivityType: "private",
+          natGatewayId: "nat-0123456789abcdef0",
+          state: "available",
+          subnetId: "subnet-0123456789abcdef0"
+        },
+        relationships: [
+          { type: "contains" as const, targetResourceId: "missing-subnet", label: "contains" }
+        ]
+      },
+      terraformType: "aws_nat_gateway",
+      terraformName: "resource_orphan_nat"
+    }
+  ];
+
+  for (const scenario of scenarios) {
+    const scanResult = result(scenario.resource);
+    scanResult.importSuggestions = [
+      {
+        id: `import-${scenario.resource.id}`,
+        resourceId: scenario.resource.id,
+        status: "ready",
+        handoffReady: true,
+        terraformAddress: `${scenario.terraformType}.${scenario.terraformName}`,
+        importCommand:
+          `terraform import ${scenario.terraformType}.${scenario.terraformName} ${scenario.resource.providerResourceId}`
+      }
+    ];
+
+    const targets = await resolveVerifiedImportTargets(
+      {
+        projectId: "project-1",
+        accessContext,
+        diagramJson: diagram({
+          id: scenario.resource.id,
+          resourceType: scenario.terraformType,
+          resourceName: scenario.terraformName
+        })
+      },
+      repositoryWith(scanResult)
+    );
+
+    assert.deepEqual(targets, [], scenario.resource.resourceType);
+  }
+});
+
 function repositoryWith(
   scanResult: ReverseEngineeringScanResult,
   overrides: Partial<{ id: string; projectId: string; status: string }> = {}

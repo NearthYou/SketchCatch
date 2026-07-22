@@ -78,6 +78,57 @@ function getMissingTerraformResourceFields(
     ];
   }
 
+  if (resourceType === "ELASTIC_IP") {
+    return [
+      ...(getValidElasticIpAllocationId(config["allocationId"]) ? [] : ["allocationId"]),
+      ...(config["domain"] === "vpc" ? [] : ["domain=vpc"]),
+      ...(config["associationTargetType"] === "unassociated" ||
+      config["associationTargetType"] === "nat_gateway"
+        ? []
+        : ["associationTargetType"])
+    ];
+  }
+
+  if (resourceType === "NAT_GATEWAY") {
+    const connectivityType = config["connectivityType"];
+    const allocationIds = getExactElasticIpAllocationIds(config["allocationIds"]);
+    const primaryAllocationId = getValidElasticIpAllocationId(
+      config["primaryAllocationId"]
+    );
+    const commonFields = [
+      ...(getValidNatGatewayId(config["natGatewayId"]) ? [] : ["natGatewayId"]),
+      ...(getNonEmptyString(config["subnetId"]) ? [] : ["subnetId"]),
+      ...(config["state"] === "available" ? [] : ["state=available"]),
+      ...(connectivityType === "public" || connectivityType === "private"
+        ? []
+        : ["connectivityType"])
+    ];
+
+    if (connectivityType === "public") {
+      return [
+        ...commonFields,
+        ...(allocationIds && allocationIds.length > 0 ? [] : ["allocationIds"]),
+        ...(primaryAllocationId && allocationIds?.includes(primaryAllocationId)
+          ? []
+          : ["primaryAllocationId"])
+      ];
+    }
+
+    if (connectivityType === "private") {
+      return [
+        ...commonFields,
+        ...(allocationIds?.length === 0 ? [] : ["allocationIds=[]"]),
+        ...(config["primaryAllocationId"] === undefined ||
+        config["primaryAllocationId"] === null ||
+        config["primaryAllocationId"] === ""
+          ? []
+          : ["primaryAllocationId"])
+      ];
+    }
+
+    return commonFields;
+  }
+
   if (resourceType === "EC2") {
     return [
       ...(getNonEmptyString(config["imageId"]) ? [] : ["imageId"]),
@@ -262,6 +313,14 @@ function getMissingTerraformResourceFields(
 function getStableTerraformImportId(
   resource: Pick<DiscoveredResource, "providerResourceId" | "resourceType" | "config">
 ): string | null {
+  if (resource.resourceType === "ELASTIC_IP") {
+    return getValidElasticIpAllocationId(resource.config["allocationId"]);
+  }
+
+  if (resource.resourceType === "NAT_GATEWAY") {
+    return getValidNatGatewayId(resource.config["natGatewayId"]);
+  }
+
   if (resource.resourceType === "ROUTE_TABLE_ASSOCIATION") {
     const subnetId = getNonEmptyString(resource.config["subnetId"]);
     const routeTableId = getNonEmptyString(resource.config["routeTableId"]);
@@ -573,6 +632,37 @@ function getValidEcsName(value: unknown): string | null {
   const name = getNonEmptyString(value);
 
   return name && /^[A-Za-z0-9_-]+$/u.test(name) ? name : null;
+}
+
+function getValidElasticIpAllocationId(value: unknown): string | null {
+  const allocationId = getNonEmptyString(value);
+
+  return allocationId && /^eipalloc-[a-f0-9]{8,}$/iu.test(allocationId)
+    ? allocationId
+    : null;
+}
+
+function getValidNatGatewayId(value: unknown): string | null {
+  const natGatewayId = getNonEmptyString(value);
+
+  return natGatewayId && /^nat-[a-f0-9]{8,}$/iu.test(natGatewayId)
+    ? natGatewayId
+    : null;
+}
+
+function getExactElasticIpAllocationIds(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const allocationIds = value.flatMap((candidate) => {
+    const allocationId = getValidElasticIpAllocationId(candidate);
+    return allocationId ? [allocationId] : [];
+  });
+
+  return allocationIds.length === value.length && new Set(allocationIds).size === value.length
+    ? allocationIds
+    : null;
 }
 
 function getNonEmptyString(value: unknown): string | null {

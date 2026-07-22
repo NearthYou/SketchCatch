@@ -682,6 +682,111 @@ test("같은 scan 대상이 사라진 과거 Route Table Association의 Terrafor
   });
 });
 
+test("같은 scan 참조가 사라진 과거 EIP/NAT의 Terraform identity를 제거한다", () => {
+  const legacyResult = createLegacyResult();
+  const staleResources = [
+    {
+      id: "legacy-eip",
+      provider: "aws" as const,
+      providerResourceType: "AWS::EC2::EIP",
+      providerResourceId: "eipalloc-0123456789abcdef0",
+      region: "ap-northeast-2",
+      displayName: "egress-ip",
+      resourceType: "ELASTIC_IP" as const,
+      config: {
+        allocationId: "eipalloc-0123456789abcdef0",
+        associationTargetType: "nat_gateway",
+        domain: "vpc"
+      },
+      relationships: [
+        { type: "depends_on" as const, targetResourceId: "missing-nat", label: "depends_on" }
+      ]
+    },
+    {
+      id: "legacy-nat",
+      provider: "aws" as const,
+      providerResourceType: "AWS::EC2::NatGateway",
+      providerResourceId: "nat-0123456789abcdef0",
+      region: "ap-northeast-2",
+      displayName: "private-egress",
+      resourceType: "NAT_GATEWAY" as const,
+      config: {
+        allocationIds: [],
+        connectivityType: "private",
+        natGatewayId: "nat-0123456789abcdef0",
+        state: "available",
+        subnetId: "subnet-0123456789abcdef0"
+      },
+      relationships: [
+        { type: "contains" as const, targetResourceId: "missing-subnet", label: "contains" }
+      ]
+    }
+  ];
+  legacyResult.discoveredResources.push(...staleResources);
+  legacyResult.architectureJson.nodes.push(
+    ...staleResources.map((resource) => ({
+      id: resource.id,
+      type: resource.resourceType,
+      label: resource.displayName,
+      positionX: 720,
+      positionY: 80,
+      config: {
+        providerResourceId: resource.providerResourceId,
+        terraformBlockType: "resource" as const,
+        terraformResourceType:
+          resource.resourceType === "ELASTIC_IP" ? "aws_eip" : "aws_nat_gateway",
+        terraformResourceName: resource.id.replaceAll("-", "_"),
+        terraformFileName: "reverse-engineering",
+        reverseEngineeringManagement: "managed"
+      }
+    }))
+  );
+  legacyResult.importSuggestions.push(
+    ...staleResources.map((resource) => {
+      const terraformType = resource.resourceType === "ELASTIC_IP"
+        ? "aws_eip"
+        : "aws_nat_gateway";
+      const terraformName = resource.id.replaceAll("-", "_");
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "ready" as const,
+        handoffReady: true,
+        terraformAddress: `${terraformType}.${terraformName}`,
+        importCommand:
+          `terraform import ${terraformType}.${terraformName} ${resource.providerResourceId}`
+      };
+    })
+  );
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+
+  for (const staleResource of staleResources) {
+    const resource = result.discoveredResources.find(
+      (candidate) => candidate.id === staleResource.id
+    );
+    const node = result.architectureJson.nodes.find(
+      (candidate) => candidate.id === staleResource.id
+    );
+    const suggestion = result.importSuggestions.find(
+      (candidate) => candidate.resourceId === staleResource.id
+    );
+
+    assert.equal(resource?.analysisExcluded, true);
+    assert.equal(resource?.importSuggestionStatus, "manual_review");
+    assert.equal(node?.config["analysisExcluded"], true);
+    assert.equal(node?.config["reverseEngineeringManagement"], "needs_mapping");
+    assert.equal(node?.config["terraformBlockType"], undefined);
+    assert.equal(node?.config["terraformResourceType"], undefined);
+    assert.equal(node?.config["terraformResourceName"], undefined);
+    assert.equal(node?.config["terraformFileName"], undefined);
+    assert.equal(suggestion?.status, "manual_review");
+    assert.equal(suggestion?.handoffReady, false);
+    assert.equal(suggestion?.terraformAddress, undefined);
+    assert.equal(suggestion?.importCommand, undefined);
+  }
+});
+
 test("유일하게 연결된 지원 Resource가 아닌 과거 import handoff는 안전하게 제거한다", () => {
   const unmatchedResult = createLegacyResult();
   unmatchedResult.importSuggestions.push({

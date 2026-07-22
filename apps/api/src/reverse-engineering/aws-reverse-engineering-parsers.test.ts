@@ -1,9 +1,139 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  parseAddressesFromXml,
+  parseNatGatewaysFromXml,
   parseRouteTablesFromXml,
   parseSecurityGroupsFromXml
 } from "./aws-reverse-engineering-parsers.js";
+
+test("EIP XML은 allocation ID와 안전한 association 분류만 보존한다", () => {
+  const [record] = parseAddressesFromXml(
+    `<DescribeAddressesResponse>
+      <addressesSet>
+        <item>
+          <allocationId>eipalloc-0123456789abcdef0</allocationId>
+          <associationId>eipassoc-0123456789abcdef0</associationId>
+          <domain>vpc</domain>
+          <instanceId>i-private-target</instanceId>
+          <networkInterfaceId>eni-private-target</networkInterfaceId>
+          <privateIpAddress>10.0.1.10</privateIpAddress>
+          <publicIp>203.0.113.10</publicIp>
+          <tagSet>
+            <item><key>Name</key><value>egress-ip</value></item>
+            <item><key>team</key><value>platform</value></item>
+          </tagSet>
+        </item>
+      </addressesSet>
+    </DescribeAddressesResponse>`,
+    "ap-northeast-2"
+  );
+
+  assert.deepEqual(record, {
+    providerResourceType: "AWS::EC2::EIP",
+    providerResourceId: "eipalloc-0123456789abcdef0",
+    displayName: "egress-ip",
+    region: "ap-northeast-2",
+    config: {
+      allocationId: "eipalloc-0123456789abcdef0",
+      associationTargetType: "ec2_or_eni",
+      domain: "vpc",
+      publicIp: "203.0.113.10",
+      tags: [
+        { key: "Name", value: "egress-ip" },
+        { key: "team", value: "platform" }
+      ]
+    },
+    relationships: []
+  });
+  assert.doesNotMatch(
+    JSON.stringify(record),
+    /i-private-target|eni-private-target|10\.0\.1\.10|eipassoc-/u
+  );
+});
+
+test("NAT Gateway XML은 subnet과 primary/all EIP 관계를 보존하고 민감한 주소는 버린다", () => {
+  const [record] = parseNatGatewaysFromXml(
+    `<DescribeNatGatewaysResponse>
+      <natGatewaySet>
+        <item>
+          <natGatewayId>nat-0123456789abcdef0</natGatewayId>
+          <subnetId>subnet-0123456789abcdef0</subnetId>
+          <vpcId>vpc-0123456789abcdef0</vpcId>
+          <state>available</state>
+          <connectivityType>public</connectivityType>
+          <natGatewayAddressSet>
+            <item>
+              <allocationId>eipalloc-primary1234567</allocationId>
+              <associationId>eipassoc-private-primary</associationId>
+              <networkInterfaceId>eni-private-primary</networkInterfaceId>
+              <privateIp>10.0.1.10</privateIp>
+              <publicIp>203.0.113.10</publicIp>
+              <isPrimary>true</isPrimary>
+            </item>
+            <item>
+              <allocationId>eipalloc-secondary12345</allocationId>
+              <networkInterfaceId>eni-private-secondary</networkInterfaceId>
+              <privateIp>10.0.1.11</privateIp>
+              <publicIp>203.0.113.11</publicIp>
+              <isPrimary>false</isPrimary>
+            </item>
+          </natGatewayAddressSet>
+          <tagSet><item><key>Name</key><value>public-egress</value></item></tagSet>
+        </item>
+      </natGatewaySet>
+    </DescribeNatGatewaysResponse>`,
+    "ap-northeast-2"
+  );
+
+  assert.deepEqual(record, {
+    providerResourceType: "AWS::EC2::NatGateway",
+    providerResourceId: "nat-0123456789abcdef0",
+    displayName: "public-egress",
+    region: "ap-northeast-2",
+    config: {
+      allocationIds: ["eipalloc-primary1234567", "eipalloc-secondary12345"],
+      connectivityType: "public",
+      natGatewayId: "nat-0123456789abcdef0",
+      primaryAllocationId: "eipalloc-primary1234567",
+      state: "available",
+      subnetId: "subnet-0123456789abcdef0",
+      tags: [{ key: "Name", value: "public-egress" }],
+      vpcId: "vpc-0123456789abcdef0"
+    },
+    relationships: [
+      { type: "contains", targetProviderResourceId: "subnet-0123456789abcdef0" },
+      { type: "depends_on", targetProviderResourceId: "eipalloc-primary1234567" },
+      { type: "depends_on", targetProviderResourceId: "eipalloc-secondary12345" }
+    ]
+  });
+  assert.doesNotMatch(
+    JSON.stringify(record),
+    /eni-private|10\.0\.1\.|203\.0\.113\.|eipassoc-/u
+  );
+});
+
+test("private NAT Gateway는 EIP 없이도 subnet 관계와 connectivity를 보존한다", () => {
+  const [record] = parseNatGatewaysFromXml(
+    `<DescribeNatGatewaysResponse><natGatewaySet><item>
+      <natGatewayId>nat-abcdef01234567890</natGatewayId>
+      <subnetId>subnet-abcdef01234567890</subnetId>
+      <state>available</state>
+      <connectivityType>private</connectivityType>
+      <natGatewayAddressSet>
+        <item><networkInterfaceId>eni-private</networkInterfaceId><privateIp>10.0.2.10</privateIp></item>
+      </natGatewayAddressSet>
+    </item></natGatewaySet></DescribeNatGatewaysResponse>`,
+    "ap-northeast-2"
+  );
+
+  assert.equal(record?.config["connectivityType"], "private");
+  assert.deepEqual(record?.config["allocationIds"], []);
+  assert.equal("primaryAllocationId" in (record?.config ?? {}), false);
+  assert.deepEqual(record?.relationships, [
+    { type: "contains", targetProviderResourceId: "subnet-abcdef01234567890" }
+  ]);
+});
 
 test("Route Table XML에서 테이블과 subnet/main/gateway association을 각각 보존한다", () => {
   const records = parseRouteTablesFromXml(
@@ -16,6 +146,11 @@ test("Route Table XML에서 테이블과 subnet/main/gateway association을 각�
             <item>
               <destinationCidrBlock>10.0.0.0/16</destinationCidrBlock>
               <gatewayId>local</gatewayId>
+              <state>active</state>
+            </item>
+            <item>
+              <destinationCidrBlock>0.0.0.0/0</destinationCidrBlock>
+              <natGatewayId>nat-0123456789abcdef0</natGatewayId>
               <state>active</state>
             </item>
           </routeSet>
@@ -48,6 +183,11 @@ test("Route Table XML에서 테이블과 subnet/main/gateway association을 각�
   const [routeTable, subnetAssociation, mainAssociation, gatewayAssociation] = records;
   assert.equal(routeTable?.providerResourceType, "AWS::EC2::RouteTable");
   assert.equal(routeTable?.providerResourceId, "rtb-main");
+  assert.deepEqual(routeTable?.relationships, [
+    { type: "contains", targetProviderResourceId: "vpc-main" },
+    { type: "depends_on", targetProviderResourceId: "igw-main" },
+    { type: "depends_on", targetProviderResourceId: "nat-0123456789abcdef0" }
+  ]);
   assert.deepEqual(routeTable?.config["associations"], [
     {
       routeTableAssociationId: "rtbassoc-subnet",

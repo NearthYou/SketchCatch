@@ -1133,6 +1133,176 @@ test("Subnet Route Table Association을 안전한 config와 두 관계가 있는
   );
 });
 
+test("EIP과 public NAT을 안전한 config, same-scan 참조, import identity가 있는 지원 리소스로 변환한다", async () => {
+  const allocationId = "eipalloc-0123456789abcdef0";
+  const natGatewayId = "nat-0123456789abcdef0";
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::EC2::Subnet",
+      providerResourceId: "subnet-0123456789abcdef0",
+      displayName: "private-a",
+      config: {
+        vpcId: "vpc-0123456789abcdef0",
+        cidrBlock: "10.0.1.0/24",
+        availabilityZone: "ap-northeast-2a",
+        mapPublicIpOnLaunch: false,
+        assignIpv6AddressOnCreation: false
+      }
+    }),
+    record({
+      providerResourceType: "AWS::EC2::EIP",
+      providerResourceId: allocationId,
+      displayName: "egress-ip",
+      config: {
+        allocationId,
+        associationTargetType: "nat_gateway",
+        domain: "vpc",
+        publicIp: "203.0.113.10",
+        tags: [{ key: "Name", value: "egress-ip" }],
+        associationId: "eipassoc-must-not-be-public",
+        networkInterfaceId: "eni-must-not-be-public",
+        privateIpAddress: "10.0.1.10",
+        providerParameters: { secret: "must-not-be-public" }
+      },
+      relationships: [{ type: "depends_on", targetProviderResourceId: natGatewayId }]
+    }),
+    record({
+      providerResourceType: "AWS::EC2::NatGateway",
+      providerResourceId: natGatewayId,
+      displayName: "public-egress",
+      config: {
+        allocationIds: [allocationId],
+        connectivityType: "public",
+        natGatewayId,
+        primaryAllocationId: allocationId,
+        state: "available",
+        subnetId: "subnet-0123456789abcdef0",
+        tags: [{ key: "Name", value: "public-egress" }],
+        failureMessage:
+          "arn:aws:iam::123456789012:role/must-not-be-public",
+        networkInterfaceId: "eni-must-not-be-public",
+        privateIp: "10.0.1.10",
+        providerParameters: { secret: "must-not-be-public" }
+      },
+      relationships: [
+        { type: "contains", targetProviderResourceId: "subnet-0123456789abcdef0" },
+        { type: "depends_on", targetProviderResourceId: allocationId }
+      ]
+    })
+  ]);
+
+  const eip = result.discoveredResources.find(
+    (resource) => resource.providerResourceId === allocationId
+  );
+  const nat = result.discoveredResources.find(
+    (resource) => resource.providerResourceId === natGatewayId
+  );
+  assert.ok(eip);
+  assert.ok(nat);
+  assert.equal(eip.resourceType, "ELASTIC_IP");
+  assert.equal(nat.resourceType, "NAT_GATEWAY");
+  assert.deepEqual(eip.config, {
+    allocationId,
+    associationTargetType: "nat_gateway",
+    domain: "vpc",
+    publicIp: "203.0.113.10",
+    tags: [{ key: "Name", value: "egress-ip" }]
+  });
+  assert.deepEqual(nat.config, {
+    allocationIds: [allocationId],
+    connectivityType: "public",
+    natGatewayId,
+    primaryAllocationId: allocationId,
+    state: "available",
+    subnetId: "subnet-0123456789abcdef0",
+    tags: [{ key: "Name", value: "public-egress" }]
+  });
+  assert.doesNotMatch(
+    JSON.stringify([eip, nat]),
+    /must-not-be-public|arn:aws|eni-|10\.0\.1\.10/u
+  );
+  assert.equal(eip.analysisExcluded ?? false, false);
+  assert.equal(nat.analysisExcluded ?? false, false);
+
+  const eipNode = result.architectureJson.nodes.find((node) => node.id === eip.id);
+  const natNode = result.architectureJson.nodes.find((node) => node.id === nat.id);
+  assert.equal(eipNode?.config["terraformResourceType"], "aws_eip");
+  assert.equal(natNode?.config["terraformResourceType"], "aws_nat_gateway");
+  assert.equal(
+    natNode?.config["subnetId"],
+    "aws_subnet.resource_subnet_0123456789abcdef0.id"
+  );
+  assert.equal(natNode?.config["allocationId"], "aws_eip.resource_eipalloc_0123456789abcdef0.id");
+
+  assertReadyImport(
+    result.importSuggestions.find((suggestion) => suggestion.resourceId === eip.id),
+    "aws_eip",
+    allocationId
+  );
+  assertReadyImport(
+    result.importSuggestions.find((suggestion) => suggestion.resourceId === nat.id),
+    "aws_nat_gateway",
+    natGatewayId
+  );
+});
+
+test("unsupported EIP association과 deleted/incomplete NAT은 보드에 유지하고 needs_mapping으로 닫는다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::EC2::EIP",
+      providerResourceId: "eipalloc-0123456789abcdef0",
+      displayName: "unsupported-eip",
+      config: {
+        allocationId: "eipalloc-0123456789abcdef0",
+        associationTargetType: "ec2_or_eni",
+        domain: "vpc"
+      }
+    }),
+    record({
+      providerResourceType: "AWS::EC2::NatGateway",
+      providerResourceId: "nat-0123456789abcdef0",
+      displayName: "deleted-nat",
+      config: {
+        allocationIds: [],
+        connectivityType: "private",
+        natGatewayId: "nat-0123456789abcdef0",
+        state: "deleted",
+        subnetId: "subnet-0123456789abcdef0"
+      }
+    })
+  ]);
+
+  assert.deepEqual(
+    result.discoveredResources.map((resource) => ({
+      resourceType: resource.resourceType,
+      analysisExcluded: resource.analysisExcluded,
+      importSuggestionStatus: resource.importSuggestionStatus
+    })),
+    [
+      {
+        resourceType: "ELASTIC_IP",
+        analysisExcluded: true,
+        importSuggestionStatus: "manual_review"
+      },
+      {
+        resourceType: "NAT_GATEWAY",
+        analysisExcluded: true,
+        importSuggestionStatus: "manual_review"
+      }
+    ]
+  );
+  assert.deepEqual(
+    result.architectureJson.nodes.map((node) => node.config["reverseEngineeringManagement"]),
+    ["needs_mapping", "needs_mapping"]
+  );
+  assert.equal(result.analysisExclusions.every((exclusion) =>
+    exclusion.reason === "missing_required_data"
+  ), true);
+  for (const suggestion of result.importSuggestions) {
+    assertManualImportWithoutIdentity(suggestion);
+  }
+});
+
 async function scan(records: AwsDiscoveredResourceRecord[]): Promise<ReverseEngineeringScanResult> {
   return createAwsProviderAdapter({
     async discoverResources() {

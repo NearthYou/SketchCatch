@@ -80,6 +80,8 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::EC2::InternetGateway", "INTERNET_GATEWAY"],
   ["AWS::EC2::RouteTable", "ROUTE_TABLE"],
   ["AWS::EC2::RouteTableAssociation", "ROUTE_TABLE_ASSOCIATION"],
+  ["AWS::EC2::EIP", "ELASTIC_IP"],
+  ["AWS::EC2::NatGateway", "NAT_GATEWAY"],
   ["AWS::EC2::SecurityGroup", "SECURITY_GROUP"],
   ["AWS::EC2::Instance", "EC2"],
   ["AWS::EC2::Image", "AMI"],
@@ -108,6 +110,8 @@ const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
   "CLOUDWATCH_METRIC_ALARM",
   "CLOUDWATCH_LOG_GROUP",
   "ROUTE_TABLE_ASSOCIATION",
+  "ELASTIC_IP",
+  "NAT_GATEWAY",
   "EVENTBRIDGE_RULE",
   "EVENTBRIDGE_TARGET",
   "LOAD_BALANCER",
@@ -124,6 +128,8 @@ const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
   "INTERNET_GATEWAY",
   "ROUTE_TABLE",
   "ROUTE_TABLE_ASSOCIATION",
+  "ELASTIC_IP",
+  "NAT_GATEWAY",
   "SECURITY_GROUP",
   "EC2",
   "RDS",
@@ -136,6 +142,11 @@ const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
   "ECS_CLUSTER",
   "ECS_SERVICE",
   "ECS_TASK_DEFINITION"
+]);
+const SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES = new Set<ResourceType>([
+  "ROUTE_TABLE_ASSOCIATION",
+  "ELASTIC_IP",
+  "NAT_GATEWAY"
 ]);
 const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
   "providerResourceId",
@@ -162,6 +173,23 @@ const IAM_CLOUD_FORMATION_OWNERSHIP_TAG_KEYS = new Set([
   "aws:cloudformation:logical-id"
 ]);
 const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>([
+  [
+    "AWS::EC2::EIP",
+    new Set(["allocationId", "associationTargetType", "domain", "publicIp", "tags"])
+  ],
+  [
+    "AWS::EC2::NatGateway",
+    new Set([
+      "allocationIds",
+      "connectivityType",
+      "natGatewayId",
+      "primaryAllocationId",
+      "state",
+      "subnetId",
+      "tags",
+      "vpcId"
+    ])
+  ],
   [
     "AWS::EC2::RouteTableAssociation",
     new Set(["routeTableAssociationId", "subnetId", "routeTableId", "main"])
@@ -385,7 +413,7 @@ export function createAwsProviderAdapter(
         )
       );
       const discoveredResources = baseDiscoveredResources.map((resource) =>
-        resource.resourceType === "ROUTE_TABLE_ASSOCIATION" &&
+        SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES.has(resource.resourceType) &&
         createReverseEngineeringTerraformProjection(resource, baseDiscoveredResources)
           .management !== "managed"
           ? {
@@ -658,7 +686,7 @@ function createAnalysisExclusions(
       id: `analysis-exclusion-${resource.id}`,
       resourceId: resource.id,
       reason:
-        resource.resourceType === "ROUTE_TABLE_ASSOCIATION"
+        SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES.has(resource.resourceType)
           ? "missing_required_data"
           : "unsupported_resource_type",
       message: isKmsConnectedCloudWatchLogGroup(resource)
@@ -673,6 +701,10 @@ function createAnalysisExclusions(
                 ? "EventBridge Target의 전달 설정이나 대상 연결을 안전하게 다시 만들 수 없어 보드에만 표시됩니다."
                 : resource.resourceType === "ROUTE_TABLE_ASSOCIATION"
                   ? "같은 스캔의 Subnet과 Route Table을 안전하게 연결할 수 없어 보드에만 표시됩니다."
+                  : resource.resourceType === "ELASTIC_IP"
+                    ? "EIP 연결 대상을 안전하게 확인할 수 없어 보드에만 표시됩니다."
+                    : resource.resourceType === "NAT_GATEWAY"
+                      ? "같은 스캔의 Subnet과 EIP를 안전하게 연결할 수 없어 보드에만 표시됩니다."
           : "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
     }));
 }
@@ -774,7 +806,7 @@ function createImportSuggestions(
     }
 
     if (
-      resource.resourceType === "ROUTE_TABLE_ASSOCIATION" &&
+      SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES.has(resource.resourceType) &&
       createReverseEngineeringTerraformProjection(resource, discoveredResources).management !==
         "managed"
     ) {
@@ -782,8 +814,7 @@ function createImportSuggestions(
         id: `import-${resource.id}`,
         resourceId: resource.id,
         status: "manual_review",
-        reason:
-          "같은 스캔의 관리 가능한 Subnet과 Route Table을 먼저 확인해야 안전하게 가져올 수 있습니다.",
+        reason: createSameScanReferenceReason(resource.resourceType),
         handoffReady: false
       };
     }
@@ -806,7 +837,11 @@ function createImportSuggestions(
 
 // gg: 자동 import를 만들 수 없는 이유를 Resource별로 짧고 정확하게 설명합니다.
 function createMissingImportIdReason(resourceType: ResourceType): string {
-  return resourceType === "ROUTE_TABLE_ASSOCIATION"
+  return resourceType === "ELASTIC_IP"
+    ? "Terraform import에 필요한 EIP allocation ID가 없습니다."
+    : resourceType === "NAT_GATEWAY"
+      ? "Terraform import에 필요한 NAT Gateway ID가 없습니다."
+      : resourceType === "ROUTE_TABLE_ASSOCIATION"
     ? "Terraform import에 필요한 subnet ID와 route table ID가 없습니다."
     : resourceType === "EVENTBRIDGE_RULE"
     ? "Terraform import에 필요한 EventBridge bus name과 rule name이 없습니다."
@@ -825,6 +860,14 @@ function createMissingImportIdReason(resourceType: ResourceType): string {
           : resourceType === "ECS_TASK_DEFINITION"
             ? "보안상 ECS Task Definition의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
             : "Terraform import에 필요한 provider Resource ID가 없습니다.";
+}
+
+function createSameScanReferenceReason(resourceType: ResourceType): string {
+  return resourceType === "ELASTIC_IP"
+    ? "같은 스캔에서 EIP의 NAT 연결을 확인해야 안전하게 가져올 수 있습니다."
+    : resourceType === "NAT_GATEWAY"
+      ? "같은 스캔의 관리 가능한 Subnet과 모든 EIP를 먼저 확인해야 안전하게 가져올 수 있습니다."
+      : "같은 스캔의 관리 가능한 Subnet과 Route Table을 먼저 확인해야 안전하게 가져올 수 있습니다.";
 }
 
 function createTerraformCreationValidationFindings(

@@ -25,6 +25,8 @@ const TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE = new Map<ResourceType, string>([
   ["INTERNET_GATEWAY", "aws_internet_gateway"],
   ["ROUTE_TABLE", "aws_route_table"],
   ["ROUTE_TABLE_ASSOCIATION", "aws_route_table_association"],
+  ["ELASTIC_IP", "aws_eip"],
+  ["NAT_GATEWAY", "aws_nat_gateway"],
   ["SECURITY_GROUP", "aws_security_group"],
   ["EC2", "aws_instance"],
   ["RDS", "aws_db_instance"],
@@ -38,6 +40,12 @@ const TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE = new Map<ResourceType, string>([
   ["ECS_CLUSTER", "aws_ecs_cluster"],
   ["ECS_SERVICE", "aws_ecs_service"],
   ["ECS_TASK_DEFINITION", "aws_ecs_task_definition"]
+]);
+
+const SAME_SCAN_REFERENCE_RESOURCE_TYPES = new Set<ResourceType>([
+  "ROUTE_TABLE_ASSOCIATION",
+  "ELASTIC_IP",
+  "NAT_GATEWAY"
 ]);
 
 /** 기존 AWS 리소스를 보드에서 편집 가능한 Terraform identity와 명시적 인수로 투영한다. */
@@ -59,7 +67,7 @@ export function createReverseEngineeringTerraformProjection(
     sameScanResources
   );
   if (
-    resource.resourceType === "ROUTE_TABLE_ASSOCIATION" &&
+    SAME_SCAN_REFERENCE_RESOURCE_TYPES.has(resource.resourceType) &&
     Object.keys(terraformValues).length === 0
   ) {
     return { management: "needs_mapping", terraformValues: {} };
@@ -141,6 +149,10 @@ export function createReverseEngineeringTerraformValues(
       });
     case "ROUTE_TABLE_ASSOCIATION":
       return createRouteTableAssociationTerraformValues(resource, sameScanResources);
+    case "ELASTIC_IP":
+      return createElasticIpTerraformValues(resource, sameScanResources);
+    case "NAT_GATEWAY":
+      return createNatGatewayTerraformValues(resource, sameScanResources);
     case "SECURITY_GROUP":
       return compactConfig({
         name: config["groupName"],
@@ -315,10 +327,137 @@ function createRouteTableAssociationTerraformValues(
   };
 }
 
+function createElasticIpTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  const associationTargetType = resource.config["associationTargetType"];
+
+  if (associationTargetType === "nat_gateway") {
+    if (!sameScanResources) {
+      return {};
+    }
+
+    const allocationId = getNonEmptyString(resource.config["allocationId"]);
+    const natGatewayCandidates = sameScanResources.filter(
+      (candidate) =>
+        candidate.resourceType === "NAT_GATEWAY" &&
+        hasRelationshipTo(resource, candidate) &&
+        hasRelationshipTo(candidate, resource) &&
+        getStringValues(candidate.config["allocationIds"]).includes(allocationId ?? "")
+    );
+    const natGateway = natGatewayCandidates.length === 1
+      ? natGatewayCandidates[0]
+      : undefined;
+
+    if (!natGateway || classifyReverseEngineeringManagement(natGateway) !== "managed") {
+      return {};
+    }
+  } else if (associationTargetType !== "unassociated") {
+    return {};
+  }
+
+  return compactConfig({
+    domain: resource.config["domain"],
+    tags: normalizeTerraformTags(resource.config["tags"])
+  });
+}
+
+function createNatGatewayTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  if (!sameScanResources) {
+    return {};
+  }
+
+  const subnet = findSameScanManagedTarget(
+    resource,
+    sameScanResources,
+    "SUBNET",
+    resource.config["subnetId"]
+  );
+  if (!subnet) {
+    return {};
+  }
+
+  const connectivityType = resource.config["connectivityType"];
+  if (connectivityType === "private") {
+    return compactConfig({
+      subnetId: createTerraformIdReference("aws_subnet", subnet),
+      connectivityType,
+      tags: normalizeTerraformTags(resource.config["tags"])
+    });
+  }
+
+  if (connectivityType !== "public") {
+    return {};
+  }
+
+  const allocationIds = getStringValues(resource.config["allocationIds"]);
+  const primaryAllocationId = getNonEmptyString(resource.config["primaryAllocationId"]);
+  if (!primaryAllocationId || allocationIds.length === 0) {
+    return {};
+  }
+
+  const elasticIps = allocationIds.flatMap((allocationId) => {
+    const elasticIp = findSameScanManagedTarget(
+      resource,
+      sameScanResources,
+      "ELASTIC_IP",
+      allocationId
+    );
+
+    return elasticIp &&
+      elasticIp.config["associationTargetType"] === "nat_gateway" &&
+      hasRelationshipTo(elasticIp, resource)
+      ? [elasticIp]
+      : [];
+  });
+  if (elasticIps.length !== allocationIds.length) {
+    return {};
+  }
+
+  const primaryElasticIp = elasticIps.find(
+    (elasticIp) => elasticIp.providerResourceId === primaryAllocationId
+  );
+  if (!primaryElasticIp) {
+    return {};
+  }
+
+  const secondaryElasticIps = elasticIps.filter(
+    (elasticIp) => elasticIp.id !== primaryElasticIp.id
+  );
+
+  return compactConfig({
+    subnetId: createTerraformIdReference("aws_subnet", subnet),
+    allocationId: createTerraformIdReference("aws_eip", primaryElasticIp),
+    secondaryAllocationIds: secondaryElasticIps.map((elasticIp) =>
+      createTerraformIdReference("aws_eip", elasticIp)
+    ),
+    connectivityType,
+    tags: normalizeTerraformTags(resource.config["tags"])
+  });
+}
+
 function findSameScanAssociationTarget(
   association: DiscoveredResource,
   sameScanResources: readonly DiscoveredResource[],
   resourceType: "SUBNET" | "ROUTE_TABLE",
+  providerResourceId: unknown
+): DiscoveredResource | undefined {
+  return findSameScanManagedTarget(
+    association,
+    sameScanResources,
+    resourceType,
+    providerResourceId
+  );
+}
+
+function findSameScanManagedTarget(
+  source: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[],
+  resourceType: ResourceType,
   providerResourceId: unknown
 ): DiscoveredResource | undefined {
   if (typeof providerResourceId !== "string" || providerResourceId.trim().length === 0) {
@@ -329,15 +468,39 @@ function findSameScanAssociationTarget(
     (candidate) =>
       candidate.resourceType === resourceType &&
       candidate.providerResourceId === providerResourceId.trim() &&
-      (association.relationships ?? []).some(
-        (relationship) => relationship.targetResourceId === candidate.id
-      )
+      hasRelationshipTo(source, candidate)
   );
   const target = candidates.length === 1 ? candidates[0] : undefined;
 
   return target && classifyReverseEngineeringManagement(target) === "managed"
     ? target
     : undefined;
+}
+
+function hasRelationshipTo(source: DiscoveredResource, target: DiscoveredResource): boolean {
+  return (source.relationships ?? []).some(
+    (relationship) => relationship.targetResourceId === target.id
+  );
+}
+
+function createTerraformIdReference(
+  terraformResourceType: string,
+  resource: DiscoveredResource
+): string {
+  return `${terraformResourceType}.${createStableTerraformResourceName(resource.id)}.id`;
+}
+
+function getNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getStringValues(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (candidate): candidate is string =>
+          typeof candidate === "string" && candidate.trim().length > 0
+      )
+    : [];
 }
 
 /** undefined, null, 빈 배열과 빈 object를 제거하되 false와 0은 보존한다. */

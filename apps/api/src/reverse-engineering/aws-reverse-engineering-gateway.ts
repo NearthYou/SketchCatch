@@ -146,9 +146,11 @@ import type {
 } from "./aws-provider-adapter.js";
 import { selectHigherPriorityReverseEngineeringScanError } from "./reverse-engineering-scan-error-priority.js";
 import {
+  parseAddressesFromXml,
   parseAwsQueryPaginationToken,
   parseInstancesFromXml,
   parseInternetGatewaysFromXml,
+  parseNatGatewaysFromXml,
   parseRdsInstancesFromXml,
   parseRouteTablesFromXml,
   parseSecurityGroupsFromXml,
@@ -365,6 +367,12 @@ export function createAwsReverseEngineeringGateway(
         readResourceGroup(input, "SUBNET", (reportPageFailure) =>
           describeSubnets(input.region, credentials, fetchXml, reportPageFailure)
         ),
+        readResourceGroup(input, "ELASTIC_IP", (reportPageFailure) =>
+          describeAddresses(input.region, credentials, fetchXml, reportPageFailure)
+        ),
+        readResourceGroup(input, "NAT_GATEWAY", (reportPageFailure) =>
+          describeNatGateways(input.region, credentials, fetchXml, reportPageFailure)
+        ),
         readResourceGroup(input, "INTERNET_GATEWAY", (reportPageFailure) =>
           describeInternetGateways(input.region, credentials, fetchXml, reportPageFailure)
         ),
@@ -419,7 +427,9 @@ export function createAwsReverseEngineeringGateway(
       const records = resolveEcsRelationships(
         resolveCloudFrontOriginRelationships(
           resolveEventBridgeTargetRelationships(
-            uniqueDiscoveredRecordsByProviderId(resourceGroups.flatMap((group) => group.records))
+            resolveNatGatewayElasticIpRelationships(
+              uniqueDiscoveredRecordsByProviderId(resourceGroups.flatMap((group) => group.records))
+            )
           )
         )
       );
@@ -576,6 +586,40 @@ export async function describeSubnets(
     requestToken: "NextToken",
     responseToken: "nextToken",
     parse: parseSubnetsFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
+}
+
+/** gg: EIP Query pagination도 page-one allocation을 later failure와 분리합니다. */
+export async function describeAddresses(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
+): Promise<AwsDiscoveredResourceRecord[]> {
+  return readAwsQueryResourcePages({
+    service: "ec2",
+    action: "DescribeAddresses",
+    version: "2016-11-15",
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseAddressesFromXml
+  }, region, credentials, fetchXml, reportPageFailure);
+}
+
+/** gg: NAT Gateway Query pagination은 subnet/EIP 참조를 page별 bounded record로 줄입니다. */
+export async function describeNatGateways(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  fetchXml: typeof fetch,
+  reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
+): Promise<AwsDiscoveredResourceRecord[]> {
+  return readAwsQueryResourcePages({
+    service: "ec2",
+    action: "DescribeNatGateways",
+    version: "2016-11-15",
+    requestToken: "NextToken",
+    responseToken: "nextToken",
+    parse: parseNatGatewaysFromXml
   }, region, credentials, fetchXml, reportPageFailure);
 }
 
@@ -3563,6 +3607,63 @@ function uniqueDiscoveredRelationships(
   ];
 }
 
+// 같은 scan의 NAT allocation 참조로만 EIP의 ENI association을 지원되는 NAT 연결로 좁힙니다.
+export function resolveNatGatewayElasticIpRelationships(
+  records: AwsDiscoveredResourceRecord[]
+): AwsDiscoveredResourceRecord[] {
+  const natGatewayIdsByAllocationId = new Map<string, string[]>();
+
+  for (const record of records) {
+    if (record.providerResourceType !== "AWS::EC2::NatGateway") {
+      continue;
+    }
+
+    const natGatewayId = getNonEmptyStringValue(record.config["natGatewayId"])
+      ?? (/^nat-[a-z0-9]+$/iu.test(record.providerResourceId)
+        ? record.providerResourceId
+        : null);
+
+    if (!natGatewayId || !Array.isArray(record.config["allocationIds"])) {
+      continue;
+    }
+
+    for (const allocationId of record.config["allocationIds"]) {
+      if (typeof allocationId !== "string" || allocationId.trim().length === 0) {
+        continue;
+      }
+
+      natGatewayIdsByAllocationId.set(allocationId, [
+        ...(natGatewayIdsByAllocationId.get(allocationId) ?? []),
+        natGatewayId
+      ]);
+    }
+  }
+
+  return records.map((record) => {
+    if (record.providerResourceType !== "AWS::EC2::EIP") {
+      return record;
+    }
+
+    const allocationId = getNonEmptyStringValue(record.config["allocationId"]);
+    const natGatewayIds = allocationId
+      ? [...new Set(natGatewayIdsByAllocationId.get(allocationId) ?? [])]
+      : [];
+
+    if (natGatewayIds.length !== 1 || !natGatewayIds[0]) {
+      return record;
+    }
+
+    return {
+      ...record,
+      config: { ...record.config, associationTargetType: "nat_gateway" },
+      relationships: uniqueDiscoveredRelationships([
+        ...record.relationships,
+        { type: "depends_on", targetProviderResourceId: natGatewayIds[0] }
+      ])
+    };
+  });
+}
+
 // gg: 같은 Resource가 여러 reader에서 잡혀도 전용 조회 결과의 설정과 관계를 보존합니다.
 export function uniqueDiscoveredRecordsByProviderId(
   records: AwsDiscoveredResourceRecord[]
@@ -3676,6 +3777,30 @@ function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord):
     return imageId ? `AWS::EC2::Image:${imageId.toLowerCase()}` : record.providerResourceId;
   }
 
+  if (record.providerResourceType === "AWS::EC2::EIP") {
+    const allocationId = extractEc2InventoryId(
+      record,
+      "allocationId",
+      "eipalloc-",
+      ["eip-allocation", "elastic-ip"]
+    );
+
+    return allocationId ? `AWS::EC2::EIP:${allocationId}` : record.providerResourceId;
+  }
+
+  if (record.providerResourceType === "AWS::EC2::NatGateway") {
+    const natGatewayId = extractEc2InventoryId(
+      record,
+      "natGatewayId",
+      "nat-",
+      ["natgateway", "nat-gateway"]
+    );
+
+    return natGatewayId
+      ? `AWS::EC2::NatGateway:${natGatewayId}`
+      : record.providerResourceId;
+  }
+
   if (record.providerResourceType === "AWS::ApiGateway::RestApi") {
     const configId = getNonEmptyStringValue(record.config["id"]);
     const arnId = /^arn:[^:]+:apigateway:[^:]+::\/restapis\/([^/]+)$/u.exec(
@@ -3689,7 +3814,35 @@ function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord):
   return record.providerResourceId;
 }
 
+function extractEc2InventoryId(
+  record: AwsDiscoveredResourceRecord,
+  configKey: string,
+  idPrefix: string,
+  arnResourceKinds: readonly string[]
+): string | null {
+  const configId = getNonEmptyStringValue(record.config[configKey]);
+  const directId = new RegExp(`^${idPrefix}[a-z0-9]+$`, "iu").test(
+    record.providerResourceId
+  )
+    ? record.providerResourceId
+    : null;
+  const arnResource = /^arn:[^:]+:ec2:[^:]+:[^:]+:(.+)$/iu.exec(
+    record.providerResourceId
+  )?.[1];
+  const arnId = arnResourceKinds.flatMap((resourceKind) => {
+    const match = new RegExp(`^${resourceKind}/(${idPrefix}[a-z0-9]+)$`, "iu").exec(
+      arnResource ?? ""
+    );
+    return match?.[1] ? [match[1]] : [];
+  })[0];
+  const id = configId ?? directId ?? arnId;
+
+  return id?.toLowerCase() ?? null;
+}
+
 const DEDICATED_RECORD_DETAIL_KEY_BY_PROVIDER_RESOURCE_TYPE = new Map<string, string>([
+  ["AWS::EC2::EIP", "allocationId"],
+  ["AWS::EC2::NatGateway", "natGatewayId"],
   ["AWS::EC2::Image", "imageId"],
   ["AWS::Logs::LogGroup", "logGroupName"],
   ["AWS::ApiGateway::RestApi", "name"],
@@ -3792,6 +3945,8 @@ export function shouldReadResourceGroup(input: AwsProviderScanInput, resourceTyp
   return (
     input.resourceTypes.includes("ALL") ||
     input.resourceTypes.includes(resourceType) ||
+    ((resourceType === "SUBNET" || resourceType === "ELASTIC_IP") &&
+      input.resourceTypes.includes("NAT_GATEWAY")) ||
     ((resourceType === "ROUTE_TABLE" || resourceType === "SUBNET") &&
       input.resourceTypes.includes("ROUTE_TABLE_ASSOCIATION"))
   );
@@ -3840,6 +3995,8 @@ function getReverseEngineeringAwsServiceKey(resourceType: ResourceType): string 
   switch (resourceType) {
     case "VPC":
     case "SUBNET":
+    case "ELASTIC_IP":
+    case "NAT_GATEWAY":
     case "INTERNET_GATEWAY":
     case "ROUTE_TABLE":
     case "ROUTE_TABLE_ASSOCIATION":
