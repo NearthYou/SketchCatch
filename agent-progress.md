@@ -22,9 +22,29 @@ Short English-only working log for the current agent context. Older records are 
 - CI/CD Phase 2 now depends only on the verified AWS target, matching Region, supported runtime kind, and current confirmed Repository build config. Plan-time checkout verification and deployment URLs are secret-safe Phase 3 evidence, so the Phase header and its four rows share the same server readiness result.
 - CI/CD Phase 3 now applies and verifies GitHub Repository settings, one target-branch Environment policy, scoped AWS trust, and PR state in one resumable action. Failed Pipelines can create a safe retry PR without Destroy or Direct redeployment, and workflow project binding is checked before external work.
 - Sixty focused Repository runtime-Secret, deployment-action, and failure-visibility regressions pass; the final post-review 50-test subset also passes. `pnpm lint` and `pnpm typecheck` pass. Root `pnpm build` reported all five tasks successful before the known Turbo exit hang. The full Web suite passes 1,090 of 1,098 tests; its eight failures are outside the changed runtime-Secret paths. Root `pnpm test` still exposes ten unrelated API baseline failures and one lease-heartbeat cancellation; its one Repository source-contract failure was corrected and passes focused verification.
+- Live Observation resets its exponential reconnect backoff after any successful SSE or fallback snapshot, so intermittent stream closures no longer accumulate into repeated eight-second traffic gaps.
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
+
+### 2026-07-22 - Make Live Observation traffic dense, dramatic, and load-testable
+
+- Preserved the existing Focused Flow nodes, geometry, and routes while raising the visible request cap from five to 24, merging rapid single-event SSE snapshots into one sustained dense burst, and retaining exact overflow accounting.
+- Stable particle identities preserve in-flight travel during continuous 5 RPS snapshots: each request replaces only the oldest capped particle instead of restarting the full path.
+- Rolling warning/high/critical pressure now raises the existing motion vocabulary from flow to busy/surge. Busy/surge add bounded trail, glow, particle-size rhythm, and critical atmosphere effects; reduced-motion still disables the added ambient animation.
+- A standalone HTML preview was reopened with repaired Unicode copy and 9, 24, 250, and 900 request presets.
+- The external audience-live-check branch adds two explicit, cancellable profiles that share the real check-in and observation-receipt path with manual audience traffic: 24 requests for the AI warning and 900 requests at no more than 5 RPS for Fargate scale-out verification. Controls require the presenter query flag, 900 requests require confirmation, stale runs cannot overwrite current state, and attempted/succeeded/observed/failed counts remain distinct.
+- The external app passes all 58 tests, production build, typecheck, changed-file Biome checks, and diff checks. No bot profile, cloud load, deployment, Terraform action, or AWS mutation was executed.
+- Nine focused traffic/reconnect tests, root lint, root typecheck, and the direct Web production build pass.
+- The final root pnpm build passed all five packages; the direct Web build also completed all 23 routes after the final particle-identity fix.
+
+### 2026-07-22 - Reset Live Observation retry backoff after recovery
+
+- Added a deterministic fetch/timer regression that reproduced the user-visible delay: three recovered stream cycles still waited `1, 2, 4` units because the lifetime retry counter never reset.
+- Routed both SSE and fallback snapshots through one success handler that resets the counter while preserving exponential backoff for genuinely consecutive failures. The regression now observes `1, 1, 1`.
+- Twenty-six focused Live Observation tests, focused and root typecheck, root lint, direct Web production build, diff checks, and the final harness check pass.
+- Root `pnpm build` was attempted twice but Turbo produced no output and did not terminate; both verified build process trees were stopped. The changed Web package itself compiled and generated all routes successfully.
+- AWS read-only evidence could not be refreshed because this session has no configured credentials. No dependency, lockfile, migration, cloud mutation, production deployment, push, or Git/CI/CD handoff was performed.
 
 ### 2026-07-22 - Unblock the dev-to-main release migration history check
 
@@ -66,82 +86,6 @@ Short English-only working log for the current agent context. Older records are 
 - Merged `origin/dev` at `587e4443` into `codex/fix-deployment-live-observation`; the only textual conflict was this session log, and both histories were preserved. The combined Redis recovery, SSE diagnostics, Store-backed traffic warning, AI recommendation, and bounded Terraform draft flows pass 10 focused API tests, 27 focused Web tests, the Redis 8 integration suite, harness, lint, typecheck, and all production builds.
 - Refreshed `origin/dev` to `a45c399b` and merged its Signal Dashboard rebuild. The only code conflict kept the typed SSE failure diagnostics while dropping the dashboard's removed legacy capacity import. Ninety-four focused TypeScript tests and six CSS-loaded Signal Dashboard component tests pass together with harness, lint, typecheck, and production builds.
 - No dependency, lockfile, migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
-
-### 2026-07-22 - Align CI/CD readiness phase boundaries
-
-- Completed the task-focused four-phase CI/CD redesign and aligned the Phase 2 header and rows with the server-owned verified AWS target, Region, runtime, and current Repository build config.
-- Moved Plan-time checkout verification and secret-safe Static Site/API output evidence into Phase 3. The Plan CTA only opens Direct Deployment and never starts Plan or Apply itself.
-- Updated stale API readiness fixtures to include the persisted Phase 2 deployment target, preserving the production readiness contract while repairing the four CI failures.
-- Merged the latest `origin/dev`, preserved both Workspace panel regression intents, retained the updated historical Live Observation plan, and resolved every conflict marker.
-- Focused API and Web regressions, lint, typecheck, build, harness, and diff checks passed. No database migration, provider mutation, deployment, or Git handoff was performed.
-
-### 2026-07-22 - Remove the duplicate AWS connection step description
-
-- Hid the empty-state AWS Role description from the connection step header while retaining it in the expanded body and preserving the verified account/region summary.
-- Seven focused Settings tests, lint, typecheck, build, final harness, and two-axis review pass. No full test suite was run.
-- No API, shared contract, database migration, dependency, deployment, or cloud mutation change was made.
-
-### 2026-07-22 - Restructure Settings connection flow
-
-- Reworked the existing Settings integrations into one ordered GitHub App -> AWS account -> AWS CodeBuild GitHub authorization flow, with completed steps collapsed and the current or error step expanded.
-- Preserved all existing API clients, DTOs, shared types, actions, and connected AWS account management. Long CodeBuild failure details now remain behind an `오류 상세` disclosure with a neutral summary.
-- Verification passed: 14 focused Web tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, diff checks, and two-axis review. Authenticated browser smoke was unavailable because the in-app browser session was signed out.
-- No database migration, dependency change, cloud mutation, deployment action, or Git/CI/CD handoff was performed.
-
-### 2026-07-22 - Connect real audience traffic to immediate Live Observation warnings
-
-- Removed the separate public per-IP limiter, `Retry-After` propagation, and audience countdown while retaining the Store safety envelope of 20 events/second, 120 events/10 seconds, 10,000 events/session, and a 15-minute session lifetime.
-- Added an optional audience application URL to the v4 manifest with backward-compatible CloudFront derivation for existing manifests. The external audience app receives a scoped observation receipt URL and emits best-effort receipts only after successful real check-in and heartbeat requests.
-- Latched immediate Store-backed pressure warnings until a user-approved Project Draft save succeeds. The only automatic Terraform edit requires exactly one `aws_appautoscaling_target` and one numeric `max_capacity`, increments it by one, and never runs Plan, Apply, deployment, or cloud mutation.
-- Added AI recommendation context, explicit editor navigation after save, revision-conflict protection, contract documentation, and focused API/Web regressions.
-- Verification passed: 24 focused API tests, 28 focused Web tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, final harness, and two-axis review. Review fixes separated Store-only receipts from legacy probes, moved warning latch state outside the modal, streamed Store snapshots before provider refresh, and removed the unused Runtime Cache dependency.
-- Root `pnpm test` remains non-green in pre-existing `aiArchitectureDrafts.test.ts` expectations outside this workstream; the changed Live Observation subsets pass.
-- The external `audience-live-check` clone passes typecheck, build, 49 tests, and changed-file Biome checks. Its root lint remains non-green because of existing repository-wide CRLF formatting findings outside the changed files.
-- No database migration, dependency change, secret access, Terraform execution, deployment, or cloud mutation was performed.
-
-### 2026-07-22 - Reduce Diagram resource label size
-
-- Reduced only the labels beneath Diagram resource icons from an effective 18px to 13px while preserving the two-line clamp, icon spacing, edge labels, and area headings.
-- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
-
-### 2026-07-22 - Strengthen Workspace panel borders
-
-- Increased the Diagram Editor's neutral border contrast for both outer panel boundaries and internal separators/controls: regular lines now use `#d4d4d4`, while strong lines use `#c8c8c8`.
-- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
-
-### 2026-07-21 - Simplify fallback cost headings
-
-- Removed the marked `예상` qualifier from the fallback monthly and daily cost headings while preserving the explicit `실제` labels for AWS-backed data.
-- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
-
-### 2026-07-21 - Remove visible sample identifiers from Cost Usage
-
-- Replaced visible `sample-*`, `Sample`, `예시`, and test-only wording in fallback Cost Usage content with neutral DB/ALB names and estimated-cost labels. Internal fallback identifiers remain unchanged, and live AWS recommendation conditions retain their original wording.
-- Lint, typecheck, build, harness, and two-axis review pass. No feature or browser test suite was run.
-
-### 2026-07-21 - Shorten the Live Observation public traffic cooldown
-
-- Fast-forwarded the issue branch from `c3ac5a8e` to current `origin/dev` at `13ed1cb6`, then restored the Live Observation request work on top.
-- Reproduced the audience page dropping the server `Retry-After` value and the public collector enforcing a 30-request fixed minute, which could leave one client waiting almost 60 seconds.
-- Replaced the long window with two global per-IP safeguards aligned to the Store envelope: 20 requests per second and 120 requests per 10 seconds. Human-paced requests no longer encounter a minute cooldown; excessive traffic waits normally one second and at most ten seconds.
-- Propagated the exact cooldown through the collector error, HTTP `Retry-After`, CORS exposure, audience client, session state, disabled action, and automatic ready-state recovery.
-- Added five API/Web regressions for both rate windows, HTTP/CORS delivery, client parsing, and cooldown suppression. The existing four traffic-burst regressions remain green.
-- Focused verification passes 9/9. Root harness, lint, typecheck, all five production builds, and diff checks pass on the updated branch.
-- Preserved the latest dev progress record and archive during stash conflict resolution; no product-code merge conflict occurred.
-- No dependency, lockfile, database migration, Terraform execution, cloud mutation, Deployment action, or Git/CI/CD handoff was performed.
-
-### 2026-07-21 - Remove the Repository-specific audience demo bypass
-
-- Removed the fixed analysis response, frozen revision, synthetic architecture facts, strict URL profile, and Web-only Architecture Draft branch for `chaekang/audience-live-check`.
-- Public analysis now resolves the selected branch SHA and reads its tree and evidence files; Repository Board generation uses the same analyzed Template path as every other repository.
-- Focused Repository API and Web checks pass 18/18, and the retained general Fixed Template checks pass 4/4. Harness, lint, typecheck, build, and diff checks pass. The broad AI Draft file still has 15 unrelated baseline failures.
-- No dependency, lockfile, database migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
-- 2026-07-21: Added a UI-only target environment selector to the new-project screen with equally selectable AWS, GCP, Azure, and On-premise options. The selection is intentionally not persisted or sent to project creation APIs. The focused environment test, browser selection check, lint, typecheck, and build pass. The full Web suite remains at 1,095/1,099 because of four pre-existing Architecture Board/compiler failures outside this change.
-
-### 2026-07-22 - Keep Live Observation traffic visible
-
-- Reserved a non-shrinking desktop traffic viewport above the Signal Dashboard and added a 20px separation; mobile keeps its existing content-sized layout.
-- Browser QA confirmed a 410px desktop flow, a 20px gap, and no mobile horizontal overflow. Focused Live Observation checks, harness, lint, typecheck, build, and diff checks pass.
 
 ## Known Risk
 
