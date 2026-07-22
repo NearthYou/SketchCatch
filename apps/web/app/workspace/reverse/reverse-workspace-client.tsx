@@ -13,6 +13,10 @@ import {
 } from "../../../features/workspace/ReverseEngineeringPanel";
 import styles from "../../../features/workspace/reverse-engineering.module.css";
 import { getReverseEngineeringServiceLabel } from "../../../features/workspace/reverse-engineering-presentation";
+import {
+  getReverseEngineeringInspectorCoreValues,
+  getReverseEngineeringInspectorPurpose
+} from "../../../features/workspace/reverse-engineering-resource-inspector";
 
 type ReverseWorkspaceClientProps = {
   readonly projectName: string;
@@ -181,7 +185,7 @@ function ReverseResourceInspector({
   const providerResourceId = formatInspectorValue(values["providerResourceId"]);
   const providerResourceType = formatInspectorValue(values["providerResourceType"]);
   const isReviewOnly = node.type === "UNKNOWN" || values["analysisExcluded"] === true;
-  const coreValues = getInspectorCoreValues(node.type, values);
+  const coreValues = getReverseEngineeringInspectorCoreValues(node.type, values);
   const displayName = getInspectorDisplayName(
     node.label,
     providerResourceId,
@@ -234,7 +238,9 @@ function ReverseResourceInspector({
               </dd>
             </div>
           </dl>
-          <p className={styles.inspectorPurpose}>{getInspectorPurpose(node.type, isReviewOnly)}</p>
+          <p className={styles.inspectorPurpose}>
+            {getReverseEngineeringInspectorPurpose(node.type, isReviewOnly)}
+          </p>
         </section>
 
         {coreValues.length > 0 ? (
@@ -282,102 +288,4 @@ function isHumanInspectorDisplayName(displayName: string, providerResourceId: st
       displayName
     )
   );
-}
-
-function getInspectorPurpose(resourceType: string, isReviewOnly: boolean): string {
-  if (isReviewOnly) {
-    return "AWS에서 찾은 리소스입니다. 보드에서 구조를 확인할 수 있지만 Terraform 생성과 배포에는 자동으로 사용하지 않습니다.";
-  }
-
-  const purposes: Readonly<Record<string, string>> = {
-    EC2: "애플리케이션을 실행하는 가상 서버입니다.",
-    INTERNET_GATEWAY: "VPC와 인터넷 사이의 통신을 연결합니다.",
-    RDS: "애플리케이션 데이터를 저장하는 관리형 데이터베이스입니다.",
-    ROUTE_TABLE: "네트워크 트래픽의 경로를 정합니다.",
-    S3: "파일과 객체 데이터를 저장합니다.",
-    SECURITY_GROUP: "Resource에 허용할 네트워크 통신을 제어합니다.",
-    SUBNET: "VPC 안에서 Resource를 배치할 네트워크 구역입니다.",
-    VPC: "AWS Resource가 통신하는 사설 네트워크 범위입니다."
-  };
-
-  return purposes[resourceType] ?? "AWS에서 읽은 구성을 보드에서 검토할 수 있습니다.";
-}
-
-type InspectorCoreValue = {
-  readonly key: string;
-  readonly label: string;
-  readonly value: string;
-};
-
-const INSPECTOR_CORE_VALUE_ALLOWLIST: Readonly<Record<string, readonly [string, string][]>> = {
-  EC2: [
-    ["instanceType", "인스턴스 유형"],
-    ["placementAvailabilityZone", "Availability Zone"],
-    ["privateIpAddress", "사설 IP"]
-  ],
-  INTERNET_GATEWAY: [],
-  RDS: [
-    ["dbInstanceClass", "DB 인스턴스 유형"],
-    ["engine", "DB 엔진"],
-    ["availabilityZone", "Availability Zone"],
-    ["dbName", "DB 이름"]
-  ],
-  ROUTE_TABLE: [],
-  S3: [
-    ["bucketRegion", "Bucket 리전"],
-    ["versioningStatus", "버전 관리"],
-    ["websiteIndexDocument", "웹 사이트 문서"]
-  ],
-  SECURITY_GROUP: [
-    ["groupName", "보안 그룹 이름"],
-    ["description", "설명"]
-  ],
-  SUBNET: [
-    ["availabilityZone", "Availability Zone"],
-    ["cidrBlock", "CIDR"],
-    ["availableIpAddressCount", "사용 가능 IP"]
-  ],
-  VPC: [
-    ["cidrBlock", "CIDR"],
-    ["isDefault", "기본 VPC"]
-  ]
-};
-
-function getInspectorCoreValues(
-  resourceType: string,
-  values: Readonly<Record<string, unknown>>
-): InspectorCoreValue[] {
-  return (INSPECTOR_CORE_VALUE_ALLOWLIST[resourceType] ?? [])
-    .map(([key, label]) => ({
-      key,
-      label,
-      value: formatMeaningfulInspectorValue(key, values[key])
-    }))
-    .filter((value): value is InspectorCoreValue => value.value !== null)
-    .slice(0, 4);
-}
-
-function formatMeaningfulInspectorValue(key: string, value: unknown): string | null {
-  if (key === "versioningStatus" && typeof value === "string") {
-    const versioningStatusLabels: Readonly<Record<string, string>> = {
-      Enabled: "사용 중",
-      Suspended: "일시 중지"
-    };
-
-    return versioningStatusLabels[value] ?? "설정 상태 확인 필요";
-  }
-
-  if (key === "isDefault" && typeof value === "boolean") {
-    return value ? "예" : "아니요";
-  }
-
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value;
-  }
-
-  if (typeof value === "number") {
-    return String(value);
-  }
-
-  return null;
 }
