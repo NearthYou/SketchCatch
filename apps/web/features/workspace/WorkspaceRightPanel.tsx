@@ -728,10 +728,25 @@ export function WorkspaceRightPanel({
   const openLiveObservationTerraformEditor = useCallback((): void => {
     setIsLiveObservationOpen(false);
     setLiveObservationSelection(null);
-    context.setRightPanelOpen(true);
-    setActiveView("terraform");
+
+    if (liveObservationAppliedTerraformUpdate) {
+      openTerraformIssueSourceLocation({
+        fileName: liveObservationAppliedTerraformUpdate.fileName,
+        line: liveObservationAppliedTerraformUpdate.line,
+        resourceAddress: liveObservationAppliedTerraformUpdate.address
+      });
+    } else {
+      context.setRightPanelOpen(true);
+      setActiveView("terraform");
+    }
+
     onTerraformAiInteraction("preview");
-  }, [context, onTerraformAiInteraction]);
+  }, [
+    context,
+    liveObservationAppliedTerraformUpdate,
+    onTerraformAiInteraction,
+    openTerraformIssueSourceLocation
+  ]);
 
   const updateLiveObservationDeployment = useCallback(
     (deploymentId: string): void => {

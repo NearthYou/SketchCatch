@@ -136,6 +136,13 @@ Short English-only working log for the current agent context. Older records are 
 - Reserved a non-shrinking desktop traffic viewport above the Signal Dashboard and added a 20px separation; mobile keeps its existing content-sized layout.
 - Browser QA confirmed a 410px desktop flow, a 20px gap, and no mobile horizontal overflow. Focused Live Observation checks, harness, lint, typecheck, build, and diff checks pass.
 
+### 2026-07-22 - Simplify the Live Observation incident view
+
+- Reorganized the Signal Dashboard around current impact, at most three evidence-backed problems, concise evidence, grouped masked logs, and real user-approved actions.
+- Replaced internal resource names and developer diagnostics with stable Korean labels. Saved capacity drafts now open the exact Terraform file and line with the existing editor highlight.
+- Preserved every protected traffic, capacity, and animation source unchanged. Focused checks pass 75/75; harness, lint, typecheck, build, diff checks, and responsive browser QA at 390x844, 1024x768, and 1440x900 pass.
+- No deployment, cloud mutation, dependency, migration, PR, or merge was performed.
+
 ## Known Risk
 
 - The manifest-contract repair and audience receipt flow are production-verified, but provider-confirmed scale-out remains a separate blocked acceptance item.
