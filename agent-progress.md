@@ -26,6 +26,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Smooth-scroll landing brand links
+
+- Routed the header and footer SketchCatch brand links through the same smooth section-navigation handler used by the landing navigation bar.
+- Preserved native `#top` fallback navigation, URL hash replacement, keyboard link semantics, and the existing reduced-motion behavior.
+- Local browser verification confirmed the brand link resolves uniquely and returns a scrolled page to `#top`; lint, typecheck, build, final harness, and diff checks pass.
+- No shared contract, database migration, dependency, deployment, cloud mutation, or Git/CI/CD handoff change was made.
+
 ### 2026-07-22 - Tighten and equalize landing workflow spacing
 
 - Centered each landing workflow step within the existing seven equal grid tracks and centered every arrow in the inter-track gap.
@@ -144,11 +151,6 @@ Short English-only working log for the current agent context. Older records are 
 - Focused Repository API and Web checks pass 18/18, and the retained general Fixed Template checks pass 4/4. Harness, lint, typecheck, build, and diff checks pass. The broad AI Draft file still has 15 unrelated baseline failures.
 - No dependency, lockfile, database migration, Terraform execution, cloud mutation, deployment, or Git/CI/CD handoff was performed.
 - 2026-07-21: Added a UI-only target environment selector to the new-project screen with equally selectable AWS, GCP, Azure, and On-premise options. The selection is intentionally not persisted or sent to project creation APIs. The focused environment test, browser selection check, lint, typecheck, and build pass. The full Web suite remains at 1,095/1,099 because of four pre-existing Architecture Board/compiler failures outside this change.
-
-### 2026-07-22 - Keep Live Observation traffic visible
-
-- Reserved a non-shrinking desktop traffic viewport above the Signal Dashboard and added a 20px separation; mobile keeps its existing content-sized layout.
-- Browser QA confirmed a 410px desktop flow, a 20px gap, and no mobile horizontal overflow. Focused Live Observation checks, harness, lint, typecheck, build, and diff checks pass.
 
 ## Known Risk
 
