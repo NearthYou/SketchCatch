@@ -2,13 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { GetResourcesCommand } from "@aws-sdk/client-resource-groups-tagging-api";
 import {
+  GetDefaultViewCommand,
+  GetViewCommand,
+  SearchCommand
+} from "@aws-sdk/client-resource-explorer-2";
+import {
   createAwsProviderAdapter,
   type AwsDiscoveredResourceRecord
 } from "./aws-provider-adapter.js";
 import {
+  listResourceExplorerResourcesAsUnknown,
   listTaggedUnknownResources,
   uniqueDiscoveredRecordsByProviderId
 } from "./aws-reverse-engineering-gateway.js";
+import { classifyReverseEngineeringManagement } from "./reverse-engineering-management-policy.js";
 
 const credentials = {
   AWS_ACCESS_KEY_ID: "AKIA_TEST",
@@ -171,6 +178,195 @@ test("Tagging API의 API Gateway ARN은 전용 reader ID와 하나로 합친다"
   assert.equal(records[0]?.config["name"], "customer-api");
   assert.deepEqual(records[0]?.config["tags"], [
     { key: "Environment", value: "production" }
+  ]);
+});
+
+test("IAM 소유권 태그는 public과 private 후보의 관리 경계까지 안전하게 전달한다", async () => {
+  const iamResources = [
+    {
+      providerResourceType: "AWS::IAM::Role",
+      detail: { roleName: "customer-role" },
+      resourceName: "role/customer-role"
+    },
+    {
+      providerResourceType: "AWS::IAM::Policy",
+      detail: { policyName: "customer-policy" },
+      resourceName: "policy/customer-policy"
+    },
+    {
+      providerResourceType: "AWS::IAM::InstanceProfile",
+      detail: { instanceProfileName: "customer-profile", roleNames: ["customer-role"] },
+      resourceName: "instance-profile/customer-profile"
+    }
+  ] as const;
+  const records = iamResources.flatMap((resource) => [
+    record(
+      resource.providerResourceType,
+      `arn:aws:iam::123456789012:${resource.resourceName}-cfn`,
+      `${resource.resourceName}-cfn`,
+      {
+        ...resource.detail,
+        tags: [
+          {
+            key: "aws:cloudformation:stack-id",
+            value:
+              "arn:aws:cloudformation:ap-northeast-2:123456789012:stack/customer/stack-id"
+          },
+          { key: "Environment", value: "production" }
+        ]
+      }
+    ),
+    record(
+      resource.providerResourceType,
+      `arn:aws:iam::123456789012:${resource.resourceName}-sketchcatch`,
+      `${resource.resourceName}-sketchcatch`,
+      {
+        ...resource.detail,
+        tags: [
+          { Key: "ManagedBy", Value: "SketchCatch" },
+          { Key: "Environment", Value: "production" }
+        ]
+      }
+    )
+  ]);
+
+  for (const resultVisibility of ["public", "private"] as const) {
+    const result = await createAwsProviderAdapter(
+      { async discoverResources() { return records; } },
+      { resultVisibility }
+    ).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
+
+    assert.deepEqual(
+      result.discoveredResources.map((resource) =>
+        classifyReverseEngineeringManagement(resource)
+      ),
+      iamResources.flatMap(() => ["reference", "sketchcatch_managed"])
+    );
+    assert.equal(JSON.stringify(result.discoveredResources).includes("Environment"), false);
+    assert.doesNotMatch(JSON.stringify(result.discoveredResources), /arn:aws:cloudformation/iu);
+    for (const [index, resource] of result.discoveredResources.entries()) {
+      assert.deepEqual(
+        resource.config["tags"],
+        index % 2 === 0
+          ? [{ key: "aws:cloudformation:stack-id", value: "present" }]
+          : [{ key: "ManagedBy", value: "SketchCatch" }]
+      );
+    }
+  }
+});
+
+test("Tagging API의 AMI ARN은 전용 AMI와 합치고 상세 설정과 소유권 태그를 보존한다", async () => {
+  const imageId = "ami-0123456789abcdef0";
+  const imageArn = `arn:aws:ec2:ap-northeast-2:123456789012:image/${imageId}`;
+  const genericRecords = await listTaggedUnknownResources(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        assert.ok(command instanceof GetResourcesCommand);
+        return {
+          ResourceTagMappingList: [
+            {
+              ResourceARN: imageArn,
+              Tags: [
+                { Key: "Name", Value: "customer-base" },
+                { Key: "aws:cloudformation:stack-name", Value: "customer-images" }
+              ]
+            }
+          ]
+        };
+      }
+    })
+  );
+  assert.ok(genericRecords[0]);
+  genericRecords[0].relationships = [
+    { type: "depends_on", targetProviderResourceId: "snapshot/snap-customer" }
+  ];
+  const detailed = record(
+    "AWS::EC2::Image",
+    imageId,
+    "customer-base",
+    {
+      architecture: "arm64",
+      imageId,
+      rootDeviceName: "/dev/xvda",
+      state: "available"
+    },
+    [{ type: "attached_to", targetProviderResourceId: "instance/i-customer" }]
+  );
+
+  const records = uniqueDiscoveredRecordsByProviderId([...genericRecords, detailed]);
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceId, imageId);
+  assert.deepEqual(records[0]?.config, {
+    architecture: "arm64",
+    imageId,
+    rootDeviceName: "/dev/xvda",
+    state: "available",
+    tags: [
+      { key: "Name", value: "customer-base" },
+      { key: "aws:cloudformation:stack-name", value: "customer-images" }
+    ]
+  });
+  assert.deepEqual(records[0]?.relationships, [
+    { type: "depends_on", targetProviderResourceId: "snapshot/snap-customer" },
+    { type: "attached_to", targetProviderResourceId: "instance/i-customer" }
+  ]);
+});
+
+test("Resource Explorer의 AMI ARN은 전용 AMI와 합치고 상세 설정과 관계를 보존한다", async () => {
+  const imageId = "ami-0fedcba9876543210";
+  const imageArn = `arn:aws:ec2:ap-northeast-2:123456789012:image/${imageId}`;
+  const viewArn =
+    "arn:aws:resource-explorer-2:ap-northeast-2:123456789012:view/default/example";
+  const genericRecords = await listResourceExplorerResourcesAsUnknown(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        if (command instanceof GetDefaultViewCommand) return { ViewArn: viewArn };
+        if (command instanceof GetViewCommand) return { View: { ViewArn: viewArn } };
+        if (command instanceof SearchCommand) {
+          return {
+            Resources: [
+              {
+                Arn: imageArn,
+                OwningAccountId: "123456789012",
+                Region: "ap-northeast-2",
+                ResourceType: "AWS::EC2::Image",
+                Service: "ec2"
+              }
+            ]
+          };
+        }
+        throw new Error(`Unexpected command: ${command.constructor.name}`);
+      }
+    })
+  );
+  assert.ok(genericRecords[0]);
+  genericRecords[0].relationships = [
+    { type: "depends_on", targetProviderResourceId: "snapshot/snap-explorer" }
+  ];
+  const detailed = record("AWS::EC2::Image", imageId, "explorer-base", {
+    architecture: "x86_64",
+    imageId,
+    imageType: "machine",
+    state: "available"
+  });
+
+  const records = uniqueDiscoveredRecordsByProviderId([...genericRecords, detailed]);
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceId, imageId);
+  assert.deepEqual(records[0]?.config, {
+    architecture: "x86_64",
+    imageId,
+    imageType: "machine",
+    state: "available"
+  });
+  assert.deepEqual(records[0]?.relationships, [
+    { type: "depends_on", targetProviderResourceId: "snapshot/snap-explorer" }
   ]);
 });
 

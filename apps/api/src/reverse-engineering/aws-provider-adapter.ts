@@ -146,6 +146,16 @@ const OPAQUE_PUBLIC_ID_RESOURCE_TYPES = new Set([
   "AWS::IAM::Policy",
   "AWS::IAM::InstanceProfile"
 ]);
+const IAM_OWNERSHIP_RESOURCE_TYPES = new Set([
+  "AWS::IAM::Role",
+  "AWS::IAM::Policy",
+  "AWS::IAM::InstanceProfile"
+]);
+const IAM_CLOUD_FORMATION_OWNERSHIP_TAG_KEYS = new Set([
+  "aws:cloudformation:stack-id",
+  "aws:cloudformation:stack-name",
+  "aws:cloudformation:logical-id"
+]);
 const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>([
   [
     "AWS::ApiGateway::RestApi",
@@ -1379,7 +1389,43 @@ export function createAwsPublicResourceConfig(
     return sanitizePublicCloudWatchMetricAlarmConfig(publicConfig, record.config);
   }
 
+  if (IAM_OWNERSHIP_RESOURCE_TYPES.has(record.providerResourceType)) {
+    return sanitizePublicIamOwnershipConfig(publicConfig, record.config);
+  }
+
   return publicConfig;
+}
+
+// IAM의 관리 경계 판정에 필요한 시스템 태그만 남기고 사용자 태그와 ARN은 공개하지 않습니다.
+function sanitizePublicIamOwnershipConfig(
+  publicConfig: Record<string, unknown>,
+  sourceConfig: Record<string, unknown>
+): Record<string, unknown> {
+  const ownershipTags = Array.isArray(sourceConfig["tags"])
+    ? sourceConfig["tags"].flatMap((tag) => {
+        if (!isRecord(tag)) {
+          return [];
+        }
+
+        const key = tag["key"] ?? tag["Key"];
+        const value = tag["value"] ?? tag["Value"];
+        if (typeof key !== "string" || typeof value !== "string" || value.length === 0) {
+          return [];
+        }
+
+        if (key === "ManagedBy" && value === "SketchCatch") {
+          return [{ key, value }];
+        }
+
+        if (!IAM_CLOUD_FORMATION_OWNERSHIP_TAG_KEYS.has(key)) {
+          return [];
+        }
+
+        return [{ key, value: containsAwsArn(value) ? "present" : value }];
+      })
+    : [];
+
+  return ownershipTags.length > 0 ? { ...publicConfig, tags: ownershipTags } : publicConfig;
 }
 
 // gg: 서버 전용 결과도 allowlist를 지키되 KMS 로그를 관리 대상에서 막을 판정 근거는 보존합니다.

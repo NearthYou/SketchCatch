@@ -3663,6 +3663,19 @@ function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord):
       : record.providerResourceId;
   }
 
+  if (record.providerResourceType === "AWS::EC2::Image") {
+    const configImageId = getNonEmptyStringValue(record.config["imageId"]);
+    const arnImageId = /^arn:[^:]+:ec2:[^:]+:[^:]+:image\/(ami-[a-f0-9]+)$/iu.exec(
+      record.providerResourceId
+    )?.[1];
+    const directImageId = /^ami-[a-f0-9]+$/iu.test(record.providerResourceId)
+      ? record.providerResourceId
+      : null;
+    const imageId = configImageId ?? arnImageId ?? directImageId;
+
+    return imageId ? `AWS::EC2::Image:${imageId.toLowerCase()}` : record.providerResourceId;
+  }
+
   if (record.providerResourceType === "AWS::ApiGateway::RestApi") {
     const configId = getNonEmptyStringValue(record.config["id"]);
     const arnId = /^arn:[^:]+:apigateway:[^:]+::\/restapis\/([^/]+)$/u.exec(
@@ -3677,6 +3690,7 @@ function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord):
 }
 
 const DEDICATED_RECORD_DETAIL_KEY_BY_PROVIDER_RESOURCE_TYPE = new Map<string, string>([
+  ["AWS::EC2::Image", "imageId"],
   ["AWS::Logs::LogGroup", "logGroupName"],
   ["AWS::ApiGateway::RestApi", "name"],
   ["AWS::CloudWatch::Alarm", "alarmName"],
