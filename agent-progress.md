@@ -26,6 +26,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Ignore CI/CD handoffs from replaced Repository connections
+
+- Reproduced the production failure with a deterministic Web regression: reconnecting the same GitHub Repository creates a new Source Repository id, while the previous selector reused a handoff by Deployment and accepted Plan only.
+- Updated setup handoff selection to require the current Source Repository id, so a handoff tied to the inactive pre-reconnect record is ignored and the approved setup flow creates a fresh handoff.
+- Verification passes: 54 focused CI/CD Web tests, root lint, root typecheck, all five production builds, diff checks, and the final harness check.
+- No database migration, dependency change, AWS mutation, Terraform execution, deployment, or handoff creation was performed. GitHub issue #537 and its review branch were created after verification.
+
+
 ### 2026-07-22 - Repair the production Live Observation manifest contract
 
 - Reproduced the post-reboot production failure with a fresh ECS task: session creation succeeded, but the first read returned HTTP 503 `LIVE_OBSERVATION_CACHE_UNAVAILABLE`.
