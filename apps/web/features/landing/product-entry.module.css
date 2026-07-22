@@ -757,13 +757,13 @@
 
 .flowList {
   display: grid;
-  width: min(calc(100% - 64px), 1400px);
+  width: min(calc(100% - 64px), 1200px);
   min-height: 88px;
   align-items: center;
   margin-block: 0;
   padding: 0;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
   list-style: none;
 }
 
@@ -772,6 +772,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   color: var(--landing-body);
   font-size: calc(13px + var(--presentation-font-size-increase));
@@ -780,7 +781,9 @@
 
 .flowList li:not(:last-child)::after {
   position: absolute;
-  right: 0;
+  right: -12px;
+  width: 12px;
+  text-align: center;
   color: var(--landing-muted);
   content: "→";
 }

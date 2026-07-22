@@ -26,6 +26,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Tighten and equalize landing workflow spacing
+
+- Centered each landing workflow step within the existing seven equal grid tracks and centered every arrow in the inter-track gap.
+- Reduced the desktop workflow width from 1400px to 1200px and the inter-track gap from 16px to 12px after visual feedback requested a tighter row.
+- Browser geometry confirmed equal track widths and arrow placement before the final compression; lint, typecheck, build, final harness, and diff checks pass. The post-restart browser reload was blocked by the local URL policy, so no second screenshot was captured.
+- No shared contract, database migration, dependency, deployment, cloud mutation, or Git/CI/CD handoff change was made.
+
 ### 2026-07-22 - Unblock the dev-to-main release migration history check
 
 - Confirmed release PR #534 failed only because main legitimately lacks the historically skipped `0044_github_codebuild_release_plane` entry while already containing `0045` and `0046`.
