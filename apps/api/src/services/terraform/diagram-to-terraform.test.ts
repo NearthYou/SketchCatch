@@ -1719,8 +1719,6 @@ test("Reverse Engineering CloudWatch Log Group은 관리 가능한 값만 Terraf
       createLiveObservationNode("aws_cloudwatch_log_group", "orders", {
         name: "/ecs/orders",
         retentionInDays: 30,
-        kmsKeyId:
-          "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555",
         logGroupClass: "STANDARD",
         storedBytes: 1234,
         providerResourceId:
@@ -1737,10 +1735,6 @@ test("Reverse Engineering CloudWatch Log Group은 관리 가능한 값만 Terraf
   assert.match(terraform, /resource "aws_cloudwatch_log_group" "orders" \{/);
   assert.match(terraform, /name\s+= "\/ecs\/orders"/);
   assert.match(terraform, /retention_in_days\s+= 30/);
-  assert.match(
-    terraform,
-    /kms_key_id\s+= "arn:aws:kms:ap-northeast-2:123456789012:key\/11111111-2222-3333-4444-555555555555"/
-  );
   assert.doesNotMatch(
     terraform,
     /log_group_class|stored_bytes|provider_resource_id|provider_resource_type|reverse_engineering_observed_config/

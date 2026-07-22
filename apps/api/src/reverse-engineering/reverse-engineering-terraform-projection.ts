@@ -155,8 +155,7 @@ function createTerraformValues(resource: DiscoveredResource): ResourceConfig {
     case "CLOUDWATCH_LOG_GROUP":
       return compactConfig({
         name: config["logGroupName"],
-        retentionInDays: config["retentionInDays"],
-        kmsKeyId: config["kmsKeyId"]
+        retentionInDays: config["retentionInDays"]
       });
     case "LOAD_BALANCER":
       return compactConfig({

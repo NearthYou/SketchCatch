@@ -88,17 +88,17 @@ function assertStrictFixtureTerraform(fixtureName: string | undefined, terraform
 
   if (fixtureName === REVERSE_ENGINEERING_CLOUDWATCH_LOG_GROUP_FIXTURE) {
     if (
-      !/resource "aws_cloudwatch_log_group" "orders" \{[\s\S]*name\s+= "\/ecs\/orders"[\s\S]*retention_in_days\s+= 30[\s\S]*kms_key_id\s+= "arn:aws:kms:/.test(
+      !/resource "aws_cloudwatch_log_group" "orders" \{[\s\S]*name\s+= "\/ecs\/orders"[\s\S]*retention_in_days\s+= 30/.test(
         terraform
       )
     ) {
       throw new Error(
-        "CloudWatch Log Group fixture must preserve name, retention_in_days, and kms_key_id before Terraform validation."
+        "CloudWatch Log Group fixture must preserve name and retention_in_days before Terraform validation."
       );
     }
-    if (/log_group_class|stored_bytes|provider_resource_/u.test(terraform)) {
+    if (/kms_key_id|log_group_class|stored_bytes|provider_resource_/u.test(terraform)) {
       throw new Error(
-        "CloudWatch Log Group fixture must not render observed-only AWS fields."
+        "CloudWatch Log Group fixture must not render KMS or observed-only AWS fields."
       );
     }
     return;
@@ -119,7 +119,7 @@ function assertStrictFixtureTerraform(fixtureName: string | undefined, terraform
   }
 }
 
-// gg: 기존 CloudWatch Log Group에서 실제로 관리할 세 필드만 Terraform 검증에 넣습니다.
+// gg: 암호화되지 않은 기존 CloudWatch Log Group의 안전한 관리 필드만 Terraform 검증에 넣습니다.
 function createCloudWatchLogGroupFixture(): InfrastructureGraph {
   return {
     nodes: [
@@ -136,8 +136,6 @@ function createCloudWatchLogGroupFixture(): InfrastructureGraph {
         config: {
           name: "/ecs/orders",
           retentionInDays: 30,
-          kmsKeyId:
-            "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555",
           logGroupClass: "STANDARD",
           storedBytes: 1234,
           providerResourceId:

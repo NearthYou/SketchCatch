@@ -51,7 +51,8 @@ import {
   listLambdaPermissionsAsUnknown,
   readEcsResourcesWithDiagnostics,
   readResourceExplorerResourcesWithDiagnostics,
-  resolveCloudFrontOriginRelationships
+  resolveCloudFrontOriginRelationships,
+  uniqueDiscoveredRecordsByProviderId
 } from "./aws-reverse-engineering-gateway.js";
 import { parseAwsQueryPaginationToken } from "./aws-reverse-engineering-parsers.js";
 
@@ -650,6 +651,35 @@ test("Resource Explorer resolves the default view before searching it", async ()
   );
   assert.equal((commands[1] as GetViewCommand).input.ViewArn, viewArn);
   assert.equal((commands[2] as SearchCommand).input.ViewArn, viewArn);
+});
+
+test("ALL 스캔은 generic Log Group보다 이름과 설정이 있는 전용 조회 결과를 우선한다", () => {
+  const logGroupArn =
+    "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders";
+  const kmsKeyArn =
+    "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555";
+  const genericRecord = safeRecord(
+    "AWS::Logs::LogGroup",
+    logGroupArn,
+    "LogGroup · generic"
+  );
+  const detailedRecord: AwsDiscoveredResourceRecord = {
+    ...genericRecord,
+    displayName: "/ecs/orders",
+    config: {
+      logGroupName: "/ecs/orders",
+      retentionInDays: 30,
+      kmsKeyId: kmsKeyArn
+    }
+  };
+
+  const records = uniqueDiscoveredRecordsByProviderId([
+    genericRecord,
+    detailedRecord
+  ]);
+
+  assert.equal(records.length, 1);
+  assert.deepEqual(records[0], detailedRecord);
 });
 
 test("ALB와 CloudFront reader 선택은 ALL 및 직접 선택에만 한 번씩 포함한다", () => {

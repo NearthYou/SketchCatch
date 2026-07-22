@@ -3009,19 +3009,41 @@ function uniqueDiscoveredRelationships(
   ];
 }
 
-function uniqueDiscoveredRecordsByProviderId(
+// gg: 같은 Log Group이 여러 reader에서 잡히면 이름과 설정이 있는 전용 조회 결과를 보존합니다.
+export function uniqueDiscoveredRecordsByProviderId(
   records: AwsDiscoveredResourceRecord[]
 ): AwsDiscoveredResourceRecord[] {
-  const seenProviderResourceIds = new Set<string>();
+  const uniqueRecords: AwsDiscoveredResourceRecord[] = [];
+  const recordIndexByProviderResourceId = new Map<string, number>();
 
-  return records.filter((record) => {
-    if (seenProviderResourceIds.has(record.providerResourceId)) {
-      return false;
+  for (const record of records) {
+    const existingIndex = recordIndexByProviderResourceId.get(record.providerResourceId);
+    if (existingIndex === undefined) {
+      recordIndexByProviderResourceId.set(record.providerResourceId, uniqueRecords.length);
+      uniqueRecords.push(record);
+      continue;
     }
 
-    seenProviderResourceIds.add(record.providerResourceId);
-    return true;
-  });
+    const existingRecord = uniqueRecords[existingIndex];
+    if (existingRecord && shouldPreferDetailedLogGroupRecord(existingRecord, record)) {
+      uniqueRecords[existingIndex] = record;
+    }
+  }
+
+  return uniqueRecords;
+}
+
+// gg: 다른 Resource의 기존 first-win 규칙은 유지하고 Log Group의 전용 상세 정보만 교체합니다.
+function shouldPreferDetailedLogGroupRecord(
+  existingRecord: AwsDiscoveredResourceRecord,
+  candidateRecord: AwsDiscoveredResourceRecord
+): boolean {
+  return (
+    existingRecord.providerResourceType === "AWS::Logs::LogGroup" &&
+    candidateRecord.providerResourceType === "AWS::Logs::LogGroup" &&
+    getNonEmptyStringValue(existingRecord.config["logGroupName"]) === null &&
+    getNonEmptyStringValue(candidateRecord.config["logGroupName"]) !== null
+  );
 }
 
 function compactRecord(values: Record<string, unknown>): Record<string, unknown> {

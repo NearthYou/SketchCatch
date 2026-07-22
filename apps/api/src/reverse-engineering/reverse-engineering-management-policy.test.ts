@@ -28,6 +28,28 @@ test("AWS가 소유한 IAM service-linked Role과 KMS Key는 관리하지 않는
   );
 });
 
+test("KMS 연결 Log Group은 보드에만 남기고 암호화되지 않은 Log Group만 관리한다", () => {
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("CLOUDWATCH_LOG_GROUP", { hasKmsKey: true })
+    ),
+    "needs_mapping"
+  );
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("CLOUDWATCH_LOG_GROUP", {
+        kmsKeyId:
+          "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555"
+      })
+    ),
+    "needs_mapping"
+  );
+  assert.equal(
+    classifyReverseEngineeringManagement(resource("CLOUDWATCH_LOG_GROUP")),
+    "managed"
+  );
+});
+
 test("SketchCatch 연결 제어 Role과 Policy는 Terraform 관리에서 제외한다", () => {
   assert.equal(
     classifyReverseEngineeringManagement(

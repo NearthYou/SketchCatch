@@ -70,9 +70,23 @@ export function classifyReverseEngineeringManagement(
     return "reference";
   }
 
+  if (isKmsConnectedCloudWatchLogGroup(resource)) {
+    return "needs_mapping";
+  }
+
   return AUTOMATED_MANAGED_RESOURCE_TYPES.has(resource.resourceType)
     ? "managed"
     : "needs_mapping";
+}
+
+/** KMS 연결을 안전하게 재주입할 수 없는 Log Group인지 공개 marker와 서버 원본으로 확인한다. */
+export function isKmsConnectedCloudWatchLogGroup(
+  resource: Pick<DiscoveredResource, "resourceType" | "config">
+): boolean {
+  return (
+    resource.resourceType === "CLOUDWATCH_LOG_GROUP" &&
+    (resource.config["hasKmsKey"] === true || hasNonEmptyString(resource.config["kmsKeyId"]))
+  );
 }
 
 /** 명시적 ownership 또는 실제 생성 규칙과 정확히 일치하는 SketchCatch 제어 리소스만 찾는다. */

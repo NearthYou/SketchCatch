@@ -23,6 +23,7 @@ import {
   createStableTerraformResourceName,
   getReverseEngineeringTerraformResourceType
 } from "./reverse-engineering-terraform-projection.js";
+import { isKmsConnectedCloudWatchLogGroup } from "./reverse-engineering-management-policy.js";
 
 export type AwsProviderScanInput = {
   provider: CloudProvider;
@@ -345,7 +346,7 @@ function createResourceIdMap(records: AwsDiscoveredResourceRecord[]): ReadonlyMa
   return new Map(records.map((record) => [record.providerResourceId, createNodeId(record)]));
 }
 
-// gg: private mode도 비밀 config는 버리고 import에 필요한 provider identity만 서버에 남깁니다.
+// gg: 공개 결과는 비밀 config를 제거하고 서버 전용 결과만 안전 판정에 필요한 원본을 남깁니다.
 function toDiscoveredResource(
   record: AwsDiscoveredResourceRecord,
   idMap: ReadonlyMap<string, string>,
@@ -370,6 +371,14 @@ function toDiscoveredResource(
       toDiscoveredRelationship(relationship, idMap)
     )
   };
+
+  if (isKmsConnectedCloudWatchLogGroup(baseResource)) {
+    return {
+      ...baseResource,
+      analysisExcluded: true,
+      importSuggestionStatus: "manual_review"
+    };
+  }
 
   if (REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES.has(resourceType)) {
     return baseResource;
@@ -440,7 +449,9 @@ function createAnalysisExclusions(
       id: `analysis-exclusion-${resource.id}`,
       resourceId: resource.id,
       reason: "unsupported_resource_type",
-      message: "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
+      message: isKmsConnectedCloudWatchLogGroup(resource)
+        ? "KMS Key로 암호화된 로그 저장소는 현재 안전하게 수정할 수 없어 보드에만 표시됩니다."
+        : "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
     }));
 }
 
@@ -448,6 +459,17 @@ function createImportSuggestions(
   discoveredResources: DiscoveredResource[]
 ): ReverseEngineeringImportSuggestion[] {
   return discoveredResources.map((resource) => {
+    if (isKmsConnectedCloudWatchLogGroup(resource)) {
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "manual_review",
+        reason:
+          "KMS Key로 암호화된 로그 저장소는 현재 안전하게 수정할 수 없어 보드에만 표시됩니다.",
+        handoffReady: false
+      };
+    }
+
     const terraformResourceType = getReverseEngineeringTerraformResourceType(resource.resourceType);
 
     if (!terraformResourceType) {
@@ -885,12 +907,16 @@ export function createAwsPublicResourceConfig(
     })
   );
 
-  return record.providerResourceType === "AWS::ECS::TaskDefinition"
-    ? sanitizePublicEcsTaskDefinitionConfig(publicConfig, record.config)
+  if (record.providerResourceType === "AWS::ECS::TaskDefinition") {
+    return sanitizePublicEcsTaskDefinitionConfig(publicConfig, record.config);
+  }
+
+  return record.providerResourceType === "AWS::Logs::LogGroup"
+    ? sanitizePublicCloudWatchLogGroupConfig(publicConfig, record.config)
     : publicConfig;
 }
 
-// gg: 서버 전용 결과도 Resource별 allowlist를 지키되 import 후 복원에 필요한 KMS 연결은 보존합니다.
+// gg: 서버 전용 결과도 allowlist를 지키되 KMS 로그를 관리 대상에서 막을 판정 근거는 보존합니다.
 function createAwsStoredResourceConfig(
   record: Pick<AwsDiscoveredResourceRecord, "providerResourceType" | "config">,
   resultVisibility: "public" | "private"
@@ -905,6 +931,17 @@ function createAwsStoredResourceConfig(
 
   const kmsKeyId = getNonEmptyString(record.config["kmsKeyId"]);
   return kmsKeyId ? { ...publicConfig, kmsKeyId } : publicConfig;
+}
+
+// gg: 공개 결과에는 KMS ARN 대신 암호화 연결 여부만 남겨 안전한 관리 경계를 전달합니다.
+function sanitizePublicCloudWatchLogGroupConfig(
+  publicConfig: Record<string, unknown>,
+  sourceConfig: Record<string, unknown>
+): Record<string, unknown> {
+  const hasKmsKey =
+    sourceConfig["hasKmsKey"] === true || getNonEmptyString(sourceConfig["kmsKeyId"]) !== null;
+
+  return hasKmsKey ? { ...publicConfig, hasKmsKey: true } : publicConfig;
 }
 
 function sanitizePublicEcsTaskDefinitionConfig(
