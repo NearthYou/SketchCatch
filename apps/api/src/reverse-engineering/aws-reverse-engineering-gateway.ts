@@ -3027,7 +3027,7 @@ export function uniqueDiscoveredRecordsByProviderId(
     }
 
     const existingRecord = uniqueRecords[existingIndex];
-    if (existingRecord && shouldPreferDetailedLogGroupRecord(existingRecord, record)) {
+    if (existingRecord && shouldPreferDedicatedRecord(existingRecord, record)) {
       uniqueRecords[existingIndex] = record;
     }
   }
@@ -3037,25 +3037,44 @@ export function uniqueDiscoveredRecordsByProviderId(
 
 /** CloudWatch Logs SDK ARN의 끝 `:*`와 Resource Explorer ARN을 같은 Log Group으로 맞춥니다. */
 function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord): string {
-  if (record.providerResourceType !== "AWS::Logs::LogGroup") {
-    return record.providerResourceId;
+  if (record.providerResourceType === "AWS::Logs::LogGroup") {
+    return record.providerResourceId.endsWith(":*")
+      ? record.providerResourceId.slice(0, -2)
+      : record.providerResourceId;
   }
 
-  return record.providerResourceId.endsWith(":*")
-    ? record.providerResourceId.slice(0, -2)
-    : record.providerResourceId;
+  if (record.providerResourceType === "AWS::ApiGateway::RestApi") {
+    const configId = getNonEmptyStringValue(record.config["id"]);
+    const arnId = /^arn:[^:]+:apigateway:[^:]+::\/restapis\/([^/]+)$/u.exec(
+      record.providerResourceId
+    )?.[1];
+    const restApiId = configId ?? arnId ?? record.providerResourceId;
+
+    return `AWS::ApiGateway::RestApi:${restApiId}`;
+  }
+
+  return record.providerResourceId;
 }
 
-// gg: 다른 Resource의 기존 first-win 규칙은 유지하고 Log Group의 전용 상세 정보만 교체합니다.
-function shouldPreferDetailedLogGroupRecord(
+// gg: generic inventory보다 같은 Resource의 전용 reader가 가진 관리 가능 설정을 우선합니다.
+function shouldPreferDedicatedRecord(
   existingRecord: AwsDiscoveredResourceRecord,
   candidateRecord: AwsDiscoveredResourceRecord
 ): boolean {
-  return (
-    existingRecord.providerResourceType === "AWS::Logs::LogGroup" &&
-    candidateRecord.providerResourceType === "AWS::Logs::LogGroup" &&
-    getNonEmptyStringValue(existingRecord.config["logGroupName"]) === null &&
-    getNonEmptyStringValue(candidateRecord.config["logGroupName"]) !== null
+  if (existingRecord.providerResourceType !== candidateRecord.providerResourceType) {
+    return false;
+  }
+
+  const detailKey = existingRecord.providerResourceType === "AWS::Logs::LogGroup"
+    ? "logGroupName"
+    : existingRecord.providerResourceType === "AWS::ApiGateway::RestApi"
+      ? "name"
+      : null;
+
+  return Boolean(
+    detailKey &&
+    getNonEmptyStringValue(existingRecord.config[detailKey]) === null &&
+    getNonEmptyStringValue(candidateRecord.config[detailKey]) !== null
   );
 }
 

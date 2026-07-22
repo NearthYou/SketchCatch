@@ -683,6 +683,33 @@ test("ALL 스캔은 generic Log Group보다 이름과 설정이 있는 전용 �
   assert.deepEqual(records[0], detailedRecord);
 });
 
+test("ALL 스캔은 API Gateway ARN inventory와 전용 REST API ID를 하나로 합친다", () => {
+  const restApiId = "a1b2c3d4e5";
+  const genericRecord = safeRecord(
+    "AWS::ApiGateway::RestApi",
+    `arn:aws:apigateway:ap-northeast-2::/restapis/${restApiId}`,
+    "RestApi · generic"
+  );
+  const detailedRecord: AwsDiscoveredResourceRecord = {
+    ...genericRecord,
+    providerResourceId: restApiId,
+    displayName: "customer-api",
+    config: {
+      id: restApiId,
+      name: "customer-api",
+      endpointConfiguration: { types: ["REGIONAL"] }
+    }
+  };
+
+  const records = uniqueDiscoveredRecordsByProviderId([
+    genericRecord,
+    detailedRecord
+  ]);
+
+  assert.equal(records.length, 1);
+  assert.deepEqual(records[0], detailedRecord);
+});
+
 test("ALB와 CloudFront reader 선택은 ALL 및 직접 선택에만 한 번씩 포함한다", () => {
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["ALL"])), {
     loadBalancers: true,
