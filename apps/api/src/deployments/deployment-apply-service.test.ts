@@ -33,6 +33,7 @@ import {
   createDeploymentPlanOptimizationEvidence,
   createTerraformDesiredStateIdentity
 } from "./deployment-optimization.js";
+import { terraformImportSafetyGateVersion } from "./deployment-safety-gate.js";
 import type {
   ProjectExecutionLeaseRecord,
   ProjectExecutionLeaseRepository
@@ -1196,6 +1197,7 @@ test("an approved import-only Plan executes Terraform apply instead of the no-ch
     deleteCount: 0,
     replaceCount: 0,
     importCount: 1,
+    importSafetyGateVersion: terraformImportSafetyGateVersion,
     blocked: false,
     warnings: []
   });

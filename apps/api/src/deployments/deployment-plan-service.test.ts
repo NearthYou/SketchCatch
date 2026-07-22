@@ -2569,7 +2569,7 @@ test("runDeploymentPlan records destructive or high-risk warnings without blocki
   ]);
 });
 
-test("runDeploymentPlan persists a deterministic risk block only for unsafe imported resources", async () => {
+test("runDeploymentPlan persists a deterministic risk block for unsafe imports and destructive companion changes", async () => {
   const repository = new FakeDeploymentRepository();
   const planArtifactStorage = new FakePlanArtifactStorage();
 
@@ -2625,7 +2625,7 @@ test("runDeploymentPlan persists a deterministic risk block only for unsafe impo
   );
 
   const blockedReason =
-    "Terraform import plan includes unsafe changes for existing resources: aws_instance.a_existing [delete,create]; aws_s3_bucket.import_update [update]; aws_s3_bucket.z_existing [create]";
+    "Terraform import plan includes unsafe changes for existing resources: aws_instance.a_existing [delete,create]; aws_s3_bucket.import_update [update]; aws_s3_bucket.z_existing [create]; aws_s3_bucket.ordinary_delete [delete]";
   assert.equal(result.deployment.planSummary?.importCount, 3);
   assert.equal(result.deployment.planSummary?.importSafetyGateVersion, 2);
   assert.equal(result.deployment.planSummary?.blocked, true);
