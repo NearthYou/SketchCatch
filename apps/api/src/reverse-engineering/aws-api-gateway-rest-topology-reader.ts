@@ -41,6 +41,7 @@ export type AwsApiGatewayRestTopologyAdvancedFeature =
   | "stage_variables"
   | "access_logs"
   | "canary"
+  | "method_settings"
   | "cache";
 
 export type AwsApiGatewayRestTopologyClassification = "simple" | "advanced" | "incomplete";
@@ -168,6 +169,7 @@ const ADVANCED_FEATURE_ORDER: readonly AwsApiGatewayRestTopologyAdvancedFeature[
   "stage_variables",
   "access_logs",
   "canary",
+  "method_settings",
   "cache"
 ];
 
@@ -482,6 +484,11 @@ async function addResourceAndMethodRecords(input: {
       }
       continue;
     }
+    const pathPart = getNonEmptyString(resource.pathPart);
+    if (!pathPart) {
+      markFamilyIncomplete(input.state, "resources", "invalid_response");
+      continue;
+    }
     const resourceIdentity = createIdentity(
       "AWS::ApiGateway::Resource",
       `${input.restApiId}/${resourceId}`
@@ -498,7 +505,7 @@ async function addResourceAndMethodRecords(input: {
       displayName: getNonEmptyString(resource.path) ?? "API Resource",
       publicConfig: {
         path: resource.path,
-        pathPart: resource.pathPart,
+        pathPart,
         hasMethods: Object.keys(resource.resourceMethods ?? {}).length > 0
       },
       serverOnlyConfig: {
@@ -506,7 +513,7 @@ async function addResourceAndMethodRecords(input: {
         resourceId,
         parentResourceId,
         path: resource.path,
-        pathPart: resource.pathPart
+        pathPart
       }
     });
     if (!addTopologyRecord(input.state, resourceRecord, "resources")) continue;
@@ -555,6 +562,10 @@ async function addMethodAndIntegrationRecord(input: {
     markFamilyIncomplete(input.state, "methods", classifyReadFailure(error));
     return;
   }
+  if (!getNonEmptyString(method.authorizationType)) {
+    markFamilyIncomplete(input.state, "methods", "invalid_response");
+    return;
+  }
 
   addMethodAdvancedFeatures(input.state, method);
   const methodIdentity = createIdentity(
@@ -590,6 +601,10 @@ async function addMethodAndIntegrationRecord(input: {
     );
   } catch (error) {
     markFamilyIncomplete(input.state, "integrations", classifyReadFailure(error));
+    return;
+  }
+  if (!getNonEmptyString(integration.type)) {
+    markFamilyIncomplete(input.state, "integrations", "invalid_response");
     return;
   }
 
@@ -681,7 +696,7 @@ function addStageRecords(input: {
     const deploymentIdentity = deploymentId
       ? input.deploymentIdentities.get(deploymentId)
       : undefined;
-    if (deploymentId && !deploymentIdentity) {
+    if (!deploymentId || !deploymentIdentity) {
       markFamilyIncomplete(input.state, "stages", "invalid_response");
     }
     addStageAdvancedFeatures(input.state, stage);
@@ -703,24 +718,54 @@ function addStageRecords(input: {
   }
 }
 
-/** gg: Resource parent가 같은 API 목록에 없으면 일부 조회 결과를 정상 관리 대상으로 올리지 않습니다. */
+/** gg: Resource ID 중복과 root까지 이어지지 않는 parent cycle을 관리 가능한 구조로 올리지 않습니다. */
 function validateResourceParentRelations(
   state: FamilyReadState,
   resources: readonly Resource[]
 ): void {
   if (state.failures.some((failure) => failure.scope === "resources")) return;
 
-  const resourceIds = new Set(
-    resources.flatMap((resource) => {
-      const resourceId = getNonEmptyString(resource.id);
-      return resourceId ? [resourceId] : [];
-    })
-  );
-  const hasRoot = resources.some((resource) => !getNonEmptyString(resource.parentId));
-
-  if (!hasRoot) markFamilyIncomplete(state, "resources", "invalid_response");
+  const resourceIds = new Set<string>();
+  const parentByResourceId = new Map<string, string | undefined>();
+  let rootResourceId: string | undefined;
   for (const resource of resources) {
+    const resourceId = getNonEmptyString(resource.id);
+    if (!resourceId || resourceIds.has(resourceId)) {
+      markFamilyIncomplete(state, "resources", "invalid_response");
+      continue;
+    }
+    resourceIds.add(resourceId);
     const parentId = getNonEmptyString(resource.parentId);
+    parentByResourceId.set(resourceId, parentId);
+    if (!parentId) rootResourceId = resourceId;
+  }
+
+  if (!rootResourceId) {
+    markFamilyIncomplete(state, "resources", "invalid_response");
+    return;
+  }
+
+  for (const [resourceId, directParentId] of parentByResourceId) {
+    if (!directParentId) continue;
+    const visited = new Set<string>();
+    let currentId = resourceId;
+
+    while (currentId !== rootResourceId) {
+      if (visited.has(currentId)) {
+        markFamilyIncomplete(state, "resources", "invalid_response");
+        break;
+      }
+      visited.add(currentId);
+      const parentId = parentByResourceId.get(currentId);
+      if (!parentId || !resourceIds.has(parentId)) {
+        markFamilyIncomplete(state, "resources", "invalid_response");
+        break;
+      }
+      currentId = parentId;
+    }
+  }
+
+  for (const parentId of parentByResourceId.values()) {
     if (parentId && !resourceIds.has(parentId)) {
       markFamilyIncomplete(state, "resources", "invalid_response");
     }
@@ -840,6 +885,7 @@ function addStageAdvancedFeatures(state: FamilyReadState, stage: Stage): void {
   if (hasRecordEntries(stage.variables)) state.advancedFeatures.add("stage_variables");
   if (stage.accessLogSettings) state.advancedFeatures.add("access_logs");
   if (stage.canarySettings) state.advancedFeatures.add("canary");
+  if (hasRecordEntries(stage.methodSettings)) state.advancedFeatures.add("method_settings");
   if (
     stage.cacheClusterEnabled === true ||
     Object.values(stage.methodSettings ?? {}).some((setting) => setting.cachingEnabled === true)

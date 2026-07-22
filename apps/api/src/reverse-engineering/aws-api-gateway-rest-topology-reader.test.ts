@@ -128,6 +128,45 @@ function createSimpleTopologyClient(): {
   };
 }
 
+type StaticTopologyFixture = {
+  readonly restApi?: Readonly<Record<string, unknown>>;
+  readonly resources: readonly Readonly<Record<string, unknown>>[];
+  readonly method?: Readonly<Record<string, unknown>>;
+  readonly integration?: Readonly<Record<string, unknown>>;
+  readonly deployments?: readonly Readonly<Record<string, unknown>>[];
+  readonly stages?: readonly Readonly<Record<string, unknown>>[];
+};
+
+/** gg: fail-close 경계 테스트가 필요한 AWS 응답만 바꿔 같은 단순 family 기준을 재사용합니다. */
+function createStaticTopologyClient(
+  fixture: StaticTopologyFixture
+): AwsApiGatewayRestTopologyReadClient {
+  return {
+    async send(command: object): Promise<unknown> {
+      if (command instanceof GetRestApisCommand) {
+        return { items: [fixture.restApi ?? { id: "fixture-api", name: "Fixture API" }] };
+      }
+      if (command instanceof GetResourcesCommand) return { items: fixture.resources };
+      if (command instanceof GetMethodCommand && fixture.method) return fixture.method;
+      if (command instanceof GetIntegrationCommand && fixture.integration) {
+        return fixture.integration;
+      }
+      if (command instanceof GetDeploymentsCommand) {
+        return { items: fixture.deployments ?? [] };
+      }
+      if (command instanceof GetStagesCommand) return { item: fixture.stages ?? [] };
+      if (
+        command instanceof GetAuthorizersCommand ||
+        command instanceof GetModelsCommand ||
+        command instanceof GetRequestValidatorsCommand
+      ) {
+        return { items: [] };
+      }
+      assert.fail(`unexpected command: ${command.constructor.name}`);
+    }
+  };
+}
+
 test("API Gateway REST topology reader는 모든 page와 Method/Integration을 읽고 관계와 비공개 import ID를 보존한다", async () => {
   const { client, commands } = createSimpleTopologyClient();
   const result = await readAwsApiGatewayRestTopology({
@@ -256,11 +295,14 @@ test("API Gateway REST topology reader는 모든 page와 Method/Integration을 �
 });
 
 test("API Gateway REST topology reader는 고급 기능을 단순 topology와 구분하고 민감한 원문은 공개하지 않는다", async () => {
-  const privatePolicy = '{"Statement":[{"Resource":"arn:aws:execute-api:::private"}]}';
+  const privatePolicyToken = "policy-server-only-token";
+  const privatePolicy = `{"Statement":[{"Sid":"${privatePolicyToken}","Resource":"arn:aws:execute-api:::private"}]}`;
   const privateCredentialsArn = "arn:aws:iam::123456789012:role/private-api-role";
   const privateIntegrationUri =
     "arn:aws:apigateway:ap-northeast-2:lambda:path/functions/private/invocations";
   const privateAccessLogArn = "arn:aws:logs:ap-northeast-2:123456789012:private-log";
+  const privateAccessLogFormat = "stage-log-server-only-format";
+  const privateCanaryValue = "canary-server-only-value";
 
   const result = await readAwsApiGatewayRestTopology({
     region: "ap-northeast-2",
@@ -286,6 +328,7 @@ test("API Gateway REST topology reader는 고급 기능을 단순 topology와 �
               {
                 id: "advanced-resource",
                 parentId: "advanced-root",
+                pathPart: "orders",
                 path: "/orders",
                 resourceMethods: { POST: {} }
               }
@@ -325,9 +368,12 @@ test("API Gateway REST topology reader는 고급 기능을 단순 topology와 �
                 variables: { secretTarget: "private-stage-value" },
                 accessLogSettings: {
                   destinationArn: privateAccessLogArn,
-                  format: "private-format"
+                  format: privateAccessLogFormat
                 },
-                canarySettings: { percentTraffic: 10 },
+                canarySettings: {
+                  percentTraffic: 10,
+                  stageVariableOverrides: { privateCanary: privateCanaryValue }
+                },
                 cacheClusterEnabled: true,
                 methodSettings: { "*/*": { cachingEnabled: true } }
               }
@@ -363,16 +409,19 @@ test("API Gateway REST topology reader는 고급 기능을 단순 topology와 �
       "stage_variables",
       "access_logs",
       "canary",
+      "method_settings",
       "cache"
     ]
   });
 
   const publicJson = JSON.stringify({ families: result.families, records: result.publicRecords });
   for (const privateValue of [
-    privatePolicy,
+    privatePolicyToken,
     privateCredentialsArn,
     privateIntegrationUri,
     privateAccessLogArn,
+    privateAccessLogFormat,
+    privateCanaryValue,
     "advanced-api/advanced-resource/POST",
     "private-stage-value",
     "private-schema"
@@ -383,8 +432,26 @@ test("API Gateway REST topology reader는 고급 기능을 단순 topology와 �
   const privateIntegration = result.serverOnlyRecords.find(
     (record) => record.providerResourceType === "AWS::ApiGateway::Integration"
   );
+  const privateRestApi = result.serverOnlyRecords.find(
+    (record) => record.providerResourceType === "AWS::ApiGateway::RestApi"
+  );
+  const privateStage = result.serverOnlyRecords.find(
+    (record) => record.providerResourceType === "AWS::ApiGateway::Stage"
+  );
+  assert.equal(privateRestApi?.serverOnlyConfig.policyBody, privatePolicy);
   assert.equal(privateIntegration?.serverOnlyConfig.integrationUri, privateIntegrationUri);
   assert.equal(privateIntegration?.serverOnlyConfig.credentialsArn, privateCredentialsArn);
+  assert.deepEqual(privateStage?.serverOnlyConfig.variables, {
+    secretTarget: "private-stage-value"
+  });
+  assert.deepEqual(privateStage?.serverOnlyConfig.accessLogSettings, {
+    destinationArn: privateAccessLogArn,
+    format: privateAccessLogFormat
+  });
+  assert.deepEqual(privateStage?.serverOnlyConfig.canarySettings, {
+    percentTraffic: 10,
+    stageVariableOverrides: { privateCanary: privateCanaryValue }
+  });
 });
 
 test("API Gateway REST topology reader는 child 권한 실패가 나면 해당 API family 전체를 incomplete로 처리한다", async () => {
@@ -665,4 +732,172 @@ test("API Gateway REST topology reader는 family pagination position이 반복�
     ),
     true
   );
+});
+
+test("API Gateway REST topology reader는 Stage deployment ID가 없으면 family를 관리 불가로 처리한다", async () => {
+  const result = await readAwsApiGatewayRestTopology({
+    region: "ap-northeast-2",
+    credentials,
+    createClient: () =>
+      createStaticTopologyClient({
+        resources: [{ id: "root", path: "/" }],
+        deployments: [{ id: "deployment-one" }],
+        stages: [{ stageName: "prod" }]
+      })
+  });
+
+  assert.equal(result.families[0]?.classification, "incomplete");
+  assert.equal(result.families[0]?.managementReady, false);
+  assert.equal(
+    result.failures.some(
+      (failure) => failure.scope === "stages" && failure.outcome === "invalid_response"
+    ),
+    true
+  );
+});
+
+test("API Gateway REST topology reader는 root ID 충돌과 순환 Resource 관계를 관리 불가로 처리한다", async () => {
+  const cases = [
+    {
+      name: "root와 child ID 충돌",
+      resources: [
+        { id: "same-id", path: "/" },
+        { id: "same-id", parentId: "same-id", path: "/orders", pathPart: "orders" }
+      ]
+    },
+    {
+      name: "자기 자신을 부모로 둔 child",
+      resources: [
+        { id: "root", path: "/" },
+        { id: "self-child", parentId: "self-child", path: "/orders", pathPart: "orders" }
+      ]
+    },
+    {
+      name: "root와 연결되지 않은 child cycle",
+      resources: [
+        { id: "root", path: "/" },
+        { id: "child-a", parentId: "child-b", path: "/a", pathPart: "a" },
+        { id: "child-b", parentId: "child-a", path: "/b", pathPart: "b" }
+      ]
+    }
+  ] as const;
+
+  for (const testCase of cases) {
+    const result = await readAwsApiGatewayRestTopology({
+      region: "ap-northeast-2",
+      credentials,
+      createClient: () => createStaticTopologyClient({ resources: testCase.resources })
+    });
+
+    assert.equal(result.families[0]?.classification, "incomplete", testCase.name);
+    assert.equal(result.families[0]?.managementReady, false, testCase.name);
+    assert.equal(
+      result.failures.some(
+        (failure) => failure.scope === "resources" && failure.outcome === "invalid_response"
+      ),
+      true,
+      testCase.name
+    );
+  }
+});
+
+test("API Gateway REST topology reader는 Terraform 필수값이 빠진 child 응답을 관리 불가로 처리한다", async () => {
+  const cases: readonly {
+    readonly name: string;
+    readonly scope: "resources" | "methods" | "integrations";
+    readonly fixture: StaticTopologyFixture;
+  }[] = [
+    {
+      name: "Resource pathPart 누락",
+      scope: "resources",
+      fixture: {
+        resources: [
+          { id: "root", path: "/" },
+          { id: "orders", parentId: "root", path: "/orders" }
+        ]
+      }
+    },
+    {
+      name: "Method authorizationType 누락",
+      scope: "methods",
+      fixture: {
+        resources: [
+          { id: "root", path: "/" },
+          {
+            id: "orders",
+            parentId: "root",
+            path: "/orders",
+            pathPart: "orders",
+            resourceMethods: { GET: {} }
+          }
+        ],
+        method: { httpMethod: "GET" }
+      }
+    },
+    {
+      name: "Integration type 누락",
+      scope: "integrations",
+      fixture: {
+        resources: [
+          { id: "root", path: "/" },
+          {
+            id: "orders",
+            parentId: "root",
+            path: "/orders",
+            pathPart: "orders",
+            resourceMethods: { GET: {} }
+          }
+        ],
+        method: {
+          httpMethod: "GET",
+          authorizationType: "NONE",
+          methodIntegration: { type: "HTTP_PROXY" }
+        },
+        integration: { httpMethod: "GET" }
+      }
+    }
+  ];
+
+  for (const testCase of cases) {
+    const result = await readAwsApiGatewayRestTopology({
+      region: "ap-northeast-2",
+      credentials,
+      createClient: () => createStaticTopologyClient(testCase.fixture)
+    });
+
+    assert.equal(result.families[0]?.classification, "incomplete", testCase.name);
+    assert.equal(result.families[0]?.managementReady, false, testCase.name);
+    assert.equal(
+      result.failures.some(
+        (failure) => failure.scope === testCase.scope && failure.outcome === "invalid_response"
+      ),
+      true,
+      testCase.name
+    );
+  }
+});
+
+test("API Gateway REST topology reader는 cache가 아닌 Method Settings도 advanced로 분류한다", async () => {
+  const result = await readAwsApiGatewayRestTopology({
+    region: "ap-northeast-2",
+    credentials,
+    createClient: () =>
+      createStaticTopologyClient({
+        resources: [{ id: "root", path: "/" }],
+        deployments: [{ id: "deployment-one" }],
+        stages: [
+          {
+            stageName: "prod",
+            deploymentId: "deployment-one",
+            methodSettings: {
+              "*/*": { loggingLevel: "INFO", metricsEnabled: true, throttlingBurstLimit: 10 }
+            }
+          }
+        ]
+      })
+  });
+
+  assert.equal(result.families[0]?.classification, "advanced");
+  assert.equal(result.families[0]?.managementReady, false);
+  assert.equal(result.families[0]?.advancedFeatures.includes("method_settings"), true);
 });
