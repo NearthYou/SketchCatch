@@ -3116,7 +3116,7 @@ function parseAwsArn(arn: string): {
 } {
   const [, , service = "unknown", region = "", accountId = "", ...resourceParts] = arn.split(":");
   const resource = resourceParts.join(":");
-  const [resourceKind = "resource", ...nameParts] = resource.split(/[/:]/);
+  const [resourceKind = "resource", ...nameParts] = resource.split(/[/:]/).filter(Boolean);
   const resourceName = nameParts.join("/");
 
   return {
@@ -3129,8 +3129,44 @@ function parseAwsArn(arn: string): {
   };
 }
 
+const AWS_PROVIDER_RESOURCE_TYPE_BY_ARN_KIND = new Map<string, string>([
+  ["apigateway:restapis", "AWS::ApiGateway::RestApi"],
+  ["application-autoscaling:scalable-target", "AWS::ApplicationAutoScaling::ScalableTarget"],
+  ["application-autoscaling:scaling-policy", "AWS::ApplicationAutoScaling::ScalingPolicy"],
+  ["cloudfront:distribution", "AWS::CloudFront::Distribution"],
+  ["cloudfront:origin-access-control", "AWS::CloudFront::OriginAccessControl"],
+  ["cloudwatch:alarm", "AWS::CloudWatch::Alarm"],
+  ["ec2:eip-allocation", "AWS::EC2::EIP"],
+  ["ec2:image", "AWS::EC2::Image"],
+  ["ec2:instance", "AWS::EC2::Instance"],
+  ["ec2:internet-gateway", "AWS::EC2::InternetGateway"],
+  ["ec2:natgateway", "AWS::EC2::NatGateway"],
+  ["ec2:route-table", "AWS::EC2::RouteTable"],
+  ["ec2:security-group", "AWS::EC2::SecurityGroup"],
+  ["ec2:subnet", "AWS::EC2::Subnet"],
+  ["ec2:vpc", "AWS::EC2::VPC"],
+  ["ecr:repository", "AWS::ECR::Repository"],
+  ["elasticloadbalancing:listener", "AWS::ElasticLoadBalancingV2::Listener"],
+  ["elasticloadbalancing:loadbalancer", "AWS::ElasticLoadBalancingV2::LoadBalancer"],
+  ["elasticloadbalancing:targetgroup", "AWS::ElasticLoadBalancingV2::TargetGroup"],
+  ["events:event-bus", "AWS::Events::EventBus"],
+  ["events:rule", "AWS::Events::Rule"],
+  ["iam:instance-profile", "AWS::IAM::InstanceProfile"],
+  ["iam:policy", "AWS::IAM::Policy"],
+  ["iam:role", "AWS::IAM::Role"],
+  ["kms:key", "AWS::KMS::Key"],
+  ["lambda:function", "AWS::Lambda::Function"],
+  ["logs:log-group", "AWS::Logs::LogGroup"],
+  ["rds:db", "AWS::RDS::DBInstance"],
+  ["secretsmanager:secret", "AWS::SecretsManager::Secret"]
+]);
+
 function toProviderResourceType(service: string, resourceKind: string): string {
-  return `AWS::${toPascalCase(service)}::${toPascalCase(resourceKind)}`;
+  return (
+    AWS_PROVIDER_RESOURCE_TYPE_BY_ARN_KIND.get(
+      `${service.toLowerCase()}:${resourceKind.toLowerCase()}`
+    ) ?? `AWS::${toPascalCase(service)}::${toPascalCase(resourceKind)}`
+  );
 }
 
 function toPascalCase(value: string): string {
@@ -3544,12 +3580,79 @@ export function uniqueDiscoveredRecordsByProviderId(
     }
 
     const existingRecord = uniqueRecords[existingIndex];
-    if (existingRecord && shouldPreferDedicatedRecord(existingRecord, record)) {
-      uniqueRecords[existingIndex] = record;
+    if (existingRecord) {
+      uniqueRecords[existingIndex] = mergeDuplicateDiscoveredRecords(existingRecord, record);
     }
   }
 
   return uniqueRecords;
+}
+
+function mergeDuplicateDiscoveredRecords(
+  existingRecord: AwsDiscoveredResourceRecord,
+  candidateRecord: AwsDiscoveredResourceRecord
+): AwsDiscoveredResourceRecord {
+  const preferCandidate = shouldPreferDedicatedRecord(existingRecord, candidateRecord);
+  const preferredRecord = preferCandidate ? candidateRecord : existingRecord;
+  const secondaryRecord = preferCandidate ? existingRecord : candidateRecord;
+
+  return {
+    ...secondaryRecord,
+    ...preferredRecord,
+    config: mergeDiscoveredRecordConfig(secondaryRecord.config, preferredRecord.config),
+    relationships: uniqueDiscoveredRelationships([
+      ...secondaryRecord.relationships,
+      ...preferredRecord.relationships
+    ])
+  };
+}
+
+function mergeDiscoveredRecordConfig(
+  secondaryConfig: Record<string, unknown>,
+  preferredConfig: Record<string, unknown>
+): Record<string, unknown> {
+  const mergedTags = mergeDiscoveredRecordTags(
+    secondaryConfig["tags"],
+    preferredConfig["tags"]
+  );
+
+  return mergedTags.length > 0 ? { ...preferredConfig, tags: mergedTags } : preferredConfig;
+}
+
+function mergeDiscoveredRecordTags(
+  secondaryTags: unknown,
+  preferredTags: unknown
+): Array<{ key: string; value: string }> {
+  return [
+    ...new Map(
+      [...normalizeDiscoveredRecordTags(secondaryTags), ...normalizeDiscoveredRecordTags(preferredTags)].map(
+        (tag) => [tag.key, tag]
+      )
+    ).values()
+  ];
+}
+
+function normalizeDiscoveredRecordTags(value: unknown): Array<{ key: string; value: string }> {
+  if (Array.isArray(value)) {
+    return value.flatMap((candidate) => {
+      if (!isRecordValue(candidate)) {
+        return [];
+      }
+
+      const key = candidate["key"] ?? candidate["Key"];
+      const tagValue = candidate["value"] ?? candidate["Value"];
+
+      return typeof key === "string" && typeof tagValue === "string"
+        ? [{ key, value: tagValue }]
+        : [];
+    });
+  }
+
+  return isRecordValue(value)
+    ? Object.entries(value).flatMap(([key, tagValue]) =>
+        typeof tagValue === "string" ? [{ key, value: tagValue }] : []
+      )
+    : [];
 }
 
 /** CloudWatch Logs SDK ARN의 끝 `:*`와 Resource Explorer ARN을 같은 Log Group으로 맞춥니다. */

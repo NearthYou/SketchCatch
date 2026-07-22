@@ -166,6 +166,7 @@ export const AWS_IMPORT_READERS = [
     displayName: "EventBridge",
     tier: "expanded",
     actions: [
+      "events:ListEventBuses",
       "events:ListRules",
       "events:ListTargetsByRule",
       "events:ListTagsForResource"

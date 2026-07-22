@@ -40,6 +40,7 @@ test("EventBridge import reader는 Rule과 Target을 읽는 최소 권한만 요
   assert.equal(reader?.displayName, "EventBridge");
   assert.equal(reader?.tier, "expanded");
   assert.deepEqual(reader?.actions, [
+    "events:ListEventBuses",
     "events:ListRules",
     "events:ListTargetsByRule",
     "events:ListTagsForResource"

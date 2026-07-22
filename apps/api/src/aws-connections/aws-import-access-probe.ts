@@ -38,6 +38,7 @@ import {
 } from "@aws-sdk/client-ecr";
 import {
   EventBridgeClient,
+  ListEventBusesCommand,
   ListRulesCommand,
   ListTagsForResourceCommand as ListEventBridgeTagsForResourceCommand,
   ListTargetsByRuleCommand
@@ -741,7 +742,14 @@ async function probeEventBridgeExecutor(
 export async function probeEventBridge(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  const listed = await client.send(new ListRulesCommand({ Limit: 1 })) as {
+  const listedBuses = await client.send(new ListEventBusesCommand({ Limit: 1 })) as {
+    EventBuses?: Array<{ Name?: string }>;
+  };
+  const eventBusName = listedBuses.EventBuses?.[0]?.Name;
+  const listed = await client.send(new ListRulesCommand({
+    ...(eventBusName ? { EventBusName: eventBusName } : {}),
+    Limit: 1
+  })) as {
     Rules?: Array<{ Name?: string; EventBusName?: string; Arn?: string }>;
   };
   const rule = listed.Rules?.[0];

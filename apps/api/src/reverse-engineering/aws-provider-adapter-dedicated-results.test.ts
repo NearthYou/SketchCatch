@@ -1,10 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { GetResourcesCommand } from "@aws-sdk/client-resource-groups-tagging-api";
 import {
   createAwsProviderAdapter,
   type AwsDiscoveredResourceRecord
 } from "./aws-provider-adapter.js";
-import { uniqueDiscoveredRecordsByProviderId } from "./aws-reverse-engineering-gateway.js";
+import {
+  listTaggedUnknownResources,
+  uniqueDiscoveredRecordsByProviderId
+} from "./aws-reverse-engineering-gateway.js";
+
+const credentials = {
+  AWS_ACCESS_KEY_ID: "AKIA_TEST",
+  AWS_REGION: "ap-northeast-2",
+  AWS_SECRET_ACCESS_KEY: "secret",
+  AWS_SESSION_TOKEN: "token"
+};
 
 test("ALL 스캔은 Lambda IAM KMS의 generic inventory보다 전용 조회 결과를 우선한다", () => {
   const detailedRecords = createDetailedRecords();
@@ -83,6 +94,84 @@ test("ALL 스캔의 Lambda IAM KMS 상세 설정과 관계를 보드 후보까�
   assert.equal(resourcesByType.get("LAMBDA")?.relationships?.length, 3);
   assert.equal(resourcesByType.get("IAM_INSTANCE_PROFILE")?.relationships?.length, 1);
   assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
+});
+
+test("Tagging API의 실제 IAM ARN도 전용 reader와 합치며 CloudFormation 소유 태그를 보존한다", async () => {
+  const roleArn = "arn:aws:iam::123456789012:role/customer-api";
+  const genericRecords = await listTaggedUnknownResources(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        assert.ok(command instanceof GetResourcesCommand);
+        return {
+          ResourceTagMappingList: [
+            {
+              ResourceARN: roleArn,
+              Tags: [
+                { Key: "Name", Value: "customer-api" },
+                { Key: "aws:cloudformation:stack-name", Value: "customer-production" }
+              ]
+            }
+          ]
+        };
+      }
+    })
+  );
+  const detailed = record(
+    "AWS::IAM::Role",
+    roleArn,
+    "customer-api",
+    { roleName: "customer-api", path: "/service/" },
+    [{ type: "attached_to", targetProviderResourceId: "instance-profile/customer-api" }]
+  );
+
+  const records = uniqueDiscoveredRecordsByProviderId([...genericRecords, detailed]);
+
+  assert.equal(genericRecords[0]?.providerResourceType, "AWS::IAM::Role");
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.config["roleName"], "customer-api");
+  assert.deepEqual(records[0]?.config["tags"], [
+    { key: "Name", value: "customer-api" },
+    { key: "aws:cloudformation:stack-name", value: "customer-production" }
+  ]);
+  assert.deepEqual(records[0]?.relationships, detailed.relationships);
+});
+
+test("Tagging API의 API Gateway ARN은 전용 reader ID와 하나로 합친다", async () => {
+  const genericRecords = await listTaggedUnknownResources(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        assert.ok(command instanceof GetResourcesCommand);
+        return {
+          ResourceTagMappingList: [
+            {
+              ResourceARN: "arn:aws:apigateway:ap-northeast-2::/restapis/api123",
+              Tags: [{ Key: "Environment", Value: "production" }]
+            }
+          ]
+        };
+      }
+    })
+  );
+  const detailed = record(
+    "AWS::ApiGateway::RestApi",
+    "api123",
+    "customer-api",
+    { id: "api123", name: "customer-api" }
+  );
+
+  const records = uniqueDiscoveredRecordsByProviderId([...genericRecords, detailed]);
+
+  assert.equal(genericRecords[0]?.providerResourceType, "AWS::ApiGateway::RestApi");
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceId, "api123");
+  assert.equal(records[0]?.config["name"], "customer-api");
+  assert.deepEqual(records[0]?.config["tags"], [
+    { key: "Environment", value: "production" }
+  ]);
 });
 
 function createDetailedRecords(): AwsDiscoveredResourceRecord[] {
