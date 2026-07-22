@@ -86,7 +86,7 @@ function createLegacyResult(): LegacyReverseEngineeringScanResult {
         config: {}
       }
     ],
-    architectureJson,
+    architectureJson: structuredClone(architectureJson),
     findings: [],
     analysisExclusions: [
       {
@@ -211,6 +211,52 @@ test("과거 저장된 KMS Log Group도 읽는 순간 관리와 import를 다시
   assert.equal(suggestion?.terraformAddress, undefined);
   assert.equal(suggestion?.importCommand, undefined);
   assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
+});
+
+test("CloudFormation 소유 Resource는 읽는 순간 Terraform 편집 대상으로 표시하지 않는다", () => {
+  const legacyResult = createLegacyResult();
+  const bucket = legacyResult.discoveredResources.find((resource) => resource.id === "safe-bucket");
+  const bucketNode = legacyResult.architectureJson.nodes.find(
+    (node) => node.id === "legacy-safe-bucket-node"
+  );
+
+  assert.ok(bucket);
+  assert.ok(bucketNode);
+
+  bucket.config = {
+    tags: [
+      { key: "aws:cloudformation:stack-name", value: "customer-production" },
+      { key: "Environment", value: "production" }
+    ]
+  };
+  bucketNode.config = {
+    ...bucketNode.config,
+    reverseEngineeringManagement: "managed",
+    terraformBlockType: "resource",
+    terraformResourceType: "aws_s3_bucket",
+    terraformResourceName: "safe_bucket",
+    terraformFileName: "reverse-engineering"
+  };
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const publicBucket = result.discoveredResources.find((resource) => resource.id === "safe-bucket");
+  const publicBucketNode = result.architectureJson.nodes.find(
+    (node) => node.id === "legacy-safe-bucket-node"
+  );
+  const suggestion = result.importSuggestions.find(
+    (item) => item.resourceId === "safe-bucket"
+  );
+
+  assert.equal(publicBucket?.analysisExcluded, true);
+  assert.equal(publicBucket?.importSuggestionStatus, undefined);
+  assert.equal(publicBucketNode?.config["analysisExcluded"], true);
+  assert.equal(publicBucketNode?.config["reverseEngineeringManagement"], "reference");
+  assert.equal(publicBucketNode?.config["terraformResourceType"], undefined);
+  assert.equal(publicBucketNode?.config["terraformResourceName"], undefined);
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.equal(suggestion?.terraformAddress, undefined);
+  assert.equal(suggestion?.importCommand, undefined);
 });
 
 test("과거 저장된 Action과 Metric Query Alarm도 읽는 순간 관리와 import를 다시 차단한다", () => {
@@ -426,6 +472,7 @@ test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호�
   assert.equal(lambdaNode?.label, "orders-handler");
   assert.deepEqual(lambdaNode?.config, {
     functionName: "orders-handler",
+    reverseEngineeringManagement: "needs_mapping",
     providerResourceType: "AWS::Lambda::Function",
     providerResourceId: result.discoveredResources[0]?.providerResourceId,
     analysisExcluded: true

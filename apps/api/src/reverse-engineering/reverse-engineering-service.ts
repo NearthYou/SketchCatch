@@ -47,6 +47,7 @@ import {
   type ReverseEngineeringConnectionFailureClassification
 } from "./reverse-engineering-public-errors.js";
 import {
+  classifyReverseEngineeringManagement,
   isCloudWatchMetricAlarmRequiringMapping,
   isKmsConnectedCloudWatchLogGroup
 } from "./reverse-engineering-management-policy.js";
@@ -300,9 +301,12 @@ function sanitizeReadCompatibilityDiscoveredResource(
     providerResourceId: resource.providerResourceId
   };
   const displayName = createAwsResourceDisplayName(resource);
+  const management = classifyReverseEngineeringManagement(resource);
   const needsManualMapping =
     isKmsConnectedCloudWatchLogGroup(resource) ||
     isCloudWatchMetricAlarmRequiringMapping(resource);
+  const analysisExcluded =
+    resource.analysisExcluded === true || management !== "managed";
 
   return {
     ...resource,
@@ -317,9 +321,8 @@ function sanitizeReadCompatibilityDiscoveredResource(
       providerResourceType: resource.providerResourceType,
       config: resource.config
     }),
-    ...(needsManualMapping
-      ? { analysisExcluded: true, importSuggestionStatus: "manual_review" as const }
-      : {}),
+    ...(analysisExcluded ? { analysisExcluded: true } : {}),
+    ...(needsManualMapping ? { importSuggestionStatus: "manual_review" as const } : {}),
     relationships: resource.relationships?.map((relationship) => ({
       ...relationship,
       targetResourceId: sanitizePublicResourceReference(
@@ -673,6 +676,7 @@ function createReadCompatibilityNormalizationContext(
         .filter(
           (resource) =>
             isReviewOnlyDiscoveredResource(resource) ||
+            classifyReverseEngineeringManagement(resource) !== "managed" ||
             isKmsConnectedCloudWatchLogGroup(resource) ||
             isCloudWatchMetricAlarmRequiringMapping(resource)
         )
@@ -749,6 +753,7 @@ function normalizeReadCompatibilityNode(
 
   const analysisExcluded =
     node.config["analysisExcluded"] === true || context.reviewOnlyResourceIds.has(resource.id);
+  const management = classifyReverseEngineeringManagement(resource);
   const label =
     context.displayNameByProviderResourceId.get(resource.providerResourceId) ??
     createAwsResourceDisplayName(resource);
@@ -759,12 +764,10 @@ function normalizeReadCompatibilityNode(
     providerResourceId: resource.providerResourceId,
     analysisExcluded
   };
-  const requiresManualMapping =
-    isKmsConnectedCloudWatchLogGroup(resource) ||
-    isCloudWatchMetricAlarmRequiringMapping(resource);
-  const config = requiresManualMapping
-    ? createManualMappingReadCompatibilityConfig(observedConfig)
-    : observedConfig;
+  const config =
+    management === "managed"
+      ? observedConfig
+      : createNonManagedReadCompatibilityConfig(observedConfig, management);
 
   if (node.label === label && isDeepStrictEqual(node.config, config)) {
     return node;
@@ -778,8 +781,12 @@ function normalizeReadCompatibilityNode(
 }
 
 /** 과거 위험 Resource에 남은 실행 가능한 Terraform identity를 읽는 즉시 제거합니다. */
-function createManualMappingReadCompatibilityConfig(
-  config: Record<string, unknown>
+function createNonManagedReadCompatibilityConfig(
+  config: Record<string, unknown>,
+  management: Exclude<
+    ReturnType<typeof classifyReverseEngineeringManagement>,
+    "managed"
+  >
 ): Record<string, unknown> {
   const {
     terraformBlockType: _terraformBlockType,
@@ -792,7 +799,7 @@ function createManualMappingReadCompatibilityConfig(
   return {
     ...safeConfig,
     analysisExcluded: true,
-    reverseEngineeringManagement: "needs_mapping"
+    reverseEngineeringManagement: management
   };
 }
 
