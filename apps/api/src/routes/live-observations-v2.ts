@@ -9,6 +9,7 @@ import {
 const deploymentParamsSchema = z.object({ deploymentId: z.uuid() });
 const observationParamsSchema = deploymentParamsSchema.extend({ observationId: z.uuid() });
 const streamQuerySchema = z.object({ once: z.enum(["true", "false"]).optional() });
+const LIVE_SNAPSHOT_INTERVAL_MS = 500;
 
 type EnabledLiveObservationV2RouteOptions = {
   readonly enabled: true;
@@ -205,7 +206,7 @@ async function streamSnapshots(input: {
     return;
   }
 
-  timers.snapshot = setInterval(() => void writeSnapshot(), 1_000);
+  timers.snapshot = setInterval(() => void writeSnapshot(), LIVE_SNAPSHOT_INTERVAL_MS);
   timers.heartbeat = setInterval(() => {
     if (!closed) input.reply.raw.write(": heartbeat\n\n");
   }, 15_000);

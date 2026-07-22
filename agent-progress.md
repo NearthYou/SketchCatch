@@ -147,3 +147,9 @@ Short English-only working log for the current agent context. Older records are 
 1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
 2. Use a separately approved load cycle if provider-confirmed Live Observation scale-out must be accepted; no DB migration is required.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
+### 2026-07-22 - Increase Live Observation snapshot cadence
+
+- Reverted every uncommitted UI experiment from the canceled Live Observation display task before starting this work.
+- Reduced only the Store-backed SSE snapshot interval from 1,000 ms to 500 ms so accepted request receipts reach the animation in smaller, more frequent batches. The 10-second AWS provider cache and 15-second heartbeat remain unchanged.
+- Verification passed: 14 focused Live Observation API tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, final harness, and diff checks.
+- The change remains isolated on `codex/increase-live-observation-refresh` and must not be merged into `dev` without a new explicit request. No deployment, cloud mutation, migration, dependency, or lockfile change was performed.
