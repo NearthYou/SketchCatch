@@ -332,12 +332,23 @@ function ReverseEngineeringScanCoveragePanel({
   const hasRetryableScanError = coverage
     ? coverage.unavailableServices.some((service) => service.remedy === "retry")
     : scanErrors.some((scanError) => scanError.retryable);
+  const detailedPresentations = new Map(
+    presentReverseEngineeringScanErrors(scanErrors).map((presentation) => [
+      presentation.key,
+      presentation
+    ])
+  );
   const presentations = coverage
-    ? coverage.unavailableServices.map((service) => ({
-        key: service.serviceKey,
-        serviceName: service.displayName,
-        remedy: getCoverageRemedy(service.reason)
-      }))
+    ? coverage.unavailableServices.map((service) => {
+        const detailedPresentation = detailedPresentations.get(service.serviceKey);
+
+        return {
+          key: service.serviceKey,
+          serviceName: service.displayName,
+          causeLabel: detailedPresentation?.causeLabel ?? getCoverageCauseLabel(service.reason),
+          remedy: getCoverageRemedy(service.reason)
+        };
+      })
     : presentReverseEngineeringScanErrors(scanErrors);
 
   return (
@@ -351,7 +362,7 @@ function ReverseEngineeringScanCoveragePanel({
               {presentations.map((presentation) => (
                 <li key={presentation.key} className={styles.resultItem}>
                   <strong>{presentation.serviceName}</strong>
-                  <span className={styles.errorBadge}>읽기 실패</span>
+                  <span className={styles.errorBadge}>{presentation.causeLabel}</span>
                   <span>{presentation.remedy}</span>
                 </li>
               ))}
@@ -400,6 +411,20 @@ function getCoverageRemedy(
   }
 
   return "잠시 후 다시 시도해 주세요.";
+}
+
+function getCoverageCauseLabel(
+  reason: ReverseEngineeringServiceCoverage["unavailableServices"][number]["reason"]
+): string {
+  if (reason === "permission_required") {
+    return "권한 부족";
+  }
+
+  if (reason === "not_configured") {
+    return "서비스 준비 필요";
+  }
+
+  return "다시 시도 필요";
 }
 
 // 아직 정식 변환하지 못한 AWS 리소스를 숨기지 않고 별도 목록으로 보여줍니다.

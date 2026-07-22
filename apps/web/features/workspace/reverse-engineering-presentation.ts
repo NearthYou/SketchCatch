@@ -26,6 +26,7 @@ export type ReverseEngineeringScanSummary = {
 export type ReverseEngineeringScanErrorPresentation = {
   readonly key: string;
   readonly serviceName: string;
+  readonly causeLabel: string;
   readonly remedy: string;
 };
 
@@ -74,13 +75,16 @@ const SERVICE_LABELS: Readonly<Record<string, string>> = {
 const MAX_DISPLAY_NAME_LENGTH = 42;
 const SCAN_ERROR_SERVICE_NAMES: Readonly<Record<string, string>> = {
   "api-gateway": "API Gateway",
+  "application-autoscaling": "Application Auto Scaling",
   "aws-inventory": "AWS 리소스 목록",
   cloudfront: "CloudFront",
   cloudwatch: "CloudWatch",
   "cloudwatch-logs": "CloudWatch Logs",
   ec2: "EC2",
+  ecr: "ECR",
   ecs: "ECS",
   "elastic-load-balancing": "Elastic Load Balancing",
+  eventbridge: "EventBridge",
   iam: "IAM",
   kms: "KMS",
   lambda: "Lambda",
@@ -88,7 +92,8 @@ const SCAN_ERROR_SERVICE_NAMES: Readonly<Record<string, string>> = {
   "resource-explorer": "Resource Explorer",
   "resource-explorer-2": "Resource Explorer",
   "resource-groups-tagging": "Resource Groups Tagging API",
-  s3: "S3"
+  s3: "S3",
+  secretsmanager: "Secrets Manager"
 };
 
 export function presentReverseEngineeringResource(
@@ -145,6 +150,7 @@ export function presentReverseEngineeringScanErrors(
     presentationByService.set(key, {
       key,
       serviceName: getScanErrorServiceName(key),
+      causeLabel: getScanErrorCauseLabel(scanError.reason),
       remedy: getScanErrorRemedy(scanError.reason)
     });
   }
@@ -194,8 +200,13 @@ function getScanErrorServiceKey(scanError: ReverseEngineeringScanError): string 
     CLOUDWATCH_LOG_GROUP: "cloudwatch-logs",
     CLOUDWATCH_METRIC_ALARM: "cloudwatch",
     API_GATEWAY_REST_API: "api-gateway",
+    APPLICATION_AUTO_SCALING_TARGET: "application-autoscaling",
+    APPLICATION_AUTO_SCALING_POLICY: "application-autoscaling",
+    ECR_REPOSITORY: "ecr",
+    EVENT_RULE: "eventbridge",
     LAMBDA: "lambda",
-    LAMBDA_PERMISSION: "lambda"
+    LAMBDA_PERMISSION: "lambda",
+    SECRETS_MANAGER_SECRET: "secretsmanager"
   };
 
   return serviceByResourceType[scanError.resourceType] ?? "aws-inventory";
@@ -204,6 +215,34 @@ function getScanErrorServiceKey(scanError: ReverseEngineeringScanError): string 
 // gg: 공개 목록에 없는 식별자는 기술 이름 대신 일반 AWS 서비스로 표시합니다.
 function getScanErrorServiceName(key: string): string {
   return SCAN_ERROR_SERVICE_NAMES[key] ?? "AWS 서비스";
+}
+
+function getScanErrorCauseLabel(reason: ReverseEngineeringScanError["reason"]): string {
+  if (reason === "permission_denied") {
+    return "권한 부족";
+  }
+
+  if (reason === "not_configured") {
+    return "서비스 준비 필요";
+  }
+
+  if (reason === "invalid_region") {
+    return "리전 설정 오류";
+  }
+
+  if (reason === "expired_credential") {
+    return "AWS 연결 만료";
+  }
+
+  if (reason === "throttled") {
+    return "AWS 요청 제한";
+  }
+
+  if (reason === "provider_error") {
+    return "AWS 서비스 일시 오류";
+  }
+
+  return "원인 확인 필요";
 }
 
 function getScanErrorRemedy(reason: ReverseEngineeringScanError["reason"]): string {

@@ -500,15 +500,45 @@ test("부분 실패는 실제 AWS 서비스별로 합치고 내부 오류 대신
     {
       key: "ec2",
       serviceName: "EC2",
+      causeLabel: "권한 부족",
       remedy: "가져오기 권한을 추가한 뒤 다시 시도해 주세요."
     },
     {
       key: "s3",
       serviceName: "S3",
+      causeLabel: "AWS 요청 제한",
       remedy: "잠시 후 다시 시도해 주세요."
     }
   ]);
   assert.doesNotMatch(JSON.stringify(errors), /AccessDenied|arn:aws|DescribeVpcs|RequestId|provider_api/);
+});
+
+test("부분 실패 원인을 내부 오류 없이 쉬운 한국어로 구분한다", () => {
+  const reasons = [
+    ["permission_denied", "권한 부족"],
+    ["not_configured", "서비스 준비 필요"],
+    ["invalid_region", "리전 설정 오류"],
+    ["expired_credential", "AWS 연결 만료"],
+    ["throttled", "AWS 요청 제한"],
+    ["provider_error", "AWS 서비스 일시 오류"],
+    ["unknown", "원인 확인 필요"]
+  ] as const;
+
+  const errors = presentReverseEngineeringScanErrors(
+    reasons.map(([reason], index) => ({
+      id: `scan-error-service-${index === 0 ? "eventbridge" : `service-${index}`}`,
+      serviceKey: index === 0 ? "eventbridge" : undefined,
+      resourceType: "UNKNOWN" as const,
+      stage: "provider_api" as const,
+      reason,
+      message: `raw-${reason}-arn:aws:iam::123456789012:role/private RequestId: hidden`,
+      retryable: reason === "throttled" || reason === "provider_error"
+    }))
+  );
+
+  assert.deepEqual(errors.map((error) => error.causeLabel), reasons.map(([, label]) => label));
+  assert.equal(errors[0]?.serviceName, "EventBridge");
+  assert.doesNotMatch(JSON.stringify(errors), /arn:aws|RequestId|raw-|provider_api/u);
 });
 
 test("UNKNOWN reader도 안전한 serviceKey로 서로 다른 AWS 서비스를 구분한다", () => {
