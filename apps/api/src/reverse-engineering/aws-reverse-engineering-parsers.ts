@@ -1,12 +1,26 @@
 // allow: SIZE_OK - AWS Query XML parser bundle; splitting every resource parser needs a separate migration.
 import type { AwsDiscoveredRelationship, AwsDiscoveredResourceRecord } from "./aws-provider-adapter.js";
 
-type SecurityGroupIngressRule = {
-  ipProtocol: string | null;
-  fromPort: number;
-  toPort: number | null;
-  port: number;
-  cidr: string;
+type SecurityGroupRule = {
+  ipProtocol: string;
+  fromPort?: number;
+  toPort?: number;
+  port?: number;
+  cidr?: string;
+  cidrBlocks?: string[];
+  ipv6CidrBlocks?: string[];
+  prefixListIds?: string[];
+  securityGroups?: string[];
+  description?: string | undefined;
+  sourceSecurityGroupName?: string | undefined;
+  sourceSecurityGroupOwnerId?: string | undefined;
+  sourceSecurityGroupVpcId?: string | undefined;
+  sourceSecurityGroupVpcPeeringConnectionId?: string | undefined;
+};
+type SecurityGroupRuleExtraction = {
+  rules: SecurityGroupRule[];
+  complete: boolean;
+  sourceSecurityGroupIds: string[];
 };
 type ProviderParameterValue = string | ProviderParameterValue[] | { [key: string]: ProviderParameterValue };
 type ConfigRecord = Record<string, string | number | boolean>;
@@ -129,7 +143,7 @@ export function parseRouteTablesFromXml(
   });
 }
 
-// AWS Security Group XML을 VPC 의존 관계가 있는 Resource 후보로 바꿉니다.
+// AWS Security Group XML을 VPC와 source Security Group 관계가 있는 Resource 후보로 바꿉니다.
 export function parseSecurityGroupsFromXml(
   xml: string,
   region: string
@@ -137,6 +151,12 @@ export function parseSecurityGroupsFromXml(
   return extractSetItems(xml, "securityGroupInfo").map((item) => {
     const groupId = extractRequiredTag(item, "groupId");
     const vpcId = extractTag(item, "vpcId");
+    const ingress = extractSecurityGroupIngressRules(item);
+    const egress = extractSecurityGroupEgressRules(item);
+    const sourceSecurityGroupIds = [...new Set([
+      ...ingress.sourceSecurityGroupIds,
+      ...egress.sourceSecurityGroupIds
+    ])].filter((sourceGroupId) => sourceGroupId !== groupId);
 
     return {
       providerResourceType: "AWS::EC2::SecurityGroup",
@@ -149,10 +169,16 @@ export function parseSecurityGroupsFromXml(
         ownerId: extractTag(item, "ownerId"),
         providerParameters: createXmlParameterSnapshot(item),
         vpcId,
-        egress: extractSecurityGroupEgressRules(item),
-        ingress: extractSecurityGroupIngressRules(item)
+        egress: egress.rules,
+        ingress: ingress.rules,
+        securityGroupRulesComplete: ingress.complete && egress.complete
       },
-      relationships: vpcId ? [createRelationship("depends_on", vpcId)] : []
+      relationships: [
+        ...(vpcId ? [createRelationship("depends_on", vpcId)] : []),
+        ...sourceSecurityGroupIds.map((sourceGroupId) =>
+          createRelationship("depends_on", sourceGroupId)
+        )
+      ]
     };
   });
 }
@@ -252,31 +278,135 @@ function extractRdsSubnetIds(xml: string): string[] {
 }
 
 // Security Group ingress XML에서 위험 분석과 설정 표시 둘 다에 필요한 규칙 정보를 추립니다.
-function extractSecurityGroupIngressRules(xml: string): SecurityGroupIngressRule[] {
+function extractSecurityGroupIngressRules(xml: string): SecurityGroupRuleExtraction {
   return extractSecurityGroupRules(xml, "ipPermissions");
 }
 
-function extractSecurityGroupEgressRules(xml: string): SecurityGroupIngressRule[] {
+// Security Group egress도 ingress와 같은 source 보존 규칙으로 추출합니다.
+function extractSecurityGroupEgressRules(xml: string): SecurityGroupRuleExtraction {
   return extractSecurityGroupRules(xml, "ipPermissionsEgress");
 }
 
-function extractSecurityGroupRules(xml: string, setTag: string): SecurityGroupIngressRule[] {
-  return extractSetItems(xml, setTag).flatMap((permission) => {
+// gg: source별 설명과 종류를 합치지 않아 AWS 규칙을 Terraform에서 그대로 다시 만들 수 있게 합니다.
+function extractSecurityGroupRules(xml: string, setTag: string): SecurityGroupRuleExtraction {
+  if (!hasXmlElement(xml, setTag)) {
+    return { rules: [], complete: false, sourceSecurityGroupIds: [] };
+  }
+
+  const rules: SecurityGroupRule[] = [];
+  const sourceSecurityGroupIds: string[] = [];
+  let complete = true;
+
+  for (const permission of extractSetItems(xml, setTag)) {
+    const ipProtocol = extractTag(permission, "ipProtocol");
     const fromPort = extractIntegerTag(permission, "fromPort");
     const toPort = extractIntegerTag(permission, "toPort");
+    const hasFromPort = hasXmlElement(permission, "fromPort");
+    const hasToPort = hasXmlElement(permission, "toPort");
 
-    if (fromPort === null) {
-      return [];
+    if (
+      !ipProtocol ||
+      hasFromPort !== hasToPort ||
+      (hasFromPort && (fromPort === null || toPort === null))
+    ) {
+      complete = false;
     }
 
-    return extractRepeatedTags(permission, "cidrIp").map((cidr) => ({
-      ipProtocol: extractTag(permission, "ipProtocol"),
-      fromPort,
-      toPort,
-      port: fromPort,
-      cidr
-    }));
-  });
+    if (!ipProtocol) {
+      continue;
+    }
+
+    const baseRule: SecurityGroupRule = {
+      ipProtocol,
+      ...(fromPort === null ? {} : { fromPort, port: fromPort }),
+      ...(toPort === null ? {} : { toPort })
+    };
+    const ipv4Sources = extractSetItems(permission, "ipRanges");
+    const ipv6Sources = extractSetItems(permission, "ipv6Ranges");
+    const prefixListSources = extractSetItems(permission, "prefixListIds");
+    const securityGroupSources = extractSetItems(permission, "groups");
+    const sourceCount =
+      ipv4Sources.length +
+      ipv6Sources.length +
+      prefixListSources.length +
+      securityGroupSources.length;
+
+    if (sourceCount === 0) {
+      complete = false;
+    }
+
+    for (const source of ipv4Sources) {
+      const cidr = extractTag(source, "cidrIp");
+      if (!cidr) {
+        complete = false;
+        continue;
+      }
+      rules.push(compactSecurityGroupRule({
+        ...baseRule,
+        cidr,
+        cidrBlocks: [cidr],
+        description: extractTag(source, "description") ?? undefined
+      }));
+    }
+
+    for (const source of ipv6Sources) {
+      const cidr = extractTag(source, "cidrIpv6");
+      if (!cidr) {
+        complete = false;
+        continue;
+      }
+      rules.push(compactSecurityGroupRule({
+        ...baseRule,
+        ipv6CidrBlocks: [cidr],
+        description: extractTag(source, "description") ?? undefined
+      }));
+    }
+
+    for (const source of prefixListSources) {
+      const prefixListId = extractTag(source, "prefixListId");
+      if (!prefixListId) {
+        complete = false;
+        continue;
+      }
+      rules.push(compactSecurityGroupRule({
+        ...baseRule,
+        prefixListIds: [prefixListId],
+        description: extractTag(source, "description") ?? undefined
+      }));
+    }
+
+    for (const source of securityGroupSources) {
+      const sourceSecurityGroupId = extractTag(source, "groupId");
+      if (!sourceSecurityGroupId) {
+        complete = false;
+        continue;
+      }
+      sourceSecurityGroupIds.push(sourceSecurityGroupId);
+      rules.push(compactSecurityGroupRule({
+        ...baseRule,
+        securityGroups: [sourceSecurityGroupId],
+        description: extractTag(source, "description") ?? undefined,
+        sourceSecurityGroupName: extractTag(source, "groupName") ?? undefined,
+        sourceSecurityGroupOwnerId: extractTag(source, "userId") ?? undefined,
+        sourceSecurityGroupVpcId: extractTag(source, "vpcId") ?? undefined,
+        sourceSecurityGroupVpcPeeringConnectionId:
+          extractTag(source, "vpcPeeringConnectionId") ?? undefined
+      }));
+    }
+  }
+
+  return {
+    rules,
+    complete,
+    sourceSecurityGroupIds: [...new Set(sourceSecurityGroupIds)]
+  };
+}
+
+// gg: source metadata의 빈 선택값만 제거하고 protocol -1의 port 생략은 그대로 보존합니다.
+function compactSecurityGroupRule(rule: SecurityGroupRule): SecurityGroupRule {
+  return Object.fromEntries(
+    Object.entries(rule).filter(([, value]) => value !== undefined && value !== "")
+  ) as SecurityGroupRule;
 }
 
 function extractCidrBlockAssociations(xml: string): ConfigRecord[] {
@@ -517,6 +647,11 @@ function extractTagBodies(xml: string, tagName: string): string[] {
   const pattern = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
 
   return [...xml.matchAll(pattern)].map((match) => match[1] ?? "");
+}
+
+// gg: 빈 AWS 목록의 self-closing 태그도 조회 완료 근거로 인정합니다.
+function hasXmlElement(xml: string, tagName: string): boolean {
+  return new RegExp(`<${tagName}(?:>|\\s*/>)`).test(xml);
 }
 
 // AWS 원본 리소스 ID 사이의 관계를 내부 관계 모양으로 만듭니다.

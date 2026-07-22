@@ -25,7 +25,8 @@ import {
 } from "./reverse-engineering-terraform-projection.js";
 import {
   isCloudWatchMetricAlarmRequiringMapping,
-  isKmsConnectedCloudWatchLogGroup
+  isKmsConnectedCloudWatchLogGroup,
+  isSecurityGroupRequiringMapping
 } from "./reverse-engineering-management-policy.js";
 
 export type AwsProviderScanInput = {
@@ -431,6 +432,14 @@ function toDiscoveredResource(
     };
   }
 
+  if (isSecurityGroupRequiringMapping(baseResource)) {
+    return {
+      ...baseResource,
+      analysisExcluded: true,
+      importSuggestionStatus: "manual_review"
+    };
+  }
+
   if (REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES.has(resourceType)) {
     return baseResource;
   }
@@ -491,6 +500,7 @@ function toDiscoveredRelationship(
   ];
 }
 
+// gg: 원본을 완전히 복원할 수 없는 Resource는 AI 분석 대상에서도 명시적으로 제외합니다.
 function createAnalysisExclusions(
   discoveredResources: DiscoveredResource[]
 ): ReverseEngineeringAnalysisExclusion[] {
@@ -504,10 +514,13 @@ function createAnalysisExclusions(
         ? "KMS Key로 암호화된 로그 저장소는 현재 안전하게 수정할 수 없어 보드에만 표시됩니다."
         : isCloudWatchMetricAlarmRequiringMapping(resource)
           ? "알림 동작 대상 또는 계산식 지표 연결이 남아 있어 보드에만 표시됩니다."
+          : isSecurityGroupRequiringMapping(resource)
+            ? "접근 규칙의 대상과 범위를 모두 확인하지 못해 보드에만 표시됩니다."
           : "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
     }));
 }
 
+// gg: 안전하게 다시 만들 수 없는 Resource는 자동 import 대신 사용자 확인으로 돌립니다.
 function createImportSuggestions(
   discoveredResources: DiscoveredResource[]
 ): ReverseEngineeringImportSuggestion[] {
@@ -530,6 +543,16 @@ function createImportSuggestions(
         status: "manual_review",
         reason:
           "알림 동작 대상 또는 계산식 지표를 보드 리소스와 먼저 연결해야 안전하게 수정할 수 있습니다.",
+        handoffReady: false
+      };
+    }
+
+    if (isSecurityGroupRequiringMapping(resource)) {
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "manual_review",
+        reason: "접근 규칙의 대상과 범위를 모두 확인한 뒤 안전하게 수정할 수 있습니다.",
         handoffReady: false
       };
     }

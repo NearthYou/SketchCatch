@@ -147,6 +147,32 @@ test("서버 전용 Reverse Engineering 결과는 나중 Terraform import에 필
   assert.equal(result.importSuggestions[0]?.importCommand?.split(" ").at(-1), ALB_ARN);
 });
 
+test("규칙 source를 완전히 읽지 못한 Security Group은 자동 import에서 제외한다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::EC2::SecurityGroup",
+      providerResourceId: "sg-incomplete",
+      displayName: "incomplete",
+      config: {
+        groupName: "incomplete",
+        description: "missing source",
+        vpcId: "vpc-main",
+        securityGroupRulesComplete: false,
+        ingress: [],
+        egress: []
+      }
+    })
+  ]);
+
+  const [resource] = result.discoveredResources;
+  const [suggestion] = result.importSuggestions;
+  assert.equal(resource?.analysisExcluded, true);
+  assert.equal(resource?.importSuggestionStatus, "manual_review");
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.match(suggestion?.reason ?? "", /규칙.*확인/);
+});
+
 test("ALB와 CloudFront를 supported ResourceType으로 변환하고 공개 가능한 import만 만든다", async () => {
   const result = await scan([
     record({

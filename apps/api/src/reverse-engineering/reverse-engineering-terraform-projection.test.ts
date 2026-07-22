@@ -148,6 +148,99 @@ test("네트워크와 실행 리소스의 관찰값을 Terraform 인수 이름�
   }
 });
 
+test("Security Group 규칙의 모든 source와 optional port를 Terraform 값으로 보존한다", () => {
+  const projection = createReverseEngineeringTerraformProjection(
+    resource("SECURITY_GROUP", {
+      providerResourceType: "AWS::EC2::SecurityGroup",
+      providerResourceId: "sg-target",
+      config: {
+        groupName: "target",
+        description: "target group",
+        vpcId: "vpc-main",
+        securityGroupRulesComplete: true,
+        ingress: [
+          {
+            ipProtocol: "tcp",
+            fromPort: 443,
+            toPort: 443,
+            cidrBlocks: ["10.0.0.0/8"],
+            description: "office ipv4"
+          },
+          {
+            ipProtocol: "tcp",
+            fromPort: 443,
+            toPort: 443,
+            ipv6CidrBlocks: ["2001:db8::/64"],
+            description: "office ipv6"
+          },
+          {
+            ipProtocol: "tcp",
+            fromPort: 443,
+            toPort: 443,
+            prefixListIds: ["pl-0123456789abcdef0"],
+            description: "aws service"
+          },
+          {
+            ipProtocol: "tcp",
+            fromPort: 443,
+            toPort: 443,
+            securityGroups: ["sg-source"],
+            description: "source workload"
+          }
+        ],
+        egress: [
+          {
+            ipProtocol: "-1",
+            cidrBlocks: ["0.0.0.0/0"]
+          }
+        ]
+      }
+    })
+  );
+
+  assert.deepEqual(projection.terraformValues, {
+    name: "target",
+    description: "target group",
+    vpcId: "vpc-main",
+    ingress: [
+      {
+        protocol: "tcp",
+        fromPort: 443,
+        toPort: 443,
+        cidrBlocks: ["10.0.0.0/8"],
+        description: "office ipv4"
+      },
+      {
+        protocol: "tcp",
+        fromPort: 443,
+        toPort: 443,
+        ipv6CidrBlocks: ["2001:db8::/64"],
+        description: "office ipv6"
+      },
+      {
+        protocol: "tcp",
+        fromPort: 443,
+        toPort: 443,
+        prefixListIds: ["pl-0123456789abcdef0"],
+        description: "aws service"
+      },
+      {
+        protocol: "tcp",
+        fromPort: 443,
+        toPort: 443,
+        securityGroups: ["sg-source"],
+        description: "source workload"
+      }
+    ],
+    egress: [
+      {
+        protocol: "-1",
+        cidrBlocks: ["0.0.0.0/0"]
+      }
+    ]
+  });
+});
+
 test("암호화되지 않은 CloudWatch Log Group의 이름과 보존 기간을 Terraform 값으로 보존한다", () => {
   const projection = createReverseEngineeringTerraformProjection(
     resource("CLOUDWATCH_LOG_GROUP", {

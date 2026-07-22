@@ -369,13 +369,31 @@ function normalizeSecurityGroupRules(value: unknown): Record<string, unknown>[] 
       protocol: rule["ipProtocol"],
       fromPort: rule["fromPort"],
       toPort: rule["toPort"],
-      cidrBlocks: typeof cidr === "string" ? [cidr] : undefined
+      description: rule["description"],
+      cidrBlocks:
+        normalizeSecurityGroupSourceValues(rule["cidrBlocks"]) ??
+        (typeof cidr === "string" ? [cidr] : undefined),
+      ipv6CidrBlocks: normalizeSecurityGroupSourceValues(rule["ipv6CidrBlocks"]),
+      prefixListIds: normalizeSecurityGroupSourceValues(rule["prefixListIds"]),
+      securityGroups: normalizeSecurityGroupSourceValues(rule["securityGroups"])
     });
 
     return Object.keys(normalized).length > 0 ? [normalized] : [];
   });
 
   return rules.length > 0 ? rules : undefined;
+}
+
+/** Security Group source 목록은 빈 값 없이 조회된 순서 그대로 Terraform에 전달합니다. */
+function normalizeSecurityGroupSourceValues(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const values = value.filter(
+    (source): source is string => typeof source === "string" && source.trim().length > 0
+  );
+  return values.length > 0 ? values : undefined;
 }
 
 /** ARN 형태의 instance profile은 Terraform이 요구하는 마지막 이름 부분만 사용한다. */

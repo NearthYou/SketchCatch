@@ -21,6 +21,43 @@ test("자동 지원 워크로드와 AMI를 Terraform 관리 경계에 맞게 분
   assert.equal(classifyReverseEngineeringManagement(resource("AMI")), "reference");
 });
 
+test("규칙 원본의 완전성을 확인한 Security Group만 자동 관리한다", () => {
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("SECURITY_GROUP", {
+        securityGroupRulesComplete: true,
+        ingress: [
+          {
+            ipProtocol: "-1",
+            cidrBlocks: ["0.0.0.0/0"]
+          }
+        ],
+        egress: []
+      })
+    ),
+    "managed"
+  );
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("SECURITY_GROUP", {
+        securityGroupRulesComplete: false,
+        ingress: [],
+        egress: []
+      })
+    ),
+    "needs_mapping"
+  );
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("SECURITY_GROUP", {
+        ingress: [{ ipProtocol: "tcp", fromPort: 443, toPort: 443 }],
+        egress: []
+      })
+    ),
+    "needs_mapping"
+  );
+});
+
 test("Action 대상이나 Metric Query 연결이 남은 CloudWatch Alarm은 매핑 전까지 관리하지 않는다", () => {
   assert.equal(
     classifyReverseEngineeringManagement(

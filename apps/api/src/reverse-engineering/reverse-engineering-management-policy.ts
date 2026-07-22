@@ -80,9 +80,71 @@ export function classifyReverseEngineeringManagement(
     return "needs_mapping";
   }
 
+  if (isSecurityGroupRequiringMapping(resource)) {
+    return "needs_mapping";
+  }
+
   return AUTOMATED_MANAGED_RESOURCE_TYPES.has(resource.resourceType)
     ? "managed"
     : "needs_mapping";
+}
+
+/** Security Group 규칙의 protocol, source, port 완전성을 확인하지 못하면 자동 관리를 막습니다. */
+export function isSecurityGroupRequiringMapping(
+  resource: Pick<DiscoveredResource, "resourceType" | "config">
+): boolean {
+  if (resource.resourceType !== "SECURITY_GROUP") {
+    return false;
+  }
+
+  if (
+    resource.config["securityGroupRulesComplete"] !== true ||
+    !Array.isArray(resource.config["ingress"]) ||
+    !Array.isArray(resource.config["egress"])
+  ) {
+    return true;
+  }
+
+  return ![...resource.config["ingress"], ...resource.config["egress"]].every(
+    isCompleteSecurityGroupRule
+  );
+}
+
+/** Security Group rule 하나가 재생성 가능한 source와 port 짝을 가졌는지 확인합니다. */
+function isCompleteSecurityGroupRule(value: unknown): boolean {
+  if (!isRecord(value) || !hasNonEmptyString(value["ipProtocol"])) {
+    return false;
+  }
+
+  const hasFromPort = value["fromPort"] !== undefined;
+  const hasToPort = value["toPort"] !== undefined;
+  if (
+    hasFromPort !== hasToPort ||
+    (hasFromPort &&
+      (!Number.isInteger(value["fromPort"]) || !Number.isInteger(value["toPort"])))
+  ) {
+    return false;
+  }
+
+  const sourceKeys = [
+    "cidrBlocks",
+    "ipv6CidrBlocks",
+    "prefixListIds",
+    "securityGroups"
+  ] as const;
+  let sourceCount = 0;
+  for (const key of sourceKeys) {
+    const source = value[key];
+    if (source === undefined) {
+      continue;
+    }
+    if (!Array.isArray(source) || source.length === 0 || !source.every(hasNonEmptyString)) {
+      return false;
+    }
+    sourceCount += source.length;
+  }
+
+  return sourceCount > 0;
 }
 
 /** Action ARN 또는 metric math 연결을 안전하게 재구성하지 못하는 Alarm인지 확인합니다. */
