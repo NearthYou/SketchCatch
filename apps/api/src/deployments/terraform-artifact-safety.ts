@@ -1034,24 +1034,68 @@ function extractDataSourceBlocks(source: string): TerraformResourceBlock[] {
 
 function extractNamedBlocks(source: string, blockName: string): Array<{ body: string }> {
   const blocks: Array<{ body: string }> = [];
-  const headerPattern = new RegExp(`\\b${blockName}\\s*\\{`, "g");
-  let match: RegExpExecArray | null;
+  let index = 0;
 
-  while ((match = headerPattern.exec(source)) !== null) {
-    const openBraceIndex = match.index + match[0].length - 1;
+  while (index < source.length) {
+    const char = source[index]!;
+    const nextChar = source[index + 1];
+
+    if (char === "\"") {
+      index = skipQuotedString(source, index);
+      continue;
+    }
+
+    if (char === "#" || (char === "/" && nextChar === "/")) {
+      index = skipLineComment(source, index);
+      continue;
+    }
+
+    if (char === "/" && nextChar === "*") {
+      index = skipBlockComment(source, index, 1).index;
+      continue;
+    }
+
+    if (!source.startsWith(blockName, index) || isHclIdentifierCharacter(source[index - 1])) {
+      index += 1;
+      continue;
+    }
+
+    const nameEndIndex = index + blockName.length;
+
+    if (isHclIdentifierCharacter(source[nameEndIndex])) {
+      index = nameEndIndex;
+      continue;
+    }
+
+    let openBraceIndex = nameEndIndex;
+
+    while (openBraceIndex < source.length && /\s/u.test(source[openBraceIndex]!)) {
+      openBraceIndex += 1;
+    }
+
+    if (source[openBraceIndex] !== "{") {
+      index = nameEndIndex;
+      continue;
+    }
+
     const closeBraceIndex = findMatchingCloseBrace(source, openBraceIndex);
 
     if (closeBraceIndex === -1) {
+      index = openBraceIndex + 1;
       continue;
     }
 
     blocks.push({
       body: source.slice(openBraceIndex + 1, closeBraceIndex)
     });
-    headerPattern.lastIndex = closeBraceIndex + 1;
+    index = closeBraceIndex + 1;
   }
 
   return blocks;
+}
+
+function isHclIdentifierCharacter(char: string | undefined): boolean {
+  return typeof char === "string" && /[A-Za-z0-9_-]/u.test(char);
 }
 
 function findMatchingCloseBrace(source: string, openBraceIndex: number): number {

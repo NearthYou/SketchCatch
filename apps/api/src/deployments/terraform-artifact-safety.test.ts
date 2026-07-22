@@ -82,6 +82,19 @@ test("Terraform import IDs allow generator-escaped literal template markers", ()
   );
 });
 
+test("Terraform artifact safety ignores JavaScript import syntax inside quoted values", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      resource "aws_s3_bucket" "existing" {
+        bucket = "existing-bucket"
+        tags = {
+          inline_source = "import { randomUUID } from \\"node:crypto\\";"
+        }
+      }
+    `)
+  );
+});
+
 test("generated S3 artifacts omit synthetic public access blocks and pass safety", () => {
   const graph: InfrastructureGraph = {
     nodes: [
