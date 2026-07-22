@@ -10,6 +10,7 @@ import type {
 } from "@sketchcatch/types";
 
 import { convertArchitectureJsonToDiagramJson } from "./workspace-ai-diagram-adapter";
+import { presentLiveObservationDiagramResourceLabels } from "./live-observation-resource-presentation";
 
 export const OBSERVABLE_RESOURCE_TYPES: ReadonlySet<ResourceType> = new Set([
   "CLOUDFRONT",
@@ -53,7 +54,10 @@ export function createLiveObservationArchitectureModel(
 ): LiveObservationArchitectureModel {
   const observationArchitecture = recoverLiveObservationReferenceEdges(architecture);
   const convertedDiagram = convertArchitectureJsonToDiagramJson(observationArchitecture);
-  const diagram = preserveDeployedArchitectureGraph(observationArchitecture, convertedDiagram);
+  const diagram = presentLiveObservationDiagramResourceLabels(
+    preserveDeployedArchitectureGraph(observationArchitecture, convertedDiagram)
+  );
+  const displayNameByResourceId = new Map(diagram.nodes.map((node) => [node.id, node.label]));
   const aggregateObservationState = getAggregateObservationState(snapshot);
   const hasEcsCapacity = architecture.nodes.some(
     (node) => node.type === "ECS_CLUSTER" || node.type === "ECS_SERVICE"
@@ -73,7 +77,7 @@ export function createLiveObservationArchitectureModel(
       return {
         detailLines: scalingDetailLinesByResourceId.get(node.id) ?? [],
         id: node.id,
-        label: node.label ?? node.type,
+        label: displayNameByResourceId.get(node.id) ?? node.label ?? node.type,
         observable,
         observationState: observable ? aggregateObservationState : "not_supported",
         resourceType: node.type

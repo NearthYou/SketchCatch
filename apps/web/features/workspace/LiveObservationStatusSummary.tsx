@@ -1,5 +1,5 @@
 import React from "react";
-import { CheckCircle2, CircleAlert, CircleHelp, LoaderCircle } from "lucide-react";
+import { CheckCircle2, CircleAlert, CircleHelp, LoaderCircle, Radio } from "lucide-react";
 import type {
   LiveObservationDashboardStatus,
   LiveObservationSignalStatus
@@ -50,6 +50,7 @@ export function LiveObservationStatusSummary({
 function getStatusIcon(status: LiveObservationSignalStatus) {
   if (status === "normal") return CheckCircle2;
   if (status === "warning" || status === "critical") return CircleAlert;
+  if (status === "observed") return Radio;
   if (status === "checking") return LoaderCircle;
   return CircleHelp;
 }
@@ -59,6 +60,7 @@ function getStatusLabel(status: LiveObservationSignalStatus): string {
   if (status === "normal") return "정상";
   if (status === "warning") return "주의";
   if (status === "critical") return "문제 발생";
+  if (status === "observed") return "요청 확인";
   if (status === "checking") return "확인 중";
   return "확인할 수 없음";
 }

@@ -102,6 +102,13 @@ test("shows immediate traffic capacity as a forecast without replacing actual ta
   assert.match(styles, /data-capacity-forecast="scale-in"/);
 });
 
+test("uses plain Korean capacity labels without exposing internal task wording", () => {
+  assert.match(source, /실행 서버 그룹/);
+  assert.match(source, /실행 서버 \$\{actualCapacityCount\}개 관측/);
+  assert.match(source, /추가 실행 서버 \$\{model\.hiddenCapacityCount\}개/);
+  assert.doesNotMatch(source, /FARGATE TASK 그룹|Task 관측 대기|추가 Task/);
+});
+
 test("stops traffic and capacity motion when reduced motion is requested", () => {
   const reducedMotion = styles.slice(styles.indexOf("@media (prefers-reduced-motion: reduce)", 8_000));
   assert.match(reducedMotion, /data-flowing="true"[\s\S]*liveObservationPresentationNode/);
