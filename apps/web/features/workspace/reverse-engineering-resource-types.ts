@@ -11,7 +11,15 @@ export const REVERSE_ENGINEERING_RESOURCE_TYPES: ResourceType[] = [
   "EC2",
   "RDS",
   "S3",
+  "LAMBDA",
+  "LAMBDA_PERMISSION",
+  "IAM_ROLE",
+  "IAM_POLICY",
+  "IAM_INSTANCE_PROFILE",
+  "KMS_KEY",
   "API_GATEWAY_REST_API",
+  "EVENTBRIDGE_RULE",
+  "EVENTBRIDGE_TARGET",
   "CLOUDWATCH_LOG_GROUP",
   "CLOUDWATCH_METRIC_ALARM",
   "LOAD_BALANCER",
@@ -35,7 +43,15 @@ const RESOURCE_SELECTION_LABELS: Readonly<Partial<Record<ResourceType, string>>>
   EC2: "가상 서버(EC2)",
   RDS: "데이터베이스(RDS)",
   S3: "파일 저장소(S3)",
+  LAMBDA: "Lambda 함수",
+  LAMBDA_PERMISSION: "Lambda 호출 권한",
+  IAM_ROLE: "IAM 역할",
+  IAM_POLICY: "IAM 정책",
+  IAM_INSTANCE_PROFILE: "EC2용 IAM 프로필",
+  KMS_KEY: "암호화 키(KMS)",
   API_GATEWAY_REST_API: "API 입구(API Gateway)",
+  EVENTBRIDGE_RULE: "이벤트 규칙(EventBridge)",
+  EVENTBRIDGE_TARGET: "이벤트 대상(EventBridge)",
   CLOUDWATCH_LOG_GROUP: "로그 저장소(CloudWatch)",
   CLOUDWATCH_METRIC_ALARM: "지표 알림(CloudWatch)",
   LOAD_BALANCER: "애플리케이션 로드 밸런서(ALB)",
@@ -62,7 +78,7 @@ export function getReverseEngineeringSelectionHelp(
   selection: ReverseEngineeringResourceSelection
 ): string {
   return selection === REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
-    ? "배포할 수 있는 리소스와 보드에만 표시하는 AWS 리소스를 함께 읽습니다."
+    ? "Terraform 편집 대상과 보드에서 확인할 AWS 리소스를 함께 읽습니다."
     : "선택한 정식 지원 Resource만 읽습니다.";
 }
 

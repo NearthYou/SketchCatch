@@ -74,10 +74,28 @@ test("API Gateway와 CloudWatch Alarm을 개별 Resource로 선택하고 쉬운 
   );
 });
 
+test("Lambda, IAM, KMS, EventBridge를 개별 Resource로 선택하고 쉬운 이름으로 본다", () => {
+  const expectedLabels = [
+    ["LAMBDA", "Lambda 함수"],
+    ["LAMBDA_PERMISSION", "Lambda 호출 권한"],
+    ["IAM_ROLE", "IAM 역할"],
+    ["IAM_POLICY", "IAM 정책"],
+    ["IAM_INSTANCE_PROFILE", "EC2용 IAM 프로필"],
+    ["KMS_KEY", "암호화 키(KMS)"],
+    ["EVENTBRIDGE_RULE", "이벤트 규칙(EventBridge)"],
+    ["EVENTBRIDGE_TARGET", "이벤트 대상(EventBridge)"]
+  ] as const satisfies readonly (readonly [ReverseEngineeringResourceSelection, string])[];
+
+  for (const [resourceType, label] of expectedLabels) {
+    assert.equal(REVERSE_ENGINEERING_RESOURCE_TYPES.includes(resourceType), true);
+    assert.equal(formatReverseEngineeringResourceSelectionLabel(resourceType), label);
+  }
+});
+
 test("전체 선택 도움말은 보드에만 표시하는 AWS 리소스도 함께 읽는다고 설명한다", () => {
   assert.equal(
     getReverseEngineeringSelectionHelp(REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION),
-    "배포할 수 있는 리소스와 보드에만 표시하는 AWS 리소스를 함께 읽습니다."
+    "Terraform 편집 대상과 보드에서 확인할 AWS 리소스를 함께 읽습니다."
   );
   assert.equal(
     getReverseEngineeringSelectionHelp("VPC"),
