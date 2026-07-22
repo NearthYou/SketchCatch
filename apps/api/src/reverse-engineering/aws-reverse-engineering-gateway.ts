@@ -3013,7 +3013,7 @@ function uniqueDiscoveredRelationships(
   ];
 }
 
-// gg: 같은 Log Group이 여러 reader에서 잡히면 이름과 설정이 있는 전용 조회 결과를 보존합니다.
+// gg: 같은 Resource가 여러 reader에서 잡혀도 전용 조회 결과의 설정과 관계를 보존합니다.
 export function uniqueDiscoveredRecordsByProviderId(
   records: AwsDiscoveredResourceRecord[]
 ): AwsDiscoveredResourceRecord[] {
@@ -3059,6 +3059,17 @@ function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord):
   return record.providerResourceId;
 }
 
+const DEDICATED_RECORD_DETAIL_KEY_BY_PROVIDER_RESOURCE_TYPE = new Map<string, string>([
+  ["AWS::Logs::LogGroup", "logGroupName"],
+  ["AWS::ApiGateway::RestApi", "name"],
+  ["AWS::CloudWatch::Alarm", "alarmName"],
+  ["AWS::Lambda::Function", "functionName"],
+  ["AWS::IAM::Role", "roleName"],
+  ["AWS::IAM::Policy", "policyName"],
+  ["AWS::IAM::InstanceProfile", "instanceProfileName"],
+  ["AWS::KMS::Key", "keyId"]
+]);
+
 // gg: generic inventory보다 같은 Resource의 전용 reader가 가진 관리 가능 설정을 우선합니다.
 function shouldPreferDedicatedRecord(
   existingRecord: AwsDiscoveredResourceRecord,
@@ -3068,13 +3079,9 @@ function shouldPreferDedicatedRecord(
     return false;
   }
 
-  const detailKey = existingRecord.providerResourceType === "AWS::Logs::LogGroup"
-    ? "logGroupName"
-    : existingRecord.providerResourceType === "AWS::ApiGateway::RestApi"
-      ? "name"
-      : existingRecord.providerResourceType === "AWS::CloudWatch::Alarm"
-        ? "alarmName"
-      : null;
+  const detailKey = DEDICATED_RECORD_DETAIL_KEY_BY_PROVIDER_RESOURCE_TYPE.get(
+    existingRecord.providerResourceType
+  );
 
   return Boolean(
     detailKey &&
