@@ -107,6 +107,7 @@ export function classifyReverseEngineeringConnectionFailure(
     errorName === "credentialsprovidererror" ||
     errorName === "tokenprovidererror" ||
     message.includes("aws caller credentials") ||
+    message.includes("aws sso credentials") ||
     message.includes("could not load credentials") ||
     message.includes("sso session")
   ) {
