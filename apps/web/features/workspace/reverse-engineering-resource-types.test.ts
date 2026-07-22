@@ -61,6 +61,19 @@ test("CloudWatch Log Group을 직접 가져올 Resource로 선택할 수 있다"
   assert.equal(REVERSE_ENGINEERING_RESOURCE_TYPES.includes("CLOUDWATCH_LOG_GROUP"), true);
 });
 
+test("API Gateway와 CloudWatch Alarm을 개별 Resource로 선택하고 쉬운 이름으로 본다", () => {
+  assert.equal(REVERSE_ENGINEERING_RESOURCE_TYPES.includes("API_GATEWAY_REST_API"), true);
+  assert.equal(REVERSE_ENGINEERING_RESOURCE_TYPES.includes("CLOUDWATCH_METRIC_ALARM"), true);
+  assert.equal(
+    formatReverseEngineeringResourceSelectionLabel("API_GATEWAY_REST_API"),
+    "API 입구(API Gateway)"
+  );
+  assert.equal(
+    formatReverseEngineeringResourceSelectionLabel("CLOUDWATCH_METRIC_ALARM"),
+    "지표 알림(CloudWatch)"
+  );
+});
+
 test("전체 선택 도움말은 보드에만 표시하는 AWS 리소스도 함께 읽는다고 설명한다", () => {
   assert.equal(
     getReverseEngineeringSelectionHelp(REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION),
