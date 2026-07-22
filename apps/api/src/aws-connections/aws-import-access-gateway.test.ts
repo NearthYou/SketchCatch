@@ -45,10 +45,10 @@ const contract = createAwsImportManagerContract({
   templateBucketName: "sketchcatch-private-templates"
 });
 
-test("default registry pins issued Policy action sets and uses the current v2 set", () => {
-  assert.deepEqual(Object.keys(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION), ["1", "2"]);
+test("default registry pins issued Policy action sets and uses the current v3 set", () => {
+  assert.deepEqual(Object.keys(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION), ["1", "2", "3"]);
   assert.deepEqual(
-    [...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["2"]].sort(),
+    [...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["3"]].sort(),
     [...createAwsImportReadPolicyDocument().Statement[0].Action].sort()
   );
 });

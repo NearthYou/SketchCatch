@@ -205,7 +205,40 @@ test("EventBridge 권한 거부는 전체 가져오기를 막지 않고 서비�
   );
 });
 
-test("EventBridge probe는 Rule 한 page와 첫 Rule의 Target 한 page만 읽는다", async () => {
+test("새 데모 metadata 서비스 오류는 각각 안전한 expanded 제한으로 남긴다", async () => {
+  const executors = createExecutors(async (_context, serviceKey) => {
+    if (String(serviceKey) === "ecr") return "permission_denied";
+    if (String(serviceKey) === "secretsmanager") return "transient";
+    return "success";
+  });
+  const result = await probeAwsImportAccess(
+    { connection },
+    {
+      executors,
+      async assumeRole() {
+        return {
+          accessKeyId: "temporary-access-key",
+          secretAccessKey: "temporary-secret-key",
+          sessionToken: "temporary-session-token"
+        };
+      }
+    }
+  );
+
+  assert.equal(result.status, "limited");
+  assert.deepEqual(result.limitedServiceLabels, ["ECR", "Secrets Manager"]);
+  assert.deepEqual(
+    result.serviceResults
+      .filter((service) => ["ecr", "secretsmanager"].includes(service.serviceKey))
+      .map((service) => [service.serviceKey, service.outcome]),
+    [
+      ["ecr", "permission_denied"],
+      ["secretsmanager", "transient"]
+    ]
+  );
+});
+
+test("EventBridge probe는 첫 Rule의 Target과 tag metadata만 읽는다", async () => {
   const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
 
   const outcome = await probeEventBridge({
@@ -213,7 +246,13 @@ test("EventBridge probe는 Rule 한 page와 첫 Rule의 Target 한 page만 읽�
       const value = command as { constructor: { name: string }; input: Record<string, unknown> };
       calls.push({ name: value.constructor.name, input: value.input });
       return calls.length === 1
-        ? { Rules: [{ Name: "nightly", EventBusName: "default" }] }
+        ? {
+            Rules: [{
+              Name: "nightly",
+              EventBusName: "default",
+              Arn: "arn:aws:events:ap-northeast-2:123456789012:rule/nightly"
+            }]
+          }
         : { Targets: [] };
     }
   });
@@ -221,12 +260,17 @@ test("EventBridge probe는 Rule 한 page와 첫 Rule의 Target 한 page만 읽�
   assert.equal(outcome, "success");
   assert.deepEqual(calls.map((call) => call.name), [
     "ListRulesCommand",
-    "ListTargetsByRuleCommand"
+    "ListTargetsByRuleCommand",
+    "ListTagsForResourceCommand"
   ]);
   assert.equal(calls[0]?.input["Limit"], 1);
   assert.equal(calls[1]?.input["Limit"], 1);
   assert.equal(calls[1]?.input["Rule"], "nightly");
   assert.equal(calls[1]?.input["EventBusName"], "default");
+  assert.equal(
+    calls[2]?.input["ResourceARN"],
+    "arn:aws:events:ap-northeast-2:123456789012:rule/nightly"
+  );
 });
 
 test("Resource Explorer uses GetDefaultView then GetView then one Search", async () => {

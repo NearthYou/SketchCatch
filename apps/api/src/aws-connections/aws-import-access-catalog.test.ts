@@ -39,6 +39,51 @@ test("EventBridge import reader는 Rule과 Target을 읽는 최소 권한만 요
 
   assert.equal(reader?.displayName, "EventBridge");
   assert.equal(reader?.tier, "expanded");
-  assert.deepEqual(reader?.actions, ["events:ListRules", "events:ListTargetsByRule"]);
-  assert.doesNotMatch(JSON.stringify(reader), /Create|Put|Delete|Tag/u);
+  assert.deepEqual(reader?.actions, [
+    "events:ListRules",
+    "events:ListTargetsByRule",
+    "events:ListTagsForResource"
+  ]);
+  assert.doesNotMatch(
+    JSON.stringify(reader),
+    /Create|Put|Delete|events:(?:TagResource|UntagResource)/u
+  );
+});
+
+test("데모 토폴로지 reader는 필요한 metadata 읽기 권한만 요청한다", () => {
+  const readers = new Map(AWS_IMPORT_READERS.map((reader) => [reader.serviceKey, reader]));
+
+  assert.deepEqual(readers.get("ec2")?.actions.slice(-2), [
+    "ec2:DescribeAddresses",
+    "ec2:DescribeNatGateways"
+  ]);
+  assert.deepEqual(readers.get("elbv2")?.actions, [
+    "elasticloadbalancing:DescribeLoadBalancers",
+    "elasticloadbalancing:DescribeTargetGroups",
+    "elasticloadbalancing:DescribeListeners"
+  ]);
+  assert.deepEqual(readers.get("cloudfront")?.actions, [
+    "cloudfront:ListDistributions",
+    "cloudfront:ListOriginAccessControls",
+    "cloudfront:GetOriginAccessControl"
+  ]);
+  assert.deepEqual(readers.get("ecr")?.actions, [
+    "ecr:DescribeRepositories",
+    "ecr:ListTagsForResource"
+  ]);
+  assert.deepEqual(readers.get("secretsmanager")?.actions, [
+    "secretsmanager:ListSecrets",
+    "secretsmanager:DescribeSecret"
+  ]);
+  assert.deepEqual(readers.get("application-autoscaling")?.actions, [
+    "application-autoscaling:DescribeScalableTargets",
+    "application-autoscaling:DescribeScalingPolicies"
+  ]);
+  assert.equal(readers.get("ecr")?.tier, "expanded");
+  assert.equal(readers.get("secretsmanager")?.tier, "expanded");
+  assert.equal(readers.get("application-autoscaling")?.tier, "expanded");
+  assert.doesNotMatch(
+    JSON.stringify([...readers.values()]),
+    /GetSecretValue|Create|Update|Put|Delete|TagResource|UntagResource/u
+  );
 });

@@ -30,7 +30,9 @@ export const AWS_IMPORT_READERS = [
       "ec2:DescribeInternetGateways",
       "ec2:DescribeRouteTables",
       "ec2:DescribeSecurityGroups",
-      "ec2:DescribeInstances"
+      "ec2:DescribeInstances",
+      "ec2:DescribeAddresses",
+      "ec2:DescribeNatGateways"
     ]
   },
   {
@@ -58,7 +60,11 @@ export const AWS_IMPORT_READERS = [
     serviceKey: "elbv2",
     displayName: "Load Balancer",
     tier: "core",
-    actions: ["elasticloadbalancing:DescribeLoadBalancers"]
+    actions: [
+      "elasticloadbalancing:DescribeLoadBalancers",
+      "elasticloadbalancing:DescribeTargetGroups",
+      "elasticloadbalancing:DescribeListeners"
+    ]
   },
   {
     serviceKey: "ecs",
@@ -76,7 +82,32 @@ export const AWS_IMPORT_READERS = [
     serviceKey: "cloudfront",
     displayName: "CloudFront",
     tier: "core",
-    actions: ["cloudfront:ListDistributions"]
+    actions: [
+      "cloudfront:ListDistributions",
+      "cloudfront:ListOriginAccessControls",
+      "cloudfront:GetOriginAccessControl"
+    ]
+  },
+  {
+    serviceKey: "ecr",
+    displayName: "ECR",
+    tier: "expanded",
+    actions: ["ecr:DescribeRepositories", "ecr:ListTagsForResource"]
+  },
+  {
+    serviceKey: "secretsmanager",
+    displayName: "Secrets Manager",
+    tier: "expanded",
+    actions: ["secretsmanager:ListSecrets", "secretsmanager:DescribeSecret"]
+  },
+  {
+    serviceKey: "application-autoscaling",
+    displayName: "Application Auto Scaling",
+    tier: "expanded",
+    actions: [
+      "application-autoscaling:DescribeScalableTargets",
+      "application-autoscaling:DescribeScalingPolicies"
+    ]
   },
   {
     serviceKey: "resource-explorer",
@@ -134,7 +165,11 @@ export const AWS_IMPORT_READERS = [
     serviceKey: "eventbridge",
     displayName: "EventBridge",
     tier: "expanded",
-    actions: ["events:ListRules", "events:ListTargetsByRule"]
+    actions: [
+      "events:ListRules",
+      "events:ListTargetsByRule",
+      "events:ListTagsForResource"
+    ]
   },
   {
     serviceKey: "ami",

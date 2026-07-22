@@ -1,12 +1,24 @@
 import { randomUUID } from "node:crypto";
+import {
+  ApplicationAutoScalingClient,
+  DescribeScalableTargetsCommand,
+  DescribeScalingPoliciesCommand
+} from "@aws-sdk/client-application-auto-scaling";
 import { GetRestApisCommand, APIGatewayClient } from "@aws-sdk/client-api-gateway";
-import { ListDistributionsCommand, CloudFrontClient } from "@aws-sdk/client-cloudfront";
+import {
+  CloudFrontClient,
+  GetOriginAccessControlCommand,
+  ListDistributionsCommand,
+  ListOriginAccessControlsCommand
+} from "@aws-sdk/client-cloudfront";
 import { DescribeAlarmsCommand, CloudWatchClient } from "@aws-sdk/client-cloudwatch";
 import { DescribeLogGroupsCommand, CloudWatchLogsClient } from "@aws-sdk/client-cloudwatch-logs";
 import {
+  DescribeAddressesCommand,
   DescribeImagesCommand,
   DescribeInstancesCommand,
   DescribeInternetGatewaysCommand,
+  DescribeNatGatewaysCommand,
   DescribeRouteTablesCommand,
   DescribeSecurityGroupsCommand,
   DescribeSubnetsCommand,
@@ -14,12 +26,20 @@ import {
   EC2Client
 } from "@aws-sdk/client-ec2";
 import {
+  DescribeListenersCommand,
   DescribeLoadBalancersCommand,
+  DescribeTargetGroupsCommand,
   ElasticLoadBalancingV2Client
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import {
+  DescribeRepositoriesCommand,
+  ECRClient,
+  ListTagsForResourceCommand as ListEcrTagsForResourceCommand
+} from "@aws-sdk/client-ecr";
+import {
   EventBridgeClient,
   ListRulesCommand,
+  ListTagsForResourceCommand as ListEventBridgeTagsForResourceCommand,
   ListTargetsByRuleCommand
 } from "@aws-sdk/client-eventbridge";
 import {
@@ -48,6 +68,11 @@ import {
   GetResourcesCommand,
   ResourceGroupsTaggingAPIClient
 } from "@aws-sdk/client-resource-groups-tagging-api";
+import {
+  DescribeSecretCommand,
+  ListSecretsCommand,
+  SecretsManagerClient
+} from "@aws-sdk/client-secrets-manager";
 import {
   GetBucketEncryptionCommand,
   GetBucketLocationCommand,
@@ -140,6 +165,9 @@ export const AWS_IMPORT_PROBE_EXECUTORS: ReadonlyMap<
   ["elbv2", probeElbv2],
   ["ecs", probeEcs],
   ["cloudfront", probeCloudFront],
+  ["ecr", probeEcrExecutor],
+  ["secretsmanager", probeSecretsManagerExecutor],
+  ["application-autoscaling", probeApplicationAutoScalingExecutor],
   ["resource-explorer", probeResourceExplorerExecutor],
   ["tagging", probeTagging],
   ["iam", probeIam],
@@ -354,6 +382,22 @@ async function probeEc2(context: AwsImportProbeExecutorContext): Promise<AwsImpo
   await client.send(new DescribeRouteTablesCommand({ MaxResults: 5 }));
   await client.send(new DescribeSecurityGroupsCommand({ MaxResults: 5 }));
   await client.send(new DescribeInstancesCommand({ MaxResults: 5 }));
+  await probeEc2Topology({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+  return "success";
+}
+
+/** gg: 데모 topology에 필요한 EIP와 NAT Gateway metadata도 첫 page만 읽습니다. */
+export async function probeEc2Topology(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  try {
+    await client.send(new DescribeAddressesCommand({ DryRun: true }));
+  } catch (error) {
+    if (errorName(error) !== "DryRunOperation") throw error;
+  }
+  await client.send(new DescribeNatGatewaysCommand({ MaxResults: 5 }));
   return "success";
 }
 
@@ -409,7 +453,28 @@ async function probeElbv2(context: AwsImportProbeExecutorContext): Promise<AwsIm
     new ElasticLoadBalancingV2Client({ region: context.region, credentials: context.credentials }),
     context.abortSignal
   );
-  await client.send(new DescribeLoadBalancersCommand({ PageSize: 1 }));
+  return probeElbv2Topology({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+}
+
+/** gg: 첫 Load Balancer에 연결된 Target Group과 Listener metadata만 확인합니다. */
+export async function probeElbv2Topology(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  const listed = await client.send(new DescribeLoadBalancersCommand({ PageSize: 1 })) as {
+    LoadBalancers?: Array<{ LoadBalancerArn?: string }>;
+  };
+  const loadBalancerArn = listed.LoadBalancers?.[0]?.LoadBalancerArn;
+  if (!loadBalancerArn) return "success";
+  await client.send(new DescribeTargetGroupsCommand({
+    LoadBalancerArn: loadBalancerArn,
+    PageSize: 1
+  }));
+  await client.send(new DescribeListenersCommand({
+    LoadBalancerArn: loadBalancerArn,
+    PageSize: 1
+  }));
   return "success";
 }
 
@@ -440,7 +505,117 @@ async function probeCloudFront(context: AwsImportProbeExecutorContext): Promise<
     new CloudFrontClient({ region: context.region, credentials: context.credentials }),
     context.abortSignal
   );
+  return probeCloudFrontTopology({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+}
+
+/** gg: Distribution과 첫 Origin Access Control metadata만 읽습니다. */
+export async function probeCloudFrontTopology(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
   await client.send(new ListDistributionsCommand({ MaxItems: 1 }));
+  const listed = await client.send(new ListOriginAccessControlsCommand({ MaxItems: 1 })) as {
+    OriginAccessControlList?: { Items?: Array<{ Id?: string }> };
+  };
+  const originAccessControlId = listed.OriginAccessControlList?.Items?.[0]?.Id;
+  if (originAccessControlId) {
+    await client.send(new GetOriginAccessControlCommand({ Id: originAccessControlId }));
+  }
+  return "success";
+}
+
+/** gg: ECR production executor는 shared session client를 bounded primitive에 전달합니다. */
+async function probeEcrExecutor(
+  context: AwsImportProbeExecutorContext
+): Promise<AwsImportProbeOutcome> {
+  const client = bindAbortSignal(
+    new ECRClient({ region: context.region, credentials: context.credentials }),
+    context.abortSignal
+  );
+  return probeEcr({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+}
+
+/** gg: 첫 ECR Repository의 identity와 tag metadata만 읽습니다. */
+export async function probeEcr(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  const listed = await client.send(new DescribeRepositoriesCommand({ maxResults: 1 })) as {
+    repositories?: Array<{ repositoryArn?: string }>;
+  };
+  const repositoryArn = listed.repositories?.[0]?.repositoryArn;
+  if (repositoryArn) {
+    await client.send(new ListEcrTagsForResourceCommand({ resourceArn: repositoryArn }));
+  }
+  return "success";
+}
+
+/** gg: Secrets Manager production executor는 secret value API를 포함하지 않습니다. */
+async function probeSecretsManagerExecutor(
+  context: AwsImportProbeExecutorContext
+): Promise<AwsImportProbeOutcome> {
+  const client = bindAbortSignal(
+    new SecretsManagerClient({ region: context.region, credentials: context.credentials }),
+    context.abortSignal
+  );
+  return probeSecretsManager({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+}
+
+/** gg: 첫 Secret의 이름과 설정 metadata만 읽고 실제 비밀값은 읽지 않습니다. */
+export async function probeSecretsManager(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  const listed = await client.send(new ListSecretsCommand({ MaxResults: 1 })) as {
+    SecretList?: Array<{ ARN?: string; Name?: string }>;
+  };
+  const secretId = listed.SecretList?.[0]?.ARN ?? listed.SecretList?.[0]?.Name;
+  if (secretId) await client.send(new DescribeSecretCommand({ SecretId: secretId }));
+  return "success";
+}
+
+/** gg: Application Auto Scaling production executor도 ECS 범위의 첫 target만 확인합니다. */
+async function probeApplicationAutoScalingExecutor(
+  context: AwsImportProbeExecutorContext
+): Promise<AwsImportProbeOutcome> {
+  const client = bindAbortSignal(
+    new ApplicationAutoScalingClient({
+      region: context.region,
+      credentials: context.credentials
+    }),
+    context.abortSignal
+  );
+  return probeApplicationAutoScaling({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+}
+
+/** gg: 첫 ECS scaling target과 연결된 policy metadata만 읽습니다. */
+export async function probeApplicationAutoScaling(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  const listed = await client.send(new DescribeScalableTargetsCommand({
+    ServiceNamespace: "ecs",
+    MaxResults: 1
+  })) as {
+    ScalableTargets?: Array<{
+      ResourceId?: string;
+      ScalableDimension?: "ecs:service:DesiredCount";
+      ServiceNamespace?: "ecs";
+    }>;
+  };
+  const target = listed.ScalableTargets?.[0];
+  if (target?.ResourceId && target.ScalableDimension && target.ServiceNamespace) {
+    await client.send(new DescribeScalingPoliciesCommand({
+      ResourceId: target.ResourceId,
+      ScalableDimension: target.ScalableDimension,
+      ServiceNamespace: target.ServiceNamespace,
+      MaxResults: 1
+    }));
+  }
   return "success";
 }
 
@@ -567,7 +742,7 @@ export async function probeEventBridge(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
   const listed = await client.send(new ListRulesCommand({ Limit: 1 })) as {
-    Rules?: Array<{ Name?: string; EventBusName?: string }>;
+    Rules?: Array<{ Name?: string; EventBusName?: string; Arn?: string }>;
   };
   const rule = listed.Rules?.[0];
   if (!rule?.Name) return "success";
@@ -576,6 +751,9 @@ export async function probeEventBridge(
     EventBusName: rule.EventBusName,
     Limit: 1
   }));
+  if (rule.Arn) {
+    await client.send(new ListEventBridgeTagsForResourceCommand({ ResourceARN: rule.Arn }));
+  }
   return "success";
 }
 

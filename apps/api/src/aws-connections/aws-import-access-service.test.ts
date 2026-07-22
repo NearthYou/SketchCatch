@@ -760,23 +760,29 @@ test("read-only and preview commands never mutate customer AWS", async () => {
 
 test("checkImportReads persists serviceKey outcomes and maps public labels from the catalog", async () => {
   const fixture = createImportAccessServiceFixture({
-    probeResult: createProbeResult({ iam: "permission_denied" })
+    probeResult: createProbeResult({
+      ecr: "permission_denied",
+      secretsmanager: "transient",
+      iam: "permission_denied"
+    })
   });
 
   const result = await fixture.service.checkImportReads(fixture.ownerInput);
 
   assert.equal(result.state.status, "limited");
   assert.equal(result.state.coreReady, true);
-  assert.deepEqual(result.state.limitedServiceLabels, ["IAM"]);
+  assert.deepEqual(result.state.limitedServiceLabels, ["ECR", "Secrets Manager", "IAM"]);
   assert.deepEqual(fixture.getRecord()?.coreReadSummary, {
     ec2: "success",
     s3: "success"
   });
   assert.deepEqual(fixture.getRecord()?.expandedReadSummary, {
+    ecr: "permission_denied",
+    secretsmanager: "transient",
     iam: "permission_denied"
   });
   assert.equal(fixture.getRecord()?.policyStackId, "policy-stack-id");
-  assert.equal(fixture.getRecord()?.policyContractVersion, "2");
+  assert.equal(fixture.getRecord()?.policyContractVersion, "3");
   assert.match(fixture.getRecord()?.policyTemplateHash ?? "", /^[0-9a-f]{64}$/u);
   assert.match(fixture.getRecord()?.policyFingerprint ?? "", /^[0-9a-f]{64}$/u);
   assert.doesNotMatch(JSON.stringify(fixture.getRecord()), /AccessDenied|RequestId|arn:aws/u);
