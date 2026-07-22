@@ -21,7 +21,7 @@ test("import catalog produces the read-only policy Task 4 gateway and probes wil
   );
   assert.doesNotMatch(
     JSON.stringify(policy),
-    /Create|Update|Put|Delete|Attach|Detach|PassRole/u
+    /"[^"]*:(?:Create|Update|Put|Delete|Attach|Detach|PassRole)/u
   );
 });
 
@@ -79,6 +79,12 @@ test("데모 토폴로지 reader는 필요한 metadata 읽기 권한만 요청�
   assert.deepEqual(readers.get("application-autoscaling")?.actions, [
     "application-autoscaling:DescribeScalableTargets",
     "application-autoscaling:DescribeScalingPolicies"
+  ]);
+  assert.deepEqual(readers.get("iam")?.actions, [
+    "iam:ListRoles",
+    "iam:ListPolicies",
+    "iam:ListInstanceProfiles",
+    "iam:ListAttachedRolePolicies"
   ]);
   assert.equal(readers.get("ecr")?.tier, "expanded");
   assert.equal(readers.get("secretsmanager")?.tier, "expanded");

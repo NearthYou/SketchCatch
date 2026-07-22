@@ -9,12 +9,34 @@ import {
   AWS_IMPORT_PROBE_EXECUTORS,
   probeAwsImportAccess,
   probeEventBridge,
+  probeIamRoleAttachments,
   probeLambda,
   probeResourceExplorer,
   probeS3,
   type AwsImportProbeExecutor,
   type AwsImportProbeOutcome
 } from "./aws-import-access-probe.js";
+
+test("IAM probe는 첫 Role의 연결된 Managed Policy 읽기 권한까지 확인한다", async () => {
+  const commands: object[] = [];
+  const outcome = await probeIamRoleAttachments({
+    async send(command) {
+      commands.push(command);
+      if (command.constructor.name === "ListRolesCommand") {
+        return { Roles: [{ RoleName: "application-role" }] };
+      }
+      return {};
+    }
+  });
+
+  assert.equal(outcome, "success");
+  assert.deepEqual(commands.map((command) => command.constructor.name), [
+    "ListRolesCommand",
+    "ListPoliciesCommand",
+    "ListInstanceProfilesCommand",
+    "ListAttachedRolePoliciesCommand"
+  ]);
+});
 
 const connection: AwsConnection = {
   id: "11111111-2222-4333-8444-555555555555",

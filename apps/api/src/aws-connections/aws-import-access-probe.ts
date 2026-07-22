@@ -53,6 +53,7 @@ import {
 } from "@aws-sdk/client-ecs";
 import {
   IAMClient,
+  ListAttachedRolePoliciesCommand,
   ListInstanceProfilesCommand,
   ListPoliciesCommand,
   ListRolesCommand
@@ -647,9 +648,27 @@ async function probeIam(context: AwsImportProbeExecutorContext): Promise<AwsImpo
     new IAMClient({ region: context.region, credentials: context.credentials }),
     context.abortSignal
   );
-  await client.send(new ListRolesCommand({ MaxItems: 1 }));
+  return probeIamRoleAttachments({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+}
+
+/** gg: 첫 Role 하나로 Managed Policy 연결 관계를 읽을 수 있는지도 함께 확인합니다. */
+export async function probeIamRoleAttachments(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  const roles = await client.send(new ListRolesCommand({ MaxItems: 1 })) as {
+    Roles?: Array<{ RoleName?: string }>;
+  };
   await client.send(new ListPoliciesCommand({ MaxItems: 1 }));
   await client.send(new ListInstanceProfilesCommand({ MaxItems: 1 }));
+  const roleName = roles.Roles?.[0]?.RoleName;
+  if (roleName) {
+    await client.send(new ListAttachedRolePoliciesCommand({
+      RoleName: roleName,
+      MaxItems: 1
+    }));
+  }
   return "success";
 }
 

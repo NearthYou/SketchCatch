@@ -129,7 +129,12 @@ export const AWS_IMPORT_READERS = [
     serviceKey: "iam",
     displayName: "IAM",
     tier: "expanded",
-    actions: ["iam:ListRoles", "iam:ListPolicies", "iam:ListInstanceProfiles"]
+    actions: [
+      "iam:ListRoles",
+      "iam:ListPolicies",
+      "iam:ListInstanceProfiles",
+      "iam:ListAttachedRolePolicies"
+    ]
   },
   {
     serviceKey: "kms",
