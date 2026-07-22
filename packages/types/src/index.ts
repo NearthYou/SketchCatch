@@ -377,6 +377,7 @@ export type CreateReverseEngineeringProjectRequest = CreateProjectRequest & {
     previewId: string;
     draftId: string;
     sourceNodeIds: string[];
+    importDecision: ReverseEngineeringImportDecisionRequest;
   };
 };
 
@@ -857,9 +858,7 @@ export type GitCicdReadinessItemKey =
   | "monitoring_config"
   | "deployment_target";
 
-export type GitCicdDeploymentTargetReadinessKey =
-  | "aws_connection"
-  | "build_config";
+export type GitCicdDeploymentTargetReadinessKey = "aws_connection" | "build_config";
 
 export type GitCicdReadinessAction =
   | "approve_apply_plan"
@@ -1794,10 +1793,7 @@ export type ProjectBuildEnvironmentStatus =
   | "verification_failed"
   | "disconnected";
 
-export type ProjectRepositoryAccessVerificationStatus =
-  | "not_checked"
-  | "verified"
-  | "failed";
+export type ProjectRepositoryAccessVerificationStatus = "not_checked" | "verified" | "failed";
 
 export type ProjectBuildEnvironment = {
   id: string;
@@ -2425,6 +2421,20 @@ export type ReverseEngineeringImportSuggestionStatus =
   | "ready"
   | "unsupported_resource_type"
   | "manual_review";
+
+export type ReverseEngineeringImportDecisionMode = "import_existing" | "observe_only";
+
+export type ReverseEngineeringImportDecision = {
+  version: 1;
+  mode: ReverseEngineeringImportDecisionMode;
+  statusAtConfirmation: ReverseEngineeringImportSuggestionStatus;
+};
+
+export type ReverseEngineeringImportDecisionRequest = {
+  version: 1;
+  selectedReadyResourceIds: string[];
+  acknowledgedReviewOnlyResourceIds: string[];
+};
 
 export type DiscoveredResource = {
   id: string;
@@ -3993,6 +4003,7 @@ export type DiagramNodeMetadata = {
         source: "aws_scan";
         protectedValueKeys: string[];
         editableValueKeys: string[];
+        importDecision?: ReverseEngineeringImportDecision | undefined;
       }
     | undefined;
 };
@@ -4301,6 +4312,21 @@ export type ProjectDraft = {
 export type SaveProjectDraftRequest = {
   diagramJson: DiagramJson;
   expectedRevision: number | null;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
+};
+
+/** Existing Project에 Reverse Engineering 후보를 서버 검증 뒤 적용하는 exact request입니다. */
+export type ApplyReverseEngineeringDraftRequest = {
+  expectedRevision: number;
+  sourceScanId: string;
+  sourceDraftId: string;
+  sourceNodeIds: string[];
+  sourceEdgeIds: string[];
+  sourceDiagram: DiagramJson;
+  sourceFingerprint: string;
+  candidateDiagram: DiagramJson;
+  candidateArchitectureJson: ArchitectureJson;
+  importDecision: ReverseEngineeringImportDecisionRequest;
   terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
 

@@ -1730,6 +1730,51 @@
   display: none;
 }
 
+.reverseEngineeringWorkspaceView {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.reverseEngineeringWorkspaceHeader {
+  align-items: center;
+  background: var(--workspace-surface, #ffffff);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.reverseEngineeringWorkspaceHeader > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.reverseEngineeringWorkspaceHeader strong {
+  color: var(--workspace-text, #171717);
+  font-size: calc(14px + var(--presentation-font-size-increase));
+}
+
+.reverseEngineeringWorkspaceHeader span,
+.reverseEngineeringEntryMessage,
+.reverseEngineeringEntryError {
+  color: var(--workspace-muted, #60646c);
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  line-height: 1.4;
+}
+
+.reverseEngineeringEntryMessage,
+.reverseEngineeringEntryError {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reverseEngineeringEntryError {
+  color: #b42318;
+}
+
 .panelModeToggle {
   align-items: center;
   background: var(--workspace-surface-muted, #fafafa);
@@ -11344,19 +11389,11 @@
 
 /* Deployment tab final cascade */
 .deploymentConsoleScreenBody {
-  --deployment-console-page-title-size: calc(
-    28px + var(--presentation-font-size-increase)
-  );
+  --deployment-console-page-title-size: calc(28px + var(--presentation-font-size-increase));
   --deployment-console-context-size: calc(13px + var(--presentation-font-size-increase));
-  --deployment-console-primary-action-size: calc(
-    16px + var(--presentation-font-size-increase)
-  );
-  --deployment-console-section-title-size: calc(
-    18px + var(--presentation-font-size-increase)
-  );
-  --deployment-console-feature-title-size: calc(
-    22px + var(--presentation-font-size-increase)
-  );
+  --deployment-console-primary-action-size: calc(16px + var(--presentation-font-size-increase));
+  --deployment-console-section-title-size: calc(18px + var(--presentation-font-size-increase));
+  --deployment-console-feature-title-size: calc(22px + var(--presentation-font-size-increase));
   --deployment-console-row-title-size: calc(16px + var(--presentation-font-size-increase));
   --deployment-console-body-size: calc(15px + var(--presentation-font-size-increase));
   --deployment-console-meta-size: calc(13px + var(--presentation-font-size-increase));
@@ -11526,10 +11563,7 @@
 }
 
 .deploymentPageHeader
-  .deploymentSecondaryButton:is(
-    [data-action="cancel-execution"],
-    [data-action="destroy-plan"]
-  ) {
+  .deploymentSecondaryButton:is([data-action="cancel-execution"], [data-action="destroy-plan"]) {
   background: #fff1f0;
   border-color: #e7aaa5;
   color: #b42318;
@@ -11550,15 +11584,13 @@
 }
 
 .deploymentPageHeader
-  .deploymentSecondaryButton:is(
-    [data-action="cancel-execution"],
-    [data-action="destroy-plan"]
-  ):not(:disabled):hover,
+  .deploymentSecondaryButton:is([data-action="cancel-execution"], [data-action="destroy-plan"]):not(
+    :disabled
+  ):hover,
 .deploymentPageHeader
-  .deploymentSecondaryButton:is(
-    [data-action="cancel-execution"],
-    [data-action="destroy-plan"]
-  ):not(:disabled):focus-visible {
+  .deploymentSecondaryButton:is([data-action="cancel-execution"], [data-action="destroy-plan"]):not(
+    :disabled
+  ):focus-visible {
   background: #ffe5e2;
   border-color: #d77f78;
   color: #991b1b;

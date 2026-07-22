@@ -10,8 +10,7 @@ test("자동 지원 워크로드와 AMI를 Terraform 관리 경계에 맞게 분
       resource("ECS_SERVICE", {
         name: "customer-api",
         clusterArn: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/customer",
-        taskDefinitionArn:
-          "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/customer-api:1",
+        taskDefinitionArn: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/customer-api:1",
         desiredCount: 1,
         launchType: "FARGATE",
         networkConfiguration: {
@@ -26,13 +25,23 @@ test("자동 지원 워크로드와 AMI를 Terraform 관리 경계에 맞게 분
   );
   assert.equal(
     classifyReverseEngineeringManagement(
-      resource("CLOUDWATCH_LOG_GROUP", { logGroupName: "/ecs/customer-api" })
+      resource("CLOUDWATCH_LOG_GROUP", {
+        logGroupClass: "STANDARD",
+        logGroupName: "/ecs/customer-api",
+        tags: [],
+        tagsReadComplete: true
+      })
     ),
     "managed"
   );
   assert.equal(
     classifyReverseEngineeringManagement(
-      resource("API_GATEWAY_REST_API", { name: "customer-api" })
+      resource("API_GATEWAY_REST_API", {
+        hasResourcePolicy: false,
+        name: "customer-api",
+        tags: {},
+        tagsReadComplete: true
+      })
     ),
     "managed"
   );
@@ -46,12 +55,45 @@ test("자동 지원 워크로드와 AMI를 Terraform 관리 경계에 맞게 분
         metricName: "RequestCount",
         namespace: "AWS/ApiGateway",
         period: 60,
-        statistic: "Sum"
+        statistic: "Sum",
+        tags: [],
+        tagsReadComplete: true
       })
     ),
     "managed"
   );
   assert.equal(classifyReverseEngineeringManagement(resource("AMI")), "reference");
+});
+
+test("API Gateway는 policy 부재와 전체 tag를 명시적으로 확인한 경우에만 관리한다", () => {
+  for (const config of [
+    { name: "legacy-api", tags: {}, tagsReadComplete: true },
+    { hasResourcePolicy: true, name: "private-api", tags: {}, tagsReadComplete: true },
+    { hasResourcePolicy: false, name: "missing-tags" },
+    {
+      hasResourcePolicy: false,
+      name: "malformed-tags",
+      tags: { Owner: 123 },
+      tagsReadComplete: true
+    }
+  ]) {
+    assert.equal(
+      classifyReverseEngineeringManagement(resource("API_GATEWAY_REST_API", config)),
+      "needs_mapping"
+    );
+  }
+
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("API_GATEWAY_REST_API", {
+        hasResourcePolicy: false,
+        name: "public-api",
+        tags: {},
+        tagsReadComplete: true
+      })
+    ),
+    "managed"
+  );
 });
 
 test("EIP는 VPC allocation과 unassociated/NAT association만 자동 관리한다", () => {
@@ -99,10 +141,7 @@ test("available NAT은 connectivity별 완전한 allocation 경계만 자동 관
     subnetId: "subnet-fedcba98765432100"
   };
 
-  assert.equal(
-    classifyReverseEngineeringManagement(resource("NAT_GATEWAY", publicNat)),
-    "managed"
-  );
+  assert.equal(classifyReverseEngineeringManagement(resource("NAT_GATEWAY", publicNat)), "managed");
   assert.equal(
     classifyReverseEngineeringManagement(resource("NAT_GATEWAY", privateNat)),
     "managed"
@@ -165,19 +204,31 @@ test("규칙 원본의 완전성을 확인한 Security Group만 자동 관리한
 test("Action 대상이나 Metric Query 연결이 남은 CloudWatch Alarm은 매핑 전까지 관리하지 않는다", () => {
   assert.equal(
     classifyReverseEngineeringManagement(
-      resource("CLOUDWATCH_METRIC_ALARM", { hasActionTargets: true })
+      resource("CLOUDWATCH_METRIC_ALARM", {
+        hasActionTargets: true,
+        tags: [],
+        tagsReadComplete: true
+      })
     ),
     "needs_mapping"
   );
   assert.equal(
     classifyReverseEngineeringManagement(
-      resource("CLOUDWATCH_METRIC_ALARM", { hasMetricQueries: true })
+      resource("CLOUDWATCH_METRIC_ALARM", {
+        hasMetricQueries: true,
+        tags: [],
+        tagsReadComplete: true
+      })
     ),
     "needs_mapping"
   );
   assert.equal(
     classifyReverseEngineeringManagement(
-      resource("CLOUDWATCH_METRIC_ALARM", { thresholdMetricId: "e1" })
+      resource("CLOUDWATCH_METRIC_ALARM", {
+        tags: [],
+        tagsReadComplete: true,
+        thresholdMetricId: "e1"
+      })
     ),
     "needs_mapping"
   );
@@ -185,11 +236,15 @@ test("Action 대상이나 Metric Query 연결이 남은 CloudWatch Alarm은 매�
 
 test("AWS가 소유한 IAM service-linked Role과 KMS Key는 관리하지 않는다", () => {
   assert.equal(
-    classifyReverseEngineeringManagement(resource("IAM_ROLE", { roleName: "AWSServiceRoleForECS" })),
+    classifyReverseEngineeringManagement(
+      resource("IAM_ROLE", { roleName: "AWSServiceRoleForECS" })
+    ),
     "aws_managed"
   );
   assert.equal(
-    classifyReverseEngineeringManagement(resource("IAM_ROLE", { roleName: "AWSReservedSSO_Admin" })),
+    classifyReverseEngineeringManagement(
+      resource("IAM_ROLE", { roleName: "AWSReservedSSO_Admin" })
+    ),
     "aws_managed"
   );
   assert.equal(
@@ -201,22 +256,35 @@ test("AWS가 소유한 IAM service-linked Role과 KMS Key는 관리하지 않는
 test("KMS 연결 Log Group은 보드에만 남기고 암호화되지 않은 Log Group만 관리한다", () => {
   assert.equal(
     classifyReverseEngineeringManagement(
-      resource("CLOUDWATCH_LOG_GROUP", { hasKmsKey: true })
-    ),
-    "needs_mapping"
-  );
-  assert.equal(
-    classifyReverseEngineeringManagement(
       resource("CLOUDWATCH_LOG_GROUP", {
-        kmsKeyId:
-          "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555"
+        hasKmsKey: true,
+        logGroupClass: "STANDARD",
+        tags: [],
+        tagsReadComplete: true
       })
     ),
     "needs_mapping"
   );
   assert.equal(
     classifyReverseEngineeringManagement(
-      resource("CLOUDWATCH_LOG_GROUP", { logGroupName: "/ecs/customer-api" })
+      resource("CLOUDWATCH_LOG_GROUP", {
+        logGroupClass: "STANDARD",
+        kmsKeyId:
+          "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555",
+        tags: [],
+        tagsReadComplete: true
+      })
+    ),
+    "needs_mapping"
+  );
+  assert.equal(
+    classifyReverseEngineeringManagement(
+      resource("CLOUDWATCH_LOG_GROUP", {
+        logGroupClass: "STANDARD",
+        logGroupName: "/ecs/customer-api",
+        tags: [],
+        tagsReadComplete: true
+      })
     ),
     "managed"
   );
@@ -331,9 +399,7 @@ test("SketchCatch ownership tag와 marker는 Resource 종류와 무관하게 보
 test("SketchCatch ownership 값은 정확히 일치할 때만 신뢰한다", () => {
   for (const value of ["sketchcatch", "SketchCatch ", "Terraform"]) {
     assert.equal(
-      classifyReverseEngineeringManagement(
-        resource("S3", { tags: [{ key: "ManagedBy", value }] })
-      ),
+      classifyReverseEngineeringManagement(resource("S3", { tags: [{ key: "ManagedBy", value }] })),
       "managed"
     );
   }

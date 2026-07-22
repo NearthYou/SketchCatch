@@ -117,6 +117,7 @@ import type {
   RecentSuccessfulDeploymentProjectListResponse,
   SourceRepository,
   AnalyzeSourceRepositoryResponse,
+  ApplyReverseEngineeringDraftRequest,
   SourceRepositoryAnalysisResult,
   SourceRepositoryListResponse,
   SourceRepositoryResponse,
@@ -192,9 +193,7 @@ type PublicAiRequestOptions = {
 };
 
 export type ArchitectureDraftStreamOptions = PublicAiRequestOptions & {
-  readonly onProgress?:
-    | ((snapshot: ArchitectureDraftProgressSnapshot) => void)
-    | undefined;
+  readonly onProgress?: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined;
 };
 
 type ArchitectureSnapshotResponse = {
@@ -382,6 +381,23 @@ export async function applyProjectDraftBoardAutoOrganize({
 } & BoardAutoOrganizeApplyRequest): Promise<ProjectDraftResponse> {
   return apiFetch<ProjectDraftResponse>(
     `/projects/${encodeURIComponent(projectId)}/draft/auto-organize/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: request
+    }
+  );
+}
+
+/** 기존 Project의 AWS 후보를 전용 서버 검증과 CAS 저장 경계로 보냅니다. */
+export async function applyProjectDraftReverseEngineering({
+  projectId,
+  ...request
+}: {
+  readonly projectId: string;
+} & ApplyReverseEngineeringDraftRequest): Promise<ProjectDraftResponse> {
+  return apiFetch<ProjectDraftResponse>(
+    `/projects/${encodeURIComponent(projectId)}/draft/reverse-engineering/apply`,
     {
       auth: true,
       method: "POST",
@@ -884,8 +900,7 @@ function createPublicAiConnectionError(requestContext: ApiRequestContext): ApiCl
     0,
     {
       error: "internal_server_error",
-      message:
-        "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요."
+      message: "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요."
     },
     requestContext
   );
@@ -904,16 +919,14 @@ function createInvalidArchitectureDraftStreamError(
   );
 }
 
+/** 공개 AI stream의 허용 이벤트만 좁혀 잘못된 응답을 진행 상태로 사용하지 않는다. */
 function isArchitectureDraftStreamEvent(value: unknown): value is ArchitectureDraftStreamEvent {
   if (typeof value !== "object" || value === null || !("type" in value)) {
     return false;
   }
 
   if (value.type === "progress") {
-    return (
-      "snapshot" in value &&
-      isArchitectureDraftProgressSnapshot(value.snapshot)
-    );
+    return "snapshot" in value && isArchitectureDraftProgressSnapshot(value.snapshot);
   }
 
   if (value.type === "result") {
@@ -1085,8 +1098,7 @@ function isAiProviderMetadata(value: unknown): value is AiProviderMetadata {
               attempt.status === "fallback" ||
               attempt.status === "skipped" ||
               attempt.status === "failed") &&
-            (attempt.fallbackReason === undefined ||
-              typeof attempt.fallbackReason === "string")
+            (attempt.fallbackReason === undefined || typeof attempt.fallbackReason === "string")
         ))) &&
     typeof value.generatedAt === "string"
   );
@@ -1213,8 +1225,14 @@ function isDiagramEdge(value: unknown): boolean {
   );
 }
 
+/** 서버 Diagram의 viewport는 유한한 좌표와 zoom일 때만 복원한다. */
 function isDiagramViewport(value: unknown): boolean {
-  return isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y) && isFiniteNumber(value.zoom);
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value.x) &&
+    isFiniteNumber(value.y) &&
+    isFiniteNumber(value.zoom)
+  );
 }
 
 function isDiagramPoint(value: unknown): boolean {
@@ -1528,14 +1546,11 @@ export async function disconnectAwsCodeConnection(
   connectionId: string,
   input: DisconnectAwsCodeConnectionRequest
 ): Promise<void> {
-  await apiFetch<void>(
-    `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection`,
-    {
-      auth: true,
-      method: "DELETE",
-      body: input
-    }
-  );
+  await apiFetch<void>(`/aws/connections/${encodeURIComponent(connectionId)}/codeconnection`, {
+    auth: true,
+    method: "DELETE",
+    body: input
+  });
 }
 
 export async function getAwsConnectionCloudFormationTemplate({
@@ -2213,10 +2228,9 @@ export async function createGitHubAccountInstallUrl(): Promise<GitHubAppInstallU
 }
 
 export async function listGitHubAccountInstallations(): Promise<ListGitHubInstallationsResponse> {
-  return apiFetch<ListGitHubInstallationsResponse>(
-    "/source-repositories/github/installations",
-    { auth: true }
-  );
+  return apiFetch<ListGitHubInstallationsResponse>("/source-repositories/github/installations", {
+    auth: true
+  });
 }
 
 export async function createGitHubExistingInstallationCallbackUrl(

@@ -177,6 +177,12 @@ test("ALB는 VPC 상위 서비스로, CloudFront는 global edge 영역의 suppor
       displayName: "orders",
       resourceType: "LOAD_BALANCER",
       config: {
+        reverseEngineeringDetailsVersion: 1,
+        attributesReadComplete: true,
+        attributesProjectionComplete: true,
+        attributes: {},
+        tagsReadComplete: true,
+        tags: [],
         name: "orders",
         loadBalancerType: "application",
         scheme: "internet-facing",

@@ -1,6 +1,15 @@
-import type { DiagramJson, DiagramNode, ReverseEngineeringScanResult } from "@sketchcatch/types";
+import type {
+  DiagramJson,
+  DiagramNode,
+  ReverseEngineeringImportDecision,
+  ReverseEngineeringScanResult
+} from "@sketchcatch/types";
 import type { ProjectAccessContext } from "../deployments/deployment-service.js";
 import type { VerifiedTerraformImportTarget } from "../services/terraform/terraform-import-blocks.js";
+import {
+  ReverseEngineeringImportDependencyError,
+  validateReverseEngineeringImportDependencies
+} from "./reverse-engineering-import-dependency.js";
 import { createReverseEngineeringTerraformProjection } from "./reverse-engineering-terraform-projection.js";
 
 export type ReverseEngineeringImportScanRecord = {
@@ -46,7 +55,11 @@ export async function resolveVerifiedImportTargets(
     return source ? [{ node, source }] : [];
   });
   const scans = new Map<string, ReverseEngineeringImportScanRecord>();
-  const targets: VerifiedTerraformImportTarget[] = [];
+  const verifiedNodes: Array<{
+    node: DiagramNode;
+    source: { scanId: string; draftId: string };
+    scan: ReverseEngineeringImportScanRecord & { result: ReverseEngineeringScanResult };
+  }> = [];
 
   for (const { node, source } of sourcedNodes) {
     const scan =
@@ -71,13 +84,57 @@ export async function resolveVerifiedImportTargets(
     }
     scans.set(source.scanId, scan);
 
-    const target = resolveNodeImportTarget(node, source.draftId, scan.result);
-    if (target) {
-      targets.push(target);
-    }
+    verifiedNodes.push({
+      node,
+      source,
+      scan: scan as ReverseEngineeringImportScanRecord & {
+        result: ReverseEngineeringScanResult;
+      }
+    });
   }
 
-  return targets;
+  validateVerifiedNodeDependencies(verifiedNodes);
+
+  return verifiedNodes.flatMap(({ node, source, scan }) => {
+    const target = resolveNodeImportTarget(node, source.draftId, scan.result);
+    return target ? [target] : [];
+  });
+}
+
+/** gg: import block을 만들기 전에 scan별 서버 결정과 same-scan Terraform 의존성을 다시 확인합니다. */
+function validateVerifiedNodeDependencies(
+  verifiedNodes: readonly {
+    node: DiagramNode;
+    scan: ReverseEngineeringImportScanRecord & { result: ReverseEngineeringScanResult };
+  }[]
+): void {
+  const selectedResourceIdsByScanId = new Map<string, Set<string>>();
+  const scanResultByScanId = new Map<string, ReverseEngineeringScanResult>();
+
+  for (const { node, scan } of verifiedNodes) {
+    const decision = readServerConfirmedImportDecision(node);
+    scanResultByScanId.set(scan.id, scan.result);
+    if (decision.mode !== "import_existing") {
+      continue;
+    }
+    const selectedResourceIds = selectedResourceIdsByScanId.get(scan.id) ?? new Set<string>();
+    selectedResourceIds.add(node.id);
+    selectedResourceIdsByScanId.set(scan.id, selectedResourceIds);
+  }
+
+  for (const [scanId, scanResult] of scanResultByScanId) {
+    try {
+      validateReverseEngineeringImportDependencies({
+        storedScanResult: scanResult,
+        importExistingResourceIds: [...(selectedResourceIdsByScanId.get(scanId) ?? [])]
+      });
+    } catch (error) {
+      if (error instanceof ReverseEngineeringImportDependencyError) {
+        throw new ReverseEngineeringImportTargetVerificationError(error.message);
+      }
+      throw error;
+    }
+  }
 }
 
 /** gg: source metadata가 일부만 남은 손상 node는 일반 새 리소스로 오인하지 않고 중단합니다. */
@@ -139,7 +196,7 @@ function hasConsistentStoredIdentity(
   );
 }
 
-/** gg: 보호 리소스는 제외하고 관리 대상은 저장된 suggestion과 주소가 모두 같아야 허용합니다. */
+/** gg: 서버가 확인한 사용자 선택과 저장 suggestion이 모두 같을 때만 import 대상을 만듭니다. */
 function resolveNodeImportTarget(
   node: DiagramNode,
   draftId: string,
@@ -158,21 +215,28 @@ function resolveNodeImportTarget(
     );
   }
   const resource = resources[0]!;
-  const management = createReverseEngineeringTerraformProjection(
-    resource,
-    result.discoveredResources
-  ).management;
-
-  if (management !== "managed") {
-    return null;
-  }
-
   const suggestions = result.importSuggestions.filter(
     (suggestion) => suggestion.resourceId === resource.id
   );
   const suggestion = suggestions.length === 1 ? suggestions[0] : undefined;
+  const decision = readServerConfirmedImportDecision(node);
+
+  if (!suggestion || decision.statusAtConfirmation !== suggestion.status) {
+    throw new ReverseEngineeringImportTargetVerificationError(
+      `${resource.displayName} 리소스의 가져오기 선택이 저장된 AWS 원본과 다릅니다.`
+    );
+  }
+
+  if (decision.mode === "observe_only") {
+    return null;
+  }
+
+  const management = createReverseEngineeringTerraformProjection(
+    resource,
+    result.discoveredResources
+  ).management;
   if (
-    !suggestion ||
+    management !== "managed" ||
     suggestion.status !== "ready" ||
     suggestion.handoffReady !== true ||
     !suggestion.terraformAddress ||
@@ -197,6 +261,34 @@ function resolveNodeImportTarget(
     providerResourceType: resource.providerResourceType,
     resourceType: resource.resourceType
   };
+}
+
+/** gg: import 결정은 서버가 저장한 exact shape만 허용해 누락·위조된 과거 Board를 배포에서 차단합니다. */
+function readServerConfirmedImportDecision(node: DiagramNode): ReverseEngineeringImportDecision {
+  const decision = node.metadata?.reverseEngineering?.importDecision;
+
+  if (
+    !decision ||
+    typeof decision !== "object" ||
+    Object.keys(decision).length !== 3 ||
+    decision.version !== 1 ||
+    (decision.mode !== "import_existing" && decision.mode !== "observe_only") ||
+    (decision.statusAtConfirmation !== "ready" &&
+      decision.statusAtConfirmation !== "manual_review" &&
+      decision.statusAtConfirmation !== "unsupported_resource_type")
+  ) {
+    throw new ReverseEngineeringImportTargetVerificationError(
+      "기존 AWS 리소스의 가져오기 선택을 확인할 수 없습니다. 다시 가져와 주세요."
+    );
+  }
+
+  if (decision.mode === "import_existing" && decision.statusAtConfirmation !== "ready") {
+    throw new ReverseEngineeringImportTargetVerificationError(
+      "바로 관리할 수 없는 AWS 리소스는 기존 리소스로 가져올 수 없습니다."
+    );
+  }
+
+  return decision;
 }
 
 /** gg: 현재 보드가 가리키는 정적 resource 주소만 원본 suggestion과 비교합니다. */

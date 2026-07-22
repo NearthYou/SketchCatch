@@ -65,9 +65,7 @@ function renderTerraformOutputs(graph: InfrastructureGraph): string[] {
     return liveObservationOutputs;
   }
 
-  return listeners.length === 0 || hasApplicationDeliveryEdge
-    ? renderDeploymentOutputs(graph)
-    : [];
+  return listeners.length === 0 || hasApplicationDeliveryEdge ? renderDeploymentOutputs(graph) : [];
 }
 
 function renderDeploymentOutputs(graph: InfrastructureGraph): string[] {
@@ -180,9 +178,10 @@ function renderDeploymentOutputs(graph: InfrastructureGraph): string[] {
 
   const loadBalancerAddress = `aws_lb.${loadBalancer.iac.resourceName}`;
   const targetGroupAddress = `aws_lb_target_group.${targetGroup.iac.resourceName}`;
-  const apiBaseUrl = cloudFront && cloudFrontRoutesApiTraffic(cloudFront)
-    ? `"https://\${aws_cloudfront_distribution.${cloudFront.iac.resourceName}.domain_name}"`
-    : `"http://\${${loadBalancerAddress}.dns_name}"`;
+  const apiBaseUrl =
+    cloudFront && cloudFrontRoutesApiTraffic(cloudFront)
+      ? `"https://\${aws_cloudfront_distribution.${cloudFront.iac.resourceName}.domain_name}"`
+      : `"http://\${${loadBalancerAddress}.dns_name}"`;
   outputs.push(
     renderOutput("api_base_url", apiBaseUrl),
     renderOutput("api_origin_url", `"http://\${${loadBalancerAddress}.dns_name}"`),
@@ -215,7 +214,10 @@ function renderDeploymentOutputs(graph: InfrastructureGraph): string[] {
       renderOutput("ecs_container_port", String(ecsContainer.port))
     );
   }
-  if (!applicationScalingTarget || typeof applicationScalingTarget.config["maxCapacity"] !== "number") {
+  if (
+    !applicationScalingTarget ||
+    typeof applicationScalingTarget.config["maxCapacity"] !== "number"
+  ) {
     return outputs;
   }
 
@@ -261,12 +263,14 @@ function cloudFrontRoutesApiTraffic(node: InfrastructureGraphNode): boolean {
   const behaviorValue = node.config["orderedCacheBehavior"];
   const behaviors = Array.isArray(behaviorValue) ? behaviorValue : [behaviorValue];
 
-  if (behaviors.some(
-    (behavior) =>
-      isRecord(behavior) &&
-      typeof behavior["pathPattern"] === "string" &&
-      behavior["pathPattern"].startsWith("/api/")
-  )) {
+  if (
+    behaviors.some(
+      (behavior) =>
+        isRecord(behavior) &&
+        typeof behavior["pathPattern"] === "string" &&
+        behavior["pathPattern"].startsWith("/api/")
+    )
+  ) {
     return true;
   }
 
@@ -363,6 +367,14 @@ function normalizeReverseEngineeringResourceConfig(
     return normalizeReverseEngineeringLoadBalancerConfig(node.config);
   }
 
+  if (node.iac.resourceType === "aws_lb_target_group") {
+    return normalizeReverseEngineeringLoadBalancerTargetGroupConfig(node.config);
+  }
+
+  if (node.iac.resourceType === "aws_lb_listener") {
+    return normalizeReverseEngineeringLoadBalancerListenerConfig(node.config);
+  }
+
   if (node.iac.resourceType === "aws_cloudfront_distribution") {
     return normalizeReverseEngineeringCloudFrontConfig(node.config);
   }
@@ -392,6 +404,8 @@ function isReverseEngineeringResourceConfig(config: Record<string, unknown>): bo
     config["providerResourceType"] === "AWS::EC2::EIP" ||
     config["providerResourceType"] === "AWS::EC2::NatGateway" ||
     config["providerResourceType"] === "AWS::ElasticLoadBalancingV2::LoadBalancer" ||
+    config["providerResourceType"] === "AWS::ElasticLoadBalancingV2::TargetGroup" ||
+    config["providerResourceType"] === "AWS::ElasticLoadBalancingV2::Listener" ||
     config["providerResourceType"] === "AWS::CloudFront::Distribution" ||
     config["providerResourceType"] === "AWS::ECS::Cluster" ||
     config["providerResourceType"] === "AWS::ECS::Service" ||
@@ -423,14 +437,15 @@ function normalizeReverseEngineeringNatGatewayConfig(
   });
 }
 
-// gg: 로그 이름, 보존 기간, KMS 연결만 Terraform 관리값으로 전달합니다.
+// gg: 로그 이름, 보존 기간, KMS 연결, 완전히 읽은 태그만 Terraform 관리값으로 전달합니다.
 function normalizeReverseEngineeringCloudWatchLogGroupConfig(
   config: Record<string, unknown>
 ): Record<string, unknown> {
   return compactTerraformConfig({
     name: readNonEmptyString(config["name"] ?? config["logGroupName"]),
     retentionInDays: readNumber(config["retentionInDays"]),
-    kmsKeyId: readNonEmptyString(config["kmsKeyId"])
+    kmsKeyId: readNonEmptyString(config["kmsKeyId"]),
+    tags: config["tags"]
   });
 }
 
@@ -442,8 +457,8 @@ function hasUnsupportedReverseEngineeringCloudFrontVpcOrigin(
   return (
     node.iac.resourceType === "aws_cloudfront_distribution" &&
     isReverseEngineeringResourceConfig(node.config) &&
-    normalizeRecordList(node.config["origin"]).some(
-      (origin) => hasCloudFrontVpcOriginConfig(origin)
+    normalizeRecordList(node.config["origin"]).some((origin) =>
+      hasCloudFrontVpcOriginConfig(origin)
     )
   );
 }
@@ -475,15 +490,84 @@ function normalizeReverseEngineeringLoadBalancerConfig(
   });
 }
 
+// gg: ELBv2 관측용 이름·attribute 읽기 상태·관계 ARN은 Terraform 인수가 아니므로 Target Group의 생성 인자만 보존합니다.
+function normalizeReverseEngineeringLoadBalancerTargetGroupConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  return compactTerraformConfig({
+    name: readNonEmptyString(config["name"]),
+    port: readNumber(config["port"]),
+    protocol: readNonEmptyString(config["protocol"]),
+    targetType: readNonEmptyString(config["targetType"]),
+    vpcId: readNonEmptyString(config["vpcId"]),
+    deregistrationDelay: readNumber(config["deregistrationDelay"]),
+    healthCheck: normalizeLoadBalancerTargetGroupHealthCheck(config["healthCheck"]),
+    tags: config["tags"]
+  });
+}
+
+/** Target Group health check의 지원 인자만 보존하고 불완전 값은 렌더링하지 않는다. */
+function normalizeLoadBalancerTargetGroupHealthCheck(
+  value: unknown
+): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const healthCheck = compactTerraformConfig({
+    enabled: readBoolean(value["enabled"]),
+    protocol: readNonEmptyString(value["protocol"]),
+    port: readNonEmptyString(value["port"]),
+    path: readNonEmptyString(value["path"]),
+    matcher: readNonEmptyString(value["matcher"]),
+    interval: readNumber(value["interval"]),
+    timeout: readNumber(value["timeout"]),
+    healthyThreshold: readNumber(value["healthyThreshold"]),
+    unhealthyThreshold: readNumber(value["unhealthyThreshold"])
+  });
+
+  return Object.keys(healthCheck).length > 0 ? healthCheck : undefined;
+}
+
+// gg: Listener의 scan 판정값은 버리고 실제 listener 인자, forward action, tag만 남깁니다.
+function normalizeReverseEngineeringLoadBalancerListenerConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  return compactTerraformConfig({
+    loadBalancerArn: readNonEmptyString(config["loadBalancerArn"]),
+    port: readNumber(config["port"]),
+    protocol: readNonEmptyString(config["protocol"]),
+    certificateArn: readNonEmptyString(config["certificateArn"]),
+    defaultAction: normalizeLoadBalancerListenerDefaultActions(config["defaultAction"]),
+    tags: config["tags"]
+  });
+}
+
+/** Listener는 검증된 단순 forward 인자만 남기고 고급 Action을 임의로 재구성하지 않는다. */
+function normalizeLoadBalancerListenerDefaultActions(
+  value: unknown
+): Record<string, unknown>[] | undefined {
+  const actions = normalizeRecordList(value)
+    .map((action) =>
+      compactTerraformConfig({
+        type: readNonEmptyString(action["type"]),
+        targetGroupArn: readNonEmptyString(action["targetGroupArn"])
+      })
+    )
+    .filter((action) => Object.keys(action).length > 0);
+
+  return actions.length > 0 ? actions : undefined;
+}
+
 function readSupportedLoadBalancerIpAddressType(value: unknown): string | undefined {
-  return value === "ipv4" ||
-    value === "dualstack" ||
-    value === "dualstack-without-public-ipv4"
+  return value === "ipv4" || value === "dualstack" || value === "dualstack-without-public-ipv4"
     ? value
     : undefined;
 }
 
-function normalizeLoadBalancerSubnetMappings(value: unknown): Record<string, unknown>[] | undefined {
+function normalizeLoadBalancerSubnetMappings(
+  value: unknown
+): Record<string, unknown>[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }
@@ -567,9 +651,7 @@ function normalizeEcsManagedStorageConfiguration(
 
   const normalized = compactTerraformConfig({
     kmsKeyId: readNonEmptyString(value["kmsKeyId"]),
-    fargateEphemeralStorageKmsKeyId: readNonEmptyString(
-      value["fargateEphemeralStorageKmsKeyId"]
-    )
+    fargateEphemeralStorageKmsKeyId: readNonEmptyString(value["fargateEphemeralStorageKmsKeyId"])
   });
 
   return Object.keys(normalized).length > 0 ? normalized : undefined;
@@ -588,13 +670,9 @@ function normalizeReverseEngineeringEcsServiceConfig(
     taskDefinition: readNonEmptyString(config["taskDefinitionArn"]),
     desiredCount: readNumber(config["desiredCount"]),
     launchType:
-      capacityProviderStrategy === undefined
-        ? readNonEmptyString(config["launchType"])
-        : undefined,
+      capacityProviderStrategy === undefined ? readNonEmptyString(config["launchType"]) : undefined,
     capacityProviderStrategy,
-    networkConfiguration: normalizeEcsServiceNetworkConfiguration(
-      config["networkConfiguration"]
-    ),
+    networkConfiguration: normalizeEcsServiceNetworkConfiguration(config["networkConfiguration"]),
     loadBalancer: normalizeEcsServiceLoadBalancers(config["loadBalancers"])
   });
 }
@@ -622,9 +700,7 @@ function normalizeEcsServiceNetworkConfiguration(
     return undefined;
   }
 
-  const awsvpc = isRecord(value["awsvpcConfiguration"])
-    ? value["awsvpcConfiguration"]
-    : value;
+  const awsvpc = isRecord(value["awsvpcConfiguration"]) ? value["awsvpcConfiguration"] : value;
   const assignPublicIp = normalizeEcsAssignPublicIp(awsvpc["assignPublicIp"]);
   const normalized = compactTerraformConfig({
     assignPublicIp,
@@ -643,22 +719,19 @@ function normalizeEcsAssignPublicIp(value: unknown): boolean | undefined {
   return value === "ENABLED" ? true : value === "DISABLED" ? false : undefined;
 }
 
-function normalizeEcsServiceLoadBalancers(
-  value: unknown
-): Record<string, unknown>[] | undefined {
-  const loadBalancers = normalizeRecordList(value)
-    .flatMap((loadBalancer) => {
-      const targetGroupArn = readNonEmptyString(loadBalancer["targetGroupArn"]);
-      const elbName = readNonEmptyString(loadBalancer["loadBalancerName"]);
-      const containerName = readNonEmptyString(loadBalancer["containerName"]);
-      const containerPort = readEcsContainerPort(loadBalancer["containerPort"]);
+function normalizeEcsServiceLoadBalancers(value: unknown): Record<string, unknown>[] | undefined {
+  const loadBalancers = normalizeRecordList(value).flatMap((loadBalancer) => {
+    const targetGroupArn = readNonEmptyString(loadBalancer["targetGroupArn"]);
+    const elbName = readNonEmptyString(loadBalancer["loadBalancerName"]);
+    const containerName = readNonEmptyString(loadBalancer["containerName"]);
+    const containerPort = readEcsContainerPort(loadBalancer["containerPort"]);
 
-      return hasExactlyOneEcsServiceLoadBalancerTarget(targetGroupArn, elbName) &&
-        containerName !== undefined &&
-        containerPort !== undefined
-        ? [compactTerraformConfig({ targetGroupArn, elbName, containerName, containerPort })]
-        : [];
-    });
+    return hasExactlyOneEcsServiceLoadBalancerTarget(targetGroupArn, elbName) &&
+      containerName !== undefined &&
+      containerPort !== undefined
+      ? [compactTerraformConfig({ targetGroupArn, elbName, containerName, containerPort })]
+      : [];
+  });
 
   return loadBalancers.length > 0 ? loadBalancers : undefined;
 }
@@ -691,9 +764,7 @@ function normalizeReverseEngineeringEcsTaskDefinitionConfig(
   });
 }
 
-function normalizeEcsContainerDefinitions(
-  value: unknown
-): Record<string, unknown>[] | undefined {
+function normalizeEcsContainerDefinitions(value: unknown): Record<string, unknown>[] | undefined {
   const containers = normalizeRecordList(value)
     .map((container) =>
       compactTerraformConfig({
@@ -719,9 +790,7 @@ function normalizeEcsContainerDefinitions(
   return containers.length > 0 ? containers : undefined;
 }
 
-function normalizeEcsContainerPortMappings(
-  value: unknown
-): Record<string, unknown>[] | undefined {
+function normalizeEcsContainerPortMappings(value: unknown): Record<string, unknown>[] | undefined {
   const portMappings = normalizeRecordList(value)
     .map((portMapping) =>
       compactTerraformConfig({
@@ -737,9 +806,7 @@ function normalizeEcsContainerPortMappings(
   return portMappings.length > 0 ? portMappings : undefined;
 }
 
-function normalizeEcsContainerSecrets(
-  value: unknown
-): Record<string, unknown>[] | undefined {
+function normalizeEcsContainerSecrets(value: unknown): Record<string, unknown>[] | undefined {
   const secrets = normalizeRecordList(value)
     .map((secret) =>
       compactTerraformConfig({
@@ -795,7 +862,9 @@ function normalizeCloudFrontOriginBlocks(value: unknown): Record<string, unknown
   return origins.length > 0 ? origins : undefined;
 }
 
-function normalizeCloudFrontCustomOriginConfig(value: unknown): Record<string, unknown> | undefined {
+function normalizeCloudFrontCustomOriginConfig(
+  value: unknown
+): Record<string, unknown> | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -886,18 +955,15 @@ function normalizeCloudFrontCookies(value: unknown): Record<string, unknown> | u
 
 function normalizeCloudFrontRestrictions(value: unknown): Record<string, unknown> | undefined {
   const restriction = normalizeRecordList(value)[0];
-  const geoRestriction = restriction && isRecord(restriction["geoRestriction"])
-    ? compactTerraformConfig({
-        locations: readStringArray(restriction["geoRestriction"]["locations"]),
-        restrictionType: readNonEmptyString(
-          restriction["geoRestriction"]["restrictionType"]
-        )
-      })
-    : undefined;
+  const geoRestriction =
+    restriction && isRecord(restriction["geoRestriction"])
+      ? compactTerraformConfig({
+          locations: readStringArray(restriction["geoRestriction"]["locations"]),
+          restrictionType: readNonEmptyString(restriction["geoRestriction"]["restrictionType"])
+        })
+      : undefined;
 
-  return geoRestriction && Object.keys(geoRestriction).length > 0
-    ? { geoRestriction }
-    : undefined;
+  return geoRestriction && Object.keys(geoRestriction).length > 0 ? { geoRestriction } : undefined;
 }
 
 function normalizeCloudFrontViewerCertificates(
@@ -981,10 +1047,13 @@ function renderManagedS3Versioning(node: InfrastructureGraphNode): string {
   ].join("\n");
 }
 
+/** 실제 inline source가 있는 Lambda에만 archive 보조 블록을 생성한다. */
 function hasInlineLambdaSource(node: InfrastructureGraphNode): boolean {
-  return node.iac.resourceType === "aws_lambda_function" &&
+  return (
+    node.iac.resourceType === "aws_lambda_function" &&
     typeof node.config["inlineSource"] === "string" &&
-    node.config["inlineSource"].length > 0;
+    node.config["inlineSource"].length > 0
+  );
 }
 
 function renderInlineLambdaArchive(node: InfrastructureGraphNode): string {
@@ -1168,12 +1237,7 @@ function resolveRuntimeTopology(
   if (logGroups === null) return null;
 
   if (selected.kind === "asg") {
-    const alarm = resolveAsgPressureAlarm(
-      graph,
-      loadBalancer,
-      targetGroup,
-      selected.node
-    );
+    const alarm = resolveAsgPressureAlarm(graph, loadBalancer, targetGroup, selected.node);
     if (!alarm) return null;
     return {
       capacity: {
@@ -1185,20 +1249,18 @@ function resolveRuntimeTopology(
     };
   }
 
-  const ecsCluster = findUniqueReferencedNode(
-    graph,
-    selected.node.config["cluster"],
-    "aws_ecs_cluster",
-    ["id", "arn", "name"]
-  ) ?? (legacySingleRuntime ? onlyNode(resourceNodes(graph, "aws_ecs_cluster")) : null);
-  const applicationScalingTargets = resourceNodes(graph, "aws_appautoscaling_target")
-    .filter((node) =>
-      containsTerraformReference(
-        node.config["resourceId"],
-        terraformAddress(selected.node),
-        ["name"]
-      )
-    );
+  const ecsCluster =
+    findUniqueReferencedNode(graph, selected.node.config["cluster"], "aws_ecs_cluster", [
+      "id",
+      "arn",
+      "name"
+    ]) ?? (legacySingleRuntime ? onlyNode(resourceNodes(graph, "aws_ecs_cluster")) : null);
+  const applicationScalingTargets = resourceNodes(graph, "aws_appautoscaling_target").filter(
+    (node) =>
+      containsTerraformReference(node.config["resourceId"], terraformAddress(selected.node), [
+        "name"
+      ])
+  );
   const applicationScalingTarget = onlyNode(applicationScalingTargets);
   if (
     !ecsCluster ||
@@ -1225,14 +1287,11 @@ function runtimeReferencesTargetGroup(
   targetGroup: InfrastructureGraphNode,
   targetGroupAddress: string
 ): boolean {
-  const configValue = runtime.kind === "asg"
-    ? runtime.node.config["targetGroupArns"]
-    : runtime.node.config["loadBalancer"];
-  return containsTerraformReferenceOfType(
-    configValue,
-    "aws_lb_target_group",
-    "arn"
-  )
+  const configValue =
+    runtime.kind === "asg"
+      ? runtime.node.config["targetGroupArns"]
+      : runtime.node.config["loadBalancer"];
+  return containsTerraformReferenceOfType(configValue, "aws_lb_target_group", "arn")
     ? containsTerraformReference(configValue, targetGroupAddress, ["arn"])
     : nodesDirectlyConnected(graph, runtime.node, targetGroup);
 }
@@ -1241,15 +1300,15 @@ function runtimeHasAnotherTargetGroupLink(
   graph: InfrastructureGraph,
   runtime: RuntimeCandidate
 ): boolean {
-  const configValue = runtime.kind === "asg"
-    ? runtime.node.config["targetGroupArns"]
-    : runtime.node.config["loadBalancer"];
+  const configValue =
+    runtime.kind === "asg"
+      ? runtime.node.config["targetGroupArns"]
+      : runtime.node.config["loadBalancer"];
   if (containsTerraformReferenceOfType(configValue, "aws_lb_target_group", "arn")) {
     return true;
   }
-  return resourceNodes(graph, "aws_lb_target_group").some(
-    (targetGroup) =>
-      nodesDirectlyConnected(graph, runtime.node, targetGroup)
+  return resourceNodes(graph, "aws_lb_target_group").some((targetGroup) =>
+    nodesDirectlyConnected(graph, runtime.node, targetGroup)
   );
 }
 
@@ -1258,9 +1317,10 @@ function resolveRuntimeLogGroups(
   runtime: RuntimeCandidate,
   legacySingleRuntime: boolean
 ): InfrastructureGraphNode[] | null {
-  const owners = runtime.kind === "ecs_fargate"
-    ? resolveEcsLogOwners(graph, runtime.node)
-    : resolveAsgLogOwners(graph, runtime.node);
+  const owners =
+    runtime.kind === "ecs_fargate"
+      ? resolveEcsLogOwners(graph, runtime.node)
+      : resolveAsgLogOwners(graph, runtime.node);
   if (!owners) return null;
 
   const logGroups = resourceNodes(graph, "aws_cloudwatch_log_group");
@@ -1271,12 +1331,12 @@ function resolveRuntimeLogGroups(
   );
   if (
     owners.some((owner) =>
-      containsTerraformReferenceOfTypeForAttributes(
-        owner.config,
-        "aws_cloudwatch_log_group",
-        ["name", "arn"]
-      )
-    ) && referenced.length === 0
+      containsTerraformReferenceOfTypeForAttributes(owner.config, "aws_cloudwatch_log_group", [
+        "name",
+        "arn"
+      ])
+    ) &&
+    referenced.length === 0
   ) {
     return null;
   }
@@ -1285,11 +1345,12 @@ function resolveRuntimeLogGroups(
     ...owners.flatMap((owner) => outgoingNodes(graph, owner, "aws_cloudwatch_log_group"))
   ]);
   const allLogGroups = resourceNodes(graph, "aws_cloudwatch_log_group");
-  const selected = explicit.length > 0
-    ? explicit
-    : legacySingleRuntime && allLogGroups.length <= 1
-      ? allLogGroups
-      : [];
+  const selected =
+    explicit.length > 0
+      ? explicit
+      : legacySingleRuntime && allLogGroups.length <= 1
+        ? allLogGroups
+        : [];
   return selected.length <= 10 ? selected : null;
 }
 
@@ -1304,11 +1365,7 @@ function resolveEcsLogOwners(
     "aws_ecs_task_definition",
     ["arn", "id"]
   );
-  return taskDefinition === null
-    ? null
-    : taskDefinition
-      ? [service, taskDefinition]
-      : [service];
+  return taskDefinition === null ? null : taskDefinition ? [service, taskDefinition] : [service];
 }
 
 function resolveAsgLogOwners(
@@ -1350,10 +1407,16 @@ function resolveAsgLogOwners(
   owners.push(role);
 
   for (const resourceType of ["aws_iam_role_policy", "aws_iam_policy"] as const) {
-    owners.push(...resourceNodes(graph, resourceType).filter((policy) =>
-      containsTerraformReference(policy.config["role"], terraformAddress(role), ["name", "id", "arn"]) ||
-      graph.edges.some((edge) => edge.sourceId === role.id && edge.targetId === policy.id)
-    ));
+    owners.push(
+      ...resourceNodes(graph, resourceType).filter(
+        (policy) =>
+          containsTerraformReference(policy.config["role"], terraformAddress(role), [
+            "name",
+            "id",
+            "arn"
+          ]) || graph.edges.some((edge) => edge.sourceId === role.id && edge.targetId === policy.id)
+      )
+    );
   }
   return uniqueNodes(owners);
 }
@@ -1383,9 +1446,7 @@ function outgoingNodes(
   resourceType: string
 ): InfrastructureGraphNode[] {
   const targetIds = new Set(
-    graph.edges
-      .filter((edge) => edge.sourceId === source.id)
-      .map((edge) => edge.targetId)
+    graph.edges.filter((edge) => edge.sourceId === source.id).map((edge) => edge.targetId)
   );
   return resourceNodes(graph, resourceType).filter((node) => targetIds.has(node.id));
 }
@@ -1405,28 +1466,20 @@ function resolveAsgPressureAlarm(
       typeof node.config["threshold"] === "number"
   );
   const validCandidates = candidates.filter((alarm) => {
-    const actionOwner = resolveAlarmActionAutoScalingGroup(
-      graph,
-      alarm,
-      autoScalingGroups
-    );
+    const actionOwner = resolveAlarmActionAutoScalingGroup(graph, alarm, autoScalingGroups);
     if (!actionOwner || actionOwner.id !== autoScalingGroup.id) {
       return false;
     }
 
     const loadBalancerDimensions = loadBalancers.filter((candidate) =>
-      containsTerraformReference(
-        alarm.config["dimensions"],
-        terraformAddress(candidate),
-        ["arn_suffix"]
-      )
+      containsTerraformReference(alarm.config["dimensions"], terraformAddress(candidate), [
+        "arn_suffix"
+      ])
     );
     const targetGroupDimensions = targetGroups.filter((candidate) =>
-      containsTerraformReference(
-        alarm.config["dimensions"],
-        terraformAddress(candidate),
-        ["arn_suffix"]
-      )
+      containsTerraformReference(alarm.config["dimensions"], terraformAddress(candidate), [
+        "arn_suffix"
+      ])
     );
     if (
       onlyNode(loadBalancerDimensions)?.id !== loadBalancer.id ||
@@ -1436,11 +1489,7 @@ function resolveAsgPressureAlarm(
     }
 
     const dimensionOwners = autoScalingGroups.filter((candidate) =>
-      containsTerraformReference(
-        alarm.config["dimensions"],
-        terraformAddress(candidate),
-        ["name"]
-      )
+      containsTerraformReference(alarm.config["dimensions"], terraformAddress(candidate), ["name"])
     );
     const hasDimensionReference = containsTerraformReferenceOfType(
       alarm.config["dimensions"],
@@ -1478,11 +1527,9 @@ function resolveAlarmActionAutoScalingGroup(
   if (!policy) return null;
 
   const policyOwners = autoScalingGroups.filter((candidate) =>
-    containsTerraformReference(
-      policy.config["autoscalingGroupName"],
-      terraformAddress(candidate),
-      ["name"]
-    )
+    containsTerraformReference(policy.config["autoscalingGroupName"], terraformAddress(candidate), [
+      "name"
+    ])
   );
   if (
     !containsTerraformReferenceOfType(
@@ -1499,8 +1546,9 @@ function resolveAlarmActionAutoScalingGroup(
 function renderLiveObservationLogGroupOutputs(
   logGroups: readonly InfrastructureGraphNode[]
 ): string[] {
-  const addresses = logGroups
-    .map((node) => `aws_cloudwatch_log_group.${node.iac.resourceName}.name`);
+  const addresses = logGroups.map(
+    (node) => `aws_cloudwatch_log_group.${node.iac.resourceName}.name`
+  );
 
   if (addresses.length === 0) return [];
   if (addresses.length === 1) {
@@ -1543,12 +1591,11 @@ function forwardTargetGroupReferences(listener: InfrastructureGraphNode): unknow
   const defaultAction = listener.config["defaultAction"];
   const actions = Array.isArray(defaultAction) ? defaultAction : [defaultAction];
   return actions.flatMap((action) =>
-    isRecord(action) && action["type"] === "forward"
-      ? [action["targetGroupArn"]]
-      : []
+    isRecord(action) && action["type"] === "forward" ? [action["targetGroupArn"]] : []
   );
 }
 
+/** 선택한 ALB와 Target Group에 정확히 연결된 단일 요청 기반 정책의 목표값만 사용한다. */
 function findAlbRequestCountTargetValue(
   graph: InfrastructureGraph,
   loadBalancerAddress: string,
@@ -1557,11 +1604,8 @@ function findAlbRequestCountTargetValue(
 ): number | null {
   const scalingTargetAddress = terraformAddress(applicationScalingTarget);
   const selectedTargetPolicies = resourceNodes(graph, "aws_appautoscaling_policy").filter(
-    (policy) => containsTerraformReference(
-        policy.config["resourceId"],
-        scalingTargetAddress,
-        ["resource_id"]
-      )
+    (policy) =>
+      containsTerraformReference(policy.config["resourceId"], scalingTargetAddress, ["resource_id"])
   );
   const requestPolicies = selectedTargetPolicies.flatMap((policy) => {
     const configuration = policy.config["targetTrackingScalingPolicyConfiguration"];
@@ -1574,27 +1618,17 @@ function findAlbRequestCountTargetValue(
         ? [specificationValue]
         : [];
     const albRequestSpecifications = specifications.filter(
-      (specification) =>
-        specification["predefinedMetricType"] === "ALBRequestCountPerTarget"
+      (specification) => specification["predefinedMetricType"] === "ALBRequestCountPerTarget"
     );
     if (albRequestSpecifications.length === 0) return [];
 
     const specification = onlyNode(albRequestSpecifications);
     const resourceLabel = specification?.["resourceLabel"];
     const loadBalancerReferences = resourceNodes(graph, "aws_lb").filter((candidate) =>
-      containsTerraformReference(
-        resourceLabel,
-        terraformAddress(candidate),
-        ["arn_suffix"]
-      )
+      containsTerraformReference(resourceLabel, terraformAddress(candidate), ["arn_suffix"])
     );
-    const targetGroupReferences = resourceNodes(graph, "aws_lb_target_group").filter(
-      (candidate) =>
-        containsTerraformReference(
-          resourceLabel,
-          terraformAddress(candidate),
-          ["arn_suffix"]
-        )
+    const targetGroupReferences = resourceNodes(graph, "aws_lb_target_group").filter((candidate) =>
+      containsTerraformReference(resourceLabel, terraformAddress(candidate), ["arn_suffix"])
     );
     const targetValue = configuration["targetValue"];
     const valid =
@@ -1610,7 +1644,7 @@ function findAlbRequestCountTargetValue(
   });
 
   const selected = onlyNode(requestPolicies);
-  return selected?.valid ? selected.targetValue as number : null;
+  return selected?.valid ? (selected.targetValue as number) : null;
 }
 
 function resourceNodes(
@@ -1618,8 +1652,7 @@ function resourceNodes(
   resourceType: string
 ): InfrastructureGraphNode[] {
   return graph.nodes.filter(
-    (node) =>
-      node.iac.terraformBlockType === "resource" && node.iac.resourceType === resourceType
+    (node) => node.iac.terraformBlockType === "resource" && node.iac.resourceType === resourceType
   );
 }
 
@@ -1636,6 +1669,7 @@ function findUniqueReferencedNode(
   );
 }
 
+/** 정해진 주소와 허용 attribute를 재귀 탐색해 다른 문자열을 관계로 오인하지 않는다. */
 function containsTerraformReference(
   value: unknown,
   address: string,
@@ -1648,15 +1682,17 @@ function containsTerraformReference(
     });
   }
   if (Array.isArray(value)) {
-    return value.some((candidate) =>
-      containsTerraformReference(candidate, address, attributes)
-    );
+    return value.some((candidate) => containsTerraformReference(candidate, address, attributes));
   }
-  return isRecord(value) && Object.values(value).some((candidate) =>
-    containsTerraformReference(candidate, address, attributes)
+  return (
+    isRecord(value) &&
+    Object.values(value).some((candidate) =>
+      containsTerraformReference(candidate, address, attributes)
+    )
   );
 }
 
+/** 특정 Terraform Resource type의 정적 attribute 참조만 운영 출력 연결로 인정한다. */
 function containsTerraformReferenceOfType(
   value: unknown,
   resourceType: string,
@@ -1674,11 +1710,15 @@ function containsTerraformReferenceOfType(
       containsTerraformReferenceOfType(candidate, resourceType, attribute)
     );
   }
-  return isRecord(value) && Object.values(value).some((candidate) =>
-    containsTerraformReferenceOfType(candidate, resourceType, attribute)
+  return (
+    isRecord(value) &&
+    Object.values(value).some((candidate) =>
+      containsTerraformReferenceOfType(candidate, resourceType, attribute)
+    )
   );
 }
 
+/** 허용된 attribute 후보 안에서만 특정 Resource type 참조를 찾아 탐지 범위를 제한한다. */
 function containsTerraformReferenceOfTypeForAttributes(
   value: unknown,
   resourceType: string,
@@ -1726,10 +1766,7 @@ function renderBlock(node: InfrastructureGraphNode): string {
   const body = Object.entries(createRenderableResourceConfig(node)).flatMap(([key, value]) =>
     renderBodyEntry(node.iac.resourceType, key, value, 1)
   );
-  if (
-    node.iac.resourceType === "aws_s3_object" &&
-    node.config["releaseManagedContent"] === true
-  ) {
+  if (node.iac.resourceType === "aws_s3_object" && node.config["releaseManagedContent"] === true) {
     body.push(
       "  lifecycle {",
       "    ignore_changes = [content, content_type, cache_control, etag, source]",
@@ -1954,19 +1991,21 @@ function isReverseEngineeringEcsNestedBlock(
 }
 
 function renderLifecycleIgnoreChanges(value: unknown[], indentLevel: number): string {
-  const renderedValue = value.length === 0
-    ? "[]"
-    : [
-        "[",
-        ...value.map((item) =>
-          `${indent(indentLevel + 1)}${
-            typeof item === "string" && TERRAFORM_IDENTIFIER_PATTERN.test(item)
-              ? item
-              : renderValue(item, indentLevel + 1)
-          },`
-        ),
-        `${indent(indentLevel)}]`
-      ].join("\n");
+  const renderedValue =
+    value.length === 0
+      ? "[]"
+      : [
+          "[",
+          ...value.map(
+            (item) =>
+              `${indent(indentLevel + 1)}${
+                typeof item === "string" && TERRAFORM_IDENTIFIER_PATTERN.test(item)
+                  ? item
+                  : renderValue(item, indentLevel + 1)
+              },`
+          ),
+          `${indent(indentLevel)}]`
+        ].join("\n");
 
   return `${indent(indentLevel)}ignore_changes = ${renderedValue}`;
 }

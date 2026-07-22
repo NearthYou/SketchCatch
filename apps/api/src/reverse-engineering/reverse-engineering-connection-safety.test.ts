@@ -190,6 +190,12 @@ test("기존 Project 스캔은 AWS 원본을 저장하고 호출자에게는 공
             displayName: "private-entry",
             region: "ap-northeast-2",
             config: {
+              reverseEngineeringDetailsVersion: 1,
+              attributesReadComplete: true,
+              attributesProjectionComplete: true,
+              attributes: {},
+              tagsReadComplete: true,
+              tags: [],
               name: "private-entry",
               type: "application",
               ipAddressType: "ipv4",

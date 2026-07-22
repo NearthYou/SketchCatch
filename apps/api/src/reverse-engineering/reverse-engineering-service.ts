@@ -317,17 +317,13 @@ function sanitizeReadCompatibilityDiscoveredResource(
     providerResourceId: resource.providerResourceId
   };
   const displayName = createAwsResourceDisplayName(resource);
-  const management = classifyReadCompatibilityManagement(
-    resource,
-    context.discoveredResources
-  );
+  const management = classifyReadCompatibilityManagement(resource, context.discoveredResources);
   const needsManualMapping =
     isKmsConnectedCloudWatchLogGroup(resource) ||
     isCloudWatchMetricAlarmRequiringMapping(resource) ||
     (READ_COMPATIBILITY_CONTEXTUAL_RESOURCE_TYPES.has(resource.resourceType) &&
       management !== "managed");
-  const analysisExcluded =
-    resource.analysisExcluded === true || management !== "managed";
+  const analysisExcluded = resource.analysisExcluded === true || management !== "managed";
 
   return {
     ...resource,
@@ -477,10 +473,7 @@ function sanitizePublicTerraformProjection(input: {
         : undefined;
   const terraformValues =
     hasCanonicalIdentity && projectionResource
-      ? createReverseEngineeringTerraformValues(
-          projectionResource,
-          input.sameScanResources
-        )
+      ? createReverseEngineeringTerraformValues(projectionResource, input.sameScanResources)
       : {};
 
   return {
@@ -697,10 +690,7 @@ function classifyReadCompatibilityManagement(
   resource: DiscoveredResource,
   sameScanResources: readonly DiscoveredResource[]
 ): ReverseEngineeringManagementDecision {
-  return createReverseEngineeringTerraformProjection(
-    resource,
-    sameScanResources
-  ).management;
+  return createReverseEngineeringTerraformProjection(resource, sameScanResources).management;
 }
 
 function createReadCompatibilityNormalizationContext(
@@ -724,10 +714,8 @@ function createReadCompatibilityNormalizationContext(
         .filter(
           (resource) =>
             isReviewOnlyDiscoveredResource(resource) ||
-            classifyReadCompatibilityManagement(
-              resource,
-              persistedResult.discoveredResources
-            ) !== "managed" ||
+            classifyReadCompatibilityManagement(resource, persistedResult.discoveredResources) !==
+              "managed" ||
             isKmsConnectedCloudWatchLogGroup(resource) ||
             isCloudWatchMetricAlarmRequiringMapping(resource)
         )
@@ -804,10 +792,7 @@ function normalizeReadCompatibilityNode(
 
   const analysisExcluded =
     node.config["analysisExcluded"] === true || context.reviewOnlyResourceIds.has(resource.id);
-  const management = classifyReadCompatibilityManagement(
-    resource,
-    context.discoveredResources
-  );
+  const management = classifyReadCompatibilityManagement(resource, context.discoveredResources);
   const label =
     context.displayNameByProviderResourceId.get(resource.providerResourceId) ??
     createAwsResourceDisplayName(resource);
@@ -955,6 +940,7 @@ function isUsableReverseEngineeringDraft(
   );
 }
 
+/** 과거 Scan의 실행 제안이 현재 안전 기준을 못 맞추면 보드 확인용으로 강등한다. */
 function sanitizeImportSuggestions(
   context: ReadCompatibilityNormalizationContext,
   importSuggestions: ReverseEngineeringImportSuggestion[]
@@ -977,7 +963,9 @@ function sanitizeImportSuggestions(
       status: "manual_review",
       handoffReady: false,
       reason:
-        suggestion.reason ?? "검토 전용 Resource는 Terraform import 또는 배포에 사용할 수 없습니다."
+        suggestion.reason && !suggestion.reason.includes("검토 전용")
+          ? suggestion.reason
+          : "AWS에서 찾았지만 현재 설정을 안전하게 Terraform으로 옮길 수 없습니다. 보드에서 구조를 확인할 수 있습니다."
     };
   });
 }

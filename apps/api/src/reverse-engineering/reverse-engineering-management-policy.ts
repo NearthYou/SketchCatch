@@ -80,7 +80,11 @@ export function classifyReverseEngineeringManagement(
     return "reference";
   }
 
-  if (isKmsConnectedCloudWatchLogGroup(resource)) {
+  if (isApiGatewayRestApiRequiringMapping(resource)) {
+    return "needs_mapping";
+  }
+
+  if (isCloudWatchLogGroupRequiringMapping(resource)) {
     return "needs_mapping";
   }
 
@@ -106,9 +110,29 @@ export function classifyReverseEngineeringManagement(
     }
   }
 
-  return AUTOMATED_MANAGED_RESOURCE_TYPES.has(resource.resourceType)
-    ? "managed"
-    : "needs_mapping";
+  return AUTOMATED_MANAGED_RESOURCE_TYPES.has(resource.resourceType) ? "managed" : "needs_mapping";
+}
+
+/** policy 부재와 전체 tag를 명시적으로 확인하지 못한 REST API는 자동 관리하지 않습니다. */
+export function isApiGatewayRestApiRequiringMapping(
+  resource: Pick<DiscoveredResource, "resourceType" | "config">
+): boolean {
+  return (
+    resource.resourceType === "API_GATEWAY_REST_API" &&
+    (resource.config["hasResourcePolicy"] !== false ||
+      resource.config["tagsReadComplete"] !== true ||
+      !hasCompleteApiGatewayTagMap(resource.config["tags"]))
+  );
+}
+
+/** API Gateway tag map이 손실 없이 복원 가능한 문자열 쌍으로만 구성됐는지 확인합니다. */
+function hasCompleteApiGatewayTagMap(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    Object.entries(value).every(
+      ([key, tagValue]) => key.trim().length > 0 && typeof tagValue === "string"
+    )
+  );
 }
 
 /** Security Group 규칙의 protocol, source, port 완전성을 확인하지 못하면 자동 관리를 막습니다. */
@@ -142,18 +166,12 @@ function isCompleteSecurityGroupRule(value: unknown): boolean {
   const hasToPort = value["toPort"] !== undefined;
   if (
     hasFromPort !== hasToPort ||
-    (hasFromPort &&
-      (!Number.isInteger(value["fromPort"]) || !Number.isInteger(value["toPort"])))
+    (hasFromPort && (!Number.isInteger(value["fromPort"]) || !Number.isInteger(value["toPort"])))
   ) {
     return false;
   }
 
-  const sourceKeys = [
-    "cidrBlocks",
-    "ipv6CidrBlocks",
-    "prefixListIds",
-    "securityGroups"
-  ] as const;
+  const sourceKeys = ["cidrBlocks", "ipv6CidrBlocks", "prefixListIds", "securityGroups"] as const;
   let sourceCount = 0;
   for (const key of sourceKeys) {
     const source = value[key];
@@ -178,14 +196,33 @@ export function isCloudWatchMetricAlarmRequiringMapping(
   }
 
   return (
+    resource.config["tagsReadComplete"] !== true ||
+    !Array.isArray(resource.config["tags"]) ||
     resource.config["hasActionTargets"] === true ||
     resource.config["hasMetricQueries"] === true ||
+    resource.config["hasUnprojectableDimensions"] === true ||
     ["alarmActions", "insufficientDataActions", "okActions"].some(
       (key) => Array.isArray(resource.config[key]) && resource.config[key].length > 0
     ) ||
     (Array.isArray(resource.config["metrics"]) && resource.config["metrics"].length > 0) ||
     (typeof resource.config["thresholdMetricId"] === "string" &&
       resource.config["thresholdMetricId"].trim().length > 0)
+  );
+}
+
+/** 태그, 저장 class, KMS 연결을 정확히 재구성할 수 없는 Log Group은 자동 관리하지 않는다. */
+export function isCloudWatchLogGroupRequiringMapping(
+  resource: Pick<DiscoveredResource, "resourceType" | "config">
+): boolean {
+  if (resource.resourceType !== "CLOUDWATCH_LOG_GROUP") {
+    return false;
+  }
+
+  return (
+    resource.config["tagsReadComplete"] !== true ||
+    !Array.isArray(resource.config["tags"]) ||
+    resource.config["logGroupClass"] !== "STANDARD" ||
+    isKmsConnectedCloudWatchLogGroup(resource)
   );
 }
 
@@ -236,14 +273,10 @@ export function isEventBridgeTargetRequiringMapping(
       resource.config["ruleTerraformReference"],
       "aws_cloudwatch_event_rule",
       "name"
-    ) &&
-    isTerraformArnReference(resource.config["targetTerraformReference"]);
+    ) && isTerraformArnReference(resource.config["targetTerraformReference"]);
   const hasProjectedReferences =
-    isTerraformAttributeReference(
-      resource.config["rule"],
-      "aws_cloudwatch_event_rule",
-      "name"
-    ) && isTerraformArnReference(resource.config["arn"]);
+    isTerraformAttributeReference(resource.config["rule"], "aws_cloudwatch_event_rule", "name") &&
+    isTerraformArnReference(resource.config["arn"]);
 
   return (
     riskyMarkers.some((key) => resource.config[key] === true) ||
@@ -263,11 +296,9 @@ function isTerraformAttributeReference(
   );
 }
 
+/** 서버가 만든 정적 Terraform ARN 참조만 인정해 임의 문자열을 관리 근거로 쓰지 않는다. */
 function isTerraformArnReference(value: unknown): boolean {
-  return (
-    typeof value === "string" &&
-    /^aws_[a-z0-9_]+\.[a-z_][a-z0-9_]*\.arn$/u.test(value)
-  );
+  return typeof value === "string" && /^aws_[a-z0-9_]+\.[a-z_][a-z0-9_]*\.arn$/u.test(value);
 }
 
 /** 명시적 ownership 또는 실제 생성 규칙과 정확히 일치하는 SketchCatch 제어 리소스만 찾는다. */
@@ -315,9 +346,7 @@ function isAwsManagedResource(
 
 /** CloudFormation이 소유한다는 필드 또는 시스템 태그가 있는지 확인한다. */
 function hasCloudFormationOwnershipEvidence(config: Record<string, unknown>): boolean {
-  if (
-    CLOUD_FORMATION_OWNERSHIP_KEYS.some((key) => hasNonEmptyString(config[key]))
-  ) {
+  if (CLOUD_FORMATION_OWNERSHIP_KEYS.some((key) => hasNonEmptyString(config[key]))) {
     return true;
   }
 
@@ -338,9 +367,7 @@ function hasCloudFormationOwnershipEvidence(config: Record<string, unknown>): bo
 function hasExactSketchCatchOwnership(config: Record<string, unknown>): boolean {
   return (
     config["managedBy"] === "SketchCatch" ||
-    getResourceTags(config).some(
-      (tag) => tag.key === "ManagedBy" && tag.value === "SketchCatch"
-    )
+    getResourceTags(config).some((tag) => tag.key === "ManagedBy" && tag.value === "SketchCatch")
   );
 }
 

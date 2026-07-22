@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Edge, Node } from "@xyflow/react";
 import type {
+  ApplyReverseEngineeringDraftRequest,
   DiagramEdge,
   DiagramEdgeRoute,
   DiagramJson,
@@ -103,6 +104,10 @@ export type DiagramEditorPanelContext = {
   /** 서버 revision 저장이 성공한 뒤에만 Diagram과 History를 함께 적용합니다. */
   persistAndApplyDiagramJson?:
     | ((diagram: DiagramJson, expectedRevision: number) => Promise<void>)
+    | undefined;
+  /** Reverse Engineering 결과는 전용 서버 검증을 통과한 Diagram만 적용합니다. */
+  persistAndApplyReverseEngineeringDraft?:
+    | ((request: Omit<ApplyReverseEngineeringDraftRequest, "terraformFiles">) => Promise<void>)
     | undefined;
   closeInspectedNode: () => void;
   commitTerraformSourceAuthority: () => DiagramJson;

@@ -78,7 +78,31 @@ test("Reverse preview keeps the exact persisted revision and Board fingerprint",
 
   assert.equal(preview.sourceDraftRevision, 7);
   assert.notDeepEqual(preview.sourceDiagram, diagram);
-  assert.notEqual(preview.sourceFingerprint, "");
+  assert.match(preview.sourceFingerprint, /^[0-9a-f]{8}$/u);
+});
+
+test("an unchanged Reverse preview saves the Board and Snapshot once", async () => {
+  const source = createDiagram();
+  const writes = createWriteTracker();
+
+  const outcome = await applyExistingReverseEngineeringPreview({
+    currentDiagram: source,
+    currentDraftRevision: 7,
+    diagramToApply: moveDiagram(source),
+    persistAndApply: writes.persistAndApply,
+    preview: createReverseEngineeringApplyPreview({ diagram: source, draftRevision: 7 }),
+    saveSnapshot: writes.saveSnapshot
+  });
+
+  assert.equal(outcome.status, "saved");
+  assert.deepEqual(writes.expectedRevisions, [7]);
+  assert.deepEqual(writes.counts(), {
+    board: 1,
+    history: 1,
+    localSave: 1,
+    server: 1,
+    snapshot: 1
+  });
 });
 
 test("a newer draft revision blocks an old Reverse preview with zero writes", async () => {

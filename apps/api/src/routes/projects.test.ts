@@ -5,7 +5,8 @@ import { buildApp } from "../app.js";
 import { createAccessToken } from "../auth/tokens.js";
 import type { Database, DatabaseClient } from "../db/client.js";
 import { projectDrafts, projects, users } from "../db/schema.js";
-import { createBoardAutoOrganizeSourceFingerprint } from "../modules/projects/board-auto-organize-apply-service.js";
+import { createBoardAutoOrganizeSourceFingerprint } from "@sketchcatch/types";
+import type { ExistingReverseEngineeringDraftApplyInput } from "../reverse-engineering/existing-reverse-engineering-draft-apply-service.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -75,8 +76,7 @@ test("GET /api/projects/:id/draft restores the active user's diagramJson", async
 });
 
 test("GET /api/projects/:id/draft 공개 응답은 과거 AWS 원본을 정리하고 일반 Board를 유지한다", async () => {
-  const legacyLambdaArn =
-    "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler";
+  const legacyLambdaArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler";
   const legacyNodeId =
     "resource-arn-aws-lambda-ap-northeast-2-123456789012-function-orders-handler";
   const ordinaryNode: DiagramJson["nodes"][number] = {
@@ -170,19 +170,13 @@ test("GET /api/projects/:id/draft 공개 응답은 과거 AWS 원본을 정리�
 
   assert.equal(response.statusCode, 200);
   assert.match(lambda?.id ?? "", /^resource-aws-ref-[a-f0-9]{24}$/u);
-  assert.match(
-    String(lambda?.parameters?.values["providerResourceId"]),
-    /^aws-ref-[a-f0-9]{24}$/u
-  );
+  assert.match(String(lambda?.parameters?.values["providerResourceId"]), /^aws-ref-[a-f0-9]{24}$/u);
   assert.equal(lambda?.parameters?.values["functionName"], "orders-handler");
   assert.equal(lambda?.parameters?.values["Environment"], undefined);
   assert.equal(lambda?.parameters?.values["Role"], undefined);
   assert.equal(lambda?.parameters?.values["KMSKeyArn"], undefined);
   assert.equal(lambda?.parameters?.values["Layers"], undefined);
-  assert.equal(
-    responseDiagram.edges[0]?.sourceNodeId,
-    lambda?.id
-  );
+  assert.equal(responseDiagram.edges[0]?.sourceNodeId, lambda?.id);
   assert.match(responseDiagram.edges[0]?.id ?? "", new RegExp(lambda?.id ?? "never"));
   assert.equal(responseDiagram.variables?.[0]?.bindings[0]?.nodeId, lambda?.id);
   assert.deepEqual(responseDiagram.nodes[1], ordinaryNode);
@@ -530,9 +524,7 @@ test("PUT /api/projects/:id/draft does not overwrite a draft created during the 
 test("POST /api/projects/:id/draft/auto-organize/apply saves one visual-only candidate", async () => {
   const candidateDiagram = structuredClone(draftDiagram);
   candidateDiagram.nodes[0]!.position = { x: 360, y: 180 };
-  const terraformFiles = [
-    { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "vpc" {}' }
-  ];
+  const terraformFiles = [{ fileName: "main.tf", terraformCode: 'resource "aws_vpc" "vpc" {}' }];
   const fakeDb = new ProjectDraftRouteFakeDb({
     users: [makeUser()],
     projects: [makeProject()],
@@ -560,6 +552,148 @@ test("POST /api/projects/:id/draft/auto-organize/apply saves one visual-only can
   assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, candidateDiagram);
   assert.equal(fakeDb.draftRows[0]?.terraformFiles?.[0]?.fileName, "main.tf");
   assert.equal(fakeDb.projectUpdated, true);
+
+  await app.close();
+});
+
+test("POST /api/projects/:id/draft/reverse-engineering/apply returns the server-stamped draft", async () => {
+  const stampedDiagram = structuredClone(draftDiagram);
+  stampedDiagram.nodes[0]!.metadata = {
+    reverseEngineering: {
+      source: "aws_scan",
+      protectedValueKeys: ["providerResourceId"],
+      editableValueKeys: ["displayName"],
+      importDecision: {
+        version: 1,
+        mode: "import_existing",
+        statusAtConfirmation: "ready"
+      }
+    }
+  };
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    drafts: [makeProjectDraft({ revision: 4 })]
+  });
+  let receivedInput: ExistingReverseEngineeringDraftApplyInput | undefined;
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectRoutes: {
+      applyExistingReverseEngineeringDraft: async (input) => {
+        receivedInput = input;
+        return {
+          status: "saved",
+          draft: makeProjectDraft({ diagramJson: stampedDiagram, revision: 5 })
+        };
+      }
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft/reverse-engineering/apply`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      expectedRevision: 4,
+      sourceScanId: "55555555-5555-4555-8555-555555555555",
+      sourceDraftId: "66666666-6666-4666-8666-666666666666",
+      sourceNodeIds: ["node-vpc"],
+      sourceEdgeIds: [],
+      sourceDiagram: draftDiagram,
+      sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(draftDiagram),
+      candidateDiagram: draftDiagram,
+      candidateArchitectureJson: {
+        nodes: [
+          {
+            id: "node-vpc",
+            type: "VPC",
+            label: "VPC",
+            positionX: 0,
+            positionY: 0,
+            config: {}
+          }
+        ],
+        edges: []
+      },
+      importDecision: {
+        version: 1,
+        selectedReadyResourceIds: ["node-vpc"],
+        acknowledgedReviewOnlyResourceIds: []
+      },
+      terraformFiles: []
+    }
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(receivedInput?.projectId, ACTIVE_PROJECT_ID);
+  assert.equal(receivedInput?.userId, ACTIVE_USER_ID);
+  assert.equal(
+    response.json().draft.diagramJson.nodes[0].metadata.reverseEngineering.importDecision.mode,
+    "import_existing"
+  );
+
+  await app.close();
+});
+
+test("POST /api/projects/:id/draft/reverse-engineering/apply returns the structured draft conflict", async () => {
+  const currentDraft = makeProjectDraft({ revision: 9 });
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    drafts: [makeProjectDraft({ revision: 4 })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectRoutes: {
+      applyExistingReverseEngineeringDraft: async () => ({
+        status: "conflict",
+        currentDraft
+      })
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft/reverse-engineering/apply`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      expectedRevision: 4,
+      sourceScanId: "55555555-5555-4555-8555-555555555555",
+      sourceDraftId: "66666666-6666-4666-8666-666666666666",
+      sourceNodeIds: ["node-vpc"],
+      sourceEdgeIds: [],
+      sourceDiagram: draftDiagram,
+      sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(draftDiagram),
+      candidateDiagram: draftDiagram,
+      candidateArchitectureJson: {
+        nodes: [
+          {
+            id: "node-vpc",
+            type: "VPC",
+            label: "VPC",
+            positionX: 0,
+            positionY: 0,
+            config: {}
+          }
+        ],
+        edges: []
+      },
+      importDecision: {
+        version: 1,
+        selectedReadyResourceIds: ["node-vpc"],
+        acknowledgedReviewOnlyResourceIds: []
+      },
+      terraformFiles: []
+    }
+  });
+
+  assert.equal(response.statusCode, 409, response.body);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message: "다른 탭에서 이 프로젝트가 변경되었습니다.",
+    currentRevision: 9,
+    currentServerSavedAt: "2026-06-24T00:00:00.000Z"
+  });
 
   await app.close();
 });
@@ -638,9 +772,7 @@ test("POST /api/projects/:id/draft/auto-organize/apply cannot change Terraform f
   candidateDiagram.nodes[0]!.position = { x: 360, y: 180 };
   const originalDraft = makeProjectDraft({
     revision: 4,
-    terraformFiles: [
-      { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "vpc" {}' }
-    ]
+    terraformFiles: [{ fileName: "main.tf", terraformCode: 'resource "aws_vpc" "vpc" {}' }]
   });
   const fakeDb = new ProjectDraftRouteFakeDb({
     users: [makeUser()],
@@ -660,9 +792,7 @@ test("POST /api/projects/:id/draft/auto-organize/apply cannot change Terraform f
       sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(draftDiagram),
       candidateDiagram,
       expectedRevision: 4,
-      terraformFiles: [
-        { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "changed" {}' }
-      ]
+      terraformFiles: [{ fileName: "main.tf", terraformCode: 'resource "aws_vpc" "changed" {}' }]
     }
   });
 

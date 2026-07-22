@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { diagramNodeModuleSourceSchema } from "./diagram-node-module-source-schema.js";
+import { RESOURCE_TYPES } from "@sketchcatch/types";
 import type {
+  ApplyReverseEngineeringDraftRequest,
+  ArchitectureJson,
   DiagramBounds,
   DiagramEdgeMetadata,
   DiagramEdgeRoute,
@@ -9,7 +12,9 @@ import type {
   DiagramPoint,
   DiagramPresentation,
   DiagramVariable,
-  DiagramVariableBinding
+  DiagramVariableBinding,
+  ReverseEngineeringImportDecision,
+  ReverseEngineeringImportDecisionRequest
 } from "@sketchcatch/types";
 
 const diagramPointSchema: z.ZodType<DiagramPoint> = z
@@ -71,6 +76,23 @@ const diagramNodeStyleSchema = z.object({
   borderStyle: z.enum(["solid", "dashed", "dotted"]).optional()
 });
 
+const reverseEngineeringImportDecisionSchema: z.ZodType<ReverseEngineeringImportDecision> = z
+  .object({
+    version: z.literal(1),
+    mode: z.enum(["import_existing", "observe_only"]),
+    statusAtConfirmation: z.enum(["ready", "unsupported_resource_type", "manual_review"])
+  })
+  .strict();
+
+export const reverseEngineeringImportDecisionRequestSchema: z.ZodType<ReverseEngineeringImportDecisionRequest> =
+  z
+    .object({
+      version: z.literal(1),
+      selectedReadyResourceIds: z.array(z.string().min(1)),
+      acknowledgedReviewOnlyResourceIds: z.array(z.string().min(1))
+    })
+    .strict();
+
 const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
   .object({
     parentAreaNodeId: z.string().min(1).optional(),
@@ -87,7 +109,8 @@ const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
       .object({
         source: z.literal("aws_scan"),
         protectedValueKeys: z.array(z.string().min(1)),
-        editableValueKeys: z.array(z.string().min(1))
+        editableValueKeys: z.array(z.string().min(1)),
+        importDecision: reverseEngineeringImportDecisionSchema.optional()
       })
       .optional()
   })
@@ -187,6 +210,33 @@ const terraformSyncFileInputSchema = z
   })
   .strict();
 
+const architectureNodeSchema = z
+  .object({
+    id: z.string().min(1),
+    type: z.enum(RESOURCE_TYPES),
+    label: z.string().min(1).optional(),
+    positionX: z.number().finite(),
+    positionY: z.number().finite(),
+    config: z.record(z.string(), z.unknown()).default({})
+  })
+  .strict();
+
+const architectureEdgeSchema = z
+  .object({
+    id: z.string().min(1),
+    sourceId: z.string().min(1),
+    targetId: z.string().min(1),
+    label: z.string().min(1).optional()
+  })
+  .strict();
+
+export const architectureJsonSchema: z.ZodType<ArchitectureJson> = z
+  .object({
+    nodes: z.array(architectureNodeSchema),
+    edges: z.array(architectureEdgeSchema)
+  })
+  .strict();
+
 export const diagramJsonSchema: z.ZodType<DiagramJson> = z.object({
   nodes: z.array(diagramNodeSchema),
   edges: z.array(diagramEdgeSchema),
@@ -220,3 +270,21 @@ export const boardAutoOrganizeApplyBodySchema = z
     terraformFiles: z.array(terraformSyncFileInputSchema)
   })
   .strict();
+
+/** 기존 Project의 Reverse Engineering 적용은 스캔·후보·선택 근거를 모두 exact body로 받습니다. */
+export const reverseEngineeringDraftApplyBodySchema: z.ZodType<ApplyReverseEngineeringDraftRequest> =
+  z
+    .object({
+      expectedRevision: z.number().int().positive(),
+      sourceScanId: z.string().trim().min(1),
+      sourceDraftId: z.string().trim().min(1),
+      sourceNodeIds: z.array(z.string().min(1)).min(1),
+      sourceEdgeIds: z.array(z.string().min(1)),
+      sourceDiagram: diagramJsonSchema,
+      sourceFingerprint: z.string().regex(/^[0-9a-f]{8}$/u),
+      candidateDiagram: diagramJsonSchema,
+      candidateArchitectureJson: architectureJsonSchema,
+      importDecision: reverseEngineeringImportDecisionRequestSchema,
+      terraformFiles: z.array(terraformSyncFileInputSchema).optional()
+    })
+    .strict();

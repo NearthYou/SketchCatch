@@ -50,6 +50,11 @@ import {
   REVERSE_ENGINEERING_RESOURCE_SELECTIONS
 } from "./reverse-engineering-resource-types";
 import {
+  createReverseEngineeringImportDecisionOptions,
+  createReverseEngineeringImportDecisionRequest,
+  isReverseEngineeringImportDecisionComplete
+} from "./reverse-engineering-import-decision";
+import {
   canStartReverseEngineeringScan,
   createReverseEngineeringAwsSettingsHref,
   getReverseEngineeringAwsConnectionRecovery
@@ -117,6 +122,10 @@ export function ReverseEngineeringPanel({
     useState<ReverseEngineeringBoardApplicationMode>("replace");
   const [organizedDiagrams, setOrganizedDiagrams] =
     useState<ReverseEngineeringOrganizedDiagrams | null>(null);
+  const [selectedReadyResourceIds, setSelectedReadyResourceIds] = useState<string[]>([]);
+  const [acknowledgedReviewOnlyResourceIds, setAcknowledgedReviewOnlyResourceIds] = useState<
+    string[]
+  >([]);
   const handleRequestError = useCallback((error: unknown) => {
     setErrorMessage(toErrorMessage(error));
   }, []);
@@ -128,12 +137,12 @@ export function ReverseEngineeringPanel({
     selectedAwsConnectionId,
     selectedProjectId,
     setSelectedAwsConnectionId,
-    setSelectedProjectId,
     verifiedAwsConnections
   } = useReverseEngineeringOptions({
     initialProjectId: projectId,
     onError: handleRequestError
   });
+  const targetProjectId = createProjectOnApply ? selectedProjectId : projectId;
   const {
     activeScanId,
     forgetScan,
@@ -146,10 +155,10 @@ export function ReverseEngineeringPanel({
     enabled: !createProjectOnApply,
     onError: handleRequestError,
     scanResponse,
-    selectedProjectId
+    selectedProjectId: targetProjectId
   });
 
-  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const selectedProject = projects.find((project) => project.id === targetProjectId);
   const awsConnectionRecovery = useMemo(
     () =>
       getReverseEngineeringAwsConnectionRecovery({
@@ -259,6 +268,20 @@ export function ReverseEngineeringPanel({
     activeOrganizedDiagram
   ]);
   const comparison = selectedCandidateApplication?.comparison ?? null;
+  const importDecisionOptions = useMemo(
+    () =>
+      selectedCandidateResult && selectedCandidateApplication
+        ? createReverseEngineeringImportDecisionOptions(
+            selectedCandidateResult,
+            selectedCandidateApplication.sourceOwnership.nodeIds
+          )
+        : { ready: [], reviewOnly: [], invalidResourceIds: [] },
+    [selectedCandidateApplication, selectedCandidateResult]
+  );
+  const isImportDecisionComplete = isReverseEngineeringImportDecisionComplete(
+    importDecisionOptions,
+    acknowledgedReviewOnlyResourceIds
+  );
   const hasDeletedSourceScan = useMemo(
     () => hasDeletedReverseEngineeringSourceScan(context.diagram, scanHistory, scanHistoryState),
     [context.diagram, scanHistory, scanHistoryState]
@@ -304,6 +327,23 @@ export function ReverseEngineeringPanel({
     selectedCandidate?.id
   ]);
 
+  // gg: 새 scan이나 다른 후보를 열면 이전 리소스 선택을 재사용하지 않습니다.
+  useEffect(() => {
+    setSelectedReadyResourceIds([]);
+    setAcknowledgedReviewOnlyResourceIds([]);
+  }, [scanResponse?.scan.id, selectedCandidate?.id]);
+
+  // gg: replace와 append 사이에서 실제 적용 범위 밖으로 빠진 선택은 요청에서 제거합니다.
+  useEffect(() => {
+    const readyIds = new Set(importDecisionOptions.ready.map((option) => option.id));
+    const reviewOnlyIds = new Set(importDecisionOptions.reviewOnly.map((option) => option.id));
+
+    setSelectedReadyResourceIds((currentIds) => filterSelectionToScope(currentIds, readyIds));
+    setAcknowledgedReviewOnlyResourceIds((currentIds) =>
+      filterSelectionToScope(currentIds, reviewOnlyIds)
+    );
+  }, [importDecisionOptions]);
+
   // 사용자가 가져올 AWS 리소스 종류를 켜고 끕니다.
   function toggleResourceType(resourceType: ReverseEngineeringResourceSelection): void {
     setSelectedResourceTypes((currentResourceTypes) =>
@@ -333,7 +373,7 @@ export function ReverseEngineeringPanel({
       draftRevision: createProjectOnApply ? null : context.projectDraftRevision
     });
     setPreviewBase(basePreview);
-    context.setPreviewDiagram(null);
+    context.setPreviewDiagram(createProjectOnApply ? null : basePreview.sourceDiagram);
 
     try {
       const response = createProjectOnApply
@@ -344,7 +384,7 @@ export function ReverseEngineeringPanel({
           })
         : await runSavedScan({
             awsConnectionId: selectedAwsConnection.id,
-            projectId: selectedProjectId,
+            projectId: targetProjectId,
             region: selectedAwsConnection.region,
             resourceTypes: selectedResourceTypes
           });
@@ -367,13 +407,13 @@ export function ReverseEngineeringPanel({
 
   // 사용자가 실행 중인 scan을 멈추고 싶을 때 서버에 안전한 취소 요청만 보냅니다.
   async function cancelActiveScan(scanId = activeScanId): Promise<void> {
-    if (!scanId || !selectedProjectId) {
+    if (!scanId || !targetProjectId) {
       return;
     }
 
     try {
       const scan = await cancelReverseEngineeringScan({
-        projectId: selectedProjectId,
+        projectId: targetProjectId,
         scanId
       });
 
@@ -388,7 +428,7 @@ export function ReverseEngineeringPanel({
   async function deleteSavedScan(scanId: string): Promise<void> {
     try {
       await deleteReverseEngineeringScan({
-        projectId: selectedProjectId,
+        projectId: targetProjectId,
         scanId
       });
 
@@ -425,11 +465,11 @@ export function ReverseEngineeringPanel({
 
     try {
       const response = await getReverseEngineeringScan({
-        projectId: selectedProjectId,
+        projectId: targetProjectId,
         scanId
       });
       const nextLogs = await listReverseEngineeringScanLogs({
-        projectId: selectedProjectId,
+        projectId: targetProjectId,
         scanId
       });
 
@@ -475,6 +515,16 @@ export function ReverseEngineeringPanel({
     if (!application) {
       return;
     }
+    if (!isImportDecisionComplete) {
+      setApplyState("error");
+      setApplyMessage("보드에서 바로 수정할 수 없는 리소스를 모두 확인해 주세요.");
+      return;
+    }
+    const importDecision = createReverseEngineeringImportDecisionRequest({
+      options: importDecisionOptions,
+      selectedReadyResourceIds,
+      acknowledgedReviewOnlyResourceIds
+    });
     const diagramToApply = attachReverseEngineeringSourceToDiagram({
       diagram: application.diagram,
       sourceScanId: result.scan.id,
@@ -502,7 +552,8 @@ export function ReverseEngineeringPanel({
           reverseEngineering: {
             previewId,
             draftId: result.reverseEngineeringDraft.id,
-            sourceNodeIds: [...application.sourceOwnership.nodeIds]
+            sourceNodeIds: [...application.sourceOwnership.nodeIds],
+            importDecision
           },
           architectureJson: convertReverseEngineeringBoardToArchitectureJson(
             diagramToApply,
@@ -527,9 +578,11 @@ export function ReverseEngineeringPanel({
       return;
     }
 
-    if (!context.persistAndApplyDiagramJson) {
+    if (!context.persistAndApplyReverseEngineeringDraft) {
       setApplyState("error");
-      setApplyMessage("Board 서버 저장이 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.");
+      setApplyMessage(
+        "Reverse Engineering 서버 검증이 준비되지 않았습니다. 잠시 후 다시 시도해 주세요."
+      );
       return;
     }
 
@@ -545,8 +598,23 @@ export function ReverseEngineeringPanel({
         currentDraftRevision: context.projectDraftRevision,
         diagramToApply,
         persistAndApply: (diagram, expectedRevision) =>
-          context.persistAndApplyDiagramJson?.(diagram, expectedRevision) ??
-          Promise.reject(new Error("Board 서버 저장 경계가 준비되지 않았습니다.")),
+          context.persistAndApplyReverseEngineeringDraft?.({
+            expectedRevision,
+            sourceScanId: result.scan.id,
+            sourceDraftId: result.reverseEngineeringDraft.id,
+            sourceNodeIds: [...application.sourceOwnership.nodeIds],
+            sourceEdgeIds: [...application.sourceOwnership.edgeIds],
+            sourceDiagram: previewBase.sourceDiagram,
+            sourceFingerprint: previewBase.sourceFingerprint,
+            candidateDiagram: diagram,
+            candidateArchitectureJson: convertReverseEngineeringBoardToArchitectureJson(
+              diagram,
+              result,
+              application.sourceOwnership
+            ),
+            importDecision
+          }) ??
+          Promise.reject(new Error("Reverse Engineering 서버 검증 경계가 준비되지 않았습니다.")),
         preview: previewBase,
         saveSnapshot: async () => {
           await createArchitectureSnapshot({
@@ -739,11 +807,10 @@ export function ReverseEngineeringPanel({
           onScanCancel={() => void cancelActiveScan()}
           onScanStart={() => void runScan()}
           onSelectedAwsConnectionChange={setSelectedAwsConnectionId}
-          onSelectedProjectChange={setSelectedProjectId}
           projects={projects}
           resourceTypes={REVERSE_ENGINEERING_RESOURCE_SELECTIONS}
           selectedAwsConnectionId={resolvedSelectedAwsConnectionId}
-          selectedProjectId={selectedProjectId}
+          selectedProjectId={targetProjectId}
           selectedResourceTypes={selectedResourceTypes}
         />
         {errorMessage ? <p className={styles.error}>{errorMessage}</p> : null}
@@ -781,16 +848,28 @@ export function ReverseEngineeringPanel({
             createProjectOnApply={createProjectOnApply}
             hasCurrentBoardResources={previewSourceDiagram.nodes.length > 0}
             logs={logs}
+            acknowledgedReviewOnlyResourceIds={acknowledgedReviewOnlyResourceIds}
+            importDecisionComplete={isImportDecisionComplete}
+            importDecisionOptions={importDecisionOptions}
             onAppendToCurrentBoard={() => void applyScanResult("append")}
             onApplicationModeChange={previewApplicationMode}
             onCompilePlacement={previewAutomaticOrganization}
             onKeepOriginalPlacement={previewOriginalPlacement}
+            onReadyResourceToggle={(resourceId) =>
+              setSelectedReadyResourceIds((currentIds) => toggleSelection(currentIds, resourceId))
+            }
             onReplaceCurrentBoard={() => void applyScanResult("replace")}
+            onReviewOnlyResourceToggle={(resourceId) =>
+              setAcknowledgedReviewOnlyResourceIds((currentIds) =>
+                toggleSelection(currentIds, resourceId)
+              )
+            }
             onRetryScan={() => void runScan()}
             permissionRecoveryHref={createReverseEngineeringAwsSettingsHref(
               selectedCandidateResponse.scan.awsConnectionId
             )}
             response={selectedCandidateResponse}
+            selectedReadyResourceIds={selectedReadyResourceIds}
             selectedCandidateId={selectedCandidate.id}
             placement={placement}
           />
@@ -819,6 +898,23 @@ type ReverseEngineeringRunOutput = {
   readonly previewId: string | null;
   readonly response: ReverseEngineeringScanResponse;
 };
+
+// gg: 실제 적용 범위 안에 남은 리소스 선택만 유지합니다.
+function filterSelectionToScope(
+  currentIds: readonly string[],
+  allowedIds: ReadonlySet<string>
+): string[] {
+  const nextIds = currentIds.filter((resourceId) => allowedIds.has(resourceId));
+
+  return nextIds;
+}
+
+// gg: 같은 리소스를 다시 누르면 선택을 해제하고 순서는 화면 순서대로 유지합니다.
+function toggleSelection(currentIds: readonly string[], resourceId: string): string[] {
+  return currentIds.includes(resourceId)
+    ? currentIds.filter((currentId) => currentId !== resourceId)
+    : [...currentIds, resourceId];
+}
 
 // 새 프로젝트 시작에서는 프로젝트를 만들기 전에 AWS만 읽어서 미리보기 결과를 받습니다.
 async function runPreviewScan({

@@ -6,10 +6,7 @@ import {
   ListTagsForResourceCommand,
   ListTargetsByRuleCommand
 } from "@aws-sdk/client-eventbridge";
-import type {
-  DiscoveredResource,
-  ReverseEngineeringScanResult
-} from "@sketchcatch/types";
+import type { DiscoveredResource, ReverseEngineeringScanResult } from "@sketchcatch/types";
 import type { TerraformAwsCredentialEnv } from "../aws-connections/aws-connection-runtime-credentials.js";
 import {
   createAwsProviderAdapter,
@@ -27,8 +24,7 @@ const credentials: TerraformAwsCredentialEnv = {
   AWS_REGION: "ap-northeast-2"
 };
 const ruleArn = "arn:aws:events:ap-northeast-2:123456789012:rule/orders-bus/daily";
-const logGroupArn =
-  "arn:aws:logs:ap-northeast-2:123456789012:log-group:/aws/events/orders";
+const logGroupArn = "arn:aws:logs:ap-northeast-2:123456789012:log-group:/aws/events/orders";
 
 type EventBridgeReader = (
   region: string,
@@ -73,13 +69,15 @@ test("EventBridge reader는 Rule과 각 Target의 모든 page를 읽고 원본 �
         if (command instanceof ListRulesCommand) {
           if (command.input.EventBusName === "default") {
             return {
-              Rules: [{
-                Name: "scheduled",
-                Arn: "arn:aws:events:ap-northeast-2:123456789012:rule/scheduled",
-                EventBusName: "default",
-                ScheduleExpression: "rate(5 minutes)",
-                State: "ENABLED"
-              }]
+              Rules: [
+                {
+                  Name: "scheduled",
+                  Arn: "arn:aws:events:ap-northeast-2:123456789012:rule/scheduled",
+                  EventBusName: "default",
+                  ScheduleExpression: "rate(5 minutes)",
+                  State: "ENABLED"
+                }
+              ]
             };
           }
           return command.input.NextToken
@@ -87,14 +85,16 @@ test("EventBridge reader는 Rule과 각 Target의 모든 page를 읽고 원본 �
                 Rules: []
               }
             : {
-                Rules: [{
-                  Name: "daily",
-                  Arn: ruleArn,
-                  Description: "Daily order event",
-                  EventBusName: "orders-bus",
-                  EventPattern: "{\"source\":[\"orders\"]}",
-                  State: "ENABLED"
-                }],
+                Rules: [
+                  {
+                    Name: "daily",
+                    Arn: ruleArn,
+                    Description: "Daily order event",
+                    EventBusName: "orders-bus",
+                    EventPattern: '{"source":["orders"]}',
+                    State: "ENABLED"
+                  }
+                ],
                 NextToken: "rules-page-2"
               };
         }
@@ -114,10 +114,12 @@ test("EventBridge reader는 Rule과 각 Target의 모든 page를 읽고 원본 �
         if (command.input.Rule === "daily") {
           return command.input.NextToken
             ? {
-                Targets: [{
-                  Id: "lambda",
-                  Arn: "arn:aws:lambda:ap-northeast-2:123456789012:function:orders"
-                }]
+                Targets: [
+                  {
+                    Id: "lambda",
+                    Arn: "arn:aws:lambda:ap-northeast-2:123456789012:function:orders"
+                  }
+                ]
               }
             : {
                 Targets: [{ Id: "logs", Arn: logGroupArn }],
@@ -133,8 +135,7 @@ test("EventBridge reader는 Rule과 각 Target의 모든 page를 읽고 원본 �
   assert.deepEqual(
     commands
       .filter(
-        (command): command is ListEventBusesCommand =>
-          command instanceof ListEventBusesCommand
+        (command): command is ListEventBusesCommand => command instanceof ListEventBusesCommand
       )
       .map((command) => command.input.NextToken),
     [undefined, "buses-page-2"]
@@ -158,13 +159,11 @@ test("EventBridge reader는 Rule과 각 Target의 모든 page를 읽고 원본 �
     [undefined, "targets-page-2"]
   );
   assert.equal(
-    result.records.filter((record) => record.providerResourceType === "AWS::Events::Rule")
-      .length,
+    result.records.filter((record) => record.providerResourceType === "AWS::Events::Rule").length,
     2
   );
   assert.equal(
-    result.records.filter((record) => record.providerResourceType === "AWS::Events::Target")
-      .length,
+    result.records.filter((record) => record.providerResourceType === "AWS::Events::Target").length,
     2
   );
   const dailyRule = result.records.find((record) => record.displayName === "daily");
@@ -172,7 +171,7 @@ test("EventBridge reader는 Rule과 각 Target의 모든 page를 읽고 원본 �
     name: "daily",
     description: "Daily order event",
     eventBusName: "orders-bus",
-    eventPattern: "{\"source\":[\"orders\"]}",
+    eventPattern: '{"source":["orders"]}',
     state: "ENABLED",
     tagsReadComplete: true,
     tags: [
@@ -204,22 +203,26 @@ test("EventBridge Target 뒤 page가 실패해도 앞 page와 다른 Rule을 살
         if (command instanceof ListRulesCommand) {
           return command.input.EventBusName === "orders-bus"
             ? {
-                Rules: [{
-                  Name: "daily",
-                  Arn: ruleArn,
-                  EventBusName: "orders-bus",
-                  EventPattern: "{}",
-                  State: "ENABLED"
-                }]
+                Rules: [
+                  {
+                    Name: "daily",
+                    Arn: ruleArn,
+                    EventBusName: "orders-bus",
+                    EventPattern: "{}",
+                    State: "ENABLED"
+                  }
+                ]
               }
             : {
-                Rules: [{
-                Name: "scheduled",
-                Arn: "arn:aws:events:ap-northeast-2:123456789012:rule/scheduled",
-                EventBusName: "default",
-                ScheduleExpression: "rate(1 hour)",
-                State: "ENABLED"
-                }]
+                Rules: [
+                  {
+                    Name: "scheduled",
+                    Arn: "arn:aws:events:ap-northeast-2:123456789012:rule/scheduled",
+                    EventBusName: "default",
+                    ScheduleExpression: "rate(1 hour)",
+                    State: "ENABLED"
+                  }
+                ]
               };
         }
 
@@ -244,10 +247,11 @@ test("EventBridge Target 뒤 page가 실패해도 앞 page와 다른 Rule을 살
     })
   );
 
-  assert.deepEqual(
-    result.records.map((record) => record.displayName).sort(),
-    ["daily", "logs", "scheduled"]
-  );
+  assert.deepEqual(result.records.map((record) => record.displayName).sort(), [
+    "daily",
+    "logs",
+    "scheduled"
+  ]);
   assert.deepEqual(result.scanErrors, [
     {
       id: "scan-error-service-eventbridge",
@@ -279,13 +283,15 @@ test("EventBridge Rule 태그를 읽지 못하면 Rule과 Target 자동 관리�
         }
         if (command instanceof ListRulesCommand) {
           return {
-            Rules: [{
-              Name: "daily",
-              Arn: ruleArn,
-              EventBusName: "orders-bus",
-              EventPattern: "{}",
-              State: "ENABLED"
-            }]
+            Rules: [
+              {
+                Name: "daily",
+                Arn: ruleArn,
+                EventBusName: "orders-bus",
+                EventPattern: "{}",
+                State: "ENABLED"
+              }
+            ]
           };
         }
         if (command instanceof ListTagsForResourceCommand) {
@@ -309,7 +315,9 @@ test("EventBridge Rule 태그를 읽지 못하면 Rule과 Target 자동 관리�
   assert.equal(classifyReverseEngineeringManagement(target), "needs_mapping");
   assert.ok(
     result.importSuggestions
-      .filter((suggestion) => suggestion.resourceId === rule.id || suggestion.resourceId === target.id)
+      .filter(
+        (suggestion) => suggestion.resourceId === rule.id || suggestion.resourceId === target.id
+      )
       .every((suggestion) => suggestion.status !== "ready")
   );
   assert.equal(readResult.scanErrors[0]?.serviceKey, "eventbridge");
@@ -364,10 +372,7 @@ test("발견된 Lambda ECS SNS 대상은 EventBridge Target 관계로만 안전�
   ];
   const records = destinations.flatMap((destination, index) => [
     {
-      ...eventTargetRecord(
-        { targetArn: destination.providerResourceId },
-        `target-${index}`
-      )
+      ...eventTargetRecord({ targetArn: destination.providerResourceId }, `target-${index}`)
     },
     {
       ...destination,
@@ -379,13 +384,13 @@ test("발견된 Lambda ECS SNS 대상은 EventBridge Target 관계로만 안전�
 
   for (const [index, destination] of destinations.entries()) {
     const target = resolved.find(
-      (record) => record.providerResourceId === `eventbridge-target:orders-bus/daily/target-${index}`
+      (record) =>
+        record.providerResourceId === `eventbridge-target:orders-bus/daily/target-${index}`
     );
     assert.ok(target);
     assert.ok(
       target.relationships.some(
-        (relationship) =>
-          relationship.targetProviderResourceId === destination.providerResourceId
+        (relationship) => relationship.targetProviderResourceId === destination.providerResourceId
       )
     );
     assert.equal(target.config["targetReferenceReady"], false);
@@ -429,7 +434,7 @@ test("발견된 단순 Log Group Target은 Rule과 대상 참조를 가진 Terra
     name: "daily",
     description: "Daily order event",
     eventBusName: "orders-bus",
-    eventPattern: "{\"source\":[\"orders\"]}",
+    eventPattern: '{"source":["orders"]}',
     state: "ENABLED",
     tags: { Environment: "production" }
   });
@@ -452,14 +457,9 @@ test("저장 결과를 공개 응답으로 바꿔도 EventBridge Target의 안�
       logGroupRecord()
     ])
   );
-  const publicResult = normalizeReverseEngineeringScanResult(
-    privateResult.scan,
-    privateResult
-  );
+  const publicResult = normalizeReverseEngineeringScanResult(privateResult.scan, privateResult);
   const target = findResource(publicResult, "EVENTBRIDGE_TARGET");
-  const targetNode = publicResult.architectureJson.nodes.find(
-    (node) => node.id === target.id
-  );
+  const targetNode = publicResult.architectureJson.nodes.find((node) => node.id === target.id);
 
   assert.match(String(target.config["ruleTerraformReference"]), /^aws_cloudwatch_event_rule\./u);
   assert.match(String(target.config["targetTerraformReference"]), /^aws_cloudwatch_log_group\./u);
@@ -475,7 +475,7 @@ test("외부 ARN과 고급 전달 설정이 있는 EventBridge Target은 항상 
   for (const targetConfig of [
     { targetArn: "arn:aws:sns:ap-northeast-2:999999999999:external" },
     { targetArn: logGroupArn, roleArn: "arn:aws:iam::123456789012:role/events" },
-    { targetArn: logGroupArn, input: "{\"demo\":true}" },
+    { targetArn: logGroupArn, input: '{"demo":true}' },
     { targetArn: logGroupArn, inputPath: "$.detail" },
     { targetArn: logGroupArn, inputTransformer: { InputTemplate: "{}" } },
     { targetArn: logGroupArn, deadLetterConfig: { Arn: "arn:aws:sqs:::dead" } },
@@ -545,7 +545,7 @@ function eventRuleRecord(): AwsDiscoveredResourceRecord {
       name: "daily",
       description: "Daily order event",
       eventBusName: "orders-bus",
-      eventPattern: "{\"source\":[\"orders\"]}",
+      eventPattern: '{"source":["orders"]}',
       state: "ENABLED",
       tagsReadComplete: true,
       tags: [{ key: "Environment", value: "production" }]
@@ -582,15 +582,19 @@ function logGroupRecord(): AwsDiscoveredResourceRecord {
     providerResourceId: `${logGroupArn}:*`,
     displayName: "/aws/events/orders",
     region: "ap-northeast-2",
-    config: { logGroupName: "/aws/events/orders", retentionInDays: 30 },
+    config: {
+      logGroupClass: "STANDARD",
+      logGroupName: "/aws/events/orders",
+      retentionInDays: 30,
+      tags: [],
+      tagsReadComplete: true
+    },
     relationships: []
   };
 }
 
 // gg: 실제 private scan과 같은 adapter 경계에서 import suggestion까지 확인합니다.
-async function scan(
-  records: AwsDiscoveredResourceRecord[]
-): Promise<ReverseEngineeringScanResult> {
+async function scan(records: AwsDiscoveredResourceRecord[]): Promise<ReverseEngineeringScanResult> {
   return createAwsProviderAdapter(
     {
       async discoverResources() {

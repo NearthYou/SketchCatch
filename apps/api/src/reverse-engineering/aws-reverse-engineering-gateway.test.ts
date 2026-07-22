@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  DescribeImagesCommand
-} from "@aws-sdk/client-ec2";
-import {
-  DescribeLoadBalancersCommand
-} from "@aws-sdk/client-elastic-load-balancing-v2";
+import { GetRestApisCommand } from "@aws-sdk/client-api-gateway";
+import { DescribeImagesCommand } from "@aws-sdk/client-ec2";
+import { DescribeLoadBalancersCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { ListDistributionsCommand } from "@aws-sdk/client-cloudfront";
-import { DescribeAlarmsCommand } from "@aws-sdk/client-cloudwatch";
+import {
+  DescribeAlarmsCommand,
+  ListTagsForResourceCommand as ListCloudWatchTagsForResourceCommand
+} from "@aws-sdk/client-cloudwatch";
+import {
+  DescribeLogGroupsCommand,
+  ListTagsForResourceCommand as ListLogGroupTagsForResourceCommand
+} from "@aws-sdk/client-cloudwatch-logs";
 import {
   GetBucketTaggingCommand,
   GetBucketVersioningCommand,
@@ -53,8 +57,10 @@ import {
   listApplicationLoadBalancers,
   listBucketsWithDetails,
   listCloudFrontDistributions,
+  listCloudWatchLogGroupsAsUnknown,
   listCloudWatchMetricAlarmsAsUnknown,
   listIamRolesAsUnknown,
+  listApiGatewayRestApisAsUnknown,
   listLambdaFunctionsAsUnknown,
   listLambdaPermissionsAsUnknown,
   listTaggedUnknownResources,
@@ -180,15 +186,16 @@ const awsQueryReaderScenarios = [
 ] as const;
 
 function createAwsQueryPageXml(
-  kind: typeof awsQueryReaderScenarios[number]["kind"],
+  kind: (typeof awsQueryReaderScenarios)[number]["kind"],
   id: string,
   nextToken: string | undefined
 ): string {
-  const token = nextToken === undefined
-    ? ""
-    : kind === "rds"
-      ? `<Marker>${escapeXml(nextToken)}</Marker>`
-      : `<nextToken>${escapeXml(nextToken)}</nextToken>`;
+  const token =
+    nextToken === undefined
+      ? ""
+      : kind === "rds"
+        ? `<Marker>${escapeXml(nextToken)}</Marker>`
+        : `<nextToken>${escapeXml(nextToken)}</nextToken>`;
   switch (kind) {
     case "vpc":
       return `<DescribeVpcsResponse><vpcSet><item><vpcId>${id}</vpcId></item></vpcSet>${token}</DescribeVpcsResponse>`;
@@ -212,10 +219,7 @@ function createAwsQueryPageXml(
 }
 
 function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 test("later page failure preserves prior items and exposes only a safe outcome", async () => {
@@ -225,7 +229,7 @@ test("later page failure preserves prior items and exposes only a safe outcome",
     }
     throw new Error(
       "InternalServerException RequestId private-request-id " +
-      "arn:aws:iam::123456789012:role/private"
+        "arn:aws:iam::123456789012:role/private"
     );
   });
 
@@ -243,36 +247,32 @@ test("Lambda 함수는 환경 비밀값과 실행 Role ARN 없이 안전한 설�
   const roleArn = "arn:aws:iam::123456789012:role/synthetic-lambda-role";
   const kmsKeyArn = "arn:aws:kms:ap-northeast-2:123456789012:key/synthetic-key";
   const layerArn = "arn:aws:lambda:ap-northeast-2:123456789012:layer:synthetic-layer:1";
-  const [record] = await listLambdaFunctionsAsUnknown(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command) {
-        assert.ok(command instanceof ListFunctionsCommand);
-        return {
-          Functions: [
-            {
-              FunctionName: "orders-handler",
-              FunctionArn: functionArn,
-              Runtime: "nodejs22.x",
-              Handler: "index.handler",
-              MemorySize: 512,
-              Timeout: 30,
-              Role: roleArn,
-              KMSKeyArn: kmsKeyArn,
-              Layers: [{ Arn: layerArn, CodeSize: 10 }],
-              Environment: { Variables: { API_TOKEN: secretToken } },
-              VpcConfig: {
-                VpcId: "vpc-safe",
-                SubnetIds: ["subnet-safe"],
-                SecurityGroupIds: ["sg-safe"]
-              }
+  const [record] = await listLambdaFunctionsAsUnknown("ap-northeast-2", credentials, () => ({
+    async send(command) {
+      assert.ok(command instanceof ListFunctionsCommand);
+      return {
+        Functions: [
+          {
+            FunctionName: "orders-handler",
+            FunctionArn: functionArn,
+            Runtime: "nodejs22.x",
+            Handler: "index.handler",
+            MemorySize: 512,
+            Timeout: 30,
+            Role: roleArn,
+            KMSKeyArn: kmsKeyArn,
+            Layers: [{ Arn: layerArn, CodeSize: 10 }],
+            Environment: { Variables: { API_TOKEN: secretToken } },
+            VpcConfig: {
+              VpcId: "vpc-safe",
+              SubnetIds: ["subnet-safe"],
+              SecurityGroupIds: ["sg-safe"]
             }
-          ]
-        };
-      }
-    })
-  );
+          }
+        ]
+      };
+    }
+  }));
 
   assert.ok(record);
   assert.equal(record.config["functionName"], "orders-handler");
@@ -322,19 +322,15 @@ test("Lambda permission은 AWS Action과 Principal과 Policy JSON 대신 안전�
     ]
   });
   const lambdaFunction = { FunctionName: "orders-handler", FunctionArn: functionArn };
-  const records = await listLambdaPermissionsAsUnknown(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command) {
-        if (command instanceof ListFunctionsCommand) {
-          return { Functions: [lambdaFunction] };
-        }
-        assert.ok(command instanceof GetPolicyCommand);
-        return { Policy: policy };
+  const records = await listLambdaPermissionsAsUnknown("ap-northeast-2", credentials, () => ({
+    async send(command) {
+      if (command instanceof ListFunctionsCommand) {
+        return { Functions: [lambdaFunction] };
       }
-    })
-  );
+      assert.ok(command instanceof GetPolicyCommand);
+      return { Policy: policy };
+    }
+  }));
 
   assert.equal(records.length, 1);
   assert.equal(records[0]?.config["effect"], "allow");
@@ -353,11 +349,11 @@ test("Lambda permission은 AWS Action과 Principal과 Policy JSON 대신 안전�
     "providerParameters"
   ]);
 
-  const functionRecords = await listLambdaFunctionsAsUnknown(
-    "ap-northeast-2",
-    credentials,
-    () => ({ async send() { return { Functions: [lambdaFunction] }; } })
-  );
+  const functionRecords = await listLambdaFunctionsAsUnknown("ap-northeast-2", credentials, () => ({
+    async send() {
+      return { Functions: [lambdaFunction] };
+    }
+  }));
   const result = await scanGatewayRecords([...functionRecords, ...records]);
   assert.equal(result.discoveredResources[1]?.relationships?.length, 1);
   assert.equal(result.architectureJson.edges.length, 1);
@@ -371,36 +367,34 @@ test("IAM Role은 trust policy와 ARN 대신 연결에 필요한 안전한 요�
   const roleArn = "arn:aws:iam::123456789012:role/synthetic-role";
   const principalArn = "arn:aws:iam::210987654321:root";
   const boundaryArn = "arn:aws:iam::123456789012:policy/synthetic-boundary";
-  const trustPolicy = encodeURIComponent(JSON.stringify({
-    Version: "2012-10-17",
-    Statement: [{ Effect: "Allow", Action: "sts:AssumeRole", Principal: { AWS: principalArn } }]
-  }));
-  const [record] = await listIamRolesAsUnknown(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command) {
-        assert.ok(command instanceof ListRolesCommand);
-        return {
-          Roles: [
-            {
-              Path: "/service-role/",
-              RoleName: "synthetic-role",
-              RoleId: "SYNTHETICROLEID",
-              Arn: roleArn,
-              CreateDate: new Date("2026-01-01T00:00:00.000Z"),
-              AssumeRolePolicyDocument: trustPolicy,
-              PermissionsBoundary: {
-                PermissionsBoundaryType: "Policy",
-                PermissionsBoundaryArn: boundaryArn
-              },
-              Tags: [{ Key: "API_TOKEN", Value: "synthetic-tag-secret" }]
-            }
-          ]
-        };
-      }
+  const trustPolicy = encodeURIComponent(
+    JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [{ Effect: "Allow", Action: "sts:AssumeRole", Principal: { AWS: principalArn } }]
     })
   );
+  const [record] = await listIamRolesAsUnknown("ap-northeast-2", credentials, () => ({
+    async send(command) {
+      assert.ok(command instanceof ListRolesCommand);
+      return {
+        Roles: [
+          {
+            Path: "/service-role/",
+            RoleName: "synthetic-role",
+            RoleId: "SYNTHETICROLEID",
+            Arn: roleArn,
+            CreateDate: new Date("2026-01-01T00:00:00.000Z"),
+            AssumeRolePolicyDocument: trustPolicy,
+            PermissionsBoundary: {
+              PermissionsBoundaryType: "Policy",
+              PermissionsBoundaryArn: boundaryArn
+            },
+            Tags: [{ Key: "API_TOKEN", Value: "synthetic-tag-secret" }]
+          }
+        ]
+      };
+    }
+  }));
 
   assert.ok(record);
   assert.equal(record.config["roleName"], "synthetic-role");
@@ -472,14 +466,17 @@ test("AWS Query signs only allowlisted pagination parameters and encodes opaque 
     return new Response("<DescribeVpcsResponse />", { status: 200 });
   }) as typeof fetch;
 
-  await sendAwsQuery({
-    service: "ec2",
-    region: "ap-northeast-2",
-    action: "DescribeVpcs",
-    version: "2016-11-15",
-    credentials,
-    parameters: { NextToken: "opaque +/&= token" }
-  } as never, fetchXml);
+  await sendAwsQuery(
+    {
+      service: "ec2",
+      region: "ap-northeast-2",
+      action: "DescribeVpcs",
+      version: "2016-11-15",
+      credentials,
+      parameters: { NextToken: "opaque +/&= token" }
+    } as never,
+    fetchXml
+  );
 
   const parameters = new URLSearchParams(body);
   assert.equal(parameters.get("Action"), "DescribeVpcs");
@@ -487,14 +484,17 @@ test("AWS Query signs only allowlisted pagination parameters and encodes opaque 
   assert.equal(parameters.get("NextToken"), "opaque +/&= token");
 
   await assert.rejects(
-    sendAwsQuery({
-      service: "ec2",
-      region: "ap-northeast-2",
-      action: "DescribeVpcs",
-      version: "2016-11-15",
-      credentials,
-      parameters: { Action: "DeleteEverything" }
-    } as never, fetchXml),
+    sendAwsQuery(
+      {
+        service: "ec2",
+        region: "ap-northeast-2",
+        action: "DescribeVpcs",
+        version: "2016-11-15",
+        credentials,
+        parameters: { Action: "DeleteEverything" }
+      } as never,
+      fetchXml
+    ),
     /pagination parameter/iu
   );
   assert.equal(fetchCalls, 1);
@@ -515,10 +515,7 @@ test("AWS Query parses EC2 nextToken and RDS Marker without retaining response X
     ),
     "rds-marker"
   );
-  assert.equal(
-    parseAwsQueryPaginationToken("<DescribeVpcsResponse />", "nextToken"),
-    undefined
-  );
+  assert.equal(parseAwsQueryPaginationToken("<DescribeVpcsResponse />", "nextToken"), undefined);
 });
 
 test("NAT Gateway 직접 선택은 NAT와 같은 scan의 Subnet/EIP만 dependency로 읽는다", () => {
@@ -561,13 +558,13 @@ test("Route Table Association 직접 선택과 ALL은 기존 DescribeRouteTables
   assert.equal(shouldReadResourceGroup(scanInput(["SUBNET"]), "ROUTE_TABLE"), false);
 
   const bodies: string[] = [];
-  const records = await describeRouteTables(
-    "ap-northeast-2",
-    credentials,
-    (async (_url: string | URL | Request, init?: RequestInit) => {
-      bodies.push(String(init?.body ?? ""));
-      return new Response(
-        `<DescribeRouteTablesResponse>
+  const records = await describeRouteTables("ap-northeast-2", credentials, (async (
+    _url: string | URL | Request,
+    init?: RequestInit
+  ) => {
+    bodies.push(String(init?.body ?? ""));
+    return new Response(
+      `<DescribeRouteTablesResponse>
           <routeTableSet>
             <item>
               <routeTableId>rtb-main</routeTableId>
@@ -583,10 +580,9 @@ test("Route Table Association 직접 선택과 ALL은 기존 DescribeRouteTables
             </item>
           </routeTableSet>
         </DescribeRouteTablesResponse>`,
-        { status: 200 }
-      );
-    }) as typeof fetch
-  );
+      { status: 200 }
+    );
+  }) as typeof fetch);
 
   assert.equal(bodies.length, 1);
   assert.equal(new URLSearchParams(bodies[0]).get("Action"), "DescribeRouteTables");
@@ -756,23 +752,18 @@ test("반복 Route Table page의 Association record를 provider ID 기준으로 
 test("ALL 스캔은 실제 generic EIP/NAT ARN보다 전용 Query 설정을 우선해 한 번만 남긴다", async () => {
   const allocationId = "eipalloc-0123456789abcdef0";
   const natGatewayId = "nat-0123456789abcdef0";
-  const [genericEip] = await listTaggedUnknownResources(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send() {
-        return {
-          ResourceTagMappingList: [
-            {
-              ResourceARN:
-                `arn:aws:ec2:ap-northeast-2:123456789012:elastic-ip/${allocationId}`,
-              Tags: [{ Key: "owner", Value: "platform" }]
-            }
-          ]
-        };
-      }
-    })
-  );
+  const [genericEip] = await listTaggedUnknownResources("ap-northeast-2", credentials, () => ({
+    async send() {
+      return {
+        ResourceTagMappingList: [
+          {
+            ResourceARN: `arn:aws:ec2:ap-northeast-2:123456789012:elastic-ip/${allocationId}`,
+            Tags: [{ Key: "owner", Value: "platform" }]
+          }
+        ]
+      };
+    }
+  }));
   assert.equal(genericEip?.providerResourceType, "AWS::EC2::EIP");
   const records = uniqueDiscoveredRecordsByProviderId([
     genericEip!,
@@ -901,9 +892,11 @@ test("all EC2 Query readers and RDS follow their response pagination token", asy
         bodies.push(String(init?.body ?? ""));
         page += 1;
         return new Response(
-          createAwsQueryPageXml(scenario.kind, `${scenario.idPrefix}-${page}`, page === 1
-            ? "opaque +/&= token"
-            : undefined),
+          createAwsQueryPageXml(
+            scenario.kind,
+            `${scenario.idPrefix}-${page}`,
+            page === 1 ? "opaque +/&= token" : undefined
+          ),
           { status: 200 }
         );
       }) as typeof fetch,
@@ -989,7 +982,10 @@ test("S3 ListBuckets pagination preserves detailed page-one buckets on a later f
     (failure) => failures.push(failure)
   );
 
-  assert.deepEqual(records.map((record) => record.providerResourceId), ["kept-bucket"]);
+  assert.deepEqual(
+    records.map((record) => record.providerResourceId),
+    ["kept-bucket"]
+  );
   assert.equal(listCommands.length, 2);
   assert.equal(listCommands[0]?.input.MaxBuckets, 1_000);
   assert.equal(listCommands[1]?.input.ContinuationToken, "page-2");
@@ -997,26 +993,22 @@ test("S3 ListBuckets pagination preserves detailed page-one buckets on a later f
 });
 
 test("S3 상세 권한 실패는 리소스별 불완전 표시를 남기고 import 준비를 막는다", async () => {
-  const records = await listBucketsWithDetails(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command: object): Promise<unknown> {
-        if (command instanceof ListBucketsCommand) {
-          return { Buckets: [{ Name: "partial-bucket" }] };
-        }
-        if (command instanceof GetBucketVersioningCommand) {
-          throw Object.assign(new Error("private provider failure"), {
-            name: "AccessDeniedException"
-          });
-        }
-        if (command instanceof GetBucketTaggingCommand) {
-          throw Object.assign(new Error("no tags configured"), { name: "NoSuchTagSet" });
-        }
-        return {};
+  const records = await listBucketsWithDetails("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      if (command instanceof ListBucketsCommand) {
+        return { Buckets: [{ Name: "partial-bucket" }] };
       }
-    })
-  );
+      if (command instanceof GetBucketVersioningCommand) {
+        throw Object.assign(new Error("private provider failure"), {
+          name: "AccessDeniedException"
+        });
+      }
+      if (command instanceof GetBucketTaggingCommand) {
+        throw Object.assign(new Error("no tags configured"), { name: "NoSuchTagSet" });
+      }
+      return {};
+    }
+  }));
 
   assert.deepEqual(records[0]?.config["reverseEngineeringIncompleteDetails"], ["versioning"]);
 
@@ -1050,7 +1042,10 @@ test("AMI pagination preserves page-one images and reports one safe later failur
     (failure) => failures.push(failure)
   );
 
-  assert.deepEqual(records.map((record) => record.providerResourceId), ["ami-kept"]);
+  assert.deepEqual(
+    records.map((record) => record.providerResourceId),
+    ["ami-kept"]
+  );
   assert.equal(commands.length, 2);
   assert.equal(commands[0]?.input.MaxResults, 1_000);
   assert.equal(commands[1]?.input.NextToken, "page-2");
@@ -1059,8 +1054,7 @@ test("AMI pagination preserves page-one images and reports one safe later failur
 });
 
 test("Resource Explorer resolves the default view before searching it", async () => {
-  const viewArn =
-    "arn:aws:resource-explorer-2:ap-northeast-2:123456789012:view/default/example";
+  const viewArn = "arn:aws:resource-explorer-2:ap-northeast-2:123456789012:view/default/example";
   const commands: object[] = [];
   const result = await readResourceExplorerResourcesWithDiagnostics(
     "ap-northeast-2",
@@ -1086,15 +1080,10 @@ test("Resource Explorer resolves the default view before searching it", async ()
 });
 
 test("ALL 스캔은 generic Log Group보다 이름과 설정이 있는 전용 조회 결과를 우선한다", () => {
-  const logGroupArn =
-    "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders";
+  const logGroupArn = "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders";
   const kmsKeyArn =
     "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555";
-  const genericRecord = safeRecord(
-    "AWS::Logs::LogGroup",
-    logGroupArn,
-    "LogGroup · generic"
-  );
+  const genericRecord = safeRecord("AWS::Logs::LogGroup", logGroupArn, "LogGroup · generic");
   const detailedRecord: AwsDiscoveredResourceRecord = {
     ...genericRecord,
     providerResourceId: `${logGroupArn}:*`,
@@ -1106,10 +1095,7 @@ test("ALL 스캔은 generic Log Group보다 이름과 설정이 있는 전용 �
     }
   };
 
-  const records = uniqueDiscoveredRecordsByProviderId([
-    genericRecord,
-    detailedRecord
-  ]);
+  const records = uniqueDiscoveredRecordsByProviderId([genericRecord, detailedRecord]);
 
   assert.equal(records.length, 1);
   assert.deepEqual(records[0], detailedRecord);
@@ -1133,76 +1119,99 @@ test("ALL 스캔은 API Gateway ARN inventory와 전용 REST API ID를 하나로
     }
   };
 
-  const records = uniqueDiscoveredRecordsByProviderId([
-    genericRecord,
-    detailedRecord
-  ]);
+  const records = uniqueDiscoveredRecordsByProviderId([genericRecord, detailedRecord]);
 
   assert.equal(records.length, 1);
   assert.deepEqual(records[0], detailedRecord);
 });
 
+test("API Gateway reader는 resource policy 원문 대신 존재 marker만 기록한다", async () => {
+  const policy = JSON.stringify({
+    Statement: [{ Resource: "arn:aws:execute-api:ap-northeast-2:123456789012:*" }]
+  });
+  const records = await listApiGatewayRestApisAsUnknown("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      assert.ok(command instanceof GetRestApisCommand);
+      return { items: [{ id: "a1b2c3d4e5", name: "private-api", policy }] };
+    }
+  }));
+
+  assert.equal(records[0]?.config["hasResourcePolicy"], true);
+  assert.equal(records[0]?.config["policy"], undefined);
+  assert.doesNotMatch(JSON.stringify(records), /Statement|execute-api/iu);
+});
+
+test("API Gateway reader는 policy와 tag가 없다는 완료 근거도 명시적으로 기록한다", async () => {
+  const records = await listApiGatewayRestApisAsUnknown("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      assert.ok(command instanceof GetRestApisCommand);
+      return { items: [{ id: "a1b2c3d4e5", name: "public-api" }] };
+    }
+  }));
+
+  assert.equal(records[0]?.config["hasResourcePolicy"], false);
+  assert.equal(records[0]?.config["tagsReadComplete"], true);
+  assert.deepEqual(records[0]?.config["tags"], {});
+});
+
 test("CloudWatch 전용 reader는 Alarm 재생성에 필요한 단일 Metric 설정을 페이지별로 보존한다", async () => {
   const commands: DescribeAlarmsCommand[] = [];
-  const records = await listCloudWatchMetricAlarmsAsUnknown(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command: object): Promise<unknown> {
-        assert.ok(command instanceof DescribeAlarmsCommand);
-        commands.push(command);
+  const records = await listCloudWatchMetricAlarmsAsUnknown("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      if (command instanceof ListCloudWatchTagsForResourceCommand) {
+        return { Tags: [] };
+      }
+      assert.ok(command instanceof DescribeAlarmsCommand);
+      commands.push(command);
 
-        if (command.input.NextToken === "page-2") {
-          return {
-            MetricAlarms: [
-              {
-                AlarmArn:
-                  "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:p99-latency",
-                AlarmName: "p99-latency",
-                ComparisonOperator: "GreaterThanThreshold",
-                EvaluateLowSampleCountPercentile: "ignore",
-                EvaluationPeriods: 2,
-                ExtendedStatistic: "p99",
-                MetricName: "TargetResponseTime",
-                Namespace: "AWS/ApplicationELB",
-                Period: 60,
-                Threshold: 1.5,
-                ThresholdMetricId: "e1",
-                TreatMissingData: "notBreaching"
-              }
-            ]
-          };
-        }
-
+      if (command.input.NextToken === "page-2") {
         return {
           MetricAlarms: [
             {
-              ActionsEnabled: true,
-              AlarmActions: [],
-              AlarmArn:
-                "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count",
-              AlarmDescription: "API request threshold",
-              AlarmName: "api-request-count",
+              AlarmArn: "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:p99-latency",
+              AlarmName: "p99-latency",
               ComparisonOperator: "GreaterThanThreshold",
-              DatapointsToAlarm: 2,
-              Dimensions: [{ Name: "LoadBalancer", Value: "app/customer/1234" }],
-              EvaluationPeriods: 3,
-              InsufficientDataActions: [],
-              MetricName: "RequestCountPerTarget",
+              EvaluateLowSampleCountPercentile: "ignore",
+              EvaluationPeriods: 2,
+              ExtendedStatistic: "p99",
+              MetricName: "TargetResponseTime",
               Namespace: "AWS/ApplicationELB",
-              OKActions: [],
               Period: 60,
-              Statistic: "Sum",
-              Threshold: 100,
-              TreatMissingData: "notBreaching",
-              Unit: "Count"
+              Threshold: 1.5,
+              ThresholdMetricId: "e1",
+              TreatMissingData: "notBreaching"
             }
-          ],
-          NextToken: "page-2"
+          ]
         };
       }
-    })
-  );
+
+      return {
+        MetricAlarms: [
+          {
+            ActionsEnabled: true,
+            AlarmActions: [],
+            AlarmArn: "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count",
+            AlarmDescription: "API request threshold",
+            AlarmName: "api-request-count",
+            ComparisonOperator: "GreaterThanThreshold",
+            DatapointsToAlarm: 2,
+            Dimensions: [{ Name: "LoadBalancer", Value: "app/customer/1234" }],
+            EvaluationPeriods: 3,
+            InsufficientDataActions: [],
+            MetricName: "RequestCountPerTarget",
+            Namespace: "AWS/ApplicationELB",
+            OKActions: [],
+            Period: 60,
+            Statistic: "Sum",
+            Threshold: 100,
+            TreatMissingData: "notBreaching",
+            Unit: "Count"
+          }
+        ],
+        NextToken: "page-2"
+      };
+    }
+  }));
 
   assert.equal(commands.length, 2);
   assert.equal(commands[0]?.input.NextToken, undefined);
@@ -1232,6 +1241,8 @@ test("CloudWatch 전용 reader는 Alarm 재생성에 필요한 단일 Metric 설
     stateUpdatedAt: undefined,
     stateValue: undefined,
     statistic: "Sum",
+    tags: [],
+    tagsReadComplete: true,
     threshold: 100,
     thresholdMetricId: undefined,
     treatMissingData: "notBreaching",
@@ -1242,14 +1253,138 @@ test("CloudWatch 전용 reader는 Alarm 재생성에 필요한 단일 Metric 설
   assert.equal(records[1]?.config["thresholdMetricId"], "e1");
 });
 
-test("ALL 스캔은 generic Alarm보다 이름과 Metric 설정이 있는 전용 조회 결과를 우선한다", () => {
-  const alarmArn =
-    "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count";
-  const genericRecord = safeRecord(
-    "AWS::CloudWatch::Alarm",
-    alarmArn,
-    "Alarm · generic"
+test("CloudWatch Alarm reader는 서비스 tag API의 완전한 결과만 보존한다", async () => {
+  const alarmArn = "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count";
+  const commands: object[] = [];
+  const records = await listCloudWatchMetricAlarmsAsUnknown("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      commands.push(command);
+      if (command instanceof DescribeAlarmsCommand) {
+        return {
+          MetricAlarms: [{ AlarmArn: alarmArn, AlarmName: "api-request-count" }]
+        };
+      }
+      if (command instanceof ListCloudWatchTagsForResourceCommand) {
+        assert.equal(command.input.ResourceARN, alarmArn);
+        return { Tags: [{ Key: "Environment", Value: "production" }] };
+      }
+      throw new Error(`Unexpected command: ${command.constructor.name}`);
+    }
+  }));
+
+  assert.equal(
+    commands.some((command) => command instanceof ListCloudWatchTagsForResourceCommand),
+    true
   );
+  assert.equal(records[0]?.config["tagsReadComplete"], true);
+  assert.deepEqual(records[0]?.config["tags"], [{ key: "Environment", value: "production" }]);
+});
+
+test("CloudWatch Alarm tag 응답의 항목이 불완전하면 tag evidence를 완전하다고 표시하지 않는다", async () => {
+  const records = await listCloudWatchMetricAlarmsAsUnknown("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      if (command instanceof DescribeAlarmsCommand) {
+        return {
+          MetricAlarms: [
+            {
+              AlarmArn: "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count",
+              AlarmName: "api-request-count"
+            }
+          ]
+        };
+      }
+      if (command instanceof ListCloudWatchTagsForResourceCommand) {
+        return { Tags: [{ Key: "Environment" }] };
+      }
+      throw new Error(`Unexpected command: ${command.constructor.name}`);
+    }
+  }));
+
+  assert.equal(records[0]?.config["tagsReadComplete"], false);
+  assert.equal(records[0]?.config["tags"], undefined);
+});
+
+test("CloudWatch LogGroup reader는 정규화한 ARN으로 tag API를 읽고 빈 결과도 보존한다", async () => {
+  const sdkArn = "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders:*";
+  const resourceArn = sdkArn.slice(0, -2);
+  const commands: object[] = [];
+  const records = await listCloudWatchLogGroupsAsUnknown("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      commands.push(command);
+      if (command instanceof DescribeLogGroupsCommand) {
+        return {
+          logGroups: [{ arn: sdkArn, logGroupName: "/ecs/orders", logGroupClass: "STANDARD" }]
+        };
+      }
+      if (command instanceof ListLogGroupTagsForResourceCommand) {
+        assert.equal(command.input.resourceArn, resourceArn);
+        return { tags: {} };
+      }
+      throw new Error(`Unexpected command: ${command.constructor.name}`);
+    }
+  }));
+
+  assert.equal(
+    commands.some((command) => command instanceof ListLogGroupTagsForResourceCommand),
+    true
+  );
+  assert.equal(records[0]?.config["tagsReadComplete"], true);
+  assert.deepEqual(records[0]?.config["tags"], []);
+});
+
+test("CloudWatch Alarm tag 조회 실패는 리소스를 버리지 않고 불완전 evidence로 남긴다", async () => {
+  const alarmArn = "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:private-alarm";
+  const failures: Array<{ outcome: string }> = [];
+  const records = await listCloudWatchMetricAlarmsAsUnknown(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        if (command instanceof DescribeAlarmsCommand) {
+          return { MetricAlarms: [{ AlarmArn: alarmArn, AlarmName: "private-alarm" }] };
+        }
+        if (command instanceof ListCloudWatchTagsForResourceCommand) {
+          throw Object.assign(new Error(`AccessDenied ${alarmArn}`), {
+            name: "AccessDeniedException"
+          });
+        }
+        throw new Error(`Unexpected command: ${command.constructor.name}`);
+      }
+    }),
+    (failure) => failures.push(failure)
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.config["tagsReadComplete"], false);
+  assert.equal(records[0]?.config["tags"], undefined);
+  assert.deepEqual(failures, [{ outcome: "permission_denied" }]);
+  assert.doesNotMatch(JSON.stringify(failures), /arn:aws|private-alarm/iu);
+});
+
+test("CloudWatch LogGroup tag 조회에 필요한 ARN이 없으면 불완전 evidence로 남긴다", async () => {
+  const commands: object[] = [];
+  const records = await listCloudWatchLogGroupsAsUnknown("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      commands.push(command);
+      if (command instanceof DescribeLogGroupsCommand) {
+        return { logGroups: [{ logGroupName: "/ecs/orders", logGroupClass: "STANDARD" }] };
+      }
+      throw new Error(`Unexpected command: ${command.constructor.name}`);
+    }
+  }));
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.config["tagsReadComplete"], false);
+  assert.equal(records[0]?.config["tags"], undefined);
+  assert.equal(
+    commands.some((command) => command instanceof ListLogGroupTagsForResourceCommand),
+    false
+  );
+});
+
+test("ALL 스캔은 generic Alarm보다 이름과 Metric 설정이 있는 전용 조회 결과를 우선한다", () => {
+  const alarmArn = "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count";
+  const genericRecord = safeRecord("AWS::CloudWatch::Alarm", alarmArn, "Alarm · generic");
   const detailedRecord: AwsDiscoveredResourceRecord = {
     ...genericRecord,
     displayName: "api-request-count",
@@ -1286,10 +1421,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     eventBridgeResources: false,
     unknownResources: true
   });
-  for (const resourceType of [
-    "LOAD_BALANCER_TARGET_GROUP",
-    "LOAD_BALANCER_LISTENER"
-  ] as const) {
+  for (const resourceType of ["LOAD_BALANCER_TARGET_GROUP", "LOAD_BALANCER_LISTENER"] as const) {
     assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput([resourceType])), {
       loadBalancers: true,
       cloudFrontDistributions: false,
@@ -1313,11 +1445,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     unknownResources: true
   });
 
-  for (const resourceType of [
-    "ECS_CLUSTER",
-    "ECS_SERVICE",
-    "ECS_TASK_DEFINITION"
-  ] as const) {
+  for (const resourceType of ["ECS_CLUSTER", "ECS_SERVICE", "ECS_TASK_DEFINITION"] as const) {
     assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput([resourceType])), {
       loadBalancers: false,
       cloudFrontDistributions: false,
@@ -1334,14 +1462,12 @@ test("EventBridge reader 선택은 ALL과 Rule/Target 동시 선택에서도 한
     true
   );
   assert.equal(
-    createAwsReverseEngineeringReaderPlan(
-      scanInput(["EVENTBRIDGE_RULE", "EVENTBRIDGE_TARGET"])
-    ).eventBridgeResources,
+    createAwsReverseEngineeringReaderPlan(scanInput(["EVENTBRIDGE_RULE", "EVENTBRIDGE_TARGET"]))
+      .eventBridgeResources,
     true
   );
   assert.equal(
-    createAwsReverseEngineeringReaderPlan(scanInput(["EVENTBRIDGE_RULE"]))
-      .eventBridgeResources,
+    createAwsReverseEngineeringReaderPlan(scanInput(["EVENTBRIDGE_RULE"])).eventBridgeResources,
     true
   );
 });
@@ -1405,139 +1531,137 @@ test("ECS reader는 cluster/service pagination과 공유 Task Definition dedupe�
   const serviceB = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/worker";
   const taskDefinition = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
   const commands: object[] = [];
-  const result = await readEcsResourcesWithDiagnostics(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command: object): Promise<unknown> {
-        commands.push(command);
+  const result = await readEcsResourcesWithDiagnostics("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      commands.push(command);
 
-        if (command instanceof ListClustersCommand) {
-          return command.input.nextToken
-            ? { clusterArns: [clusterB] }
-            : { clusterArns: [clusterA], nextToken: "clusters-page-2" };
-        }
-
-        if (command instanceof DescribeClustersCommand) {
-          return {
-            clusters: [
-              {
-                clusterArn: clusterA,
-                clusterName: "orders",
-                status: "ACTIVE",
-                configuration: {
-                  executeCommandConfiguration: {
-                    logging: "DEFAULT"
-                  }
-                },
-                capacityProviders: ["FARGATE", "FARGATE_SPOT"]
-              },
-              {
-                clusterArn: clusterB,
-                clusterName: "empty",
-                status: "ACTIVE"
-              }
-            ]
-          };
-        }
-
-        if (command instanceof ListServicesCommand) {
-          if (command.input.cluster === clusterB) {
-            return { serviceArns: [] };
-          }
-
-          return command.input.nextToken
-            ? { serviceArns: [serviceB] }
-            : { serviceArns: [serviceA], nextToken: "services-page-2" };
-        }
-
-        if (command instanceof DescribeServicesCommand) {
-          return {
-            services: [
-              {
-                serviceArn: serviceA,
-                serviceName: "api",
-                clusterArn: clusterA,
-                taskDefinition,
-                desiredCount: 2,
-                launchType: "FARGATE",
-                networkConfiguration: {
-                  awsvpcConfiguration: {
-                    subnets: ["subnet-private-a"],
-                    securityGroups: ["sg-api"],
-                    assignPublicIp: "DISABLED"
-                  }
-                },
-                loadBalancers: [
-                  {
-                    targetGroupArn:
-                      "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api/one",
-                    containerName: "api",
-                    containerPort: 4000
-                  }
-                ]
-              },
-              {
-                serviceArn: serviceB,
-                serviceName: "worker",
-                clusterArn: clusterA,
-                taskDefinition,
-                desiredCount: 1,
-                capacityProviderStrategy: [{ capacityProvider: "FARGATE_SPOT", weight: 1 }],
-                networkConfiguration: {
-                  awsvpcConfiguration: {
-                    subnets: ["subnet-private-a"],
-                    securityGroups: ["sg-worker"],
-                    assignPublicIp: "DISABLED"
-                  }
-                }
-              }
-            ]
-          };
-        }
-
-        if (command instanceof DescribeTaskDefinitionCommand) {
-          return {
-            taskDefinition: {
-              taskDefinitionArn: taskDefinition,
-              family: "orders",
-              revision: 7,
-              networkMode: "awsvpc",
-              requiresCompatibilities: ["FARGATE"],
-              cpu: "512",
-              memory: "1024",
-              executionRoleArn: "arn:aws:iam::123456789012:role/ecs-execution",
-              taskRoleArn: "arn:aws:iam::123456789012:role/orders-task",
-              containerDefinitions: [
-                {
-                  name: "api",
-                  image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/orders:stable",
-                  essential: true,
-                  environment: [{ name: "API_TOKEN", value: "must-not-leak" }],
-                  secrets: [
-                    {
-                      name: "DATABASE_URL",
-                      valueFrom: "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:db"
-                    }
-                  ],
-                  portMappings: [{ containerPort: 4000, protocol: "tcp" }],
-                  rawSdkField: "must-not-copy"
-                }
-              ],
-              $metadata: { requestId: "must-not-copy" }
-            },
-            $metadata: { requestId: "must-not-copy" }
-          };
-        }
-
-        throw new Error(`Unexpected ECS command: ${command.constructor.name}`);
+      if (command instanceof ListClustersCommand) {
+        return command.input.nextToken
+          ? { clusterArns: [clusterB] }
+          : { clusterArns: [clusterA], nextToken: "clusters-page-2" };
       }
-    })
-  );
+
+      if (command instanceof DescribeClustersCommand) {
+        return {
+          clusters: [
+            {
+              clusterArn: clusterA,
+              clusterName: "orders",
+              status: "ACTIVE",
+              configuration: {
+                executeCommandConfiguration: {
+                  logging: "DEFAULT"
+                }
+              },
+              capacityProviders: ["FARGATE", "FARGATE_SPOT"]
+            },
+            {
+              clusterArn: clusterB,
+              clusterName: "empty",
+              status: "ACTIVE"
+            }
+          ]
+        };
+      }
+
+      if (command instanceof ListServicesCommand) {
+        if (command.input.cluster === clusterB) {
+          return { serviceArns: [] };
+        }
+
+        return command.input.nextToken
+          ? { serviceArns: [serviceB] }
+          : { serviceArns: [serviceA], nextToken: "services-page-2" };
+      }
+
+      if (command instanceof DescribeServicesCommand) {
+        return {
+          services: [
+            {
+              serviceArn: serviceA,
+              serviceName: "api",
+              clusterArn: clusterA,
+              taskDefinition,
+              desiredCount: 2,
+              launchType: "FARGATE",
+              networkConfiguration: {
+                awsvpcConfiguration: {
+                  subnets: ["subnet-private-a"],
+                  securityGroups: ["sg-api"],
+                  assignPublicIp: "DISABLED"
+                }
+              },
+              loadBalancers: [
+                {
+                  targetGroupArn:
+                    "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api/one",
+                  containerName: "api",
+                  containerPort: 4000
+                }
+              ]
+            },
+            {
+              serviceArn: serviceB,
+              serviceName: "worker",
+              clusterArn: clusterA,
+              taskDefinition,
+              desiredCount: 1,
+              capacityProviderStrategy: [{ capacityProvider: "FARGATE_SPOT", weight: 1 }],
+              networkConfiguration: {
+                awsvpcConfiguration: {
+                  subnets: ["subnet-private-a"],
+                  securityGroups: ["sg-worker"],
+                  assignPublicIp: "DISABLED"
+                }
+              }
+            }
+          ]
+        };
+      }
+
+      if (command instanceof DescribeTaskDefinitionCommand) {
+        return {
+          taskDefinition: {
+            taskDefinitionArn: taskDefinition,
+            family: "orders",
+            revision: 7,
+            networkMode: "awsvpc",
+            requiresCompatibilities: ["FARGATE"],
+            cpu: "512",
+            memory: "1024",
+            executionRoleArn: "arn:aws:iam::123456789012:role/ecs-execution",
+            taskRoleArn: "arn:aws:iam::123456789012:role/orders-task",
+            containerDefinitions: [
+              {
+                name: "api",
+                image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/orders:stable",
+                essential: true,
+                environment: [{ name: "API_TOKEN", value: "must-not-leak" }],
+                secrets: [
+                  {
+                    name: "DATABASE_URL",
+                    valueFrom: "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:db"
+                  }
+                ],
+                portMappings: [{ containerPort: 4000, protocol: "tcp" }],
+                rawSdkField: "must-not-copy"
+              }
+            ],
+            $metadata: { requestId: "must-not-copy" }
+          },
+          $metadata: { requestId: "must-not-copy" }
+        };
+      }
+
+      throw new Error(`Unexpected ECS command: ${command.constructor.name}`);
+    }
+  }));
 
   assert.deepEqual(result.scanErrors, []);
   assert.deepEqual(
-    commands.filter((command) => command instanceof ListClustersCommand).map((command) => command.input.nextToken),
+    commands
+      .filter((command) => command instanceof ListClustersCommand)
+      .map((command) => command.input.nextToken),
     [undefined, "clusters-page-2"]
   );
   assert.deepEqual(
@@ -1557,7 +1681,10 @@ test("ECS reader는 cluster/service pagination과 공유 Task Definition dedupe�
       .map((command) => command.input.nextToken),
     [undefined, "services-page-2"]
   );
-  assert.equal(commands.filter((command) => command instanceof DescribeTaskDefinitionCommand).length, 1);
+  assert.equal(
+    commands.filter((command) => command instanceof DescribeTaskDefinitionCommand).length,
+    1
+  );
   assert.deepEqual(
     result.records.map((record) => record.providerResourceType),
     [
@@ -1602,33 +1729,31 @@ test("ECS reader는 cluster/service pagination과 공유 Task Definition dedupe�
 test("ECS cluster later-page failure keeps and describes accumulated cluster ARNs", async () => {
   const clusterArn = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
   const commands: object[] = [];
-  const result = await readEcsResourcesWithDiagnostics(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command: object): Promise<unknown> {
-        commands.push(command);
-        if (command instanceof ListClustersCommand) {
-          if (command.input.nextToken) {
-            throw new Error("InternalServerException RequestId private-request-id");
-          }
-          return { clusterArns: [clusterArn], nextToken: "page-2" };
+  const result = await readEcsResourcesWithDiagnostics("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      commands.push(command);
+      if (command instanceof ListClustersCommand) {
+        if (command.input.nextToken) {
+          throw new Error("InternalServerException RequestId private-request-id");
         }
-        if (command instanceof DescribeClustersCommand) {
-          return { clusters: [{ clusterArn, clusterName: "orders", status: "ACTIVE" }] };
-        }
-        if (command instanceof ListServicesCommand) return { serviceArns: [] };
-        throw new Error(`Unexpected ECS command: ${command.constructor.name}`);
+        return { clusterArns: [clusterArn], nextToken: "page-2" };
       }
-    })
-  );
+      if (command instanceof DescribeClustersCommand) {
+        return { clusters: [{ clusterArn, clusterName: "orders", status: "ACTIVE" }] };
+      }
+      if (command instanceof ListServicesCommand) return { serviceArns: [] };
+      throw new Error(`Unexpected ECS command: ${command.constructor.name}`);
+    }
+  }));
 
-  assert.deepEqual(result.records.map((record) => record.providerResourceId), [clusterArn]);
+  assert.deepEqual(
+    result.records.map((record) => record.providerResourceId),
+    [clusterArn]
+  );
   assert.deepEqual(
     commands
       .filter(
-        (command): command is DescribeClustersCommand =>
-          command instanceof DescribeClustersCommand
+        (command): command is DescribeClustersCommand => command instanceof DescribeClustersCommand
       )
       .map((command) => command.input.clusters),
     [[clusterArn]]
@@ -1641,49 +1766,46 @@ test("ECS cluster later-page failure keeps and describes accumulated cluster ARN
 test("ECS service later-page failure keeps describing accumulated services and task definitions", async () => {
   const clusterArn = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
   const serviceArn = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api";
-  const taskDefinitionArn =
-    "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:1";
+  const taskDefinitionArn = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:1";
   const commands: object[] = [];
-  const result = await readEcsResourcesWithDiagnostics(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command: object): Promise<unknown> {
-        commands.push(command);
-        if (command instanceof ListClustersCommand) return { clusterArns: [clusterArn] };
-        if (command instanceof DescribeClustersCommand) {
-          return { clusters: [{ clusterArn, clusterName: "orders", status: "ACTIVE" }] };
+  const result = await readEcsResourcesWithDiagnostics("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      commands.push(command);
+      if (command instanceof ListClustersCommand) return { clusterArns: [clusterArn] };
+      if (command instanceof DescribeClustersCommand) {
+        return { clusters: [{ clusterArn, clusterName: "orders", status: "ACTIVE" }] };
+      }
+      if (command instanceof ListServicesCommand) {
+        if (command.input.nextToken) {
+          throw new Error("InternalServerException RequestId private-service-request");
         }
-        if (command instanceof ListServicesCommand) {
-          if (command.input.nextToken) {
-            throw new Error("InternalServerException RequestId private-service-request");
-          }
-          return { serviceArns: [serviceArn], nextToken: "page-2" };
-        }
-        if (command instanceof DescribeServicesCommand) {
-          return {
-            services: [{
+        return { serviceArns: [serviceArn], nextToken: "page-2" };
+      }
+      if (command instanceof DescribeServicesCommand) {
+        return {
+          services: [
+            {
               serviceArn,
               serviceName: "api",
               clusterArn,
               taskDefinition: taskDefinitionArn
-            }]
-          };
-        }
-        if (command instanceof DescribeTaskDefinitionCommand) {
-          return {
-            taskDefinition: {
-              taskDefinitionArn,
-              family: "orders",
-              revision: 1,
-              containerDefinitions: []
             }
-          };
-        }
-        throw new Error(`Unexpected ECS command: ${command.constructor.name}`);
+          ]
+        };
       }
-    })
-  );
+      if (command instanceof DescribeTaskDefinitionCommand) {
+        return {
+          taskDefinition: {
+            taskDefinitionArn,
+            family: "orders",
+            revision: 1,
+            containerDefinitions: []
+          }
+        };
+      }
+      throw new Error(`Unexpected ECS command: ${command.constructor.name}`);
+    }
+  }));
 
   assert.deepEqual(
     result.records.map((record) => record.providerResourceId),
@@ -1692,8 +1814,7 @@ test("ECS service later-page failure keeps describing accumulated services and t
   assert.deepEqual(
     commands
       .filter(
-        (command): command is DescribeServicesCommand =>
-          command instanceof DescribeServicesCommand
+        (command): command is DescribeServicesCommand => command instanceof DescribeServicesCommand
       )
       .map((command) => command.input.services),
     [[serviceArn]]
@@ -1707,47 +1828,43 @@ test("한 Cluster의 service 조회 실패는 다른 ECS 결과를 유지하고 
   const healthyCluster = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/healthy";
   const deniedCluster = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/denied";
   const healthyService = "arn:aws:ecs:ap-northeast-2:123456789012:service/healthy/api";
-  const result = await readEcsResourcesWithDiagnostics(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command: object): Promise<unknown> {
-        if (command instanceof ListClustersCommand) {
-          return { clusterArns: [healthyCluster, deniedCluster] };
-        }
-        if (command instanceof DescribeClustersCommand) {
-          return {
-            clusters: [
-              { clusterArn: healthyCluster, clusterName: "healthy", status: "ACTIVE" },
-              { clusterArn: deniedCluster, clusterName: "denied", status: "ACTIVE" }
-            ]
-          };
-        }
-        if (command instanceof ListServicesCommand) {
-          if (command.input.cluster === deniedCluster) {
-            throw new Error(
-              "AccessDeniedException: arn:aws:iam::123456789012:role/internal cannot call ecs:ListServices RequestId: private-request-id"
-            );
-          }
-          return { serviceArns: [healthyService] };
-        }
-        if (command instanceof DescribeServicesCommand) {
-          return {
-            services: [
-              {
-                serviceArn: healthyService,
-                serviceName: "api",
-                clusterArn: healthyCluster,
-                desiredCount: 1,
-                launchType: "FARGATE"
-              }
-            ]
-          };
-        }
-        throw new Error(`Unexpected ECS command: ${command.constructor.name}`);
+  const result = await readEcsResourcesWithDiagnostics("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      if (command instanceof ListClustersCommand) {
+        return { clusterArns: [healthyCluster, deniedCluster] };
       }
-    })
-  );
+      if (command instanceof DescribeClustersCommand) {
+        return {
+          clusters: [
+            { clusterArn: healthyCluster, clusterName: "healthy", status: "ACTIVE" },
+            { clusterArn: deniedCluster, clusterName: "denied", status: "ACTIVE" }
+          ]
+        };
+      }
+      if (command instanceof ListServicesCommand) {
+        if (command.input.cluster === deniedCluster) {
+          throw new Error(
+            "AccessDeniedException: arn:aws:iam::123456789012:role/internal cannot call ecs:ListServices RequestId: private-request-id"
+          );
+        }
+        return { serviceArns: [healthyService] };
+      }
+      if (command instanceof DescribeServicesCommand) {
+        return {
+          services: [
+            {
+              serviceArn: healthyService,
+              serviceName: "api",
+              clusterArn: healthyCluster,
+              desiredCount: 1,
+              launchType: "FARGATE"
+            }
+          ]
+        };
+      }
+      throw new Error(`Unexpected ECS command: ${command.constructor.name}`);
+    }
+  }));
 
   assert.deepEqual(
     result.records.map((record) => record.providerResourceId),
@@ -1765,43 +1882,37 @@ test("한 Cluster의 service 조회 실패는 다른 ECS 결과를 유지하고 
 
 test("ALB reader는 pagination을 끝까지 읽고 실제 VPC, Security Group, Subnet 관계만 정규화한다", async () => {
   const commands: object[] = [];
-  const records = await listApplicationLoadBalancers(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command: object): Promise<unknown> {
-        commands.push(command);
-        return commands.length === 1
-          ? {
-              LoadBalancers: [
-                {
-                  LoadBalancerArn:
-                    "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
-                  LoadBalancerName: "orders",
-                  Type: "application",
-                  Scheme: "internet-facing",
-                  DNSName: "orders-123.ap-northeast-2.elb.amazonaws.com",
-                  VpcId: "vpc-orders",
-                  SecurityGroups: ["sg-web"],
-                  AvailabilityZones: [
-                    { ZoneName: "ap-northeast-2a", SubnetId: "subnet-public-a" }
-                  ],
-                  State: { Code: "active" },
-                  IpAddressType: "ipv4"
-                },
-                {
-                  LoadBalancerArn:
-                    "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/net/not-an-alb/two",
-                  LoadBalancerName: "not-an-alb",
-                  Type: "network"
-                }
-              ],
-              NextMarker: "next-page"
-            }
-          : { LoadBalancers: [] };
-      }
-    })
-  );
+  const records = await listApplicationLoadBalancers("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      commands.push(command);
+      return commands.length === 1
+        ? {
+            LoadBalancers: [
+              {
+                LoadBalancerArn:
+                  "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
+                LoadBalancerName: "orders",
+                Type: "application",
+                Scheme: "internet-facing",
+                DNSName: "orders-123.ap-northeast-2.elb.amazonaws.com",
+                VpcId: "vpc-orders",
+                SecurityGroups: ["sg-web"],
+                AvailabilityZones: [{ ZoneName: "ap-northeast-2a", SubnetId: "subnet-public-a" }],
+                State: { Code: "active" },
+                IpAddressType: "ipv4"
+              },
+              {
+                LoadBalancerArn:
+                  "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/net/not-an-alb/two",
+                LoadBalancerName: "not-an-alb",
+                Type: "network"
+              }
+            ],
+            NextMarker: "next-page"
+          }
+        : { LoadBalancers: [] };
+    }
+  }));
 
   assert.equal(commands.length, 2);
   assert.ok(commands[0] instanceof DescribeLoadBalancersCommand);
@@ -1847,16 +1958,18 @@ test("ALB later-page failure returns earlier records with one safe diagnostic ou
         if (calls === 2) {
           throw new Error(
             "InternalServerException RequestId private-request " +
-            "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/private"
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/private"
           );
         }
         return {
-          LoadBalancers: [{
-            LoadBalancerArn:
-              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
-            LoadBalancerName: "orders",
-            Type: "application"
-          }],
+          LoadBalancers: [
+            {
+              LoadBalancerArn:
+                "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
+              LoadBalancerName: "orders",
+              Type: "application"
+            }
+          ],
           NextMarker: "page-2"
         };
       }
@@ -1871,57 +1984,53 @@ test("ALB later-page failure returns earlier records with one safe diagnostic ou
 
 test("CloudFront reader는 distribution ID와 생성에 필요한 응답 구조만 보존한다", async () => {
   const commands: object[] = [];
-  const records = await listCloudFrontDistributions(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command: object): Promise<unknown> {
-        commands.push(command);
-        return {
-          DistributionList: {
-            Items: [
-              {
-                ARN: "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTION",
-                Id: "EDISTRIBUTION",
-                DomainName: "d111111abcdef8.cloudfront.net",
-                Comment: "orders entry",
-                Enabled: true,
-                Status: "Deployed",
-                Origins: {
-                  Items: [
-                    {
-                      Id: "orders-alb",
-                      DomainName: "orders-123.ap-northeast-2.elb.amazonaws.com",
-                      CustomOriginConfig: {
-                        HTTPPort: 80,
-                        HTTPSPort: 443,
-                        OriginProtocolPolicy: "https-only",
-                        OriginSslProtocols: { Items: ["TLSv1.2"] }
-                      }
+  const records = await listCloudFrontDistributions("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      commands.push(command);
+      return {
+        DistributionList: {
+          Items: [
+            {
+              ARN: "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTION",
+              Id: "EDISTRIBUTION",
+              DomainName: "d111111abcdef8.cloudfront.net",
+              Comment: "orders entry",
+              Enabled: true,
+              Status: "Deployed",
+              Origins: {
+                Items: [
+                  {
+                    Id: "orders-alb",
+                    DomainName: "orders-123.ap-northeast-2.elb.amazonaws.com",
+                    CustomOriginConfig: {
+                      HTTPPort: 80,
+                      HTTPSPort: 443,
+                      OriginProtocolPolicy: "https-only",
+                      OriginSslProtocols: { Items: ["TLSv1.2"] }
                     }
-                  ]
-                },
-                DefaultCacheBehavior: {
-                  TargetOriginId: "orders-alb",
-                  ViewerProtocolPolicy: "redirect-to-https",
-                  AllowedMethods: {
-                    Items: ["GET", "HEAD"],
-                    CachedMethods: { Items: ["GET", "HEAD"] }
-                  },
-                  ForwardedValues: {
-                    QueryString: false,
-                    Cookies: { Forward: "none" }
                   }
+                ]
+              },
+              DefaultCacheBehavior: {
+                TargetOriginId: "orders-alb",
+                ViewerProtocolPolicy: "redirect-to-https",
+                AllowedMethods: {
+                  Items: ["GET", "HEAD"],
+                  CachedMethods: { Items: ["GET", "HEAD"] }
                 },
-                Restrictions: { GeoRestriction: { RestrictionType: "none" } },
-                ViewerCertificate: { CloudFrontDefaultCertificate: true }
-              }
-            ]
-          }
-        };
-      }
-    })
-  );
+                ForwardedValues: {
+                  QueryString: false,
+                  Cookies: { Forward: "none" }
+                }
+              },
+              Restrictions: { GeoRestriction: { RestrictionType: "none" } },
+              ViewerCertificate: { CloudFrontDefaultCertificate: true }
+            }
+          ]
+        }
+      };
+    }
+  }));
 
   assert.equal(commands.length, 1);
   assert.ok(commands[0] instanceof ListDistributionsCommand);
@@ -1967,39 +2076,35 @@ test("CloudFront reader는 distribution ID와 생성에 필요한 응답 구조�
 });
 
 test("CloudFront reader는 VpcOriginConfig를 보존해 새 Terraform 생성 경계를 판단할 수 있게 한다", async () => {
-  const records = await listCloudFrontDistributions(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(): Promise<unknown> {
-        return {
-          DistributionList: {
-            Items: [
-              {
-                ARN: "arn:aws:cloudfront::123456789012:distribution/EVPCORIGIN",
-                Id: "EVPCORIGIN",
-                DomainName: "d111111abcdef8.cloudfront.net",
-                Origins: {
-                  Items: [
-                    {
-                      Id: "private-origin",
-                      DomainName: "internal.example.com",
-                      VpcOriginConfig: {
-                        VpcOriginId: "vo_0123456789abcdef0",
-                        OwnerAccountId: "123456789012",
-                        OriginReadTimeout: 30,
-                        OriginKeepaliveTimeout: 5
-                      }
+  const records = await listCloudFrontDistributions("ap-northeast-2", credentials, () => ({
+    async send(): Promise<unknown> {
+      return {
+        DistributionList: {
+          Items: [
+            {
+              ARN: "arn:aws:cloudfront::123456789012:distribution/EVPCORIGIN",
+              Id: "EVPCORIGIN",
+              DomainName: "d111111abcdef8.cloudfront.net",
+              Origins: {
+                Items: [
+                  {
+                    Id: "private-origin",
+                    DomainName: "internal.example.com",
+                    VpcOriginConfig: {
+                      VpcOriginId: "vo_0123456789abcdef0",
+                      OwnerAccountId: "123456789012",
+                      OriginReadTimeout: 30,
+                      OriginKeepaliveTimeout: 5
                     }
-                  ]
-                }
+                  }
+                ]
               }
-            ]
-          }
-        };
-      }
-    })
-  );
+            }
+          ]
+        }
+      };
+    }
+  }));
 
   assert.deepEqual(records[0]?.config["origin"], [
     {
@@ -2032,7 +2137,8 @@ test("CloudFront origin은 동일 response 증거가 있는 ALB와 S3에만 연�
   };
   const alb: AwsDiscoveredResourceRecord = {
     providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
-    providerResourceId: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
+    providerResourceId:
+      "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
     displayName: "orders",
     region: "ap-northeast-2",
     config: { dnsName: "orders-123.ap-northeast-2.elb.amazonaws.com" },

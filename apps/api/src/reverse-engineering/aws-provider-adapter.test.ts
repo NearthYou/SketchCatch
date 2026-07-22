@@ -13,8 +13,7 @@ const CLOUDFRONT_ARN_B = "arn:aws:cloudfront::123456789012:distribution/EDISTRIB
 const ECS_CLUSTER_ARN = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
 const ECS_SERVICE_ARN = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api";
 const ECS_TASK_DEFINITION_ARN = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
-const CLOUDWATCH_LOG_GROUP_ARN =
-  "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders";
+const CLOUDWATCH_LOG_GROUP_ARN = "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders";
 const CLOUDWATCH_LOG_GROUP_KMS_ARN =
   "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555";
 
@@ -126,12 +125,18 @@ test("서버 전용 Reverse Engineering 결과는 나중 Terraform import에 필
             providerResourceId: ALB_ARN,
             displayName: "private-shared-entry",
             config: {
+              attributes: {},
+              attributesProjectionComplete: true,
+              attributesReadComplete: true,
               arn: ALB_ARN,
               name: "private-shared-entry",
-              type: "application",
               ipAddressType: "ipv4",
+              reverseEngineeringDetailsVersion: 1,
               scheme: "internet-facing",
-              subnetIds: ["subnet-private-a"]
+              subnetIds: ["subnet-private-a"],
+              tags: [],
+              tagsReadComplete: true,
+              type: "application"
             }
           })
         ];
@@ -265,35 +270,34 @@ test("AWS 전용 reader가 찾은 Resource를 실제 Catalog 타입으로 보드
     providerTypeMappings.map(([, resourceType]) => resourceType)
   );
   assert.equal(
-    result.discoveredResources.slice(0, -2).every((resource) => resource.analysisExcluded === true),
+    result.discoveredResources.every((resource) => resource.analysisExcluded === true),
     true
   );
-  assert.equal(result.discoveredResources.at(-2)?.analysisExcluded ?? false, false);
-  assert.equal(result.discoveredResources.at(-1)?.analysisExcluded ?? false, false);
   assert.deepEqual(
     result.architectureJson.nodes.map((node) => node.type),
     providerTypeMappings.map(([, resourceType]) => resourceType)
   );
-  assert.equal(result.analysisExclusions.length, providerTypeMappings.length - 2);
+  assert.equal(result.analysisExclusions.length, providerTypeMappings.length);
   assert.equal(
-    result.importSuggestions.slice(0, -2).every(
-      (suggestion) =>
-        suggestion.status === "unsupported_resource_type" && suggestion.handoffReady === false
-    ),
+    result.importSuggestions
+      .slice(0, -2)
+      .every(
+        (suggestion) =>
+          suggestion.status === "unsupported_resource_type" && suggestion.handoffReady === false
+      ),
     true
   );
   assert.equal(result.importSuggestions.at(-2)?.status, "manual_review");
-  assert.match(result.importSuggestions.at(-2)?.reason ?? "", /alarmName/iu);
+  assert.match(result.importSuggestions.at(-2)?.reason ?? "", /태그/iu);
   assert.equal(result.importSuggestions.at(-1)?.status, "manual_review");
-  assert.match(result.importSuggestions.at(-1)?.reason ?? "", /name/iu);
+  assert.match(result.importSuggestions.at(-1)?.reason ?? "", /policy/iu);
 });
 
 test("단일 Metric CloudWatch Alarm을 재배포 가능한 Terraform 관리 대상으로 만든다", async () => {
   const result = await scan([
     record({
       providerResourceType: "AWS::CloudWatch::Alarm",
-      providerResourceId:
-        "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count",
+      providerResourceId: "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count",
       displayName: "api-request-count",
       config: {
         actionsEnabled: true,
@@ -310,6 +314,8 @@ test("단일 Metric CloudWatch Alarm을 재배포 가능한 Terraform 관리 대
         namespace: "AWS/ApplicationELB",
         period: 60,
         statistic: "Sum",
+        tags: [{ key: "Environment", value: "production" }],
+        tagsReadComplete: true,
         threshold: 100,
         treatMissingData: "notBreaching",
         unit: "Count",
@@ -336,6 +342,8 @@ test("단일 Metric CloudWatch Alarm을 재배포 가능한 Terraform 관리 대
     namespace: "AWS/ApplicationELB",
     period: 60,
     statistic: "Sum",
+    tags: [{ key: "Environment", value: "production" }],
+    tagsReadComplete: true,
     threshold: 100,
     treatMissingData: "notBreaching",
     unit: "Count"
@@ -355,13 +363,14 @@ test("Action 대상이나 Metric Query가 있는 CloudWatch Alarm은 보드에 �
   const result = await scan([
     record({
       providerResourceType: "AWS::CloudWatch::Alarm",
-      providerResourceId:
-        "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:notify-ops",
+      providerResourceId: "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:notify-ops",
       displayName: "notify-ops",
       config: {
         alarmName: "notify-ops",
         alarmActions: ["arn:aws:sns:ap-northeast-2:123456789012:ops"],
-        metrics: [{ Id: "m1", Expression: "SUM(METRICS())" }]
+        metrics: [{ Id: "m1", Expression: "SUM(METRICS())" }],
+        tags: [],
+        tagsReadComplete: true
       }
     })
   ]);
@@ -372,19 +381,65 @@ test("Action 대상이나 Metric Query가 있는 CloudWatch Alarm은 보드에 �
   assert.deepEqual(resource?.config, {
     alarmName: "notify-ops",
     hasActionTargets: true,
-    hasMetricQueries: true
+    hasMetricQueries: true,
+    tags: [],
+    tagsReadComplete: true
   });
   assert.equal(suggestion?.status, "manual_review");
   assert.equal(suggestion?.handoffReady, false);
   assert.equal(suggestion?.importCommand, undefined);
-  assert.match(
-    result.analysisExclusions[0]?.message ?? "",
-    /알림 동작 대상|계산식 지표/u
-  );
+  assert.match(result.analysisExclusions[0]?.message ?? "", /알림 동작 대상|계산식 지표/u);
   assert.equal(
     result.architectureJson.nodes[0]?.config["reverseEngineeringManagement"],
     "needs_mapping"
   );
+  assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
+});
+
+test("ARN dimension 값이 공개 경계에서 제거되는 CloudWatch Alarm은 자동 관리를 막는다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::CloudWatch::Alarm",
+      providerResourceId: "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:queue-depth",
+      displayName: "queue-depth",
+      config: {
+        alarmName: "queue-depth",
+        comparisonOperator: "GreaterThanThreshold",
+        dimensions: [
+          {
+            Name: "QueueArn",
+            Value: "arn:aws:sqs:ap-northeast-2:123456789012:private-queue"
+          }
+        ],
+        evaluationPeriods: 1,
+        metricName: "ApproximateNumberOfMessagesVisible",
+        namespace: "AWS/SQS",
+        period: 60,
+        statistic: "Average",
+        tags: [],
+        tagsReadComplete: true,
+        threshold: 10
+      }
+    })
+  ]);
+
+  const [resource] = result.discoveredResources;
+  const [suggestion] = result.importSuggestions;
+  assert.equal(resource?.analysisExcluded, true);
+  assert.deepEqual(resource?.config, {
+    alarmName: "queue-depth",
+    hasUnprojectableDimensions: true,
+    tags: [],
+    tagsReadComplete: true
+  });
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.equal(suggestion?.importCommand, undefined);
+  assert.equal(
+    result.architectureJson.nodes[0]?.config["reverseEngineeringManagement"],
+    "needs_mapping"
+  );
+  assert.equal(result.architectureJson.nodes[0]?.config["terraformResourceType"], undefined);
   assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
 });
 
@@ -396,6 +451,7 @@ test("API Gateway REST API를 이름과 설정을 보존한 Terraform 관리 대
       displayName: "customer-api",
       config: {
         id: "a1b2c3d4e5",
+        hasResourcePolicy: false,
         name: "customer-api",
         description: "Customer API",
         apiKeySource: "HEADER",
@@ -404,6 +460,7 @@ test("API Gateway REST API를 이름과 설정을 보존한 Terraform 관리 대
         endpointConfiguration: { types: ["REGIONAL"] },
         minimumCompressionSize: 1_024,
         tags: { Environment: "production" },
+        tagsReadComplete: true,
         rootResourceId: "root-must-not-be-managed",
         createdAt: "2026-07-23T00:00:00.000Z"
       }
@@ -418,20 +475,108 @@ test("API Gateway REST API를 이름과 설정을 보존한 Terraform 관리 대
     description: "Customer API",
     disableExecuteApiEndpoint: true,
     endpointConfiguration: { types: ["REGIONAL"] },
+    hasResourcePolicy: false,
     id: "a1b2c3d4e5",
     minimumCompressionSize: 1_024,
     name: "customer-api",
-    tags: { Environment: "production" }
+    tags: { Environment: "production" },
+    tagsReadComplete: true
   });
-  assertReadyImport(
-    result.importSuggestions[0],
-    "aws_api_gateway_rest_api",
-    "a1b2c3d4e5"
-  );
+  assertReadyImport(result.importSuggestions[0], "aws_api_gateway_rest_api", "a1b2c3d4e5");
   assert.equal(
     result.architectureJson.nodes[0]?.config["terraformResourceType"],
     "aws_api_gateway_rest_api"
   );
+});
+
+test("resource policy가 있는 API Gateway REST API는 존재 marker만 남기고 자동 관리를 막는다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::ApiGateway::RestApi",
+      providerResourceId: "a1b2c3d4e5",
+      displayName: "private-api",
+      config: {
+        id: "a1b2c3d4e5",
+        name: "private-api",
+        policy: JSON.stringify({
+          Statement: [{ Resource: "arn:aws:execute-api:ap-northeast-2:123456789012:*" }]
+        }),
+        tags: {},
+        tagsReadComplete: true
+      }
+    })
+  ]);
+
+  const [resource] = result.discoveredResources;
+  const [suggestion] = result.importSuggestions;
+  assert.equal(resource?.analysisExcluded, true);
+  assert.deepEqual(resource?.config, {
+    hasResourcePolicy: true,
+    id: "a1b2c3d4e5",
+    name: "private-api",
+    tags: {},
+    tagsReadComplete: true
+  });
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.equal(suggestion?.importCommand, undefined);
+  assert.equal(
+    result.architectureJson.nodes[0]?.config["reverseEngineeringManagement"],
+    "needs_mapping"
+  );
+  assert.equal(result.architectureJson.nodes[0]?.config["terraformResourceType"], undefined);
+  assert.doesNotMatch(JSON.stringify(result), /Statement|execute-api|arn:aws/iu);
+});
+
+test("공개 경계에서 ARN tag를 제거한 API Gateway와 ELBv2는 자동 관리를 막는다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::ApiGateway::RestApi",
+      providerResourceId: "a1b2c3d4e5",
+      displayName: "tagged-api",
+      config: {
+        hasResourcePolicy: false,
+        id: "a1b2c3d4e5",
+        name: "tagged-api",
+        tags: {
+          Environment: "production",
+          OwnerArn: "arn:aws:iam::123456789012:role/private-owner"
+        },
+        tagsReadComplete: true
+      }
+    }),
+    record({
+      providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      providerResourceId: ALB_ARN,
+      displayName: "tagged-alb",
+      config: {
+        attributes: {},
+        attributesProjectionComplete: true,
+        attributesReadComplete: true,
+        ipAddressType: "ipv4",
+        name: "tagged-alb",
+        reverseEngineeringDetailsVersion: 1,
+        scheme: "internet-facing",
+        subnetIds: ["subnet-a"],
+        tags: [
+          { key: "Environment", value: "production" },
+          { key: "OwnerArn", value: "arn:aws:iam::123456789012:role/private-owner" }
+        ],
+        tagsReadComplete: true,
+        type: "application"
+      }
+    })
+  ]);
+
+  assert.equal(result.discoveredResources[0]?.analysisExcluded, true);
+  assert.equal(result.discoveredResources[1]?.analysisExcluded ?? false, false);
+  for (const [index, resource] of result.discoveredResources.entries()) {
+    assert.equal(resource.config["tagsReadComplete"], false);
+    assert.equal(result.importSuggestions[index]?.status, "manual_review");
+    assert.equal(result.importSuggestions[index]?.handoffReady, false);
+    assert.equal(result.architectureJson.nodes[index]?.config["terraformResourceType"], undefined);
+  }
+  assert.doesNotMatch(JSON.stringify(result), /private-owner|arn:aws/iu);
 });
 
 test("KMS 연결 CloudWatch Log Group은 공개·서버 config 경계를 지키고 자동 관리를 막는다", async () => {
@@ -445,6 +590,8 @@ test("KMS 연결 CloudWatch Log Group은 공개·서버 config 경계를 지키�
       retentionInDays: 30,
       kmsKeyId: CLOUDWATCH_LOG_GROUP_KMS_ARN,
       logGroupClass: "STANDARD",
+      tags: [],
+      tagsReadComplete: true,
       storedBytes: 1234,
       providerParameters: { secret: "never-public" }
     }
@@ -464,6 +611,8 @@ test("KMS 연결 CloudWatch Log Group은 공개·서버 config 경계를 지키�
     logGroupName: "/ecs/orders",
     retentionInDays: 30,
     logGroupClass: "STANDARD",
+    tags: [],
+    tagsReadComplete: true,
     hasKmsKey: true
   });
   assert.deepEqual(privateResult.discoveredResources[0]?.config, {
@@ -471,6 +620,8 @@ test("KMS 연결 CloudWatch Log Group은 공개·서버 config 경계를 지키�
     retentionInDays: 30,
     kmsKeyId: CLOUDWATCH_LOG_GROUP_KMS_ARN,
     logGroupClass: "STANDARD",
+    tags: [],
+    tagsReadComplete: true,
     hasKmsKey: true
   });
   assert.equal(publicResult.importSuggestions[0]?.status, "manual_review");
@@ -490,16 +641,134 @@ test("KMS를 쓰지 않는 CloudWatch Log Group은 이름으로 자동 import할
       providerResourceType: "AWS::Logs::LogGroup",
       providerResourceId: CLOUDWATCH_LOG_GROUP_ARN,
       displayName: "/ecs/orders",
-      config: { logGroupName: "/ecs/orders", retentionInDays: 30 }
+      config: {
+        logGroupClass: "STANDARD",
+        logGroupName: "/ecs/orders",
+        retentionInDays: 30,
+        tags: [],
+        tagsReadComplete: true
+      }
     })
   ]);
 
   assert.equal(result.discoveredResources[0]?.analysisExcluded ?? false, false);
-  assertReadyImport(
-    result.importSuggestions[0],
-    "aws_cloudwatch_log_group",
-    "/ecs/orders"
+  assertReadyImport(result.importSuggestions[0], "aws_cloudwatch_log_group", "/ecs/orders");
+});
+
+test("CloudWatch Alarm과 Log Group의 tag evidence가 없으면 자동 import를 막는다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::CloudWatch::Alarm",
+      providerResourceId: "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:api-request-count",
+      displayName: "api-request-count",
+      config: {
+        alarmName: "api-request-count",
+        comparisonOperator: "GreaterThanThreshold",
+        evaluationPeriods: 1,
+        metricName: "RequestCount",
+        namespace: "AWS/ApiGateway",
+        period: 60,
+        statistic: "Sum",
+        tagsReadComplete: false,
+        threshold: 100
+      }
+    }),
+    record({
+      providerResourceType: "AWS::Logs::LogGroup",
+      providerResourceId: CLOUDWATCH_LOG_GROUP_ARN,
+      displayName: "/ecs/orders",
+      config: {
+        logGroupClass: "STANDARD",
+        logGroupName: "/ecs/orders"
+      }
+    })
+  ]);
+
+  for (const [index, resource] of result.discoveredResources.entries()) {
+    assert.equal(resource.analysisExcluded, true);
+    assert.equal(resource.config["tagsReadComplete"], false);
+    assert.equal(result.importSuggestions[index]?.status, "manual_review");
+    assert.equal(result.importSuggestions[index]?.handoffReady, false);
+    assert.equal(result.importSuggestions[index]?.importCommand, undefined);
+    assert.equal(
+      result.architectureJson.nodes[index]?.config["reverseEngineeringManagement"],
+      "needs_mapping"
+    );
+    assert.equal(result.architectureJson.nodes[index]?.config["terraformResourceType"], undefined);
+  }
+});
+
+test("ARN 값이 든 CloudWatch tag는 공개하지 않고 불완전 projection으로 닫는다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::CloudWatch::Alarm",
+      providerResourceId: "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:queue-depth",
+      displayName: "queue-depth",
+      config: {
+        alarmName: "queue-depth",
+        comparisonOperator: "GreaterThanThreshold",
+        evaluationPeriods: 1,
+        metricName: "ApproximateNumberOfMessagesVisible",
+        namespace: "AWS/SQS",
+        period: 60,
+        statistic: "Average",
+        tags: [
+          {
+            key: "QueueArn",
+            value: "arn:aws:sqs:ap-northeast-2:123456789012:private-queue"
+          }
+        ],
+        tagsReadComplete: true,
+        threshold: 10
+      }
+    })
+  ]);
+
+  assert.equal(result.discoveredResources[0]?.config["tagsReadComplete"], false);
+  assert.equal(result.discoveredResources[0]?.config["tags"], undefined);
+  assert.equal(result.importSuggestions[0]?.status, "manual_review");
+  assert.equal(result.importSuggestions[0]?.handoffReady, false);
+  assert.equal(result.architectureJson.nodes[0]?.config["terraformResourceType"], undefined);
+  assert.doesNotMatch(JSON.stringify(result), /arn:aws|private-queue/iu);
+});
+
+test("CloudWatch Log Group은 STANDARD class만 자동 관리한다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::Logs::LogGroup",
+      providerResourceId: CLOUDWATCH_LOG_GROUP_ARN,
+      displayName: "/ecs/standard",
+      config: {
+        logGroupClass: "STANDARD",
+        logGroupName: "/ecs/standard",
+        tags: [],
+        tagsReadComplete: true
+      }
+    }),
+    record({
+      providerResourceType: "AWS::Logs::LogGroup",
+      providerResourceId: "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/infrequent",
+      displayName: "/ecs/infrequent",
+      config: {
+        logGroupClass: "INFREQUENT_ACCESS",
+        logGroupName: "/ecs/infrequent",
+        tags: [],
+        tagsReadComplete: true
+      }
+    })
+  ]);
+
+  assert.equal(result.discoveredResources[0]?.analysisExcluded ?? false, false);
+  assert.equal(result.importSuggestions[0]?.status, "ready");
+  assert.equal(result.discoveredResources[1]?.analysisExcluded, true);
+  assert.equal(result.importSuggestions[1]?.status, "manual_review");
+  assert.equal(result.importSuggestions[1]?.handoffReady, false);
+  assert.equal(result.importSuggestions[1]?.importCommand, undefined);
+  assert.equal(
+    result.architectureJson.nodes[1]?.config["reverseEngineeringManagement"],
+    "needs_mapping"
   );
+  assert.equal(result.architectureJson.nodes[1]?.config["terraformResourceType"], undefined);
 });
 
 test("이름이 없는 CloudWatch Log Group은 자동 import에서 제외하고 이유를 남긴다", async () => {
@@ -508,7 +777,12 @@ test("이름이 없는 CloudWatch Log Group은 자동 import에서 제외하고 
       providerResourceType: "AWS::Logs::LogGroup",
       providerResourceId: CLOUDWATCH_LOG_GROUP_ARN,
       displayName: "이름을 확인할 수 없는 로그",
-      config: { retentionInDays: 30 }
+      config: {
+        logGroupClass: "STANDARD",
+        retentionInDays: 30,
+        tags: [],
+        tagsReadComplete: true
+      }
     })
   ]);
 
@@ -522,12 +796,18 @@ test("이름이 없는 CloudWatch Log Group은 자동 import에서 제외하고 
 
 test("AWS 원본 config는 보존하고 Board projection과 handoff는 같은 Terraform identity를 쓴다", async () => {
   const sourceConfig = {
+    attributes: {},
+    attributesProjectionComplete: true,
+    attributesReadComplete: true,
     arn: ALB_ARN,
     name: "source-exact-alb",
-    type: "application",
     ipAddressType: "ipv4",
+    reverseEngineeringDetailsVersion: 1,
     scheme: "internet-facing",
-    subnetIds: ["subnet-a"]
+    subnetIds: ["subnet-a"],
+    tags: [],
+    tagsReadComplete: true,
+    type: "application"
   };
   const result = await scanPrivate([
     record({
@@ -872,12 +1152,18 @@ test("loadBalancerType application 정규화 값도 ALB 지원과 생성 가능�
       providerResourceId: ALB_ARN,
       displayName: "normalized-alb",
       config: {
+        attributes: {},
+        attributesProjectionComplete: true,
+        attributesReadComplete: true,
         arn: ALB_ARN,
         name: "normalized-alb",
         loadBalancerType: "application",
         ipAddressType: "ipv4",
+        reverseEngineeringDetailsVersion: 1,
         scheme: "internet-facing",
-        subnetIds: ["subnet-a"]
+        subnetIds: ["subnet-a"],
+        tags: [],
+        tagsReadComplete: true
       }
     })
   ]);
@@ -1018,12 +1304,18 @@ test("ALB subnet_mapping은 subnets 대신 새 Terraform 생성 위치 정보로
       providerResourceId: ALB_ARN,
       displayName: "mapped-alb",
       config: {
+        attributes: {},
+        attributesProjectionComplete: true,
+        attributesReadComplete: true,
         arn: ALB_ARN,
         name: "mapped-alb",
         type: "application",
         ipAddressType: "ipv4",
+        reverseEngineeringDetailsVersion: 1,
         scheme: "internet-facing",
-        subnetMapping: [{ subnetId: "subnet-a", allocationId: "eipalloc-a" }]
+        subnetMapping: [{ subnetId: "subnet-a", allocationId: "eipalloc-a" }],
+        tags: [],
+        tagsReadComplete: true
       }
     })
   ]);
@@ -1107,14 +1399,9 @@ test("Subnet Route Table Association을 안전한 config와 두 관계가 있는
     }
   ]);
 
-  const associationNode = result.architectureJson.nodes.find(
-    (node) => node.id === association.id
-  );
+  const associationNode = result.architectureJson.nodes.find((node) => node.id === association.id);
   assert.equal(associationNode?.config["reverseEngineeringManagement"], "managed");
-  assert.equal(
-    associationNode?.config["terraformResourceType"],
-    "aws_route_table_association"
-  );
+  assert.equal(associationNode?.config["terraformResourceType"], "aws_route_table_association");
   assert.deepEqual(
     {
       subnetId: associationNode?.config["subnetId"],
@@ -1178,8 +1465,7 @@ test("EIP과 public NAT을 안전한 config, same-scan 참조, import identity�
         state: "available",
         subnetId: "subnet-0123456789abcdef0",
         tags: [{ key: "Name", value: "public-egress" }],
-        failureMessage:
-          "arn:aws:iam::123456789012:role/must-not-be-public",
+        failureMessage: "arn:aws:iam::123456789012:role/must-not-be-public",
         networkInterfaceId: "eni-must-not-be-public",
         privateIp: "10.0.1.10",
         providerParameters: { secret: "must-not-be-public" }
@@ -1217,10 +1503,7 @@ test("EIP과 public NAT을 안전한 config, same-scan 참조, import identity�
     subnetId: "subnet-0123456789abcdef0",
     tags: [{ key: "Name", value: "public-egress" }]
   });
-  assert.doesNotMatch(
-    JSON.stringify([eip, nat]),
-    /must-not-be-public|arn:aws|eni-|10\.0\.1\.10/u
-  );
+  assert.doesNotMatch(JSON.stringify([eip, nat]), /must-not-be-public|arn:aws|eni-|10\.0\.1\.10/u);
   assert.equal(eip.analysisExcluded ?? false, false);
   assert.equal(nat.analysisExcluded ?? false, false);
 
@@ -1228,10 +1511,7 @@ test("EIP과 public NAT을 안전한 config, same-scan 참조, import identity�
   const natNode = result.architectureJson.nodes.find((node) => node.id === nat.id);
   assert.equal(eipNode?.config["terraformResourceType"], "aws_eip");
   assert.equal(natNode?.config["terraformResourceType"], "aws_nat_gateway");
-  assert.equal(
-    natNode?.config["subnetId"],
-    "aws_subnet.resource_subnet_0123456789abcdef0.id"
-  );
+  assert.equal(natNode?.config["subnetId"], "aws_subnet.resource_subnet_0123456789abcdef0.id");
   assert.equal(natNode?.config["allocationId"], "aws_eip.resource_eipalloc_0123456789abcdef0.id");
 
   assertReadyImport(
@@ -1295,9 +1575,10 @@ test("unsupported EIP association과 deleted/incomplete NAT은 보드에 유지�
     result.architectureJson.nodes.map((node) => node.config["reverseEngineeringManagement"]),
     ["needs_mapping", "needs_mapping"]
   );
-  assert.equal(result.analysisExclusions.every((exclusion) =>
-    exclusion.reason === "missing_required_data"
-  ), true);
+  assert.equal(
+    result.analysisExclusions.every((exclusion) => exclusion.reason === "missing_required_data"),
+    true
+  );
   for (const suggestion of result.importSuggestions) {
     assertManualImportWithoutIdentity(suggestion);
   }
@@ -1456,15 +1737,11 @@ test("Target Group만 선택하면 연결된 VPC만 의존 리소스로 함께 �
   );
 
   assert.equal(
-    result.discoveredResources.some(
-      (resource) => resource.providerResourceId === selectedVpcId
-    ),
+    result.discoveredResources.some((resource) => resource.providerResourceId === selectedVpcId),
     true
   );
   assert.equal(
-    result.discoveredResources.some(
-      (resource) => resource.providerResourceId === unrelatedVpcId
-    ),
+    result.discoveredResources.some((resource) => resource.providerResourceId === unrelatedVpcId),
     false
   );
 });

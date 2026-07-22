@@ -93,7 +93,11 @@ test("핵심 리소스의 최소 관찰값이 빠지면 Terraform import를 수�
 
     assert.ok(resource, providerResourceType);
     assert.ok(node, providerResourceType);
-    assert.equal(node.config["reverseEngineeringManagement"], "needs_mapping", providerResourceType);
+    assert.equal(
+      node.config["reverseEngineeringManagement"],
+      "needs_mapping",
+      providerResourceType
+    );
     assert.equal(node.config["terraformBlockType"], undefined, providerResourceType);
     assert.equal(node.config["terraformResourceType"], undefined, providerResourceType);
     assert.equal(node.config["terraformResourceName"], undefined, providerResourceType);
@@ -154,7 +158,11 @@ test("서비스 계열의 필수 Terraform 관찰값이 빠져도 리소스만 �
 
     assert.ok(node, providerResourceType);
     assert.ok(suggestion, providerResourceType);
-    assert.equal(node.config["reverseEngineeringManagement"], "needs_mapping", providerResourceType);
+    assert.equal(
+      node.config["reverseEngineeringManagement"],
+      "needs_mapping",
+      providerResourceType
+    );
     assert.equal(node.config["terraformBlockType"], undefined, providerResourceType);
     assert.equal(node.config["terraformResourceType"], undefined, providerResourceType);
     assert.equal(node.config["terraformResourceName"], undefined, providerResourceType);
@@ -281,10 +289,20 @@ test("main/gateway 및 같은 scan 대상이 빠진 Association은 보존하되 
       ...scenario.records,
       record("AWS::EC2::RouteTableAssociation", associationId, scenario.config, [
         ...(typeof scenario.config["subnetId"] === "string"
-          ? [{ type: "attached_to" as const, targetProviderResourceId: scenario.config["subnetId"] }]
+          ? [
+              {
+                type: "attached_to" as const,
+                targetProviderResourceId: scenario.config["subnetId"]
+              }
+            ]
           : []),
         ...(typeof scenario.config["routeTableId"] === "string"
-          ? [{ type: "depends_on" as const, targetProviderResourceId: scenario.config["routeTableId"] }]
+          ? [
+              {
+                type: "depends_on" as const,
+                targetProviderResourceId: scenario.config["routeTableId"]
+              }
+            ]
           : [])
       ])
     ]);
@@ -293,9 +311,7 @@ test("main/gateway 및 같은 scan 대상이 빠진 Association은 보존하되 
     );
     assert.ok(association, scenario.name);
     assert.equal(association.resourceType, "ROUTE_TABLE_ASSOCIATION", scenario.name);
-    const node = result.architectureJson.nodes.find(
-      (candidate) => candidate.id === association.id
-    );
+    const node = result.architectureJson.nodes.find((candidate) => candidate.id === association.id);
     const suggestion = result.importSuggestions.find(
       (candidate) => candidate.resourceId === association.id
     );
@@ -370,25 +386,37 @@ function completeCoreRecords(): AwsDiscoveredResourceRecord[] {
     }),
     record("AWS::S3::Bucket", "assets-main", {}),
     record("AWS::ApiGateway::RestApi", "api-main", {
-      name: "customer-api"
+      hasResourcePolicy: false,
+      name: "customer-api",
+      tags: {},
+      tagsReadComplete: true
     }),
     record(
       "AWS::ElasticLoadBalancingV2::LoadBalancer",
       "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/customer/1234",
       {
+        attributes: {},
+        attributesProjectionComplete: true,
+        attributesReadComplete: true,
         name: "customer-entry",
         loadBalancerType: "application",
+        reverseEngineeringDetailsVersion: 1,
         scheme: "internet-facing",
         ipAddressType: "ipv4",
-        subnetIds: ["subnet-a", "subnet-b"]
+        subnetIds: ["subnet-a", "subnet-b"],
+        tags: [],
+        tagsReadComplete: true
       }
     ),
     record(
       "AWS::Logs::LogGroup",
       "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/customer-api",
       {
+        logGroupClass: "STANDARD",
         logGroupName: "/ecs/customer-api",
-        retentionInDays: 30
+        retentionInDays: 30,
+        tags: [],
+        tagsReadComplete: true
       }
     )
   ];

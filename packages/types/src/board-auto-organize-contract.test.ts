@@ -3,11 +3,26 @@ import test from "node:test";
 import type { DiagramJson, DiagramNode } from "./index";
 
 import {
+  createBoardAutoOrganizeSourceFingerprint,
   hasSameBoardAutoOrganizeSemantics,
   isBoardAutoPresentationFrameNode,
   serializeBoardAutoOrganizeSemantics,
   serializeBoardAutoOrganizeSource
 } from "./board-auto-organize-contract";
+
+test("Board source fingerprint는 같은 원본을 같은 8자리 값으로 만든다", () => {
+  const source = diagram();
+  const otherViewport = {
+    ...structuredClone(source),
+    viewport: { x: 320, y: -80, zoom: 0.5 }
+  };
+
+  assert.match(createBoardAutoOrganizeSourceFingerprint(source), /^[0-9a-f]{8}$/u);
+  assert.equal(
+    createBoardAutoOrganizeSourceFingerprint(source),
+    createBoardAutoOrganizeSourceFingerprint(otherViewport)
+  );
+});
 
 test("Board 자동 정리 source 직렬화는 viewport와 일시 선택만 제외한다", () => {
   const source = diagram();
@@ -119,10 +134,7 @@ test("자동 표시 프레임은 네 가지 소유권 값이 모두 맞아야 �
   const owned = autoFrame("board-auto-frame:owned", false);
 
   assert.equal(isBoardAutoPresentationFrameNode(owned), true);
-  assert.equal(
-    isBoardAutoPresentationFrameNode({ ...owned, kind: "resource" }),
-    false
-  );
+  assert.equal(isBoardAutoPresentationFrameNode({ ...owned, kind: "resource" }), false);
   assert.equal(isBoardAutoPresentationFrameNode({ ...owned, type: "design-group" }), false);
   assert.equal(
     isBoardAutoPresentationFrameNode({

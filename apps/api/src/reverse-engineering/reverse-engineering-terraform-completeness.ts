@@ -29,6 +29,7 @@ function getMissingTerraformCreationFields(
   ];
 }
 
+/** Resource별 재생성 필수값을 한곳에서 확인해 불완전 AWS 조회를 ready로 올리지 않는다. */
 function getMissingTerraformResourceFields(
   resourceType: ResourceType,
   config: Record<string, unknown>
@@ -45,9 +46,7 @@ function getMissingTerraformResourceFields(
       ...(getNonEmptyString(config["vpcId"]) ? [] : ["vpcId"]),
       ...(getNonEmptyString(config["cidrBlock"]) ? [] : ["cidrBlock"]),
       ...(getNonEmptyString(config["availabilityZone"]) ? [] : ["availabilityZone"]),
-      ...(typeof config["mapPublicIpOnLaunch"] === "boolean"
-        ? []
-        : ["mapPublicIpOnLaunch"]),
+      ...(typeof config["mapPublicIpOnLaunch"] === "boolean" ? [] : ["mapPublicIpOnLaunch"]),
       ...(typeof config["assignIpv6AddressOnCreation"] === "boolean"
         ? []
         : ["assignIpv6AddressOnCreation"])
@@ -55,9 +54,7 @@ function getMissingTerraformResourceFields(
   }
 
   if (resourceType === "INTERNET_GATEWAY") {
-    return hasCompleteInternetGatewayAttachments(config["attachments"])
-      ? []
-      : ["attachments"];
+    return hasCompleteInternetGatewayAttachments(config["attachments"]) ? [] : ["attachments"];
   }
 
   if (resourceType === "ROUTE_TABLE") {
@@ -69,9 +66,7 @@ function getMissingTerraformResourceFields(
 
   if (resourceType === "ROUTE_TABLE_ASSOCIATION") {
     return [
-      ...(getNonEmptyString(config["routeTableAssociationId"])
-        ? []
-        : ["routeTableAssociationId"]),
+      ...(getNonEmptyString(config["routeTableAssociationId"]) ? [] : ["routeTableAssociationId"]),
       ...(getNonEmptyString(config["subnetId"]) ? [] : ["subnetId"]),
       ...(getNonEmptyString(config["routeTableId"]) ? [] : ["routeTableId"]),
       ...(config["main"] === false ? [] : ["main=false"])
@@ -92,9 +87,7 @@ function getMissingTerraformResourceFields(
   if (resourceType === "NAT_GATEWAY") {
     const connectivityType = config["connectivityType"];
     const allocationIds = getExactElasticIpAllocationIds(config["allocationIds"]);
-    const primaryAllocationId = getValidElasticIpAllocationId(
-      config["primaryAllocationId"]
-    );
+    const primaryAllocationId = getValidElasticIpAllocationId(config["primaryAllocationId"]);
     const commonFields = [
       ...(config["addressStatusesReady"] === false ? ["addressState=succeeded"] : []),
       ...(getValidNatGatewayId(config["natGatewayId"]) ? [] : ["natGatewayId"]),
@@ -135,12 +128,8 @@ function getMissingTerraformResourceFields(
       ...(getNonEmptyString(config["imageId"]) ? [] : ["imageId"]),
       ...(getNonEmptyString(config["instanceType"]) ? [] : ["instanceType"]),
       ...(getNonEmptyString(config["subnetId"]) ? [] : ["subnetId"]),
-      ...(getStringArray(config["securityGroupIds"]).length > 0
-        ? []
-        : ["securityGroupIds"]),
-      ...(hasKnownEc2MonitoringState(config["monitoringState"])
-        ? []
-        : ["monitoringState"])
+      ...(getStringArray(config["securityGroupIds"]).length > 0 ? [] : ["securityGroupIds"]),
+      ...(hasKnownEc2MonitoringState(config["monitoringState"]) ? [] : ["monitoringState"])
     ];
   }
 
@@ -148,29 +137,17 @@ function getMissingTerraformResourceFields(
     return [
       ...(isPositiveNumber(config["allocatedStorage"]) ? [] : ["allocatedStorage"]),
       ...(getNonEmptyString(config["availabilityZone"]) ? [] : ["availabilityZone"]),
-      ...(isNonNegativeNumber(config["backupRetentionPeriod"])
-        ? []
-        : ["backupRetentionPeriod"]),
+      ...(isNonNegativeNumber(config["backupRetentionPeriod"]) ? [] : ["backupRetentionPeriod"]),
       ...(getNonEmptyString(config["dbInstanceClass"]) ? [] : ["dbInstanceClass"]),
-      ...(getNonEmptyString(config["dbSubnetGroupName"])
-        ? []
-        : ["dbSubnetGroupName"]),
-      ...(typeof config["deletionProtection"] === "boolean"
-        ? []
-        : ["deletionProtection"]),
+      ...(getNonEmptyString(config["dbSubnetGroupName"]) ? [] : ["dbSubnetGroupName"]),
+      ...(typeof config["deletionProtection"] === "boolean" ? [] : ["deletionProtection"]),
       ...(getNonEmptyString(config["engine"]) ? [] : ["engine"]),
       ...(getNonEmptyString(config["engineVersion"]) ? [] : ["engineVersion"]),
       ...(typeof config["multiAz"] === "boolean" ? [] : ["multiAz"]),
-      ...(typeof config["publiclyAccessible"] === "boolean"
-        ? []
-        : ["publiclyAccessible"]),
-      ...(typeof config["storageEncrypted"] === "boolean"
-        ? []
-        : ["storageEncrypted"]),
+      ...(typeof config["publiclyAccessible"] === "boolean" ? [] : ["publiclyAccessible"]),
+      ...(typeof config["storageEncrypted"] === "boolean" ? [] : ["storageEncrypted"]),
       ...(getNonEmptyString(config["storageType"]) ? [] : ["storageType"]),
-      ...(getStringArray(config["vpcSecurityGroupIds"]).length > 0
-        ? []
-        : ["vpcSecurityGroupIds"])
+      ...(getStringArray(config["vpcSecurityGroupIds"]).length > 0 ? [] : ["vpcSecurityGroupIds"])
     ];
   }
 
@@ -181,20 +158,15 @@ function getMissingTerraformResourceFields(
   if (resourceType === "CLOUDWATCH_METRIC_ALARM") {
     return [
       ...(getNonEmptyString(config["alarmName"]) ? [] : ["alarmName"]),
-      ...(getNonEmptyString(config["comparisonOperator"])
-        ? []
-        : ["comparisonOperator"]),
-      ...(isPositiveNumber(config["evaluationPeriods"])
-        ? []
-        : ["evaluationPeriods"]),
+      ...(getNonEmptyString(config["comparisonOperator"]) ? [] : ["comparisonOperator"]),
+      ...(isPositiveNumber(config["evaluationPeriods"]) ? [] : ["evaluationPeriods"]),
       ...(typeof config["threshold"] === "number" && Number.isFinite(config["threshold"])
         ? []
         : ["threshold"]),
       ...(getNonEmptyString(config["metricName"]) ? [] : ["metricName"]),
       ...(getNonEmptyString(config["namespace"]) ? [] : ["namespace"]),
       ...(isPositiveNumber(config["period"]) ? [] : ["period"]),
-      ...((getNonEmptyString(config["statistic"]) ??
-        getNonEmptyString(config["extendedStatistic"]))
+      ...((getNonEmptyString(config["statistic"]) ?? getNonEmptyString(config["extendedStatistic"]))
         ? []
         : ["statistic/extendedStatistic"])
     ];
@@ -225,28 +197,21 @@ function getMissingTerraformResourceFields(
       ...(getValidEventBridgeName(config["targetId"]) ? [] : ["targetId"]),
       ...(getValidEventBridgeName(config["ruleName"]) ? [] : ["ruleName"]),
       ...(getValidEventBridgeName(config["eventBusName"]) ? [] : ["eventBusName"]),
-      ...(getNonEmptyString(config["ruleTerraformReference"])
-        ? []
-        : ["ruleTerraformReference"]),
-      ...(getNonEmptyString(config["targetTerraformReference"])
-        ? []
-        : ["targetTerraformReference"])
+      ...(getNonEmptyString(config["ruleTerraformReference"]) ? [] : ["ruleTerraformReference"]),
+      ...(getNonEmptyString(config["targetTerraformReference"]) ? [] : ["targetTerraformReference"])
     ];
   }
 
   if (resourceType === "LOAD_BALANCER") {
     return [
-      ...getMissingElasticLoadBalancingDetails(config, false),
+      ...getMissingElasticLoadBalancingDetails(config, true),
       ...(getNonEmptyString(config["name"]) ? [] : ["name"]),
-      ...((getNonEmptyString(config["loadBalancerType"]) ??
-      getNonEmptyString(config["type"]))
+      ...((getNonEmptyString(config["loadBalancerType"]) ?? getNonEmptyString(config["type"]))
         ? []
         : ["type"]),
       ...(getNonEmptyString(config["scheme"]) ? [] : ["scheme"]),
       ...(hasLoadBalancerSubnetPlacement(config) ? [] : ["subnetIds/subnetMapping"]),
-      ...(hasSupportedLoadBalancerIpAddressType(config["ipAddressType"])
-        ? []
-        : ["ipAddressType"])
+      ...(hasSupportedLoadBalancerIpAddressType(config["ipAddressType"]) ? [] : ["ipAddressType"])
     ];
   }
 
@@ -255,12 +220,12 @@ function getMissingTerraformResourceFields(
       ...getMissingElasticLoadBalancingDetails(config, true),
       ...(getNonEmptyString(config["name"]) ? [] : ["name"]),
       ...(isValidTcpPort(config["port"]) ? [] : ["port"]),
-      ...(["HTTP", "HTTPS"].includes(String(config["protocol"]))
-        ? []
-        : ["protocol=HTTP/HTTPS"]),
+      ...(["HTTP", "HTTPS"].includes(String(config["protocol"])) ? [] : ["protocol=HTTP/HTTPS"]),
       ...(["instance", "ip"].includes(String(config["targetType"]))
         ? []
         : ["targetType=instance/ip"]),
+      ...(config["ipAddressType"] === "ipv4" ? [] : ["ipAddressType=ipv4"]),
+      ...(config["protocolVersion"] === "HTTP1" ? [] : ["protocolVersion=HTTP1"]),
       ...(getNonEmptyString(config["vpcId"]) ? [] : ["vpcId"]),
       ...(hasCompleteLoadBalancerTargetGroupHealthCheck(config["healthCheck"])
         ? []
@@ -293,9 +258,7 @@ function getMissingTerraformResourceFields(
         ? []
         : ["defaultCacheBehavior"]),
       ...(hasGeoRestriction(config["restrictions"]) ? [] : ["restrictions"]),
-      ...(hasCloudFrontViewerCertificate(config["viewerCertificate"])
-        ? []
-        : ["viewerCertificate"])
+      ...(hasCloudFrontViewerCertificate(config["viewerCertificate"]) ? [] : ["viewerCertificate"])
     ];
   }
 
@@ -307,9 +270,7 @@ function getMissingTerraformResourceFields(
     return [
       ...(getValidEcsName(config["name"]) ? [] : ["name"]),
       ...(getNonEmptyString(config["clusterArn"]) ? [] : ["clusterArn"]),
-      ...(getNonEmptyString(config["taskDefinitionArn"])
-        ? []
-        : ["taskDefinitionArn"]),
+      ...(getNonEmptyString(config["taskDefinitionArn"]) ? [] : ["taskDefinitionArn"]),
       ...(isNonNegativeNumber(config["desiredCount"]) ? [] : ["desiredCount"]),
       ...(getNonEmptyString(config["launchType"]) ||
       hasEcsCapacityProviderStrategy(config["capacityProviderStrategy"])
@@ -515,6 +476,7 @@ function getMissingElasticLoadBalancingDetails(
     ...(config["attributesReadComplete"] === true && isRecord(config["attributes"])
       ? []
       : ["details.attributes"]),
+    ...(config["attributesProjectionComplete"] === true ? [] : ["details.attributesProjection"]),
     ...(config["tagsReadComplete"] === true && Array.isArray(config["tags"])
       ? []
       : ["details.tags"])
@@ -557,8 +519,7 @@ function hasCompleteInternetGatewayAttachments(value: unknown): boolean {
   return (
     Array.isArray(value) &&
     value.every(
-      (attachment) =>
-        isRecord(attachment) && getNonEmptyString(attachment["vpcId"]) !== null
+      (attachment) => isRecord(attachment) && getNonEmptyString(attachment["vpcId"]) !== null
     )
   );
 }
@@ -575,12 +536,9 @@ function hasCompleteRouteTableRoutes(value: unknown): boolean {
       const hasDestination =
         getNonEmptyString(route["destinationCidrBlock"]) !== null ||
         getNonEmptyString(route["destinationIpv6CidrBlock"]) !== null;
-      const hasTarget = [
-        "gatewayId",
-        "instanceId",
-        "natGatewayId",
-        "networkInterfaceId"
-      ].some((key) => getNonEmptyString(route[key]) !== null);
+      const hasTarget = ["gatewayId", "instanceId", "natGatewayId", "networkInterfaceId"].some(
+        (key) => getNonEmptyString(route[key]) !== null
+      );
 
       return hasDestination && hasTarget;
     })
@@ -595,9 +553,7 @@ function hasEcsCapacityProviderStrategy(value: unknown): boolean {
   return (
     Array.isArray(value) &&
     value.length > 0 &&
-    value.every(
-      (item) => isRecord(item) && getValidEcsName(item["capacityProvider"]) !== null
-    )
+    value.every((item) => isRecord(item) && getValidEcsName(item["capacityProvider"]) !== null)
   );
 }
 
@@ -747,17 +703,13 @@ function getValidEcsName(value: unknown): string | null {
 function getValidElasticIpAllocationId(value: unknown): string | null {
   const allocationId = getNonEmptyString(value);
 
-  return allocationId && /^eipalloc-[a-f0-9]{8,}$/iu.test(allocationId)
-    ? allocationId
-    : null;
+  return allocationId && /^eipalloc-[a-f0-9]{8,}$/iu.test(allocationId) ? allocationId : null;
 }
 
 function getValidNatGatewayId(value: unknown): string | null {
   const natGatewayId = getNonEmptyString(value);
 
-  return natGatewayId && /^nat-[a-f0-9]{8,}$/iu.test(natGatewayId)
-    ? natGatewayId
-    : null;
+  return natGatewayId && /^nat-[a-f0-9]{8,}$/iu.test(natGatewayId) ? natGatewayId : null;
 }
 
 function getExactElasticIpAllocationIds(value: unknown): string[] | null {
@@ -781,9 +733,7 @@ function getNonEmptyString(value: unknown): string | null {
 
 function getStringArray(value: unknown): string[] {
   return Array.isArray(value)
-    ? value.filter(
-        (item): item is string => typeof item === "string" && item.trim().length > 0
-      )
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
     : [];
 }
 

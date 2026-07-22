@@ -53,6 +53,7 @@ import type {
   PointerEvent as ReactPointerEvent
 } from "react";
 import type {
+  ApplyReverseEngineeringDraftRequest,
   DiagramEdge,
   DiagramJson,
   DiagramNode,
@@ -263,6 +264,11 @@ type DiagramEditorAutoOrganizeProps = DiagramEditorProps & {
         readonly expectedRevision: number;
       }) => Promise<ProjectDraftResponse>)
     | undefined;
+  readonly onReverseEngineeringDraftApplyRequest?:
+    | ((
+        request: Omit<ApplyReverseEngineeringDraftRequest, "terraformFiles">
+      ) => Promise<ProjectDraftResponse>)
+    | undefined;
   readonly projectDraftRevision?: number | null | undefined;
 };
 
@@ -298,6 +304,7 @@ function DiagramEditorInner({
   onBoardAutoOrganizeApplyRequest,
   onPersistedDiagramApplied,
   onPersistedDiagramApplyRequest,
+  onReverseEngineeringDraftApplyRequest,
   onDiagramChange,
   onDiagramSaveRequest,
   onWorkspacePanelOpen,
@@ -1133,6 +1140,59 @@ function DiagramEditorInner({
     ]
   );
 
+  /** Reverse Engineering 후보는 서버가 다시 검증하고 stamp한 Diagram만 Board와 History에 적용합니다. */
+  const persistAndApplyReverseEngineeringDraft = useCallback<
+    NonNullable<DiagramEditorPanelContext["persistAndApplyReverseEngineeringDraft"]>
+  >(
+    async (request) => {
+      if (autoOrganizeApplyInFlightRef.current) {
+        throw new Error("다른 Board 적용이 진행 중입니다.");
+      }
+      if (!onReverseEngineeringDraftApplyRequest) {
+        throw new Error("Reverse Engineering 서버 검증 경계가 준비되지 않았습니다.");
+      }
+
+      const candidateDiagram = normalizeDiagramResourceNodeGeometry(
+        cloneDiagram(request.candidateDiagram)
+      );
+      autoOrganizeApplyInFlightRef.current = true;
+      setAutoOrganizeApplyPending(true);
+
+      try {
+        const response = await onReverseEngineeringDraftApplyRequest({
+          ...request,
+          candidateDiagram
+        });
+
+        if (!response.draft) {
+          throw new Error("Reverse Engineering 서버 저장 결과가 비어 있습니다.");
+        }
+
+        const persistedDiagram = cloneDiagram(response.draft.diagramJson);
+        autoOrganizeApplyInFlightRef.current = false;
+        shouldApplySourceViewportRef.current = true;
+        commitDiagramUpdate(() => cloneDiagram(persistedDiagram));
+        onPersistedDiagramApplied?.({
+          diagramJson: cloneDiagram(persistedDiagram),
+          draft: response.draft
+        });
+        setPreviewDiagram(null);
+        setInspectedNodeId(null);
+        setSelectedNodeIds([]);
+        setSelectedEdgeIds([]);
+      } finally {
+        autoOrganizeApplyInFlightRef.current = false;
+        setAutoOrganizeApplyPending(false);
+      }
+    },
+    [
+      commitDiagramUpdate,
+      onPersistedDiagramApplied,
+      onReverseEngineeringDraftApplyRequest,
+      setPreviewDiagram
+    ]
+  );
+
   /** 현재 Board를 바꾸지 않고 Task 6의 안전한 후보 전체로 preview session을 엽니다. */
   const previewAutomaticOrganization = useCallback(() => {
     try {
@@ -1398,6 +1458,10 @@ function DiagramEditorInner({
         onPersistedDiagramApplyRequest && projectDraftRevision !== null
           ? persistAndApplyDiagramJson
           : undefined,
+      persistAndApplyReverseEngineeringDraft:
+        onReverseEngineeringDraftApplyRequest && projectDraftRevision !== null
+          ? persistAndApplyReverseEngineeringDraft
+          : undefined,
       closeInspectedNode: () => setInspectedNodeId(null),
       commitTerraformSourceAuthority,
       focusResourceNode,
@@ -1423,7 +1487,9 @@ function DiagramEditorInner({
       isRightPanelOpen,
       onDiagramSaveRequest,
       onPersistedDiagramApplyRequest,
+      onReverseEngineeringDraftApplyRequest,
       persistAndApplyDiagramJson,
+      persistAndApplyReverseEngineeringDraft,
       previewAnnotations,
       previewDiagram,
       projectDraftRevision,
@@ -2948,11 +3014,7 @@ function DiagramEditorInner({
   ]);
 
   useEffect(() => {
-    if (
-      !isFlowReady ||
-      !shouldAutoFitInitialDiagramRef.current ||
-      diagram.nodes.length === 0
-    ) {
+    if (!isFlowReady || !shouldAutoFitInitialDiagramRef.current || diagram.nodes.length === 0) {
       return;
     }
 

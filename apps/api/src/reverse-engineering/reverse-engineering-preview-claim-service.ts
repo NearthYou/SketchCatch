@@ -5,6 +5,7 @@ import type {
   ArchitectureJson,
   DiagramJson,
   ProjectDraft,
+  ReverseEngineeringImportDecisionRequest,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScan,
   ReverseEngineeringScanResult
@@ -19,6 +20,7 @@ import {
 } from "../db/schema.js";
 import { toProjectDraft } from "../modules/projects/project-drafts.js";
 import { normalizeReverseEngineeringScanResult } from "./reverse-engineering-service.js";
+import { validateAndStampReverseEngineeringImportDecisions } from "./reverse-engineering-import-decision.js";
 
 const PREVIEW_SCAN_PROJECT_ID = "00000000-0000-4000-8000-000000000000";
 const SOURCE_PROVENANCE_KEYS = [
@@ -117,6 +119,7 @@ export type ReverseEngineeringPreviewClaimInput = {
     previewId: string;
     publicDraftId: string;
     sourceNodeIds: string[];
+    importDecision: ReverseEngineeringImportDecisionRequest;
   };
 };
 
@@ -182,10 +185,7 @@ export function createPostgresReverseEngineeringPreviewClaimRepository(
           },
           // gg: AWS/import 원본은 browser Board가 아닌 completed Scan result에만 연결합니다.
           async insertCompletedScan(input) {
-            const [scan] = await tx
-              .insert(reverseEngineeringScans)
-              .values(input)
-              .returning();
+            const [scan] = await tx.insert(reverseEngineeringScans).values(input).returning();
 
             if (!scan) {
               throw new Error("Reverse Engineering completed scan creation failed");
@@ -266,10 +266,7 @@ export async function claimReverseEngineeringPreviewProject(
 
   return repository.transaction(async (tx) => {
     const claimedAt = now();
-    const preview = await tx.lockOwnedPreview(
-      input.reverseEngineering.previewId,
-      input.userId
-    );
+    const preview = await tx.lockOwnedPreview(input.reverseEngineering.previewId, input.userId);
 
     if (!preview) {
       throw new ReverseEngineeringPreviewClaimNotFoundError();
@@ -297,7 +294,7 @@ export async function claimReverseEngineeringPreviewProject(
       scanId,
       draftId
     });
-    const diagramJson = stampSelectedDiagramNodes({
+    const sourceStampedDiagramJson = stampSelectedDiagramNodes({
       diagramJson: input.diagramJson,
       publicResult,
       sourceNodeIds: input.reverseEngineering.sourceNodeIds,
@@ -309,6 +306,12 @@ export async function claimReverseEngineeringPreviewProject(
       projectId,
       scanId,
       draftId
+    });
+    const diagramJson = validateAndStampReverseEngineeringImportDecisions({
+      request: input.reverseEngineering.importDecision,
+      diagramJson: sourceStampedDiagramJson,
+      appliedSourceNodeIds: input.reverseEngineering.sourceNodeIds,
+      storedScanResult: persistedResult
     });
     const project = await tx.insertProject({
       id: projectId,
@@ -427,9 +430,7 @@ function validatePublicDraftConsistency(
     throw new ReverseEngineeringPreviewClaimConflictError("public_draft_mismatch");
   }
 
-  const publicNodeById = createUniqueNodeMap(
-    publicResult.reverseEngineeringDraft.architectureJson
-  );
+  const publicNodeById = createUniqueNodeMap(publicResult.reverseEngineeringDraft.architectureJson);
   const architectureNodeById = createUniqueNodeMap(input.architectureJson);
   const diagramNodeById = createUniqueDiagramNodeMap(input.diagramJson);
 
@@ -455,10 +456,7 @@ function validatePublicDraftConsistency(
 
     if (
       !isDeepStrictEqual(architectureSemantics, publicSemantics) ||
-      !isDeepStrictEqual(
-        omitSourceProvenance(diagramNode.parameters.values),
-        publicNode.config
-      )
+      !isDeepStrictEqual(omitSourceProvenance(diagramNode.parameters.values), publicNode.config)
     ) {
       throw new ReverseEngineeringPreviewClaimConflictError("public_draft_mismatch");
     }
@@ -466,8 +464,7 @@ function validatePublicDraftConsistency(
 
   validateSelectedSourceEdges({
     input,
-    publicArchitecture:
-      publicResult.reverseEngineeringDraft.architectureJson,
+    publicArchitecture: publicResult.reverseEngineeringDraft.architectureJson,
     sourceNodeIds: uniqueSourceNodeIds
   });
 }
@@ -555,9 +552,7 @@ function createUniqueDiagramNodeMap(
 }
 
 // gg: 비교할 때 browser가 임시로 붙인 preview provenance는 신뢰하거나 의미 비교에 쓰지 않습니다.
-function omitSourceProvenance(
-  values: Record<string, unknown>
-): Record<string, unknown> {
+function omitSourceProvenance(values: Record<string, unknown>): Record<string, unknown> {
   const result = { ...values };
 
   for (const key of SOURCE_PROVENANCE_KEYS) {
@@ -582,9 +577,7 @@ function stampSelectedArchitectureNodes({
   draftId: string;
 }): ArchitectureJson {
   const sourceNodeIdSet = new Set(sourceNodeIds);
-  const publicNodeById = createUniqueNodeMap(
-    publicResult.reverseEngineeringDraft.architectureJson
-  );
+  const publicNodeById = createUniqueNodeMap(publicResult.reverseEngineeringDraft.architectureJson);
 
   return {
     ...architectureJson,
@@ -625,9 +618,7 @@ function stampSelectedDiagramNodes({
   draftId: string;
 }): DiagramJson {
   const sourceNodeIdSet = new Set(sourceNodeIds);
-  const publicNodeById = createUniqueNodeMap(
-    publicResult.reverseEngineeringDraft.architectureJson
-  );
+  const publicNodeById = createUniqueNodeMap(publicResult.reverseEngineeringDraft.architectureJson);
 
   return {
     ...diagramJson,
@@ -637,16 +628,10 @@ function stampSelectedDiagramNodes({
       }
 
       const publicNode = publicNodeById.get(node.id)!;
-      const terraformResourceType = readNonEmptyString(
-        publicNode.config["terraformResourceType"]
-      );
-      const terraformResourceName = readNonEmptyString(
-        publicNode.config["terraformResourceName"]
-      );
+      const terraformResourceType = readNonEmptyString(publicNode.config["terraformResourceType"]);
+      const terraformResourceName = readNonEmptyString(publicNode.config["terraformResourceName"]);
       const terraformFileName = readNonEmptyString(publicNode.config["terraformFileName"]);
-      const terraformBlockType = readTerraformBlockType(
-        publicNode.config["terraformBlockType"]
-      );
+      const terraformBlockType = readTerraformBlockType(publicNode.config["terraformBlockType"]);
       const { terraformBlockType: _browserBlockType, ...browserParameters } = node.parameters;
 
       return {

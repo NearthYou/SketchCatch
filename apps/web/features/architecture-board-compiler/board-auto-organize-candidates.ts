@@ -1,7 +1,7 @@
 import {
+  createBoardAutoOrganizeSourceFingerprint,
   hasSameBoardAutoOrganizeSemantics,
   isBoardAutoPresentationFrameNode,
-  serializeBoardAutoOrganizeSource,
   type ArchitectureJson,
   type BoardAutoOrganizeCandidate,
   type BoardAutoOrganizeCandidateSet,
@@ -43,8 +43,7 @@ export function createBoardAutoOrganizeCandidates(
   architectureOverride?: ArchitectureJson
 ): BoardAutoOrganizeCandidateSet {
   const sourceDiagram = structuredClone(diagram);
-  const serializedSource = serializeBoardAutoOrganizeSource(sourceDiagram);
-  const sourceFingerprint = createFingerprint(serializedSource);
+  const sourceFingerprint = createBoardAutoOrganizeSourceFingerprint(sourceDiagram);
   const proposals = compileArchitectureBoardCandidates({
     architecture: architectureOverride
       ? structuredClone(architectureOverride)
@@ -56,10 +55,7 @@ export function createBoardAutoOrganizeCandidates(
 
   for (const proposal of proposals) {
     const constrained = constrainBoardAutoOrganizeProposal(sourceDiagram, proposal);
-    const visualDiff = createBoardAutoOrganizeVisualDiff(
-      sourceDiagram,
-      constrained.diagram
-    );
+    const visualDiff = createBoardAutoOrganizeVisualDiff(sourceDiagram, constrained.diagram);
 
     if (
       !hasVisualChanges(visualDiff) ||
@@ -102,10 +98,12 @@ export function createBoardAutoOrganizeCandidates(
   const candidates = [...candidatesByFingerprint.values()]
     .sort(compareRankedCandidates)
     .slice(0, MAX_CANDIDATES)
-    .map(({ candidate }, index): BoardAutoOrganizeCandidate => ({
-      id: `arrangement-${index + 1}`,
-      ...candidate
-    }));
+    .map(
+      ({ candidate }, index): BoardAutoOrganizeCandidate => ({
+        id: `arrangement-${index + 1}`,
+        ...candidate
+      })
+    );
 
   return {
     sessionId: `board-auto-session:${sourceFingerprint}`,
@@ -149,9 +147,7 @@ export function createBoardAutoOrganizeVisualDiff(
       .filter((edge) => !sameValue(edge.route, candidateEdgeById.get(edge.id)?.route))
       .map((edge) => edge.id)
       .sort(),
-    addedFrameIds: [...candidateFrameById.keys()]
-      .filter((id) => !sourceFrameById.has(id))
-      .sort(),
+    addedFrameIds: [...candidateFrameById.keys()].filter((id) => !sourceFrameById.has(id)).sort(),
     changedFrameIds: [...sourceFrameById.keys()]
       .filter(
         (id) =>
@@ -159,9 +155,7 @@ export function createBoardAutoOrganizeVisualDiff(
           !sameValue(sourceFrameById.get(id), candidateFrameById.get(id))
       )
       .sort(),
-    removedFrameIds: [...sourceFrameById.keys()]
-      .filter((id) => !candidateFrameById.has(id))
-      .sort()
+    removedFrameIds: [...sourceFrameById.keys()].filter((id) => !candidateFrameById.has(id)).sort()
   };
 }
 
@@ -184,15 +178,11 @@ function isSafeVisualCandidate(
   const changedEdgeIds = new Set(visualDiff.reroutedEdgeIds);
 
   return (
-    candidate.nodes
-      .filter((node) => changedNodeIds.has(node.id))
-      .every(hasValidNodeGeometry) &&
+    candidate.nodes.filter((node) => changedNodeIds.has(node.id)).every(hasValidNodeGeometry) &&
     candidate.edges
       .filter((edge) => changedEdgeIds.has(edge.id))
       .every(
-        (edge) =>
-          edge.route === undefined ||
-          hasValidBoardAutoOrganizeRouteGeometry(edge.route)
+        (edge) => edge.route === undefined || hasValidBoardAutoOrganizeRouteGeometry(edge.route)
       )
   );
 }
@@ -214,9 +204,7 @@ function hasValidNodeGeometry(node: DiagramNode): boolean {
 }
 
 /** route 문자열, angle과 모든 control point가 유한한 geometry인지 확인합니다. */
-export function hasValidBoardAutoOrganizeRouteGeometry(
-  route: DiagramEdgeRoute
-): boolean {
+export function hasValidBoardAutoOrganizeRouteGeometry(route: DiagramEdgeRoute): boolean {
   return (
     typeof route.svgPath === "string" &&
     !NON_FINITE_SVG_PATH_PATTERN.test(route.svgPath) &&

@@ -26,6 +26,8 @@ import {
   CloudWatchClient,
   DescribeAlarmsCommand,
   type DescribeAlarmsCommandOutput,
+  ListTagsForResourceCommand as ListCloudWatchTagsForResourceCommand,
+  type ListTagsForResourceCommandOutput as ListCloudWatchTagsForResourceCommandOutput,
   type MetricAlarm
 } from "@aws-sdk/client-cloudwatch";
 import {
@@ -108,6 +110,8 @@ import {
   CloudWatchLogsClient,
   DescribeLogGroupsCommand,
   type DescribeLogGroupsCommandOutput,
+  ListTagsForResourceCommand as ListLogGroupTagsForResourceCommand,
+  type ListTagsForResourceCommandOutput as ListLogGroupTagsForResourceCommandOutput,
   type LogGroup
 } from "@aws-sdk/client-cloudwatch-logs";
 import {
@@ -221,9 +225,10 @@ export async function collectAwsPages<T>(
     try {
       const page = await readPage(nextToken);
       items.push(...page.items);
-      const candidateToken = typeof page.nextToken === "string" && page.nextToken.length > 0
-        ? page.nextToken
-        : undefined;
+      const candidateToken =
+        typeof page.nextToken === "string" && page.nextToken.length > 0
+          ? page.nextToken
+          : undefined;
       if (candidateToken && seenTokens.has(candidateToken)) {
         return { items, failure: { outcome: "transient" } };
       }
@@ -242,9 +247,10 @@ export async function collectAwsPages<T>(
 
 /** gg: provider 원문은 버리고 기존 scan reason만 page-level 안전 분류로 좁힙니다. */
 function classifyAwsPageFailureOutcome(error: unknown): AwsPageFailure["outcome"] {
-  const details = error && typeof error === "object"
-    ? error as { name?: unknown; code?: unknown; Code?: unknown; message?: unknown }
-    : {};
+  const details =
+    error && typeof error === "object"
+      ? (error as { name?: unknown; code?: unknown; Code?: unknown; message?: unknown })
+      : {};
   const classifierText = [details.name, details.code, details.Code, details.message]
     .filter((value): value is string => typeof value === "string")
     .join(" ");
@@ -418,12 +424,7 @@ export function createAwsReverseEngineeringGateway(
         ...(readerPlan.cloudFrontDistributions
           ? [
               readResourceGroup(input, "CLOUDFRONT", (reportPageFailure) =>
-                listCloudFrontDistributions(
-                  input.region,
-                  credentials,
-                  undefined,
-                  reportPageFailure
-                )
+                listCloudFrontDistributions(input.region, credentials, undefined, reportPageFailure)
               )
             ]
           : []),
@@ -473,9 +474,9 @@ async function readResourceGroup(
     const records = await read((failure) => pageFailures.push(failure));
     return {
       records,
-      scanErrors: pageFailures.slice(0, 1).map((failure) =>
-        toScanErrorFromPageFailure(resourceType, failure)
-      )
+      scanErrors: pageFailures
+        .slice(0, 1)
+        .map((failure) => toScanErrorFromPageFailure(resourceType, failure))
     };
   } catch (error) {
     return {
@@ -555,19 +556,23 @@ async function readAwsQueryResourcePages(
   reportPageFailure: (failure: AwsPageFailure) => void
 ): Promise<AwsDiscoveredResourceRecord[]> {
   const result = await collectAwsPages(async (nextToken) => {
-    const parameters = nextToken === undefined
-      ? undefined
-      : input.requestToken === "NextToken"
-        ? { NextToken: nextToken }
-        : { Marker: nextToken };
-    const xml = await sendAwsQuery({
-      service: input.service,
-      region,
-      action: input.action,
-      version: input.version,
-      credentials,
-      ...(parameters ? { parameters } : {})
-    }, fetchXml);
+    const parameters =
+      nextToken === undefined
+        ? undefined
+        : input.requestToken === "NextToken"
+          ? { NextToken: nextToken }
+          : { Marker: nextToken };
+    const xml = await sendAwsQuery(
+      {
+        service: input.service,
+        region,
+        action: input.action,
+        version: input.version,
+        credentials,
+        ...(parameters ? { parameters } : {})
+      },
+      fetchXml
+    );
     return {
       items: input.parse(xml, region),
       nextToken: parseAwsQueryPaginationToken(xml, input.responseToken)
@@ -584,14 +589,20 @@ export async function describeVpcs(
   fetchXml: typeof fetch,
   reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  return readAwsQueryResourcePages({
-    service: "ec2",
-    action: "DescribeVpcs",
-    version: "2016-11-15",
-    requestToken: "NextToken",
-    responseToken: "nextToken",
-    parse: parseVpcsFromXml
-  }, region, credentials, fetchXml, reportPageFailure);
+  return readAwsQueryResourcePages(
+    {
+      service: "ec2",
+      action: "DescribeVpcs",
+      version: "2016-11-15",
+      requestToken: "NextToken",
+      responseToken: "nextToken",
+      parse: parseVpcsFromXml
+    },
+    region,
+    credentials,
+    fetchXml,
+    reportPageFailure
+  );
 }
 
 /** gg: Subnet Query pagination도 첫 page records를 later failure와 분리합니다. */
@@ -601,14 +612,20 @@ export async function describeSubnets(
   fetchXml: typeof fetch,
   reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  return readAwsQueryResourcePages({
-    service: "ec2",
-    action: "DescribeSubnets",
-    version: "2016-11-15",
-    requestToken: "NextToken",
-    responseToken: "nextToken",
-    parse: parseSubnetsFromXml
-  }, region, credentials, fetchXml, reportPageFailure);
+  return readAwsQueryResourcePages(
+    {
+      service: "ec2",
+      action: "DescribeSubnets",
+      version: "2016-11-15",
+      requestToken: "NextToken",
+      responseToken: "nextToken",
+      parse: parseSubnetsFromXml
+    },
+    region,
+    credentials,
+    fetchXml,
+    reportPageFailure
+  );
 }
 
 /** gg: EIP Query pagination도 page-one allocation을 later failure와 분리합니다. */
@@ -618,14 +635,20 @@ export async function describeAddresses(
   fetchXml: typeof fetch,
   reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  return readAwsQueryResourcePages({
-    service: "ec2",
-    action: "DescribeAddresses",
-    version: "2016-11-15",
-    requestToken: "NextToken",
-    responseToken: "nextToken",
-    parse: parseAddressesFromXml
-  }, region, credentials, fetchXml, reportPageFailure);
+  return readAwsQueryResourcePages(
+    {
+      service: "ec2",
+      action: "DescribeAddresses",
+      version: "2016-11-15",
+      requestToken: "NextToken",
+      responseToken: "nextToken",
+      parse: parseAddressesFromXml
+    },
+    region,
+    credentials,
+    fetchXml,
+    reportPageFailure
+  );
 }
 
 /** gg: NAT Gateway Query pagination은 subnet/EIP 참조를 page별 bounded record로 줄입니다. */
@@ -635,14 +658,20 @@ export async function describeNatGateways(
   fetchXml: typeof fetch,
   reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  return readAwsQueryResourcePages({
-    service: "ec2",
-    action: "DescribeNatGateways",
-    version: "2016-11-15",
-    requestToken: "NextToken",
-    responseToken: "nextToken",
-    parse: parseNatGatewaysFromXml
-  }, region, credentials, fetchXml, reportPageFailure);
+  return readAwsQueryResourcePages(
+    {
+      service: "ec2",
+      action: "DescribeNatGateways",
+      version: "2016-11-15",
+      requestToken: "NextToken",
+      responseToken: "nextToken",
+      parse: parseNatGatewaysFromXml
+    },
+    region,
+    credentials,
+    fetchXml,
+    reportPageFailure
+  );
 }
 
 /** gg: Security Group Query pagination도 동일한 bounded token 계약을 사용합니다. */
@@ -652,14 +681,20 @@ export async function describeSecurityGroups(
   fetchXml: typeof fetch,
   reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  return readAwsQueryResourcePages({
-    service: "ec2",
-    action: "DescribeSecurityGroups",
-    version: "2016-11-15",
-    requestToken: "NextToken",
-    responseToken: "nextToken",
-    parse: parseSecurityGroupsFromXml
-  }, region, credentials, fetchXml, reportPageFailure);
+  return readAwsQueryResourcePages(
+    {
+      service: "ec2",
+      action: "DescribeSecurityGroups",
+      version: "2016-11-15",
+      requestToken: "NextToken",
+      responseToken: "nextToken",
+      parse: parseSecurityGroupsFromXml
+    },
+    region,
+    credentials,
+    fetchXml,
+    reportPageFailure
+  );
 }
 
 /** gg: Instance Query pagination은 누적 instance records를 later failure에도 유지합니다. */
@@ -669,14 +704,20 @@ export async function describeInstances(
   fetchXml: typeof fetch,
   reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  return readAwsQueryResourcePages({
-    service: "ec2",
-    action: "DescribeInstances",
-    version: "2016-11-15",
-    requestToken: "NextToken",
-    responseToken: "nextToken",
-    parse: parseInstancesFromXml
-  }, region, credentials, fetchXml, reportPageFailure);
+  return readAwsQueryResourcePages(
+    {
+      service: "ec2",
+      action: "DescribeInstances",
+      version: "2016-11-15",
+      requestToken: "NextToken",
+      responseToken: "nextToken",
+      parse: parseInstancesFromXml
+    },
+    region,
+    credentials,
+    fetchXml,
+    reportPageFailure
+  );
 }
 
 /** gg: Internet Gateway Query pagination도 EC2 nextToken만 allowlist로 서명합니다. */
@@ -686,14 +727,20 @@ export async function describeInternetGateways(
   fetchXml: typeof fetch,
   reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  return readAwsQueryResourcePages({
-    service: "ec2",
-    action: "DescribeInternetGateways",
-    version: "2016-11-15",
-    requestToken: "NextToken",
-    responseToken: "nextToken",
-    parse: parseInternetGatewaysFromXml
-  }, region, credentials, fetchXml, reportPageFailure);
+  return readAwsQueryResourcePages(
+    {
+      service: "ec2",
+      action: "DescribeInternetGateways",
+      version: "2016-11-15",
+      requestToken: "NextToken",
+      responseToken: "nextToken",
+      parse: parseInternetGatewaysFromXml
+    },
+    region,
+    credentials,
+    fetchXml,
+    reportPageFailure
+  );
 }
 
 /** gg: Route Table Query pagination도 page별 XML을 즉시 records로 축소합니다. */
@@ -703,14 +750,20 @@ export async function describeRouteTables(
   fetchXml: typeof fetch,
   reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  return readAwsQueryResourcePages({
-    service: "ec2",
-    action: "DescribeRouteTables",
-    version: "2016-11-15",
-    requestToken: "NextToken",
-    responseToken: "nextToken",
-    parse: parseRouteTablesFromXml
-  }, region, credentials, fetchXml, reportPageFailure);
+  return readAwsQueryResourcePages(
+    {
+      service: "ec2",
+      action: "DescribeRouteTables",
+      version: "2016-11-15",
+      requestToken: "NextToken",
+      responseToken: "nextToken",
+      parse: parseRouteTablesFromXml
+    },
+    region,
+    credentials,
+    fetchXml,
+    reportPageFailure
+  );
 }
 
 /** gg: RDS Query pagination은 대소문자가 다른 Marker 계약을 명시적으로 유지합니다. */
@@ -720,14 +773,20 @@ export async function describeRdsInstances(
   fetchXml: typeof fetch,
   reportPageFailure: (failure: AwsPageFailure) => void = () => undefined
 ): Promise<AwsDiscoveredResourceRecord[]> {
-  return readAwsQueryResourcePages({
-    service: "rds",
-    action: "DescribeDBInstances",
-    version: "2014-10-31",
-    requestToken: "Marker",
-    responseToken: "Marker",
-    parse: parseRdsInstancesFromXml
-  }, region, credentials, fetchXml, reportPageFailure);
+  return readAwsQueryResourcePages(
+    {
+      service: "rds",
+      action: "DescribeDBInstances",
+      version: "2014-10-31",
+      requestToken: "Marker",
+      responseToken: "Marker",
+      parse: parseRdsInstancesFromXml
+    },
+    region,
+    credentials,
+    fetchXml,
+    reportPageFailure
+  );
 }
 
 /** gg: S3 bucket page마다 read-only 세부 정보를 축소하고 later failure에는 앞 page를 보존합니다. */
@@ -792,36 +851,50 @@ async function createS3BucketRecord(
     websiteRead,
     taggingRead,
     policyStatusRead
-  ] =
-    await Promise.all([
-      readS3BucketDetail(() =>
-        sendS3Command<GetBucketLocationCommandOutput>(client, new GetBucketLocationCommand({ Bucket: bucketName }))
-      ),
-      readS3BucketDetail(() =>
-        sendS3Command<GetBucketVersioningCommandOutput>(client, new GetBucketVersioningCommand({ Bucket: bucketName }))
-      ),
-      readS3BucketDetail(() =>
-        sendS3Command<GetPublicAccessBlockCommandOutput>(
-          client,
-          new GetPublicAccessBlockCommand({ Bucket: bucketName })
-        )
-      ),
-      readS3BucketDetail(() =>
-        sendS3Command<GetBucketEncryptionCommandOutput>(client, new GetBucketEncryptionCommand({ Bucket: bucketName }))
-      ),
-      readS3BucketDetail(() =>
-        sendS3Command<GetBucketWebsiteCommandOutput>(client, new GetBucketWebsiteCommand({ Bucket: bucketName }))
-      ),
-      readS3BucketDetail(() =>
-        sendS3Command<GetBucketTaggingCommandOutput>(client, new GetBucketTaggingCommand({ Bucket: bucketName }))
-      ),
-      readS3BucketDetail(() =>
-        sendS3Command<GetBucketPolicyStatusCommandOutput>(
-          client,
-          new GetBucketPolicyStatusCommand({ Bucket: bucketName })
-        )
+  ] = await Promise.all([
+    readS3BucketDetail(() =>
+      sendS3Command<GetBucketLocationCommandOutput>(
+        client,
+        new GetBucketLocationCommand({ Bucket: bucketName })
       )
-    ]);
+    ),
+    readS3BucketDetail(() =>
+      sendS3Command<GetBucketVersioningCommandOutput>(
+        client,
+        new GetBucketVersioningCommand({ Bucket: bucketName })
+      )
+    ),
+    readS3BucketDetail(() =>
+      sendS3Command<GetPublicAccessBlockCommandOutput>(
+        client,
+        new GetPublicAccessBlockCommand({ Bucket: bucketName })
+      )
+    ),
+    readS3BucketDetail(() =>
+      sendS3Command<GetBucketEncryptionCommandOutput>(
+        client,
+        new GetBucketEncryptionCommand({ Bucket: bucketName })
+      )
+    ),
+    readS3BucketDetail(() =>
+      sendS3Command<GetBucketWebsiteCommandOutput>(
+        client,
+        new GetBucketWebsiteCommand({ Bucket: bucketName })
+      )
+    ),
+    readS3BucketDetail(() =>
+      sendS3Command<GetBucketTaggingCommandOutput>(
+        client,
+        new GetBucketTaggingCommand({ Bucket: bucketName })
+      )
+    ),
+    readS3BucketDetail(() =>
+      sendS3Command<GetBucketPolicyStatusCommandOutput>(
+        client,
+        new GetBucketPolicyStatusCommand({ Bucket: bucketName })
+      )
+    )
+  ]);
   const location = locationRead.value;
   const versioning = versioningRead.value;
   const publicAccessBlock = publicAccessBlockRead.value;
@@ -919,7 +992,9 @@ async function sendS3Command<TOutput>(client: AwsS3ReadClient, command: object):
   return (await client.send(command)) as TOutput;
 }
 
-async function readOptionalS3Detail<TOutput>(read: () => Promise<TOutput>): Promise<TOutput | null> {
+async function readOptionalS3Detail<TOutput>(
+  read: () => Promise<TOutput>
+): Promise<TOutput | null> {
   try {
     return await read();
   } catch {
@@ -997,9 +1072,7 @@ export async function readEventBridgeResourcesWithDiagnostics(
           new ListTagsForResourceCommand({ ResourceARN: ruleArn })
         );
         tags = (tagResponse.Tags ?? []).flatMap((tag) =>
-          typeof tag.Key === "string" &&
-          tag.Key.length > 0 &&
-          typeof tag.Value === "string"
+          typeof tag.Key === "string" && tag.Key.length > 0 && typeof tag.Value === "string"
             ? [{ key: tag.Key, value: tag.Value }]
             : []
         );
@@ -1009,15 +1082,8 @@ export async function readEventBridgeResourcesWithDiagnostics(
       }
     }
 
-    const eventBusName =
-      getNonEmptyStringValue(rule.EventBusName) ?? scannedEventBusName;
-    const ruleRecord = toEventBridgeRuleRecord(
-      rule,
-      region,
-      eventBusName,
-      tags,
-      tagsReadComplete
-    );
+    const eventBusName = getNonEmptyStringValue(rule.EventBusName) ?? scannedEventBusName;
+    const ruleRecord = toEventBridgeRuleRecord(rule, region, eventBusName, tags, tagsReadComplete);
     if (!ruleRecord) {
       continue;
     }
@@ -1040,11 +1106,7 @@ export async function readEventBridgeResourcesWithDiagnostics(
     });
     if (targetPages.failure) {
       scanErrors.push(
-        toScanErrorFromPageFailure(
-          "EVENTBRIDGE_TARGET",
-          targetPages.failure,
-          "eventbridge"
-        )
+        toScanErrorFromPageFailure("EVENTBRIDGE_TARGET", targetPages.failure, "eventbridge")
       );
     }
     records.push(
@@ -1081,8 +1143,8 @@ function toEventBridgeRuleRecord(
   tagsReadComplete = false
 ): AwsDiscoveredResourceRecord | null {
   const name = getNonEmptyStringValue(rule.Name);
-  const providerResourceId = getNonEmptyStringValue(rule.Arn) ??
-    (name ? `eventbridge-rule:${eventBusName}/${name}` : null);
+  const providerResourceId =
+    getNonEmptyStringValue(rule.Arn) ?? (name ? `eventbridge-rule:${eventBusName}/${name}` : null);
   if (!providerResourceId) {
     return null;
   }
@@ -1143,9 +1205,7 @@ function toEventBridgeTargetRecord(
         hasInputTransformer: target.InputTransformer ? true : undefined,
         hasDeadLetterConfig: target.DeadLetterConfig ? true : undefined,
         hasRetryPolicy: target.RetryPolicy ? true : undefined,
-        hasAdvancedParameters: hasEventBridgeTargetAdvancedParameters(target)
-          ? true
-          : undefined
+        hasAdvancedParameters: hasEventBridgeTargetAdvancedParameters(target) ? true : undefined
       }),
       relationships: [
         { type: "depends_on", targetProviderResourceId: ruleRecord.providerResourceId },
@@ -1307,9 +1367,9 @@ async function readUnknownResourceRecords(
     const records = await read((failure) => pageFailures.push(failure));
     return {
       records,
-      scanErrors: pageFailures.slice(0, 1).map((failure) =>
-        toScanErrorFromPageFailure(resourceType, failure, serviceKey)
-      )
+      scanErrors: pageFailures
+        .slice(0, 1)
+        .map((failure) => toScanErrorFromPageFailure(resourceType, failure, serviceKey))
     };
   } catch (error) {
     return {
@@ -1339,20 +1399,10 @@ async function listUnknownResources(
         listKmsKeysAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
       readUnknownResourceRecords("UNKNOWN", "cloudwatch-logs", (reportPageFailure) =>
-        listCloudWatchLogGroupsAsUnknown(
-          input.region,
-          credentials,
-          undefined,
-          reportPageFailure
-        )
+        listCloudWatchLogGroupsAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
       readUnknownResourceRecords("UNKNOWN", "api-gateway", (reportPageFailure) =>
-        listApiGatewayRestApisAsUnknown(
-          input.region,
-          credentials,
-          undefined,
-          reportPageFailure
-        )
+        listApiGatewayRestApisAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
       readUnknownResourceRecords("UNKNOWN", "ec2", (reportPageFailure) =>
         listAmiImagesAsUnknown(input.region, credentials, undefined, reportPageFailure)
@@ -1361,20 +1411,10 @@ async function listUnknownResources(
         listIamPoliciesAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
       readUnknownResourceRecords("UNKNOWN", "iam", (reportPageFailure) =>
-        listIamInstanceProfilesAsUnknown(
-          input.region,
-          credentials,
-          undefined,
-          reportPageFailure
-        )
+        listIamInstanceProfilesAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
       readUnknownResourceRecords("UNKNOWN", "cloudwatch", (reportPageFailure) =>
-        listCloudWatchMetricAlarmsAsUnknown(
-          input.region,
-          credentials,
-          undefined,
-          reportPageFailure
-        )
+        listCloudWatchMetricAlarmsAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
       readUnknownResourceRecords("UNKNOWN", "lambda", (reportPageFailure) =>
         listLambdaPermissionsAsUnknown(input.region, credentials, undefined, reportPageFailure)
@@ -1418,12 +1458,7 @@ async function listUnknownResources(
   if (input.resourceTypes.includes("IAM_INSTANCE_PROFILE")) {
     reads.push(
       readUnknownResourceRecords("IAM_INSTANCE_PROFILE", "iam", (reportPageFailure) =>
-        listIamInstanceProfilesAsUnknown(
-          input.region,
-          credentials,
-          undefined,
-          reportPageFailure
-        )
+        listIamInstanceProfilesAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
@@ -1438,45 +1473,24 @@ async function listUnknownResources(
 
   if (input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP")) {
     reads.push(
-      readUnknownResourceRecords(
-        "CLOUDWATCH_LOG_GROUP",
-        "cloudwatch-logs",
-        (reportPageFailure) => listCloudWatchLogGroupsAsUnknown(
-          input.region,
-          credentials,
-          undefined,
-          reportPageFailure
-        )
+      readUnknownResourceRecords("CLOUDWATCH_LOG_GROUP", "cloudwatch-logs", (reportPageFailure) =>
+        listCloudWatchLogGroupsAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
 
   if (input.resourceTypes.includes("CLOUDWATCH_METRIC_ALARM")) {
     reads.push(
-      readUnknownResourceRecords(
-        "CLOUDWATCH_METRIC_ALARM",
-        "cloudwatch",
-        (reportPageFailure) => listCloudWatchMetricAlarmsAsUnknown(
-          input.region,
-          credentials,
-          undefined,
-          reportPageFailure
-        )
+      readUnknownResourceRecords("CLOUDWATCH_METRIC_ALARM", "cloudwatch", (reportPageFailure) =>
+        listCloudWatchMetricAlarmsAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
 
   if (input.resourceTypes.includes("API_GATEWAY_REST_API")) {
     reads.push(
-      readUnknownResourceRecords(
-        "API_GATEWAY_REST_API",
-        "api-gateway",
-        (reportPageFailure) => listApiGatewayRestApisAsUnknown(
-          input.region,
-          credentials,
-          undefined,
-          reportPageFailure
-        )
+      readUnknownResourceRecords("API_GATEWAY_REST_API", "api-gateway", (reportPageFailure) =>
+        listApiGatewayRestApisAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
@@ -1569,12 +1583,7 @@ export async function readEcsResourcesWithDiagnostics(
     if (servicePages.failure) {
       scanErrors.push(toScanErrorFromPageFailure("ECS_SERVICE", servicePages.failure));
     }
-    const services = await describeEcsServices(
-      client,
-      cluster,
-      servicePages.items,
-      scanErrors
-    );
+    const services = await describeEcsServices(client, cluster, servicePages.items, scanErrors);
 
     for (const service of services) {
       const record = toEcsServiceRecord(service, cluster, region);
@@ -1866,6 +1875,7 @@ function normalizeEcsLoadBalancers(service: Service): Record<string, unknown>[] 
   return loadBalancers.length > 0 ? loadBalancers : undefined;
 }
 
+/** Task Definition을 재현 가능한 후보로 만들되 환경값과 Secret은 자동 적용하지 않는다. */
 function toEcsTaskDefinitionRecord(
   taskDefinition: TaskDefinition,
   fallbackRegion: string
@@ -1885,7 +1895,7 @@ function toEcsTaskDefinitionRecord(
     displayName:
       taskDefinition.family && taskDefinition.revision !== undefined
         ? `${taskDefinition.family}:${taskDefinition.revision}`
-        : taskDefinition.family ?? arn,
+        : (taskDefinition.family ?? arn),
     region: parseAwsArn(arn).region || fallbackRegion,
     config: compactRecord({
       arn,
@@ -1998,9 +2008,7 @@ export async function readElasticLoadBalancingResourcesWithDiagnostics(
   const scanErrors: ReverseEngineeringScanError[] = [];
   const loadBalancerPages = await listApplicationLoadBalancerPages(client);
   if (loadBalancerPages.failure) {
-    scanErrors.push(
-      toScanErrorFromPageFailure("LOAD_BALANCER", loadBalancerPages.failure)
-    );
+    scanErrors.push(toScanErrorFromPageFailure("LOAD_BALANCER", loadBalancerPages.failure));
   }
   const loadBalancers = loadBalancerPages.items.filter(
     (loadBalancer) => loadBalancer.Type === "application" && Boolean(loadBalancer.LoadBalancerArn)
@@ -2013,10 +2021,7 @@ export async function readElasticLoadBalancingResourcesWithDiagnostics(
     const targetGroupPages = await listTargetGroupPages(client);
     if (targetGroupPages.failure) {
       scanErrors.push(
-        toScanErrorFromPageFailure(
-          "LOAD_BALANCER_TARGET_GROUP",
-          targetGroupPages.failure
-        )
+        toScanErrorFromPageFailure("LOAD_BALANCER_TARGET_GROUP", targetGroupPages.failure)
       );
     }
     records.push(
@@ -2037,9 +2042,7 @@ export async function readElasticLoadBalancingResourcesWithDiagnostics(
         );
       }
       records.push(
-        ...listenerPages.items.flatMap((listener) =>
-          toLoadBalancerListenerRecord(listener, region)
-        )
+        ...listenerPages.items.flatMap((listener) => toLoadBalancerListenerRecord(listener, region))
       );
     }
   }
@@ -2062,8 +2065,7 @@ function shouldReadElasticLoadBalancingTargetGroups(input: AwsProviderScanInput)
 /** gg: Listener는 직접 또는 전체 선택에서만 읽고 그 의존 ALB/TG는 같은 scan에 유지합니다. */
 function shouldReadElasticLoadBalancingListeners(input: AwsProviderScanInput): boolean {
   return (
-    input.resourceTypes.includes("ALL") ||
-    input.resourceTypes.includes("LOAD_BALANCER_LISTENER")
+    input.resourceTypes.includes("ALL") || input.resourceTypes.includes("LOAD_BALANCER_LISTENER")
   );
 }
 
@@ -2084,9 +2086,7 @@ async function listApplicationLoadBalancerPages(
 }
 
 /** gg: Target Group page token을 원문 없이 동일한 page collector로 처리합니다. */
-async function listTargetGroupPages(
-  client: AwsElbReadClient
-): Promise<AwsPageResult<TargetGroup>> {
+async function listTargetGroupPages(client: AwsElbReadClient): Promise<AwsPageResult<TargetGroup>> {
   return collectAwsPages(async (marker) => {
     const response = await sendElbCommand<DescribeTargetGroupsCommandOutput>(
       client,
@@ -2170,22 +2170,119 @@ async function readElasticLoadBalancingResourceAttributes(
   return response.Attributes ?? [];
 }
 
-/** gg: 현재 Terraform projection이 쓰는 숫자 attribute만 정확히 변환합니다. */
+/** gg: Resource별 기본 attribute 근거를 확인한 뒤 현재 Terraform projection 값만 변환합니다. */
 function createElasticLoadBalancingTerraformAttributeConfig(
   record: AwsDiscoveredResourceRecord,
   attributes: readonly ElasticLoadBalancingAttribute[]
 ): Record<string, unknown> {
+  const attributesProjectionComplete =
+    hasRequiredElasticLoadBalancingAttributeEvidence(record, attributes) &&
+    attributes.every((attribute) =>
+      isSafelyProjectedElasticLoadBalancingAttribute(record, attribute)
+    );
   if (record.providerResourceType !== "AWS::ElasticLoadBalancingV2::TargetGroup") {
-    return {};
+    return { attributesProjectionComplete };
   }
 
   const deregistrationDelay = Number(
-    attributes.find((attribute) => attribute.Key === "deregistration_delay.timeout_seconds")
-      ?.Value
+    attributes.find((attribute) => attribute.Key === "deregistration_delay.timeout_seconds")?.Value
   );
-  return Number.isFinite(deregistrationDelay) && deregistrationDelay >= 0
-    ? { deregistrationDelay }
-    : {};
+  return {
+    attributesProjectionComplete,
+    ...(Number.isInteger(deregistrationDelay) &&
+    deregistrationDelay >= 0 &&
+    deregistrationDelay <= 3_600
+      ? { deregistrationDelay }
+      : {})
+  };
+}
+
+/** gg: 빈 성공 응답을 완전한 projection으로 오인하지 않도록 Resource별 기준 key를 요구합니다. */
+function hasRequiredElasticLoadBalancingAttributeEvidence(
+  record: AwsDiscoveredResourceRecord,
+  attributes: readonly ElasticLoadBalancingAttribute[]
+): boolean {
+  const requiredKey =
+    record.providerResourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer"
+      ? "deletion_protection.enabled"
+      : record.providerResourceType === "AWS::ElasticLoadBalancingV2::TargetGroup"
+        ? "deregistration_delay.timeout_seconds"
+        : "routing.http.response.server.enabled";
+
+  return attributes.some((attribute) => attribute.Key === requiredKey);
+}
+
+const SAFE_ALB_OMITTED_ATTRIBUTE_DEFAULTS = new Map<string, string>([
+  ["access_logs.s3.bucket", ""],
+  ["access_logs.s3.enabled", "false"],
+  ["access_logs.s3.prefix", ""],
+  ["client_keep_alive.seconds", "3600"],
+  ["connection_logs.s3.bucket", ""],
+  ["connection_logs.s3.enabled", "false"],
+  ["connection_logs.s3.prefix", ""],
+  ["deletion_protection.enabled", "false"],
+  ["idle_timeout.timeout_seconds", "60"],
+  ["load_balancing.cross_zone.enabled", "true"],
+  ["routing.http.desync_mitigation_mode", "defensive"],
+  ["routing.http.drop_invalid_header_fields.enabled", "false"],
+  ["routing.http.preserve_host_header.enabled", "false"],
+  ["routing.http.x_amzn_tls_version_and_cipher_suite.enabled", "false"],
+  ["routing.http.xff_client_port.enabled", "false"],
+  ["routing.http.xff_header_processing.mode", "append"],
+  ["routing.http2.enabled", "true"],
+  ["waf.fail_open.enabled", "false"],
+  ["zonal_shift.config.enabled", "false"]
+]);
+
+const SAFE_TARGET_GROUP_OMITTED_ATTRIBUTE_DEFAULTS = new Map<string, string>([
+  ["load_balancing.algorithm.anomaly_mitigation", "off"],
+  ["load_balancing.algorithm.type", "round_robin"],
+  ["load_balancing.cross_zone.enabled", "use_load_balancer_configuration"],
+  ["slow_start.duration_seconds", "0"],
+  ["stickiness.enabled", "false"],
+  ["target_group_health.dns_failover.minimum_healthy_targets.count", "1"],
+  ["target_group_health.dns_failover.minimum_healthy_targets.percentage", "off"],
+  ["target_group_health.unhealthy_state_routing.minimum_healthy_targets.count", "1"],
+  ["target_group_health.unhealthy_state_routing.minimum_healthy_targets.percentage", "off"]
+]);
+
+const SAFE_LISTENER_OMITTED_ATTRIBUTE_DEFAULTS = new Map<string, string>([
+  ["routing.http.response.server.enabled", "true"]
+]);
+
+/** projection 값 또는 생략 시 동일한 AWS 기본값만 안전한 attribute로 인정한다. */
+function isSafelyProjectedElasticLoadBalancingAttribute(
+  record: AwsDiscoveredResourceRecord,
+  attribute: ElasticLoadBalancingAttribute
+): boolean {
+  const key = getNonEmptyStringValue(attribute.Key);
+  const value = attribute.Value;
+  if (!key || typeof value !== "string") return false;
+
+  if (record.providerResourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer") {
+    return SAFE_ALB_OMITTED_ATTRIBUTE_DEFAULTS.get(key) === value;
+  }
+
+  if (record.providerResourceType === "AWS::ElasticLoadBalancingV2::TargetGroup") {
+    if (key === "deregistration_delay.timeout_seconds") {
+      const seconds = Number(value);
+      return Number.isInteger(seconds) && seconds >= 0 && seconds <= 3_600;
+    }
+
+    if (
+      (key === "stickiness.type" && value === "lb_cookie") ||
+      (key === "stickiness.lb_cookie.duration_seconds" && value === "86400")
+    ) {
+      return (
+        ["instance", "ip"].includes(String(record.config["targetType"])) &&
+        ["HTTP", "HTTPS"].includes(String(record.config["protocol"]))
+      );
+    }
+
+    return SAFE_TARGET_GROUP_OMITTED_ATTRIBUTE_DEFAULTS.get(key) === value;
+  }
+
+  return SAFE_LISTENER_OMITTED_ATTRIBUTE_DEFAULTS.get(key) === value;
 }
 
 /** gg: AWS attribute 배열은 빈 key를 버린 단순 key/value 객체로만 보존합니다. */
@@ -2195,13 +2292,12 @@ function normalizeElasticLoadBalancingAttributes(
   return Object.fromEntries(
     attributes.flatMap((attribute) => {
       const key = getNonEmptyStringValue(attribute.Key);
-      const value = getNonEmptyStringValue(attribute.Value);
-      return key && value ? [[key, value]] : [];
+      return key && typeof attribute.Value === "string" ? [[key, attribute.Value]] : [];
     })
   );
 }
 
-/** gg: ELB DescribeTags 최대 20 ARN 제한을 지키고 batch 실패 대상만 incomplete로 표시합니다. */
+/** gg: ELB DescribeTags 최대 20 ARN 제한을 지키고 ARN별 정확한 응답만 complete로 표시합니다. */
 async function readElasticLoadBalancingTags(
   records: AwsDiscoveredResourceRecord[],
   client: AwsElbReadClient,
@@ -2214,18 +2310,25 @@ async function readElasticLoadBalancingTags(
         client,
         new DescribeTagsCommand({ ResourceArns: resourceArns })
       );
-      const tagsByArn = new Map(
-        (response.TagDescriptions ?? []).flatMap((description) => {
-          const arn = getNonEmptyStringValue(description.ResourceArn);
-          return arn ? [[arn, normalizeElasticLoadBalancingTags(description)]] : [];
-        })
-      );
+      const tagsByArn = new Map<string, Array<{ key: string; value: string }> | null>();
+      for (const description of response.TagDescriptions ?? []) {
+        const arn = getNonEmptyStringValue(description.ResourceArn);
+        if (!arn) continue;
+
+        const tags = normalizeElasticLoadBalancingTags(description);
+        tagsByArn.set(arn, tagsByArn.has(arn) ? null : tags);
+      }
       for (const record of recordBatch) {
+        const tags = tagsByArn.get(record.providerResourceId);
+        if (!tags) {
+          record.config = markElasticLoadBalancingIncomplete(record.config, "tags");
+          continue;
+        }
         record.config = {
           ...record.config,
           reverseEngineeringDetailsVersion: 1,
           tagsReadComplete: true,
-          tags: tagsByArn.get(record.providerResourceId) ?? []
+          tags
         };
       }
     } catch (error) {
@@ -2241,15 +2344,19 @@ async function readElasticLoadBalancingTags(
   }
 }
 
-/** gg: ELB tag의 빈 key/value를 제외하고 공개 가능한 문자열만 남깁니다. */
+/** gg: ELB tag 응답 전체가 유효할 때만 AWS가 허용하는 빈 value까지 그대로 보존합니다. */
 function normalizeElasticLoadBalancingTags(
   description: TagDescription
-): Array<{ key: string; value: string }> {
-  return (description.Tags ?? []).flatMap((tag) => {
+): Array<{ key: string; value: string }> | null {
+  if (!Array.isArray(description.Tags)) return null;
+
+  const tags: Array<{ key: string; value: string }> = [];
+  for (const tag of description.Tags) {
     const key = getNonEmptyStringValue(tag.Key);
-    const value = getNonEmptyStringValue(tag.Value);
-    return key && value ? [{ key, value }] : [];
-  });
+    if (!key || typeof tag.Value !== "string") return null;
+    tags.push({ key, value: tag.Value });
+  }
+  return tags;
 }
 
 /** gg: 상세 조회 실패 종류를 중복 없이 누적해 관리 판정을 fail-close합니다. */
@@ -2386,9 +2493,7 @@ export async function listAmiImagesAsUnknown(
       new DescribeImagesCommand({ Owners: ["self"], MaxResults: 1_000, NextToken: nextToken })
     );
     return {
-      items: (response.Images ?? []).flatMap((image) =>
-        toUnknownAmiImageRecord(image, region)
-      ),
+      items: (response.Images ?? []).flatMap((image) => toUnknownAmiImageRecord(image, region)),
       nextToken: response.NextToken
     };
   });
@@ -2483,9 +2588,7 @@ export async function listKmsKeysAsUnknown(
       (response.Keys ?? []).map((key) => createKmsKeyRecord(key.KeyId, key.KeyArn, region, client))
     );
     return {
-      items: keyRecords.filter(
-        (record): record is AwsDiscoveredResourceRecord => record !== null
-      ),
+      items: keyRecords.filter((record): record is AwsDiscoveredResourceRecord => record !== null),
       nextToken: response.NextMarker
     };
   });
@@ -2494,6 +2597,7 @@ export async function listKmsKeysAsUnknown(
   return result.items;
 }
 
+/** Log Group과 태그를 함께 읽고 태그 실패는 불완전 근거로 남겨 자동 관리를 막는다. */
 export async function listCloudWatchLogGroupsAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
@@ -2506,10 +2610,14 @@ export async function listCloudWatchLogGroupsAsUnknown(
       client,
       new DescribeLogGroupsCommand({ nextToken })
     );
+    const records = await Promise.all(
+      (response.logGroups ?? []).map(async (logGroup) => {
+        const tagEvidence = await readCloudWatchLogGroupTags(logGroup, client, reportPageFailure);
+        return toUnknownLogGroupRecord(logGroup, region, tagEvidence);
+      })
+    );
     return {
-      items: (response.logGroups ?? []).flatMap((logGroup) =>
-        toUnknownLogGroupRecord(logGroup, region)
-      ),
+      items: records.flat(),
       nextToken: response.nextToken
     };
   });
@@ -2518,6 +2626,7 @@ export async function listCloudWatchLogGroupsAsUnknown(
   return result.items;
 }
 
+/** Alarm과 태그를 함께 읽고 일부 조회 실패를 전체 성공으로 오인하지 않도록 기록한다. */
 export async function listCloudWatchMetricAlarmsAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
@@ -2530,16 +2639,91 @@ export async function listCloudWatchMetricAlarmsAsUnknown(
       client,
       new DescribeAlarmsCommand({ NextToken: nextToken })
     );
+    const records = await Promise.all(
+      (response.MetricAlarms ?? []).map(async (alarm) => {
+        const tagEvidence = await readCloudWatchMetricAlarmTags(alarm, client, reportPageFailure);
+        return toUnknownMetricAlarmRecord(alarm, region, tagEvidence);
+      })
+    );
     return {
-      items: (response.MetricAlarms ?? []).flatMap((alarm) =>
-        toUnknownMetricAlarmRecord(alarm, region)
-      ),
+      items: records.flat(),
       nextToken: response.NextToken
     };
   });
 
   if (result.failure) reportPageFailure(result.failure);
   return result.items;
+}
+
+type AwsTagReadEvidence = {
+  readonly tags?: Array<{ key: string; value: string }>;
+  readonly tagsReadComplete: boolean;
+};
+
+/** Log Group ARN과 전체 태그를 확인한 경우만 완료로 표시하고 실패하면 닫힌 상태로 반환한다. */
+async function readCloudWatchLogGroupTags(
+  logGroup: LogGroup,
+  client: AwsCloudWatchLogsReadClient,
+  reportFailure: (failure: AwsPageFailure) => void
+): Promise<AwsTagReadEvidence> {
+  const resourceArn =
+    getNonEmptyStringValue(logGroup.logGroupArn) ??
+    getNonEmptyStringValue(logGroup.arn)?.replace(/:\*$/u, "");
+  if (!resourceArn) {
+    return { tagsReadComplete: false };
+  }
+
+  try {
+    const response = await sendCloudWatchLogsCommand<ListLogGroupTagsForResourceCommandOutput>(
+      client,
+      new ListLogGroupTagsForResourceCommand({ resourceArn })
+    );
+    const tagEntries = Object.entries(response.tags ?? {});
+    if (tagEntries.some(([key, value]) => key.trim().length === 0 || typeof value !== "string")) {
+      return { tagsReadComplete: false };
+    }
+    return {
+      tags: tagEntries.map(([key, value]) => ({ key, value })),
+      tagsReadComplete: true
+    };
+  } catch (error) {
+    reportFailure({ outcome: classifyAwsPageFailureOutcome(error) });
+    return { tagsReadComplete: false };
+  }
+}
+
+/** Alarm 태그가 모두 문자열로 확인된 경우만 완료로 표시하고 실패하면 자동 관리를 막는다. */
+async function readCloudWatchMetricAlarmTags(
+  alarm: MetricAlarm,
+  client: AwsCloudWatchReadClient,
+  reportFailure: (failure: AwsPageFailure) => void
+): Promise<AwsTagReadEvidence> {
+  const resourceArn = getNonEmptyStringValue(alarm.AlarmArn);
+  if (!resourceArn) {
+    return { tagsReadComplete: false };
+  }
+
+  try {
+    const response = await sendCloudWatchCommand<ListCloudWatchTagsForResourceCommandOutput>(
+      client,
+      new ListCloudWatchTagsForResourceCommand({ ResourceARN: resourceArn })
+    );
+    const tags: Array<{ key: string; value: string }> = [];
+    for (const tag of response.Tags ?? []) {
+      const key = getNonEmptyStringValue(tag.Key);
+      if (!key || typeof tag.Value !== "string") {
+        return { tagsReadComplete: false };
+      }
+      tags.push({ key, value: tag.Value });
+    }
+    return {
+      tags,
+      tagsReadComplete: true
+    };
+  } catch (error) {
+    reportFailure({ outcome: classifyAwsPageFailureOutcome(error) });
+    return { tagsReadComplete: false };
+  }
 }
 
 export async function listApiGatewayRestApisAsUnknown(
@@ -2555,9 +2739,7 @@ export async function listApiGatewayRestApisAsUnknown(
       new GetRestApisCommand({ position })
     );
     return {
-      items: (response.items ?? []).flatMap((restApi) =>
-        toUnknownRestApiRecord(restApi, region)
-      ),
+      items: (response.items ?? []).flatMap((restApi) => toUnknownRestApiRecord(restApi, region)),
       nextToken: response.position
     };
   });
@@ -2584,7 +2766,10 @@ function createDefaultResourceExplorerReadClient(
   region: string,
   credentials: TerraformAwsCredentialEnv
 ): AwsResourceExplorerReadClient {
-  const client = new ResourceExplorer2Client({ region, credentials: toAwsSdkCredentials(credentials) });
+  const client = new ResourceExplorer2Client({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
 
   return {
     send: (command) => client.send(command as Parameters<ResourceExplorer2Client["send"]>[0])
@@ -2745,11 +2930,17 @@ async function sendResourceExplorerCommand<TOutput>(
   return (await client.send(command)) as TOutput;
 }
 
-async function sendElbCommand<TOutput>(client: AwsElbReadClient, command: object): Promise<TOutput> {
+async function sendElbCommand<TOutput>(
+  client: AwsElbReadClient,
+  command: object
+): Promise<TOutput> {
   return (await client.send(command)) as TOutput;
 }
 
-async function sendEcsCommand<TOutput>(client: AwsEcsReadClient, command: object): Promise<TOutput> {
+async function sendEcsCommand<TOutput>(
+  client: AwsEcsReadClient,
+  command: object
+): Promise<TOutput> {
   return (await client.send(command)) as TOutput;
 }
 
@@ -2767,11 +2958,17 @@ async function sendCloudFrontCommand<TOutput>(
   return (await client.send(command)) as TOutput;
 }
 
-async function sendIamCommand<TOutput>(client: AwsIamReadClient, command: object): Promise<TOutput> {
+async function sendIamCommand<TOutput>(
+  client: AwsIamReadClient,
+  command: object
+): Promise<TOutput> {
   return (await client.send(command)) as TOutput;
 }
 
-async function sendKmsCommand<TOutput>(client: AwsKmsReadClient, command: object): Promise<TOutput> {
+async function sendKmsCommand<TOutput>(
+  client: AwsKmsReadClient,
+  command: object
+): Promise<TOutput> {
   return (await client.send(command)) as TOutput;
 }
 
@@ -2789,7 +2986,10 @@ async function sendApiGatewayCommand<TOutput>(
   return (await client.send(command)) as TOutput;
 }
 
-async function sendEc2Command<TOutput>(client: AwsEc2ReadClient, command: object): Promise<TOutput> {
+async function sendEc2Command<TOutput>(
+  client: AwsEc2ReadClient,
+  command: object
+): Promise<TOutput> {
   return (await client.send(command)) as TOutput;
 }
 
@@ -2817,7 +3017,12 @@ function toApplicationLoadBalancerRecord(
     const subnetId = availabilityZone.SubnetId;
 
     return availabilityZoneName || subnetId
-      ? [{ ...(availabilityZoneName ? { availabilityZone: availabilityZoneName } : {}), ...(subnetId ? { subnetId } : {}) }]
+      ? [
+          {
+            ...(availabilityZoneName ? { availabilityZone: availabilityZoneName } : {}),
+            ...(subnetId ? { subnetId } : {})
+          }
+        ]
       : [];
   });
   const subnetIds = availabilityZones.flatMap((availabilityZone) =>
@@ -2895,9 +3100,7 @@ function toLoadBalancerTargetGroupRecord(
         protocolVersion: targetGroup.ProtocolVersion
       }),
       relationships: [
-        ...(vpcId
-          ? [{ type: "depends_on" as const, targetProviderResourceId: vpcId }]
-          : []),
+        ...(vpcId ? [{ type: "depends_on" as const, targetProviderResourceId: vpcId }] : []),
         ...loadBalancerArns.map((loadBalancerArn) => ({
           type: "attached_to" as const,
           targetProviderResourceId: loadBalancerArn
@@ -2959,12 +3162,11 @@ function getSimpleForwardTargetGroupArn(
     ...forwardTargets.map((target) => target.arn)
   ]);
   const hasWeightedOrStickyAction =
-    forwardTargets.some(
-      (target) => target.weight !== undefined && target.weight !== 1
-    ) || action.ForwardConfig?.TargetGroupStickinessConfig?.Enabled === true;
+    forwardTargets.some((target) => target.weight !== undefined && target.weight !== 1) ||
+    action.ForwardConfig?.TargetGroupStickinessConfig?.Enabled === true;
 
   return uniqueTargetArns.size === 1 && !hasWeightedOrStickyAction
-    ? [...uniqueTargetArns][0] ?? null
+    ? ([...uniqueTargetArns][0] ?? null)
     : null;
 }
 
@@ -2983,7 +3185,10 @@ function toUnknownLambdaFunctionRecord(
   const securityGroupIds = lambdaFunction.VpcConfig?.SecurityGroupIds ?? [];
   const relationships = [
     ...(vpcId ? [{ type: "depends_on" as const, targetProviderResourceId: vpcId }] : []),
-    ...subnetIds.map((subnetId) => ({ type: "attached_to" as const, targetProviderResourceId: subnetId })),
+    ...subnetIds.map((subnetId) => ({
+      type: "attached_to" as const,
+      targetProviderResourceId: subnetId
+    })),
     ...securityGroupIds.map((securityGroupId) => ({
       type: "attached_to" as const,
       targetProviderResourceId: securityGroupId
@@ -3067,7 +3272,8 @@ function toUnknownLambdaPermissionRecord(
   index: number,
   fallbackRegion: string
 ): AwsDiscoveredResourceRecord {
-  const functionArn = lambdaFunction.FunctionArn ?? lambdaFunction.FunctionName ?? "lambda-function";
+  const functionArn =
+    lambdaFunction.FunctionArn ?? lambdaFunction.FunctionName ?? "lambda-function";
   const permissionIndex = index + 1;
   const providerResourceId = `${functionArn}:permission:${permissionIndex}`;
 
@@ -3236,7 +3442,10 @@ function normalizeCloudFrontViewerCertificate(
     : undefined;
 }
 
-function toUnknownAmiImageRecord(image: Image, fallbackRegion: string): AwsDiscoveredResourceRecord[] {
+function toUnknownAmiImageRecord(
+  image: Image,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
   if (!image.ImageId) {
     return [];
   }
@@ -3336,6 +3545,7 @@ function toUnknownIamPolicyRecord(
   ];
 }
 
+/** 식별 가능한 Instance Profile만 후보로 만들고 연결된 Role 관계를 별도 근거로 보존한다. */
 function toUnknownIamInstanceProfileRecord(
   profile: InstanceProfile,
   fallbackRegion: string
@@ -3356,10 +3566,8 @@ function toUnknownIamInstanceProfileRecord(
         createdAt: profile.CreateDate?.toISOString(),
         instanceProfileName: profile.InstanceProfileName,
         path: profile.Path,
-        roleNames: (profile.Roles ?? []).flatMap((role) =>
-          role.RoleName ? [role.RoleName] : []
-        ),
-        scanRegion: fallbackRegion,
+        roleNames: (profile.Roles ?? []).flatMap((role) => (role.RoleName ? [role.RoleName] : [])),
+        scanRegion: fallbackRegion
       }),
       relationships: (profile.Roles ?? []).flatMap((role) =>
         role.Arn ? [{ type: "depends_on" as const, targetProviderResourceId: role.Arn }] : []
@@ -3379,7 +3587,10 @@ async function createKmsKeyRecord(
   }
 
   const keyMetadata = await readOptionalS3Detail(() =>
-    sendKmsCommand<DescribeKeyCommandOutput>(client, new DescribeKeyCommand({ KeyId: keyId ?? keyArn }))
+    sendKmsCommand<DescribeKeyCommandOutput>(
+      client,
+      new DescribeKeyCommand({ KeyId: keyId ?? keyArn })
+    )
   );
 
   return toUnknownKmsKeyRecord(keyMetadata?.KeyMetadata, keyId, keyArn, fallbackRegion);
@@ -3400,7 +3611,8 @@ function toUnknownKmsKeyRecord(
   return {
     providerResourceType: "AWS::KMS::Key",
     providerResourceId,
-    displayName: keyMetadata?.Description ?? keyMetadata?.KeyId ?? fallbackKeyId ?? providerResourceId,
+    displayName:
+      keyMetadata?.Description ?? keyMetadata?.KeyId ?? fallbackKeyId ?? providerResourceId,
     region: fallbackRegion,
     config: {
       arn: keyMetadata?.Arn ?? fallbackKeyArn,
@@ -3427,9 +3639,11 @@ function toUnknownKmsKeyRecord(
   };
 }
 
+/** Log Group 설정과 태그 완전성 근거를 함께 저장해 불완전 조회의 승격을 막는다. */
 function toUnknownLogGroupRecord(
   logGroup: LogGroup,
-  fallbackRegion: string
+  fallbackRegion: string,
+  tagEvidence: AwsTagReadEvidence = { tagsReadComplete: false }
 ): AwsDiscoveredResourceRecord[] {
   const providerResourceId = logGroup.arn ?? logGroup.logGroupName;
 
@@ -3452,16 +3666,20 @@ function toUnknownLogGroupRecord(
         metricFilterCount: logGroup.metricFilterCount,
         providerParameters: toProviderParameterSnapshot(logGroup),
         retentionInDays: logGroup.retentionInDays,
-        storedBytes: logGroup.storedBytes
+        storedBytes: logGroup.storedBytes,
+        tags: tagEvidence.tags,
+        tagsReadComplete: tagEvidence.tagsReadComplete
       },
       relationships: []
     }
   ];
 }
 
+/** Alarm 설정과 별도 태그 조회 결과를 묶어 이후 관리 가능 여부를 안전하게 판단하게 한다. */
 function toUnknownMetricAlarmRecord(
   alarm: MetricAlarm,
-  fallbackRegion: string
+  fallbackRegion: string,
+  tagEvidence: AwsTagReadEvidence = { tagsReadComplete: false }
 ): AwsDiscoveredResourceRecord[] {
   const providerResourceId = alarm.AlarmArn ?? alarm.AlarmName;
 
@@ -3499,6 +3717,8 @@ function toUnknownMetricAlarmRecord(
         stateUpdatedAt: alarm.StateUpdatedTimestamp?.toISOString(),
         stateValue: alarm.StateValue,
         statistic: alarm.Statistic,
+        tags: tagEvidence.tags,
+        tagsReadComplete: tagEvidence.tagsReadComplete,
         threshold: alarm.Threshold,
         thresholdMetricId: alarm.ThresholdMetricId,
         treatMissingData: alarm.TreatMissingData,
@@ -3509,10 +3729,15 @@ function toUnknownMetricAlarmRecord(
   ];
 }
 
-function toUnknownRestApiRecord(restApi: RestApi, fallbackRegion: string): AwsDiscoveredResourceRecord[] {
+/** REST API policy 원문은 버리고 존재 여부와 전체 태그 근거만 남겨 공개 경계를 지킨다. */
+function toUnknownRestApiRecord(
+  restApi: RestApi,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
   if (!restApi.id) {
     return [];
   }
+  const { policy, ...restApiWithoutPolicy } = restApi;
 
   return [
     {
@@ -3527,12 +3752,14 @@ function toUnknownRestApiRecord(restApi: RestApi, fallbackRegion: string): AwsDi
         description: restApi.description,
         disableExecuteApiEndpoint: restApi.disableExecuteApiEndpoint,
         endpointConfiguration: restApi.endpointConfiguration,
+        hasResourcePolicy: isNonEmptyString(policy),
         id: restApi.id,
         minimumCompressionSize: restApi.minimumCompressionSize,
         name: restApi.name,
-        providerParameters: toProviderParameterSnapshot(restApi),
+        providerParameters: toProviderParameterSnapshot(restApiWithoutPolicy),
         rootResourceId: restApi.rootResourceId,
-        tags: restApi.tags,
+        tags: restApi.tags ?? {},
+        tagsReadComplete: true,
         version: restApi.version,
         warnings: restApi.warnings
       },
@@ -3679,7 +3906,9 @@ function toPascalCase(value: string): string {
 
 function isKnownTaggedResourceArn(arn: string): boolean {
   return (
-    /:ec2:[^:]*:[^:]*:(vpc|subnet|internet-gateway|route-table|security-group|instance)\//.test(arn) ||
+    /:ec2:[^:]*:[^:]*:(vpc|subnet|internet-gateway|route-table|security-group|instance)\//.test(
+      arn
+    ) ||
     /:rds:[^:]*:[^:]*:db:/.test(arn) ||
     /^arn:aws:s3:::[^/]+$/.test(arn)
   );
@@ -3710,9 +3939,7 @@ type EventBridgeTargetReferenceMetadata = {
 export function resolveEventBridgeTargetRelationships(
   records: AwsDiscoveredResourceRecord[]
 ): AwsDiscoveredResourceRecord[] {
-  const recordsByProviderId = new Map(
-    records.map((record) => [record.providerResourceId, record])
-  );
+  const recordsByProviderId = new Map(records.map((record) => [record.providerResourceId, record]));
   const recordsByRelationshipIdentity = new Map(
     records.map((record) => [
       createEventBridgeRelationshipIdentity(record.providerResourceId),
@@ -3725,17 +3952,15 @@ export function resolveEventBridgeTargetRelationships(
       return record;
     }
 
-    const ruleProviderResourceId = getNonEmptyStringValue(
-      record.config["ruleProviderResourceId"]
-    );
+    const ruleProviderResourceId = getNonEmptyStringValue(record.config["ruleProviderResourceId"]);
     const targetProviderResourceId = getNonEmptyStringValue(
       record.config["targetArn"] ?? record.config["targetProviderResourceId"]
     );
     const targetRecord = targetProviderResourceId
-      ? recordsByProviderId.get(targetProviderResourceId) ??
+      ? (recordsByProviderId.get(targetProviderResourceId) ??
         recordsByRelationshipIdentity.get(
           createEventBridgeRelationshipIdentity(targetProviderResourceId)
-        )
+        ))
       : undefined;
     const ruleRecord = ruleProviderResourceId
       ? recordsByProviderId.get(ruleProviderResourceId)
@@ -3751,7 +3976,12 @@ export function resolveEventBridgeTargetRelationships(
         ? [{ type: "depends_on" as const, targetProviderResourceId: ruleProviderResourceId }]
         : []),
       ...(resolvedTargetProviderResourceId
-        ? [{ type: "attached_to" as const, targetProviderResourceId: resolvedTargetProviderResourceId }]
+        ? [
+            {
+              type: "attached_to" as const,
+              targetProviderResourceId: resolvedTargetProviderResourceId
+            }
+          ]
         : [])
     ];
 
@@ -3766,11 +3996,7 @@ export function resolveEventBridgeTargetRelationships(
         ruleReferenceReady: isEventBridgeRuleReferenceReady(ruleRecord),
         hasRoleArn: hasEventBridgeTargetRisk(record.config, "hasRoleArn", "roleArn"),
         hasInput: hasEventBridgeTargetRisk(record.config, "hasInput", "input"),
-        hasInputPath: hasEventBridgeTargetRisk(
-          record.config,
-          "hasInputPath",
-          "inputPath"
-        ),
+        hasInputPath: hasEventBridgeTargetRisk(record.config, "hasInputPath", "inputPath"),
         hasInputTransformer: hasEventBridgeTargetRisk(
           record.config,
           "hasInputTransformer",
@@ -3781,16 +4007,10 @@ export function resolveEventBridgeTargetRelationships(
           "hasDeadLetterConfig",
           "deadLetterConfig"
         ),
-        hasRetryPolicy: hasEventBridgeTargetRisk(
-          record.config,
-          "hasRetryPolicy",
-          "retryPolicy"
-        ),
+        hasRetryPolicy: hasEventBridgeTargetRisk(record.config, "hasRetryPolicy", "retryPolicy"),
         hasAdvancedParameters:
           record.config["hasAdvancedParameters"] === true ||
-          EVENTBRIDGE_TARGET_ADVANCED_CONFIG_KEYS.some(
-            (key) => record.config[key] !== undefined
-          )
+          EVENTBRIDGE_TARGET_ADVANCED_CONFIG_KEYS.some((key) => record.config[key] !== undefined)
             ? true
             : undefined,
         targetReferenceReady: targetReference !== null,
@@ -3813,9 +4033,7 @@ function createEventBridgeRelationshipIdentity(providerResourceId: string): stri
     : providerResourceId;
 }
 
-function isEventBridgeRuleReferenceReady(
-  record: AwsDiscoveredResourceRecord | undefined
-): boolean {
+function isEventBridgeRuleReferenceReady(record: AwsDiscoveredResourceRecord | undefined): boolean {
   return Boolean(
     record?.providerResourceType === "AWS::Events::Rule" &&
     record.config["tagsReadComplete"] === true &&
@@ -3851,6 +4069,9 @@ function getEventBridgeTargetReferenceMetadata(
   if (
     record.providerResourceType === "AWS::Logs::LogGroup" &&
     getNonEmptyStringValue(record.config["logGroupName"]) &&
+    record.config["logGroupClass"] === "STANDARD" &&
+    record.config["tagsReadComplete"] === true &&
+    Array.isArray(record.config["tags"]) &&
     record.config["hasKmsKey"] !== true &&
     !getNonEmptyStringValue(record.config["kmsKeyId"])
   ) {
@@ -3879,11 +4100,10 @@ export function resolveEcsRelationships(
     const networkConfiguration = isRecordValue(record.config["networkConfiguration"])
       ? record.config["networkConfiguration"]
       : null;
-    const awsvpcConfiguration = networkConfiguration && isRecordValue(
-      networkConfiguration["awsvpcConfiguration"]
-    )
-      ? networkConfiguration["awsvpcConfiguration"]
-      : null;
+    const awsvpcConfiguration =
+      networkConfiguration && isRecordValue(networkConfiguration["awsvpcConfiguration"])
+        ? networkConfiguration["awsvpcConfiguration"]
+        : null;
 
     if (awsvpcConfiguration) {
       candidateRelationships.push(
@@ -3951,7 +4171,9 @@ export function resolveCloudFrontOriginRelationships(
       ? record.config["origin"].filter(isRecordValue)
       : [];
     const resolvedRelationships = origins.flatMap((origin) => {
-      const candidate = originCandidates.find((resource) => originExplicitlyReferencesResource(origin, resource));
+      const candidate = originCandidates.find((resource) =>
+        originExplicitlyReferencesResource(origin, resource)
+      );
 
       return candidate
         ? [{ type: "depends_on" as const, targetProviderResourceId: candidate.providerResourceId }]
@@ -3972,8 +4194,11 @@ function originExplicitlyReferencesResource(
   origin: Record<string, unknown>,
   resource: AwsDiscoveredResourceRecord
 ): boolean {
-  const explicitOriginIds = [origin["arn"], origin["originArn"], origin["providerResourceId"]]
-    .filter((value): value is string => typeof value === "string" && value.length > 0);
+  const explicitOriginIds = [
+    origin["arn"],
+    origin["originArn"],
+    origin["providerResourceId"]
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
 
   if (explicitOriginIds.includes(resource.providerResourceId)) {
     return true;
@@ -4016,11 +4241,7 @@ function isS3OriginDomainForBucket(domainName: string, bucketName: string): bool
 }
 
 function isAwsS3Endpoint(endpoint: string): boolean {
-  if (
-    endpoint === "s3" ||
-    endpoint === "s3-accelerate" ||
-    endpoint === "s3-accelerate.dualstack"
-  ) {
+  if (endpoint === "s3" || endpoint === "s3-accelerate" || endpoint === "s3-accelerate.dualstack") {
     return true;
   }
 
@@ -4071,10 +4292,9 @@ export function resolveNatGatewayElasticIpRelationships(
       continue;
     }
 
-    const natGatewayId = getNonEmptyStringValue(record.config["natGatewayId"])
-      ?? (/^nat-[a-z0-9]+$/iu.test(record.providerResourceId)
-        ? record.providerResourceId
-        : null);
+    const natGatewayId =
+      getNonEmptyStringValue(record.config["natGatewayId"]) ??
+      (/^nat-[a-z0-9]+$/iu.test(record.providerResourceId) ? record.providerResourceId : null);
 
     if (!natGatewayId || !Array.isArray(record.config["allocationIds"])) {
       continue;
@@ -4169,10 +4389,7 @@ function mergeDiscoveredRecordConfig(
   secondaryConfig: Record<string, unknown>,
   preferredConfig: Record<string, unknown>
 ): Record<string, unknown> {
-  const mergedTags = mergeDiscoveredRecordTags(
-    secondaryConfig["tags"],
-    preferredConfig["tags"]
-  );
+  const mergedTags = mergeDiscoveredRecordTags(secondaryConfig["tags"], preferredConfig["tags"]);
 
   return mergedTags.length > 0 ? { ...preferredConfig, tags: mergedTags } : preferredConfig;
 }
@@ -4183,9 +4400,10 @@ function mergeDiscoveredRecordTags(
 ): Array<{ key: string; value: string }> {
   return [
     ...new Map(
-      [...normalizeDiscoveredRecordTags(secondaryTags), ...normalizeDiscoveredRecordTags(preferredTags)].map(
-        (tag) => [tag.key, tag]
-      )
+      [
+        ...normalizeDiscoveredRecordTags(secondaryTags),
+        ...normalizeDiscoveredRecordTags(preferredTags)
+      ].map((tag) => [tag.key, tag])
     ).values()
   ];
 }
@@ -4235,27 +4453,21 @@ function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord):
   }
 
   if (record.providerResourceType === "AWS::EC2::EIP") {
-    const allocationId = extractEc2InventoryId(
-      record,
-      "allocationId",
-      "eipalloc-",
-      ["eip-allocation", "elastic-ip"]
-    );
+    const allocationId = extractEc2InventoryId(record, "allocationId", "eipalloc-", [
+      "eip-allocation",
+      "elastic-ip"
+    ]);
 
     return allocationId ? `AWS::EC2::EIP:${allocationId}` : record.providerResourceId;
   }
 
   if (record.providerResourceType === "AWS::EC2::NatGateway") {
-    const natGatewayId = extractEc2InventoryId(
-      record,
-      "natGatewayId",
-      "nat-",
-      ["natgateway", "nat-gateway"]
-    );
+    const natGatewayId = extractEc2InventoryId(record, "natGatewayId", "nat-", [
+      "natgateway",
+      "nat-gateway"
+    ]);
 
-    return natGatewayId
-      ? `AWS::EC2::NatGateway:${natGatewayId}`
-      : record.providerResourceId;
+    return natGatewayId ? `AWS::EC2::NatGateway:${natGatewayId}` : record.providerResourceId;
   }
 
   if (record.providerResourceType === "AWS::ApiGateway::RestApi") {
@@ -4278,14 +4490,10 @@ function extractEc2InventoryId(
   arnResourceKinds: readonly string[]
 ): string | null {
   const configId = getNonEmptyStringValue(record.config[configKey]);
-  const directId = new RegExp(`^${idPrefix}[a-z0-9]+$`, "iu").test(
-    record.providerResourceId
-  )
+  const directId = new RegExp(`^${idPrefix}[a-z0-9]+$`, "iu").test(record.providerResourceId)
     ? record.providerResourceId
     : null;
-  const arnResource = /^arn:[^:]+:ec2:[^:]+:[^:]+:(.+)$/iu.exec(
-    record.providerResourceId
-  )?.[1];
+  const arnResource = /^arn:[^:]+:ec2:[^:]+:[^:]+:(.+)$/iu.exec(record.providerResourceId)?.[1];
   const arnId = arnResourceKinds.flatMap((resourceKind) => {
     const match = new RegExp(`^${resourceKind}/(${idPrefix}[a-z0-9]+)$`, "iu").exec(
       arnResource ?? ""
@@ -4346,9 +4554,7 @@ function shouldPreferDedicatedRecord(
 }
 
 /** gg: complete dedicated > generic fallback > incomplete dedicated 순서로 한 Resource만 남깁니다. */
-function getElasticLoadBalancingRecordPreference(
-  record: AwsDiscoveredResourceRecord
-): number {
+function getElasticLoadBalancingRecordPreference(record: AwsDiscoveredResourceRecord): number {
   if (record.config["reverseEngineeringDetailsVersion"] !== 1) {
     return 1;
   }
@@ -4361,9 +4567,7 @@ function getElasticLoadBalancingRecordPreference(
 }
 
 function compactRecord(values: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(values).filter(([, value]) => value !== undefined)
-  );
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
 }
 
 function isRecordValue(value: unknown): value is Record<string, unknown> {
@@ -4426,7 +4630,10 @@ function toProviderParameterSnapshot(value: unknown): unknown {
 }
 
 // `ALL`은 화면 선택값일 뿐 실제 AWS 리소스가 아니어서, 각 지원 리소스 조회로 풀어서 처리합니다.
-export function shouldReadResourceGroup(input: AwsProviderScanInput, resourceType: ResourceType): boolean {
+export function shouldReadResourceGroup(
+  input: AwsProviderScanInput,
+  resourceType: ResourceType
+): boolean {
   return (
     input.resourceTypes.includes("ALL") ||
     input.resourceTypes.includes(resourceType) ||
@@ -4453,10 +4660,10 @@ export function shouldReadUnknownResourceGroup(input: AwsProviderScanInput): boo
     input.resourceTypes.includes("KMS_KEY") ||
     input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP") ||
     input.resourceTypes.includes("CLOUDWATCH_METRIC_ALARM") ||
-    input.resourceTypes.includes("API_GATEWAY_REST_API")
-    || input.resourceTypes.includes("LOAD_BALANCER")
-    || input.resourceTypes.includes("LOAD_BALANCER_TARGET_GROUP")
-    || input.resourceTypes.includes("LOAD_BALANCER_LISTENER")
+    input.resourceTypes.includes("API_GATEWAY_REST_API") ||
+    input.resourceTypes.includes("LOAD_BALANCER") ||
+    input.resourceTypes.includes("LOAD_BALANCER_TARGET_GROUP") ||
+    input.resourceTypes.includes("LOAD_BALANCER_LISTENER")
   );
 }
 
@@ -4531,7 +4738,10 @@ function getReverseEngineeringAwsServiceKey(resourceType: ResourceType): string 
 }
 
 function normalizeReverseEngineeringAwsServiceKey(serviceKey: string): string {
-  return serviceKey.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return serviceKey
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function formatSafeScanErrorMessage(reason: ReverseEngineeringScanError["reason"]): string {

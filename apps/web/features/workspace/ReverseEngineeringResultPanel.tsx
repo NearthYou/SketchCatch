@@ -12,6 +12,7 @@ import type {
   ReverseEngineeringPlacement
 } from "./reverse-engineering-board-application";
 import type { ReverseEngineeringBoardCandidate } from "./reverse-engineering-board-candidates";
+import type { ReverseEngineeringImportDecisionOptions } from "./reverse-engineering-import-decision";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
 import {
   presentReverseEngineeringResource,
@@ -22,6 +23,7 @@ import styles from "./reverse-engineering.module.css";
 
 export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "partial" | "error";
 export type ReverseEngineeringResultPanelProps = {
+  readonly acknowledgedReviewOnlyResourceIds: readonly string[];
   readonly applyMessage: string | null;
   readonly applicationMode: ReverseEngineeringBoardApplicationMode;
   readonly applyState: ReverseEngineeringApplyState;
@@ -29,36 +31,47 @@ export type ReverseEngineeringResultPanelProps = {
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly createProjectOnApply: boolean;
   readonly hasCurrentBoardResources: boolean;
+  readonly importDecisionComplete: boolean;
+  readonly importDecisionOptions: ReverseEngineeringImportDecisionOptions;
   readonly logs: ReverseEngineeringScanLogLine[];
   readonly onAppendToCurrentBoard: () => void;
   readonly onApplicationModeChange: (mode: ReverseEngineeringBoardApplicationMode) => void;
   readonly onCompilePlacement: () => void;
   readonly onKeepOriginalPlacement: () => void;
+  readonly onReadyResourceToggle: (resourceId: string) => void;
   readonly onReplaceCurrentBoard: () => void;
   readonly onRetryScan: () => void;
+  readonly onReviewOnlyResourceToggle: (resourceId: string) => void;
   readonly permissionRecoveryHref: string;
   readonly response: ReverseEngineeringScanResponse;
+  readonly selectedReadyResourceIds: readonly string[];
   readonly selectedCandidateId: string;
   readonly placement: ReverseEngineeringPlacement;
 };
 
 // 스캔 결과와 사용자가 누를 적용 버튼을 한 화면에 모아 보여줍니다.
 export function ReverseEngineeringResultPanel({
+  acknowledgedReviewOnlyResourceIds,
   applyMessage,
   applicationMode,
   applyState,
   comparison,
   createProjectOnApply,
   hasCurrentBoardResources,
+  importDecisionComplete,
+  importDecisionOptions,
   onAppendToCurrentBoard,
   onApplicationModeChange,
   onCompilePlacement,
   onKeepOriginalPlacement,
+  onReadyResourceToggle,
   onReplaceCurrentBoard,
   onRetryScan,
+  onReviewOnlyResourceToggle,
   permissionRecoveryHref,
   placement,
-  response
+  response,
+  selectedReadyResourceIds
 }: ReverseEngineeringResultPanelProps) {
   const result = response.result;
 
@@ -188,6 +201,79 @@ export function ReverseEngineeringResultPanel({
         </p>
       </section>
 
+      <section className={styles.section} aria-label="Terraform 가져오기 선택">
+        <h3>Terraform으로 관리할 리소스 선택</h3>
+        <p className={styles.sectionDescription}>
+          보드에 표시하는 것과 Terraform으로 관리하는 것은 다릅니다. 선택한 리소스만 기존 AWS
+          리소스로 가져옵니다.
+        </p>
+        {importDecisionOptions.ready.length > 0 ? (
+          <ul className={styles.importDecisionList}>
+            {importDecisionOptions.ready.map((option) => (
+              <li className={styles.importDecisionItem} key={option.id}>
+                <label>
+                  <input
+                    checked={selectedReadyResourceIds.includes(option.id)}
+                    onChange={() => onReadyResourceToggle(option.id)}
+                    type="checkbox"
+                  />
+                  <span className={styles.importDecisionCopy}>
+                    <strong>{option.label}</strong>
+                    <span>기존 AWS 리소스를 Terraform으로 가져와 수정할 수 있게 합니다.</span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.hint}>이번 적용에서 바로 Terraform으로 가져올 리소스는 없습니다.</p>
+        )}
+        <p className={styles.hint}>
+          선택하지 않은 리소스는 보드에만 표시하고 Terraform으로 가져오지 않습니다.
+        </p>
+
+        {importDecisionOptions.reviewOnly.length > 0 ? (
+          <div className={styles.importDecisionReview}>
+            <strong>보드에서만 확인할 리소스</strong>
+            <p>
+              아래 항목은 AWS에서 찾았지만 아직 Board에서 안전하게 수정하거나 배포할 수 없습니다.
+              내용을 확인해야 계속할 수 있습니다.
+            </p>
+            <ul className={styles.importDecisionList}>
+              {importDecisionOptions.reviewOnly.map((option) => (
+                <li className={styles.importDecisionItem} key={option.id}>
+                  <label>
+                    <input
+                      checked={acknowledgedReviewOnlyResourceIds.includes(option.id)}
+                      onChange={() => onReviewOnlyResourceToggle(option.id)}
+                      type="checkbox"
+                    />
+                    <span className={styles.importDecisionCopy}>
+                      <strong>{option.label}</strong>
+                      <span>
+                        {option.status === "unsupported_resource_type"
+                          ? "현재 Board에서 수정하거나 배포할 수 없는 종류입니다."
+                          : "현재 설정을 안전하게 Terraform으로 옮기려면 추가 확인이 필요합니다."}
+                      </span>
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {importDecisionOptions.invalidResourceIds.length > 0 ? (
+          <p className={styles.error} role="alert">
+            가져오기 상태를 확인하지 못한 리소스가 있습니다. 다시 스캔해 주세요.
+          </p>
+        ) : !importDecisionComplete ? (
+          <p className={styles.warning} role="status">
+            보드에서만 확인할 리소스를 모두 확인해 주세요.
+          </p>
+        ) : null}
+      </section>
+
       <section className={styles.section} aria-label="선택한 배치 적용">
         <h3>선택한 배치 적용</h3>
         <p className={styles.sectionDescription}>
@@ -200,6 +286,7 @@ export function ReverseEngineeringResultPanel({
             disabled={
               isApplying ||
               !hasApplicableResources ||
+              !importDecisionComplete ||
               (hasCurrentBoardResources && applicationMode !== "replace")
             }
             onClick={onReplaceCurrentBoard}
@@ -213,6 +300,7 @@ export function ReverseEngineeringResultPanel({
               disabled={
                 isApplying ||
                 !hasApplicableResources ||
+                !importDecisionComplete ||
                 comparison.additions.length === 0 ||
                 applicationMode !== "append"
               }

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ArchitectureJson, DiagramJson, ReverseEngineeringScanResult } from "@sketchcatch/types";
+import type {
+  ArchitectureJson,
+  DiagramJson,
+  ReverseEngineeringScanResult
+} from "@sketchcatch/types";
 import { normalizeReverseEngineeringScanResult } from "./reverse-engineering-service.js";
 import {
   claimReverseEngineeringPreviewProject,
@@ -56,31 +60,21 @@ test("preview claim은 실제 Project·Draft·Scan ID를 선택한 source node�
     (node) => node.id === "manual-node"
   );
 
-  assert.equal(
-    selectedDraftNode?.parameters?.values["reverseEngineeringSourceScanId"],
-    SCAN_ID
-  );
-  assert.equal(
-    selectedDraftNode?.parameters?.values["reverseEngineeringDraftId"],
-    DRAFT_ID
-  );
-  assert.equal(
-    selectedDraftNode?.parameters?.values["reverseEngineeringSourceKind"],
-    "saved_scan"
-  );
-  assert.equal(
-    selectedArchitectureNode?.config["reverseEngineeringSourceScanId"],
-    SCAN_ID
-  );
+  assert.equal(selectedDraftNode?.parameters?.values["reverseEngineeringSourceScanId"], SCAN_ID);
+  assert.equal(selectedDraftNode?.parameters?.values["reverseEngineeringDraftId"], DRAFT_ID);
+  assert.equal(selectedDraftNode?.parameters?.values["reverseEngineeringSourceKind"], "saved_scan");
+  assert.deepEqual(selectedDraftNode?.metadata?.reverseEngineering?.importDecision, {
+    version: 1,
+    mode: "import_existing",
+    statusAtConfirmation: "ready"
+  });
+  assert.equal(selectedArchitectureNode?.config["reverseEngineeringSourceScanId"], SCAN_ID);
   assert.equal(selectedArchitectureNode?.config["reverseEngineeringDraftId"], DRAFT_ID);
   assert.equal(
     manualDraftNode?.parameters?.values["reverseEngineeringSourceScanId"],
     "previous-scan"
   );
-  assert.equal(
-    manualArchitectureNode?.config["reverseEngineeringSourceScanId"],
-    "previous-scan"
-  );
+  assert.equal(manualArchitectureNode?.config["reverseEngineeringSourceScanId"], "previous-scan");
   assert.equal(repository.preview.claimedProjectId, PROJECT_ID);
   assert.equal(repository.preview.claimedScanId, SCAN_ID);
   assert.equal(repository.preview.claimedDraftId, DRAFT_ID);
@@ -112,8 +106,7 @@ test("만료된 preview는 Project 생성 전에 거부한다", async () => {
       now: () => NOW
     }),
     (error: unknown) =>
-      error instanceof ReverseEngineeringPreviewClaimConflictError &&
-      error.reason === "expired"
+      error instanceof ReverseEngineeringPreviewClaimConflictError && error.reason === "expired"
   );
 
   assert.equal(repository.projectRows.length, 0);
@@ -136,8 +129,7 @@ test("한 번 claim한 preview는 replay해도 두 번째 Project를 만들지 �
       now: () => new Date(NOW.getTime() + 1)
     }),
     (error: unknown) =>
-      error instanceof ReverseEngineeringPreviewClaimConflictError &&
-      error.reason === "claimed"
+      error instanceof ReverseEngineeringPreviewClaimConflictError && error.reason === "claimed"
   );
 
   assert.equal(repository.projectRows.length, 1);
@@ -298,9 +290,7 @@ class InMemoryPreviewClaimRepository implements ReverseEngineeringPreviewClaimRe
     });
     const tx: ReverseEngineeringPreviewClaimTransaction = {
       lockOwnedPreview: async (previewId, userId) =>
-        this.preview.id === previewId && this.preview.userId === userId
-          ? this.preview
-          : undefined,
+        this.preview.id === previewId && this.preview.userId === userId ? this.preview : undefined,
       insertProject: async (input) => {
         const project = { ...input, createdAt: NOW, updatedAt: NOW };
         this.projectRows.push(project);
@@ -373,11 +363,17 @@ function createRawResult(): ReverseEngineeringScanResult {
         positionX: 120,
         positionY: 120,
         config: {
+          attributes: {},
+          attributesProjectionComplete: true,
+          attributesReadComplete: true,
           name: "private-entry",
           type: "application",
           ipAddressType: "ipv4",
+          reverseEngineeringDetailsVersion: 1,
           scheme: "internet-facing",
           subnetIds: ["subnet-private"],
+          tags: [],
+          tagsReadComplete: true,
           providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
           providerResourceId: PRIVATE_ALB_ARN,
           analysisExcluded: false
@@ -542,7 +538,12 @@ function createClaimInput(
     reverseEngineering: {
       previewId: preview.id,
       publicDraftId: publicResult.reverseEngineeringDraft.id,
-      sourceNodeIds: [sourceNode.id]
+      sourceNodeIds: [sourceNode.id],
+      importDecision: {
+        version: 1,
+        selectedReadyResourceIds: [sourceNode.id],
+        acknowledgedReviewOnlyResourceIds: []
+      }
     }
   };
 }

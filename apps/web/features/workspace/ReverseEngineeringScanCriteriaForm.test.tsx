@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { AwsConnection, Project, ReverseEngineeringResourceSelection } from "@sketchcatch/types";
+import type {
+  AwsConnection,
+  Project,
+  ReverseEngineeringResourceSelection
+} from "@sketchcatch/types";
 import { ReverseEngineeringScanCriteriaForm } from "./ReverseEngineeringScanCriteriaForm";
 import { getReverseEngineeringAwsConnectionRecovery } from "./reverse-engineering-aws-connection-readiness";
 
@@ -62,7 +66,6 @@ function renderForm(input: {
       onScanCancel() {},
       onScanStart() {},
       onSelectedAwsConnectionChange() {},
-      onSelectedProjectChange() {},
       projects: [project],
       resourceTypes,
       selectedAwsConnectionId: input.selectedAwsConnectionId,

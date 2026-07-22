@@ -1,7 +1,11 @@
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import React from "react";
-import type { AwsConnection, Project, ReverseEngineeringResourceSelection } from "@sketchcatch/types";
+import type {
+  AwsConnection,
+  Project,
+  ReverseEngineeringResourceSelection
+} from "@sketchcatch/types";
 import {
   formatReverseEngineeringResourceSelectionLabel,
   isReverseEngineeringResourceSelectionChecked
@@ -24,7 +28,6 @@ type ReverseEngineeringScanCriteriaFormProps = {
   readonly onScanCancel: () => void;
   readonly onScanStart: () => void;
   readonly onSelectedAwsConnectionChange: (awsConnectionId: string) => void;
-  readonly onSelectedProjectChange: (projectId: string) => void;
   readonly projects: Project[];
   readonly resourceTypes: ReverseEngineeringResourceSelection[];
   readonly selectedAwsConnectionId: string;
@@ -45,7 +48,6 @@ export function ReverseEngineeringScanCriteriaForm({
   onScanCancel,
   onScanStart,
   onSelectedAwsConnectionChange,
-  onSelectedProjectChange,
   projects,
   resourceTypes,
   selectedAwsConnectionId,
@@ -76,9 +78,7 @@ export function ReverseEngineeringScanCriteriaForm({
             <RefreshCw size={14} aria-hidden="true" />
           </button>
         </div>
-        <p>
-          검증된 AWS Role로 기존 Resource와 관계를 읽습니다.
-        </p>
+        <p>검증된 AWS Role로 기존 Resource와 관계를 읽습니다.</p>
       </header>
 
       <section className={styles.section}>
@@ -89,7 +89,8 @@ export function ReverseEngineeringScanCriteriaForm({
             : "결과를 바로 반영하지 않고 먼저 미리보기로 보여줍니다."}
         </p>
         <p className={styles.scopeHelp}>
-          전체: 배포할 수 있는 리소스와 보드에만 표시하는 AWS 리소스를 함께 읽습니다.<br />
+          전체: 배포할 수 있는 리소스와 보드에만 표시하는 AWS 리소스를 함께 읽습니다.
+          <br />
           개별 선택: 선택한 정식 지원 Resource만 읽습니다.
         </p>
 
@@ -99,7 +100,9 @@ export function ReverseEngineeringScanCriteriaForm({
           onClick={onScanStart}
           type="button"
         >
-          {isScanning ? <LoaderCircle className={styles.spinner} aria-hidden="true" size={16} /> : null}
+          {isScanning ? (
+            <LoaderCircle className={styles.spinner} aria-hidden="true" size={16} />
+          ) : null}
           <span>{isScanning ? "AWS를 읽는 중" : "기존 AWS 가져오기"}</span>
         </button>
         {awsConnectionRecovery.readiness !== "ready" ? (
@@ -112,11 +115,7 @@ export function ReverseEngineeringScanCriteriaForm({
           </div>
         ) : null}
         {isScanning && !createProjectOnApply ? (
-          <button
-            className={styles.secondaryButton}
-            onClick={onScanCancel}
-            type="button"
-          >
+          <button className={styles.secondaryButton} onClick={onScanCancel} type="button">
             취소
           </button>
         ) : null}
@@ -133,11 +132,7 @@ export function ReverseEngineeringScanCriteriaForm({
           {createProjectOnApply ? null : (
             <label className={styles.field}>
               <span className={styles.fieldLabel}>프로젝트</span>
-              <select
-                disabled={isLoadingOptions}
-                onChange={(event) => onSelectedProjectChange(event.currentTarget.value)}
-                value={selectedProjectId}
-              >
+              <select disabled value={selectedProjectId}>
                 {projects.map((project) => (
                   <option key={project.id} value={project.id}>
                     {project.name}
@@ -171,7 +166,10 @@ export function ReverseEngineeringScanCriteriaForm({
               {resourceTypes.map((resourceType) => (
                 <label key={resourceType} className={styles.resourceToggle}>
                   <input
-                    checked={isReverseEngineeringResourceSelectionChecked(selectedResourceTypes, resourceType)}
+                    checked={isReverseEngineeringResourceSelectionChecked(
+                      selectedResourceTypes,
+                      resourceType
+                    )}
                     onChange={() => onResourceTypeToggle(resourceType)}
                     type="checkbox"
                   />
@@ -191,7 +189,10 @@ function getSelectedAwsConnectionRegion(
   awsConnections: AwsConnection[],
   selectedAwsConnectionId: string
 ): string {
-  return awsConnections.find((connection) => connection.id === selectedAwsConnectionId)?.region ?? "리전 미선택";
+  return (
+    awsConnections.find((connection) => connection.id === selectedAwsConnectionId)?.region ??
+    "리전 미선택"
+  );
 }
 
 // `ALL`은 사용자가 이해하는 화면 라벨로 보여주고, 실제 리소스 타입 이름은 그대로 둡니다.

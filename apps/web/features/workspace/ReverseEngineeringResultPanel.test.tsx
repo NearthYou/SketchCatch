@@ -65,6 +65,7 @@ const response: ReverseEngineeringScanResponse = {
   }
 };
 
+/** 선택 상태와 사용자 확인 경계를 실제 패널 props로 조립해 SSR 결과를 검증한다. */
 function renderPanel(
   placement: "original" | "compiled",
   options: {
@@ -74,11 +75,16 @@ function renderPanel(
     readonly additionCount?: number;
     readonly boardNodeCount?: number;
     readonly hasCurrentBoardResources?: boolean;
+    readonly importDecisionComplete?: boolean;
+    readonly importDecisionOptions?: ReverseEngineeringResultPanelProps["importDecisionOptions"];
+    readonly selectedReadyResourceIds?: readonly string[];
+    readonly acknowledgedReviewOnlyResourceIds?: readonly string[];
     readonly coverage?: ReverseEngineeringServiceCoverage;
     readonly scanErrors?: readonly ReverseEngineeringScanError[];
   } = {}
 ): string {
   const props: ReverseEngineeringResultPanelProps = {
+    acknowledgedReviewOnlyResourceIds: options.acknowledgedReviewOnlyResourceIds ?? [],
     applyMessage: options.applyMessage ?? null,
     applicationMode: options.applicationMode ?? "replace",
     applyState: options.applyState ?? "idle",
@@ -95,13 +101,21 @@ function renderPanel(
     },
     createProjectOnApply: false,
     hasCurrentBoardResources: options.hasCurrentBoardResources ?? false,
+    importDecisionComplete: options.importDecisionComplete ?? true,
+    importDecisionOptions: options.importDecisionOptions ?? {
+      ready: [],
+      reviewOnly: [],
+      invalidResourceIds: []
+    },
     logs: [],
     onAppendToCurrentBoard() {},
     onApplicationModeChange() {},
     onCompilePlacement() {},
     onKeepOriginalPlacement() {},
+    onReadyResourceToggle() {},
     onReplaceCurrentBoard() {},
     onRetryScan() {},
+    onReviewOnlyResourceToggle() {},
     permissionRecoveryHref: "/dashboard/settings?tab=aws&next=reverse&awsConnectionId=connection-1",
     placement,
     response: {
@@ -124,7 +138,8 @@ function renderPanel(
           }
         : undefined
     },
-    selectedCandidateId: "candidate-structure-auto"
+    selectedCandidateId: "candidate-structure-auto",
+    selectedReadyResourceIds: options.selectedReadyResourceIds ?? []
   };
 
   return renderToStaticMarkup(createElement(ReverseEngineeringResultPanel, props));
@@ -305,4 +320,26 @@ test("현재 보드에서는 실제로 적용할 replace 또는 append 배치를
     /<button[^>]*disabled=""[^>]*><span>현재 보드를 가져온 항목으로 바꾸기<\/span>/
   );
   assert.match(html, /<button(?![^>]*disabled="")[^>]*>현재 보드에 추가<\/button>/);
+});
+
+test("Terraform 가져오기 선택과 Board에서만 확인할 리소스 동의를 분리한다", () => {
+  const html = renderPanel("original", {
+    boardNodeCount: 2,
+    importDecisionComplete: false,
+    importDecisionOptions: {
+      ready: [{ id: "ready-resource", label: "고객 파일", status: "ready" }],
+      reviewOnly: [{ id: "review-resource", label: "암호화 키", status: "manual_review" }],
+      invalidResourceIds: []
+    }
+  });
+
+  assert.match(html, /Terraform으로 관리할 리소스 선택/);
+  assert.match(html, /고객 파일/);
+  assert.match(html, /기존 AWS 리소스를 Terraform으로 가져와 수정/);
+  assert.match(html, /보드에서만 확인할 리소스/);
+  assert.match(html, /암호화 키/);
+  assert.match(html, /추가 확인이 필요/);
+  assert.match(html, /보드에서만 확인할 리소스를 모두 확인해 주세요/);
+  assert.match(html, /<button[^>]*disabled=""[^>]*><span>보드에 적용<\/span>/);
+  assert.doesNotMatch(html, /검토 전용/);
 });

@@ -20,12 +20,9 @@ import {
 
 const region = "ap-northeast-2";
 const accountId = "123456789012";
-const loadBalancerArn =
-  `arn:aws:elasticloadbalancing:${region}:${accountId}:loadbalancer/app/orders/lb-id`;
-const targetGroupArn =
-  `arn:aws:elasticloadbalancing:${region}:${accountId}:targetgroup/orders/tg-id`;
-const listenerArn =
-  `arn:aws:elasticloadbalancing:${region}:${accountId}:listener/app/orders/lb-id/listener-id`;
+const loadBalancerArn = `arn:aws:elasticloadbalancing:${region}:${accountId}:loadbalancer/app/orders/lb-id`;
+const targetGroupArn = `arn:aws:elasticloadbalancing:${region}:${accountId}:targetgroup/orders/tg-id`;
+const listenerArn = `arn:aws:elasticloadbalancing:${region}:${accountId}:listener/app/orders/lb-id/listener-id`;
 const credentials: TerraformAwsCredentialEnv = {
   AWS_ACCESS_KEY_ID: "access-key",
   AWS_SECRET_ACCESS_KEY: "secret-key",
@@ -107,8 +104,15 @@ test("ELBv2 reader는 ALB, Target Group, HTTP Listener의 상세 정보와 관�
         if (command instanceof DescribeLoadBalancerAttributesCommand) {
           return {
             Attributes: [
+              { Key: "access_logs.s3.bucket", Value: "" },
+              { Key: "access_logs.s3.enabled", Value: "false" },
+              { Key: "access_logs.s3.prefix", Value: "" },
+              { Key: "connection_logs.s3.bucket", Value: "" },
+              { Key: "connection_logs.s3.enabled", Value: "false" },
+              { Key: "connection_logs.s3.prefix", Value: "" },
               { Key: "deletion_protection.enabled", Value: "false" },
-              { Key: "idle_timeout.timeout_seconds", Value: "60" }
+              { Key: "idle_timeout.timeout_seconds", Value: "60" },
+              { Key: "routing.http2.enabled", Value: "true" }
             ]
           };
         }
@@ -117,7 +121,18 @@ test("ELBv2 reader는 ALB, Target Group, HTTP Listener의 상세 정보와 관�
         }
         if (command instanceof DescribeTargetGroupAttributesCommand) {
           return {
-            Attributes: [{ Key: "deregistration_delay.timeout_seconds", Value: "120" }]
+            Attributes: [
+              { Key: "deregistration_delay.timeout_seconds", Value: "120" },
+              { Key: "load_balancing.algorithm.type", Value: "round_robin" },
+              {
+                Key: "load_balancing.cross_zone.enabled",
+                Value: "use_load_balancer_configuration"
+              },
+              { Key: "slow_start.duration_seconds", Value: "0" },
+              { Key: "stickiness.enabled", Value: "false" },
+              { Key: "stickiness.type", Value: "lb_cookie" },
+              { Key: "stickiness.lb_cookie.duration_seconds", Value: "86400" }
+            ]
           };
         }
         if (command instanceof DescribeListenersCommand) {
@@ -132,7 +147,10 @@ test("ELBv2 reader는 ALB, Target Group, HTTP Listener의 상세 정보와 관�
           return {
             TagDescriptions: command.input.ResourceArns?.map((ResourceArn) => ({
               ResourceArn,
-              Tags: [{ Key: "Environment", Value: "demo" }]
+              Tags: [
+                { Key: "Environment", Value: "demo" },
+                { Key: "Empty", Value: "" }
+              ]
             }))
           };
         }
@@ -155,10 +173,15 @@ test("ELBv2 reader는 ALB, Target Group, HTTP Listener의 상세 정보와 관�
   const httpListener = result.records[2];
 
   assert.equal(alb?.config["attributesReadComplete"], true);
+  assert.equal(alb?.config["attributesProjectionComplete"], true);
   assert.equal(alb?.config["tagsReadComplete"], true);
-  assert.deepEqual(alb?.config["tags"], [{ key: "Environment", value: "demo" }]);
+  assert.deepEqual(alb?.config["tags"], [
+    { key: "Environment", value: "demo" },
+    { key: "Empty", value: "" }
+  ]);
   assert.equal(target?.config["deregistrationDelay"], 120);
   assert.equal(target?.config["attributesReadComplete"], true);
+  assert.equal(target?.config["attributesProjectionComplete"], true);
   assert.equal(target?.config["tagsReadComplete"], true);
   assert.deepEqual(target?.relationships, [
     { type: "depends_on", targetProviderResourceId: "vpc-orders" },
@@ -166,6 +189,7 @@ test("ELBv2 reader는 ALB, Target Group, HTTP Listener의 상세 정보와 관�
   ]);
   assert.equal(httpListener?.config["simpleForwardAction"], true);
   assert.equal(httpListener?.config["attributesReadComplete"], true);
+  assert.equal(httpListener?.config["attributesProjectionComplete"], true);
   assert.equal(httpListener?.config["tagsReadComplete"], true);
   assert.deepEqual(httpListener?.relationships, [
     { type: "depends_on", targetProviderResourceId: loadBalancerArn },
@@ -181,6 +205,111 @@ test("ELBv2 reader는 ALB, Target Group, HTTP Listener의 상세 정보와 관�
     targetGroupArn,
     listenerArn
   ]);
+});
+
+test("ELBv2 reader는 unknown 또는 non-default attribute를 projection 불완전으로 표시한다", async () => {
+  const result = await readElasticLoadBalancingResourcesWithDiagnostics(
+    scanInput(),
+    region,
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        if (command instanceof DescribeLoadBalancersCommand) {
+          return { LoadBalancers: [loadBalancer()] };
+        }
+        if (command instanceof DescribeLoadBalancerAttributesCommand) {
+          return { Attributes: [{ Key: "future.attribute", Value: "default" }] };
+        }
+        if (command instanceof DescribeTargetGroupsCommand) {
+          return { TargetGroups: [targetGroup()] };
+        }
+        if (command instanceof DescribeTargetGroupAttributesCommand) {
+          return {
+            Attributes: [
+              { Key: "deregistration_delay.timeout_seconds", Value: "120" },
+              { Key: "stickiness.enabled", Value: "true" }
+            ]
+          };
+        }
+        if (command instanceof DescribeListenersCommand) {
+          return { Listeners: [listener()] };
+        }
+        if (command instanceof DescribeListenerAttributesCommand) {
+          return {
+            Attributes: [{ Key: "routing.http.response.server.enabled", Value: "false" }]
+          };
+        }
+        if (command instanceof DescribeTagsCommand) {
+          return {
+            TagDescriptions: command.input.ResourceArns?.map((ResourceArn) => ({
+              ResourceArn,
+              Tags: []
+            }))
+          };
+        }
+        throw new Error(`Unexpected command: ${command.constructor.name}`);
+      }
+    })
+  );
+
+  assert.deepEqual(
+    result.records.map((record) => record.config["attributesProjectionComplete"]),
+    [false, false, false]
+  );
+  assert.equal(result.records[1]?.config["deregistrationDelay"], 120);
+});
+
+test("ELBv2 reader는 빈 attribute와 누락 또는 불완전한 tag 응답을 complete로 표시하지 않는다", async () => {
+  const result = await readElasticLoadBalancingResourcesWithDiagnostics(
+    scanInput(),
+    region,
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        if (command instanceof DescribeLoadBalancersCommand) {
+          return { LoadBalancers: [loadBalancer()] };
+        }
+        if (command instanceof DescribeLoadBalancerAttributesCommand) {
+          return {};
+        }
+        if (command instanceof DescribeTargetGroupsCommand) {
+          return { TargetGroups: [targetGroup()] };
+        }
+        if (command instanceof DescribeTargetGroupAttributesCommand) {
+          return { Attributes: [] };
+        }
+        if (command instanceof DescribeListenersCommand) {
+          return { Listeners: [listener()] };
+        }
+        if (command instanceof DescribeListenerAttributesCommand) {
+          return { Attributes: [] };
+        }
+        if (command instanceof DescribeTagsCommand) {
+          const [loadBalancerResourceArn, targetGroupResourceArn] =
+            command.input.ResourceArns ?? [];
+          return {
+            TagDescriptions: [
+              { ResourceArn: loadBalancerResourceArn, Tags: [] },
+              { ResourceArn: targetGroupResourceArn, Tags: [{ Key: "Owner" }] }
+            ]
+          };
+        }
+        throw new Error(`Unexpected command: ${command.constructor.name}`);
+      }
+    })
+  );
+
+  assert.deepEqual(
+    result.records.map((record) => record.config["attributesProjectionComplete"]),
+    [false, false, false]
+  );
+  assert.deepEqual(
+    result.records.map((record) => record.config["tagsReadComplete"]),
+    [true, false, false]
+  );
+  assert.deepEqual(result.records[0]?.config["tags"], []);
+  assert.equal(result.records[1]?.config["tags"], undefined);
+  assert.equal(result.records[2]?.config["tags"], undefined);
 });
 
 test("Target Group later page 실패는 앞 page와 안전한 scan error를 함께 보존한다", async () => {
@@ -274,7 +403,10 @@ test("Listener later page 실패와 attribute 실패는 읽은 결과를 incompl
   const httpListener = result.records.find(
     (record) => record.providerResourceType === "AWS::ElasticLoadBalancingV2::Listener"
   );
-  assert.deepEqual(httpListener?.config["reverseEngineeringIncompleteDetails"], ["attributes"]);
+  assert.deepEqual(httpListener?.config["reverseEngineeringIncompleteDetails"], [
+    "attributes",
+    "tags"
+  ]);
   assert.equal(
     result.scanErrors.some((error) => error.resourceType === "LOAD_BALANCER_LISTENER"),
     true
@@ -314,9 +446,10 @@ test("ELBv2 tag batch 실패는 대상 record를 incomplete로 남기고 20개 �
 
   assert.ok(tagBatchSizes.every((size) => size > 0 && size <= 20));
   assert.ok(
-    result.records.every((record) =>
-      Array.isArray(record.config["reverseEngineeringIncompleteDetails"]) &&
-      record.config["reverseEngineeringIncompleteDetails"].includes("tags")
+    result.records.every(
+      (record) =>
+        Array.isArray(record.config["reverseEngineeringIncompleteDetails"]) &&
+        record.config["reverseEngineeringIncompleteDetails"].includes("tags")
     )
   );
   assert.ok(result.scanErrors.length > 0);

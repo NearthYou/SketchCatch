@@ -13,12 +13,9 @@ import { normalizeReverseEngineeringScanResult } from "./reverse-engineering-ser
 
 const region = "ap-northeast-2";
 const accountId = "123456789012";
-const loadBalancerArn =
-  `arn:aws:elasticloadbalancing:${region}:${accountId}:loadbalancer/app/orders/a1b2c3d4e5f6a7b8`;
-const targetGroupArn =
-  `arn:aws:elasticloadbalancing:${region}:${accountId}:targetgroup/orders/b1c2d3e4f5a6b7c8`;
-const listenerArn =
-  `arn:aws:elasticloadbalancing:${region}:${accountId}:listener/app/orders/a1b2c3d4e5f6a7b8/c1d2e3f4a5b6c7d8`;
+const loadBalancerArn = `arn:aws:elasticloadbalancing:${region}:${accountId}:loadbalancer/app/orders/a1b2c3d4e5f6a7b8`;
+const targetGroupArn = `arn:aws:elasticloadbalancing:${region}:${accountId}:targetgroup/orders/b1c2d3e4f5a6b7c8`;
+const listenerArn = `arn:aws:elasticloadbalancing:${region}:${accountId}:listener/app/orders/a1b2c3d4e5f6a7b8/c1d2e3f4a5b6c7d8`;
 
 /** gg: 관리 가능한 ELBv2 chain과 VPC 원본 record를 같은 scan 순서로 만듭니다. */
 function completeRecords(): AwsDiscoveredResourceRecord[] {
@@ -44,6 +41,7 @@ function completeRecords(): AwsDiscoveredResourceRecord[] {
         subnetIds: ["subnet-public-a"],
         reverseEngineeringDetailsVersion: 1,
         attributesReadComplete: true,
+        attributesProjectionComplete: true,
         tagsReadComplete: true,
         attributes: {},
         tags: [{ key: "Environment", value: "demo" }]
@@ -62,6 +60,8 @@ function completeRecords(): AwsDiscoveredResourceRecord[] {
         port: 8080,
         vpcId: "vpc-orders",
         targetType: "ip",
+        ipAddressType: "ipv4",
+        protocolVersion: "HTTP1",
         healthCheck: {
           enabled: true,
           protocol: "HTTP",
@@ -76,6 +76,7 @@ function completeRecords(): AwsDiscoveredResourceRecord[] {
         deregistrationDelay: 120,
         reverseEngineeringDetailsVersion: 1,
         attributesReadComplete: true,
+        attributesProjectionComplete: true,
         tagsReadComplete: true,
         attributes: { "deregistration_delay.timeout_seconds": "120" },
         tags: [{ key: "Environment", value: "demo" }]
@@ -97,6 +98,7 @@ function completeRecords(): AwsDiscoveredResourceRecord[] {
         simpleForwardAction: true,
         reverseEngineeringDetailsVersion: 1,
         attributesReadComplete: true,
+        attributesProjectionComplete: true,
         tagsReadComplete: true,
         attributes: {},
         tags: [{ key: "Environment", value: "demo" }]
@@ -115,7 +117,11 @@ async function scanRecords(
   resultVisibility: "public" | "private"
 ) {
   return createAwsProviderAdapter(
-    { async discoverResources() { return structuredClone(records); } },
+    {
+      async discoverResources() {
+        return structuredClone(records);
+      }
+    },
     { resultVisibility }
   ).scan({ provider: "aws", region, resourceTypes: ["ALL"] });
 }
@@ -174,10 +180,12 @@ test("완전한 Target Group과 HTTP Listener는 같은 scan 참조로 Terraform
     loadBalancerArn: `aws_lb.${targetProjectionName(alb)}.arn`,
     port: 80,
     protocol: "HTTP",
-    defaultAction: [{
-      type: "forward",
-      targetGroupArn: `aws_lb_target_group.${targetProjectionName(target)}.arn`
-    }],
+    defaultAction: [
+      {
+        type: "forward",
+        targetGroupArn: `aws_lb_target_group.${targetProjectionName(target)}.arn`
+      }
+    ],
     tags: { Environment: "demo" }
   });
 
@@ -198,10 +206,11 @@ test("공개 ELBv2 결과에는 ARN을 숨기고 안전 판정과 편집 필드�
   const serialized = JSON.stringify(result);
 
   assert.doesNotMatch(serialized, /arn:aws:elasticloadbalancing/iu);
-  for (const resource of result.discoveredResources.filter((candidate) =>
-    candidate.resourceType === "LOAD_BALANCER" ||
-    candidate.resourceType === "LOAD_BALANCER_TARGET_GROUP" ||
-    candidate.resourceType === "LOAD_BALANCER_LISTENER"
+  for (const resource of result.discoveredResources.filter(
+    (candidate) =>
+      candidate.resourceType === "LOAD_BALANCER" ||
+      candidate.resourceType === "LOAD_BALANCER_TARGET_GROUP" ||
+      candidate.resourceType === "LOAD_BALANCER_LISTENER"
   )) {
     assert.match(resource.providerResourceId, /^aws-ref-[a-f0-9]{24}$/u);
     assert.equal(resource.config["attributesReadComplete"], true);
@@ -213,22 +222,35 @@ test("지원 밖 Target Group과 Listener 또는 불완전 상세 조회는 need
   const scenarios: Array<{
     name: string;
     mutate(records: AwsDiscoveredResourceRecord[]): void;
-    resourceType: "LOAD_BALANCER_TARGET_GROUP" | "LOAD_BALANCER_LISTENER";
+    resourceType: "LOAD_BALANCER" | "LOAD_BALANCER_TARGET_GROUP" | "LOAD_BALANCER_LISTENER";
   }> = [
+    {
+      name: "미투영 ALB attribute",
+      resourceType: "LOAD_BALANCER",
+      mutate(records) {
+        records[1]!.config["attributesProjectionComplete"] = false;
+      }
+    },
     {
       name: "TCP Target Group",
       resourceType: "LOAD_BALANCER_TARGET_GROUP",
-      mutate(records) { records[2]!.config["protocol"] = "TCP"; }
+      mutate(records) {
+        records[2]!.config["protocol"] = "TCP";
+      }
     },
     {
       name: "Lambda Target Group",
       resourceType: "LOAD_BALANCER_TARGET_GROUP",
-      mutate(records) { records[2]!.config["targetType"] = "lambda"; }
+      mutate(records) {
+        records[2]!.config["targetType"] = "lambda";
+      }
     },
     {
       name: "ALB 관계 없는 Target Group",
       resourceType: "LOAD_BALANCER_TARGET_GROUP",
-      mutate(records) { records[2]!.relationships = records[2]!.relationships.slice(0, 1); }
+      mutate(records) {
+        records[2]!.relationships = records[2]!.relationships.slice(0, 1);
+      }
     },
     {
       name: "attribute 실패 Target Group",
@@ -239,9 +261,32 @@ test("지원 밖 Target Group과 Listener 또는 불완전 상세 조회는 need
       }
     },
     {
+      name: "미투영 Target Group attribute",
+      resourceType: "LOAD_BALANCER_TARGET_GROUP",
+      mutate(records) {
+        records[2]!.config["attributesProjectionComplete"] = false;
+      }
+    },
+    {
+      name: "IPv6 Target Group",
+      resourceType: "LOAD_BALANCER_TARGET_GROUP",
+      mutate(records) {
+        records[2]!.config["ipAddressType"] = "ipv6";
+      }
+    },
+    {
+      name: "HTTP2 Target Group",
+      resourceType: "LOAD_BALANCER_TARGET_GROUP",
+      mutate(records) {
+        records[2]!.config["protocolVersion"] = "HTTP2";
+      }
+    },
+    {
       name: "HTTPS Listener",
       resourceType: "LOAD_BALANCER_LISTENER",
-      mutate(records) { records[3]!.config["protocol"] = "HTTPS"; }
+      mutate(records) {
+        records[3]!.config["protocol"] = "HTTPS";
+      }
     },
     {
       name: "redirect Listener",
@@ -254,7 +299,16 @@ test("지원 밖 Target Group과 Listener 또는 불완전 상세 조회는 need
     {
       name: "Target Group 관계 없는 Listener",
       resourceType: "LOAD_BALANCER_LISTENER",
-      mutate(records) { records[3]!.relationships = records[3]!.relationships.slice(0, 1); }
+      mutate(records) {
+        records[3]!.relationships = records[3]!.relationships.slice(0, 1);
+      }
+    },
+    {
+      name: "미투영 Listener attribute",
+      resourceType: "LOAD_BALANCER_LISTENER",
+      mutate(records) {
+        records[3]!.config["attributesProjectionComplete"] = false;
+      }
     }
   ];
 
@@ -278,7 +332,41 @@ test("지원 밖 Target Group과 Listener 또는 불완전 상세 조회는 need
   }
 });
 
-test("과거 ALB 저장 결과는 새 상세 marker가 없어도 기존 읽기 동작을 유지한다", async () => {
+test("관계가 부족한 Target Group과 Listener는 실제 누락 연결을 안내한다", async () => {
+  const targetRecords = completeRecords();
+  targetRecords[2]!.relationships = targetRecords[2]!.relationships.slice(0, 1);
+  const targetResult = await scanRecords(targetRecords, "private");
+  const target = targetResult.discoveredResources.find(
+    (resource) => resource.resourceType === "LOAD_BALANCER_TARGET_GROUP"
+  );
+  assert.ok(target);
+  const targetSuggestion = targetResult.importSuggestions.find(
+    (suggestion) => suggestion.resourceId === target.id
+  );
+  const targetExclusion = targetResult.analysisExclusions.find(
+    (exclusion) => exclusion.resourceId === target.id
+  );
+  assert.match(targetSuggestion?.reason ?? "", /VPC.*ALB|ALB.*VPC/iu);
+  assert.match(targetExclusion?.message ?? "", /VPC.*ALB|ALB.*VPC/iu);
+
+  const listenerRecords = completeRecords();
+  listenerRecords[3]!.relationships = listenerRecords[3]!.relationships.slice(0, 1);
+  const listenerResult = await scanRecords(listenerRecords, "private");
+  const listener = listenerResult.discoveredResources.find(
+    (resource) => resource.resourceType === "LOAD_BALANCER_LISTENER"
+  );
+  assert.ok(listener);
+  const listenerSuggestion = listenerResult.importSuggestions.find(
+    (suggestion) => suggestion.resourceId === listener.id
+  );
+  const listenerExclusion = listenerResult.analysisExclusions.find(
+    (exclusion) => exclusion.resourceId === listener.id
+  );
+  assert.match(listenerSuggestion?.reason ?? "", /ALB.*Target Group|Target Group.*ALB/iu);
+  assert.match(listenerExclusion?.message ?? "", /ALB.*Target Group|Target Group.*ALB/iu);
+});
+
+test("과거 ALB 저장 결과는 새 상세 marker가 없으면 자동 관리를 막는다", async () => {
   const records = completeRecords();
   delete records[1]!.config["reverseEngineeringDetailsVersion"];
   delete records[1]!.config["attributesReadComplete"];
@@ -292,16 +380,15 @@ test("과거 ALB 저장 결과는 새 상세 marker가 없어도 기존 읽기 �
   assert.ok(alb);
   assert.equal(
     createReverseEngineeringTerraformProjection(alb, result.discoveredResources).management,
-    "managed"
+    "needs_mapping"
   );
+  const suggestion = result.importSuggestions.find((candidate) => candidate.resourceId === alb.id);
+  assert.equal(suggestion?.handoffReady, false);
 });
 
 test("저장된 완전한 ELBv2 chain은 읽기 보정 뒤에도 관리 상태를 유지하고 ARN은 숨긴다", async () => {
   const privateResult = await scanRecords(completeRecords(), "private");
-  const publicResult = normalizeReverseEngineeringScanResult(
-    privateResult.scan,
-    privateResult
-  );
+  const publicResult = normalizeReverseEngineeringScanResult(privateResult.scan, privateResult);
   const target = publicResult.discoveredResources.find(
     (resource) => resource.resourceType === "LOAD_BALANCER_TARGET_GROUP"
   );

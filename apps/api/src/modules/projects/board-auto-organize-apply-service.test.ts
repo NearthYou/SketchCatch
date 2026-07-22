@@ -3,11 +3,11 @@ import { test } from "node:test";
 import type { DiagramJson, TerraformSyncFileInput } from "@sketchcatch/types";
 import type { Database } from "../../db/client.js";
 import type { ProjectDraftRow } from "./project-drafts.js";
+import { createBoardAutoOrganizeSourceFingerprint } from "@sketchcatch/types";
 import {
   applyBoardAutoOrganizeDraft,
   BoardAutoOrganizeSemanticMismatchError,
-  BoardAutoOrganizeSourceMismatchError,
-  createBoardAutoOrganizeSourceFingerprint
+  BoardAutoOrganizeSourceMismatchError
 } from "./board-auto-organize-apply-service.js";
 
 const PROJECT_ID = "33333333-3333-4333-8333-333333333333";

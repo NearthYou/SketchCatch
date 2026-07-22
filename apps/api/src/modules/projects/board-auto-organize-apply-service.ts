@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import {
+  createBoardAutoOrganizeSourceFingerprint,
   hasSameBoardAutoOrganizeSemantics,
   serializeBoardAutoOrganizeSource,
   type DiagramJson,
@@ -44,7 +45,7 @@ export async function applyBoardAutoOrganizeDraft(
 ): Promise<SaveProjectDraftRevisionResult> {
   const serializedRequestSource = serializeBoardAutoOrganizeSource(input.sourceDiagram);
 
-  if (createFingerprint(serializedRequestSource) !== input.sourceFingerprint) {
+  if (createBoardAutoOrganizeSourceFingerprint(input.sourceDiagram) !== input.sourceFingerprint) {
     throw new BoardAutoOrganizeSourceMismatchError();
   }
 
@@ -65,7 +66,8 @@ export async function applyBoardAutoOrganizeDraft(
   };
 
   if (
-    serializeBoardAutoOrganizeSource(publicPersistedDraft.diagramJson) !== serializedRequestSource ||
+    serializeBoardAutoOrganizeSource(publicPersistedDraft.diagramJson) !==
+      serializedRequestSource ||
     !hasSameBoardAutoOrganizeSemantics(publicPersistedDraft.diagramJson, input.sourceDiagram)
   ) {
     throw new BoardAutoOrganizeSourceMismatchError();
@@ -120,23 +122,6 @@ async function readProjectDraft({
     .where(eq(projectDrafts.projectId, projectId));
 
   return draft ?? null;
-}
-
-/** Task 6 후보와 같은 source serializer/FNV-1a 규칙으로 서버 fingerprint를 다시 만듭니다. */
-export function createBoardAutoOrganizeSourceFingerprint(diagram: DiagramJson): string {
-  return createFingerprint(serializeBoardAutoOrganizeSource(diagram));
-}
-
-/** 브라우저 후보 생성과 동일한 UTF-16 FNV-1a 값을 8자리 hex로 고정합니다. */
-function createFingerprint(value: string): string {
-  let hash = 0x811c9dc5;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-
-  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 /** 요청 source와 fingerprint가 다를 때 저장 전에 stale 처리를 요구합니다. */

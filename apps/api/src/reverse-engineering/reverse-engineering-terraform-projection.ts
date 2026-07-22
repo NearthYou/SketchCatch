@@ -58,18 +58,13 @@ export function createReverseEngineeringTerraformProjection(
   sameScanResources?: readonly DiscoveredResource[]
 ): ReverseEngineeringTerraformProjection {
   const management = classifyReverseEngineeringManagement(resource);
-  const terraformResourceType = TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE.get(
-    resource.resourceType
-  );
+  const terraformResourceType = TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE.get(resource.resourceType);
 
   if (management !== "managed" || !terraformResourceType) {
     return { management, terraformValues: {} };
   }
 
-  const terraformValues = createReverseEngineeringTerraformValues(
-    resource,
-    sameScanResources
-  );
+  const terraformValues = createReverseEngineeringTerraformValues(resource, sameScanResources);
   if (
     SAME_SCAN_REFERENCE_RESOURCE_TYPES.has(resource.resourceType) &&
     Object.keys(terraformValues).length === 0
@@ -204,7 +199,8 @@ export function createReverseEngineeringTerraformValues(
     case "CLOUDWATCH_LOG_GROUP":
       return compactConfig({
         name: config["logGroupName"],
-        retentionInDays: config["retentionInDays"]
+        retentionInDays: config["retentionInDays"],
+        tags: normalizeTerraformTags(config["tags"])
       });
     case "CLOUDWATCH_METRIC_ALARM":
       return compactConfig({
@@ -221,6 +217,7 @@ export function createReverseEngineeringTerraformValues(
         namespace: config["namespace"],
         period: config["period"],
         statistic: config["statistic"],
+        tags: normalizeTerraformTags(config["tags"]),
         threshold: config["threshold"],
         treatMissingData: config["treatMissingData"],
         unit: config["unit"]
@@ -281,9 +278,7 @@ export function createReverseEngineeringTerraformValues(
         desiredCount: config["desiredCount"],
         launchType: config["launchType"],
         capacityProviderStrategy: config["capacityProviderStrategy"],
-        networkConfiguration: normalizeEcsNetworkConfiguration(
-          config["networkConfiguration"]
-        ),
+        networkConfiguration: normalizeEcsNetworkConfiguration(config["networkConfiguration"]),
         loadBalancer: config["loadBalancers"],
         tags: normalizeTerraformTags(config["tags"])
       });
@@ -361,10 +356,7 @@ function createLoadBalancerListenerTerraformValues(
     defaultAction: [
       {
         type: "forward",
-        targetGroupArn: createTerraformArnReference(
-          "aws_lb_target_group",
-          targetGroup
-        )
+        targetGroupArn: createTerraformArnReference("aws_lb_target_group", targetGroup)
       }
     ],
     tags: normalizeTerraformTags(resource.config["tags"])
@@ -421,9 +413,7 @@ function createElasticIpTerraformValues(
         hasRelationshipTo(candidate, resource) &&
         getStringValues(candidate.config["allocationIds"]).includes(allocationId ?? "")
     );
-    const natGateway = natGatewayCandidates.length === 1
-      ? natGatewayCandidates[0]
-      : undefined;
+    const natGateway = natGatewayCandidates.length === 1 ? natGatewayCandidates[0] : undefined;
 
     if (!natGateway || classifyReverseEngineeringManagement(natGateway) !== "managed") {
       return {};
@@ -547,9 +537,7 @@ function findSameScanManagedTarget(
   );
   const target = candidates.length === 1 ? candidates[0] : undefined;
 
-  return target && classifyReverseEngineeringManagement(target) === "managed"
-    ? target
-    : undefined;
+  return target && classifyReverseEngineeringManagement(target) === "managed" ? target : undefined;
 }
 
 /** gg: node 관계로 확인된 같은 scan 대상이 정확히 하나일 때만 Terraform 참조를 허용합니다. */
@@ -628,8 +616,8 @@ function normalizeTerraformTags(value: unknown): Record<string, string> | undefi
   if (!Array.isArray(value)) {
     return isRecord(value)
       ? Object.fromEntries(
-          Object.entries(value).filter((entry): entry is [string, string] =>
-            typeof entry[1] === "string"
+          Object.entries(value).filter(
+            (entry): entry is [string, string] => typeof entry[1] === "string"
           )
         )
       : undefined;
@@ -642,9 +630,7 @@ function normalizeTerraformTags(value: unknown): Record<string, string> | undefi
     const key = candidate["key"] ?? candidate["Key"];
     const tagValue = candidate["value"] ?? candidate["Value"];
 
-    return typeof key === "string" && typeof tagValue === "string"
-      ? [[key, tagValue]]
-      : [];
+    return typeof key === "string" && typeof tagValue === "string" ? [[key, tagValue]] : [];
   });
 
   return tags.length > 0 ? Object.fromEntries(tags) : undefined;
@@ -705,15 +691,11 @@ function normalizeRouteTableRoutes(
     const natGatewayId = getNonEmptyString(route["natGatewayId"]);
     const sameScanNatGateway =
       natGatewayId && sameScanResources
-        ? findSameScanManagedTarget(
-            routeTable,
-            sameScanResources,
-            "NAT_GATEWAY",
-            natGatewayId
-          )
+        ? findSameScanManagedTarget(routeTable, sameScanResources, "NAT_GATEWAY", natGatewayId)
         : undefined;
     const managedNatGateway =
-      sameScanNatGateway && sameScanResources &&
+      sameScanNatGateway &&
+      sameScanResources &&
       createReverseEngineeringTerraformProjection(sameScanNatGateway, sameScanResources)
         .management === "managed"
         ? sameScanNatGateway
@@ -800,9 +782,7 @@ function normalizeEcsNetworkConfiguration(value: unknown): Record<string, unknow
   if (!isRecord(value)) {
     return undefined;
   }
-  const awsvpc = isRecord(value["awsvpcConfiguration"])
-    ? value["awsvpcConfiguration"]
-    : value;
+  const awsvpc = isRecord(value["awsvpcConfiguration"]) ? value["awsvpcConfiguration"] : value;
 
   return compactConfig({
     subnets: awsvpc["subnets"],

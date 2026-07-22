@@ -1,5 +1,5 @@
 import {
-  serializeBoardAutoOrganizeSource,
+  createBoardAutoOrganizeSourceFingerprint,
   type DiagramJson,
   type ReverseEngineeringSourceKind
 } from "@sketchcatch/types";
@@ -86,7 +86,7 @@ export function createReverseEngineeringApplyPreview({
   return {
     sourceDiagram,
     sourceDraftRevision: draftRevision,
-    sourceFingerprint: serializeBoardAutoOrganizeSource(sourceDiagram)
+    sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(sourceDiagram)
   };
 }
 
@@ -109,7 +109,7 @@ export async function applyExistingReverseEngineeringPreview({
   if (
     preview.sourceDraftRevision === null ||
     currentDraftRevision !== preview.sourceDraftRevision ||
-    serializeBoardAutoOrganizeSource(currentDiagram) !== preview.sourceFingerprint
+    createBoardAutoOrganizeSourceFingerprint(currentDiagram) !== preview.sourceFingerprint
   ) {
     return { status: "stale" };
   }

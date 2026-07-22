@@ -154,7 +154,7 @@ test("새 프로젝트 적용은 Project, Draft, Snapshot을 하나의 서버 �
   const createProjectFlow = getSourceBlock(
     applyFlow,
     "if (createProjectOnApply)",
-    "if (!context.persistAndApplyDiagramJson)"
+    "if (!context.persistAndApplyReverseEngineeringDraft)"
   );
 
   assert.match(createProjectFlow, /await createReverseEngineeringProject\(/);
@@ -169,7 +169,7 @@ test("새 프로젝트는 서버 preview claim만 보내고 공개 scan identity
   const createProjectFlow = getSourceBlock(
     panelSource,
     "if (createProjectOnApply)",
-    "if (!context.persistAndApplyDiagramJson)"
+    "if (!context.persistAndApplyReverseEngineeringDraft)"
   );
   const createProjectRequestContract = getSourceBlock(
     sharedTypesSource,
@@ -203,10 +203,7 @@ test("새 프로젝트는 서버 preview claim만 보내고 공개 scan identity
   assert.match(panelSource, /setPreviewId\(response\.previewId\)/);
   assert.match(createProjectFlow, /previewId,/);
   assert.match(createProjectFlow, /draftId: result\.reverseEngineeringDraft\.id/);
-  assert.match(
-    createProjectFlow,
-    /sourceNodeIds: \[\.\.\.application\.sourceOwnership\.nodeIds\]/
-  );
+  assert.match(createProjectFlow, /sourceNodeIds: \[\.\.\.application\.sourceOwnership\.nodeIds\]/);
 
   const claimPayload = getSourceBlock(
     createProjectFlow,
@@ -249,15 +246,30 @@ test("Reverse preview가 생성 당시 Board fingerprint와 draft revision으로
   assert.match(applyFlow, /preview: previewBase/);
   assert.match(
     applyFlow,
-    /persistAndApply: \(diagram, expectedRevision\) =>\s*context\.persistAndApplyDiagramJson\?\.\(diagram, expectedRevision\)/
+    /persistAndApply: \(diagram, expectedRevision\) =>\s*context\.persistAndApplyReverseEngineeringDraft\?\.\(\{/
   );
+  assert.match(applyFlow, /sourceFingerprint: previewBase\.sourceFingerprint/);
+  assert.match(applyFlow, /sourceEdgeIds: \[\.\.\.application\.sourceOwnership\.edgeIds\]/);
+  assert.match(applyFlow, /importDecision/);
   assert.match(diagramEditorTypesSource, /projectDraftRevision: number \| null/);
+  assert.match(diagramEditorTypesSource, /persistAndApplyReverseEngineeringDraft\?/);
   assert.match(
-    diagramEditorTypesSource,
-    /\(\(diagram: DiagramJson, expectedRevision: number\) => Promise<void>\)/
+    persistedApplyFlow,
+    /const persistedDiagram = cloneDiagram\(response\.draft\.diagramJson\)/
   );
-  assert.match(persistedApplyFlow, /async \(nextDiagram, expectedRevision\)/);
-  assert.doesNotMatch(persistedApplyFlow, /expectedRevision: projectDraftRevision/);
+  assert.doesNotMatch(
+    persistedApplyFlow,
+    /commitDiagramUpdate\(\(\) => cloneDiagram\(request\.candidateDiagram\)\)/
+  );
+});
+
+test("기존 프로젝트 스캔은 현재 Workspace Project에서 벗어나지 않는다", () => {
+  assert.match(
+    panelSource,
+    /const targetProjectId = createProjectOnApply \? selectedProjectId : projectId/
+  );
+  assert.match(panelSource, /projectId: targetProjectId/);
+  assert.doesNotMatch(panelSource, /onSelectedProjectChange=\{setSelectedProjectId\}/);
 });
 
 test("중첩 상세 항목은 열린 바깥 항목 때문에 닫힌 표시가 바뀌지 않는다", () => {

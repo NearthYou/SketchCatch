@@ -59,10 +59,13 @@ export function serializeBoardAutoOrganizeSource(diagram: DiagramJson): string {
     edges: sortById(diagram.edges).map((edge) =>
       omitTransientSelectionFields(edge as unknown as Record<string, unknown>)
     ),
-    ...(diagram.variables === undefined
-      ? {}
-      : { variables: sortVariables(diagram.variables) })
+    ...(diagram.variables === undefined ? {} : { variables: sortVariables(diagram.variables) })
   });
+}
+
+/** source serializer를 브라우저와 서버가 공유하는 UTF-16 FNV-1a 8자리 값으로 줄입니다. */
+export function createBoardAutoOrganizeSourceFingerprint(diagram: DiagramJson): string {
+  return createBoardAutoOrganizeFingerprint(serializeBoardAutoOrganizeSource(diagram));
 }
 
 /** 자동 정리가 바꿀 수 없는 Resource·설정·관계·presentation을 안정적으로 직렬화합니다. */
@@ -74,12 +77,8 @@ export function serializeBoardAutoOrganizeSemantics(diagram: DiagramJson): strin
         omitTransientSelectionFields(node as unknown as Record<string, unknown>)
       ),
     edges: sortById(diagram.edges).map(toSemanticEdge),
-    ...(diagram.variables === undefined
-      ? {}
-      : { variables: sortVariables(diagram.variables) }),
-    ...(diagram.presentation === undefined
-      ? {}
-      : { presentation: diagram.presentation })
+    ...(diagram.variables === undefined ? {} : { variables: sortVariables(diagram.variables) }),
+    ...(diagram.presentation === undefined ? {} : { presentation: diagram.presentation })
   });
 }
 
@@ -89,8 +88,7 @@ export function hasSameBoardAutoOrganizeSemantics(
   candidate: DiagramJson
 ): boolean {
   return (
-    serializeBoardAutoOrganizeSemantics(source) ===
-    serializeBoardAutoOrganizeSemantics(candidate)
+    serializeBoardAutoOrganizeSemantics(source) === serializeBoardAutoOrganizeSemantics(candidate)
   );
 }
 
@@ -104,12 +102,8 @@ function toSemanticEdge(edge: DiagramEdge): unknown {
   } = edge;
 
   return {
-    ...omitTransientSelectionFields(
-      semanticEdge as unknown as Record<string, unknown>
-    ),
-    ...(route?.arrowDirection === undefined
-      ? {}
-      : { arrowDirection: route.arrowDirection })
+    ...omitTransientSelectionFields(semanticEdge as unknown as Record<string, unknown>),
+    ...(route?.arrowDirection === undefined ? {} : { arrowDirection: route.arrowDirection })
   };
 }
 
@@ -167,4 +161,16 @@ function omitTransientSelectionFields(
 /** 배열과 null을 제외한 plain JSON object만 좁힙니다. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** 안정적으로 직렬화한 Board source를 짧은 비교 값으로 만듭니다. */
+function createBoardAutoOrganizeFingerprint(value: string): string {
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }

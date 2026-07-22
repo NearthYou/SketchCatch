@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import type {
+  ApplyReverseEngineeringDraftRequest,
   DiagramJson,
   ProjectDraft,
   ProjectDraftConflictResponse,
@@ -18,6 +19,7 @@ import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import {
   applyProjectDraftBoardAutoOrganize,
+  applyProjectDraftReverseEngineering,
   getProject,
   listSourceRepositories,
   saveProjectDraft
@@ -63,19 +65,14 @@ import {
   type ProjectLocalSaveState,
   type ProjectServerSaveState
 } from "./project-draft-save-status";
-import {
-  loadProjectWorkspaceTitle,
-  resolveProjectWorkspaceTitle
-} from "./project-workspace-title";
+import { loadProjectWorkspaceTitle, resolveProjectWorkspaceTitle } from "./project-workspace-title";
 import type { WorkspaceCloudPlatform } from "./project-draft-persistence";
-import {
-  getProjectDraftConflict,
-  type SavedServerProjectDiagramDraft
-} from "./project-draft-sync";
+import { getProjectDraftConflict, type SavedServerProjectDiagramDraft } from "./project-draft-sync";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type { InitialCicdReturnCommand } from "./cicd-return-command";
 import { ProjectDraftConflictDialog } from "./ProjectDraftConflictDialog";
 import { reconcileBoardAutoOrganizeTerraformFiles } from "./project-draft-conflict";
+import { prepareWorkspaceReverseEngineeringEntry } from "./workspace-reverse-engineering-entry";
 import {
   claimProjectDraftTabCacheWorkspaceId,
   type ProjectDraftTabCacheClaim
@@ -526,6 +523,27 @@ function ProjectWorkspaceDraftManagerState({
     void flushDraftToServer("external");
   }, [flushDraftToServer]);
 
+  /** 현재 보드를 서버에 먼저 확정하고 같은 Project의 AWS 구조 가져오기만 허용합니다. */
+  const handleReverseEngineeringOpenRequest = useCallback(async () => {
+    return prepareWorkspaceReverseEngineeringEntry({
+      draftReady: draftReadyRef.current,
+      hasPendingLocalChanges: hasPendingLocalChangesRef.current,
+      projectDraftRevision,
+      projectId,
+      serverConflict: serverConflictRef.current,
+      serverDirty: serverDirtyRef.current,
+      serverSaving: serverSavingRef.current,
+      saveDraft: async () => {
+        const result = await flushDraftToServer("manual");
+
+        return {
+          ok: result.ok && result.serverDraft !== null,
+          revision: result.serverDraft?.revision ?? null
+        };
+      }
+    });
+  }, [flushDraftToServer, projectDraftRevision, projectId]);
+
   const saveAndOpenDeployment = useCallback((): void => {
     setDeploymentOpenRequestId((requestId) => requestId + 1);
   }, []);
@@ -821,9 +839,48 @@ function ProjectWorkspaceDraftManagerState({
     [projectId]
   );
 
+  /** Reverse Engineering 요청에 현재 Terraform 파일을 붙여 서버가 다시 확인한 결과만 저장합니다. */
+  const handleReverseEngineeringDraftApplyRequest = useCallback(
+    async (
+      request: Omit<ApplyReverseEngineeringDraftRequest, "terraformFiles">
+    ): Promise<ProjectDraftResponse> => {
+      try {
+        const response = await applyProjectDraftReverseEngineering({
+          ...request,
+          projectId,
+          terraformFiles: latestTerraformFilesRef.current.map((file) => ({ ...file }))
+        });
+
+        if (!response.draft) {
+          throw new Error("Reverse Engineering Board 저장 결과가 비어 있습니다.");
+        }
+
+        return response;
+      } catch (error) {
+        const conflict = getProjectDraftConflict(error);
+
+        if (conflict) {
+          serverConflictRef.current = true;
+          setDraftConflict(conflict);
+          setDraftReloadError(null);
+          setServerSaveState("server-conflict");
+        }
+
+        throw error;
+      }
+    },
+    [projectId]
+  );
+
   /** 서버 적용 뒤의 Board를 같은 revision의 로컬 복구 상태로 한 번만 맞춥니다. */
   const handleBoardAutoOrganizeApplied = useCallback(
-    ({ diagramJson, draft }: { readonly diagramJson: DiagramJson; readonly draft: ProjectDraft }) => {
+    ({
+      diagramJson,
+      draft
+    }: {
+      readonly diagramJson: DiagramJson;
+      readonly draft: ProjectDraft;
+    }) => {
       clearLocalSaveTimer();
       const serverTerraformFiles = draft.terraformFiles?.map((file) => ({ ...file })) ?? [];
       const terraformReconciliation = reconcileBoardAutoOrganizeTerraformFiles({
@@ -1041,6 +1098,7 @@ function ProjectWorkspaceDraftManagerState({
         onBoardAutoOrganizeApplyRequest={handleBoardAutoOrganizeApplyRequest}
         onPersistedDiagramApplied={handlePersistedDiagramApplied}
         onPersistedDiagramApplyRequest={handlePersistedDiagramApplyRequest}
+        onReverseEngineeringDraftApplyRequest={handleReverseEngineeringDraftApplyRequest}
         onDiagramChange={handleDiagramChange}
         onDiagramSaveRequest={() => flushDraftToServer("manual")}
         onWorkspacePanelOpen={closeAiChat}
@@ -1066,6 +1124,7 @@ function ProjectWorkspaceDraftManagerState({
             initialTerraformFiles={initialTerraformFiles}
             onBlockingPanelOpenChange={setBlockingPanelOpen}
             onLiveObservationTerraformFilesApply={handleLiveObservationTerraformFilesApply}
+            onReverseEngineeringOpenRequest={handleReverseEngineeringOpenRequest}
             onDeploymentConsoleOpenChange={setDeploymentConsoleOpen}
             onPanelOpenRequest={closeAiChat}
             onInitialCicdReturnCommandReady={acknowledgeInitialCicdReturnCommand}
