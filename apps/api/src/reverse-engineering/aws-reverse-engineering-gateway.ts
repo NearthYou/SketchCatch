@@ -2672,6 +2672,7 @@ function toUnknownRestApiRecord(restApi: RestApi, fallbackRegion: string): AwsDi
         disableExecuteApiEndpoint: restApi.disableExecuteApiEndpoint,
         endpointConfiguration: restApi.endpointConfiguration,
         id: restApi.id,
+        minimumCompressionSize: restApi.minimumCompressionSize,
         name: restApi.name,
         providerParameters: toProviderParameterSnapshot(restApi),
         rootResourceId: restApi.rootResourceId,

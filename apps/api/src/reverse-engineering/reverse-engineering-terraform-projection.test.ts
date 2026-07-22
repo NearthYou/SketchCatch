@@ -195,6 +195,45 @@ test("KMS 연결 CloudWatch Log Group은 위험한 Terraform identity와 값을 
   });
 });
 
+test("API Gateway REST API 관찰값을 재배포 가능한 Terraform 값으로 제한한다", () => {
+  const projection = createReverseEngineeringTerraformProjection(
+    resource("API_GATEWAY_REST_API", {
+      providerResourceId: "a1b2c3d4e5",
+      providerResourceType: "AWS::ApiGateway::RestApi",
+      config: {
+        name: "customer-api",
+        description: "Customer API",
+        apiKeySource: "HEADER",
+        binaryMediaTypes: ["application/octet-stream"],
+        disableExecuteApiEndpoint: true,
+        endpointConfiguration: { types: ["REGIONAL"] },
+        minimumCompressionSize: 1_024,
+        tags: { Environment: "production" },
+        id: "a1b2c3d4e5",
+        rootResourceId: "root-must-not-be-managed"
+      }
+    })
+  );
+
+  assert.deepEqual(projection, {
+    management: "managed",
+    terraformBlockType: "resource",
+    terraformResourceType: "aws_api_gateway_rest_api",
+    terraformResourceName: "resource_customer_assets",
+    terraformFileName: "reverse-engineering",
+    terraformValues: {
+      name: "customer-api",
+      description: "Customer API",
+      apiKeySource: "HEADER",
+      binaryMediaTypes: ["application/octet-stream"],
+      disableExecuteApiEndpoint: true,
+      endpointConfiguration: { types: ["REGIONAL"] },
+      minimumCompressionSize: 1_024,
+      tags: { Environment: "production" }
+    }
+  });
+});
+
 test("AWS와 CloudFormation과 SketchCatch 소유 리소스는 보드에는 남겨도 Terraform identity를 만들지 않는다", () => {
   const protectedResources = [
     resource("S3", {

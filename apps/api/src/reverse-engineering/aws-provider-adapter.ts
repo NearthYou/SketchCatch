@@ -94,6 +94,7 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
 ]);
 
 const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
+  "API_GATEWAY_REST_API",
   "CLOUDWATCH_LOG_GROUP",
   "LOAD_BALANCER",
   "CLOUDFRONT",
@@ -102,6 +103,7 @@ const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
   "ECS_TASK_DEFINITION"
 ]);
 const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
+  "API_GATEWAY_REST_API",
   "VPC",
   "SUBNET",
   "INTERNET_GATEWAY",
@@ -132,6 +134,20 @@ const OPAQUE_PUBLIC_ID_RESOURCE_TYPES = new Set([
   "AWS::IAM::InstanceProfile"
 ]);
 const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>([
+  [
+    "AWS::ApiGateway::RestApi",
+    new Set([
+      "apiKeySource",
+      "binaryMediaTypes",
+      "description",
+      "disableExecuteApiEndpoint",
+      "endpointConfiguration",
+      "id",
+      "minimumCompressionSize",
+      "name",
+      "tags"
+    ])
+  ],
   [
     "AWS::ElasticLoadBalancingV2::LoadBalancer",
     new Set([
@@ -655,6 +671,10 @@ function getMissingTerraformCreationFields(
   resourceType: ResourceType,
   config: Record<string, unknown>
 ): string[] {
+  if (resourceType === "API_GATEWAY_REST_API") {
+    return getNonEmptyString(config["name"]) ? [] : ["name"];
+  }
+
   if (resourceType === "CLOUDWATCH_LOG_GROUP") {
     return getNonEmptyString(config["logGroupName"]) ? [] : ["logGroupName"];
   }

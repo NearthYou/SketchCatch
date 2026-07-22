@@ -10,6 +10,10 @@ test("자동 지원 워크로드와 AMI를 Terraform 관리 경계에 맞게 분
     classifyReverseEngineeringManagement(resource("CLOUDWATCH_LOG_GROUP")),
     "managed"
   );
+  assert.equal(
+    classifyReverseEngineeringManagement(resource("API_GATEWAY_REST_API")),
+    "managed"
+  );
   assert.equal(classifyReverseEngineeringManagement(resource("AMI")), "reference");
 });
 

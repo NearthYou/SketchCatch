@@ -8,6 +8,7 @@ export type ReverseEngineeringManagementDecision =
   | "needs_mapping";
 
 const AUTOMATED_MANAGED_RESOURCE_TYPES = new Set<ResourceType>([
+  "API_GATEWAY_REST_API",
   "VPC",
   "SUBNET",
   "INTERNET_GATEWAY",

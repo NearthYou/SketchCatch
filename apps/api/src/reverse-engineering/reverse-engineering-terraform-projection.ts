@@ -19,6 +19,7 @@ export type ReverseEngineeringTerraformProjection = {
 };
 
 const TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE = new Map<ResourceType, string>([
+  ["API_GATEWAY_REST_API", "aws_api_gateway_rest_api"],
   ["VPC", "aws_vpc"],
   ["SUBNET", "aws_subnet"],
   ["INTERNET_GATEWAY", "aws_internet_gateway"],
@@ -82,6 +83,17 @@ function createTerraformValues(resource: DiscoveredResource): ResourceConfig {
   const { config } = resource;
 
   switch (resource.resourceType) {
+    case "API_GATEWAY_REST_API":
+      return compactConfig({
+        name: config["name"],
+        description: config["description"],
+        apiKeySource: config["apiKeySource"],
+        binaryMediaTypes: config["binaryMediaTypes"],
+        disableExecuteApiEndpoint: config["disableExecuteApiEndpoint"],
+        endpointConfiguration: config["endpointConfiguration"],
+        minimumCompressionSize: config["minimumCompressionSize"],
+        tags: normalizeTerraformTags(config["tags"])
+      });
     case "VPC":
       return compactConfig({
         cidrBlock: config["cidrBlock"],

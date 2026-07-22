@@ -208,7 +208,7 @@ test("ALB와 CloudFront를 supported ResourceType으로 변환하고 공개 가�
   }
 });
 
-test("AWS 전용 reader가 찾은 검토 전용 Resource도 실제 Catalog 타입으로 보드에 표시한다", async () => {
+test("AWS 전용 reader가 찾은 Resource를 실제 Catalog 타입으로 보드에 표시한다", async () => {
   const providerTypeMappings = [
     ["AWS::EC2::Image", "AMI"],
     ["AWS::Lambda::Function", "LAMBDA"],
@@ -235,20 +235,69 @@ test("AWS 전용 reader가 찾은 검토 전용 Resource도 실제 Catalog 타�
     providerTypeMappings.map(([, resourceType]) => resourceType)
   );
   assert.equal(
-    result.discoveredResources.every((resource) => resource.analysisExcluded === true),
+    result.discoveredResources.slice(0, -1).every((resource) => resource.analysisExcluded === true),
     true
   );
+  assert.equal(result.discoveredResources.at(-1)?.analysisExcluded ?? false, false);
   assert.deepEqual(
     result.architectureJson.nodes.map((node) => node.type),
     providerTypeMappings.map(([, resourceType]) => resourceType)
   );
-  assert.equal(result.analysisExclusions.length, providerTypeMappings.length);
+  assert.equal(result.analysisExclusions.length, providerTypeMappings.length - 1);
   assert.equal(
-    result.importSuggestions.every(
+    result.importSuggestions.slice(0, -1).every(
       (suggestion) =>
         suggestion.status === "unsupported_resource_type" && suggestion.handoffReady === false
     ),
     true
+  );
+  assert.equal(result.importSuggestions.at(-1)?.status, "manual_review");
+  assert.match(result.importSuggestions.at(-1)?.reason ?? "", /name/iu);
+});
+
+test("API Gateway REST API를 이름과 설정을 보존한 Terraform 관리 대상으로 만든다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::ApiGateway::RestApi",
+      providerResourceId: "a1b2c3d4e5",
+      displayName: "customer-api",
+      config: {
+        id: "a1b2c3d4e5",
+        name: "customer-api",
+        description: "Customer API",
+        apiKeySource: "HEADER",
+        binaryMediaTypes: ["application/octet-stream"],
+        disableExecuteApiEndpoint: true,
+        endpointConfiguration: { types: ["REGIONAL"] },
+        minimumCompressionSize: 1_024,
+        tags: { Environment: "production" },
+        rootResourceId: "root-must-not-be-managed",
+        createdAt: "2026-07-23T00:00:00.000Z"
+      }
+    })
+  ]);
+
+  const [resource] = result.discoveredResources;
+  assert.equal(resource?.analysisExcluded ?? false, false);
+  assert.deepEqual(resource?.config, {
+    apiKeySource: "HEADER",
+    binaryMediaTypes: ["application/octet-stream"],
+    description: "Customer API",
+    disableExecuteApiEndpoint: true,
+    endpointConfiguration: { types: ["REGIONAL"] },
+    id: "a1b2c3d4e5",
+    minimumCompressionSize: 1_024,
+    name: "customer-api",
+    tags: { Environment: "production" }
+  });
+  assertReadyImport(
+    result.importSuggestions[0],
+    "aws_api_gateway_rest_api",
+    "a1b2c3d4e5"
+  );
+  assert.equal(
+    result.architectureJson.nodes[0]?.config["terraformResourceType"],
+    "aws_api_gateway_rest_api"
   );
 });
 
