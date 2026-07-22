@@ -99,8 +99,28 @@ test("the realtime deployment demo prompt keeps questions but always returns the
   trackingConfiguration[0].targetValue = 5;
 
   const tunedTerraform = generateTerraformFromDiagramJson(tunedDiagram);
+  assert.equal(
+    tunedTerraform,
+    expectedTerraform.replace(
+      /(\btarget_value\s*=\s*)50\b/u,
+      (_match, prefix: string) => `${prefix}5`
+    )
+  );
   assert.match(tunedTerraform, /target_value\s+= 5/u);
   assert.doesNotMatch(tunedTerraform, /target_value\s+= 50/u);
+  assert.match(
+    tunedTerraform,
+    /resource "aws_route_table_association" "rta_private_app_a" \{[\s\S]*?subnet_id\s+= aws_subnet\.subnet_private_app_a\.id[\s\S]*?\}/u
+  );
+  assert.match(
+    tunedTerraform,
+    /output "max_capacity" \{[\s\S]*?value\s+= aws_appautoscaling_target\.ecs_service_requests\.max_capacity[\s\S]*?\}/u
+  );
+  assert.match(tunedTerraform, /resource "random_password" "check_in_signing"/u);
+  assert.match(
+    tunedTerraform,
+    /secret_string\s+= random_password\.check_in_signing\.result/u
+  );
 
   const catalogPresentedDiagram = {
     ...first.diagramJson,
