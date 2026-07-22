@@ -8,8 +8,11 @@ import {
   GitCicdInitialApplicationReleaseRequiredError,
   GitCicdSourceRepositoryMismatchError,
   type GitCicdHandoffProvider,
-  type GitCicdHandoffRepository
+  type GitCicdHandoffRecord,
+  type GitCicdHandoffRepository,
+  type ProjectAccessContext
 } from "../git-cicd/git-cicd-handoff-service.js";
+import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
 import { registerGitCicdHandoffRoutes } from "./git-cicd-handoffs.js";
 
 process.env.NODE_ENV = "test";
@@ -117,6 +120,85 @@ test("stale handoff configuration maps to its stable HTTP 409 code", async (t) =
     message: "CI/CD 설정이 변경되었습니다. Delivery 정보를 새로고침하고 다시 검토해 주세요."
   });
 });
+
+test("setup retries an existing handoff without requiring another accepted change id", async (t) => {
+  const app = Fastify();
+  const handoffId = "77777777-7777-4777-8777-777777777777";
+  let receivedInput: unknown;
+  await app.register(registerGitCicdHandoffRoutes, {
+    prefix: "/api",
+    getDatabaseClient: createAuthDatabaseClient,
+    createGitCicdHandoffRepository: () => ({}) as GitCicdHandoffRepository,
+    gitCicdHandoffProvider: {} as GitCicdHandoffProvider,
+    runtimeCache: createInMemoryRuntimeCache({ cleanupIntervalMs: null }),
+    setupGitCicdHandoff: async (input: {
+      handoffId: string;
+      accessContext: ProjectAccessContext;
+    }) => {
+      receivedInput = input;
+      return createHandoffRecord(input.handoffId);
+    }
+  });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/git-cicd-handoffs/${handoffId}/setup`,
+    headers: { authorization: `Bearer ${await createAccessToken(userId)}` }
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(receivedInput, {
+    handoffId,
+    accessContext: { kind: "user", userId }
+  });
+  assert.equal(response.json().handoff.userAcceptedChangeId, "accepted-plan-1");
+  assert.equal(response.json().handoff.status, "pr_created");
+});
+
+function createHandoffRecord(id: string): GitCicdHandoffRecord {
+  return {
+    id,
+    projectId,
+    architectureId: "architecture-1",
+    terraformArtifactId: "terraform-1",
+    handoffKind: "terraform_iac",
+    sourceDeploymentId: "deployment-1",
+    deploymentMode: "infra_and_app",
+    requiresEnvironmentApproval: true,
+    sourceRepositoryId: "repository-1",
+    repositoryProvider: "github",
+    repositoryOwner: "sketchcatch",
+    repositoryName: "demo",
+    targetBranch: "main",
+    sourceBranch: "sketchcatch/demo/iac-handoff",
+    commitMessage: null,
+    pullRequestTitle: "Deploy SketchCatch",
+    pullRequestUrl: "https://github.com/sketchcatch/demo/pull/1",
+    pullRequestNumber: 1,
+    pullRequestHeadSha: "a".repeat(40),
+    mergeCommitSha: null,
+    environmentName: "sketchcatch-production",
+    pipelineRunUrl: null,
+    infraPipelineRunUrl: null,
+    infraPipelineStatus: "waiting_for_merge",
+    appPipelineRunUrl: null,
+    appPipelineStatus: "not_started",
+    destroyPipelineRunUrl: null,
+    destroyPipelineStatus: "not_started",
+    staticSiteUrl: null,
+    apiBaseUrl: null,
+    repositorySettingsPreview: null,
+    awsRoleDiff: null,
+    githubAppPermissionRequired: false,
+    status: "pr_created",
+    statusMessage: null,
+    userAcceptedChangeId: "accepted-plan-1",
+    createdByUserId: userId,
+    createdAt: new Date("2026-07-22T00:00:00.000Z"),
+    updatedAt: new Date("2026-07-22T00:01:00.000Z")
+  };
+}
 
 function createAuthDatabaseClient(): DatabaseClient {
   const query = {

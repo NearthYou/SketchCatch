@@ -9,6 +9,7 @@ test("reads Terraform handoff files from the configured Project asset storage", 
   const objectKey = "projects/project-1/assets/terraform_file/main.tf";
   let storageReadCount = 0;
   let pullRequestFiles: Array<{ path: string; content: string }> = [];
+  let expectedPullRequestHeadSha: string | null | undefined;
   const projectAssetStorage: ProjectAssetStorage = {
     async putObject() {},
     async getObject(input) {
@@ -22,13 +23,18 @@ test("reads Terraform handoff files from the configured Project asset storage", 
     }
   };
   const githubAppClient = {
-    async createPullRequest(input: { files: Array<{ path: string; content: string }> }) {
+    async createPullRequest(input: {
+      expectedPullRequestHeadSha?: string | null;
+      files: Array<{ path: string; content: string }>;
+    }) {
       pullRequestFiles = input.files;
+      expectedPullRequestHeadSha = input.expectedPullRequestHeadSha;
       return {
         pullRequestUrl: "https://github.com/example/repository/pull/1",
         pullRequestNumber: 1,
         pullRequestHeadSha: "a".repeat(40),
-        commitSha: "a".repeat(40)
+        commitSha: "a".repeat(40),
+        sourceBranch: "sketchcatch/deploy-retry-2"
       };
     }
   } as GitHubAppClient;
@@ -38,7 +44,7 @@ test("reads Terraform handoff files from the configured Project asset storage", 
 
   try {
     const provider = createGitHubAppGitProvider(providerOptions);
-    await provider.createPullRequest({
+    const result = await provider.createPullRequest({
       repository: {
         provider: "github",
         installationId: "installation-1",
@@ -47,6 +53,7 @@ test("reads Terraform handoff files from the configured Project asset storage", 
       },
       targetBranch: "main",
       sourceBranch: "sketchcatch/deploy",
+      expectedPullRequestHeadSha: "persisted-head-sha",
       commitMessage: "chore: add deployment",
       files: [
         {
@@ -63,6 +70,7 @@ test("reads Terraform handoff files from the configured Project asset storage", 
       },
       userAcceptedChangeId: "plan-1"
     });
+    assert.equal(result.sourceBranch, "sketchcatch/deploy-retry-2");
   } finally {
     if (previousBucketName === undefined) {
       delete process.env.S3_BUCKET_NAME;
@@ -72,5 +80,6 @@ test("reads Terraform handoff files from the configured Project asset storage", 
   }
 
   assert.equal(storageReadCount, 1);
+  assert.equal(expectedPullRequestHeadSha, "persisted-head-sha");
   assert.deepEqual(pullRequestFiles, [{ path: "infra/main.tf", content: terraform }]);
 });

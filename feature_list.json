@@ -1087,6 +1087,38 @@
         "notes": "Focused API checks pass 130/130 and focused merged Web checks pass 31/31. Migration compatibility, lint, serial typecheck, build, harness, and diff checks pass. Production ECS run 29700391499 deployed the compatible API, Web, and worker image before migration run 29700681495 created snapshot sketchcatch-production-pre-migration-29700681495 and completed the one-off ECS migration task with exit code 0. All three HTTPS health checks return 200. The full API suite still exposes unrelated existing failures outside this workstream."
       },
       "notes": "Migration 0054 changes apps/api/drizzle/meta/_journal.json and is applied in production. No Terraform apply/destroy or user Git/CI/CD handoff was performed."
+    },
+    {
+      "id": "CICD-SETUP-CONVERGENCE-001",
+      "priority": 1,
+      "area": "git-cicd",
+      "title": "Resumable GitHub and AWS setup with safe PR retry",
+      "user_visible_behavior": "사용자는 한 번의 승인으로 Repository 설정, target branch 제한, AWS 신뢰 정책과 배포 PR을 준비하고, 중간 실패나 Pipeline 실패가 있어도 Direct Destroy·재배포 없이 같은 handoff에서 안전하게 다시 진행한다.",
+      "status": "passing",
+      "verification": [
+        "서버는 외부 변경 전에 draft handoff를 저장하고 Repository 설정, AWS trust, PR 순서로 실행한다.",
+        "GitHub Environment와 managed variables는 exact read-back을 통과하며 이미 같은 값은 write를 생략한다.",
+        "AWS trust는 Repository/Environment scoped Sid만 수렴시키고 다른 statement를 보존하며 DB 증거 저장 실패 시 PR 전에 중단한다.",
+        "열린 PR의 사용자 변경은 보존하고 닫힌 PR과 실패 Pipeline은 non-nested retry branch로 복구한다.",
+        "Phase 3은 Repository, AWS, PR 증거가 모두 검증된 뒤 완료되며 Phase 4가 실패 Pipeline retry action을 제공한다.",
+        "생성 workflow는 stale project ID를 외부 작업 전에 차단하고 HTTP 오류 본문을 보존한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-22",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/aws-role-diff-apply-service.test.ts src/git-cicd/git-cicd-handoff-configuration-integration.test.ts src/git-cicd/git-cicd-repository-settings-service.test.ts src/git-cicd/git-cicd-runtime-convergence-workflows.test.ts src/git-cicd/git-cicd-workflows-output-url.test.ts src/git-cicd/github-app-git-provider-project-asset-storage.test.ts src/routes/git-cicd-handoffs.test.ts src/source-repositories/github-app-client-pull-request.test.ts src/source-repositories/github-app-client-repository-settings.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test --test-reporter=dot \"src/git-cicd/**/*.test.ts\" src/routes/git-cicd-handoffs.test.ts src/routes/git-cicd-infrastructure-runs.test.ts src/routes/git-cicd-readiness.test.ts src/routes/git-cicd-release-runs.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-readiness-service.test.ts",
+          "pnpm --dir apps/web exec node --import ./test-css-register.mjs --import tsx --test features/workspace/cicd-handoff.test.ts features/workspace/cicd-readiness-presentation.test.ts features/workspace/cicd-handoff-configuration-preview.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/cicd-handoff-setup-client.test.ts",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check"
+        ],
+        "notes": "Focused setup/provider tests pass 42/42, the Git/CI/CD API regression set passes 246/246, readiness passes 96/96 including the previously failing CI cases, and focused Web tests pass 54/54. Root lint, typecheck, and all five production builds pass."
+      },
+      "notes": "No DB schema, Drizzle migration, dependency, secret, live GitHub/AWS mutation, PR merge, Terraform action, production deployment, or push was performed."
     }
   ]
 }

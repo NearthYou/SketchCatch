@@ -12,7 +12,7 @@ const consoleSource = readFileSync(
 );
 
 test("shows the server-derived handoff configuration in the existing flat PR review", () => {
-  const reviewStart = handoffPanelSource.indexOf("PR 생성 전 검토");
+  const reviewStart = handoffPanelSource.indexOf("CI/CD 설정 및 PR 검토");
   const reviewEnd = handoffPanelSource.indexOf("</dl>", reviewStart);
   const reviewPanelEnd = handoffPanelSource.indexOf("{handoffs.length", reviewEnd);
   assert.ok(reviewStart >= 0 && reviewEnd > reviewStart);
@@ -31,9 +31,9 @@ test("shows the server-derived handoff configuration in the existing flat PR rev
   assert.equal((reviewPanelSource.match(/deploymentPrimaryButton/g) ?? []).length, 1);
 });
 
-test("wires the preview into creation and refreshes stale review data without retrying", () => {
-  const creationStart = consoleSource.indexOf("const createHandoff = useCallback");
-  const creationEnd = consoleSource.indexOf("const runHandoffAction", creationStart);
+test("wires create and persisted draft resume through one setup action", () => {
+  const creationStart = consoleSource.indexOf("const runHandoffSetup = useCallback");
+  const creationEnd = consoleSource.indexOf("useEffect(() =>", creationStart);
   assert.ok(creationStart >= 0 && creationEnd > creationStart);
   const creationSource = consoleSource.slice(creationStart, creationEnd);
   const catchStart = creationSource.indexOf("} catch (error) {");
@@ -43,12 +43,35 @@ test("wires the preview into creation and refreshes stale review data without re
 
   assert.match(consoleSource, /hasConfigurationPreview:\s*configurationPreview !== null/);
   assert.match(creationSource, /configurationPreview,/);
+  assert.match(creationSource, /existingHandoff\s*\?\s*await setupGitCicdHandoff/);
+  assert.match(creationSource, /: await createGitCicdHandoff/);
   assert.match(consoleSource, /configurationPreview=\{configurationPreview\}/);
+  assert.match(catchSource, /await refreshHandoffs\(\)/);
   assert.match(catchSource, /await handleGitCicdHandoffCreationError\(/);
   assert.match(catchSource, /onRefreshDeliveryProfile/);
   assert.doesNotMatch(catchSource, /setIsHandoffReviewOpen\(false\)/);
   assert.doesNotMatch(catchSource, /createGitCicdHandoff\(/);
   assert.equal((consoleSource.match(/createGitCicdHandoff\(\{/g) ?? []).length, 1);
+  assert.equal(
+    (consoleSource.match(/setupGitCicdHandoff\(existingHandoff\.id\)/g) ?? []).length,
+    1
+  );
+});
+
+test("wires the failed Pipeline retry CTA to the existing setup action", () => {
+  const activationStart = consoleSource.indexOf("function activateCurrentTask(): void");
+  const activationEnd = consoleSource.indexOf("const isCurrentTaskUnavailable", activationStart);
+  assert.ok(activationStart >= 0 && activationEnd > activationStart);
+  const activationSource = consoleSource.slice(activationStart, activationEnd);
+
+  assert.match(
+    activationSource,
+    /if \(action\.kind === "retry_setup"\) \{\s*void runHandoffSetup\(\);\s*return;/
+  );
+  assert.match(
+    consoleSource,
+    /presentation\.currentTask\.action\.kind === "retry_setup" && !canCreateHandoff/
+  );
 });
 
 test("shows build verification and deployment URLs as Phase 3 evidence", () => {

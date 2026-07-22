@@ -7,6 +7,7 @@ import type {
   ProjectDeliveryProfile,
   ProjectDeploymentTarget
 } from "@sketchcatch/types";
+import { isGitCicdHandoffSetupComplete } from "./cicd-handoff";
 
 export type CicdPhaseId = "source" | "target" | "pr" | "pipeline";
 
@@ -17,6 +18,7 @@ export type CicdTaskId =
   | "approve_apply_plan"
   | "deploy_initial_application"
   | "create_pr"
+  | "retry_setup"
   | "inspect_pipeline";
 
 export type CicdSetupDrawerId = "repository" | "monitoring" | "target";
@@ -28,6 +30,7 @@ export type CicdTaskAction =
       readonly scope: "application" | "full_stack" | null;
     }
   | { readonly kind: "review_pr" }
+  | { readonly kind: "retry_setup" }
   | { readonly kind: "section"; readonly sectionId: "cicd-pipeline" };
 
 export type CicdTaskPresentation = {
@@ -139,13 +142,15 @@ export function getCicdReadinessPresentation(
     initialReleaseItem === undefined ||
     input.profile.readiness.initialApplicationReleaseId !== null ||
     initialReleaseItem?.status === "ready";
-  const handoffReady = isCreatedHandoff(input.currentHandoff);
+  const handoffReady = isGitCicdHandoffSetupComplete(input.currentHandoff);
   const currentTask = selectCurrentTask({
     applyPlanReady,
+    handoffStarted: input.currentHandoff !== null,
     handoffReady,
     initialReleaseItem,
     initialReleaseReady,
     monitoringReady,
+    pipelineRetryRequired: input.currentHandoff?.status === "pipeline_failed",
     sourceReady,
     targetReady
   });
@@ -252,10 +257,12 @@ function toCicdDeploymentOutputItem(input: {
 
 function selectCurrentTask(input: {
   readonly applyPlanReady: boolean;
+  readonly handoffStarted: boolean;
   readonly handoffReady: boolean;
   readonly initialReleaseItem: GitCicdReadinessItem | undefined;
   readonly initialReleaseReady: boolean;
   readonly monitoringReady: boolean;
+  readonly pipelineRetryRequired: boolean;
   readonly sourceReady: boolean;
   readonly targetReady: boolean;
 }): CicdTaskPresentation {
@@ -316,10 +323,22 @@ function selectCurrentTask(input: {
     return {
       id: "create_pr",
       phase: "pr",
-      title: "배포 PR 생성",
-      description: "후속 배포를 위한 Workflow와 Repository 설정을 검토하세요.",
-      actionLabel: "PR 생성 검토하기",
+      title: input.handoffStarted ? "CI/CD 설정 계속하기" : "CI/CD 설정 및 PR 생성",
+      description: input.handoffStarted
+        ? "완료되지 않은 Repository 설정, AWS 신뢰 정책과 PR 준비를 이어서 진행하세요."
+        : "Repository 설정, AWS 신뢰 정책과 배포 PR 변경을 한 번에 검토하세요.",
+      actionLabel: input.handoffStarted ? "설정 계속하기" : "PR 생성 검토하기",
       action: { kind: "review_pr" }
+    };
+  }
+  if (input.pipelineRetryRequired) {
+    return {
+      id: "retry_setup",
+      phase: "pipeline",
+      title: "실패한 Pipeline 재시도",
+      description: "Repository와 AWS 설정을 다시 검증하고 Retry PR을 생성합니다.",
+      actionLabel: "설정 재적용 및 Retry PR 생성",
+      action: { kind: "retry_setup" }
     };
   }
   return {

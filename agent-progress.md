@@ -19,20 +19,22 @@ Short English-only working log for the current agent context. Older records are 
 - Windows subprocess, local environment isolation, generated architecture knowledge, resource catalog, typography, and Workspace source-contract regressions are repaired.
 - The CI/CD tab now presents one current task, a four-Phase readiness flow, flat checklist rows, and right-side setup drawers in the project deployment blue. Current Plan handoffs and Pipeline runs stay scoped, global refresh synchronizes GitHub state, and desktop/390px authenticated browser checks pass.
 - CI/CD Phase 2 now depends only on the verified AWS target, matching Region, supported runtime kind, and current confirmed Repository build config. Plan-time checkout verification and deployment URLs are secret-safe Phase 3 evidence, so the Phase header and its four rows share the same server readiness result.
+- CI/CD Phase 3 now applies and verifies GitHub Repository settings, one target-branch Environment policy, scoped AWS trust, and PR state in one resumable action. Failed Pipelines can create a safe retry PR without Destroy or Direct redeployment, and workflow project binding is checked before external work.
 - Sixty focused Repository runtime-Secret, deployment-action, and failure-visibility regressions pass; the final post-review 50-test subset also passes. `pnpm lint` and `pnpm typecheck` pass. Root `pnpm build` reported all five tasks successful before the known Turbo exit hang. The full Web suite passes 1,090 of 1,098 tests; its eight failures are outside the changed runtime-Secret paths. Root `pnpm test` still exposes ten unrelated API baseline failures and one lease-heartbeat cancellation; its one Repository source-contract failure was corrected and passes focused verification.
 - `feature_list.json` retains one separately owned aggregate `in_progress` item: `ARCHITECTURE-BOARD-COMPILER-409`.
 
 ## Session Record
 
-### 2026-07-22 - Design convergent Git/CI/CD setup and PR recovery
+### 2026-07-22 - Implement convergent Git/CI/CD setup and PR recovery
 
-- Confirmed `Refactor/jh/531-cicd-pr개선-및-편의성-추가` is clean and exactly matches the freshly fetched `origin/dev` at `334e33c5`.
-- Traced the production 404 to stale GitHub Repository variables: PR creation can currently complete Phase 3 without applying or verifying the current project's settings.
-- Audited the Repository settings, AWS trust, PR provider, persistence, API, and Web phase gates. The design now uses one user-approved server orchestrator, persisted step evidence, exact provider read-back, lease/idempotency, and open/closed/merged PR reconciliation.
-- Added `docs/superpowers/specs/2026-07-22-git-cicd-setup-convergence-design.md`, including the July 2026 immutable GitHub OIDC subject compatibility, scoped IAM statement preservation, stale project ID defense, failure injection matrix, and production Go/No-Go criteria.
-- Strengthened the written design after adversarial review: setup-ready and execution-ready are separate, generated workflows carry the active revision, normal application commits do not invalidate installation configuration, and unknown provider outcomes are quarantined behind a durable setup worker and append-only mutation journal instead of automatic lease takeover.
-- A DB migration is planned after the written spec gate. Latest checked migration is `0054`; the expected `0055` number must be coordinated before creation. No migration, product code, external GitHub/AWS mutation, deployment, or push was performed in this design pass.
-- Verification: starting and final `pnpm harness:check`, tracked-file `git diff --check`, and new-spec trailing-whitespace checks passed. The written design and continuation records were committed without product-code changes.
+- Kept the implementation on existing `git_cicd_handoffs` JSONB evidence with no schema, migration, worker, lease, or dependency change.
+- Phase 3 now stores a `draft` before provider work and runs Repository settings -> AWS trust -> PR through one user-approved server action. Partial failures resume the same handoff; legacy successful/running handoffs backfill only missing verification evidence without replacing their PR or Pipeline state.
+- GitHub settings now converge managed variables with blank-value deletion and exact read-back, configure one target-branch Environment policy, and skip writes when remote state is already exact.
+- AWS trust uses a Repository/Environment-scoped deterministic Sid, preserves unrelated and other Repository statements, safely migrates only the matching legacy statement, skips exact writes, and stops before PR unless verified evidence is persisted.
+- Open PRs are mutated only when the stored head and exact handoff manifest prove ownership. Exact PR files are reused without writes, while changed or closed PRs keep their branches and receive a new non-nested retry branch.
+- Failed/cancelled setup creates a stable retry-only file so a merged retry PR starts the ECS App workflow. Phase 3 remains complete after Pipeline failure and Phase 4 exposes the retry setup action.
+- Every generated workflow validates its embedded project ID against `SKETCHCATCH_PROJECT_ID` before external work and uses `curl --fail-with-body` for actionable HTTP failures.
+- Verification passes: 42 focused API setup/provider tests, 246 Git/CI/CD API regression tests, 96 readiness tests including the previously failing CI cases, 54 focused Web tests, root lint, root typecheck, and all five production build tasks. No live GitHub/AWS mutation, PR merge, Terraform action, deployment, or push was performed.
 
 ### 2026-07-22 - Complete the external audience receipt handoff
 
@@ -131,6 +133,8 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Known Risk
 
+- Production still uses the previous separated CI/CD setup flow until this branch is reviewed and deployed. The final GitHub/AWS acceptance remains intentionally deferred to one authorized post-deployment run.
+- Existing GitHub App installations must approve Administration and Variables as Read and write plus Actions as Read-only before Environment branch-policy convergence can succeed.
 - Production still runs the pre-fix Redis client lifecycle until this branch is released through the reviewed deployment workflow.
 - Production still serves the old audience bundle until `codex/fix-browser-check-in-route` is reviewed and released; the native fetch receiver fix has only been verified in the local Chrome flow and is not yet present in CloudFront.
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
@@ -144,6 +148,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-1. Obtain written-spec review approval for `docs/superpowers/specs/2026-07-22-git-cicd-setup-convergence-design.md`.
-2. After approval, create the detailed implementation plan and coordinate the expected `0055` migration number before editing `apps/api/drizzle/**`.
-3. Implement the focused provider/orchestrator/API/Web failure matrix before any production acceptance run.
+1. Review and merge the focused CI/CD setup change; no migration is required.
+2. Deploy the API/Web change through the normal reviewed production workflow.
+3. Run one authorized acceptance: create setup, confirm exact Repository variables and Environment branch policy, merge the PR, then exercise one failed-Pipeline retry without Direct Destroy/redeployment.

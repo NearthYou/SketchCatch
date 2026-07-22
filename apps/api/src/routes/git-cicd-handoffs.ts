@@ -45,7 +45,9 @@ import {
   GitCicdHandoffProviderPermissionError,
   GitCicdHandoffProviderMismatchError,
   listProjectGitCicdHandoffs,
+  setupGitCicdHandoff,
   updateGitCicdHandoffStatus,
+  type GitCicdHandoffSetupActions,
   type GitCicdHandoffProvider,
   type GitCicdHandoffRecord,
   type GitCicdHandoffRepository,
@@ -240,6 +242,7 @@ type GitCicdHandoffRouteOptions = {
   gitCicdMonitoringProvider?: GitCicdMonitoringProvider;
   gitCicdHandoffProvider?: GitCicdHandoffProvider;
   createGitCicdHandoff?: typeof createGitCicdHandoff;
+  setupGitCicdHandoff?: typeof setupGitCicdHandoff;
   gitCicdPipelineStatusProvider?: GitCicdPipelineStatusProvider;
   gitCicdRepositorySettingsApplier?: GitCicdRepositorySettingsApplier;
   awsRoleDiffGateway?: AwsRoleDiffGateway;
@@ -453,7 +456,7 @@ export async function registerGitCicdHandoffRoutes(
   app.post("/projects/:projectId/git-cicd-handoffs", async (request, reply) => {
     const params = projectHandoffParamsSchema.parse(request.params);
     const body = createGitCicdHandoffBodySchema.parse(request.body);
-    const { accessContext, repository, provider } = await getGitCicdHandoffRequestContext(
+    const { accessContext, db, repository, provider } = await getGitCicdHandoffRequestContext(
       request,
       options,
       getGitCicdDatabaseClient
@@ -485,7 +488,11 @@ export async function registerGitCicdHandoffRoutes(
           userAcceptedChangeId: body.userAcceptedChangeId
         },
         repository,
-        provider
+        provider,
+        undefined,
+        {
+          setupActions: createGitCicdHandoffSetupActions(db, options)
+        }
       );
       const response: GitCicdHandoffResponse = {
         handoff: toGitCicdHandoff(handoff)
@@ -544,6 +551,39 @@ export async function registerGitCicdHandoffRoutes(
       const response: GitCicdHandoffResponse = {
         handoff: toGitCicdHandoff(handoff)
       };
+
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
+  app.post("/git-cicd-handoffs/:handoffId/setup", async (request, reply) => {
+    const params = handoffParamsSchema.parse(request.params);
+    const { accessContext, db, repository, provider } =
+      await getGitCicdHandoffRequestContext(
+        request,
+        options,
+        getGitCicdDatabaseClient
+      );
+
+    try {
+      const handoff = await (options?.setupGitCicdHandoff ?? setupGitCicdHandoff)(
+        {
+          handoffId: params.handoffId,
+          accessContext
+        },
+        repository,
+        provider,
+        {
+          setupActions: createGitCicdHandoffSetupActions(db, options)
+        }
+      );
+      const response: GitCicdHandoffResponse = {
+        handoff: toGitCicdHandoff(handoff)
+      };
+
+      await writeGitCicdPipelineStatusSnapshot({ handoff, runtimeCache });
 
       return reply.status(200).send(response);
     } catch (error) {
@@ -672,6 +712,30 @@ export async function registerGitCicdHandoffRoutes(
       return handleGitCicdHandoffError(error, reply);
     }
   });
+}
+
+function createGitCicdHandoffSetupActions(
+  db: DatabaseClient["db"],
+  options: GitCicdHandoffRouteOptions | undefined
+): GitCicdHandoffSetupActions {
+  return {
+    applyRepositorySettings(input, repository) {
+      return applyGitCicdRepositorySettings(
+        input,
+        repository,
+        options?.gitCicdRepositorySettingsApplier ?? createGitHubRepositorySettingsApplier()
+      );
+    },
+    applyAwsRoleDiff(input, repository) {
+      return options?.awsRoleDiffGateway
+        ? applyGitCicdAwsRoleDiff(input, repository, options.awsRoleDiffGateway)
+        : applyGitCicdAwsRoleDiffUsingProjectConnection(
+            input,
+            repository,
+            createPostgresAwsRoleDiffConnectionRepository(db)
+          );
+    }
+  };
 }
 
 function toGitCicdHandoff(row: GitCicdHandoffRecord): GitCicdHandoff {

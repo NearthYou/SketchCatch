@@ -4,35 +4,28 @@ Use this file only for compact continuation context. Write it in English and ref
 
 ## Currently Verified
 
-- Branch `Refactor/jh/531-cicd-pr개선-및-편의성-추가` started exactly at freshly fetched `origin/dev` commit `334e33c5` and now has one committed written-design change on top.
-- The production CI/CD 404 was caused by a stale GitHub Repository `SKETCHCATCH_PROJECT_ID`; current Phase 3 can be marked complete by PR creation without Repository settings verification.
-- Read-only backend, frontend, and verification audits found the same structural gaps: external PR creation precedes the DB handoff insert, Repository settings have no read-back or persisted evidence, AWS trust verification is incomplete, and existing PRs cannot be reconciled deterministically.
-- The user-approved design direction is written in `docs/superpowers/specs/2026-07-22-git-cicd-setup-convergence-design.md`; written-spec review remains the next gate.
-- The starting `pnpm harness:check` passed. No product code, migration, dependency, external mutation, deployment, or push was performed.
+- Branch `Refactor/jh/531-cicd-pr개선-및-편의성-추가` implements the minimal CI/CD setup convergence scope on top of `origin/dev` at `334e33c5`; the earlier written design commit is `a7e3e4e2`.
+- One Phase 3 action now persists a draft before applying GitHub Repository settings, a target-branch Environment policy, scoped AWS trust, and PR changes in order.
+- Partial handoffs resume with the same accepted Plan. Failed/cancelled Pipeline state creates a retry-only file and safe retry PR without Direct Destroy or redeployment.
+- Provider hardening preserves unrelated GitHub branches and IAM statements, avoids exact-state writes, verifies remote read-back, and requires persisted Repository/AWS evidence before Phase 3 completion.
+- Generated workflows reject a stale `SKETCHCATCH_PROJECT_ID` before external work and retain API error bodies.
+- Focused verification passes: API setup/provider 42, full Git/CI/CD API 246, readiness 96, Web 54, root lint, root typecheck, and all five production build tasks.
 
 ## Changes This Session
 
-- Fetched `origin`, verified the new branch has zero commits ahead/behind `origin/dev`, and ran the starting harness successfully.
-- Audited the current GitHub Repository settings, AWS trust, handoff persistence, PR provider, API routes, and Phase 3/4 Web gates.
-- Wrote and self-reviewed the convergent setup design, including persistent steps, exact provider verification, PR recovery, OIDC compatibility, separate setup/execution readiness, durable worker dispatch, unknown-outcome quarantine, and the focused failure-injection matrix.
-- Did not modify product code, schema, migration files, dependencies, external providers, or deployed infrastructure.
+- Added the resumable setup API, persisted verification evidence, exact GitHub/AWS convergence, safe PR recovery, workflow project binding guard, and Phase 4 retry CTA.
+- Updated shared contracts and canonical data/deployment/architecture documentation.
+- No DB schema, Drizzle migration, dependency, worker, or lease change was added.
+- No live GitHub/AWS mutation, PR merge, Terraform Plan/Apply/Destroy, deployment, or push was performed.
+- The combined user approval covers Repository variables, Environment branch policy, the current scoped AWS trust statement, and PR preparation. It does not approve merge or Pipeline/cloud execution.
 
 ## Broken Or Unverified
 
-- Ask the user to review the written spec as required by the brainstorming workflow.
-- After written-spec approval, invoke the writing-plans skill and implement from the resulting plan.
-- Before creating a migration, re-check the latest number. `0054_remove_practice_live_profile.sql` is currently latest; expected `0055` has a cross-branch collision risk.
-- Production acceptance remains intentionally unverified until the implementation, local failure matrix, reviewed deployment, and one authorized live run are complete.
-
-## Implementation Boundaries
-
-- One explicit setup approval may converge GitHub settings, AWS OIDC/trust, and PR state. It does not approve PR merge, workflow dispatch, Terraform Apply, release, or Destroy.
-- Persist the handoff before external mutation, read before and after every provider write, and resume by configuration revision without duplicate PRs.
-- Phase 3 and Pipeline provenance require all three setup steps to be remotely verified for the current revision.
-- Preserve unrelated GitHub variables, branches, and IAM statements; never use wildcard trust as a recovery fallback.
-- Do not run live GitHub/AWS mutation during implementation verification.
+- No changed local regression is known to be broken.
+- Live GitHub/AWS acceptance is intentionally unverified until the reviewed branch is deployed.
 
 ## Best Next Action
 
-1. Obtain written-spec approval.
-2. Create the detailed implementation plan and execute it with focused failure-injection tests before any production acceptance run.
+1. Review and deploy this branch through the normal production workflow.
+2. Confirm the GitHub App installation has Administration and Variables Read/write plus Actions Read-only.
+3. Run one authorized production acceptance covering first setup and one failed-Pipeline retry.

@@ -3,6 +3,44 @@ import test from "node:test";
 
 import { createGitCicdAutomationFiles } from "./git-cicd-workflows.js";
 
+test("generated workflows reject a stale Repository project binding before external work", () => {
+  const projectId = "11111111-1111-4111-8111-111111111111";
+  const files = createGitCicdAutomationFiles({
+    projectId,
+    projectSlug: "customer-app",
+    repositoryOwner: "NearthYou",
+    repositoryName: "customer-app",
+    targetBranch: "main",
+    sketchCatchPublicBaseUrl: "https://sketchcatch.example.com"
+  });
+  assert.equal(
+    files.some((file) => file.path.endsWith("/ci-cd/retry.json")),
+    false,
+    "initial setup must not create the retry-only trigger file"
+  );
+
+  for (const workflowPath of [
+    ".github/workflows/sketchcatch-app.yml",
+    ".github/workflows/sketchcatch-infra.yml",
+    ".github/workflows/sketchcatch-destroy.yml"
+  ]) {
+    const workflow = files.find((file) => file.path === workflowPath)?.content;
+    assert.ok(workflow, `${workflowPath} must be generated`);
+    assert.match(
+      workflow,
+      new RegExp(`SKETCHCATCH_EXPECTED_PROJECT_ID: ["']?${projectId}["']?`)
+    );
+    assert.match(workflow, /SKETCHCATCH_PROJECT_ID: \$\{\{ vars\.SKETCHCATCH_PROJECT_ID \}\}/u);
+    assert.match(workflow, /Validate SketchCatch project binding/u);
+    assert.match(workflow, /SketchCatch project binding mismatch/u);
+    assert.ok(
+      workflow.indexOf("Validate SketchCatch project binding") <
+        workflow.indexOf("aws-actions/configure-aws-credentials"),
+      `${workflowPath} must reject a stale project before AWS credentials are used`
+    );
+  }
+});
+
 test("ECS GitHub Actions delegates deployment and runtime convergence to the SketchCatch backend worker", () => {
   const files = createGitCicdAutomationFiles({
     projectId: "project-1",
@@ -11,6 +49,7 @@ test("ECS GitHub Actions delegates deployment and runtime convergence to the Ske
     repositoryName: "customer-app",
     targetBranch: "main",
     sketchCatchPublicBaseUrl: "https://sketchcatch.example.com",
+    setupRetryToken: "handoff-previous:failed-head-sha",
     awsRegion: "ap-northeast-2",
     awsAccountId: "123456789012",
     runtimeTargetKind: "ecs_fargate",
@@ -64,6 +103,23 @@ test("ECS GitHub Actions delegates deployment and runtime convergence to the Ske
   assert.match(workflow, /succeeded\) exit 0/u);
   assert.match(workflow, /--retry 5 --retry-all-errors/u);
   assert.match(workflow, /--connect-timeout 10 --max-time 30/u);
+  assert.doesNotMatch(workflow, /curl --fail(?:\s|\\)/u);
+  assert.match(workflow, /curl --fail-with-body/u);
+  const excludedCicdPath = workflow.indexOf("!sketchcatch/customer-app/ci-cd/**");
+  const includedRetryPath = workflow.indexOf("sketchcatch/customer-app/ci-cd/retry.json");
+  assert.ok(excludedCicdPath >= 0);
+  assert.ok(
+    includedRetryPath > excludedCicdPath,
+    "retry.json must be re-included after the generated CI/CD directory exclusion"
+  );
+  const retryFile = files.find(
+    (file) => file.path === "sketchcatch/customer-app/ci-cd/retry.json"
+  );
+  assert.ok(retryFile);
+  assert.equal(
+    JSON.parse(retryFile.content).setupRetryToken,
+    "handoff-previous:failed-head-sha"
+  );
   assert.match(
     workflow,
     /failed\|cancelled\|partially_failed\|partially_cancelled/u

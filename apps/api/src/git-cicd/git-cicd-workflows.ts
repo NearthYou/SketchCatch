@@ -12,6 +12,7 @@ export const defaultGitCicdEnvironmentName = "sketchcatch-production";
 
 export type GitCicdWorkflowRenderInput = {
   handoffId?: string | undefined;
+  setupRetryToken?: string | undefined;
   projectId?: string | undefined;
   projectSlug: string;
   repositoryOwner: string;
@@ -99,6 +100,17 @@ export function createGitCicdAutomationFiles(
       content: `${JSON.stringify(createHandoffManifest(input), null, 2)}\n`,
       contentType: "application/json"
     },
+    ...(input.setupRetryToken
+      ? [{
+          path: `sketchcatch/${input.projectSlug}/ci-cd/retry.json`,
+          content: `${JSON.stringify({
+            schemaVersion: 1,
+            generatedBy: "sketchcatch",
+            setupRetryToken: input.setupRetryToken
+          }, null, 2)}\n`,
+          contentType: "application/json"
+        }]
+      : []),
     // ECS application builds use a server-generated buildspec inside SketchCatch.
     // Repository-controlled buildspecs must not receive deployment credentials.
   ];
@@ -408,6 +420,7 @@ on:
       - ${JSON.stringify(appPathGlob)}
       - ${JSON.stringify(`!${generatedProjectPath}/terraform/**`)}
       - ${JSON.stringify(`!${generatedProjectPath}/ci-cd/**`)}
+      - ${JSON.stringify(`${generatedProjectPath}/ci-cd/retry.json`)}
       - '!.github/workflows/sketchcatch-infra.yml'
       - '!.github/workflows/sketchcatch-app.yml'
       - '!.github/workflows/sketchcatch-destroy.yml'
@@ -417,8 +430,8 @@ permissions:
   contents: read
 
 env:
+${renderProjectBindingEnvironment(input)}
   SKETCHCATCH_RELEASE_API_URL: \${{ vars.SKETCHCATCH_RELEASE_API_URL }}
-  SKETCHCATCH_PROJECT_ID: \${{ vars.SKETCHCATCH_PROJECT_ID }}
   SKETCHCATCH_OIDC_AUDIENCE: sketchcatch-release-run
   SKETCHCATCH_RELEASE_SHA: \${{ github.sha }}
 
@@ -427,6 +440,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${environmentName}
     steps:
+${renderProjectBindingStep()}
       - name: Request trusted SketchCatch release
         id: release
         shell: bash
@@ -434,7 +448,7 @@ jobs:
           set -euo pipefail
           test -n "$SKETCHCATCH_RELEASE_API_URL"
           test -n "$SKETCHCATCH_PROJECT_ID"
-          OIDC_TOKEN=$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 \
+          OIDC_TOKEN=$(curl --fail-with-body --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 \
             --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value')
           IDEMPOTENCY_KEY="\${{ github.repository_id }}:$SKETCHCATCH_RELEASE_SHA:\${{ github.run_id }}:\${{ github.run_attempt }}"
@@ -448,7 +462,7 @@ jobs:
             --arg runAttempt "\${{ github.run_attempt }}" \
             --arg runUrl "\${{ github.server_url }}/\${{ github.repository }}/actions/runs/\${{ github.run_id }}" \
             '{repository:$repository,repositoryId:$repositoryId,commitSha:$commitSha,ref:$ref,workflow:$workflow,workflowRunId:$runId,workflowRunAttempt:($runAttempt|tonumber),workflowRunUrl:$runUrl}' > release-request.json
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 \
+          curl --fail-with-body --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 \
             --request POST \
             --header "Authorization: Bearer $OIDC_TOKEN" \
             --header "Content-Type: application/json" \
@@ -465,10 +479,10 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 180); do
-            OIDC_TOKEN=$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 \
+            OIDC_TOKEN=$(curl --fail-with-body --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 \
               --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
               "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value')
-            curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 \
+            curl --fail-with-body --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 \
               --header "Authorization: Bearer $OIDC_TOKEN" \
               "\${SKETCHCATCH_RELEASE_API_URL%/}/api/git-cicd/release-runs/$SKETCHCATCH_RELEASE_RUN_ID" > release-run.json
             STATUS=$(jq -er '.run.status' release-run.json)
@@ -509,6 +523,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+${renderProjectBindingEnvironment(input)}
   SKETCHCATCH_RELEASE_SHA: \${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
   SKETCHCATCH_RELEASE_BUCKET: \${{ vars.SKETCHCATCH_RELEASE_BUCKET }}
   SKETCHCATCH_LAMBDA_FUNCTION: \${{ vars.SKETCHCATCH_LAMBDA_FUNCTION }}
@@ -527,6 +542,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${environmentName}
     steps:
+${renderProjectBindingStep()}
       - uses: actions/checkout@v4
         with:
           ref: \${{ env.SKETCHCATCH_RELEASE_SHA }}
@@ -652,7 +668,7 @@ jobs:
             test "$ACTIVE_VERSION" = "$SKETCHCATCH_PUBLISHED_VERSION"
             OUTCOME=succeeded
             HEALTH_URL="\${SKETCHCATCH_OUTPUT_URL%/}\${SKETCHCATCH_HEALTH_CHECK_PATH}"
-            if ! curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$HEALTH_URL" >/dev/null; then
+            if ! curl --fail-with-body --show-error --max-time 10 --max-redirs 0 --proto '=https' "$HEALTH_URL" >/dev/null; then
               ALIAS_REVISION_ID=$(aws lambda get-alias --function-name "$SKETCHCATCH_LAMBDA_FUNCTION" --name "$SKETCHCATCH_LAMBDA_ALIAS" --query 'RevisionId' --output text)
               aws lambda update-alias \
                 --function-name "$SKETCHCATCH_LAMBDA_FUNCTION" \
@@ -724,6 +740,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+${renderProjectBindingEnvironment(input)}
   SKETCHCATCH_RELEASE_SHA: \${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
   SKETCHCATCH_RELEASE_BUCKET: \${{ vars.SKETCHCATCH_RELEASE_BUCKET }}
   SKETCHCATCH_CODEDEPLOY_APPLICATION: \${{ vars.SKETCHCATCH_CODEDEPLOY_APPLICATION }}
@@ -740,6 +757,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${environmentName}
     steps:
+${renderProjectBindingStep()}
       - uses: actions/checkout@v4
         with:
           ref: \${{ env.SKETCHCATCH_RELEASE_SHA }}
@@ -896,7 +914,7 @@ jobs:
               FAILURE_REASON=instance_failure
             else
               HEALTH_URL="\${SKETCHCATCH_OUTPUT_URL%/}\${SKETCHCATCH_HEALTH_CHECK_PATH}"
-              if ! curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$HEALTH_URL" >/dev/null; then
+              if ! curl --fail-with-body --show-error --max-time 10 --max-redirs 0 --proto '=https' "$HEALTH_URL" >/dev/null; then
                 ACTIVE_DEPLOYMENT_ID=$(restore_previous_revision "SketchCatch health-check rollback")
                 set +e
                 aws deploy wait deployment-successful --deployment-id "$ACTIVE_DEPLOYMENT_ID"
@@ -945,7 +963,7 @@ jobs:
           )
           HEALTH_URL="\${SKETCHCATCH_OUTPUT_URL%/}\${SKETCHCATCH_HEALTH_CHECK_PATH}"
           HEALTHY=0
-          if curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$HEALTH_URL" >/dev/null; then HEALTHY=1; fi
+          if curl --fail-with-body --show-error --max-time 10 --max-redirs 0 --proto '=https' "$HEALTH_URL" >/dev/null; then HEALTHY=1; fi
           export ACTIVE_DEPLOYMENT_ID TARGET_COUNT SUCCEEDED_COUNT FAILURE_REASON
           python3 - "$OUTCOME" <<'PY'
           import base64
@@ -1010,6 +1028,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+${renderProjectBindingEnvironment(input)}
   SKETCHCATCH_RELEASE_SHA: \${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
   SKETCHCATCH_STATIC_BUCKET: \${{ vars.SKETCHCATCH_STATIC_BUCKET }}
   SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID: \${{ vars.SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID }}
@@ -1025,6 +1044,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${environmentName}
     steps:
+${renderProjectBindingStep()}
       - uses: actions/checkout@v4
         with:
           ref: \${{ env.SKETCHCATCH_RELEASE_SHA }}
@@ -1214,7 +1234,7 @@ jobs:
           if [ "$SKETCHCATCH_SWITCH_OUTCOME" != success ]; then
             OUTCOME=failed
             FAILURE_REASON="\${SKETCHCATCH_SWITCH_FAILURE_REASON:-distribution_update_failure}"
-          elif ! curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$SKETCHCATCH_OUTPUT_URL" >/dev/null; then
+          elif ! curl --fail-with-body --show-error --max-time 10 --max-redirs 0 --proto '=https' "$SKETCHCATCH_OUTPUT_URL" >/dev/null; then
             OUTCOME=failed
             FAILURE_REASON=health_check_failure
           fi
@@ -1296,7 +1316,7 @@ jobs:
           EXPECTED_PREFIX="$SKETCHCATCH_RELEASE_PREFIX"
           if [ "$OUTCOME" != succeeded ]; then EXPECTED_PREFIX="\${SKETCHCATCH_PREVIOUS_ORIGIN_PATH#/}"; fi
           HEALTHY=0
-          if curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$SKETCHCATCH_OUTPUT_URL" >/dev/null; then HEALTHY=1; fi
+          if curl --fail-with-body --show-error --max-time 10 --max-redirs 0 --proto '=https' "$SKETCHCATCH_OUTPUT_URL" >/dev/null; then HEALTHY=1; fi
           DISTRIBUTION_ETAG=$(jq -r '.ETag // empty' sketchcatch-distribution-active.json)
           export OUTCOME FAILURE_REASON ACTIVE_INVALIDATION_ID ACTIVE_RELEASE_PREFIX DISTRIBUTION_ETAG
           python3 - <<'PY'
@@ -1369,9 +1389,9 @@ permissions:
   contents: read
 
 env:
+${renderProjectBindingEnvironment(input)}
   TF_IN_AUTOMATION: "true"
   SKETCHCATCH_RELEASE_API_URL: \${{ vars.SKETCHCATCH_RELEASE_API_URL }}
-  SKETCHCATCH_PROJECT_ID: \${{ vars.SKETCHCATCH_PROJECT_ID }}
   SKETCHCATCH_OIDC_AUDIENCE: sketchcatch-infrastructure-run
   SKETCHCATCH_AWS_REGION: \${{ vars.SKETCHCATCH_AWS_REGION }}
   SKETCHCATCH_TF_STATE_BUCKET: \${{ vars.SKETCHCATCH_TF_STATE_BUCKET }}
@@ -1386,6 +1406,7 @@ jobs:
       run:
         working-directory: ${terraformDirectory}
     steps:
+${renderProjectBindingStep()}
       - name: Register SketchCatch infrastructure run
         id: register
         shell: bash
@@ -1394,7 +1415,7 @@ jobs:
           set -euo pipefail
           test -n "$SKETCHCATCH_RELEASE_API_URL"
           test -n "$SKETCHCATCH_PROJECT_ID"
-          OIDC_TOKEN=$(curl --fail --silent --show-error --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value')
+          OIDC_TOKEN=$(curl --fail-with-body --silent --show-error --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value')
           jq -n \
             --arg repository "\${{ github.repository }}" \
             --arg repositoryId "\${{ github.repository_id }}" \
@@ -1405,7 +1426,7 @@ jobs:
             --arg runAttempt "\${{ github.run_attempt }}" \
             --arg runUrl "\${{ github.server_url }}/\${{ github.repository }}/actions/runs/\${{ github.run_id }}" \
             '{repository:$repository,repositoryId:$repositoryId,commitSha:$commitSha,ref:$ref,workflow:$workflow,workflowRunId:$runId,workflowRunAttempt:($runAttempt|tonumber),workflowRunUrl:$runUrl}' > infrastructure-run-request.json
-          curl --fail --silent --show-error \
+          curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Authorization: Bearer $OIDC_TOKEN" \
             --header "Content-Type: application/json" \
@@ -1437,11 +1458,11 @@ jobs:
         run: |
           set -euo pipefail
           request_oidc_token() {
-            curl --fail --silent --show-error --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value'
+            curl --fail-with-body --silent --show-error --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value'
           }
           send_heartbeat() {
             OIDC_TOKEN=$(request_oidc_token)
-            curl --fail --silent --show-error --request POST --header "Authorization: Bearer $OIDC_TOKEN" "\${SKETCHCATCH_RELEASE_API_URL%/}/api/git-cicd/infrastructure-runs/$SKETCHCATCH_INFRA_RUN_ID/heartbeat" >/dev/null
+            curl --fail-with-body --silent --show-error --request POST --header "Authorization: Bearer $OIDC_TOKEN" "\${SKETCHCATCH_RELEASE_API_URL%/}/api/git-cicd/infrastructure-runs/$SKETCHCATCH_INFRA_RUN_ID/heartbeat" >/dev/null
           }
           run_with_heartbeat() {
             "$@" &
@@ -1495,11 +1516,11 @@ jobs:
         run: |
           set -euo pipefail
           request_oidc_token() {
-            curl --fail --silent --show-error --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value'
+            curl --fail-with-body --silent --show-error --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value'
           }
           send_heartbeat() {
             OIDC_TOKEN=$(request_oidc_token)
-            curl --fail --silent --show-error --request POST --header "Authorization: Bearer $OIDC_TOKEN" "\${SKETCHCATCH_RELEASE_API_URL%/}/api/git-cicd/infrastructure-runs/$SKETCHCATCH_INFRA_RUN_ID/heartbeat" >/dev/null
+            curl --fail-with-body --silent --show-error --request POST --header "Authorization: Bearer $OIDC_TOKEN" "\${SKETCHCATCH_RELEASE_API_URL%/}/api/git-cicd/infrastructure-runs/$SKETCHCATCH_INFRA_RUN_ID/heartbeat" >/dev/null
           }
           run_with_heartbeat() {
             "$@" &
@@ -1540,11 +1561,11 @@ jobs:
         run: |
           set -euo pipefail
           request_oidc_token() {
-            curl --fail --silent --show-error --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value'
+            curl --fail-with-body --silent --show-error --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value'
           }
           send_heartbeat() {
             OIDC_TOKEN=$(request_oidc_token)
-            curl --fail --silent --show-error --request POST --header "Authorization: Bearer $OIDC_TOKEN" "\${SKETCHCATCH_RELEASE_API_URL%/}/api/git-cicd/infrastructure-runs/$SKETCHCATCH_INFRA_RUN_ID/heartbeat" >/dev/null
+            curl --fail-with-body --silent --show-error --request POST --header "Authorization: Bearer $OIDC_TOKEN" "\${SKETCHCATCH_RELEASE_API_URL%/}/api/git-cicd/infrastructure-runs/$SKETCHCATCH_INFRA_RUN_ID/heartbeat" >/dev/null
           }
           run_with_heartbeat() {
             "$@" &
@@ -1602,9 +1623,9 @@ jobs:
             CONCLUSION=succeeded
             STAGE=infra_apply
           fi
-          OIDC_TOKEN=$(curl --fail --silent --show-error --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value')
+          OIDC_TOKEN=$(curl --fail-with-body --silent --show-error --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value')
           jq -n --arg conclusion "$CONCLUSION" --arg stage "$STAGE" '{conclusion:$conclusion,stage:$stage}' > infrastructure-run-result.json
-          curl --fail --silent --show-error \
+          curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Authorization: Bearer $OIDC_TOKEN" \
             --header "Content-Type: application/json" \
@@ -1637,6 +1658,7 @@ permissions:
   contents: read
 
 env:
+${renderProjectBindingEnvironment(input)}
   SKETCHCATCH_ASG_NAME: \${{ vars.SKETCHCATCH_ASG_NAME }}
 
 jobs:
@@ -1645,6 +1667,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${environmentName}
     steps:
+${renderProjectBindingStep()}
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -1762,7 +1785,7 @@ jobs:
         run: |
           for url in "\${{ vars.SKETCHCATCH_STATIC_SITE_URL }}" "\${{ vars.SKETCHCATCH_API_BASE_URL }}"; do
             if [ -n "$url" ]; then
-              curl --fail --show-error --location "$url" >/tmp/sketchcatch-url-check
+              curl --fail-with-body --show-error --location "$url" >/tmp/sketchcatch-url-check
             fi
           done
 `;
@@ -1786,6 +1809,7 @@ permissions:
   contents: read
 
 env:
+${renderProjectBindingEnvironment(input)}
   SKETCHCATCH_AWS_REGION: \${{ vars.SKETCHCATCH_AWS_REGION }}
   SKETCHCATCH_TF_STATE_BUCKET: \${{ vars.SKETCHCATCH_TF_STATE_BUCKET }}
   SKETCHCATCH_TF_STATE_KEY: \${{ vars.SKETCHCATCH_TF_STATE_KEY }}
@@ -1799,6 +1823,7 @@ jobs:
       run:
         working-directory: ${terraformDirectory}
     steps:
+${renderProjectBindingStep()}
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
       - uses: aws-actions/configure-aws-credentials@v4
@@ -1834,6 +1859,23 @@ jobs:
             aws s3 rm "s3://\${{ vars.SKETCHCATCH_STATIC_BUCKET }}/releases/" --recursive || true
           fi
 `;
+}
+
+function renderProjectBindingEnvironment(input: GitCicdWorkflowRenderInput): string {
+  return `  SKETCHCATCH_EXPECTED_PROJECT_ID: ${JSON.stringify(input.projectId ?? "")}
+  SKETCHCATCH_PROJECT_ID: \${{ vars.SKETCHCATCH_PROJECT_ID }}`;
+}
+
+function renderProjectBindingStep(): string {
+  return `      - name: Validate SketchCatch project binding
+        shell: bash
+        working-directory: .
+        run: |
+          set -euo pipefail
+          if [ -z "$SKETCHCATCH_PROJECT_ID" ] || [ "$SKETCHCATCH_PROJECT_ID" != "$SKETCHCATCH_EXPECTED_PROJECT_ID" ]; then
+            echo "::error::SketchCatch project binding mismatch. Reapply CI/CD settings for project $SKETCHCATCH_EXPECTED_PROJECT_ID before running this workflow." >&2
+            exit 1
+          fi`;
 }
 
 function createDefaultStateBucket(input: GitCicdWorkflowRenderInput): string {

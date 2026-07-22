@@ -1925,10 +1925,24 @@ type GitCicdReadinessResponse = {
 
 - `POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply`는 handoff의 `repositorySettingsPreview`를 기준으로 GitHub App installation token으로 GitHub Environment와 Actions variables를 적용한다.
 - 응답 DTO는 `GitCicdRepositorySettingsApplyResponse`이며 적용 여부, environment 이름, 적용된 variable 이름과 workflow file 목록을 반환한다.
-- GitHub App 권한이 부족하면 `github_app_permission_required`로 중단하고 GitHub App 설정에서 Administration과 Variables의 Read and write 승인을 안내한다. 로그인용 GitHub OAuth token은 Repository 변경에 사용하지 않는다.
+- GitHub App 권한이 부족하면 `github_app_permission_required`로 중단하고 GitHub App 설정에서 Administration·Variables의 Read and write와 Actions의 Read-only 승인을 안내한다. 로그인용 GitHub OAuth token은 Repository 변경에 사용하지 않는다.
 - `POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply`는 승인된 `awsRoleDiff`를 기준으로 IAM trust policy를 적용하고 검증한다.
 - 응답 DTO는 `GitCicdAwsRoleDiffApplyResponse`이며 role ARN, repository, environment, `appliedAt`, `verified`를 반환한다.
 - `GitCicdAwsRoleDiff` JSON에는 적용 후 `applied`, `appliedAt`, `verified`를 기록할 수 있다.
+
+2026-07-22 설정 수렴 계약:
+
+- `POST /api/projects/:projectId/git-cicd-handoffs`는 handoff를 먼저 `draft`로 저장한 뒤 Repository 설정, 필요한 AWS Role trust, PR 준비를 한 번의 사용자 승인으로 순서대로 처리한다.
+- `POST /api/git-cicd-handoffs/:handoffId/setup`은 중간에 실패했거나 과거 방식으로 생성된 handoff의 미완료 설정을 같은 record에서 다시 확인하고 이어서 처리한다. 과거 `pipeline_running`/`pipeline_success` record는 Repository/AWS 검증 증거만 보완하고 기존 PR과 Pipeline 상태를 유지한다. Direct Deployment의 Destroy나 재배포는 요구하지 않는다.
+- `pipeline_failed` 또는 닫힌 PR로 `cancelled`된 handoff를 재개하면 실패 run identity에서 만든 안정적인 `setupRetryToken`을 PR provider에 전달한다. 이때만 `sketchcatch/<project>/ci-cd/retry.json`을 생성·갱신하며, ECS App workflow는 이 exact path를 재포함해 retry PR merge 뒤 Pipeline을 다시 시작한다. 최초 setup에는 retry file을 만들지 않는다.
+- `GitCicdRepositorySettingsPreview`는 `applied`, `appliedAt`, `verified` 증거를 저장할 수 있다. Repository variable과 target branch 전용 Environment policy는 GitHub에서 다시 읽은 상태가 preview와 정확히 같아야 `verified: true`가 된다. 이미 일치하는 provider 상태는 write를 생략한다.
+- `GitCicdRepositorySettingsApplyResponse`는 기존 필드와 함께 `appliedAt`, `verified`를 반환한다.
+- AWS trust statement는 Repository/Environment별 scoped Sid를 사용한다. 현재 scope의 legacy statement만 교체하고 다른 statement는 보존하며, exact 상태면 IAM write를 생략한다. `awsRoleDiff.verified` 저장까지 확인되지 않으면 PR 단계로 진행하지 않는다.
+- 열린 PR은 저장된 head SHA와 handoff manifest ownership이 모두 일치할 때만 갱신한다. 불일치하면 기존 PR/branch를 보존하고 새 retry branch를 만든다.
+- `repositorySettingsPreview.verified === true`, `awsRoleDiff === null || awsRoleDiff.verified === true`, 유효한 PR URL과 non-draft/non-cancelled status가 모두 충족되어야 Workspace의 CI/CD Phase 3을 완료로 표시한다.
+- `pipeline_failed`는 Phase 3 완료 상태를 유지하고 Phase 4에서 통합 setup endpoint를 다시 호출하는 retry action을 표시한다.
+- 생성 workflow는 AWS credential 또는 SketchCatch 실행 API를 사용하기 전에 Repository의 `SKETCHCATCH_PROJECT_ID`와 생성 당시 project ID를 비교한다. 다르면 provider mutation 없이 실패한다.
+- 기존 개별 Repository/AWS apply endpoint는 호환성을 위해 유지하지만 Workspace의 기본 흐름은 통합 setup endpoint를 사용한다.
 
 ```ts
 type SourceRepositoryProvider = "internal" | "github";
