@@ -100,6 +100,7 @@ import {
 } from "./deployment-console-state";
 import {
   filterDeploymentHistoryEntries,
+  formatDeploymentPlanChangeSummary,
   getDeploymentHistoryEntries,
   getDeploymentFailureDeveloperCheck,
   getDeploymentStatusPresentation,
@@ -2175,7 +2176,7 @@ export function DirectDeploymentScreen({
                             {formatDate(deployment.createdAt)}
                           </time>
                         </td>
-                        <td>{formatDeploymentChangeSummary(deployment.planSummary)}</td>
+                        <td>{formatDeploymentPlanChangeSummary(deployment.planSummary)}</td>
                         <td>{formatDeploymentScope(deployment.scope)}</td>
                         <td>
                           <code title={versionLabel}>{versionLabel}</code>
@@ -2239,7 +2240,7 @@ export function DirectDeploymentScreen({
                     </div>
                     <div>
                       <dt>변경 결과</dt>
-                      <dd>{formatDeploymentChangeSummary(deployment.planSummary)}</dd>
+                      <dd>{formatDeploymentPlanChangeSummary(deployment.planSummary)}</dd>
                     </div>
                     <div>
                       <dt>대상</dt>
@@ -2649,6 +2650,7 @@ function OptionalInfoRow({
   return <InfoRow label={label} value={value} />;
 }
 
+// 승인 전에 기존 Resource import까지 포함한 전체 Plan 변경을 한 문장으로 보여줍니다.
 function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
   const summary = deployment.planSummary;
 
@@ -2660,7 +2662,7 @@ function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
     <>
       <InfoRow
         label="변경 사항"
-        value={`+${summary.createCount} ~${summary.updateCount} -${summary.deleteCount} +/-${summary.replaceCount}`}
+        value={formatDeploymentPlanChangeSummary(summary)}
       />
       {summary.warnings.length > 0 ? (
         <div className={styles.deploymentWarnings}>
@@ -2899,23 +2901,6 @@ function formatOutputValue(output: TerraformOutput): string {
   }
 
   return JSON.stringify(output.value);
-}
-
-function formatDeploymentChangeSummary(summary: Deployment["planSummary"]): string {
-  if (!summary) {
-    return "변경 정보 없음";
-  }
-
-  const changes = [
-    ["추가", summary.createCount],
-    ["수정", summary.updateCount],
-    ["교체", summary.replaceCount],
-    ["삭제", summary.deleteCount]
-  ]
-    .filter(([, count]) => Number(count) > 0)
-    .map(([label, count]) => `${label} ${count}개`);
-
-  return changes.length > 0 ? changes.join(" · ") : "변경 없음";
 }
 
 function formatDeploymentScope(scope: DeploymentScope): string {

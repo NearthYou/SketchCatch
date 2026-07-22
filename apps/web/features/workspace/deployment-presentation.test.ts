@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   filterDeploymentHistoryEntries,
+  formatDeploymentPlanChangeSummary,
   getDeploymentHistoryEntries,
   getDeploymentFailureDeveloperCheck,
   getDeploymentHistoryMetrics,
@@ -91,6 +92,7 @@ test("Deployment History filters terminal entries by completion state", () => {
         updateCount: 0,
         deleteCount: 1,
         replaceCount: 0,
+        importCount: 4,
         blocked: false,
         warnings: []
       }
@@ -137,9 +139,37 @@ test("Deployment History filters terminal entries by completion state", () => {
   assert.deepEqual(getDeploymentHistoryMetrics(entries), {
     averageDurationMs: 81_000,
     completedCount: 3,
-    totalChangeCount: 3,
+    totalChangeCount: 7,
     totalCount: 3
   });
+});
+
+test("Deployment summaries explain imported existing Resources without calling them no changes", () => {
+  const importOnlySummary = {
+    createCount: 0,
+    updateCount: 0,
+    deleteCount: 0,
+    replaceCount: 0,
+    importCount: 3,
+    blocked: false,
+    warnings: []
+  };
+
+  assert.equal(
+    formatDeploymentPlanChangeSummary(importOnlySummary),
+    "기존 리소스 3개 가져오기"
+  );
+  assert.notEqual(formatDeploymentPlanChangeSummary(importOnlySummary), "변경 없음");
+  assert.equal(
+    formatDeploymentPlanChangeSummary({
+      ...importOnlySummary,
+      createCount: 2,
+      updateCount: 1,
+      deleteCount: 1,
+      replaceCount: 1
+    }),
+    "기존 리소스 3개 가져오기 · 추가 2개 · 수정 1개 · 교체 1개 · 삭제 1개"
+  );
 });
 
 test("Deployment History keeps a failed entry even when a Plan summary is unavailable", () => {
