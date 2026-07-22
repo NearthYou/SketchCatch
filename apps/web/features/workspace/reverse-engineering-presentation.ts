@@ -93,8 +93,8 @@ export function presentReverseEngineeringResource(
     displayState,
     displayName: getDisplayName(resource, serviceLabel),
     serviceLabel,
-    statusLabel: getStatusLabel(displayState, hasRelationships),
-    statusDescription: getStatusDescription(displayState, hasRelationships),
+    statusLabel: getStatusLabel(resource, displayState),
+    statusDescription: getStatusDescription(resource, displayState, hasRelationships),
     regionLabel: resource.region,
     technicalIdentity: resource.providerResourceId
   };
@@ -248,25 +248,32 @@ function shortenDisplayName(displayName: string): string {
 }
 
 function getStatusLabel(
-  displayState: ReverseEngineeringDisplayState,
-  _hasRelationships: boolean
+  resource: DiscoveredResource,
+  displayState: ReverseEngineeringDisplayState
 ): string {
   if (displayState === "supported") {
-    return "배포 가능";
+    return "Terraform 편집 대상";
   }
 
-  return "보드 표시만";
+  return resource.importSuggestionStatus === "manual_review"
+    ? "설정 보완 필요"
+    : "보드에서만 확인";
 }
 
 function getStatusDescription(
+  resource: DiscoveredResource,
   displayState: ReverseEngineeringDisplayState,
   hasRelationships: boolean
 ): string {
   if (displayState === "supported") {
-    return "SketchCatch에서 Terraform을 만들고 배포할 수 있는 리소스입니다.";
+    return "AWS에서 가져온 설정을 Terraform으로 확인하고 수정할 수 있습니다. 실제 배포 전에는 변경 계획을 검토해야 합니다.";
+  }
+
+  if (resource.importSuggestionStatus === "manual_review") {
+    return "AWS에서 읽은 정보가 부족하거나 연결 설정을 자동으로 옮길 수 없습니다. 표시된 항목을 확인한 뒤 Terraform에 포함하세요.";
   }
 
   return hasRelationships
-    ? "보드에서 위치와 연결 관계를 확인할 수 있지만 Terraform 생성과 배포에는 자동으로 사용하지 않습니다."
-    : "보드에서 위치를 확인할 수 있지만 Terraform 생성과 배포에는 자동으로 사용하지 않습니다.";
+    ? "보드에서 위치와 연결 관계를 확인할 수 있습니다. Terraform 변경에는 자동으로 포함되지 않습니다."
+    : "보드에서 위치를 확인할 수 있습니다. Terraform 변경에는 자동으로 포함되지 않습니다.";
 }
