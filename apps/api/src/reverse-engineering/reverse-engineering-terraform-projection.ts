@@ -27,6 +27,7 @@ const TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE = new Map<ResourceType, string>([
   ["EC2", "aws_instance"],
   ["RDS", "aws_db_instance"],
   ["S3", "aws_s3_bucket"],
+  ["CLOUDWATCH_LOG_GROUP", "aws_cloudwatch_log_group"],
   ["LOAD_BALANCER", "aws_lb"],
   ["CLOUDFRONT", "aws_cloudfront_distribution"],
   ["ECS_CLUSTER", "aws_ecs_cluster"],
@@ -150,6 +151,12 @@ function createTerraformValues(resource: DiscoveredResource): ResourceConfig {
       return compactConfig({
         bucket: resource.providerResourceId,
         tags: normalizeTerraformTags(config["tags"])
+      });
+    case "CLOUDWATCH_LOG_GROUP":
+      return compactConfig({
+        name: config["logGroupName"],
+        retentionInDays: config["retentionInDays"],
+        kmsKeyId: config["kmsKeyId"]
       });
     case "LOAD_BALANCER":
       return compactConfig({

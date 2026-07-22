@@ -343,6 +343,7 @@ function createRenderableResourceConfig(node: InfrastructureGraphNode): Record<s
   return config;
 }
 
+// gg: Reverse Engineering 관찰값에서 실제 Terraform이 관리할 수 있는 필드만 남깁니다.
 function normalizeReverseEngineeringResourceConfig(
   node: InfrastructureGraphNode
 ): Record<string, unknown> {
@@ -370,17 +371,34 @@ function normalizeReverseEngineeringResourceConfig(
     return normalizeReverseEngineeringEcsTaskDefinitionConfig(node.config);
   }
 
+  if (node.iac.resourceType === "aws_cloudwatch_log_group") {
+    return normalizeReverseEngineeringCloudWatchLogGroupConfig(node.config);
+  }
+
   return { ...node.config };
 }
 
+// gg: 전용 AWS reader가 만든 config만 Reverse Engineering 정규화 대상으로 인정합니다.
 function isReverseEngineeringResourceConfig(config: Record<string, unknown>): boolean {
   return (
     config["providerResourceType"] === "AWS::ElasticLoadBalancingV2::LoadBalancer" ||
     config["providerResourceType"] === "AWS::CloudFront::Distribution" ||
     config["providerResourceType"] === "AWS::ECS::Cluster" ||
     config["providerResourceType"] === "AWS::ECS::Service" ||
-    config["providerResourceType"] === "AWS::ECS::TaskDefinition"
+    config["providerResourceType"] === "AWS::ECS::TaskDefinition" ||
+    config["providerResourceType"] === "AWS::Logs::LogGroup"
   );
+}
+
+// gg: 로그 이름, 보존 기간, KMS 연결만 Terraform 관리값으로 전달합니다.
+function normalizeReverseEngineeringCloudWatchLogGroupConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  return compactTerraformConfig({
+    name: readNonEmptyString(config["name"] ?? config["logGroupName"]),
+    retentionInDays: readNumber(config["retentionInDays"]),
+    kmsKeyId: readNonEmptyString(config["kmsKeyId"])
+  });
 }
 
 // The AWS summary proves a VPC origin exists, but not enough provider configuration to recreate it.

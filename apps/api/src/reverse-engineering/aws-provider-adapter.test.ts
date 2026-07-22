@@ -13,6 +13,10 @@ const CLOUDFRONT_ARN_B = "arn:aws:cloudfront::123456789012:distribution/EDISTRIB
 const ECS_CLUSTER_ARN = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
 const ECS_SERVICE_ARN = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api";
 const ECS_TASK_DEFINITION_ARN = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
+const CLOUDWATCH_LOG_GROUP_ARN =
+  "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders";
+const CLOUDWATCH_LOG_GROUP_KMS_ARN =
+  "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555";
 
 test("공개 Reverse Engineering 결과에는 ARN과 환경 비밀값을 남기지 않는다", async () => {
   const result = await scan([
@@ -213,7 +217,6 @@ test("AWS 전용 reader가 찾은 검토 전용 Resource도 실제 Catalog 타�
     ["AWS::IAM::Policy", "IAM_POLICY"],
     ["AWS::IAM::InstanceProfile", "IAM_INSTANCE_PROFILE"],
     ["AWS::KMS::Key", "KMS_KEY"],
-    ["AWS::Logs::LogGroup", "CLOUDWATCH_LOG_GROUP"],
     ["AWS::CloudWatch::Alarm", "CLOUDWATCH_METRIC_ALARM"],
     ["AWS::ApiGateway::RestApi", "API_GATEWAY_REST_API"]
   ] as const;
@@ -247,6 +250,68 @@ test("AWS 전용 reader가 찾은 검토 전용 Resource도 실제 Catalog 타�
     ),
     true
   );
+});
+
+test("CloudWatch Log Group은 이름으로 import하고 공개·서버 config 경계를 지킨다", async () => {
+  const logGroup = record({
+    providerResourceType: "AWS::Logs::LogGroup",
+    providerResourceId: CLOUDWATCH_LOG_GROUP_ARN,
+    displayName: "/ecs/orders",
+    config: {
+      arn: CLOUDWATCH_LOG_GROUP_ARN,
+      logGroupName: "/ecs/orders",
+      retentionInDays: 30,
+      kmsKeyId: CLOUDWATCH_LOG_GROUP_KMS_ARN,
+      logGroupClass: "STANDARD",
+      storedBytes: 1234,
+      providerParameters: { secret: "never-public" }
+    }
+  });
+  const publicResult = await scan([logGroup]);
+  const privateResult = await createAwsProviderAdapter(
+    {
+      async discoverResources() {
+        return [logGroup];
+      }
+    },
+    { resultVisibility: "private" }
+  ).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
+
+  assert.equal(publicResult.discoveredResources[0]?.analysisExcluded ?? false, false);
+  assert.deepEqual(publicResult.discoveredResources[0]?.config, {
+    logGroupName: "/ecs/orders",
+    retentionInDays: 30,
+    logGroupClass: "STANDARD"
+  });
+  assert.deepEqual(privateResult.discoveredResources[0]?.config, {
+    logGroupName: "/ecs/orders",
+    retentionInDays: 30,
+    kmsKeyId: CLOUDWATCH_LOG_GROUP_KMS_ARN,
+    logGroupClass: "STANDARD"
+  });
+  assertReadyImport(
+    publicResult.importSuggestions[0],
+    "aws_cloudwatch_log_group",
+    "/ecs/orders"
+  );
+});
+
+test("이름이 없는 CloudWatch Log Group은 자동 import에서 제외하고 이유를 남긴다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::Logs::LogGroup",
+      providerResourceId: CLOUDWATCH_LOG_GROUP_ARN,
+      displayName: "이름을 확인할 수 없는 로그",
+      config: { retentionInDays: 30 }
+    })
+  ]);
+
+  assert.equal(result.discoveredResources[0]?.analysisExcluded ?? false, false);
+  assert.equal(result.importSuggestions[0]?.status, "manual_review");
+  assert.equal(result.importSuggestions[0]?.handoffReady, false);
+  assert.equal(result.importSuggestions[0]?.importCommand, undefined);
+  assert.match(result.importSuggestions[0]?.reason ?? "", /log group name/iu);
+  assert.match(result.findings[0]?.description ?? "", /logGroupName/iu);
 });
 
 test("AWS 원본 config는 보존하고 Board projection과 handoff는 같은 Terraform identity를 쓴다", async () => {

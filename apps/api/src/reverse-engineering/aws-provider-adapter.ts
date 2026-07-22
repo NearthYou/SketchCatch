@@ -93,6 +93,7 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
 ]);
 
 const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
+  "CLOUDWATCH_LOG_GROUP",
   "LOAD_BALANCER",
   "CLOUDFRONT",
   "ECS_CLUSTER",
@@ -108,6 +109,7 @@ const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
   "EC2",
   "RDS",
   "S3",
+  "CLOUDWATCH_LOG_GROUP",
   "LOAD_BALANCER",
   "CLOUDFRONT",
   "ECS_CLUSTER",
@@ -241,6 +243,10 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
   [
     "AWS::IAM::InstanceProfile",
     new Set(["createdAt", "instanceProfileName", "path", "roleNames", "scanRegion"])
+  ],
+  [
+    "AWS::Logs::LogGroup",
+    new Set(["logGroupClass", "logGroupName", "retentionInDays"])
   ]
 ]);
 const OMIT_PUBLIC_VALUE = Symbol("omit-public-value");
@@ -347,7 +353,7 @@ function toDiscoveredResource(
   resultVisibility: "public" | "private"
 ): DiscoveredResource {
   const resourceType = resolveAwsResourceType(record);
-  const config = createAwsPublicResourceConfig(record);
+  const config = createAwsStoredResourceConfig(record, resultVisibility);
   const baseResource: DiscoveredResource = {
     id: createNodeId(record),
     provider: "aws",
@@ -502,7 +508,12 @@ function createImportSuggestions(
   });
 }
 
+// gg: 각 Resource가 Terraform에서 요구하는 실제 import ID만 선택해 잘못된 대상을 막습니다.
 function getStableTerraformImportId(resource: DiscoveredResource): string | null {
+  if (resource.resourceType === "CLOUDWATCH_LOG_GROUP") {
+    return getNonEmptyString(resource.config["logGroupName"]);
+  }
+
   if (resource.resourceType === "CLOUDFRONT") {
     return getNonEmptyString(resource.config["id"]);
   }
@@ -536,8 +547,11 @@ function getStableTerraformImportId(resource: DiscoveredResource): string | null
   return getNonEmptyString(resource.providerResourceId);
 }
 
+// gg: 자동 import를 만들 수 없는 이유를 Resource별로 짧고 정확하게 설명합니다.
 function createMissingImportIdReason(resourceType: ResourceType): string {
-  return resourceType === "CLOUDFRONT"
+  return resourceType === "CLOUDWATCH_LOG_GROUP"
+    ? "Terraform import에 필요한 CloudWatch log group name이 없습니다."
+    : resourceType === "CLOUDFRONT"
     ? "Terraform import에 필요한 CloudFront distribution ID가 없습니다."
     : resourceType === "LOAD_BALANCER"
       ? "보안상 ALB의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
@@ -614,10 +628,15 @@ function createTerraformCreationValidationFindings(
   });
 }
 
+// gg: 관찰값만으로 새 Terraform을 안전하게 만들 수 있는지 필수값을 확인합니다.
 function getMissingTerraformCreationFields(
   resourceType: ResourceType,
   config: Record<string, unknown>
 ): string[] {
+  if (resourceType === "CLOUDWATCH_LOG_GROUP") {
+    return getNonEmptyString(config["logGroupName"]) ? [] : ["logGroupName"];
+  }
+
   if (resourceType === "LOAD_BALANCER") {
     return [
       ...(getNonEmptyString(config["name"]) ? [] : ["name"]),
@@ -869,6 +888,23 @@ export function createAwsPublicResourceConfig(
   return record.providerResourceType === "AWS::ECS::TaskDefinition"
     ? sanitizePublicEcsTaskDefinitionConfig(publicConfig, record.config)
     : publicConfig;
+}
+
+// gg: 서버 전용 결과도 Resource별 allowlist를 지키되 import 후 복원에 필요한 KMS 연결은 보존합니다.
+function createAwsStoredResourceConfig(
+  record: Pick<AwsDiscoveredResourceRecord, "providerResourceType" | "config">,
+  resultVisibility: "public" | "private"
+): Record<string, unknown> {
+  const publicConfig = createAwsPublicResourceConfig(record);
+  if (
+    resultVisibility !== "private" ||
+    record.providerResourceType !== "AWS::Logs::LogGroup"
+  ) {
+    return publicConfig;
+  }
+
+  const kmsKeyId = getNonEmptyString(record.config["kmsKeyId"]);
+  return kmsKeyId ? { ...publicConfig, kmsKeyId } : publicConfig;
 }
 
 function sanitizePublicEcsTaskDefinitionConfig(

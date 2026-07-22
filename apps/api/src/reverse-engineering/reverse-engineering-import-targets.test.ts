@@ -84,6 +84,56 @@ test("실제 adapter의 S3 주소를 공개 Board projection에서 바꾸지 않
   ]);
 });
 
+test("CloudWatch Log Group은 ARN 대신 log group name을 검증된 import ID로 사용한다", async () => {
+  const rawResult = await createAwsProviderAdapter(
+    {
+      async discoverResources() {
+        return [
+          {
+            providerResourceType: "AWS::Logs::LogGroup",
+            providerResourceId:
+              "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders",
+            displayName: "/ecs/orders",
+            region: "ap-northeast-2",
+            config: { logGroupName: "/ecs/orders", retentionInDays: 30 },
+            relationships: []
+          }
+        ];
+      }
+    },
+    { resultVisibility: "private" }
+  ).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
+  const persistedResult = stampPersistedIdentity(rawResult);
+  const publicResult = normalizeReverseEngineeringScanResult(
+    persistedResult.scan,
+    persistedResult
+  );
+
+  const targets = await resolveVerifiedImportTargets(
+    {
+      projectId: "project-1",
+      accessContext,
+      diagramJson: diagramFromPublicArchitecture(
+        publicResult.reverseEngineeringDraft.architectureJson,
+        persistedResult.scan.id,
+        persistedResult.reverseEngineeringDraft.id
+      )
+    },
+    repositoryWith(persistedResult)
+  );
+
+  assert.deepEqual(targets, [
+    {
+      resourceId: persistedResult.discoveredResources[0]?.id,
+      terraformAddress:
+        persistedResult.importSuggestions[0]?.terraformAddress,
+      importId: "/ecs/orders",
+      providerResourceType: "AWS::Logs::LogGroup",
+      resourceType: "CLOUDWATCH_LOG_GROUP"
+    }
+  ]);
+});
+
 test("ARN을 가진 ALB도 공개 Board projection의 Terraform identity로 검증한다", async () => {
   const rawResult = await createAwsProviderAdapter(
     {

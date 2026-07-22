@@ -7,6 +7,8 @@ import { renderTerraformFromInfrastructureGraph } from "./diagram-to-terraform.j
 
 const REVERSE_ENGINEERING_ALB_CLOUDFRONT_FIXTURE = "reverse-engineering-alb-cloudfront";
 const REVERSE_ENGINEERING_ECS_FIXTURE = "reverse-engineering-ecs";
+const REVERSE_ENGINEERING_CLOUDWATCH_LOG_GROUP_FIXTURE =
+  "reverse-engineering-cloudwatch-log-group";
 const PROVIDERS_TF = `terraform {
   required_providers {
     aws = {
@@ -31,12 +33,15 @@ async function main(): Promise<void> {
     ? createAlbCloudFrontFixture
     : fixtureName === REVERSE_ENGINEERING_ECS_FIXTURE
       ? createEcsFixture
-      : null;
+      : fixtureName === REVERSE_ENGINEERING_CLOUDWATCH_LOG_GROUP_FIXTURE
+        ? createCloudWatchLogGroupFixture
+        : null;
   if (!createFixture) {
     throw new Error(
       `Unknown Terraform validation fixture: ${fixtureName ?? "<missing>"}. ` +
         `Expected --fixture ${REVERSE_ENGINEERING_ALB_CLOUDFRONT_FIXTURE} or ` +
-        `${REVERSE_ENGINEERING_ECS_FIXTURE}.`
+        `${REVERSE_ENGINEERING_ECS_FIXTURE} or ` +
+        `${REVERSE_ENGINEERING_CLOUDWATCH_LOG_GROUP_FIXTURE}.`
     );
   }
 
@@ -81,6 +86,24 @@ function assertStrictFixtureTerraform(fixtureName: string | undefined, terraform
     return;
   }
 
+  if (fixtureName === REVERSE_ENGINEERING_CLOUDWATCH_LOG_GROUP_FIXTURE) {
+    if (
+      !/resource "aws_cloudwatch_log_group" "orders" \{[\s\S]*name\s+= "\/ecs\/orders"[\s\S]*retention_in_days\s+= 30[\s\S]*kms_key_id\s+= "arn:aws:kms:/.test(
+        terraform
+      )
+    ) {
+      throw new Error(
+        "CloudWatch Log Group fixture must preserve name, retention_in_days, and kms_key_id before Terraform validation."
+      );
+    }
+    if (/log_group_class|stored_bytes|provider_resource_/u.test(terraform)) {
+      throw new Error(
+        "CloudWatch Log Group fixture must not render observed-only AWS fields."
+      );
+    }
+    return;
+  }
+
   if (fixtureName !== REVERSE_ENGINEERING_ECS_FIXTURE) {
     return;
   }
@@ -94,6 +117,37 @@ function assertStrictFixtureTerraform(fixtureName: string | undefined, terraform
   if (/\bload_balancer_name\s+=/.test(terraform)) {
     throw new Error("ECS fixture must not render unsupported aws_ecs_service.load_balancer.load_balancer_name.");
   }
+}
+
+// gg: 기존 CloudWatch Log Group에서 실제로 관리할 세 필드만 Terraform 검증에 넣습니다.
+function createCloudWatchLogGroupFixture(): InfrastructureGraph {
+  return {
+    nodes: [
+      {
+        id: "reverse-engineering-cloudwatch-log-group",
+        label: "orders logs",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_cloudwatch_log_group",
+          resourceName: "orders",
+          fileName: "main"
+        },
+        config: {
+          name: "/ecs/orders",
+          retentionInDays: 30,
+          kmsKeyId:
+            "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555",
+          logGroupClass: "STANDARD",
+          storedBytes: 1234,
+          providerResourceId:
+            "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders",
+          providerResourceType: "AWS::Logs::LogGroup"
+        }
+      }
+    ],
+    edges: []
+  };
 }
 
 function readFixtureName(args: readonly string[]): string | undefined {

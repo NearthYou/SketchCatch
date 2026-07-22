@@ -16,6 +16,7 @@ const AUTOMATED_MANAGED_RESOURCE_TYPES = new Set<ResourceType>([
   "EC2",
   "RDS",
   "S3",
+  "CLOUDWATCH_LOG_GROUP",
   "LOAD_BALANCER",
   "CLOUDFRONT",
   "ECS_CLUSTER",

@@ -1713,6 +1713,40 @@ test("Reverse Engineering ECS managed storage-only configuration은 KMS 값을 T
   assert.doesNotMatch(terraform, /execute_command_configuration/);
 });
 
+test("Reverse Engineering CloudWatch Log Group은 관리 가능한 값만 Terraform에 렌더링한다", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_cloudwatch_log_group", "orders", {
+        name: "/ecs/orders",
+        retentionInDays: 30,
+        kmsKeyId:
+          "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555",
+        logGroupClass: "STANDARD",
+        storedBytes: 1234,
+        providerResourceId:
+          "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders",
+        providerResourceType: "AWS::Logs::LogGroup",
+        reverseEngineeringObservedConfig: { storedBytes: 1234 }
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /resource "aws_cloudwatch_log_group" "orders" \{/);
+  assert.match(terraform, /name\s+= "\/ecs\/orders"/);
+  assert.match(terraform, /retention_in_days\s+= 30/);
+  assert.match(
+    terraform,
+    /kms_key_id\s+= "arn:aws:kms:ap-northeast-2:123456789012:key\/11111111-2222-3333-4444-555555555555"/
+  );
+  assert.doesNotMatch(
+    terraform,
+    /log_group_class|stored_bytes|provider_resource_id|provider_resource_type|reverse_engineering_observed_config/
+  );
+});
+
 test("Reverse Engineering ECS Service는 classic ELB를 elb_name으로 렌더링하고 불완전한 binding은 생략한다", () => {
   const graph: InfrastructureGraph = {
     nodes: [

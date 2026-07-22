@@ -6,6 +6,10 @@ import { classifyReverseEngineeringManagement } from "./reverse-engineering-mana
 test("자동 지원 워크로드와 AMI를 Terraform 관리 경계에 맞게 분류한다", () => {
   assert.equal(classifyReverseEngineeringManagement(resource("S3")), "managed");
   assert.equal(classifyReverseEngineeringManagement(resource("ECS_SERVICE")), "managed");
+  assert.equal(
+    classifyReverseEngineeringManagement(resource("CLOUDWATCH_LOG_GROUP")),
+    "managed"
+  );
   assert.equal(classifyReverseEngineeringManagement(resource("AMI")), "reference");
 });
 
