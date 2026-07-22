@@ -1,13 +1,22 @@
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { execFileSync } from "node:child_process";
 import { findAppendOnlyMigrationHistoryFailures } from "./db-migration-history.mjs";
 
 const migrationDirectory = path.join(process.cwd(), "apps/api/drizzle");
 const migrationJournalRelativePath = "apps/api/drizzle/meta/_journal.json";
 const migrationJournalPath = path.join(process.cwd(), migrationJournalRelativePath);
 const policyStartRevision = 29;
+const knownHistoricalMigrationRepairs = [
+  {
+    fileName: "0044_github_codebuild_release_plane.sql",
+    sha256: "f1395432cb3dc4fdc01bd14ba5cb3c985f573c55d6587c5b75941a5560b22264",
+    tag: "0044_github_codebuild_release_plane",
+    when: 1784160000002
+  }
+];
 const destructivePatterns = [
   /\bDROP\s+(?:TABLE|COLUMN)\b/i,
   /\bRENAME\s+(?:COLUMN|TO)\b/i,
@@ -45,11 +54,34 @@ if (baseSha && !/^0{40}$/.test(baseSha)) {
         encoding: "utf8"
       })
     );
+    const baseEntries = baseJournal.entries ?? [];
+    const currentEntries = currentJournal.entries ?? [];
+    const baseTags = new Set(baseEntries.map((entry) => entry.tag));
+    const currentByTag = new Map(currentEntries.map((entry) => [entry.tag, entry]));
+    const allowedHistoricalInsertions = knownHistoricalMigrationRepairs.flatMap((repair) => {
+      const currentEntry = currentByTag.get(repair.tag);
+      if (baseTags.has(repair.tag) || currentEntry?.when !== repair.when) {
+        return [];
+      }
+
+      const sql = fs
+        .readFileSync(path.join(migrationDirectory, repair.fileName), "utf8")
+        .replaceAll("\r\n", "\n");
+      const sha256 = createHash("sha256").update(sql).digest("hex");
+      if (sha256 !== repair.sha256) {
+        failures.push(
+          `${repair.tag} historical repair checksum changed from ${repair.sha256} to ${sha256}`
+        );
+        return [];
+      }
+
+      return [{ tag: repair.tag, when: repair.when }];
+    });
+
     failures.push(
-      ...findAppendOnlyMigrationHistoryFailures(
-        baseJournal.entries ?? [],
-        currentJournal.entries ?? []
-      )
+      ...findAppendOnlyMigrationHistoryFailures(baseEntries, currentEntries, {
+        allowedHistoricalInsertions
+      })
     );
   }
 }
