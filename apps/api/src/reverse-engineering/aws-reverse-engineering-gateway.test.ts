@@ -8,7 +8,11 @@ import {
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { ListDistributionsCommand } from "@aws-sdk/client-cloudfront";
 import { DescribeAlarmsCommand } from "@aws-sdk/client-cloudwatch";
-import { ListBucketsCommand } from "@aws-sdk/client-s3";
+import {
+  GetBucketTaggingCommand,
+  GetBucketVersioningCommand,
+  ListBucketsCommand
+} from "@aws-sdk/client-s3";
 import {
   GetDefaultViewCommand,
   GetViewCommand,
@@ -594,6 +598,36 @@ test("S3 ListBuckets pagination preserves detailed page-one buckets on a later f
   assert.equal(listCommands[0]?.input.MaxBuckets, 1_000);
   assert.equal(listCommands[1]?.input.ContinuationToken, "page-2");
   assert.deepEqual(failures, [{ outcome: "permission_denied" }]);
+});
+
+test("S3 상세 권한 실패는 리소스별 불완전 표시를 남기고 import 준비를 막는다", async () => {
+  const records = await listBucketsWithDetails(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        if (command instanceof ListBucketsCommand) {
+          return { Buckets: [{ Name: "partial-bucket" }] };
+        }
+        if (command instanceof GetBucketVersioningCommand) {
+          throw Object.assign(new Error("private provider failure"), {
+            name: "AccessDeniedException"
+          });
+        }
+        if (command instanceof GetBucketTaggingCommand) {
+          throw Object.assign(new Error("no tags configured"), { name: "NoSuchTagSet" });
+        }
+        return {};
+      }
+    })
+  );
+
+  assert.deepEqual(records[0]?.config["reverseEngineeringIncompleteDetails"], ["versioning"]);
+
+  const result = await scanGatewayRecords(records);
+  assert.equal(result.importSuggestions[0]?.status, "manual_review");
+  assert.equal(result.importSuggestions[0]?.handoffReady, false);
+  assert.match(result.importSuggestions[0]?.reason ?? "", /details\.versioning/);
 });
 
 test("AMI pagination preserves page-one images and reports one safe later failure", async () => {

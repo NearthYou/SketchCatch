@@ -682,36 +682,63 @@ async function createS3BucketRecord(
     return null;
   }
 
-  const [location, versioning, publicAccessBlock, encryption, website, tagging, policyStatus] =
+  const [
+    locationRead,
+    versioningRead,
+    publicAccessBlockRead,
+    encryptionRead,
+    websiteRead,
+    taggingRead,
+    policyStatusRead
+  ] =
     await Promise.all([
-      readOptionalS3Detail(() =>
+      readS3BucketDetail(() =>
         sendS3Command<GetBucketLocationCommandOutput>(client, new GetBucketLocationCommand({ Bucket: bucketName }))
       ),
-      readOptionalS3Detail(() =>
+      readS3BucketDetail(() =>
         sendS3Command<GetBucketVersioningCommandOutput>(client, new GetBucketVersioningCommand({ Bucket: bucketName }))
       ),
-      readOptionalS3Detail(() =>
+      readS3BucketDetail(() =>
         sendS3Command<GetPublicAccessBlockCommandOutput>(
           client,
           new GetPublicAccessBlockCommand({ Bucket: bucketName })
         )
       ),
-      readOptionalS3Detail(() =>
+      readS3BucketDetail(() =>
         sendS3Command<GetBucketEncryptionCommandOutput>(client, new GetBucketEncryptionCommand({ Bucket: bucketName }))
       ),
-      readOptionalS3Detail(() =>
+      readS3BucketDetail(() =>
         sendS3Command<GetBucketWebsiteCommandOutput>(client, new GetBucketWebsiteCommand({ Bucket: bucketName }))
       ),
-      readOptionalS3Detail(() =>
+      readS3BucketDetail(() =>
         sendS3Command<GetBucketTaggingCommandOutput>(client, new GetBucketTaggingCommand({ Bucket: bucketName }))
       ),
-      readOptionalS3Detail(() =>
+      readS3BucketDetail(() =>
         sendS3Command<GetBucketPolicyStatusCommandOutput>(
           client,
           new GetBucketPolicyStatusCommand({ Bucket: bucketName })
         )
       )
     ]);
+  const location = locationRead.value;
+  const versioning = versioningRead.value;
+  const publicAccessBlock = publicAccessBlockRead.value;
+  const encryption = encryptionRead.value;
+  const website = websiteRead.value;
+  const tagging = taggingRead.value;
+  const policyStatus = policyStatusRead.value;
+  const detailReads: ReadonlyArray<readonly [string, S3BucketDetailRead<unknown>]> = [
+    ["location", locationRead],
+    ["versioning", versioningRead],
+    ["publicAccessBlock", publicAccessBlockRead],
+    ["encryption", encryptionRead],
+    ["website", websiteRead],
+    ["tags", taggingRead],
+    ["policyStatus", policyStatusRead]
+  ];
+  const incompleteDetails = detailReads.flatMap(([detailName, read]) =>
+    read.complete ? [] : [detailName]
+  );
   const bucketRegion = normalizeS3BucketRegion(location?.LocationConstraint, fallbackRegion);
 
   return {
@@ -730,6 +757,8 @@ async function createS3BucketRecord(
       websiteErrorDocument: website?.ErrorDocument?.Key,
       tags: tagging?.TagSet?.map((tag) => ({ key: tag.Key, value: tag.Value })),
       policyStatusIsPublic: policyStatus?.PolicyStatus?.IsPublic,
+      reverseEngineeringIncompleteDetails:
+        incompleteDetails.length > 0 ? incompleteDetails : undefined,
       providerParameters: toProviderParameterSnapshot({
         bucket: {
           name: bucketName,
@@ -746,6 +775,42 @@ async function createS3BucketRecord(
     },
     relationships: []
   };
+}
+
+type S3BucketDetailRead<TOutput> = {
+  readonly complete: boolean;
+  readonly value: TOutput | null;
+};
+
+// gg: optional 설정 부재와 읽기 실패를 나눠 S3를 완전하게 읽지 못한 경우만 표시합니다.
+async function readS3BucketDetail<TOutput>(
+  read: () => Promise<TOutput>
+): Promise<S3BucketDetailRead<TOutput>> {
+  try {
+    return { complete: true, value: await read() };
+  } catch (error) {
+    return {
+      complete: isMissingS3BucketConfiguration(error),
+      value: null
+    };
+  }
+}
+
+// gg: S3에 optional 설정이 없는 정상 상태는 상세 조회 실패로 계산하지 않습니다.
+function isMissingS3BucketConfiguration(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("name" in error)) {
+    return false;
+  }
+
+  const name = typeof error.name === "string" ? error.name : "";
+  return [
+    "NoSuchConfiguration",
+    "NoSuchWebsiteConfiguration",
+    "NoSuchTagSet",
+    "NoSuchPublicAccessBlockConfiguration",
+    "NoSuchBucketPolicy",
+    "ServerSideEncryptionConfigurationNotFoundError"
+  ].includes(name);
 }
 
 async function sendS3Command<TOutput>(client: AwsS3ReadClient, command: object): Promise<TOutput> {

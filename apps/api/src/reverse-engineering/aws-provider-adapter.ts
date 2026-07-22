@@ -746,6 +746,99 @@ function getMissingTerraformCreationFields(
   resourceType: ResourceType,
   config: Record<string, unknown>
 ): string[] {
+  const incompleteDetailFields = getIncompleteDetailFields(config);
+
+  return [
+    ...incompleteDetailFields,
+    ...getMissingTerraformResourceFields(resourceType, config)
+  ];
+}
+
+// gg: Resource 종류별 실제 관찰값이 같은 Terraform 리소스를 만들 최소 조건을 확인합니다.
+function getMissingTerraformResourceFields(
+  resourceType: ResourceType,
+  config: Record<string, unknown>
+): string[] {
+  if (resourceType === "VPC") {
+    return [
+      ...(getNonEmptyString(config["cidrBlock"]) ? [] : ["cidrBlock"]),
+      ...(getNonEmptyString(config["instanceTenancy"]) ? [] : ["instanceTenancy"])
+    ];
+  }
+
+  if (resourceType === "SUBNET") {
+    return [
+      ...(getNonEmptyString(config["vpcId"]) ? [] : ["vpcId"]),
+      ...(getNonEmptyString(config["cidrBlock"]) ? [] : ["cidrBlock"]),
+      ...(getNonEmptyString(config["availabilityZone"]) ? [] : ["availabilityZone"]),
+      ...(typeof config["mapPublicIpOnLaunch"] === "boolean"
+        ? []
+        : ["mapPublicIpOnLaunch"]),
+      ...(typeof config["assignIpv6AddressOnCreation"] === "boolean"
+        ? []
+        : ["assignIpv6AddressOnCreation"])
+    ];
+  }
+
+  if (resourceType === "INTERNET_GATEWAY") {
+    return hasCompleteInternetGatewayAttachments(config["attachments"])
+      ? []
+      : ["attachments"];
+  }
+
+  if (resourceType === "ROUTE_TABLE") {
+    return [
+      ...(getNonEmptyString(config["vpcId"]) ? [] : ["vpcId"]),
+      ...(hasCompleteRouteTableRoutes(config["routes"]) ? [] : ["routes"])
+    ];
+  }
+
+  if (resourceType === "EC2") {
+    return [
+      ...(getNonEmptyString(config["imageId"]) ? [] : ["imageId"]),
+      ...(getNonEmptyString(config["instanceType"]) ? [] : ["instanceType"]),
+      ...(getNonEmptyString(config["subnetId"]) ? [] : ["subnetId"]),
+      ...(getStringArray(config["securityGroupIds"]).length > 0
+        ? []
+        : ["securityGroupIds"]),
+      ...(hasKnownEc2MonitoringState(config["monitoringState"])
+        ? []
+        : ["monitoringState"])
+    ];
+  }
+
+  if (resourceType === "RDS") {
+    return [
+      ...(isPositiveNumber(config["allocatedStorage"]) ? [] : ["allocatedStorage"]),
+      ...(getNonEmptyString(config["availabilityZone"]) ? [] : ["availabilityZone"]),
+      ...(isNonNegativeNumber(config["backupRetentionPeriod"])
+        ? []
+        : ["backupRetentionPeriod"]),
+      ...(getNonEmptyString(config["dbInstanceClass"]) ? [] : ["dbInstanceClass"]),
+      ...(getNonEmptyString(config["dbSubnetGroupName"]) ? [] : ["dbSubnetGroupName"]),
+      ...(typeof config["deletionProtection"] === "boolean"
+        ? []
+        : ["deletionProtection"]),
+      ...(getNonEmptyString(config["engine"]) ? [] : ["engine"]),
+      ...(getNonEmptyString(config["engineVersion"]) ? [] : ["engineVersion"]),
+      ...(typeof config["multiAz"] === "boolean" ? [] : ["multiAz"]),
+      ...(typeof config["publiclyAccessible"] === "boolean"
+        ? []
+        : ["publiclyAccessible"]),
+      ...(typeof config["storageEncrypted"] === "boolean"
+        ? []
+        : ["storageEncrypted"]),
+      ...(getNonEmptyString(config["storageType"]) ? [] : ["storageType"]),
+      ...(getStringArray(config["vpcSecurityGroupIds"]).length > 0
+        ? []
+        : ["vpcSecurityGroupIds"])
+    ];
+  }
+
+  if (resourceType === "S3") {
+    return [];
+  }
+
   if (resourceType === "CLOUDWATCH_METRIC_ALARM") {
     return [
       ...(getNonEmptyString(config["alarmName"]) ? [] : ["alarmName"]),
@@ -844,6 +937,65 @@ function getMissingTerraformCreationFields(
   }
 
   return [];
+}
+
+// gg: 세부 조회 실패 marker가 있으면 누락 원인을 사용자 검토 항목으로 바꿉니다.
+function getIncompleteDetailFields(config: Record<string, unknown>): string[] {
+  const marker = config["reverseEngineeringIncompleteDetails"];
+  if (marker === undefined) {
+    return [];
+  }
+  if (!Array.isArray(marker)) {
+    return ["details"];
+  }
+
+  const detailNames = getStringArray(marker);
+  if (detailNames.length !== marker.length) {
+    return ["details"];
+  }
+
+  return detailNames.map((detailName) => `details.${detailName}`);
+}
+
+// gg: 분리된 Internet Gateway도 허용하되 attachment가 있으면 VPC ID를 반드시 확인합니다.
+function hasCompleteInternetGatewayAttachments(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (attachment) =>
+        isRecord(attachment) && getNonEmptyString(attachment["vpcId"]) !== null
+    )
+  );
+}
+
+// gg: Route마다 목적지와 다음 홉을 모두 읽은 경우에만 같은 Route Table을 만들 수 있습니다.
+function hasCompleteRouteTableRoutes(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((route) => {
+      if (!isRecord(route)) {
+        return false;
+      }
+
+      const hasDestination =
+        getNonEmptyString(route["destinationCidrBlock"]) !== null ||
+        getNonEmptyString(route["destinationIpv6CidrBlock"]) !== null;
+      const hasTarget = [
+        "gatewayId",
+        "instanceId",
+        "natGatewayId",
+        "networkInterfaceId"
+      ].some((key) => getNonEmptyString(route[key]) !== null);
+
+      return hasDestination && hasTarget;
+    })
+  );
+}
+
+// gg: EC2 상세 monitoring 상태를 Terraform boolean으로 바꿀 수 있을 때만 완전한 관찰값입니다.
+function hasKnownEc2MonitoringState(value: unknown): boolean {
+  return value === "enabled" || value === "disabled";
 }
 
 function hasEcsCapacityProviderStrategy(value: unknown): boolean {
