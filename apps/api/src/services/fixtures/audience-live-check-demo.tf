@@ -346,6 +346,10 @@ resource "aws_eip" "eip_nat" {
 resource "aws_nat_gateway" "nat_private_egress" {
   subnet_id     = aws_subnet.subnet_fixed_template_ecs_fargate_container_app_a.id
   allocation_id = aws_eip.eip_nat.id
+  depends_on = [
+    aws_internet_gateway.igw_fixed_template_ecs_fargate_container_app,
+    aws_route_table_association.rta_fixed_template_ecs_fargate_container_app_a,
+  ]
 }
 
 resource "aws_route_table" "rt_private_app" {

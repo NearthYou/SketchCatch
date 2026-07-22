@@ -114,6 +114,10 @@ test("the realtime deployment demo prompt keeps questions but always returns the
   );
   assert.match(
     tunedTerraform,
+    /resource "aws_nat_gateway" "nat_private_egress" \{[\s\S]*?depends_on\s+= \[[\s\S]*?aws_internet_gateway\.igw_fixed_template_ecs_fargate_container_app[\s\S]*?aws_route_table_association\.rta_fixed_template_ecs_fargate_container_app_a[\s\S]*?\][\s\S]*?\}/u
+  );
+  assert.match(
+    tunedTerraform,
     /output "max_capacity" \{[\s\S]*?value\s+= aws_appautoscaling_target\.ecs_service_requests\.max_capacity[\s\S]*?\}/u
   );
   assert.match(tunedTerraform, /resource "random_password" "check_in_signing"/u);
