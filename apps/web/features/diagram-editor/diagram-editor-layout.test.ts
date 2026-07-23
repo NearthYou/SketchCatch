@@ -36,6 +36,11 @@ test("diagram editor uses partial box selection for overlapping area nodes", () 
   assert.match(diagramEditorSource, /selectionMode=\{SelectionMode\.Partial\}/);
 });
 
+test("trackpad pinch does not take over the Architecture Board viewport", () => {
+  assert.match(diagramEditorSource, /panOnScroll=\{viewerPolicy\.panOnScroll\}/);
+  assert.match(diagramEditorSource, /zoomOnPinch=\{false\}/);
+});
+
 test("clicking any interactive flow node replaces the current single selection", () => {
   const handleFlowNodeClickStart = diagramEditorSource.indexOf(
     "const handleFlowNodeClick = useCallback("
