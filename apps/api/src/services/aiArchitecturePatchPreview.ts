@@ -657,6 +657,9 @@ AUTO_SCALING_GROUP:
 - config.maxSize
 - config.desiredCapacity
 
+APPLICATION_AUTO_SCALING_POLICY:
+- config.targetTrackingScalingPolicyConfiguration.targetValue
+
 Rules:
 1. If selectedTargetResourceId is present, use that resource as the target if it exists. Do not ask which resource to modify.
 2. If selectedTargetResourceId is present but does not exist, return needs_clarification.
@@ -702,6 +705,14 @@ Database rules:
   op = set_value
   path = config.allocatedStorage
   value = 200
+
+Target tracking rules:
+- If the request mentions one exact resource id or label, prefer that resource over a shorter resource keyword inside its name.
+- If the user asks to change target value, target_value, 대상 값, 목표 값, or 요청 기준 and exactly one APPLICATION_AUTO_SCALING_POLICY exists, use it.
+- For "target value 50에서 5로" or "요청 기준을 5로", return:
+  op = set_value
+  path = config.targetTrackingScalingPolicyConfiguration.targetValue
+  value = 5
 
 Delete rules:
 - If the user asks to delete/remove a resource type and multiple resources of that type exist, return needs_clarification with candidateResourceIds.
@@ -771,7 +782,10 @@ const PATCH_PLAN_ALLOWED_OPERATION_PATHS: Readonly<Partial<Record<ResourceType, 
   LAMBDA: ["config.runtime", "config.memorySize", "config.timeout"],
   LOAD_BALANCER: ["config.internal"],
   CLOUDFRONT: ["config.signingBehavior"],
-  AUTO_SCALING_GROUP: ["config.minSize", "config.maxSize", "config.desiredCapacity"]
+  AUTO_SCALING_GROUP: ["config.minSize", "config.maxSize", "config.desiredCapacity"],
+  APPLICATION_AUTO_SCALING_POLICY: [
+    "config.targetTrackingScalingPolicyConfiguration.targetValue"
+  ]
 };
 
 export function createArchitecturePatchPlan(
@@ -791,7 +805,11 @@ export function createArchitecturePatchPlan(
   const naturalLanguageAction = isEc2InstanceTypeModificationInstruction(normalizedInstruction)
     ? "modify_resource"
     : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
-  const resourceType = findResourceType(normalizedInstruction);
+  const inferredTargetNode =
+    naturalLanguageAction === "add_resource"
+      ? undefined
+      : findNaturalLanguagePatchTarget(input.architectureJson.nodes, normalizedInstruction);
+  const resourceType = inferredTargetNode?.type ?? findResourceType(normalizedInstruction);
 
   if (naturalLanguageAction === "manual_review") {
     return createNeedsClarificationPatchPlan(
@@ -823,7 +841,8 @@ export function createArchitecturePatchPlan(
 
   const targetResolution = resolvePatchPlanTarget(input.architectureJson, {
     resourceType,
-    selectedTargetResourceId: input.selectedTargetResourceId
+    selectedTargetResourceId:
+      input.selectedTargetResourceId ?? inferredTargetNode?.id
   });
 
   if (targetResolution.status === "needs_clarification") {
@@ -901,11 +920,15 @@ export async function createArchitecturePatchPreviewWithPatchPlanCompiler(
 ): Promise<ArchitecturePatchPreviewResponse> {
   const fallbackPlan = createArchitecturePatchPlan(input);
   const fallbackMetadata = createPatchFallbackMetadata(input.instruction);
-  const providerResult = await createProviderBackedPatchPlan(input, options);
+  const providerResult =
+    fallbackPlan.status === "planned"
+      ? undefined
+      : await createProviderBackedPatchPlan(input, options);
+  const patchPlan = providerResult?.patchPlan ?? fallbackPlan;
 
   return createArchitecturePatchPreviewFromPlan(
     input,
-    providerResult?.patchPlan ?? fallbackPlan,
+    patchPlan,
     providerResult?.providerMetadata ?? fallbackMetadata
   );
 }
@@ -1015,7 +1038,7 @@ function createArchitecturePatchPreviewFromPlan(
     resolvedIntent
   );
 
-  return applyPatchPlanToPreviewResponse({
+  const preview = applyPatchPlanToPreviewResponse({
     status: "preview",
     intent: resolvedIntent,
     baseArchitectureJson: effectiveInput.architectureJson,
@@ -1026,6 +1049,28 @@ function createArchitecturePatchPreviewFromPlan(
     patchPlan,
     providerMetadata
   }, patchPlan);
+
+  if (
+    JSON.stringify(preview.baseArchitectureJson.nodes) ===
+      JSON.stringify(preview.proposedArchitectureJson.nodes) &&
+    JSON.stringify(preview.baseArchitectureJson.edges) ===
+      JSON.stringify(preview.proposedArchitectureJson.edges)
+  ) {
+    return {
+      status: "needs_clarification",
+      intent: resolvedIntent,
+      question:
+        "요청한 설정을 현재 보드에서 자동으로 변경하지 못했습니다. 바꿀 리소스나 값을 조금 다르게 말해주세요.",
+      candidates:
+        targetResolution.targetNode === null
+          ? []
+          : [toClarificationCandidate(targetResolution.targetNode)],
+      patchPlan,
+      providerMetadata
+    };
+  }
+
+  return preview;
 }
 
 function createNoResourceAdditionPreview(
@@ -1471,11 +1516,48 @@ function applyPatchPlanOperationsToConfig(
     }
 
     if (operation.op === "set_value" || operation.op === "rename") {
-      nextConfig[key] = operation.value;
+      setConfigPathValue(nextConfig, key, operation.value);
     }
   }
 
   return nextConfig;
+}
+
+function setConfigPathValue(
+  config: Record<string, unknown>,
+  path: string,
+  value: string | number | boolean | null
+): void {
+  const [key, ...remainingPath] = path.split(".");
+
+  if (!key) {
+    return;
+  }
+
+  if (remainingPath.length === 0) {
+    config[key] = value;
+    return;
+  }
+
+  const currentValue = config[key];
+  const nestedPath = remainingPath.join(".");
+
+  if (Array.isArray(currentValue)) {
+    config[key] = currentValue.map((item, index) => {
+      if (index !== 0 || !isRecord(item)) {
+        return item;
+      }
+
+      const nextItem = { ...item };
+      setConfigPathValue(nextItem, nestedPath, value);
+      return nextItem;
+    });
+    return;
+  }
+
+  const nextValue = isRecord(currentValue) ? { ...currentValue } : {};
+  setConfigPathValue(nextValue, nestedPath, value);
+  config[key] = nextValue;
 }
 
 function createPatchPlanTarget(
@@ -1822,6 +1904,22 @@ function createPatchPlanOperations(
     if (signingBehavior !== undefined) {
       return [{ op: "set_value", path: "config.signingBehavior", value: signingBehavior }];
     }
+  }
+
+  if (targetNode.type === "APPLICATION_AUTO_SCALING_POLICY") {
+    const targetValue = findTargetTrackingTargetValue(normalizedInstruction);
+
+    if (targetValue !== undefined) {
+      return [
+        {
+          op: "set_value",
+          path: "config.targetTrackingScalingPolicyConfiguration.targetValue",
+          value: targetValue
+        }
+      ];
+    }
+
+    return [];
   }
 
   if (targetNode.type === "AUTO_SCALING_GROUP") {
@@ -2190,7 +2288,14 @@ function resolvePatchIntent(input: CreateArchitecturePatchPreviewInput): Archite
   const instruction = input.instruction;
   const normalizedInstruction = normalizeSearchText(instruction);
   const replacementIntent = resolveReplacementPatchIntent(normalizedInstruction);
-  const explicitResourceType = findResourceType(normalizedInstruction);
+  const naturalLanguageAction = isEc2InstanceTypeModificationInstruction(normalizedInstruction)
+    ? "modify_resource"
+    : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
+  const inferredTargetNode =
+    naturalLanguageAction === "add_resource"
+      ? undefined
+      : findNaturalLanguagePatchTarget(input.architectureJson.nodes, normalizedInstruction);
+  const explicitResourceType = inferredTargetNode?.type ?? findResourceType(normalizedInstruction);
   const serviceExpansionResourceType =
     explicitResourceType === undefined
       ? inferServiceExpansionResourceType(normalizedInstruction, input.architectureJson.nodes)
@@ -2198,19 +2303,18 @@ function resolvePatchIntent(input: CreateArchitecturePatchPreviewInput): Archite
   const resourceType = replacementIntent
     ? replacementIntent.sourceResourceType
     : (explicitResourceType ?? serviceExpansionResourceType);
-  const naturalLanguageAction = isEc2InstanceTypeModificationInstruction(normalizedInstruction)
-    ? "modify_resource"
-    : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
   const requestedAction = replacementIntent
     ? "modify_resource"
     : naturalLanguageAction === "manual_review" && serviceExpansionResourceType !== undefined
       ? "add_resource"
       : naturalLanguageAction;
 
+  const targetResourceId = input.selectedTargetResourceId ?? inferredTargetNode?.id;
+
   return {
     instruction,
     requestedAction,
-    ...(input.selectedTargetResourceId ? { targetResourceId: input.selectedTargetResourceId } : {}),
+    ...(targetResourceId ? { targetResourceId } : {}),
     ...(input.connectionTargetResourceId
       ? { connectionTargetResourceId: input.connectionTargetResourceId }
       : {}),
@@ -2743,6 +2847,27 @@ function findMentionedNodes(nodes: readonly ResourceNode[], instruction: string)
   return nodes.filter((node) =>
     nodeSearchAliases(node).some((alias) => includesPhrase(normalizedInstruction, alias))
   );
+}
+
+function findNaturalLanguagePatchTarget(
+  nodes: readonly ResourceNode[],
+  instruction: string
+): ResourceNode | undefined {
+  const mentionedNodes = findMentionedNodes(nodes, instruction);
+
+  if (mentionedNodes.length === 1) {
+    return mentionedNodes[0];
+  }
+
+  if (!isTargetTrackingTargetValueInstruction(instruction)) {
+    return undefined;
+  }
+
+  const scalingPolicies = nodes.filter(
+    (node) => node.type === "APPLICATION_AUTO_SCALING_POLICY"
+  );
+
+  return scalingPolicies.length === 1 ? scalingPolicies[0] : undefined;
 }
 
 function nodeSearchAliases(node: ResourceNode): string[] {
@@ -3717,9 +3842,7 @@ function createModificationConfig(
     return updates;
   }
 
-  return {
-    naturalLanguageChangeRequest: intent.instruction
-  };
+  return {};
 }
 
 function isCloudFrontOriginAccessControl(node: ResourceNode): boolean {
@@ -4081,6 +4204,33 @@ function upsertIngressPort(currentIngress: unknown, port: number): unknown[] {
       cidr: "0.0.0.0/0"
     }
   ];
+}
+
+function isTargetTrackingTargetValueInstruction(instruction: string): boolean {
+  return includesAnyPhrase(normalizeSearchText(instruction), [
+    "target value",
+    "target_value",
+    "targetvalue",
+    "대상 값",
+    "목표 값",
+    "요청 기준",
+    "요청 수 기준"
+  ]);
+}
+
+function findTargetTrackingTargetValue(
+  normalizedInstruction: string
+): number | undefined {
+  if (!isTargetTrackingTargetValueInstruction(normalizedInstruction)) {
+    return undefined;
+  }
+
+  const values = Array.from(
+    normalizedInstruction.matchAll(/\b\d+(?:\.\d+)?\b/g),
+    (match) => Number(match[0])
+  ).filter((value) => Number.isFinite(value) && value > 0);
+
+  return values.at(-1);
 }
 
 function findCapacityValue(
