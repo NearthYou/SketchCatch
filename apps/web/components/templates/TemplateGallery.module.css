@@ -6,10 +6,9 @@
 
 .controls {
   align-items: end;
-  display: grid;
+  display: flex;
   font-family: var(--font-sans);
-  gap: 10px;
-  grid-template-columns: minmax(220px, 1fr) minmax(130px, 180px) minmax(150px, 190px);
+  justify-content: flex-end;
 }
 
 .searchField {
@@ -22,6 +21,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   min-height: 42px;
   padding: 0 12px;
+  width: min(100%, 520px);
 }
 
 .searchField:focus-within {
@@ -45,18 +45,6 @@
   font-weight: var(--presentation-font-weight-regular);
   letter-spacing: 0;
   line-height: 1.5;
-}
-
-.selectField {
-  display: grid;
-  gap: 7px;
-}
-
-.selectField > span {
-  color: var(--color-body);
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-regular);
-  line-height: 1.4;
 }
 
 .searchField input {
@@ -251,7 +239,6 @@
 }
 
 @media (max-width: 760px) {
-  .controls,
   .grid {
     grid-template-columns: 1fr;
   }
