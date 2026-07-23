@@ -8,20 +8,11 @@ import {
   getBoardTemplateRelationshipCount,
   getBoardTemplateResourceCount,
   isBoardTemplateAvailable,
-  listBoardTemplateTags,
   type AvailableBoardTemplate,
-  type BoardTemplate,
-  type BoardTemplateSort
+  type BoardTemplate
 } from "../../features/resource-settings/template-library";
 import { BoardThumbnailImage } from "../architecture-board/BoardThumbnailImage";
-import { SelectMenu, type SelectMenuOption } from "../ui/SelectMenu";
 import styles from "./TemplateGallery.module.css";
-
-const TEMPLATE_SORT_OPTIONS: readonly SelectMenuOption[] = [
-  { label: "추천순", value: "recommended" },
-  { label: "이름순", value: "name" },
-  { label: "Resource 많은 순", value: "resources" }
-];
 
 export type TemplateGalleryProps = {
   readonly actionHref?: ((template: AvailableBoardTemplate) => string) | undefined;
@@ -40,19 +31,9 @@ export function TemplateGallery({
   templates
 }: TemplateGalleryProps) {
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<BoardTemplateSort>("recommended");
-  const [tag, setTag] = useState("all");
-  const tags = useMemo(() => listBoardTemplateTags(templates), [templates]);
-  const tagOptions = useMemo<readonly SelectMenuOption[]>(
-    () => [
-      { label: "전체", value: "all" },
-      ...tags.map((templateTag) => ({ label: templateTag, value: templateTag }))
-    ],
-    [tags]
-  );
   const visibleTemplates = useMemo(
-    () => filterBoardTemplates(templates, { query, sort, tag }),
-    [query, sort, tag, templates]
+    () => filterBoardTemplates(templates, { query, sort: "recommended", tag: "all" }),
+    [query, templates]
   );
 
   return (
@@ -63,41 +44,17 @@ export function TemplateGallery({
           <span className={styles.visuallyHidden}>Template 검색</span>
           <input
             onChange={(event) => setQuery(event.currentTarget.value)}
-            placeholder="이름, Resource, tag 검색"
+            placeholder="이름 또는 Resource 검색"
             type="search"
             value={query}
           />
         </label>
-        <div className={styles.selectField}>
-          <span>Tag</span>
-          <SelectMenu
-            ariaLabel="Template Tag 선택"
-            emptyLabel="Tag 선택"
-            onChange={setTag}
-            options={tagOptions}
-            size="large"
-            tone="surface"
-            value={tag}
-          />
-        </div>
-        <div className={styles.selectField}>
-          <span>정렬</span>
-          <SelectMenu
-            ariaLabel="Template 정렬 선택"
-            emptyLabel="정렬 선택"
-            onChange={(value) => setSort(value as BoardTemplateSort)}
-            options={TEMPLATE_SORT_OPTIONS}
-            size="large"
-            tone="surface"
-            value={sort}
-          />
-        </div>
       </div>
 
       {visibleTemplates.length === 0 ? (
         <div className={styles.emptyState}>
           <strong>일치하는 Template이 없습니다</strong>
-          <span>검색어나 Tag를 바꿔보세요.</span>
+          <span>검색어를 바꿔보세요.</span>
         </div>
       ) : (
         <div className={styles.grid}>

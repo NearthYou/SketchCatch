@@ -35,7 +35,6 @@ import {
   createAwsCodeConnection,
   deleteAwsConnection,
   disconnectAwsCodeConnection,
-  getAwsCodeConnection,
   getAwsConnectionDeletionPreview,
   getAwsConnectionCloudFormationTemplate,
   refreshAwsCodeConnection,
@@ -45,6 +44,7 @@ import {
 } from "../../../features/workspace/api";
 import { restoreAwsConnectionSetup } from "../../../features/dashboard/aws-connection-setup";
 import {
+  useAwsCodeConnectionsQueries,
   useAwsConnectionsQuery,
   useAwsConnectionSettingsQuery,
   useGitHubInstallationsQuery
@@ -52,6 +52,7 @@ import {
 import { useAuth } from "../../../components/auth/auth-provider";
 import { invalidateAwsConnectionQueries } from "../../../components/query/dashboard-query-invalidation";
 import { getApiErrorMessage } from "../../../lib/api-client";
+import { queryKeys } from "../../../lib/query-keys";
 import {
   deriveAwsConnectionSettingsState,
   type AwsConnectionCleanupRetryDisplay
@@ -127,6 +128,23 @@ export function SettingsDashboardClient() {
     [displayedConnections, recoveryMode, verifiedConnections]
   );
   const displayedCleanupRetries = recoveryMode ? [] : cleanupRetries;
+  const displayedVerifiedConnectionIds = useMemo(
+    () => displayedVerifiedConnections.map((connection) => connection.id),
+    [displayedVerifiedConnections]
+  );
+  const codeConnectionQueries = useAwsCodeConnectionsQueries(displayedVerifiedConnectionIds);
+  const codeConnections = useMemo(
+    () =>
+      Object.fromEntries(
+        codeConnectionQueries.flatMap((query, index) =>
+          query.data
+            ? [[displayedVerifiedConnectionIds[index], query.data] as const]
+            : []
+        )
+      ),
+    [codeConnectionQueries, displayedVerifiedConnectionIds]
+  );
+  const codeConnectionLoadError = codeConnectionQueries.find((query) => query.isError)?.error;
   const isConnectionsPending = recoveryMode
     ? recoveryConnectionsQuery.isPending && !recoveryConnectionsQuery.data
     : connectionsQuery.isPending && !connectionsQuery.data;
@@ -146,9 +164,6 @@ export function SettingsDashboardClient() {
   const [deletionErrorMessage, setDeletionErrorMessage] = useState("");
   const [showCodeConnectionDisconnectModal, setShowCodeConnectionDisconnectModal] =
     useState(false);
-  const [codeConnections, setCodeConnections] = useState<
-    Record<string, AwsCodeConnectionResponse>
-  >({});
   const [selectedBuildAwsConnectionId, setSelectedBuildAwsConnectionId] = useState("");
   const selectedCodeConnectionStatus =
     codeConnections[selectedBuildAwsConnectionId]?.codeConnection?.status;
@@ -174,10 +189,25 @@ export function SettingsDashboardClient() {
   // 저장된 AWS 연결 목록을 다시 읽고 현재 상태를 최신으로 맞춥니다.
   async function loadConnections(): Promise<void> {
     setErrorMessage("");
-    const result = await displayedConnectionsQuery.refetch();
+    const [result] = await Promise.all([
+      displayedConnectionsQuery.refetch(),
+      githubInstallationsQuery.refetch(),
+      ...codeConnectionQueries.map((query) => query.refetch())
+    ]);
     if (result.error) {
       setErrorMessage(getApiErrorMessage(result.error, "AWS 연결을 불러오지 못했습니다."));
     }
+  }
+
+  function cacheCodeConnection(
+    awsConnectionId: string,
+    response: AwsCodeConnectionResponse
+  ): void {
+    if (!user?.id) return;
+    queryClient.setQueryData(
+      queryKeys.awsCodeConnection(user.id, awsConnectionId),
+      response
+    );
   }
 
   async function invalidateConnections(): Promise<void> {
@@ -367,10 +397,7 @@ export function SettingsDashboardClient() {
     setErrorMessage("");
     try {
       const response = await createAwsCodeConnection(selectedBuildAwsConnectionId);
-      setCodeConnections((current) => ({
-        ...current,
-        [selectedBuildAwsConnectionId]: response
-      }));
+      cacheCodeConnection(selectedBuildAwsConnectionId, response);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "AWS CodeBuild용 GitHub 권한을 만들지 못했습니다."));
     } finally {
@@ -384,10 +411,7 @@ export function SettingsDashboardClient() {
     setErrorMessage("");
     try {
       const response = await refreshAwsCodeConnection(selectedBuildAwsConnectionId);
-      setCodeConnections((current) => ({
-        ...current,
-        [selectedBuildAwsConnectionId]: response
-      }));
+      cacheCodeConnection(selectedBuildAwsConnectionId, response);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "GitHub 승인 상태를 확인하지 못했습니다."));
     } finally {
@@ -406,10 +430,7 @@ export function SettingsDashboardClient() {
     setErrorMessage("");
     try {
       await disconnectAwsCodeConnection(connectionId, { confirmedManagedCleanup: true });
-      setCodeConnections((current) => ({
-        ...current,
-        [connectionId]: { codeConnection: null }
-      }));
+      cacheCodeConnection(connectionId, { codeConnection: null });
       setShowCodeConnectionDisconnectModal(false);
     } catch (error) {
       setShowCodeConnectionDisconnectModal(false);
@@ -427,42 +448,6 @@ export function SettingsDashboardClient() {
           ? (displayedVerifiedConnections[0]?.id ?? "")
           : ""
     );
-  }, [displayedVerifiedConnections]);
-
-  useEffect(() => {
-    let active = true;
-
-    void Promise.all(
-      displayedVerifiedConnections.map(async (connection) => {
-        const savedConnection = await getAwsCodeConnection(connection.id);
-        if (!savedConnection.codeConnection) return [connection.id, savedConnection] as const;
-        try {
-          return [connection.id, await refreshAwsCodeConnection(connection.id)] as const;
-        } catch (error) {
-          if (active) {
-            setErrorMessage(
-              getApiErrorMessage(
-                error,
-                "AWS 상태를 다시 확인하지 못해 저장된 연결 상태를 표시합니다."
-              )
-            );
-          }
-          return [connection.id, savedConnection] as const;
-        }
-      })
-    )
-      .then((entries) => {
-        if (active) setCodeConnections(Object.fromEntries(entries));
-      })
-      .catch((error) => {
-        if (active) {
-          setErrorMessage(getApiErrorMessage(error, "GitHub 빌드 연결 상태를 불러오지 못했습니다."));
-        }
-      });
-
-    return () => {
-      active = false;
-    };
   }, [displayedVerifiedConnections]);
 
   useEffect(() => {
@@ -538,6 +523,7 @@ export function SettingsDashboardClient() {
       ) : (
         <>
           {displayedConnectionsQuery.isError ? <p className={styles.errorBand}>{getApiErrorMessage(displayedConnectionsQuery.error, "AWS 연결을 갱신하지 못했습니다.")}</p> : null}
+          {codeConnectionLoadError ? <p className={styles.errorBand}>{getApiErrorMessage(codeConnectionLoadError, "GitHub 빌드 연결 상태를 불러오지 못했습니다.")}</p> : null}
           {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}
 
           <section aria-label="외부 서비스 연결 순서" className={styles.connectionFlow}>

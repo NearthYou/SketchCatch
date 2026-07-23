@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -86,6 +87,11 @@ const mainStartOptions = startModeOptions.filter((option) => option.kind !== "bl
 const blankStartOption = startModeOptions.find((option) => option.kind === "blank");
 const boardTemplates = listBoardTemplates();
 const targetEnvironmentOptions = createWorkspaceTargetEnvironmentOptions();
+const TARGET_ENVIRONMENT_ICON_PATHS: Record<WorkspaceTargetEnvironment, string> = {
+  aws: "/provider-icons/aws.svg",
+  gcp: "/provider-icons/google-cloud.svg",
+  azure: "/provider-icons/azure.svg"
+};
 
 // 프로젝트 이름과 시작 방식을 받아 알맞은 생성 흐름으로 연결합니다.
 export function WorkspaceStartClient({
@@ -402,16 +408,18 @@ export function WorkspaceStartClient({
                   >
                     <span className={styles.optionIcon}>
                       {isOptionSubmitting ? (
-                        <LoaderCircle aria-hidden="true" className={styles.spinner} size={20} />
+                        <LoaderCircle aria-hidden="true" className={styles.spinner} size={26} />
                       ) : (
-                        <Icon aria-hidden="true" size={20} />
+                        <Icon aria-hidden="true" size={26} />
                       )}
                     </span>
                     <span className={styles.optionCopy}>
-                      <strong>{option.title}</strong>
+                      <span className={styles.optionTitleRow}>
+                        <strong>{option.title}</strong>
+                        {option.kind === "reverse" ? <em>AWS Role 필요</em> : null}
+                      </span>
                       <small>{option.description}</small>
                     </span>
-                    {option.kind === "reverse" ? <em>AWS Role 필요</em> : null}
                   </button>
                 );
               })}
@@ -482,6 +490,14 @@ function TargetEnvironmentField({
                 type="radio"
                 value={option.id}
               />
+              <span aria-hidden="true" className={styles.targetEnvironmentBrandIcon}>
+                <Image
+                  alt=""
+                  height={32}
+                  src={TARGET_ENVIRONMENT_ICON_PATHS[option.id]}
+                  width={32}
+                />
+              </span>
               <span>{option.label}</span>
               {isSelected ? <Check aria-hidden="true" size={18} strokeWidth={3} /> : null}
             </label>
