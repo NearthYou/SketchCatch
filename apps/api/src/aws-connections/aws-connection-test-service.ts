@@ -376,6 +376,8 @@ function isAwsCredentialError(error: unknown): boolean {
     errorName === "ExpiredTokenException" ||
     errorName === "InvalidClientTokenId" ||
     errorName === "UnrecognizedClientException" ||
+    errorName === "CredentialsProviderError" ||
+    errorName === "TokenProviderError" ||
     message.includes("could not load credentials")
   );
 }
@@ -388,10 +390,12 @@ function isAwsSsoCredentialProviderError(error: unknown): boolean {
       : "";
 
   return (
-    errorName === "CredentialsProviderError" ||
-    errorName === "TokenProviderError" ||
     errorName === "SSOProviderInvalidToken" ||
-    message.includes("sso session")
+    message.includes("sso session") ||
+    message.includes("credentials from sso") ||
+    message.includes("aws sso credentials") ||
+    message.includes("sso token") ||
+    message.includes(".aws/sso/cache")
   );
 }
 

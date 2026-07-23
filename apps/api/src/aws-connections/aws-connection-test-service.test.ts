@@ -15,7 +15,7 @@ test("classifies unavailable SSO credentials separately from an unknown Role fai
       name: "TokenProviderError",
       message: "Token is expired"
     }).message,
-    "AWS SSO credentials are unavailable or expired"
+    "AWS caller credentials are invalid or expired"
   );
   assert.equal(
     awsConnectionTestService.toAwsConnectionTestError({
@@ -24,6 +24,25 @@ test("classifies unavailable SSO credentials separately from an unknown Role fai
     }).message,
     "AWS SSO credentials are unavailable or expired"
   );
+});
+
+test("generic credential provider names do not imply an SSO session", () => {
+  for (const error of [
+    {
+      name: "CredentialsProviderError",
+      message: "Could not load credentials from any providers"
+    },
+    {
+      name: "TokenProviderError",
+      message: "Token is expired"
+    }
+  ]) {
+    assert.equal(
+      awsConnectionTestService.toAwsConnectionTestError(error).message,
+      "AWS caller credentials are invalid or expired",
+      error.name
+    );
+  }
 });
 
 test("classifies STS transport, throttling, and validation failures", () => {

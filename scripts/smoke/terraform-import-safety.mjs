@@ -186,13 +186,38 @@ Local Terraform plans and state are removed without printing their contents.
 
 /** gg: evidence 경로가 없으면 기존 stdout 전용 동작을 유지하고, 있으면 절대 경로만 받습니다. */
 export function readTerraformImportSafetyEvidencePath(env = process.env, args = []) {
-  const optionIndex = args.indexOf("--evidence-output");
-  const optionValue = optionIndex >= 0 ? args[optionIndex + 1] : undefined;
+  let optionValue;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = String(args[index] ?? "");
+    if (argument === "--evidence-output") {
+      requireCondition(
+        optionValue === undefined,
+        "invalid_cli_argument",
+        "Evidence output may be specified only once"
+      );
+      optionValue = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (argument.startsWith("--evidence-output=")) {
+      requireCondition(
+        optionValue === undefined,
+        "invalid_cli_argument",
+        "Evidence output may be specified only once"
+      );
+      optionValue = argument.slice("--evidence-output=".length);
+      continue;
+    }
+    throw new TerraformImportSafetyError(
+      "invalid_cli_argument",
+      "Only --evidence-output is supported"
+    );
+  }
   const configuredPath = String(
     optionValue ?? env.SKETCHCATCH_TF_IMPORT_EVIDENCE_PATH ?? ""
   ).trim();
 
-  if (configuredPath.length === 0 && optionIndex < 0) {
+  if (configuredPath.length === 0 && optionValue === undefined) {
     return null;
   }
 
@@ -212,6 +237,21 @@ export function createTerraformImportSafetyEvidence(result) {
     schemaVersion: HARNESS_SCHEMA_VERSION,
     status: result?.status === "passed" ? "passed" : "blocked"
   };
+
+  if (
+    typeof result?.invocationId === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      result.invocationId
+    )
+  ) {
+    evidence.invocationId = result.invocationId;
+  }
+  if (
+    typeof result?.startedAt === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(result.startedAt)
+  ) {
+    evidence.startedAt = result.startedAt;
+  }
 
   if (
     result?.mode === "preflight" ||
@@ -260,6 +300,20 @@ export function createTerraformImportSafetyEvidence(result) {
   }
 
   return Object.freeze(evidence);
+}
+
+/** gg: 새 검증 전에 이전 evidence를 지워 실패한 새 실행을 과거 성공으로 오인하지 않게 합니다. */
+export async function clearTerraformImportSafetyEvidence(evidencePath, dependencies = {}) {
+  if (evidencePath === null || evidencePath === undefined || evidencePath === "") return;
+  const remove = dependencies.fileSystem?.rm ?? rm;
+  try {
+    await remove(evidencePath, { force: true });
+  } catch {
+    throw new TerraformImportSafetyError(
+      "evidence_prepare_failed",
+      "Previous evidence file could not be cleared"
+    );
+  }
 }
 
 /** gg: 같은 폴더의 비공개 임시 파일을 완성한 뒤 rename해 반쪽 evidence를 남기지 않습니다. */
@@ -1088,15 +1142,26 @@ export async function runTerraformImportSafetyHarness(env = process.env, depende
 // Keep CLI output to a redacted proof summary and stable failure code.
 async function runCli() {
   let evidencePath = null;
+  const invocation = {
+    invocationId: randomUUID(),
+    startedAt: new Date().toISOString()
+  };
   try {
     evidencePath = readTerraformImportSafetyEvidencePath(process.env, process.argv.slice(2));
+    await clearTerraformImportSafetyEvidence(evidencePath);
     const result = await runTerraformImportSafetyHarness(process.env);
-    await writeTerraformImportSafetyEvidence(evidencePath, result);
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    const completedResult = { ...result, ...invocation };
+    await writeTerraformImportSafetyEvidence(evidencePath, completedResult);
+    process.stdout.write(`${JSON.stringify(completedResult, null, 2)}\n`);
   } catch (error) {
     const code =
       error instanceof TerraformImportSafetyError ? error.code : "terraform_import_safety_failed";
-    const blockedResult = { kind: HARNESS_KIND, status: "blocked", errorCode: code };
+    const blockedResult = {
+      kind: HARNESS_KIND,
+      status: "blocked",
+      errorCode: code,
+      ...invocation
+    };
     if (evidencePath) {
       try {
         await writeTerraformImportSafetyEvidence(evidencePath, blockedResult);

@@ -20,9 +20,11 @@ import {
   assertImportOnlyPlan,
   assertNoOpPlan,
   assertSingleAllowlistedUpdatePlan,
+  clearTerraformImportSafetyEvidence,
   createDisposableS3FixtureCommand,
   createProtectedTerraformEnvironment,
   createTerraformImportSafetyStagePlan,
+  createTerraformImportSafetyEvidence,
   readTerraformImportSafetyEvidencePath,
   evaluateTerraformImportFixturePreflight,
   readTerraformImportSafetyConfig,
@@ -796,10 +798,56 @@ test("evidence 출력 경로는 명시한 절대 경로만 허용하고 없으�
     ),
     "/tmp/from-cli.json"
   );
+  assert.equal(
+    readTerraformImportSafetyEvidencePath({}, ["--evidence-output=/tmp/from-equals.json"]),
+    "/tmp/from-equals.json"
+  );
   assertSafetyError(
     () => readTerraformImportSafetyEvidencePath({}, ["--evidence-output", "relative.json"]),
     "invalid_evidence_path"
   );
+  assertSafetyError(
+    () => readTerraformImportSafetyEvidencePath({}, ["--evidnce-output", "/tmp/typo.json"]),
+    "invalid_cli_argument"
+  );
+});
+
+test("evidence는 현재 CLI 실행과 대조할 수 있는 invocation id를 보존한다", () => {
+  const evidence = createTerraformImportSafetyEvidence({
+    status: "passed",
+    invocationId: "6f27cc6b-9236-4ad1-9e6c-8ef576c9ed3d",
+    startedAt: "2026-07-23T08:00:00.000Z"
+  });
+
+  assert.equal(evidence.invocationId, "6f27cc6b-9236-4ad1-9e6c-8ef576c9ed3d");
+  assert.equal(evidence.startedAt, "2026-07-23T08:00:00.000Z");
+});
+
+test("새 실행 전에 이전 성공 evidence를 제거해 실패 뒤 stale pass가 남지 않게 한다", async () => {
+  const directory = await createTemporaryDirectory(join(tmpdir(), "sketchcatch-stale-evidence-"));
+  const evidencePath = join(directory, "terraform-import-evidence.json");
+
+  try {
+    await writeExternalFile(evidencePath, '{"status":"passed","invocationId":"old"}\n');
+    await clearTerraformImportSafetyEvidence(evidencePath);
+    await assert.rejects(access(evidencePath));
+    await assert.rejects(
+      clearTerraformImportSafetyEvidence(evidencePath, {
+        fileSystem: {
+          async rm() {
+            throw new Error("permission denied");
+          }
+        }
+      }),
+      (error) => {
+        assert.equal(error instanceof TerraformImportSafetyError, true);
+        assert.equal(error.code, "evidence_prepare_failed");
+        return true;
+      }
+    );
+  } finally {
+    await removeTemporaryDirectory(directory, { recursive: true, force: true });
+  }
 });
 
 test("evidence는 임시 파일에서 원자적으로 교체하고 secret과 Terraform state를 저장하지 않는다", async () => {

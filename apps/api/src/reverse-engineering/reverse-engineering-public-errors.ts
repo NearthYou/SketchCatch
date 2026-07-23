@@ -100,7 +100,8 @@ export function classifyReverseEngineeringConnectionFailure(
   const message = error instanceof Error ? error.message.toLowerCase() : "";
 
   if (
-    errorName.includes("sso") ||
+    errorName === "ssoproviderinvalidtoken" ||
+    errorName === "ssocredentialprovidererror" ||
     message.includes("aws sso credentials") ||
     message.includes("credentials from sso") ||
     message.includes("sso session") ||

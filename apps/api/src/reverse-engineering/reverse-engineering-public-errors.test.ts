@@ -149,6 +149,17 @@ test("일반 AWS 자격 증명 만료에는 SSO 명령을 지어내지 않는다
   assert.doesNotMatch(classification.publicMessage, /aws sso login|--profile/iu);
 });
 
+test("오류 이름 안의 우연한 sso 문자열을 SSO 만료로 오인하지 않는다", () => {
+  const classification = classifyReverseEngineeringConnectionFailure(
+    Object.assign(new Error("Association lookup failed"), {
+      name: "InvalidAssociationID.NotFound"
+    })
+  );
+
+  assert.equal(classification.internalCode, "provider_unavailable");
+  assert.doesNotMatch(classification.publicMessage, /aws sso login|SSO 로그인/iu);
+});
+
 test("고객 Role 연결 거부만 환경설정 확인으로 분류한다", () => {
   const classification = classifyReverseEngineeringConnectionFailure(
     new Error("AWS Role assume permission denied")

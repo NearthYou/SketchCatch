@@ -19,9 +19,6 @@ export function createReverseEngineeringLayoutSummary(
       partialMessage: (improved, remaining) =>
         `리소스 겹침 ${improved}곳을 정리했고, ${remaining}곳은 확인이 필요합니다.`
     }),
-    candidate.visualDiff.reroutedEdgeIds.length > 0
-      ? `연결선 ${candidate.visualDiff.reroutedEdgeIds.length}개를 보기 쉽게 정리했습니다.`
-      : null,
     summarizeCountChange({
       before: sourceOutsideSubnetCount,
       after: organizedOutsideSubnetCount,
@@ -30,7 +27,8 @@ export function createReverseEngineeringLayoutSummary(
       remainingMessage: (count) => `서브넷 밖 리소스 ${count}개를 확인해 주세요.`,
       partialMessage: (improved, remaining) =>
         `서브넷 밖 리소스 ${improved}개를 옮겼고, ${remaining}개는 확인이 필요합니다.`
-    })
+    }),
+    summarizeVisualDiff(candidate)
   ];
 
   return summary.filter((message): message is string => message !== null).slice(0, 3);
@@ -61,6 +59,7 @@ function summarizeCountChange(input: CountSummaryInput): string {
 function countResourceOverlaps(diagram: DiagramJson): number {
   const resources = diagram.nodes.filter((node) => node.kind === "resource");
   const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
+  const parentByChildId = createParentByChildId(diagram);
   let count = 0;
 
   for (let leftIndex = 0; leftIndex < resources.length; leftIndex += 1) {
@@ -69,8 +68,8 @@ function countResourceOverlaps(diagram: DiagramJson): number {
       const right = resources[rightIndex]!;
 
       if (
-        isAncestor(left, right, nodeById) ||
-        isAncestor(right, left, nodeById) ||
+        isAncestor(left, right, nodeById, parentByChildId) ||
+        isAncestor(right, left, nodeById, parentByChildId) ||
         !rectanglesOverlap(left, right)
       ) {
         continue;
@@ -86,13 +85,62 @@ function countResourceOverlaps(diagram: DiagramJson): number {
 /** gg: Subnet 소속으로 기록된 Resource가 실제 화면 경계 안에 들어왔는지만 확인합니다. */
 function countResourcesOutsideSubnet(diagram: DiagramJson): number {
   const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
+  const parentByChildId = createParentByChildId(diagram);
 
   return diagram.nodes.filter((node) => {
-    const parentId = node.metadata?.parentAreaNodeId;
+    const parentId = parentByChildId.get(node.id);
     const parent = parentId ? nodeById.get(parentId) : undefined;
 
     return parent && isSubnet(parent) && !rectangleContains(parent, node);
   }).length;
+}
+
+/** gg: RE 원본의 contains/hosts edge와 Board metadata를 같은 실제 포함관계로 읽습니다. */
+function createParentByChildId(diagram: DiagramJson): ReadonlyMap<string, string> {
+  const nodeIds = new Set(diagram.nodes.map((node) => node.id));
+  const parentByChildId = new Map<string, string>();
+
+  for (const node of diagram.nodes) {
+    const parentId = node.metadata?.parentAreaNodeId;
+    if (parentId && nodeIds.has(parentId)) {
+      parentByChildId.set(node.id, parentId);
+    }
+  }
+
+  for (const edge of diagram.edges) {
+    const label = edge.label?.trim().toLowerCase();
+    if (
+      (label === "contains" || label === "hosts") &&
+      nodeIds.has(edge.sourceNodeId) &&
+      nodeIds.has(edge.targetNodeId) &&
+      !parentByChildId.has(edge.targetNodeId)
+    ) {
+      parentByChildId.set(edge.targetNodeId, edge.sourceNodeId);
+    }
+  }
+
+  return parentByChildId;
+}
+
+/** gg: Compiler가 바꾼 시각 요소를 개선으로 단정하지 않고 승인 전에 빠짐없이 알립니다. */
+function summarizeVisualDiff(candidate: BoardAutoOrganizeCandidate): string | null {
+  const parts = [
+    formatVisualChange("리소스 위치", candidate.visualDiff.movedNodeIds.length),
+    formatVisualChange("크기", candidate.visualDiff.resizedNodeIds.length),
+    formatVisualChange(
+      "표시 영역",
+      candidate.visualDiff.addedFrameIds.length +
+        candidate.visualDiff.changedFrameIds.length +
+        candidate.visualDiff.removedFrameIds.length
+    ),
+    formatVisualChange("연결선 경로", candidate.visualDiff.reroutedEdgeIds.length)
+  ].filter((part): part is string => part !== null);
+
+  return parts.length > 0 ? `${parts.join(", ")}가 바뀌었습니다. 결과를 확인해 주세요.` : null;
+}
+
+function formatVisualChange(label: string, count: number): string | null {
+  return count > 0 ? `${label} ${count}개` : null;
 }
 
 /** gg: 타입 이름의 대소문자나 Terraform 형식 차이와 무관하게 Subnet을 찾습니다. */
@@ -122,10 +170,11 @@ function rectangleContains(parent: DiagramNode, child: DiagramNode): boolean {
 function isAncestor(
   candidateAncestor: DiagramNode,
   node: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  parentByChildId: ReadonlyMap<string, string>
 ): boolean {
   const visited = new Set<string>();
-  let parentId = node.metadata?.parentAreaNodeId;
+  let parentId = parentByChildId.get(node.id);
 
   while (parentId && !visited.has(parentId)) {
     if (parentId === candidateAncestor.id) {
@@ -133,7 +182,7 @@ function isAncestor(
     }
 
     visited.add(parentId);
-    parentId = nodeById.get(parentId)?.metadata?.parentAreaNodeId;
+    parentId = nodeById.has(parentId) ? parentByChildId.get(parentId) : undefined;
   }
 
   return false;

@@ -156,13 +156,14 @@ export function ReverseEngineeringResultPanel({
         </div>
         <p className={styles.placementDescription}>
           {placement === "compiled"
-            ? "Resource와 관계와 설정은 그대로 두고, 위치와 연결선만 정리한 모습입니다."
+            ? "Resource와 관계와 설정은 그대로 두고, 위치·크기·표시 영역·연결선을 바꾼 미리보기입니다."
             : "가져온 Resource와 관계와 설정을 바꾸지 않은 상태를 먼저 보여드립니다."}
         </p>
         {placement === "original" ? (
           <p className={styles.placementQuestion}>
             <strong>보기 좋게 자동 정리할까요?</strong>
-            위치와 연결선만 바뀌며, 아직 보드에는 저장되지 않습니다.
+            Resource 설정과 관계는 유지하고 위치, 크기, 표시 영역, 연결선만 바꿉니다. 아직
+            보드에는 저장되지 않습니다.
           </p>
         ) : layoutSummary.length > 0 ? (
           <div className={styles.placementSummary} aria-label="자동 정리 결과">
