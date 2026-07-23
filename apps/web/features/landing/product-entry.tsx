@@ -93,25 +93,25 @@ export function ProductEntry() {
             href="#workflow"
             onClick={(event) => handleSectionNavigation(event, "workflow", "#workflow", "center")}
           >
-            작업 흐름
+            서비스 흐름
           </a>
           <a
             href="#workspace"
             onClick={(event) => handleSectionNavigation(event, "workspace-title", "#workspace")}
           >
-            통합 작업 공간
+            설계
           </a>
           <a
             href="#reverse"
             onClick={(event) => handleSectionNavigation(event, "reverse-content", "#reverse", "center")}
           >
-            기존 환경 가져오기
+            인프라 분석
           </a>
           <a
             href="#deployment"
             onClick={(event) => handleSectionNavigation(event, "deployment-content", "#deployment", "center")}
           >
-            배포 방식
+            배포
           </a>
         </nav>
 

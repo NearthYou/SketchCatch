@@ -13,7 +13,7 @@ const productSectionsSource = readFileSync(
 );
 
 test("landing navigation and entry actions use the Korean login-first flow", () => {
-  for (const label of ["작업 흐름", "통합 작업 공간", "기존 환경 가져오기", "배포 방식"]) {
+  for (const label of ["서비스 흐름", "설계", "인프라 분석", "배포"]) {
     assert.match(productEntrySource, new RegExp(label));
   }
 
