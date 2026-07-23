@@ -34,6 +34,7 @@ export type ReverseEngineeringResultPanelProps = {
   readonly importDecisionComplete: boolean;
   readonly importDecisionOptions: ReverseEngineeringImportDecisionOptions;
   readonly logs: ReverseEngineeringScanLogLine[];
+  readonly layoutSummary: readonly string[];
   readonly onAppendToCurrentBoard: () => void;
   readonly onApplicationModeChange: (mode: ReverseEngineeringBoardApplicationMode) => void;
   readonly onCompilePlacement: () => void;
@@ -60,6 +61,7 @@ export function ReverseEngineeringResultPanel({
   hasCurrentBoardResources,
   importDecisionComplete,
   importDecisionOptions,
+  layoutSummary,
   onAppendToCurrentBoard,
   onApplicationModeChange,
   onCompilePlacement,
@@ -157,6 +159,21 @@ export function ReverseEngineeringResultPanel({
             ? "Resource와 관계와 설정은 그대로 두고, 위치와 연결선만 정리한 모습입니다."
             : "가져온 Resource와 관계와 설정을 바꾸지 않은 상태를 먼저 보여드립니다."}
         </p>
+        {placement === "original" ? (
+          <p className={styles.placementQuestion}>
+            <strong>보기 좋게 자동 정리할까요?</strong>
+            위치와 연결선만 바뀌며, 아직 보드에는 저장되지 않습니다.
+          </p>
+        ) : layoutSummary.length > 0 ? (
+          <div className={styles.placementSummary} aria-label="자동 정리 결과">
+            <strong>정리 결과</strong>
+            <ul>
+              {layoutSummary.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {hasCurrentBoardResources ? (
           <div className={styles.placementActions} role="group" aria-label="적용 방식 미리보기">
             <button
@@ -184,7 +201,7 @@ export function ReverseEngineeringResultPanel({
             onClick={onKeepOriginalPlacement}
             type="button"
           >
-            원본
+            원본 유지
           </button>
           <button
             aria-pressed={placement === "compiled"}
@@ -192,7 +209,7 @@ export function ReverseEngineeringResultPanel({
             onClick={onCompilePlacement}
             type="button"
           >
-            정리본
+            보기 좋게 정리
           </button>
         </div>
         <p className={styles.placementSaveBoundary}>

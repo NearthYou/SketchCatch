@@ -27,6 +27,7 @@ const SERVICE_DISPLAY_NAMES: Readonly<Record<string, string>> = {
 
 export type ReverseEngineeringConnectionFailureClassification = {
   readonly internalCode:
+    | "caller_sso_session_expired"
     | "caller_credentials_unavailable"
     | "target_role_unavailable"
     | "provider_unavailable";
@@ -44,10 +45,7 @@ export function createReverseEngineeringPublicCoverage(
     const serviceKey = getSafeServiceKey(scanError);
     strongestErrors.set(
       serviceKey,
-      selectHigherPriorityReverseEngineeringScanError(
-        strongestErrors.get(serviceKey),
-        scanError
-      )
+      selectHigherPriorityReverseEngineeringScanError(strongestErrors.get(serviceKey), scanError)
     );
   }
 
@@ -79,10 +77,7 @@ export function sanitizeReverseEngineeringScanErrors(
     const serviceKey = getSafeServiceKey(scanError);
     strongestErrors.set(
       serviceKey,
-      selectHigherPriorityReverseEngineeringScanError(
-        strongestErrors.get(serviceKey),
-        scanError
-      )
+      selectHigherPriorityReverseEngineeringScanError(strongestErrors.get(serviceKey), scanError)
     );
   }
 
@@ -105,12 +100,27 @@ export function classifyReverseEngineeringConnectionFailure(
   const message = error instanceof Error ? error.message.toLowerCase() : "";
 
   if (
+    errorName.includes("sso") ||
+    message.includes("aws sso credentials") ||
+    message.includes("credentials from sso") ||
+    message.includes("sso session") ||
+    message.includes("sso token") ||
+    message.includes(".aws/sso/cache")
+  ) {
+    return {
+      internalCode: "caller_sso_session_expired",
+      publicReason: "retry",
+      publicMessage:
+        "AWS SSO 로그인이 만료되었습니다. 터미널에서 aws sso login을 실행한 뒤 다시 시도해 주세요."
+    };
+  }
+
+  if (
     errorName === "credentialsprovidererror" ||
     errorName === "tokenprovidererror" ||
     message.includes("aws caller credentials") ||
-    message.includes("aws sso credentials") ||
     message.includes("could not load credentials") ||
-    message.includes("sso session")
+    message.includes("caller credentials")
   ) {
     return {
       internalCode: "caller_credentials_unavailable",

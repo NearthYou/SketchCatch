@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -158,6 +158,10 @@ Required environment:
   SKETCHCATCH_TF_IMPORT_REGION=<fixture region>
   SKETCHCATCH_TF_IMPORT_ALLOWED_REGIONS=<exact comma-separated allowlist>
 
+Optional redacted evidence file:
+  --evidence-output <absolute path>
+  or SKETCHCATCH_TF_IMPORT_EVIDENCE_PATH=<absolute path>
+
 Fixture prepared by the operator before this harness:
   Bucket name: ${FIXTURE_PREFIX}<run id>
   Empty bucket with exactly these tags:
@@ -178,6 +182,140 @@ to ${AFTER_TAG_VALUE}, and proves a final no-op. It never creates or destroys cl
 The create_fixture mode creates only the one empty, tagged fixture and never deletes it.
 Local Terraform plans and state are removed without printing their contents.
 `;
+}
+
+/** gg: evidence 경로가 없으면 기존 stdout 전용 동작을 유지하고, 있으면 절대 경로만 받습니다. */
+export function readTerraformImportSafetyEvidencePath(env = process.env, args = []) {
+  const optionIndex = args.indexOf("--evidence-output");
+  const optionValue = optionIndex >= 0 ? args[optionIndex + 1] : undefined;
+  const configuredPath = String(
+    optionValue ?? env.SKETCHCATCH_TF_IMPORT_EVIDENCE_PATH ?? ""
+  ).trim();
+
+  if (configuredPath.length === 0 && optionIndex < 0) {
+    return null;
+  }
+
+  requireCondition(
+    configuredPath.length > 0 && !configuredPath.startsWith("--") && isAbsolute(configuredPath),
+    "invalid_evidence_path",
+    "Evidence output must be an absolute path"
+  );
+
+  return configuredPath;
+}
+
+/** gg: 향후 result에 민감한 필드가 추가돼도 evidence에는 고정된 증명 필드만 남깁니다. */
+export function createTerraformImportSafetyEvidence(result) {
+  const evidence = {
+    kind: HARNESS_KIND,
+    schemaVersion: HARNESS_SCHEMA_VERSION,
+    status: result?.status === "passed" ? "passed" : "blocked"
+  };
+
+  if (
+    result?.mode === "preflight" ||
+    result?.mode === "create_fixture" ||
+    result?.mode === "execute"
+  ) {
+    evidence.mode = result.mode;
+  }
+  if (typeof result?.mutationPerformed === "boolean") {
+    evidence.mutationPerformed = result.mutationPerformed;
+  }
+  if (typeof result?.fixtureFingerprint === "string") {
+    evidence.fixtureFingerprint = result.fixtureFingerprint;
+  }
+  if (typeof result?.fixtureCreated === "boolean") {
+    evidence.fixtureCreated = result.fixtureCreated;
+  }
+  if (typeof result?.cloudDestroyPerformed === "boolean") {
+    evidence.cloudDestroyPerformed = result.cloudDestroyPerformed;
+  }
+
+  const preflight = copyAllowedFields(result?.preflight, [
+    "ready",
+    "accountVerified",
+    "regionVerified",
+    "empty"
+  ]);
+  if (Object.keys(preflight).length > 0) {
+    evidence.preflight = preflight;
+  }
+
+  const proof = copyAllowedFields(result?.proof, [
+    "importRemoteMutationCount",
+    "importedPlanNoOp",
+    "allowlistedUpdateCount",
+    "providerUpdateVerified",
+    "finalPlanNoOp",
+    "cloudDestroyPerformed"
+  ]);
+  if (Object.keys(proof).length > 0) {
+    evidence.proof = proof;
+  }
+
+  if (typeof result?.errorCode === "string" && /^[a-z0-9_]+$/u.test(result.errorCode)) {
+    evidence.errorCode = result.errorCode;
+  }
+
+  return Object.freeze(evidence);
+}
+
+/** gg: 같은 폴더의 비공개 임시 파일을 완성한 뒤 rename해 반쪽 evidence를 남기지 않습니다. */
+export async function writeTerraformImportSafetyEvidence(evidencePath, result, dependencies = {}) {
+  if (evidencePath === null || evidencePath === undefined || evidencePath === "") {
+    return null;
+  }
+
+  requireCondition(
+    typeof evidencePath === "string" && isAbsolute(evidencePath),
+    "invalid_evidence_path",
+    "Evidence output must be an absolute path"
+  );
+  const fileSystem = {
+    writeFile: dependencies.fileSystem?.writeFile ?? writeFile,
+    rename: dependencies.fileSystem?.rename ?? rename,
+    rm: dependencies.fileSystem?.rm ?? rm
+  };
+  const temporaryPath = join(
+    dirname(evidencePath),
+    `.${basename(evidencePath)}.${process.pid}-${randomUUID()}.tmp`
+  );
+  const contents = `${JSON.stringify(createTerraformImportSafetyEvidence(result), null, 2)}\n`;
+
+  try {
+    await fileSystem.writeFile(temporaryPath, contents, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600
+    });
+    await fileSystem.rename(temporaryPath, evidencePath);
+  } catch {
+    await fileSystem.rm(temporaryPath, { force: true }).catch(() => undefined);
+    throw new TerraformImportSafetyError(
+      "evidence_write_failed",
+      "Redacted evidence file could not be written"
+    );
+  }
+
+  return Object.freeze({ written: true });
+}
+
+/** gg: boolean과 안전한 정수 증명 값만 allowlist로 복사합니다. */
+function copyAllowedFields(value, fieldNames) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    fieldNames.flatMap((fieldName) => {
+      const fieldValue = value[fieldName];
+      return typeof fieldValue === "boolean" || Number.isSafeInteger(fieldValue)
+        ? [[fieldName, fieldValue]]
+        : [];
+    })
+  );
 }
 
 // Build one atomic S3 create request whose tags identify only this disposable run.
@@ -949,15 +1087,24 @@ export async function runTerraformImportSafetyHarness(env = process.env, depende
 
 // Keep CLI output to a redacted proof summary and stable failure code.
 async function runCli() {
+  let evidencePath = null;
   try {
+    evidencePath = readTerraformImportSafetyEvidencePath(process.env, process.argv.slice(2));
     const result = await runTerraformImportSafetyHarness(process.env);
+    await writeTerraformImportSafetyEvidence(evidencePath, result);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } catch (error) {
     const code =
       error instanceof TerraformImportSafetyError ? error.code : "terraform_import_safety_failed";
-    process.stderr.write(
-      `${JSON.stringify({ kind: HARNESS_KIND, status: "blocked", errorCode: code })}\n`
-    );
+    const blockedResult = { kind: HARNESS_KIND, status: "blocked", errorCode: code };
+    if (evidencePath) {
+      try {
+        await writeTerraformImportSafetyEvidence(evidencePath, blockedResult);
+      } catch {
+        // gg: evidence 실패가 원래 검증 오류의 안전한 stdout/stderr 계약을 바꾸지 않게 합니다.
+      }
+    }
+    process.stderr.write(`${JSON.stringify(blockedResult)}\n`);
     process.exitCode = 1;
   }
 }

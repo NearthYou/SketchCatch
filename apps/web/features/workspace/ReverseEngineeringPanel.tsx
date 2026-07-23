@@ -54,6 +54,7 @@ import {
   createReverseEngineeringImportDecisionRequest,
   isReverseEngineeringImportDecisionComplete
 } from "./reverse-engineering-import-decision";
+import { createReverseEngineeringLayoutSummary } from "./reverse-engineering-layout-summary";
 import {
   canStartReverseEngineeringScan,
   createReverseEngineeringAwsSettingsHref,
@@ -87,9 +88,13 @@ export type ReverseEngineeringCandidatePanelState = {
 };
 
 type RequestState = "idle" | "loading" | "error";
+type ReverseEngineeringOrganizedPreview = {
+  readonly diagram: DiagramJson;
+  readonly layoutSummary: readonly string[];
+};
 type ReverseEngineeringOrganizedDiagrams = {
-  readonly append: DiagramJson | null;
-  readonly replace: DiagramJson;
+  readonly append: ReverseEngineeringOrganizedPreview | null;
+  readonly replace: ReverseEngineeringOrganizedPreview;
 };
 const SCAN_POLL_INTERVAL_MS = 1000;
 const SCAN_POLL_ATTEMPT_COUNT = 30;
@@ -231,10 +236,11 @@ export function ReverseEngineeringPanel({
       result: selectedCandidateResult
     });
   }, [previewSourceDiagram, selectedCandidateResult]);
-  const activeOrganizedDiagram =
+  const activeOrganizedPreview =
     applicationMode === "append"
       ? (organizedDiagrams?.append ?? null)
       : (organizedDiagrams?.replace ?? null);
+  const activeOrganizedDiagram = activeOrganizedPreview?.diagram ?? null;
   const originalApplication =
     applicationMode === "append"
       ? originalCandidateAppendApplication
@@ -677,12 +683,12 @@ export function ReverseEngineeringPanel({
       return;
     }
 
-    const organizedDiagram =
+    const organizedPreview =
       mode === "append"
         ? (organizedDiagrams?.append ?? null)
         : (organizedDiagrams?.replace ?? null);
 
-    if (!organizedDiagram) {
+    if (!organizedPreview) {
       setPlacement("original");
       context.setPreviewDiagram(nextOriginalApplication.previewDiagram);
       return;
@@ -691,7 +697,7 @@ export function ReverseEngineeringPanel({
     const application = createReverseEngineeringBoardApplication({
       currentDiagram: previewSourceDiagram,
       mode,
-      organizedDiagram,
+      organizedDiagram: organizedPreview.diagram,
       placement: "compiled",
       result: selectedCandidateResult
     });
@@ -723,23 +729,38 @@ export function ReverseEngineeringPanel({
           )
         )
       : null;
-    const replaceDiagram = replaceCandidateSet.candidates[0]?.diagram ?? null;
-    const appendDiagram = appendCandidateSet?.candidates[0]?.diagram ?? null;
+    const replaceCandidate = replaceCandidateSet.candidates[0] ?? null;
+    const appendCandidate = appendCandidateSet?.candidates[0] ?? null;
 
-    if (!replaceDiagram) {
+    if (!replaceCandidate) {
       setApplyState("error");
       setApplyMessage("정리본을 만들지 못했어요.");
       return;
     }
 
     const nextOrganizedDiagrams: ReverseEngineeringOrganizedDiagrams = {
-      append: appendDiagram ? structuredClone(appendDiagram) : null,
-      replace: structuredClone(replaceDiagram)
+      append:
+        appendCandidate && originalCandidateAppendApplication
+          ? {
+              diagram: structuredClone(appendCandidate.diagram),
+              layoutSummary: createReverseEngineeringLayoutSummary(
+                originalCandidateAppendApplication.diagram,
+                appendCandidate
+              )
+            }
+          : null,
+      replace: {
+        diagram: structuredClone(replaceCandidate.diagram),
+        layoutSummary: createReverseEngineeringLayoutSummary(
+          originalCandidateApplication.diagram,
+          replaceCandidate
+        )
+      }
     };
-    const organizedDiagram =
+    const organizedPreview =
       applicationMode === "append" ? nextOrganizedDiagrams.append : nextOrganizedDiagrams.replace;
 
-    if (!organizedDiagram) {
+    if (!organizedPreview) {
       setApplyState("error");
       setApplyMessage("현재 적용 방식의 정리본을 만들지 못했어요.");
       return;
@@ -749,7 +770,7 @@ export function ReverseEngineeringPanel({
     setApplyMessage(null);
     setOrganizedDiagrams(nextOrganizedDiagrams);
     setPlacement("compiled");
-    context.setPreviewDiagram(organizedDiagram);
+    context.setPreviewDiagram(organizedPreview.diagram);
   }
 
   // gg: 원본 보기는 만들어 둔 정리본을 버리거나 저장하지 않고 source-exact 미리보기로 돌아갑니다.
@@ -848,6 +869,9 @@ export function ReverseEngineeringPanel({
             createProjectOnApply={createProjectOnApply}
             hasCurrentBoardResources={previewSourceDiagram.nodes.length > 0}
             logs={logs}
+            layoutSummary={
+              placement === "compiled" ? (activeOrganizedPreview?.layoutSummary ?? []) : []
+            }
             acknowledgedReviewOnlyResourceIds={acknowledgedReviewOnlyResourceIds}
             importDecisionComplete={isImportDecisionComplete}
             importDecisionOptions={importDecisionOptions}

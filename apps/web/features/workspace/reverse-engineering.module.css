@@ -296,6 +296,28 @@ button.candidateCardSelected {
   word-break: keep-all;
 }
 
+.placementQuestion,
+.placementSummary {
+  background: #fff;
+  border: 1px solid #c7d5ff;
+  border-radius: 8px;
+  color: var(--reverse-text);
+  display: grid;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  gap: 5px;
+  line-height: 1.5;
+  margin: 0;
+  padding: 11px 12px;
+}
+
+.placementSummary ul {
+  color: var(--reverse-muted);
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 19px;
+}
+
 .placementSaveBoundary {
   background: var(--reverse-surface-muted);
   border-left: 3px solid #8da4d8;

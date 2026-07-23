@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import {
   access,
   mkdtemp as createTemporaryDirectory,
+  readFile as readExternalFile,
+  readdir,
   rm as removeTemporaryDirectory,
+  stat,
   writeFile as writeExternalFile
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -20,11 +23,13 @@ import {
   createDisposableS3FixtureCommand,
   createProtectedTerraformEnvironment,
   createTerraformImportSafetyStagePlan,
+  readTerraformImportSafetyEvidencePath,
   evaluateTerraformImportFixturePreflight,
   readTerraformImportSafetyConfig,
   renderTerraformImportFixture,
   renderTerraformImportSafetyUsage,
-  runTerraformImportSafetyHarness
+  runTerraformImportSafetyHarness,
+  writeTerraformImportSafetyEvidence
 } from "./terraform-import-safety.mjs";
 
 const ACCOUNT_ID = "111122223333";
@@ -771,4 +776,75 @@ test("CLI usage states the operator fixture and read-only default", () => {
   assert.match(usage, /never creates or destroys cloud resources/u);
   assert.match(usage, /create_fixture mode creates only the one empty, tagged fixture/u);
   assert.match(usage, /Local Terraform plans and state are removed without printing/u);
+  assert.match(usage, /--evidence-output <absolute path>/u);
+  assert.match(usage, /SKETCHCATCH_TF_IMPORT_EVIDENCE_PATH/u);
+});
+
+test("evidence 출력 경로는 명시한 절대 경로만 허용하고 없으면 기존 동작을 유지한다", () => {
+  assert.equal(readTerraformImportSafetyEvidencePath({}, []), null);
+  assert.equal(
+    readTerraformImportSafetyEvidencePath(
+      { SKETCHCATCH_TF_IMPORT_EVIDENCE_PATH: "/tmp/from-env.json" },
+      []
+    ),
+    "/tmp/from-env.json"
+  );
+  assert.equal(
+    readTerraformImportSafetyEvidencePath(
+      { SKETCHCATCH_TF_IMPORT_EVIDENCE_PATH: "/tmp/from-env.json" },
+      ["--evidence-output", "/tmp/from-cli.json"]
+    ),
+    "/tmp/from-cli.json"
+  );
+  assertSafetyError(
+    () => readTerraformImportSafetyEvidencePath({}, ["--evidence-output", "relative.json"]),
+    "invalid_evidence_path"
+  );
+});
+
+test("evidence는 임시 파일에서 원자적으로 교체하고 secret과 Terraform state를 저장하지 않는다", async () => {
+  const directory = await createTemporaryDirectory(join(tmpdir(), "sketchcatch-evidence-"));
+  const evidencePath = join(directory, "terraform-import-evidence.json");
+
+  try {
+    await writeTerraformImportSafetyEvidence(evidencePath, {
+      kind: "sketchcatch_terraform_import_safety",
+      schemaVersion: 1,
+      mode: "execute",
+      status: "passed",
+      mutationPerformed: true,
+      fixtureFingerprint: "safe-fingerprint",
+      secretAccessKey: "must-not-be-written",
+      terraformState: { resources: ["must-not-be-written"] },
+      preflight: {
+        ready: true,
+        accountVerified: true,
+        regionVerified: true,
+        empty: true,
+        rawProviderOutput: "must-not-be-written"
+      },
+      proof: {
+        importRemoteMutationCount: 0,
+        importedPlanNoOp: true,
+        allowlistedUpdateCount: 1,
+        providerUpdateVerified: true,
+        finalPlanNoOp: true,
+        cloudDestroyPerformed: false,
+        statePayload: "must-not-be-written"
+      }
+    });
+
+    const contents = await readExternalFile(evidencePath, "utf8");
+    const saved = JSON.parse(contents);
+    assert.equal(saved.status, "passed");
+    assert.equal(saved.proof.finalPlanNoOp, true);
+    assert.doesNotMatch(
+      contents,
+      /must-not-be-written|secretAccessKey|terraformState|statePayload/iu
+    );
+    assert.deepEqual(await readdir(directory), ["terraform-import-evidence.json"]);
+    assert.equal((await stat(evidencePath)).mode & 0o777, 0o600);
+  } finally {
+    await removeTemporaryDirectory(directory, { recursive: true, force: true });
+  }
 });
