@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-22",
+  "lastUpdated": "2026-07-23",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -578,7 +578,7 @@
         "Live Observation 하단은 현재 상태, 사용자 영향, 근거 기반 중요 신호 최대 3개와 사실·가능성·확인 불가를 구분하며 자동 변경하지 않는다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-19",
+        "lastVerified": "2026-07-23",
         "commands": [
           "pnpm --filter @sketchcatch/api exec tsx --test src/services/authoredTerraformArchitecturePresets.test.ts",
           "pnpm harness:check",
@@ -622,7 +622,12 @@
           "pnpm --dir apps/web exec tsx --test features/workspace/workspace-design-analysis-presentation.test.ts features/workspace/workspace-design-analysis-integration.test.ts",
           "git diff --check",
           "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-status.test.ts features/workspace/workspace-ai-error-progress.test.ts features/workspace/workspace-ai-workbench-contract.test.ts",
-          "local Chrome QA: 8% -> 10% -> 12% -> 15% -> 17% -> 100% complete"
+          "local Chrome QA: 8% -> 10% -> 12% -> 15% -> 17% -> 100% complete",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/new/workspace-start-options.test.ts app/workspace/new/workspace-start-template-flow.test.ts app/workspace/repository/repository-project-persistence.test.ts app/workspace/repository/repository-start-client.test.ts app/workspace/repository/repository-recovery-action.test.ts app/workspace/repository/repository-draft-readiness.test.ts app/workspace/repository/repository-analysis-resume.test.ts app/workspace/repository/repository-analysis-record-payload.test.ts",
+          "node --import ./apps/web/test-css-register.mjs --import ./apps/web/node_modules/tsx/dist/loader.mjs --test apps/web/app/workspace/ai/workspace-ai-presentation.test.ts apps/web/app/workspace/ai/decorative-aws-orbit.test.tsx",
+          "..\\..\\node_modules\\.bin\\eslint.CMD . (apps/web)",
+          "..\\..\\node_modules\\.bin\\tsc.CMD --noEmit -p tsconfig.json (apps/web)",
+          "node scripts/check-harness.mjs"
         ],
         "notes": "000 Compiler implementation remains complete: the checked-in 29+1 knowledge artifact expands bounded geometry candidates, keeps source/requested-original/presentation/semantic selection explicit, forwards Reverse Engineering diagnostics, and fingerprint-gates visual-only Template variants. `/workspace/ai` was rebuilt from the cleanup baseline with a semantic clicked-option trail, deterministic presentation-only Orbit sourced only from actual `/Resource-Icons_07312025/` catalog entries, and a Compiler-authoritative read-only final Diagram. The deleted progress card, requirement list, history panel, mobile tabs, and unused backend progress features remain absent. Focused Workspace AI/Compiler tests passed 94/94, full Web regression passed 545/545, and harness/lint/typecheck/build/diff checks passed. Browser QA covered desktop, breakpoint, tablet, and 390x844 mobile layouts, continuous Orbit response motion, the independent final reveal, pan/zoom, zero horizontal overflow, and zero new console errors or warnings after the viewer-anchor fix; Board application was not used. The aggregate feature remains in_progress only for the separately owned Compiler evidence and human-review queue. Natural-language clarification answers are now validated against their current question, rejected answers repeat that question, and accepted structured answers are forwarded to Amazon Q without question-text contamination; focused API tests passed 81/81 and focused Web tests passed 12/12. The backend clarification follow-up now rejects both unrelated recipe requests and API information requests that do not express a backend decision; the focused regression, live Web-to-API request, and API typecheck pass. All 15 required clarification questions now reject explanation-only answers, and both Workspace chat surfaces render an accepted natural-language answer as a disabled selected existing option or a new custom option; focused API tests pass 5/5, focused Web tests pass 6/6, and API/Web typechecks pass. Five additional clarification expressions now pass after expanding database, region, and upload semantics; five additional diagram patch instructions also produce the requested Preview graphs. Every supported resource type now has Korean natural-language aliases and generated variants, with complete alias coverage at 2/2 and patch regressions at 3/3. Cross-question free-form answers now require category-specific evidence across all 15 required questions, and rejected answers explain why before repeating the question; four focused API regressions, focused Web feedback/selection checks, and API/Web typechecks pass. Both chat surfaces show the accepted natural-language value in a dedicated row while disabling the answered question options. Traffic clarification now distinguishes daily visitor counts from concurrent-user counts, so daily 500 maps to medium while concurrent 500 maps to large; Spring Boot wording also reuses the existing complex business logic option. Diagram-generation progress now advances every 1.5 seconds through a fifth finalization stage instead of holding the intent step for 3 seconds. The `/workspace/ai` selected answer keeps its pressed styling without rendering a redundant selected-text suffix. Its generation progress step is owned by the persistent transcript and passed into the conditional card, preventing visible resets to the first stage. Repeated architecture validation failures outside Repository Fixed Template selection use the dedicated OpenAI conflict-diagnosis path. Repository board creation with a selected Fixed Template bypasses AI validation and clarification entirely, saves the selected Template directly, and still records Repository analysis provenance. Frontend and backend clarification answers now share a technology-stack classifier across types, API, and Web, so common framework names map to the existing static/SPA/SSR/mobile and simple/complex/microservices choices without inventing a new option; ambiguous database products do not infer data size. Design Analysis now appears at the bottom of Live Observation instead of as a separate right-panel mode, combining current-Board simulation and Pre-Deployment review in the runtime observation page; focused checks pass 33/33 and browser QA verifies the rendered order. Terraform error analysis now preserves a successful `100%` / `완료` gauge for 800ms after fast responses, while failed, cancelled, stale, and code-preparation error paths do not claim completion; focused checks pass 36/36 and local Chrome QA observed the 17% to 100% transition."
       },
@@ -1132,6 +1137,35 @@
         "notes": "Focused setup/provider tests pass 42/42, the Git/CI/CD API regression set passes 246/246, readiness passes 96/96 including the previously failing CI cases, and focused Web tests pass 54/54. Root lint, typecheck, and all five production builds pass."
       },
       "notes": "No DB schema, Drizzle migration, dependency, secret, live GitHub/AWS mutation, PR merge, Terraform action, production deployment, or push was performed."
+    },
+    {
+      "id": "REPOSITORY-PREVIEW-UI-001",
+      "priority": 2,
+      "area": "repository-ux",
+      "title": "Ranked Repository preview and structured follow-up questions",
+      "user_visible_behavior": "Repository 분석 결과에서 추천 순위와 명확한 AI 설계 작업을 확인하고, 추천 이유 길이와 관계없이 고정된 탐색 제어를 사용하며, 추가 질문과 선택지를 쉽게 구분한다.",
+      "status": "passing",
+      "verification": [
+        "현재 후보에 따라 1순위, 2순위, 3순위 추천 레이블을 보여준다.",
+        "AI 설계 작업은 AI로 직접 설계로 표시한다.",
+        "추천 이유가 여러 줄이어도 후보 탐색 제어는 프리뷰 하단 상단에 고정된다.",
+        "Template 이름은 보조 정보로 낮추고 추가 질문 제목을 가장 크게 표시한다.",
+        "각 질문은 여백으로 분리하고 질문과 답변 간격은 좁히며, 라디오 답변은 선택 카드로 표시한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-23",
+        "commands": [
+          "pnpm --dir apps/web exec node --import ./test-css-register.mjs --import tsx --test app/workspace/repository/*.test.ts app/workspace/repository/*.test.tsx",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check",
+          "authenticated in-app browser navigation across Repository candidates and follow-up answer states"
+        ],
+        "notes": "All 46 Repository tests pass. Root lint, typecheck, and all five production builds pass. Browser verification confirmed stable candidate navigation plus clear follow-up question hierarchy and selected answer-card styling."
+      },
+      "notes": "No API, persistence, dependency, migration, cloud mutation, deployment, GitHub issue, or Git/CI/CD handoff changed."
     }
   ]
 }

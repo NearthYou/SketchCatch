@@ -1,10 +1,147 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
+const repositoryScreenPath = join(currentDir, "repository-analysis-screen.tsx");
+const repositoryStylesPath = join(currentDir, "repository-analysis-screen.module.css");
+const repositoryScreenSource = existsSync(repositoryScreenPath)
+  ? readFileSync(repositoryScreenPath, "utf8")
+  : "";
+const repositoryStylesSource = existsSync(repositoryStylesPath)
+  ? readFileSync(repositoryStylesPath, "utf8")
+  : "";
+
+test("Repository start separates the pre-analysis form from the completed result", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.equal(source.match(/<h1/g)?.length, 1);
+  assert.match(source, /showUrlAnalysis && !publicAnalysis/);
+  assert.match(source, /<RepositoryAnalysisForm/);
+  assert.match(source, /<RepositoryAnalysisResult/);
+  assert.match(repositoryScreenSource, /export function RepositoryAnalysisForm/);
+  assert.match(repositoryScreenSource, /<form onSubmit=\{onSubmit\}>/);
+  assert.match(repositoryScreenSource, /name="repositoryUrl"/);
+  assert.match(repositoryScreenSource, /name="branch"/);
+  assert.match(repositoryScreenSource, /공개 저장소는 GitHub 연결 없이 분석할 수 있습니다/);
+  assert.doesNotMatch(repositoryScreenSource, /Template Preview[\s\S]*RepositoryAnalysisForm/);
+});
+
+test("Repository start keeps global navigation and uses a presentation-scale canvas", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.match(source, /import \{ ProductBrand \} from "\.\.\/\.\.\/\.\.\/components\/ui\/ProductBrand"/);
+  assert.match(
+    source,
+    /<header className=\{styles\.topbar\}>[\s\S]*<ProductBrand \/>[\s\S]*href="\/workspace\/new"[\s\S]*시작 방식 다시 선택[\s\S]*<\/header>/
+  );
+  assert.match(repositoryStylesSource, /\.topbar \{[\s\S]*min-height:\s*64px/);
+  assert.match(repositoryStylesSource, /\.shell \{[\s\S]*width:\s*min\(1440px,\s*100%\)/);
+  assert.match(repositoryStylesSource, /\.pageHeading h1 \{[\s\S]*44px/);
+});
+
+test("Repository result keeps metadata compact and uses the real Template thumbnail", () => {
+  assert.match(repositoryScreenSource, /owner/);
+  assert.match(repositoryScreenSource, /branch/);
+  assert.match(repositoryScreenSource, /분석 완료/);
+  assert.match(repositoryScreenSource, /다른 저장소 분석/);
+  assert.match(repositoryScreenSource, /<dl/);
+  assert.match(repositoryScreenSource, /createRepositoryEvidenceSummary/);
+  assert.match(repositoryScreenSource, /listBoardTemplates/);
+  assert.match(repositoryScreenSource, /thumbnailSrc/);
+  assert.match(repositoryScreenSource, /<BoardThumbnailImage/);
+  assert.match(repositoryScreenSource, /currentCandidate\.reasons\[0\]/);
+  assert.match(repositoryScreenSource, /Math\.round\(currentCandidate\.confidence \* 100\)/);
+});
+
+test("Repository Template exploration changes only the preview index until explicit use", () => {
+  assert.match(repositoryScreenSource, /useState\(0\)/);
+  assert.match(repositoryScreenSource, /setPreviewIndex\(0\)/);
+  assert.match(repositoryScreenSource, /aria-label="이전 Template"/);
+  assert.match(repositoryScreenSource, /aria-label="다음 Template"/);
+  assert.match(repositoryScreenSource, /aria-live="polite"/);
+  assert.match(repositoryScreenSource, /candidates\.length > 1/);
+  assert.match(repositoryScreenSource, /resolvedPreviewIndex/);
+  assert.match(repositoryScreenSource, /onUseTemplate\(currentCandidate\.templateId\)/);
+  assert.doesNotMatch(repositoryScreenSource, /saveProjectDraft|router\.push|buildBoardTemplateDiagram/);
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+  assert.match(source, /activeRepository\.analysis\?\.analyzedAt/);
+});
+
+test("public Repository accepts a Template only from the explicit use action", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+  const analysisBody = source.slice(
+    source.indexOf("async function analyzePublicRepositoryUrl"),
+    source.indexOf("async function createPublicRepositoryBoard")
+  );
+  const confirmationBody = source.slice(
+    source.indexOf("function confirmPublicRecommendationConfiguration"),
+    source.indexOf("return (", source.indexOf("function confirmPublicRecommendationConfiguration"))
+  );
+
+  assert.match(analysisBody, /setSelectedPublicTemplateId\(null\)/);
+  assert.doesNotMatch(analysisBody, /candidates\[0\]\?\.templateId/);
+  assert.match(confirmationBody, /setSelectedPublicTemplateId\(templateId\)/);
+  assert.match(confirmationBody, /setPublicRecommendationStage\("questions"\)/);
+  assert.match(confirmationBody, /nextRecommendation\.questions\.length === 0/);
+  assert.match(confirmationBody, /createPublicRepositoryBoard\(templateId\)/);
+});
+
+test("Repository result gives most space to Preview and collapses without overflow", () => {
+  assert.match(
+    repositoryStylesSource,
+    /grid-template-columns:\s*minmax\(200px,\s*0\.24fr\)\s+minmax\(0,\s*1fr\)/
+  );
+  assert.match(repositoryStylesSource, /\.previewColumn[\s\S]*min-width:\s*0/);
+  assert.match(repositoryStylesSource, /@media\s*\(max-width:\s*[^)]+\)[\s\S]*grid-template-columns:\s*1fr/);
+  assert.match(repositoryStylesSource, /overflow-wrap:\s*anywhere/);
+});
+
+test("Repository preview navigation stays anchored when the recommendation reason grows", () => {
+  assert.match(repositoryStylesSource, /\.previewFooter\s*\{[\s\S]*align-items:\s*start/);
+});
+
+test("Repository follow-up questions expose clear hierarchy and selectable choices", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.match(source, /className=\{styles\.selectedTemplateName\}/);
+  assert.doesNotMatch(source, /선택한 Template/);
+  assert.match(source, /className=\{styles\.questionOptions\}/);
+  assert.match(
+    repositoryStylesSource,
+    /\.questionStepBody\s*\{[^}]*padding:\s*16px 32px 28px/
+  );
+  assert.match(
+    repositoryStylesSource,
+    /\.questionList h3\s*\{[\s\S]*font-size:\s*calc\(24px/
+  );
+  assert.match(
+    repositoryStylesSource,
+    /\.questionList\s*\{[\s\S]*gap:\s*28px/
+  );
+  assert.match(
+    repositoryStylesSource,
+    /\.questionList\s*\{[^}]*gap:\s*28px;[^}]*margin-top:\s*8px/
+  );
+  assert.doesNotMatch(
+    repositoryStylesSource,
+    /\.selectedTemplateSummary\s*\{|\.questionField\s*\{[\s\S]*border-top/
+  );
+  assert.match(
+    repositoryStylesSource,
+    /\.questionField legend\s*\{[\s\S]*margin:\s*0 0 10px/
+  );
+  assert.match(
+    repositoryStylesSource,
+    /\.questionField \+ \.questionField\s*\{[\s\S]*margin-top:\s*8px/
+  );
+  assert.match(
+    repositoryStylesSource,
+    /\.questionOption:has\(input:checked\)\s*\{[\s\S]*background:\s*var\(--color-primary\)/
+  );
+});
 
 test("Repository draft saves retain the server revision loaded with the screen", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
@@ -14,19 +151,22 @@ test("Repository draft saves retain the server revision loaded with the screen",
     source,
     /setProjectDraftRevision\(projectDraftResponse\.draft\?\.revision \?\? null\)/
   );
-  assert.equal(source.match(/expectedRevision: requireProjectDraftRevision\(\)/g)?.length, 1);
+  assert.equal(
+    source.match(/expectedRevision: createdProject \? null : requireProjectDraftRevision\(\)/g)
+      ?.length,
+    1
+  );
   assert.match(source, /async function saveRepositoryBoard/);
 });
 
-test("Repository start screen exposes an explicit AI chat fallback", () => {
+test("Repository start preserves the explicit AI new-design entry", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
 
   assert.match(source, /createPublicRepositoryRecommendation/);
   assert.doesNotMatch(source, /createPublicRepositoryArchitectureDraftRequest/);
   assert.doesNotMatch(source, /createAiArchitectureDraft/);
   assert.match(source, /createWorkspaceAiStartHref/);
-  assert.match(source, /원하는 구성이 없나요\? AI로 새 설계 만들기/);
-  assert.match(source, /className=\{styles\.publicAiFallbackAction\}/);
+  assert.match(repositoryScreenSource, /<Link[\s\S]*href=\{aiDesignHref\}[\s\S]*AI로 직접 설계/);
   assert.doesNotMatch(source, /createPublicRepositoryDiagram/);
   assert.doesNotMatch(source, /AI FALLBACK/);
   assert.doesNotMatch(source, /fallbackAdditionalRequirements/);
@@ -55,10 +195,11 @@ test("Repository board generation saves the selected Fixed Template directly", (
   assert.doesNotMatch(connectedBoardBody, /saveProjectDraft/);
   assert.match(source, /await saveRepositoryBoard\(/);
   assert.match(source, /createRepositoryAnalysisRecordPayload/);
-  assert.match(
-    source,
-    /onCreateBoard=\{\(templateId\) => void createConnectedRepositoryBoard\(templateId\)\}/
-  );
+  assert.doesNotMatch(source, /setSelectedConnectedTemplateId/);
+  assert.match(source, /void createConnectedRepositoryBoard\(templateId\)/);
+  assert.doesNotMatch(publicBoardBody, /recommendation\.candidates\[0\]/);
+  assert.match(publicBoardBody, /templateId: PublicRepositoryTemplateId/);
+  assert.doesNotMatch(publicBoardBody, /PublicRepositoryTemplateId \| null/);
   assert.doesNotMatch(source, /createRepositoryBoardHref/);
   assert.doesNotMatch(source, /href=\{createRepositoryBoardHref/);
 });
@@ -97,8 +238,8 @@ test("public Repository Template failures do not masquerade as Repository access
   );
 
   assert.ok(publicErrorBody.length > 0);
-  assert.match(publicErrorBody, /title="Fixed Template 보드를 생성할 수 없습니다"/);
-  assert.match(publicErrorBody, /onClick=\{\(\) => void createPublicRepositoryBoard\(\)\}/);
+  assert.match(publicErrorBody, /<h2 id="repository-board-error-title">보드를 생성할 수 없습니다<\/h2>/);
+  assert.match(publicErrorBody, /createPublicRepositoryBoard\(selectedPublicTemplateId\)/);
   assert.match(publicErrorBody, />\s*다시 생성\s*</);
   assert.doesNotMatch(publicErrorBody, /<RepositoryAnalysisRecovery/);
 });
@@ -118,16 +259,65 @@ test("public Repository errors keep analysis and architecture failures distinct"
   assert.doesNotMatch(repositoryErrorBody, /createPublicRepositoryBoard/);
 });
 
-test("Repository start screen selects a fetched branch before reanalysis", () => {
+test("Repository start keeps the analyzed branch for a later URL analysis request", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
 
   assert.match(source, /setDefaultBranch\(result\.defaultBranch\)/);
-  assert.match(source, /publicAnalysis\.availableBranches\.map/);
-  assert.match(source, /<SelectMenu/);
-  assert.match(source, /tone="workspace"/);
+  assert.match(repositoryScreenSource, /id="repository-branch"/);
+  assert.match(repositoryScreenSource, /name="branch"/);
+  assert.match(repositoryScreenSource, /onBranchChange/);
   assert.match(source, /setDefaultBranch\(""\)/);
   assert.match(source, /analyzePublicRepositoryUrl\(repositoryUrl, defaultBranch\)/);
-  assert.doesNotMatch(source, /placeholder="main"/);
+});
+
+test("changing the Repository URL clears a stale branch from the previous Repository", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+  const urlChangeBody = source.slice(
+    source.indexOf("onRepositoryUrlChange={(nextRepositoryUrl) => {"),
+    source.indexOf("onSubmit=", source.indexOf("onRepositoryUrlChange={(nextRepositoryUrl) => {"))
+  );
+
+  assert.ok(urlChangeBody.length > 0);
+  assert.match(urlChangeBody, /setDefaultBranch\(""\)/);
+});
+
+test("public Repository generation locks configuration and keeps the result mounted", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+  const publicResultBody = source.slice(
+    source.indexOf("{publicAnalysis &&"),
+    source.indexOf("{publicAnalysis &&", source.indexOf("{publicAnalysis &&") + 1)
+  );
+  const questionBody = source.slice(
+    source.indexOf('publicRecommendationStage === "questions"'),
+    source.indexOf('{publicAnalysisState === "architecture_error"')
+  );
+
+  assert.match(
+    publicResultBody,
+    /id="public-repository-deployment-type"[\s\S]*disabled=\{isPublicAnalysisBusy\}/
+  );
+  assert.doesNotMatch(publicResultBody, /\skey=\{/);
+  assert.match(
+    questionBody,
+    /className=\{styles\.secondaryButton\}[\s\S]*disabled=\{isPublicAnalysisBusy\}[\s\S]*Template 다시 선택/
+  );
+});
+
+test("the default Web test command runs Repository TSX tests with the CSS loader", () => {
+  const webPackage = JSON.parse(
+    readFileSync(join(currentDir, "../../..", "package.json"), "utf8")
+  ) as { scripts?: { test?: string } };
+  const testCommand = webPackage.scripts?.test ?? "";
+  const repositoryTestSegment = testCommand
+    .split("&&")
+    .find((segment) => segment.includes("app/workspace/repository"));
+
+  assert.ok(repositoryTestSegment);
+  assert.match(
+    repositoryTestSegment,
+    /node --import \.\/test-css-register\.mjs --import tsx --test/
+  );
+  assert.match(repositoryTestSegment, /app\/workspace\/repository\/\*\.test\.tsx/);
 });
 
 test("Repository draft defers CI/CD connection until Delivery", () => {
@@ -136,10 +326,8 @@ test("Repository draft defers CI/CD connection until Delivery", () => {
   assert.match(source, /createGitHubSourceRepositoryInstallUrl/);
   assert.match(source, /getRepositoryDraftBlockingIssue/);
   assert.match(source, /\.map\(localizePublicRepositoryQuestion\)/);
-  assert.match(source, /공개 저장소는 GitHub 연결 없이 분석하고 보드를 만들 수 있습니다/);
-  assert.match(source, /CI\/CD는 보드 생성\s+후 Delivery에서 연결합니다/);
+  assert.match(source, /onUseTemplate=\{confirmPublicRecommendationConfiguration\}/);
   assert.doesNotMatch(source, /function RepositoryCiCdConnection/);
-  assert.match(source, /onConfirmConfiguration=\{confirmPublicRecommendationConfiguration\}/);
   assert.doesNotMatch(source, /CiCdHandoffOption/);
   assert.doesNotMatch(source, /CI\/CD 인계 사용/);
   assert.doesNotMatch(source, /환경설정에서 권한 관리/);

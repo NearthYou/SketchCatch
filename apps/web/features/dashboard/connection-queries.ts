@@ -1,7 +1,13 @@
 "use client";
 
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  queryOptions,
+  useQueries,
+  useQuery
+} from "@tanstack/react-query";
 import type {
+  AwsCodeConnectionResponse,
   AwsConnection,
   AwsImportAccessNextAction,
   AwsImportAccessState
@@ -10,11 +16,47 @@ import { useAuth } from "../../components/auth/auth-provider";
 import { queryKeys } from "../../lib/query-keys";
 import {
   getAwsImportAccessState,
+  getAwsCodeConnection,
   listAwsConnections,
   listAwsConnectionSettings,
   listGitHubAccountInstallations,
+  refreshAwsCodeConnection,
   type AwsImportAccessSafeResponse
 } from "../workspace/api";
+
+export const SETTINGS_CONNECTION_STALE_TIME_MS = 5 * 60_000;
+export const SETTINGS_CONNECTION_GC_TIME_MS = 30 * 60_000;
+
+type AwsCodeConnectionLoader = {
+  readonly load: (awsConnectionId: string) => Promise<AwsCodeConnectionResponse>;
+};
+
+const defaultAwsCodeConnectionLoader: AwsCodeConnectionLoader = {
+  load: async (awsConnectionId) => {
+    const savedConnection = await getAwsCodeConnection(awsConnectionId);
+    if (!savedConnection.codeConnection) {
+      return savedConnection;
+    }
+
+    try {
+      return await refreshAwsCodeConnection(awsConnectionId);
+    } catch {
+      return savedConnection;
+    }
+  }
+};
+
+export function createAwsCodeConnectionQueryOptions(
+  input: { readonly awsConnectionId: string; readonly userId: string },
+  loader: AwsCodeConnectionLoader = defaultAwsCodeConnectionLoader
+) {
+  return queryOptions({
+    gcTime: SETTINGS_CONNECTION_GC_TIME_MS,
+    queryFn: () => loader.load(input.awsConnectionId),
+    queryKey: queryKeys.awsCodeConnection(input.userId, input.awsConnectionId),
+    staleTime: SETTINGS_CONNECTION_STALE_TIME_MS
+  });
+}
 
 export function useAwsConnectionsQuery(options: { readonly includeUnverified?: boolean } = {}) {
   const { status, user } = useAuth();
@@ -35,9 +77,11 @@ export function useAwsConnectionSettingsQuery() {
 
   return useQuery({
     enabled: status === "authenticated" && userId.length > 0,
+    gcTime: SETTINGS_CONNECTION_GC_TIME_MS,
     placeholderData: keepPreviousData,
     queryFn: ({ signal }) => listAwsConnectionSettings({ signal }),
-    queryKey: queryKeys.awsConnectionSettings(userId)
+    queryKey: queryKeys.awsConnectionSettings(userId),
+    staleTime: SETTINGS_CONNECTION_STALE_TIME_MS
   });
 }
 
@@ -91,8 +135,22 @@ export function useGitHubInstallationsQuery() {
 
   return useQuery({
     enabled: status === "authenticated" && userId.length > 0,
+    gcTime: SETTINGS_CONNECTION_GC_TIME_MS,
     placeholderData: keepPreviousData,
     queryFn: listGitHubAccountInstallations,
-    queryKey: queryKeys.githubInstallations(userId)
+    queryKey: queryKeys.githubInstallations(userId),
+    staleTime: SETTINGS_CONNECTION_STALE_TIME_MS
+  });
+}
+
+export function useAwsCodeConnectionsQueries(awsConnectionIds: readonly string[]) {
+  const { status, user } = useAuth();
+  const userId = user?.id ?? "";
+
+  return useQueries({
+    queries: awsConnectionIds.map((awsConnectionId) => ({
+      ...createAwsCodeConnectionQueryOptions({ awsConnectionId, userId }),
+      enabled: status === "authenticated" && userId.length > 0
+    }))
   });
 }

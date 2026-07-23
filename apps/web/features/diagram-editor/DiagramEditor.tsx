@@ -3660,6 +3660,7 @@ function DiagramEditorInner({
             panOnDrag={viewerPolicy.canPanAndZoom && (isPreviewActive || interactionMode === "pan")}
             panOnScroll={viewerPolicy.panOnScroll}
             panOnScrollMode={PanOnScrollMode.Free}
+            zoomOnPinch={false}
             proOptions={{ hideAttribution: true }}
             selectionKeyCode={["Shift", "Meta", "Control"]}
             selectionMode={SelectionMode.Partial}

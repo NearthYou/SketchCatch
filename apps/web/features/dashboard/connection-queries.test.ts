@@ -7,7 +7,12 @@ import { keepPreviousData, QueryObserver } from "@tanstack/react-query";
 import type { AwsConnection, AwsImportAccessState } from "@sketchcatch/types";
 import { createAppQueryClient } from "../../components/query/create-query-client";
 import { queryKeys } from "../../lib/query-keys";
-import { toAwsImportAccessQueryState } from "./connection-queries";
+import {
+  createAwsCodeConnectionQueryOptions,
+  SETTINGS_CONNECTION_GC_TIME_MS,
+  SETTINGS_CONNECTION_STALE_TIME_MS,
+  toAwsImportAccessQueryState
+} from "./connection-queries";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const connectionQuerySource = readFileSync(join(currentDir, "connection-queries.ts"), "utf8");
@@ -139,4 +144,35 @@ test("AWS 가져오기 권한 query cache에는 signed Console 링크를 저장�
     JSON.stringify(cached),
     /signature|consoleUrl|managerTemplateUrl|providerError|AccessDenied|RequestId/u
   );
+});
+
+test("settings connection cache survives tab remounts without reloading", async () => {
+  const queryClient = createAppQueryClient();
+  let loadCount = 0;
+  const options = createAwsCodeConnectionQueryOptions(
+    { awsConnectionId: "connection-1", userId: "user-1" },
+    {
+      load: async () => {
+        loadCount += 1;
+        return { codeConnection: null };
+      }
+    }
+  );
+
+  const first = await queryClient.fetchQuery(options);
+  const cached = await queryClient.fetchQuery(options);
+
+  assert.deepEqual(options.queryKey, [
+    "user",
+    "user-1",
+    "connections",
+    "aws",
+    "connection-1",
+    "codeconnection"
+  ]);
+  assert.equal(options.staleTime, SETTINGS_CONNECTION_STALE_TIME_MS);
+  assert.equal(options.gcTime, SETTINGS_CONNECTION_GC_TIME_MS);
+  assert.equal(cached, first);
+  assert.equal(loadCount, 1);
+  queryClient.clear();
 });

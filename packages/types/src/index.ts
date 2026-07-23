@@ -339,6 +339,26 @@ export type AuthResponse = {
 
 export type CurrentUserResponse = {
   user: User;
+  canChangePassword: boolean;
+};
+
+export type ProfilePasswordVerificationRequest = {
+  currentPassword: string;
+};
+
+export type ProfilePasswordVerificationResponse = {
+  expiresInSeconds: number;
+};
+
+export type UpdateProfileRequest = {
+  nickname: string;
+  newPassword?: string | undefined;
+  newPasswordConfirmation?: string | undefined;
+};
+
+export type UpdateProfileResponse = {
+  user: User;
+  session?: AuthSession | undefined;
 };
 
 export type Project = {

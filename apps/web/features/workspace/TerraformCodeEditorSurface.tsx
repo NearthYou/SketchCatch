@@ -43,6 +43,7 @@ export type TerraformCodeEditorActions = {
 
 export type TerraformCodeEditorRefs = {
   readonly lineNumbers: RefObject<HTMLOListElement | null>;
+  readonly syntaxHighlight: RefObject<HTMLPreElement | null>;
   readonly textarea: RefObject<HTMLTextAreaElement | null>;
 };
 
@@ -56,6 +57,20 @@ export function TerraformCodeEditorSurface({
   readonly refs: TerraformCodeEditorRefs;
   readonly state: TerraformCodeEditorState;
 }) {
+  const handleScroll: UIEventHandler<HTMLTextAreaElement> = (event) => {
+    const { scrollLeft, scrollTop } = event.currentTarget;
+
+    if (refs.lineNumbers.current) {
+      refs.lineNumbers.current.scrollTop = scrollTop;
+    }
+
+    if (refs.syntaxHighlight.current) {
+      refs.syntaxHighlight.current.style.transform = `translate3d(${-scrollLeft}px, ${-scrollTop}px, 0)`;
+    }
+
+    actions.handleScroll(event);
+  };
+
   return (
     <div className={styles.terraformEditorFrame}>
       <ol ref={refs.lineNumbers} className={styles.terraformLineNumbers} aria-hidden="true">
@@ -73,7 +88,11 @@ export function TerraformCodeEditorSurface({
         ))}
       </ol>
       <div className={styles.terraformSyntaxHighlightLayer} aria-hidden="true">
-        <pre className={styles.terraformSyntaxHighlightCode} style={state.syntaxHighlightStyle}>
+        <pre
+          ref={refs.syntaxHighlight}
+          className={styles.terraformSyntaxHighlightCode}
+          style={state.syntaxHighlightStyle}
+        >
           {state.highlightedLines.map((line) => (
             <span
               className={
@@ -97,7 +116,7 @@ export function TerraformCodeEditorSurface({
         className={styles.terraformTextarea}
         onChange={(event) => actions.changeCode(event.currentTarget.value)}
         onKeyDown={actions.handleKeyDown}
-        onScroll={actions.handleScroll}
+        onScroll={handleScroll}
         placeholder="# Board에 Resource를 추가하면 Terraform Preview가 여기에 표시됩니다."
         readOnly={state.isMutationLocked}
         spellCheck={false}

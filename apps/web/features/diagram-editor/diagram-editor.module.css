@@ -2093,6 +2093,11 @@ button.rightRailResizeHandle {
   opacity: 0;
   visibility: hidden;
 }
+.canvasPanelResourceNamesVisible .nodeShellZoomFar .resourceNodeLabel {
+  opacity: 1;
+  visibility: visible;
+}
+
 
 .lockBadge {
   align-items: center;

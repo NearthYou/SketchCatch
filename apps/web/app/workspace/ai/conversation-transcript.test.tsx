@@ -49,3 +49,43 @@ test("대화 기록은 진행 후보가 있어도 제외 control을 표시하지
   assert.doesNotMatch(html, /추천 후보 제외/);
   assert.doesNotMatch(html, />제외</);
 });
+
+test("질문 응답을 기다리는 loading에는 다이어그램 생성 안내를 표시하지 않는다", () => {
+  const html = renderToStaticMarkup(
+    createElement(ConversationTranscript, {
+      hasFinalPreview: false,
+      isInteractionLocked: false,
+      isSuggestionInputBlocked: false,
+      messages: [],
+      onCancelRequest: () => undefined,
+      onOpenPreview: () => undefined,
+      onRetry: async () => undefined,
+      onSuggestionSelect: () => undefined,
+      progressSnapshot: null,
+      requestState: "loading",
+      selections: []
+    })
+  );
+
+  assert.doesNotMatch(html, /role="status"/);
+});
+
+test("서버가 생성 progress를 보낸 뒤에만 다이어그램 생성 안내를 표시한다", () => {
+  const html = renderToStaticMarkup(
+    createElement(ConversationTranscript, {
+      hasFinalPreview: false,
+      isInteractionLocked: false,
+      isSuggestionInputBlocked: false,
+      messages: [],
+      onCancelRequest: () => undefined,
+      onOpenPreview: () => undefined,
+      onRetry: async () => undefined,
+      onSuggestionSelect: () => undefined,
+      progressSnapshot,
+      requestState: "loading",
+      selections: []
+    })
+  );
+
+  assert.match(html, /role="status"/);
+});
