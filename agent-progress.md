@@ -6,6 +6,20 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-23 - Clear Repository Analysis result UI
+
+- Removed the old Repository result presentation layer: CSS module, architecture preview, cards, candidate list, visual wrappers, icon wrappers, and old full-width action layout.
+- Kept the existing analysis APIs, public/private recovery, recommendation order and IDs, Board creation, Analysis Record persistence, Project Draft revision, navigation, and AI new-design entry.
+- Replaced the route surface with minimal semantic HTML: one heading, labeled URL form, native branch and Template selects, status/alert regions, and existing actions.
+- Preserved the fetched branch list as a native select after public analysis; users do not need to know branch names manually.
+- Verified: Repository route tests 12/12, related analysis/recommendation/handoff tests 36/36, root harness, lint, typecheck, and production build pass.
+- Full Web and root test runs remain red only in untouched visual/API fixture tests outside this change. The baseline document records the exact boundary.
+
+### Risk and next action
+
+- Browser entry, session, console, and initial overflow were checked. Full success/error/retry browser states need a deterministic local API fixture; their contracts are covered by focused tests.
+- Build the replacement Repository result UI in a separate task. Do not restore the deleted cards, preview, or route-specific CSS.
+
 ### 2026-07-22 - Make Live Observation traffic dense, dramatic, and load-testable
 
 - Preserved the existing Focused Flow nodes, geometry, and routes while raising the visible request cap from five to 24, merging rapid single-event SSE snapshots into one sustained dense burst, and retaining exact overflow accounting.

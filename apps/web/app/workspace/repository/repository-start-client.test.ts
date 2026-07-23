@@ -6,6 +6,27 @@ import { dirname, join } from "node:path";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
+test("Repository start uses an unstyled semantic surface without legacy presentation", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.match(source, /<main>/);
+  assert.match(source, /<form onSubmit=\{\(event\) => void analyzeRepositoryUrl\(event\)\}>/);
+  assert.match(source, /htmlFor="repository-url"/);
+  assert.match(source, /id="repository-url"/);
+  assert.match(source, /name="repositoryUrl"/);
+  assert.match(source, /htmlFor="repository-branch"/);
+  assert.match(source, /id="repository-branch"/);
+  assert.match(source, /name="branch"/);
+  assert.match(source, /<section aria-labelledby="repository-analysis-result-title">/);
+  assert.match(source, /<p aria-live="polite" role="status">/);
+  assert.doesNotMatch(source, /repository-start\.module\.css/);
+  assert.doesNotMatch(source, /RepositoryArchitecturePreview/);
+  assert.doesNotMatch(source, /ProductBrand/);
+  assert.doesNotMatch(source, /ProductState/);
+  assert.doesNotMatch(source, /SelectMenu/);
+  assert.doesNotMatch(source, /styles\./);
+});
+
 test("Repository draft saves retain the server revision loaded with the screen", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
 
@@ -18,15 +39,14 @@ test("Repository draft saves retain the server revision loaded with the screen",
   assert.match(source, /async function saveRepositoryBoard/);
 });
 
-test("Repository start screen exposes an explicit AI chat fallback", () => {
+test("Repository start preserves the explicit AI new-design entry", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
 
   assert.match(source, /createPublicRepositoryRecommendation/);
   assert.doesNotMatch(source, /createPublicRepositoryArchitectureDraftRequest/);
   assert.doesNotMatch(source, /createAiArchitectureDraft/);
   assert.match(source, /createWorkspaceAiStartHref/);
-  assert.match(source, /원하는 구성이 없나요\? AI로 새 설계 만들기/);
-  assert.match(source, /className=\{styles\.publicAiFallbackAction\}/);
+  assert.match(source, /<Link href=\{aiDesignHref\}>AI 새 설계<\/Link>/);
   assert.doesNotMatch(source, /createPublicRepositoryDiagram/);
   assert.doesNotMatch(source, /AI FALLBACK/);
   assert.doesNotMatch(source, /fallbackAdditionalRequirements/);
@@ -55,10 +75,8 @@ test("Repository board generation saves the selected Fixed Template directly", (
   assert.doesNotMatch(connectedBoardBody, /saveProjectDraft/);
   assert.match(source, /await saveRepositoryBoard\(/);
   assert.match(source, /createRepositoryAnalysisRecordPayload/);
-  assert.match(
-    source,
-    /onCreateBoard=\{\(templateId\) => void createConnectedRepositoryBoard\(templateId\)\}/
-  );
+  assert.match(source, /setSelectedConnectedTemplateId/);
+  assert.match(source, /void createConnectedRepositoryBoard\(selectedConnectedTemplate\)/);
   assert.doesNotMatch(source, /createRepositoryBoardHref/);
   assert.doesNotMatch(source, /href=\{createRepositoryBoardHref/);
 });
@@ -97,7 +115,7 @@ test("public Repository Template failures do not masquerade as Repository access
   );
 
   assert.ok(publicErrorBody.length > 0);
-  assert.match(publicErrorBody, /title="Fixed Template 보드를 생성할 수 없습니다"/);
+  assert.match(publicErrorBody, /<h2 id="repository-board-error-title">보드를 생성할 수 없습니다<\/h2>/);
   assert.match(publicErrorBody, /onClick=\{\(\) => void createPublicRepositoryBoard\(\)\}/);
   assert.match(publicErrorBody, />\s*다시 생성\s*</);
   assert.doesNotMatch(publicErrorBody, /<RepositoryAnalysisRecovery/);
@@ -118,13 +136,15 @@ test("public Repository errors keep analysis and architecture failures distinct"
   assert.doesNotMatch(repositoryErrorBody, /createPublicRepositoryBoard/);
 });
 
-test("Repository start screen selects a fetched branch before reanalysis", () => {
+test("Repository start keeps the analyzed branch for a later URL analysis request", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
 
   assert.match(source, /setDefaultBranch\(result\.defaultBranch\)/);
   assert.match(source, /publicAnalysis\.availableBranches\.map/);
-  assert.match(source, /<SelectMenu/);
-  assert.match(source, /tone="workspace"/);
+  assert.match(source, /id="repository-branch"/);
+  assert.match(source, /name="branch"/);
+  assert.match(source, /<select/);
+  assert.match(source, /onChange=\{\(event\) => setDefaultBranch\(event\.target\.value\)\}/);
   assert.match(source, /setDefaultBranch\(""\)/);
   assert.match(source, /analyzePublicRepositoryUrl\(repositoryUrl, defaultBranch\)/);
   assert.doesNotMatch(source, /placeholder="main"/);
@@ -136,10 +156,8 @@ test("Repository draft defers CI/CD connection until Delivery", () => {
   assert.match(source, /createGitHubSourceRepositoryInstallUrl/);
   assert.match(source, /getRepositoryDraftBlockingIssue/);
   assert.match(source, /\.map\(localizePublicRepositoryQuestion\)/);
-  assert.match(source, /공개 저장소는 GitHub 연결 없이 분석하고 보드를 만들 수 있습니다/);
-  assert.match(source, /CI\/CD는 보드 생성\s+후 Delivery에서 연결합니다/);
-  assert.doesNotMatch(source, /function RepositoryCiCdConnection/);
   assert.match(source, /onConfirmConfiguration=\{confirmPublicRecommendationConfiguration\}/);
+  assert.doesNotMatch(source, /function RepositoryCiCdConnection/);
   assert.doesNotMatch(source, /CiCdHandoffOption/);
   assert.doesNotMatch(source, /CI\/CD 인계 사용/);
   assert.doesNotMatch(source, /환경설정에서 권한 관리/);
