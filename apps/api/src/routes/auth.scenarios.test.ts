@@ -6,11 +6,13 @@ import type {
   LoginLockedErrorResponse,
   PasswordResetConfirmResponse,
   PasswordResetRequestResponse,
+  ProfilePasswordVerificationResponse,
   SignupAvailabilityResponse,
-  SignupRequest
+  SignupRequest,
+  UpdateProfileResponse
 } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
-import { createAccessToken, hashToken } from "../auth/tokens.js";
+import { createAccessToken, createProfileUpdateToken, hashToken } from "../auth/tokens.js";
 import { hashPassword } from "../auth/password.js";
 import type { Database, DatabaseClient } from "../db/client.js";
 import { loginAttempts, passwordResetTokens, refreshTokens, users } from "../db/schema.js";
@@ -800,6 +802,187 @@ test("GET /api/auth/me returns the active user", async () => {
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().user.id, USER_ID);
   assert.equal(response.json().user.username, "demo");
+  assert.equal(response.json().canChangePassword, true);
+
+  await app.close();
+});
+
+test("GET /api/auth/me reports that social-only users cannot change a password", async () => {
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [
+      [{ id: USER_ID, deletedAt: null }],
+      [makeUser({ passwordHash: null })]
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/auth/me",
+    headers: await authHeaders(USER_ID)
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().canChangePassword, false);
+
+  await app.close();
+});
+
+test("POST /api/auth/me/password-verification verifies the current password", async () => {
+  const user = await makeUserWithPassword(PASSWORD);
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[{ id: USER_ID, deletedAt: null }], [user], []]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/me/password-verification",
+    headers: await authHeaders(USER_ID),
+    payload: {
+      currentPassword: PASSWORD
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as ProfilePasswordVerificationResponse;
+  assert.ok(body.expiresInSeconds > 0);
+  assert.match(String(response.headers["set-cookie"]), /sketchcatch_profile_update_token=/);
+  assert.match(String(response.headers["set-cookie"]), /HttpOnly/);
+  assert.equal(fakeDb.loginAttemptRows.at(-1)?.success, true);
+
+  await app.close();
+});
+
+test("POST /api/auth/me/password-verification rejects an incorrect password", async () => {
+  const user = await makeUserWithPassword(PASSWORD);
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [
+      [{ id: USER_ID, deletedAt: null }],
+      [user],
+      [],
+      [],
+      [{ failedAttemptCount: 0 }]
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/me/password-verification",
+    headers: await authHeaders(USER_ID),
+    payload: {
+      currentPassword: "incorrect-password"
+    }
+  });
+
+  assert.equal(response.statusCode, 401);
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
+  assert.equal(fakeDb.loginAttemptRows.at(-1)?.failureReason, "profile_reauthentication_failed");
+
+  await app.close();
+});
+
+test("PATCH /api/auth/me updates a password account after verification", async () => {
+  const user = await makeUserWithPassword(PASSWORD);
+  const verificationToken = await createProfileUpdateToken(
+    USER_ID,
+    user.updatedAt.toISOString()
+  );
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[{ id: USER_ID, deletedAt: null }], [user]]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "PATCH",
+    url: "/api/auth/me",
+    headers: {
+      ...(await authHeaders(USER_ID)),
+      cookie: `sketchcatch_profile_update_token=${encodeURIComponent(verificationToken)}`
+    },
+    payload: {
+      nickname: "변경된 이름",
+      newPassword: "New-password-456",
+      newPasswordConfirmation: "New-password-456"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as UpdateProfileResponse;
+  assert.equal(body.user.nickname, "변경된 이름");
+  assert.ok(body.session?.accessToken);
+  const userUpdate = fakeDb.updateCalls.find((call) => call.table === users);
+  assert.equal(userUpdate?.values.nickname, "변경된 이름");
+  assert.notEqual(userUpdate?.values.passwordHash, user.passwordHash);
+  assert.ok(fakeDb.updateCalls.some((call) => call.table === refreshTokens));
+  assert.ok(fakeDb.updateCalls.some((call) => call.table === passwordResetTokens));
+
+  await app.close();
+});
+
+test("PATCH /api/auth/me lets a social-only user update only their nickname", async () => {
+  const user = makeUser({ passwordHash: null });
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[{ id: USER_ID, deletedAt: null }], [user]]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "PATCH",
+    url: "/api/auth/me",
+    headers: await authHeaders(USER_ID),
+    payload: {
+      nickname: "소셜 사용자"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as UpdateProfileResponse;
+  assert.equal(body.user.nickname, "소셜 사용자");
+  assert.equal(body.session, undefined);
+  assert.equal(fakeDb.updateCalls.length, 1);
+  assert.equal(fakeDb.updateCalls[0]?.table, users);
+  assert.equal(fakeDb.updateCalls[0]?.values.passwordHash, undefined);
+
+  await app.close();
+});
+
+test("PATCH /api/auth/me rejects password changes for a social-only user", async () => {
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [
+      [{ id: USER_ID, deletedAt: null }],
+      [makeUser({ passwordHash: null })]
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "PATCH",
+    url: "/api/auth/me",
+    headers: await authHeaders(USER_ID),
+    payload: {
+      nickname: "소셜 사용자",
+      newPassword: "New-password-456",
+      newPasswordConfirmation: "New-password-456"
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assertErrorResponse(response.json() as ApiErrorResponse, "conflict");
+  assert.equal(fakeDb.updateCalls.length, 0);
 
   await app.close();
 });
@@ -1066,10 +1249,15 @@ class AuthScenarioFakeDb {
           this.updateCalls.push(updateCall);
 
           return {
-            where: async (...whereArgs: unknown[]) => {
+            where: (...whereArgs: unknown[]) => {
               updateCall.whereArgs = whereArgs;
+              const rows = table === users ? [makeUser(values as Partial<UserRow>)] : [];
+              const result = Promise.resolve(rows);
 
-              return [];
+              return {
+                returning: async () => rows,
+                then: result.then.bind(result)
+              };
             }
           };
         }

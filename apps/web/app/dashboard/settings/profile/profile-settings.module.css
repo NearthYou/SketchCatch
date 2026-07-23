@@ -61,17 +61,6 @@
   line-height: 1.55;
 }
 
-.previewNotice {
-  margin: 24px 28px 0;
-  border: 1px solid #dcdee0;
-  border-radius: 10px;
-  padding: 12px 14px;
-  background: #f7f8fa;
-  color: #55585f;
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  line-height: 1.5;
-}
-
 .form {
   display: grid;
   gap: 28px;
@@ -133,6 +122,33 @@
   font-size: calc(11px + var(--presentation-font-size-increase));
 }
 
+.fieldHint {
+  color: #7a7e85;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  line-height: 1.45;
+}
+
+.formError,
+.successMessage {
+  margin: -8px 0 0;
+  border-radius: 9px;
+  padding: 11px 13px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  line-height: 1.45;
+}
+
+.formError {
+  border: 1px solid #f0b8b3;
+  background: #fff7f6;
+  color: #b42318;
+}
+
+.successMessage {
+  border: 1px solid #a7dec3;
+  background: #f0fff7;
+  color: #087443;
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;
@@ -191,10 +207,6 @@
   .cardHeading,
   .form {
     padding: 20px;
-  }
-
-  .previewNotice {
-    margin: 20px 20px 0;
   }
 
   .fieldGrid {

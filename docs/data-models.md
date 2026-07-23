@@ -375,6 +375,8 @@ type AuthSession = {
 
 소셜 로그인 provider 계정은 `oauth_accounts`에 저장한다. `oauth_accounts.provider + provider_user_id`는 외부 provider 계정의 고유 연결 키이며, 실제 provider access token은 저장하지 않는다. 소셜 전용 사용자는 `users.password_hash`가 `null`일 수 있고, 일반 비밀번호 로그인에서는 password hash가 없는 사용자를 로그인 실패로 처리한다.
 
+마이페이지의 일반 비밀번호 계정은 현재 비밀번호를 서버에서 확인한 뒤 짧은 만료 시간을 가진 프로필 수정 증명을 HttpOnly cookie로 발급받는다. 프로필 수정 API는 이 증명과 현재 `users.updated_at` 기준이 일치할 때만 조건부 갱신으로 `nickname`과 선택적인 새 비밀번호를 한 트랜잭션에서 갱신한다. 비밀번호 변경 시 기존 refresh token과 password reset token을 만료시키고 현재 브라우저에 새 인증 세션을 발급한다. 소셜 전용 사용자는 현재 비밀번호 확인 없이 `nickname`만 변경할 수 있으며 비밀번호 변경 입력은 서버가 거부한다. 프로필 수정 증명과 비밀번호 원문은 DB에 저장하거나 API 응답에 노출하지 않는다.
+
 AWS-first Direct Deployment Path에서는 `DiagramJson -> InfrastructureGraph -> Terraform` 흐름을 우선 사용한다. Terraform 편집 내용을 다시 반영할 때는 `Terraform -> InfrastructureGraph patch -> DiagramJson` 흐름으로 같은 node의 `parameters.values`를 갱신한다. AI 분석이나 비용/위험 분석이 `ArchitectureJson`을 요구하면 `DiagramJson -> ArchitectureJson` 어댑터를 둔다.
 
 `ArchitectureJson`, `InfrastructureGraph`, `DiagramJson`은 서로 대체 관계가 아니다.

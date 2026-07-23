@@ -1,44 +1,92 @@
 "use client";
 
+import {
+  getPasswordPolicyErrorMessage,
+  PASSWORD_POLICY_HELP_TEXT
+} from "@sketchcatch/types";
 import Link from "next/link";
 import { LockKeyhole, UserRound } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useAuth } from "../../../../components/auth/auth-provider";
+import { requestProfilePasswordVerification } from "../../../../lib/auth-api";
+import { getApiErrorMessage } from "../../../../lib/api-client";
 import styles from "./profile-settings.module.css";
 
 type ProfileStep = "verify" | "edit";
 
 export function ProfileSettingsClient() {
-  const { user } = useAuth();
+  const { canChangePassword, updateProfile, user } = useAuth();
   const [step, setStep] = useState<ProfileStep>("verify");
   const [currentPassword, setCurrentPassword] = useState("");
   const [name, setName] = useState(user?.nickname ?? "");
   const [newPassword, setNewPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
-  const [verificationError, setVerificationError] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [isPending, setIsPending] = useState(false);
 
+  const effectiveStep = canChangePassword === false ? "edit" : step;
+  const passwordPolicyError = newPassword ? getPasswordPolicyErrorMessage(newPassword) : null;
   const passwordsMatch =
-    newPassword.length === 0 ||
-    passwordConfirmation.length === 0 ||
-    newPassword === passwordConfirmation;
+    passwordConfirmation.length === 0 || newPassword === passwordConfirmation;
+  const includesPasswordChange = newPassword.length > 0 || passwordConfirmation.length > 0;
+  const canSubmitProfile =
+    name.trim().length > 0 &&
+    (!canChangePassword ||
+      (!includesPasswordChange ||
+        (!passwordPolicyError &&
+          newPassword.length > 0 &&
+          passwordConfirmation.length > 0 &&
+          passwordsMatch)));
 
-  function handleVerificationSubmit(event: FormEvent<HTMLFormElement>): void {
+  async function handleVerificationSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-
     if (!currentPassword) {
-      setVerificationError("현재 비밀번호를 입력해주세요.");
+      setErrorMessage("현재 비밀번호를 입력해주세요.");
       return;
     }
 
-    setVerificationError("");
-    setStep("edit");
+    setIsPending(true);
+    setErrorMessage("");
+    try {
+      await requestProfilePasswordVerification({ currentPassword });
+      setCurrentPassword("");
+      setStep("edit");
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error, "현재 비밀번호를 확인하지 못했습니다."));
+    } finally {
+      setIsPending(false);
+    }
   }
 
-  function handleProfileSubmit(event: FormEvent<HTMLFormElement>): void {
+  async function handleProfileSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    if (!canSubmitProfile || isPending) return;
+
+    setIsPending(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      await updateProfile({
+        nickname: name.trim(),
+        ...(canChangePassword && includesPasswordChange
+          ? {
+              newPassword,
+              newPasswordConfirmation: passwordConfirmation
+            }
+          : {})
+      });
+      setNewPassword("");
+      setPasswordConfirmation("");
+      setSuccessMessage("개인정보가 수정되었습니다.");
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error, "개인정보를 수정하지 못했습니다."));
+    } finally {
+      setIsPending(false);
+    }
   }
 
-  if (step === "verify") {
+  if (effectiveStep === "verify") {
     return (
       <section className={styles.page} aria-labelledby="profile-verification-title">
         <header className={styles.pageHeader}>
@@ -52,32 +100,30 @@ export function ProfileSettingsClient() {
             </span>
             <div>
               <h2>본인 확인</h2>
-              <p>
-                개인정보 보호를 위해 현재 비밀번호를 입력해주세요. 실제 일치 검증은
-                API 연결 후 적용됩니다.
-              </p>
+              <p>개인정보 보호를 위해 현재 비밀번호를 입력해주세요.</p>
             </div>
           </div>
 
-          <form className={styles.form} onSubmit={handleVerificationSubmit}>
+          <form className={styles.form} onSubmit={(event) => void handleVerificationSubmit(event)}>
             <label className={styles.field}>
               <span>현재 비밀번호</span>
               <input
-                aria-describedby={verificationError ? "current-password-error" : undefined}
-                aria-invalid={verificationError ? true : undefined}
+                aria-describedby={errorMessage ? "current-password-error" : undefined}
+                aria-invalid={errorMessage ? true : undefined}
                 autoComplete="current-password"
+                disabled={isPending}
                 name="currentPassword"
                 onChange={(event) => {
                   setCurrentPassword(event.target.value);
-                  setVerificationError("");
+                  setErrorMessage("");
                 }}
                 placeholder="현재 비밀번호를 입력해주세요"
                 type="password"
                 value={currentPassword}
               />
-              {verificationError ? (
+              {errorMessage ? (
                 <small className={styles.errorMessage} id="current-password-error">
-                  {verificationError}
+                  {errorMessage}
                 </small>
               ) : null}
             </label>
@@ -86,8 +132,8 @@ export function ProfileSettingsClient() {
               <Link className={styles.cancelButton} href="/dashboard/settings">
                 취소
               </Link>
-              <button className={styles.saveButton} type="submit">
-                확인
+              <button className={styles.saveButton} disabled={isPending} type="submit">
+                {isPending ? "확인 중..." : "확인"}
               </button>
             </div>
           </form>
@@ -103,11 +149,7 @@ export function ProfileSettingsClient() {
       </header>
 
       <div className={styles.profileCard}>
-        <div className={styles.previewNotice} role="status">
-          개인정보 수정 화면 미리보기입니다. 저장 기능은 아직 연결되지 않았습니다.
-        </div>
-
-        <form className={styles.form} onSubmit={handleProfileSubmit}>
+        <form className={styles.form} onSubmit={(event) => void handleProfileSubmit(event)}>
           <div className={styles.fieldGrid}>
             <label className={`${styles.field} ${styles.fullWidthField}`}>
               <span>
@@ -116,67 +158,107 @@ export function ProfileSettingsClient() {
               </span>
               <input
                 autoComplete="nickname"
+                disabled={isPending}
                 maxLength={40}
                 name="name"
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setSuccessMessage("");
+                }}
                 placeholder="변경할 이름을 입력해주세요"
                 type="text"
                 value={name}
               />
             </label>
 
-            <label className={styles.field}>
-              <span>
-                <LockKeyhole aria-hidden="true" size={17} />
-                새 비밀번호
-              </span>
-              <input
-                autoComplete="new-password"
-                name="newPassword"
-                onChange={(event) => setNewPassword(event.target.value)}
-                placeholder="새 비밀번호를 입력해주세요"
-                type="password"
-                value={newPassword}
-              />
-            </label>
+            {canChangePassword ? (
+              <>
+                <label className={styles.field}>
+                  <span>
+                    <LockKeyhole aria-hidden="true" size={17} />
+                    새 비밀번호
+                  </span>
+                  <input
+                    aria-describedby={passwordPolicyError ? "new-password-error" : "password-hint"}
+                    aria-invalid={passwordPolicyError ? true : undefined}
+                    autoComplete="new-password"
+                    disabled={isPending}
+                    name="newPassword"
+                    onChange={(event) => {
+                      setNewPassword(event.target.value);
+                      setSuccessMessage("");
+                    }}
+                    placeholder="변경할 때만 입력해주세요"
+                    type="password"
+                    value={newPassword}
+                  />
+                  <small
+                    className={passwordPolicyError ? styles.errorMessage : styles.fieldHint}
+                    id={passwordPolicyError ? "new-password-error" : "password-hint"}
+                  >
+                    {passwordPolicyError ?? PASSWORD_POLICY_HELP_TEXT}
+                  </small>
+                </label>
 
-            <label className={styles.field}>
-              <span>
-                <LockKeyhole aria-hidden="true" size={17} />
-                비밀번호 확인
-              </span>
-              <input
-                aria-describedby={!passwordsMatch ? "password-confirmation-error" : undefined}
-                aria-invalid={!passwordsMatch || undefined}
-                autoComplete="new-password"
-                name="passwordConfirmation"
-                onChange={(event) => setPasswordConfirmation(event.target.value)}
-                placeholder="새 비밀번호를 한 번 더 입력해주세요"
-                type="password"
-                value={passwordConfirmation}
-              />
-              {!passwordsMatch ? (
-                <small className={styles.errorMessage} id="password-confirmation-error">
-                  비밀번호가 일치하지 않습니다.
-                </small>
-              ) : null}
-            </label>
+                <label className={styles.field}>
+                  <span>
+                    <LockKeyhole aria-hidden="true" size={17} />
+                    비밀번호 확인
+                  </span>
+                  <input
+                    aria-describedby={!passwordsMatch ? "password-confirmation-error" : undefined}
+                    aria-invalid={!passwordsMatch || undefined}
+                    autoComplete="new-password"
+                    disabled={isPending}
+                    name="newPasswordConfirmation"
+                    onChange={(event) => {
+                      setPasswordConfirmation(event.target.value);
+                      setSuccessMessage("");
+                    }}
+                    placeholder="새 비밀번호를 한 번 더 입력해주세요"
+                    type="password"
+                    value={passwordConfirmation}
+                  />
+                  {!passwordsMatch ? (
+                    <small className={styles.errorMessage} id="password-confirmation-error">
+                      비밀번호가 일치하지 않습니다.
+                    </small>
+                  ) : null}
+                </label>
+              </>
+            ) : null}
           </div>
 
+          {errorMessage ? <p className={styles.formError}>{errorMessage}</p> : null}
+          {successMessage ? (
+            <p className={styles.successMessage} role="status">
+              {successMessage}
+            </p>
+          ) : null}
+
           <div className={styles.actions}>
-            <button
-              className={styles.cancelButton}
-              onClick={() => setStep("verify")}
-              type="button"
-            >
-              취소
-            </button>
+            {canChangePassword ? (
+              <button
+                className={styles.cancelButton}
+                disabled={isPending}
+                onClick={() => {
+                  setStep("verify");
+                }}
+                type="button"
+              >
+                취소
+              </button>
+            ) : (
+              <Link className={styles.cancelButton} href="/dashboard/settings">
+                취소
+              </Link>
+            )}
             <button
               className={styles.saveButton}
-              disabled
+              disabled={!canSubmitProfile || isPending}
               type="submit"
             >
-              수정하기
+              {isPending ? "수정 중..." : "수정하기"}
             </button>
           </div>
         </form>
