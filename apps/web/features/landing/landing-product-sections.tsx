@@ -18,7 +18,7 @@ export function LandingProductSections() {
         <div className={styles.container}>
           <h2 id="cta-title">인프라를 설계하고<br />검토한 뒤 배포하세요</h2>
           <p>직접 설계하거나 요구사항, 소스 저장소, 기존 클라우드 환경을 불러와 프로젝트를 시작할 수 있습니다.</p>
-          <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
+          <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/login">
             새 프로젝트 시작하기 <span className={styles.buttonIcon} aria-hidden="true">→</span>
           </Link>
         </div>

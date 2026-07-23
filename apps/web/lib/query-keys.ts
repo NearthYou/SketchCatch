@@ -9,6 +9,12 @@ export const queryKeys = {
     [...awsConnectionsRoot(userId), includeUnverified ? "all-statuses" : "verified-only"] as const,
   awsConnectionSettings: (userId: string) =>
     [...userRoot(userId), "connections", "aws", "settings"] as const,
+  awsCodeConnection: (userId: string, awsConnectionId: string) =>
+    [
+      ...awsConnectionsRoot(userId),
+      awsConnectionId,
+      "codeconnection"
+    ] as const,
   costs: (userId: string) => [...userRoot(userId), "costs"] as const,
   costEstimates: (userId: string, period: string, expectedUserCount: number) =>
     [...userRoot(userId), "costs", "estimate", period, expectedUserCount] as const,
