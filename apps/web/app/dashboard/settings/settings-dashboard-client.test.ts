@@ -62,6 +62,8 @@ test("Settings hides AWS implementation terms and explains one connection outcom
   assert.doesNotMatch(clientSource, /AWS Role 연결 상태/);
   assert.doesNotMatch(clientSource, /CloudFormation으로 Role 만들기/);
   assert.doesNotMatch(clientSource, />Role 연결 확인</);
+  assert.doesNotMatch(clientSource, /getApiErrorMessage\(/);
+  assert.doesNotMatch(clientSource, /<pre>\{cloudFormation\.templateBody\}<\/pre>/);
 });
 
 test("Settings keeps role identifiers out of the connected AWS account summary", () => {
@@ -74,6 +76,8 @@ test("Settings uses a simple confirmation before disconnecting AWS", () => {
   assert.match(clientSource, /AWS 연결 해제 확인/);
   assert.match(clientSource, /배포한 인프라는 유지됩니다\./);
   assert.match(clientSource, /구조 분석 설정을 먼저 정리한 뒤 AWS 연결을 해제할 수 있습니다\./);
+  assert.doesNotMatch(clientSource, /deletionPreview\.preservedResources\.join/);
+  assert.doesNotMatch(clientSource, /deletionPreview\.preservedRecords/);
 });
 
 test("Settings checks structure analysis after AWS connection confirmation", () => {

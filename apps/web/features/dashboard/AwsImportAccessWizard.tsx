@@ -180,6 +180,13 @@ export function AwsImportAccessWizard({
     );
   }
 
+  if (!shouldRenderAwsStructureAnalysisCard({
+    hasContinueAction: onContinue !== undefined,
+    state: stateQuery.data.state
+  })) {
+    return null;
+  }
+
   return (
     <AwsImportAccessWizardView
       connectionStatus={connectionStatus}
@@ -195,6 +202,15 @@ export function AwsImportAccessWizard({
       {...(onContinue ? { onContinue } : {})}
     />
   );
+}
+
+/** gg: 정상 연결은 설정 화면을 비우고, 복구·해제·복귀가 필요한 경우에만 구조 분석 카드를 남깁니다. */
+export function shouldRenderAwsStructureAnalysisCard(input: {
+  readonly hasContinueAction: boolean;
+  readonly state: AwsImportAccessState;
+}): boolean {
+  if (input.hasContinueAction || input.state.cleanupAvailable) return true;
+  return input.state.status !== "ready" && input.state.status !== "limited";
 }
 
 /** gg: command 실패 뒤 같은 연결을 한 번 다시 읽고 원래 오류는 안전한 UI 경계로 전달합니다. */

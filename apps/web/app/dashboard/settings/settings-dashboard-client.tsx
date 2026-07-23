@@ -52,7 +52,6 @@ import {
 } from "../../../features/dashboard/connection-queries";
 import { useAuth } from "../../../components/auth/auth-provider";
 import { invalidateAwsConnectionQueries } from "../../../components/query/dashboard-query-invalidation";
-import { getApiErrorMessage } from "../../../lib/api-client";
 import {
   deriveAwsConnectionSettingsState,
   type AwsConnectionCleanupRetryDisplay
@@ -80,6 +79,11 @@ const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
   { label: "버지니아 북부", value: "us-east-1" },
   { label: "도쿄", value: "ap-northeast-1" }
 ];
+
+/** gg: 설정 화면은 API·AWS 진단을 노출하지 않고 사용자가 바로 이해할 수 있는 다음 행동만 안내합니다. */
+function getSettingsErrorMessage(_error: unknown, fallbackMessage: string): string {
+  return fallbackMessage;
+}
 
 // gg: AWS 연결과 GitHub 배포 연결을 사용자가 한 화면에서 이어서 관리합니다.
 export function SettingsDashboardClient() {
@@ -184,7 +188,7 @@ export function SettingsDashboardClient() {
     setErrorMessage("");
     const result = await displayedConnectionsQuery.refetch();
     if (result.error) {
-      setErrorMessage(getApiErrorMessage(result.error, "AWS 연결을 불러오지 못했습니다."));
+      setErrorMessage(getSettingsErrorMessage(result.error, "AWS 연결을 불러오지 못했습니다."));
     }
   }
 
@@ -212,7 +216,7 @@ export function SettingsDashboardClient() {
       setCloudFormation(template);
       await invalidateConnections();
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "AWS 연결 준비에 실패했습니다."));
+      setErrorMessage(getSettingsErrorMessage(error, "AWS 연결 준비에 실패했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -234,7 +238,7 @@ export function SettingsDashboardClient() {
       setAccountId(restored.accountId);
       setRegion(restored.region);
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "AWS 연결 설정을 불러오지 못했습니다."));
+      setErrorMessage(getSettingsErrorMessage(error, "AWS 연결 설정을 불러오지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -261,7 +265,7 @@ export function SettingsDashboardClient() {
       setAccountId("");
       await invalidateConnections();
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "AWS 연결을 확인하지 못했습니다."));
+      setErrorMessage(getSettingsErrorMessage(error, "AWS 연결을 확인하지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -282,7 +286,7 @@ export function SettingsDashboardClient() {
       }
       await invalidateConnections();
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "AWS 연결을 확인하지 못했습니다."));
+      setErrorMessage(getSettingsErrorMessage(error, "AWS 연결을 확인하지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -307,7 +311,7 @@ export function SettingsDashboardClient() {
       }
       await invalidateConnections();
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "AWS 연결을 다시 확인하지 못했습니다."));
+      setErrorMessage(getSettingsErrorMessage(error, "AWS 연결을 다시 확인하지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -321,7 +325,7 @@ export function SettingsDashboardClient() {
     try {
       setDeletionPreview(await getAwsConnectionDeletionPreview(connectionId));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "AWS 연결 해제 대상을 불러오지 못했습니다."));
+      setErrorMessage(getSettingsErrorMessage(error, "AWS 연결 해제 대상을 불러오지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -341,7 +345,7 @@ export function SettingsDashboardClient() {
       setDeletionPreview(null);
       await invalidateConnections();
     } catch (error) {
-      setDeletionErrorMessage(getApiErrorMessage(error, "AWS 연결을 해제하지 못했습니다."));
+      setDeletionErrorMessage(getSettingsErrorMessage(error, "AWS 연결을 해제하지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -396,7 +400,7 @@ export function SettingsDashboardClient() {
         [selectedBuildAwsConnectionId]: response
       }));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "GitHub 배포 연결을 만들지 못했습니다."));
+      setErrorMessage(getSettingsErrorMessage(error, "GitHub 배포 연결을 만들지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -413,7 +417,7 @@ export function SettingsDashboardClient() {
         [selectedBuildAwsConnectionId]: response
       }));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "GitHub 승인 상태를 확인하지 못했습니다."));
+      setErrorMessage(getSettingsErrorMessage(error, "GitHub 승인 상태를 확인하지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -437,7 +441,7 @@ export function SettingsDashboardClient() {
       setShowCodeConnectionDisconnectModal(false);
     } catch (error) {
       setShowCodeConnectionDisconnectModal(false);
-      setErrorMessage(getApiErrorMessage(error, "GitHub 빌드 연결을 해제하지 못했습니다."));
+      setErrorMessage(getSettingsErrorMessage(error, "GitHub 빌드 연결을 해제하지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -465,7 +469,7 @@ export function SettingsDashboardClient() {
         } catch (error) {
           if (active) {
             setErrorMessage(
-              getApiErrorMessage(
+              getSettingsErrorMessage(
                 error,
                 "AWS 상태를 다시 확인하지 못해 저장된 연결 상태를 표시합니다."
               )
@@ -480,7 +484,7 @@ export function SettingsDashboardClient() {
       })
       .catch((error) => {
         if (active) {
-          setErrorMessage(getApiErrorMessage(error, "GitHub 빌드 연결 상태를 불러오지 못했습니다."));
+          setErrorMessage(getSettingsErrorMessage(error, "GitHub 빌드 연결 상태를 불러오지 못했습니다."));
         }
       });
 
@@ -546,11 +550,11 @@ export function SettingsDashboardClient() {
       ) : hasConnectionsLoadError ? (
         <>
           <GitHubAccountSettings />
-          <ProductState action={<button onClick={() => void loadConnections()} type="button">다시 시도</button>} description={getApiErrorMessage(displayedConnectionsQuery.error, "AWS 연결을 불러오지 못했습니다.")} kind="error" title="AWS 환경설정을 불러오지 못했습니다" />
+          <ProductState action={<button onClick={() => void loadConnections()} type="button">다시 시도</button>} description={getSettingsErrorMessage(displayedConnectionsQuery.error, "AWS 연결을 불러오지 못했습니다.")} kind="error" title="AWS 환경설정을 불러오지 못했습니다" />
         </>
       ) : (
         <>
-          {displayedConnectionsQuery.isError ? <p className={styles.errorBand}>{getApiErrorMessage(displayedConnectionsQuery.error, "AWS 연결을 갱신하지 못했습니다.")}</p> : null}
+          {displayedConnectionsQuery.isError ? <p className={styles.errorBand}>{getSettingsErrorMessage(displayedConnectionsQuery.error, "AWS 연결을 갱신하지 못했습니다.")}</p> : null}
           {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}
 
           <section aria-label="외부 서비스 연결 순서" className={styles.connectionFlow}>
@@ -598,7 +602,22 @@ export function SettingsDashboardClient() {
                 {setupConnection && cloudFormation ? (
                   <section aria-label="AWS 연결 승인" className={`${styles.setupSection} ${styles.inlineSetupSection}`}>
                     <div><span>1</span><div><strong>AWS에서 연결 승인</strong><p>AWS Console에서 SketchCatch 연결을 승인해 주세요.</p></div></div>
-                    {cloudFormation.launchStackUrl ? <a href={cloudFormation.launchStackUrl} rel="noreferrer" target="_blank">AWS에서 승인하기 <ExternalLink size={15} /></a> : <details><summary>AWS에서 승인 화면이 열리지 않나요?</summary><p>아래 연결 내용을 AWS Console에서 실행해 주세요.</p><pre>{cloudFormation.templateBody}</pre></details>}
+                    {cloudFormation.launchStackUrl ? (
+                      <a href={cloudFormation.launchStackUrl} rel="noreferrer" target="_blank">
+                        AWS에서 승인하기 <ExternalLink size={15} />
+                      </a>
+                    ) : (
+                      <div className={styles.setupConsoleFallback} role="alert">
+                        <p>AWS 승인 화면을 열지 못했습니다. 잠시 후 연결을 다시 준비해 주세요.</p>
+                        <button
+                          disabled={actionPending}
+                          onClick={() => void resumeConnectionSetup(setupConnection)}
+                          type="button"
+                        >
+                          연결 다시 준비
+                        </button>
+                      </div>
+                    )}
                     <div><span>2</span><label><strong>AWS 계정 ID 확인</strong><input inputMode="numeric" maxLength={12} onChange={(event) => setAccountId(event.target.value.replace(/\D/g, ""))} placeholder="12자리 계정 ID" value={accountId} /></label></div>
                     <button className={styles.primaryAction} disabled={actionPending || !/^\d{12}$/.test(accountId)} onClick={() => void verifyCreatedRole()} type="button">AWS 연결 확인</button>
                   </section>
@@ -839,11 +858,6 @@ export function SettingsDashboardClient() {
               </ul>
               <strong>유지되는 항목</strong>
               <p>배포한 인프라와 기존 구조 분석 결과는 유지됩니다.</p>
-              <details>
-                <summary>정리 범위 자세히 보기</summary>
-                <p>{deletionPreview.preservedResources.join(", ")}</p>
-                <p>구조 분석 결과 {deletionPreview.preservedRecords?.reverseEngineeringScans ?? 0}개는 연결 해제 후에도 보존됩니다.</p>
-              </details>
             </div>
             {deletionPreview.blockerMessage ? (
               <p className={styles.cleanupBlocker}>구조 분석 설정을 먼저 정리한 뒤 AWS 연결을 해제할 수 있습니다.</p>
