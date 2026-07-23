@@ -1,13 +1,17 @@
-import { getApiErrorMessage } from "../../lib/api-client";
 import type { LiveObservationStreamFailure } from "./api";
+
+export function getLiveObservationErrorMessage(
+  _error: unknown,
+  fallbackMessage: string
+): string {
+  return fallbackMessage;
+}
 
 export function getLiveObservationStreamErrorMessage(
   failure: LiveObservationStreamFailure
 ): string {
-  return getApiErrorMessage(
+  return getLiveObservationErrorMessage(
     failure.error,
-    failure.source === "stream"
-      ? "실시간 관측 연결이 지연되고 있습니다. 자동으로 다시 연결합니다."
-      : "관측 상태 조회가 지연되고 있습니다. 자동으로 다시 연결합니다."
+    "최신 상태를 받지 못했어요. 자동으로 다시 시도할게요."
   );
 }

@@ -15,48 +15,43 @@ export type LiveObservationRecommendedAction = {
 
 /** Keeps investigation guidance and the one real, user-approved draft action in the same decision area. */
 export function LiveObservationNextActions({
-  hasLogDetails,
   recommendedAction
 }: {
-  readonly hasLogDetails: boolean;
   readonly recommendedAction?: LiveObservationRecommendedAction | null | undefined;
 }) {
-  if (!hasLogDetails && !recommendedAction) return null;
+  if (!recommendedAction) return null;
 
   return (
     <section aria-labelledby="live-observation-next-actions-heading" className={styles.nextActions}>
-      <h3 id="live-observation-next-actions-heading">다음 확인</h3>
-      {hasLogDetails ? <p>대표 로그를 열어 자세한 내용을 확인할 수 있어요.</p> : null}
-      {recommendedAction ? (
-        <div className={styles.recommendedAction}>
-          <strong>{recommendedAction.title}</strong>
-          <p>{recommendedAction.description}</p>
-          {recommendedAction.isLoading ? (
-            <p role="status">AI가 현재 상황을 확인하고 있어요.</p>
-          ) : null}
-          {recommendedAction.explanation ? (
-            <p className={styles.recommendedActionExplanation}>{recommendedAction.explanation}</p>
-          ) : null}
-          {recommendedAction.errorMessage ? (
-            <p className={styles.recommendedActionError} role="alert">
-              {recommendedAction.errorMessage}
-            </p>
-          ) : null}
-          {recommendedAction.onAction ? (
-            <button
-              className={styles.recommendedActionButton}
-              disabled={recommendedAction.isApplying}
-              onClick={recommendedAction.onAction}
-              type="button"
-            >
-              {recommendedAction.isApplying
-                ? "Project Draft 저장 중..."
-                : recommendedAction.actionLabel}
-            </button>
-          ) : null}
-          <small>{recommendedAction.boundary}</small>
-        </div>
-      ) : null}
+      <h3 id="live-observation-next-actions-heading">다음 행동</h3>
+      <div className={styles.recommendedAction}>
+        <strong>{recommendedAction.title}</strong>
+        <p>{recommendedAction.description}</p>
+        {recommendedAction.isLoading ? <p role="status">수정안을 준비하고 있어요.</p> : null}
+        {recommendedAction.errorMessage ? (
+          <p className={styles.recommendedActionError} role="alert">
+            수정안을 준비하지 못했어요. 잠시 후 다시 시도해 주세요.
+          </p>
+        ) : null}
+        {recommendedAction.onAction ? (
+          <button
+            className={styles.recommendedActionButton}
+            disabled={recommendedAction.isApplying}
+            onClick={recommendedAction.onAction}
+            type="button"
+          >
+            {recommendedAction.isApplying
+              ? "수정안을 저장하고 있어요..."
+              : getActionLabel(recommendedAction.actionLabel)}
+          </button>
+        ) : null}
+        <small>{recommendedAction.boundary}</small>
+      </div>
     </section>
   );
+}
+
+/** Replaces an internal draft name with the user-visible action while preserving other real actions. */
+function getActionLabel(value: string): string {
+  return /Project Draft/i.test(value) ? "수정안 저장" : value;
 }
