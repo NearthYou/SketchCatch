@@ -164,18 +164,49 @@ export function ProductEntry() {
 
       <footer className={styles.siteFooter}>
         <div className={`${styles.container} ${styles.footerLayout}`}>
-          <div className={styles.footerBrand}>
-            <a
-              className={styles.brand}
-              href="#top"
-              onClick={(event) => handleSectionNavigation(event, "top", "#top")}
-            >
-              <span>SketchCatch</span>
-            </a>
-            <p>Practice Architecture to approved Deployment.</p>
+          <div className={styles.footerMain}>
+            <div className={styles.footerBrand}>
+              <a
+                className={styles.brand}
+                href="#top"
+                onClick={(event) => handleSectionNavigation(event, "top", "#top")}
+              >
+                <Image alt="" className={styles.brandMark} height={24} src="/sketchcatch-logo.png" width={16} />
+                <span>SketchCatch</span>
+              </a>
+              <p>Terraform 기반 멀티 클라우드 IaC 운영 서비스</p>
+            </div>
+            <nav aria-label="푸터 메뉴" className={styles.footerNav}>
+              <a
+                href="#workflow"
+                onClick={(event) => handleSectionNavigation(event, "workflow", "#workflow", "center")}
+              >
+                서비스 흐름
+              </a>
+              <a
+                href="#workspace"
+                onClick={(event) => handleSectionNavigation(event, "workspace-title", "#workspace")}
+              >
+                설계
+              </a>
+              <a
+                href="#reverse"
+                onClick={(event) => handleSectionNavigation(event, "reverse-content", "#reverse", "center")}
+              >
+                인프라 분석
+              </a>
+              <a
+                href="#deployment"
+                onClick={(event) => handleSectionNavigation(event, "deployment-content", "#deployment", "center")}
+              >
+                배포
+              </a>
+              <Link href="/login">로그인</Link>
+            </nav>
           </div>
-          <div className={styles.footerMeta}>
-            Product preview · 2026<br />Built from the SketchCatch product flow
+          <div className={styles.footerBottom}>
+            <span>© 2026 SketchCatch. All rights reserved.</span>
+            <span>설계부터 배포까지, 하나의 흐름으로.</span>
           </div>
         </div>
       </footer>

@@ -9,6 +9,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+- 2026-07-23: Replaced the landing preview footer with a production-style product footer containing the SketchCatch identity, provider-neutral IaC service description, product-section navigation, Login entry, copyright, and responsive mobile layout. Verified with the focused landing regression test, Web typecheck, scoped diff review, and harness check.
 - 2026-07-23: Localized the landing navigation, removed the duplicate product-tour action, and routed every landing start CTA through Login so Signup is entered only from the Login page. Verified with the focused landing-flow regression test, Web typecheck, scoped diff review, and harness check.
 - 2026-07-23: Added user-scoped Settings caches for AWS, GitHub, and AWS CodeConnections. Cached connection details now survive tab remounts for 30 minutes, stay fresh for 5 minutes, and explicit refresh updates every connection source. Verified with the focused cache regression test, Web typecheck, scoped diff review, and harness check.
 - 2026-07-23: Aligned the empty Cost Usage refresh action with the shared dashboard secondary-button UI, typography, icon, and busy state. Verified by scoped diff review and harness check.

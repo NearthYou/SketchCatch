@@ -22,4 +22,8 @@ test("landing navigation and entry actions use the Korean login-first flow", () 
   assert.doesNotMatch(productSectionsSource, /href="\/signup"/);
   assert.match(productEntrySource, /href="\/login"[\s\S]*설계 시작/);
   assert.match(productSectionsSource, /href="\/login"[\s\S]*새 프로젝트 시작하기/);
+  assert.doesNotMatch(productEntrySource, /Product preview|Built from the SketchCatch product flow/);
+  assert.match(productEntrySource, /Terraform 기반 멀티 클라우드 IaC 운영 서비스/);
+  assert.match(productEntrySource, /© 2026 SketchCatch\. All rights reserved\./);
+  assert.match(productEntrySource, /aria-label="푸터 메뉴"/);
 });
