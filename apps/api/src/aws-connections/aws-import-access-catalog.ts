@@ -130,6 +130,12 @@ export const AWS_IMPORT_READERS = [
     ]
   },
   {
+    serviceKey: "cloud-control",
+    displayName: "Cloud Control",
+    tier: "expanded",
+    actions: ["cloudformation:ListResources", "cloudformation:GetResource"]
+  },
+  {
     serviceKey: "tagging",
     displayName: "Resource Groups Tagging API",
     tier: "expanded",

@@ -26,6 +26,10 @@ import {
   ListTagsForResourceCommand as ListCloudFrontTagsForResourceCommand
 } from "@aws-sdk/client-cloudfront";
 import {
+  CloudControlClient,
+  ListResourcesCommand as ListCloudControlResourcesCommand
+} from "@aws-sdk/client-cloudcontrol";
+import {
   DescribeAlarmsCommand,
   CloudWatchClient,
   ListTagsForResourceCommand as ListCloudWatchTagsForResourceCommand
@@ -223,6 +227,7 @@ export const AWS_IMPORT_PROBE_EXECUTORS: ReadonlyMap<AwsImportServiceKey, AwsImp
     ["secretsmanager", probeSecretsManagerExecutor],
     ["application-autoscaling", probeApplicationAutoScalingExecutor],
     ["resource-explorer", probeResourceExplorerExecutor],
+    ["cloud-control", probeCloudControlExecutor],
     ["tagging", probeTagging],
     ["iam", probeIam],
     ["kms", probeKms],
@@ -763,6 +768,23 @@ async function probeResourceExplorerExecutor(
     context.abortSignal
   );
   return probeResourceExplorer({ send: (command) => client.send(command as never) });
+}
+
+/** gg: Cloud Control은 대표 AWS 종류의 첫 Resource 목록만 읽어 inventory 권한을 확인합니다. */
+async function probeCloudControlExecutor(
+  context: AwsImportProbeExecutorContext
+): Promise<AwsImportProbeOutcome> {
+  const client = bindAbortSignal(
+    new CloudControlClient({ region: context.region, credentials: context.credentials }),
+    context.abortSignal
+  );
+  await client.send(
+    new ListCloudControlResourcesCommand({
+      TypeName: "AWS::EC2::VPC",
+      MaxResults: 1
+    })
+  );
+  return "success";
 }
 
 /** gg: Tagging API는 한 resource만 요청하고 pagination token을 따르지 않습니다. */

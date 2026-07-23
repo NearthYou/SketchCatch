@@ -66,6 +66,21 @@ test("EventBridge import reader는 Rule과 Target을 읽는 최소 권한만 요
   );
 });
 
+test("Cloud Control inventory는 Resource 존재와 공개 설정을 읽는 최소 권한만 요청한다", () => {
+  const reader = AWS_IMPORT_READERS.find((candidate) => candidate.serviceKey === "cloud-control");
+
+  assert.equal(reader?.displayName, "Cloud Control");
+  assert.equal(reader?.tier, "expanded");
+  assert.deepEqual(reader?.actions, [
+    "cloudformation:ListResources",
+    "cloudformation:GetResource"
+  ]);
+  assert.doesNotMatch(
+    JSON.stringify(reader),
+    /Create|Update|Delete|Set|Register|Deregister/u
+  );
+});
+
 test("데모 토폴로지 reader는 필요한 metadata 읽기 권한만 요청한다", () => {
   const readers = new Map(AWS_IMPORT_READERS.map((reader) => [reader.serviceKey, reader]));
 

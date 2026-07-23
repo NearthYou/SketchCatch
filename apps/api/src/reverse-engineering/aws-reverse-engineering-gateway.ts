@@ -163,6 +163,12 @@ import {
   type ListObjectsV2CommandOutput
 } from "@aws-sdk/client-s3";
 import type { AwsConnection, ResourceType, ReverseEngineeringScanError } from "@sketchcatch/types";
+import {
+  isReverseEngineeringAwsProviderTypeSelected,
+  resolveReverseEngineeringAwsResourceTypeFromArn,
+  reverseEngineeringAwsResourceCatalog,
+  reverseEngineeringAwsResourceTypes
+} from "@sketchcatch/types/resource-definitions";
 import { createAwsSdkStsGateway } from "../aws-connections/aws-connection-test-service.js";
 import {
   prepareTerraformAwsCredentialEnv,
@@ -174,6 +180,7 @@ import type {
   AwsProviderScanGateway,
   AwsProviderScanInput
 } from "./aws-provider-adapter.js";
+import { readAwsCloudControlReverseEngineeringResources } from "./aws-cloud-control-reverse-engineering-reader.js";
 import { readAwsDeploymentSupportReverseEngineeringResources } from "./aws-deployment-support-reverse-engineering-reader.js";
 import { readAwsDetailedReverseEngineeringResources } from "./aws-detailed-reverse-engineering-reader.js";
 import { selectHigherPriorityReverseEngineeringScanError } from "./reverse-engineering-scan-error-priority.js";
@@ -201,6 +208,7 @@ export type AwsReverseEngineeringGatewayOptions = {
   prepareCredentials?: (awsConnection: AwsConnection) => Promise<TerraformAwsCredentialEnv>;
   readDetailedResources?: typeof readAwsDetailedReverseEngineeringResources;
   readDeploymentSupportResources?: typeof readAwsDeploymentSupportReverseEngineeringResources;
+  readCloudControlResources?: typeof readAwsCloudControlReverseEngineeringResources;
   readUnknownResources?: typeof listUnknownResources;
 };
 
@@ -211,6 +219,7 @@ export type AwsReverseEngineeringReaderPlan = {
   readonly eventBridgeResources: boolean;
   readonly detailedResources: boolean;
   readonly deploymentSupportResources: boolean;
+  readonly cloudControlResources: boolean;
   readonly unknownResources: boolean;
 };
 
@@ -466,6 +475,20 @@ export function createAwsReverseEngineeringGateway(
               )(input, credentials)
             ]
           : []),
+        ...(readerPlan.cloudControlResources
+          ? [
+              (
+                options.readCloudControlResources ??
+                readAwsCloudControlReverseEngineeringResources
+              )(
+                {
+                  providerResourceTypes: getAwsCloudControlProviderResourceTypes(input),
+                  region: input.region
+                },
+                credentials
+              )
+            ]
+          : []),
         ...(readerPlan.unknownResources
           ? [
               readUnknownResourceGroup(
@@ -554,6 +577,7 @@ export function createAwsReverseEngineeringReaderPlan(
     eventBridgeResources: shouldReadEventBridgeResourceGroup(input),
     detailedResources: shouldReadDetailedResourceGroup(input),
     deploymentSupportResources: shouldReadDeploymentSupportResourceGroup(input),
+    cloudControlResources: getAwsCloudControlProviderResourceTypes(input).length > 0,
     unknownResources: shouldReadUnknownResourceGroup(input)
   };
 }
@@ -596,6 +620,69 @@ const DETAILED_REVERSE_ENGINEERING_TYPES = new Set<ResourceType>([
   "API_GATEWAY_DEPLOYMENT",
   "API_GATEWAY_STAGE"
 ]);
+
+const DEDICATED_REVERSE_ENGINEERING_RESOURCE_TYPES = new Set<ResourceType>([
+  "VPC",
+  "SUBNET",
+  "ELASTIC_IP",
+  "NAT_GATEWAY",
+  "INTERNET_GATEWAY",
+  "ROUTE_TABLE",
+  "ROUTE_TABLE_ASSOCIATION",
+  "SECURITY_GROUP",
+  "EC2",
+  "AMI",
+  "RDS",
+  "S3",
+  "LOAD_BALANCER",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "LOAD_BALANCER_LISTENER",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION",
+  "EVENTBRIDGE_RULE",
+  "EVENTBRIDGE_TARGET",
+  "IAM_ROLE",
+  "IAM_POLICY",
+  "IAM_INSTANCE_PROFILE",
+  "LAMBDA",
+  "LAMBDA_PERMISSION",
+  "KMS_KEY",
+  "KMS_ALIAS",
+  "API_GATEWAY_REST_API",
+  "API_GATEWAY_RESOURCE",
+  "API_GATEWAY_METHOD",
+  "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
+  "API_GATEWAY_STAGE",
+  "ECR_REPOSITORY",
+  "SECRETS_MANAGER_SECRET",
+  "APPLICATION_AUTO_SCALING_TARGET",
+  "APPLICATION_AUTO_SCALING_POLICY",
+  "CLOUDFRONT",
+  "CLOUDWATCH_LOG_GROUP",
+  "CLOUDWATCH_METRIC_ALARM"
+]);
+
+/** gg: 전용 reader가 없는 선택 항목만 Cloud Control inventory로 보내 중복 보드를 막습니다. */
+export function getAwsCloudControlProviderResourceTypes(
+  input: AwsProviderScanInput
+): string[] {
+  return [
+    ...new Set(
+      reverseEngineeringAwsResourceCatalog.flatMap((entry) =>
+        DEDICATED_REVERSE_ENGINEERING_RESOURCE_TYPES.has(entry.resourceType)
+          ? []
+          : entry.providerResourceTypes.filter((providerResourceType) =>
+              isReverseEngineeringAwsProviderTypeSelected(
+                providerResourceType,
+                input.resourceTypes
+              )
+            )
+      )
+    )
+  ].sort();
+}
 
 /** gg: ALB family 선택 하나라도 있으면 같은 reader에서 안전한 의존 리소스를 함께 읽습니다. */
 function shouldReadElasticLoadBalancingResourceGroup(input: AwsProviderScanInput): boolean {
@@ -1710,10 +1797,7 @@ async function listUnknownResources(
         listCloudWatchMetricAlarmsAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
-  } else if (
-    shouldReadElasticLoadBalancingResourceGroup(input) ||
-    shouldReadDeploymentSupportResourceGroup(input)
-  ) {
+  } else if (shouldReadUnknownResourceGroup(input)) {
     reads.push(
       readResourceExplorerResourcesWithDiagnostics(input.region, credentials).then((result) =>
         filterGenericSelectedFallback(input, result)
@@ -1765,35 +1849,13 @@ export function filterGenericSelectedFallback(
   input: AwsProviderScanInput,
   result: AwsProviderDiscoveryResult
 ): AwsProviderDiscoveryResult {
-  const providerResourceTypes = new Set([
-    ...(shouldReadElasticLoadBalancingResourceGroup(input)
-      ? ["AWS::ElasticLoadBalancingV2::LoadBalancer"]
-      : []),
-    ...(shouldReadElasticLoadBalancingTargetGroups(input)
-      ? ["AWS::ElasticLoadBalancingV2::TargetGroup"]
-      : []),
-    ...(shouldReadElasticLoadBalancingListeners(input)
-      ? ["AWS::ElasticLoadBalancingV2::Listener"]
-      : []),
-    ...(input.resourceTypes.includes("ECR_REPOSITORY") ? ["AWS::ECR::Repository"] : []),
-    ...(input.resourceTypes.includes("SECRETS_MANAGER_SECRET")
-      ? ["AWS::SecretsManager::Secret"]
-      : []),
-    ...(input.resourceTypes.includes("APPLICATION_AUTO_SCALING_TARGET")
-      ? ["AWS::ApplicationAutoScaling::ScalableTarget"]
-      : []),
-    ...(input.resourceTypes.includes("APPLICATION_AUTO_SCALING_POLICY")
-      ? ["AWS::ApplicationAutoScaling::ScalingPolicy"]
-      : []),
-    ...(input.resourceTypes.includes("CLOUDFRONT")
-      ? ["AWS::CloudFront::Distribution", "AWS::CloudFront::OriginAccessControl"]
-      : [])
-  ]);
-
   return {
     ...result,
     records: result.records.filter((record) =>
-      providerResourceTypes.has(record.providerResourceType)
+      isReverseEngineeringAwsProviderTypeSelected(
+        record.providerResourceType,
+        input.resourceTypes
+      )
     )
   };
 }
@@ -4614,7 +4676,15 @@ const AWS_PROVIDER_RESOURCE_TYPE_BY_ARN_KIND = new Map<string, string>([
 ]);
 
 function toProviderResourceType(service: string, resourceKind: string): string {
+  const catalogResourceType = resolveReverseEngineeringAwsResourceTypeFromArn(
+    `arn:aws:${service}:region:account:${resourceKind}/resource`
+  );
+  const catalogProviderResourceType = reverseEngineeringAwsResourceCatalog
+    .find((entry) => entry.resourceType === catalogResourceType)
+    ?.providerResourceTypes.at(0);
+
   return (
+    catalogProviderResourceType ??
     AWS_PROVIDER_RESOURCE_TYPE_BY_ARN_KIND.get(
       `${service.toLowerCase()}:${resourceKind.toLowerCase()}`
     ) ?? `AWS::${toPascalCase(service)}::${toPascalCase(resourceKind)}`
@@ -5536,7 +5606,8 @@ export function shouldReadUnknownResourceGroup(input: AwsProviderScanInput): boo
     input.resourceTypes.includes("SECRETS_MANAGER_SECRET") ||
     input.resourceTypes.includes("APPLICATION_AUTO_SCALING_TARGET") ||
     input.resourceTypes.includes("APPLICATION_AUTO_SCALING_POLICY") ||
-    input.resourceTypes.includes("CLOUDFRONT")
+    input.resourceTypes.includes("CLOUDFRONT") ||
+    getAwsCloudControlProviderResourceTypes(input).length > 0
   );
 }
 

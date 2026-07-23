@@ -63,6 +63,7 @@ import {
   describeSubnets,
   describeVpcs,
   filterGenericSelectedFallback,
+  getAwsCloudControlProviderResourceTypes,
   isReverseEngineeringPromotedResourceArn,
   listAmiImagesAsUnknown,
   listApplicationLoadBalancers,
@@ -1028,7 +1029,8 @@ test("S3 상세 권한 실패는 리소스별 불완전 표시를 남기고 impo
   const result = await scanGatewayRecords(records);
   assert.equal(result.importSuggestions[0]?.status, "manual_review");
   assert.equal(result.importSuggestions[0]?.handoffReady, false);
-  assert.match(result.importSuggestions[0]?.reason ?? "", /details\.versioning/);
+  assert.match(result.importSuggestions[0]?.reason ?? "", /안전하게 수정할 설정/u);
+  assert.doesNotMatch(result.importSuggestions[0]?.reason ?? "", /details\.versioning/u);
 });
 
 test("S3 reader는 파일 이름을 저장하지 않고 Bucket에 안전한 파일 수 요약만 남긴다", async () => {
@@ -1181,7 +1183,7 @@ test("S3 암호화와 웹사이트 원문은 서버에만 두고 Bucket 자동 �
   assert.equal(publicBucket?.config["hasEncryptionConfiguration"], true);
   assert.equal(publicBucket?.config["hasWebsiteConfiguration"], true);
   assert.equal(publicBucket?.importSuggestionStatus, "manual_review");
-  assert.match(result.importSuggestions[0]?.reason ?? "", /암호화.*웹사이트/u);
+  assert.match(result.importSuggestions[0]?.reason ?? "", /안전하게 수정할 설정/u);
   assert.doesNotMatch(JSON.stringify(result), /123456789012|customer@example\.com|KMSMasterKeyID/u);
 });
 
@@ -1718,6 +1720,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     eventBridgeResources: true,
     detailedResources: true,
     deploymentSupportResources: true,
+    cloudControlResources: true,
     unknownResources: true
   });
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["LOAD_BALANCER"])), {
@@ -1727,6 +1730,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     eventBridgeResources: false,
     detailedResources: false,
     deploymentSupportResources: false,
+    cloudControlResources: false,
     unknownResources: true
   });
   for (const resourceType of ["LOAD_BALANCER_TARGET_GROUP", "LOAD_BALANCER_LISTENER"] as const) {
@@ -1737,6 +1741,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
       eventBridgeResources: false,
       detailedResources: false,
       deploymentSupportResources: false,
+      cloudControlResources: resourceType === "LOAD_BALANCER_TARGET_GROUP",
       unknownResources: true
     });
   }
@@ -1747,6 +1752,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     eventBridgeResources: false,
     detailedResources: false,
     deploymentSupportResources: true,
+    cloudControlResources: false,
     unknownResources: true
   });
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["UNKNOWN"])), {
@@ -1756,6 +1762,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     eventBridgeResources: false,
     detailedResources: false,
     deploymentSupportResources: false,
+    cloudControlResources: false,
     unknownResources: true
   });
 
@@ -1767,26 +1774,32 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
       eventBridgeResources: false,
       detailedResources: false,
       deploymentSupportResources: false,
+      cloudControlResources: false,
       unknownResources: false
     });
   }
 });
 
-test("IAM, Lambda, KMS, API Gateway 선택은 상세 reader만 켜고 UNKNOWN 중복 조회를 끈다", () => {
+test("Cloud Control은 전용 reader가 없는 선택 종류와 하위 구성만 읽는다", () => {
+  assert.deepEqual(
+    getAwsCloudControlProviderResourceTypes(scanInput(["DYNAMODB_TABLE"])),
+    ["AWS::DynamoDB::GlobalTable", "AWS::DynamoDB::Table"]
+  );
+  assert.deepEqual(getAwsCloudControlProviderResourceTypes(scanInput(["LAMBDA"])), [
+    "AWS::Lambda::Alias",
+    "AWS::Lambda::EventSourceMapping"
+  ]);
+  assert.deepEqual(getAwsCloudControlProviderResourceTypes(scanInput(["VPC"])), []);
+});
+
+test("전용 상세 reader만 필요한 종류는 generic inventory 중복 조회를 끈다", () => {
   for (const resourceType of [
     "IAM_ROLE",
     "IAM_POLICY",
     "IAM_INSTANCE_PROFILE",
-    "LAMBDA",
     "LAMBDA_PERMISSION",
     "KMS_KEY",
-    "KMS_ALIAS",
-    "API_GATEWAY_REST_API",
-    "API_GATEWAY_RESOURCE",
-    "API_GATEWAY_METHOD",
-    "API_GATEWAY_INTEGRATION",
-    "API_GATEWAY_DEPLOYMENT",
-    "API_GATEWAY_STAGE"
+    "KMS_ALIAS"
   ] as const) {
     const input = scanInput([resourceType]);
     const plan = createAwsReverseEngineeringReaderPlan(input);
@@ -1794,6 +1807,22 @@ test("IAM, Lambda, KMS, API Gateway 선택은 상세 reader만 켜고 UNKNOWN �
     assert.equal(plan.detailedResources, true, `${resourceType} 상세 reader`);
     assert.equal(plan.unknownResources, false, `${resourceType} UNKNOWN 중복 방지`);
     assert.equal(shouldReadUnknownResourceGroup(input), false);
+  }
+
+  for (const resourceType of [
+    "LAMBDA",
+    "API_GATEWAY_REST_API",
+    "API_GATEWAY_RESOURCE",
+    "API_GATEWAY_METHOD",
+    "API_GATEWAY_INTEGRATION",
+    "API_GATEWAY_DEPLOYMENT",
+    "API_GATEWAY_STAGE"
+  ] as const) {
+    const plan = createAwsReverseEngineeringReaderPlan(scanInput([resourceType]));
+
+    assert.equal(plan.detailedResources, true, `${resourceType} 상세 reader`);
+    assert.equal(plan.cloudControlResources, true, `${resourceType} 하위 구성 inventory`);
+    assert.equal(plan.unknownResources, true, `${resourceType} generic fallback`);
   }
 
   const unknownPlan = createAwsReverseEngineeringReaderPlan(scanInput(["UNKNOWN"]));
@@ -1814,6 +1843,23 @@ test("배포 지원 상세 reader를 선택해도 generic inventory fallback을 
 
     assert.equal(plan.deploymentSupportResources, true, `${resourceType} 상세 reader`);
     assert.equal(plan.unknownResources, true, `${resourceType} generic fallback`);
+    assert.equal(shouldReadUnknownResourceGroup(input), true);
+  }
+});
+
+test("전용 reader가 없는 AWS 종류도 generic inventory에서 찾는다", () => {
+  for (const resourceType of [
+    "DYNAMODB_TABLE",
+    "EFS_FILE_SYSTEM",
+    "ROUTE53_ZONE",
+    "SQS_QUEUE",
+    "EKS_CLUSTER",
+    "CLOUDTRAIL"
+  ] as const) {
+    const input = scanInput([resourceType]);
+    const plan = createAwsReverseEngineeringReaderPlan(input);
+
+    assert.equal(plan.unknownResources, true, `${resourceType} inventory fallback`);
     assert.equal(shouldReadUnknownResourceGroup(input), true);
   }
 });
@@ -1890,6 +1936,26 @@ test("ELB와 ECR을 함께 선택하면 두 family의 generic fallback을 모두
   );
 
   assert.deepEqual(result.records, [loadBalancer, repository]);
+});
+
+test("generic inventory는 사용자가 선택한 새 AWS 종류만 남긴다", () => {
+  const table = safeRecord(
+    "AWS::DynamoDB::Table",
+    "arn:aws:dynamodb:ap-northeast-2:111122223333:table/orders",
+    "orders"
+  );
+  const queue = safeRecord(
+    "AWS::SQS::Queue",
+    "arn:aws:sqs:ap-northeast-2:111122223333:jobs",
+    "jobs"
+  );
+
+  const result = filterGenericSelectedFallback(scanInput(["DYNAMODB_TABLE"]), {
+    records: [table, queue],
+    scanErrors: []
+  });
+
+  assert.deepEqual(result.records, [table]);
 });
 
 test("generic OAC ARN과 상세 OAC ID는 한 Resource로 합치고 상세 설정을 우선한다", () => {

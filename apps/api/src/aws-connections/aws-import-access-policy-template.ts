@@ -8,7 +8,7 @@ import {
   getAwsImportPolicyFingerprint
 } from "./aws-import-access-catalog.js";
 
-export const AWS_IMPORT_POLICY_CONTRACT_VERSION = "10";
+export const AWS_IMPORT_POLICY_CONTRACT_VERSION = "11";
 
 export type AwsImportIssuedPolicyActionRegistry = Readonly<Record<string, readonly string[]>>;
 
@@ -504,11 +504,21 @@ const AWS_IMPORT_ISSUED_POLICY_ACTIONS_THROUGH_V9 = {
 } as const satisfies AwsImportIssuedPolicyActionRegistry;
 
 /** gg: v9은 그대로 보존하고 CloudFront exact config 조회 권한만 v10에 추가합니다. */
-export const AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION = {
+const AWS_IMPORT_ISSUED_POLICY_ACTIONS_THROUGH_V10 = {
   ...AWS_IMPORT_ISSUED_POLICY_ACTIONS_THROUGH_V9,
   "10": [
     ...AWS_IMPORT_ISSUED_POLICY_ACTIONS_THROUGH_V9["9"],
     "cloudfront:GetDistributionConfig"
+  ].sort()
+} as const satisfies AwsImportIssuedPolicyActionRegistry;
+
+/** gg: v10은 그대로 보존하고 공통 AWS inventory 읽기 권한만 v11에 추가합니다. */
+export const AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION = {
+  ...AWS_IMPORT_ISSUED_POLICY_ACTIONS_THROUGH_V10,
+  "11": [
+    ...AWS_IMPORT_ISSUED_POLICY_ACTIONS_THROUGH_V10["10"],
+    "cloudformation:GetResource",
+    "cloudformation:ListResources"
   ].sort()
 } as const satisfies AwsImportIssuedPolicyActionRegistry;
 
