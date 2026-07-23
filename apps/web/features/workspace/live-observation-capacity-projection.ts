@@ -19,8 +19,10 @@ export function getLiveObservationCapacityProjection(
   architecture: ArchitectureJson,
   snapshot: LiveObservationV2Snapshot | null
 ): LiveObservationCapacityProjection | null {
+  if (!snapshot) return null;
+
   const evidence = readRequestScalingEvidence(recoverLiveObservationReferenceEdges(architecture));
-  if (!snapshot || !evidence) return null;
+  if (!evidence) return null;
 
   const predictedCount = clamp(
     Math.ceil(snapshot.live.projectedRequestsPerMinute / evidence.targetValue),

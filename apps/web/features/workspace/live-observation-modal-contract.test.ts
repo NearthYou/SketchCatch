@@ -260,6 +260,18 @@ test("keeps the Signal Dashboard and does not restore the legacy metric grid", (
   assert.doesNotMatch(modalSource, /operationalAnalysis|providerLogs|최근 런타임 로그/);
 });
 
+test("clears AI analysis state when its incident inputs disappear", () => {
+  const aiSimulationEffect = getSourceBlock(
+    modalSource,
+    "const selectedSessionId = selectedSession?.id ?? null;",
+    "}, [selectedArchitecture, selectedSession?.id, trafficIncidentSnapshot]);"
+  );
+
+  assert.match(
+    aiSimulationEffect,
+    /if \(!selectedArchitecture \|\| !trafficIncidentSnapshot \|\| !selectedSessionId\) \{[\s\S]*?aiAnalysisSessionRef\.current = null;[\s\S]*?setAiRecommendationState\("idle"\);[\s\S]*?setAiRecommendationError\(""\);[\s\S]*?setAiRecommendationExplanation\(""\);[\s\S]*?return;[\s\S]*?\}/
+  );
+});
 test("offers the capacity change only as an explicit Project Draft action", () => {
   assert.match(modalSource, /createLiveObservationDesignSimulationRequest/);
   assert.match(modalSource, /최대 실행 서버를/);

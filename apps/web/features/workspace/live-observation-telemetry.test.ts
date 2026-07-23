@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import test from "node:test";
 import type { LiveObservationV2Snapshot } from "@sketchcatch/types";
 import { createLiveObservationTelemetryModel } from "./live-observation-telemetry";
@@ -19,8 +19,24 @@ test("keeps immediate Store telemetry visible while provider metrics are unavail
     pressurePercent: 78,
     projectedRequestsPerMinute: 468,
     providerState: "unavailable",
-    rollingRequestsPerSecond: 7.8
+    rollingRequestsPerSecond: 7.8,
+    sessionStatus: "active"
   });
+});
+
+test("preserves terminal session status alongside the final provider payload", () => {
+  const value = snapshot({ state: "available" });
+  value.status = "stopped";
+  value.terminalAt = "2026-07-23T00:01:00.000Z";
+
+  const model = createLiveObservationTelemetryModel({
+    aiState: "ready",
+    architecture: null,
+    snapshot: value
+  });
+
+  assert.equal(model.providerState, "available");
+  assert.equal(model.sessionStatus, "stopped");
 });
 
 function snapshot({

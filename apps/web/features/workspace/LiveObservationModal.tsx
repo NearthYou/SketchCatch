@@ -249,7 +249,13 @@ export function LiveObservationModal({
 
   useEffect(() => {
     const selectedSessionId = selectedSession?.id ?? null;
-    if (!selectedArchitecture || !trafficIncidentSnapshot || !selectedSessionId) return;
+    if (!selectedArchitecture || !trafficIncidentSnapshot || !selectedSessionId) {
+      aiAnalysisSessionRef.current = null;
+      setAiRecommendationState("idle");
+      setAiRecommendationError("");
+      setAiRecommendationExplanation("");
+      return;
+    }
     if (aiAnalysisSessionRef.current === selectedSessionId) return;
 
     const input = createLiveObservationDesignSimulationRequest(

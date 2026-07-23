@@ -92,14 +92,16 @@ Short English-only working log for the current agent context. Older records are 
 2. Use a separately approved load cycle if provider-confirmed Live Observation scale-out must be accepted; no DB migration is required.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
 
-### 2026-07-23 - Live Observation telemetry and motion feedback
+### 2026-07-23 - Live Observation telemetry feedback and review fixes
 
 - Created branch `codex/live-observation-feedback` from `dev`.
 - Added an always-visible telemetry summary for accepted Store requests, rolling RPS, projected requests/minute, pressure, expected/actual Task count, provider observation state, and AI analysis state.
 - Made capacity projection recover Terraform reference edges before reading ECS target-tracking evidence, so expected Tasks appear even when persisted architecture edges are absent.
-- Preserved exact request/overflow accounting while capping animated particle DOM work at 12 and disabling the redundant connector sweep during bursts.
-- AI recommendation results now retain and render the LLM/deterministic explanation; the loading state remains visible immediately.
-- Removed the rendered `현재 상태` summary and the focused `실시간 트래픽 · 핵심 데이터 흐름` diagram. The deployment selector now labels the selected timestamp inline as `배포 시각`.
-- Verification: modal contracts pass 18/18, dashboard rendering tests pass 8/8, Web typecheck and lint pass, and the root production build completes all five packages and 23 Web routes.
-- Browser verification confirms the telemetry summary is now the first dashboard content and the removed status/flow sections do not render. The local fixture still reports a pre-existing server/client Korean time-format hydration mismatch.
+- Removed the rendered current-status summary and focused traffic-flow diagram. The deployment selector now labels the selected timestamp inline as `배포 시각`.
+- Review fixes preserve stopped and expired lifecycle states, distinguish unavailable AWS observation from delayed data, show actual Task counts without a forecast, and reset cancelled AI analysis when its incident inputs disappear.
+- Memoized telemetry isolates the one-second countdown repaint from architecture recovery work, and null snapshots now return before reference recovery.
+- Deleted the unrendered focused-flow component, its diagram/particle/capacity-transition modules, focused-flow CSS, traffic-burst helpers, and obsolete tests instead of maintaining inactive animation work.
+- Verification: 109 Live Observation tests, Web lint, Web typecheck, and harness checks pass. Root lint, root typecheck, and root build pass across all five packages; the Web build generated all 23 routes.
+- Cross-impact verification found zero remaining TypeScript references to the 20 removed focused-flow CSS classes and no changes under API, shared types, AWS connection, Deployment, or CI/CD implementation files. AWS connection, Deployment, and CI/CD regressions pass 318/320; the two failures are unchanged stale CI/CD blue-primary contracts whose implementation files are outside this diff.
+- Browser verification confirms the telemetry summary is the first dashboard content and the removed status/flow sections do not render. The local fixture still reports a pre-existing server/client Korean time-format hydration mismatch.
 - No migration, dependency, cloud, traffic, or deployment mutation was performed.
