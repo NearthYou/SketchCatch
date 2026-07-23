@@ -23,6 +23,11 @@ import type {
   AwsImportAccessRepository,
   AwsImportCleanupInspectionOperationKind
 } from "./aws-import-access-repository.js";
+import {
+  hasNoAwsImportAccessCompanionArtifacts,
+  isDirectAwsImportReadProbeMarker,
+  requiresAwsImportAccessCleanup
+} from "./aws-import-access-repository.js";
 import { AWS_IMPORT_READERS } from "./aws-import-access-catalog.js";
 import {
   probeAwsImportAccess,
@@ -84,6 +89,23 @@ export function createAwsImportAccessService(
   const generateOperationId = options.generateOperationId ?? randomUUID;
   const probeImportAccess = options.probeImportAccess ?? probeAwsImportAccess;
 
+  /** gg: 직접·기존 경로 모두 같은 bounded probe를 사용하고 provider 원문은 결과에 남기지 않습니다. */
+  async function runImportReadProbe(
+    connection: Parameters<typeof probeAwsImportAccess>[0]["connection"]
+  ): Promise<AwsImportProbeResult> {
+    try {
+      return await probeImportAccess({ connection });
+    } catch {
+      return {
+        status: "retry_required",
+        coreReady: false,
+        serviceResults: [],
+        limitedServiceLabels: [],
+        safeErrorCode: "probe_retry"
+      };
+    }
+  }
+
   /** gg: cleanup read는 AWS 호출 전에 lease를 claim하고 같은 operation CAS로만 결과를 저장합니다. */
   async function runCleanupInspection(
     input: AwsImportAccessOwnerInput,
@@ -101,6 +123,10 @@ export function createAwsImportAccessService(
       now: commandNow
     });
     const operationId = generateOperationId();
+    // gg: 직접 읽기 확인 marker는 AWS 보조 artifact가 없으므로 정리 흐름을 만들지 않습니다.
+    if (isDirectAwsImportReadProbeMarker(current)) {
+      return toCommandResponse(current, current.operationId ?? operationId);
+    }
     if (current.status === "cleanup_complete") {
       return toCommandResponse(current, current.operationId ?? operationId);
     }
@@ -454,10 +480,15 @@ export function createAwsImportAccessService(
       return toCommandResponse(completion.record, input.operationId);
     },
 
-    // gg: 실제 probe 결과를 allowlisted 상태와 serviceKey outcome으로만 저장합니다.
+    // gg: 보조 Stack이 없는 신규 연결은 먼저 읽기만 확인하고, 부족할 때만 기존 Console 승인 흐름으로 돌아갑니다.
     async checkImportReads(input) {
       const connection = await requireOwnedConnection(input, options.connectionRepository);
-      await options.repository.getOrCreate({ connectionId: input.connectionId, now: now() });
+      const current = await options.repository.getOrCreate({
+        connectionId: input.connectionId,
+        now: now()
+      });
+      const canDirectlyProbe = hasNoAwsImportAccessCompanionArtifacts(current) &&
+        (current.status === "check_required" || isDirectAwsImportReadProbeMarker(current));
       const operationId = generateOperationId();
       const claimedAt = now();
       const claim = await options.repository.claimImportReads({
@@ -479,6 +510,46 @@ export function createAwsImportAccessService(
         contract,
         expectedCurrent: createExpectedCurrentState(claim.record)
       });
+      const hasNoAwsCompanionArtifacts = inspection.managerStatus === "absent" &&
+        inspection.policyStatus === "absent";
+      if (canDirectlyProbe && hasNoAwsCompanionArtifacts) {
+        const probe = await runImportReadProbe(connection);
+        const coreReadSummary = Object.fromEntries(
+          probe.serviceResults
+            .filter((result) => result.tier === "core")
+            .map((result) => [result.serviceKey, result.outcome])
+        );
+        const expandedReadSummary = Object.fromEntries(
+          probe.serviceResults
+            .filter((result) => result.tier === "expanded")
+            .map((result) => [result.serviceKey, result.outcome])
+        );
+        const status: AwsImportAccessStatus = probe.status === "update_required"
+          ? "check_required"
+          : probe.status;
+        const completion = await options.repository.finishImportReads({
+          connectionId: input.connectionId,
+          operationId,
+          now: now(),
+          changes: {
+            status,
+            operationId,
+            operationKind: "check_reads",
+            coreReadSummary,
+            expandedReadSummary,
+            leaseExpiresAt: null,
+            lastCheckedAt: now(),
+            safeErrorCode: probe.safeErrorCode,
+            safeErrorSummary: probe.status === "update_required"
+              ? "AWS 구조를 읽는 데 필요한 권한을 준비해 주세요."
+              : safeSummaryForProbeStatus(probe.status)
+          }
+        });
+        if (completion.kind === "stale") {
+          throw new AwsImportAccessLeaseError("권한 작업 상태가 변경되었습니다.");
+        }
+        return toCommandResponse(completion.record, operationId);
+      }
       if (
         !inspection.verified || inspection.managerStatus !== "target" ||
         inspection.policyStatus !== "target"
@@ -504,18 +575,7 @@ export function createAwsImportAccessService(
         }
         return toCommandResponse(completion.record, operationId);
       }
-      let probe: AwsImportProbeResult;
-      try {
-        probe = await probeImportAccess({ connection });
-      } catch {
-        probe = {
-          status: "retry_required",
-          coreReady: false,
-          serviceResults: [],
-          limitedServiceLabels: [],
-          safeErrorCode: "probe_retry"
-        };
-      }
+      const probe = await runImportReadProbe(connection);
       const coreReadSummary = Object.fromEntries(
         probe.serviceResults
           .filter((result) => result.tier === "core")
@@ -992,7 +1052,7 @@ function toPublicState(record: AwsImportAccessRecord): AwsImportAccessState {
     connectionId: record.awsConnectionId,
     status: record.status,
     nextAction: nextActionForRecord(record),
-    cleanupAvailable: record.status !== "cleanup_complete",
+    cleanupAvailable: requiresAwsImportAccessCleanup(record),
     coreReady: Object.values(record.coreReadSummary ?? {}).every(
       (outcome) => outcome === "success"
     ) && Object.keys(record.coreReadSummary ?? {}).length > 0,

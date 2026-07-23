@@ -5,6 +5,69 @@ import { awsImportAccess } from "../db/schema.js";
 
 export type AwsImportAccessRecord = typeof awsImportAccess.$inferSelect;
 
+type AwsImportAccessCompanionArtifactRecord = Pick<
+  AwsImportAccessRecord,
+  | "status"
+  | "operationKind"
+  | "managerStackName"
+  | "managerStackId"
+  | "managerContractVersion"
+  | "managerTemplateHash"
+  | "policyStackName"
+  | "policyStackId"
+  | "policyContractVersion"
+  | "policyTemplateHash"
+  | "targetRoleArn"
+  | "serviceRoleArn"
+  | "readPolicyArn"
+  | "controlPolicyArn"
+  | "cleanupVerificationPolicyArn"
+  | "policyFingerprint"
+>;
+
+/** gg: 보조 Stack·Policy 계약을 아직 시작하지 않은 연결만 직접 읽기 확인으로 처리합니다. */
+export function hasNoAwsImportAccessCompanionArtifacts(
+  record: AwsImportAccessCompanionArtifactRecord
+): boolean {
+  return [
+    record.managerStackName,
+    record.managerStackId,
+    record.managerContractVersion,
+    record.managerTemplateHash,
+    record.policyStackName,
+    record.policyStackId,
+    record.policyContractVersion,
+    record.policyTemplateHash,
+    record.targetRoleArn,
+    record.serviceRoleArn,
+    record.readPolicyArn,
+    record.controlPolicyArn,
+    record.cleanupVerificationPolicyArn,
+    record.policyFingerprint
+  ].every((value) => value === null);
+}
+
+/** gg: 직접 읽기 확인 marker는 AWS 보조 Stack·Policy를 만들지 않았으므로 연결 해제 정리를 요구하지 않습니다. */
+export function isDirectAwsImportReadProbeMarker(
+  record: AwsImportAccessCompanionArtifactRecord
+): boolean {
+  const hasNoCompanionArtifact = hasNoAwsImportAccessCompanionArtifacts(record);
+  return record.operationKind === "check_reads" &&
+    hasNoCompanionArtifact &&
+    (record.status === "check_required" ||
+      record.status === "ready" ||
+      record.status === "limited" ||
+      record.status === "retry_required" ||
+      record.status === "connection_required");
+}
+
+/** gg: 실제 보조 artifact가 남은 경우만 기존 정리·연결 해제 보호선을 유지합니다. */
+export function requiresAwsImportAccessCleanup(
+  record: AwsImportAccessCompanionArtifactRecord
+): boolean {
+  return record.status !== "cleanup_complete" && !isDirectAwsImportReadProbeMarker(record);
+}
+
 export type AwsImportAccessRecordChanges = Partial<
   Omit<AwsImportAccessRecord, "awsConnectionId" | "createdAt" | "updatedAt">
 >;

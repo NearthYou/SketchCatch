@@ -36,6 +36,10 @@ import {
   type AwsConnectionTester
 } from "./aws-connection-test-service.js";
 import { createAwsImportReadPolicyDocument } from "./aws-import-access-catalog.js";
+import {
+  isDirectAwsImportReadProbeMarker,
+  requiresAwsImportAccessCleanup
+} from "./aws-import-access-repository.js";
 
 export const recommendedAwsConnectionRoleName = "SketchCatchTerraformExecutionRole";
 export const recommendedCodeBuildPermissionsBoundaryName = "SketchCatchCodeBuildBoundary";
@@ -453,13 +457,13 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
       return result?.count ?? 0;
     },
 
-    // gg: preview는 import child가 없거나 exact cleanup_complete일 때만 삭제를 제안합니다.
+    // gg: 직접 읽기 확인 marker는 AWS 보조 artifact가 없으므로 연결 해제를 막지 않습니다.
     async findAwsImportAccessCleanupStatus(connectionId) {
       const [record] = await db
-        .select({ status: awsImportAccess.status })
+        .select()
         .from(awsImportAccess)
         .where(eq(awsImportAccess.awsConnectionId, connectionId));
-      return record?.status;
+      return record && requiresAwsImportAccessCleanup(record) ? record.status : undefined;
     },
 
     // gg: fresh/retry claim 모두 같은 transaction에서 import cleanup 상태를 먼저 잠급니다.
@@ -478,11 +482,11 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
           .for("update");
         if (!connection) return undefined;
         const [importAccess] = await transaction
-          .select({ status: awsImportAccess.status })
+          .select()
           .from(awsImportAccess)
           .where(eq(awsImportAccess.awsConnectionId, connectionId))
           .for("update");
-        if (importAccess && importAccess.status !== "cleanup_complete") {
+        if (importAccess && requiresAwsImportAccessCleanup(importAccess)) {
           return {
             connection,
             claimed: false,
@@ -560,7 +564,7 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
         );
     },
 
-    // gg: final parent delete 직전 child를 다시 잠그고 cleanup_complete만 함께 제거합니다.
+    // gg: final parent delete는 실제 보조 artifact와 direct probe marker를 구분해 child FK를 안전하게 해제합니다.
     async deleteClaimedAwsConnection(connectionId, accessContext) {
       return db.transaction(async (transaction) => {
         const [claimedConnection] = await transaction
@@ -576,11 +580,11 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
           .for("update");
         if (!claimedConnection) return undefined;
         const [importAccess] = await transaction
-          .select({ status: awsImportAccess.status })
+          .select()
           .from(awsImportAccess)
           .where(eq(awsImportAccess.awsConnectionId, connectionId))
           .for("update");
-        if (importAccess && importAccess.status !== "cleanup_complete") {
+        if (importAccess && requiresAwsImportAccessCleanup(importAccess)) {
           throw new AwsConnectionDeleteConflictError(
             "AWS 가져오기 권한 정리 상태가 변경되었습니다. 다시 확인해 주세요."
           );
@@ -589,15 +593,13 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
           .update(projectBuildEnvironments)
           .set({ status: "disconnected", lastVerifiedAt: null, updatedAt: new Date() })
           .where(eq(projectBuildEnvironments.awsConnectionId, connectionId));
-        if (importAccess?.status === "cleanup_complete") {
+        if (
+          importAccess?.status === "cleanup_complete" ||
+          (importAccess ? isDirectAwsImportReadProbeMarker(importAccess) : false)
+        ) {
           await transaction
             .delete(awsImportAccess)
-            .where(
-              and(
-                eq(awsImportAccess.awsConnectionId, connectionId),
-                eq(awsImportAccess.status, "cleanup_complete")
-              )
-            );
+            .where(eq(awsImportAccess.awsConnectionId, connectionId));
         }
         const [connection] = await transaction
           .delete(awsConnections)

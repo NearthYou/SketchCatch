@@ -63,6 +63,149 @@ test("getState exposes cleanup for persisted incomplete rows but not completed c
   }
 });
 
+test("a direct read probe saves a ready marker without a cleanup action", async () => {
+  const fixture = createImportAccessServiceFixture();
+  configureAbsentImportCompanionArtifacts(fixture);
+  let cleanupInspections = 0;
+  fixture.gateway.inspectCleanup = async () => {
+    cleanupInspections += 1;
+    throw new Error("direct read markers must not start cleanup inspection");
+  };
+
+  const checked = await fixture.service.checkImportReads(fixture.ownerInput);
+  const cleanup = await fixture.service.prepareCleanup(fixture.ownerInput);
+
+  assert.equal(checked.state.status, "ready");
+  assert.equal(checked.state.cleanupAvailable, false);
+  assert.equal(checked.state.nextAction, null);
+  assert.equal(fixture.getRecord()?.managerStackId, null);
+  assert.equal(fixture.getRecord()?.policyStackId, null);
+  assert.equal(cleanup.state.status, "ready");
+  assert.equal(cleanupInspections, 0);
+});
+
+test("a direct read probe saves limited services without creating companion artifacts", async () => {
+  const fixture = createImportAccessServiceFixture({
+    probeResult: createProbeResult({ iam: "permission_denied" })
+  });
+  configureAbsentImportCompanionArtifacts(fixture);
+
+  const result = await fixture.service.checkImportReads(fixture.ownerInput);
+
+  assert.equal(result.state.status, "limited");
+  assert.equal(result.state.coreReady, true);
+  assert.deepEqual(result.state.limitedServiceLabels, ["IAM"]);
+  assert.equal(result.state.cleanupAvailable, false);
+  assert.equal(fixture.getRecord()?.managerStackId, null);
+  assert.equal(fixture.getRecord()?.policyStackId, null);
+});
+
+test("a direct probe with missing core reads returns to the existing manager recovery flow", async () => {
+  const fixture = createImportAccessServiceFixture({
+    probeResult: {
+      status: "update_required",
+      coreReady: false,
+      serviceResults: [
+        {
+          serviceKey: "ec2",
+          displayName: "EC2 네트워크와 컴퓨팅",
+          tier: "core",
+          outcome: "permission_denied"
+        }
+      ],
+      limitedServiceLabels: [],
+      safeErrorCode: "core_read_denied"
+    }
+  });
+  configureAbsentImportCompanionArtifacts(fixture);
+  let prepared = 0;
+  fixture.gateway.prepareManager = async () => {
+    prepared += 1;
+    return { consoleUrl: "https://console.example/manager" };
+  };
+
+  const checked = await fixture.service.checkImportReads(fixture.ownerInput);
+  const recovered = await fixture.service.prepareManager(fixture.ownerInput);
+
+  assert.equal(checked.state.status, "check_required");
+  assert.equal(checked.state.nextAction, "prepare_manager");
+  assert.equal(checked.state.cleanupAvailable, false);
+  assert.equal(fixture.getRecord()?.managerStackId, null);
+  assert.equal(recovered.state.status, "manager_approval_required");
+  assert.equal(prepared, 1);
+});
+
+test("a direct probe preserves retry and connection recovery states", async () => {
+  for (const scenario of [
+    {
+      status: "retry_required" as const,
+      nextAction: "check_reads" as const,
+      safeErrorCode: "probe_retry"
+    },
+    {
+      status: "connection_required" as const,
+      nextAction: "open_settings" as const,
+      safeErrorCode: "target_role_unavailable"
+    }
+  ]) {
+    const fixture = createImportAccessServiceFixture({
+      probeResult: {
+        status: scenario.status,
+        coreReady: false,
+        serviceResults: [],
+        limitedServiceLabels: [],
+        safeErrorCode: scenario.safeErrorCode
+      }
+    });
+    configureAbsentImportCompanionArtifacts(fixture);
+
+    const result = await fixture.service.checkImportReads(fixture.ownerInput);
+
+    assert.equal(result.state.status, scenario.status);
+    assert.equal(result.state.nextAction, scenario.nextAction);
+    assert.equal(result.state.cleanupAvailable, false);
+  }
+});
+
+test("an existing companion artifact keeps the managed-policy read-check path", async () => {
+  const fixture = createImportAccessServiceFixture();
+  const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  Object.assign(record, {
+    managerStackId: "stored-manager-stack-id",
+    managerContractVersion: "1",
+    managerTemplateHash: "a".repeat(64),
+    policyStackId: "stored-policy-stack-id",
+    policyContractVersion: "1",
+    policyTemplateHash: "b".repeat(64),
+    policyFingerprint: "c".repeat(64)
+  });
+  let expectedManagerStackId: string | undefined;
+  fixture.gateway.inspectManager = async (input) => {
+    expectedManagerStackId = input.expectedCurrent?.manager?.stackId;
+    return {
+      verified: true,
+      managerStatus: "target",
+      managerStackId: "stored-manager-stack-id",
+      managerContractVersion: "1",
+      managerTemplateSha256: "a".repeat(64),
+      policyStatus: "target",
+      policyStackId: "stored-policy-stack-id",
+      policyStackExists: true,
+      policyContractVersion: "1",
+      policyTemplateSha256: "b".repeat(64),
+      policyFingerprint: "c".repeat(64)
+    };
+  };
+
+  const result = await fixture.service.checkImportReads(fixture.ownerInput);
+
+  assert.equal(expectedManagerStackId, "stored-manager-stack-id");
+  assert.equal(result.state.status, "ready");
+  assert.equal(result.state.cleanupAvailable, true);
+  assert.equal(fixture.getRecord()?.managerStackId, "stored-manager-stack-id");
+  assert.equal(fixture.getRecord()?.policyStackId, "stored-policy-stack-id");
+});
+
 test("policy apply consumes one approval and preserves deployment verification", async () => {
   const fixture = createImportAccessServiceFixture({ connectionStatus: "verified" });
   const preview = await fixture.service.previewPolicy(fixture.ownerInput);
@@ -880,7 +1023,10 @@ test("checkImportReads persists serviceKey outcomes and maps public labels from 
     iam: "permission_denied"
   });
   assert.equal(fixture.getRecord()?.policyStackId, "policy-stack-id");
-  assert.equal(fixture.getRecord()?.policyContractVersion, "6");
+  assert.equal(
+    fixture.getRecord()?.policyContractVersion,
+    fixture.gateway.policyContractVersion
+  );
   assert.match(fixture.getRecord()?.policyTemplateHash ?? "", /^[0-9a-f]{64}$/u);
   assert.match(fixture.getRecord()?.policyFingerprint ?? "", /^[0-9a-f]{64}$/u);
   assert.doesNotMatch(JSON.stringify(fixture.getRecord()), /AccessDenied|RequestId|arn:aws/u);
@@ -1186,6 +1332,7 @@ function createImportAccessServiceFixture(
   };
   const gateway: AwsImportAccessServiceGateway & {
     managerStackId: string;
+    policyContractVersion?: string;
     policyMutations: string[];
     deleteCalls: number;
   } = {
@@ -1196,6 +1343,7 @@ function createImportAccessServiceFixture(
       return { consoleUrl: "https://ap-northeast-2.console.aws.amazon.com/cloudformation/home" };
     },
     async inspectManager(input) {
+      this.policyContractVersion = input.contract.policyContractVersion;
       if (record?.operationKind === "check_reads") {
         const policyReady = options.policyReadyForProbe !== false;
         return {
@@ -1297,6 +1445,25 @@ function createProbeResult(
     limitedServiceLabels: [],
     safeErrorCode: null
   };
+}
+
+function configureAbsentImportCompanionArtifacts(
+  fixture: ReturnType<typeof createImportAccessServiceFixture>
+) {
+  fixture.gateway.inspectManager = async () => ({
+    verified: false,
+    managerStatus: "absent",
+    managerStackId: null,
+    managerContractVersion: null,
+    managerTemplateSha256: null,
+    policyStatus: "absent",
+    policyStackId: null,
+    policyStackExists: false,
+    policyContractVersion: null,
+    policyTemplateSha256: null,
+    policyFingerprint: null,
+    reason: "not_found" as const
+  });
 }
 
 function createVerifiedManagerCleanupInspection(identity: {
