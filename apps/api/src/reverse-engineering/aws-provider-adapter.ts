@@ -98,11 +98,18 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::Lambda::Permission", "LAMBDA_PERMISSION"],
   ["AWS::IAM::Role", "IAM_ROLE"],
   ["AWS::IAM::Policy", "IAM_POLICY"],
+  ["AWS::IAM::RolePolicy", "IAM_POLICY"],
   ["AWS::IAM::InstanceProfile", "IAM_INSTANCE_PROFILE"],
   ["AWS::KMS::Key", "KMS_KEY"],
+  ["AWS::KMS::Alias", "KMS_ALIAS"],
   ["AWS::Logs::LogGroup", "CLOUDWATCH_LOG_GROUP"],
   ["AWS::CloudWatch::Alarm", "CLOUDWATCH_METRIC_ALARM"],
   ["AWS::ApiGateway::RestApi", "API_GATEWAY_REST_API"],
+  ["AWS::ApiGateway::Resource", "API_GATEWAY_RESOURCE"],
+  ["AWS::ApiGateway::Method", "API_GATEWAY_METHOD"],
+  ["AWS::ApiGateway::Integration", "API_GATEWAY_INTEGRATION"],
+  ["AWS::ApiGateway::Deployment", "API_GATEWAY_DEPLOYMENT"],
+  ["AWS::ApiGateway::Stage", "API_GATEWAY_STAGE"],
   ["AWS::Events::Rule", "EVENTBRIDGE_RULE"],
   ["AWS::Events::Target", "EVENTBRIDGE_TARGET"],
   ["AWS::ElasticLoadBalancingV2::LoadBalancer", "LOAD_BALANCER"],
@@ -175,11 +182,20 @@ const OPAQUE_PUBLIC_ID_RESOURCE_TYPES = new Set([
   "AWS::Lambda::Permission",
   "AWS::IAM::Role",
   "AWS::IAM::Policy",
-  "AWS::IAM::InstanceProfile"
+  "AWS::IAM::RolePolicy",
+  "AWS::IAM::InstanceProfile",
+  "AWS::KMS::Key",
+  "AWS::KMS::Alias",
+  "AWS::ApiGateway::Resource",
+  "AWS::ApiGateway::Method",
+  "AWS::ApiGateway::Integration",
+  "AWS::ApiGateway::Deployment",
+  "AWS::ApiGateway::Stage"
 ]);
 const IAM_OWNERSHIP_RESOURCE_TYPES = new Set([
   "AWS::IAM::Role",
   "AWS::IAM::Policy",
+  "AWS::IAM::RolePolicy",
   "AWS::IAM::InstanceProfile"
 ]);
 const ELASTIC_LOAD_BALANCING_RESOURCE_TYPES = new Set([
@@ -192,6 +208,17 @@ const IAM_CLOUD_FORMATION_OWNERSHIP_TAG_KEYS = new Set([
   "aws:cloudformation:stack-name",
   "aws:cloudformation:logical-id"
 ]);
+const DETAILED_REVERSE_ENGINEERING_PUBLIC_STATUS_KEYS = [
+  "managementReady",
+  "reverseEngineeringDetailsComplete",
+  "reverseEngineeringDetailsVersion",
+  "reverseEngineeringIncompleteDetails"
+] as const;
+const API_GATEWAY_PUBLIC_TOPOLOGY_STATUS_KEYS = [
+  ...DETAILED_REVERSE_ENGINEERING_PUBLIC_STATUS_KEYS,
+  "apiGatewayTopologyClassification",
+  "apiGatewayAdvancedFeatures"
+] as const;
 const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>([
   [
     "AWS::EC2::EIP",
@@ -218,17 +245,75 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
   [
     "AWS::ApiGateway::RestApi",
     new Set([
+      ...API_GATEWAY_PUBLIC_TOPOLOGY_STATUS_KEYS,
       "apiKeySource",
       "binaryMediaTypes",
       "description",
       "disableExecuteApiEndpoint",
       "endpointConfiguration",
+      "endpointTypes",
+      "hasDescription",
       "hasResourcePolicy",
       "id",
       "minimumCompressionSize",
       "name",
+      "tagCount",
       "tags",
-      "tagsReadComplete"
+      "tagsReadComplete",
+      "version"
+    ])
+  ],
+  [
+    "AWS::ApiGateway::Resource",
+    new Set([...API_GATEWAY_PUBLIC_TOPOLOGY_STATUS_KEYS, "hasMethods", "path", "pathPart"])
+  ],
+  [
+    "AWS::ApiGateway::Method",
+    new Set([
+      ...API_GATEWAY_PUBLIC_TOPOLOGY_STATUS_KEYS,
+      "apiKeyRequired",
+      "authorizationType",
+      "hasAuthorizer",
+      "hasRequestModels",
+      "hasRequestParameters",
+      "hasValidator",
+      "httpMethod",
+      "responseCount"
+    ])
+  ],
+  [
+    "AWS::ApiGateway::Integration",
+    new Set([
+      ...API_GATEWAY_PUBLIC_TOPOLOGY_STATUS_KEYS,
+      "cacheConfigured",
+      "connectionType",
+      "contentHandling",
+      "hasCredentials",
+      "hasRequestParameters",
+      "hasRequestTemplates",
+      "hasVpcLink",
+      "integrationHttpMethod",
+      "integrationType",
+      "passthroughBehavior",
+      "timeoutInMillis"
+    ])
+  ],
+  [
+    "AWS::ApiGateway::Deployment",
+    new Set([...API_GATEWAY_PUBLIC_TOPOLOGY_STATUS_KEYS, "createdAt", "hasDescription"])
+  ],
+  [
+    "AWS::ApiGateway::Stage",
+    new Set([
+      ...API_GATEWAY_PUBLIC_TOPOLOGY_STATUS_KEYS,
+      "cacheEnabled",
+      "hasAccessLogs",
+      "hasCanary",
+      "hasDescription",
+      "hasStageVariables",
+      "stageName",
+      "tagCount",
+      "tracingEnabled"
     ])
   ],
   [
@@ -359,6 +444,7 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
   [
     "AWS::Lambda::Function",
     new Set([
+      ...DETAILED_REVERSE_ENGINEERING_PUBLIC_STATUS_KEYS,
       "architectures",
       "codeSize",
       "ephemeralStorageSize",
@@ -380,41 +466,99 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
   ],
   [
     "AWS::Lambda::Permission",
-    new Set(["effect", "functionName", "hasCondition", "permissionIndex"])
+    new Set([
+      ...DETAILED_REVERSE_ENGINEERING_PUBLIC_STATUS_KEYS,
+      "effect",
+      "functionName",
+      "hasCondition",
+      "permissionIndex"
+    ])
   ],
   [
     "AWS::IAM::Role",
     new Set([
+      ...DETAILED_REVERSE_ENGINEERING_PUBLIC_STATUS_KEYS,
+      "attachedPolicyCount",
       "createdAt",
       "description",
       "hasPermissionsBoundary",
       "hasTrustPolicy",
+      "inlinePolicyNames",
       "lastUsedAt",
       "lastUsedRegion",
       "maxSessionDuration",
+      "ownership",
       "path",
       "roleName",
-      "scanRegion"
+      "scanRegion",
+      "tagsReadComplete",
+      "trustPolicyRedacted"
     ])
   ],
   [
     "AWS::IAM::Policy",
     new Set([
+      ...DETAILED_REVERSE_ENGINEERING_PUBLIC_STATUS_KEYS,
       "attachmentCount",
       "createdAt",
+      "defaultVersionId",
       "description",
       "isAttachable",
+      "ownership",
       "path",
       "permissionsBoundaryUsageCount",
+      "policyDocumentRedacted",
       "policyName",
       "scanRegion",
+      "tagsReadComplete",
       "updatedAt"
     ])
   ],
   [
     "AWS::IAM::InstanceProfile",
-    new Set(["createdAt", "instanceProfileName", "path", "roleNames", "scanRegion"])
+    new Set([
+      ...DETAILED_REVERSE_ENGINEERING_PUBLIC_STATUS_KEYS,
+      "createdAt",
+      "instanceProfileName",
+      "ownership",
+      "path",
+      "roleNames",
+      "scanRegion",
+      "tagsReadComplete"
+    ])
   ],
+  [
+    "AWS::IAM::RolePolicy",
+    new Set([
+      ...DETAILED_REVERSE_ENGINEERING_PUBLIC_STATUS_KEYS,
+      "ownership",
+      "policyDocumentRedacted",
+      "policyName",
+      "roleName"
+    ])
+  ],
+  [
+    "AWS::KMS::Key",
+    new Set([
+      ...DETAILED_REVERSE_ENGINEERING_PUBLIC_STATUS_KEYS,
+      "description",
+      "enabled",
+      "keyManager",
+      "keySpec",
+      "keyState",
+      "keyUsage",
+      "multiRegion",
+      "origin",
+      "policyDigest",
+      "policyReadComplete",
+      "rotationEnabled",
+      "rotationPeriodInDays",
+      "rotationReadComplete",
+      "tagCount",
+      "tagsReadComplete"
+    ])
+  ],
+  ["AWS::KMS::Alias", new Set([...DETAILED_REVERSE_ENGINEERING_PUBLIC_STATUS_KEYS, "awsManaged"])],
   [
     "AWS::Logs::LogGroup",
     new Set(["logGroupClass", "logGroupName", "retentionInDays", "tags", "tagsReadComplete"])
@@ -495,7 +639,7 @@ export function createAwsProviderAdapter(
             }
           : resource
       );
-      const architectureJson = createReverseEngineeringArchitectureJson(discoveredResources);
+      const architectureJson = createDetailedManagementSafeArchitectureJson(discoveredResources);
       const scan = createEmptyScan(input);
 
       return {
@@ -677,6 +821,39 @@ function createEmptyScan(input: AwsProviderScanInput): ReverseEngineeringScanRes
   };
 }
 
+/** gg: 상세 조회 완료 근거가 부족한 node에서 Terraform 관리 identity를 제거해 자동 승격을 막습니다. */
+function createDetailedManagementSafeArchitectureJson(
+  discoveredResources: readonly DiscoveredResource[]
+): ArchitectureJson {
+  const architectureJson = createReverseEngineeringArchitectureJson(discoveredResources);
+  const reviewOnlyResourceIds = new Set(
+    discoveredResources
+      .filter((resource) => requiresDetailedReaderManagementReview(resource.config))
+      .map((resource) => resource.id)
+  );
+
+  return {
+    ...architectureJson,
+    nodes: architectureJson.nodes.map((node) => {
+      if (!reviewOnlyResourceIds.has(node.id)) return node;
+      const config = { ...node.config };
+      delete config["terraformBlockType"];
+      delete config["terraformResourceType"];
+      delete config["terraformResourceName"];
+      delete config["terraformFileName"];
+      return {
+        ...node,
+        config: {
+          ...config,
+          reverseEngineeringManagement: "needs_mapping",
+          sketchcatchReferenceTerraform: true,
+          analysisExcluded: true
+        }
+      };
+    })
+  };
+}
+
 function createResourceIdMap(records: AwsDiscoveredResourceRecord[]): ReadonlyMap<string, string> {
   return new Map(records.map((record) => [record.providerResourceId, createNodeId(record)]));
 }
@@ -789,6 +966,14 @@ function toDiscoveredResource(
     };
   }
 
+  if (requiresDetailedReaderManagementReview(record.config)) {
+    return {
+      ...baseResource,
+      analysisExcluded: true,
+      importSuggestionStatus: "manual_review"
+    };
+  }
+
   if (REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES.has(resourceType)) {
     return baseResource;
   }
@@ -798,6 +983,20 @@ function toDiscoveredResource(
     analysisExcluded: true,
     importSuggestionStatus: "unsupported_resource_type"
   };
+}
+
+/** gg: 상세 reader가 상태 marker를 보낸 경우 두 완료 값이 모두 true일 때만 자동 관리를 허용합니다. */
+function requiresDetailedReaderManagementReview(
+  config: Readonly<Record<string, unknown>>
+): boolean {
+  const hasDetailedReaderEvidence =
+    Object.prototype.hasOwnProperty.call(config, "managementReady") ||
+    Object.prototype.hasOwnProperty.call(config, "reverseEngineeringDetailsComplete");
+
+  return (
+    hasDetailedReaderEvidence &&
+    (config["managementReady"] !== true || config["reverseEngineeringDetailsComplete"] !== true)
+  );
 }
 
 function resolveAwsResourceType(record: AwsDiscoveredResourceRecord): ResourceType {
@@ -1000,6 +1199,16 @@ function createImportSuggestions(
         status: "manual_review",
         reason:
           "EventBridge Target의 전달 설정과 대상 연결을 확인한 뒤 안전하게 수정할 수 있습니다.",
+        handoffReady: false
+      };
+    }
+
+    if (requiresDetailedReaderManagementReview(resource.config)) {
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "manual_review",
+        reason: "AWS 상세 설정을 모두 확인하지 못해 자동으로 가져오지 않습니다.",
         handoffReady: false
       };
     }

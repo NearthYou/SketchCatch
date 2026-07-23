@@ -94,7 +94,6 @@ test("ALL 스캔의 Lambda IAM KMS 상세 설정과 관계를 보드 후보까�
     roleNames: ["orders-api"]
   });
   assert.deepEqual(resourcesByType.get("KMS_KEY")?.config, {
-    keyId: "11111111-2222-3333-4444-555555555555",
     keyManager: "CUSTOMER",
     keyState: "Enabled"
   });

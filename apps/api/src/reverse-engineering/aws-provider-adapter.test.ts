@@ -179,10 +179,7 @@ test("상세 reader의 AWS 원본과 import ID는 서버 결과에만 합친다"
   const privateResult = await scanPrivate([detailedRecord]);
 
   assert.doesNotMatch(JSON.stringify(publicResult), /123456789012|synthetic-never-public/iu);
-  assert.equal(
-    privateResult.discoveredResources[0]?.providerResourceId,
-    lambdaArn
-  );
+  assert.equal(privateResult.discoveredResources[0]?.providerResourceId, lambdaArn);
   assert.equal(privateResult.discoveredResources[0]?.config["terraformImportId"], "orders-api");
   assert.deepEqual(privateResult.discoveredResources[0]?.config["environmentVariables"], {
     API_TOKEN: "synthetic-never-public"
@@ -328,6 +325,234 @@ test("AWS 전용 reader가 찾은 Resource를 실제 Catalog 타입으로 보드
   assert.match(result.importSuggestions.at(-2)?.reason ?? "", /태그/iu);
   assert.equal(result.importSuggestions.at(-1)?.status, "manual_review");
   assert.match(result.importSuggestions.at(-1)?.reason ?? "", /policy/iu);
+});
+
+test("상세 reader의 IAM KMS API Gateway 하위 Resource를 Catalog 타입으로 표시하고 공개 원문을 숨긴다", async () => {
+  const records = [
+    {
+      providerResourceType: "AWS::IAM::RolePolicy",
+      providerResourceId: "orders-role:inline-policy:orders-read",
+      displayName: "orders-read",
+      region: "global",
+      config: {
+        policyName: "orders-read",
+        roleName: "orders-role",
+        ownership: "customer",
+        managementReady: true,
+        reverseEngineeringDetailsComplete: true,
+        reverseEngineeringDetailsVersion: 1,
+        policyDocumentRedacted: true,
+        policyDocument: { Statement: [{ Effect: "Allow", Action: "s3:GetObject" }] }
+      },
+      relationships: [],
+      serverOnly: {
+        providerResourceId: "arn:aws:iam::123456789012:role/orders-role",
+        terraformImportId: "orders-role:orders-read",
+        config: { policyDocument: "private-inline-policy" }
+      }
+    },
+    {
+      providerResourceType: "AWS::KMS::Key",
+      providerResourceId: "11111111-2222-3333-4444-555555555555",
+      displayName: "orders-key",
+      region: "ap-northeast-2",
+      config: {
+        description: "Orders key",
+        enabled: true,
+        keyId: "11111111-2222-3333-4444-555555555555",
+        keyManager: "CUSTOMER",
+        keyState: "Enabled",
+        managementReady: true,
+        policyReadComplete: true,
+        reverseEngineeringDetailsComplete: true,
+        reverseEngineeringDetailsVersion: 1,
+        tagsReadComplete: true,
+        policyDocument: "private-kms-policy"
+      },
+      relationships: [],
+      serverOnly: {
+        providerResourceId: "11111111-2222-3333-4444-555555555555",
+        terraformImportId: "11111111-2222-3333-4444-555555555555",
+        config: { policyDocument: "private-kms-policy" }
+      }
+    },
+    {
+      providerResourceType: "AWS::KMS::Alias",
+      providerResourceId: "alias/orders",
+      displayName: "alias/orders",
+      region: "ap-northeast-2",
+      config: {
+        awsManaged: false,
+        managementReady: true,
+        reverseEngineeringDetailsComplete: true,
+        targetKeyId: "11111111-2222-3333-4444-555555555555"
+      },
+      relationships: [],
+      serverOnly: {
+        providerResourceId: "alias/orders",
+        terraformImportId: "alias/orders",
+        config: { aliasName: "alias/orders", targetKeyId: "private-target-key" }
+      }
+    },
+    ...[
+      [
+        "AWS::ApiGateway::Resource",
+        "api123/resource456",
+        { path: "/orders", pathPart: "orders", hasMethods: true, resourceId: "resource456" }
+      ],
+      [
+        "AWS::ApiGateway::Method",
+        "api123/resource456/GET",
+        {
+          httpMethod: "GET",
+          authorizationType: "NONE",
+          apiKeyRequired: false,
+          hasAuthorizer: false,
+          hasValidator: false,
+          hasRequestParameters: false,
+          hasRequestModels: false,
+          responseCount: 1,
+          requestParameters: { "method.request.header.Secret": true }
+        }
+      ],
+      [
+        "AWS::ApiGateway::Integration",
+        "api123/resource456/GET",
+        {
+          integrationType: "AWS_PROXY",
+          integrationHttpMethod: "POST",
+          connectionType: "INTERNET",
+          hasVpcLink: false,
+          hasCredentials: true,
+          hasRequestParameters: false,
+          hasRequestTemplates: false,
+          cacheConfigured: false,
+          timeoutInMillis: 29_000,
+          integrationUri: "private-integration-uri",
+          credentialsArn: "arn:aws:iam::123456789012:role/private-integration"
+        }
+      ],
+      [
+        "AWS::ApiGateway::Deployment",
+        "api123/deployment789",
+        { createdAt: "2026-07-23T00:00:00.000Z", hasDescription: true, apiSummary: "private" }
+      ],
+      [
+        "AWS::ApiGateway::Stage",
+        "api123/production",
+        {
+          stageName: "production",
+          hasDescription: true,
+          tracingEnabled: true,
+          hasStageVariables: true,
+          hasAccessLogs: true,
+          hasCanary: false,
+          cacheEnabled: false,
+          tagCount: 1,
+          variables: { TOKEN: "private-stage-variable" }
+        }
+      ]
+    ].map(([providerResourceType, providerResourceId, config]) => ({
+      providerResourceType: providerResourceType as string,
+      providerResourceId: providerResourceId as string,
+      displayName: providerResourceId as string,
+      region: "ap-northeast-2",
+      config: {
+        ...(config as Record<string, unknown>),
+        managementReady: true,
+        reverseEngineeringDetailsComplete: true,
+        reverseEngineeringDetailsVersion: 1,
+        apiGatewayTopologyClassification: "simple",
+        apiGatewayAdvancedFeatures: []
+      },
+      relationships: [],
+      serverOnly: {
+        providerResourceId: `private-${providerResourceId as string}`,
+        terraformImportId: `private-import-${providerResourceId as string}`,
+        config: {
+          environmentVariables: { TOKEN: "private-api-environment" },
+          terraformImportId: `private-import-${providerResourceId as string}`
+        }
+      }
+    }))
+  ] satisfies AwsDiscoveredResourceRecord[];
+
+  const result = await scan(records);
+
+  assert.deepEqual(
+    result.discoveredResources.map((resource) => resource.resourceType),
+    [
+      "IAM_POLICY",
+      "KMS_KEY",
+      "KMS_ALIAS",
+      "API_GATEWAY_RESOURCE",
+      "API_GATEWAY_METHOD",
+      "API_GATEWAY_INTEGRATION",
+      "API_GATEWAY_DEPLOYMENT",
+      "API_GATEWAY_STAGE"
+    ]
+  );
+  assert.ok(
+    result.discoveredResources.every((resource) =>
+      resource.providerResourceId.startsWith("aws-ref-")
+    )
+  );
+  assert.ok(
+    result.importSuggestions.every(
+      (suggestion) =>
+        suggestion.status === "unsupported_resource_type" && suggestion.handoffReady === false
+    )
+  );
+  const serializedResult = JSON.stringify(result);
+  assert.doesNotMatch(serializedResult, /private-/iu);
+  assert.doesNotMatch(serializedResult, /11111111-2222-3333-4444-555555555555/iu);
+  assert.doesNotMatch(
+    serializedResult,
+    /"(?:policyDocument|environmentVariables|terraformImportId|targetKeyId|requestParameters|integrationUri|credentialsArn|apiSummary|variables)":/iu
+  );
+});
+
+test("상세 reader의 관리 완료 근거가 불완전하면 지원 타입도 Terraform handoff를 닫는다", async () => {
+  const createRestApiRecord = (
+    managementReady: boolean,
+    reverseEngineeringDetailsComplete: boolean
+  ): AwsDiscoveredResourceRecord =>
+    record({
+      providerResourceType: "AWS::ApiGateway::RestApi",
+      providerResourceId: `api-${managementReady}-${reverseEngineeringDetailsComplete}`,
+      displayName: "orders-api",
+      config: {
+        hasResourcePolicy: false,
+        name: "orders-api",
+        tags: {},
+        tagsReadComplete: true,
+        managementReady,
+        reverseEngineeringDetailsComplete,
+        reverseEngineeringDetailsVersion: 1
+      }
+    });
+  const result = await scan([
+    createRestApiRecord(false, true),
+    createRestApiRecord(true, false),
+    createRestApiRecord(true, true)
+  ]);
+
+  assert.deepEqual(
+    result.importSuggestions.map((suggestion) => ({
+      handoffReady: suggestion.handoffReady,
+      status: suggestion.status
+    })),
+    [
+      { handoffReady: false, status: "manual_review" },
+      { handoffReady: false, status: "manual_review" },
+      { handoffReady: true, status: "ready" }
+    ]
+  );
+  for (const node of result.architectureJson.nodes.slice(0, 2)) {
+    assert.equal(node.config["reverseEngineeringManagement"], "needs_mapping");
+    assert.equal(node.config["terraformResourceType"], undefined);
+  }
+  assert.equal(result.architectureJson.nodes[2]?.config["reverseEngineeringManagement"], "managed");
 });
 
 test("단일 Metric CloudWatch Alarm을 재배포 가능한 Terraform 관리 대상으로 만든다", async () => {
