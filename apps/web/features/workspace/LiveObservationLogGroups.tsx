@@ -12,7 +12,7 @@ export function LiveObservationLogGroups({
 
   return (
     <section aria-labelledby="live-observation-log-groups-heading" className={styles.logGroups}>
-      <h3 id="live-observation-log-groups-heading">관측 로그</h3>
+      <h3 id="live-observation-log-groups-heading">관련 로그</h3>
       <ul>
         {groups.map((group) => (
           <li key={group.id}>
@@ -22,8 +22,8 @@ export function LiveObservationLogGroups({
             </div>
             <p>{formatLogRange(group.firstObservedAt, group.lastObservedAt)}</p>
             <details>
-              <summary>원문 로그 보기</summary>
-              <pre>{group.representative.message}</pre>
+              <summary>로그 보기</summary>
+              <pre>{group.normalizedMessage}</pre>
             </details>
           </li>
         ))}

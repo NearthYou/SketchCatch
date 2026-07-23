@@ -12,7 +12,7 @@ export function LiveObservationIncidentTimeline({
 
   return (
     <details className={styles.incidentTimeline}>
-      <summary>사고 흐름 보기</summary>
+      <summary>시간순 기록 보기</summary>
       <ol>
         {events.map((event) => (
           <li key={event.id}>
@@ -21,7 +21,7 @@ export function LiveObservationIncidentTimeline({
           </li>
         ))}
       </ol>
-      <p>시간이 가깝다고 원인 관계를 뜻하지는 않아요.</p>
+      <p>시간이 가깝다고 원인인 것은 아니에요.</p>
     </details>
   );
 }

@@ -27,6 +27,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-22 - Ignore CI/CD handoffs from replaced Repository connections
+
+- Reproduced the production failure with a deterministic Web regression: reconnecting the same GitHub Repository creates a new Source Repository id, while the previous selector reused a handoff by Deployment and accepted Plan only.
+- Updated setup handoff selection to require the current Source Repository id, so a handoff tied to the inactive pre-reconnect record is ignored and the approved setup flow creates a fresh handoff.
+- Verification passes: 54 focused CI/CD Web tests, root lint, root typecheck, all five production builds, diff checks, and the final harness check.
+- No database migration, dependency change, AWS mutation, Terraform execution, deployment, or handoff creation was performed. GitHub issue #537 and its review branch were created after verification.
+
 ### 2026-07-22 - Make Live Observation traffic dense, dramatic, and load-testable
 
 - Preserved the existing Focused Flow nodes, geometry, and routes while raising the visible request cap from five to 24, merging rapid single-event SSE snapshots into one sustained dense burst, and retaining exact overflow accounting.
