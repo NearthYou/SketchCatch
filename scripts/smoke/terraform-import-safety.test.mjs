@@ -426,8 +426,7 @@ test("fixture 생성 요청의 응답을 잃으면 변경 여부를 false로 단
   assert.deepEqual(progress.at(-1), {
     mode: "create_fixture",
     mutationStatus: "attempted_unknown",
-    mutationStage: "fixture_create_requested",
-    fixtureCreated: false
+    mutationStage: "fixture_create_requested"
   });
 });
 
@@ -937,6 +936,17 @@ test("evidence는 현재 CLI 실행과 대조할 수 있는 invocation id를 보
   assert.equal(evidence.mutationPerformed, true);
   assert.equal(evidence.mutationStatus, "confirmed");
   assert.equal(evidence.mutationStage, "allowlisted_update_applied");
+});
+
+test("생성 요청 결과가 불확실하면 fixture 생성 여부를 false로 단정하지 않는다", () => {
+  const evidence = createTerraformImportSafetyEvidence({
+    status: "blocked",
+    mutationStatus: "attempted_unknown",
+    mutationStage: "fixture_create_requested"
+  });
+
+  assert.equal(evidence.mutationStatus, "attempted_unknown");
+  assert.equal("fixtureCreated" in evidence, false);
 });
 
 test("새 실행 전에 이전 성공 evidence를 제거해 실패 뒤 stale pass가 남지 않게 한다", async () => {

@@ -23,12 +23,7 @@ export function createReverseEngineeringLayoutSummary(
       partialMessage: (improved, remaining) =>
         `리소스 겹침 ${improved}곳을 정리했고, ${remaining}곳은 확인이 필요합니다.`
     }),
-    summarizeSubnetChange(
-      sourceDiagram,
-      candidate.diagram,
-      sourceOutsideSubnetIds,
-      organizedOutsideSubnetIds
-    ),
+    summarizeSubnetChange(sourceOutsideSubnetIds, organizedOutsideSubnetIds),
     summarizeVisualDiff(candidate)
   ];
 
@@ -103,34 +98,28 @@ function getResourcesOutsideSubnet(diagram: DiagramJson): ReadonlySet<string> {
 
 /** gg: Resource 이동과 Area 크기 조정을 구분해 실제로 하지 않은 이동을 주장하지 않습니다. */
 function summarizeSubnetChange(
-  sourceDiagram: DiagramJson,
-  candidateDiagram: DiagramJson,
   sourceOutsideIds: ReadonlySet<string>,
   candidateOutsideIds: ReadonlySet<string>
 ): string {
+  const resolvedCount = [...sourceOutsideIds].filter((id) => !candidateOutsideIds.has(id)).length;
+  const newlyOutsideCount = [...candidateOutsideIds].filter((id) => !sourceOutsideIds.has(id)).length;
+
   if (candidateOutsideIds.size === 0) {
     if (sourceOutsideIds.size === 0) return "서브넷 밖 리소스가 없습니다.";
-    const resolvedIds = [...sourceOutsideIds];
-    return resolvedIds.every((id) => didNodeMove(sourceDiagram, candidateDiagram, id))
-      ? `서브넷 밖 리소스 ${resolvedIds.length}개를 안으로 옮겼습니다.`
-      : `서브넷 경계를 조정해 리소스 ${resolvedIds.length}개를 안에 포함했습니다.`;
+    return `서브넷 밖 리소스 ${resolvedCount}개가 정리되었습니다.`;
   }
 
-  const improvement = Math.max(0, sourceOutsideIds.size - candidateOutsideIds.size);
-  if (improvement === 0) {
-    return `서브넷 밖 리소스 ${candidateOutsideIds.size}개를 확인해 주세요.`;
+  if (resolvedCount > 0 && newlyOutsideCount > 0) {
+    return `서브넷 밖 리소스 ${resolvedCount}개가 정리됐지만, ${newlyOutsideCount}개가 새로 경계를 벗어났습니다. 총 ${candidateOutsideIds.size}개를 확인해 주세요.`;
   }
 
-  const resolvedIds = [...sourceOutsideIds].filter((id) => !candidateOutsideIds.has(id));
-  return resolvedIds.every((id) => didNodeMove(sourceDiagram, candidateDiagram, id))
-    ? `서브넷 밖 리소스 ${improvement}개를 옮겼고, ${candidateOutsideIds.size}개는 확인이 필요합니다.`
-    : `서브넷 경계 밖 문제가 ${improvement}개 줄었고, ${candidateOutsideIds.size}개는 확인이 필요합니다.`;
-}
-
-function didNodeMove(source: DiagramJson, candidate: DiagramJson, nodeId: string): boolean {
-  const before = source.nodes.find((node) => node.id === nodeId)?.position;
-  const after = candidate.nodes.find((node) => node.id === nodeId)?.position;
-  return Boolean(before && after && (before.x !== after.x || before.y !== after.y));
+  if (resolvedCount > 0) {
+    return `서브넷 밖 리소스 ${resolvedCount}개가 정리됐고, ${candidateOutsideIds.size}개는 확인이 필요합니다.`;
+  }
+  if (newlyOutsideCount > 0) {
+    return `${newlyOutsideCount}개가 새로 서브넷 경계를 벗어났습니다. 총 ${candidateOutsideIds.size}개를 확인해 주세요.`;
+  }
+  return `서브넷 밖 리소스 ${candidateOutsideIds.size}개를 확인해 주세요.`;
 }
 
 /** gg: RE 원본의 contains/hosts edge와 Board metadata를 같은 실제 포함관계로 읽습니다. */

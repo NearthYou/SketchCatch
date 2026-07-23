@@ -1052,8 +1052,7 @@ export async function runTerraformImportSafetyHarness(env = process.env, depende
     reportProgress({
       mode: config.mode,
       mutationStatus: "attempted_unknown",
-      mutationStage: "fixture_create_requested",
-      fixtureCreated: false
+      mutationStage: "fixture_create_requested"
     });
     await baseCommandRunner(request.command, request.args);
     // gg: 생성 직후부터 이후 검증 실패도 이미 발생한 AWS 변경으로 기록합니다.
