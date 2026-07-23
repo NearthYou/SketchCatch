@@ -25,10 +25,12 @@
     "test:live-observation:redis": "node scripts/test-live-observation-redis.mjs",
     "test:core": "turbo test",
     "test:sandbox-e2e": "node --test scripts/smoke/deployment-sandbox-e2e.test.mjs",
+    "test:terraform-import-safety": "node --test scripts/smoke/terraform-import-safety.test.mjs",
     "test:terraform": "terraform -chdir=infra/aws/terraform test",
     "sandbox:e2e": "node scripts/smoke/deployment-sandbox-e2e.mjs",
+    "terraform-import-safety": "node scripts/smoke/terraform-import-safety.mjs",
     "typecheck": "turbo typecheck",
-    "test": "pnpm test:core && pnpm test:sandbox-e2e && pnpm test:terraform",
+    "test": "pnpm test:core && pnpm test:sandbox-e2e && pnpm test:terraform-import-safety && pnpm test:terraform",
     "format": "prettier --write .",
     "docker:build": "docker build -f docker/api.Dockerfile -t sketchcatch-api:local . && docker build -f docker/web.Dockerfile -t sketchcatch-web:local . && docker build -f docker/nginx.Dockerfile -t sketchcatch-nginx:local ."
   },
