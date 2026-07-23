@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync(new URL("./index.tsx", import.meta.url), "utf8");
+const modalStyles = readFileSync(
+  new URL("./template-library-modal.module.css", import.meta.url),
+  "utf8"
+);
 
 test("템플릿 목록 선택은 보드에 즉시 적용하지 않고 상세 미리보기를 연다", () => {
   const panelSource = getSourceBlock(source, "function TemplatesPanel(", "function TemplateLibraryModal(");
@@ -24,6 +28,19 @@ test("전체보기에서 선택해도 개별 상세 미리보기로 전환한다
   assert.match(librarySource, /actionLabel="상세 미리보기"/);
   assert.match(librarySource, /onTemplateSelect\(template\)/);
   assert.doesNotMatch(librarySource, /onTemplateApply\(template\)/);
+});
+
+test("template library header stays separate from the scrollable gallery", () => {
+  const librarySource = getSourceBlock(
+    source,
+    "function TemplateLibraryModal(",
+    "function TemplateDetailPreviewModal("
+  );
+
+  assert.match(librarySource, /className=\{[^}]*modalStyles\.libraryDialog/);
+  assert.match(librarySource, /<div className=\{modalStyles\.libraryContent\}>\s*<TemplateGallery/s);
+  assert.match(modalStyles, /\.libraryDialog\s*\{[^}]*overflow:\s*hidden;/s);
+  assert.match(modalStyles, /\.libraryContent\s*\{[^}]*overflow-y:\s*auto;/s);
 });
 
 test("개별 상세 창에서만 선택한 템플릿을 보드에 적용한다", () => {

@@ -69,6 +69,9 @@
   background: #ffffff;
   border: 1px solid #dcdee0;
   border-radius: 12px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
   min-width: 0;
   overflow: hidden;
 }
@@ -89,6 +92,7 @@
 .cardBody {
   display: grid;
   gap: 14px;
+  grid-template-rows: auto auto minmax(0, 1fr);
   padding: 16px;
 }
 
@@ -96,7 +100,7 @@
   align-items: start;
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .cardHeading h2,
@@ -106,6 +110,9 @@
 
 .cardHeading h2 {
   font-size: calc(16px + var(--presentation-font-size-increase));
+  overflow-wrap: break-word;
+  text-wrap: balance;
+  word-break: keep-all;
 }
 
 .cardHeading p {
@@ -113,28 +120,44 @@
   font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.55;
   margin-top: 6px;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
 }
 
 .cardHeading dl {
-  display: flex;
-  gap: 10px;
+  background: #f7f7f8;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 0;
+  overflow: hidden;
 }
 
 .cardHeading dl div {
-  display: grid;
-  gap: 2px;
-  text-align: right;
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 9px 11px;
+}
+
+.cardHeading dl div + div {
+  border-left: 1px solid #e5e7eb;
 }
 
 .cardHeading dt {
   color: #60646c;
   font-size: calc(12px + var(--presentation-font-size-increase));
+  white-space: nowrap;
 }
 
 .cardHeading dd {
   font-size: calc(13px + var(--presentation-font-size-increase));
-  font-weight: var(--presentation-font-weight-regular);
+  font-weight: var(--presentation-font-weight-bold);
   margin: 0;
 }
 
@@ -172,6 +195,7 @@
 }
 
 .unavailableAction {
+  align-self: end;
   display: grid;
   gap: 8px;
 }
