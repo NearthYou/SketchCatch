@@ -85,6 +85,68 @@ resource "aws_subnet" "public" {
   );
 });
 
+test("renders Reverse Engineering metadata that looks like Terraform references as literal text", () => {
+  const referenceLikeText = "aws_s3_bucket.literal.arn";
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "secret",
+        label: "secret",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_secretsmanager_secret",
+          resourceName: "secret",
+          fileName: "main"
+        },
+        config: {
+          name: referenceLikeText,
+          description:
+            `${referenceLikeText} \${${referenceLikeText}} ` + "$${already_safe}",
+          kmsKeyId: "aws_kms_key.main.arn",
+          tags: {
+            [referenceLikeText]: referenceLikeText
+          }
+        }
+      },
+      {
+        id: "origin-access-control",
+        label: "origin_access_control",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_cloudfront_origin_access_control",
+          resourceName: "origin_access_control",
+          fileName: "main"
+        },
+        config: {
+          name: referenceLikeText,
+          description: referenceLikeText,
+          originAccessControlOriginType: "s3",
+          signingBehavior: "always",
+          signingProtocol: "sigv4"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /name = "aws_s3_bucket\.literal\.arn"/);
+  assert.match(
+    terraform,
+    /description = "aws_s3_bucket\.literal\.arn \$\$\{aws_s3_bucket\.literal\.arn\} \$\$\{already_safe\}"/
+  );
+  assert.match(
+    terraform,
+    /"aws_s3_bucket\.literal\.arn" = "aws_s3_bucket\.literal\.arn"/
+  );
+  assert.match(terraform, /kms_key_id = aws_kms_key\.main\.arn/);
+  assert.doesNotMatch(terraform, /name = aws_s3_bucket\.literal\.arn/);
+  assert.doesNotMatch(terraform, /description = aws_s3_bucket\.literal\.arn/);
+});
+
 test("renders S3 buckets without synthetic companion resources", () => {
   const graph: InfrastructureGraph = {
     nodes: [
@@ -152,6 +214,107 @@ test("renders generated random password references as Terraform expressions", ()
 
   assert.match(terraform, /secret_string = random_password\.runtime\.result/u);
   assert.doesNotMatch(terraform, /secret_string = "random_password\.runtime\.result"/u);
+});
+
+test("literal Terraform template markers are escaped without changing intended references", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "metadata-secret",
+        label: "metadata_secret",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_secretsmanager_secret",
+          resourceName: "metadata_secret",
+          fileName: "main"
+        },
+        config: {
+          name: "plain-secret",
+          description:
+            "literal-${not_a_reference}-%{ if true }value%{ endif }-$${already_safe}-%%{ safe }",
+          kmsKeyId: "aws_kms_key.main.arn",
+          tags: {
+            "Owner${literal}": "team-%{ not_a_directive }"
+          }
+        }
+      },
+      {
+        id: "metadata-oac",
+        label: "metadata_oac",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_cloudfront_origin_access_control",
+          resourceName: "metadata_oac",
+          fileName: "main"
+        },
+        config: {
+          name: "plain-oac",
+          description: "origin-${literal}-%{ endif }",
+          originAccessControlOriginType: "s3",
+          signingBehavior: "always",
+          signingProtocol: "sigv4"
+        }
+      },
+      {
+        id: "inline-lambda",
+        label: "inline_lambda",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_lambda_function",
+          resourceName: "inline_lambda",
+          fileName: "main"
+        },
+        config: {
+          functionName: "inline-lambda",
+          inlineSource: "export const label = `${literal}`;"
+        }
+      },
+      {
+        id: "bucket-policy",
+        label: "bucket_policy",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket_policy",
+          resourceName: "logs",
+          fileName: "main"
+        },
+        config: {
+          bucket: "aws_s3_bucket.logs.id",
+          policy: JSON.stringify({
+            Resource: [
+              "arn:aws:s3:::logs/home/${aws:username}/*",
+              "${aws_s3_bucket.logs.arn}/*"
+            ],
+            Note: "%{ if enabled }literal%{ endif }"
+          })
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.ok(terraform.includes('name = "plain-secret"'));
+  assert.ok(
+    terraform.includes(
+      'description = "literal-$${not_a_reference}-%%{ if true }value%%{ endif }-$${already_safe}-%%{ safe }"'
+    )
+  );
+  assert.match(terraform, /kms_key_id = aws_kms_key\.main\.arn/u);
+  assert.ok(terraform.includes('"Owner$${literal}" = "team-%%{ not_a_directive }"'));
+  assert.ok(terraform.includes('description = "origin-$${literal}-%%{ endif }"'));
+  assert.match(terraform, /bucket = aws_s3_bucket\.logs\.id/u);
+  assert.ok(terraform.includes("$${aws:username}"));
+  assert.ok(terraform.includes("${aws_s3_bucket.logs.arn}/*"));
+  assert.ok(terraform.includes("%%{ if enabled }literal%%{ endif }"));
+  assert.ok(terraform.includes('source_content = "export const label = `$${literal}`;"'));
+  assert.ok(!terraform.includes("$$${already_safe}"));
+  assert.ok(!terraform.includes("%%%{ safe }"));
 });
 
 test("renders managed web bucket versioning and protects release-managed bootstrap content", () => {
@@ -478,7 +641,7 @@ test("renders application delivery outputs for a single-task Fargate topology", 
       createLiveObservationNode("aws_ecs_service", "api", {
         loadBalancer: {
           targetGroupArn: "aws_lb_target_group.api.arn",
-          containerName: "api",
+          containerName: "api-${literal}",
           containerPort: 3000
         }
       }),
@@ -532,7 +695,7 @@ test("renders application delivery outputs for a single-task Fargate topology", 
   );
   assert.match(terraform, /output "ecs_cluster_name"[\s\S]*aws_ecs_cluster\.demo\.name/);
   assert.match(terraform, /output "ecs_service_name"[\s\S]*aws_ecs_service\.api\.name/);
-  assert.match(terraform, /output "ecs_container_name"[\s\S]*"api"/);
+  assert.match(terraform, /output "ecs_container_name"[\s\S]*"api-\$\$\{literal\}"/);
   assert.match(terraform, /output "ecs_container_port"[\s\S]*3000/);
   assert.match(terraform, /output "alb_arn"[\s\S]*aws_lb\.demo\.arn/);
   assert.match(terraform, /output "alb_dns_name"[\s\S]*aws_lb\.demo\.dns_name/);

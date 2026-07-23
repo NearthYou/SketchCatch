@@ -68,6 +68,7 @@ function renderTerraformOutputs(graph: InfrastructureGraph): string[] {
   return listeners.length === 0 || hasApplicationDeliveryEdge ? renderDeploymentOutputs(graph) : [];
 }
 
+// 배포와 관측에 필요한 output만 graph의 실제 연결 상태에서 생성한다.
 function renderDeploymentOutputs(graph: InfrastructureGraph): string[] {
   const website = firstResourceNode(graph, "aws_s3_bucket_website_configuration");
   const webBucket = firstResourceNode(graph, "aws_s3_bucket");
@@ -210,7 +211,7 @@ function renderDeploymentOutputs(graph: InfrastructureGraph): string[] {
   const ecsContainer = resolveEcsServiceContainer(ecsService);
   if (ecsContainer) {
     outputs.push(
-      renderOutput("ecs_container_name", JSON.stringify(ecsContainer.name)),
+      renderOutput("ecs_container_name", renderTerraformQuotedString(ecsContainer.name)),
       renderOutput("ecs_container_port", String(ecsContainer.port))
     );
   }
@@ -1056,6 +1057,7 @@ function hasInlineLambdaSource(node: InfrastructureGraphNode): boolean {
   );
 }
 
+// Lambda source 안의 `${...}`도 Terraform이 실행하지 않고 원본 코드로 archive에 넣는다.
 function renderInlineLambdaArchive(node: InfrastructureGraphNode): string {
   const source = node.config["inlineSource"];
   if (typeof source !== "string") return "";
@@ -1063,7 +1065,7 @@ function renderInlineLambdaArchive(node: InfrastructureGraphNode): string {
   return [
     `data "archive_file" "${archiveName}" {`,
     `${INDENT_UNIT}type = "zip"`,
-    `${INDENT_UNIT}source_content = ${JSON.stringify(source)}`,
+    `${INDENT_UNIT}source_content = ${renderTerraformQuotedString(source)}`,
     `${INDENT_UNIT}source_content_filename = "index.mjs"`,
     `${INDENT_UNIT}output_path = "\${path.module}/${archiveName}.zip"`,
     "}"
@@ -1855,7 +1857,7 @@ function renderBodyEntry(
     return renderNestedBlocks(resourceType, key, normalizedValue, indentLevel, []);
   }
 
-  return [renderAttribute(key, normalizedValue, indentLevel)];
+  return [renderAttribute(key, normalizedValue, indentLevel, [])];
 }
 
 function normalizeTopLevelValue(resourceType: string, key: string, value: unknown): unknown {
@@ -1968,7 +1970,7 @@ function renderNestedBlockEntry(
     return renderNestedBlocks(resourceType, key, value, indentLevel, parentPath);
   }
 
-  return [renderAttribute(key, value, indentLevel)];
+  return [renderAttribute(key, value, indentLevel, parentPath)];
 }
 
 function isReverseEngineeringEcsNestedBlock(
@@ -2010,16 +2012,37 @@ function renderLifecycleIgnoreChanges(value: unknown[], indentLevel: number): st
   return `${indent(indentLevel)}ignore_changes = ${renderedValue}`;
 }
 
-function renderAttribute(key: string, value: unknown, indentLevel: number): string {
+function renderAttribute(
+  key: string,
+  value: unknown,
+  indentLevel: number,
+  parentPath: readonly string[]
+): string {
   const attributeName = toSnakeCase(key);
   assertTerraformIdentifier(attributeName, "attribute name");
 
   const renderedValue =
     attributeName === "depends_on"
       ? renderDependencyList(value, indentLevel)
-      : renderValue(value, indentLevel);
+      : renderValue(
+          value,
+          indentLevel,
+          shouldRenderTerraformAttributeAsLiteral(attributeName, parentPath)
+        );
 
   return `${indent(indentLevel)}${attributeName} = ${renderedValue}`;
+}
+
+function shouldRenderTerraformAttributeAsLiteral(
+  attributeName: string,
+  parentPath: readonly string[]
+): boolean {
+  return (
+    attributeName === "description" ||
+    attributeName === "comment" ||
+    attributeName === "tags" ||
+    (attributeName === "name" && parentPath.length === 0)
+  );
 }
 
 function renderDependencyList(value: unknown, indentLevel: number): string {
@@ -2046,15 +2069,16 @@ function renderDependencyList(value: unknown, indentLevel: number): string {
 }
 
 // JavaScript 값을 Terraform HCL 값 표현으로 바꾼다.
-function renderValue(value: unknown, indentLevel: number): string {
+function renderValue(value: unknown, indentLevel: number, renderStringsAsLiteral = false): string {
   if (value === null || value === undefined) {
     return "null";
   }
 
   if (typeof value === "string") {
-    return isTerraformReference(value) || isSupportedTerraformFunctionExpression(value)
+    return !renderStringsAsLiteral &&
+      (isTerraformReference(value) || isSupportedTerraformFunctionExpression(value))
       ? value
-      : JSON.stringify(value);
+      : renderTerraformQuotedString(value, !renderStringsAsLiteral);
   }
 
   if (typeof value === "number" || typeof value === "boolean") {
@@ -2062,31 +2086,42 @@ function renderValue(value: unknown, indentLevel: number): string {
   }
 
   if (Array.isArray(value)) {
-    return renderArray(value, indentLevel);
+    return renderArray(value, indentLevel, renderStringsAsLiteral);
   }
 
   if (isRecord(value)) {
-    return renderObject(value, indentLevel);
+    return renderObject(value, indentLevel, renderStringsAsLiteral);
   }
 
-  return JSON.stringify(String(value));
+  return renderTerraformQuotedString(String(value), !renderStringsAsLiteral);
 }
 
 // 배열 값을 사람이 읽기 쉬운 여러 줄 Terraform list로 출력한다.
-function renderArray(values: unknown[], indentLevel: number): string {
+function renderArray(
+  values: unknown[],
+  indentLevel: number,
+  renderStringsAsLiteral: boolean
+): string {
   if (values.length === 0) {
     return "[]";
   }
 
   return [
     "[",
-    ...values.map((value) => `${indent(indentLevel + 1)}${renderValue(value, indentLevel + 1)},`),
+    ...values.map(
+      (value) =>
+        `${indent(indentLevel + 1)}${renderValue(value, indentLevel + 1, renderStringsAsLiteral)},`
+    ),
     `${indent(indentLevel)}]`
   ].join("\n");
 }
 
 // object 값을 Terraform map/object 표현으로 바꾼다. tags 같은 nested key는 원래 이름을 유지한다.
-function renderObject(value: Record<string, unknown>, indentLevel: number): string {
+function renderObject(
+  value: Record<string, unknown>,
+  indentLevel: number,
+  renderStringsAsLiteral: boolean
+): string {
   const entries = Object.entries(value);
 
   if (entries.length === 0) {
@@ -2097,18 +2132,127 @@ function renderObject(value: Record<string, unknown>, indentLevel: number): stri
     "{",
     ...entries.map(
       ([key, nestedValue]) =>
-        `${indent(indentLevel + 1)}${renderObjectKey(key)} = ${renderValue(nestedValue, indentLevel + 1)}`
+        `${indent(indentLevel + 1)}${renderObjectKey(key, renderStringsAsLiteral)} = ${renderValue(
+          nestedValue,
+          indentLevel + 1,
+          renderStringsAsLiteral
+        )}`
     ),
     `${indent(indentLevel)}}`
   ].join("\n");
 }
 
-function renderObjectKey(key: string): string {
-  return TERRAFORM_IDENTIFIER_PATTERN.test(key) ? key : JSON.stringify(key);
+// map key도 HCL quoted string이므로 의도하지 않은 template 문법을 literal로 보존한다.
+function renderObjectKey(key: string, renderStringsAsLiteral: boolean): string {
+  return TERRAFORM_IDENTIFIER_PATTERN.test(key)
+    ? key
+    : renderTerraformQuotedString(key, !renderStringsAsLiteral);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// 일반 문자열에서는 안전한 Terraform 참조만 interpolation으로 남기고 나머지는 literal로 escape한다.
+function renderTerraformQuotedString(value: string, preserveTerraformReferences = true): string {
+  return JSON.stringify(
+    escapeUnintendedTerraformTemplateMarkers(value, preserveTerraformReferences)
+  );
+}
+
+// 이미 escape된 marker는 그대로 두고 AWS policy 변수 같은 비-Terraform 표현만 한 번 escape한다.
+function escapeUnintendedTerraformTemplateMarkers(
+  value: string,
+  preserveTerraformReferences: boolean
+): string {
+  let rendered = "";
+  let cursor = 0;
+
+  while (cursor < value.length) {
+    if (value.startsWith("$${", cursor) || value.startsWith("%%{", cursor)) {
+      rendered += value.slice(cursor, cursor + 3);
+      cursor += 3;
+      continue;
+    }
+
+    if (value.startsWith("${", cursor)) {
+      const interpolationEnd = findTerraformInterpolationEnd(value, cursor);
+      const expression =
+        interpolationEnd === -1 ? "" : value.slice(cursor + 2, interpolationEnd).trim();
+
+      if (
+        preserveTerraformReferences &&
+        interpolationEnd !== -1 &&
+        (isTerraformReference(expression) ||
+          isSupportedTerraformFunctionExpression(expression))
+      ) {
+        rendered += value.slice(cursor, interpolationEnd + 1);
+        cursor = interpolationEnd + 1;
+        continue;
+      }
+
+      rendered += "$${";
+      cursor += 2;
+      continue;
+    }
+
+    if (value.startsWith("%{", cursor)) {
+      rendered += "%%{";
+      cursor += 2;
+      continue;
+    }
+
+    rendered += value[cursor];
+    cursor += 1;
+  }
+
+  return rendered;
+}
+
+// interpolation 안의 object literal과 quoted string을 건너뛰어 실제 닫는 괄호를 찾는다.
+function findTerraformInterpolationEnd(value: string, startIndex: number): number {
+  let braceDepth = 1;
+  let inString = false;
+  let escaped = false;
+
+  for (let cursor = startIndex + 2; cursor < value.length; cursor += 1) {
+    const character = value[cursor];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (character === "\\" && inString) {
+      escaped = true;
+      continue;
+    }
+
+    if (character === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (character === "{") {
+      braceDepth += 1;
+      continue;
+    }
+
+    if (character !== "}") {
+      continue;
+    }
+
+    braceDepth -= 1;
+    if (braceDepth === 0) {
+      return cursor;
+    }
+  }
+
+  return -1;
 }
 
 // Terraform reference는 따옴표 없이 출력해야 하므로 일반 문자열과 구분한다.
