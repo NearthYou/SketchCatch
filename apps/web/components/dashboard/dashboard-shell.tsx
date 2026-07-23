@@ -34,7 +34,8 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
   const { isRefreshing, logout, status, user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pageTitle = getDashboardPageTitle(pathname);
-  const shouldRenderTopbar = !DASHBOARD_NAV_ITEMS.some((item) => item.href === pathname);
+  const shouldRenderTopbar =
+    pathname !== PROFILE_PATH && !DASHBOARD_NAV_ITEMS.some((item) => item.href === pathname);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
