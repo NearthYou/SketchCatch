@@ -204,11 +204,14 @@ export function CostUsagePanel({
       <ProductState
         action={
           <button
+            aria-busy={isFetching}
+            className="dashboardSecondaryButton"
             disabled={isFetching}
             onClick={() => void usageQuery.refetch()}
             type="button"
           >
-            {isFetching ? "새로고침 중" : "새로고침"}
+            <RefreshCw aria-hidden="true" size={17} />
+            <span>{isFetching ? "새로고침 중" : "새로고침"}</span>
           </button>
         }
         description="프로젝트를 배포하면 AWS Cost Explorer와 CloudWatch 기반 실제 사용량이 여기에 표시됩니다."
