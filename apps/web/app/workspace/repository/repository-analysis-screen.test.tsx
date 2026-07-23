@@ -57,6 +57,7 @@ test("pre-analysis form renders URL and branch without result content", () => {
 
   assert.match(html, /name="repositoryUrl"/);
   assert.match(html, /name="branch"/);
+  assert.match(html, /data-icon="github"/);
   assert.match(html, /lucide-git-branch/);
   assert.match(html, />URL 분석</);
   assert.doesNotMatch(html, /Template Preview|적합도|이 Template 사용/);

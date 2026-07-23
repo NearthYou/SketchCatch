@@ -57,7 +57,19 @@ export function RepositoryAnalysisForm({
       <form onSubmit={onSubmit}>
         <div className={styles.formFields}>
           <label className={styles.field} htmlFor="repository-url">
-            <span>Repository URL</span>
+            <span className={styles.fieldLabel}>
+              <svg
+                aria-hidden="true"
+                data-icon="github"
+                fill="currentColor"
+                height="24"
+                viewBox="0 0 24 24"
+                width="24"
+              >
+                <path d="M12 .297a12 12 0 0 0-3.79 23.4c.6.111.82-.261.82-.577v-2.234c-3.338.726-4.042-1.416-4.042-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.085 1.839 1.237 1.839 1.237 1.07 1.835 2.809 1.305 3.493.998.108-.775.418-1.305.762-1.605-2.665-.303-5.467-1.332-5.467-5.93 0-1.31.468-2.381 1.235-3.221-.124-.303-.535-1.523.117-3.176 0 0 1.008-.322 3.3 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.873.118 3.176.77.84 1.233 1.911 1.233 3.221 0 4.61-2.807 5.624-5.479 5.92.43.372.824 1.102.824 2.222v3.293c0 .319.216.694.825.576A12.003 12.003 0 0 0 12 .297z" />
+              </svg>
+              <span>Repository URL</span>
+            </span>
             <input
               autoComplete="url"
               id="repository-url"
