@@ -60,6 +60,11 @@
   padding: 20px 12px;
 }
 
+.dashboardNavGroup {
+  display: grid;
+  gap: 4px;
+}
+
 .dashboardNavItem {
   display: flex;
   min-height: 42px;
@@ -89,14 +94,54 @@
   color: #171717;
 }
 
+.dashboardSubNavItem {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  margin-left: 40px;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #60646c;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-medium);
+  text-decoration: none;
+  transition:
+    background-color var(--motion-fast),
+    color var(--motion-fast);
+}
+
+.dashboardSubNavItem:hover,
+.dashboardSubNavItemActive {
+  background: #f7f8fa;
+  color: #171717;
+}
+
 .dashboardAccount {
   display: grid;
   min-width: 0;
   align-items: center;
   padding: 16px;
   border-top: 1px solid #f0f0f3;
-  grid-template-columns: 34px minmax(0, 1fr) 36px;
+  grid-template-columns: minmax(0, 1fr) 36px;
   gap: 10px;
+}
+
+.dashboardAccountProfile {
+  display: grid;
+  min-width: 0;
+  align-items: center;
+  border-radius: 10px;
+  padding: 4px;
+  color: inherit;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  text-decoration: none;
+  transition: background-color var(--motion-fast);
+}
+
+.dashboardAccountProfile:hover,
+.dashboardAccountProfile:focus-visible {
+  background: #f0f0f3;
 }
 
 .dashboardAvatar {

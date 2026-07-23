@@ -25,6 +25,7 @@ const DASHBOARD_NAV_ITEMS = [
   { href: "/dashboard/costs", icon: WalletCards, label: "비용 관리" },
   { href: "/dashboard/settings", icon: Settings, label: "설정" }
 ] as const;
+const PROFILE_PATH = "/dashboard/settings/profile";
 
 // 인증된 Dashboard 화면의 공통 탐색 영역과 세션 상태를 책임집니다.
 export function DashboardShell({ children }: { readonly children: ReactNode }) {
@@ -93,29 +94,50 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
           {DASHBOARD_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = isDashboardNavItemActive(pathname, item.href);
+            const showsProfileLink = item.href === "/dashboard/settings" && isActive;
 
             return (
-              <Link
-                aria-current={isActive ? "page" : undefined}
-                className={isActive ? "dashboardNavItem dashboardNavItemActive" : "dashboardNavItem"}
-                href={item.href}
-                key={item.href}
-              >
-                <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
-                <span>{item.label}</span>
-              </Link>
+              <div className="dashboardNavGroup" key={item.href}>
+                <Link
+                  aria-current={isActive && pathname !== PROFILE_PATH ? "page" : undefined}
+                  className={isActive ? "dashboardNavItem dashboardNavItemActive" : "dashboardNavItem"}
+                  href={item.href}
+                >
+                  <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
+                  <span>{item.label}</span>
+                </Link>
+                {showsProfileLink ? (
+                  <Link
+                    aria-current={pathname === PROFILE_PATH ? "page" : undefined}
+                    className={
+                      pathname === PROFILE_PATH
+                        ? "dashboardSubNavItem dashboardSubNavItemActive"
+                        : "dashboardSubNavItem"
+                    }
+                    href={PROFILE_PATH}
+                  >
+                    <span>마이페이지</span>
+                  </Link>
+                ) : null}
+              </div>
             );
           })}
         </nav>
 
         <div className="dashboardAccount">
-          <div className="dashboardAvatar" aria-hidden="true">
-            {(user?.nickname || user?.username || "S").slice(0, 1).toUpperCase()}
-          </div>
-          <div className="dashboardAccountText">
-            <strong>{user?.nickname || user?.username}</strong>
-            <span>{user?.email}</span>
-          </div>
+          <Link
+            aria-label="마이페이지로 이동"
+            className="dashboardAccountProfile"
+            href={PROFILE_PATH}
+          >
+            <div className="dashboardAvatar" aria-hidden="true">
+              {(user?.nickname || user?.username || "S").slice(0, 1).toUpperCase()}
+            </div>
+            <div className="dashboardAccountText">
+              <strong>{user?.nickname || user?.username}</strong>
+              <span>{user?.email}</span>
+            </div>
+          </Link>
           <button
             aria-label="로그아웃"
             className="dashboardLogoutButton"
@@ -190,6 +212,10 @@ function isDashboardNavItemActive(pathname: string, href: string): boolean {
 
 // route 이름을 사용자가 이해할 수 있는 짧은 화면 제목으로 바꿉니다.
 function getDashboardPageTitle(pathname: string): string {
+  if (pathname === PROFILE_PATH) {
+    return "마이페이지";
+  }
+
   if (pathname.startsWith("/dashboard/projects/")) {
     return pathname.endsWith("/repository")
       ? "소스 저장소"

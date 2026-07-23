@@ -1,0 +1,230 @@
+.page {
+  display: grid;
+  width: min(100%, 920px);
+  margin: 0 auto;
+  gap: 24px;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #dcdee0;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #60646c;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  letter-spacing: 0.12em;
+}
+
+.pageHeader h1 {
+  margin: 0;
+  font-size: calc(30px + var(--presentation-font-size-increase));
+  line-height: 1.2;
+}
+
+.pageHeader > div > p:last-child {
+  margin: 10px 0 0;
+  color: #60646c;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  line-height: 1.6;
+}
+
+.profileCard {
+  overflow: hidden;
+  border: 1px solid #e1e3e6;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+
+.profileSummary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 28px;
+  border-bottom: 1px solid #eceef0;
+  background: #fafafa;
+}
+
+.profileSummary > div:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.profileSummary strong {
+  font-size: calc(18px + var(--presentation-font-size-increase));
+}
+
+.profileSummary span {
+  overflow: hidden;
+  color: #60646c;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avatar {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 14px;
+  background: #171717;
+  color: #ffffff;
+  font-size: calc(18px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.previewNotice {
+  margin: 24px 28px 0;
+  border: 1px solid #dcdee0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #f7f8fa;
+  color: #55585f;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  line-height: 1.5;
+}
+
+.form {
+  display: grid;
+  gap: 24px;
+  padding: 28px;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.field {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+}
+
+.field > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.field input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #cfd2d6;
+  border-radius: 10px;
+  padding: 0 14px;
+  background: #ffffff;
+  color: #171717;
+  font: inherit;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  outline: none;
+  transition:
+    border-color var(--motion-fast),
+    box-shadow var(--motion-fast);
+}
+
+.field input:focus {
+  border-color: #171717;
+  box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.08);
+}
+
+.readOnlyField {
+  grid-column: 1 / -1;
+}
+
+.readOnlyField input {
+  background: #f7f8fa;
+  color: #60646c;
+}
+
+.field small {
+  color: #7a7e85;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.cancelButton,
+.saveButton {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  padding: 0 18px;
+  font: inherit;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  text-decoration: none;
+}
+
+.cancelButton {
+  border: 1px solid #cfd2d6;
+  background: #ffffff;
+  color: #171717;
+}
+
+.saveButton {
+  border: 1px solid #171717;
+  background: #171717;
+  color: #ffffff;
+}
+
+.saveButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (max-width: 720px) {
+  .page {
+    gap: 18px;
+  }
+
+  .pageHeader {
+    padding-bottom: 18px;
+  }
+
+  .pageHeader h1 {
+    font-size: calc(25px + var(--presentation-font-size-increase));
+  }
+
+  .profileSummary,
+  .form {
+    padding: 20px;
+  }
+
+  .previewNotice {
+    margin: 20px 20px 0;
+  }
+
+  .fieldGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .readOnlyField {
+    grid-column: auto;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+}
