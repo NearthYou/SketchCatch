@@ -6,6 +6,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-23 - Simplify the Reverse Engineering start flow
+
+- Moved the first AWS import action to the empty-board center and removed the old left-side `보드 후보 선택` guidance and duplicate right-side scan button for a new project.
+- Kept the scan preview-only until the user applies it. The center action now always uses the latest advanced resource selection.
+- Split scan failures into Settings recovery for AWS connection setup issues and plain retry for temporary failures. Existing saved-project scans retain the safe generic error message.
+- Removed the central start-card title and description and removed the right-panel header as requested; error recovery text remains only when it is needed.
+- Focused Reverse Engineering tests (27), Web typecheck, root lint, harness check, and diff check pass. API lint has one existing unused-variable warning in `aws-reverse-engineering-gateway.ts`.
+
 ### 2026-07-22 - Make Live Observation traffic dense, dramatic, and load-testable
 
 - Preserved the existing Focused Flow nodes, geometry, and routes while raising the visible request cap from five to 24, merging rapid single-event SSE snapshots into one sustained dense burst, and retaining exact overflow accounting.

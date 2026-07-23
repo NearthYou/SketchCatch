@@ -47,6 +47,7 @@ function createConnection(overrides: Partial<AwsConnection> = {}): AwsConnection
 
 function renderForm(input: {
   readonly awsConnections: AwsConnection[];
+  readonly createProjectOnApply?: boolean;
   readonly selectedAwsConnectionId: string;
 }): string {
   const recovery = getReverseEngineeringAwsConnectionRecovery({
@@ -59,6 +60,7 @@ function renderForm(input: {
       awsConnectionRecovery: recovery,
       awsConnections: input.awsConnections,
       canStartScan: recovery.canStartScan,
+      createProjectOnApply: input.createProjectOnApply,
       isLoadingOptions: false,
       isScanning: false,
       onRefresh() {},
@@ -149,4 +151,19 @@ test("검증된 AWS 연결은 복구 카드 없이 스캔 행동을 유지한다
   ]) {
     assert.match(html, new RegExp(label.replace(/[()]/g, "\\$&")));
   }
+});
+
+test("새 프로젝트 Reverse 시작 화면은 오른쪽 패널의 중복 가져오기 버튼을 숨긴다", () => {
+  const html = renderForm({
+    awsConnections: [createConnection()],
+    createProjectOnApply: true,
+    selectedAwsConnectionId: "connection-1"
+  });
+
+  assert.doesNotMatch(html, /<header/);
+  assert.doesNotMatch(html, /AWS 가져오기 설정/);
+  assert.doesNotMatch(html, /가져올 리소스와 AWS 연결을 확인합니다\./);
+  assert.doesNotMatch(html, /전체 스캔/);
+  assert.doesNotMatch(html, /<button[^>]*>[\s\S]*?기존 AWS 가져오기/);
+  assert.doesNotMatch(html, /배포할 수 있는 리소스/);
 });

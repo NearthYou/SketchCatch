@@ -58,7 +58,8 @@ import { createReverseEngineeringLayoutSummary } from "./reverse-engineering-lay
 import {
   canStartReverseEngineeringScan,
   createReverseEngineeringAwsSettingsHref,
-  getReverseEngineeringAwsConnectionRecovery
+  getReverseEngineeringAwsConnectionRecovery,
+  type ReverseEngineeringAwsConnectionRecovery
 } from "./reverse-engineering-aws-connection-readiness";
 import {
   ReverseEngineeringResultPanel,
@@ -66,6 +67,8 @@ import {
 } from "./ReverseEngineeringResultPanel";
 import { ReverseEngineeringScanCriteriaForm } from "./ReverseEngineeringScanCriteriaForm";
 import { ReverseEngineeringScanHistoryPanel } from "./ReverseEngineeringScanHistoryPanel";
+import type { ReverseEngineeringStartFailure } from "./ReverseEngineeringStartCard";
+import { getReverseEngineeringStartFailure } from "./reverse-engineering-scan-start-failure";
 import { useReverseEngineeringOptions } from "./useReverseEngineeringOptions";
 import { useReverseEngineeringScanHistory } from "./useReverseEngineeringScanHistory";
 import styles from "./reverse-engineering.module.css";
@@ -76,6 +79,9 @@ export type ReverseEngineeringPanelProps = {
   readonly onCandidatePanelChange?:
     | ((state: ReverseEngineeringCandidatePanelState) => void)
     | undefined;
+  readonly onInitialScanActionChange?:
+    | ((state: ReverseEngineeringInitialScanActionState | null) => void)
+    | undefined;
   readonly projectId: string;
   readonly projectName: string;
 };
@@ -85,6 +91,15 @@ export type ReverseEngineeringCandidatePanelState = {
   readonly hasScanResult: boolean;
   readonly onCandidateSelect: (candidateId: string) => void;
   readonly selectedCandidateId: string | null;
+};
+
+export type ReverseEngineeringInitialScanActionState = {
+  readonly awsConnectionRecovery: ReverseEngineeringAwsConnectionRecovery;
+  readonly canStartScan: boolean;
+  readonly failure: ReverseEngineeringStartFailure | null;
+  readonly isLoadingOptions: boolean;
+  readonly isScanning: boolean;
+  readonly onScanStart: () => void;
 };
 
 type RequestState = "idle" | "loading" | "error";
@@ -104,6 +119,7 @@ export function ReverseEngineeringPanel({
   context,
   createProjectOnApply = false,
   onCandidatePanelChange,
+  onInitialScanActionChange,
   projectId,
   projectName
 }: ReverseEngineeringPanelProps) {
@@ -115,6 +131,8 @@ export function ReverseEngineeringPanel({
   >([REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION]);
   const [scanState, setScanState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [initialScanFailure, setInitialScanFailure] =
+    useState<ReverseEngineeringStartFailure | null>(null);
   const [scanResponse, setScanResponse] = useState<ReverseEngineeringScanResponse | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [logs, setLogs] = useState<ReverseEngineeringScanLogLine[]>([]);
@@ -339,6 +357,14 @@ export function ReverseEngineeringPanel({
     setAcknowledgedReviewOnlyResourceIds([]);
   }, [scanResponse?.scan.id, selectedCandidate?.id]);
 
+  // gg: Reverse 시작 화면을 떠날 때 중앙 카드가 오래된 AWS 연결 상태를 계속 보이지 않게 지웁니다.
+  useEffect(
+    () => () => {
+      onInitialScanActionChange?.(null);
+    },
+    [onInitialScanActionChange]
+  );
+
   // gg: replace와 append 사이에서 실제 적용 범위 밖으로 빠진 선택은 요청에서 제거합니다.
   useEffect(() => {
     const readyIds = new Set(importDecisionOptions.ready.map((option) => option.id));
@@ -357,14 +383,45 @@ export function ReverseEngineeringPanel({
     );
   }
 
+  // 스캔 직후에는 가장 앞의 후보를 기본 미리보기로 보여줍니다.
+  const showFirstCandidatePreview = useCallback(
+    (result: ReverseEngineeringScanResult, baseDiagram: DiagramJson): void => {
+      const nextCandidates = createReverseEngineeringBoardCandidates(result);
+      const nextCandidate = nextCandidates[0];
+
+      if (!nextCandidate) {
+        setSelectedCandidateId(null);
+        setPreviewBase(null);
+        context.setPreviewDiagram(null);
+        return;
+      }
+
+      const candidateResult = createReverseEngineeringCandidateResult(result, nextCandidate);
+      const application = createReverseEngineeringBoardApplication({
+        currentDiagram: baseDiagram,
+        mode: "replace",
+        placement: "original",
+        result: candidateResult
+      });
+
+      setPlacement("original");
+      setApplicationMode("replace");
+      setOrganizedDiagrams(null);
+      setSelectedCandidateId(nextCandidate.id);
+      context.setPreviewDiagram(application.previewDiagram);
+    },
+    [context]
+  );
+
   // 사용자가 스캔을 다시 시작하면 이전 미리보기와 적용 메시지를 지웁니다.
-  async function runScan(): Promise<void> {
+  const runScan = useCallback(async (): Promise<void> => {
     if (!canStartScan || !selectedAwsConnection) {
       return;
     }
 
     setScanState("loading");
     setErrorMessage(null);
+    setInitialScanFailure(null);
     setApplyMessage(null);
     setApplyState("idle");
     setPlacement("original");
@@ -405,11 +462,66 @@ export function ReverseEngineeringPanel({
         showFirstCandidatePreview(response.response.result, basePreview.sourceDiagram);
       }
       setScanState("idle");
-    } catch {
+    } catch (error) {
       setScanState("error");
+      if (createProjectOnApply) {
+        setInitialScanFailure(getReverseEngineeringStartFailure(error));
+        return;
+      }
+
       setErrorMessage("AWS에서 항목을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
-  }
+  }, [
+    canStartScan,
+    context,
+    createProjectOnApply,
+    rememberCompletedScan,
+    selectedAwsConnection,
+    selectedResourceTypes,
+    showFirstCandidatePreview,
+    targetProjectId
+  ]);
+
+  // gg: 중앙 시작 카드는 선택한 Resource 종류가 바뀌면 최신 스캔 함수를 다시 받습니다.
+  useEffect(() => {
+    if (!onInitialScanActionChange) {
+      return;
+    }
+
+    if (!createProjectOnApply || scanResponse?.result) {
+      onInitialScanActionChange(null);
+      return;
+    }
+
+    const optionLoadFailure =
+      loadState === "error"
+        ? {
+            action: "retry" as const,
+            description: "잠시 후 다시 시도해 주세요.",
+            title: "AWS 연결을 확인하지 못했습니다."
+          }
+        : null;
+
+    onInitialScanActionChange({
+      awsConnectionRecovery,
+      canStartScan,
+      failure: initialScanFailure ?? optionLoadFailure,
+      isLoadingOptions: loadState === "loading",
+      isScanning: scanState === "loading",
+      onScanStart: loadState === "error" ? () => void loadOptions() : () => void runScan()
+    });
+  }, [
+    awsConnectionRecovery,
+    canStartScan,
+    createProjectOnApply,
+    initialScanFailure,
+    loadOptions,
+    loadState,
+    onInitialScanActionChange,
+    runScan,
+    scanResponse?.result,
+    scanState
+  ]);
 
   // 사용자가 실행 중인 scan을 멈추고 싶을 때 서버에 안전한 취소 요청만 보냅니다.
   async function cancelActiveScan(scanId = activeScanId): Promise<void> {
@@ -783,36 +895,6 @@ export function ReverseEngineeringPanel({
     context.setPreviewDiagram(originalApplication.previewDiagram);
   }
 
-  // 스캔 직후에는 가장 앞의 후보를 기본 미리보기로 보여줍니다.
-  function showFirstCandidatePreview(
-    result: ReverseEngineeringScanResult,
-    baseDiagram: DiagramJson
-  ): void {
-    const nextCandidates = createReverseEngineeringBoardCandidates(result);
-    const nextCandidate = nextCandidates[0];
-
-    if (!nextCandidate) {
-      setSelectedCandidateId(null);
-      setPreviewBase(null);
-      context.setPreviewDiagram(null);
-      return;
-    }
-
-    const candidateResult = createReverseEngineeringCandidateResult(result, nextCandidate);
-    const application = createReverseEngineeringBoardApplication({
-      currentDiagram: baseDiagram,
-      mode: "replace",
-      placement: "original",
-      result: candidateResult
-    });
-
-    setPlacement("original");
-    setApplicationMode("replace");
-    setOrganizedDiagrams(null);
-    setSelectedCandidateId(nextCandidate.id);
-    context.setPreviewDiagram(application.previewDiagram);
-  }
-
   return (
     <section className={styles.panel} aria-label="Reverse Engineering">
       <div className={styles.panelContent}>
@@ -834,7 +916,9 @@ export function ReverseEngineeringPanel({
           selectedProjectId={targetProjectId}
           selectedResourceTypes={selectedResourceTypes}
         />
-        {errorMessage ? <p className={styles.error}>{errorMessage}</p> : null}
+        {errorMessage && !createProjectOnApply ? (
+          <p className={styles.error}>{errorMessage}</p>
+        ) : null}
         {hasDeletedSourceScan ? (
           <p className={styles.warning}>
             이 보드는 Reverse Engineering scan에서 시작됐습니다. 하지만 원본 scan 기록은
@@ -897,14 +981,14 @@ export function ReverseEngineeringPanel({
             selectedCandidateId={selectedCandidate.id}
             placement={placement}
           />
-        ) : (
+        ) : !createProjectOnApply ? (
           <section className={styles.section}>
             <h3>결과</h3>
             <p className={styles.sectionDescription}>
               스캔이 끝나면 Resource 개수와 적용 구조를 확인할 수 있습니다.
             </p>
           </section>
-        )}
+        ) : null}
       </div>
     </section>
   );
