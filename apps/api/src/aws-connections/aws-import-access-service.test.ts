@@ -239,6 +239,104 @@ test("first Manager preparation can bootstrap an old Role without CloudFormation
   assert.equal(result.consoleUrl, "https://console.example/manager");
 });
 
+test("cleanup retry without any stored import Stack identity can restart Manager preparation", async () => {
+  const fixture = createImportAccessServiceFixture();
+  const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  Object.assign(record, {
+    status: "cleanup_required",
+    operationKind: "check_cleanup",
+    safeErrorCode: "retry",
+    safeErrorSummary: "AWS 권한 정리 상태를 다시 확인해 주세요."
+  });
+  fixture.gateway.inspectManager = async () => ({
+    verified: false,
+    managerStatus: "invalid",
+    managerStackId: null,
+    managerContractVersion: null,
+    managerTemplateSha256: null,
+    policyStatus: "invalid",
+    policyStackId: null,
+    policyStackExists: false,
+    policyContractVersion: null,
+    policyTemplateSha256: null,
+    policyFingerprint: null,
+    reason: "retry"
+  });
+  const modes: unknown[] = [];
+  fixture.gateway.prepareManager = async (input) => {
+    modes.push(input.mode);
+    return { consoleUrl: "https://console.example/manager" };
+  };
+
+  const beforePreparation = await fixture.service.getState(fixture.ownerInput);
+  const result = await fixture.service.prepareManager(fixture.ownerInput);
+
+  assert.equal(beforePreparation.nextAction, "prepare_manager");
+  assert.deepEqual(modes, [{ kind: "create" }]);
+  assert.equal(result.state.status, "manager_approval_required");
+  assert.equal(result.consoleUrl, "https://console.example/manager");
+  assert.equal(fixture.gateway.policyMutations.length, 0);
+  assert.equal(fixture.gateway.deleteCalls, 0);
+});
+
+test("cleanup retry with a known import Stack stays in cleanup instead of restarting Manager preparation", async () => {
+  const fixture = createImportAccessServiceFixture();
+  const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  Object.assign(record, {
+    status: "cleanup_required",
+    operationKind: "check_cleanup",
+    safeErrorCode: "retry",
+    safeErrorSummary: "AWS 권한 정리 상태를 다시 확인해 주세요.",
+    managerStackId: "known-manager-stack-id",
+    managerContractVersion: "1",
+    managerTemplateHash: "a".repeat(64)
+  });
+  let inspectionCalls = 0;
+  fixture.gateway.inspectManager = async () => {
+    inspectionCalls += 1;
+    throw new Error("known cleanup must not start a Manager inspection");
+  };
+  let prepareCalls = 0;
+  fixture.gateway.prepareManager = async () => {
+    prepareCalls += 1;
+    return { consoleUrl: "https://console.example/manager" };
+  };
+
+  const beforePreparation = await fixture.service.getState(fixture.ownerInput);
+  const result = await fixture.service.prepareManager(fixture.ownerInput);
+
+  assert.equal(beforePreparation.nextAction, "check_cleanup");
+  assert.equal(prepareCalls, 0);
+  assert.equal(inspectionCalls, 0);
+  assert.equal(result.state.status, "cleanup_required");
+  assert.equal(result.nextAction, "check_cleanup");
+  assert.equal(fixture.getRecord()?.managerStackId, "known-manager-stack-id");
+});
+
+test("cleanup_complete remains terminal even when old Stack identity is still recorded", async () => {
+  const fixture = createImportAccessServiceFixture();
+  const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  Object.assign(record, {
+    status: "cleanup_complete",
+    managerStackId: "old-manager-stack-id",
+    managerContractVersion: "1",
+    managerTemplateHash: "a".repeat(64)
+  });
+  let inspectionCalls = 0;
+  fixture.gateway.inspectManager = async () => {
+    inspectionCalls += 1;
+    throw new Error("cleanup_complete must not restart Manager preparation");
+  };
+
+  const beforePreparation = await fixture.service.getState(fixture.ownerInput);
+  const result = await fixture.service.prepareManager(fixture.ownerInput);
+
+  assert.equal(beforePreparation.nextAction, null);
+  assert.equal(result.state.status, "cleanup_complete");
+  assert.equal(result.nextAction, null);
+  assert.equal(inspectionCalls, 0);
+});
+
 test("Manager preparation uses Quick Create only when absent and exact update when owned older", async () => {
   for (const scenario of ["absent", "owned_older"] as const) {
     const fixture = createImportAccessServiceFixture();

@@ -86,12 +86,15 @@ const terraformManagedServiceActions = [
   "application-autoscaling:TagResource",
   "application-autoscaling:UntagResource"
 ] as const;
+// gg: 새 연결은 Manager/Policy Stack 상태를 읽어 retry와 실제 부재를 구분하지만, 기존 Role은 Console 승인 흐름으로 복구합니다.
 const reverseEngineeringReadActions = [
   "tag:GetResources",
   "resource-explorer-2:Search",
   "iam:ListRoles",
   "iam:ListPolicies",
-  "iam:ListInstanceProfiles"
+  "iam:ListInstanceProfiles",
+  "cloudformation:DescribeStacks",
+  "cloudformation:GetTemplate"
 ] as const;
 const directReleaseCodeBuildActions = [
   "codebuild:CreateProject",

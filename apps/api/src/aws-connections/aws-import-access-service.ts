@@ -185,19 +185,18 @@ export function createAwsImportAccessService(
         connectionId: input.connectionId,
         now: now()
       });
+      // gg: 정리 중이거나 완료된 연결은 기존 artifact를 건너뛰지 않으며, identity 없는 retry만 Console 재준비로 복구합니다.
+      if (isCleanupLifecycleState(current.status) && !isRecoverableCleanupRetry(current)) {
+        return toCommandResponse(current, current.operationId ?? operationId);
+      }
       const inspection = await options.gateway.inspectManager({
         connection,
         contract,
         expectedCurrent: createExpectedCurrentState(current)
       });
       const managerReady = inspection.verified && inspection.managerStatus === "target";
-      // gg: 예전 연결 Role에는 CloudFormation 조회 권한이 없으므로 최초 준비만 exact 새 Stack 생성으로 bootstrap합니다.
-      const canBootstrapCreate = current.status === "check_required" &&
-        current.managerStackId === null &&
-        current.policyStackId === null &&
-        inspection.reason === "retry" &&
-        inspection.managerStackId === null &&
-        inspection.policyStackId === null;
+      // gg: CloudFormation 읽기 권한이 없던 연결은 empty retry일 때만 새 Manager 승인 화면을 다시 엽니다.
+      const canBootstrapCreate = canBootstrapManagerPreparation(current, inspection);
       const canCreate = (inspection.managerStatus === "absent" &&
         inspection.policyStatus === "absent") || canBootstrapCreate;
       const canUpdate = inspection.managerStatus === "owned_older" &&
@@ -733,6 +732,59 @@ function trustedCleanupInspectionFields(inspection: CleanupInspection) {
   };
 }
 
+type ImportStackIdentityFields = Pick<
+  AwsImportAccessRecord,
+  | "managerStackId"
+  | "managerContractVersion"
+  | "managerTemplateHash"
+  | "policyStackId"
+  | "policyContractVersion"
+  | "policyTemplateHash"
+  | "policyFingerprint"
+>;
+
+/** gg: 저장된 exact identity가 하나라도 있으면 미확인 cleanup artifact가 있을 수 있어 재준비를 막습니다. */
+function hasNoStoredImportStackIdentity(record: Partial<ImportStackIdentityFields>): boolean {
+  return record.managerStackId === null &&
+    record.managerContractVersion === null &&
+    record.managerTemplateHash === null &&
+    record.policyStackId === null &&
+    record.policyContractVersion === null &&
+    record.policyTemplateHash === null &&
+    record.policyFingerprint === null;
+}
+
+/** gg: cleanup 확인이 CloudFormation read 거부로 멈춘 empty legacy row만 사용자의 새 Console 승인을 허용합니다. */
+function isRecoverableCleanupRetry(
+  record: Pick<AwsImportAccessRecord, "status" | "safeErrorCode"> &
+    Partial<ImportStackIdentityFields>
+): boolean {
+  return record.status === "cleanup_required" &&
+    (record.safeErrorCode === "retry" || record.safeErrorCode === "cleanup_retry") &&
+    hasNoStoredImportStackIdentity(record);
+}
+
+/** gg: cleanup lifecycle는 삭제 가능 상태를 포함하므로 recovery 외 Manager 준비 요청을 상태 변경 없이 돌려보냅니다. */
+function isCleanupLifecycleState(status: AwsImportAccessStatus): boolean {
+  return status === "cleanup_policy_required" ||
+    status === "cleanup_manager_required" ||
+    status === "cleanup_checking" ||
+    status === "cleanup_required" ||
+    status === "cleanup_complete";
+}
+
+/** gg: legacy bootstrap은 초기 연결 또는 empty cleanup retry에서만 Console create URL을 발급합니다. */
+function canBootstrapManagerPreparation(
+  current: AwsImportAccessRecord,
+  inspection: ManagerInspection
+): boolean {
+  return (current.status === "check_required" || isRecoverableCleanupRetry(current)) &&
+    hasNoStoredImportStackIdentity(current) &&
+    inspection.reason === "retry" &&
+    inspection.managerStackId === null &&
+    inspection.policyStackId === null;
+}
+
 /** gg: DB의 prior verified identity만 older Stack 분류에 제공하며 incomplete 값은 신뢰하지 않습니다. */
 function createExpectedCurrentState(
   record: AwsImportAccessRecord
@@ -1022,7 +1074,8 @@ const RETRY_NEXT_ACTION_BY_SAFE_ERROR_CODE: Readonly<
 
 /** gg: retry_required는 operation metadata를 우선하고 safe code는 legacy fallback으로만 사용합니다. */
 export function nextActionForRecord(
-  record: Pick<AwsImportAccessRecord, "status" | "operationKind" | "safeErrorCode">
+  record: Pick<AwsImportAccessRecord, "status" | "operationKind" | "safeErrorCode"> &
+    Partial<ImportStackIdentityFields>
 ): AwsImportAccessNextAction | null {
   if (record.status === "retry_required") {
     return (record.operationKind
@@ -1045,7 +1098,9 @@ export function nextActionForRecord(
     case "cleanup_policy_required": return "delete_policy_stack";
     case "cleanup_manager_required": return "delete_manager_stack";
     case "cleanup_checking": return "check_cleanup";
-    case "cleanup_required": return "check_cleanup";
+    case "cleanup_required": return isRecoverableCleanupRetry(record)
+      ? "prepare_manager"
+      : "check_cleanup";
     case "cleanup_complete": return null;
   }
 }
