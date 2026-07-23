@@ -1,14 +1,11 @@
 .page {
   display: grid;
-  width: min(100%, 920px);
+  width: min(100%, 760px);
   margin: 0 auto;
   gap: 24px;
 }
 
 .pageHeader {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
   padding-bottom: 24px;
   border-bottom: 1px solid #dcdee0;
 }
@@ -27,6 +24,43 @@
   box-shadow: var(--shadow-card);
 }
 
+.verificationCard {
+  width: min(100%, 620px);
+  margin: 24px auto 0;
+}
+
+.cardHeading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 24px 28px;
+  border-bottom: 1px solid #eceef0;
+  background: #fafafa;
+}
+
+.headingIcon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #dcdee0;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.cardHeading h2 {
+  margin: 0;
+  font-size: calc(18px + var(--presentation-font-size-increase));
+}
+
+.cardHeading p {
+  margin: 6px 0 0;
+  color: #60646c;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  line-height: 1.55;
+}
+
 .previewNotice {
   margin: 24px 28px 0;
   border: 1px solid #dcdee0;
@@ -40,20 +74,25 @@
 
 .form {
   display: grid;
-  gap: 24px;
+  gap: 28px;
   padding: 28px;
 }
 
 .fieldGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: 22px 20px;
 }
 
-.field {
+.field,
+.fullWidthField {
   display: grid;
   min-width: 0;
   gap: 9px;
+}
+
+.fullWidthField {
+  grid-column: 1 / -1;
 }
 
 .field > span {
@@ -66,7 +105,7 @@
 
 .field input {
   width: 100%;
-  min-height: 48px;
+  min-height: 50px;
   border: 1px solid #cfd2d6;
   border-radius: 10px;
   padding: 0 14px;
@@ -85,17 +124,12 @@
   box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.08);
 }
 
-.readOnlyField {
-  grid-column: 1 / -1;
+.field input[aria-invalid="true"] {
+  border-color: #d92d20;
 }
 
-.readOnlyField input {
-  background: #f7f8fa;
-  color: #60646c;
-}
-
-.field small {
-  color: #7a7e85;
+.errorMessage {
+  color: #d92d20;
   font-size: calc(11px + var(--presentation-font-size-increase));
 }
 
@@ -113,7 +147,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 9px;
-  padding: 0 18px;
+  padding: 0 20px;
   font: inherit;
   font-size: calc(13px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
@@ -150,6 +184,11 @@
     font-size: calc(25px + var(--presentation-font-size-increase));
   }
 
+  .verificationCard {
+    margin-top: 8px;
+  }
+
+  .cardHeading,
   .form {
     padding: 20px;
   }
@@ -162,7 +201,7 @@
     grid-template-columns: 1fr;
   }
 
-  .readOnlyField {
+  .fullWidthField {
     grid-column: auto;
   }
 
@@ -170,5 +209,4 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
 }
