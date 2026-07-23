@@ -6,6 +6,16 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-23 - Recover blocked AWS import preparation
+
+- Confirmed the local SSO caller and the saved deployment Role can both access their expected AWS identities. The failure was not an expired SSO session.
+- Added a narrow recovery path for an old import-access record that has a cleanup retry but no stored Manager or Policy identity. It only opens the existing AWS Console approval flow and never mutates AWS automatically.
+- Kept incomplete cleanup and completed cleanup records blocked from recovery so known AWS artifacts cannot be skipped before deletion.
+- Made the AWS connection step independent from GitHub App setup. CodeBuild still requires both GitHub and AWS connections.
+- Added CloudFormation read checks to the template used by future AWS connections. Existing Roles are unchanged until their owner approves a separate AWS Console update.
+- Verified the repaired Settings page in Chrome: the recovery button and AWS accordion are enabled, CodeBuild remains locked, and the page has no console errors.
+- Focused Web checks and the targeted connection-service tests pass. The broader import-access service file still has one pre-existing catalog-version expectation mismatch (`11` actual versus `6` expected).
+
 ### 2026-07-23 - Simplify the Reverse Engineering start flow
 
 - Moved the first AWS import action to the empty-board center and removed the old left-side `보드 후보 선택` guidance and duplicate right-side scan button for a new project.
