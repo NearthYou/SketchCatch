@@ -73,6 +73,13 @@ Short English-only working log for the current agent context. Older records are 
 - Root `pnpm build` was attempted twice but Turbo produced no output and did not terminate; both verified build process trees were stopped. The changed Web package itself compiled and generated all routes successfully.
 - AWS read-only evidence could not be refreshed because this session has no configured credentials. No dependency, lockfile, migration, cloud mutation, production deployment, push, or Git/CI/CD handoff was performed.
 
+### 2026-07-23 - Stop Workspace AI message-triggered Orbit flashes
+
+- Issue #553 now keeps the Orbit reaction key stable while the conversation remains in the same stage, so user answers and assistant follow-up messages no longer restart the transient response animation.
+- Preserved `DecorativeAwsOrbit`, the continuous Orbit motion, convergence, Preview transition, and all Orbit CSS animation definitions unchanged.
+- Verified the regression red before implementation and green afterward. The focused Orbit suite passes 13/13, Web ESLint passes, Web `tsc --noEmit` passes, `git diff --check` passes, and the harness check passes.
+- `next build --webpack` compiled successfully, then stopped on the pre-existing `apps/web/app/api/ai/architecture-draft/route.ts` export of `forwardArchitectureDraftRequest`; that route is unchanged from `dev`.
+
 ## Known Risk
 
 - Authenticated browser visual smoke testing for `/workspace/new` was not available in the clean browser session; the route redirected to login. Source-level regression coverage and the production build are green.

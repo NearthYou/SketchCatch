@@ -52,10 +52,7 @@ export function WorkspaceAiShell({
   const showFinalPreview = hasFinalPreview && stagePhase === "preview";
   const answerCount = workflow.messages.filter(({ role }) => role === "user").length;
   const orbitPresentation = getWorkspaceAiOrbitPresentation({ answerCount, stagePhase });
-  const orbitReactionKey = createWorkspaceAiOrbitReactionKey({
-    lastMessageId: workflow.messages.at(-1)?.id ?? null,
-    selectionCount: selections.length
-  });
+  const orbitReactionKey = createWorkspaceAiOrbitReactionKey({ stagePhase });
   const mobileView = resolveWorkspaceAiMobileView({
     hasFinalPreview: showFinalPreview,
     previewRequested: mobilePreviewRequested
