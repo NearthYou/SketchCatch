@@ -22,13 +22,11 @@ import {
 import { createPortal } from "react-dom";
 import {
   Activity,
-  CloudDownload,
   Code2,
   GalleryVerticalEnd,
   PanelRightClose,
   PanelRightOpen,
-  Rocket,
-  X
+  Rocket
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
@@ -37,7 +35,6 @@ import {
   type DeploymentPreDeploymentCheckState
 } from "./DeploymentPanel";
 import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
-import { ReverseEngineeringPanel } from "./ReverseEngineeringPanel";
 import {
   TerraformCodePanel,
   type TerraformFilesReplacementRequest,
@@ -152,7 +149,6 @@ export type WorkspaceRightPanelProps = {
 type PendingTerraformLeaveAction =
   | { readonly kind: "view"; readonly view: WorkspaceRightPanelView }
   | { readonly kind: "deployment-console" }
-  | { readonly kind: "reverse-engineering" }
   | { readonly kind: "right-panel-close" }
   | { readonly kind: "replay-click"; readonly target: HTMLElement };
 
@@ -161,7 +157,7 @@ const MIN_TERRAFORM_CODE_PANE_RATIO = 32;
 const MAX_TERRAFORM_CODE_PANE_RATIO = 78;
 const TERRAFORM_SPLIT_KEYBOARD_STEP = 4;
 
-// 오른쪽 패널은 현재 Project를 서버에 저장한 뒤에만 AWS 구조 가져오기를 열어줍니다.
+// 오른쪽 패널은 리소스 설정, Terraform, 배포와 관측 작업만 전환합니다.
 export function WorkspaceRightPanel({
   context,
   deploymentAvailability,
@@ -176,7 +172,6 @@ export function WorkspaceRightPanel({
   onPanelOpenRequest,
   onInitialCicdReturnCommandReady,
   onLiveObservationTerraformFilesApply,
-  onReverseEngineeringOpenRequest,
   onSelectTerraformIssue,
   onTerraformAiContextChange,
   onTerraformAiInteraction,
@@ -213,11 +208,6 @@ export function WorkspaceRightPanel({
     defaultResourceWorkspaceView
   );
   const [hasUnsavedTerraformChanges, setHasUnsavedTerraformChanges] = useState(false);
-  const [isReverseEngineeringOpen, setReverseEngineeringOpen] = useState(false);
-  const [isReverseEngineeringPreparing, setReverseEngineeringPreparing] = useState(false);
-  const [reverseEngineeringEntryMessage, setReverseEngineeringEntryMessage] = useState<
-    string | null
-  >(null);
   const [isDeploymentBaselineDirty, setIsDeploymentBaselineDirty] = useState(false);
   const [lastSavedDeploymentBaselineFingerprint, setLastSavedDeploymentBaselineFingerprint] =
     useState<string | null>(() => toDeploymentBaselineFingerprint(context.diagram));
@@ -564,49 +554,6 @@ export function WorkspaceRightPanel({
     [hasUnsavedTerraformChanges]
   );
 
-  /** AWS 후보를 닫을 때 실제 Board는 건드리지 않고 미리보기만 제거합니다. */
-  const closeReverseEngineering = useCallback((): boolean => {
-    if (context.isMutationLocked) {
-      setReverseEngineeringEntryMessage("적용 결과를 확인하고 있습니다. 잠시만 기다려주세요.");
-      return false;
-    }
-
-    context.setPreviewDiagram(null);
-    setReverseEngineeringOpen(false);
-    setReverseEngineeringEntryMessage(null);
-    return true;
-  }, [context]);
-
-  /** 현재 Project의 서버 저장이 확인된 경우에만 AWS 스캔 화면을 엽니다. */
-  const performReverseEngineeringOpen = useCallback(async (): Promise<void> => {
-    if (!onReverseEngineeringOpenRequest || isReverseEngineeringPreparing) {
-      return;
-    }
-
-    setReverseEngineeringPreparing(true);
-    setReverseEngineeringEntryMessage(null);
-
-    try {
-      const result = await onReverseEngineeringOpenRequest();
-
-      if (!result.ok) {
-        setReverseEngineeringEntryMessage(result.message);
-        return;
-      }
-
-      onPanelOpenRequest();
-      context.setRightPanelOpen(true);
-      context.setPreviewDiagram(context.diagram);
-      setReverseEngineeringOpen(true);
-    } catch {
-      setReverseEngineeringEntryMessage(
-        "현재 보드를 준비하지 못했습니다. 저장 상태를 확인한 뒤 다시 시도해주세요."
-      );
-    } finally {
-      setReverseEngineeringPreparing(false);
-    }
-  }, [context, isReverseEngineeringPreparing, onPanelOpenRequest, onReverseEngineeringOpenRequest]);
-
   /** Terraform 저장 확인 뒤 사용자가 고른 원래 작업을 한 번만 이어갑니다. */
   const runPendingTerraformLeaveAction = useCallback((): void => {
     const pendingAction = pendingTerraformLeaveActionRef.current;
@@ -632,11 +579,6 @@ export function WorkspaceRightPanel({
         return;
       }
 
-      if (pendingAction.kind === "reverse-engineering") {
-        void performReverseEngineeringOpen();
-        return;
-      }
-
       if (pendingAction.kind === "right-panel-close") {
         context.setRightPanelOpen(false);
         return;
@@ -648,51 +590,11 @@ export function WorkspaceRightPanel({
         skipTerraformLeaveGuardRef.current = false;
       }, 0);
     }
-  }, [context, onPanelOpenRequest, onTerraformAiInteraction, performReverseEngineeringOpen]);
+  }, [context, onPanelOpenRequest, onTerraformAiInteraction]);
 
-  /** Terraform 편집 내용이 남아 있으면 기존 저장 확인을 거친 뒤 AWS 스캔을 시작합니다. */
-  const requestReverseEngineeringOpen = useCallback((): void => {
-    if (isReverseEngineeringOpen) {
-      closeReverseEngineering();
-      return;
-    }
-
-    if (context.isMutationLocked) {
-      setReverseEngineeringEntryMessage("다른 Board 적용이 끝난 뒤 다시 시도해주세요.");
-      context.setRightPanelOpen(true);
-      return;
-    }
-
-    onPanelOpenRequest();
-    context.setRightPanelOpen(true);
-
-    if (!requestTerraformLeave({ kind: "reverse-engineering" })) {
-      return;
-    }
-
-    void performReverseEngineeringOpen();
-  }, [
-    closeReverseEngineering,
-    context,
-    isReverseEngineeringOpen,
-    onPanelOpenRequest,
-    performReverseEngineeringOpen,
-    requestTerraformLeave
-  ]);
-
-  /** 다른 오른쪽 작업으로 이동하면 적용 전 AWS 후보 미리보기만 닫습니다. */
+  /** 오른쪽 작업을 바꿀 때 Terraform의 미저장 변경만 먼저 확인합니다. */
   const requestView = useCallback(
     (nextView: WorkspaceRightPanelView): void => {
-      if (isReverseEngineeringOpen) {
-        if (!closeReverseEngineering()) {
-          return;
-        }
-        onPanelOpenRequest();
-        setActiveView(nextView);
-        onTerraformAiInteraction(nextView === "terraform" ? "preview" : "draft");
-        return;
-      }
-
       if (nextView === activeView) {
         onPanelOpenRequest();
         onTerraformAiInteraction(nextView === "terraform" ? "preview" : "draft");
@@ -716,8 +618,6 @@ export function WorkspaceRightPanel({
     },
     [
       activeView,
-      closeReverseEngineering,
-      isReverseEngineeringOpen,
       onPanelOpenRequest,
       onTerraformAiInteraction,
       requestTerraformLeave
@@ -990,16 +890,8 @@ export function WorkspaceRightPanel({
     onTerraformAiInteraction("draft");
   }
 
-  /** 오른쪽 패널을 닫아도 적용 전 AWS 후보가 실제 Board에 남지 않게 합니다. */
+  /** 오른쪽 패널을 닫기 전에 Terraform의 미저장 변경을 확인합니다. */
   function requestRightPanelClose(): void {
-    if (isReverseEngineeringOpen) {
-      if (!closeReverseEngineering()) {
-        return;
-      }
-      context.setRightPanelOpen(false);
-      return;
-    }
-
     if (!requestTerraformLeave({ kind: "right-panel-close" })) {
       return;
     }
@@ -1259,18 +1151,6 @@ export function WorkspaceRightPanel({
           >
             <GalleryVerticalEnd size={18} aria-hidden="true" />
           </button>
-          {onReverseEngineeringOpenRequest ? (
-            <button
-              aria-label="AWS 구조 가져오기"
-              className={styles.collapsedPanelButton}
-              disabled={isReverseEngineeringPreparing || context.isMutationLocked}
-              onClick={requestReverseEngineeringOpen}
-              title="AWS 구조 가져오기"
-              type="button"
-            >
-              <CloudDownload size={18} aria-hidden="true" />
-            </button>
-          ) : null}
           <button
             className={styles.collapsedPanelButton}
             data-terraform-editor-navigation
@@ -1348,9 +1228,9 @@ export function WorkspaceRightPanel({
             aria-label="Configurator and code"
           >
             <button
-              aria-pressed={activeView === "resource" && !isReverseEngineeringOpen}
+              aria-pressed={activeView === "resource"}
               className={
-                activeView === "resource" && !isReverseEngineeringOpen
+                activeView === "resource"
                   ? styles.panelModeButtonActive
                   : styles.panelModeButton
               }
@@ -1361,9 +1241,9 @@ export function WorkspaceRightPanel({
               <GalleryVerticalEnd size={16} aria-hidden="true" />
             </button>
             <button
-              aria-pressed={activeView === "terraform" && !isReverseEngineeringOpen}
+              aria-pressed={activeView === "terraform"}
               className={
-                activeView === "terraform" && !isReverseEngineeringOpen
+                activeView === "terraform"
                   ? styles.panelModeButtonActive
                   : styles.panelModeButton
               }
@@ -1380,24 +1260,6 @@ export function WorkspaceRightPanel({
                 {issueCount}
               </span>
             </button>
-            {onReverseEngineeringOpenRequest ? (
-              <button
-                aria-label="AWS 구조 가져오기"
-                aria-pressed={isReverseEngineeringOpen}
-                className={
-                  isReverseEngineeringOpen
-                    ? styles.panelModeTextButtonActive
-                    : styles.panelModeTextButton
-                }
-                disabled={isReverseEngineeringPreparing || context.isMutationLocked}
-                onClick={requestReverseEngineeringOpen}
-                title={isReverseEngineeringOpen ? "AWS 구조 가져오기 닫기" : "AWS 구조 가져오기"}
-                type="button"
-              >
-                <CloudDownload size={16} aria-hidden="true" />
-                <span>AWS 가져오기</span>
-              </button>
-            ) : null}
             <button
               aria-label="Live Observation"
               className={styles.panelModeButton}
@@ -1408,21 +1270,9 @@ export function WorkspaceRightPanel({
               <Activity size={16} aria-hidden="true" />
             </button>
           </div>
-          {isReverseEngineeringPreparing ? (
-            <span className={styles.reverseEngineeringEntryMessage} role="status">
-              현재 보드를 저장하는 중입니다.
-            </span>
-          ) : reverseEngineeringEntryMessage ? (
-            <span className={styles.reverseEngineeringEntryError} role="alert">
-              {reverseEngineeringEntryMessage}
-            </span>
-          ) : null}
         </div>
 
-        <div
-          className={styles.rightPanelView}
-          hidden={activeView !== "resource" || isReverseEngineeringOpen}
-        >
+        <div className={styles.rightPanelView} hidden={activeView !== "resource"}>
           <ResourceWorkspacePanel
             context={context}
             onViewChange={handleResourceWorkspaceViewChange}
@@ -1432,7 +1282,7 @@ export function WorkspaceRightPanel({
         <div
           ref={terraformViewRef}
           className={styles.rightPanelView}
-          hidden={activeView !== "terraform" || isReverseEngineeringOpen}
+          hidden={activeView !== "terraform"}
         >
           <div
             className={styles.terraformSplitLayout}
@@ -1448,7 +1298,7 @@ export function WorkspaceRightPanel({
                 externalDiscardRequestId={terraformDiscardRequestId}
                 externalSaveRequestId={terraformSaveRequestId}
                 isMutationLocked={context.isMutationLocked}
-                isVisible={activeView === "terraform" && !isReverseEngineeringOpen}
+                isVisible={activeView === "terraform"}
                 onArchitectureDiagnosticsChange={handleArchitectureDiagnosticsChange}
                 onDiagnosticsChange={handleTerraformDiagnosticsChange}
                 onDirtyChange={handleTerraformDirtyChange}
@@ -1484,32 +1334,6 @@ export function WorkspaceRightPanel({
               />
             </div>
           </div>
-        </div>
-        <div
-          className={`${styles.rightPanelView} ${styles.reverseEngineeringWorkspaceView}`}
-          hidden={!isReverseEngineeringOpen}
-        >
-          <header className={styles.reverseEngineeringWorkspaceHeader}>
-            <div>
-              <strong>AWS 구조 가져오기</strong>
-              <span>현재 프로젝트에 적용하기 전에 후보를 먼저 확인합니다.</span>
-            </div>
-            <button
-              aria-label="AWS 구조 가져오기 취소"
-              className={styles.panelIconButton}
-              disabled={context.isMutationLocked}
-              onClick={closeReverseEngineering}
-              title="취소"
-              type="button"
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
-          </header>
-          <ReverseEngineeringPanel
-            context={context}
-            projectId={projectId}
-            projectName={projectName}
-          />
         </div>
         {showTerraformLeaveDialog ? (
           <TerraformLeaveDialog

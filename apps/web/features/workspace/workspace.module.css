@@ -1730,51 +1730,6 @@
   display: none;
 }
 
-.reverseEngineeringWorkspaceView {
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
-.reverseEngineeringWorkspaceHeader {
-  align-items: center;
-  background: var(--workspace-surface, #ffffff);
-  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 12px 14px;
-}
-
-.reverseEngineeringWorkspaceHeader > div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.reverseEngineeringWorkspaceHeader strong {
-  color: var(--workspace-text, #171717);
-  font-size: calc(14px + var(--presentation-font-size-increase));
-}
-
-.reverseEngineeringWorkspaceHeader span,
-.reverseEngineeringEntryMessage,
-.reverseEngineeringEntryError {
-  color: var(--workspace-muted, #60646c);
-  font-size: calc(11px + var(--presentation-font-size-increase));
-  line-height: 1.4;
-}
-
-.reverseEngineeringEntryMessage,
-.reverseEngineeringEntryError {
-  margin-left: auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.reverseEngineeringEntryError {
-  color: #b42318;
-}
-
 .panelModeToggle {
   align-items: center;
   background: var(--workspace-surface-muted, #fafafa);

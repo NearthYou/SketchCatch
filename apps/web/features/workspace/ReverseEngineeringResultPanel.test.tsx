@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import type {
+  DiscoveredResource,
   ReverseEngineeringScanError,
   ReverseEngineeringServiceCoverage,
   ReverseEngineeringScanResponse
@@ -13,6 +16,11 @@ import {
 } from "./ReverseEngineeringResultPanel";
 
 Object.assign(globalThis, { React });
+
+const resultPanelSource = readFileSync(
+  fileURLToPath(new URL("./ReverseEngineeringResultPanel.tsx", import.meta.url)),
+  "utf8"
+);
 
 const response: ReverseEngineeringScanResponse = {
   scan: {
@@ -74,6 +82,8 @@ function renderPanel(
     readonly applyState?: ReverseEngineeringResultPanelProps["applyState"];
     readonly additionCount?: number;
     readonly boardNodeCount?: number;
+    readonly edgeCount?: number;
+    readonly discoveredResources?: readonly DiscoveredResource[];
     readonly hasCurrentBoardResources?: boolean;
     readonly importDecisionComplete?: boolean;
     readonly importDecisionOptions?: ReverseEngineeringResultPanelProps["importDecisionOptions"];
@@ -133,8 +143,14 @@ function renderPanel(
                 positionX: index * 80,
                 positionY: 0,
                 config: {}
+              })),
+              edges: Array.from({ length: options.edgeCount ?? 0 }, (_, index) => ({
+                id: `edge-${index}`,
+                sourceId: "resource-0",
+                targetId: "resource-1"
               }))
             },
+            discoveredResources: [...(options.discoveredResources ?? [])],
             scanErrors: [...(options.scanErrors ?? [])],
             ...(options.coverage ? { coverage: options.coverage } : {})
           }
@@ -147,16 +163,191 @@ function renderPanel(
   return renderToStaticMarkup(createElement(ReverseEngineeringResultPanel, props));
 }
 
-test("원래 AWS 배치를 처음 보여주고 Compiler와 원본 유지 선택을 저장 행동과 분리한다", () => {
+function discoveredResource(
+  id: string,
+  providerResourceType: string,
+  resourceType: DiscoveredResource["resourceType"] = "UNKNOWN"
+): DiscoveredResource {
+  return {
+    id,
+    provider: "aws",
+    providerResourceType,
+    providerResourceId: id,
+    region: "ap-northeast-2",
+    displayName: id,
+    resourceType,
+    config: {}
+  };
+}
+
+test("기본 미리보기는 핵심 수치와 세 가지 행동만 먼저 보여준다", () => {
+  const html = renderPanel("original", {
+    boardNodeCount: 2,
+    edgeCount: 1,
+    discoveredResources: [
+      {
+        id: "resource-1",
+        provider: "aws",
+        providerResourceType: "AWS::EC2::VPC",
+        providerResourceId: "vpc-1",
+        region: "ap-northeast-2",
+        displayName: "서비스 VPC",
+        resourceType: "VPC",
+        config: {}
+      },
+      {
+        id: "resource-2",
+        provider: "aws",
+        providerResourceType: "AWS::IAM::Role",
+        providerResourceId: "role-1",
+        region: "global",
+        displayName: "서비스 역할",
+        resourceType: "UNKNOWN",
+        config: {},
+        analysisExcluded: true
+      }
+    ],
+    importDecisionOptions: {
+      ready: [{ id: "resource-1", label: "서비스 VPC", status: "ready" }],
+      reviewOnly: [
+        { id: "resource-2", label: "서비스 역할", status: "unsupported_resource_type" }
+      ],
+      invalidResourceIds: []
+    }
+  });
+
+  assert.match(html, /aria-label="미리보기"/);
+  assert.match(html, /리소스<strong>2<\/strong>/);
+  assert.match(html, /연결<strong>1<\/strong>/);
+  assert.match(html, />보드에 적용</);
+  assert.match(html, />보기 좋게 정리</);
+  assert.match(html, />상세 정보</);
+  assert.match(html, /role="dialog"/);
+  assert.match(html, /hidden=""/);
+  assert.match(html, /리소스 이름 또는 종류 검색/);
+  assert.match(html, /전체[^0-9]*2/);
+  assert.match(html, /수정 가능[^0-9]*1/);
+  assert.match(html, /확인 필요[^0-9]*1/);
+  assert.match(html, /보드에 표시되지 않거나 읽지 못한 항목은 자동으로 적용하지 않습니다/);
+  assert.match(html, /Terraform으로 관리할 리소스 선택/);
+  assert.doesNotMatch(html, /<h3>스캔 요약<\/h3>/);
+  assert.doesNotMatch(html, /<h3>선택한 배치 적용<\/h3>/);
+});
+
+test("상세 정보 첫 화면은 다섯 가지 쉬운 분류의 리소스 수를 먼저 보여준다", () => {
+  const html = renderPanel("original", {
+    discoveredResources: [
+      {
+        id: "network-vpc",
+        provider: "aws",
+        providerResourceType: "AWS::EC2::VPC",
+        providerResourceId: "vpc-1",
+        region: "ap-northeast-2",
+        displayName: "서비스 VPC",
+        resourceType: "VPC",
+        config: {}
+      },
+      {
+        id: "network-subnet",
+        provider: "aws",
+        providerResourceType: "AWS::EC2::Subnet",
+        providerResourceId: "subnet-1",
+        region: "ap-northeast-2",
+        displayName: "서비스 서브넷",
+        resourceType: "SUBNET",
+        config: {}
+      },
+      {
+        id: "compute-service",
+        provider: "aws",
+        providerResourceType: "AWS::ECS::Service",
+        providerResourceId: "service-1",
+        region: "ap-northeast-2",
+        displayName: "API 서비스",
+        resourceType: "ECS_SERVICE",
+        config: {}
+      },
+      {
+        id: "storage-bucket",
+        provider: "aws",
+        providerResourceType: "AWS::S3::Bucket",
+        providerResourceId: "bucket-1",
+        region: "ap-northeast-2",
+        displayName: "파일 저장소",
+        resourceType: "S3",
+        config: {}
+      },
+      {
+        id: "security-role",
+        provider: "aws",
+        providerResourceType: "AWS::IAM::Role",
+        providerResourceId: "role-1",
+        region: "global",
+        displayName: "실행 역할",
+        resourceType: "IAM_ROLE",
+        config: {}
+      },
+      {
+        id: "other-rule",
+        provider: "aws",
+        providerResourceType: "AWS::Events::Rule",
+        providerResourceId: "rule-1",
+        region: "ap-northeast-2",
+        displayName: "예약 실행 규칙",
+        resourceType: "EVENTBRIDGE_RULE",
+        config: {}
+      },
+      discoveredResource("network-acl", "AWS::EC2::NetworkAcl"),
+      discoveredResource("vpc-endpoint", "AWS::EC2::VPCEndpoint"),
+      discoveredResource("vpc-peering", "AWS::EC2::VPCPeeringConnection"),
+      discoveredResource("route53-zone", "AWS::Route53::HostedZone"),
+      discoveredResource("websocket-api", "AWS::ApiGatewayV2::Api"),
+      discoveredResource("launch-template", "AWS::EC2::LaunchTemplate"),
+      discoveredResource("auto-scaling", "AWS::AutoScaling::AutoScalingGroup"),
+      discoveredResource("eks-cluster", "AWS::EKS::Cluster"),
+      discoveredResource("lambda-alias", "AWS::Lambda::Alias"),
+      discoveredResource("web-acl", "AWS::WAFv2::WebACL"),
+      discoveredResource("certificate", "AWS::CertificateManager::Certificate"),
+      discoveredResource("user-pool", "AWS::Cognito::UserPool"),
+      discoveredResource("config-rule", "AWS::Config::ConfigRule"),
+      discoveredResource("trail", "AWS::CloudTrail::Trail"),
+      discoveredResource("guard-duty", "AWS::GuardDuty::Detector"),
+      discoveredResource("shield", "AWS::Shield::Protection")
+    ]
+  });
+
+  const categorySummaryIndex = html.indexOf('aria-label="리소스 종류별 개수"');
+  const searchIndex = html.indexOf('placeholder="리소스 이름 또는 종류 검색"');
+  const previewHtml = html.slice(0, html.indexOf('role="dialog"'));
+
+  assert.ok(categorySummaryIndex > 0);
+  assert.ok(categorySummaryIndex < searchIndex);
+  assert.match(html, /네트워크<strong>7<\/strong>/);
+  assert.match(html, /서버·컴퓨팅<strong>5<\/strong>/);
+  assert.match(html, /데이터·저장소<strong>1<\/strong>/);
+  assert.match(html, /보안·권한<strong>8<\/strong>/);
+  assert.match(html, /기타<strong>1<\/strong>/);
+  assert.doesNotMatch(previewHtml, /리소스 종류별 개수/);
+});
+
+test("자동 정리는 한 프레임 먼저 진행 상태를 그리고 같은 요청을 다시 받지 않는다", () => {
+  assert.match(resultPanelSource, /if \(isOrganizing \|\| placement === "compiled"\) \{\s*return;/);
+  assert.match(
+    resultPanelSource,
+    /setIsOrganizing\(true\);[\s\S]*?window\.requestAnimationFrame\([\s\S]*?window\.setTimeout\([\s\S]*?onCompilePlacement\(\);[\s\S]*?setIsOrganizing\(false\)/
+  );
+  assert.match(resultPanelSource, /disabled=\{isOrganizing \|\| placement === "compiled"\}/);
+  assert.match(resultPanelSource, /isOrganizing \? "정리하는 중…" : "보기 좋게 정리"/);
+});
+
+test("원래 AWS 배치를 먼저 보여주고 상세 설정과 저장 행동을 분리한다", () => {
   const html = renderPanel("original");
 
-  assert.match(html, /AWS에서 가져온 원본/);
-  assert.match(html, /가져온 Resource와 관계와 설정을 바꾸지 않은 상태/);
-  assert.match(html, /보기 좋게 자동 정리할까요\?/);
-  assert.match(html, /위치, 크기, 표시 영역, 연결선/);
+  assert.match(html, /AWS에서 가져온 배치/);
   assert.match(html, /aria-pressed="true"[^>]*>원본 유지</);
   assert.match(html, /aria-pressed="false"[^>]*>보기 좋게 정리</);
   assert.match(html, />보드에 적용</);
+  assert.match(html, /hidden=""/);
   assert.doesNotMatch(html, /보드 정리 검토/);
 });
 
@@ -192,8 +383,11 @@ test("자동 정리는 원본과 하나의 정리본만 실제 Board에서 전�
   });
 
   assert.match(html, /aria-pressed="false"[^>]*>원본 유지</);
-  assert.match(html, /aria-pressed="true"[^>]*>보기 좋게 정리</);
-  assert.match(html, /정리본을 확인한 뒤 원하는 적용/);
+  assert.match(
+    html,
+    /aria-pressed="true"[^>]*disabled=""[^>]*>(?:<span>)?보기 좋게 정리/
+  );
+  assert.match(html, /보기 좋게 정리한 배치/);
   assert.match(html, /리소스 겹침 2곳을 정리했습니다/);
   assert.match(html, /연결선 경로 3개가 바뀌었습니다/);
   assert.match(html, /서브넷 밖 리소스 1개를 안으로 옮겼습니다/);
@@ -201,7 +395,6 @@ test("자동 정리는 원본과 하나의 정리본만 실제 Board에서 전�
     html,
     /정리안 1|정리안 2|Board 정리안 선택|겹친 Resource를 떨어뜨렸습니다|연결선이 Resource를 지나가지 않게 정리했습니다|정리 점수|변경 거리|후보|내부 cost|compiled:|architecture-board-compiler|template/
   );
-  assert.doesNotMatch(html, /<(?:img|svg)\b/);
 });
 
 test("부분 실패는 같은 AWS 연결의 Settings 복구 행동만 보여주고 내부 AWS 정보를 숨긴다", () => {
@@ -238,8 +431,8 @@ test("부분 실패는 같은 AWS 연결의 Settings 복구 행동만 보여주�
     /href="\/dashboard\/settings\?tab=aws&amp;next=reverse&amp;awsConnectionId=connection-1"/
   );
   assert.doesNotMatch(html, /AWS에서 승인했어요|가져오기 권한 추가/);
-  assert.match(html, /보드에 표시할 항목이 없어요/);
-  assert.match(html, /<button[^>]*disabled=""[^>]*><span>가져온 항목만 보드에 적용<\/span>/);
+  assert.match(html, /보드에 표시할 항목이 없습니다/);
+  assert.match(html, /<button[^>]*disabled=""[^>]*>보드에 적용<\/button>/);
   assert.match(html, /EC2/);
   assert.match(html, /권한 부족/);
   assert.match(html, /환경설정에서 읽기 권한을 보완해 주세요/);
@@ -297,7 +490,7 @@ test("coverage가 있어도 실제 실패 원인을 연결 만료와 리전 오�
   assert.doesNotMatch(html, /ExpiredToken|InvalidEndpoint|arn:aws|RequestId|provider_api/u);
 });
 
-test("부분 결과를 기존 보드에 적용할 때 교체와 추가를 분명히 구분한다", () => {
+test("부분 결과의 교체와 추가 선택은 상세 정보 안에서 보존한다", () => {
   const html = renderPanel("original", {
     boardNodeCount: 1,
     hasCurrentBoardResources: true,
@@ -313,9 +506,10 @@ test("부분 결과를 기존 보드에 적용할 때 교체와 추가를 분명
     ]
   });
 
-  assert.match(html, />현재 보드를 가져온 항목으로 바꾸기</);
-  assert.match(html, />가져온 항목만 현재 보드에 추가</);
-  assert.doesNotMatch(html, />가져온 항목만 사용</);
+  assert.match(html, />현재 보드 교체 미리보기</);
+  assert.match(html, />현재 보드 추가 미리보기</);
+  assert.match(html, />보드에 적용</);
+  assert.match(html, /가져온 항목만 사용해 계속 진행할 수 있어요/);
 });
 
 test("현재 보드에서는 실제로 적용할 replace 또는 append 배치를 먼저 선택해 미리본다", () => {
@@ -328,11 +522,7 @@ test("현재 보드에서는 실제로 적용할 replace 또는 append 배치를
 
   assert.match(html, /aria-pressed="false"[^>]*>현재 보드 교체 미리보기</);
   assert.match(html, /aria-pressed="true"[^>]*>현재 보드 추가 미리보기</);
-  assert.match(
-    html,
-    /<button[^>]*disabled=""[^>]*><span>현재 보드를 가져온 항목으로 바꾸기<\/span>/
-  );
-  assert.match(html, /<button(?![^>]*disabled="")[^>]*>현재 보드에 추가<\/button>/);
+  assert.match(html, /<button[^>]*aria-busy="false"(?![^>]*disabled="")[^>]*>보드에 적용<\/button>/);
 });
 
 test("Terraform 가져오기 선택과 Board에서만 확인할 리소스 동의를 분리한다", () => {
@@ -353,6 +543,6 @@ test("Terraform 가져오기 선택과 Board에서만 확인할 리소스 동의
   assert.match(html, /암호화 키/);
   assert.match(html, /추가 확인이 필요/);
   assert.match(html, /보드에서만 확인할 리소스를 모두 확인해 주세요/);
-  assert.match(html, /<button[^>]*disabled=""[^>]*><span>보드에 적용<\/span>/);
+  assert.match(html, /<button[^>]*disabled=""[^>]*>보드에 적용<\/button>/);
   assert.doesNotMatch(html, /검토 전용/);
 });

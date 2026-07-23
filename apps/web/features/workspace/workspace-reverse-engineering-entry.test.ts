@@ -145,16 +145,13 @@ test("저장된 현재 Project는 추가 저장 없이 바로 진입한다", asy
   assert.equal(saveCallCount, 0);
 });
 
-test("Workspace 진입점은 현재 Project만 스캔하고 취소 시 preview만 닫는다", () => {
-  assert.match(rightPanelSource, /title="AWS 구조 가져오기"/);
-  assert.match(rightPanelSource, /<span>AWS 가져오기<\/span>/);
-  assert.match(rightPanelSource, /<ReverseEngineeringPanel/);
-  assert.match(rightPanelSource, /projectId=\{projectId\}/);
-  assert.doesNotMatch(rightPanelSource, /createProjectOnApply/);
-  assert.match(rightPanelSource, /context\.setPreviewDiagram\(context\.diagram\)/);
-  assert.match(rightPanelSource, /context\.setPreviewDiagram\(null\)/);
-  assert.match(rightPanelSource, /if \(context\.isMutationLocked\)/);
-  assert.match(rightPanelSource, /disabled=\{context\.isMutationLocked\}/);
+test("Workspace 오른쪽 패널에서는 AWS 가져오기와 재스캔 진입점을 제공하지 않는다", () => {
+  assert.doesNotMatch(rightPanelSource, /title="AWS 구조 가져오기"/);
+  assert.doesNotMatch(rightPanelSource, /<span>AWS 가져오기<\/span>/);
+  assert.doesNotMatch(rightPanelSource, /<ReverseEngineeringPanel/);
+  assert.doesNotMatch(rightPanelSource, /requestReverseEngineeringOpen/);
+  assert.doesNotMatch(rightPanelSource, /performReverseEngineeringOpen/);
+  assert.doesNotMatch(rightPanelSource, /isReverseEngineeringOpen/);
   assert.match(reverseEngineeringCss, /\.panel\s*\{\s*composes:\s*shell;/);
   assert.match(
     reverseEngineeringPanelSource,

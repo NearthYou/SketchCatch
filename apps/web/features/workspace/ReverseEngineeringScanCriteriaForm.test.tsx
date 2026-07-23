@@ -75,7 +75,7 @@ function renderForm(input: {
   );
 }
 
-test("pending AWS 연결은 정확한 복구 CTA와 새로고침을 보여주고 민감한 값을 숨긴다", () => {
+test("pending AWS 연결은 복구 CTA만 보여주고 별도 새로고침 진입점과 민감한 값을 숨긴다", () => {
   const html = renderForm({
     awsConnections: [
       createConnection({
@@ -90,7 +90,7 @@ test("pending AWS 연결은 정확한 복구 CTA와 새로고침을 보여주고
   assert.match(html, /확인 필요/);
   assert.match(html, /AWS Role이 아직 준비되지 않았습니다\./);
   assert.match(html, /설정 계속/);
-  assert.match(html, /AWS 연결 새로고침/);
+  assert.doesNotMatch(html, /AWS 연결 새로고침/);
   assert.match(
     html,
     /\/dashboard\/settings\?tab=aws&amp;next=reverse&amp;awsConnectionId=connection-1/

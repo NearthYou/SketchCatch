@@ -1,4 +1,4 @@
-import { LoaderCircle, RefreshCw } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import React from "react";
 import type {
@@ -43,7 +43,6 @@ export function ReverseEngineeringScanCriteriaForm({
   createProjectOnApply = false,
   isLoadingOptions,
   isScanning,
-  onRefresh,
   onResourceTypeToggle,
   onScanCancel,
   onScanStart,
@@ -67,16 +66,6 @@ export function ReverseEngineeringScanCriteriaForm({
             <span className={styles.eyebrow}>Reverse Engineering</span>
             <h2>기존 AWS 가져오기</h2>
           </div>
-          <button
-            aria-label="AWS 연결 새로고침"
-            className={styles.iconButton}
-            disabled={isLoadingOptions}
-            onClick={onRefresh}
-            title="AWS 연결 새로고침"
-            type="button"
-          >
-            <RefreshCw size={14} aria-hidden="true" />
-          </button>
         </div>
         <p>검증된 AWS Role로 기존 Resource와 관계를 읽습니다.</p>
       </header>
