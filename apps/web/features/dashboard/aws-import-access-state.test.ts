@@ -208,24 +208,19 @@ test("idle server statuses follow their contracted next action", () => {
   }
 });
 
-test("권한 상태를 확인하거나 설정하는 동안에는 실행 버튼을 함께 보여주지 않는다", () => {
+test("서버에 저장된 처리 상태는 새로고침 뒤에도 다음 확인 행동을 보여준다", () => {
   const cases = [
-    ["manager_checking", "check_manager"],
-    ["policy_working", "check_reads"],
-    ["checking_reads", "check_reads"],
-    ["cleanup_checking", "check_cleanup"]
+    ["manager_checking", "check_manager", "check_manager"],
+    ["policy_working", "check_reads", "check_reads"],
+    ["checking_reads", "check_reads", "check_reads"],
+    ["cleanup_checking", "check_cleanup", "check_cleanup"]
   ] as const;
 
-  for (const [status, nextAction] of cases) {
+  for (const [status, nextAction, expectedCommand] of cases) {
     const result = view(status, nextAction, { cleanupAvailable: true });
 
-    assert.equal(result.isBusy, true, status);
-    assert.equal(result.primaryAction, null, status);
-    assert.equal(result.primaryCommand, null, status);
-    assert.equal(result.secondaryAction, null, status);
-    assert.equal(result.secondaryCommand, null, status);
-    assert.equal(result.cleanupAction, null, status);
-    assert.equal(result.cleanupCommand, null, status);
+    assert.equal(result.primaryCommand, expectedCommand, status);
+    assert.notEqual(result.primaryAction, null, status);
   }
 });
 

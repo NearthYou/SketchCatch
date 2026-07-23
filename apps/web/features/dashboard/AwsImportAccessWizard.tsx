@@ -356,7 +356,6 @@ function selectAwsStructureAnalysisAction(input: {
   readonly view: ReturnType<typeof deriveAwsImportAccessView>;
 }): AwsStructureAnalysisAction | null {
   const { hasPolicyApproval, onContinue, setupLinkCopied, setupTemplateUrl, state, view } = input;
-  if (view.isBusy) return null;
   if (view.canContinue && onContinue) {
     return {
       kind: "continue",
@@ -436,7 +435,8 @@ export function AwsImportAccessWizardView({
     hasPolicyApproval,
     state
   });
-  const pending = isBusy || view.isBusy;
+  // gg: 서버에 저장된 확인 상태는 다시 누를 수 있게 두고, 이 화면이 실제 요청 중일 때만 잠급니다.
+  const pending = isBusy;
   const presentation = getAwsStructureAnalysisPresentation({
     connectionStatus,
     hasPolicyApproval,

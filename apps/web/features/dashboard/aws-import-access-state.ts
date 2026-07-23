@@ -25,7 +25,6 @@ export type AwsImportAccessView = {
   readonly cleanupAction: string | null;
   readonly cleanupCommand: AwsImportAccessUiCommand | null;
   readonly deploymentConnectionPreserved: true;
-  readonly isBusy: boolean;
   readonly canContinue: boolean;
 };
 
@@ -101,13 +100,6 @@ const REPREPARE_PRESENTATION = {
   description: "기존 AWS 구조를 분석할 수 있도록 AWS에서 권한을 설정해 주세요."
 } as const;
 
-const BUSY_STATUSES = new Set<AwsImportAccessStatus>([
-  "manager_checking",
-  "policy_working",
-  "checking_reads",
-  "cleanup_checking"
-]);
-
 /** gg: 서버의 status와 nextAction을 한 표로 해석해 임의 문자열 추측을 막습니다. */
 export function deriveAwsImportAccessView(input: {
   readonly connectionStatus: AwsConnectionStatus;
@@ -117,23 +109,6 @@ export function deriveAwsImportAccessView(input: {
   const presentation = canReprepareAwsImportAccess(input.state)
     ? REPREPARE_PRESENTATION
     : STATUS_PRESENTATION[input.state.status];
-  const isBusy = BUSY_STATUSES.has(input.state.status);
-
-  /** gg: 권한 설정이나 확인이 진행 중이면 이전 행동을 함께 보여 주어 중복 실행을 막습니다. */
-  if (isBusy) {
-    return {
-      ...presentation,
-      primaryAction: null,
-      primaryCommand: null,
-      secondaryAction: null,
-      secondaryCommand: null,
-      cleanupAction: null,
-      cleanupCommand: null,
-      deploymentConnectionPreserved: true,
-      isBusy: true,
-      canContinue: false
-    };
-  }
 
   const canStartCleanup = canStartAwsImportAccessCleanup(
     input.state.status,
@@ -153,7 +128,6 @@ export function deriveAwsImportAccessView(input: {
       cleanupAction: canStartCleanup ? "구조 분석 권한 해제" : null,
       cleanupCommand: canStartCleanup ? "prepare_cleanup" : null,
       deploymentConnectionPreserved: true,
-      isBusy: false,
       canContinue: false
     };
   }
@@ -181,7 +155,6 @@ export function deriveAwsImportAccessView(input: {
     cleanupAction: canStartCleanup ? "구조 분석 권한 해제" : null,
     cleanupCommand: canStartCleanup ? "prepare_cleanup" : null,
     deploymentConnectionPreserved: true,
-    isBusy: false,
     canContinue: input.state.status === "ready" || input.state.status === "limited"
   };
 }
