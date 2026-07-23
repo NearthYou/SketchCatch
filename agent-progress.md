@@ -19,6 +19,13 @@ Short English-only working log for the current agent context. Older records are 
 - 2026-07-23: Enlarged the `/workspace/new` content area, start cards, titles, descriptions, and icons; added local cloud-provider brand assets and responsive single-column fallback. The focused start-screen test passes 2/2, and lint, typecheck, and production build pass.
 - 2026-07-23: Refined the `/workspace/new` start-method cards to match the selected compact UI direction. Added a focused regression test. Verified with the focused test, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`.
 
+### 2026-07-23 - Defer Repository Project creation until Board confirmation
+
+- Issue #542 now opens the Repository analysis route with only the draft project name; entering the route or navigating back does not call Project creation.
+- Public Repository analysis works without a persisted Project. The Project is created only inside the confirmed Board save path, and a failed first draft save triggers best-effort deletion of that newly created empty Project.
+- Existing Project revision checks and Repository provenance retries continue to use the persisted Project ID; successful first saves invalidate Dashboard Project queries.
+- The 32 focused new-project/Repository regressions, root lint, root typecheck, root build, diff check, and harness check pass.
+
 ### 2026-07-22 - Make Live Observation traffic dense, dramatic, and load-testable
 
 - Preserved the existing Focused Flow nodes, geometry, and routes while raising the visible request cap from five to 24, merging rapid single-event SSE snapshots into one sustained dense burst, and retaining exact overflow accounting.

@@ -248,16 +248,6 @@ export function WorkspaceStartClient({
           createdProjectId = project.id;
           await invalidateProjectQueries(queryClient, user?.id);
 
-          if (action.kind === "createRepositoryProject") {
-            clearWorkspaceStartForm();
-            const params = new URLSearchParams({
-              projectId: project.id,
-              projectName: project.name
-            });
-            router.push(`/workspace/repository?${params.toString()}`);
-            return;
-          }
-
           if (action.kind === "createProject" && action.openMode === "template" && template) {
             await saveProjectDraft({
               ...createTemplateProjectDraft({ projectId: project.id, template }),

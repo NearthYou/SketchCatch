@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -25,6 +26,8 @@ import type {
   SourceRepositoryAnalysisResult,
   SourceRepository,
 } from "@sketchcatch/types";
+import { useAuth } from "../../../components/auth/auth-provider";
+import { invalidateProjectQueries } from "../../../components/query/dashboard-query-invalidation";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import { ProductState } from "../../../components/ui/ProductState";
 import { SelectMenu } from "../../../components/ui/SelectMenu";
@@ -33,7 +36,9 @@ import {
   analyzePublicSourceRepository,
   analyzeSourceRepository,
   connectGitHubSourceRepository,
+  createProject,
   createGitHubSourceRepositoryInstallUrl,
+  deleteProject,
   getProjectDraft,
   listGitHubAccountInstallations,
   listGitHubInstalledRepositories,
@@ -108,6 +113,9 @@ export function RepositoryStartClient({
   projectName
 }: RepositoryStartClientProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const [currentProjectId, setCurrentProjectId] = useState(projectId);
   const hasAutoAnalyzedPublicUrl = useRef(false);
   const hasRestoredRepositoryAnalysis = useRef(false);
   const [repositories, setRepositories] = useState<SourceRepository[]>([]);
@@ -147,7 +155,7 @@ export function RepositoryStartClient({
   const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
   const previewDiagram = createRepositoryPreviewDiagram(effectiveProjectName, activeRepository);
   const isPublicAnalysisBusy = publicAnalysisState === "loading";
-  const showUrlAnalysis = Boolean(projectId && (!activeRepository || publicAnalysis));
+  const showUrlAnalysis = Boolean(!activeRepository || publicAnalysis);
   const recoveryAction = useMemo<RepositoryRecoveryAction>(() => {
     try {
       return selectRepositoryRecoveryAction({
@@ -163,17 +171,16 @@ export function RepositoryStartClient({
 
   useEffect(() => {
     if (!projectId) {
-      setErrorMessage("프로젝트 정보가 없습니다. 새 프로젝트 화면에서 다시 시작해주세요.");
+      setProjectDraftRevision(null);
       return;
     }
-
     void loadRepositories();
   }, [projectId]);
 
   useEffect(() => {
     if (initialResumeKey) return;
 
-    if (!projectId || !initialRepositoryUrl.trim() || hasAutoAnalyzedPublicUrl.current) {
+    if (!initialRepositoryUrl.trim() || hasAutoAnalyzedPublicUrl.current) {
       return;
     }
 
@@ -485,12 +492,33 @@ export function RepositoryStartClient({
       readonly templateId: PublicRepositoryTemplateId;
     }
   ): Promise<void> {
-    const response = await saveProjectDraft({
-      diagramJson,
-      expectedRevision: requireProjectDraftRevision(),
-      projectId
-    });
-    setProjectDraftRevision(response.draft?.revision ?? null);
+    const createdProject = currentProjectId
+      ? null
+      : await createProject({ name: effectiveProjectName });
+    const targetProjectId = currentProjectId || createdProject?.id;
+
+    if (!targetProjectId) {
+      throw new Error("PROJECT_ID_UNAVAILABLE");
+    }
+
+    try {
+      const response = await saveProjectDraft({
+        diagramJson,
+        expectedRevision: createdProject ? null : requireProjectDraftRevision(),
+        projectId: targetProjectId
+      });
+      setProjectDraftRevision(response.draft?.revision ?? null);
+    } catch (error) {
+      if (createdProject) {
+        await deleteProject(createdProject.id).catch(() => undefined);
+      }
+      throw error;
+    }
+
+    setCurrentProjectId(targetProjectId);
+    if (createdProject) {
+      await invalidateProjectQueries(queryClient, user?.id);
+    }
 
     if (provenance) {
       const payload = createRepositoryAnalysisRecordPayload({
@@ -499,7 +527,7 @@ export function RepositoryStartClient({
         selectedTemplateId: provenance.templateId
       });
       try {
-        await saveRepositoryAnalysisRecord(projectId, payload);
+        await saveRepositoryAnalysisRecord(targetProjectId, payload);
         setPendingAnalysisRecord(null);
       } catch (cause) {
         setPendingAnalysisRecord(payload);
@@ -509,21 +537,21 @@ export function RepositoryStartClient({
 
     router.push(
       `/workspace?${new URLSearchParams({
-        projectId,
+        projectId: targetProjectId,
         projectName: effectiveProjectName
       }).toString()}`
     );
   }
 
   async function retryRepositoryAnalysisRecord(): Promise<void> {
-    if (!pendingAnalysisRecord || actionState === "loading") return;
+    if (!pendingAnalysisRecord || actionState === "loading" || !currentProjectId) return;
     setActionState("loading");
     setErrorMessage("");
     try {
-      await saveRepositoryAnalysisRecord(projectId, pendingAnalysisRecord);
+      await saveRepositoryAnalysisRecord(currentProjectId, pendingAnalysisRecord);
       setPendingAnalysisRecord(null);
       router.push(`/workspace?${new URLSearchParams({
-        projectId,
+        projectId: currentProjectId,
         projectName: effectiveProjectName
       }).toString()}`);
     } catch (error) {
