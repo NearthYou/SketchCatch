@@ -16,7 +16,7 @@ test("global settings owns GitHub App installation without project repository be
   );
 
   assert.match(source, /GitHub App 연결/);
-  assert.match(source, /로그인 방식과 관계없이/);
+  assert.match(source, /프로젝트에서 사용할 GitHub 조직과 저장소 접근 권한을 관리합니다/);
   assert.match(source, /useGitHubInstallationsQuery/);
   assert.match(connectionQueriesSource, /export function useGitHubInstallationsQuery/);
   assert.match(connectionQueriesSource, /queryFn:\s*listGitHubAccountInstallations/);

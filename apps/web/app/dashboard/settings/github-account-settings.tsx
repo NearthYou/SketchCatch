@@ -45,14 +45,14 @@ export function GitHubAccountSettings({ embedded = false }: { readonly embedded?
     >
       {embedded ? (
         <p className={styles.embeddedSettingsDescription}>
-          SketchCatch 로그인 방식과 관계없이 모든 프로젝트에서 사용할 GitHub App 권한을 관리합니다.
+          프로젝트에서 사용할 GitHub 조직과 저장소 접근 권한을 관리합니다.
         </p>
       ) : (
         <header>
           <DashboardIcon name="github" />
           <div>
             <h2 id="github-account-settings-title">GitHub App 연결</h2>
-            <p>SketchCatch 로그인 방식과 관계없이 모든 프로젝트에서 사용할 GitHub App 권한을 관리합니다.</p>
+            <p>프로젝트에서 사용할 GitHub 조직과 저장소 접근 권한을 관리합니다.</p>
           </div>
         </header>
       )}
@@ -112,14 +112,13 @@ export function GitHubAccountSettings({ embedded = false }: { readonly embedded?
               <div className={styles.githubInstallationDetails}>
                 <strong>{installation.accountLogin}</strong>
                 <p>
-                  {installation.accountType ?? "GitHub account"} · {formatRepositorySelection(
-                    installation.repositorySelection
-                  )} · repository {installation.repositoryCount}개
+                  {installation.accountType ?? "GitHub account"} ·{" "}
+                  {formatRepositorySelection(installation)}
                 </p>
               </div>
               {installation.htmlUrl ? (
                 <a href={installation.htmlUrl} rel="noreferrer" target="_blank">
-                  GitHub 권한 관리
+                  GitHub App 권한 관리
                   <ExternalLink aria-hidden="true" size={14} />
                 </a>
               ) : null}
@@ -157,8 +156,10 @@ export function GitHubAccountSettings({ embedded = false }: { readonly embedded?
   );
 }
 
-function formatRepositorySelection(selection: GitHubInstallationConnection["repositorySelection"]): string {
-  if (selection === "all") return "모든 repository";
-  if (selection === "selected") return "선택한 repository";
-  return "권한 범위 확인 필요";
+function formatRepositorySelection(installation: GitHubInstallationConnection): string {
+  if (installation.repositorySelection === "all") return "모든 Repository 접근";
+  if (installation.repositorySelection === "selected") {
+    return `Repository ${installation.repositoryCount}개 선택됨`;
+  }
+  return "Repository 접근 범위 확인 필요";
 }

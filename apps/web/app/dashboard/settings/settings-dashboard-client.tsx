@@ -507,14 +507,19 @@ export function SettingsDashboardClient() {
         : "current";
   const primaryVerifiedConnection = displayedVerifiedConnections[0];
   const githubStepSummary = githubStepComplete
-    ? `${githubAuthorizationTarget.installation.accountLogin} · GitHub App 연결됨`
+    ? `${githubAuthorizationTarget.installation.accountLogin} · ${githubAuthorizationTarget.installation.accountType ?? "GitHub account"}`
     : githubAuthorizationTarget.status === "multiple_github_installations_unsupported"
       ? "활성 GitHub App 연결을 하나만 남겨 주세요."
-      : "GitHub App 연결이 필요합니다.";
+      : "GitHub 조직과 저장소를 연결해 주세요.";
   const awsStepSummary = primaryVerifiedConnection
-    ? `${primaryVerifiedConnection.accountId ?? "계정 확인 전"} · ${getAwsRegionLabel(primaryVerifiedConnection.region)}`
+    ? `${primaryVerifiedConnection.accountId ?? "계정 확인 전"} · ${getAwsRegionLabel(primaryVerifiedConnection.region)} (${primaryVerifiedConnection.region})`
     : "";
-  const codeBuildStepSummary = getCodeBuildStepSummary(selectedCodeConnection?.status);
+  const codeBuildStepSummary = getCodeBuildStepSummary(
+    selectedCodeConnection?.status,
+    githubAuthorizationTarget.status === "ready"
+      ? githubAuthorizationTarget.installation.accountLogin
+      : undefined
+  );
 
   return (
     <div className="dashboardRouteStack">
@@ -564,7 +569,7 @@ export function SettingsDashboardClient() {
               titleId="aws-account-connection-title"
             >
               <div className={styles.connectionStepControls} id="aws-account-connection">
-                <p>Access Key 대신 한 번 만든 Role을 사용합니다.</p>
+                <p>Terraform 실행을 위한 IAM Role 기반 AWS 연결을 설정합니다.</p>
                 <div className={styles.controlRow}>
                   <div className={styles.controlField}>
                     <span>기본 region</span>
@@ -1003,13 +1008,20 @@ function getAwsRegionLabel(region: string): string {
   return AWS_REGION_OPTIONS.find((option) => option.value === region)?.label ?? region;
 }
 
-function getCodeBuildStepSummary(status: AwsCodeConnectionStatus | undefined): string {
-  if (status === "AVAILABLE") return "GitHub 권한 연결됨";
+function getCodeBuildStepSummary(
+  status: AwsCodeConnectionStatus | undefined,
+  githubAccountLogin?: string
+): string {
+  if (status === "AVAILABLE") {
+    return githubAccountLogin
+      ? `${githubAccountLogin} · AWS CodeConnections`
+      : "AWS CodeConnections 연결 활성";
+  }
   if (status === "ERROR") return "연결 오류를 확인해 주세요.";
-  if (status === "CREATING") return "AWS GitHub 권한 생성 중";
-  if (status === "PENDING") return "AWS에서 GitHub 권한 승인이 필요합니다.";
-  if (status === "DELETING") return "GitHub 빌드 연결 해제 중";
-  return "검증된 AWS 계정으로 GitHub 권한을 연결합니다.";
+  if (status === "CREATING") return "AWS CodeConnections 연결을 생성하고 있습니다.";
+  if (status === "PENDING") return "AWS에서 GitHub 연결 승인이 필요합니다.";
+  if (status === "DELETING") return "GitHub 연결을 해제하고 있습니다.";
+  return "CodeBuild에서 사용할 GitHub 연결을 설정해 주세요.";
 }
 
 function GitHubAuthorizationTargetNotice({
@@ -1024,28 +1036,28 @@ function GitHubAuthorizationTargetNotice({
   if (isPending) {
     return (
       <p className={styles.githubSettingsMessage} role="status">
-        승인 대상 GitHub 계정을 확인하고 있습니다.
+        GitHub 연결 정보를 확인하고 있습니다.
       </p>
     );
   }
   if (isError) {
     return (
       <p className={styles.githubSettingsError} role="alert">
-        GitHub App 연결 정보를 확인할 수 없어 AWS 승인을 시작할 수 없습니다.
+        GitHub App 연결 정보를 불러오지 못해 CodeBuild 연동을 시작할 수 없습니다.
       </p>
     );
   }
   if (target.status === "github_app_not_configured") {
     return (
       <p className={styles.githubSettingsMessage} role="status">
-        GitHub App 서버 설정이 완료된 뒤 AWS 승인을 시작할 수 있습니다.
+        GitHub App 서버 설정을 완료한 후 CodeBuild 연동을 시작할 수 있습니다.
       </p>
     );
   }
   if (target.status === "github_installation_required") {
     return (
       <div className={styles.githubSettingsError} role="alert">
-        <p>GitHub App 연결이 먼저 필요합니다.</p>
+        <p>CodeBuild 연동을 위해 GitHub App을 먼저 연결해 주세요.</p>
         <button onClick={scrollToGitHubAccountConnection} type="button">
           GitHub App 연결하기
         </button>
@@ -1055,7 +1067,7 @@ function GitHubAuthorizationTargetNotice({
   if (target.status === "multiple_github_installations_unsupported") {
     return (
       <div className={styles.githubSettingsError} role="alert">
-        <p>GitHub 연결 정리 필요: 승인 대상을 확정할 수 있도록 활성 연결을 하나만 남겨 주세요.</p>
+        <p>CodeBuild에서 사용할 GitHub App 연결을 하나만 유지해 주세요.</p>
         <button onClick={scrollToGitHubAccountConnection} type="button">
           GitHub 연결 확인하기
         </button>
@@ -1063,16 +1075,13 @@ function GitHubAuthorizationTargetNotice({
     );
   }
   return (
-    <div className={styles.githubInstallationList} aria-label="AWS 승인 대상 GitHub 계정">
+    <div className={styles.githubInstallationList} aria-label="GitHub 연결 정보">
       <article className={styles.githubInstallationCard}>
         <div className={styles.githubInstallationDetails}>
-          <strong>승인 대상 GitHub 계정 · {target.installation.accountLogin}</strong>
+          <strong>GitHub 연결 정보 · {target.installation.accountLogin}</strong>
           <p>
-            {target.installation.accountType ?? "GitHub account"} ·{
-              " "
-            }{formatGitHubRepositorySelection(target.installation)} · repository{
-              " "
-            }{target.installation.repositoryCount}개
+            {target.installation.accountType ?? "GitHub account"} ·{" "}
+            {formatGitHubRepositorySelection(target.installation)}
           </p>
         </div>
       </article>
@@ -1098,9 +1107,11 @@ function scrollToAwsAccountConnection(): void {
 function formatGitHubRepositorySelection(
   installation: GitHubInstallationConnection
 ): string {
-  if (installation.repositorySelection === "all") return "모든 repository";
-  if (installation.repositorySelection === "selected") return "선택한 repository";
-  return "권한 범위 확인 필요";
+  if (installation.repositorySelection === "all") return "모든 Repository 접근";
+  if (installation.repositorySelection === "selected") {
+    return `Repository ${installation.repositoryCount}개 선택됨`;
+  }
+  return "Repository 접근 범위 확인 필요";
 }
 
 function GitHubBuildConnectionAction({
