@@ -21,12 +21,25 @@ test("marks an expired observation as historical", () => {
   assert.doesNotMatch(html, /AWS 지표 수신/);
 });
 
-test("describes unavailable provider telemetry as a failure that needs checking", () => {
+test("keeps unavailable provider telemetry out of the primary infrastructure summary", () => {
   const html = renderSummary(snapshot({ status: "active", state: "unavailable", running: null }));
 
-  assert.match(html, /AWS 관측 불가/);
-  assert.match(html, /연결과 관측 권한을 확인해 주세요/);
-  assert.doesNotMatch(html, /AWS 지표 대기/);
+  assert.doesNotMatch(html, /AWS 관측 불가/);
+  assert.doesNotMatch(html, /연결과 관측 권한을 확인해 주세요/);
+  assert.match(html, /실제 확인 중/);
+  assert.doesNotMatch(html, /CloudWatch/);
+});
+
+test("shows only infrastructure design signals in the primary summary", () => {
+  const html = renderSummary(snapshot({ status: "active", state: "available", running: 2 }));
+
+  assert.match(html, /예상 부하/);
+  assert.match(html, /Task 변화/);
+  assert.match(html, /설계 분석/);
+  assert.doesNotMatch(html, /수집 요청/);
+  assert.doesNotMatch(html, /최근 속도/);
+  assert.doesNotMatch(html, /1분 환산/);
+  assert.doesNotMatch(html, /AWS 지표 수신/);
 });
 
 test("shows actual task capacity even when no forecast can be calculated", () => {
