@@ -36,3 +36,29 @@ test("Dashboard Template entry opens the selected detail with naming beside its 
   assert.match(cssSource, /grid-template-areas: "preview content";/);
   assert.match(cssSource, /grid-template-areas: "content" "preview";/);
 });
+
+test("Workspace start options keep titles on one line with subdued descriptions and metadata", async () => {
+  const [clientSource, cssSource] = await Promise.all([
+    readFile(clientSourceUrl, "utf8"),
+    readFile(cssSourceUrl, "utf8")
+  ]);
+
+  assert.match(clientSource, /className=\{styles\.optionTitleRow\}/);
+  assert.match(
+    cssSource,
+    /\.optionTitleRow\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*gap:\s*8px;/s
+  );
+  assert.match(cssSource, /\.optionCopy strong\s*\{[^}]*white-space:\s*nowrap;/s);
+  assert.match(
+    cssSource,
+    /\.optionCopy small\s*\{[^}]*color:\s*#858b95;[^}]*font-size:\s*calc\(11px \+ var\(--presentation-font-size-increase\)\);[^}]*font-weight:\s*var\(--presentation-font-weight-regular\);/s
+  );
+  assert.match(
+    cssSource,
+    /\.optionTitleRow em\s*\{[^}]*font-size:\s*calc\(8px \+ var\(--presentation-font-size-increase\)\);/s
+  );
+  assert.match(
+    cssSource,
+    /@media \(max-width:\s*860px\)\s*\{[^}]*\.optionTitleRow\s*\{[^}]*flex-direction:\s*column;/s
+  );
+});

@@ -107,7 +107,11 @@ test("Repository draft saves retain the server revision loaded with the screen",
     source,
     /setProjectDraftRevision\(projectDraftResponse\.draft\?\.revision \?\? null\)/
   );
-  assert.equal(source.match(/expectedRevision: requireProjectDraftRevision\(\)/g)?.length, 1);
+  assert.equal(
+    source.match(/expectedRevision: createdProject \? null : requireProjectDraftRevision\(\)/g)
+      ?.length,
+    1
+  );
   assert.match(source, /async function saveRepositoryBoard/);
 });
 
