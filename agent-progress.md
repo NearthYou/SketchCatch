@@ -25,6 +25,14 @@ Short English-only working log for the current agent context. Older records are 
 - Browser-verified the two-question layout and selected answer state at desktop size.
 - Verified 46 Repository tests, root lint, root typecheck, production build, authenticated browser navigation, scoped diff checks, and the final harness check.
 
+### 2026-07-23 - Emphasize Repository URL analysis entry
+
+- Added the Git branch icon to the Branch field and enlarged the pre-analysis Repository heading, labels, inputs, hint, error state, and submit action for presentation use.
+- Added a decorative GitHub mark to the Repository URL label while keeping the existing Branch icon and field layout.
+- Kept the completed analysis result typography and controls at their existing scale.
+- Verified with 23 Repository route tests, Web lint, Web typecheck, Web production build, root harness check, and diff check.
+- Root `pnpm test` still fails in pre-existing Settings, board-rendering, and API baseline suites outside this change; the Repository screen test passes inside that run.
+
 ### 2026-07-23 - Rebuild Repository analysis and Template preview UI
 
 - Split `/workspace/repository` into a focused pre-analysis form and a completed result with compact Repository metadata, mapped evidence, real Template thumbnails, and a Preview-first 28/72 layout.

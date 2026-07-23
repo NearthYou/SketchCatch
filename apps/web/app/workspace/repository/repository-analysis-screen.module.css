@@ -57,9 +57,13 @@
   letter-spacing: -0.02em;
 }
 
+.entryPageHeading h1 {
+  font-size: clamp(54px, 5vw, calc(66px + var(--presentation-font-size-increase)));
+}
+
 .formSection {
-  width: min(880px, 100%);
-  padding: 40px;
+  width: min(1040px, 100%);
+  padding: clamp(40px, 4vw, 56px);
   border-radius: var(--radius-frame);
   background: var(--color-canvas);
   box-shadow: var(--shadow-ring);
@@ -67,23 +71,46 @@
 
 .formSection form {
   display: grid;
-  gap: 28px;
+  gap: 36px;
 }
 
 .formFields {
   display: grid;
-  gap: 20px;
+  gap: 28px;
 }
 
 .field {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   color: var(--color-ink);
-  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-size: calc(24px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
 }
 
-.field input,
+.fieldLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fieldLabel svg {
+  flex: 0 0 auto;
+}
+
+.field input {
+  width: 100%;
+  min-width: 0;
+  height: 72px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font: inherit;
+  font-weight: var(--presentation-font-weight-regular);
+  padding: 0 20px;
+  outline: none;
+}
+
 .resultToolbar select,
 .settingsFields select,
 .questionField input {
@@ -120,13 +147,17 @@
 }
 
 .formHint,
-.statusMessage,
-.emptyEvidence,
-.emptyPreview p {
+.statusMessage {
   margin: 0;
   color: var(--color-muted);
-  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-size: calc(18px + var(--presentation-font-size-increase));
   line-height: 1.5;
+}
+
+.formActions .primaryButton {
+  min-height: 64px;
+  font-size: calc(24px + var(--presentation-font-size-increase));
+  padding: 12px 24px;
 }
 
 .statusMessage,
@@ -136,7 +167,7 @@
 
 .errorMessage {
   color: var(--color-error);
-  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-size: calc(18px + var(--presentation-font-size-increase));
   line-height: 1.5;
 }
 
@@ -637,8 +668,30 @@
     font-size: calc(36px + var(--presentation-font-size-increase));
   }
 
+  .entryPageHeading h1 {
+    font-size: calc(48px + var(--presentation-font-size-increase));
+  }
+
   .formSection {
-    padding: 28px 24px;
+    padding: 32px 24px;
+  }
+
+  .field {
+    font-size: calc(18px + var(--presentation-font-size-increase));
+  }
+
+  .field input {
+    height: 64px;
+    padding: 0 16px;
+  }
+
+  .formHint {
+    font-size: calc(16px + var(--presentation-font-size-increase));
+  }
+
+  .formActions .primaryButton {
+    min-height: 60px;
+    font-size: calc(18px + var(--presentation-font-size-increase));
   }
 
   .formActions,
