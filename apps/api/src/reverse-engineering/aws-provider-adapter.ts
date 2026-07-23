@@ -99,6 +99,7 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::IAM::Role", "IAM_ROLE"],
   ["AWS::IAM::Policy", "IAM_POLICY"],
   ["AWS::IAM::RolePolicy", "IAM_POLICY"],
+  ["AWS::IAM::RolePolicyAttachment", "IAM_POLICY"],
   ["AWS::IAM::InstanceProfile", "IAM_INSTANCE_PROFILE"],
   ["AWS::KMS::Key", "KMS_KEY"],
   ["AWS::KMS::Alias", "KMS_ALIAS"],
@@ -183,6 +184,7 @@ const OPAQUE_PUBLIC_ID_RESOURCE_TYPES = new Set([
   "AWS::IAM::Role",
   "AWS::IAM::Policy",
   "AWS::IAM::RolePolicy",
+  "AWS::IAM::RolePolicyAttachment",
   "AWS::IAM::InstanceProfile",
   "AWS::KMS::Key",
   "AWS::KMS::Alias",
@@ -196,6 +198,7 @@ const IAM_OWNERSHIP_RESOURCE_TYPES = new Set([
   "AWS::IAM::Role",
   "AWS::IAM::Policy",
   "AWS::IAM::RolePolicy",
+  "AWS::IAM::RolePolicyAttachment",
   "AWS::IAM::InstanceProfile"
 ]);
 const ELASTIC_LOAD_BALANCING_RESOURCE_TYPES = new Set([
@@ -533,6 +536,15 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
       ...DETAILED_REVERSE_ENGINEERING_PUBLIC_STATUS_KEYS,
       "ownership",
       "policyDocumentRedacted",
+      "policyName",
+      "roleName"
+    ])
+  ],
+  [
+    "AWS::IAM::RolePolicyAttachment",
+    new Set([
+      ...DETAILED_REVERSE_ENGINEERING_PUBLIC_STATUS_KEYS,
+      "ownership",
       "policyName",
       "roleName"
     ])

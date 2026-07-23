@@ -4404,6 +4404,7 @@ function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord):
       "AWS::IAM::Policy",
       "AWS::IAM::InstanceProfile",
       "AWS::IAM::RolePolicy",
+      "AWS::IAM::RolePolicyAttachment",
       "AWS::Lambda::Function",
       "AWS::Lambda::Permission"
     ].includes(record.providerResourceType)
@@ -4539,6 +4540,7 @@ const DEDICATED_RECORD_DETAIL_KEY_BY_PROVIDER_RESOURCE_TYPE = new Map<string, st
   ["AWS::IAM::Policy", "policyName"],
   ["AWS::IAM::InstanceProfile", "instanceProfileName"],
   ["AWS::IAM::RolePolicy", "policyName"],
+  ["AWS::IAM::RolePolicyAttachment", "policyName"],
   ["AWS::KMS::Key", "keyId"],
   ["AWS::KMS::Alias", "aliasName"]
 ]);

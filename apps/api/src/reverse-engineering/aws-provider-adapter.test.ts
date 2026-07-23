@@ -284,6 +284,8 @@ test("AWS 전용 reader가 찾은 Resource를 실제 Catalog 타입으로 보드
     ["AWS::Lambda::Permission", "LAMBDA_PERMISSION"],
     ["AWS::IAM::Role", "IAM_ROLE"],
     ["AWS::IAM::Policy", "IAM_POLICY"],
+    ["AWS::IAM::RolePolicy", "IAM_POLICY"],
+    ["AWS::IAM::RolePolicyAttachment", "IAM_POLICY"],
     ["AWS::IAM::InstanceProfile", "IAM_INSTANCE_PROFILE"],
     ["AWS::KMS::Key", "KMS_KEY"],
     ["AWS::CloudWatch::Alarm", "CLOUDWATCH_METRIC_ALARM"],

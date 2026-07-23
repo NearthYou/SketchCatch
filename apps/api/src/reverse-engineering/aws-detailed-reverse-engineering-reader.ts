@@ -53,7 +53,7 @@ const API_GATEWAY_RESOURCE_TYPES = new Set<ResourceType>([
 ]);
 const PROVIDER_RESOURCE_TYPES_BY_SELECTION = new Map<ResourceType, readonly string[]>([
   ["IAM_ROLE", ["AWS::IAM::Role"]],
-  ["IAM_POLICY", ["AWS::IAM::Policy", "AWS::IAM::RolePolicy"]],
+  ["IAM_POLICY", ["AWS::IAM::Policy", "AWS::IAM::RolePolicy", "AWS::IAM::RolePolicyAttachment"]],
   ["IAM_INSTANCE_PROFILE", ["AWS::IAM::InstanceProfile"]],
   ["LAMBDA", ["AWS::Lambda::Function"]],
   ["LAMBDA_PERMISSION", ["AWS::Lambda::Permission"]],
