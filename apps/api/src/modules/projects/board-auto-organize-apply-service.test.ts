@@ -287,6 +287,146 @@ test("server rejects direct requests that change or delete a locked auto frame",
   assert.equal(saveCalls, 0);
 });
 
+test("server는 Reverse Engineering 표시 프레임 geometry를 원본으로 다시 고정한다", async () => {
+  const sourceDiagram = createDiagram();
+  const frame = createReverseInfrastructureFrame();
+  sourceDiagram.nodes.unshift(frame);
+  const candidateDiagram = structuredClone(sourceDiagram);
+  candidateDiagram.nodes.find((node) => node.id === frame.id)!.position = {
+    x: 900,
+    y: 700
+  };
+  candidateDiagram.nodes.find((node) => node.id === frame.id)!.size = {
+    width: 700,
+    height: 520
+  };
+  candidateDiagram.nodes.find((node) => node.id === "node-vpc")!.position = {
+    x: 120,
+    y: 140
+  };
+  const savedDiagrams: DiagramJson[] = [];
+
+  await applyBoardAutoOrganizeDraft(
+    {
+      candidateDiagram,
+      db: {} as Database,
+      expectedRevision: 7,
+      projectId: PROJECT_ID,
+      sourceDiagram,
+      sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(sourceDiagram),
+      terraformFiles: [],
+      userId: USER_ID
+    },
+    {
+      readDraft: async () => ({
+        ...createDraftRow(sourceDiagram, []),
+        revision: 7
+      }),
+      saveDraftRevision: async (input) => {
+        savedDiagrams.push(input.input.diagramJson);
+        return { status: "saved", draft: createDraftRow(input.input.diagramJson, []) };
+      }
+    }
+  );
+
+  const savedDiagram = savedDiagrams[0];
+  assert.ok(savedDiagram);
+  assert.deepEqual(
+    savedDiagram.nodes.find((node) => node.id === frame.id),
+    frame
+  );
+  assert.deepEqual(
+    savedDiagram.nodes.find((node) => node.id === "node-vpc")?.position,
+    { x: 120, y: 140 }
+  );
+});
+
+test("server는 Reverse Engineering 표시 프레임 밖으로 나간 멤버를 저장하지 않는다", async () => {
+  const sourceDiagram = createDiagram();
+  const frame = createReverseInfrastructureFrame();
+  sourceDiagram.nodes.unshift(frame);
+  const candidateDiagram = structuredClone(sourceDiagram);
+  candidateDiagram.nodes.find((node) => node.id === "node-vpc")!.position = {
+    x: 900,
+    y: 700
+  };
+  let saveCalls = 0;
+
+  await assert.rejects(
+    () =>
+      applyBoardAutoOrganizeDraft(
+        {
+          candidateDiagram,
+          db: {} as Database,
+          expectedRevision: 7,
+          projectId: PROJECT_ID,
+          sourceDiagram,
+          sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(sourceDiagram),
+          terraformFiles: [],
+          userId: USER_ID
+        },
+        {
+          readDraft: async () => ({
+            ...createDraftRow(sourceDiagram, []),
+            revision: 7
+          }),
+          saveDraftRevision: async () => {
+            saveCalls += 1;
+            return { status: "saved", draft: createDraftRow(candidateDiagram, []) };
+          }
+        }
+      ),
+    BoardAutoOrganizeSemanticMismatchError
+  );
+
+  assert.equal(saveCalls, 0);
+});
+
+test("server는 Reverse Engineering 표시 프레임 소속 변경을 저장하지 않는다", async () => {
+  const sourceDiagram = createDiagram();
+  const frame = createReverseInfrastructureFrame();
+  sourceDiagram.nodes.unshift(frame);
+  const candidateDiagram = structuredClone(sourceDiagram);
+  const candidateFrame = candidateDiagram.nodes.find((node) => node.id === frame.id)!;
+  candidateFrame.metadata = {
+    ...candidateFrame.metadata,
+    reverseEngineeringInfrastructureFrame: {
+      ...candidateFrame.metadata!.reverseEngineeringInfrastructureFrame!,
+      memberNodeIds: []
+    }
+  };
+  let saveCalls = 0;
+
+  await assert.rejects(
+    () =>
+      applyBoardAutoOrganizeDraft(
+        {
+          candidateDiagram,
+          db: {} as Database,
+          expectedRevision: 7,
+          projectId: PROJECT_ID,
+          sourceDiagram,
+          sourceFingerprint: createBoardAutoOrganizeSourceFingerprint(sourceDiagram),
+          terraformFiles: [],
+          userId: USER_ID
+        },
+        {
+          readDraft: async () => ({
+            ...createDraftRow(sourceDiagram, []),
+            revision: 7
+          }),
+          saveDraftRevision: async () => {
+            saveCalls += 1;
+            return { status: "saved", draft: createDraftRow(candidateDiagram, []) };
+          }
+        }
+      ),
+    BoardAutoOrganizeSemanticMismatchError
+  );
+
+  assert.equal(saveCalls, 0);
+});
+
 test("server rebuilds new auto frames from safe presentation fields and preserves viewport", async () => {
   const sourceDiagram = createDiagram();
   const candidateDiagram = structuredClone(sourceDiagram);
@@ -512,6 +652,29 @@ function createAutoFrame(id: string, locked: boolean): DiagramJson["nodes"][numb
     locked,
     zIndex: 0,
     metadata: { presentationCatalogItemId: "design-group" }
+  };
+}
+
+/** gg: 서버가 geometry를 고정해야 하는 Reverse Engineering 표시 프레임을 만듭니다. */
+function createReverseInfrastructureFrame(): DiagramJson["nodes"][number] {
+  return {
+    id: "reverse-infra-frame:vpc:main",
+    type: "design_group",
+    kind: "design",
+    position: { x: 0, y: 0 },
+    size: { width: 640, height: 480 },
+    label: "VPC · main",
+    locked: false,
+    zIndex: 0,
+    metadata: {
+      presentationCatalogItemId: "design-group",
+      reverseEngineeringInfrastructureFrame: {
+        source: "aws_scan",
+        groupBy: "vpc",
+        groupKey: "main",
+        memberNodeIds: ["node-vpc"]
+      }
+    }
   };
 }
 

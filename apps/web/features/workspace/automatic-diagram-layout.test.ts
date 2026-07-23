@@ -500,6 +500,55 @@ test("layoutAutomaticDiagram keeps a protected Area position and grows it for ad
   assert.equal(result.quality.parentBoundaryViolationCount, 0);
 });
 
+test("Reverse Engineering 표시 프레임은 고정하고 각 프레임 안에서만 Resource를 정리한다", () => {
+  const frameA = reverseInfrastructureFrame("frame-a", 0, 0, ["a-api", "a-db"]);
+  const frameB = reverseInfrastructureFrame("frame-b", 620, 0, ["b-api", "b-db"]);
+  const nodes = [
+    frameA,
+    frameB,
+    makeNode("a-api", "aws_ecs_service", 80, 100, "resource", {
+      size: { width: 120, height: 72 }
+    }),
+    makeNode("a-db", "aws_db_instance", 80, 100, "resource", {
+      size: { width: 120, height: 72 }
+    }),
+    makeNode("b-api", "aws_ecs_service", 700, 100, "resource", {
+      size: { width: 120, height: 72 }
+    }),
+    makeNode("b-db", "aws_db_instance", 700, 100, "resource", {
+      size: { width: 120, height: 72 }
+    })
+  ];
+
+  const result = layoutAutomaticDiagram({
+    edges: [
+      { id: "a-api-db", sourceId: "a-api", targetId: "a-db" },
+      { id: "b-api-db", sourceId: "b-api", targetId: "b-db" }
+    ],
+    nodes
+  });
+  const nodeById = new Map(result.nodes.map((node) => [node.id, node]));
+
+  assert.deepEqual(nodeById.get(frameA.id), frameA);
+  assert.deepEqual(nodeById.get(frameB.id), frameB);
+  assertContains(frameA, nodeById.get("a-api")!);
+  assertContains(frameA, nodeById.get("a-db")!);
+  assertContains(frameB, nodeById.get("b-api")!);
+  assertContains(frameB, nodeById.get("b-db")!);
+  assert.equal(overlaps(nodeById.get("a-api")!, nodeById.get("a-db")!), false);
+  assert.equal(overlaps(nodeById.get("b-api")!, nodeById.get("b-db")!), false);
+  assert.equal(
+    nodeById.get("a-api")!.position.x < frameA.position.x + frameA.size.width,
+    true
+  );
+  assert.equal(
+    nodeById.get("b-api")!.position.x >= frameB.position.x,
+    true
+  );
+  assert.equal(nodeById.get("a-api")?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(nodeById.get("b-api")?.metadata?.parentAreaNodeId, undefined);
+});
+
 test("evaluateAutomaticDiagramLayout penalizes portrait canvases", () => {
   const vertical = evaluateAutomaticDiagramLayout({
     edges: [],
@@ -613,6 +662,34 @@ function makeNode(
           }
         }
       : {})
+  };
+}
+
+/** gg: 실제 parent가 아닌 Reverse Engineering 표시 프레임 fixture를 만듭니다. */
+function reverseInfrastructureFrame(
+  suffix: string,
+  x: number,
+  y: number,
+  memberNodeIds: string[]
+): DiagramNode {
+  return {
+    id: `reverse-infra-frame:project:${suffix}`,
+    type: "design_group",
+    kind: "design",
+    position: { x, y },
+    size: { width: 480, height: 300 },
+    label: `프로젝트 · ${suffix}`,
+    locked: false,
+    zIndex: 0,
+    metadata: {
+      presentationCatalogItemId: "design-group",
+      reverseEngineeringInfrastructureFrame: {
+        source: "aws_scan",
+        groupBy: "project",
+        groupKey: suffix,
+        memberNodeIds
+      }
+    }
   };
 }
 

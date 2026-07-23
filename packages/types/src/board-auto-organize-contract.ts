@@ -1,6 +1,7 @@
 import type { DiagramEdge, DiagramJson, DiagramNode, DiagramVariable } from "./index.ts";
 
 export const BOARD_AUTO_FRAME_ID_PREFIX = "board-auto-frame:";
+export const REVERSE_ENGINEERING_INFRASTRUCTURE_FRAME_ID_PREFIX = "reverse-infra-frame:";
 export const BOARD_AUTO_ORGANIZE_SAFETY_EXPLANATION =
   "Resource, 설정, 연결 관계는 바뀌지 않았습니다.";
 
@@ -43,6 +44,43 @@ export function isBoardAutoPresentationFrameNode(node: DiagramNode): boolean {
     node.type === "design_group" &&
     node.metadata?.presentationCatalogItemId === "design-group" &&
     node.id.startsWith(BOARD_AUTO_FRAME_ID_PREFIX)
+  );
+}
+
+/** gg: AWS 가져오기의 표시 전용 프레임을 자동 장식 프레임과 분리해 식별합니다. */
+export function isReverseEngineeringInfrastructureFrameNode(node: DiagramNode): boolean {
+  return (
+    node.kind === "design" &&
+    node.type === "design_group" &&
+    node.metadata?.presentationCatalogItemId === "design-group" &&
+    node.metadata.reverseEngineeringInfrastructureFrame?.source === "aws_scan" &&
+    node.id.startsWith(REVERSE_ENGINEERING_INFRASTRUCTURE_FRAME_ID_PREFIX)
+  );
+}
+
+/** gg: Resource의 전체 사각형이 가져오기 표시 프레임 경계 안에 있는지 확인합니다. */
+export function isNodeInsideReverseEngineeringInfrastructureFrame(
+  node: DiagramNode,
+  frame: DiagramNode
+): boolean {
+  if (!isReverseEngineeringInfrastructureFrameNode(frame)) {
+    return false;
+  }
+
+  const nodeRight = node.position.x + node.size.width;
+  const nodeBottom = node.position.y + node.size.height;
+  const frameRight = frame.position.x + frame.size.width;
+  const frameBottom = frame.position.y + frame.size.height;
+
+  return (
+    Number.isFinite(node.position.x) &&
+    Number.isFinite(node.position.y) &&
+    Number.isFinite(nodeRight) &&
+    Number.isFinite(nodeBottom) &&
+    node.position.x >= frame.position.x &&
+    node.position.y >= frame.position.y &&
+    nodeRight <= frameRight &&
+    nodeBottom <= frameBottom
   );
 }
 

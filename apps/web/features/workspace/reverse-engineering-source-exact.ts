@@ -6,6 +6,7 @@ import type {
 } from "@sketchcatch/types";
 import { getDefaultResourceDefinitionByResourceType } from "@sketchcatch/types/resource-definitions";
 import { resourceCatalog } from "../resource-settings/catalog";
+import { createReverseEngineeringInfrastructureFrames } from "./reverse-engineering-infrastructure-frames";
 
 const FALLBACK_NODE_SIZE = { width: 48, height: 48 } as const;
 
@@ -13,8 +14,13 @@ const FALLBACK_NODE_SIZE = { width: 48, height: 48 } as const;
 export function createSourceExactReverseEngineeringDiagram(
   architecture: ArchitectureJson
 ): DiagramJson {
+  const resourceNodes = architecture.nodes.map(createSourceExactNode);
+
   return {
-    nodes: architecture.nodes.map(createSourceExactNode),
+    nodes: [
+      ...createReverseEngineeringInfrastructureFrames(architecture, resourceNodes),
+      ...resourceNodes
+    ],
     edges: architecture.edges.map((edge) => ({
       id: edge.id,
       sourceNodeId: edge.sourceId,

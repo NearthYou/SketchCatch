@@ -1,3 +1,4 @@
+import { isReverseEngineeringInfrastructureFrameNode } from "@sketchcatch/types";
 import type {
   ArchitectureBoardCompilationChange,
   ArchitectureBoardCompilationChangeAction,
@@ -608,11 +609,15 @@ function preserveCurrentBoardState(
 
       return copyLockedNodeGeometry(node, currentNode);
     }),
-    // ArchitectureJson intentionally contains IaC resources only. A locked design
-    // node is user-owned presentation state, so it must survive a compiler pass even
-    // when it has no Terraform counterpart.
+    // ArchitectureJson intentionally contains IaC resources only. 잠긴 Design과
+    // Reverse Engineering 표시 프레임은 Terraform counterpart가 없어도 유지합니다.
     ...currentDiagram.nodes
-      .filter((node) => node.locked && node.kind === "design" && !nextNodeIds.has(node.id))
+      .filter(
+        (node) =>
+          node.kind === "design" &&
+          (node.locked || isReverseEngineeringInfrastructureFrameNode(node)) &&
+          !nextNodeIds.has(node.id)
+      )
       .map((node) => structuredClone(node))
   ];
   const nodeIds = new Set(nodes.map((node) => node.id));
@@ -1283,11 +1288,12 @@ function routeAndLayerDiagram(
   };
 }
 
+/** gg: 표시 프레임의 화면 층은 유지하고 일반 Compiler node만 다시 층을 정합니다. */
 function applyCompilerLayerOrder(nodes: readonly DiagramNode[]): DiagramNode[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return nodes.map((node) => {
-    if (node.locked) {
+    if (node.locked || isReverseEngineeringInfrastructureFrameNode(node)) {
       return structuredClone(node);
     }
     const depth = getDiagramAreaDepth(node, nodeById);

@@ -44,12 +44,14 @@ test("Reverse Engineering 원본은 AWS가 준 Resource, 설정, 관계만 그�
 
   assert.equal(diagram.presentation?.geometryPolicy, "source-exact");
   assert.deepEqual(
-    diagram.nodes.map((node) => ({
-      config: node.parameters?.values,
-      id: node.id,
-      label: node.label,
-      position: node.position
-    })),
+    diagram.nodes
+      .filter((node) => node.kind === "resource")
+      .map((node) => ({
+        config: node.parameters?.values,
+        id: node.id,
+        label: node.label,
+        position: node.position
+      })),
     [
       {
         config: source.nodes[0]?.config,
@@ -132,7 +134,9 @@ test("서버가 검증해 부여한 기존 AWS Terraform identity는 편집 가�
     edges: []
   };
 
-  const bucket = createSourceExactReverseEngineeringDiagram(architecture).nodes[0];
+  const bucket = createSourceExactReverseEngineeringDiagram(architecture).nodes.find(
+    (node) => node.id === "resource-existing-bucket"
+  );
 
   assert.equal(bucket?.type, "aws_s3_bucket");
   assert.equal(bucket?.parameters?.terraformBlockType, "resource");
@@ -163,8 +167,41 @@ test("검토 전용 Resource도 실제 왼쪽 Catalog 아이콘으로 표시한�
   };
 
   const diagram = createSourceExactReverseEngineeringDiagram(architecture);
-  const role = diagram.nodes[0];
+  const role = diagram.nodes.find((node) => node.id === "iam-role-source");
 
   assert.equal(role?.type, "IAM_ROLE");
   assert.match(role?.iconUrl ?? "", /Identity-Access-Management_Role_48\.svg$/);
+});
+
+test("Reverse Engineering 원본 Board에 표시 전용 인프라 프레임을 함께 넣는다", () => {
+  const architecture: ArchitectureJson = {
+    nodes: [
+      {
+        id: "service",
+        type: "LAMBDA",
+        label: "Checkout API",
+        positionX: 160,
+        positionY: 120,
+        config: {
+          tags: { Project: "store" }
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagram = createSourceExactReverseEngineeringDiagram(architecture);
+  const resource = diagram.nodes.find((node) => node.id === "service");
+  const frame = diagram.nodes.find(
+    (node) => node.metadata?.reverseEngineeringInfrastructureFrame !== undefined
+  );
+
+  assert.ok(resource);
+  assert.ok(frame);
+  assert.deepEqual(
+    frame.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds,
+    ["service"]
+  );
+  assert.equal(resource.metadata?.parentAreaNodeId, undefined);
+  assert.equal(frame.metadata?.parentAreaNodeId, undefined);
 });

@@ -77,7 +77,7 @@ const scanResult: ReverseEngineeringScanResult = {
   scanErrors: []
 };
 
-test("Reverse Engineering은 사용자가 고른 visual-only 정리안만 적용 후보로 사용한다", () => {
+test("Reverse Engineering 정리안은 표시 프레임을 고정하고 프레임 밖 멤버 이동을 버린다", () => {
   const inputBefore = structuredClone(scanResult);
   const original = createReverseEngineeringBoardApplication({
     currentDiagram,
@@ -85,7 +85,21 @@ test("Reverse Engineering은 사용자가 고른 visual-only 정리안만 적용
     placement: "original",
     result: scanResult
   });
-  const organizedDiagram = moveFirstNode(original.diagram, 160);
+  const originalFrame = original.diagram.nodes.find(
+    (node) =>
+      node.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds.includes("vpc-1") ===
+      true
+  );
+  assert.ok(originalFrame);
+  const organizedDiagram = structuredClone(original.diagram);
+  organizedDiagram.nodes.find((node) => node.id === originalFrame.id)!.position = {
+    x: 900,
+    y: 800
+  };
+  organizedDiagram.nodes.find((node) => node.id === "vpc-1")!.position = {
+    x: 900,
+    y: 800
+  };
   const application = createReverseEngineeringBoardApplication({
     currentDiagram,
     mode: "replace",
@@ -95,12 +109,59 @@ test("Reverse Engineering은 사용자가 고른 visual-only 정리안만 적용
   });
 
   assert.equal(application.compilation, null);
-  assert.deepEqual(application.diagram, organizedDiagram);
+  assert.deepEqual(
+    application.diagram.nodes.find((node) => node.id === originalFrame.id),
+    originalFrame
+  );
+  assert.deepEqual(
+    application.diagram.nodes.find((node) => node.id === "vpc-1")?.position,
+    original.diagram.nodes.find((node) => node.id === "vpc-1")?.position
+  );
   assert.deepEqual(application.previewDiagram, application.diagram);
-  assert.equal(application.previewDiagram.nodes.length, 2);
-  assert.equal(application.diagram.nodes[0]?.metadata?.reverseEngineering?.source, "aws_scan");
+  assert.equal(
+    application.previewDiagram.nodes.filter((node) => node.kind === "resource").length,
+    2
+  );
+  assert.equal(
+    application.diagram.nodes.find((node) => node.id === "vpc-1")?.metadata
+      ?.reverseEngineering?.source,
+    "aws_scan"
+  );
   assert.equal(hasSameBoardAutoOrganizeSemantics(original.diagram, application.diagram), true);
   assert.deepEqual(scanResult, inputBefore);
+});
+
+test("Reverse Engineering 정리안은 표시 프레임 소속 변경을 거절한다", () => {
+  const original = createReverseEngineeringBoardApplication({
+    currentDiagram,
+    mode: "replace",
+    placement: "original",
+    result: scanResult
+  });
+  const organizedDiagram = structuredClone(original.diagram);
+  const frame = organizedDiagram.nodes.find(
+    (node) => node.metadata?.reverseEngineeringInfrastructureFrame !== undefined
+  );
+  assert.ok(frame);
+  frame.metadata = {
+    ...frame.metadata,
+    reverseEngineeringInfrastructureFrame: {
+      ...frame.metadata!.reverseEngineeringInfrastructureFrame!,
+      memberNodeIds: []
+    }
+  };
+
+  assert.throws(
+    () =>
+      createReverseEngineeringBoardApplication({
+        currentDiagram,
+        mode: "replace",
+        organizedDiagram,
+        placement: "compiled",
+        result: scanResult
+      }),
+    /AWS 원본을 변경/
+  );
 });
 
 test("Reverse Engineering은 원래 배치를 선택하면 Compiler proposal 없이 AWS 파생 보드를 반환한다", () => {
@@ -114,10 +175,12 @@ test("Reverse Engineering은 원래 배치를 선택하면 Compiler proposal 없
 
   assert.equal(application.compilation, null);
   assert.deepEqual(
-    application.diagram.nodes.map(({ id, metadata }) => ({
-      id,
-      source: metadata?.reverseEngineering?.source
-    })),
+    application.diagram.nodes
+      .filter((node) => node.kind === "resource")
+      .map(({ id, metadata }) => ({
+        id,
+        source: metadata?.reverseEngineering?.source
+      })),
     [
       { id: "vpc-1", source: "aws_scan" },
       { id: "unknown-1", source: "aws_scan" }
@@ -125,7 +188,9 @@ test("Reverse Engineering은 원래 배치를 선택하면 Compiler proposal 없
   );
   assert.deepEqual(application.diagram, application.previewDiagram);
   assert.deepEqual(
-    application.diagram.nodes.map(({ id, position }) => ({ id, position })),
+    application.diagram.nodes
+      .filter((node) => node.kind === "resource")
+      .map(({ id, position }) => ({ id, position })),
     [
       { id: "vpc-1", position: { x: 0, y: 0 } },
       { id: "unknown-1", position: { x: 0, y: 0 } }
@@ -199,7 +264,9 @@ test("원래 배치는 AWS에서 읽은 Resource, 관계, 설정을 하나도 �
 
   assert.equal(application.diagram.presentation?.geometryPolicy, "source-exact");
   assert.deepEqual(
-    application.diagram.nodes.map((node) => ({ id: node.id, values: node.parameters?.values })),
+    application.diagram.nodes
+      .filter((node) => node.kind === "resource")
+      .map((node) => ({ id: node.id, values: node.parameters?.values })),
     source.architectureJson.nodes.map((node) => ({ id: node.id, values: node.config }))
   );
   assert.deepEqual(application.diagram.edges, [
@@ -306,12 +373,112 @@ test("Reverse Engineering 원래 배치는 Compiler 없이 현재 Board에 추�
 
   assert.equal(application.compilation, null);
   assert.deepEqual(
-    new Set(application.diagram.nodes.map((node) => node.id)),
+    new Set(
+      application.diagram.nodes
+        .filter((node) => node.kind === "resource")
+        .map((node) => node.id)
+    ),
     new Set(["current-bucket", "vpc-1"])
   );
   assert.deepEqual(application.diagram.viewport, currentBoard.viewport);
   assert.deepEqual(application.diagram.variables, currentBoard.variables);
   assert.deepEqual(application.diagram.presentation, currentBoard.presentation);
+});
+
+test("Reverse Engineering append는 새 Resource가 속한 표시 프레임도 함께 유지한다", () => {
+  const currentBoard: DiagramJson = {
+    nodes: [
+      makeResourceNode("current-bucket", "aws_s3_bucket", "current_bucket", "bucket-current", 0)
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram: currentBoard,
+    mode: "append",
+    placement: "original",
+    result: scanResult
+  });
+  const frame = application.diagram.nodes.find(
+    (node) => node.metadata?.reverseEngineeringInfrastructureFrame !== undefined
+  );
+
+  assert.ok(frame);
+  assert.deepEqual(
+    frame.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds,
+    ["vpc-1"]
+  );
+  assert.equal(frame.metadata?.reverseEngineering, undefined);
+  assert.equal(application.sourceOwnership.nodeIds.includes(frame.id), false);
+});
+
+test("Reverse Engineering append의 새 표시 프레임은 실제 추가 멤버 범위만 감싼다", () => {
+  const currentBoard: DiagramJson = {
+    nodes: [
+      makeResourceNode(
+        "existing-bucket",
+        "aws_s3_bucket",
+        "existing_bucket",
+        "bucket-existing",
+        0
+      )
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const result = structuredClone(scanResult);
+  result.architectureJson = {
+    nodes: [
+      {
+        id: "scanned-existing-bucket",
+        type: "S3",
+        label: "Existing bucket",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          providerResourceId: "bucket-existing",
+          tags: { Project: "store" }
+        }
+      },
+      {
+        id: "scanned-new-bucket",
+        type: "S3",
+        label: "New bucket",
+        positionX: 1_000,
+        positionY: 200,
+        config: {
+          providerResourceId: "bucket-new",
+          tags: { Project: "store" }
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram: currentBoard,
+    mode: "append",
+    placement: "original",
+    result
+  });
+  const frame = application.diagram.nodes.find(
+    (node) => node.metadata?.reverseEngineeringInfrastructureFrame !== undefined
+  );
+  const addedNode = application.diagram.nodes.find((node) => node.id === "scanned-new-bucket");
+
+  assert.ok(frame);
+  assert.ok(addedNode);
+  assert.deepEqual(
+    frame.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds,
+    ["scanned-new-bucket"]
+  );
+  assert.equal(frame.position.x > 900, true);
+  assert.equal(addedNode.position.x >= frame.position.x, true);
+  assert.equal(
+    addedNode.position.x + addedNode.size.width <= frame.position.x + frame.size.width,
+    true
+  );
 });
 
 test("Reverse Engineering 자동 정리는 scan 진단을 보드 의미 정보에 섞지 않는다", () => {
@@ -390,7 +557,9 @@ test("발견한 검토 전용 Lambda와 IAM Role은 관계 유무와 관계없�
   const iamRole = nodeById.get("iam-role-1");
 
   assert.deepEqual(
-    application.diagram.nodes.map((node) => node.id),
+    application.diagram.nodes
+      .filter((node) => node.kind === "resource")
+      .map((node) => node.id),
     ["vpc-1", "lambda-1", "iam-role-1"]
   );
   assert.deepEqual(
@@ -697,7 +866,11 @@ test("Reverse Engineering append는 현재 Board와 새 스캔 리소스의 visu
   assert.equal(application.compilation, null);
   assert.deepEqual(application.previewDiagram, application.diagram);
   assert.deepEqual(
-    new Set(application.diagram.nodes.map((node) => node.id)),
+    new Set(
+      application.diagram.nodes
+        .filter((node) => node.kind === "resource")
+        .map((node) => node.id)
+    ),
     new Set(["current-bucket", "current-log", "vpc-1"])
   );
   assert.equal(

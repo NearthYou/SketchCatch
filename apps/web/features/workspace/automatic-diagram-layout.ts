@@ -1,5 +1,6 @@
 import {
   isBoardAutoPresentationFrameNode,
+  isReverseEngineeringInfrastructureFrameNode,
   type DiagramNode
 } from "@sketchcatch/types";
 import { isAreaNode, isSecurityGroupScopeNode } from "../diagram-editor/area-nodes";
@@ -227,14 +228,25 @@ function isUsableCandidateProfile(
   );
 }
 
-/** 자동 프레임과 잠긴 노드는 움직이지 않고 한 전략의 layout을 계산합니다. */
+/** 자동 프레임·가져오기 프레임·잠긴 노드는 지키고 한 전략의 layout을 계산합니다. */
 function createLayoutCandidate(
   input: AutomaticDiagramLayoutInput,
   config: LayoutCandidateConfig
 ): DiagramNode[] {
+  const infrastructureFrames = input.nodes.filter(
+    isReverseEngineeringInfrastructureFrameNode
+  );
+  const infrastructureMemberNodeIds = new Set(
+    infrastructureFrames.flatMap(
+      (frame) =>
+        frame.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds ?? []
+    )
+  );
   const protectedNodeIds = new Set([
     ...(input.protectedNodeIds ?? []),
-    ...input.nodes.filter(isBoardAutoPresentationFrameNode).map((node) => node.id)
+    ...input.nodes.filter(isBoardAutoPresentationFrameNode).map((node) => node.id),
+    ...infrastructureFrames.map((node) => node.id),
+    ...infrastructureMemberNodeIds
   ]);
   const layoutNodes = input.nodes.filter((node) => !isAreaNode(node));
   const roleByNodeId = new Map(layoutNodes.map((node) => [node.id, classifySemanticRole(node)]));
@@ -307,7 +319,138 @@ function createLayoutCandidate(
 
   resolveSiblingAreaOverlaps([ROOT_PARENT_ID, ...parentIds], nextNodeById, protectedNodeIds);
 
+  layoutReverseEngineeringInfrastructureFrameMembers(
+    infrastructureFrames,
+    nextNodeById,
+    rankByNodeId,
+    input.protectedNodeIds ?? new Set()
+  );
+
   return input.nodes.map((node) => nextNodeById.get(node.id) ?? node);
+}
+
+/** gg: 표시 프레임 geometry와 소속은 고정하고, 움직일 수 있는 멤버만 내부 격자에 놓습니다. */
+function layoutReverseEngineeringInfrastructureFrameMembers(
+  frames: readonly DiagramNode[],
+  nodeById: Map<string, DiagramNode>,
+  rankByNodeId: ReadonlyMap<string, number>,
+  callerProtectedNodeIds: ReadonlySet<string>
+): void {
+  const alreadyPlacedMemberNodeIds = new Set<string>();
+
+  for (const frame of [...frames].sort((left, right) => left.id.localeCompare(right.id))) {
+    const marker = frame.metadata?.reverseEngineeringInfrastructureFrame;
+    if (!marker) {
+      continue;
+    }
+
+    const members = marker.memberNodeIds.flatMap((nodeId) => {
+      const node = nodeById.get(nodeId);
+      if (
+        !node ||
+        node.kind !== "resource" ||
+        alreadyPlacedMemberNodeIds.has(nodeId)
+      ) {
+        return [];
+      }
+      alreadyPlacedMemberNodeIds.add(nodeId);
+      return [node];
+    });
+
+    if (
+      members.length === 0 ||
+      members.some((node) => node.locked || callerProtectedNodeIds.has(node.id))
+    ) {
+      continue;
+    }
+
+    const placements = createInfrastructureFrameGrid(frame, members, rankByNodeId);
+    if (!placements) {
+      continue;
+    }
+
+    for (const [nodeId, position] of placements) {
+      const node = nodeById.get(nodeId);
+      if (node) {
+        nodeById.set(nodeId, { ...node, position });
+      }
+    }
+  }
+}
+
+/** gg: 크기를 바꾸지 않고 프레임 안에 들어가는 가장 넓은 결정론적 격자를 찾습니다. */
+function createInfrastructureFrameGrid(
+  frame: DiagramNode,
+  members: readonly DiagramNode[],
+  rankByNodeId: ReadonlyMap<string, number>
+): ReadonlyMap<string, DiagramNode["position"]> | null {
+  const horizontalPadding = 32;
+  const titlePadding = 56;
+  const bottomPadding = 32;
+  const gap = 24;
+  const innerWidth = frame.size.width - horizontalPadding * 2;
+  const innerHeight = frame.size.height - titlePadding - bottomPadding;
+
+  if (innerWidth <= 0 || innerHeight <= 0) {
+    return null;
+  }
+
+  const sortedMembers = [...members].sort(
+    (left, right) =>
+      (rankByNodeId.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+        (rankByNodeId.get(right.id) ?? Number.MAX_SAFE_INTEGER) ||
+      left.id.localeCompare(right.id)
+  );
+
+  for (let columnCount = sortedMembers.length; columnCount >= 1; columnCount -= 1) {
+    const rowCount = Math.ceil(sortedMembers.length / columnCount);
+    const columnWidths = Array.from({ length: columnCount }, () => 0);
+    const rowHeights = Array.from({ length: rowCount }, () => 0);
+
+    for (const [index, node] of sortedMembers.entries()) {
+      const column = index % columnCount;
+      const row = Math.floor(index / columnCount);
+      columnWidths[column] = Math.max(columnWidths[column] ?? 0, node.size.width);
+      rowHeights[row] = Math.max(rowHeights[row] ?? 0, node.size.height);
+    }
+
+    const contentWidth =
+      columnWidths.reduce((total, width) => total + width, 0) +
+      gap * Math.max(0, columnCount - 1);
+    const contentHeight =
+      rowHeights.reduce((total, height) => total + height, 0) +
+      gap * Math.max(0, rowCount - 1);
+
+    if (contentWidth > innerWidth || contentHeight > innerHeight) {
+      continue;
+    }
+
+    const xByColumn: number[] = [];
+    const yByRow: number[] = [];
+    let nextX = frame.position.x + horizontalPadding;
+    let nextY = frame.position.y + titlePadding;
+
+    for (const width of columnWidths) {
+      xByColumn.push(nextX);
+      nextX += width + gap;
+    }
+    for (const height of rowHeights) {
+      yByRow.push(nextY);
+      nextY += height + gap;
+    }
+
+    return new Map(
+      sortedMembers.map((node, index) => [
+        node.id,
+        {
+          x: xByColumn[index % columnCount] ?? node.position.x,
+          y: yByRow[Math.floor(index / columnCount)] ?? node.position.y
+        }
+      ])
+    );
+  }
+
+  return null;
 }
 
 function resolveSiblingAreaOverlaps(

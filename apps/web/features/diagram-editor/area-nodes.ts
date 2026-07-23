@@ -1,5 +1,6 @@
 import {
   isBoardAutoPresentationFrameNode,
+  isReverseEngineeringInfrastructureFrameNode,
   type DiagramNode
 } from "../../../../packages/types/src";
 import { getAwsRegionLabel } from "../parameter-input/aws-region-options";
@@ -200,7 +201,8 @@ export function isContainmentAreaNode(node: DiagramNode): boolean {
   return (
     isAreaNode(node) &&
     !isSecurityGroupScopeNode(node) &&
-    !isBoardAutoPresentationFrameNode(node)
+    !isBoardAutoPresentationFrameNode(node) &&
+    !isReverseEngineeringInfrastructureFrameNode(node)
   );
 }
 

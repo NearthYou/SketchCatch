@@ -5,10 +5,15 @@ import type {
   DiagramNode,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
+import {
+  isNodeInsideReverseEngineeringInfrastructureFrame,
+  isReverseEngineeringInfrastructureFrameNode
+} from "@sketchcatch/types";
 import { hasSameBoardAutoOrganizeSemantics } from "../architecture-board-compiler";
 import {
   convertDiagramJsonToArchitectureJson
 } from "./workspace-ai-diagram-adapter";
+import { fitReverseEngineeringInfrastructureFrameToMembers } from "./reverse-engineering-infrastructure-frames";
 import { createSourceExactReverseEngineeringDiagram } from "./reverse-engineering-source-exact";
 
 export type ReverseEngineeringBoardApplicationMode = "replace" | "append";
@@ -77,7 +82,9 @@ export function createReverseEngineeringBoardApplication(
   const originalPreview = createOriginalReverseEngineeringPreview(input.result);
   const comparison = compareDiagrams(input.currentDiagram, originalPreview.diagram);
   const replaceSourceOwnership = {
-    nodeIds: originalPreview.diagram.nodes.map((node) => node.id),
+    nodeIds: originalPreview.diagram.nodes
+      .filter((node) => node.kind === "resource")
+      .map((node) => node.id),
     edgeIds: originalPreview.diagram.edges.map((edge) => edge.id)
   } satisfies ReverseEngineeringSourceOwnership;
 
@@ -215,7 +222,59 @@ function useSelectedReverseEngineeringOrganization(
     throw new Error("Board 정리안이 가져온 AWS 원본을 변경했습니다.");
   }
 
-  return structuredClone(organizedDiagram);
+  return constrainSelectedReverseEngineeringInfrastructureFrames(
+    sourceDiagram,
+    organizedDiagram
+  );
+}
+
+/** gg: 정리안 적용 시 프레임은 원본으로 고정하고 프레임 밖 멤버 이동은 원본 geometry로 되돌립니다. */
+function constrainSelectedReverseEngineeringInfrastructureFrames(
+  sourceDiagram: DiagramJson,
+  organizedDiagram: DiagramJson
+): DiagramJson {
+  const sourceNodeById = new Map(sourceDiagram.nodes.map((node) => [node.id, node]));
+  const frameByMemberNodeId = new Map<string, DiagramNode>();
+
+  for (const frame of [...sourceDiagram.nodes]
+    .filter(isReverseEngineeringInfrastructureFrameNode)
+    .sort((left, right) => left.id.localeCompare(right.id))) {
+    for (
+      const memberNodeId of
+      frame.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds ?? []
+    ) {
+      if (!frameByMemberNodeId.has(memberNodeId)) {
+        frameByMemberNodeId.set(memberNodeId, frame);
+      }
+    }
+  }
+
+  return {
+    ...structuredClone(organizedDiagram),
+    nodes: organizedDiagram.nodes.map((candidateNode) => {
+      const sourceNode = sourceNodeById.get(candidateNode.id);
+      if (!sourceNode) {
+        return structuredClone(candidateNode);
+      }
+      if (isReverseEngineeringInfrastructureFrameNode(sourceNode)) {
+        return structuredClone(sourceNode);
+      }
+
+      const frame = frameByMemberNodeId.get(sourceNode.id);
+      if (
+        frame &&
+        !isNodeInsideReverseEngineeringInfrastructureFrame(candidateNode, frame)
+      ) {
+        return {
+          ...structuredClone(candidateNode),
+          position: structuredClone(sourceNode.position),
+          size: structuredClone(sourceNode.size)
+        };
+      }
+
+      return structuredClone(candidateNode);
+    })
+  };
 }
 
 // AWS에서 가져온 노드에 보호해야 하는 원본 값 목록을 남깁니다.
@@ -226,7 +285,9 @@ function markReverseEngineeringDiagram(
   return {
     ...diagram,
     nodes: diagram.nodes.map((node) =>
-      nodeIds === undefined || nodeIds.has(node.id) ? markReverseEngineeringNode(node) : node
+      node.kind === "resource" && (nodeIds === undefined || nodeIds.has(node.id))
+        ? markReverseEngineeringNode(node)
+        : node
     )
   };
 }
@@ -257,6 +318,7 @@ function isUnsupportedUnknownNode(node: DiagramNode): boolean {
   return node.type === "UNKNOWN" || values?.["analysisExcluded"] === true;
 }
 
+// 표시 프레임은 비교 항목에서 빼고 실제 AWS Resource만 추가·중복·확인 대상으로 나눕니다.
 function compareDiagrams(
   currentDiagram: DiagramJson,
   previewDiagram: DiagramJson
@@ -275,7 +337,7 @@ function compareDiagrams(
   const duplicates: ReverseEngineeringBoardComparisonItem[] = [];
   const manualReviews: ReverseEngineeringBoardComparisonItem[] = [];
 
-  for (const node of previewDiagram.nodes) {
+  for (const node of previewDiagram.nodes.filter((candidate) => candidate.kind === "resource")) {
     const item = toComparisonItem(node);
     const providerResourceId = item.providerResourceId;
     const terraformIdentity = item.terraformIdentity;
@@ -310,7 +372,7 @@ function compareDiagrams(
     additions.push(item);
   }
 
-  for (const node of currentDiagram.nodes) {
+  for (const node of currentDiagram.nodes.filter((candidate) => candidate.kind === "resource")) {
     const providerResourceId = getProviderResourceId(node)[0];
 
     if (providerResourceId && !previewProviderResourceIds.has(providerResourceId)) {
@@ -332,9 +394,69 @@ function appendAdditionsToCurrentDiagram(
 } {
   const additionNodeIds = new Set(comparison.additions.map((item) => item.nodeId));
   const currentNodeIds = new Set(currentDiagram.nodes.map((node) => node.id));
+  const currentNodesWithFrameMembership = mergeAppendedFrameMembership(
+    currentDiagram.nodes,
+    previewDiagram.nodes,
+    additionNodeIds
+  );
+  const currentNodeIdsWithFrames = new Set(
+    currentNodesWithFrameMembership.map((node) => node.id)
+  );
+  const currentFrameById = new Map(
+    currentNodesWithFrameMembership
+      .filter(isReverseEngineeringInfrastructureFrameNode)
+      .map((node) => [node.id, node])
+  );
+  const previewResourceNodeById = new Map(
+    previewDiagram.nodes
+      .filter((node) => node.kind === "resource")
+      .map((node) => [node.id, node])
+  );
+  const appendedFrames = previewDiagram.nodes
+    .filter(isReverseEngineeringInfrastructureFrameNode)
+    .flatMap((frame) => {
+      const marker = frame.metadata?.reverseEngineeringInfrastructureFrame;
+      const memberNodeIds = marker?.memberNodeIds.filter((nodeId) => additionNodeIds.has(nodeId));
+      const members = memberNodeIds?.flatMap((nodeId) => {
+        const node = previewResourceNodeById.get(nodeId);
+        return node ? [node] : [];
+      });
+
+      if (
+        !marker ||
+        !memberNodeIds ||
+        memberNodeIds.length === 0 ||
+        !members ||
+        members.length !== memberNodeIds.length
+      ) {
+        return [];
+      }
+
+      const currentFrame = currentFrameById.get(frame.id);
+      const currentMemberNodeIds = new Set(
+        currentFrame?.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds ?? []
+      );
+      if (memberNodeIds.every((nodeId) => currentMemberNodeIds.has(nodeId))) {
+        return [];
+      }
+
+      const frameId = currentNodeIdsWithFrames.has(frame.id)
+        ? createAppendedInfrastructureFrameId(frame.id, memberNodeIds)
+        : frame.id;
+      if (currentNodeIdsWithFrames.has(frameId)) {
+        return [];
+      }
+
+      return [
+        fitReverseEngineeringInfrastructureFrameToMembers(frame, members, frameId)
+      ];
+    });
   const nodes = [
-    ...currentDiagram.nodes,
-    ...previewDiagram.nodes.filter((node) => additionNodeIds.has(node.id))
+    ...currentNodesWithFrameMembership,
+    ...appendedFrames,
+    ...previewDiagram.nodes.filter(
+      (node) => node.kind === "resource" && additionNodeIds.has(node.id)
+    )
   ];
   const nodeIdsAfterAppend = new Set([...currentNodeIds, ...additionNodeIds]);
   const appendedEdges = previewDiagram.edges.filter((edge) =>
@@ -353,6 +475,84 @@ function appendAdditionsToCurrentDiagram(
       edgeIds: appendedEdges.map((edge) => edge.id)
     }
   };
+}
+
+/** gg: 같은 표시 프레임이 이미 있으면 geometry는 지키고 새 Resource 소속만 합칩니다. */
+function mergeAppendedFrameMembership(
+  currentNodes: readonly DiagramNode[],
+  previewNodes: readonly DiagramNode[],
+  additionNodeIds: ReadonlySet<string>
+): DiagramNode[] {
+  const previewFrameById = new Map(
+    previewNodes
+      .filter(isReverseEngineeringInfrastructureFrameNode)
+      .map((node) => [node.id, node])
+  );
+  const previewResourceNodeById = new Map(
+    previewNodes
+      .filter((node) => node.kind === "resource")
+      .map((node) => [node.id, node])
+  );
+
+  return currentNodes.map((node) => {
+    if (!isReverseEngineeringInfrastructureFrameNode(node)) {
+      return structuredClone(node);
+    }
+
+    const currentMarker = node.metadata?.reverseEngineeringInfrastructureFrame;
+    const previewMarker = previewFrameById.get(node.id)?.metadata
+      ?.reverseEngineeringInfrastructureFrame;
+    if (!currentMarker || !previewMarker) {
+      return structuredClone(node);
+    }
+
+    const appendedMemberNodeIds = previewMarker.memberNodeIds.filter((nodeId) =>
+      additionNodeIds.has(nodeId)
+    );
+    const appendedMembers = appendedMemberNodeIds.flatMap((nodeId) => {
+      const member = previewResourceNodeById.get(nodeId);
+      return member ? [member] : [];
+    });
+    if (
+      appendedMemberNodeIds.length === 0 ||
+      appendedMembers.length !== appendedMemberNodeIds.length ||
+      appendedMembers.some(
+        (member) => !isNodeInsideReverseEngineeringInfrastructureFrame(member, node)
+      )
+    ) {
+      return structuredClone(node);
+    }
+
+    return {
+      ...structuredClone(node),
+      metadata: {
+        ...structuredClone(node.metadata),
+        reverseEngineeringInfrastructureFrame: {
+          ...structuredClone(currentMarker),
+          memberNodeIds: [...new Set([
+            ...currentMarker.memberNodeIds,
+            ...appendedMemberNodeIds
+          ])].sort()
+        }
+      }
+    };
+  });
+}
+
+/** gg: 기존 같은 그룹 프레임에 안전하게 들어가지 않는 추가분은 별도 안정 ID 프레임으로 보존합니다. */
+function createAppendedInfrastructureFrameId(
+  baseFrameId: string,
+  memberNodeIds: readonly string[]
+): string {
+  let hash = 0x811c9dc5;
+  const value = [...memberNodeIds].sort().join("|");
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return `${baseFrameId}:append:${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 // 양쪽 끝 노드가 보드에 있을 때만 관계선을 추가해 끊어진 선을 만들지 않습니다.

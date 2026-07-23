@@ -3966,6 +3966,21 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  /** Reverse Engineering이 만든 표시 전용 그룹이며 실제 AWS 포함 관계로 사용하지 않습니다. */
+  reverseEngineeringInfrastructureFrame?:
+    | {
+        source: "aws_scan";
+        groupBy:
+          | "project"
+          | "service"
+          | "environment"
+          | "vpc"
+          | "relationship"
+          | "common";
+        groupKey: string;
+        memberNodeIds: string[];
+      }
+    | undefined;
   areaAutoSizeBaseline?:
     | {
         position: {

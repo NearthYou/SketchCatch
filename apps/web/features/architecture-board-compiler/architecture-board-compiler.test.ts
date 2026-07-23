@@ -928,6 +928,63 @@ test("source-exact 자동 정리는 잠긴 design node와 유효한 presentation
   );
 });
 
+test("source-exact 자동 정리는 잠기지 않은 Reverse Engineering 표시 프레임도 고정한다", () => {
+  const source = compileArchitectureBoard({ architecture, trigger: "ai-draft" }).diagram;
+  const frame: DiagramNode = {
+    id: "reverse-infra-frame:project:store",
+    type: "design_group",
+    kind: "design",
+    label: "프로젝트 · store",
+    position: { x: -80, y: -100 },
+    size: { width: 520, height: 320 },
+    locked: false,
+    zIndex: 0,
+    metadata: {
+      presentationCatalogItemId: "design-group",
+      reverseEngineeringInfrastructureFrame: {
+        source: "aws_scan",
+        groupBy: "project",
+        groupKey: "store",
+        memberNodeIds: ["api", "function"]
+      }
+    }
+  };
+  const currentDiagram: DiagramJson = {
+    ...structuredClone(source),
+    nodes: [
+      frame,
+      ...source.nodes.map((node) => ({
+        ...structuredClone(node),
+        position: { x: 20, y: 20 }
+      }))
+    ],
+    presentation: { geometryPolicy: "source-exact" }
+  };
+
+  const proposal = compileArchitectureBoard({
+    architecture,
+    currentDiagram,
+    trigger: "board-auto-organize"
+  });
+  const carriedFrame = proposal.diagram.nodes.find((node) => node.id === frame.id);
+  const api = proposal.diagram.nodes.find((node) => node.id === "api");
+  const fn = proposal.diagram.nodes.find((node) => node.id === "function");
+
+  assert.deepEqual(carriedFrame, frame);
+  assert.ok(api);
+  assert.ok(fn);
+  assert.equal(api.metadata?.parentAreaNodeId, undefined);
+  assert.equal(fn.metadata?.parentAreaNodeId, undefined);
+  assert.ok(api.position.x >= frame.position.x);
+  assert.ok(api.position.y >= frame.position.y);
+  assert.ok(api.position.x + api.size.width <= frame.position.x + frame.size.width);
+  assert.ok(api.position.y + api.size.height <= frame.position.y + frame.size.height);
+  assert.ok(fn.position.x >= frame.position.x);
+  assert.ok(fn.position.y >= frame.position.y);
+  assert.ok(fn.position.x + fn.size.width <= frame.position.x + frame.size.width);
+  assert.ok(fn.position.y + fn.size.height <= frame.position.y + frame.size.height);
+});
+
 test("같은 Resource의 위치·크기·z-index 변경은 각각 고유한 change id를 가진다", () => {
   const source = compileArchitectureBoard({ architecture, trigger: "ai-draft" }).diagram;
   const currentDiagram: DiagramJson = {

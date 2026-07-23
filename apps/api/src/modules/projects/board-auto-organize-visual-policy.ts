@@ -1,6 +1,8 @@
 import { isDeepStrictEqual } from "node:util";
 import {
   isBoardAutoPresentationFrameNode,
+  isNodeInsideReverseEngineeringInfrastructureFrame,
+  isReverseEngineeringInfrastructureFrameNode,
   type DiagramEdge,
   type DiagramEdgeRoute,
   type DiagramJson,
@@ -55,7 +57,7 @@ const SVG_PATH_COMMAND_ARITY = new Map<string, number>([
 const SVG_PATH_TOKEN_PATTERN =
   /[AaCcHhLlMmQqSsTtVvZz]|[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/giy;
 
-/** 저장된 원본 위에 검증된 위치·크기·route·자동 프레임만 다시 조립합니다. */
+/** 저장된 원본 위에 검증된 위치·크기·route를 조립하고 가져오기 프레임은 고정합니다. */
 export function recomposeBoardAutoOrganizeDiagram(
   sourceDiagram: DiagramJson,
   candidateDiagram: DiagramJson
@@ -68,6 +70,8 @@ export function recomposeBoardAutoOrganizeDiagram(
   if (!sourceNodeById || !candidateNodeById || !sourceEdgeById || !candidateEdgeById) {
     throw new BoardAutoOrganizeSemanticMismatchError();
   }
+  const infrastructureFrameByMemberNodeId =
+    createReverseEngineeringInfrastructureFrameByMemberNodeId(sourceDiagram.nodes);
 
   const sourceEdgeEndpointIds = new Set(
     sourceDiagram.edges.flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId])
@@ -109,6 +113,32 @@ export function recomposeBoardAutoOrganizeDiagram(
     }
 
     if (!candidateNode || isBoardAutoPresentationFrameNode(candidateNode)) {
+      throw new BoardAutoOrganizeSemanticMismatchError();
+    }
+
+    if (isReverseEngineeringInfrastructureFrameNode(sourceNode)) {
+      if (
+        !isReverseEngineeringInfrastructureFrameNode(candidateNode) ||
+        !isDeepStrictEqual(
+          sourceNode.metadata?.reverseEngineeringInfrastructureFrame,
+          candidateNode.metadata?.reverseEngineeringInfrastructureFrame
+        )
+      ) {
+        throw new BoardAutoOrganizeSemanticMismatchError();
+      }
+
+      nodes.push(structuredClone(sourceNode));
+      continue;
+    }
+
+    const infrastructureFrame = infrastructureFrameByMemberNodeId.get(sourceNode.id);
+    if (
+      infrastructureFrame &&
+      !isNodeInsideReverseEngineeringInfrastructureFrame(
+        candidateNode,
+        infrastructureFrame
+      )
+    ) {
       throw new BoardAutoOrganizeSemanticMismatchError();
     }
 
@@ -165,6 +195,35 @@ export function recomposeBoardAutoOrganizeDiagram(
     nodes,
     edges
   };
+}
+
+/** gg: 저장 원본의 표시 프레임 소속과 내부 bounds가 정상일 때만 서버 적용을 계속합니다. */
+function createReverseEngineeringInfrastructureFrameByMemberNodeId(
+  nodes: readonly DiagramNode[]
+): ReadonlyMap<string, DiagramNode> {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const frameByMemberNodeId = new Map<string, DiagramNode>();
+
+  for (const frame of nodes.filter(isReverseEngineeringInfrastructureFrameNode)) {
+    for (
+      const memberNodeId of
+      frame.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds ?? []
+    ) {
+      const member = nodeById.get(memberNodeId);
+      if (
+        !member ||
+        member.kind !== "resource" ||
+        frameByMemberNodeId.has(memberNodeId) ||
+        !isNodeInsideReverseEngineeringInfrastructureFrame(member, frame)
+      ) {
+        throw new BoardAutoOrganizeSemanticMismatchError();
+      }
+
+      frameByMemberNodeId.set(memberNodeId, frame);
+    }
+  }
+
+  return frameByMemberNodeId;
 }
 
 /** 자동 프레임은 제목·geometry·style과 네 가지 소유권 값만 저장합니다. */
