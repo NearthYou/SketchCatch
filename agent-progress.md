@@ -14,6 +14,7 @@ Short English-only working log for the current agent context. Older records are 
 - Root lint and typecheck passed. All five package production builds passed directly; the final Turbo wrapper did not exit after completing work, so it was terminated after package-level verification.
 - Root pnpm test remains red in unrelated pre-existing Web baseline tests such as Settings CodeConnection refresh, Live Observation layout contracts, and Repository start behavior. The focused suites for this workstream pass.
 - No schema, dependency, shared contract, cloud resource, deployment, or migration changes were made.
+- 2026-07-24: Merged the latest dev branch into `fix/gg/484-settings`. A persisted AWS structure-analysis check now keeps its next action after refresh, and a blocked AWS disconnect dialog sends the user directly to that action. Focused Settings checks, harness, lint, Web typecheck, and production build pass.
 
 
 ## Session Record
@@ -24,78 +25,6 @@ Short English-only working log for the current agent context. Older records are 
 - 2026-07-23: Refined the Dashboard Settings submenu with the shared Pretendard font, a 2px smaller My Page label, 4px additional separation, and a reduced-motion-safe downward reveal. No test command was run at the user's explicit request.
 - 2026-07-23: Aligned the My Page new-password and confirmation controls as an equal-width desktop row with shared feedback below and a single-column mobile fallback. No test command was run at the user's explicit request.
 - 2026-07-23: Completed Dashboard My Page profile updates without a DB migration. Password accounts now require server-verified current-password proof in an HttpOnly cookie before a conditional nickname or optional-password update; social-only accounts can change only their nickname. Password changes revoke prior refresh/reset tokens and issue a fresh current-browser session. The focused eight-route auth checks, root lint, typecheck, build, and harness check passed before the final internal concurrency/cookie hardening; no further test run was made at the user's explicit request.
-
-### 2026-07-23 - Stabilize Repository Template preview controls
-
-- Replaced the generic Template Preview eyebrow with the active candidate rank and renamed the AI design action to AI로 직접 설계.
-- Top-aligned the candidate navigation with the recommendation copy so 1 / 3, 2 / 3, and 3 / 3 no longer move vertically when reason lengths differ.
-- Refined the follow-up step with a subdued selected-Template summary, a larger section heading, tight Template-to-section spacing, whitespace-separated question groups, tighter prompt-to-choice spacing, and accessible card-style radio choices with clear checked, hover, and focus states.
-- Browser-verified the two-question layout and selected answer state at desktop size.
-- Verified 46 Repository tests, root lint, root typecheck, production build, authenticated browser navigation, scoped diff checks, and the final harness check.
-
-### 2026-07-23 - Emphasize Repository URL analysis entry
-
-- Added the Git branch icon to the Branch field and enlarged the pre-analysis Repository heading, labels, inputs, hint, error state, and submit action for presentation use.
-- Added a decorative GitHub mark to the Repository URL label while keeping the existing Branch icon and field layout.
-- Kept the completed analysis result typography and controls at their existing scale.
-- Verified with 23 Repository route tests, Web lint, Web typecheck, Web production build, root harness check, and diff check.
-- Root `pnpm test` still fails in pre-existing Settings, board-rendering, and API baseline suites outside this change; the Repository screen test passes inside that run.
-
-### 2026-07-23 - Rebuild Repository analysis and Template preview UI
-
-- Split `/workspace/repository` into a focused pre-analysis form and a completed result with compact Repository metadata, mapped evidence, real Template thumbnails, and a Preview-first 28/72 layout.
-- Candidate arrows change only the local Preview index. Explicit Template acceptance is required before Board creation, and new recommendation results reset to the first candidate.
-- Preserved public/private recovery, follow-up questions, AI new-design entry, recommendation order and confidence, runtime Secret handoff, Board persistence, Analysis Record provenance, and Project Draft revision contracts.
-- Added responsive CSS, compact actions, one accessible live candidate announcement, pending/completed status, keyboard-native navigation, and neutral thumbnail/evidence fallbacks.
-- Fixed final-review regressions: changing the Repository URL now clears its stale branch, Repository TSX render tests run in the default Web suite, connected analyses fall back to safe `aiHandoff.evidence`, generation locks configuration changes, and deployment-type changes no longer remount the result or lose focus.
-- Browser-verified loading, success, failure recovery, candidate navigation, explicit Template use, AI new-design navigation, thumbnail fallback, keyboard focus, and form reset. The result has no console errors or horizontal overflow at 1440×900 and 390×844.
-- Added the shared 64px SketchCatch topbar with a return-to-start-mode link, widened the Repository canvas to 1440px, and enlarged the form, result metadata, and Preview-first layout for presentation use. Repository-focused tests, lint, typecheck, production build, and diff checks pass. A fresh unauthenticated local-browser session reached the login guard, so live visual QA still requires an authenticated local session.
-- Verified 42 Repository tests and 28 recommendation/handoff tests. Harness, root lint, root typecheck, production build, diff checks, and 25 sandbox E2E tests pass.
-- The untouched full Web baseline remains at 1,219/1,227 and the untouched API baseline remains at 1,523/1,557. Root `pnpm test` stops in `test:core`; Terraform tests also require a newer Terraform than local v1.6.6 for `mock_provider` and `override_resource`.
-
-### 2026-07-23 - Clear Repository Analysis result UI
-
-- Removed the old Repository result presentation layer: CSS module, architecture preview, cards, candidate list, visual wrappers, icon wrappers, and old full-width action layout.
-- Kept the existing analysis APIs, public/private recovery, recommendation order and IDs, Board creation, Analysis Record persistence, Project Draft revision, navigation, and AI new-design entry.
-- Replaced the route surface with minimal semantic HTML: one heading, labeled URL form, native branch and Template selects, status/alert regions, and existing actions.
-- Preserved the fetched branch list as a native select after public analysis; users do not need to know branch names manually.
-- Verified: Repository route tests 12/12, related analysis/recommendation/handoff tests 36/36, root harness, lint, typecheck, and production build pass.
-- Full Web and root test runs remain red only in untouched visual/API fixture tests outside this change. The baseline document records the exact boundary.
-
-### 2026-07-23 - Repository UI boundaries
-
-- No Repository UI follow-up is required before commit. The remaining failing suites are outside this diff and should be repaired separately.
-- Do not restore the deleted legacy result cards or change the preserved Repository Analysis, recommendation, Board creation, AI, auth, or route contracts.
-
-### Other 2026-07-23 updates
-
-- 2026-07-23: Removed the legacy `template-live-observation` demo fixture from the user-facing Template Gallery while retaining it for legacy Draft and Live Observation contract verification. Web typecheck and harness check pass; the focused compiler-heavy review test exceeded its 60-second execution limit.
-- 2026-07-23: Simplified the shared Template Gallery controls by removing Tag and sort selectors, retaining recommended order, and placing a compact search field on the right with full-width mobile behavior. Verified with the focused gallery regression test, Web typecheck, scoped diff review, and harness check.
-- 2026-07-23: Replaced the landing preview footer with a production-style product footer containing the SketchCatch identity, provider-neutral IaC service description, product-section navigation, Login entry, copyright, and responsive mobile layout. Verified with the focused landing regression test, Web typecheck, scoped diff review, and harness check.
-- 2026-07-23: Localized the landing navigation, removed the duplicate product-tour action, and routed every landing start CTA through Login so Signup is entered only from the Login page. Verified with the focused landing-flow regression test, Web typecheck, scoped diff review, and harness check.
-- 2026-07-23: Added user-scoped Settings caches for AWS, GitHub, and AWS CodeConnections. Cached connection details now survive tab remounts for 30 minutes, stay fresh for 5 minutes, and explicit refresh updates every connection source. Verified with the focused cache regression test, Web typecheck, scoped diff review, and harness check.
-- 2026-07-23: Aligned the empty Cost Usage refresh action with the shared dashboard secondary-button UI, typography, icon, and busy state. Verified by scoped diff review and harness check.
-- 2026-07-23: Removed the redundant empty-project `새 설계 시작` CTA from both project-list implementations while preserving the top-level `새 프로젝트` action. Verified by scoped diff review and harness check.
-- 2026-07-23: Enlarged the `/workspace/new` content area, start cards, titles, descriptions, and icons; added local cloud-provider brand assets and responsive single-column fallback. The focused start-screen test passes 2/2, and lint, typecheck, and production build pass.
-- 2026-07-23: Refined the `/workspace/new` start-method cards to match the selected compact UI direction. Added a focused regression test. Verified with the focused test, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`.
-
-### 2026-07-23 - Improve Repository follow-up question readability
-
-- Raised the follow-up section heading, prompt, choice, and text-input sizes while preserving existing design tokens, focus states, and responsive behavior.
-- Fixed the nested choice label inheriting the generic 12px metadata rule by explicitly inheriting the button typography.
-- Set the public Board action to a balanced 220 by 48px desktop size, retained the mobile full-width rule, and separated it from questions with a hairline divider.
-- Added 20px between questions without bullets, removed the question-stage top divider, and increased the back action to 40px with a 12px summary gap.
-- Kept the previously updated GitHub issue #543 unchanged after canceling a later unsaved edit, and retained branch fix/ck/543-repository-question-ui.
-- Repository-focused tests passed 29/29 after merging the latest dev branch. Web and root lint/typecheck passed. All five root build tasks and all 23 Web routes completed successfully.
-- User-provided authenticated-state screenshots guided the final spacing and sizing adjustments. No credentials, cloud mutations, dependency changes, or migrations were involved.
-- The latest dev Repository analysis rebuild superseded the branch-specific presentation structure during merge resolution; dev behavior and styles were retained. The merged Repository suite passes 44/44, and root lint, typecheck, build, diff, and harness checks pass.
-
-### 2026-07-23 - Defer Repository Project creation until Board confirmation
-
-- Issue #542 now opens the Repository analysis route with only the draft project name; entering the route or navigating back does not call Project creation.
-- Public Repository analysis works without a persisted Project. The Project is created only inside the confirmed Board save path, and a failed first draft save triggers best-effort deletion of that newly created empty Project.
-- Existing Project revision checks and Repository provenance retries continue to use the persisted Project ID; successful first saves invalidate Dashboard Project queries.
-- The 32 focused new-project/Repository regressions, root lint, root typecheck, root build, diff check, and harness check pass.
 
 ### 2026-07-23 - Make AWS connection a single user-facing flow
 

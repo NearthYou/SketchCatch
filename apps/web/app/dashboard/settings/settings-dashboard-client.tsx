@@ -386,6 +386,20 @@ export function SettingsDashboardClient() {
     setDeletionErrorMessage("");
   }
 
+  // gg: 연결 해제 전 정리가 필요하면 사용자가 막힌 구조 분석 행동으로 바로 돌아갈 수 있게 합니다.
+  function continueAwsStructureAnalysisCleanup(): void {
+    const connectionId = deletionPreview?.connectionId;
+    closeDeletionPreview();
+    if (!connectionId) return;
+
+    window.requestAnimationFrame(() => {
+      const target = document.getElementById(`aws-structure-analysis-${connectionId}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const action = target?.querySelector<HTMLButtonElement>("button:not([disabled])");
+      (action ?? target)?.focus();
+    });
+  }
+
   async function connectGitHubBuild(): Promise<void> {
     if (githubInstallationsQuery.isPending) {
       setErrorMessage("GitHub App 연결 상태를 확인하고 있습니다. 잠시 후 다시 시도해 주세요.");
@@ -737,7 +751,11 @@ export function SettingsDashboardClient() {
                       <Trash2 size={15} />AWS 연결 해제
                     </button>
                   </div>
-                  <div className={settingsStyles.connectionImportAccess}>
+                  <div
+                    className={settingsStyles.connectionImportAccess}
+                    id={`aws-structure-analysis-${connection.id}`}
+                    tabIndex={-1}
+                  >
                     <AwsImportAccessWizard
                       connectionId={connection.id}
                       connectionStatus={connection.status}
@@ -856,7 +874,16 @@ export function SettingsDashboardClient() {
             ) : null}
             <div className={styles.modalActions}>
               <button disabled={actionPending} onClick={closeDeletionPreview} type="button">취소</button>
-              {deletionPreview.canDelete ? (
+              {deletionPreview.blockerMessage ? (
+                <button
+                  className={styles.primaryAction}
+                  disabled={actionPending}
+                  onClick={continueAwsStructureAnalysisCleanup}
+                  type="button"
+                >
+                  설정 해제 계속
+                </button>
+              ) : deletionPreview.canDelete ? (
                 <button
                   className={styles.dangerAction}
                   disabled={actionPending}

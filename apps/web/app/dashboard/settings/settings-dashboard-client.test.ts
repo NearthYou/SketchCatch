@@ -76,6 +76,8 @@ test("Settings uses a simple confirmation before disconnecting AWS", () => {
   assert.match(clientSource, /AWS 연결 해제 확인/);
   assert.match(clientSource, /배포한 인프라는 유지됩니다\./);
   assert.match(clientSource, /구조 분석 설정을 먼저 정리한 뒤 AWS 연결을 해제할 수 있습니다\./);
+  assert.match(clientSource, /설정 해제 계속\s*<\/button>/);
+  assert.match(clientSource, /continueAwsStructureAnalysisCleanup/);
   assert.doesNotMatch(clientSource, /deletionPreview\.preservedResources\.join/);
   assert.doesNotMatch(clientSource, /deletionPreview\.preservedRecords/);
 });
@@ -108,18 +110,11 @@ test("Pending GitHub authorization identifies the exact AWS connection to update
   assert.match(clientSource, /Update pending connection/);
 });
 
-test("Settings refreshes an existing CodeConnection from AWS before presenting its status", () => {
-  const loadStart = clientSource.indexOf("void Promise.all(");
-  const loadEnd = clientSource.indexOf("return () =>", loadStart);
-  const loadSource = clientSource.slice(loadStart, loadEnd);
-
-  assert.ok(loadStart > -1);
-  assert.ok(loadEnd > loadStart);
-  assert.match(loadSource, /await getAwsCodeConnection\(connection\.id\)/);
-  assert.match(loadSource, /await refreshAwsCodeConnection\(connection\.id\)/);
-  assert.match(loadSource, /catch \(error\) \{/);
-  assert.match(loadSource, /return \[connection\.id, savedConnection\] as const/);
-  assert.match(loadSource, /AWS 상태를 다시 확인하지 못해 저장된 연결 상태를 표시합니다/);
+test("Settings uses the cached CodeConnection query when showing deployment connection state", () => {
+  assert.match(clientSource, /useAwsCodeConnectionsQueries\(displayedVerifiedConnectionIds\)/);
+  assert.match(clientSource, /codeConnectionQueries\.flatMap/);
+  assert.match(clientSource, /codeConnectionQueries\.map\(\(query\) => query\.refetch\(\)\)/);
+  assert.doesNotMatch(clientSource, /void Promise\.all\(\s*displayedVerifiedConnections\.map/);
 });
 
 test("Settings keeps Reverse return behind the selected connection import-access wizard", () => {

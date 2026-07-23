@@ -33,6 +33,7 @@ test("Terraform editor scroll synchronizes gutter and highlighted code before Re
       highlightedBlockAddress: null,
       highlightedBlockStyle: null,
       highlightedLines: [],
+      isMutationLocked: false,
       lineNumbers: [1],
       sourceLineHighlightStyle: null,
       syntaxHighlightStyle: {}
