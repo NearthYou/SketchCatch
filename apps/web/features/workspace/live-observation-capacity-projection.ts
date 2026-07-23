@@ -1,4 +1,5 @@
 import type { ArchitectureJson, LiveObservationV2Snapshot } from "@sketchcatch/types";
+import { recoverLiveObservationReferenceEdges } from "./live-observation-architecture";
 
 export type LiveObservationCapacityProjection = Readonly<{
   actualCount: number | null;
@@ -18,7 +19,7 @@ export function getLiveObservationCapacityProjection(
   architecture: ArchitectureJson,
   snapshot: LiveObservationV2Snapshot | null
 ): LiveObservationCapacityProjection | null {
-  const evidence = readRequestScalingEvidence(architecture);
+  const evidence = readRequestScalingEvidence(recoverLiveObservationReferenceEdges(architecture));
   if (!snapshot || !evidence) return null;
 
   const predictedCount = clamp(

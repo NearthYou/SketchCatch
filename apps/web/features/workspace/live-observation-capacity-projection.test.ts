@@ -42,17 +42,27 @@ test("does not invent a forecast for unsupported scaling metrics", () => {
     null
   );
 });
-
+test("recovers Terraform scaling references when the architecture has no explicit edges", () => {
+  assert.equal(
+    getLiveObservationCapacityProjection(
+      architecture({ minCapacity: 1, maxCapacity: 3, targetValue: 10, includeEdges: false }),
+      snapshot({ projectedRequestsPerMinute: 24, running: 1 })
+    )?.predictedCount,
+    3
+  );
+});
 function architecture({
   metric = "ALBRequestCountPerTarget",
   minCapacity,
   maxCapacity,
-  targetValue
+  targetValue,
+  includeEdges = true
 }: {
   readonly metric?: string;
   readonly minCapacity: number;
   readonly maxCapacity: number;
   readonly targetValue: number;
+  readonly includeEdges?: boolean;
 }): ArchitectureJson {
   return {
     nodes: [
@@ -61,14 +71,19 @@ function architecture({
         type: "ECS_SERVICE",
         positionX: 0,
         positionY: 0,
-        config: {}
+        config: { terraformResourceName: "service" }
       },
       {
         id: "target",
         type: "APPLICATION_AUTO_SCALING_TARGET",
         positionX: 0,
         positionY: 0,
-        config: { minCapacity, maxCapacity }
+        config: {
+          maxCapacity,
+          minCapacity,
+          serviceRef: "${aws_ecs_service.service.id}",
+          terraformResourceName: "target"
+        }
       },
       {
         id: "policy",
@@ -77,6 +92,8 @@ function architecture({
         positionY: 0,
         config: {
           policyType: "TargetTrackingScaling",
+          targetRef: "${aws_appautoscaling_target.target.id}",
+          terraformResourceName: "policy",
           targetTrackingScalingPolicyConfiguration: {
             targetValue,
             predefinedMetricSpecification: [{ predefinedMetricType: metric }]
@@ -84,10 +101,12 @@ function architecture({
         }
       }
     ],
-    edges: [
-      { id: "service-target", sourceId: "service", targetId: "target" },
-      { id: "target-policy", sourceId: "target", targetId: "policy" }
-    ]
+    edges: includeEdges === false
+      ? []
+      : [
+          { id: "service-target", sourceId: "service", targetId: "target" },
+          { id: "target-policy", sourceId: "target", targetId: "policy" }
+        ]
   };
 }
 
