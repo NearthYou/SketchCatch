@@ -1107,7 +1107,7 @@ function PublicRepositoryRecommendationStep({
 
   if (stage === "questions") {
     return (
-      <section className={styles.publicAnalysisResult} aria-label="public 저장소 추가 질문">
+      <section className={`${styles.publicAnalysisResult} ${styles.publicQuestionStage}`} aria-label="public 저장소 추가 질문">
         <div className={styles.publicQuestionSummary}>
           <button
             aria-label="템플릿 선택으로 돌아가기"
@@ -1116,7 +1116,7 @@ function PublicRepositoryRecommendationStep({
             title="템플릿 선택으로 돌아가기"
             type="button"
           >
-            <ArrowLeft aria-hidden="true" size={16} />
+            <ArrowLeft aria-hidden="true" size={18} />
           </button>
           <div>
             <span>선택한 템플릿</span>
@@ -1128,15 +1128,17 @@ function PublicRepositoryRecommendationStep({
           onAnswer={onAnswer}
           questions={recommendation.questions}
         />
-        <button
-          className={styles.publicBoardAction}
-          disabled={isBusy || !analysis.recommendedTemplateId}
-          onClick={onCreateBoard}
-          type="button"
-        >
-          {isBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
-          보드 생성
-        </button>
+        <div className={styles.publicBoardActionArea}>
+          <button
+            className={styles.publicBoardAction}
+            disabled={isBusy || !analysis.recommendedTemplateId}
+            onClick={onCreateBoard}
+            type="button"
+          >
+            {isBusy ? <LoaderCircle className={styles.spin} size={17} /> : <Search size={17} />}
+            보드 생성
+          </button>
+        </div>
       </section>
     );
   }

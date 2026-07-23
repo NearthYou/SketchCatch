@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-22",
+  "lastUpdated": "2026-07-23",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -28,6 +28,36 @@
     ]
   },
   "features": [
+    {
+      "id": "REPOSITORY-UI-543",
+      "priority": 1,
+      "area": "workspace-start",
+      "title": "Repository question readability and action sizing",
+      "user_visible_behavior": "Repository follow-up questions are easier to scan, question groups are separated clearly, and the Board action has balanced desktop sizing.",
+      "status": "passing",
+      "verification": [
+        "Question headings, prompts, choices, and text inputs use a clearer type hierarchy.",
+        "Questions use 20px separation without bullet markers.",
+        "The question-stage top divider is removed while the Board action has its own divider.",
+        "The back action is 40px with a 12px summary gap.",
+        "The Board action is 220 by 48px on desktop and remains full width on mobile."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-23",
+        "commands": [
+          ".\\node_modules\\.bin\\tsx.CMD --test \"app/workspace/repository/*.test.ts\"",
+          "pnpm --filter @sketchcatch/web lint",
+          "pnpm --filter @sketchcatch/web typecheck",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check"
+        ],
+        "notes": "Repository-focused tests passed 28/28. Web and root lint/typecheck passed. All five build tasks and all 23 Web routes passed. User-provided screenshots guided the authenticated-state spacing adjustments."
+      },
+      "notes": "GitHub issue #543 remains at the user-approved earlier description; a later draft edit was canceled without saving. No shared contract or migration changed."
+    },
     {
       "id": "TEST-PROTECTION-LINE-001",
       "priority": 1,

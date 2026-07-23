@@ -4,7 +4,21 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Repository follow-up prompts and controls now use a stronger readable type hierarchy.
+- Repository questions use 20px spacing without bullets; the question stage removes the top divider and separates the Board CTA with a lower divider.
+- The back action is 40px with a 12px summary gap. The Board CTA is 220 by 48px on desktop and remains full width below 640px.
+
 ## Session Record
+
+### 2026-07-23 - Improve Repository follow-up question readability
+
+- Raised the follow-up section heading, prompt, choice, and text-input sizes while preserving existing design tokens, focus states, and responsive behavior.
+- Fixed the nested choice label inheriting the generic 12px metadata rule by explicitly inheriting the button typography.
+- Set the public Board action to a balanced 220 by 48px desktop size, retained the mobile full-width rule, and separated it from questions with a hairline divider.
+- Added 20px between questions without bullets, removed the question-stage top divider, and increased the back action to 40px with a 12px summary gap.
+- Kept the previously updated GitHub issue #543 unchanged after canceling a later unsaved edit, and retained branch fix/ck/543-repository-question-ui.
+- Repository-focused tests passed 28/28. Web and root lint/typecheck passed. All five root build tasks and all 23 Web routes completed successfully.
+- User-provided authenticated-state screenshots guided the final spacing and sizing adjustments. No credentials, cloud mutations, dependency changes, or migrations were involved.
 
 ### 2026-07-22 - Make Live Observation traffic dense, dramatic, and load-testable
 
