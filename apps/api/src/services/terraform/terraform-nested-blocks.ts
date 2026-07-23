@@ -2,6 +2,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_ami: new Set(["filter"]),
   aws_api_gateway_integration: new Set(["tlsConfig"]),
   aws_api_gateway_rest_api: new Set(["endpointConfiguration"]),
+  aws_appautoscaling_target: new Set(["suspendedState"]),
   aws_appautoscaling_policy: new Set(["targetTrackingScalingPolicyConfiguration"]),
   aws_ecs_capacity_provider: new Set(["autoScalingGroupProvider"]),
   aws_eks_fargate_profile: new Set(["selector"]),
@@ -60,7 +61,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
     "networkConfiguration"
   ]),
   aws_elb: new Set(["healthCheck", "listener"]),
-  aws_ecr_repository: new Set(["imageScanningConfiguration"]),
+  aws_ecr_repository: new Set(["encryptionConfiguration", "imageScanningConfiguration"]),
   aws_instance: new Set(["rootBlockDevice"]),
   aws_lambda_function: new Set([
     "deadLetterConfig",

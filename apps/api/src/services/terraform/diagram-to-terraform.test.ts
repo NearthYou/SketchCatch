@@ -147,6 +147,84 @@ test("renders Reverse Engineering metadata that looks like Terraform references 
   assert.doesNotMatch(terraform, /description = aws_s3_bucket\.literal\.arn/);
 });
 
+test("renders CloudFront routing identifiers as literals while keeping relationship fields as references", () => {
+  const referenceLikeIdentifier = "aws_lb.application.id";
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "distribution",
+        label: "distribution",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_cloudfront_distribution",
+          resourceName: "distribution",
+          fileName: "main"
+        },
+        config: {
+          enabled: true,
+          comment: referenceLikeIdentifier,
+          origin: [
+            {
+              originId: referenceLikeIdentifier,
+              domainName: "aws_lb.application.dns_name",
+              originAccessControlId: "aws_cloudfront_origin_access_control.application.id",
+              customOriginConfig: {
+                httpPort: 80,
+                httpsPort: 443,
+                originProtocolPolicy: "http-only",
+                originSslProtocols: ["TLSv1.2"]
+              }
+            }
+          ],
+          defaultCacheBehavior: {
+            targetOriginId: referenceLikeIdentifier,
+            viewerProtocolPolicy: "redirect-to-https",
+            allowedMethods: ["GET", "HEAD"],
+            cachedMethods: ["GET", "HEAD"],
+            cachePolicyId: "aws_cloudfront_cache_policy.application.id"
+          },
+          orderedCacheBehavior: [
+            {
+              pathPattern: referenceLikeIdentifier,
+              targetOriginId: referenceLikeIdentifier,
+              viewerProtocolPolicy: "redirect-to-https",
+              allowedMethods: ["GET", "HEAD"],
+              cachedMethods: ["GET", "HEAD"],
+              cachePolicyId: "aws_cloudfront_cache_policy.application.id"
+            }
+          ],
+          restrictions: {
+            geoRestriction: {
+              restrictionType: "none"
+            }
+          },
+          viewerCertificate: {
+            cloudfrontDefaultCertificate: true
+          }
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /comment = "aws_lb\.application\.id"/u);
+  assert.match(terraform, /origin_id = "aws_lb\.application\.id"/u);
+  assert.equal(terraform.match(/target_origin_id = "aws_lb\.application\.id"/gu)?.length, 2);
+  assert.match(terraform, /path_pattern = "aws_lb\.application\.id"/u);
+  assert.match(terraform, /domain_name = aws_lb\.application\.dns_name/u);
+  assert.match(
+    terraform,
+    /origin_access_control_id = aws_cloudfront_origin_access_control\.application\.id/u
+  );
+  assert.equal(
+    terraform.match(/cache_policy_id = aws_cloudfront_cache_policy\.application\.id/gu)?.length,
+    2
+  );
+});
+
 test("renders S3 buckets without synthetic companion resources", () => {
   const graph: InfrastructureGraph = {
     nodes: [

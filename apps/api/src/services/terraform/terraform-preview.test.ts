@@ -160,6 +160,64 @@ test("generates stable Terraform code repeatedly from the same DiagramJson", () 
   );
 });
 
+test("AWS metadata의 Terraform template 문법은 literal로 escape하고 실제 참조는 유지한다", () => {
+  const terraformCode = generateTerraformFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "metadata-secret",
+        type: "aws_secretsmanager_secret",
+        kind: "resource",
+        label: "metadata_secret",
+        parameters: {
+          resourceType: "aws_secretsmanager_secret",
+          resourceName: "metadata_secret",
+          fileName: "main",
+          values: {
+            description:
+              "literal-${not_a_reference}-%{ if true }value%{ endif }-$${already_safe}",
+            kmsKeyId: "aws_kms_key.main.arn",
+            tags: {
+              "Owner${literal}": "team-%{ not_a_directive }"
+            }
+          }
+        }
+      }),
+      makeNode({
+        id: "metadata-oac",
+        type: "aws_cloudfront_origin_access_control",
+        kind: "resource",
+        label: "metadata_oac",
+        parameters: {
+          resourceType: "aws_cloudfront_origin_access_control",
+          resourceName: "metadata_oac",
+          fileName: "main",
+          values: {
+            name: "metadata-oac",
+            description: "origin-${literal}-%{ endif }",
+            originAccessControlOriginType: "s3",
+            signingBehavior: "always",
+            signingProtocol: "sigv4"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.ok(
+    terraformCode.includes(
+      'description = "literal-$${not_a_reference}-%%{ if true }value%%{ endif }-$${already_safe}"'
+    )
+  );
+  assert.match(terraformCode, /kms_key_id = aws_kms_key\.main\.arn/u);
+  assert.ok(
+    terraformCode.includes('"Owner$${literal}" = "team-%%{ not_a_directive }"')
+  );
+  assert.ok(terraformCode.includes('description = "origin-$${literal}-%%{ endif }"'));
+  assert.ok(!terraformCode.includes("$$${already_safe}"));
+});
+
 test("inherits AZ area values into Subnet and EBS Preview without rendering Region or AZ blocks", () => {
   const diagramJson: DiagramJson = {
     nodes: [
@@ -1147,6 +1205,142 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
   assert.equal(
     isTerraformNestedBlockAttribute("aws_api_gateway_rest_api", "endpoint_configuration"),
     true
+  );
+});
+
+test("renders imported ECR encryption and scaling suspended state as Terraform nested blocks", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "ecr-repository",
+        type: "aws_ecr_repository",
+        kind: "resource",
+        label: "api",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_ecr_repository",
+          resourceName: "api",
+          fileName: "main",
+          values: {
+            name: "audience-live-check-api",
+            encryptionConfiguration: {
+              encryptionType: "AES256"
+            }
+          }
+        }
+      }),
+      makeNode({
+        id: "scaling-target",
+        type: "aws_appautoscaling_target",
+        kind: "resource",
+        label: "api",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_appautoscaling_target",
+          resourceName: "api",
+          fileName: "main",
+          values: {
+            minCapacity: 1,
+            maxCapacity: 2,
+            resourceId: "service/demo/api",
+            scalableDimension: "ecs:service:DesiredCount",
+            serviceNamespace: "ecs",
+            suspendedState: {
+              dynamicScalingInSuspended: false,
+              dynamicScalingOutSuspended: false,
+              scheduledScalingSuspended: false
+            }
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(
+    terraformCode,
+    /encryption_configuration \{[\s\S]*encryption_type = "AES256"[\s\S]*\}/u
+  );
+  assert.match(
+    terraformCode,
+    /suspended_state \{[\s\S]*dynamic_scaling_in_suspended = false[\s\S]*dynamic_scaling_out_suspended = false[\s\S]*scheduled_scaling_suspended = false[\s\S]*\}/u
+  );
+  assert.doesNotMatch(terraformCode, /(?:encryption_configuration|suspended_state)\s*=\s*\{/u);
+});
+
+test("renders imported CloudFront /api와 /health 순서 규칙을 각각 보존한다", () => {
+  const terraformCode = generateTerraformFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "cloudfront-imported",
+        type: "aws_cloudfront_distribution",
+        kind: "resource",
+        label: "imported_cdn",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_cloudfront_distribution",
+          resourceName: "imported_cdn",
+          fileName: "reverse-engineering",
+          values: {
+            enabled: true,
+            origin: [
+              {
+                originId: "web",
+                domainName: "web.example.com",
+                customOriginConfig: {
+                  httpPort: 80,
+                  httpsPort: 443,
+                  originProtocolPolicy: "https-only",
+                  originSslProtocols: ["TLSv1.2"]
+                }
+              }
+            ],
+            defaultCacheBehavior: {
+              targetOriginId: "web",
+              viewerProtocolPolicy: "redirect-to-https",
+              allowedMethods: ["GET", "HEAD"],
+              cachedMethods: ["GET", "HEAD"],
+              cachePolicyId: "managed-static"
+            },
+            orderedCacheBehavior: [
+              {
+                pathPattern: "/api/*",
+                targetOriginId: "web",
+                viewerProtocolPolicy: "redirect-to-https",
+                allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+                cachedMethods: ["GET", "HEAD"],
+                cachePolicyId: "managed-disabled",
+                originRequestPolicyId: "managed-all-viewer"
+              },
+              {
+                pathPattern: "/health",
+                targetOriginId: "web",
+                viewerProtocolPolicy: "redirect-to-https",
+                allowedMethods: ["GET", "HEAD"],
+                cachedMethods: ["GET", "HEAD"],
+                cachePolicyId: "managed-disabled"
+              }
+            ],
+            restrictions: { geoRestriction: { restrictionType: "none" } },
+            viewerCertificate: { cloudfrontDefaultCertificate: true }
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  const orderedBlocks = terraformCode.match(/ordered_cache_behavior \{/gu) ?? [];
+  assert.equal(orderedBlocks.length, 2);
+  assert.match(terraformCode, /path_pattern = "\/api\/\*"/u);
+  assert.match(terraformCode, /path_pattern = "\/health"/u);
+  assert.ok(
+    terraformCode.indexOf('path_pattern = "/api/*"') <
+      terraformCode.indexOf('path_pattern = "/health"')
   );
 });
 

@@ -53,3 +53,14 @@ test("API Gateway Integration TLS 설정을 단일 nested block으로 렌더링�
     true
   );
 });
+
+test("ECR 암호화와 Application Auto Scaling 중지 상태를 nested block으로 등록한다", () => {
+  assert.equal(
+    isTerraformNestedBlockAttribute("aws_ecr_repository", "encryptionConfiguration"),
+    true
+  );
+  assert.equal(
+    isTerraformNestedBlockAttribute("aws_appautoscaling_target", "suspendedState"),
+    true
+  );
+});

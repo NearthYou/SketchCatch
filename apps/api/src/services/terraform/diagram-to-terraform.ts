@@ -17,6 +17,16 @@ const TERRAFORM_REFERENCE_PATTERN =
   /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^(?:aws|kubernetes|random)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
 const TERRAFORM_RESOURCE_ADDRESS_PATTERN =
   /^(?:(?:aws|kubernetes|random)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+|module\.[a-zA-Z0-9_-]+)$/;
+const TERRAFORM_LITERAL_ATTRIBUTE_PATHS_BY_RESOURCE: Readonly<
+  Record<string, ReadonlySet<string>>
+> = {
+  aws_cloudfront_distribution: new Set([
+    "origin.origin_id",
+    "default_cache_behavior.target_origin_id",
+    "ordered_cache_behavior.path_pattern",
+    "ordered_cache_behavior.target_origin_id"
+  ])
+};
 
 export class TerraformDiagramValidationError extends Error {
   readonly reason = "invalid_identifier";
@@ -1857,7 +1867,7 @@ function renderBodyEntry(
     return renderNestedBlocks(resourceType, key, normalizedValue, indentLevel, []);
   }
 
-  return [renderAttribute(key, normalizedValue, indentLevel, [])];
+  return [renderAttribute(resourceType, key, normalizedValue, indentLevel, [])];
 }
 
 function normalizeTopLevelValue(resourceType: string, key: string, value: unknown): unknown {
@@ -1970,7 +1980,7 @@ function renderNestedBlockEntry(
     return renderNestedBlocks(resourceType, key, value, indentLevel, parentPath);
   }
 
-  return [renderAttribute(key, value, indentLevel, parentPath)];
+  return [renderAttribute(resourceType, key, value, indentLevel, parentPath)];
 }
 
 function isReverseEngineeringEcsNestedBlock(
@@ -2013,6 +2023,7 @@ function renderLifecycleIgnoreChanges(value: unknown[], indentLevel: number): st
 }
 
 function renderAttribute(
+  resourceType: string,
   key: string,
   value: unknown,
   indentLevel: number,
@@ -2027,21 +2038,25 @@ function renderAttribute(
       : renderValue(
           value,
           indentLevel,
-          shouldRenderTerraformAttributeAsLiteral(attributeName, parentPath)
+          shouldRenderTerraformAttributeAsLiteral(resourceType, attributeName, parentPath)
         );
 
   return `${indent(indentLevel)}${attributeName} = ${renderedValue}`;
 }
 
 function shouldRenderTerraformAttributeAsLiteral(
+  resourceType: string,
   attributeName: string,
   parentPath: readonly string[]
 ): boolean {
+  const attributePath = [...parentPath.map(toSnakeCase), attributeName].join(".");
+
   return (
     attributeName === "description" ||
     attributeName === "comment" ||
     attributeName === "tags" ||
-    (attributeName === "name" && parentPath.length === 0)
+    (attributeName === "name" && parentPath.length === 0) ||
+    TERRAFORM_LITERAL_ATTRIBUTE_PATHS_BY_RESOURCE[resourceType]?.has(attributePath) === true
   );
 }
 
