@@ -97,6 +97,189 @@ test("managed AWS cleanup deletes CodeBuild, its role, then CodeConnection", asy
   ]);
 });
 
+test("managed AWS cleanup retries an eventual IAM role deletion conflict", async () => {
+  const calls: string[] = [];
+  const cleanup = createAwsConnectionManagedCleanup({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createCodeBuildClient: () => createClient("codebuild", calls),
+    createCloudWatchLogsClient: () => createClient("logs", calls),
+    createIamClient: () => createClient("iam", calls, { deleteRoleConflicts: 1 }),
+    createCodeConnectionsClient: () => createClient("codeconnections", calls),
+    createEcrClient: () => createClient("ecr", calls)
+  });
+
+  await cleanup({
+    connection: createConnection(),
+    resources: {
+      codeBuildProjects: [
+        {
+          projectId: "12345678-1234-1234-1234-1234567890ab",
+          projectName: "sketchcatch-12345678-build",
+          serviceRoleArn: "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-12345678"
+        }
+      ],
+      codeConnectionArn: null
+    }
+  });
+
+  assert.equal(calls.filter((call) => call === "iam:DeleteRoleCommand").length, 2);
+});
+
+test("managed AWS cleanup uses one bounded SDK retry layer for throttling", async () => {
+  const calls: string[] = [];
+  let configuredMaxAttempts: unknown;
+  const cleanup = createAwsConnectionManagedCleanup({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createCodeBuildClient: (configuration) => {
+      configuredMaxAttempts = configuration.maxAttempts;
+      return createClient("codebuild", calls, {
+        failures: { BatchGetProjectsCommand: ["ThrottlingException"] }
+      });
+    },
+    createCloudWatchLogsClient: () => createClient("logs", calls),
+    createIamClient: () => createClient("iam", calls),
+    createCodeConnectionsClient: () => createClient("codeconnections", calls),
+    createEcrClient: () => createClient("ecr", calls)
+  });
+
+  await assert.rejects(
+    cleanup({
+      connection: createConnection(),
+      resources: {
+        codeBuildProjects: [
+          {
+            projectId: "12345678-1234-1234-1234-1234567890ab",
+            projectName: "sketchcatch-12345678-build",
+            serviceRoleArn:
+              "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-12345678"
+          }
+        ],
+        codeConnectionArn: null
+      }
+    }),
+    { name: "ThrottlingException" }
+  );
+
+  assert.equal(configuredMaxAttempts, 6);
+  assert.equal(calls.filter((call) => call === "codebuild:BatchGetProjectsCommand").length, 1);
+});
+
+test("managed AWS cleanup delegates AssumeRole retries to its STS gateway", async () => {
+  const calls: string[] = [];
+  let assumeRoleAttempts = 0;
+  const cleanup = createAwsConnectionManagedCleanup({
+    assumeRole: async () => {
+      assumeRoleAttempts += 1;
+      throw Object.assign(new Error("STS throttled"), {
+        name: "ThrottlingException",
+        $metadata: { httpStatusCode: 429 }
+      });
+    },
+    createCodeBuildClient: () => createClient("codebuild", calls),
+    createCloudWatchLogsClient: () => createClient("logs", calls),
+    createIamClient: () => createClient("iam", calls),
+    createCodeConnectionsClient: () => createClient("codeconnections", calls),
+    createEcrClient: () => createClient("ecr", calls)
+  });
+
+  await assert.rejects(
+    cleanup({
+      connection: createConnection(),
+      resources: {
+        codeBuildProjects: [],
+        codeConnectionArn:
+          "arn:aws:codeconnections:ap-northeast-2:123456789012:connection/connection-id"
+      }
+    }),
+    { name: "ThrottlingException" }
+  );
+
+  assert.equal(assumeRoleAttempts, 1);
+  assert.deepEqual(calls, []);
+});
+
+test("managed AWS cleanup does not retry a permanent authorization failure", async () => {
+  const calls: string[] = [];
+  const cleanup = createAwsConnectionManagedCleanup({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createCodeBuildClient: () =>
+      createClient("codebuild", calls, {
+        failures: { BatchGetProjectsCommand: ["AccessDeniedException"] }
+      }),
+    createCloudWatchLogsClient: () => createClient("logs", calls),
+    createIamClient: () => createClient("iam", calls),
+    createCodeConnectionsClient: () => createClient("codeconnections", calls),
+    createEcrClient: () => createClient("ecr", calls)
+  });
+
+  await assert.rejects(
+    cleanup({
+      connection: createConnection(),
+      resources: {
+        codeBuildProjects: [
+          {
+            projectId: "12345678-1234-1234-1234-1234567890ab",
+            projectName: "sketchcatch-12345678-build",
+            serviceRoleArn:
+              "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-12345678"
+          }
+        ],
+        codeConnectionArn: null
+      }
+    }),
+    { name: "AccessDeniedException" }
+  );
+  assert.equal(calls.filter((call) => call === "codebuild:BatchGetProjectsCommand").length, 1);
+  assert.equal(calls.includes("codebuild:DeleteProjectCommand"), false);
+});
+
+test("managed AWS cleanup treats an already missing IAM policy as success", async () => {
+  const calls: string[] = [];
+  const cleanup = createAwsConnectionManagedCleanup({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createCodeBuildClient: () => createClient("codebuild", calls),
+    createCloudWatchLogsClient: () => createClient("logs", calls),
+    createIamClient: () =>
+      createClient("iam", calls, {
+        failures: { DeleteRolePolicyCommand: ["NoSuchEntityException"] }
+      }),
+    createCodeConnectionsClient: () => createClient("codeconnections", calls),
+    createEcrClient: () => createClient("ecr", calls)
+  });
+
+  await cleanup({
+    connection: createConnection(),
+    resources: {
+      codeBuildProjects: [
+        {
+          projectId: "12345678-1234-1234-1234-1234567890ab",
+          projectName: "sketchcatch-12345678-build",
+          serviceRoleArn: "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-12345678"
+        }
+      ],
+      codeConnectionArn: null
+    }
+  });
+
+  assert.equal(calls.includes("iam:DeleteRoleCommand"), true);
+});
+
 test("managed AWS cleanup refuses to delete resources without matching ownership tags", async () => {
   const calls: string[] = [];
   const cleanup = createAwsConnectionManagedCleanup({
@@ -155,8 +338,7 @@ test("managed AWS cleanup refuses to delete a cache repository without matching 
           {
             projectId: "12345678-1234-1234-1234-1234567890ab",
             projectName: "sketchcatch-12345678-build",
-            serviceRoleArn:
-              "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-12345678"
+            serviceRoleArn: "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-12345678"
           }
         ],
         codeConnectionArn: null
@@ -187,12 +369,43 @@ function createConnection() {
 function createClient(
   kind: string,
   calls: string[],
-  options: { owned?: boolean } = {}
+  options: {
+    deleteRoleConflicts?: number;
+    failures?: Record<string, string[]>;
+    owned?: boolean;
+  } = {}
 ) {
   return {
     async send(command: object) {
       const name = command.constructor.name;
       calls.push(`${kind}:${name}`);
+      const failureName = options.failures?.[name]?.shift();
+      if (failureName) {
+        throw Object.assign(new Error(`${name} failed with ${failureName}`), {
+          name: failureName,
+          $metadata: {
+            httpStatusCode:
+              failureName === "ThrottlingException"
+                ? 429
+                : failureName === "AccessDeniedException"
+                  ? 403
+                  : failureName === "NoSuchEntityException"
+                    ? 404
+                    : 500
+          }
+        });
+      }
+      if (
+        kind === "iam" &&
+        name === "DeleteRoleCommand" &&
+        (options.deleteRoleConflicts ?? 0) > 0
+      ) {
+        options.deleteRoleConflicts = (options.deleteRoleConflicts ?? 0) - 1;
+        throw Object.assign(new Error("IAM role still has attached entities"), {
+          name: "DeleteConflictException",
+          $metadata: { httpStatusCode: 409 }
+        });
+      }
       if (kind === "codebuild" && name === "BatchGetProjectsCommand") {
         return {
           projects: [

@@ -4,6 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- AWS connection managed cleanup uses a single bounded AWS SDK retry layer, waits through the established IAM propagation schedule for deletion conflicts, and keeps authorization and ownership failures non-retryable.
 - The new-project screen shows local AWS, multicolor Google Cloud, and Azure brand icons and uses a wider, larger start-method layout with single-line desktop copy.
 - Workspace start cards keep every desktop title on one line, use subdued description typography, and place the AWS Role badge in the Reverse Engineering title row.
 - Repository Template previews show a dynamic recommendation rank, use the clearer AI design action, and keep candidate navigation anchored independently of recommendation-reason length.
@@ -11,6 +12,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+- 2026-07-23: Stabilized AWS connection deletion without a migration or live AWS mutation. Managed cleanup now gives AWS SDK resource clients six bounded attempts, retries IAM `DeleteConflictException` and `ConcurrentModificationException` across the established 31.75-second propagation schedule, and treats IAM `NoSuchEntityException` as idempotent success. Added focused coverage for retry-layer ownership, IAM consistency, permanent authorization failures, missing resources, and ownership safety. The 13 focused cleanup/service/route tests, root lint, typecheck, build, harness, diff checks, and two-axis review passed. Root `pnpm test` remains blocked by the unrelated Web `ReverseEngineeringScanCriteriaForm.test.tsx` CSS-module loader failure.
 - 2026-07-23: Renamed the Dashboard profile route label from My Page to 개인정보 수정 and expanded its page header across the shared Dashboard content width while preserving the centered 760px form card. No test command was run at the user's explicit request.
 - 2026-07-23: Fixed My Page profile updates that falsely returned an expired-verification 401 because PostgreSQL stored `users.updated_at` with microsecond precision while JavaScript `Date` compared only milliseconds. The update now locks the user row, validates the millisecond credential version inside the transaction, and advances `updated_at`; the exact local signup → verification → password update flow changed from 401 to 200. No broad test suite was run.
 - 2026-07-23: Refined the Dashboard Settings submenu with the shared Pretendard font, a 2px smaller My Page label, 4px additional separation, and a reduced-motion-safe downward reveal. No test command was run at the user's explicit request.
