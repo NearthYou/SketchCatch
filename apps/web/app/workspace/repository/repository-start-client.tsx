@@ -49,6 +49,7 @@ import {
   createRepositoryAnalysisRecordPayload
 } from "./repository-analysis-record-payload";
 import { getRepositoryRequiredRuntimeSecrets } from "../../../features/workspace/repository-template-handoff";
+import { ProductBrand } from "../../../components/ui/ProductBrand";
 import {
   selectRepositoryRecoveryAction,
   type RepositoryRecoveryAction
@@ -639,6 +640,12 @@ export function RepositoryStartClient({
 
   return (
     <main className={styles.page}>
+      <header className={styles.topbar}>
+        <ProductBrand />
+        <Link className={styles.startModeLink} href="/workspace/new">
+          시작 방식 다시 선택
+        </Link>
+      </header>
       <div className={styles.shell}>
         <header className={styles.pageHeading}>
           <h1 id="repository-start-title">GitHub 저장소</h1>

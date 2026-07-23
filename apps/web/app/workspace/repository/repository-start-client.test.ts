@@ -29,6 +29,19 @@ test("Repository start separates the pre-analysis form from the completed result
   assert.doesNotMatch(repositoryScreenSource, /Template Preview[\s\S]*RepositoryAnalysisForm/);
 });
 
+test("Repository start keeps global navigation and uses a presentation-scale canvas", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.match(source, /import \{ ProductBrand \} from "\.\.\/\.\.\/\.\.\/components\/ui\/ProductBrand"/);
+  assert.match(
+    source,
+    /<header className=\{styles\.topbar\}>[\s\S]*<ProductBrand \/>[\s\S]*href="\/workspace\/new"[\s\S]*시작 방식 다시 선택[\s\S]*<\/header>/
+  );
+  assert.match(repositoryStylesSource, /\.topbar \{[\s\S]*min-height:\s*64px/);
+  assert.match(repositoryStylesSource, /\.shell \{[\s\S]*width:\s*min\(1440px,\s*100%\)/);
+  assert.match(repositoryStylesSource, /\.pageHeading h1 \{[\s\S]*44px/);
+});
+
 test("Repository result keeps metadata compact and uses the real Template thumbnail", () => {
   assert.match(repositoryScreenSource, /owner/);
   assert.match(repositoryScreenSource, /branch/);
@@ -79,7 +92,7 @@ test("public Repository accepts a Template only from the explicit use action", (
 test("Repository result gives most space to Preview and collapses without overflow", () => {
   assert.match(
     repositoryStylesSource,
-    /grid-template-columns:\s*minmax\(180px,\s*0\.28fr\)\s+minmax\(0,\s*1fr\)/
+    /grid-template-columns:\s*minmax\(200px,\s*0\.24fr\)\s+minmax\(0,\s*1fr\)/
   );
   assert.match(repositoryStylesSource, /\.previewColumn[\s\S]*min-width:\s*0/);
   assert.match(repositoryStylesSource, /@media\s*\(max-width:\s*[^)]+\)[\s\S]*grid-template-columns:\s*1fr/);
