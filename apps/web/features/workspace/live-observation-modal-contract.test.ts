@@ -126,14 +126,17 @@ test("selected Deployment independently loads its immutable Architecture for tel
   );
 });
 
-test("removes the focused traffic path from the default observation view", () => {
-  assert.doesNotMatch(modalSource, /LiveObservationFocusedFlow/);
+test("restores the compact infrastructure flow without the removed legacy title", () => {
+  assert.match(modalSource, /LiveObservationFocusedFlow/);
+  assert.match(
+    modalSource,
+    /<LiveObservationFocusedFlow[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}/
+  );
   assert.doesNotMatch(modalSource, /실시간 트래픽 · 핵심 데이터 흐름/);
   assert.doesNotMatch(modalSource, /LiveObservationDiagramMap/);
 });
 
-test("keeps Live Observation free of legacy diagram and design views", () => {
-  assert.doesNotMatch(modalSource, /LiveObservationFocusedFlow/);
+test("keeps Live Observation free of legacy full-diagram and design views", () => {
   assert.doesNotMatch(modalSource, /LiveObservationDiagramMap/);
   assert.doesNotMatch(modalSource, /WorkspaceDesignAnalysisPanel/);
   assert.doesNotMatch(modalSource, /전체 Architecture 보기/);

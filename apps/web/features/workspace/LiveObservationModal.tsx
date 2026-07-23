@@ -35,6 +35,7 @@ import {
   type LiveObservationTerraformUpdateResult
 } from "./live-observation-terraform-update";
 import { LiveObservationSignalDashboard } from "./LiveObservationSignalDashboard";
+import { LiveObservationFocusedFlow } from "./LiveObservationFocusedFlow";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
@@ -726,6 +727,12 @@ export function LiveObservationModal({
             <div className={styles.liveObservationError} role="alert">
               {selectedArchitectureErrorMessage}
             </div>
+          ) : null}
+          {selectedDeployment && selectedArchitecture ? (
+            <LiveObservationFocusedFlow
+              architecture={selectedArchitecture}
+              snapshot={selectedSnapshot}
+            />
           ) : null}
           {selectedDeployment ? (
             <LiveObservationSignalDashboard
