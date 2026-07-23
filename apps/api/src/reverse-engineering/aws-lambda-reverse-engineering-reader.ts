@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import {
+  GetFunctionCodeSigningConfigCommand,
+  GetFunctionConcurrencyCommand,
   GetFunctionCommand,
   GetPolicyCommand,
   LambdaClient,
@@ -9,6 +11,8 @@ import {
   ListVersionsByFunctionCommand,
   type AliasConfiguration,
   type FunctionConfiguration,
+  type GetFunctionCodeSigningConfigCommandOutput,
+  type GetFunctionConcurrencyCommandOutput,
   type GetFunctionCommandOutput,
   type GetPolicyCommandOutput,
   type ListAliasesCommandOutput,
@@ -53,6 +57,8 @@ export type AwsLambdaServerOnlyDetail =
       readonly codeSource: Readonly<Record<string, unknown>>;
       readonly tags: Readonly<Record<string, string>>;
       readonly environmentVariables: Readonly<Record<string, string>>;
+      readonly codeSigningConfigArn?: string;
+      readonly reservedConcurrentExecutions?: number;
       readonly resourcePolicyDocument?: unknown;
     }
   | {
@@ -179,28 +185,37 @@ async function readDetailedLambdaFunction(
     };
   }
 
-  const [functionDetail, tags, policy, aliases, versions] = await Promise.all([
-    readLambdaDetail<GetFunctionCommandOutput>(
-      client,
-      new GetFunctionCommand({ FunctionName: listedName })
-    ),
-    readLambdaDetail<ListTagsCommandOutput>(client, new ListTagsCommand({ Resource: listedArn })),
-    readLambdaResourcePolicy(client, listedName),
-    collectSafeLambdaPages<AliasConfiguration>(async (marker) => {
-      const response = await sendLambda<ListAliasesCommandOutput>(
+  const [functionDetail, concurrency, codeSigningConfig, tags, policy, aliases, versions] =
+    await Promise.all([
+      readLambdaDetail<GetFunctionCommandOutput>(
         client,
-        new ListAliasesCommand({ FunctionName: listedName, Marker: marker })
-      );
-      return { items: response.Aliases ?? [], nextMarker: response.NextMarker };
-    }),
-    collectSafeLambdaPages<FunctionConfiguration>(async (marker) => {
-      const response = await sendLambda<ListVersionsByFunctionCommandOutput>(
+        new GetFunctionCommand({ FunctionName: listedName })
+      ),
+      readLambdaDetail<GetFunctionConcurrencyCommandOutput>(
         client,
-        new ListVersionsByFunctionCommand({ FunctionName: listedName, Marker: marker })
-      );
-      return { items: response.Versions ?? [], nextMarker: response.NextMarker };
-    })
-  ]);
+        new GetFunctionConcurrencyCommand({ FunctionName: listedName })
+      ),
+      readLambdaDetail<GetFunctionCodeSigningConfigCommandOutput>(
+        client,
+        new GetFunctionCodeSigningConfigCommand({ FunctionName: listedName })
+      ),
+      readLambdaDetail<ListTagsCommandOutput>(client, new ListTagsCommand({ Resource: listedArn })),
+      readLambdaResourcePolicy(client, listedName),
+      collectSafeLambdaPages<AliasConfiguration>(async (marker) => {
+        const response = await sendLambda<ListAliasesCommandOutput>(
+          client,
+          new ListAliasesCommand({ FunctionName: listedName, Marker: marker })
+        );
+        return { items: response.Aliases ?? [], nextMarker: response.NextMarker };
+      }),
+      collectSafeLambdaPages<FunctionConfiguration>(async (marker) => {
+        const response = await sendLambda<ListVersionsByFunctionCommandOutput>(
+          client,
+          new ListVersionsByFunctionCommand({ FunctionName: listedName, Marker: marker })
+        );
+        return { items: response.Versions ?? [], nextMarker: response.NextMarker };
+      })
+    ]);
 
   const exactConfiguration = {
     ...listedFunction,
@@ -214,6 +229,13 @@ async function readDetailedLambdaFunction(
   );
   const environmentVariables = toStringRecord(exactConfiguration.Environment?.Variables);
   const environmentReadComplete = exactConfiguration.Environment?.Error === undefined;
+  const reservedConcurrentExecutions =
+    concurrency.complete && typeof concurrency.value.ReservedConcurrentExecutions === "number"
+      ? concurrency.value.ReservedConcurrentExecutions
+      : undefined;
+  const codeSigningConfigArn = codeSigningConfig.complete
+    ? (nonEmptyString(codeSigningConfig.value.CodeSigningConfigArn) ?? undefined)
+    : undefined;
   const serverOnlyCodeSource = functionDetail.complete
     ? compactRecord({
         repositoryType: functionDetail.value.Code?.RepositoryType,
@@ -234,10 +256,21 @@ async function readDetailedLambdaFunction(
   const lifecycleStateReady = exactConfiguration.State === "Active";
   const lastUpdateReady = exactConfiguration.LastUpdateStatus === "Successful";
   const imageConfigurationReady = exactConfiguration.ImageConfigResponse?.Error === undefined;
+  const unmappedPermissionStatementCount = policy.statements.filter(
+    (statement) => statement.statementId === null
+  ).length;
+  const unsupportedProjectionDetails = getUnsupportedLambdaProjectionDetails(
+    exactConfiguration,
+    functionName,
+    codeSigningConfigArn !== undefined
+  );
   const missingDetails = uniqueSorted([
     ...(functionDetail.complete ? [] : ["function"]),
+    ...(concurrency.complete ? [] : ["reservedConcurrency"]),
+    ...(codeSigningConfig.complete ? [] : ["codeSigningConfigRead"]),
     ...(tags.complete ? [] : ["tags"]),
     ...(policy.complete ? [] : ["resourcePolicy"]),
+    ...(unmappedPermissionStatementCount > 0 ? ["unmappedPermissions"] : []),
     ...(aliases.complete ? [] : ["aliasesRead"]),
     ...(versions.complete ? [] : ["versionsRead"]),
     ...(environmentReadComplete ? [] : ["environment"]),
@@ -247,7 +280,8 @@ async function readDetailedLambdaFunction(
     ...(publishedVersions.length > 0 ? ["publishedVersions"] : []),
     ...(lifecycleStateReady ? [] : ["lifecycleState"]),
     ...(lastUpdateReady ? [] : ["lastUpdateStatus"]),
-    ...(imageConfigurationReady ? [] : ["imageConfiguration"])
+    ...(imageConfigurationReady ? [] : ["imageConfiguration"]),
+    ...unsupportedProjectionDetails
   ]);
   const publicTags = toPublicLambdaTags(tags.complete ? tags.value.Tags : undefined);
   const relationships = createLambdaRelationships(exactConfiguration);
@@ -299,12 +333,18 @@ async function readDetailedLambdaFunction(
       environmentVariableNames: Object.keys(environmentVariables).sort(),
       environmentValuesRedacted: true,
       environmentReadComplete,
+      hasReservedConcurrency: concurrency.complete
+        ? reservedConcurrentExecutions !== undefined
+        : undefined,
+      reservedConcurrencyReadComplete: concurrency.complete,
+      hasCodeSigningConfig: codeSigningConfig.complete
+        ? codeSigningConfigArn !== undefined
+        : undefined,
+      codeSigningConfigReadComplete: codeSigningConfig.complete,
       resourcePolicyPresent: policy.present === true,
       resourcePolicyRedacted: policy.present === true,
       resourcePolicyStatementCount: policy.statements.length,
-      unmappedPermissionStatementCount: policy.statements.filter(
-        (statement) => statement.statementId === null
-      ).length,
+      unmappedPermissionStatementCount,
       aliases: aliases.items
         .flatMap((alias) => {
           const name = nonEmptyString(alias.Name);
@@ -355,6 +395,8 @@ async function readDetailedLambdaFunction(
     codeSource: serverOnlyCodeSource,
     tags: tags.complete ? (tags.value.Tags ?? {}) : {},
     environmentVariables,
+    ...(codeSigningConfigArn ? { codeSigningConfigArn } : {}),
+    ...(reservedConcurrentExecutions !== undefined ? { reservedConcurrentExecutions } : {}),
     ...(policy.complete && policy.present ? { resourcePolicyDocument: policy.document } : {})
   };
 
@@ -366,6 +408,8 @@ async function readDetailedLambdaFunction(
     ],
     failures: [
       ...toLambdaDetailFailure(functionProviderResourceId, "function", functionDetail),
+      ...toLambdaDetailFailure(functionProviderResourceId, "reservedConcurrency", concurrency),
+      ...toLambdaDetailFailure(functionProviderResourceId, "codeSigningConfig", codeSigningConfig),
       ...toLambdaDetailFailure(functionProviderResourceId, "tags", tags),
       ...(policy.complete
         ? []
@@ -391,6 +435,35 @@ async function readDetailedLambdaFunction(
           ])
     ]
   };
+}
+
+/** gg: 아직 Terraform projection이 재현하지 못하는 Lambda 설정은 원문을 보존하고 관리 승격만 막습니다. */
+function getUnsupportedLambdaProjectionDetails(
+  configuration: FunctionConfiguration,
+  functionName: string,
+  hasCodeSigningConfig: boolean
+): string[] {
+  const loggingConfig = configuration.LoggingConfig;
+  const logGroup = nonEmptyString(loggingConfig?.LogGroup);
+  const logFormat = nonEmptyString(loggingConfig?.LogFormat);
+  const customLoggingConfigured =
+    (logGroup !== null && logGroup !== `/aws/lambda/${functionName}`) ||
+    (logFormat !== null && logFormat !== "Text") ||
+    nonEmptyString(loggingConfig?.ApplicationLogLevel) !== null ||
+    nonEmptyString(loggingConfig?.SystemLogLevel) !== null;
+  const snapStartConfigured =
+    nonEmptyString(configuration.SnapStart?.ApplyOn) !== null &&
+    configuration.SnapStart?.ApplyOn !== "None";
+
+  return [
+    ...(nonEmptyString(configuration.KMSKeyArn) ? ["kmsKey"] : []),
+    ...(nonEmptyString(configuration.DeadLetterConfig?.TargetArn) ? ["deadLetterConfig"] : []),
+    ...((configuration.FileSystemConfigs?.length ?? 0) > 0 ? ["fileSystemConfigs"] : []),
+    ...((configuration.Layers?.length ?? 0) > 0 ? ["layers"] : []),
+    ...(customLoggingConfigured ? ["loggingConfig"] : []),
+    ...(snapStartConfigured ? ["snapStart"] : []),
+    ...(hasCodeSigningConfig ? ["codeSigningConfig"] : [])
+  ];
 }
 
 /** gg: ResourceNotFound만 policy 없음으로 인정하고 다른 실패는 권한 누락으로 닫습니다. */
@@ -479,7 +552,7 @@ function createLambdaPermissionArtifacts(input: {
     "AWS::Lambda::Permission",
     exactPermissionIdentity
   );
-  const terraformImportId = `${input.functionName}${assessment.qualifier ? `/${assessment.qualifier}` : ""}/${input.statementId}`;
+  const terraformImportId = `${input.functionName}${assessment.qualifier ? `:${assessment.qualifier}` : ""}/${input.statementId}`;
   const managementReady =
     input.parentMissingDetails.length === 0 && assessment.missingDetails.length === 0;
   const action = input.statement["Action"];
