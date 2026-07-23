@@ -14,6 +14,7 @@ import {
   type AwsConnectionRepository,
   verifyAwsConnection
 } from "./aws-connection-service.js";
+import { createAwsImportReadPolicyDocument } from "./aws-import-access-catalog.js";
 
 const accessContext: ProjectAccessContext = {
   kind: "user",
@@ -372,7 +373,7 @@ test("AWS connection policy authorizes only SketchCatch-managed CodeBuild names"
   assert.match(template.templateBody, /repository\/sketchcatch-\*-build-cache/);
 });
 
-test("기존 AWS 연결 Template에 Reverse Engineering 읽기 권한을 포함한다", async () => {
+test("새 AWS 연결 Template에 현재 구조 분석 읽기 권한을 모두 포함한다", async () => {
   const repository = createInMemoryAwsConnectionRepository();
   const result = await createAwsConnection(
     {
@@ -387,18 +388,18 @@ test("기존 AWS 연결 Template에 Reverse Engineering 읽기 권한을 포함�
     }
   );
   const requiredReadActions = [
-    "tag:GetResources",
-    "resource-explorer-2:Search",
-    "iam:ListRoles",
-    "iam:ListPolicies",
-    "iam:ListInstanceProfiles",
-    "cloudformation:DescribeStacks",
-    "cloudformation:GetTemplate"
-  ];
+    ...new Set([
+      ...createAwsImportReadPolicyDocument().Statement[0].Action,
+      "cloudformation:DescribeStacks",
+      "cloudformation:GetTemplate"
+    ])
+  ].sort();
   const policy = result.roleSetup.permissionSetup.terraformPolicyDocument as {
     Statement: Array<{ Action: string | readonly string[] }>;
   };
-  const policyActions = policy.Statement.flatMap((statement) => toStringArray(statement.Action));
+  const readStatementActions = policy.Statement
+    .map((statement) => toStringArray(statement.Action))
+    .find((actions) => actions.includes("tag:GetResources"));
   const template = await getAwsConnectionCloudFormationTemplate(
     {
       connectionId: result.awsConnection.id,
@@ -408,8 +409,9 @@ test("기존 AWS 연결 Template에 Reverse Engineering 읽기 권한을 포함�
     repository
   );
 
+  assert.deepEqual(readStatementActions, requiredReadActions);
+
   for (const action of requiredReadActions) {
-    assert.equal(policyActions.includes(action), true, `${action} must be in the Role policy`);
     assert.match(template.templateBody, new RegExp(action.replace(":", "\\:")));
   }
 });

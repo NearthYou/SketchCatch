@@ -35,6 +35,7 @@ import {
   supportedAwsConnectionRegion,
   type AwsConnectionTester
 } from "./aws-connection-test-service.js";
+import { createAwsImportReadPolicyDocument } from "./aws-import-access-catalog.js";
 
 export const recommendedAwsConnectionRoleName = "SketchCatchTerraformExecutionRole";
 export const recommendedCodeBuildPermissionsBoundaryName = "SketchCatchCodeBuildBoundary";
@@ -86,16 +87,14 @@ const terraformManagedServiceActions = [
   "application-autoscaling:TagResource",
   "application-autoscaling:UntagResource"
 ] as const;
-// gg: 새 연결은 Manager/Policy Stack 상태를 읽어 retry와 실제 부재를 구분하지만, 기존 Role은 Console 승인 흐름으로 복구합니다.
+// gg: 새 연결은 별도 권한 목록과 같은 구조 분석 읽기 범위를 처음부터 제안합니다. 실제 AWS 반영은 Console 승인 뒤에만 일어납니다.
 const reverseEngineeringReadActions = [
-  "tag:GetResources",
-  "resource-explorer-2:Search",
-  "iam:ListRoles",
-  "iam:ListPolicies",
-  "iam:ListInstanceProfiles",
-  "cloudformation:DescribeStacks",
-  "cloudformation:GetTemplate"
-] as const;
+  ...new Set([
+    ...createAwsImportReadPolicyDocument().Statement[0].Action,
+    "cloudformation:DescribeStacks",
+    "cloudformation:GetTemplate"
+  ])
+].sort();
 const directReleaseCodeBuildActions = [
   "codebuild:CreateProject",
   "codebuild:UpdateProject",
