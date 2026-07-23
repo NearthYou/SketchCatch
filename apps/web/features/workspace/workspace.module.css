@@ -7526,8 +7526,10 @@
 }
 
 .liveObservationTargetBar label {
+  align-items: center;
   display: grid;
-  gap: 3px;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
   min-width: 0;
 }
 
@@ -7535,6 +7537,7 @@
   color: var(--workspace-muted, #60646c);
   font-size: calc(12px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
+  white-space: nowrap;
 }
 
 .liveObservationTargetBar select {

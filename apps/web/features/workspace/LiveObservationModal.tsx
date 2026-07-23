@@ -34,7 +34,6 @@ import {
   incrementLiveObservationEcsMaxCapacity,
   type LiveObservationTerraformUpdateResult
 } from "./live-observation-terraform-update";
-import { LiveObservationFocusedFlow } from "./LiveObservationFocusedFlow";
 import { LiveObservationSignalDashboard } from "./LiveObservationSignalDashboard";
 import styles from "./workspace.module.css";
 
@@ -98,6 +97,7 @@ export function LiveObservationModal({
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [aiRecommendationError, setAiRecommendationError] = useState("");
+  const [aiRecommendationExplanation, setAiRecommendationExplanation] = useState("");
   const [terraformApplyState, setTerraformApplyState] = useState<"idle" | "loading">("idle");
   const [terraformApplyError, setTerraformApplyError] = useState("");
   const queries = useLiveObservationQueries({
@@ -196,6 +196,7 @@ export function LiveObservationModal({
         ...(aiRecommendationState === "error" && aiRecommendationError
           ? { errorMessage: aiRecommendationError }
           : {}),
+        ...(aiRecommendationExplanation ? { explanation: aiRecommendationExplanation } : {}),
         isApplying: terraformApplyState === "loading",
         isLoading: aiRecommendationState === "loading",
         ...(terraformUpdatePreview ? { onAction: () => void applyTerraformUpdate() } : {}),
@@ -225,6 +226,7 @@ export function LiveObservationModal({
     aiAnalysisSessionRef.current = null;
     setAiRecommendationState("idle");
     setAiRecommendationError("");
+    setAiRecommendationExplanation("");
     setTerraformApplyState("idle");
     setTerraformApplyError("");
   }, [selectedSession?.id]);
@@ -261,8 +263,11 @@ export function LiveObservationModal({
     setAiRecommendationState("loading");
     setAiRecommendationError("");
     void runAiDesignSimulation(input).then(
-      () => {
+      (result) => {
         if (cancelled) return;
+        setAiRecommendationExplanation(
+          result.llmExplanation?.summary ?? result.recommendations[0] ?? result.summary
+        );
         setAiRecommendationState("ready");
       },
       (error) => {
@@ -574,7 +579,7 @@ export function LiveObservationModal({
           </div>
           <div className={styles.liveObservationTargetBar}>
             <label>
-              <span>배포</span>
+              <span>배포 시각</span>
               <select
                 disabled={
                   eligibleDeployments.length === 0 ||
@@ -716,15 +721,11 @@ export function LiveObservationModal({
               {selectedArchitectureErrorMessage}
             </div>
           ) : null}
-          {selectedArchitectureState === "ready" && selectedArchitecture ? (
-            <LiveObservationFocusedFlow
-              architecture={selectedArchitecture}
-              key={`focused-${selectedDeploymentId}`}
-              snapshot={selectedSnapshot}
-            />
-          ) : null}
           {selectedDeployment ? (
             <LiveObservationSignalDashboard
+              aiError={aiRecommendationError || undefined}
+              aiState={aiRecommendationState}
+              architecture={selectedArchitecture}
               deployment={selectedDeployment}
               recommendedAction={recommendedAction}
               snapshot={selectedSnapshot}

@@ -113,42 +113,44 @@ test("modal re-entry restores only the selected, unexpired active session and ab
   assert.match(modalSource, /return \(\) => abortController\.abort\(\)/);
 });
 
-test("selected Deployment independently loads and renders its immutable Architecture", () => {
-  const focusedFlowIndex = modalSource.indexOf("<LiveObservationFocusedFlow");
-
+test("selected Deployment independently loads its immutable Architecture for telemetry and AI", () => {
   assert.match(modalSource, /useLiveObservationQueries\(\{/);
   assert.match(modalSource, /deploymentId: selectedDeploymentId/);
-  assert.match(modalSource, /LiveObservationFocusedFlow/);
   assert.match(
     modalSource,
     /const selectedArchitecture = queries\.architecture\.data\?\.architecture \?\? null;/
   );
-  assert.ok(focusedFlowIndex >= 0);
-});
-
-test("restores the focused traffic path as the default observation view", () => {
-  const focusedFlowIndex = modalSource.indexOf("<LiveObservationFocusedFlow");
-  const architectureMapIndex = modalSource.indexOf("<LiveObservationDiagramMap");
-
-  assert.match(modalSource, /LiveObservationFocusedFlow/);
-  assert.ok(focusedFlowIndex >= 0, "Focused traffic flow must render");
-  assert.ok(
-    architectureMapIndex === -1 || focusedFlowIndex < architectureMapIndex,
-    "Focused traffic flow must be the primary view"
-  );
   assert.match(
     modalSource,
-    /<LiveObservationFocusedFlow[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
+    /<LiveObservationSignalDashboard[\s\S]*?architecture=\{selectedArchitecture\}/
   );
 });
 
-test("keeps Live Observation focused on the traffic path", () => {
+test("removes the focused traffic path from the default observation view", () => {
+  assert.doesNotMatch(modalSource, /LiveObservationFocusedFlow/);
+  assert.doesNotMatch(modalSource, /실시간 트래픽 · 핵심 데이터 흐름/);
+  assert.doesNotMatch(modalSource, /LiveObservationDiagramMap/);
+});
+
+test("keeps Live Observation free of legacy diagram and design views", () => {
+  assert.doesNotMatch(modalSource, /LiveObservationFocusedFlow/);
   assert.doesNotMatch(modalSource, /LiveObservationDiagramMap/);
   assert.doesNotMatch(modalSource, /WorkspaceDesignAnalysisPanel/);
   assert.doesNotMatch(modalSource, /전체 Architecture 보기/);
   assert.doesNotMatch(modalSource, /설계 분석/);
 });
 
+test("places the deployment time label inline to the left of the selected timestamp", () => {
+  assert.match(
+    modalSource,
+    /<label>[\s\S]*?<span>배포 시각<\/span>[\s\S]*?<select/
+  );
+  assert.doesNotMatch(modalSource, /<span>배포<\/span>/);
+  assert.match(
+    workspaceStyles,
+    /\.liveObservationTargetBar label\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\)/
+  );
+});
 test("anchors the QR utility below its button without covering header controls", () => {
   assert.match(
     modalSource,
@@ -174,7 +176,7 @@ test("renders Architecture state only when it belongs to the selected Deployment
   );
   assert.match(
     modalSource,
-    /<LiveObservationFocusedFlow[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
+    /<LiveObservationSignalDashboard[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
   assert.match(
     modalSource,
@@ -230,7 +232,7 @@ test("session creation locks Deployment selection and clears a mismatched sessio
   assert.match(modalSource, /const selectedSnapshot = selectedSession \? snapshot : null;/);
   assert.match(
     modalSource,
-    /<LiveObservationFocusedFlow[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
+    /<LiveObservationSignalDashboard[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
   assert.match(deploymentSelectionHandler, /session\.deploymentId !== nextDeploymentId/);
   assert.match(deploymentSelectionHandler, /onSessionChange\(null\)/);
