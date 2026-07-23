@@ -16,7 +16,10 @@ import {
   createBoardAutoOrganizeProposal,
   reviewArchitectureBoardTemplate
 } from ".";
-import { createReverseEngineeringBoardApplication } from "../workspace/reverse-engineering-board-application";
+import {
+  convertReverseEngineeringBoardToArchitectureJson,
+  createReverseEngineeringBoardApplication
+} from "../workspace/reverse-engineering-board-application";
 
 test("AI Draft와 Board 자동 정리는 같은 Compiler version의 proposal을 만든다", () => {
   const diagram = buildTemplateDiagramJson("minimal-serverless-api", {
@@ -163,7 +166,14 @@ test("Reverse Engineering도 shared visual-only 정리안 interface를 사용한
     placement: "original",
     result
   });
-  const candidateSet = createBoardAutoOrganizeCandidates(original.diagram);
+  const candidateSet = createBoardAutoOrganizeCandidates(
+    original.diagram,
+    convertReverseEngineeringBoardToArchitectureJson(
+      original.diagram,
+      result,
+      original.sourceOwnership
+    )
+  );
   const selected = candidateSet.candidates[0];
 
   assert.ok(selected);
