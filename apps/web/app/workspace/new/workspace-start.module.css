@@ -66,7 +66,7 @@
 }
 
 .layout {
-  width: min(100%, 920px);
+  width: min(100%, 1200px);
   margin: 0 auto;
   padding: 72px 0 96px;
 }
@@ -169,7 +169,7 @@
 .targetEnvironmentOption {
   display: grid;
   min-width: 0;
-  min-height: 76px;
+  min-height: 88px;
   align-items: center;
   border: 1px solid #dcdee0;
   border-radius: 10px;
@@ -179,8 +179,22 @@
   cursor: pointer;
   font-size: calc(15px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   gap: 10px;
+}
+
+.targetEnvironmentBrandIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+}
+
+.targetEnvironmentBrandIcon img {
+  display: block;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .targetEnvironmentOption:hover {
@@ -234,19 +248,19 @@
 .option {
   display: grid;
   min-width: 0;
-  min-height: 116px;
+  min-height: 136px;
   align-items: center;
   border: 0;
   border-right: 1px solid #f0f0f3;
   border-bottom: 1px solid #f0f0f3;
-  padding: 20px;
+  padding: 26px;
   background: #ffffff;
   color: #171717;
   cursor: pointer;
   font: inherit;
   text-align: left;
-  grid-template-columns: 36px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 18px;
 }
 
 .option:nth-child(2n) {
@@ -268,17 +282,22 @@
 
 .optionIcon {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #f0f0f3;
+}
+
+.optionIcon svg {
+  width: 26px;
+  height: 26px;
 }
 
 .optionCopy {
   display: grid;
   min-width: 0;
-  gap: 7px;
+  gap: 9px;
 }
 
 .optionTitleRow {
@@ -289,17 +308,18 @@
 }
 
 .optionCopy strong {
-  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-size: calc(15px + var(--presentation-font-size-increase));
   line-height: 1.25;
   white-space: nowrap;
 }
 
 .optionCopy small {
   color: #858b95;
-  font-size: calc(9px + var(--presentation-font-size-increase));
+  font-size: calc(11px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-regular);
   line-height: 1.5;
   word-break: keep-all;
+  white-space: nowrap;
 }
 
 .optionTitleRow em {
@@ -595,6 +615,14 @@
   to { transform: rotate(360deg); }
 }
 
+@media (max-width: 1200px) {
+  .optionList { grid-template-columns: 1fr; }
+  .option,
+  .option:nth-child(2n),
+  .option:nth-last-child(-n + 2) { border-right: 0; border-bottom: 1px solid #f0f0f3; }
+  .option:last-child { border-bottom: 0; }
+}
+
 @media (max-width: 860px) {
   .optionTitleRow { align-items: flex-start; flex-direction: column; gap: 5px; }
   .optionTitleRow em { margin-left: 0; }
@@ -621,11 +649,7 @@
   .layout { padding: 48px 12px 72px; }
   .heading h1 { font-size: calc(30px + var(--presentation-font-size-increase)); }
   .targetEnvironmentOptions { grid-template-columns: 1fr; }
-  .optionList { grid-template-columns: 1fr; }
-  .option,
-  .option:nth-child(2n),
-  .option:nth-last-child(-n + 2) { border-right: 0; border-bottom: 1px solid #f0f0f3; }
-  .option:last-child { border-bottom: 0; }
+  .optionCopy small { white-space: normal; }
   .blankAction { align-self: center; }
   .repositoryUrlForm { grid-template-columns: 1fr; }
   .templateFlow { padding: 48px 12px 72px; gap: 22px; }

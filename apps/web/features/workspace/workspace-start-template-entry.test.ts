@@ -51,7 +51,7 @@ test("Workspace start options keep titles on one line with subdued descriptions 
   assert.match(cssSource, /\.optionCopy strong\s*\{[^}]*white-space:\s*nowrap;/s);
   assert.match(
     cssSource,
-    /\.optionCopy small\s*\{[^}]*color:\s*#858b95;[^}]*font-size:\s*calc\(9px \+ var\(--presentation-font-size-increase\)\);[^}]*font-weight:\s*var\(--presentation-font-weight-regular\);/s
+    /\.optionCopy small\s*\{[^}]*color:\s*#858b95;[^}]*font-size:\s*calc\(11px \+ var\(--presentation-font-size-increase\)\);[^}]*font-weight:\s*var\(--presentation-font-weight-regular\);/s
   );
   assert.match(
     cssSource,
