@@ -15,6 +15,10 @@ const helperSource = readFileSync(
   fileURLToPath(new URL("./live-observation.ts", import.meta.url)),
   "utf8"
 );
+const stylesSource = readFileSync(
+  fileURLToPath(new URL("./workspace.module.css", import.meta.url)),
+  "utf8"
+);
 
 test("renders the live infrastructure motion in the observation modal", () => {
   assert.match(modalSource, /import \{ LiveObservationFocusedFlow \}/);
@@ -27,4 +31,12 @@ test("bounds request particles and keeps their identities stable", () => {
   assert.match(helperSource, /MAX_ANIMATED_REQUEST_PARTICLES = 12/);
   assert.match(flowSource, /appendLiveObservationParticleIds/);
   assert.match(flowSource, /getLiveObservationAnimatedParticleCount/);
+});
+test("keeps the flow motion active between request burst snapshots", () => {
+  assert.match(flowSource, /hasLiveObservationActiveTraffic/);
+  assert.match(flowSource, /data-flowing=\{hasActiveTraffic\}/);
+  assert.match(
+    stylesSource,
+    /\.liveObservationFocusedFlow\[data-flowing="true"\] \.liveObservationPresentationNode/
+  );
 });

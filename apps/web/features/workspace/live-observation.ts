@@ -42,6 +42,12 @@ export function getLiveObservationAnimatedParticleCount(requestCount: number): n
   return Math.min(MAX_ANIMATED_REQUEST_PARTICLES, Math.max(0, Math.floor(requestCount)));
 }
 
+export function hasLiveObservationActiveTraffic(
+  snapshot: LiveObservationV2Snapshot | null
+): boolean {
+  return snapshot?.status === "active" && snapshot.live.rollingRequestsPerSecond > 0;
+}
+
 export function appendLiveObservationParticleIds(
   currentIds: readonly number[],
   incomingRequestCount: number,
@@ -51,10 +57,7 @@ export function appendLiveObservationParticleIds(
   const particleLimit = Math.max(0, visibleParticleCount);
   if (particleLimit === 0) return [];
 
-  const incomingVisibleCount = Math.min(
-    Math.max(0, incomingRequestCount),
-    particleLimit
-  );
+  const incomingVisibleCount = Math.min(Math.max(0, incomingRequestCount), particleLimit);
   const incomingIds = Array.from({ length: incomingVisibleCount }, nextId);
 
   return [...currentIds, ...incomingIds].slice(-particleLimit);
@@ -239,11 +242,7 @@ export function getLiveObservationTrafficIntensity(
     return "surge";
   }
 
-  if (
-    pressureLevel === "warning" ||
-    pressureLevel === "high" ||
-    burstRequestCount >= 20
-  ) {
+  if (pressureLevel === "warning" || pressureLevel === "high" || burstRequestCount >= 20) {
     return "busy";
   }
 

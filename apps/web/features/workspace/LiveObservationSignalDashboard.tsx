@@ -11,6 +11,10 @@ import {
 } from "./LiveObservationNextActions";
 import { createLiveObservationSignalDashboardModel } from "./live-observation-signal-dashboard";
 import { appendLiveObservationSessionHistory } from "./live-observation-session-history";
+import {
+  EMPTY_LIVE_OBSERVATION_SIGNAL_LEDGER,
+  reconcileLiveObservationSignalLedger
+} from "./live-observation-signal-ledger";
 import type { LiveObservationAiState } from "./live-observation-telemetry";
 import styles from "./live-observation-signal-dashboard.module.css";
 
@@ -33,6 +37,7 @@ export function LiveObservationSignalDashboard({
   const [history, setHistory] = useState<ReturnType<typeof appendLiveObservationSessionHistory>>(
     []
   );
+  const [signalLedger, setSignalLedger] = useState(EMPTY_LIVE_OBSERVATION_SIGNAL_LEDGER);
   const [selectedSignalId, setSelectedSignalId] = useState<string | null>(null);
   const resolvedAiState = aiState ?? "idle";
 
@@ -45,17 +50,27 @@ export function LiveObservationSignalDashboard({
     () => createLiveObservationSignalDashboardModel({ deployment, history, snapshot }),
     [deployment, history, snapshot]
   );
+  const visibleSignals = useMemo(
+    () => reconcileLiveObservationSignalLedger(signalLedger, snapshot, model.signals).signals,
+    [model.signals, signalLedger, snapshot]
+  );
   const selectedSignal =
-    model.signals.find((signal) => signal.id === selectedSignalId) ?? model.signals[0] ?? null;
+    visibleSignals.find((signal) => signal.id === selectedSignalId) ?? visibleSignals[0] ?? null;
 
-  // Preserve a user's selected signal while it still exists, otherwise fall back to the most important current one.
+  useEffect(() => {
+    setSignalLedger((current) =>
+      reconcileLiveObservationSignalLedger(current, snapshot, model.signals)
+    );
+  }, [model.signals, snapshot]);
+
+  // Preserve the selected observation record while it remains in this session's stable ledger.
   useEffect(() => {
     setSelectedSignalId((current) =>
-      current && model.signals.some((signal) => signal.id === current)
+      current && visibleSignals.some((signal) => signal.id === current)
         ? current
-        : (model.signals[0]?.id ?? null)
+        : (visibleSignals[0]?.id ?? null)
     );
-  }, [model.signals]);
+  }, [visibleSignals]);
 
   return (
     <section aria-label="실시간 관측 문제" className={styles.signalDashboard}>
@@ -68,11 +83,10 @@ export function LiveObservationSignalDashboard({
       <LiveObservationSignalCards
         onSelect={setSelectedSignalId}
         selectedSignalId={selectedSignal?.id ?? null}
-        signals={model.signals}
+        signals={visibleSignals}
       />
       {selectedSignal ? (
         <LiveObservationSignalDetail
-          logGroups={model.logGroups}
           recommendedAction={recommendedAction}
           signal={selectedSignal}
         />

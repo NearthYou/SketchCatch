@@ -35,7 +35,8 @@ export function createLiveObservationTelemetryModel({
     actualTaskCount:
       projection?.actualCount ?? snapshot?.latestObservation?.payload.capacity.running ?? null,
     aiState,
-    expectedTaskCount: projection?.predictedCount ?? null,
+    expectedTaskCount:
+      projection?.predictedCount ?? snapshot?.latestObservation?.payload.capacity.desired ?? null,
     pressureLevel: snapshot?.live.pressureLevel ?? "normal",
     pressurePercent: snapshot?.live.pressurePercent ?? 0,
     projectedRequestsPerMinute: snapshot?.live.projectedRequestsPerMinute ?? 0,

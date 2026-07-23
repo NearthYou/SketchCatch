@@ -26,7 +26,7 @@ test("keeps unavailable provider telemetry out of the primary infrastructure sum
 
   assert.doesNotMatch(html, /AWS 관측 불가/);
   assert.doesNotMatch(html, /연결과 관측 권한을 확인해 주세요/);
-  assert.match(html, /실제 확인 중/);
+  assert.match(html, /실행 확인 중/);
   assert.doesNotMatch(html, /CloudWatch/);
 });
 
@@ -42,10 +42,10 @@ test("shows only infrastructure design signals in the primary summary", () => {
   assert.doesNotMatch(html, /AWS 지표 수신/);
 });
 
-test("shows actual task capacity even when no forecast can be calculated", () => {
+test("uses provider desired capacity as the expected task count when design projection is unavailable", () => {
   const html = renderSummary(snapshot({ status: "active", state: "available", running: 3 }));
 
-  assert.match(html, /3개 실제 · 예상 대기/);
+  assert.match(html, /실행 3개 · 예상 3개/);
 });
 function renderSummary(value: LiveObservationV2Snapshot | null): string {
   return renderToStaticMarkup(

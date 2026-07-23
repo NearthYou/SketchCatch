@@ -13,54 +13,52 @@ type LiveObservationTelemetrySummaryProps = {
   readonly snapshot: LiveObservationV2Snapshot | null;
 };
 
-export const LiveObservationTelemetrySummary = memo(
-  function LiveObservationTelemetrySummary({
-    aiError,
-    aiState,
-    architecture,
-    snapshot
-  }: LiveObservationTelemetrySummaryProps) {
-    const model = useMemo(
-      () => createLiveObservationTelemetryModel({ aiState, architecture, snapshot }),
-      [aiState, architecture, snapshot]
-    );
-    const actualTaskLabel =
-      model.actualTaskCount === null ? "실제 확인 중" : `${model.actualTaskCount}개 실제`;
-    const expectedTaskLabel =
-      model.expectedTaskCount === null ? "예상 대기" : `${model.expectedTaskCount}개 예상`;
-    const sessionLabel = getSessionLabel(model.sessionStatus);
-    const observationNote = getObservationNote(model.sessionStatus);
+export const LiveObservationTelemetrySummary = memo(function LiveObservationTelemetrySummary({
+  aiError,
+  aiState,
+  architecture,
+  snapshot
+}: LiveObservationTelemetrySummaryProps) {
+  const model = useMemo(
+    () => createLiveObservationTelemetryModel({ aiState, architecture, snapshot }),
+    [aiState, architecture, snapshot]
+  );
+  const actualTaskLabel =
+    model.actualTaskCount === null ? "실행 확인 중" : `실행 ${model.actualTaskCount}개`;
+  const expectedTaskLabel =
+    model.expectedTaskCount === null ? "예상 계산 중" : `예상 ${model.expectedTaskCount}개`;
+  const sessionLabel = getSessionLabel(model.sessionStatus);
+  const observationNote = getObservationNote(model.sessionStatus);
 
-    return (
-      <section
-        aria-label="인프라 설계 판단"
-        className={styles.telemetrySummary}
-        data-session-status={model.sessionStatus ?? "not_started"}
-        data-testid="live-observation-telemetry"
-      >
-        <header className={styles.telemetryHeader}>
-          <div>
-            <p className={styles.eyebrow}>관측 기반</p>
-            <h2>인프라 설계 판단</h2>
-          </div>
-          {sessionLabel ? (
-            <span className={styles.telemetryProviderState}>{sessionLabel}</span>
-          ) : null}
-        </header>
-        <div className={styles.telemetryGrid}>
-          <TelemetryMetric
-            label="예상 부하"
-            value={`${Math.round(model.projectedRequestsPerMinute)} req/min · ${getPressureLabel(model.pressureLevel)}`}
-          />
-          <TelemetryMetric label="Task 변화" value={`${actualTaskLabel} · ${expectedTaskLabel}`} />
-          <TelemetryMetric label="설계 분석" value={getAiLabel(model.aiState)} />
+  return (
+    <section
+      aria-label="인프라 설계 판단"
+      className={styles.telemetrySummary}
+      data-session-status={model.sessionStatus ?? "not_started"}
+      data-testid="live-observation-telemetry"
+    >
+      <header className={styles.telemetryHeader}>
+        <div>
+          <p className={styles.eyebrow}>관측 기반</p>
+          <h2>인프라 설계 판단</h2>
         </div>
-        {observationNote ? <p className={styles.telemetryNote}>{observationNote}</p> : null}
-        {aiError ? <p className={styles.telemetryError}>{aiError}</p> : null}
-      </section>
-    );
-  }
-);
+        {sessionLabel ? (
+          <span className={styles.telemetryProviderState}>{sessionLabel}</span>
+        ) : null}
+      </header>
+      <div className={styles.telemetryGrid}>
+        <TelemetryMetric
+          label="예상 부하"
+          value={`${Math.round(model.projectedRequestsPerMinute)} req/min · ${getPressureLabel(model.pressureLevel)}`}
+        />
+        <TelemetryMetric label="Task 변화" value={`${actualTaskLabel} · ${expectedTaskLabel}`} />
+        <TelemetryMetric label="설계 분석" value={getAiLabel(model.aiState)} />
+      </div>
+      {observationNote ? <p className={styles.telemetryNote}>{observationNote}</p> : null}
+      {aiError ? <p className={styles.telemetryError}>{aiError}</p> : null}
+    </section>
+  );
+});
 
 function TelemetryMetric({ label, value }: { readonly label: string; readonly value: string }) {
   return (

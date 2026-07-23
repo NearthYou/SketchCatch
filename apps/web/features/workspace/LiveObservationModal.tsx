@@ -600,9 +600,7 @@ export function LiveObservationModal({
               >
                 {eligibleDeployments.length === 0 ? (
                   <option disabled value="">
-                    {listState === "loading"
-                      ? "배포 목록 확인 중..."
-                      : "관측할 배포가 없어요."}
+                    {listState === "loading" ? "배포 목록 확인 중..." : "관측할 배포가 없어요."}
                   </option>
                 ) : null}
                 {eligibleDeployments.map((deployment) => (
@@ -663,9 +661,7 @@ export function LiveObservationModal({
 
         <main className={styles.liveObservationBody}>
           {listState === "loading" ? (
-            <div className={styles.liveObservationMessage}>
-              배포 목록을 확인하고 있어요.
-            </div>
+            <div className={styles.liveObservationMessage}>배포 목록을 확인하고 있어요.</div>
           ) : null}
           {listState === "ready" && eligibleDeployments.length === 0 ? (
             <div className={styles.liveObservationMessage}>
@@ -697,15 +693,7 @@ export function LiveObservationModal({
               배포 구성을 불러오고 있어요.
             </div>
           ) : null}
-          {isTrafficPressureElevated ? (
-            <div className={styles.liveObservationError} role="alert">
-              <strong>요청이 빠르게 늘고 있어요</strong>
-              <p>
-                요청 {trafficIncidentSnapshot.live.acceptedEventCount}건 · 분당 약{" "}
-                {trafficIncidentSnapshot.live.projectedRequestsPerMinute}건
-              </p>
-            </div>
-          ) : null}
+
           {appliedTerraformUpdate ? (
             <div className={styles.liveObservationMessage} role="status">
               <strong>용량 수정안을 저장했어요</strong>

@@ -6,8 +6,19 @@ Short English-only working log for the current agent context. Older records are 
 
 - The new-project screen shows local AWS, multicolor Google Cloud, and Azure brand icons and uses a wider, larger start-method layout with single-line desktop copy.
 - Workspace start cards keep every desktop title on one line, use subdued description typography, and place the AWS Role badge in the Reverse Engineering title row.
+- Live Observation keeps up to three problem records stable per session, omits raw logs and the chronological timeline, and shows actual versus expected Task capacity with sustained traffic motion.
 
 ## Session Record
+
+### 2026-07-24 - Stabilize and clarify Live Observation
+
+- Removed the traffic-surge banner, raw log groups, and chronological incident timeline from the rendered observation UI.
+- Added a session-scoped signal ledger so observed problems remain visible while matching evidence refreshes; a new observation session resets the ledger.
+- Prioritized readability with a single-column record list, clearer telemetry cards, larger spacing, and a simplified evidence detail.
+- Added provider-desired Task fallback and a 1.2-second entering state so newly running Tasks appear as expected before settling; continuous rolling traffic now keeps the flow animation active.
+- Browser-verified the failure fixture: no surge banner, log disclosure, or timeline; `실행 2개 · 예상 3개` and two stable records render, and eight animated flow elements change frames.
+- Verification: 132 scoped Live Observation tests, root lint, root typecheck, and the direct Web production build pass. Root `pnpm build` reported all five packages successful, then its Turbo runner stayed alive and was terminated after completion.
+- No migration, dependency, cloud traffic, deployment, or external mutation was performed.
 
 ### 2026-07-23 - Rebuild Repository analysis and Template preview UI
 

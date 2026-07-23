@@ -21,7 +21,10 @@ export function LiveObservationSignalCards({
       className={styles.signalCardsSection}
     >
       <div className={styles.sectionHeader}>
-        <h2 id="live-observation-signals-heading">중요한 문제</h2>
+        <div>
+          <h2 id="live-observation-signals-heading">관측 기록</h2>
+          <p className={styles.sectionDescription}>이 세션에서 확인한 문제를 계속 표시합니다.</p>
+        </div>
         <span className={styles.signalCount}>{signals.length}개</span>
       </div>
       <div className={styles.signalCards}>

@@ -8203,7 +8203,7 @@
 }
 
 .liveObservationFocusedFlow[data-flowing="true"] .liveObservationPresentationNode {
-  animation: liveObservationNodeTraffic 0.52s ease-in-out infinite;
+  animation: liveObservationNodeTraffic 1s ease-in-out infinite;
 }
 
 .liveObservationPresentationNode img {
@@ -8302,7 +8302,7 @@
 }
 
 .liveObservationDiagramMap[data-flowing="true"] .liveObservationPresentationConnector::after {
-  animation: liveObservationConnectorFlow 0.3s linear infinite;
+  animation: liveObservationConnectorFlow 0.75s linear infinite;
   background: linear-gradient(
     90deg,
     transparent 0 18%,
@@ -8342,7 +8342,7 @@
 
 .liveObservationDiagramMap[data-traffic-intensity="surge"]
   .liveObservationPresentationConnector::after {
-  animation-duration: 0.2s;
+  animation-duration: 0.55s;
   background: linear-gradient(
     90deg,
     transparent 0 10%,
@@ -8684,8 +8684,7 @@
   font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
-.liveObservationDiagramMap[data-traffic-intensity="busy"]
-  .liveObservationPresentationSurface {
+.liveObservationDiagramMap[data-traffic-intensity="busy"] .liveObservationPresentationSurface {
   box-shadow:
     inset 0 0 54px rgb(255 107 0 / 12%),
     0 12px 30px rgb(255 107 0 / 8%);
@@ -8716,13 +8715,11 @@
   width: 58px;
 }
 
-.liveObservationDiagramMap[data-traffic-intensity="surge"]
-  .liveObservationPresentationNode {
-  animation-duration: 320ms;
+.liveObservationDiagramMap[data-traffic-intensity="surge"] .liveObservationPresentationNode {
+  animation-duration: 780ms;
 }
 
-.liveObservationDiagramMap[data-pressure-level="critical"]
-  .liveObservationCapacityStage::after {
+.liveObservationDiagramMap[data-pressure-level="critical"] .liveObservationCapacityStage::after {
   box-shadow:
     inset 0 0 34px rgb(255 36 79 / 10%),
     0 0 22px rgb(255 36 79 / 12%);
@@ -8743,8 +8740,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .liveObservationDiagramMap[data-traffic-intensity="surge"]
-    .liveObservationPresentationSurface {
+  .liveObservationDiagramMap[data-traffic-intensity="surge"] .liveObservationPresentationSurface {
     animation: none;
   }
 }
@@ -9374,17 +9370,17 @@
   }
 
   .liveObservationFocusedFlow .liveObservationPresentationViewport {
-  flex: 0 0 auto;
-  padding: 18px 20px 16px;
-}
+    flex: 0 0 auto;
+    padding: 18px 20px 16px;
+  }
 
-.liveObservationFocusedFlow .liveObservationPresentationSurface {
-  padding: 32px 22px 16px;
-}
+  .liveObservationFocusedFlow .liveObservationPresentationSurface {
+    padding: 32px 22px 16px;
+  }
 
-.liveObservationFocusedFlow .liveObservationPresentationSurface::before {
-  content: none;
-}
+  .liveObservationFocusedFlow .liveObservationPresentationSurface::before {
+    content: none;
+  }
 
   .liveObservationSignalMap {
     aspect-ratio: auto;
@@ -11428,19 +11424,11 @@
 
 /* Deployment tab final cascade */
 .deploymentConsoleScreenBody {
-  --deployment-console-page-title-size: calc(
-    28px + var(--presentation-font-size-increase)
-  );
+  --deployment-console-page-title-size: calc(28px + var(--presentation-font-size-increase));
   --deployment-console-context-size: calc(13px + var(--presentation-font-size-increase));
-  --deployment-console-primary-action-size: calc(
-    16px + var(--presentation-font-size-increase)
-  );
-  --deployment-console-section-title-size: calc(
-    18px + var(--presentation-font-size-increase)
-  );
-  --deployment-console-feature-title-size: calc(
-    22px + var(--presentation-font-size-increase)
-  );
+  --deployment-console-primary-action-size: calc(16px + var(--presentation-font-size-increase));
+  --deployment-console-section-title-size: calc(18px + var(--presentation-font-size-increase));
+  --deployment-console-feature-title-size: calc(22px + var(--presentation-font-size-increase));
   --deployment-console-row-title-size: calc(16px + var(--presentation-font-size-increase));
   --deployment-console-body-size: calc(15px + var(--presentation-font-size-increase));
   --deployment-console-meta-size: calc(13px + var(--presentation-font-size-increase));
@@ -11610,10 +11598,7 @@
 }
 
 .deploymentPageHeader
-  .deploymentSecondaryButton:is(
-    [data-action="cancel-execution"],
-    [data-action="destroy-plan"]
-  ) {
+  .deploymentSecondaryButton:is([data-action="cancel-execution"], [data-action="destroy-plan"]) {
   background: #fff1f0;
   border-color: #e7aaa5;
   color: #b42318;
@@ -11634,15 +11619,13 @@
 }
 
 .deploymentPageHeader
-  .deploymentSecondaryButton:is(
-    [data-action="cancel-execution"],
-    [data-action="destroy-plan"]
-  ):not(:disabled):hover,
+  .deploymentSecondaryButton:is([data-action="cancel-execution"], [data-action="destroy-plan"]):not(
+    :disabled
+  ):hover,
 .deploymentPageHeader
-  .deploymentSecondaryButton:is(
-    [data-action="cancel-execution"],
-    [data-action="destroy-plan"]
-  ):not(:disabled):focus-visible {
+  .deploymentSecondaryButton:is([data-action="cancel-execution"], [data-action="destroy-plan"]):not(
+    :disabled
+  ):focus-visible {
   background: #ffe5e2;
   border-color: #d77f78;
   color: #991b1b;

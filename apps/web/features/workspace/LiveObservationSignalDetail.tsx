@@ -1,22 +1,19 @@
 import React from "react";
 import type { LiveObservationSignal } from "./live-observation-signal-dashboard";
 import { LiveObservationEvidencePanel } from "./LiveObservationEvidencePanel";
-import { LiveObservationIncidentTimeline } from "./LiveObservationIncidentTimeline";
-import { LiveObservationLogGroups } from "./LiveObservationLogGroups";
+
 import {
   LiveObservationNextActions,
   type LiveObservationRecommendedAction
 } from "./LiveObservationNextActions";
-import type { LiveObservationLogGroup } from "./live-observation-log-groups";
+
 import styles from "./live-observation-signal-dashboard.module.css";
 
-/** Presents impact, evidence, logs, and only available next checks for the signal the user selected. */
+/** Presents a readable evidence summary and only available next checks for the selected record. */
 export function LiveObservationSignalDetail({
-  logGroups,
   recommendedAction,
   signal
 }: {
-  readonly logGroups: readonly LiveObservationLogGroup[];
   readonly recommendedAction?: LiveObservationRecommendedAction | null | undefined;
   readonly signal: LiveObservationSignal;
 }) {
@@ -36,10 +33,8 @@ export function LiveObservationSignalDetail({
       <div className={styles.detailGrid}>
         <div className={styles.detailPrimaryColumn}>
           <LiveObservationEvidencePanel signal={signal} />
-          <LiveObservationIncidentTimeline events={signal.timeline} />
         </div>
         <div className={styles.detailSecondaryColumn}>
-          <LiveObservationLogGroups groups={logGroups} />
           <LiveObservationNextActions recommendedAction={recommendedAction} />
         </div>
       </div>
@@ -57,13 +52,7 @@ function LiveObservationSignalSparkline({
   return (
     <figure className={styles.sparkline}>
       <figcaption>최근 확인한 값</figcaption>
-      <svg
-        aria-label="최근 값 변화"
-        height="44"
-        role="img"
-        viewBox="0 0 160 44"
-        width="160"
-      >
+      <svg aria-label="최근 값 변화" height="44" role="img" viewBox="0 0 160 44" width="160">
         <polyline
           fill="none"
           points={pathPoints}
