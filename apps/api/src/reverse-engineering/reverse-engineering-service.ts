@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { RESOURCE_TYPES } from "@sketchcatch/types";
 import type {
+  ApiErrorCode,
   AwsConnection,
   ArchitectureJson,
   CheckFinding,
@@ -1038,15 +1039,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 // 스캔 row는 있지만 Provider 호출이 실패한 경우 404와 구분하기 위해 따로 던집니다.
 export class ReverseEngineeringScanFailedError extends Error {
+  readonly statusCode: number;
+  readonly errorCode: Extract<
+    ApiErrorCode,
+    "REVERSE_ENGINEERING_AWS_SETTINGS_REQUIRED" | "REVERSE_ENGINEERING_SCAN_RETRYABLE"
+  >;
+  readonly exposeMessage = true;
   readonly internalCode: ReverseEngineeringConnectionFailureClassification["internalCode"];
   readonly publicReason: ReverseEngineeringConnectionFailureClassification["publicReason"];
 
-  // gg: 공개 Error에는 안전한 문장과 다음 행동 분류만 남깁니다.
+  // gg: 공개 Error는 provider 원문 대신 UI가 바로 다음 행동을 고를 수 있는 안전한 HTTP 계약만 제공합니다.
   constructor(classification: ReverseEngineeringConnectionFailureClassification) {
     super(classification.publicMessage);
     this.name = "ReverseEngineeringScanFailedError";
     this.internalCode = classification.internalCode;
     this.publicReason = classification.publicReason;
+    this.statusCode = classification.publicReason === "open_settings" ? 409 : 503;
+    this.errorCode =
+      classification.publicReason === "open_settings"
+        ? "REVERSE_ENGINEERING_AWS_SETTINGS_REQUIRED"
+        : "REVERSE_ENGINEERING_SCAN_RETRYABLE";
   }
 }
 

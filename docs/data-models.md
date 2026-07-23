@@ -2347,6 +2347,10 @@ type ReverseEngineeringScanLogLine = {
 `가져온 항목만 사용`을 누르면 성공적으로 읽은 결과만 적용할 수 있으며, 이 클릭을 명시적 승인으로 본다. 추가 확인창은
 두지 않지만 일반 적용 버튼과 다른 문구로 불완전한 결과임을 숨기지 않는다.
 
+전체 스캔이 결과 없이 실패하면 API는 AWS 원문 오류 대신 다음 안전한 오류만 반환한다. `REVERSE_ENGINEERING_AWS_SETTINGS_REQUIRED`는
+AWS 연결을 확인할 수 있도록 `409`과 함께 반환하고, `REVERSE_ENGINEERING_SCAN_RETRYABLE`는 잠시 뒤 다시 시도할 수 있도록
+`503`과 함께 반환한다. 두 응답 모두 Provider 오류 코드, ARN, 요청 ID 같은 내부 정보는 포함하지 않는다.
+
 Reverse Engineering 화면은 권한을 직접 바꾸지 않고 환경설정의 AWS 연결 복구로 이동시킨다. 복구는 같은 Stack과
 Role에 별도 읽기 Policy만 갱신하며 기존 배포 Policy를 건드리지 않는다. 이미 가져온 부분 결과는 복구 중에도 유지한다.
 

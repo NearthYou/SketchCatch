@@ -43,6 +43,9 @@ const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
   LIVE_OBSERVATION_NOT_FOUND: "실시간 관측 세션을 찾을 수 없습니다.",
   LIVE_OBSERVATION_OUTPUT_INVALID: "배포 결과에 실시간 관측에 필요한 Terraform output이 없습니다.",
   LIVE_OBSERVATION_RATE_LIMITED: "실시간 관측 요청 한도를 초과했습니다.",
+  REVERSE_ENGINEERING_AWS_SETTINGS_REQUIRED: "AWS 연결을 확인해 주세요.",
+  REVERSE_ENGINEERING_SCAN_RETRYABLE:
+    "AWS 구조를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.",
   not_found: "요청한 정보를 찾을 수 없습니다.",
   service_unavailable: "AI 생성 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요.",
   too_many_requests: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
