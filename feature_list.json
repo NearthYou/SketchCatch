@@ -1133,6 +1133,35 @@
         "notes": "Focused setup/provider tests pass 42/42, the Git/CI/CD API regression set passes 246/246, readiness passes 96/96 including the previously failing CI cases, and focused Web tests pass 54/54. Root lint, typecheck, and all five production builds pass."
       },
       "notes": "No DB schema, Drizzle migration, dependency, secret, live GitHub/AWS mutation, PR merge, Terraform action, production deployment, or push was performed."
+    },
+    {
+      "id": "REPOSITORY-PREVIEW-UI-001",
+      "priority": 2,
+      "area": "repository-ux",
+      "title": "Ranked Repository preview and structured follow-up questions",
+      "user_visible_behavior": "Repository 분석 결과에서 추천 순위와 명확한 AI 설계 작업을 확인하고, 추천 이유 길이와 관계없이 고정된 탐색 제어를 사용하며, 추가 질문과 선택지를 쉽게 구분한다.",
+      "status": "passing",
+      "verification": [
+        "현재 후보에 따라 1순위, 2순위, 3순위 추천 레이블을 보여준다.",
+        "AI 설계 작업은 AI로 직접 설계로 표시한다.",
+        "추천 이유가 여러 줄이어도 후보 탐색 제어는 프리뷰 하단 상단에 고정된다.",
+        "Template 이름은 보조 정보로 낮추고 추가 질문 제목을 가장 크게 표시한다.",
+        "각 질문은 여백으로 분리하고 질문과 답변 간격은 좁히며, 라디오 답변은 선택 카드로 표시한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-23",
+        "commands": [
+          "pnpm --dir apps/web exec node --import ./test-css-register.mjs --import tsx --test app/workspace/repository/*.test.ts app/workspace/repository/*.test.tsx",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check",
+          "authenticated in-app browser navigation across Repository candidates and follow-up answer states"
+        ],
+        "notes": "All 46 Repository tests pass. Root lint, typecheck, and all five production builds pass. Browser verification confirmed stable candidate navigation plus clear follow-up question hierarchy and selected answer-card styling."
+      },
+      "notes": "No API, persistence, dependency, migration, cloud mutation, deployment, GitHub issue, or Git/CI/CD handoff changed."
     }
   ]
 }
