@@ -35,8 +35,20 @@ test("Settings keeps raw CodeBuild failures behind a local details disclosure", 
 });
 
 test("Settings collapses every step after CodeBuild authorization is complete", () => {
-  assert.match(clientSource, /selectedCodeConnectionStatus === "AVAILABLE"\s*\? null\s*: "codebuild"/);
-  assert.match(clientSource, /useState<ConnectionFlowStepId \| null>/);
+  assert.match(clientSource, /deriveSettingsConnectionFlowState/);
+  assert.match(clientSource, /recommendedConnectionStep = connectionFlow\.recommendedConnectionStep/);
+  assert.match(clientSource, /useState<SettingsConnectionFlowStepId \| null>/);
+});
+
+test("Settings does not lock the AWS step when GitHub App setup is incomplete", () => {
+  const awsStepStart = clientSource.indexOf('expanded={expandedConnectionStep === "aws"}');
+  const codeBuildStepStart = clientSource.indexOf('expanded={expandedConnectionStep === "codebuild"}');
+  const awsStepSource = clientSource.slice(awsStepStart, codeBuildStepStart);
+
+  assert.ok(awsStepStart >= 0);
+  assert.ok(codeBuildStepStart > awsStepStart);
+  assert.doesNotMatch(awsStepSource, /locked=/);
+  assert.match(clientSource, /locked=\{codeBuildStepState === "locked"\}/);
 });
 
 test("Settings shows the operational AWS Role description only inside the expanded step body", () => {

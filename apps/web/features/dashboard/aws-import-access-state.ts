@@ -88,13 +88,18 @@ const STATUS_PRESENTATION = {
   },
   cleanup_required: {
     title: "AWS 권한 정리 확인 필요",
-    description: "Stack이 없어도 남은 권한 항목이 있을 수 있어 상태를 다시 확인해야 합니다."
+    description: "이전에 사용한 가져오기 권한이 남아 있는지 확인해 주세요."
   },
   cleanup_complete: {
     title: "가져오기 권한 정리 완료",
     description: "SketchCatch가 추가한 가져오기 권한 정리가 끝났습니다."
   }
 } satisfies Record<AwsImportAccessStatus, { readonly title: string; readonly description: string }>;
+
+const REPREPARE_PRESENTATION = {
+  title: "가져오기 권한 다시 준비 필요",
+  description: "AWS 구조를 다시 가져올 수 있도록 필요한 읽기 권한을 준비해 주세요."
+} as const;
 
 const BUSY_STATUSES = new Set<AwsImportAccessStatus>([
   "manager_checking",
@@ -109,7 +114,9 @@ export function deriveAwsImportAccessView(input: {
   readonly hasPolicyApproval?: boolean;
   readonly state: AwsImportAccessState;
 }): AwsImportAccessView {
-  const presentation = STATUS_PRESENTATION[input.state.status];
+  const presentation = canReprepareAwsImportAccess(input.state)
+    ? REPREPARE_PRESENTATION
+    : STATUS_PRESENTATION[input.state.status];
   const canStartCleanup = canStartAwsImportAccessCleanup(
     input.state.status,
     input.state.nextAction,
@@ -141,7 +148,7 @@ export function deriveAwsImportAccessView(input: {
     input.state.status === "cleanup_manager_required";
   return {
     ...presentation,
-    primaryAction: getCommandLabel(primaryCommand, input.state.status),
+    primaryAction: getCommandLabel(primaryCommand, input.state),
     primaryCommand,
     secondaryAction: managerReload
       ? "AWS Console 다시 열기"
@@ -159,6 +166,11 @@ export function deriveAwsImportAccessView(input: {
     isBusy: BUSY_STATUSES.has(input.state.status),
     canContinue: input.state.status === "ready" || input.state.status === "limited"
   };
+}
+
+/** gg: 서버가 명시적으로 허용한 cleanup 확인 상태만 다시 준비로 되돌려 기존 정리 순서를 추측하지 않습니다. */
+function canReprepareAwsImportAccess(state: AwsImportAccessState): boolean {
+  return state.status === "cleanup_required" && state.nextAction === "prepare_manager";
 }
 
 /** gg: persisted setup만 정리를 시작하고 합성·cleanup 상태는 기존 흐름을 유지합니다. */
@@ -198,6 +210,9 @@ function resolvePrimaryCommand(
   state: AwsImportAccessState,
   hasPolicyApproval: boolean
 ): AwsImportAccessUiCommand | null {
+  if (state.status === "cleanup_complete") {
+    return null;
+  }
   if (state.status === "policy_approval_required") {
     return hasPolicyApproval ? "apply_policy" : "preview_policy";
   }
@@ -224,21 +239,23 @@ function mapNextAction(nextAction: AwsImportAccessNextAction | null): AwsImportA
 /** gg: 같은 command라도 최초 승인·업데이트·정리 단계에 맞는 쉬운 문구를 고릅니다. */
 function getCommandLabel(
   command: AwsImportAccessUiCommand | null,
-  status: AwsImportAccessStatus
+  state: AwsImportAccessState
 ): string | null {
   switch (command) {
     case null: return null;
-    case "prepare_manager": return status === "retry_required"
-      ? "AWS Console 다시 열기"
-      : "AWS에서 준비";
+    case "prepare_manager": return canReprepareAwsImportAccess(state)
+      ? "가져오기 권한 다시 준비"
+      : state.status === "retry_required"
+        ? "AWS Console 다시 열기"
+        : "AWS에서 준비";
     case "check_manager": return "Manager 준비 확인";
-    case "preview_policy": return status === "policy_approval_required"
+    case "preview_policy": return state.status === "policy_approval_required"
       ? "권한 변경 내용 확인"
       : "가져오기 권한 업데이트";
     case "apply_policy": return "확인한 권한 적용";
     case "check_reads": return "읽기 권한 다시 확인";
     case "open_settings": return "AWS 연결 확인";
-    case "prepare_cleanup": return status === "cleanup_manager_required"
+    case "prepare_cleanup": return state.status === "cleanup_manager_required"
       ? "AWS에서 Manager 정리"
       : "AWS에서 가져오기 권한 정리";
     case "check_cleanup": return "정리 상태 확인";

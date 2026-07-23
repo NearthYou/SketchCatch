@@ -68,15 +68,17 @@ import settingsStyles from "./settings-dashboard.module.css";
 import { getSettingsAwsConnectionAction } from "./settings-aws-connection-action";
 import { GitHubAccountSettings } from "./github-account-settings";
 import { getSettingsAwsRecoveryNavigation } from "./settings-aws-recovery-navigation";
+import {
+  deriveSettingsConnectionFlowState,
+  type SettingsConnectionFlowStepId,
+  type SettingsConnectionFlowStepState
+} from "../../../features/dashboard/settings-connection-flow-state";
 
 const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
   { label: "서울", value: "ap-northeast-2" },
   { label: "버지니아 북부", value: "us-east-1" },
   { label: "도쿄", value: "ap-northeast-1" }
 ];
-
-type ConnectionFlowStepId = "github" | "aws" | "codebuild";
-type ConnectionFlowStepState = "complete" | "current" | "error" | "locked";
 
 // AWS Role 연결, 가져오기 권한, 연결 삭제와 외부 서비스 연결 단계를 함께 관리합니다.
 export function SettingsDashboardClient() {
@@ -157,16 +159,16 @@ export function SettingsDashboardClient() {
   const [selectedBuildAwsConnectionId, setSelectedBuildAwsConnectionId] = useState("");
   const selectedCodeConnectionStatus =
     codeConnections[selectedBuildAwsConnectionId]?.codeConnection?.status;
-  const recommendedConnectionStep: ConnectionFlowStepId | null =
-    githubAuthorizationTarget.status !== "ready"
-      ? "github"
-      : displayedVerifiedConnections.length === 0
-        ? "aws"
-        : selectedCodeConnectionStatus === "AVAILABLE"
-          ? null
-          : "codebuild";
+  const githubStepComplete = githubAuthorizationTarget.status === "ready";
+  const awsStepComplete = displayedVerifiedConnections.length > 0;
+  const connectionFlow = deriveSettingsConnectionFlowState({
+    codeBuildStatus: selectedCodeConnectionStatus,
+    githubReady: githubStepComplete,
+    hasVerifiedAwsConnection: awsStepComplete
+  });
+  const recommendedConnectionStep = connectionFlow.recommendedConnectionStep;
   const [expandedConnectionStep, setExpandedConnectionStep] =
-    useState<ConnectionFlowStepId | null>(recommendedConnectionStep);
+    useState<SettingsConnectionFlowStepId | null>(recommendedConnectionStep);
   const [showAwsRequiredModal, setShowAwsRequiredModal] = useState(false);
   const modalOverlayRef = useRef<HTMLDivElement>(null);
   const modalDialogRef = useRef<HTMLElement>(null);
@@ -488,23 +490,12 @@ export function SettingsDashboardClient() {
     });
   }, [deletionPreview, showAwsRequiredModal, showCodeConnectionDisconnectModal]);
 
-  const githubStepComplete = githubAuthorizationTarget.status === "ready";
-  const awsStepComplete = displayedVerifiedConnections.length > 0;
   const selectedCodeConnection = codeConnections[selectedBuildAwsConnectionId]?.codeConnection;
-  const codeBuildStepComplete = selectedCodeConnection?.status === "AVAILABLE";
-  const githubStepState: ConnectionFlowStepState = githubStepComplete ? "complete" : "current";
-  const awsStepState: ConnectionFlowStepState = !githubStepComplete
-    ? "locked"
-    : awsStepComplete
-      ? "complete"
-      : "current";
-  const codeBuildStepState: ConnectionFlowStepState = !githubStepComplete || !awsStepComplete
-    ? "locked"
-    : codeBuildStepComplete
-      ? "complete"
-      : selectedCodeConnection?.status === "ERROR"
-        ? "error"
-        : "current";
+  const {
+    awsStepState,
+    codeBuildStepState,
+    githubStepState
+  } = connectionFlow;
   const primaryVerifiedConnection = displayedVerifiedConnections[0];
   const githubStepSummary = githubStepComplete
     ? `${githubAuthorizationTarget.installation.accountLogin} · ${githubAuthorizationTarget.installation.accountType ?? "GitHub account"}`
@@ -560,7 +551,6 @@ export function SettingsDashboardClient() {
             <ConnectionFlowStep
               expanded={expandedConnectionStep === "aws"}
               icon={<Cloud />}
-              locked={awsStepState === "locked"}
               number={2}
               onToggle={() => setExpandedConnectionStep("aws")}
               state={awsStepState}
@@ -938,7 +928,7 @@ function ConnectionFlowStep({
   readonly locked?: boolean;
   readonly number: number;
   readonly onToggle: () => void;
-  readonly state: ConnectionFlowStepState;
+  readonly state: SettingsConnectionFlowStepState;
   readonly summary: string;
   readonly title: string;
   readonly titleId: string;
@@ -995,7 +985,7 @@ function ConnectionFlowStep({
 }
 
 function getConnectionFlowStatusLabel(
-  state: ConnectionFlowStepState,
+  state: SettingsConnectionFlowStepState,
   number: number
 ): string {
   if (state === "complete") return number === 2 ? "검증됨" : "연결됨";

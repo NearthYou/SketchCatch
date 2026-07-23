@@ -73,12 +73,59 @@ test("wizard preserves the existing connection and hides provider internals", as
   );
 
   assert.match(html, /기존 AWS 연결과 배포 권한은 그대로 유지됩니다/u);
-  assert.match(html, /처음 만든 AWS 연결 Stack/u);
+  assert.match(html, /기존 AWS 연결 유지/u);
+  assert.match(html, /현재 배포 환경 유지/u);
   assert.match(html, /기존 Terraform 배포 권한/u);
   assert.doesNotMatch(
     html,
     /AccessDenied|arn:aws|PolicyDocument|TemplateBody|RequestId|logical id/iu
   );
+});
+
+test("cleanup recovery keeps the action simple and routes through manager preparation", async () => {
+  const { AwsImportAccessWizardView, runAwsImportAccessCommand } = await import("./AwsImportAccessWizard");
+  const html = renderToStaticMarkup(
+    createElement(AwsImportAccessWizardView, {
+      connectionStatus: "verified",
+      state: state({
+        status: "cleanup_required",
+        nextAction: "prepare_manager"
+      }),
+      onCommand() {}
+    })
+  );
+  const calls: string[] = [];
+  const response = {
+    connectionId: "connection-1",
+    operationId: "operation-1",
+    nextAction: "check_manager" as const,
+    state: state({
+      status: "manager_approval_required",
+      nextAction: "check_manager"
+    })
+  };
+  const api = {
+    async prepareManager(connectionId: string) {
+      calls.push(connectionId);
+      return response;
+    },
+    async checkManager() { throw new Error("unexpected"); },
+    async previewPolicy() { throw new Error("unexpected"); },
+    async applyPolicy() { throw new Error("unexpected"); },
+    async checkReads() { throw new Error("unexpected"); },
+    async prepareCleanup() { throw new Error("unexpected"); },
+    async checkCleanup() { throw new Error("unexpected"); }
+  };
+
+  assert.match(html, />가져오기 권한 다시 준비<\/button>/u);
+  assert.doesNotMatch(html, /Role 유지|Stack 유지|Policy/iu);
+  await runAwsImportAccessCommand({
+    api,
+    approval: null,
+    command: "prepare_manager",
+    connectionId: "connection-1"
+  });
+  assert.deepEqual(calls, ["connection-1"]);
 });
 
 test("manager approval reload offers both a fresh link and a state check", async () => {

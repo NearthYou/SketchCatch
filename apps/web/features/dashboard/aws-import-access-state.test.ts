@@ -146,6 +146,22 @@ test("connection and cleanup states expose distinct state-driven actions", () =>
   }
 });
 
+test("cleanup recovery reuses manager preparation only when the API explicitly allows it", () => {
+  const recoverable = view("cleanup_required", "prepare_manager");
+
+  assert.equal(recoverable.title, "가져오기 권한 다시 준비 필요");
+  assert.equal(recoverable.primaryAction, "가져오기 권한 다시 준비");
+  assert.equal(recoverable.primaryCommand, "prepare_manager");
+
+  const stillCleaning = view("cleanup_required", "check_cleanup");
+  assert.equal(stillCleaning.primaryAction, "정리 상태 확인");
+  assert.equal(stillCleaning.primaryCommand, "check_cleanup");
+
+  const completed = view("cleanup_complete", "prepare_manager");
+  assert.equal(completed.primaryAction, null);
+  assert.equal(completed.primaryCommand, null);
+});
+
 test("only ready and limited states can return to Reverse Engineering", () => {
   const statuses: readonly AwsImportAccessStatus[] = [
     "check_required",

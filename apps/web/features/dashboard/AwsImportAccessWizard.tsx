@@ -285,8 +285,8 @@ export function AwsImportAccessWizardView({
       <div className={styles.importAccessPreserved}>
         <strong>기존 AWS 연결과 배포 권한은 그대로 유지됩니다.</strong>
         <ul>
-          <li>기존 AWS 연결 Role 유지</li>
-          <li>처음 만든 AWS 연결 Stack 유지</li>
+          <li>기존 AWS 연결 유지</li>
+          <li>현재 배포 환경 유지</li>
           <li>기존 Terraform 배포 권한 유지</li>
         </ul>
       </div>
