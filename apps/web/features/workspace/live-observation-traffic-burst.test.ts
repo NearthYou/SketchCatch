@@ -4,6 +4,7 @@ import type { LiveObservationV2Snapshot } from "@sketchcatch/types";
 
 import {
   appendLiveObservationParticleIds,
+  getLiveObservationAnimatedParticleCount,
   getLiveObservationTrafficIntensity,
   mergeLiveObservationRequestBursts,
   getLiveObservationTrafficBurst,
@@ -39,7 +40,11 @@ test("renders up to twenty-four requests before summarizing the overflow", () =>
     { overflowCount: 226, visibleParticleCount: 24 }
   );
 });
-
+test("keeps the animation particle budget below the exact request counter", () => {
+  assert.equal(getLiveObservationAnimatedParticleCount(24), 12);
+  assert.equal(getLiveObservationAnimatedParticleCount(250), 12);
+  assert.equal(getLiveObservationAnimatedParticleCount(3), 3);
+});
 test("merges rapid single-request snapshots into one dense visual burst", () => {
   let burst = null;
 

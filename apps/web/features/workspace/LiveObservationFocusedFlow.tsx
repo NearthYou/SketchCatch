@@ -32,6 +32,7 @@ import {
 } from "./live-observation-capacity-projection";
 import {
   appendLiveObservationParticleIds,
+  getLiveObservationAnimatedParticleCount,
   getLiveObservationTrafficIntensity,
   getLiveObservationTrafficBurst,
   getLiveObservationTrafficCursor,
@@ -209,10 +210,12 @@ export function LiveObservationFocusedFlow({
     );
   }
 
-  const particleIds = burst?.particleIds ?? [];
   const burstRequestCount = burst
     ? burst.visibleParticleCount + burst.overflowCount
     : 0;
+  const particleIds = burst
+    ? burst.particleIds.slice(-getLiveObservationAnimatedParticleCount(burstRequestCount))
+    : [];
   const trafficIntensity = getLiveObservationTrafficIntensity(
     burstRequestCount,
     snapshot?.live.pressureLevel ?? "normal"
