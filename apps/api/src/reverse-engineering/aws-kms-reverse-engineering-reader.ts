@@ -4,6 +4,7 @@ import {
   GetKeyPolicyCommand,
   GetKeyRotationStatusCommand,
   ListAliasesCommand,
+  ListGrantsCommand,
   ListKeysCommand,
   ListResourceTagsCommand,
   type AliasListEntry,
@@ -71,6 +72,7 @@ type KmsDetailResult = {
   readonly keyId?: string;
   readonly providerResourceId?: string;
   readonly managementReady?: boolean;
+  readonly reverseEngineeringDetailsComplete?: boolean;
 };
 
 type CreatedKmsAliasRecord = {
@@ -86,6 +88,11 @@ type KmsTag = {
 type KmsRotationStatus = {
   readonly enabled: boolean;
   readonly periodInDays?: number;
+};
+
+type KmsGrantsResult = {
+  readonly count: number;
+  readonly complete: boolean;
 };
 
 /**
@@ -127,9 +134,17 @@ export async function readKmsResources(input: ReadKmsResourcesInput): Promise<Aw
         : []
     )
   );
+  const detailsCompleteByKeyId = new Map(
+    details.flatMap((detail) =>
+      detail.keyId && detail.reverseEngineeringDetailsComplete !== undefined
+        ? [[detail.keyId, detail.reverseEngineeringDetailsComplete] as const]
+        : []
+    )
+  );
   const aliasDetails = aliasesResult.aliases.flatMap((alias) =>
     createAliasRecord(alias, input.region, {
       inventoryComplete: aliasesResult.complete && keysResult.complete,
+      detailsCompleteByKeyId,
       managementReadyByKeyId,
       providerIdByKeyId
     })
@@ -280,6 +295,12 @@ async function readKeyDetails(input: {
     input.failures,
     selectKmsRotationStatus
   );
+  const grants = await readAllKeyGrants(
+    input.client,
+    resolvedKeyId ?? providerResourceId,
+    providerResourceId,
+    input.failures
+  );
   const tags = await readAllKeyTags(
     input.client,
     resolvedKeyId ?? providerResourceId,
@@ -290,6 +311,8 @@ async function readKeyDetails(input: {
     metadata !== undefined &&
     policyDocument !== undefined &&
     rotationStatus !== undefined &&
+    grants.complete &&
+    grants.count === 0 &&
     tags.complete &&
     input.aliasesComplete &&
     input.keysComplete;
@@ -305,6 +328,7 @@ async function readKeyDetails(input: {
     ...(resolvedKeyId ? { keyId: resolvedKeyId } : {}),
     providerResourceId,
     managementReady,
+    reverseEngineeringDetailsComplete: detailsComplete,
     serverOnlyDetail: {
       providerResourceId,
       resourceKind: "key",
@@ -330,6 +354,9 @@ async function readKeyDetails(input: {
         keySpec: metadata?.KeySpec,
         keyState: metadata?.KeyState,
         keyUsage: metadata?.KeyUsage,
+        grantCount: grants.complete ? grants.count : undefined,
+        grantsReadComplete: grants.complete,
+        hasGrants: grants.complete ? grants.count > 0 : grants.count > 0 ? true : undefined,
         managementReady,
         multiRegion: metadata?.MultiRegion,
         origin: metadata?.Origin,
@@ -348,6 +375,67 @@ async function readKeyDetails(input: {
       relationships: []
     }
   };
+}
+
+/** gg: Grant 원문은 저장하지 않고 전체 pagination의 개수와 완료 여부만 관리 안전성 판단에 씁니다. */
+async function readAllKeyGrants(
+  client: AwsKmsDetailedReadClient,
+  keyId: string,
+  providerResourceId: string,
+  failures: AwsKmsReadFailure[]
+): Promise<KmsGrantsResult> {
+  const seenMarkers = new Set<string>();
+  let count = 0;
+  let marker: string | undefined;
+
+  for (;;) {
+    try {
+      const response = (await client.send(
+        new ListGrantsCommand({ KeyId: keyId, Marker: marker })
+      )) as {
+        Grants?: unknown;
+        NextMarker?: string;
+        Truncated?: boolean;
+      };
+      if (response.Grants !== undefined && !Array.isArray(response.Grants)) {
+        failures.push({
+          operation: "ListGrantsResponse",
+          outcome: "transient",
+          resourceId: createKmsFailureResourceRef(providerResourceId)
+        });
+        return { count, complete: false };
+      }
+      count += Array.isArray(response.Grants) ? response.Grants.length : 0;
+      if (response.Truncated === false && response.NextMarker === undefined) {
+        return { count, complete: true };
+      }
+      if (response.Truncated !== true || !isNonEmptyString(response.NextMarker)) {
+        failures.push({
+          operation: "ListGrantsPagination",
+          outcome: "transient",
+          resourceId: createKmsFailureResourceRef(providerResourceId)
+        });
+        return { count, complete: false };
+      }
+      if (seenMarkers.has(response.NextMarker)) {
+        failures.push({
+          operation: "ListGrantsPagination",
+          outcome: "transient",
+          resourceId: createKmsFailureResourceRef(providerResourceId)
+        });
+        return { count, complete: false };
+      }
+      seenMarkers.add(response.NextMarker);
+      marker = response.NextMarker;
+    } catch (error) {
+      failures.push({
+        operation: "ListGrants",
+        outcome: classifyKmsReadFailure(error),
+        resourceId: createKmsFailureResourceRef(providerResourceId)
+      });
+      return { count, complete: false };
+    }
+  }
 }
 
 /** gg: 태그 pagination 실패 시 부분 태그를 완전한 설정으로 오인하지 않게 표시합니다. */
@@ -456,7 +544,9 @@ function selectKmsPolicyDocument(response: unknown): string | undefined {
   if (typeof policy !== "string" || policy.trim().length === 0) return undefined;
   try {
     const parsed = JSON.parse(policy) as unknown;
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? policy : undefined;
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? policy
+      : undefined;
   } catch {
     return undefined;
   }
@@ -523,6 +613,7 @@ function createAliasRecord(
   region: string,
   input: {
     readonly inventoryComplete: boolean;
+    readonly detailsCompleteByKeyId: ReadonlyMap<string, boolean>;
     readonly managementReadyByKeyId: ReadonlyMap<string, boolean>;
     readonly providerIdByKeyId: ReadonlyMap<string, string>;
   }
@@ -531,7 +622,10 @@ function createAliasRecord(
   const targetProviderResourceId =
     input.providerIdByKeyId.get(alias.TargetKeyId) ?? alias.TargetKeyId;
   const awsManaged = alias.AliasName.startsWith("alias/aws/");
-  const detailsComplete = input.inventoryComplete && input.providerIdByKeyId.has(alias.TargetKeyId);
+  const detailsComplete =
+    input.inventoryComplete &&
+    input.providerIdByKeyId.has(alias.TargetKeyId) &&
+    input.detailsCompleteByKeyId.get(alias.TargetKeyId) === true;
   const managementReady =
     detailsComplete && !awsManaged && input.managementReadyByKeyId.get(alias.TargetKeyId) === true;
 

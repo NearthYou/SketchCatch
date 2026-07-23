@@ -99,10 +99,13 @@ import {
   GetKeyRotationStatusCommand,
   KMSClient,
   ListAliasesCommand as ListKmsAliasesCommand,
+  ListGrantsCommand,
   ListKeysCommand,
   ListResourceTagsCommand
 } from "@aws-sdk/client-kms";
 import {
+  GetFunctionCodeSigningConfigCommand,
+  GetFunctionConcurrencyCommand,
   GetFunctionCommand,
   GetPolicyCommand,
   LambdaClient,
@@ -142,10 +145,7 @@ import {
   createAwsSdkStsGateway,
   type AwsTemporaryCredentials
 } from "./aws-connection-test-service.js";
-import {
-  AWS_IMPORT_READERS,
-  type AwsImportServiceKey
-} from "./aws-import-access-catalog.js";
+import { AWS_IMPORT_READERS, type AwsImportServiceKey } from "./aws-import-access-catalog.js";
 
 export type AwsImportProbeOutcome =
   | "success"
@@ -208,30 +208,28 @@ export type ProbeAwsImportAccessDependencies = {
 const defaultReadTimeoutMs = 90_000;
 
 /** gg: registry는 catalog의 literal serviceKey마다 bounded production executor 하나만 둡니다. */
-export const AWS_IMPORT_PROBE_EXECUTORS: ReadonlyMap<
-  AwsImportServiceKey,
-  AwsImportProbeExecutor
-> = new Map([
-  ["ec2", probeEc2],
-  ["s3", probeS3Executor],
-  ["rds", probeRds],
-  ["elbv2", probeElbv2],
-  ["ecs", probeEcs],
-  ["cloudfront", probeCloudFront],
-  ["ecr", probeEcrExecutor],
-  ["secretsmanager", probeSecretsManagerExecutor],
-  ["application-autoscaling", probeApplicationAutoScalingExecutor],
-  ["resource-explorer", probeResourceExplorerExecutor],
-  ["tagging", probeTagging],
-  ["iam", probeIam],
-  ["kms", probeKms],
-  ["logs", probeLogs],
-  ["cloudwatch", probeCloudWatch],
-  ["apigateway", probeApiGateway],
-  ["lambda", probeLambdaExecutor],
-  ["eventbridge", probeEventBridgeExecutor],
-  ["ami", probeAmi]
-]);
+export const AWS_IMPORT_PROBE_EXECUTORS: ReadonlyMap<AwsImportServiceKey, AwsImportProbeExecutor> =
+  new Map([
+    ["ec2", probeEc2],
+    ["s3", probeS3Executor],
+    ["rds", probeRds],
+    ["elbv2", probeElbv2],
+    ["ecs", probeEcs],
+    ["cloudfront", probeCloudFront],
+    ["ecr", probeEcrExecutor],
+    ["secretsmanager", probeSecretsManagerExecutor],
+    ["application-autoscaling", probeApplicationAutoScalingExecutor],
+    ["resource-explorer", probeResourceExplorerExecutor],
+    ["tagging", probeTagging],
+    ["iam", probeIam],
+    ["kms", probeKms],
+    ["logs", probeLogs],
+    ["cloudwatch", probeCloudWatch],
+    ["apigateway", probeApiGateway],
+    ["lambda", probeLambdaExecutor],
+    ["eventbridge", probeEventBridgeExecutor],
+    ["ami", probeAmi]
+  ]);
 
 /** gg: 한 번의 target Role session만 만든 뒤 모든 bounded reader에 같은 credentials를 전달합니다. */
 export async function probeAwsImportAccess(
@@ -300,14 +298,14 @@ export async function probeResourceExplorer(
 ): Promise<AwsImportProbeOutcome> {
   let defaultView: { ViewArn?: string };
   try {
-    defaultView = await client.send(new GetDefaultViewCommand({})) as { ViewArn?: string };
+    defaultView = (await client.send(new GetDefaultViewCommand({}))) as { ViewArn?: string };
   } catch (error) {
     return classifyReadError(error);
   }
   if (!defaultView.ViewArn) return "not_configured";
   let view: { View?: { ViewArn?: string } };
   try {
-    view = await client.send(new GetViewCommand({ ViewArn: defaultView.ViewArn })) as {
+    view = (await client.send(new GetViewCommand({ ViewArn: defaultView.ViewArn }))) as {
       View?: { ViewArn?: string };
     };
   } catch (error) {
@@ -315,11 +313,13 @@ export async function probeResourceExplorer(
   }
   if (!view.View?.ViewArn) return "not_configured";
   try {
-    await client.send(new SearchCommand({
-      ViewArn: view.View.ViewArn,
-      QueryString: "*",
-      MaxResults: 1
-    }));
+    await client.send(
+      new SearchCommand({
+        ViewArn: view.View.ViewArn,
+        QueryString: "*",
+        MaxResults: 1
+      })
+    );
     return "success";
   } catch (error) {
     return isAccessDeniedError(error) ? "permission_denied" : "transient";
@@ -357,16 +357,18 @@ function deriveProbeResult(
         : "ready";
   return {
     status,
-    coreReady: coreResults.length > 0 && coreResults.every((result) => result.outcome === "success"),
+    coreReady:
+      coreResults.length > 0 && coreResults.every((result) => result.outcome === "success"),
     serviceResults,
     limitedServiceLabels: expandedFailures.map((result) => result.displayName),
-    safeErrorCode: status === "retry_required"
-      ? "core_read_retry"
-      : status === "update_required"
-        ? "core_read_permission_required"
-        : status === "limited"
-          ? "expanded_reads_limited"
-          : null
+    safeErrorCode:
+      status === "retry_required"
+        ? "core_read_retry"
+        : status === "update_required"
+          ? "core_read_permission_required"
+          : status === "limited"
+            ? "expanded_reads_limited"
+            : null
   };
 }
 
@@ -381,46 +383,73 @@ function classifyReadError(error: unknown): AwsImportProbeOutcome {
 function isBootstrapCredentialError(error: unknown): boolean {
   const name = errorName(error);
   const message = errorMessage(error).toLowerCase();
-  return name === "CredentialsProviderError" || name === "TokenProviderError" ||
-    name === "ExpiredToken" || name === "ExpiredTokenException" ||
-    name === "InvalidClientTokenId" || name === "UnrecognizedClientException" ||
-    message.includes("could not load credentials") || message.includes("sso session");
+  return (
+    name === "CredentialsProviderError" ||
+    name === "TokenProviderError" ||
+    name === "ExpiredToken" ||
+    name === "ExpiredTokenException" ||
+    name === "InvalidClientTokenId" ||
+    name === "UnrecognizedClientException" ||
+    message.includes("could not load credentials") ||
+    message.includes("sso session")
+  );
 }
 
 /** gg: explicit target Role identity/trust failures만 Settings 복구로 안내합니다. */
 function isConnectionConfigurationError(error: unknown): boolean {
   const name = errorName(error);
-  return isAccessDeniedError(error) || name === "ValidationError" ||
-    name === "NoSuchEntity" || name === "NoSuchEntityException";
+  return (
+    isAccessDeniedError(error) ||
+    name === "ValidationError" ||
+    name === "NoSuchEntity" ||
+    name === "NoSuchEntityException"
+  );
 }
 
 /** gg: target API permission 오류만 permission_denied outcome으로 분류합니다. */
 function isAccessDeniedError(error: unknown): boolean {
   const name = errorName(error);
   const message = errorMessage(error).toLowerCase();
-  return name === "AccessDenied" || name === "AccessDeniedException" ||
-    name === "UnauthorizedOperation" || message.includes("not authorized to perform");
+  return (
+    name === "AccessDenied" ||
+    name === "AccessDeniedException" ||
+    name === "UnauthorizedOperation" ||
+    message.includes("not authorized to perform")
+  );
 }
 
 /** gg: optional AWS setup 부재는 permission denial과 다른 safe outcome으로 유지합니다. */
 function isMissingConfigurationError(error: unknown): boolean {
   const name = errorName(error);
-  return name === "ResourceNotFoundException" || name === "NoSuchConfiguration" ||
-    name === "NoSuchWebsiteConfiguration" || name === "NoSuchTagSet" ||
-    name === "NoSuchPublicAccessBlockConfiguration" || name === "NoSuchBucketPolicy" ||
-    name === "ServerSideEncryptionConfigurationNotFoundError";
+  return (
+    name === "ResourceNotFoundException" ||
+    name === "NoSuchConfiguration" ||
+    name === "NoSuchWebsiteConfiguration" ||
+    name === "NoSuchTagSet" ||
+    name === "NoSuchPublicAccessBlockConfiguration" ||
+    name === "NoSuchBucketPolicy" ||
+    name === "ServerSideEncryptionConfigurationNotFoundError"
+  );
 }
 
 /** gg: SDK error name만 내부 분류에 읽고 결과에는 보존하지 않습니다. */
 function errorName(error: unknown): string {
-  return typeof error === "object" && error !== null && "name" in error &&
-    typeof error.name === "string" ? error.name : "";
+  return typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    typeof error.name === "string"
+    ? error.name
+    : "";
 }
 
 /** gg: SDK error message는 bootstrap 분류에만 사용하고 결과에는 보존하지 않습니다. */
 function errorMessage(error: unknown): string {
-  return typeof error === "object" && error !== null && "message" in error &&
-    typeof error.message === "string" ? error.message : "";
+  return typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+    ? error.message
+    : "";
 }
 
 /** gg: EC2 core action은 pagination token을 따르지 않는 단일 요청씩만 보냅니다. */
@@ -468,10 +497,8 @@ async function probeS3Executor(
 }
 
 /** gg: S3는 bucket 목록 한 page와 첫 bucket의 optional 설정만 확인합니다. */
-export async function probeS3(
-  client: AwsImportProbeReadClient
-): Promise<AwsImportProbeOutcome> {
-  const listed = await client.send(new ListBucketsCommand({ MaxBuckets: 1 })) as {
+export async function probeS3(client: AwsImportProbeReadClient): Promise<AwsImportProbeOutcome> {
+  const listed = (await client.send(new ListBucketsCommand({ MaxBuckets: 1 }))) as {
     Buckets?: Array<{ Name?: string }>;
   };
   const bucket = listed.Buckets?.[0]?.Name;
@@ -515,34 +542,42 @@ async function probeElbv2(context: AwsImportProbeExecutorContext): Promise<AwsIm
 export async function probeElbv2Topology(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  const listed = await client.send(new DescribeLoadBalancersCommand({ PageSize: 1 })) as {
+  const listed = (await client.send(new DescribeLoadBalancersCommand({ PageSize: 1 }))) as {
     LoadBalancers?: Array<{ LoadBalancerArn?: string }>;
   };
   const loadBalancerArn = listed.LoadBalancers?.[0]?.LoadBalancerArn;
   if (!loadBalancerArn) return "success";
-  await client.send(new DescribeLoadBalancerAttributesCommand({ LoadBalancerArn: loadBalancerArn }));
+  await client.send(
+    new DescribeLoadBalancerAttributesCommand({ LoadBalancerArn: loadBalancerArn })
+  );
   await client.send(new DescribeElbv2TagsCommand({ ResourceArns: [loadBalancerArn] }));
-  const targetGroups = await client.send(new DescribeTargetGroupsCommand({
-    LoadBalancerArn: loadBalancerArn,
-    PageSize: 1
-  })) as { TargetGroups?: Array<{ TargetGroupArn?: string }> };
+  const targetGroups = (await client.send(
+    new DescribeTargetGroupsCommand({
+      LoadBalancerArn: loadBalancerArn,
+      PageSize: 1
+    })
+  )) as { TargetGroups?: Array<{ TargetGroupArn?: string }> };
   const targetGroupArn = targetGroups.TargetGroups?.[0]?.TargetGroupArn;
   if (targetGroupArn) {
     await client.send(new DescribeTargetGroupAttributesCommand({ TargetGroupArn: targetGroupArn }));
     await client.send(new DescribeElbv2TagsCommand({ ResourceArns: [targetGroupArn] }));
   }
-  const listeners = await client.send(new DescribeListenersCommand({
-    LoadBalancerArn: loadBalancerArn,
-    PageSize: 1
-  })) as { Listeners?: Array<{ ListenerArn?: string; Protocol?: string }> };
+  const listeners = (await client.send(
+    new DescribeListenersCommand({
+      LoadBalancerArn: loadBalancerArn,
+      PageSize: 1
+    })
+  )) as { Listeners?: Array<{ ListenerArn?: string; Protocol?: string }> };
   const listener = listeners.Listeners?.[0];
   if (listener?.ListenerArn) {
     await client.send(new DescribeListenerAttributesCommand({ ListenerArn: listener.ListenerArn }));
     if (listener.Protocol === "HTTPS" || listener.Protocol === "TLS") {
-      await client.send(new DescribeListenerCertificatesCommand({
-        ListenerArn: listener.ListenerArn,
-        PageSize: 1
-      }));
+      await client.send(
+        new DescribeListenerCertificatesCommand({
+          ListenerArn: listener.ListenerArn,
+          PageSize: 1
+        })
+      );
     }
   }
   return "success";
@@ -561,7 +596,9 @@ async function probeEcs(context: AwsImportProbeExecutorContext): Promise<AwsImpo
   const services = await client.send(new ListServicesCommand({ cluster, maxResults: 1 }));
   const service = services.serviceArns?.[0];
   if (!service) return "success";
-  const described = await client.send(new DescribeServicesCommand({ cluster, services: [service] }));
+  const described = await client.send(
+    new DescribeServicesCommand({ cluster, services: [service] })
+  );
   const taskDefinition = described.services?.[0]?.taskDefinition;
   if (taskDefinition) {
     await client.send(new DescribeTaskDefinitionCommand({ taskDefinition }));
@@ -570,7 +607,9 @@ async function probeEcs(context: AwsImportProbeExecutorContext): Promise<AwsImpo
 }
 
 /** gg: CloudFront global list는 continuation marker를 따르지 않습니다. */
-async function probeCloudFront(context: AwsImportProbeExecutorContext): Promise<AwsImportProbeOutcome> {
+async function probeCloudFront(
+  context: AwsImportProbeExecutorContext
+): Promise<AwsImportProbeOutcome> {
   const client = bindAbortSignal(
     new CloudFrontClient({ region: context.region, credentials: context.credentials }),
     context.abortSignal
@@ -584,14 +623,14 @@ async function probeCloudFront(context: AwsImportProbeExecutorContext): Promise<
 export async function probeCloudFrontTopology(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  const distributions = await client.send(new ListDistributionsCommand({ MaxItems: 1 })) as {
+  const distributions = (await client.send(new ListDistributionsCommand({ MaxItems: 1 }))) as {
     DistributionList?: { Items?: Array<{ ARN?: string }> };
   };
   const distributionArn = distributions.DistributionList?.Items?.[0]?.ARN;
   if (distributionArn) {
     await client.send(new ListCloudFrontTagsForResourceCommand({ Resource: distributionArn }));
   }
-  const listed = await client.send(new ListOriginAccessControlsCommand({ MaxItems: 1 })) as {
+  const listed = (await client.send(new ListOriginAccessControlsCommand({ MaxItems: 1 }))) as {
     OriginAccessControlList?: { Items?: Array<{ Id?: string }> };
   };
   const originAccessControlId = listed.OriginAccessControlList?.Items?.[0]?.Id;
@@ -615,10 +654,8 @@ async function probeEcrExecutor(
 }
 
 /** gg: 첫 ECR Repository의 identity와 tag metadata만 읽습니다. */
-export async function probeEcr(
-  client: AwsImportProbeReadClient
-): Promise<AwsImportProbeOutcome> {
-  const listed = await client.send(new DescribeRepositoriesCommand({ maxResults: 1 })) as {
+export async function probeEcr(client: AwsImportProbeReadClient): Promise<AwsImportProbeOutcome> {
+  const listed = (await client.send(new DescribeRepositoriesCommand({ maxResults: 1 }))) as {
     repositories?: Array<{ repositoryArn?: string }>;
   };
   const repositoryArn = listed.repositories?.[0]?.repositoryArn;
@@ -645,7 +682,7 @@ async function probeSecretsManagerExecutor(
 export async function probeSecretsManager(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  const listed = await client.send(new ListSecretsCommand({ MaxResults: 1 })) as {
+  const listed = (await client.send(new ListSecretsCommand({ MaxResults: 1 }))) as {
     SecretList?: Array<{ ARN?: string; Name?: string }>;
   };
   const secretId = listed.SecretList?.[0]?.ARN ?? listed.SecretList?.[0]?.Name;
@@ -673,10 +710,12 @@ async function probeApplicationAutoScalingExecutor(
 export async function probeApplicationAutoScaling(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  const listed = await client.send(new DescribeScalableTargetsCommand({
-    ServiceNamespace: "ecs",
-    MaxResults: 1
-  })) as {
+  const listed = (await client.send(
+    new DescribeScalableTargetsCommand({
+      ServiceNamespace: "ecs",
+      MaxResults: 1
+    })
+  )) as {
     ScalableTargets?: Array<{
       ResourceId?: string;
       ScalableDimension?: "ecs:service:DesiredCount";
@@ -686,17 +725,21 @@ export async function probeApplicationAutoScaling(
   };
   const target = listed.ScalableTargets?.[0];
   if (target?.ResourceId && target.ScalableDimension && target.ServiceNamespace) {
-    await client.send(new DescribeScalingPoliciesCommand({
-      ResourceId: target.ResourceId,
-      ScalableDimension: target.ScalableDimension,
-      ServiceNamespace: target.ServiceNamespace,
-      MaxResults: 1
-    }));
+    await client.send(
+      new DescribeScalingPoliciesCommand({
+        ResourceId: target.ResourceId,
+        ScalableDimension: target.ScalableDimension,
+        ServiceNamespace: target.ServiceNamespace,
+        MaxResults: 1
+      })
+    );
   }
   if (target?.ScalableTargetARN) {
-    await client.send(new ListApplicationAutoScalingTagsForResourceCommand({
-      ResourceARN: target.ScalableTargetARN
-    }));
+    await client.send(
+      new ListApplicationAutoScalingTagsForResourceCommand({
+        ResourceARN: target.ScalableTargetARN
+      })
+    );
   }
   return "success";
 }
@@ -713,9 +756,14 @@ async function probeResourceExplorerExecutor(
 }
 
 /** gg: Tagging API는 한 resource만 요청하고 pagination token을 따르지 않습니다. */
-async function probeTagging(context: AwsImportProbeExecutorContext): Promise<AwsImportProbeOutcome> {
+async function probeTagging(
+  context: AwsImportProbeExecutorContext
+): Promise<AwsImportProbeOutcome> {
   const client = bindAbortSignal(
-    new ResourceGroupsTaggingAPIClient({ region: context.region, credentials: context.credentials }),
+    new ResourceGroupsTaggingAPIClient({
+      region: context.region,
+      credentials: context.credentials
+    }),
     context.abortSignal
   );
   await client.send(new GetResourcesCommand({ ResourcesPerPage: 1 }));
@@ -737,7 +785,7 @@ async function probeIam(context: AwsImportProbeExecutorContext): Promise<AwsImpo
 export async function probeIamRoleAttachments(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  const roles = await client.send(new ListRolesCommand({ MaxItems: 1 })) as {
+  const roles = (await client.send(new ListRolesCommand({ MaxItems: 1 }))) as {
     Roles?: Array<{ RoleName?: string }>;
   };
   const roleName = roles.Roles?.[0]?.RoleName;
@@ -745,58 +793,74 @@ export async function probeIamRoleAttachments(
   if (roleName) {
     await client.send(new GetRoleCommand({ RoleName: roleName }));
     await client.send(new ListRoleTagsCommand({ RoleName: roleName, MaxItems: 1 }));
-    const attachedPolicies = await client.send(new ListAttachedRolePoliciesCommand({
-      RoleName: roleName,
-      MaxItems: 1
-    })) as { AttachedPolicies?: Array<{ PolicyArn?: string }> };
+    const attachedPolicies = (await client.send(
+      new ListAttachedRolePoliciesCommand({
+        RoleName: roleName,
+        MaxItems: 1
+      })
+    )) as { AttachedPolicies?: Array<{ PolicyArn?: string }> };
     attachedPolicyArn = attachedPolicies.AttachedPolicies?.[0]?.PolicyArn;
-    const inlinePolicies = await client.send(new ListRolePoliciesCommand({
-      RoleName: roleName,
-      MaxItems: 1
-    })) as { PolicyNames?: string[] };
+    const inlinePolicies = (await client.send(
+      new ListRolePoliciesCommand({
+        RoleName: roleName,
+        MaxItems: 1
+      })
+    )) as { PolicyNames?: string[] };
     const inlinePolicyName = inlinePolicies.PolicyNames?.[0];
     if (inlinePolicyName) {
-      await client.send(new GetRolePolicyCommand({
-        RoleName: roleName,
-        PolicyName: inlinePolicyName
-      }));
+      await client.send(
+        new GetRolePolicyCommand({
+          RoleName: roleName,
+          PolicyName: inlinePolicyName
+        })
+      );
     }
   }
 
-  const listedPolicies = await client.send(new ListPoliciesCommand({
-    MaxItems: 1,
-    Scope: "Local"
-  })) as { Policies?: Array<{ Arn?: string; DefaultVersionId?: string }> };
+  const listedPolicies = (await client.send(
+    new ListPoliciesCommand({
+      MaxItems: 1,
+      Scope: "Local"
+    })
+  )) as { Policies?: Array<{ Arn?: string; DefaultVersionId?: string }> };
   const localPolicy = listedPolicies.Policies?.[0];
   const policyArn = localPolicy?.Arn ?? attachedPolicyArn;
   if (policyArn) {
-    const policy = await client.send(new GetIamPolicyCommand({ PolicyArn: policyArn })) as {
+    const policy = (await client.send(new GetIamPolicyCommand({ PolicyArn: policyArn }))) as {
       Policy?: { DefaultVersionId?: string };
     };
     const defaultVersionId = policy.Policy?.DefaultVersionId ?? localPolicy?.DefaultVersionId;
     if (defaultVersionId) {
-      await client.send(new GetPolicyVersionCommand({
-        PolicyArn: policyArn,
-        VersionId: defaultVersionId
-      }));
+      await client.send(
+        new GetPolicyVersionCommand({
+          PolicyArn: policyArn,
+          VersionId: defaultVersionId
+        })
+      );
     }
     if (localPolicy?.Arn === policyArn) {
       await client.send(new ListPolicyTagsCommand({ PolicyArn: policyArn }));
     }
   }
 
-  const instanceProfiles = await client.send(new ListInstanceProfilesCommand({ MaxItems: 1 })) as {
+  const instanceProfiles = (await client.send(
+    new ListInstanceProfilesCommand({ MaxItems: 1 })
+  )) as {
     InstanceProfiles?: Array<{ InstanceProfileName?: string }>;
   };
   const instanceProfileName = instanceProfiles.InstanceProfiles?.[0]?.InstanceProfileName;
   if (instanceProfileName) {
-    await client.send(new GetInstanceProfileCommand({
-      InstanceProfileName: instanceProfileName
-    }));
-    await client.send(new ListInstanceProfileTagsCommand({
-      InstanceProfileName: instanceProfileName,
-      MaxItems: 1
-    }));
+    await client.send(
+      new GetInstanceProfileCommand({
+        InstanceProfileName: instanceProfileName
+      })
+    );
+    await client.send(
+      new ListInstanceProfileTagsCommand({
+        InstanceProfileName: instanceProfileName,
+        MaxItems: 1
+      })
+    );
   }
   return "success";
 }
@@ -816,7 +880,7 @@ async function probeKms(context: AwsImportProbeExecutorContext): Promise<AwsImpo
 export async function probeKmsMetadata(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  const listed = await client.send(new ListKeysCommand({ Limit: 1 })) as {
+  const listed = (await client.send(new ListKeysCommand({ Limit: 1 }))) as {
     Keys?: Array<{ KeyId?: string }>;
   };
   const keyId = listed.Keys?.[0]?.KeyId;
@@ -824,6 +888,7 @@ export async function probeKmsMetadata(
   await client.send(new DescribeKeyCommand({ KeyId: keyId }));
   await client.send(new GetKeyPolicyCommand({ KeyId: keyId, PolicyName: "default" }));
   await client.send(new GetKeyRotationStatusCommand({ KeyId: keyId }));
+  await client.send(new ListGrantsCommand({ KeyId: keyId, Limit: 1 }));
   await client.send(new ListResourceTagsCommand({ KeyId: keyId, Limit: 1 }));
   await client.send(new ListKmsAliasesCommand({ KeyId: keyId, Limit: 1 }));
   return "success";
@@ -844,7 +909,7 @@ async function probeLogs(context: AwsImportProbeExecutorContext): Promise<AwsImp
 export async function probeLogsMetadata(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  const listed = await client.send(new DescribeLogGroupsCommand({ limit: 1 })) as {
+  const listed = (await client.send(new DescribeLogGroupsCommand({ limit: 1 }))) as {
     logGroups?: Array<{ arn?: string; logGroupArn?: string }>;
   };
   const logGroup = listed.logGroups?.[0];
@@ -856,7 +921,9 @@ export async function probeLogsMetadata(
 }
 
 /** gg: CloudWatch alarms는 한 건 page만 읽고 nextToken을 따르지 않습니다. */
-async function probeCloudWatch(context: AwsImportProbeExecutorContext): Promise<AwsImportProbeOutcome> {
+async function probeCloudWatch(
+  context: AwsImportProbeExecutorContext
+): Promise<AwsImportProbeOutcome> {
   const client = bindAbortSignal(
     new CloudWatchClient({ region: context.region, credentials: context.credentials }),
     context.abortSignal
@@ -870,12 +937,11 @@ async function probeCloudWatch(context: AwsImportProbeExecutorContext): Promise<
 export async function probeCloudWatchMetadata(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  const listed = await client.send(new DescribeAlarmsCommand({ MaxRecords: 1 })) as {
+  const listed = (await client.send(new DescribeAlarmsCommand({ MaxRecords: 1 }))) as {
     CompositeAlarms?: Array<{ AlarmArn?: string }>;
     MetricAlarms?: Array<{ AlarmArn?: string }>;
   };
-  const resourceArn = listed.CompositeAlarms?.[0]?.AlarmArn ??
-    listed.MetricAlarms?.[0]?.AlarmArn;
+  const resourceArn = listed.CompositeAlarms?.[0]?.AlarmArn ?? listed.MetricAlarms?.[0]?.AlarmArn;
   if (resourceArn) {
     await client.send(new ListCloudWatchTagsForResourceCommand({ ResourceARN: resourceArn }));
   }
@@ -883,7 +949,9 @@ export async function probeCloudWatchMetadata(
 }
 
 /** gg: API Gateway production executor는 첫 REST API topology probe만 실행합니다. */
-async function probeApiGateway(context: AwsImportProbeExecutorContext): Promise<AwsImportProbeOutcome> {
+async function probeApiGateway(
+  context: AwsImportProbeExecutorContext
+): Promise<AwsImportProbeOutcome> {
   const client = bindAbortSignal(
     new APIGatewayClient({ region: context.region, credentials: context.credentials }),
     context.abortSignal
@@ -897,34 +965,40 @@ async function probeApiGateway(context: AwsImportProbeExecutorContext): Promise<
 export async function probeApiGatewayTopology(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  const listed = await client.send(new GetRestApisCommand({ limit: 1 })) as {
+  const listed = (await client.send(new GetRestApisCommand({ limit: 1 }))) as {
     items?: Array<{ id?: string }>;
   };
   const restApiId = listed.items?.[0]?.id;
   if (!restApiId) return "success";
 
-  const resources = await client.send(new GetApiGatewayResourcesCommand({
-    restApiId,
-    limit: 1,
-    embed: ["methods"]
-  })) as {
+  const resources = (await client.send(
+    new GetApiGatewayResourcesCommand({
+      restApiId,
+      limit: 1,
+      embed: ["methods"]
+    })
+  )) as {
     items?: Array<{ id?: string; resourceMethods?: Record<string, unknown> }>;
   };
   const resource = resources.items?.[0];
   const resourceId = resource?.id;
   const httpMethod = Object.keys(resource?.resourceMethods ?? {})[0];
   if (resourceId && httpMethod) {
-    await client.send(new GetMethodCommand({
-      restApiId,
-      resourceId,
-      httpMethod
-    }));
-    try {
-      await client.send(new GetIntegrationCommand({
+    await client.send(
+      new GetMethodCommand({
         restApiId,
         resourceId,
         httpMethod
-      }));
+      })
+    );
+    try {
+      await client.send(
+        new GetIntegrationCommand({
+          restApiId,
+          resourceId,
+          httpMethod
+        })
+      );
     } catch (error) {
       if (errorName(error) !== "NotFoundException") throw error;
     }
@@ -954,15 +1028,19 @@ async function probeLambdaExecutor(
 export async function probeLambda(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  const listed = await client.send(new ListFunctionsCommand({ MaxItems: 1 })) as {
+  const listed = (await client.send(new ListFunctionsCommand({ MaxItems: 1 }))) as {
     Functions?: Array<{ FunctionName?: string; FunctionArn?: string }>;
   };
   const listedFunction = listed.Functions?.[0];
   const functionName = listedFunction?.FunctionName;
   if (!functionName) return "success";
-  const functionDetail = await client.send(new GetFunctionCommand({ FunctionName: functionName })) as {
+  const functionDetail = (await client.send(
+    new GetFunctionCommand({ FunctionName: functionName })
+  )) as {
     Configuration?: { FunctionArn?: string };
   };
+  await client.send(new GetFunctionConcurrencyCommand({ FunctionName: functionName }));
+  await client.send(new GetFunctionCodeSigningConfigCommand({ FunctionName: functionName }));
   try {
     await client.send(new GetPolicyCommand({ FunctionName: functionName }));
   } catch (error) {
@@ -993,23 +1071,27 @@ async function probeEventBridgeExecutor(
 export async function probeEventBridge(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
-  const listedBuses = await client.send(new ListEventBusesCommand({ Limit: 1 })) as {
+  const listedBuses = (await client.send(new ListEventBusesCommand({ Limit: 1 }))) as {
     EventBuses?: Array<{ Name?: string }>;
   };
   const eventBusName = listedBuses.EventBuses?.[0]?.Name;
-  const listed = await client.send(new ListRulesCommand({
-    ...(eventBusName ? { EventBusName: eventBusName } : {}),
-    Limit: 1
-  })) as {
+  const listed = (await client.send(
+    new ListRulesCommand({
+      ...(eventBusName ? { EventBusName: eventBusName } : {}),
+      Limit: 1
+    })
+  )) as {
     Rules?: Array<{ Name?: string; EventBusName?: string; Arn?: string }>;
   };
   const rule = listed.Rules?.[0];
   if (!rule?.Name) return "success";
-  await client.send(new ListTargetsByRuleCommand({
-    Rule: rule.Name,
-    EventBusName: rule.EventBusName,
-    Limit: 1
-  }));
+  await client.send(
+    new ListTargetsByRuleCommand({
+      Rule: rule.Name,
+      EventBusName: rule.EventBusName,
+      Limit: 1
+    })
+  );
   if (rule.Arn) {
     await client.send(new ListEventBridgeTagsForResourceCommand({ ResourceARN: rule.Arn }));
   }
@@ -1034,22 +1116,27 @@ async function sendQuery(
   action: string
 ): Promise<void> {
   const { sendAwsQuery } = await import("../reverse-engineering/aws-reverse-engineering-query.js");
-  await sendAwsQuery({
-    region: context.region,
-    service,
-    version,
-    action,
-    credentials: toTerraformCredentials(context)
-  }, (resource, init) => fetch(resource, { ...init, signal: context.abortSignal }));
+  await sendAwsQuery(
+    {
+      region: context.region,
+      service,
+      version,
+      action,
+      credentials: toTerraformCredentials(context)
+    },
+    (resource, init) => fetch(resource, { ...init, signal: context.abortSignal })
+  );
 }
 
 /** gg: every production SDK send shares the probe deadline AbortSignal. */
 function bindAbortSignal<TClient>(client: TClient, abortSignal: AbortSignal): TClient {
   return {
     send(command: object) {
-      return (client as unknown as {
-        send(command: object, options: { abortSignal: AbortSignal }): Promise<unknown>;
-      }).send(command, { abortSignal });
+      return (
+        client as unknown as {
+          send(command: object, options: { abortSignal: AbortSignal }): Promise<unknown>;
+        }
+      ).send(command, { abortSignal });
     }
   } as TClient;
 }

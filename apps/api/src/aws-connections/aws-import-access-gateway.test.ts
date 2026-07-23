@@ -26,8 +26,7 @@ const connection = {
   id: "11111111-2222-4333-8444-555555555555",
   userId: "owner-user",
   accountId: "123456789012",
-  roleArn:
-    "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-11111111",
+  roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-11111111",
   externalId: "external-id",
   region: "ap-northeast-2",
   status: "verified",
@@ -45,13 +44,19 @@ const contract = createAwsImportManagerContract({
   templateBucketName: "sketchcatch-private-templates"
 });
 
-test("default registry pins issued Policy action sets and uses the current v7 set", () => {
+test("default registry pins issued Policy action sets and uses the current v8 set", () => {
+  assert.deepEqual(Object.keys(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION), [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8"
+  ]);
   assert.deepEqual(
-    Object.keys(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION),
-    ["1", "2", "3", "4", "5", "6", "7"]
-  );
-  assert.deepEqual(
-    [...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["7"]].sort(),
+    [...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["8"]].sort(),
     [...createAwsImportReadPolicyDocument().Statement[0].Action].sort()
   );
 });
@@ -71,21 +76,27 @@ test("policy stack creation uses only Task 2 exact request builders", async () =
         return {};
       }
     }),
-    createIamClient: () => createPolicyApplyIamClient({
-      isDrifted: () => false,
-      driftKind: "trust",
-      readPolicyDocument: createAwsImportReadPolicyDocument()
-    }),
+    createIamClient: () =>
+      createPolicyApplyIamClient({
+        isDrifted: () => false,
+        driftKind: "trust",
+        readPolicyDocument: createAwsImportReadPolicyDocument()
+      }),
     assumeConnectionRole: async () => ({
       accessKeyId: "access-key",
       secretAccessKey: "secret-key",
       sessionToken: "session-token"
     }),
-    publishTemplate: async (input) => publishAwsImportCloudFormationTemplateToS3({
-      ...input,
-      s3Client: { async send() { return {}; } } as unknown as S3Client,
-      signTemplateUrl: async ({ baseUrl }) => createPresignedUrl(baseUrl)
-    }),
+    publishTemplate: async (input) =>
+      publishAwsImportCloudFormationTemplateToS3({
+        ...input,
+        s3Client: {
+          async send() {
+            return {};
+          }
+        } as unknown as S3Client,
+        signTemplateUrl: async ({ baseUrl }) => createPresignedUrl(baseUrl)
+      }),
     now: () => new Date("2026-07-19T12:05:00.000Z")
   });
 
@@ -113,9 +124,10 @@ test("policy stack creation uses only Task 2 exact request builders", async () =
 
 test("manager preparation returns the official regional CloudFormation Create Review URL", async () => {
   const gateway = createAwsImportAccessGateway({
-    publishTemplate: async () => ({
-      templateUrl: "https://private.example/template?X-Amz-Signature=secret"
-    }) as never
+    publishTemplate: async () =>
+      ({
+        templateUrl: "https://private.example/template?X-Amz-Signature=secret"
+      }) as never
   });
 
   const result = await gateway.prepareManager({
@@ -175,9 +187,10 @@ test("manager update preparation opens the exact existing Stack info fallback", 
     `arn:aws:cloudformation:${connection.region}:${connection.accountId}:stack/` +
     `${contract.managerStackName}/existing-id`;
   const gateway = createAwsImportAccessGateway({
-    publishTemplate: async () => ({
-      templateUrl: "https://private.example/template?X-Amz-Signature=secret"
-    }) as never
+    publishTemplate: async () =>
+      ({
+        templateUrl: "https://private.example/template?X-Amz-Signature=secret"
+      }) as never
   });
 
   const result = await gateway.prepareManager({
@@ -217,11 +230,12 @@ test("already-current Policy apply is an idempotent no-op", async () => {
         throw new Error("unexpected mutation");
       }
     }),
-    createIamClient: () => createPolicyApplyIamClient({
-      isDrifted: () => false,
-      driftKind: "trust",
-      readPolicyDocument: createAwsImportReadPolicyDocument()
-    }),
+    createIamClient: () =>
+      createPolicyApplyIamClient({
+        isDrifted: () => false,
+        driftKind: "trust",
+        readPolicyDocument: createAwsImportReadPolicyDocument()
+      }),
     assumeConnectionRole: async () => ({
       accessKeyId: "access-key",
       secretAccessKey: "secret-key",
@@ -284,15 +298,16 @@ test("Policy apply consumes exact expected absence or identity before any public
         return { templateUrl: createPresignedUrl(contract.policyTemplateBaseUrl) } as never;
       }
     });
-    const expectedPolicy = scenario === "disappeared"
-      ? {
-          kind: "present" as const,
-          stackId: policyStackId,
-          contractVersion: contract.policyContractVersion,
-          templateSha256: contract.policyTemplateSha256,
-          policyFingerprint: contract.policyFingerprint
-        }
-      : { kind: "absent" as const };
+    const expectedPolicy =
+      scenario === "disappeared"
+        ? {
+            kind: "present" as const,
+            stackId: policyStackId,
+            contractVersion: contract.policyContractVersion,
+            templateSha256: contract.policyTemplateSha256,
+            policyFingerprint: contract.policyFingerprint
+          }
+        : { kind: "absent" as const };
 
     await assert.rejects(
       gateway.createOrUpdatePolicyStack({
@@ -329,20 +344,20 @@ test("Policy apply rechecks approved current state after publication before muta
               throw Object.assign(new Error("not found"), { name: "ValidationError" });
             }
             return {
-              Stacks: [scenario === "absent_appeared"
-                ? createPolicyStack(policyStackId)
-                : createPolicyStackForState(
-                    policyStackId,
-                    oldPolicy.contractVersion,
-                    oldPolicy.policyFingerprint
-                  )]
+              Stacks: [
+                scenario === "absent_appeared"
+                  ? createPolicyStack(policyStackId)
+                  : createPolicyStackForState(
+                      policyStackId,
+                      oldPolicy.contractVersion,
+                      oldPolicy.policyFingerprint
+                    )
+              ]
             };
           }
           if (command instanceof GetTemplateCommand) {
             return {
-              TemplateBody: published
-                ? `${oldPolicy.templateBody} `
-                : oldPolicy.templateBody
+              TemplateBody: published ? `${oldPolicy.templateBody} ` : oldPolicy.templateBody
             };
           }
           if (command instanceof CreateStackCommand || command instanceof UpdateStackCommand) {
@@ -352,11 +367,12 @@ test("Policy apply rechecks approved current state after publication before muta
           return {};
         }
       }),
-      createIamClient: () => createPolicyApplyIamClient({
-        isDrifted: () => false,
-        driftKind: "trust",
-        readPolicyDocument: oldPolicy.policyDocument
-      }),
+      createIamClient: () =>
+        createPolicyApplyIamClient({
+          isDrifted: () => false,
+          driftKind: "trust",
+          readPolicyDocument: oldPolicy.policyDocument
+        }),
       issuedPolicyActionsByVersion: createIssuedRegistryFor(oldPolicy),
       assumeConnectionRole: async () => ({
         accessKeyId: "access-key",
@@ -367,28 +383,35 @@ test("Policy apply rechecks approved current state after publication before muta
         published = true;
         return publishAwsImportCloudFormationTemplateToS3({
           ...input,
-          s3Client: { async send() { return {}; } } as unknown as S3Client,
+          s3Client: {
+            async send() {
+              return {};
+            }
+          } as unknown as S3Client,
           signTemplateUrl: async ({ baseUrl }) => createPresignedUrl(baseUrl)
         });
       },
       now: () => new Date("2026-07-19T12:05:00.000Z")
     });
-    const expectedPolicy = scenario === "absent_appeared"
-      ? { kind: "absent" as const }
-      : {
-          kind: "present" as const,
-          stackId: policyStackId,
-          contractVersion: oldPolicy.contractVersion,
-          templateSha256: oldPolicy.templateSha256,
-          policyFingerprint: oldPolicy.policyFingerprint
-        };
+    const expectedPolicy =
+      scenario === "absent_appeared"
+        ? { kind: "absent" as const }
+        : {
+            kind: "present" as const,
+            stackId: policyStackId,
+            contractVersion: oldPolicy.contractVersion,
+            templateSha256: oldPolicy.templateSha256,
+            policyFingerprint: oldPolicy.policyFingerprint
+          };
 
-    await assert.rejects(gateway.createOrUpdatePolicyStack({
-      connection,
-      contract,
-      operationId: "33333333-3333-4333-8333-333333333333",
-      expectedPolicy
-    }));
+    await assert.rejects(
+      gateway.createOrUpdatePolicyStack({
+        connection,
+        contract,
+        operationId: "33333333-3333-4333-8333-333333333333",
+        expectedPolicy
+      })
+    );
 
     assert.equal(mutationCalls, 0, scenario);
     assert.equal(
@@ -426,11 +449,13 @@ test("Policy publication rechecks the full exact IAM state before UpdateStack", 
         async send(command: unknown) {
           if (command instanceof DescribeStacksCommand) {
             return {
-              Stacks: [createPolicyStackForState(
-                policyStackId,
-                oldPolicy.contractVersion,
-                oldPolicy.policyFingerprint
-              )]
+              Stacks: [
+                createPolicyStackForState(
+                  policyStackId,
+                  oldPolicy.contractVersion,
+                  oldPolicy.policyFingerprint
+                )
+              ]
             };
           }
           if (command instanceof GetTemplateCommand) {
@@ -443,11 +468,12 @@ test("Policy publication rechecks the full exact IAM state before UpdateStack", 
           return {};
         }
       }),
-      createIamClient: () => createPolicyApplyIamClient({
-        isDrifted: () => published,
-        driftKind,
-        readPolicyDocument: oldPolicy.policyDocument
-      }),
+      createIamClient: () =>
+        createPolicyApplyIamClient({
+          isDrifted: () => published,
+          driftKind,
+          readPolicyDocument: oldPolicy.policyDocument
+        }),
       issuedPolicyActionsByVersion: createIssuedRegistryFor(oldPolicy),
       assumeConnectionRole: async () => ({
         accessKeyId: "access-key",
@@ -458,7 +484,11 @@ test("Policy publication rechecks the full exact IAM state before UpdateStack", 
         published = true;
         return publishAwsImportCloudFormationTemplateToS3({
           ...input,
-          s3Client: { async send() { return {}; } } as unknown as S3Client,
+          s3Client: {
+            async send() {
+              return {};
+            }
+          } as unknown as S3Client,
           signTemplateUrl: async ({ baseUrl }) => createPresignedUrl(baseUrl)
         });
       },
@@ -501,11 +531,12 @@ test("already-current Policy no-op still requires full exact IAM state", async (
         return {};
       }
     }),
-    createIamClient: () => createPolicyApplyIamClient({
-      isDrifted: () => true,
-      driftKind: "service_attachment",
-      readPolicyDocument: createAwsImportReadPolicyDocument()
-    }),
+    createIamClient: () =>
+      createPolicyApplyIamClient({
+        isDrifted: () => true,
+        driftKind: "service_attachment",
+        readPolicyDocument: createAwsImportReadPolicyDocument()
+      }),
     assumeConnectionRole: async () => ({
       accessKeyId: "access-key",
       secretAccessKey: "secret-key",
@@ -517,18 +548,20 @@ test("already-current Policy no-op still requires full exact IAM state", async (
     }
   });
 
-  await assert.rejects(gateway.createOrUpdatePolicyStack({
-    connection,
-    contract,
-    operationId: "33333333-3333-4333-8333-333333333333",
-    expectedPolicy: {
-      kind: "present",
-      stackId: policyStackId,
-      contractVersion: contract.policyContractVersion,
-      templateSha256: contract.policyTemplateSha256,
-      policyFingerprint: contract.policyFingerprint
-    }
-  }));
+  await assert.rejects(
+    gateway.createOrUpdatePolicyStack({
+      connection,
+      contract,
+      operationId: "33333333-3333-4333-8333-333333333333",
+      expectedPolicy: {
+        kind: "present",
+        stackId: policyStackId,
+        contractVersion: contract.policyContractVersion,
+        templateSha256: contract.policyTemplateSha256,
+        policyFingerprint: contract.policyFingerprint
+      }
+    })
+  );
   assert.equal(publishCalls, 0);
 });
 
@@ -541,47 +574,52 @@ test("manager inspection checks exact template hash, tags and outputs", async ()
         if (command instanceof DescribeStacksCommand) {
           if (command.input.StackName === contract.policyStackName) {
             return {
-              Stacks: [{
-                StackId: "policy-stack-id",
-                StackName: contract.policyStackName,
+              Stacks: [
+                {
+                  StackId: "policy-stack-id",
+                  StackName: contract.policyStackName,
+                  StackStatus: "CREATE_COMPLETE",
+                  Tags: contract.ownershipTags,
+                  Outputs: Object.entries({
+                    SketchCatchConnectionId: contract.connectionId,
+                    TemplateContractVersion: contract.policyContractVersion,
+                    TargetRoleArn: contract.targetRoleArn,
+                    ReadManagedPolicyArn: contract.readManagedPolicyArn,
+                    PolicyFingerprint: contract.policyFingerprint
+                  }).map(([OutputKey, OutputValue]) => ({ OutputKey, OutputValue }))
+                }
+              ]
+            };
+          }
+          return {
+            Stacks: [
+              {
+                StackId: "manager-stack-id",
+                StackName: contract.managerStackName,
                 StackStatus: "CREATE_COMPLETE",
                 Tags: contract.ownershipTags,
                 Outputs: Object.entries({
                   SketchCatchConnectionId: contract.connectionId,
-                  TemplateContractVersion: contract.policyContractVersion,
+                  TemplateContractVersion: contract.contractVersion,
                   TargetRoleArn: contract.targetRoleArn,
-                  ReadManagedPolicyArn: contract.readManagedPolicyArn,
-                  PolicyFingerprint: contract.policyFingerprint
+                  CloudFormationServiceRoleArn: contract.serviceRoleArn,
+                  PolicyStackName: contract.policyStackName,
+                  PolicyStackArnPattern: contract.policyStackArn,
+                  PolicyTemplateSha256: contract.policyTemplateSha256,
+                  PolicyFingerprint: contract.policyFingerprint,
+                  ControlPolicyArn: contract.controlPolicyArn,
+                  CleanupVerificationPolicyArn: contract.cleanupVerificationPolicyArn
                 }).map(([OutputKey, OutputValue]) => ({ OutputKey, OutputValue }))
-              }]
-            };
-          }
-          return {
-            Stacks: [{
-              StackId: "manager-stack-id",
-              StackName: contract.managerStackName,
-              StackStatus: "CREATE_COMPLETE",
-              Tags: contract.ownershipTags,
-              Outputs: Object.entries({
-                SketchCatchConnectionId: contract.connectionId,
-                TemplateContractVersion: contract.contractVersion,
-                TargetRoleArn: contract.targetRoleArn,
-                CloudFormationServiceRoleArn: contract.serviceRoleArn,
-                PolicyStackName: contract.policyStackName,
-                PolicyStackArnPattern: contract.policyStackArn,
-                PolicyTemplateSha256: contract.policyTemplateSha256,
-                PolicyFingerprint: contract.policyFingerprint,
-                ControlPolicyArn: contract.controlPolicyArn,
-                CleanupVerificationPolicyArn: contract.cleanupVerificationPolicyArn
-              }).map(([OutputKey, OutputValue]) => ({ OutputKey, OutputValue }))
-            }]
+              }
+            ]
           };
         }
         if (command instanceof GetTemplateCommand) {
           return {
-            TemplateBody: command.input.StackName === "policy-stack-id"
-              ? contract.policyTemplateBody
-              : contract.templateBody
+            TemplateBody:
+              command.input.StackName === "policy-stack-id"
+                ? contract.policyTemplateBody
+                : contract.templateBody
           };
         }
         return {};
@@ -593,14 +631,18 @@ test("manager inspection checks exact template hash, tags and outputs", async ()
         if (command instanceof GetRoleCommand) {
           return {
             Role: {
-              AssumeRolePolicyDocument: encodeURIComponent(JSON.stringify({
-                Version: "2012-10-17",
-                Statement: [{
-                  Effect: "Allow",
-                  Principal: { Service: "cloudformation.amazonaws.com" },
-                  Action: "sts:AssumeRole"
-                }]
-              }))
+              AssumeRolePolicyDocument: encodeURIComponent(
+                JSON.stringify({
+                  Version: "2012-10-17",
+                  Statement: [
+                    {
+                      Effect: "Allow",
+                      Principal: { Service: "cloudformation.amazonaws.com" },
+                      Action: "sts:AssumeRole"
+                    }
+                  ]
+                })
+              )
             }
           };
         }
@@ -629,11 +671,12 @@ test("manager inspection checks exact template hash, tags and outputs", async ()
           return { Policy: { DefaultVersionId: "v1" } };
         }
         if (command instanceof GetPolicyVersionCommand) {
-          const document = command.input.PolicyArn === contract.controlPolicyArn
-            ? contract.controlPolicyDocument
-            : command.input.PolicyArn === contract.cleanupVerificationPolicyArn
-              ? contract.cleanupVerificationPolicyDocument
-              : createAwsImportReadPolicyDocument();
+          const document =
+            command.input.PolicyArn === contract.controlPolicyArn
+              ? contract.controlPolicyDocument
+              : command.input.PolicyArn === contract.cleanupVerificationPolicyArn
+                ? contract.cleanupVerificationPolicyDocument
+                : createAwsImportReadPolicyDocument();
           return { PolicyVersion: { Document: encodeURIComponent(JSON.stringify(document)) } };
         }
         return {};
@@ -930,8 +973,10 @@ test("cleanup keeps checking exact Manager artifacts after its Stack is absent",
     targetAttachments: [contract.controlPolicyArn]
   });
 
-  const exact = await gateway.inspectCleanup({ connection, contract }) as unknown as
-    ExactCleanupResult;
+  const exact = (await gateway.inspectCleanup({
+    connection,
+    contract
+  })) as unknown as ExactCleanupResult;
 
   assert.equal(exact.verified, true);
   assert.equal(exact.manager.stack.status, "absent");
@@ -950,7 +995,7 @@ test("cleanup rejects a replacement Stack that differs from the stored exact ide
     targetAttachments: [contract.controlPolicyArn, contract.cleanupVerificationPolicyArn]
   });
 
-  const exact = await gateway.inspectCleanup({
+  const exact = (await gateway.inspectCleanup({
     connection,
     contract,
     expectedCurrent: {
@@ -960,7 +1005,7 @@ test("cleanup rejects a replacement Stack that differs from the stored exact ide
         templateSha256: contract.templateSha256
       }
     }
-  } as never) as unknown as ExactCleanupResult;
+  } as never)) as unknown as ExactCleanupResult;
 
   assert.equal(exact.verified, false);
   assert.equal(exact.manager.stack.status, "drifted");
@@ -999,7 +1044,7 @@ test("cleanup keeps an unrelated later AccessDenied retryable", async () => {
     })
   });
 
-  const result = await gateway.inspectCleanup({
+  const result = (await gateway.inspectCleanup({
     connection,
     contract,
     expectedCurrent: {
@@ -1009,7 +1054,7 @@ test("cleanup keeps an unrelated later AccessDenied retryable", async () => {
         templateSha256: contract.templateSha256
       }
     }
-  } as never) as unknown as ExactCleanupResult;
+  } as never)) as unknown as ExactCleanupResult;
 
   assert.equal(result.verified, false);
   assert.equal(result.reason, "retry");
@@ -1051,7 +1096,7 @@ test("cleanup does not treat the final Policy AccessDenied as proof that every a
     })
   });
 
-  const result = await gateway.inspectCleanup({
+  const result = (await gateway.inspectCleanup({
     connection,
     contract,
     expectedCurrent: {
@@ -1061,7 +1106,7 @@ test("cleanup does not treat the final Policy AccessDenied as proof that every a
         templateSha256: contract.templateSha256
       }
     }
-  } as never) as unknown as ExactCleanupResult;
+  } as never)) as unknown as ExactCleanupResult;
 
   assert.deepEqual(events, ["unrelated-cloudformation-read"]);
   assert.equal(result.verified, false);
@@ -1100,7 +1145,7 @@ test("cleanup cannot accept an exact Policy AccessDenied as absence proof", asyn
     })
   });
 
-  const result = await gateway.inspectCleanup({
+  const result = (await gateway.inspectCleanup({
     connection,
     contract,
     expectedCurrent: {
@@ -1110,7 +1155,7 @@ test("cleanup cannot accept an exact Policy AccessDenied as absence proof", asyn
         templateSha256: contract.templateSha256
       }
     }
-  } as never) as unknown as ExactCleanupResult;
+  } as never)) as unknown as ExactCleanupResult;
 
   assert.equal(result.verified, false);
   assert.equal(result.reason, "retry");
@@ -1181,21 +1226,27 @@ function createCleanupGateway(input: {
     createCloudFormationClient: () => ({
       async send(command: unknown) {
         if (command instanceof DescribeStacksCommand) {
-          const isPolicy = command.input.StackName === contract.policyStackName ||
+          const isPolicy =
+            command.input.StackName === contract.policyStackName ||
             command.input.StackName === "policy-stack-id";
-          const present = isPolicy ? input.policyStack === "present" : input.managerStack === "present";
+          const present = isPolicy
+            ? input.policyStack === "present"
+            : input.managerStack === "present";
           if (!present) throw Object.assign(new Error("not found"), { name: "ValidationError" });
           return {
-            Stacks: [isPolicy
-              ? createPolicyStack("policy-stack-id")
-              : createManagerStack("manager-stack-id")]
+            Stacks: [
+              isPolicy
+                ? createPolicyStack("policy-stack-id")
+                : createManagerStack("manager-stack-id")
+            ]
           };
         }
         if (command instanceof GetTemplateCommand) {
           return {
-            TemplateBody: command.input.StackName === "policy-stack-id"
-              ? contract.policyTemplateBody
-              : contract.templateBody
+            TemplateBody:
+              command.input.StackName === "policy-stack-id"
+                ? contract.policyTemplateBody
+                : contract.templateBody
           };
         }
         return {};
@@ -1207,14 +1258,18 @@ function createCleanupGateway(input: {
           if (!input.serviceRole) throw noSuchEntity();
           return {
             Role: {
-              AssumeRolePolicyDocument: encodeURIComponent(JSON.stringify({
-                Version: "2012-10-17",
-                Statement: [{
-                  Effect: "Allow",
-                  Principal: { Service: "cloudformation.amazonaws.com" },
-                  Action: "sts:AssumeRole"
-                }]
-              }))
+              AssumeRolePolicyDocument: encodeURIComponent(
+                JSON.stringify({
+                  Version: "2012-10-17",
+                  Statement: [
+                    {
+                      Effect: "Allow",
+                      Principal: { Service: "cloudformation.amazonaws.com" },
+                      Action: "sts:AssumeRole"
+                    }
+                  ]
+                })
+              )
             }
           };
         }
@@ -1242,11 +1297,12 @@ function createCleanupGateway(input: {
           return { Policy: { Arn: command.input.PolicyArn, DefaultVersionId: "v1" } };
         }
         if (command instanceof GetPolicyVersionCommand) {
-          const document = command.input.PolicyArn === contract.controlPolicyArn
-            ? contract.controlPolicyDocument
-            : command.input.PolicyArn === contract.cleanupVerificationPolicyArn
-              ? contract.cleanupVerificationPolicyDocument
-              : createAwsImportReadPolicyDocument();
+          const document =
+            command.input.PolicyArn === contract.controlPolicyArn
+              ? contract.controlPolicyDocument
+              : command.input.PolicyArn === contract.cleanupVerificationPolicyArn
+                ? contract.cleanupVerificationPolicyDocument
+                : createAwsImportReadPolicyDocument();
           return { PolicyVersion: { Document: encodeURIComponent(JSON.stringify(document)) } };
         }
         return {};
@@ -1346,26 +1402,32 @@ function createPolicyApplyIamClient(input: {
       if (command instanceof GetRoleCommand) {
         return {
           Role: {
-            AssumeRolePolicyDocument: encodeURIComponent(JSON.stringify({
-              Version: "2012-10-17",
-              Statement: [{
-                Effect: "Allow",
-                Principal: {
-                  Service: drifted && input.driftKind === "trust"
-                    ? "ec2.amazonaws.com"
-                    : "cloudformation.amazonaws.com"
-                },
-                Action: "sts:AssumeRole"
-              }]
-            }))
+            AssumeRolePolicyDocument: encodeURIComponent(
+              JSON.stringify({
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Principal: {
+                      Service:
+                        drifted && input.driftKind === "trust"
+                          ? "ec2.amazonaws.com"
+                          : "cloudformation.amazonaws.com"
+                    },
+                    Action: "sts:AssumeRole"
+                  }
+                ]
+              })
+            )
           }
         };
       }
       if (command instanceof ListRolePoliciesCommand) {
         return {
-          PolicyNames: drifted && input.driftKind === "inline"
-            ? [contract.serviceRoleInlinePolicyName, "UnexpectedInline"]
-            : [contract.serviceRoleInlinePolicyName]
+          PolicyNames:
+            drifted && input.driftKind === "inline"
+              ? [contract.serviceRoleInlinePolicyName, "UnexpectedInline"]
+              : [contract.serviceRoleInlinePolicyName]
         };
       }
       if (command instanceof GetRolePolicyCommand) {
@@ -1376,9 +1438,10 @@ function createPolicyApplyIamClient(input: {
       if (command instanceof ListAttachedRolePoliciesCommand) {
         if (command.input.RoleName === contract.serviceRoleName) {
           return {
-            AttachedPolicies: drifted && input.driftKind === "service_attachment"
-              ? [{ PolicyArn: contract.readManagedPolicyArn }]
-              : []
+            AttachedPolicies:
+              drifted && input.driftKind === "service_attachment"
+                ? [{ PolicyArn: contract.readManagedPolicyArn }]
+                : []
           };
         }
         return {
@@ -1394,19 +1457,22 @@ function createPolicyApplyIamClient(input: {
         return { Policy: { DefaultVersionId: "v1" } };
       }
       if (command instanceof GetPolicyVersionCommand) {
-        const driftKind = command.input.PolicyArn === contract.controlPolicyArn
-          ? "control_policy"
-          : command.input.PolicyArn === contract.cleanupVerificationPolicyArn
-            ? "cleanup_policy"
-            : "read_policy";
-        const exactDocument = driftKind === "control_policy"
-          ? contract.controlPolicyDocument
-          : driftKind === "cleanup_policy"
-            ? contract.cleanupVerificationPolicyDocument
-            : input.readPolicyDocument;
-        const document = drifted && input.driftKind === driftKind
-          ? { Version: "2012-10-17", Statement: [] }
-          : exactDocument;
+        const driftKind =
+          command.input.PolicyArn === contract.controlPolicyArn
+            ? "control_policy"
+            : command.input.PolicyArn === contract.cleanupVerificationPolicyArn
+              ? "cleanup_policy"
+              : "read_policy";
+        const exactDocument =
+          driftKind === "control_policy"
+            ? contract.controlPolicyDocument
+            : driftKind === "cleanup_policy"
+              ? contract.cleanupVerificationPolicyDocument
+              : input.readPolicyDocument;
+        const document =
+          drifted && input.driftKind === driftKind
+            ? { Version: "2012-10-17", Statement: [] }
+            : exactDocument;
         return { PolicyVersion: { Document: encodeURIComponent(JSON.stringify(document)) } };
       }
       return {};
@@ -1414,18 +1480,20 @@ function createPolicyApplyIamClient(input: {
   };
 }
 
-function createInspectionGateway(options: {
-  managerContractVersion?: string;
-  managerTemplateBody?: string;
-  policyContractVersion?: string;
-  policyTemplateBody?: string;
-  policyFingerprint?: string;
-  readPolicyDocument?: unknown;
-  inlinePolicyNames?: string[];
-  serviceAttachedPolicyArns?: string[];
-  issuedPolicyActionsByVersion?: Readonly<Record<string, readonly string[]>>;
-  managerTags?: Array<{ Key: string; Value: string }>;
-} = {}) {
+function createInspectionGateway(
+  options: {
+    managerContractVersion?: string;
+    managerTemplateBody?: string;
+    policyContractVersion?: string;
+    policyTemplateBody?: string;
+    policyFingerprint?: string;
+    readPolicyDocument?: unknown;
+    inlinePolicyNames?: string[];
+    serviceAttachedPolicyArns?: string[];
+    issuedPolicyActionsByVersion?: Readonly<Record<string, readonly string[]>>;
+    managerTags?: Array<{ Key: string; Value: string }>;
+  } = {}
+) {
   const managerContractVersion = options.managerContractVersion ?? contract.contractVersion;
   const managerTemplateBody = options.managerTemplateBody ?? contract.templateBody;
   const policyContractVersion = options.policyContractVersion ?? contract.policyContractVersion;
@@ -1445,47 +1513,52 @@ function createInspectionGateway(options: {
         if (command instanceof DescribeStacksCommand) {
           if (command.input.StackName === contract.policyStackName) {
             return {
-              Stacks: [{
-                StackId: "policy-stack-id",
-                StackName: contract.policyStackName,
-                StackStatus: "UPDATE_COMPLETE",
-                Tags: policyTags,
-                Outputs: Object.entries({
-                  SketchCatchConnectionId: contract.connectionId,
-                  TemplateContractVersion: policyContractVersion,
-                  TargetRoleArn: contract.targetRoleArn,
-                  ReadManagedPolicyArn: contract.readManagedPolicyArn,
-                  PolicyFingerprint: policyFingerprint
-                }).map(([OutputKey, OutputValue]) => ({ OutputKey, OutputValue }))
-              }]
+              Stacks: [
+                {
+                  StackId: "policy-stack-id",
+                  StackName: contract.policyStackName,
+                  StackStatus: "UPDATE_COMPLETE",
+                  Tags: policyTags,
+                  Outputs: Object.entries({
+                    SketchCatchConnectionId: contract.connectionId,
+                    TemplateContractVersion: policyContractVersion,
+                    TargetRoleArn: contract.targetRoleArn,
+                    ReadManagedPolicyArn: contract.readManagedPolicyArn,
+                    PolicyFingerprint: policyFingerprint
+                  }).map(([OutputKey, OutputValue]) => ({ OutputKey, OutputValue }))
+                }
+              ]
             };
           }
           return {
-            Stacks: [{
-              StackId: "manager-stack-id",
-              StackName: contract.managerStackName,
-              StackStatus: "UPDATE_COMPLETE",
-              Tags: options.managerTags ?? contract.ownershipTags,
-              Outputs: Object.entries({
-                SketchCatchConnectionId: contract.connectionId,
-                TemplateContractVersion: managerContractVersion,
-                TargetRoleArn: contract.targetRoleArn,
-                CloudFormationServiceRoleArn: contract.serviceRoleArn,
-                PolicyStackName: contract.policyStackName,
-                PolicyStackArnPattern: contract.policyStackArn,
-                PolicyTemplateSha256: contract.policyTemplateSha256,
-                PolicyFingerprint: contract.policyFingerprint,
-                ControlPolicyArn: contract.controlPolicyArn,
-                CleanupVerificationPolicyArn: contract.cleanupVerificationPolicyArn
-              }).map(([OutputKey, OutputValue]) => ({ OutputKey, OutputValue }))
-            }]
+            Stacks: [
+              {
+                StackId: "manager-stack-id",
+                StackName: contract.managerStackName,
+                StackStatus: "UPDATE_COMPLETE",
+                Tags: options.managerTags ?? contract.ownershipTags,
+                Outputs: Object.entries({
+                  SketchCatchConnectionId: contract.connectionId,
+                  TemplateContractVersion: managerContractVersion,
+                  TargetRoleArn: contract.targetRoleArn,
+                  CloudFormationServiceRoleArn: contract.serviceRoleArn,
+                  PolicyStackName: contract.policyStackName,
+                  PolicyStackArnPattern: contract.policyStackArn,
+                  PolicyTemplateSha256: contract.policyTemplateSha256,
+                  PolicyFingerprint: contract.policyFingerprint,
+                  ControlPolicyArn: contract.controlPolicyArn,
+                  CleanupVerificationPolicyArn: contract.cleanupVerificationPolicyArn
+                }).map(([OutputKey, OutputValue]) => ({ OutputKey, OutputValue }))
+              }
+            ]
           };
         }
         if (command instanceof GetTemplateCommand) {
           return {
-            TemplateBody: command.input.StackName === "policy-stack-id"
-              ? policyTemplateBody
-              : managerTemplateBody
+            TemplateBody:
+              command.input.StackName === "policy-stack-id"
+                ? policyTemplateBody
+                : managerTemplateBody
           };
         }
         return {};
@@ -1497,14 +1570,18 @@ function createInspectionGateway(options: {
         if (command instanceof GetRoleCommand) {
           return {
             Role: {
-              AssumeRolePolicyDocument: encodeURIComponent(JSON.stringify({
-                Version: "2012-10-17",
-                Statement: [{
-                  Effect: "Allow",
-                  Principal: { Service: "cloudformation.amazonaws.com" },
-                  Action: "sts:AssumeRole"
-                }]
-              }))
+              AssumeRolePolicyDocument: encodeURIComponent(
+                JSON.stringify({
+                  Version: "2012-10-17",
+                  Statement: [
+                    {
+                      Effect: "Allow",
+                      Principal: { Service: "cloudformation.amazonaws.com" },
+                      Action: "sts:AssumeRole"
+                    }
+                  ]
+                })
+              )
             }
           };
         }
@@ -1539,11 +1616,12 @@ function createInspectionGateway(options: {
           return { Policy: { DefaultVersionId: "v1" } };
         }
         if (command instanceof GetPolicyVersionCommand) {
-          const document = command.input.PolicyArn === contract.controlPolicyArn
-            ? contract.controlPolicyDocument
-            : command.input.PolicyArn === contract.cleanupVerificationPolicyArn
-              ? contract.cleanupVerificationPolicyDocument
-              : readPolicyDocument;
+          const document =
+            command.input.PolicyArn === contract.controlPolicyArn
+              ? contract.controlPolicyDocument
+              : command.input.PolicyArn === contract.cleanupVerificationPolicyArn
+                ? contract.cleanupVerificationPolicyDocument
+                : readPolicyDocument;
           return { PolicyVersion: { Document: encodeURIComponent(JSON.stringify(document)) } };
         }
         return {};
@@ -1564,7 +1642,9 @@ function createInspectionGateway(options: {
 function createOlderPolicyTemplate(extraAction?: string) {
   const template = JSON.parse(contract.policyTemplateBody) as {
     Resources: {
-      ImportReadManagedPolicy: { Properties: { PolicyDocument: { Statement: [{ Action: string[] }] } } };
+      ImportReadManagedPolicy: {
+        Properties: { PolicyDocument: { Statement: [{ Action: string[] }] } };
+      };
     };
     Outputs: {
       TemplateContractVersion: { Value: string };
@@ -1611,9 +1691,7 @@ function createIssuedRegistryFor(
   oldPolicy: ReturnType<typeof createOlderPolicyTemplate>
 ): Readonly<Record<string, readonly string[]>> {
   return {
-    [oldPolicy.contractVersion]: [
-      ...oldPolicy.policyDocument.Statement[0]!.Action
-    ]
+    [oldPolicy.contractVersion]: [...oldPolicy.policyDocument.Statement[0]!.Action]
   };
 }
 

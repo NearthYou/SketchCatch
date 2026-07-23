@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AwsConnection } from "@sketchcatch/types";
-import {
-  AWS_IMPORT_READERS,
-  type AwsImportServiceKey
-} from "./aws-import-access-catalog.js";
+import { AWS_IMPORT_READERS, type AwsImportServiceKey } from "./aws-import-access-catalog.js";
 import {
   AWS_IMPORT_PROBE_EXECUTORS,
   probeApplicationAutoScaling,
@@ -34,14 +31,18 @@ test("ELBv2 probe는 첫 LB, Target Group, Listener의 속성과 태그만 읽�
         return { LoadBalancers: [{ LoadBalancerArn: "arn:aws:elasticloadbalancing:lb/app" }] };
       }
       if (value.constructor.name === "DescribeTargetGroupsCommand") {
-        return { TargetGroups: [{ TargetGroupArn: "arn:aws:elasticloadbalancing:targetgroup/api" }] };
+        return {
+          TargetGroups: [{ TargetGroupArn: "arn:aws:elasticloadbalancing:targetgroup/api" }]
+        };
       }
       if (value.constructor.name === "DescribeListenersCommand") {
         return {
-          Listeners: [{
-            ListenerArn: "arn:aws:elasticloadbalancing:listener/app/https",
-            Protocol: "HTTPS"
-          }]
+          Listeners: [
+            {
+              ListenerArn: "arn:aws:elasticloadbalancing:listener/app/https",
+              Protocol: "HTTPS"
+            }
+          ]
         };
       }
       return {};
@@ -49,21 +50,22 @@ test("ELBv2 probe는 첫 LB, Target Group, Listener의 속성과 태그만 읽�
   });
 
   assert.equal(outcome, "success");
-  assert.deepEqual(calls.map((call) => call.name), [
-    "DescribeLoadBalancersCommand",
-    "DescribeLoadBalancerAttributesCommand",
-    "DescribeTagsCommand",
-    "DescribeTargetGroupsCommand",
-    "DescribeTargetGroupAttributesCommand",
-    "DescribeTagsCommand",
-    "DescribeListenersCommand",
-    "DescribeListenerAttributesCommand",
-    "DescribeListenerCertificatesCommand"
-  ]);
+  assert.deepEqual(
+    calls.map((call) => call.name),
+    [
+      "DescribeLoadBalancersCommand",
+      "DescribeLoadBalancerAttributesCommand",
+      "DescribeTagsCommand",
+      "DescribeTargetGroupsCommand",
+      "DescribeTargetGroupAttributesCommand",
+      "DescribeTagsCommand",
+      "DescribeListenersCommand",
+      "DescribeListenerAttributesCommand",
+      "DescribeListenerCertificatesCommand"
+    ]
+  );
   assert.equal(calls[0]?.input["PageSize"], 1);
-  assert.deepEqual(calls[2]?.input["ResourceArns"], [
-    "arn:aws:elasticloadbalancing:lb/app"
-  ]);
+  assert.deepEqual(calls[2]?.input["ResourceArns"], ["arn:aws:elasticloadbalancing:lb/app"]);
   assert.equal(calls[3]?.input["PageSize"], 1);
   assert.deepEqual(calls[5]?.input["ResourceArns"], [
     "arn:aws:elasticloadbalancing:targetgroup/api"
@@ -114,10 +116,10 @@ test("CloudWatch와 Logs probe는 첫 Resource ARN의 태그만 읽는다", asyn
         : {};
     }
   });
-  assert.deepEqual(alarmCalls.map((call) => call.name), [
-    "DescribeAlarmsCommand",
-    "ListTagsForResourceCommand"
-  ]);
+  assert.deepEqual(
+    alarmCalls.map((call) => call.name),
+    ["DescribeAlarmsCommand", "ListTagsForResourceCommand"]
+  );
   assert.equal(alarmCalls[0]?.input["MaxRecords"], 1);
   assert.equal(alarmCalls[1]?.input["ResourceARN"], "arn:aws:cloudwatch:alarm/api");
 
@@ -127,16 +129,20 @@ test("CloudWatch와 Logs probe는 첫 Resource ARN의 태그만 읽는다", asyn
       const value = command as { constructor: { name: string }; input: Record<string, unknown> };
       logCalls.push({ name: value.constructor.name, input: value.input });
       return value.constructor.name === "DescribeLogGroupsCommand"
-        ? { logGroups: [{
-            logGroupArn: "arn:aws:logs:ap-northeast-2:123:log-group:/ecs/api"
-          }] }
+        ? {
+            logGroups: [
+              {
+                logGroupArn: "arn:aws:logs:ap-northeast-2:123:log-group:/ecs/api"
+              }
+            ]
+          }
         : {};
     }
   });
-  assert.deepEqual(logCalls.map((call) => call.name), [
-    "DescribeLogGroupsCommand",
-    "ListTagsForResourceCommand"
-  ]);
+  assert.deepEqual(
+    logCalls.map((call) => call.name),
+    ["DescribeLogGroupsCommand", "ListTagsForResourceCommand"]
+  );
   assert.equal(logCalls[0]?.input["limit"], 1);
   assert.equal(
     logCalls[1]?.input["resourceArn"],
@@ -151,21 +157,19 @@ test("CloudFront와 Auto Scaling probe는 첫 Resource의 태그만 읽는다", 
       const value = command as { constructor: { name: string }; input: Record<string, unknown> };
       cloudFrontCalls.push({ name: value.constructor.name, input: value.input });
       if (value.constructor.name === "ListDistributionsCommand") {
-        return { DistributionList: { Items: [{ ARN: "arn:aws:cloudfront::123:distribution/D1" }] } };
+        return {
+          DistributionList: { Items: [{ ARN: "arn:aws:cloudfront::123:distribution/D1" }] }
+        };
       }
       return {};
     }
   });
-  assert.deepEqual(cloudFrontCalls.map((call) => call.name), [
-    "ListDistributionsCommand",
-    "ListTagsForResourceCommand",
-    "ListOriginAccessControlsCommand"
-  ]);
-  assert.equal(cloudFrontCalls[0]?.input["MaxItems"], 1);
-  assert.equal(
-    cloudFrontCalls[1]?.input["Resource"],
-    "arn:aws:cloudfront::123:distribution/D1"
+  assert.deepEqual(
+    cloudFrontCalls.map((call) => call.name),
+    ["ListDistributionsCommand", "ListTagsForResourceCommand", "ListOriginAccessControlsCommand"]
   );
+  assert.equal(cloudFrontCalls[0]?.input["MaxItems"], 1);
+  assert.equal(cloudFrontCalls[1]?.input["Resource"], "arn:aws:cloudfront::123:distribution/D1");
 
   const scalingCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
   await probeApplicationAutoScaling({
@@ -174,27 +178,29 @@ test("CloudFront와 Auto Scaling probe는 첫 Resource의 태그만 읽는다", 
       scalingCalls.push({ name: value.constructor.name, input: value.input });
       if (value.constructor.name === "DescribeScalableTargetsCommand") {
         return {
-          ScalableTargets: [{
-            ResourceId: "service/cluster/api",
-            ScalableDimension: "ecs:service:DesiredCount",
-            ServiceNamespace: "ecs",
-            ScalableTargetARN: "arn:aws:application-autoscaling:target/one"
-          }]
+          ScalableTargets: [
+            {
+              ResourceId: "service/cluster/api",
+              ScalableDimension: "ecs:service:DesiredCount",
+              ServiceNamespace: "ecs",
+              ScalableTargetARN: "arn:aws:application-autoscaling:target/one"
+            }
+          ]
         };
       }
       return {};
     }
   });
-  assert.deepEqual(scalingCalls.map((call) => call.name), [
-    "DescribeScalableTargetsCommand",
-    "DescribeScalingPoliciesCommand",
-    "ListTagsForResourceCommand"
-  ]);
-  assert.equal(scalingCalls[0]?.input["MaxResults"], 1);
-  assert.equal(
-    scalingCalls[2]?.input["ResourceARN"],
-    "arn:aws:application-autoscaling:target/one"
+  assert.deepEqual(
+    scalingCalls.map((call) => call.name),
+    [
+      "DescribeScalableTargetsCommand",
+      "DescribeScalingPoliciesCommand",
+      "ListTagsForResourceCommand"
+    ]
   );
+  assert.equal(scalingCalls[0]?.input["MaxResults"], 1);
+  assert.equal(scalingCalls[2]?.input["ResourceARN"], "arn:aws:application-autoscaling:target/one");
 });
 
 test("tag probe는 빈 목록이면 추가 호출하지 않는다", async () => {
@@ -226,10 +232,12 @@ test("IAM probe는 첫 Role, Policy, Instance Profile의 상세와 태그를 확
       }
       if (command.constructor.name === "ListPoliciesCommand") {
         return {
-          Policies: [{
-            Arn: "arn:aws:iam::123:policy/application",
-            DefaultVersionId: "v3"
-          }]
+          Policies: [
+            {
+              Arn: "arn:aws:iam::123:policy/application",
+              DefaultVersionId: "v3"
+            }
+          ]
         };
       }
       if (command.constructor.name === "GetPolicyCommand") {
@@ -243,21 +251,24 @@ test("IAM probe는 첫 Role, Policy, Instance Profile의 상세와 태그를 확
   });
 
   assert.equal(outcome, "success");
-  assert.deepEqual(commands.map((command) => command.constructor.name), [
-    "ListRolesCommand",
-    "GetRoleCommand",
-    "ListRoleTagsCommand",
-    "ListAttachedRolePoliciesCommand",
-    "ListRolePoliciesCommand",
-    "GetRolePolicyCommand",
-    "ListPoliciesCommand",
-    "GetPolicyCommand",
-    "GetPolicyVersionCommand",
-    "ListPolicyTagsCommand",
-    "ListInstanceProfilesCommand",
-    "GetInstanceProfileCommand",
-    "ListInstanceProfileTagsCommand"
-  ]);
+  assert.deepEqual(
+    commands.map((command) => command.constructor.name),
+    [
+      "ListRolesCommand",
+      "GetRoleCommand",
+      "ListRoleTagsCommand",
+      "ListAttachedRolePoliciesCommand",
+      "ListRolePoliciesCommand",
+      "GetRolePolicyCommand",
+      "ListPoliciesCommand",
+      "GetPolicyCommand",
+      "GetPolicyVersionCommand",
+      "ListPolicyTagsCommand",
+      "ListInstanceProfilesCommand",
+      "GetInstanceProfileCommand",
+      "ListInstanceProfileTagsCommand"
+    ]
+  );
 });
 
 test("Lambda probe는 첫 Function의 구성, policy, tags, alias와 version을 확인한다", async () => {
@@ -267,10 +278,12 @@ test("Lambda probe는 첫 Function의 구성, policy, tags, alias와 version을 
       commands.push(command);
       if (command.constructor.name === "ListFunctionsCommand") {
         return {
-          Functions: [{
-            FunctionName: "application-function",
-            FunctionArn: "arn:aws:lambda:ap-northeast-2:123:function:application-function"
-          }]
+          Functions: [
+            {
+              FunctionName: "application-function",
+              FunctionArn: "arn:aws:lambda:ap-northeast-2:123:function:application-function"
+            }
+          ]
         };
       }
       return {};
@@ -278,14 +291,19 @@ test("Lambda probe는 첫 Function의 구성, policy, tags, alias와 version을 
   });
 
   assert.equal(outcome, "success");
-  assert.deepEqual(commands.map((command) => command.constructor.name), [
-    "ListFunctionsCommand",
-    "GetFunctionCommand",
-    "GetPolicyCommand",
-    "ListTagsCommand",
-    "ListAliasesCommand",
-    "ListVersionsByFunctionCommand"
-  ]);
+  assert.deepEqual(
+    commands.map((command) => command.constructor.name),
+    [
+      "ListFunctionsCommand",
+      "GetFunctionCommand",
+      "GetFunctionConcurrencyCommand",
+      "GetFunctionCodeSigningConfigCommand",
+      "GetPolicyCommand",
+      "ListTagsCommand",
+      "ListAliasesCommand",
+      "ListVersionsByFunctionCommand"
+    ]
+  );
 });
 
 test("Lambda probe는 resource policy가 없어도 나머지 상세 읽기를 계속한다", async () => {
@@ -295,10 +313,12 @@ test("Lambda probe는 resource policy가 없어도 나머지 상세 읽기를 �
       commands.push(command);
       if (command.constructor.name === "ListFunctionsCommand") {
         return {
-          Functions: [{
-            FunctionName: "application-function",
-            FunctionArn: "arn:aws:lambda:ap-northeast-2:123:function:application-function"
-          }]
+          Functions: [
+            {
+              FunctionName: "application-function",
+              FunctionArn: "arn:aws:lambda:ap-northeast-2:123:function:application-function"
+            }
+          ]
         };
       }
       if (command.constructor.name === "GetPolicyCommand") {
@@ -329,14 +349,18 @@ test("KMS probe는 첫 Key의 policy, rotation, tags와 aliases를 확인한다"
   });
 
   assert.equal(outcome, "success");
-  assert.deepEqual(commands.map((command) => command.constructor.name), [
-    "ListKeysCommand",
-    "DescribeKeyCommand",
-    "GetKeyPolicyCommand",
-    "GetKeyRotationStatusCommand",
-    "ListResourceTagsCommand",
-    "ListAliasesCommand"
-  ]);
+  assert.deepEqual(
+    commands.map((command) => command.constructor.name),
+    [
+      "ListKeysCommand",
+      "DescribeKeyCommand",
+      "GetKeyPolicyCommand",
+      "GetKeyRotationStatusCommand",
+      "ListGrantsCommand",
+      "ListResourceTagsCommand",
+      "ListAliasesCommand"
+    ]
+  );
 });
 
 test("API Gateway probe는 첫 REST API의 resource, method, integration, deployment와 stage를 확인한다", async () => {
@@ -361,17 +385,20 @@ test("API Gateway probe는 첫 REST API의 resource, method, integration, deploy
   });
 
   assert.equal(outcome, "success");
-  assert.deepEqual(commands.map((command) => command.constructor.name), [
-    "GetRestApisCommand",
-    "GetResourcesCommand",
-    "GetMethodCommand",
-    "GetIntegrationCommand",
-    "GetDeploymentsCommand",
-    "GetStagesCommand",
-    "GetAuthorizersCommand",
-    "GetModelsCommand",
-    "GetRequestValidatorsCommand"
-  ]);
+  assert.deepEqual(
+    commands.map((command) => command.constructor.name),
+    [
+      "GetRestApisCommand",
+      "GetResourcesCommand",
+      "GetMethodCommand",
+      "GetIntegrationCommand",
+      "GetDeploymentsCommand",
+      "GetStagesCommand",
+      "GetAuthorizersCommand",
+      "GetModelsCommand",
+      "GetRequestValidatorsCommand"
+    ]
+  );
 });
 
 test("상세 probe는 권한 거부를 성공으로 숨기지 않는다", async () => {
@@ -392,10 +419,12 @@ test("상세 probe는 권한 거부를 성공으로 숨기지 않는다", async 
       async send(command) {
         if (command.constructor.name === "ListFunctionsCommand") {
           return {
-            Functions: [{
-              FunctionName: "application-function",
-              FunctionArn: "arn:aws:lambda:ap-northeast-2:123:function:application-function"
-            }]
+            Functions: [
+              {
+                FunctionName: "application-function",
+                FunctionArn: "arn:aws:lambda:ap-northeast-2:123:function:application-function"
+              }
+            ]
           };
         }
         if (command.constructor.name === "GetFunctionCommand") return {};
@@ -586,9 +615,8 @@ test("core permission is update_required and expanded missing setup remains dist
   assert.equal(optionalMissing.status, "limited");
   assert.deepEqual(optionalMissing.limitedServiceLabels, ["Resource Explorer"]);
   assert.equal(
-    optionalMissing.serviceResults.find(
-      (result) => result.serviceKey === "resource-explorer"
-    )?.outcome,
+    optionalMissing.serviceResults.find((result) => result.serviceKey === "resource-explorer")
+      ?.outcome,
     "not_configured"
   );
 });
@@ -664,24 +692,29 @@ test("EventBridge probe는 첫 Event Bus의 첫 Rule과 Target, tag metadata만 
       }
       if (value.constructor.name === "ListRulesCommand") {
         return {
-            Rules: [{
+          Rules: [
+            {
               Name: "nightly",
               EventBusName: "orders-bus",
               Arn: "arn:aws:events:ap-northeast-2:123456789012:rule/orders-bus/nightly"
-            }]
-          };
+            }
+          ]
+        };
       }
       return { Targets: [] };
     }
   });
 
   assert.equal(outcome, "success");
-  assert.deepEqual(calls.map((call) => call.name), [
-    "ListEventBusesCommand",
-    "ListRulesCommand",
-    "ListTargetsByRuleCommand",
-    "ListTagsForResourceCommand"
-  ]);
+  assert.deepEqual(
+    calls.map((call) => call.name),
+    [
+      "ListEventBusesCommand",
+      "ListRulesCommand",
+      "ListTargetsByRuleCommand",
+      "ListTagsForResourceCommand"
+    ]
+  );
   assert.equal(calls[0]?.input["Limit"], 1);
   assert.equal(calls[1]?.input["Limit"], 1);
   assert.equal(calls[1]?.input["EventBusName"], "orders-bus");
@@ -711,11 +744,10 @@ test("Resource Explorer uses GetDefaultView then GetView then one Search", async
   });
 
   assert.equal(outcome, "success");
-  assert.deepEqual(calls.map((call) => call.name), [
-    "GetDefaultViewCommand",
-    "GetViewCommand",
-    "SearchCommand"
-  ]);
+  assert.deepEqual(
+    calls.map((call) => call.name),
+    ["GetDefaultViewCommand", "GetViewCommand", "SearchCommand"]
+  );
   assert.equal(calls[2]?.input["MaxResults"], 1);
 });
 
@@ -783,6 +815,8 @@ test("Lambda without a resource policy is a successful readable seed", async () 
   assert.deepEqual(calls, [
     "ListFunctionsCommand",
     "GetFunctionCommand",
+    "GetFunctionConcurrencyCommand",
+    "GetFunctionCodeSigningConfigCommand",
     "GetPolicyCommand",
     "ListTagsCommand",
     "ListAliasesCommand",
@@ -791,10 +825,7 @@ test("Lambda without a resource policy is a successful readable seed", async () 
 });
 
 test("S3 optional bucket configuration absence still proves read access", async () => {
-  for (const missingName of [
-    "NoSuchPublicAccessBlockConfiguration",
-    "NoSuchBucketPolicy"
-  ]) {
+  for (const missingName of ["NoSuchPublicAccessBlockConfiguration", "NoSuchBucketPolicy"]) {
     let calls = 0;
     const outcome = await probeS3({
       async send() {
@@ -835,7 +866,10 @@ test("catalog executors run sequentially to bound account-wide read pressure", a
   );
 
   assert.equal(maximumActive, 1);
-  assert.deepEqual(seen, AWS_IMPORT_READERS.map((reader) => reader.serviceKey));
+  assert.deepEqual(
+    seen,
+    AWS_IMPORT_READERS.map((reader) => reader.serviceKey)
+  );
 });
 
 test("the overall read deadline aborts a slow executor before the operation lease", async () => {
@@ -846,9 +880,13 @@ test("the overall read deadline aborts a slow executor before the operation leas
       return "success";
     }
     await new Promise<void>((_resolve, reject) => {
-      context.abortSignal.addEventListener("abort", () => {
-        reject(Object.assign(new Error("aborted raw request"), { name: "AbortError" }));
-      }, { once: true });
+      context.abortSignal.addEventListener(
+        "abort",
+        () => {
+          reject(Object.assign(new Error("aborted raw request"), { name: "AbortError" }));
+        },
+        { once: true }
+      );
     });
     return "success";
   });

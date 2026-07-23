@@ -161,6 +161,7 @@ export const AWS_IMPORT_READERS = [
       "kms:DescribeKey",
       "kms:GetKeyPolicy",
       "kms:GetKeyRotationStatus",
+      "kms:ListGrants",
       "kms:ListResourceTags",
       "kms:ListAliases"
     ]
@@ -190,6 +191,8 @@ export const AWS_IMPORT_READERS = [
     actions: [
       "lambda:ListFunctions",
       "lambda:GetFunction",
+      "lambda:GetFunctionConcurrency",
+      "lambda:GetFunctionCodeSigningConfig",
       "lambda:GetPolicy",
       "lambda:ListTags",
       "lambda:ListAliases",
@@ -215,7 +218,7 @@ export const AWS_IMPORT_READERS = [
   }
 ] as const satisfies readonly AwsImportReader[];
 
-export type AwsImportServiceKey = typeof AWS_IMPORT_READERS[number]["serviceKey"];
+export type AwsImportServiceKey = (typeof AWS_IMPORT_READERS)[number]["serviceKey"];
 
 /** gg: 실제 reader와 probe가 공유할 목록에서 읽기 Policy를 한 번만 만듭니다. */
 export function createAwsImportReadPolicyDocument(): AwsImportReadPolicyDocument {

@@ -8,11 +8,9 @@ import {
   getAwsImportPolicyFingerprint
 } from "./aws-import-access-catalog.js";
 
-export const AWS_IMPORT_POLICY_CONTRACT_VERSION = "7";
+export const AWS_IMPORT_POLICY_CONTRACT_VERSION = "8";
 
-export type AwsImportIssuedPolicyActionRegistry = Readonly<
-  Record<string, readonly string[]>
->;
+export type AwsImportIssuedPolicyActionRegistry = Readonly<Record<string, readonly string[]>>;
 
 /** gg: 이미 발급한 Policy contract별 exact action set만 수동으로 보존합니다. */
 export const AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION = {
@@ -407,6 +405,91 @@ export const AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION = {
     "secretsmanager:DescribeSecret",
     "secretsmanager:ListSecrets",
     "tag:GetResources"
+  ],
+  "8": [
+    "apigateway:GET",
+    "application-autoscaling:DescribeScalableTargets",
+    "application-autoscaling:DescribeScalingPolicies",
+    "application-autoscaling:ListTagsForResource",
+    "cloudfront:GetOriginAccessControl",
+    "cloudfront:ListDistributions",
+    "cloudfront:ListOriginAccessControls",
+    "cloudfront:ListTagsForResource",
+    "cloudwatch:DescribeAlarms",
+    "cloudwatch:ListTagsForResource",
+    "ec2:DescribeAddresses",
+    "ec2:DescribeImages",
+    "ec2:DescribeInstances",
+    "ec2:DescribeInternetGateways",
+    "ec2:DescribeNatGateways",
+    "ec2:DescribeRouteTables",
+    "ec2:DescribeSecurityGroups",
+    "ec2:DescribeSubnets",
+    "ec2:DescribeVpcs",
+    "ecr:DescribeRepositories",
+    "ecr:ListTagsForResource",
+    "ecs:DescribeClusters",
+    "ecs:DescribeServices",
+    "ecs:DescribeTaskDefinition",
+    "ecs:ListClusters",
+    "ecs:ListServices",
+    "elasticloadbalancing:DescribeListenerAttributes",
+    "elasticloadbalancing:DescribeListenerCertificates",
+    "elasticloadbalancing:DescribeListeners",
+    "elasticloadbalancing:DescribeLoadBalancerAttributes",
+    "elasticloadbalancing:DescribeLoadBalancers",
+    "elasticloadbalancing:DescribeTags",
+    "elasticloadbalancing:DescribeTargetGroupAttributes",
+    "elasticloadbalancing:DescribeTargetGroups",
+    "events:ListEventBuses",
+    "events:ListRules",
+    "events:ListTagsForResource",
+    "events:ListTargetsByRule",
+    "iam:GetInstanceProfile",
+    "iam:GetPolicy",
+    "iam:GetPolicyVersion",
+    "iam:GetRole",
+    "iam:GetRolePolicy",
+    "iam:ListAttachedRolePolicies",
+    "iam:ListInstanceProfileTags",
+    "iam:ListInstanceProfiles",
+    "iam:ListPolicies",
+    "iam:ListPolicyTags",
+    "iam:ListRolePolicies",
+    "iam:ListRoles",
+    "iam:ListRoleTags",
+    "kms:DescribeKey",
+    "kms:GetKeyPolicy",
+    "kms:GetKeyRotationStatus",
+    "kms:ListAliases",
+    "kms:ListGrants",
+    "kms:ListKeys",
+    "kms:ListResourceTags",
+    "lambda:GetFunction",
+    "lambda:GetFunctionCodeSigningConfig",
+    "lambda:GetFunctionConcurrency",
+    "lambda:GetPolicy",
+    "lambda:ListAliases",
+    "lambda:ListFunctions",
+    "lambda:ListTags",
+    "lambda:ListVersionsByFunction",
+    "logs:DescribeLogGroups",
+    "logs:ListTagsForResource",
+    "rds:DescribeDBInstances",
+    "resource-explorer-2:GetDefaultView",
+    "resource-explorer-2:GetView",
+    "resource-explorer-2:Search",
+    "s3:GetBucketLocation",
+    "s3:GetBucketPolicyStatus",
+    "s3:GetBucketPublicAccessBlock",
+    "s3:GetBucketTagging",
+    "s3:GetBucketVersioning",
+    "s3:GetBucketWebsite",
+    "s3:GetEncryptionConfiguration",
+    "s3:ListAllMyBuckets",
+    "secretsmanager:DescribeSecret",
+    "secretsmanager:ListSecrets",
+    "tag:GetResources"
   ]
 } as const satisfies AwsImportIssuedPolicyActionRegistry;
 
@@ -538,16 +621,20 @@ function getValidatedTargetRoleName(input: AwsImportPolicyContractInput): string
     throw new Error("AWS import access region is invalid");
   }
 
-  const match = /^arn:aws:iam::(\d{12}):role\/(SketchCatchTerraformExecutionRole(?:-[a-z0-9]{8})?)$/u.exec(
-    input.targetRoleArn
-  );
+  const match =
+    /^arn:aws:iam::(\d{12}):role\/(SketchCatchTerraformExecutionRole(?:-[a-z0-9]{8})?)$/u.exec(
+      input.targetRoleArn
+    );
 
   if (!match || match[1] !== input.accountId) {
     throw new Error("AWS import access target Role is invalid");
   }
 
   const targetRoleName = match[2]!;
-  const expectedSuffix = input.connectionId.toLowerCase().replace(/[^a-z0-9]/gu, "").slice(0, 8);
+  const expectedSuffix = input.connectionId
+    .toLowerCase()
+    .replace(/[^a-z0-9]/gu, "")
+    .slice(0, 8);
 
   if (
     targetRoleName !== "SketchCatchTerraformExecutionRole" &&

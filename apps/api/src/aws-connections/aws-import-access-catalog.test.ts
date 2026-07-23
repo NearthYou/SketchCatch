@@ -17,7 +17,9 @@ test("import catalog produces the read-only policy Task 4 gateway and probes wil
   assert.equal(policy.Statement[0]!.Effect, "Allow");
   assert.equal(policy.Statement[0]!.Resource, "*");
   assert(
-    catalogActions.every((action) => /^(?:Describe|Get|GET|List|Search)/u.test(action.split(":")[1] ?? ""))
+    catalogActions.every((action) =>
+      /^(?:Describe|Get|GET|List|Search)/u.test(action.split(":")[1] ?? "")
+    )
   );
   assert.doesNotMatch(
     JSON.stringify(policy),
@@ -113,6 +115,8 @@ test("데모 토폴로지 reader는 필요한 metadata 읽기 권한만 요청�
   assert.deepEqual(readers.get("lambda")?.actions, [
     "lambda:ListFunctions",
     "lambda:GetFunction",
+    "lambda:GetFunctionConcurrency",
+    "lambda:GetFunctionCodeSigningConfig",
     "lambda:GetPolicy",
     "lambda:ListTags",
     "lambda:ListAliases",
@@ -123,6 +127,7 @@ test("데모 토폴로지 reader는 필요한 metadata 읽기 권한만 요청�
     "kms:DescribeKey",
     "kms:GetKeyPolicy",
     "kms:GetKeyRotationStatus",
+    "kms:ListGrants",
     "kms:ListResourceTags",
     "kms:ListAliases"
   ]);
