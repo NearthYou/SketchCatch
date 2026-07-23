@@ -32,6 +32,7 @@ import {
 } from "../../../components/ui/SelectMenu";
 import {
   createAwsConnectionSetup,
+  checkAwsImportAccessReads,
   createAwsCodeConnection,
   deleteAwsConnection,
   disconnectAwsCodeConnection,
@@ -80,7 +81,7 @@ const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
   { label: "도쿄", value: "ap-northeast-1" }
 ];
 
-// AWS Role 연결, 가져오기 권한, 연결 삭제와 외부 서비스 연결 단계를 함께 관리합니다.
+// gg: AWS 연결과 GitHub 배포 연결을 사용자가 한 화면에서 이어서 관리합니다.
 export function SettingsDashboardClient() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -191,14 +192,14 @@ export function SettingsDashboardClient() {
     await invalidateAwsConnectionQueries(queryClient, user?.id);
   }
 
-  // 가져오기 준비가 끝난 같은 연결만 Reverse Engineering으로 돌려보냅니다.
+  // gg: 구조 분석 준비를 마친 같은 AWS 연결만 원래 화면으로 돌려보냅니다.
   function returnToReverseEngineeringAfterRecovery(): void {
     if (recoveryNavigation.returnHref) {
       router.replace(recoveryNavigation.returnHref);
     }
   }
 
-  // 새 연결의 External ID와 Role 이름을 만들고 CloudFormation 실행 정보를 준비합니다.
+  // gg: 새 AWS 연결에 필요한 AWS Console 승인 정보를 준비합니다.
   async function createConnection(): Promise<void> {
     setActionPending(true);
     setErrorMessage("");
@@ -217,7 +218,7 @@ export function SettingsDashboardClient() {
     }
   }
 
-  // 새로고침 뒤에도 저장된 미검증 연결의 CloudFormation 설정을 다시 이어갑니다.
+  // gg: 새로고침 뒤에도 미완료 AWS 연결을 이어서 승인할 수 있게 합니다.
   async function resumeConnectionSetup(connection: AwsConnection): Promise<void> {
     setActionPending(true);
     setErrorMessage("");
@@ -239,7 +240,7 @@ export function SettingsDashboardClient() {
     }
   }
 
-  // CloudFormation에서 Role을 만든 뒤 AWS 계정 ID로 AssumeRole 연결을 검증합니다.
+  // gg: AWS Console 승인 뒤 사용자가 입력한 계정으로 연결만 확인합니다.
   async function verifyCreatedRole(): Promise<void> {
     if (!setupConnection || !/^\d{12}$/.test(accountId)) return;
     setActionPending(true);
@@ -249,33 +250,45 @@ export function SettingsDashboardClient() {
         connectionId: setupConnection.id,
         accountId
       });
+      try {
+        // gg: 새 연결은 한 번의 안전한 읽기 확인으로 구조 분석 준비 상태까지 함께 갱신합니다.
+        await checkAwsImportAccessReads(setupConnection.id);
+      } catch {
+        // gg: 구조 분석 확인 실패가 이미 완료된 AWS 연결 자체를 실패로 바꾸지 않습니다.
+      }
       setSetupConnection(null);
       setCloudFormation(null);
       setAccountId("");
       await invalidateConnections();
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "AWS Role 검증에 실패했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "AWS 연결을 확인하지 못했습니다."));
     } finally {
       setActionPending(false);
     }
   }
 
-  // 이미 검증된 Role이 실제로 AssumeRole 가능한지 다시 확인합니다.
+  // gg: 이미 연결한 AWS 계정이 지금도 사용할 수 있는지만 다시 확인합니다.
   async function retestConnection(connection: AwsConnection): Promise<void> {
     if (!connection.roleArn) return;
     setActionPending(true);
     setErrorMessage("");
     try {
       await testAwsConnection({ connectionId: connection.id, roleArn: connection.roleArn });
+      try {
+        // gg: 사용자가 연결을 다시 확인할 때 구조 분석 준비 상태도 함께 최신으로 맞춥니다.
+        await checkAwsImportAccessReads(connection.id);
+      } catch {
+        // gg: 연결 확인 성공을 구조 분석 상태 확인 실패로 되돌리지 않습니다.
+      }
       await invalidateConnections();
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "AWS 연결 테스트에 실패했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "AWS 연결을 확인하지 못했습니다."));
     } finally {
       setActionPending(false);
     }
   }
 
-  // 실패한 연결은 단순 연결 테스트가 아니라 저장된 Role을 다시 검증해 verified 상태로 복구합니다.
+  // gg: 이전에 실패한 연결은 새 연결을 만들지 않고 기존 연결을 다시 확인합니다.
   async function reverifyConnection(connection: AwsConnection): Promise<void> {
     if (!connection.roleArn) {
       await resumeConnectionSetup(connection);
@@ -286,6 +299,12 @@ export function SettingsDashboardClient() {
     setErrorMessage("");
     try {
       await verifyAwsConnection({ connectionId: connection.id, roleArn: connection.roleArn });
+      try {
+        // gg: 복구한 AWS 연결도 같은 안전한 읽기 확인을 거쳐 구조 분석 준비 상태를 갱신합니다.
+        await checkAwsImportAccessReads(connection.id);
+      } catch {
+        // gg: AWS 연결 복구와 구조 분석 준비 상태는 독립적으로 보존합니다.
+      }
       await invalidateConnections();
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "AWS 연결을 다시 확인하지 못했습니다."));
@@ -294,7 +313,7 @@ export function SettingsDashboardClient() {
     }
   }
 
-  // AWS를 변경하지 않는 미리보기를 먼저 열어 사용자가 정리 대상을 확인하게 합니다.
+  // gg: 연결 해제 전에 실제로 정리될 항목만 먼저 확인합니다.
   async function removeConnection(connectionId: string): Promise<void> {
     setActionPending(true);
     setErrorMessage("");
@@ -302,13 +321,13 @@ export function SettingsDashboardClient() {
     try {
       setDeletionPreview(await getAwsConnectionDeletionPreview(connectionId));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "삭제 대상을 불러오지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "AWS 연결 해제 대상을 불러오지 못했습니다."));
     } finally {
       setActionPending(false);
     }
   }
 
-  // 미리보기에서 확인한 exact managed Resource 집합에만 삭제 승인을 보냅니다.
+  // gg: 사용자가 확인한 SketchCatch 연결 항목만 정리하고 AWS 인프라는 건드리지 않습니다.
   async function confirmRemoveConnection(): Promise<void> {
     if (!deletionPreview?.canDelete) return;
     setActionPending(true);
@@ -322,7 +341,7 @@ export function SettingsDashboardClient() {
       setDeletionPreview(null);
       await invalidateConnections();
     } catch (error) {
-      setDeletionErrorMessage(getApiErrorMessage(error, "AWS 연결을 삭제하지 못했습니다."));
+      setDeletionErrorMessage(getApiErrorMessage(error, "AWS 연결을 해제하지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -365,7 +384,7 @@ export function SettingsDashboardClient() {
       return;
     }
     if (!displayedVerifiedConnections.some((connection) => connection.id === selectedBuildAwsConnectionId)) {
-      setErrorMessage("AWS CodeBuild용 GitHub 권한을 만들 AWS 계정을 선택해 주세요.");
+      setErrorMessage("GitHub 배포 연결에 사용할 AWS 계정을 선택해 주세요.");
       return;
     }
     setActionPending(true);
@@ -377,7 +396,7 @@ export function SettingsDashboardClient() {
         [selectedBuildAwsConnectionId]: response
       }));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "AWS CodeBuild용 GitHub 권한을 만들지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "GitHub 배포 연결을 만들지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -503,7 +522,7 @@ export function SettingsDashboardClient() {
       ? "활성 GitHub App 연결을 하나만 남겨 주세요."
       : "GitHub 조직과 저장소를 연결해 주세요.";
   const awsStepSummary = primaryVerifiedConnection
-    ? `${primaryVerifiedConnection.accountId ?? "계정 확인 전"} · ${getAwsRegionLabel(primaryVerifiedConnection.region)} (${primaryVerifiedConnection.region})`
+    ? `${primaryVerifiedConnection.accountId ?? "계정 확인 전"} · ${getAwsRegionLabel(primaryVerifiedConnection.region)}`
     : "";
   const codeBuildStepSummary = getCodeBuildStepSummary(
     selectedCodeConnection?.status,
@@ -522,7 +541,7 @@ export function SettingsDashboardClient() {
       {isConnectionsPending ? (
         <>
           <GitHubAccountSettings />
-          <ProductState description="AWS Role 연결 상태를 확인하고 있습니다." kind="loading" title="AWS 환경설정 불러오는 중" />
+          <ProductState description="AWS 연결 상태를 확인하고 있습니다." kind="loading" title="AWS 설정 불러오는 중" />
         </>
       ) : hasConnectionsLoadError ? (
         <>
@@ -555,11 +574,11 @@ export function SettingsDashboardClient() {
               onToggle={() => setExpandedConnectionStep("aws")}
               state={awsStepState}
               summary={awsStepSummary}
-              title="AWS 계정 연결"
+              title="AWS 연결"
               titleId="aws-account-connection-title"
             >
               <div className={styles.connectionStepControls} id="aws-account-connection">
-                <p>Terraform 실행을 위한 IAM Role 기반 AWS 연결을 설정합니다.</p>
+                <p>AWS 계정을 한 번 연결하면 배포와 기존 AWS 구조 분석에 사용할 수 있습니다.</p>
                 <div className={styles.controlRow}>
                   <div className={styles.controlField}>
                     <span>기본 region</span>
@@ -573,15 +592,15 @@ export function SettingsDashboardClient() {
                       value={region}
                     />
                   </div>
-                  <button className={styles.primaryAction} disabled={actionPending} onClick={() => void createConnection()} type="button">새 AWS 연결</button>
+                  <button className={styles.primaryAction} disabled={actionPending} onClick={() => void createConnection()} type="button">AWS 연결</button>
                 </div>
 
                 {setupConnection && cloudFormation ? (
-                  <section aria-label="AWS Role 연결 설정" className={`${styles.setupSection} ${styles.inlineSetupSection}`}>
-                    <div><span>1</span><div><strong>CloudFormation으로 Role 만들기</strong><p>{cloudFormation.roleName}</p></div></div>
-                    {cloudFormation.launchStackUrl ? <a href={cloudFormation.launchStackUrl} rel="noreferrer" target="_blank">AWS Console 열기 <ExternalLink size={15} /></a> : <pre>{cloudFormation.templateBody}</pre>}
+                  <section aria-label="AWS 연결 승인" className={`${styles.setupSection} ${styles.inlineSetupSection}`}>
+                    <div><span>1</span><div><strong>AWS에서 연결 승인</strong><p>AWS Console에서 SketchCatch 연결을 승인해 주세요.</p></div></div>
+                    {cloudFormation.launchStackUrl ? <a href={cloudFormation.launchStackUrl} rel="noreferrer" target="_blank">AWS에서 승인하기 <ExternalLink size={15} /></a> : <details><summary>AWS에서 승인 화면이 열리지 않나요?</summary><p>아래 연결 내용을 AWS Console에서 실행해 주세요.</p><pre>{cloudFormation.templateBody}</pre></details>}
                     <div><span>2</span><label><strong>AWS 계정 ID 확인</strong><input inputMode="numeric" maxLength={12} onChange={(event) => setAccountId(event.target.value.replace(/\D/g, ""))} placeholder="12자리 계정 ID" value={accountId} /></label></div>
-                    <button className={styles.primaryAction} disabled={actionPending || !/^\d{12}$/.test(accountId)} onClick={() => void verifyCreatedRole()} type="button">Role 연결 확인</button>
+                    <button className={styles.primaryAction} disabled={actionPending || !/^\d{12}$/.test(accountId)} onClick={() => void verifyCreatedRole()} type="button">AWS 연결 확인</button>
                   </section>
                 ) : null}
               </div>
@@ -595,7 +614,7 @@ export function SettingsDashboardClient() {
               onToggle={() => setExpandedConnectionStep("codebuild")}
               state={codeBuildStepState}
               summary={codeBuildStepSummary}
-              title="AWS CodeBuild용 GitHub 권한"
+              title="GitHub 배포 연결"
               titleId="aws-codebuild-github-authorization-title"
             >
               <div className={styles.connectionStepControls} id="aws-codebuild-github-authorization">
@@ -670,8 +689,8 @@ export function SettingsDashboardClient() {
           ) : null}
 
           <section className={styles.connectionList}>
-            <div className={styles.sectionHeading}><h2>연결된 AWS 계정</h2><span>{displayedConnections.length}개</span></div>
-            {displayedConnections.length === 0 ? <p>아직 연결된 AWS 계정이 없습니다.</p> : displayedConnections.map((connection) => {
+            <div className={styles.sectionHeading}><h2>AWS 연결</h2><span>{displayedConnections.length}개</span></div>
+            {displayedConnections.length === 0 ? <p>아직 AWS 연결이 없습니다.</p> : displayedConnections.map((connection) => {
               const connectionAction = getSettingsAwsConnectionAction(connection);
 
               return (
@@ -680,7 +699,7 @@ export function SettingsDashboardClient() {
                     {connection.status === "verified" ? <CheckCircle2 size={16} /> : <Cloud size={16} />}
                     <span>
                       {connection.status === "verified"
-                        ? "검증됨"
+                        ? "연결됨"
                         : connection.status === "failed"
                           ? "재확인 필요"
                           : "확인 필요"}
@@ -688,7 +707,7 @@ export function SettingsDashboardClient() {
                   </div>
                   <div>
                     <strong>{connection.accountId ?? "계정 확인 전"}</strong>
-                    <p>{connection.region} · {connection.roleArn ?? "Role ARN 없음"}</p>
+                    <p>{getAwsRegionLabel(connection.region)}</p>
                   </div>
                   <div className={styles.rowActions}>
                     {connectionAction.kind === "test" ? (
@@ -710,7 +729,7 @@ export function SettingsDashboardClient() {
                       onClick={() => void removeConnection(connection.id)}
                       type="button"
                     >
-                      <Trash2 size={15} />삭제
+                      <Trash2 size={15} />AWS 연결 해제
                     </button>
                   </div>
                   <div className={settingsStyles.connectionImportAccess}>
@@ -756,14 +775,13 @@ export function SettingsDashboardClient() {
             <Trash2 size={24} />
             <h2 id="github-build-disconnect-title">GitHub 빌드 연결 해제</h2>
             <p id="github-build-disconnect-description">
-              SketchCatch가 만든 GitHub 빌드 리소스를 AWS에서 정리합니다. AWS 계정 연결과 배포된 애플리케이션 및 인프라는 유지됩니다.
+              SketchCatch가 만든 GitHub 배포 연결을 정리합니다. AWS 연결과 배포한 애플리케이션 및 인프라는 유지됩니다.
             </p>
             <div className={styles.cleanupPreview}>
-              <strong>정리할 리소스</strong>
+              <strong>정리되는 항목</strong>
               <ul>
-                <li>CodeBuild 프로젝트, 전용 Role과 로그</li>
-                <li>빌드 캐시 ECR Repository</li>
-                <li>GitHub CodeConnection</li>
+                <li>GitHub 배포 연결</li>
+                <li>SketchCatch가 만든 배포 보조 항목</li>
               </ul>
             </div>
             <div className={styles.modalActions}>
@@ -794,7 +812,7 @@ export function SettingsDashboardClient() {
               aria-label={
                 deletionPreview.cleanupRetry
                   ? "AWS 연결 정리 재시도 닫기"
-                  : "AWS 연결 삭제 닫기"
+                  : "AWS 연결 해제 닫기"
               }
               className={styles.modalClose}
               disabled={actionPending}
@@ -806,40 +824,34 @@ export function SettingsDashboardClient() {
             </button>
             {deletionPreview.cleanupRetry ? <AlertTriangle size={24} /> : <Trash2 size={24} />}
             <h2 id="aws-deletion-title">
-              {deletionPreview.cleanupRetry ? "AWS 연결 정리 재시도" : "AWS 연결 삭제 대상 확인"}
+              {deletionPreview.cleanupRetry ? "AWS 연결 정리 재시도" : "AWS 연결 해제 확인"}
             </h2>
             <p id="aws-deletion-description">
               {deletionPreview.cleanupRetry
-                ? "이전에 완료되지 않은 SketchCatch 관리 리소스 정리를 다시 시도합니다."
-                : "삭제를 승인하면 아래 SketchCatch 관리 리소스만 AWS에서 정리한 뒤 연결 기록을 삭제합니다."}
+                ? "이전에 완료되지 않은 SketchCatch 연결 항목 정리를 다시 시도합니다."
+                : "연결을 해제하면 SketchCatch가 만든 연결 항목만 정리합니다. 배포한 인프라는 유지됩니다."}
             </p>
             <div className={styles.cleanupPreview}>
-              <strong>정리할 리소스</strong>
+              <strong>정리되는 연결 항목</strong>
               <ul>
-                <li>CodeBuild 프로젝트 {deletionPreview.managedResources.codeBuildProjects.length}개</li>
-                <li>CodeBuild Service Role {deletionPreview.managedResources.codeBuildProjects.length}개</li>
-                <li>CodeBuild 로그 그룹 {deletionPreview.managedResources.codeBuildProjects.length}개</li>
+                <li>GitHub 배포 연결 {deletionPreview.managedResources.codeBuildProjects.length}개</li>
+                <li>SketchCatch가 만든 연결 보조 항목</li>
               </ul>
-              <strong>삭제하지 않는 리소스</strong>
-              <p>{deletionPreview.preservedResources.join(", ")}</p>
-              <strong>보존하는 기록</strong>
-              <p>
-                Reverse Engineering 결과{" "}
-                {deletionPreview.preservedRecords?.reverseEngineeringScans ?? 0}개 · 연결 삭제 후
-                연결 삭제됨으로 표시
-              </p>
+              <strong>유지되는 항목</strong>
+              <p>배포한 인프라와 기존 구조 분석 결과는 유지됩니다.</p>
+              <details>
+                <summary>정리 범위 자세히 보기</summary>
+                <p>{deletionPreview.preservedResources.join(", ")}</p>
+                <p>구조 분석 결과 {deletionPreview.preservedRecords?.reverseEngineeringScans ?? 0}개는 연결 해제 후에도 보존됩니다.</p>
+              </details>
             </div>
             {deletionPreview.blockerMessage ? (
-              <p className={styles.cleanupBlocker}>{deletionPreview.blockerMessage}</p>
+              <p className={styles.cleanupBlocker}>구조 분석 설정을 먼저 정리한 뒤 AWS 연결을 해제할 수 있습니다.</p>
             ) : null}
             {deletionErrorMessage ? (
               <div className={styles.cleanupError} role="alert">
-                <strong>삭제가 완료되지 않았습니다. 연결은 유지되었습니다.</strong>
+                <strong>연결 해제가 완료되지 않았습니다. AWS 연결은 유지되었습니다.</strong>
                 <p>오류를 확인한 뒤 다시 시도해 주세요.</p>
-                <details>
-                  <summary>오류 상세</summary>
-                  <p>{deletionErrorMessage}</p>
-                </details>
               </div>
             ) : null}
             <div className={styles.modalActions}>
@@ -852,10 +864,10 @@ export function SettingsDashboardClient() {
                   type="button"
                 >
                   {actionPending
-                    ? "삭제 중…"
+                    ? "연결 해제 중…"
                     : deletionPreview.cleanupRetry
-                      ? "관리 리소스 정리 재시도"
-                      : "관리 리소스 정리 후 연결 삭제"}
+                      ? "연결 정리 재시도"
+                      : "AWS 연결 해제"}
                 </button>
               ) : null}
             </div>
@@ -885,7 +897,7 @@ export function SettingsDashboardClient() {
             <Cloud size={24} />
             <h2 id="aws-required-title">AWS 연결이 먼저 필요합니다</h2>
             <p id="aws-required-description">
-              GitHub 코드를 빌드할 AWS 계정을 먼저 연결하고 Role 검증을 완료해 주세요.
+              GitHub 코드를 배포할 AWS 계정을 먼저 연결하고 연결 확인을 완료해 주세요.
             </p>
             <div className={styles.modalActions}>
               <button onClick={() => setShowAwsRequiredModal(false)} type="button">취소</button>
@@ -988,7 +1000,7 @@ function getConnectionFlowStatusLabel(
   state: SettingsConnectionFlowStepState,
   number: number
 ): string {
-  if (state === "complete") return number === 2 ? "검증됨" : "연결됨";
+  if (state === "complete") return "연결됨";
   if (state === "error") return "오류";
   if (state === "locked") return "대기";
   return "진행 중";
@@ -1004,14 +1016,14 @@ function getCodeBuildStepSummary(
 ): string {
   if (status === "AVAILABLE") {
     return githubAccountLogin
-      ? `${githubAccountLogin} · AWS CodeConnections`
-      : "AWS CodeConnections 연결 활성";
+      ? `${githubAccountLogin} · GitHub 배포 연결됨`
+      : "GitHub 배포 연결됨";
   }
   if (status === "ERROR") return "연결 오류를 확인해 주세요.";
-  if (status === "CREATING") return "AWS CodeConnections 연결을 생성하고 있습니다.";
+  if (status === "CREATING") return "GitHub 배포 연결을 만들고 있습니다.";
   if (status === "PENDING") return "AWS에서 GitHub 연결 승인이 필요합니다.";
-  if (status === "DELETING") return "GitHub 연결을 해제하고 있습니다.";
-  return "CodeBuild에서 사용할 GitHub 연결을 설정해 주세요.";
+  if (status === "DELETING") return "GitHub 배포 연결을 해제하고 있습니다.";
+  return "GitHub 배포 연결을 설정해 주세요.";
 }
 
 function GitHubAuthorizationTargetNotice({
@@ -1033,21 +1045,21 @@ function GitHubAuthorizationTargetNotice({
   if (isError) {
     return (
       <p className={styles.githubSettingsError} role="alert">
-        GitHub App 연결 정보를 불러오지 못해 CodeBuild 연동을 시작할 수 없습니다.
+        GitHub App 연결 정보를 불러오지 못해 GitHub 배포 연결을 시작할 수 없습니다.
       </p>
     );
   }
   if (target.status === "github_app_not_configured") {
     return (
       <p className={styles.githubSettingsMessage} role="status">
-        GitHub App 서버 설정을 완료한 후 CodeBuild 연동을 시작할 수 있습니다.
+        GitHub App 서버 설정을 완료한 후 GitHub 배포 연결을 시작할 수 있습니다.
       </p>
     );
   }
   if (target.status === "github_installation_required") {
     return (
       <div className={styles.githubSettingsError} role="alert">
-        <p>CodeBuild 연동을 위해 GitHub App을 먼저 연결해 주세요.</p>
+        <p>GitHub 배포 연결을 위해 GitHub App을 먼저 연결해 주세요.</p>
         <button onClick={scrollToGitHubAccountConnection} type="button">
           GitHub App 연결하기
         </button>
@@ -1057,7 +1069,7 @@ function GitHubAuthorizationTargetNotice({
   if (target.status === "multiple_github_installations_unsupported") {
     return (
       <div className={styles.githubSettingsError} role="alert">
-        <p>CodeBuild에서 사용할 GitHub App 연결을 하나만 유지해 주세요.</p>
+        <p>GitHub 배포에 사용할 GitHub App 연결을 하나만 유지해 주세요.</p>
         <button onClick={scrollToGitHubAccountConnection} type="button">
           GitHub 연결 확인하기
         </button>
@@ -1086,7 +1098,7 @@ function scrollToGitHubAccountConnection(): void {
   });
 }
 
-// 가져오기 연결 자체가 끊긴 경우 기존 AWS 연결 영역으로 이동합니다.
+// gg: AWS 연결이 끊긴 경우 사용자가 연결 화면으로 바로 돌아가게 합니다.
 function scrollToAwsAccountConnection(): void {
   document.getElementById("aws-account-connection")?.scrollIntoView({
     behavior: "smooth",
@@ -1122,14 +1134,14 @@ function GitHubBuildConnectionAction({
   if (!connection?.codeConnection) {
     return (
       <button className={styles.primaryAction} disabled={actionPending || disabled} onClick={onConnect} type="button">
-        AWS GitHub 권한 승인 시작
+        GitHub 배포 연결 시작
       </button>
     );
   }
   if (connection.codeConnection.status === "CREATING") {
     return (
       <div className={styles.buildConnectionPending} role="status">
-        <span>AWS GitHub 권한 생성 중</span>
+        <span>GitHub 배포 연결 준비 중</span>
         <button disabled={actionPending} onClick={onConnect} type="button">상태 확인</button>
       </div>
     );
@@ -1152,7 +1164,7 @@ function GitHubBuildConnectionAction({
         <div className={styles.buildConnectionErrorSummary}>
           <AlertTriangle aria-hidden="true" size={18} />
           <div>
-            <strong>AWS GitHub 권한 연결을 확인할 수 없습니다.</strong>
+            <strong>GitHub 배포 연결을 확인할 수 없습니다.</strong>
             <p>오류 상세를 확인한 뒤 다시 시도해 주세요.</p>
           </div>
         </div>

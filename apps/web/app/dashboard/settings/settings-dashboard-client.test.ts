@@ -13,8 +13,8 @@ const stylesSource = readFileSync(
 
 test("Settings keeps the existing connection order inside one progressive flow", () => {
   const githubIndex = clientSource.indexOf('title="GitHub App 연결"');
-  const awsIndex = clientSource.indexOf('title="AWS 계정 연결"');
-  const codeBuildIndex = clientSource.indexOf('title="AWS CodeBuild용 GitHub 권한"');
+  const awsIndex = clientSource.indexOf('title="AWS 연결"');
+  const codeBuildIndex = clientSource.indexOf('title="GitHub 배포 연결"');
 
   assert.ok(githubIndex >= 0);
   assert.ok(awsIndex > githubIndex);
@@ -26,8 +26,8 @@ test("Settings keeps the existing connection order inside one progressive flow",
   assert.match(stylesSource, /\.connectionStepBody\s*\{/);
 });
 
-test("Settings keeps raw CodeBuild failures behind a local details disclosure", () => {
-  assert.match(clientSource, /AWS GitHub 권한 연결을 확인할 수 없습니다\./);
+test("Settings keeps raw GitHub deployment failures behind a local details disclosure", () => {
+  assert.match(clientSource, /GitHub 배포 연결을 확인할 수 없습니다\./);
   assert.match(clientSource, /<summary>오류 상세<\/summary>/);
   assert.match(clientSource, /connection\.codeConnection\.statusReason/);
   assert.match(clientSource, />다시 생성<\/button>/);
@@ -51,11 +51,40 @@ test("Settings does not lock the AWS step when GitHub App setup is incomplete", 
   assert.match(clientSource, /locked=\{codeBuildStepState === "locked"\}/);
 });
 
-test("Settings shows the operational AWS Role description only inside the expanded step body", () => {
-  const roleDescriptions = clientSource.match(/Terraform 실행을 위한 IAM Role 기반 AWS 연결을 설정합니다\./g);
+test("Settings hides AWS implementation terms and explains one connection outcome", () => {
+  assert.match(
+    clientSource,
+    /AWS 계정을 한 번 연결하면 배포와 기존 AWS 구조 분석에 사용할 수 있습니다\./
+  );
+  assert.match(clientSource, /AWS에서 연결 승인/);
+  assert.match(clientSource, /AWS 연결 확인/);
+  assert.doesNotMatch(clientSource, /Terraform 실행을 위한 IAM Role 기반 AWS 연결을 설정합니다\./);
+  assert.doesNotMatch(clientSource, /AWS Role 연결 상태/);
+  assert.doesNotMatch(clientSource, /CloudFormation으로 Role 만들기/);
+  assert.doesNotMatch(clientSource, />Role 연결 확인</);
+});
 
-  assert.equal(roleDescriptions?.length, 1);
-  assert.match(clientSource, /summary \? <span className=\{styles\.connectionStepSummary\}>/);
+test("Settings keeps role identifiers out of the connected AWS account summary", () => {
+  assert.match(clientSource, /<p>\{getAwsRegionLabel\(connection\.region\)\}<\/p>/);
+  assert.doesNotMatch(clientSource, /connection\.region\} · \{connection\.roleArn/);
+  assert.match(clientSource, /<Trash2 size=\{15\} \/>AWS 연결 해제/);
+});
+
+test("Settings uses a simple confirmation before disconnecting AWS", () => {
+  assert.match(clientSource, /AWS 연결 해제 확인/);
+  assert.match(clientSource, /배포한 인프라는 유지됩니다\./);
+  assert.match(clientSource, /구조 분석 설정을 먼저 정리한 뒤 AWS 연결을 해제할 수 있습니다\./);
+});
+
+test("Settings checks structure analysis after AWS connection confirmation", () => {
+  for (const functionName of ["verifyCreatedRole", "retestConnection", "reverifyConnection"]) {
+    const start = clientSource.indexOf(`async function ${functionName}`);
+    const end = clientSource.indexOf("\n  }", start);
+    const source = clientSource.slice(start, end);
+
+    assert.ok(start >= 0, functionName);
+    assert.match(source, /await checkAwsImportAccessReads\(/, functionName);
+  }
 });
 
 test("Settings client passes one AWS connection ID into recovery navigation", () => {
