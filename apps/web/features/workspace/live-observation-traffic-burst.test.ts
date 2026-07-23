@@ -3,6 +3,9 @@ import test from "node:test";
 import type { LiveObservationV2Snapshot } from "@sketchcatch/types";
 
 import {
+  appendLiveObservationParticleIds,
+  getLiveObservationTrafficIntensity,
+  mergeLiveObservationRequestBursts,
   getLiveObservationTrafficBurst,
   getLiveObservationTrafficCursor
 } from "./live-observation.js";
@@ -23,18 +26,67 @@ test("starts a focused-flow burst from a fresh CloudWatch request observation", 
 
   assert.deepEqual(
     getLiveObservationTrafficBurst(getLiveObservationTrafficCursor(previous), next),
-    { overflowCount: 4, visibleParticleCount: 5 }
+    { overflowCount: 0, visibleParticleCount: 9 }
   );
 });
 
-test("bounds hundreds of requests to five representative particles", () => {
+test("renders up to twenty-four requests before summarizing the overflow", () => {
   const previous = snapshot({ acceptedEventCount: 0, observedAt: "2026-07-19T01:00:00.000Z" });
   const next = snapshot({ acceptedEventCount: 250, observedAt: "2026-07-19T01:00:01.000Z" });
 
   assert.deepEqual(
     getLiveObservationTrafficBurst(getLiveObservationTrafficCursor(previous), next),
-    { overflowCount: 245, visibleParticleCount: 5 }
+    { overflowCount: 226, visibleParticleCount: 24 }
   );
+});
+
+test("merges rapid single-request snapshots into one dense visual burst", () => {
+  let burst = null;
+
+  for (let index = 0; index < 30; index += 1) {
+    burst = mergeLiveObservationRequestBursts(burst, {
+      overflowCount: 0,
+      visibleParticleCount: 1
+    });
+  }
+
+  assert.deepEqual(burst, {
+    overflowCount: 6,
+    visibleParticleCount: 24
+  });
+});
+
+test("keeps in-flight particle identities and replaces only new traffic at the cap", () => {
+  let nextParticleId = 24;
+  const currentIds = Array.from({ length: 24 }, (_, index) => index + 1);
+
+  const nextIds = appendLiveObservationParticleIds(
+    currentIds,
+    1,
+    24,
+    () => {
+      nextParticleId += 1;
+      return nextParticleId;
+    }
+  );
+
+  assert.deepEqual(nextIds, Array.from({ length: 24 }, (_, index) => index + 2));
+  assert.deepEqual(nextIds.slice(0, 23), currentIds.slice(1));
+  assert.deepEqual(
+    appendLiveObservationParticleIds(currentIds, 1, 0, () => {
+      nextParticleId += 1;
+      return nextParticleId;
+    }),
+    []
+  );
+});
+
+test("raises motion intensity from rolling pressure without changing diagram geometry", () => {
+  assert.equal(getLiveObservationTrafficIntensity(1, "normal"), "flow");
+  assert.equal(getLiveObservationTrafficIntensity(24, "normal"), "busy");
+  assert.equal(getLiveObservationTrafficIntensity(1, "warning"), "busy");
+  assert.equal(getLiveObservationTrafficIntensity(1, "high"), "busy");
+  assert.equal(getLiveObservationTrafficIntensity(1, "critical"), "surge");
 });
 
 test("does not replay the same provider observation or target a missing running task", () => {
