@@ -127,3 +127,11 @@ Short English-only working log for the current agent context. Older records are 
 1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
 2. Use a separately approved load cycle if provider-confirmed Live Observation scale-out must be accepted; no DB migration is required.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
+
+### 2026-07-23 - Demo architecture editor flow
+
+- Issue #552 removes the Application Auto Scaling target from the strict Repository ECS/Fargate fixed-template draft while retaining a policy that references the target the presenter adds manually.
+- Dropping an Application Auto Scaling target now uses the existing ECS cluster and service names to fill `resource_id`, plus fixed ECS values for `scalable_dimension` and `service_namespace`; the Terraform resource name defaults to `ecs_service_requests`.
+- Fixed Template Terraform names now derive from the short `templateResourceId`, resource labels remain visible when the display toggle is on at far zoom, and Terraform gutter/highlight layers synchronize in the same scroll event.
+- Verified: focused API tests 2/2, focused Web tests 107/107, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass.
+- The broader Web suite was attempted earlier and remains red in unrelated baseline tests outside this diff. No dependency, lockfile, migration, cloud mutation, or deployment change was made.

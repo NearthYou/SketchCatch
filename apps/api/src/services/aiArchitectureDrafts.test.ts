@@ -593,8 +593,8 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.equal(countNodes("UNKNOWN"), 4);
   assert.equal(countNodes("NAT_GATEWAY"), 1);
   assert.equal(countNodes("ELASTIC_IP"), 1);
-  assert.equal(countNodes("APPLICATION_AUTO_SCALING_TARGET"), 1);
-  assert.equal(countNodes("APPLICATION_AUTO_SCALING_POLICY"), 1);
+  assert.equal(countNodes("APPLICATION_AUTO_SCALING_TARGET"), 0);
+  assert.equal(countNodes("APPLICATION_AUTO_SCALING_POLICY"), 0);
   assert.equal(countNodes("CODESTAR_CONNECTION"), 0);
   assert.equal(countNodes("CODEPIPELINE"), 0);
   assert.equal(countNodes("CODEBUILD_PROJECT"), 0);
@@ -718,8 +718,14 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.ok(edgeLabels.has("ALB SG -> Task SG: TCP 8080 only"));
   assert.ok(edgeLabels.has("application revisions pull API image from ECR"));
   assert.ok(edgeLabels.has("writes ECS container logs via awslogs"));
-  assert.ok(edgeLabels.has("scales"));
-  assert.ok(edgeLabels.has("tracks requests"));
+  assert.equal(edgeLabels.has("scales"), false);
+  assert.equal(edgeLabels.has("tracks requests"), false);
+  const nodeIds = new Set(response.architectureJson.nodes.map((node) => node.id));
+  assert.ok(
+    response.architectureJson.edges.every(
+      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+    )
+  );
   assert.equal(
     response.architectureJson.edges.filter(
       (edge) =>
@@ -788,8 +794,19 @@ test("strict repository evidence maps a generated signing secret and 1-to-3 scal
   }>;
 
   assert.equal(service?.config.desiredCount, 1);
-  assert.equal(scalingTarget?.config.minCapacity, 1);
-  assert.equal(scalingTarget?.config.maxCapacity, 3);
+  assert.equal(scalingTarget, undefined);
+  assert.equal(
+    scalingPolicy?.config.resourceId,
+    "aws_appautoscaling_target.ecs_service_requests.resource_id"
+  );
+  assert.equal(
+    scalingPolicy?.config.scalableDimension,
+    "aws_appautoscaling_target.ecs_service_requests.scalable_dimension"
+  );
+  assert.equal(
+    scalingPolicy?.config.serviceNamespace,
+    "aws_appautoscaling_target.ecs_service_requests.service_namespace"
+  );
   assert.equal(
     (scalingPolicy?.config.targetTrackingScalingPolicyConfiguration as { targetValue?: number })
       .targetValue,

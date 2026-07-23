@@ -3348,6 +3348,15 @@ test("createPlannedDiagramJson matches the approved Repository ECS reference lay
       taskSecurityGroup
   );
   assert.ok(githubActions);
+  for (const templateResource of diagramJson.nodes.filter(
+    (node) => node.kind === "resource" && node.id.startsWith(`fixed-template-${templateId}-`)
+  )) {
+    assert.doesNotMatch(
+      templateResource.parameters?.resourceName ?? "",
+      /fixed_template_ecs_fargate_container_app/u,
+      templateResource.id
+    );
+  }
   assert.equal(nodeById.has(`fixed-template-${templateId}-presentation-user`), false);
   assert.ok(definitionOpsGroup);
   assert.ok(globalIamGroup);
