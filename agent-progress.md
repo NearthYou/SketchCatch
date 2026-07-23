@@ -6,8 +6,18 @@ Short English-only working log for the current agent context. Older records are 
 
 - The new-project screen shows local AWS, multicolor Google Cloud, and Azure brand icons and uses a wider, larger start-method layout with single-line desktop copy.
 - Workspace start cards keep every desktop title on one line, use subdued description typography, and place the AWS Role badge in the Reverse Engineering title row.
+- Repository Template previews show a dynamic recommendation rank, use the clearer AI design action, and keep candidate navigation anchored independently of recommendation-reason length.
+- Repository follow-up questions separate selected Template context, section hierarchy, individual prompts, and card-style answer choices.
 
 ## Session Record
+
+### 2026-07-23 - Stabilize Repository Template preview controls
+
+- Replaced the generic Template Preview eyebrow with the active candidate rank and renamed the AI design action to AI로 직접 설계.
+- Top-aligned the candidate navigation with the recommendation copy so 1 / 3, 2 / 3, and 3 / 3 no longer move vertically when reason lengths differ.
+- Refined the follow-up step with a subdued selected-Template summary, a larger section heading, tight Template-to-section spacing, whitespace-separated question groups, tighter prompt-to-choice spacing, and accessible card-style radio choices with clear checked, hover, and focus states.
+- Browser-verified the two-question layout and selected answer state at desktop size.
+- Verified 46 Repository tests, root lint, root typecheck, production build, authenticated browser navigation, scoped diff checks, and the final harness check.
 
 ### 2026-07-23 - Rebuild Repository analysis and Template preview UI
 

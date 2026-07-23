@@ -178,7 +178,11 @@ export function RepositoryAnalysisResult({
         </aside>
 
         <div className={styles.previewColumn}>
-          <p className={styles.sectionLabel}>Template Preview</p>
+          <p className={styles.sectionLabel}>
+            {currentCandidate
+              ? `${resolvedPreviewIndex + 1}순위 추천`
+              : "추천 결과"}
+          </p>
           {currentCandidate ? (
             <>
               <div className={styles.previewHeading}>
@@ -252,7 +256,7 @@ export function RepositoryAnalysisResult({
 
               <div className={styles.previewActions}>
                 <Link className={styles.aiAction} href={aiDesignHref}>
-                  AI 새 설계
+                  AI로 직접 설계
                 </Link>
                 <button
                   className={styles.primaryButton}
@@ -268,7 +272,7 @@ export function RepositoryAnalysisResult({
             <div className={styles.emptyPreview}>
               <p>추천할 수 있는 Template 후보가 없습니다.</p>
               <Link className={styles.aiAction} href={aiDesignHref}>
-                AI 새 설계
+                AI로 직접 설계
               </Link>
             </div>
           )}
