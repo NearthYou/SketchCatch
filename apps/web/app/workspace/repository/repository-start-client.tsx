@@ -3,18 +3,10 @@
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  GitBranch,
-  LoaderCircle,
-  Search,
-  Sparkles
-} from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  DiagramJson,
   GitHubAppAvailability,
   GitHubInstallationConnection,
   GitHubInstalledRepositoryCandidate,
@@ -22,15 +14,12 @@ import type {
   RepositoryDeploymentType,
   RepositoryTemplateRecommendationResult,
   SaveRepositoryAnalysisRecordRequest,
-  DiagramJson,
-  SourceRepositoryAnalysisResult,
   SourceRepository,
+  SourceRepositoryAnalysisResult
 } from "@sketchcatch/types";
 import { useAuth } from "../../../components/auth/auth-provider";
 import { invalidateProjectQueries } from "../../../components/query/dashboard-query-invalidation";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
-import { ProductState } from "../../../components/ui/ProductState";
-import { SelectMenu } from "../../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import {
   analyzePublicSourceRepository,
@@ -60,7 +49,6 @@ import {
   type PublicRepositoryTemplateId
 } from "../../../features/workspace/public-repository-recommendation";
 import { createWorkspaceAiStartHref } from "../../../features/workspace/workspace-ai-start-entry";
-import { RepositoryArchitecturePreview } from "./repository-architecture-preview";
 import { getRepositoryDraftBlockingIssue } from "./repository-draft-readiness";
 import {
   createConnectedRepositoryAnalysisResult,
@@ -76,7 +64,12 @@ import {
   createRepositoryAnalysisResumeKey,
   writeRepositoryAnalysisResume
 } from "./repository-analysis-resume";
-import styles from "./repository-start.module.css";
+import {
+  RepositoryAnalysisForm,
+  RepositoryAnalysisResult,
+  RepositoryAnalysisSummary
+} from "./repository-analysis-screen";
+import styles from "./repository-analysis-screen.module.css";
 
 type RequestState = "idle" | "loading" | "error";
 type PublicAnalysisState =
@@ -153,9 +146,23 @@ export function RepositoryStartClient({
   const questions =
     activeHandoff?.questions?.map(localizePublicRepositoryQuestion).slice(0, 5) ?? [];
   const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
-  const previewDiagram = createRepositoryPreviewDiagram(effectiveProjectName, activeRepository);
   const isPublicAnalysisBusy = publicAnalysisState === "loading";
   const showUrlAnalysis = Boolean(!activeRepository || publicAnalysis);
+  const publicRecommendation = publicAnalysis
+    ? createPublicRepositoryRecommendation({
+        analysis: publicAnalysis,
+        answers,
+        deploymentType,
+        selectedTemplateId: selectedPublicTemplateId
+      })
+    : null;
+  const selectedPublicCandidate = publicRecommendation?.candidates.find(
+    (candidate) => candidate.templateId === selectedPublicTemplateId
+  );
+  const aiDesignHref = createWorkspaceAiStartHref({
+    projectId,
+    projectName: effectiveProjectName
+  });
   const recoveryAction = useMemo<RepositoryRecoveryAction>(() => {
     try {
       return selectRepositoryRecoveryAction({
@@ -369,13 +376,7 @@ export function RepositoryStartClient({
       setDefaultBranch(result.defaultBranch);
       const nextDeploymentType = getPublicRepositoryDeploymentDefault(result);
       setDeploymentType(nextDeploymentType);
-      setSelectedPublicTemplateId(
-        createPublicRepositoryRecommendation({
-          analysis: result,
-          answers: {},
-          deploymentType: nextDeploymentType
-        }).candidates[0]?.templateId ?? null
-      );
+      setSelectedPublicTemplateId(null);
       setPublicAnalysisState("idle");
     } catch (error) {
       setPublicAnalysisState("repository_error");
@@ -389,14 +390,16 @@ export function RepositoryStartClient({
     }
   }
 
-  async function createPublicRepositoryBoard(): Promise<void> {
+  async function createPublicRepositoryBoard(
+    templateId: PublicRepositoryTemplateId
+  ): Promise<void> {
     if (!publicAnalysis || isPublicAnalysisBusy) return;
 
     const recommendation = createPublicRepositoryRecommendation({
       analysis: publicAnalysis,
       answers,
       deploymentType,
-      selectedTemplateId: selectedPublicTemplateId
+      selectedTemplateId: templateId
     });
     const blockingIssue = getRepositoryDraftBlockingIssue({
       answers,
@@ -408,13 +411,6 @@ export function RepositoryStartClient({
       setErrorMessage(blockingIssue.message);
       return;
     }
-    const templateId = selectedPublicTemplateId ?? recommendation.candidates[0]?.templateId;
-
-    if (!templateId) {
-      setErrorMessage("추천 템플릿으로 보드를 만들 수 없습니다.");
-      return;
-    }
-
     setPublicAnalysisState("loading");
     setErrorMessage("");
 
@@ -632,234 +628,293 @@ export function RepositoryStartClient({
     }
   }
 
-  function confirmPublicRecommendationConfiguration(): void {
+  function confirmPublicRecommendationConfiguration(
+    templateId: PublicRepositoryTemplateId
+  ): void {
+    setSelectedPublicTemplateId(templateId);
+    setAnswers({});
+    setErrorMessage("");
+
+    if (!publicAnalysis) return;
+    const nextRecommendation = createPublicRepositoryRecommendation({
+      analysis: publicAnalysis,
+      answers: {},
+      deploymentType,
+      selectedTemplateId: templateId
+    });
+
+    if (nextRecommendation.questions.length === 0) {
+      void createPublicRepositoryBoard(templateId);
+      return;
+    }
+
     setPublicRecommendationStage("questions");
+  }
+
+  function resetPublicRepositoryAnalysis(): void {
+    setPublicAnalysis(null);
+    setDefaultBranch("");
+    setAnswers({});
+    setSelectedPublicTemplateId(null);
+    setPublicRecommendationStage("configuration");
+    setPublicAnalysisState("idle");
+    setErrorMessage("");
   }
 
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
         <ProductBrand />
-        <Link href="/workspace/new">시작 방식 다시 선택</Link>
+        <Link className={styles.startModeLink} href="/workspace/new">
+          시작 방식 다시 선택
+        </Link>
       </header>
-
-      <section className={styles.content} aria-labelledby="repository-start-title">
-        <header className={styles.heading}>
+      <div className={styles.shell}>
+        <header className={styles.pageHeading}>
           <h1 id="repository-start-title">GitHub 저장소</h1>
-          <p>{effectiveProjectName}</p>
         </header>
 
-        {showUrlAnalysis ? (
-          <section className={styles.publicUrlPanel}>
-            {publicRecommendationStage === "configuration" ? (
-              <>
-                <GitBranch aria-hidden="true" size={24} />
-                <h2>GitHub 저장소 URL 분석</h2>
-                <form
-                  className={styles.publicUrlForm}
-                  data-has-branches={publicAnalysis !== null}
-                  onSubmit={(event) => void analyzeRepositoryUrl(event)}
-                >
-                  <label>
-                    <span>저장소 URL</span>
-                    <input
-                      onChange={(event) => {
-                        const nextRepositoryUrl = event.target.value;
-                        setRepositoryUrl(nextRepositoryUrl);
-
-                        if (nextRepositoryUrl !== publicAnalysis?.repositoryUrl) {
-                          setPublicAnalysis(null);
-                          setDefaultBranch("");
-                          setPublicAnalysisState("idle");
-                          setErrorMessage("");
-                        }
-                      }}
-                      placeholder="https://github.com/owner/repository"
-                      type="url"
-                      value={repositoryUrl}
-                    />
-                  </label>
-                  {publicAnalysis ? (
-                    <label>
-                      <span>브랜치</span>
-                      <SelectMenu
-                        ariaLabel="분석할 브랜치"
-                        className={styles.branchSelect}
-                        disabled={isPublicAnalysisBusy}
-                        emptyLabel="브랜치 선택"
-                        onChange={setDefaultBranch}
-                        options={publicAnalysis.availableBranches.map((branch) => ({
-                          label: branch,
-                          value: branch
-                        }))}
-                        size="large"
-                        tone="workspace"
-                        value={defaultBranch}
-                      />
-                    </label>
-                  ) : null}
-                  <button disabled={isPublicAnalysisBusy || !repositoryUrl.trim()} type="submit">
-                    {isPublicAnalysisBusy ? (
-                      <LoaderCircle className={styles.spin} size={16} />
-                    ) : (
-                      <Search size={16} />
-                    )}
-                    {isPublicAnalysisBusy ? "분석 중" : "URL 분석"}
-                  </button>
-                </form>
-                <p className={styles.inlineHint}>
-                  공개 저장소는 GitHub 연결 없이 분석하고 보드를 만들 수 있습니다. CI/CD는 보드 생성 후 Delivery에서 연결합니다.
-                </p>
-              </>
-            ) : null}
-            {publicAnalysis ? (
-              <PublicRepositoryRecommendationStep
-                aiDesignHref={createWorkspaceAiStartHref({
-                  projectId,
-                  projectName: effectiveProjectName
-                })}
-                answers={answers}
-                analysis={publicAnalysis}
-                deploymentType={deploymentType}
-                isBusy={isPublicAnalysisBusy}
-                onAnswer={(questionId, value) => {
-                  setAnswers((current) => ({ ...current, [questionId]: value }));
-                  setErrorMessage("");
-                }}
-                onCreateBoard={() => void createPublicRepositoryBoard()}
-                onConfirmConfiguration={confirmPublicRecommendationConfiguration}
-                onDeploymentTypeChange={(nextDeploymentType) => {
-                  setDeploymentType(nextDeploymentType);
-                  setSelectedPublicTemplateId(null);
-                  setAnswers({});
-                }}
-                onEditConfiguration={() => setPublicRecommendationStage("configuration")}
-                onSelectTemplate={(templateId) => {
-                  setSelectedPublicTemplateId(templateId);
-                  setAnswers({});
-                }}
-                selectedTemplateId={selectedPublicTemplateId}
-                stage={publicRecommendationStage}
-              />
-            ) : null}
-            {publicAnalysisState === "architecture_error" && !pendingAnalysisRecord ? (
-              <ProductState
-                action={(
-                  <button
-                    disabled={isPublicAnalysisBusy}
-                    onClick={() => void createPublicRepositoryBoard()}
-                    type="button"
-                  >
-                    다시 생성
-                  </button>
-                )}
-                compact
-                description={errorMessage}
-                kind="error"
-                title="Fixed Template 보드를 생성할 수 없습니다"
-              />
-            ) : null}
-            {publicAnalysisState === "repository_error" && !pendingAnalysisRecord ? (
-              <RepositoryAnalysisRecovery
-                action={recoveryAction}
-                connectionSetupAvailability={githubAppAvailability?.connectionSetup}
-                errorMessage={errorMessage}
-                isBusy={actionState === "loading" || isPublicAnalysisBusy}
-                onAddPermission={(managementUrl) => {
-                  window.open(managementUrl, "_blank", "noopener,noreferrer");
-                }}
-                onAnalyzeConnected={() => void analyzeRepository()}
-                onConnect={(candidate) => void connectRepository(candidate)}
-                onConnectGitHub={() => void openGitHubConnection()}
-                onRetry={() => void analyzePublicRepositoryUrl(repositoryUrl, defaultBranch)}
-                onVerifyPermission={() => void loadCandidates()}
-              />
-            ) : null}
-          </section>
+        {showUrlAnalysis && !publicAnalysis &&
+        publicRecommendationStage === "configuration" ? (
+          <RepositoryAnalysisForm
+            branch={defaultBranch}
+            errorMessage={publicAnalysisState === "repository_error" ? "" : errorMessage}
+            isBusy={isPublicAnalysisBusy}
+            onBranchChange={setDefaultBranch}
+            onRepositoryUrlChange={(nextRepositoryUrl) => {
+              setRepositoryUrl(nextRepositoryUrl);
+              setPublicAnalysis(null);
+              setDefaultBranch("");
+              setPublicAnalysisState("idle");
+              setErrorMessage("");
+            }}
+            onSubmit={(event) => void analyzeRepositoryUrl(event)}
+            repositoryUrl={repositoryUrl}
+          />
         ) : null}
 
-        {activeRepository && !publicAnalysis ? (
-          <section className={styles.analysisPanel}>
-            <div>
-              <span>연결된 저장소</span>
-              <h2>
-                {activeRepository.owner}/{activeRepository.name}
-              </h2>
-              <p>{activeRepository.defaultBranch}</p>
-            </div>
-            <button
-              disabled={actionState === "loading"}
-              onClick={() => void analyzeRepository()}
-              type="button"
-            >
-              {actionState === "loading" ? (
-                <LoaderCircle className={styles.spin} size={16} />
-              ) : (
-                <Search size={16} />
-              )}
-              {actionState === "loading" ? "분석 중" : "저장소 분석"}
-            </button>
-
-            {activeHandoff ? (
-              <section className={styles.recommendationForm} aria-label="템플릿 추천 설정">
-                <label>
-                  <span>배포 방식</span>
+        {publicAnalysis &&
+        publicRecommendation &&
+        publicRecommendationStage === "configuration" ? (
+          <RepositoryAnalysisResult
+            aiDesignHref={aiDesignHref}
+            analysis={publicAnalysis}
+            candidates={publicRecommendation.candidates}
+            isBusy={isPublicAnalysisBusy}
+            onAnalyzeAnother={resetPublicRepositoryAnalysis}
+            onUseTemplate={confirmPublicRecommendationConfiguration}
+            resetKey={`${publicAnalysis.repositoryRevision}:${deploymentType}:${publicRecommendation.candidates
+              .map((candidate) => candidate.templateId)
+              .join(",")}`}
+            statusLabel={isPublicAnalysisBusy ? "처리 중" : "분석 완료"}
+            toolbar={
+              shouldAskPublicRepositoryDeploymentType(publicAnalysis) ? (
+                <label htmlFor="public-repository-deployment-type">
+                  배포 방식
                   <select
+                    id="public-repository-deployment-type"
+                    disabled={isPublicAnalysisBusy}
+                    name="deploymentType"
+                    onChange={(event) => {
+                      setDeploymentType(event.target.value as RepositoryDeploymentType);
+                      setSelectedPublicTemplateId(null);
+                      setAnswers({});
+                    }}
                     value={deploymentType}
-                    onChange={(event) =>
-                      setDeploymentType(event.target.value as RepositoryDeploymentType)
-                    }
                   >
                     <option value="ec2_vm">EC2/VM 기반</option>
                     <option value="container">컨테이너 기반</option>
                     <option value="serverless">서버리스 기반</option>
                   </select>
                 </label>
-                <RepositoryCiCdConnectedState repository={activeRepository} />
-                <RepositoryQuestions
-                  answers={answers}
-                  onAnswer={(questionId, value) =>
-                    setAnswers((current) => ({ ...current, [questionId]: value }))
-                  }
-                  questions={questions}
-                />
+              ) : undefined
+            }
+          />
+        ) : null}
+
+        {publicAnalysis &&
+        publicRecommendation &&
+        publicRecommendationStage === "questions" ? (
+          <section
+            aria-labelledby="repository-questions-repository-title"
+            className={styles.resultSection}
+          >
+            <RepositoryAnalysisSummary
+              actionLabel="다른 저장소 분석"
+              analysis={publicAnalysis}
+              headingId="repository-questions-repository-title"
+              isBusy={isPublicAnalysisBusy}
+              onAction={resetPublicRepositoryAnalysis}
+              statusLabel={isPublicAnalysisBusy ? "처리 중" : "분석 완료"}
+            />
+            <div className={styles.questionStepBody}>
+              <h3>{selectedPublicCandidate?.displayTitle ?? "선택한 Template"}</h3>
+              <RepositoryQuestions
+                answers={answers}
+                onAnswer={(questionId, value) => {
+                  setAnswers((current) => ({ ...current, [questionId]: value }));
+                  setErrorMessage("");
+                }}
+                questions={publicRecommendation.questions}
+              />
+              <div className={styles.panelActions}>
                 <button
-                  disabled={recommendationState === "loading"}
-                  onClick={() => void submitRecommendation()}
+                  className={styles.secondaryButton}
+                  disabled={isPublicAnalysisBusy}
+                  onClick={() => {
+                    setSelectedPublicTemplateId(null);
+                    setAnswers({});
+                    setPublicRecommendationStage("configuration");
+                  }}
                   type="button"
                 >
-                  {recommendationState === "loading" ? (
-                    <LoaderCircle className={styles.spin} size={16} />
-                  ) : (
-                    <Search size={16} />
-                  )}
-                  템플릿 추천
+                  Template 다시 선택
                 </button>
-              </section>
-            ) : null}
-
-            {activeRecommendation ? (
-              <RepositoryTemplateCandidates
-                actionState={actionState}
-                onCreateBoard={(templateId) => void createConnectedRepositoryBoard(templateId)}
-                recommendation={activeRecommendation}
-              />
-            ) : null}
-
-            {previewDiagram ? (
-              <section className={styles.previewPanel} aria-label="저장소 분석 아키텍처 미리보기">
-                <div>
-                  <span>아키텍처 미리보기</span>
-                  <strong>
-                    {activeRepository.analysis?.aiHandoff.status === "template_selected"
-                      ? activeRepository.analysis.aiHandoff.selectionReasons.join(" / ")
-                      : "분석 근거로 하나의 템플릿을 선택하지 못했습니다."}
-                  </strong>
-                </div>
-                <RepositoryArchitecturePreview diagram={previewDiagram} />
-              </section>
-            ) : null}
+                <Link className={styles.aiAction} href={aiDesignHref}>
+                  AI 새 설계
+                </Link>
+                <button
+                  className={styles.primaryButton}
+                  disabled={isPublicAnalysisBusy || !selectedPublicTemplateId}
+                  onClick={() => {
+                    if (selectedPublicTemplateId) {
+                      void createPublicRepositoryBoard(selectedPublicTemplateId);
+                    }
+                  }}
+                  type="button"
+                >
+                  {isPublicAnalysisBusy ? "생성 중" : "보드 생성"}
+                </button>
+              </div>
+            </div>
           </section>
+        ) : null}
+
+        {publicAnalysisState === "architecture_error" && !pendingAnalysisRecord ? (
+          <section
+            aria-labelledby="repository-board-error-title"
+            className={styles.errorPanel}
+            role="alert"
+          >
+            <h2 id="repository-board-error-title">보드를 생성할 수 없습니다</h2>
+            <p>{errorMessage}</p>
+            <button
+              className={styles.primaryButton}
+              disabled={isPublicAnalysisBusy}
+              onClick={() => {
+                if (selectedPublicTemplateId) {
+                  void createPublicRepositoryBoard(selectedPublicTemplateId);
+                }
+              }}
+              type="button"
+            >
+              다시 생성
+            </button>
+          </section>
+        ) : null}
+
+        {publicAnalysisState === "repository_error" && !pendingAnalysisRecord ? (
+          <RepositoryAnalysisRecovery
+            action={recoveryAction}
+            connectionSetupAvailability={githubAppAvailability?.connectionSetup}
+            errorMessage={errorMessage}
+            isBusy={actionState === "loading" || isPublicAnalysisBusy}
+            onAddPermission={(managementUrl) => {
+              window.open(managementUrl, "_blank", "noopener,noreferrer");
+            }}
+            onAnalyzeConnected={() => void analyzeRepository()}
+            onConnect={(candidate) => void connectRepository(candidate)}
+            onConnectGitHub={() => void openGitHubConnection()}
+            onRetry={() => void analyzePublicRepositoryUrl(repositoryUrl, defaultBranch)}
+            onVerifyPermission={() => void loadCandidates()}
+          />
+        ) : null}
+
+        {activeRepository && !publicAnalysis ? (
+          activeRecommendation ? (
+              <>
+                <RepositoryAnalysisResult
+                  aiDesignHref={aiDesignHref}
+                  analysis={activeRepository}
+                  analyzeAnotherLabel="저장소 다시 분석"
+                  candidates={activeRecommendation.candidates}
+                  isBusy={
+                    actionState === "loading" || recommendationState === "loading"
+                  }
+                  onAnalyzeAnother={() => void analyzeRepository()}
+                  onUseTemplate={(templateId) =>
+                    void createConnectedRepositoryBoard(templateId)
+                  }
+                  resetKey={`${activeRepository.analysis?.repositoryRevision ?? "pending"}:${activeRepository.analysis?.analyzedAt ?? "not-analyzed"}:${deploymentType}:${activeRecommendation.candidates
+                    .map((candidate) => candidate.templateId)
+                    .join(",")}`}
+                  statusLabel={actionState === "loading" ? "처리 중" : "분석 완료"}
+                />
+                {activeHandoff ? (
+                  <section
+                    aria-labelledby="repository-recommendation-settings-title"
+                    className={styles.secondarySettingsPanel}
+                  >
+                    <h2 id="repository-recommendation-settings-title">추천 설정</h2>
+                    <div className={styles.settingsFields}>
+                      <label htmlFor="repository-deployment-type">
+                        배포 방식
+                        <select
+                          id="repository-deployment-type"
+                          name="deploymentType"
+                          onChange={(event) =>
+                            setDeploymentType(event.target.value as RepositoryDeploymentType)
+                          }
+                          value={deploymentType}
+                        >
+                          <option value="ec2_vm">EC2/VM 기반</option>
+                          <option value="container">컨테이너 기반</option>
+                          <option value="serverless">서버리스 기반</option>
+                        </select>
+                      </label>
+                      <RepositoryQuestions
+                        answers={answers}
+                        onAnswer={(questionId, value) =>
+                          setAnswers((current) => ({ ...current, [questionId]: value }))
+                        }
+                        questions={questions}
+                      />
+                      <button
+                        className={`${styles.secondaryButton} ${styles.refreshRecommendationButton}`}
+                        disabled={recommendationState === "loading"}
+                        onClick={() => void submitRecommendation()}
+                        type="button"
+                      >
+                        {recommendationState === "loading" ? "추천 중" : "추천 갱신"}
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
+              </>
+            ) : (
+              <section
+                aria-labelledby="connected-repository-title"
+                className={styles.connectedPrompt}
+              >
+                <h2 id="connected-repository-title">
+                  {activeRepository.owner}/{activeRepository.name}
+                </h2>
+                <p>{activeRepository.defaultBranch}</p>
+                <button
+                  className={styles.primaryButton}
+                  disabled={actionState === "loading"}
+                  onClick={() => void analyzeRepository()}
+                  type="button"
+                >
+                  {actionState === "loading" ? "분석 중" : "저장소 분석"}
+                </button>
+                {actionState === "loading" ? (
+                  <p aria-live="polite" role="status">
+                    분석 중입니다.
+                  </p>
+                ) : null}
+              </section>
+            )
         ) : null}
 
         {errorMessage && (
@@ -867,23 +922,26 @@ export function RepositoryStartClient({
             publicAnalysisState !== "architecture_error") ||
           pendingAnalysisRecord
         ) ? (
-          <ProductState
-            action={pendingAnalysisRecord ? (
+          <section
+            aria-labelledby="repository-analysis-error-title"
+            className={styles.errorPanel}
+            role="alert"
+          >
+            <h2 id="repository-analysis-error-title">작업 실패</h2>
+            <p>{errorMessage}</p>
+            {pendingAnalysisRecord ? (
               <button
+                className={styles.primaryButton}
                 disabled={actionState === "loading"}
                 onClick={() => void retryRepositoryAnalysisRecord()}
                 type="button"
               >
                 Repository 정보 저장 재시도
               </button>
-            ) : undefined}
-            compact
-            description={errorMessage}
-            kind="error"
-            title="작업 실패"
-          />
+            ) : null}
+          </section>
         ) : null}
-      </section>
+      </div>
     </main>
   );
 }
@@ -915,7 +973,14 @@ function RepositoryAnalysisRecovery({
 }) {
   let guidance = "URL과 branch를 확인한 뒤 다시 분석해주세요.";
   let primaryAction: ReactNode = (
-    <button disabled={isBusy} onClick={onRetry} type="button">다시 분석</button>
+    <button
+      className={styles.primaryButton}
+      disabled={isBusy}
+      onClick={onRetry}
+      type="button"
+    >
+      다시 분석
+    </button>
   );
 
   if (action.kind === "connect_github") {
@@ -925,49 +990,86 @@ function RepositoryAnalysisRecovery({
     } else {
       guidance = "비공개 Repository라면 GitHub를 연결한 뒤 정확한 Repository 권한을 확인합니다.";
       primaryAction = (
-        <button disabled={isBusy} onClick={onConnectGitHub} type="button">GitHub 연결하기</button>
+        <button
+          className={styles.primaryButton}
+          disabled={isBusy}
+          onClick={onConnectGitHub}
+          type="button"
+        >
+          GitHub 연결하기
+        </button>
       );
     }
   } else if (action.kind === "add_repository_permission") {
     guidance = "GitHub에서 권한을 추가한 뒤 이 화면으로 돌아오면 자동으로 다시 확인합니다.";
     primaryAction = (
-      <div className={styles.actions}>
+      <>
         <button
+          className={styles.primaryButton}
           disabled={isBusy}
           onClick={() => onAddPermission(action.managementUrl)}
           type="button"
         >
           Repository 권한 추가
         </button>
-        <button disabled={isBusy} onClick={onVerifyPermission} type="button">권한 다시 확인</button>
-      </div>
+        <button
+          className={styles.secondaryButton}
+          disabled={isBusy}
+          onClick={onVerifyPermission}
+          type="button"
+        >
+          권한 다시 확인
+        </button>
+      </>
     );
   } else if (action.kind === "connect_exact_repository") {
     guidance = "GitHub App이 입력한 Repository에 접근할 수 있습니다. 프로젝트에 명시적으로 연결한 뒤 분석합니다.";
     primaryAction = (
-      <button disabled={isBusy} onClick={() => onConnect(action.candidate)} type="button">
+      <button
+        className={styles.primaryButton}
+        disabled={isBusy}
+        onClick={() => onConnect(action.candidate)}
+        type="button"
+      >
         이 Repository 연결하고 분석
       </button>
     );
   } else if (action.kind === "analyze_connected_repository") {
     guidance = "프로젝트에 연결된 Repository와 입력한 URL이 일치합니다.";
     primaryAction = (
-      <button disabled={isBusy} onClick={onAnalyzeConnected} type="button">연결된 Repository 분석</button>
+      <button
+        className={styles.primaryButton}
+        disabled={isBusy}
+        onClick={onAnalyzeConnected}
+        type="button"
+      >
+        연결된 Repository 분석
+      </button>
     );
   } else if (action.kind === "resolve_multiple_installations") {
     guidance = "여러 GitHub installation 중 하나를 임의로 선택하지 않습니다. 환경설정에서 연결을 정리한 뒤 다시 확인해주세요.";
     primaryAction = (
-      <button disabled={isBusy} onClick={onVerifyPermission} type="button">연결 상태 다시 확인</button>
+      <button
+        className={styles.primaryButton}
+        disabled={isBusy}
+        onClick={onVerifyPermission}
+        type="button"
+      >
+        연결 상태 다시 확인
+      </button>
     );
   }
 
   return (
-    <ProductState
-      action={primaryAction}
-      description={`${errorMessage} ${guidance}`.trim()}
-      kind={errorMessage ? "error" : "empty"}
-      title={title}
-    />
+    <section
+      aria-labelledby="repository-recovery-title"
+      className={styles.errorPanel}
+      role="alert"
+    >
+      <h2 id="repository-recovery-title">{title}</h2>
+      <p>{`${errorMessage} ${guidance}`.trim()}</p>
+      <div className={styles.panelActions}>{primaryAction}</div>
+    </section>
   );
 }
 
@@ -983,284 +1085,55 @@ function RepositoryQuestions({
   if (questions.length === 0) return null;
 
   return (
-    <section className={styles.questionSection} aria-label="추가 질문">
-      <div className={styles.questionSectionHeader}>
-        <strong>추가 질문</strong>
-      </div>
-      <div className={styles.questionList}>
-        {questions.map((question) => (
-          <fieldset className={styles.questionField} key={question.id}>
-            <legend>{question.prompt}</legend>
-            {question.answerType === "boolean" || question.answerType === "single_select" ? (
-              <span
-                className={styles.questionChoices}
-                role="radiogroup"
-                aria-label={question.prompt}
-              >
-                {(question.answerType === "boolean"
-                  ? [
-                      { label: "예", value: "true" },
-                      { label: "아니요", value: "false" }
-                    ]
-                  : (question.options ?? [])
-                ).map((option) => {
-                  const selected = String(answers[question.id] ?? "") === option.value;
+    <section aria-labelledby="repository-questions-title" className={styles.questionList}>
+      <h3 id="repository-questions-title">추가 질문</h3>
+      {questions.map((question) => (
+        <fieldset className={styles.questionField} key={question.id}>
+          <legend>{question.prompt}</legend>
+          {question.answerType === "boolean" || question.answerType === "single_select" ? (
+            (question.answerType === "boolean"
+              ? [
+                  { label: "예", value: "true" },
+                  { label: "아니요", value: "false" }
+                ]
+              : (question.options ?? [])
+            ).map((option) => {
+              const id = `repository-question-${question.id}-${option.value}`;
+              const selected = String(answers[question.id] ?? "") === option.value;
 
-                  return (
-                    <button
-                      aria-checked={selected}
-                      className={
-                        selected
-                          ? `${styles.questionChoice} ${styles.questionChoiceSelected}`
-                          : styles.questionChoice
-                      }
-                      key={option.value}
-                      onClick={() =>
-                        onAnswer(
-                          question.id,
-                          question.answerType === "boolean" ? option.value === "true" : option.value
-                        )
-                      }
-                      role="radio"
-                      type="button"
-                    >
-                      <span>{option.label}</span>
-                    </button>
-                  );
-                })}
-              </span>
-            ) : (
+              return (
+                <label className={styles.questionOption} htmlFor={id} key={option.value}>
+                  <input
+                    checked={selected}
+                    id={id}
+                    name={`repository-question-${question.id}`}
+                    onChange={() =>
+                      onAnswer(
+                        question.id,
+                        question.answerType === "boolean" ? option.value === "true" : option.value
+                      )
+                    }
+                    type="radio"
+                    value={option.value}
+                  />
+                  {option.label}
+                </label>
+              );
+            })
+          ) : (
+            <>
+              <label htmlFor={`repository-question-${question.id}`}>답변</label>
               <input
-                aria-label={question.prompt}
-                value={String(answers[question.id] ?? "")}
+                id={`repository-question-${question.id}`}
+                name={`repository-question-${question.id}`}
                 onChange={(event) => onAnswer(question.id, event.target.value)}
                 type="text"
+                value={String(answers[question.id] ?? "")}
               />
-            )}
-          </fieldset>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function RepositoryCiCdConnectedState({ repository }: { readonly repository: SourceRepository }) {
-  return (
-    <section className={styles.ciCdSection} aria-label="CI/CD 연결">
-      <ProductState
-        compact
-        description={`${repository.owner}/${repository.name} · ${repository.defaultBranch}`}
-        kind="success"
-        title="CI/CD 연결 완료"
-      />
-    </section>
-  );
-}
-
-function RepositoryTemplateCandidates({
-  actionState,
-  onCreateBoard,
-  recommendation
-}: {
-  readonly actionState: RequestState;
-  readonly onCreateBoard: (templateId: PublicRepositoryTemplateId) => void;
-  readonly recommendation: RepositoryTemplateRecommendationResult;
-}) {
-  const isBusy = actionState === "loading";
-
-  return (
-    <section className={styles.recommendationPanel} aria-label="템플릿 후보">
-      {recommendation.candidates.map((candidate) => (
-        <article key={candidate.templateId}>
-          <div>
-            <span>{Math.round(candidate.confidence * 100)}% 일치</span>
-            <strong>{candidate.displayTitle}</strong>
-            <p>{candidate.reasons.join(" ")}</p>
-            <small>{candidate.tradeoffs.join(" ")}</small>
-          </div>
-          <button
-            className={styles.boardAction}
-            disabled={isBusy}
-            onClick={() => onCreateBoard(candidate.templateId)}
-            type="button"
-          >
-            {isBusy ? <LoaderCircle className={styles.spin} size={16} /> : null}
-            AI로 보드 생성
-          </button>
-        </article>
+            </>
+          )}
+        </fieldset>
       ))}
     </section>
-  );
-}
-
-function PublicRepositoryRecommendationStep({
-  aiDesignHref,
-  answers,
-  analysis,
-  deploymentType,
-  isBusy,
-  onAnswer,
-  onConfirmConfiguration,
-  onCreateBoard,
-  onDeploymentTypeChange,
-  onEditConfiguration,
-  onSelectTemplate,
-  selectedTemplateId,
-  stage
-}: {
-  readonly aiDesignHref: string;
-  readonly answers: Record<string, string | boolean>;
-  readonly analysis: SourceRepositoryAnalysisResult;
-  readonly deploymentType: RepositoryDeploymentType;
-  readonly isBusy: boolean;
-  readonly onAnswer: (questionId: string, value: string | boolean) => void;
-  readonly onConfirmConfiguration: () => void;
-  readonly onCreateBoard: () => void;
-  readonly onDeploymentTypeChange: (deploymentType: RepositoryDeploymentType) => void;
-  readonly onEditConfiguration: () => void;
-  readonly onSelectTemplate: (templateId: PublicRepositoryTemplateId) => void;
-  readonly selectedTemplateId: PublicRepositoryTemplateId | null;
-  readonly stage: PublicRecommendationStage;
-}) {
-  const recommendation = createPublicRepositoryRecommendation({
-    analysis,
-    answers,
-    deploymentType,
-    selectedTemplateId
-  });
-  const shouldAskDeploymentType = shouldAskPublicRepositoryDeploymentType(analysis);
-  const selectedCandidate =
-    recommendation.candidates.find((candidate) => candidate.templateId === selectedTemplateId) ??
-    recommendation.candidates[0];
-
-  if (stage === "questions") {
-    return (
-      <section className={`${styles.publicAnalysisResult} ${styles.publicQuestionStage}`} aria-label="public 저장소 추가 질문">
-        <div className={styles.publicQuestionSummary}>
-          <button
-            aria-label="템플릿 선택으로 돌아가기"
-            className={styles.publicBackAction}
-            onClick={onEditConfiguration}
-            title="템플릿 선택으로 돌아가기"
-            type="button"
-          >
-            <ArrowLeft aria-hidden="true" size={18} />
-          </button>
-          <div>
-            <span>선택한 템플릿</span>
-            <strong>{selectedCandidate?.displayTitle ?? "추천 템플릿"}</strong>
-          </div>
-        </div>
-        <RepositoryQuestions
-          answers={answers}
-          onAnswer={onAnswer}
-          questions={recommendation.questions}
-        />
-        <div className={styles.publicBoardActionArea}>
-          <button
-            className={styles.publicBoardAction}
-            disabled={isBusy || !analysis.recommendedTemplateId}
-            onClick={onCreateBoard}
-            type="button"
-          >
-            {isBusy ? <LoaderCircle className={styles.spin} size={17} /> : <Search size={17} />}
-            보드 생성
-          </button>
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className={styles.publicAnalysisResult} aria-label="public 저장소 추천">
-      <div className={styles.publicRecommendationHeader}>
-        <div>
-          <span>추천 템플릿 후보</span>
-          <strong>저장소 구조와 운영 조건에 가까운 순서입니다.</strong>
-        </div>
-        <p>{recommendation.candidates.length}개 후보 중 하나를 선택하세요.</p>
-      </div>
-      {recommendation.candidates.length > 0 ? (
-        <div className={styles.publicCandidateList} role="radiogroup" aria-label="추천 템플릿 후보">
-          {recommendation.candidates.map((candidate, index) => {
-            const selected = selectedCandidate?.templateId === candidate.templateId;
-
-            return (
-              <button
-                aria-checked={selected}
-                className={
-                  selected
-                    ? `${styles.publicCandidate} ${styles.publicCandidateSelected}`
-                    : styles.publicCandidate
-                }
-                key={candidate.templateId}
-                onClick={() => onSelectTemplate(candidate.templateId)}
-                role="radio"
-                type="button"
-              >
-                <span className={styles.publicCandidateRank}>{index + 1}</span>
-                <span className={styles.publicCandidateBody}>
-                  <span className={styles.publicCandidateHeading}>
-                    <strong>{candidate.displayTitle}</strong>
-                    <span>{Math.round(candidate.confidence * 100)}% 적합</span>
-                  </span>
-                  <span className={styles.publicCandidateDetail}>
-                    <span>
-                      <b>추천 이유</b>
-                      <span>{candidate.reasons.join(" ")}</span>
-                    </span>
-                    <span>
-                      <b>고려할 점</b>
-                      <span>{candidate.tradeoffs.join(" ")}</span>
-                    </span>
-                  </span>
-                </span>
-                <span className={styles.publicCandidateCheck} aria-hidden="true">
-                  {selected ? <Check size={16} strokeWidth={2.5} /> : null}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-      {shouldAskDeploymentType ? (
-        <label>
-          <span>원하는 배포 방식</span>
-          <select
-            value={deploymentType}
-            onChange={(event) =>
-              onDeploymentTypeChange(event.target.value as RepositoryDeploymentType)
-            }
-          >
-            <option value="ec2_vm">EC2/VM 기반</option>
-            <option value="container">컨테이너 기반</option>
-            <option value="serverless">서버리스 기반</option>
-          </select>
-        </label>
-      ) : null}
-      <button
-        className={styles.publicBoardAction}
-        disabled={!selectedCandidate}
-        onClick={onConfirmConfiguration}
-        type="button"
-      >
-        확인 <ArrowRight aria-hidden="true" size={16} />
-      </button>
-      <Link className={styles.publicAiFallbackAction} href={aiDesignHref}>
-        <Sparkles aria-hidden="true" size={16} />
-        원하는 구성이 없나요? AI로 새 설계 만들기
-      </Link>
-    </section>
-  );
-}
-
-function createRepositoryPreviewDiagram(projectName: string, repository: SourceRepository | null) {
-  const handoff = repository?.analysis?.aiHandoff;
-  if (!repository || handoff?.status !== "template_selected") return null;
-  return (
-    buildBoardTemplateDiagram(handoff.templateId, {
-      projectSlug: projectName,
-      shortId: repository.id.slice(0, 8)
-    }) ?? null
   );
 }

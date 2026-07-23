@@ -4,14 +4,38 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Repository follow-up prompts and controls now use a stronger readable type hierarchy.
-- Repository questions use 20px spacing without bullets; the question stage removes the top divider and separates the Board CTA with a lower divider.
-- The back action is 40px with a 12px summary gap. The Board CTA is 220 by 48px on desktop and remains full width below 640px.
-
 - The new-project screen shows local AWS, multicolor Google Cloud, and Azure brand icons and uses a wider, larger start-method layout with single-line desktop copy.
 - Workspace start cards keep every desktop title on one line, use subdued description typography, and place the AWS Role badge in the Reverse Engineering title row.
 
 ## Session Record
+
+### 2026-07-23 - Rebuild Repository analysis and Template preview UI
+
+- Split `/workspace/repository` into a focused pre-analysis form and a completed result with compact Repository metadata, mapped evidence, real Template thumbnails, and a Preview-first 28/72 layout.
+- Candidate arrows change only the local Preview index. Explicit Template acceptance is required before Board creation, and new recommendation results reset to the first candidate.
+- Preserved public/private recovery, follow-up questions, AI new-design entry, recommendation order and confidence, runtime Secret handoff, Board persistence, Analysis Record provenance, and Project Draft revision contracts.
+- Added responsive CSS, compact actions, one accessible live candidate announcement, pending/completed status, keyboard-native navigation, and neutral thumbnail/evidence fallbacks.
+- Fixed final-review regressions: changing the Repository URL now clears its stale branch, Repository TSX render tests run in the default Web suite, connected analyses fall back to safe `aiHandoff.evidence`, generation locks configuration changes, and deployment-type changes no longer remount the result or lose focus.
+- Browser-verified loading, success, failure recovery, candidate navigation, explicit Template use, AI new-design navigation, thumbnail fallback, keyboard focus, and form reset. The result has no console errors or horizontal overflow at 1440×900 and 390×844.
+- Added the shared 64px SketchCatch topbar with a return-to-start-mode link, widened the Repository canvas to 1440px, and enlarged the form, result metadata, and Preview-first layout for presentation use. Repository-focused tests, lint, typecheck, production build, and diff checks pass. A fresh unauthenticated local-browser session reached the login guard, so live visual QA still requires an authenticated local session.
+- Verified 42 Repository tests and 28 recommendation/handoff tests. Harness, root lint, root typecheck, production build, diff checks, and 25 sandbox E2E tests pass.
+- The untouched full Web baseline remains at 1,219/1,227 and the untouched API baseline remains at 1,523/1,557. Root `pnpm test` stops in `test:core`; Terraform tests also require a newer Terraform than local v1.6.6 for `mock_provider` and `override_resource`.
+
+### 2026-07-23 - Clear Repository Analysis result UI
+
+- Removed the old Repository result presentation layer: CSS module, architecture preview, cards, candidate list, visual wrappers, icon wrappers, and old full-width action layout.
+- Kept the existing analysis APIs, public/private recovery, recommendation order and IDs, Board creation, Analysis Record persistence, Project Draft revision, navigation, and AI new-design entry.
+- Replaced the route surface with minimal semantic HTML: one heading, labeled URL form, native branch and Template selects, status/alert regions, and existing actions.
+- Preserved the fetched branch list as a native select after public analysis; users do not need to know branch names manually.
+- Verified: Repository route tests 12/12, related analysis/recommendation/handoff tests 36/36, root harness, lint, typecheck, and production build pass.
+- Full Web and root test runs remain red only in untouched visual/API fixture tests outside this change. The baseline document records the exact boundary.
+
+### 2026-07-23 - Repository UI boundaries
+
+- No Repository UI follow-up is required before commit. The remaining failing suites are outside this diff and should be repaired separately.
+- Do not restore the deleted legacy result cards or change the preserved Repository Analysis, recommendation, Board creation, AI, auth, or route contracts.
+
+### Other 2026-07-23 updates
 
 - 2026-07-23: Removed the legacy `template-live-observation` demo fixture from the user-facing Template Gallery while retaining it for legacy Draft and Live Observation contract verification. Web typecheck and harness check pass; the focused compiler-heavy review test exceeded its 60-second execution limit.
 - 2026-07-23: Simplified the shared Template Gallery controls by removing Tag and sort selectors, retaining recommended order, and placing a compact search field on the right with full-width mobile behavior. Verified with the focused gallery regression test, Web typecheck, scoped diff review, and harness check.
@@ -32,6 +56,7 @@ Short English-only working log for the current agent context. Older records are 
 - Kept the previously updated GitHub issue #543 unchanged after canceling a later unsaved edit, and retained branch fix/ck/543-repository-question-ui.
 - Repository-focused tests passed 29/29 after merging the latest dev branch. Web and root lint/typecheck passed. All five root build tasks and all 23 Web routes completed successfully.
 - User-provided authenticated-state screenshots guided the final spacing and sizing adjustments. No credentials, cloud mutations, dependency changes, or migrations were involved.
+- The latest dev Repository analysis rebuild superseded the branch-specific presentation structure during merge resolution; dev behavior and styles were retained. The merged Repository suite passes 44/44, and root lint, typecheck, build, diff, and harness checks pass.
 
 ### 2026-07-23 - Defer Repository Project creation until Board confirmation
 

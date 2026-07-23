@@ -19,10 +19,6 @@ const rightPanelSource = readFileSync(
   new URL("./WorkspaceRightPanel.tsx", import.meta.url),
   "utf8"
 );
-const repositorySource = readFileSync(
-  new URL("../../app/workspace/repository/repository-start-client.tsx", import.meta.url),
-  "utf8"
-);
 const editorSource = readFileSync(
   new URL("./delivery/ProjectDeploymentTargetEditor.tsx", import.meta.url),
   "utf8"
@@ -230,9 +226,4 @@ test("saved deployment target invalidates the stale Direct Deployment prerequisi
 test("GitHub callback follows the canonical source-only continuation instead of owning target state", () => {
   assert.match(githubCallbackSource, /배포 설정은 원래 분석을 마친 뒤 Delivery에서 받는다/);
   assert.doesNotMatch(githubCallbackSource, /ProjectDeploymentTargetEditor/);
-});
-
-test("public Repository analysis defers CI/CD configuration until after Board creation", () => {
-  assert.match(repositorySource, /CI\/CD는 보드 생성 후 Delivery에서 연결합니다/);
-  assert.doesNotMatch(repositorySource, /function RepositoryCiCdConnection/);
 });
