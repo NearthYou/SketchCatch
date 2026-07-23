@@ -1012,7 +1012,7 @@ function ConnectionFlowStep({
 
 function getConnectionFlowStatusLabel(
   state: SettingsConnectionFlowStepState,
-  number: number
+  _number: number
 ): string {
   if (state === "complete") return "연결됨";
   if (state === "error") return "오류";

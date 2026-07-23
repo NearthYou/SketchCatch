@@ -6,6 +6,17 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-23 - Make AWS connection a single user-facing flow
+
+- Reframed Settings around one AWS connection: after the user approves the normal AWS Console step, the same connection is used for deployment and existing-infrastructure analysis.
+- New connection templates now include the current bounded read catalog. Existing AWS connections and their deployment permissions are not changed by this code.
+- Added a direct bounded read check for verified connections that have no older companion setup. A ready or limited result is saved without creating or requiring a separate cleanup item; missing core reads safely return to the existing Console recovery path.
+- Kept old companion artifacts protected: they still block connection removal until their existing cleanup flow completes.
+- Removed Role, Stack, Policy, ARN, full CloudFormation template, API diagnostics, and raw cleanup names from the normal Settings UI. A successful connection no longer keeps an extra structure-analysis card visible unless recovery, cleanup, or Reverse Engineering return is needed.
+- Confirmed the current branch in a separate local Web server. The user-facing Settings page shows `AWS 연결`, `AWS 연결 확인`, and `AWS 연결 해제` rather than the former internal labels.
+- Focused API tests (62), focused Settings and structure-analysis tests (36), harness, root typecheck, root build, and root test pass. Root lint passes with one pre-existing unused-variable warning in `aws-reverse-engineering-gateway.ts`.
+- No database migration, AWS mutation, production deployment, push, or PR was performed.
+
 ### 2026-07-23 - Recover blocked AWS import preparation
 
 - Confirmed the local SSO caller and the saved deployment Role can both access their expected AWS identities. The failure was not an expired SSO session.
