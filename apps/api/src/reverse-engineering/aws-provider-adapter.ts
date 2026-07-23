@@ -12,6 +12,11 @@ import type {
   ReverseEngineeringScanError,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
+import {
+  resolveReverseEngineeringAwsProviderResourceType,
+  resolveReverseEngineeringAwsResourceTypeFromArn,
+  reverseEngineeringAwsResourceTypes
+} from "@sketchcatch/types/resource-definitions";
 import { createReverseEngineeringArchitectureJson } from "./aws-provider-architecture-layout.js";
 import { createReverseEngineeringFindings } from "./aws-reverse-engineering-findings.js";
 import { createAwsResourceDisplayNameMap } from "./aws-resource-display-name.js";
@@ -81,55 +86,9 @@ export type AwsProviderAdapterOptions = {
   resultVisibility?: "public" | "private";
 };
 
-const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
-  ["AWS::EC2::VPC", "VPC"],
-  ["AWS::EC2::Subnet", "SUBNET"],
-  ["AWS::EC2::InternetGateway", "INTERNET_GATEWAY"],
-  ["AWS::EC2::RouteTable", "ROUTE_TABLE"],
-  ["AWS::EC2::RouteTableAssociation", "ROUTE_TABLE_ASSOCIATION"],
-  ["AWS::EC2::EIP", "ELASTIC_IP"],
-  ["AWS::EC2::NatGateway", "NAT_GATEWAY"],
-  ["AWS::EC2::SecurityGroup", "SECURITY_GROUP"],
-  ["AWS::EC2::Instance", "EC2"],
-  ["AWS::EC2::Image", "AMI"],
-  ["AWS::RDS::DBInstance", "RDS"],
-  ["AWS::S3::Bucket", "S3"],
-  ["AWS::S3::BucketVersioning", "S3"],
-  ["AWS::S3::BucketPublicAccessBlock", "S3"],
-  ["AWS::S3::BucketPolicy", "S3"],
-  ["AWS::S3::Object", "S3"],
-  ["AWS::SecretsManager::Secret", "SECRETS_MANAGER_SECRET"],
-  ["AWS::Lambda::Function", "LAMBDA"],
-  ["AWS::Lambda::Permission", "LAMBDA_PERMISSION"],
-  ["AWS::IAM::Role", "IAM_ROLE"],
-  ["AWS::IAM::Policy", "IAM_POLICY"],
-  ["AWS::IAM::RolePolicy", "IAM_POLICY"],
-  ["AWS::IAM::RolePolicyAttachment", "IAM_POLICY"],
-  ["AWS::IAM::InstanceProfile", "IAM_INSTANCE_PROFILE"],
-  ["AWS::KMS::Key", "KMS_KEY"],
-  ["AWS::KMS::Alias", "KMS_ALIAS"],
-  ["AWS::Logs::LogGroup", "CLOUDWATCH_LOG_GROUP"],
-  ["AWS::CloudWatch::Alarm", "CLOUDWATCH_METRIC_ALARM"],
-  ["AWS::ApiGateway::RestApi", "API_GATEWAY_REST_API"],
-  ["AWS::ApiGateway::Resource", "API_GATEWAY_RESOURCE"],
-  ["AWS::ApiGateway::Method", "API_GATEWAY_METHOD"],
-  ["AWS::ApiGateway::Integration", "API_GATEWAY_INTEGRATION"],
-  ["AWS::ApiGateway::Deployment", "API_GATEWAY_DEPLOYMENT"],
-  ["AWS::ApiGateway::Stage", "API_GATEWAY_STAGE"],
-  ["AWS::Events::Rule", "EVENTBRIDGE_RULE"],
-  ["AWS::Events::Target", "EVENTBRIDGE_TARGET"],
-  ["AWS::ElasticLoadBalancingV2::LoadBalancer", "LOAD_BALANCER"],
-  ["AWS::ElasticLoadBalancingV2::TargetGroup", "LOAD_BALANCER_TARGET_GROUP"],
-  ["AWS::ElasticLoadBalancingV2::Listener", "LOAD_BALANCER_LISTENER"],
-  ["AWS::CloudFront::Distribution", "CLOUDFRONT"],
-  ["AWS::CloudFront::OriginAccessControl", "CLOUDFRONT"],
-  ["AWS::ECR::Repository", "ECR_REPOSITORY"],
-  ["AWS::ECS::Cluster", "ECS_CLUSTER"],
-  ["AWS::ECS::Service", "ECS_SERVICE"],
-  ["AWS::ECS::TaskDefinition", "ECS_TASK_DEFINITION"],
-  ["AWS::ApplicationAutoScaling::ScalableTarget", "APPLICATION_AUTO_SCALING_TARGET"],
-  ["AWS::ApplicationAutoScaling::ScalingPolicy", "APPLICATION_AUTO_SCALING_POLICY"]
-]);
+const reverseEngineeringAwsResourceTypeSet = new Set<ResourceType>(
+  reverseEngineeringAwsResourceTypes
+);
 
 const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_REST_API",
@@ -610,10 +569,7 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
     "AWS::S3::BucketPolicy",
     new Set(["bucketName", "hasPolicy", "policyDigest", "policyReadComplete"])
   ],
-  [
-    "AWS::S3::Object",
-    new Set<string>()
-  ],
+  ["AWS::S3::Object", new Set<string>()],
   ["AWS::ECS::Cluster", new Set(["capacityProviders", "configuration", "name", "status"])],
   [
     "AWS::ECS::Service",
@@ -952,8 +908,7 @@ function filterMultiplexedReaderRecordsForOutput(
   const autoScalingPolicyTargetIds = new Set(
     records
       .filter(
-        (record) =>
-          record.providerResourceType === "AWS::ApplicationAutoScaling::ScalingPolicy"
+        (record) => record.providerResourceType === "AWS::ApplicationAutoScaling::ScalingPolicy"
       )
       .flatMap((record) =>
         record.relationships.map((relationship) => relationship.targetProviderResourceId)
@@ -1264,6 +1219,14 @@ function toDiscoveredResource(
     return baseResource;
   }
 
+  if (reverseEngineeringAwsResourceTypeSet.has(resourceType)) {
+    return {
+      ...baseResource,
+      analysisExcluded: true,
+      importSuggestionStatus: "manual_review"
+    };
+  }
+
   return {
     ...baseResource,
     analysisExcluded: true,
@@ -1287,8 +1250,12 @@ function requiresDetailedReaderManagementReview(
   );
 }
 
+/** gg: provider type을 먼저 사용하고 generic inventory는 ARN으로 보완해 실제 보드 타입을 찾습니다. */
 function resolveAwsResourceType(record: AwsDiscoveredResourceRecord): ResourceType {
-  const resourceType = awsResourceTypeMap.get(record.providerResourceType) ?? "UNKNOWN";
+  const resourceType =
+    resolveReverseEngineeringAwsProviderResourceType(record.providerResourceType) ??
+    resolveReverseEngineeringAwsResourceTypeFromArn(record.providerResourceId) ??
+    "UNKNOWN";
 
   return resourceType === "LOAD_BALANCER" && !hasNormalizedApplicationLoadBalancerType(record)
     ? "UNKNOWN"
@@ -1397,35 +1364,38 @@ function createAnalysisExclusions(
       resourceId: resource.id,
       reason:
         SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES.has(resource.resourceType) ||
-        DETAILED_TERRAFORM_VALIDATION_RESOURCE_TYPES.has(resource.resourceType)
+        DETAILED_TERRAFORM_VALIDATION_RESOURCE_TYPES.has(resource.resourceType) ||
+        reverseEngineeringAwsResourceTypeSet.has(resource.resourceType)
           ? "missing_required_data"
           : "unsupported_resource_type",
       message:
         resource.providerResourceType === "AWS::S3::Object"
           ? "이 S3 Object는 목록 확인용이며 자동 배포 대상이 아닙니다."
           : isApiGatewayRestApiRequiringMapping(resource)
-        ? createApiGatewayRestApiMappingReason(resource)
-        : isCloudWatchLogGroupRequiringMapping(resource)
-          ? createCloudWatchLogGroupMappingReason(resource)
-          : isCloudWatchMetricAlarmRequiringMapping(resource)
-            ? createCloudWatchMetricAlarmMappingReason(resource)
-            : isSecurityGroupRequiringMapping(resource)
-              ? "접근 규칙의 대상과 범위를 모두 확인하지 못해 보드에만 표시됩니다."
-              : isEventBridgeRuleRequiringMapping(resource)
-                ? "AWS가 관리하거나 별도 실행 Role을 쓰는 EventBridge Rule은 자동으로 수정할 수 없어 보드에만 표시됩니다."
-                : isEventBridgeTargetRequiringMapping(resource)
-                  ? "EventBridge Target의 전달 설정이나 대상 연결을 안전하게 다시 만들 수 없어 보드에만 표시됩니다."
-                  : resource.resourceType === "ROUTE_TABLE_ASSOCIATION"
-                    ? "같은 스캔의 Subnet과 Route Table을 안전하게 연결할 수 없어 보드에만 표시됩니다."
-                    : resource.resourceType === "ELASTIC_IP"
-                      ? "EIP 연결 대상을 안전하게 확인할 수 없어 보드에만 표시됩니다."
-                      : resource.resourceType === "NAT_GATEWAY"
-                        ? "같은 스캔의 Subnet과 EIP를 안전하게 연결할 수 없어 보드에만 표시됩니다."
-                        : resource.resourceType === "LOAD_BALANCER_TARGET_GROUP"
-                          ? "같은 스캔의 관리 가능한 VPC와 정확히 하나의 ALB 연결을 확인할 수 없어 보드에만 표시됩니다."
-                          : resource.resourceType === "LOAD_BALANCER_LISTENER"
-                            ? "같은 스캔의 관리 가능한 ALB와 Target Group 연결을 확인할 수 없어 보드에만 표시됩니다."
-                            : "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
+            ? createApiGatewayRestApiMappingReason(resource)
+            : isCloudWatchLogGroupRequiringMapping(resource)
+              ? createCloudWatchLogGroupMappingReason(resource)
+              : isCloudWatchMetricAlarmRequiringMapping(resource)
+                ? createCloudWatchMetricAlarmMappingReason(resource)
+                : isSecurityGroupRequiringMapping(resource)
+                  ? "접근 규칙의 대상과 범위를 모두 확인하지 못해 보드에만 표시됩니다."
+                  : isEventBridgeRuleRequiringMapping(resource)
+                    ? "AWS가 관리하거나 별도 실행 Role을 쓰는 EventBridge Rule은 자동으로 수정할 수 없어 보드에만 표시됩니다."
+                    : isEventBridgeTargetRequiringMapping(resource)
+                      ? "EventBridge Target의 전달 설정이나 대상 연결을 안전하게 다시 만들 수 없어 보드에만 표시됩니다."
+                      : resource.resourceType === "ROUTE_TABLE_ASSOCIATION"
+                        ? "같은 스캔의 Subnet과 Route Table을 안전하게 연결할 수 없어 보드에만 표시됩니다."
+                        : resource.resourceType === "ELASTIC_IP"
+                          ? "EIP 연결 대상을 안전하게 확인할 수 없어 보드에만 표시됩니다."
+                          : resource.resourceType === "NAT_GATEWAY"
+                            ? "같은 스캔의 Subnet과 EIP를 안전하게 연결할 수 없어 보드에만 표시됩니다."
+                            : resource.resourceType === "LOAD_BALANCER_TARGET_GROUP"
+                              ? "같은 스캔의 관리 가능한 VPC와 정확히 하나의 ALB 연결을 확인할 수 없어 보드에만 표시됩니다."
+                              : resource.resourceType === "LOAD_BALANCER_LISTENER"
+                                ? "같은 스캔의 관리 가능한 ALB와 Target Group 연결을 확인할 수 없어 보드에만 표시됩니다."
+                                : reverseEngineeringAwsResourceTypeSet.has(resource.resourceType)
+                                  ? "AWS에서 찾았지만 안전하게 수정할 설정을 더 확인해야 해 보드에만 표시됩니다."
+                                  : "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
     }));
 }
 
@@ -1502,6 +1472,19 @@ function createImportSuggestions(
         resourceId: resource.id,
         status: "manual_review",
         reason: "AWS 상세 설정을 모두 확인하지 못해 자동으로 가져오지 않습니다.",
+        handoffReady: false
+      };
+    }
+
+    if (
+      resource.analysisExcluded === true &&
+      reverseEngineeringAwsResourceTypeSet.has(resource.resourceType)
+    ) {
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "manual_review",
+        reason: "AWS에서 찾았지만 안전하게 수정할 설정을 더 확인해야 합니다.",
         handoffReady: false
       };
     }
@@ -1627,11 +1610,8 @@ function createMissingTerraformValuesReason(
   ) {
     const hasEncryption = missingFields.includes("bucketEncryptionConfiguration");
     const hasWebsite = missingFields.includes("bucketWebsiteConfiguration");
-    const configuredFeature = hasEncryption && hasWebsite
-      ? "암호화와 웹사이트"
-      : hasEncryption
-        ? "암호화"
-        : "웹사이트";
+    const configuredFeature =
+      hasEncryption && hasWebsite ? "암호화와 웹사이트" : hasEncryption ? "암호화" : "웹사이트";
     return `이 S3 Bucket에는 ${configuredFeature} 설정이 있습니다. 기존 설정을 잃지 않도록 현재는 자동 배포하지 않습니다.`;
   }
   if (resource.resourceType === "APPLICATION_AUTO_SCALING_POLICY") {
@@ -1806,8 +1786,7 @@ function sanitizePublicS3BucketConfig(
   const configWithTagEvidence = sanitizePublicListTagEvidence(publicConfig, sourceConfig);
   const hasEncryptionConfiguration =
     sourceConfig["hasEncryptionConfiguration"] === true ||
-    (Array.isArray(sourceConfig["encryptionRules"]) &&
-      sourceConfig["encryptionRules"].length > 0);
+    (Array.isArray(sourceConfig["encryptionRules"]) && sourceConfig["encryptionRules"].length > 0);
   const hasWebsiteConfiguration =
     sourceConfig["hasWebsiteConfiguration"] === true ||
     ["websiteIndexDocument", "websiteErrorDocument", "websiteRedirect"].some(

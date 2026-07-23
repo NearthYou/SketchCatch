@@ -1,4 +1,9 @@
-import type { CloudProvider, ResourceType, TerraformBlockType } from "./index.js";
+import type {
+  CloudProvider,
+  ResourceType,
+  ReverseEngineeringResourceSelection,
+  TerraformBlockType
+} from "./index.js";
 import type { RuntimeAdapterKind } from "./runtime-convergence.js";
 
 export type ResourceDeploymentOptimizationProfile =
@@ -1241,6 +1246,402 @@ export const resourceDefinitions = [
   })
 ] as const satisfies readonly ResourceDefinition[];
 
+export type ReverseEngineeringAwsResourceCatalogEntry = {
+  readonly resourceType: ResourceType;
+  readonly providerResourceTypes: readonly string[];
+  readonly scanSelection: ResourceType;
+  readonly terraformResourceTypes: readonly string[];
+};
+
+const REVERSE_ENGINEERING_AWS_PROVIDER_TYPE_ALIASES = [
+  ["AWS::EC2::VPC", "VPC"],
+  ["AWS::EC2::Subnet", "SUBNET"],
+  ["AWS::EC2::InternetGateway", "INTERNET_GATEWAY"],
+  ["AWS::EC2::RouteTable", "ROUTE_TABLE"],
+  ["AWS::EC2::RouteTableAssociation", "ROUTE_TABLE_ASSOCIATION"],
+  ["AWS::EC2::NetworkAcl", "NETWORK_ACL"],
+  ["AWS::EC2::NetworkAclEntry", "NETWORK_ACL_RULE"],
+  ["AWS::EC2::EIP", "ELASTIC_IP"],
+  ["AWS::EC2::NatGateway", "NAT_GATEWAY"],
+  ["AWS::EC2::VPCEndpoint", "VPC_ENDPOINT"],
+  ["AWS::EC2::VPCPeeringConnection", "VPC_PEERING_CONNECTION"],
+  ["AWS::EC2::VPCPeeringConnectionAccepter", "VPC_PEERING_CONNECTION"],
+  ["AWS::EC2::SecurityGroup", "SECURITY_GROUP"],
+  ["AWS::EC2::Instance", "EC2"],
+  ["AWS::EC2::Image", "AMI"],
+  ["AWS::EC2::KeyPair", "KEY_PAIR"],
+  ["AWS::EC2::LaunchTemplate", "LAUNCH_TEMPLATE"],
+  ["AWS::EC2::Volume", "EBS_VOLUME"],
+  ["AWS::EC2::VolumeAttachment", "VOLUME_ATTACHMENT"],
+  ["AWS::AutoScaling::AutoScalingGroup", "AUTO_SCALING_GROUP"],
+  ["AWS::AutoScaling::ScalingPolicy", "AUTO_SCALING_POLICY"],
+  ["AWS::ElasticLoadBalancingV2::LoadBalancer", "LOAD_BALANCER"],
+  ["AWS::ElasticLoadBalancingV2::TargetGroup", "LOAD_BALANCER_TARGET_GROUP"],
+  ["AWS::ElasticLoadBalancingV2::TargetGroupAttachment", "LOAD_BALANCER_TARGET_GROUP_ATTACHMENT"],
+  ["AWS::ElasticLoadBalancingV2::Listener", "LOAD_BALANCER_LISTENER"],
+  ["AWS::EFS::FileSystem", "EFS_FILE_SYSTEM"],
+  ["AWS::EFS::MountTarget", "EFS_MOUNT_TARGET"],
+  ["AWS::EFS::AccessPoint", "EFS_ACCESS_POINT"],
+  ["AWS::RDS::DBInstance", "RDS"],
+  ["AWS::RDS::DBCluster", "RDS_CLUSTER"],
+  ["AWS::RDS::DBClusterInstance", "RDS_CLUSTER_INSTANCE"],
+  ["AWS::RDS::DBSubnetGroup", "DB_SUBNET_GROUP"],
+  ["AWS::DynamoDB::Table", "DYNAMODB_TABLE"],
+  ["AWS::DynamoDB::GlobalTable", "DYNAMODB_TABLE"],
+  ["AWS::ElastiCache::ReplicationGroup", "ELASTICACHE_REDIS"],
+  ["AWS::ElastiCache::SubnetGroup", "ELASTICACHE_SUBNET_GROUP"],
+  ["AWS::ElastiCache::ParameterGroup", "ELASTICACHE_PARAMETER_GROUP"],
+  ["AWS::S3::Bucket", "S3"],
+  ["AWS::S3::BucketVersioning", "S3"],
+  ["AWS::S3::BucketPublicAccessBlock", "S3"],
+  ["AWS::S3::BucketPolicy", "S3"],
+  ["AWS::S3::Object", "S3"],
+  ["AWS::SecretsManager::Secret", "SECRETS_MANAGER_SECRET"],
+  ["AWS::KMS::Key", "KMS_KEY"],
+  ["AWS::KMS::Alias", "KMS_ALIAS"],
+  ["AWS::Lambda::Function", "LAMBDA"],
+  ["AWS::Lambda::Permission", "LAMBDA_PERMISSION"],
+  ["AWS::Lambda::Alias", "LAMBDA_ALIAS"],
+  ["AWS::Lambda::EventSourceMapping", "LAMBDA_EVENT_SOURCE_MAPPING"],
+  ["AWS::ApiGateway::RestApi", "API_GATEWAY_REST_API"],
+  ["AWS::ApiGateway::Authorizer", "API_GATEWAY_AUTHORIZER"],
+  ["AWS::ApiGateway::Resource", "API_GATEWAY_RESOURCE"],
+  ["AWS::ApiGateway::Method", "API_GATEWAY_METHOD"],
+  ["AWS::ApiGateway::Integration", "API_GATEWAY_INTEGRATION"],
+  ["AWS::ApiGateway::Deployment", "API_GATEWAY_DEPLOYMENT"],
+  ["AWS::ApiGateway::Stage", "API_GATEWAY_STAGE"],
+  ["AWS::ApiGatewayV2::Api", "API_GATEWAY_WEBSOCKET_API"],
+  ["AWS::ApiGatewayV2::Route", "API_GATEWAY_V2_ROUTE"],
+  ["AWS::ApiGatewayV2::Integration", "API_GATEWAY_V2_INTEGRATION"],
+  ["AWS::ApiGatewayV2::Stage", "API_GATEWAY_V2_STAGE"],
+  ["AWS::SNS::Topic", "SNS_TOPIC"],
+  ["AWS::SNS::Subscription", "SNS_TOPIC_SUBSCRIPTION"],
+  ["AWS::SQS::Queue", "SQS_QUEUE"],
+  ["AWS::StepFunctions::StateMachine", "STEP_FUNCTIONS_STATE_MACHINE"],
+  ["AWS::Events::Rule", "EVENTBRIDGE_RULE"],
+  ["AWS::Events::Target", "EVENTBRIDGE_TARGET"],
+  ["AWS::Events::EventBusPolicy", "EVENTBRIDGE_PERMISSION"],
+  ["AWS::Scheduler::Schedule", "SCHEDULER_SCHEDULE"],
+  ["AWS::CodeBuild::Project", "CODEBUILD_PROJECT"],
+  ["AWS::CodeDeploy::Application", "CODEDEPLOY_APP"],
+  ["AWS::CodeDeploy::DeploymentGroup", "CODEDEPLOY_DEPLOYMENT_GROUP"],
+  ["AWS::CodePipeline::Pipeline", "CODEPIPELINE"],
+  ["AWS::CodeStarConnections::Connection", "CODESTAR_CONNECTION"],
+  ["AWS::IAM::Role", "IAM_ROLE"],
+  ["AWS::IAM::Policy", "IAM_POLICY"],
+  ["AWS::IAM::RolePolicy", "IAM_POLICY"],
+  ["AWS::IAM::RolePolicyAttachment", "IAM_POLICY"],
+  ["AWS::IAM::InstanceProfile", "IAM_INSTANCE_PROFILE"],
+  ["AWS::Cognito::UserPool", "COGNITO_USER_POOL"],
+  ["AWS::Cognito::UserPoolClient", "COGNITO_USER_POOL_CLIENT"],
+  ["AWS::Amplify::App", "AMPLIFY_APP"],
+  ["AWS::ECR::Repository", "ECR_REPOSITORY"],
+  ["AWS::ECR::LifecyclePolicy", "ECR_LIFECYCLE_POLICY"],
+  ["AWS::ECS::Cluster", "ECS_CLUSTER"],
+  ["AWS::ECS::Service", "ECS_SERVICE"],
+  ["AWS::ECS::TaskDefinition", "ECS_TASK_DEFINITION"],
+  ["AWS::ECS::CapacityProvider", "ECS_CAPACITY_PROVIDER"],
+  ["AWS::ApplicationAutoScaling::ScalableTarget", "APPLICATION_AUTO_SCALING_TARGET"],
+  ["AWS::ApplicationAutoScaling::ScalingPolicy", "APPLICATION_AUTO_SCALING_POLICY"],
+  ["AWS::EKS::Cluster", "EKS_CLUSTER"],
+  ["AWS::EKS::Nodegroup", "EKS_NODE_GROUP"],
+  ["AWS::EKS::FargateProfile", "EKS_FARGATE_PROFILE"],
+  ["AWS::EKS::Addon", "EKS_ADDON"],
+  ["AWS::CloudFront::Distribution", "CLOUDFRONT"],
+  ["AWS::CloudFront::OriginAccessControl", "CLOUDFRONT"],
+  ["AWS::Route53::HostedZone", "ROUTE53_ZONE"],
+  ["AWS::Route53::RecordSet", "ROUTE53_RECORD"],
+  ["AWS::WAFv2::WebACL", "WAF_WEB_ACL"],
+  ["AWS::WAFv2::WebACLAssociation", "WAF_WEB_ACL_ASSOCIATION"],
+  ["AWS::WAF::WebACL", "WAF_WEB_ACL"],
+  ["AWS::WAFRegional::WebACL", "WAF_WEB_ACL"],
+  ["AWS::CertificateManager::Certificate", "ACM_CERTIFICATE"],
+  ["AWS::CertificateManager::CertificateValidation", "ACM_CERTIFICATE_VALIDATION"],
+  ["AWS::Logs::LogGroup", "CLOUDWATCH_LOG_GROUP"],
+  ["AWS::Logs::LogStream", "CLOUDWATCH_LOG_STREAM"],
+  ["AWS::Logs::ResourcePolicy", "CLOUDWATCH_LOG_RESOURCE_POLICY"],
+  ["AWS::CloudWatch::Alarm", "CLOUDWATCH_METRIC_ALARM"],
+  ["AWS::CloudWatch::Dashboard", "CLOUDWATCH_DASHBOARD"],
+  ["AWS::Config::ConfigurationRecorder", "CONFIG_CONFIGURATION_RECORDER"],
+  ["AWS::Config::DeliveryChannel", "CONFIG_DELIVERY_CHANNEL"],
+  ["AWS::Config::ConfigRule", "CONFIG_RULE"],
+  ["AWS::CloudTrail::Trail", "CLOUDTRAIL"],
+  ["AWS::XRay::Group", "XRAY_GROUP"],
+  ["AWS::XRay::SamplingRule", "XRAY_SAMPLING_RULE"],
+  ["AWS::Shield::Protection", "SHIELD_PROTECTION"],
+  ["AWS::GuardDuty::Detector", "GUARDDUTY_DETECTOR"]
+] as const satisfies readonly (readonly [string, ResourceType])[];
+
+const REVERSE_ENGINEERING_AWS_SCAN_PARENT = {
+  NETWORK_ACL_RULE: "NETWORK_ACL",
+  AUTO_SCALING_POLICY: "AUTO_SCALING_GROUP",
+  LOAD_BALANCER_TARGET_GROUP_ATTACHMENT: "LOAD_BALANCER_TARGET_GROUP",
+  VOLUME_ATTACHMENT: "EBS_VOLUME",
+  EFS_MOUNT_TARGET: "EFS_FILE_SYSTEM",
+  EFS_ACCESS_POINT: "EFS_FILE_SYSTEM",
+  RDS_CLUSTER_INSTANCE: "RDS_CLUSTER",
+  DB_SUBNET_GROUP: "RDS",
+  ELASTICACHE_SUBNET_GROUP: "ELASTICACHE_REDIS",
+  ELASTICACHE_PARAMETER_GROUP: "ELASTICACHE_REDIS",
+  WAF_WEB_ACL_ASSOCIATION: "WAF_WEB_ACL",
+  KMS_ALIAS: "KMS_KEY",
+  LAMBDA_ALIAS: "LAMBDA",
+  LAMBDA_EVENT_SOURCE_MAPPING: "LAMBDA",
+  API_GATEWAY_AUTHORIZER: "API_GATEWAY_REST_API",
+  API_GATEWAY_RESOURCE: "API_GATEWAY_REST_API",
+  API_GATEWAY_METHOD: "API_GATEWAY_REST_API",
+  API_GATEWAY_INTEGRATION: "API_GATEWAY_REST_API",
+  API_GATEWAY_DEPLOYMENT: "API_GATEWAY_REST_API",
+  API_GATEWAY_STAGE: "API_GATEWAY_REST_API",
+  API_GATEWAY_V2_ROUTE: "API_GATEWAY_WEBSOCKET_API",
+  API_GATEWAY_V2_INTEGRATION: "API_GATEWAY_WEBSOCKET_API",
+  API_GATEWAY_V2_STAGE: "API_GATEWAY_WEBSOCKET_API",
+  SNS_TOPIC_SUBSCRIPTION: "SNS_TOPIC",
+  EVENTBRIDGE_PERMISSION: "EVENTBRIDGE_RULE",
+  CODEDEPLOY_DEPLOYMENT_GROUP: "CODEDEPLOY_APP",
+  COGNITO_USER_POOL_CLIENT: "COGNITO_USER_POOL",
+  ECR_LIFECYCLE_POLICY: "ECR_REPOSITORY",
+  EKS_NODE_GROUP: "EKS_CLUSTER",
+  EKS_FARGATE_PROFILE: "EKS_CLUSTER",
+  EKS_ADDON: "EKS_CLUSTER",
+  ACM_CERTIFICATE_VALIDATION: "ACM_CERTIFICATE",
+  CONFIG_DELIVERY_CHANNEL: "CONFIG_CONFIGURATION_RECORDER",
+  CONFIG_RULE: "CONFIG_CONFIGURATION_RECORDER",
+  CLOUDWATCH_LOG_STREAM: "CLOUDWATCH_LOG_GROUP",
+  CLOUDWATCH_LOG_RESOURCE_POLICY: "CLOUDWATCH_LOG_GROUP"
+} as const satisfies Readonly<Partial<Record<ResourceType, ResourceType>>>;
+
+const REVERSE_ENGINEERING_AWS_ARN_ALIASES = [
+  ["ec2/vpc", "VPC"],
+  ["ec2/subnet", "SUBNET"],
+  ["ec2/internet-gateway", "INTERNET_GATEWAY"],
+  ["ec2/route-table", "ROUTE_TABLE"],
+  ["ec2/network-acl", "NETWORK_ACL"],
+  ["ec2/security-group", "SECURITY_GROUP"],
+  ["ec2/instance", "EC2"],
+  ["ec2/image", "AMI"],
+  ["ec2/key-pair", "KEY_PAIR"],
+  ["ec2/launch-template", "LAUNCH_TEMPLATE"],
+  ["ec2/volume", "EBS_VOLUME"],
+  ["ec2/vpc-endpoint", "VPC_ENDPOINT"],
+  ["ec2/vpc-peering-connection", "VPC_PEERING_CONNECTION"],
+  ["autoscaling/autoscalinggroup", "AUTO_SCALING_GROUP"],
+  ["autoscaling/scalingpolicy", "AUTO_SCALING_POLICY"],
+  ["elasticloadbalancing/loadbalancer", "LOAD_BALANCER"],
+  ["elasticloadbalancing/targetgroup", "LOAD_BALANCER_TARGET_GROUP"],
+  ["elasticloadbalancing/listener", "LOAD_BALANCER_LISTENER"],
+  ["elasticfilesystem/file-system", "EFS_FILE_SYSTEM"],
+  ["elasticfilesystem/access-point", "EFS_ACCESS_POINT"],
+  ["rds/db", "RDS"],
+  ["rds/cluster", "RDS_CLUSTER"],
+  ["dynamodb/table", "DYNAMODB_TABLE"],
+  ["elasticache/replicationgroup", "ELASTICACHE_REDIS"],
+  ["elasticache/cluster", "ELASTICACHE_REDIS"],
+  ["kms/key", "KMS_KEY"],
+  ["kms/alias", "KMS_ALIAS"],
+  ["lambda/function", "LAMBDA"],
+  ["apigateway/restapis", "API_GATEWAY_REST_API"],
+  ["apigateway/apis", "API_GATEWAY_WEBSOCKET_API"],
+  ["execute-api/*", "API_GATEWAY_REST_API"],
+  ["states/statemachine", "STEP_FUNCTIONS_STATE_MACHINE"],
+  ["events/rule", "EVENTBRIDGE_RULE"],
+  ["scheduler/schedule", "SCHEDULER_SCHEDULE"],
+  ["codebuild/project", "CODEBUILD_PROJECT"],
+  ["codedeploy/application", "CODEDEPLOY_APP"],
+  ["codedeploy/deploymentgroup", "CODEDEPLOY_DEPLOYMENT_GROUP"],
+  ["codepipeline/pipeline", "CODEPIPELINE"],
+  ["codestar-connections/connection", "CODESTAR_CONNECTION"],
+  ["iam/role", "IAM_ROLE"],
+  ["iam/policy", "IAM_POLICY"],
+  ["iam/instance-profile", "IAM_INSTANCE_PROFILE"],
+  ["cognito-idp/userpool", "COGNITO_USER_POOL"],
+  ["amplify/apps", "AMPLIFY_APP"],
+  ["ecr/repository", "ECR_REPOSITORY"],
+  ["ecs/cluster", "ECS_CLUSTER"],
+  ["ecs/service", "ECS_SERVICE"],
+  ["ecs/task-definition", "ECS_TASK_DEFINITION"],
+  ["ecs/capacity-provider", "ECS_CAPACITY_PROVIDER"],
+  ["eks/cluster", "EKS_CLUSTER"],
+  ["eks/nodegroup", "EKS_NODE_GROUP"],
+  ["eks/fargateprofile", "EKS_FARGATE_PROFILE"],
+  ["eks/addon", "EKS_ADDON"],
+  ["cloudfront/distribution", "CLOUDFRONT"],
+  ["route53/hostedzone", "ROUTE53_ZONE"],
+  ["wafv2/webacl", "WAF_WEB_ACL"],
+  ["acm/certificate", "ACM_CERTIFICATE"],
+  ["logs/log-group", "CLOUDWATCH_LOG_GROUP"],
+  ["logs/log-stream", "CLOUDWATCH_LOG_STREAM"],
+  ["cloudwatch/alarm", "CLOUDWATCH_METRIC_ALARM"],
+  ["cloudwatch/dashboard", "CLOUDWATCH_DASHBOARD"],
+  ["config/config-rule", "CONFIG_RULE"],
+  ["config/configuration-recorder", "CONFIG_CONFIGURATION_RECORDER"],
+  ["config/delivery-channel", "CONFIG_DELIVERY_CHANNEL"],
+  ["cloudtrail/trail", "CLOUDTRAIL"],
+  ["xray/group", "XRAY_GROUP"],
+  ["xray/sampling-rule", "XRAY_SAMPLING_RULE"],
+  ["shield/protection", "SHIELD_PROTECTION"],
+  ["guardduty/detector", "GUARDDUTY_DETECTOR"],
+  ["secretsmanager/secret", "SECRETS_MANAGER_SECRET"]
+] as const satisfies readonly (readonly [string, ResourceType])[];
+
+const REVERSE_ENGINEERING_AWS_ARN_SERVICE_DEFAULTS = {
+  s3: "S3",
+  sns: "SNS_TOPIC",
+  sqs: "SQS_QUEUE"
+} as const satisfies Readonly<Record<string, ResourceType>>;
+
+const reverseEngineeringAwsProviderTypeMap = new Map<string, ResourceType>(
+  REVERSE_ENGINEERING_AWS_PROVIDER_TYPE_ALIASES.map(([providerType, resourceType]) => [
+    normalizeReverseEngineeringAwsIdentity(providerType),
+    resourceType
+  ])
+);
+const reverseEngineeringAwsArnTypeMap = new Map<string, ResourceType>(
+  REVERSE_ENGINEERING_AWS_ARN_ALIASES
+);
+const reverseEngineeringAwsProviderTypesByResourceType = new Map<ResourceType, readonly string[]>(
+  reverseEngineeringAwsResourceTypesFromDefinitions().map((resourceType) => [
+    resourceType,
+    REVERSE_ENGINEERING_AWS_PROVIDER_TYPE_ALIASES.filter(
+      ([, mappedResourceType]) => mappedResourceType === resourceType
+    ).map(([providerType]) => providerType)
+  ])
+);
+
+export const reverseEngineeringAwsResourceCatalog = Object.freeze(
+  reverseEngineeringAwsResourceTypesFromDefinitions().map(
+    (resourceType): ReverseEngineeringAwsResourceCatalogEntry => ({
+      resourceType,
+      providerResourceTypes:
+        reverseEngineeringAwsProviderTypesByResourceType.get(resourceType) ?? [],
+      scanSelection: getReverseEngineeringAwsScanSelection(resourceType) ?? resourceType,
+      terraformResourceTypes: resourceDefinitions
+        .filter(
+          (definition) =>
+            definition.provider === "aws" &&
+            definition.terraform.blockType === "resource" &&
+            definition.terraform.resourceType.startsWith("aws_") &&
+            definition.resourceType === resourceType
+        )
+        .map((definition) => definition.terraform.resourceType)
+    })
+  )
+);
+
+export const reverseEngineeringAwsResourceTypes = Object.freeze(
+  reverseEngineeringAwsResourceCatalog.map(({ resourceType }) => resourceType)
+);
+
+export const reverseEngineeringAwsScanResourceTypes = Object.freeze([
+  ...new Set(reverseEngineeringAwsResourceCatalog.map(({ scanSelection }) => scanSelection))
+]);
+
+/** gg: CloudFormation·Resource Explorer의 표기 차이를 무시하고 프로젝트 보드 타입을 찾습니다. */
+export function resolveReverseEngineeringAwsProviderResourceType(
+  providerResourceType: string
+): ResourceType | undefined {
+  return reverseEngineeringAwsProviderTypeMap.get(
+    normalizeReverseEngineeringAwsIdentity(providerResourceType)
+  );
+}
+
+/** gg: Tagging API가 돌려준 ARN의 service와 resource kind를 실제 보드 타입으로 바꿉니다. */
+export function resolveReverseEngineeringAwsResourceTypeFromArn(
+  arn: string
+): ResourceType | undefined {
+  const arnSegments = arn.split(":");
+
+  if (
+    arnSegments.length < 6 ||
+    normalizeReverseEngineeringAwsIdentity(arnSegments[0] ?? "") !== "arn"
+  ) {
+    return undefined;
+  }
+
+  const service = normalizeReverseEngineeringAwsIdentity(arnSegments[2] ?? "");
+  const resourceIdentity = normalizeReverseEngineeringAwsIdentity(
+    arnSegments.slice(5).join(":")
+  ).replace(/^\/+/, "");
+  const resourceKind = resourceIdentity.split(/[/:]/u, 1)[0] ?? "";
+
+  return (
+    reverseEngineeringAwsArnTypeMap.get(`${service}/${resourceKind}`) ??
+    reverseEngineeringAwsArnTypeMap.get(`${service}/*`) ??
+    REVERSE_ENGINEERING_AWS_ARN_SERVICE_DEFAULTS[
+      service as keyof typeof REVERSE_ENGINEERING_AWS_ARN_SERVICE_DEFAULTS
+    ]
+  );
+}
+
+/** gg: 한 보드 타입을 찾을 때 허용하는 AWS provider type 별칭을 gateway에 제공합니다. */
+export function getReverseEngineeringAwsProviderResourceTypes(
+  resourceType: ResourceType
+): readonly string[] {
+  return reverseEngineeringAwsProviderTypesByResourceType.get(resourceType) ?? [];
+}
+
+/** gg: 화면의 하위 구성 선택을 실제 AWS 조회를 수행하는 상위 family로 줄입니다. */
+export function getReverseEngineeringAwsScanSelection(
+  resourceType: ResourceType
+): ResourceType | undefined {
+  if (!reverseEngineeringAwsResourceTypesFromDefinitions().includes(resourceType)) {
+    return undefined;
+  }
+
+  return (
+    REVERSE_ENGINEERING_AWS_SCAN_PARENT[
+      resourceType as keyof typeof REVERSE_ENGINEERING_AWS_SCAN_PARENT
+    ] ?? resourceType
+  );
+}
+
+/** gg: generic inventory 한 건이 현재 고급 설정의 조회 범위에 포함되는지 순수 비교합니다. */
+export function isReverseEngineeringAwsProviderTypeSelected(
+  providerResourceType: string,
+  selectedResourceTypes: readonly ReverseEngineeringResourceSelection[]
+): boolean {
+  const resourceType = resolveReverseEngineeringAwsProviderResourceType(providerResourceType);
+
+  if (!resourceType || !reverseEngineeringAwsResourceTypes.includes(resourceType)) {
+    return false;
+  }
+
+  if (selectedResourceTypes.includes("ALL")) {
+    return true;
+  }
+
+  const scanSelection = getReverseEngineeringAwsScanSelection(resourceType) ?? resourceType;
+
+  return selectedResourceTypes.some(
+    (selectedResourceType) =>
+      selectedResourceType !== "ALL" &&
+      (getReverseEngineeringAwsScanSelection(selectedResourceType) ?? selectedResourceType) ===
+        scanSelection
+  );
+}
+
+/** gg: 실제 AWS resource block만 유지해 data source·random·Kubernetes가 조회 권한에 섞이지 않게 합니다. */
+function reverseEngineeringAwsResourceTypesFromDefinitions(): ResourceType[] {
+  return [
+    ...new Set(
+      resourceDefinitions
+        .filter(
+          (definition) =>
+            definition.provider === "aws" &&
+            definition.terraform.blockType === "resource" &&
+            definition.terraform.resourceType.startsWith("aws_") &&
+            definition.resourceType !== "UNKNOWN"
+        )
+        .map((definition) => definition.resourceType)
+    )
+  ];
+}
+
+/** gg: AWS type·ARN 비교에 필요 없는 대소문자와 공백 차이를 제거합니다. */
+function normalizeReverseEngineeringAwsIdentity(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 const resourceDefinitionById = new Map<string, ResourceDefinition>(
   resourceDefinitions.map((definition) => [definition.id, definition])
 );
@@ -1440,9 +1841,10 @@ function createResourceDeploymentCapability(input: {
     };
   }
 
-  const runtimeAdapters = RUNTIME_ADAPTERS_BY_TERRAFORM_RESOURCE[
-    input.terraformResourceType as keyof typeof RUNTIME_ADAPTERS_BY_TERRAFORM_RESOURCE
-  ];
+  const runtimeAdapters =
+    RUNTIME_ADAPTERS_BY_TERRAFORM_RESOURCE[
+      input.terraformResourceType as keyof typeof RUNTIME_ADAPTERS_BY_TERRAFORM_RESOURCE
+    ];
   if (runtimeAdapters) {
     return {
       status: "supported",
@@ -1491,13 +1893,16 @@ function hasSameDeploymentCapability(
     left.optimization.runtimeNoOp === "provider_verified" ||
     right.optimization.runtimeNoOp === "provider_verified"
   ) {
-    return left.optimization.runtimeNoOp === "provider_verified" &&
+    return (
+      left.optimization.runtimeNoOp === "provider_verified" &&
       right.optimization.runtimeNoOp === "provider_verified" &&
-      left.optimization.runtimeAdapters.join("|") === right.optimization.runtimeAdapters.join("|");
+      left.optimization.runtimeAdapters.join("|") === right.optimization.runtimeAdapters.join("|")
+    );
   }
 
-  return left.status === "supported" ||
-    (right.status === "excluded" && left.reason === right.reason);
+  return (
+    left.status === "supported" || (right.status === "excluded" && left.reason === right.reason)
+  );
 }
 
 function createTerraformDefinitionKey(blockType: TerraformBlockType, resourceType: string): string {

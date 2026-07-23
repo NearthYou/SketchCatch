@@ -333,11 +333,7 @@ test("CloudFront의 /api와 /health 경로 설정을 보드 Terraform 값까지 
     })
   ]);
 
-  assertReadyImport(
-    result.importSuggestions[0],
-    "aws_cloudfront_distribution",
-    "EDISTRIBUTIONA"
-  );
+  assertReadyImport(result.importSuggestions[0], "aws_cloudfront_distribution", "EDISTRIBUTIONA");
   assert.deepEqual(
     result.architectureJson.nodes[0]?.config["orderedCacheBehavior"],
     orderedCacheBehavior
@@ -460,15 +456,84 @@ test("AWS 전용 reader가 찾은 Resource를 실제 Catalog 타입으로 보드
   assert.equal(result.analysisExclusions.length, providerTypeMappings.length);
   assert.equal(result.importSuggestions[0]?.status, "unsupported_resource_type");
   assert.equal(
-    result.importSuggestions.slice(1).every(
-      (suggestion) => suggestion.status === "manual_review" && suggestion.handoffReady === false
-    ),
+    result.importSuggestions
+      .slice(1)
+      .every(
+        (suggestion) => suggestion.status === "manual_review" && suggestion.handoffReady === false
+      ),
     true
   );
   assert.equal(result.importSuggestions.at(-2)?.status, "manual_review");
   assert.match(result.importSuggestions.at(-2)?.reason ?? "", /태그/iu);
   assert.equal(result.importSuggestions.at(-1)?.status, "manual_review");
   assert.match(result.importSuggestions.at(-1)?.reason ?? "", /policy/iu);
+});
+
+test("일반 AWS inventory도 프로젝트에 정의된 Resource를 실제 보드 타입으로 표시한다", async () => {
+  const providerTypeMappings = [
+    ["AWS::EC2::NetworkAcl", "NETWORK_ACL"],
+    ["AWS::EC2::NetworkAclEntry", "NETWORK_ACL_RULE"],
+    ["AWS::EC2::VPCEndpoint", "VPC_ENDPOINT"],
+    ["AWS::EC2::VPCPeeringConnection", "VPC_PEERING_CONNECTION"],
+    ["AWS::EC2::KeyPair", "KEY_PAIR"],
+    ["AWS::EC2::LaunchTemplate", "LAUNCH_TEMPLATE"],
+    ["AWS::EC2::Volume", "EBS_VOLUME"],
+    ["AWS::EFS::FileSystem", "EFS_FILE_SYSTEM"],
+    ["AWS::RDS::DBCluster", "RDS_CLUSTER"],
+    ["AWS::DynamoDB::Table", "DYNAMODB_TABLE"],
+    ["AWS::ElastiCache::ReplicationGroup", "ELASTICACHE_REDIS"],
+    ["AWS::Route53::HostedZone", "ROUTE53_ZONE"],
+    ["AWS::Route53::RecordSet", "ROUTE53_RECORD"],
+    ["AWS::WAFv2::WebACL", "WAF_WEB_ACL"],
+    ["AWS::Lambda::Alias", "LAMBDA_ALIAS"],
+    ["AWS::Lambda::EventSourceMapping", "LAMBDA_EVENT_SOURCE_MAPPING"],
+    ["AWS::ApiGatewayV2::Api", "API_GATEWAY_WEBSOCKET_API"],
+    ["AWS::ApiGatewayV2::Route", "API_GATEWAY_V2_ROUTE"],
+    ["AWS::SNS::Topic", "SNS_TOPIC"],
+    ["AWS::SQS::Queue", "SQS_QUEUE"],
+    ["AWS::StepFunctions::StateMachine", "STEP_FUNCTIONS_STATE_MACHINE"],
+    ["AWS::Scheduler::Schedule", "SCHEDULER_SCHEDULE"],
+    ["AWS::CodeBuild::Project", "CODEBUILD_PROJECT"],
+    ["AWS::CodeDeploy::Application", "CODEDEPLOY_APP"],
+    ["AWS::CodePipeline::Pipeline", "CODEPIPELINE"],
+    ["AWS::CodeStarConnections::Connection", "CODESTAR_CONNECTION"],
+    ["AWS::Cognito::UserPool", "COGNITO_USER_POOL"],
+    ["AWS::Amplify::App", "AMPLIFY_APP"],
+    ["AWS::ECS::CapacityProvider", "ECS_CAPACITY_PROVIDER"],
+    ["AWS::EKS::Cluster", "EKS_CLUSTER"],
+    ["AWS::CertificateManager::Certificate", "ACM_CERTIFICATE"],
+    ["AWS::Config::ConfigurationRecorder", "CONFIG_CONFIGURATION_RECORDER"],
+    ["AWS::CloudTrail::Trail", "CLOUDTRAIL"],
+    ["AWS::XRay::Group", "XRAY_GROUP"],
+    ["AWS::Shield::Protection", "SHIELD_PROTECTION"],
+    ["AWS::GuardDuty::Detector", "GUARDDUTY_DETECTOR"],
+    ["AWS::CloudWatch::Dashboard", "CLOUDWATCH_DASHBOARD"],
+    ["AWS::Logs::LogStream", "CLOUDWATCH_LOG_STREAM"]
+  ] as const;
+  const result = await scan(
+    providerTypeMappings.map(([providerResourceType], index) =>
+      record({
+        providerResourceType,
+        providerResourceId: `generic-provider-resource-${index}`,
+        displayName: `Generic Resource ${index}`
+      })
+    )
+  );
+
+  assert.deepEqual(
+    result.discoveredResources.map((resource) => resource.resourceType),
+    providerTypeMappings.map(([, resourceType]) => resourceType)
+  );
+  assert.equal(
+    result.discoveredResources.every((resource) => resource.analysisExcluded === true),
+    true
+  );
+  assert.equal(
+    result.importSuggestions.every(
+      (suggestion) => suggestion.status === "manual_review" && suggestion.handoffReady === false
+    ),
+    true
+  );
 });
 
 test("상세 reader의 IAM KMS API Gateway 하위 Resource를 Catalog 타입으로 표시하고 공개 원문을 숨긴다", async () => {
@@ -643,8 +708,7 @@ test("상세 reader의 IAM KMS API Gateway 하위 Resource를 Catalog 타입으�
   );
   assert.ok(
     result.importSuggestions.every(
-      (suggestion) =>
-        suggestion.status === "manual_review" && suggestion.handoffReady === false
+      (suggestion) => suggestion.status === "manual_review" && suggestion.handoffReady === false
     )
   );
   const serializedResult = JSON.stringify(result);
@@ -2093,8 +2157,7 @@ test("예전 S3 Object record도 공개 결과에서는 Bucket 파일 수 요약
         etag: '"private-etag"'
       },
       serverOnly: {
-        terraformImportId:
-          "audience-web/private/users/customer@example.com/session-token.json"
+        terraformImportId: "audience-web/private/users/customer@example.com/session-token.json"
       }
     })
   ]);
@@ -2103,7 +2166,10 @@ test("예전 S3 Object record도 공개 결과에서는 Bucket 파일 수 요약
   assert.equal(result.discoveredResources[0]?.providerResourceType, "AWS::S3::Bucket");
   assert.equal(result.discoveredResources[0]?.config["objectInventoryObservedCount"], 2);
   assert.equal(result.discoveredResources[0]?.config["objectInventoryCountIsExact"], false);
-  assert.equal(result.discoveredResources[0]?.config["objectInventorySummary"], "저장된 파일 2개 이상");
+  assert.equal(
+    result.discoveredResources[0]?.config["objectInventorySummary"],
+    "저장된 파일 2개 이상"
+  );
   assert.equal(
     result.architectureJson.nodes.some(
       (node) => node.config["providerResourceType"] === "AWS::S3::Object"
@@ -2256,13 +2322,9 @@ test("배포 지원 Resource의 ARN tag와 Secret 설명은 공개 결과에서 
   const privateSecret = privateResult.discoveredResources.find(
     (resource) => resource.resourceType === "SECRETS_MANAGER_SECRET"
   );
-  assert.deepEqual(privateRepository?.config["tags"], [
-    { key: "Owner", value: privateArn }
-  ]);
+  assert.deepEqual(privateRepository?.config["tags"], [{ key: "Owner", value: privateArn }]);
   assert.equal(privateRepository?.config["tagsReadComplete"], true);
-  assert.deepEqual(privateTarget?.config["tags"], [
-    { key: "Owner", value: privateArn }
-  ]);
+  assert.deepEqual(privateTarget?.config["tags"], [{ key: "Owner", value: privateArn }]);
   assert.equal(privateTarget?.config["tagsReadComplete"], true);
   assert.equal(privateSecret?.config["description"], privateArn);
   assert.equal(privateSecret?.config["metadataReadComplete"], true);
@@ -2338,16 +2400,12 @@ test("자동 확장 Target 선택은 Policy를 제외하고 Policy 선택은 Tar
   });
   const policy = record({
     providerResourceType: "AWS::ApplicationAutoScaling::ScalingPolicy",
-    providerResourceId:
-      "arn:aws:autoscaling:ap-northeast-2:123456789012:scalingPolicy:policy-1",
+    providerResourceId: "arn:aws:autoscaling:ap-northeast-2:123456789012:scalingPolicy:policy-1",
     displayName: "api 요청 자동 확장",
     relationships: [{ type: "depends_on", targetProviderResourceId: targetArn }]
   });
 
-  const targetOnly = await scanWithSelection(
-    [target, policy],
-    ["APPLICATION_AUTO_SCALING_TARGET"]
-  );
+  const targetOnly = await scanWithSelection([target, policy], ["APPLICATION_AUTO_SCALING_TARGET"]);
   assert.deepEqual(
     targetOnly.discoveredResources.map((resource) => resource.resourceType),
     ["APPLICATION_AUTO_SCALING_TARGET"]

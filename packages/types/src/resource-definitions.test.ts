@@ -63,12 +63,46 @@ test("shared resource definition IDs and Terraform identities remain unique", ()
   assert.equal(new Set(terraformIdentities).size, terraformIdentities.length);
 });
 
+test("Reverse Engineering AWS catalog resolves provider aliases and ARN identities", async () => {
+  const module = (await import("./resource-definitions.js")) as unknown as Record<string, unknown>;
+  const resolveProviderType = module["resolveReverseEngineeringAwsProviderResourceType"];
+  const resolveArn = module["resolveReverseEngineeringAwsResourceTypeFromArn"];
+  const getProviderTypes = module["getReverseEngineeringAwsProviderResourceTypes"];
+  const isSelected = module["isReverseEngineeringAwsProviderTypeSelected"];
+
+  assert.equal(typeof resolveProviderType, "function");
+  assert.equal(typeof resolveArn, "function");
+  assert.equal(typeof getProviderTypes, "function");
+  assert.equal(typeof isSelected, "function");
+
+  if (
+    typeof resolveProviderType !== "function" ||
+    typeof resolveArn !== "function" ||
+    typeof getProviderTypes !== "function" ||
+    typeof isSelected !== "function"
+  ) {
+    return;
+  }
+
+  assert.equal(resolveProviderType("aws::dynamodb::table"), "DYNAMODB_TABLE");
+  assert.equal(resolveProviderType("AWS::APIGateway::RestApi"), "API_GATEWAY_REST_API");
+  assert.equal(
+    resolveArn("arn:aws:dynamodb:ap-northeast-2:123456789012:table/demo"),
+    "DYNAMODB_TABLE"
+  );
+  assert.equal(
+    resolveArn("arn:aws:apigateway:ap-northeast-2::/restapis/a1b2c3"),
+    "API_GATEWAY_REST_API"
+  );
+  assert.deepEqual(getProviderTypes("NETWORK_ACL"), ["AWS::EC2::NetworkAcl"]);
+  assert.equal(isSelected("AWS::EC2::NetworkAclEntry", ["NETWORK_ACL"]), true);
+  assert.equal(isSelected("AWS::EC2::NetworkAclEntry", ["S3"]), false);
+  assert.equal(isSelected("AWS::EC2::Image", ["ALL"]), false);
+});
+
 test("parameter catalog keys keep resource keys compatible and namespace data sources", () => {
   assert.equal(createTerraformParameterCatalogKey("resource", "aws_iam_policy"), "aws_iam_policy");
-  assert.equal(
-    createTerraformParameterCatalogKey("data", "aws_iam_policy"),
-    "data.aws_iam_policy"
-  );
+  assert.equal(createTerraformParameterCatalogKey("data", "aws_iam_policy"), "data.aws_iam_policy");
 });
 
 test("classic AWS identities stay distinct from newer Terraform resources", () => {
@@ -117,7 +151,11 @@ test("data sources, UNKNOWN resources, and catalog-only definitions carry explic
     if (definition.terraform.blockType === "data") {
       dataSourceCount += 1;
       assert.equal(definition.capabilities.deployment.status, "excluded", definition.id);
-      assert.equal(definition.capabilities.deployment.reason, "terraform_data_source", definition.id);
+      assert.equal(
+        definition.capabilities.deployment.reason,
+        "terraform_data_source",
+        definition.id
+      );
       continue;
     }
 
