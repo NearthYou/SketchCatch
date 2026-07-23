@@ -419,6 +419,115 @@ test("지원되지 않은 고객 리소스는 명시적 매핑 전까지 관리�
   );
 });
 
+test("상세 Reader 타입은 exact provider와 완료 marker가 모두 있을 때만 관리한다", () => {
+  const managedPolicy = resource(
+    "IAM_POLICY",
+    detailedConfig({
+      policyName: "orders-read",
+      policyDocument: { Version: "2012-10-17", Statement: [] },
+      terraformImportId: "arn:aws:iam::111122223333:policy/orders-read"
+    }),
+    "AWS::IAM::Policy"
+  );
+
+  assert.equal(classifyReverseEngineeringManagement(managedPolicy), "managed");
+  assert.equal(
+    classifyReverseEngineeringManagement({
+      ...managedPolicy,
+      providerResourceType: "AWS::IAM::RolePolicy"
+    }),
+    "needs_mapping"
+  );
+
+  for (const config of [
+    { ...managedPolicy.config, managementReady: false },
+    { ...managedPolicy.config, reverseEngineeringDetailsComplete: false },
+    { ...managedPolicy.config, reverseEngineeringDetailsVersion: undefined },
+    { ...managedPolicy.config, terraformImportId: undefined }
+  ]) {
+    assert.equal(
+      classifyReverseEngineeringManagement({ ...managedPolicy, config }),
+      "needs_mapping"
+    );
+  }
+});
+
+test("상세 Reader가 지원하는 IAM Lambda KMS API Gateway 타입을 자동 관리 범위에 포함한다", () => {
+  const candidates = [
+    resource(
+      "IAM_ROLE",
+      detailedConfig({
+        roleName: "orders-role",
+        trustPolicyDocument: { Version: "2012-10-17", Statement: [] },
+        terraformImportId: "orders-role"
+      }),
+      "AWS::IAM::Role"
+    ),
+    resource(
+      "IAM_INSTANCE_PROFILE",
+      detailedConfig({
+        instanceProfileName: "orders-profile",
+        roleNames: ["orders-role"],
+        terraformImportId: "orders-profile"
+      }),
+      "AWS::IAM::InstanceProfile"
+    ),
+    resource(
+      "LAMBDA_PERMISSION",
+      detailedConfig({
+        functionName: "orders-api",
+        statementId: "AllowInvoke",
+        statement: {
+          Sid: "AllowInvoke",
+          Effect: "Allow",
+          Action: "lambda:InvokeFunction",
+          Principal: "apigateway.amazonaws.com",
+          Resource: "arn:aws:lambda:ap-northeast-2:111122223333:function:orders-api"
+        },
+        terraformImportId: "orders-api/AllowInvoke"
+      }),
+      "AWS::Lambda::Permission"
+    ),
+    resource(
+      "KMS_ALIAS",
+      detailedConfig({
+        aliasName: "alias/orders",
+        targetKeyId: "11111111-2222-3333-4444-555555555555",
+        terraformImportId: "alias/orders"
+      }),
+      "AWS::KMS::Alias"
+    ),
+    resource(
+      "API_GATEWAY_STAGE",
+      detailedConfig({
+        restApiId: "api123",
+        deploymentId: "deployment123",
+        stageName: "prod",
+        terraformImportId: "api123/prod"
+      }),
+      "AWS::ApiGateway::Stage"
+    )
+  ];
+
+  assert.deepEqual(candidates.map(classifyReverseEngineeringManagement), [
+    "managed",
+    "managed",
+    "managed",
+    "managed",
+    "managed"
+  ]);
+});
+
+function detailedConfig(config: Record<string, unknown>): Record<string, unknown> {
+  return {
+    managementReady: true,
+    reverseEngineeringDetailsComplete: true,
+    reverseEngineeringDetailsVersion: 1,
+    reverseEngineeringIncompleteDetails: [],
+    ...config
+  };
+}
+
 function resource(
   resourceType: ResourceType,
   config: Record<string, unknown> = {},

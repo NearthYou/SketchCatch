@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { DiscoveredResource, ResourceType } from "@sketchcatch/types";
 import { getReverseEngineeringTerraformCompleteness } from "./reverse-engineering-terraform-completeness.js";
-import { createReverseEngineeringTerraformProjection } from "./reverse-engineering-terraform-projection.js";
+import {
+  createReverseEngineeringTerraformProjection,
+  getReverseEngineeringTerraformResourceType
+} from "./reverse-engineering-terraform-projection.js";
 
 test("기존 S3를 안정적인 Terraform 주소와 실제 편집값으로 투영한다", () => {
   const projection = createReverseEngineeringTerraformProjection(
@@ -799,6 +802,394 @@ test("AWS와 CloudFormation과 SketchCatch 소유 리소스는 보드에는 남�
     assert.deepEqual(projection.terraformValues, {});
   }
 });
+
+test("상세 providerResourceType을 실제 Terraform resource 종류로 엄격하게 분기한다", () => {
+  assert.deepEqual(
+    [
+      ["IAM_ROLE", "AWS::IAM::Role"],
+      ["IAM_POLICY", "AWS::IAM::Policy"],
+      ["IAM_POLICY", "AWS::IAM::RolePolicy"],
+      ["IAM_POLICY", "AWS::IAM::RolePolicyAttachment"],
+      ["IAM_INSTANCE_PROFILE", "AWS::IAM::InstanceProfile"],
+      ["LAMBDA", "AWS::Lambda::Function"],
+      ["LAMBDA_PERMISSION", "AWS::Lambda::Permission"],
+      ["KMS_KEY", "AWS::KMS::Key"],
+      ["KMS_ALIAS", "AWS::KMS::Alias"],
+      ["API_GATEWAY_RESOURCE", "AWS::ApiGateway::Resource"],
+      ["API_GATEWAY_METHOD", "AWS::ApiGateway::Method"],
+      ["API_GATEWAY_INTEGRATION", "AWS::ApiGateway::Integration"],
+      ["API_GATEWAY_DEPLOYMENT", "AWS::ApiGateway::Deployment"],
+      ["API_GATEWAY_STAGE", "AWS::ApiGateway::Stage"]
+    ].map(([resourceType, providerResourceType]) =>
+      getReverseEngineeringTerraformResourceType(resourceType as ResourceType, providerResourceType)
+    ),
+    [
+      "aws_iam_role",
+      "aws_iam_policy",
+      "aws_iam_role_policy",
+      "aws_iam_role_policy_attachment",
+      "aws_iam_instance_profile",
+      "aws_lambda_function",
+      "aws_lambda_permission",
+      "aws_kms_key",
+      "aws_kms_alias",
+      "aws_api_gateway_resource",
+      "aws_api_gateway_method",
+      "aws_api_gateway_integration",
+      "aws_api_gateway_deployment",
+      "aws_api_gateway_stage"
+    ]
+  );
+  assert.equal(
+    getReverseEngineeringTerraformResourceType("IAM_POLICY", "AWS::IAM::Role"),
+    undefined
+  );
+  assert.equal(getReverseEngineeringTerraformResourceType("IAM_POLICY"), undefined);
+});
+
+test("IAM Lambda KMS 상세 원본을 정책 JSON과 same-scan 참조로 투영한다", () => {
+  const role = readyDetailedResource("IAM_ROLE", "AWS::IAM::Role", {
+    id: "resource-role",
+    providerResourceId: "arn:aws:iam::111122223333:role/orders-role",
+    config: {
+      roleName: "orders-role",
+      path: "/service/",
+      trustPolicyDocument: { Version: "2012-10-17", Statement: [] },
+      terraformImportId: "orders-role"
+    }
+  });
+  const managedPolicy = readyDetailedResource("IAM_POLICY", "AWS::IAM::Policy", {
+    id: "resource-managed-policy",
+    providerResourceId: "arn:aws:iam::111122223333:policy/orders-read",
+    config: {
+      policyName: "orders-read",
+      path: "/",
+      policyDocument: { Version: "2012-10-17", Statement: [] },
+      terraformImportId: "arn:aws:iam::111122223333:policy/orders-read"
+    }
+  });
+  const inlinePolicy = readyDetailedResource("IAM_POLICY", "AWS::IAM::RolePolicy", {
+    id: "resource-inline-policy",
+    providerResourceId: "orders-role:orders-inline",
+    config: {
+      policyName: "orders-inline",
+      roleName: "orders-role",
+      policyDocument: { Version: "2012-10-17", Statement: [] },
+      terraformImportId: "orders-role:orders-inline"
+    },
+    relationships: [{ type: "depends_on", targetResourceId: role.id }]
+  });
+  const attachment = readyDetailedResource("IAM_POLICY", "AWS::IAM::RolePolicyAttachment", {
+    id: "resource-attachment",
+    providerResourceId: "orders-role/arn:aws:iam::111122223333:policy/orders-read",
+    config: {
+      roleName: "orders-role",
+      policyName: "orders-read",
+      policyArn: "arn:aws:iam::111122223333:policy/orders-read",
+      terraformImportId: "orders-role/arn:aws:iam::111122223333:policy/orders-read"
+    },
+    relationships: [
+      { type: "depends_on", targetResourceId: role.id },
+      { type: "depends_on", targetResourceId: managedPolicy.id }
+    ]
+  });
+  const profile = readyDetailedResource("IAM_INSTANCE_PROFILE", "AWS::IAM::InstanceProfile", {
+    id: "resource-profile",
+    providerResourceId: "arn:aws:iam::111122223333:instance-profile/orders-profile",
+    config: {
+      instanceProfileName: "orders-profile",
+      path: "/",
+      roleNames: ["orders-role"],
+      terraformImportId: "orders-profile"
+    },
+    relationships: [{ type: "depends_on", targetResourceId: role.id }]
+  });
+  const key = readyDetailedResource("KMS_KEY", "AWS::KMS::Key", {
+    id: "resource-key",
+    providerResourceId: "11111111-2222-3333-4444-555555555555",
+    config: {
+      providerResourceId:
+        "arn:aws:kms:ap-northeast-2:111122223333:key/11111111-2222-3333-4444-555555555555",
+      keyId: "11111111-2222-3333-4444-555555555555",
+      keySpec: "SYMMETRIC_DEFAULT",
+      keyUsage: "ENCRYPT_DECRYPT",
+      enabled: true,
+      multiRegion: false,
+      origin: "AWS_KMS",
+      rotationEnabled: true,
+      rotationPeriodInDays: 365,
+      policyDocument: { Version: "2012-10-17", Statement: [] },
+      terraformImportId: "11111111-2222-3333-4444-555555555555"
+    }
+  });
+  const alias = readyDetailedResource("KMS_ALIAS", "AWS::KMS::Alias", {
+    id: "resource-alias",
+    providerResourceId: "alias/orders",
+    config: {
+      aliasName: "alias/orders",
+      targetKeyId: "11111111-2222-3333-4444-555555555555",
+      terraformImportId: "alias/orders"
+    },
+    relationships: [{ type: "depends_on", targetResourceId: key.id }]
+  });
+  const lambda = readyDetailedResource("LAMBDA", "AWS::Lambda::Function", {
+    id: "resource-lambda",
+    providerResourceId: "arn:aws:lambda:ap-northeast-2:111122223333:function:orders-api",
+    config: {
+      functionName: "orders-api",
+      functionConfiguration: {
+        FunctionName: "orders-api",
+        PackageType: "Image",
+        Role: role.providerResourceId,
+        Description: "Orders API",
+        Architectures: ["arm64"],
+        MemorySize: 512,
+        Timeout: 30,
+        KMSKeyArn: key.config["providerResourceId"],
+        TracingConfig: { Mode: "Active" }
+      },
+      codeSource: {
+        imageUri: "111122223333.dkr.ecr.ap-northeast-2.amazonaws.com/orders:1"
+      },
+      environmentVariables: { NODE_ENV: "production" },
+      terraformImportId: "orders-api"
+    },
+    relationships: [
+      { type: "depends_on", targetResourceId: role.id },
+      { type: "depends_on", targetResourceId: key.id }
+    ]
+  });
+  const permission = readyDetailedResource("LAMBDA_PERMISSION", "AWS::Lambda::Permission", {
+    id: "resource-permission",
+    providerResourceId: "orders-api/AllowInvoke",
+    config: {
+      functionName: "orders-api",
+      statementId: "AllowInvoke",
+      statement: {
+        Sid: "AllowInvoke",
+        Effect: "Allow",
+        Action: "lambda:InvokeFunction",
+        Principal: { Service: "apigateway.amazonaws.com" },
+        Resource: lambda.providerResourceId,
+        Condition: {
+          ArnLike: { "AWS:SourceArn": "arn:aws:execute-api:ap-northeast-2:*:*/*" },
+          StringEquals: { "AWS:SourceAccount": "111122223333" }
+        }
+      },
+      terraformImportId: "orders-api/AllowInvoke"
+    },
+    relationships: [{ type: "depends_on", targetResourceId: lambda.id }]
+  });
+  const resources = [
+    role,
+    managedPolicy,
+    inlinePolicy,
+    attachment,
+    profile,
+    key,
+    alias,
+    lambda,
+    permission
+  ];
+
+  assert.deepEqual(
+    createReverseEngineeringTerraformProjection(inlinePolicy, resources).terraformValues,
+    {
+      name: "orders-inline",
+      role: "aws_iam_role.resource_role.name",
+      policy: '{"Version":"2012-10-17","Statement":[]}'
+    }
+  );
+  assert.deepEqual(
+    createReverseEngineeringTerraformProjection(attachment, resources).terraformValues,
+    {
+      role: "aws_iam_role.resource_role.name",
+      policyArn: "aws_iam_policy.resource_managed_policy.arn"
+    }
+  );
+  assert.equal(
+    createReverseEngineeringTerraformProjection(profile, resources).terraformValues["role"],
+    "aws_iam_role.resource_role.name"
+  );
+  assert.equal(
+    createReverseEngineeringTerraformProjection(alias, resources).terraformValues["targetKeyId"],
+    "aws_kms_key.resource_key.key_id"
+  );
+  assert.deepEqual(createReverseEngineeringTerraformProjection(lambda, resources).terraformValues, {
+    functionName: "orders-api",
+    packageType: "Image",
+    imageUri: "111122223333.dkr.ecr.ap-northeast-2.amazonaws.com/orders:1",
+    role: "aws_iam_role.resource_role.arn",
+    description: "Orders API",
+    architectures: ["arm64"],
+    memorySize: 512,
+    timeout: 30,
+    kmsKeyArn: "aws_kms_key.resource_key.arn",
+    environment: { variables: { NODE_ENV: "production" } },
+    tracingConfig: { mode: "Active" }
+  });
+  assert.deepEqual(
+    createReverseEngineeringTerraformProjection(permission, resources).terraformValues,
+    {
+      statementId: "AllowInvoke",
+      action: "lambda:InvokeFunction",
+      functionName: "aws_lambda_function.resource_lambda.function_name",
+      principal: "apigateway.amazonaws.com",
+      sourceArn: "arn:aws:execute-api:ap-northeast-2:*:*/*",
+      sourceAccount: "111122223333"
+    }
+  );
+});
+
+test("API Gateway child를 RestApi와 parent Terraform 참조로 투영한다", () => {
+  const restApi = resource("API_GATEWAY_REST_API", {
+    id: "resource-api",
+    providerResourceType: "AWS::ApiGateway::RestApi",
+    providerResourceId: "api123",
+    config: {
+      name: "orders-api",
+      hasResourcePolicy: false,
+      tags: {},
+      tagsReadComplete: true
+    }
+  });
+  const apiResource = readyDetailedResource("API_GATEWAY_RESOURCE", "AWS::ApiGateway::Resource", {
+    id: "resource-api-orders",
+    providerResourceId: "api123/resource123",
+    config: {
+      restApiId: "api123",
+      resourceId: "resource123",
+      parentResourceId: "root123",
+      pathPart: "orders",
+      terraformImportId: "api123/resource123"
+    },
+    relationships: [{ type: "contains", targetResourceId: restApi.id }]
+  });
+  const method = readyDetailedResource("API_GATEWAY_METHOD", "AWS::ApiGateway::Method", {
+    id: "resource-api-method",
+    providerResourceId: "api123/resource123/GET",
+    config: {
+      restApiId: "api123",
+      resourceId: "resource123",
+      httpMethod: "GET",
+      authorizationType: "NONE",
+      apiKeyRequired: false,
+      methodResponses: {},
+      terraformImportId: "api123/resource123/GET"
+    },
+    relationships: [{ type: "contains", targetResourceId: apiResource.id }]
+  });
+  const integration = readyDetailedResource(
+    "API_GATEWAY_INTEGRATION",
+    "AWS::ApiGateway::Integration",
+    {
+      id: "resource-api-integration",
+      providerResourceId: "api123/resource123/GET",
+      config: {
+        restApiId: "api123",
+        resourceId: "resource123",
+        httpMethod: "GET",
+        integrationType: "MOCK",
+        timeoutInMillis: 29_000,
+        integrationResponses: {},
+        terraformImportId: "api123/resource123/GET"
+      },
+      relationships: [{ type: "contains", targetResourceId: method.id }]
+    }
+  );
+  const deployment = readyDetailedResource(
+    "API_GATEWAY_DEPLOYMENT",
+    "AWS::ApiGateway::Deployment",
+    {
+      id: "resource-api-deployment",
+      providerResourceId: "api123/deployment123",
+      config: {
+        restApiId: "api123",
+        deploymentId: "deployment123",
+        description: "release",
+        terraformImportId: "api123/deployment123"
+      },
+      relationships: [{ type: "contains", targetResourceId: restApi.id }]
+    }
+  );
+  const stage = readyDetailedResource("API_GATEWAY_STAGE", "AWS::ApiGateway::Stage", {
+    id: "resource-api-stage",
+    providerResourceId: "api123/prod",
+    config: {
+      restApiId: "api123",
+      deploymentId: "deployment123",
+      stageName: "prod",
+      tracingEnabled: true,
+      terraformImportId: "api123/prod"
+    },
+    relationships: [
+      { type: "contains", targetResourceId: restApi.id },
+      { type: "depends_on", targetResourceId: deployment.id }
+    ]
+  });
+  const resources = [restApi, apiResource, method, integration, deployment, stage];
+
+  assert.deepEqual(
+    createReverseEngineeringTerraformProjection(apiResource, resources).terraformValues,
+    {
+      restApiId: "aws_api_gateway_rest_api.resource_api.id",
+      parentId: "aws_api_gateway_rest_api.resource_api.root_resource_id",
+      pathPart: "orders"
+    }
+  );
+  assert.deepEqual(createReverseEngineeringTerraformProjection(method, resources).terraformValues, {
+    restApiId: "aws_api_gateway_rest_api.resource_api.id",
+    resourceId: "aws_api_gateway_resource.resource_api_orders.id",
+    httpMethod: "GET",
+    authorization: "NONE",
+    apiKeyRequired: false
+  });
+  assert.deepEqual(
+    createReverseEngineeringTerraformProjection(integration, resources).terraformValues,
+    {
+      restApiId: "aws_api_gateway_rest_api.resource_api.id",
+      resourceId: "aws_api_gateway_resource.resource_api_orders.id",
+      httpMethod: "aws_api_gateway_method.resource_api_method.http_method",
+      type: "MOCK",
+      timeoutMilliseconds: 29_000
+    }
+  );
+  assert.deepEqual(
+    createReverseEngineeringTerraformProjection(deployment, resources).terraformValues,
+    {
+      restApiId: "aws_api_gateway_rest_api.resource_api.id",
+      description: "release",
+      dependsOn: [
+        "aws_api_gateway_method.resource_api_method",
+        "aws_api_gateway_integration.resource_api_integration"
+      ]
+    }
+  );
+  assert.deepEqual(createReverseEngineeringTerraformProjection(stage, resources).terraformValues, {
+    restApiId: "aws_api_gateway_rest_api.resource_api.id",
+    deploymentId: "aws_api_gateway_deployment.resource_api_deployment.id",
+    stageName: "prod",
+    tracingEnabled: true
+  });
+});
+
+function readyDetailedResource(
+  resourceType: ResourceType,
+  providerResourceType: string,
+  overrides: Partial<DiscoveredResource>
+): DiscoveredResource {
+  return resource(resourceType, {
+    ...overrides,
+    providerResourceType,
+    config: {
+      managementReady: true,
+      reverseEngineeringDetailsComplete: true,
+      reverseEngineeringDetailsVersion: 1,
+      reverseEngineeringIncompleteDetails: [],
+      ...(overrides.config ?? {})
+    }
+  });
+}
 
 function applicationLoadBalancerConfig(): Record<string, unknown> {
   return {

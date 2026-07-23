@@ -5,13 +5,35 @@ export type ReverseEngineeringTerraformCompleteness = {
   readonly importId: string | null;
 };
 
+const DETAILED_PROVIDER_TYPES_BY_RESOURCE_TYPE = new Map<ResourceType, ReadonlySet<string>>([
+  ["IAM_ROLE", new Set(["AWS::IAM::Role"])],
+  [
+    "IAM_POLICY",
+    new Set(["AWS::IAM::Policy", "AWS::IAM::RolePolicy", "AWS::IAM::RolePolicyAttachment"])
+  ],
+  ["IAM_INSTANCE_PROFILE", new Set(["AWS::IAM::InstanceProfile"])],
+  ["LAMBDA", new Set(["AWS::Lambda::Function"])],
+  ["LAMBDA_PERMISSION", new Set(["AWS::Lambda::Permission"])],
+  ["KMS_KEY", new Set(["AWS::KMS::Key"])],
+  ["KMS_ALIAS", new Set(["AWS::KMS::Alias"])],
+  ["API_GATEWAY_RESOURCE", new Set(["AWS::ApiGateway::Resource"])],
+  ["API_GATEWAY_METHOD", new Set(["AWS::ApiGateway::Method"])],
+  ["API_GATEWAY_INTEGRATION", new Set(["AWS::ApiGateway::Integration"])],
+  ["API_GATEWAY_DEPLOYMENT", new Set(["AWS::ApiGateway::Deployment"])],
+  ["API_GATEWAY_STAGE", new Set(["AWS::ApiGateway::Stage"])]
+]);
+
 /** 관리 분류, Board projection, import handoff가 공유하는 Terraform 완전성 판정이다. */
 export function getReverseEngineeringTerraformCompleteness(
-  resource: Pick<DiscoveredResource, "providerResourceId" | "resourceType" | "config">
+  resource: Pick<
+    DiscoveredResource,
+    "providerResourceId" | "providerResourceType" | "resourceType" | "config"
+  >
 ): ReverseEngineeringTerraformCompleteness {
   return {
     missingCreationFields: getMissingTerraformCreationFields(
       resource.resourceType,
+      resource.providerResourceType,
       resource.config
     ),
     importId: getStableTerraformImportId(resource)
@@ -21,19 +43,146 @@ export function getReverseEngineeringTerraformCompleteness(
 /** 관찰한 AWS 값만으로 같은 Terraform resource를 다시 선언할 수 없는 필드를 반환한다. */
 function getMissingTerraformCreationFields(
   resourceType: ResourceType,
+  providerResourceType: string,
   config: Record<string, unknown>
 ): string[] {
   return [
+    ...getMissingDetailedReaderEvidence(resourceType, providerResourceType, config),
     ...getIncompleteDetailFields(config),
-    ...getMissingTerraformResourceFields(resourceType, config)
+    ...getMissingTerraformResourceFields(resourceType, providerResourceType, config)
   ];
 }
 
 /** Resource별 재생성 필수값을 한곳에서 확인해 불완전 AWS 조회를 ready로 올리지 않는다. */
 function getMissingTerraformResourceFields(
   resourceType: ResourceType,
+  providerResourceType: string,
   config: Record<string, unknown>
 ): string[] {
+  if (resourceType === "IAM_ROLE") {
+    return [
+      ...(getValidIamName(config["roleName"], 64) ? [] : ["roleName"]),
+      ...(hasJsonObject(config["trustPolicyDocument"]) ? [] : ["trustPolicyDocument"])
+    ];
+  }
+
+  if (resourceType === "IAM_POLICY") {
+    if (providerResourceType === "AWS::IAM::Policy") {
+      return [
+        ...(getValidIamName(config["policyName"], 128) ? [] : ["policyName"]),
+        ...(hasJsonObject(config["policyDocument"]) ? [] : ["policyDocument"])
+      ];
+    }
+    if (providerResourceType === "AWS::IAM::RolePolicy") {
+      return [
+        ...(getValidIamName(config["policyName"], 128) ? [] : ["policyName"]),
+        ...(getValidIamName(config["roleName"], 64) ? [] : ["roleName"]),
+        ...(hasJsonObject(config["policyDocument"]) ? [] : ["policyDocument"])
+      ];
+    }
+    if (providerResourceType === "AWS::IAM::RolePolicyAttachment") {
+      return [
+        ...(getValidIamName(config["roleName"], 64) ? [] : ["roleName"]),
+        ...(getValidIamPolicyArn(config["policyArn"]) ? [] : ["policyArn"])
+      ];
+    }
+    return ["providerResourceType"];
+  }
+
+  if (resourceType === "IAM_INSTANCE_PROFILE") {
+    const roleNames = getExactStringArray(config["roleNames"]);
+    return [
+      ...(getValidIamName(config["instanceProfileName"], 128) ? [] : ["instanceProfileName"]),
+      ...(roleNames && roleNames.length <= 1 && roleNames.every((name) => getValidIamName(name, 64))
+        ? []
+        : ["roleNames"])
+    ];
+  }
+
+  if (resourceType === "LAMBDA") {
+    const functionConfiguration = isRecord(config["functionConfiguration"])
+      ? config["functionConfiguration"]
+      : null;
+    const codeSource = isRecord(config["codeSource"]) ? config["codeSource"] : null;
+    return [
+      ...(getValidLambdaName(config["functionName"]) ? [] : ["functionName"]),
+      ...(functionConfiguration ? [] : ["functionConfiguration"]),
+      ...(functionConfiguration?.["PackageType"] === "Image" ? [] : ["packageType=Image"]),
+      ...(getNonEmptyString(functionConfiguration?.["Role"]) ? [] : ["role"]),
+      ...(getNonEmptyString(codeSource?.["imageUri"]) ? [] : ["imageUri"]),
+      ...(getNonEmptyString(codeSource?.["sourceKmsKeyArn"]) ? ["sourceKmsKeyArn"] : []),
+      ...(getNonEmptyString(functionConfiguration?.["CodeSigningConfigArn"])
+        ? ["codeSigningConfigArn"]
+        : [])
+    ];
+  }
+
+  if (resourceType === "LAMBDA_PERMISSION") {
+    return [
+      ...(getValidLambdaName(config["functionName"]) ? [] : ["functionName"]),
+      ...(getValidLambdaStatementId(config["statementId"]) ? [] : ["statementId"]),
+      ...(hasSupportedLambdaPermissionStatement(config["statement"]) ? [] : ["statement"])
+    ];
+  }
+
+  if (resourceType === "KMS_KEY") {
+    return [
+      ...(getValidKmsKeyId(config["keyId"]) ? [] : ["keyId"]),
+      ...(getNonEmptyString(config["keySpec"]) ? [] : ["keySpec"]),
+      ...(getNonEmptyString(config["keyUsage"]) ? [] : ["keyUsage"]),
+      ...(hasJsonObject(config["policyDocument"]) ? [] : ["policyDocument"])
+    ];
+  }
+
+  if (resourceType === "KMS_ALIAS") {
+    return [
+      ...(getValidKmsAlias(config["aliasName"]) ? [] : ["aliasName"]),
+      ...(getValidKmsKeyId(config["targetKeyId"]) ? [] : ["targetKeyId"])
+    ];
+  }
+
+  if (resourceType === "API_GATEWAY_RESOURCE") {
+    return getMissingApiGatewayIdentity(config, ["resourceId", "parentResourceId", "pathPart"]);
+  }
+
+  if (resourceType === "API_GATEWAY_METHOD") {
+    return [
+      ...getMissingApiGatewayIdentity(config, ["resourceId", "httpMethod"]),
+      ...(getNonEmptyString(config["authorizationType"]) ? [] : ["authorizationType"]),
+      ...(hasEmptyRecord(config["methodResponses"]) ? [] : ["methodResponses"]),
+      ...(getNonEmptyString(config["authorizerId"]) ? ["authorizerId"] : []),
+      ...(getNonEmptyString(config["requestValidatorId"]) ? ["requestValidatorId"] : [])
+    ];
+  }
+
+  if (resourceType === "API_GATEWAY_INTEGRATION") {
+    return [
+      ...getMissingApiGatewayIdentity(config, ["resourceId", "httpMethod"]),
+      ...(getNonEmptyString(config["integrationType"]) ? [] : ["integrationType"]),
+      ...(hasEmptyRecord(config["integrationResponses"]) ? [] : ["integrationResponses"]),
+      ...(config["connectionType"] === "VPC_LINK" || getNonEmptyString(config["connectionId"])
+        ? ["vpcLink"]
+        : []),
+      ...(getNonEmptyString(config["credentialsArn"]) ? ["credentialsArn"] : []),
+      ...(getExactStringArray(config["cacheKeyParameters"])?.length ? ["cacheKeyParameters"] : [])
+    ];
+  }
+
+  if (resourceType === "API_GATEWAY_DEPLOYMENT") {
+    return getMissingApiGatewayIdentity(config, ["deploymentId"]);
+  }
+
+  if (resourceType === "API_GATEWAY_STAGE") {
+    return [
+      ...getMissingApiGatewayIdentity(config, ["deploymentId", "stageName"]),
+      ...(hasNonEmptyRecord(config["variables"]) ? ["variables"] : []),
+      ...(hasNonEmptyRecord(config["methodSettings"]) ? ["methodSettings"] : []),
+      ...(isRecord(config["accessLogSettings"]) ? ["accessLogSettings"] : []),
+      ...(isRecord(config["canarySettings"]) ? ["canarySettings"] : []),
+      ...(getNonEmptyString(config["webAclArn"]) ? ["webAclArn"] : [])
+    ];
+  }
+
   if (resourceType === "VPC") {
     return [
       ...(getNonEmptyString(config["cidrBlock"]) ? [] : ["cidrBlock"]),
@@ -305,8 +454,18 @@ function getMissingTerraformResourceFields(
 }
 
 function getStableTerraformImportId(
-  resource: Pick<DiscoveredResource, "providerResourceId" | "resourceType" | "config">
+  resource: Pick<
+    DiscoveredResource,
+    "providerResourceId" | "providerResourceType" | "resourceType" | "config"
+  >
 ): string | null {
+  if (isDetailedReverseEngineeringTerraformResourceType(resource.resourceType)) {
+    if (!isSupportedDetailedProviderType(resource.resourceType, resource.providerResourceType)) {
+      return null;
+    }
+    return getDetailedTerraformImportId(resource.providerResourceType, resource.config);
+  }
+
   if (resource.resourceType === "ELASTIC_IP") {
     return getValidElasticIpAllocationId(resource.config["allocationId"]);
   }
@@ -398,6 +557,106 @@ function getStableTerraformImportId(
   }
 
   return getNonEmptyString(resource.providerResourceId);
+}
+
+/** 상세 reader가 서버 전용 원본을 붙이는 ResourceType인지 반환한다. */
+export function isDetailedReverseEngineeringTerraformResourceType(
+  resourceType: ResourceType
+): boolean {
+  return DETAILED_PROVIDER_TYPES_BY_RESOURCE_TYPE.has(resourceType);
+}
+
+function getMissingDetailedReaderEvidence(
+  resourceType: ResourceType,
+  providerResourceType: string,
+  config: Record<string, unknown>
+): string[] {
+  if (!isDetailedReverseEngineeringTerraformResourceType(resourceType)) return [];
+
+  return [
+    ...(isSupportedDetailedProviderType(resourceType, providerResourceType)
+      ? []
+      : ["providerResourceType"]),
+    ...(config["managementReady"] === true ? [] : ["managementReady"]),
+    ...(config["reverseEngineeringDetailsComplete"] === true
+      ? []
+      : ["reverseEngineeringDetailsComplete"]),
+    ...(config["reverseEngineeringDetailsVersion"] === 1
+      ? []
+      : ["reverseEngineeringDetailsVersion"]),
+    ...(getDetailedTerraformImportId(providerResourceType, config) ? [] : ["terraformImportId"])
+  ];
+}
+
+function isSupportedDetailedProviderType(
+  resourceType: ResourceType,
+  providerResourceType: string
+): boolean {
+  return (
+    DETAILED_PROVIDER_TYPES_BY_RESOURCE_TYPE.get(resourceType)?.has(providerResourceType) === true
+  );
+}
+
+function getDetailedTerraformImportId(
+  providerResourceType: string,
+  config: Record<string, unknown>
+): string | null {
+  const importId = getNonEmptyString(config["terraformImportId"]);
+  if (!importId || hasControlCharacter(importId)) return null;
+
+  if (providerResourceType === "AWS::IAM::Role") {
+    return getValidIamName(importId, 64);
+  }
+  if (providerResourceType === "AWS::IAM::Policy") {
+    return getValidIamPolicyArn(importId);
+  }
+  if (providerResourceType === "AWS::IAM::RolePolicy") {
+    const separator = importId.indexOf(":");
+    return separator > 0 &&
+      getValidIamName(importId.slice(0, separator), 64) &&
+      getValidIamName(importId.slice(separator + 1), 128)
+      ? importId
+      : null;
+  }
+  if (providerResourceType === "AWS::IAM::RolePolicyAttachment") {
+    const separator = importId.indexOf("/");
+    return separator > 0 &&
+      getValidIamName(importId.slice(0, separator), 64) &&
+      getValidIamPolicyArn(importId.slice(separator + 1))
+      ? importId
+      : null;
+  }
+  if (providerResourceType === "AWS::IAM::InstanceProfile") {
+    return getValidIamName(importId, 128);
+  }
+  if (providerResourceType === "AWS::Lambda::Function") {
+    return getValidLambdaName(importId);
+  }
+  if (providerResourceType === "AWS::Lambda::Permission") {
+    return isValidLambdaPermissionImportId(importId) ? importId : null;
+  }
+  if (providerResourceType === "AWS::KMS::Key") {
+    return getValidKmsKeyId(importId);
+  }
+  if (providerResourceType === "AWS::KMS::Alias") {
+    return getValidKmsAlias(importId);
+  }
+  if (providerResourceType === "AWS::ApiGateway::Resource") {
+    return hasExactCompositeImportId(importId, 2) ? importId : null;
+  }
+  if (
+    providerResourceType === "AWS::ApiGateway::Method" ||
+    providerResourceType === "AWS::ApiGateway::Integration"
+  ) {
+    return hasExactCompositeImportId(importId, 3) ? importId : null;
+  }
+  if (
+    providerResourceType === "AWS::ApiGateway::Deployment" ||
+    providerResourceType === "AWS::ApiGateway::Stage"
+  ) {
+    return hasExactCompositeImportId(importId, 2) ? importId : null;
+  }
+  return null;
 }
 
 function isApplicationLoadBalancerArn(value: string): boolean {
@@ -725,6 +984,128 @@ function getExactElasticIpAllocationIds(value: unknown): string[] | null {
   return allocationIds.length === value.length && new Set(allocationIds).size === value.length
     ? allocationIds
     : null;
+}
+
+function getMissingApiGatewayIdentity(
+  config: Record<string, unknown>,
+  keys: readonly string[]
+): string[] {
+  return ["restApiId", ...keys].filter((key) => getNonEmptyString(config[key]) === null);
+}
+
+function hasJsonObject(value: unknown): boolean {
+  if (isRecord(value)) return true;
+  const serialized = getNonEmptyString(value);
+  if (!serialized) return false;
+  try {
+    return isRecord(JSON.parse(serialized) as unknown);
+  } catch {
+    return false;
+  }
+}
+
+function hasEmptyRecord(value: unknown): boolean {
+  return value === undefined || (isRecord(value) && Object.keys(value).length === 0);
+}
+
+function hasNonEmptyRecord(value: unknown): boolean {
+  return isRecord(value) && Object.keys(value).length > 0;
+}
+
+function getExactStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const values = value.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0
+  );
+  return values.length === value.length ? values : null;
+}
+
+function getValidIamName(value: unknown, maxLength: number): string | null {
+  const name = getNonEmptyString(value);
+  return name && name.length <= maxLength && /^[\w+=,.@-]+$/u.test(name) ? name : null;
+}
+
+function getValidIamPolicyArn(value: unknown): string | null {
+  const arn = getNonEmptyString(value);
+  const match = arn ? /^arn:(?:aws|aws-cn|aws-us-gov):iam::\d{12}:policy\/(.+)$/u.exec(arn) : null;
+  return match?.[1]
+    ?.split("/")
+    .every((segment) => segment.length > 0 && /^[\w+=,.@-]+$/u.test(segment))
+    ? arn
+    : null;
+}
+
+function hasControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 31 || codePoint === 127;
+  });
+}
+
+function getValidLambdaName(value: unknown): string | null {
+  const name = getNonEmptyString(value);
+  return name && name.length <= 64 && /^[A-Za-z0-9-_]+$/u.test(name) ? name : null;
+}
+
+function getValidLambdaStatementId(value: unknown): string | null {
+  const statementId = getNonEmptyString(value);
+  return statementId && statementId.length <= 100 && /^[A-Za-z0-9-_]+$/u.test(statementId)
+    ? statementId
+    : null;
+}
+
+function hasSupportedLambdaPermissionStatement(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    value["Effect"] === "Allow" &&
+    value["Action"] === "lambda:InvokeFunction" &&
+    getValidLambdaStatementId(value["Sid"]) !== null &&
+    getNonEmptyString(value["Resource"]) !== null &&
+    getLambdaPrincipal(value["Principal"]) !== null
+  );
+}
+
+function getLambdaPrincipal(value: unknown): string | null {
+  const direct = getNonEmptyString(value);
+  if (direct) return direct;
+  if (!isRecord(value) || Object.keys(value).length !== 1) return null;
+  return getNonEmptyString(Object.values(value)[0]);
+}
+
+function isValidLambdaPermissionImportId(value: string): boolean {
+  const separator = value.lastIndexOf("/");
+  if (separator <= 0 || !getValidLambdaStatementId(value.slice(separator + 1))) return false;
+  const functionAndQualifier = value.slice(0, separator);
+  const qualifierSeparator = functionAndQualifier.indexOf(":");
+  if (qualifierSeparator < 0) return getValidLambdaName(functionAndQualifier) !== null;
+  return (
+    getValidLambdaName(functionAndQualifier.slice(0, qualifierSeparator)) !== null &&
+    /^[A-Za-z0-9-_.$]+$/u.test(functionAndQualifier.slice(qualifierSeparator + 1))
+  );
+}
+
+function getValidKmsKeyId(value: unknown): string | null {
+  const keyId = getNonEmptyString(value);
+  return keyId &&
+    (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(keyId) ||
+      /^mrk-[0-9a-f]{32}$/iu.test(keyId))
+    ? keyId
+    : null;
+}
+
+function getValidKmsAlias(value: unknown): string | null {
+  const alias = getNonEmptyString(value);
+  return alias && /^alias\/[A-Za-z0-9/_-]+$/u.test(alias) && !alias.startsWith("alias/aws/")
+    ? alias
+    : null;
+}
+
+function hasExactCompositeImportId(value: string, segmentCount: number): boolean {
+  const segments = value.split("/");
+  return (
+    segments.length === segmentCount &&
+    segments.every((segment) => segment.length > 0 && /^[A-Za-z0-9._~:$+@=-]+$/u.test(segment))
+  );
 }
 
 function getNonEmptyString(value: unknown): string | null {

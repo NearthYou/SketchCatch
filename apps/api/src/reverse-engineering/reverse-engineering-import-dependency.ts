@@ -125,7 +125,10 @@ function createTerraformAddressMap(
     const projection = createReverseEngineeringTerraformProjection(resource, resources);
     const terraformResourceType =
       projection.terraformResourceType ??
-      getReverseEngineeringTerraformResourceType(resource.resourceType);
+      getReverseEngineeringTerraformResourceType(
+        resource.resourceType,
+        resource.providerResourceType
+      );
     if (!terraformResourceType) {
       continue;
     }

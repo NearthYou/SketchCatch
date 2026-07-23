@@ -1,5 +1,6 @@
 const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_ami: new Set(["filter"]),
+  aws_api_gateway_integration: new Set(["tlsConfig"]),
   aws_api_gateway_rest_api: new Set(["endpointConfiguration"]),
   aws_appautoscaling_policy: new Set(["targetTrackingScalingPolicyConfiguration"]),
   aws_ecs_capacity_provider: new Set(["autoScalingGroupProvider"]),
@@ -61,7 +62,17 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_elb: new Set(["healthCheck", "listener"]),
   aws_ecr_repository: new Set(["imageScanningConfiguration"]),
   aws_instance: new Set(["rootBlockDevice"]),
-  aws_lambda_function: new Set(["environment"]),
+  aws_lambda_function: new Set([
+    "deadLetterConfig",
+    "environment",
+    "ephemeralStorage",
+    "fileSystemConfig",
+    "imageConfig",
+    "loggingConfig",
+    "snapStart",
+    "tracingConfig",
+    "vpcConfig"
+  ]),
   aws_launch_template: new Set([
     "iamInstanceProfile",
     "metadataOptions",
@@ -107,8 +118,19 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES_BY_PATH: Record<string, ReadonlySet<stri
 };
 
 const TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES_BY_PATH: Record<string, ReadonlySet<string>> = {
+  aws_api_gateway_integration: new Set(["tlsConfig"]),
   aws_ecs_service: new Set(["lifecycle"]),
   aws_elb: new Set(["healthCheck"]),
+  aws_lambda_function: new Set([
+    "deadLetterConfig",
+    "environment",
+    "ephemeralStorage",
+    "imageConfig",
+    "loggingConfig",
+    "snapStart",
+    "tracingConfig",
+    "vpcConfig"
+  ]),
   aws_lb_target_group: new Set(["healthCheck"]),
   aws_s3_object: new Set(["lifecycle"]),
   aws_waf_web_acl: new Set(["defaultAction"]),
@@ -163,8 +185,10 @@ export function isTerraformSingleNestedBlockAttribute(
 ): boolean {
   const pathKey = [resourceType, ...parentPath.map(toCamelCase)].join(".");
 
-  return TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES_BY_PATH[pathKey]
-    ?.has(toCamelCase(attributeName)) === true;
+  return (
+    TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES_BY_PATH[pathKey]?.has(toCamelCase(attributeName)) ===
+    true
+  );
 }
 
 export function isGenericTerraformNestedBlock(attributeName: string): boolean {

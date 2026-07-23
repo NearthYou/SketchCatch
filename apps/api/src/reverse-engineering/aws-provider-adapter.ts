@@ -124,6 +124,11 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
 
 const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_REST_API",
+  "API_GATEWAY_RESOURCE",
+  "API_GATEWAY_METHOD",
+  "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
+  "API_GATEWAY_STAGE",
   "CLOUDWATCH_METRIC_ALARM",
   "CLOUDWATCH_LOG_GROUP",
   "ROUTE_TABLE_ASSOCIATION",
@@ -137,10 +142,22 @@ const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
   "CLOUDFRONT",
   "ECS_CLUSTER",
   "ECS_SERVICE",
-  "ECS_TASK_DEFINITION"
+  "ECS_TASK_DEFINITION",
+  "IAM_ROLE",
+  "IAM_POLICY",
+  "IAM_INSTANCE_PROFILE",
+  "LAMBDA",
+  "LAMBDA_PERMISSION",
+  "KMS_KEY",
+  "KMS_ALIAS"
 ]);
 const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_REST_API",
+  "API_GATEWAY_RESOURCE",
+  "API_GATEWAY_METHOD",
+  "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
+  "API_GATEWAY_STAGE",
   "CLOUDWATCH_METRIC_ALARM",
   "VPC",
   "SUBNET",
@@ -162,14 +179,45 @@ const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
   "CLOUDFRONT",
   "ECS_CLUSTER",
   "ECS_SERVICE",
-  "ECS_TASK_DEFINITION"
+  "ECS_TASK_DEFINITION",
+  "IAM_ROLE",
+  "IAM_POLICY",
+  "IAM_INSTANCE_PROFILE",
+  "LAMBDA",
+  "LAMBDA_PERMISSION",
+  "KMS_KEY",
+  "KMS_ALIAS"
 ]);
 const SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES = new Set<ResourceType>([
   "ROUTE_TABLE_ASSOCIATION",
   "ELASTIC_IP",
   "NAT_GATEWAY",
   "LOAD_BALANCER_TARGET_GROUP",
-  "LOAD_BALANCER_LISTENER"
+  "LOAD_BALANCER_LISTENER",
+  "IAM_POLICY",
+  "IAM_INSTANCE_PROFILE",
+  "LAMBDA",
+  "LAMBDA_PERMISSION",
+  "KMS_ALIAS",
+  "API_GATEWAY_RESOURCE",
+  "API_GATEWAY_METHOD",
+  "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
+  "API_GATEWAY_STAGE"
+]);
+const DETAILED_TERRAFORM_VALIDATION_RESOURCE_TYPES = new Set<ResourceType>([
+  "IAM_ROLE",
+  "IAM_POLICY",
+  "IAM_INSTANCE_PROFILE",
+  "LAMBDA",
+  "LAMBDA_PERMISSION",
+  "KMS_KEY",
+  "KMS_ALIAS",
+  "API_GATEWAY_RESOURCE",
+  "API_GATEWAY_METHOD",
+  "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
+  "API_GATEWAY_STAGE"
 ]);
 const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
   "providerResourceId",
@@ -641,7 +689,8 @@ export function createAwsProviderAdapter(
         )
       );
       const discoveredResources = baseDiscoveredResources.map((resource) =>
-        SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES.has(resource.resourceType) &&
+        (SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES.has(resource.resourceType) ||
+          DETAILED_TERRAFORM_VALIDATION_RESOURCE_TYPES.has(resource.resourceType)) &&
         createReverseEngineeringTerraformProjection(resource, baseDiscoveredResources)
           .management !== "managed"
           ? {
@@ -1007,7 +1056,9 @@ function requiresDetailedReaderManagementReview(
 
   return (
     hasDetailedReaderEvidence &&
-    (config["managementReady"] !== true || config["reverseEngineeringDetailsComplete"] !== true)
+    (config["managementReady"] !== true ||
+      config["reverseEngineeringDetailsComplete"] !== true ||
+      config["reverseEngineeringDetailsVersion"] !== 1)
   );
 }
 
@@ -1119,9 +1170,11 @@ function createAnalysisExclusions(
     .map((resource) => ({
       id: `analysis-exclusion-${resource.id}`,
       resourceId: resource.id,
-      reason: SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES.has(resource.resourceType)
-        ? "missing_required_data"
-        : "unsupported_resource_type",
+      reason:
+        SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES.has(resource.resourceType) ||
+        DETAILED_TERRAFORM_VALIDATION_RESOURCE_TYPES.has(resource.resourceType)
+          ? "missing_required_data"
+          : "unsupported_resource_type",
       message: isApiGatewayRestApiRequiringMapping(resource)
         ? createApiGatewayRestApiMappingReason(resource)
         : isCloudWatchLogGroupRequiringMapping(resource)
@@ -1225,7 +1278,10 @@ function createImportSuggestions(
       };
     }
 
-    const terraformResourceType = getReverseEngineeringTerraformResourceType(resource.resourceType);
+    const terraformResourceType = getReverseEngineeringTerraformResourceType(
+      resource.resourceType,
+      resource.providerResourceType
+    );
 
     if (!terraformResourceType) {
       return {
@@ -1327,9 +1383,17 @@ function createSameScanReferenceReason(resourceType: ResourceType): string {
       ? "같은 스캔의 관리 가능한 Subnet과 모든 EIP를 먼저 확인해야 안전하게 가져올 수 있습니다."
       : resourceType === "LOAD_BALANCER_TARGET_GROUP"
         ? "같은 스캔의 관리 가능한 VPC와 정확히 하나의 ALB 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
-        : resourceType === "LOAD_BALANCER_LISTENER"
-          ? "같은 스캔의 관리 가능한 ALB와 Target Group 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
-          : "같은 스캔의 관리 가능한 Subnet과 Route Table을 먼저 확인해야 안전하게 가져올 수 있습니다.";
+      : resourceType === "LOAD_BALANCER_LISTENER"
+        ? "같은 스캔의 관리 가능한 ALB와 Target Group 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
+        : resourceType === "IAM_POLICY" || resourceType === "IAM_INSTANCE_PROFILE"
+          ? "같은 스캔의 IAM Role과 Policy 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
+          : resourceType === "LAMBDA" || resourceType === "LAMBDA_PERMISSION"
+            ? "같은 스캔의 Lambda Function과 실행 Role 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
+            : resourceType === "KMS_ALIAS"
+              ? "같은 스캔의 KMS Key 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
+              : resourceType.startsWith("API_GATEWAY_")
+                ? "같은 스캔의 REST API와 상위 API 리소스를 먼저 확인해야 안전하게 가져올 수 있습니다."
+                : "같은 스캔의 관리 가능한 Subnet과 Route Table을 먼저 확인해야 안전하게 가져올 수 있습니다.";
 }
 
 function createTerraformCreationValidationFindings(

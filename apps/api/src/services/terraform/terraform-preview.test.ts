@@ -500,7 +500,9 @@ test("rejects unsafe Terraform block labels before rendering HCL", () => {
     }
   };
 
-  let error: (TerraformDiagramValidationError & { errorCode?: unknown; statusCode?: unknown }) | null = null;
+  let error:
+    | (TerraformDiagramValidationError & { errorCode?: unknown; statusCode?: unknown })
+    | null = null;
 
   try {
     generateTerraformFromDiagramJson(diagramJson);
@@ -584,7 +586,7 @@ test("renders data blocks", () => {
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-`data "aws_ami" "ubuntu" {
+    `data "aws_ami" "ubuntu" {
   most_recent = true
   owners = [
     "099720109477",
@@ -766,10 +768,22 @@ test("renders placement references with Terraform snake_case attribute names", (
   const terraformCode = generateTerraformFromDiagramJson(diagramJson);
 
   assert.match(terraformCode, /resource "aws_subnet" "public" \{[\s\S]*vpc_id = aws_vpc\.main\.id/);
-  assert.match(terraformCode, /resource "aws_instance" "web" \{[\s\S]*subnet_id = aws_subnet\.public\.id/);
-  assert.match(terraformCode, /resource "aws_internet_gateway" "main" \{[\s\S]*vpc_id = aws_vpc\.main\.id/);
-  assert.match(terraformCode, /resource "aws_route_table" "public" \{[\s\S]*vpc_id = aws_vpc\.main\.id/);
-  assert.match(terraformCode, /resource "aws_security_group" "web" \{[\s\S]*vpc_id = aws_vpc\.main\.id/);
+  assert.match(
+    terraformCode,
+    /resource "aws_instance" "web" \{[\s\S]*subnet_id = aws_subnet\.public\.id/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_internet_gateway" "main" \{[\s\S]*vpc_id = aws_vpc\.main\.id/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_route_table" "public" \{[\s\S]*vpc_id = aws_vpc\.main\.id/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_security_group" "web" \{[\s\S]*vpc_id = aws_vpc\.main\.id/
+  );
   assert.doesNotMatch(terraformCode, /vpcId|subnetId/);
 });
 
@@ -1067,6 +1081,7 @@ test("renders Launch Template instance profiles and dependency addresses with Te
 test("tracks curated nested block parameters as canonical camelCase keys", () => {
   const expectedNestedBlockAttributes: Record<string, string[]> = {
     aws_ami: ["filter"],
+    aws_api_gateway_integration: ["tlsConfig"],
     aws_api_gateway_rest_api: ["endpointConfiguration"],
     aws_appautoscaling_policy: ["targetTrackingScalingPolicyConfiguration"],
     aws_autoscaling_group: ["launchTemplate", "tag"],
@@ -1080,11 +1095,7 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
       "restrictions",
       "viewerCertificate"
     ],
-    aws_cloudfront_origin_request_policy: [
-      "cookiesConfig",
-      "headersConfig",
-      "queryStringsConfig"
-    ],
+    aws_cloudfront_origin_request_policy: ["cookiesConfig", "headersConfig", "queryStringsConfig"],
     aws_config_config_rule: ["source"],
     aws_instance: ["rootBlockDevice"],
     aws_eks_cluster: ["vpcConfig"],
@@ -1096,7 +1107,17 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
       "loadBalancer",
       "networkConfiguration"
     ],
-    aws_lambda_function: ["environment"],
+    aws_lambda_function: [
+      "deadLetterConfig",
+      "environment",
+      "ephemeralStorage",
+      "fileSystemConfig",
+      "imageConfig",
+      "loggingConfig",
+      "snapStart",
+      "tracingConfig",
+      "vpcConfig"
+    ],
     aws_launch_template: [
       "iamInstanceProfile",
       "metadataOptions",
@@ -1123,7 +1144,10 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
 
   assert.equal(isTerraformNestedBlockAttribute("aws_instance", "rootBlockDevice"), true);
   assert.equal(isTerraformNestedBlockAttribute("aws_instance", "root_block_device"), true);
-  assert.equal(isTerraformNestedBlockAttribute("aws_api_gateway_rest_api", "endpoint_configuration"), true);
+  assert.equal(
+    isTerraformNestedBlockAttribute("aws_api_gateway_rest_api", "endpoint_configuration"),
+    true
+  );
 });
 
 test("renders object-valued nested block parameters as Terraform nested blocks", () => {
@@ -1315,7 +1339,8 @@ test("renders deployable Terraform defaults for AI-generated CI/CD resources", (
             },
             source: {
               type: "NO_SOURCE",
-              buildspec: "version: 0.2\nphases:\n  build:\n    commands:\n      - echo \"SketchCatch build placeholder\""
+              buildspec:
+                'version: 0.2\nphases:\n  build:\n    commands:\n      - echo "SketchCatch build placeholder"'
             }
           }
         }
@@ -1537,7 +1562,9 @@ test("renders deployable Terraform defaults for AI-generated CI/CD resources", (
   assert.match(terraformCode, /data "aws_caller_identity" "current" \{/);
   assert.match(terraformCode, /data "aws_ssm_parameter" "ami" \{/);
   assert.equal(
-    createTerraformDiagnostics(terraformCode).filter((diagnostic) => diagnostic.severity === "error").length,
+    createTerraformDiagnostics(terraformCode).filter(
+      (diagnostic) => diagnostic.severity === "error"
+    ).length,
     0
   );
 });
@@ -1563,12 +1590,14 @@ test("renders Classic ELB health checks and listeners as nested blocks", () => {
               timeout: 3,
               unhealthyThreshold: 2
             },
-            listener: [{
-              instancePort: 80,
-              instanceProtocol: "http",
-              lbPort: 80,
-              lbProtocol: "http"
-            }]
+            listener: [
+              {
+                instancePort: 80,
+                instanceProtocol: "http",
+                lbPort: 80,
+                lbProtocol: "http"
+              }
+            ]
           }
         }
       })
@@ -1580,7 +1609,10 @@ test("renders Classic ELB health checks and listeners as nested blocks", () => {
   const terraformCode = generateTerraformFromDiagramJson(diagramJson);
 
   assert.match(terraformCode, /health_check \{[\s\S]*healthy_threshold = 2[\s\S]*\}/);
-  assert.match(terraformCode, /listener \{[\s\S]*instance_port = 80[\s\S]*lb_protocol = "http"[\s\S]*\}/);
+  assert.match(
+    terraformCode,
+    /listener \{[\s\S]*instance_port = 80[\s\S]*lb_protocol = "http"[\s\S]*\}/
+  );
   assert.doesNotMatch(terraformCode, /health_check\s*=|listener\s*=/);
   assert.equal(isTerraformSingleNestedBlockAttribute("aws_elb", "healthCheck"), true);
   assert.equal(isTerraformSingleNestedBlockAttribute("aws_elb", "listener"), false);

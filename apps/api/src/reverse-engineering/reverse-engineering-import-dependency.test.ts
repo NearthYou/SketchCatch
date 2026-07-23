@@ -75,6 +75,28 @@ test("vpc-와 subnet- 형태의 실제 AWS ID 문자열은 Terraform 참조로 �
   );
 });
 
+test("IAM attachment가 참조하는 Role과 managed Policy를 함께 선택하도록 강제한다", () => {
+  const storedScanResult = detailedDependencyScanResult();
+
+  assert.throws(
+    () =>
+      validateReverseEngineeringImportDependencies({
+        storedScanResult,
+        importExistingResourceIds: ["resource-attachment", "resource-role"]
+      }),
+    (error: unknown) =>
+      error instanceof ReverseEngineeringImportDependencyError &&
+      error.missingResourceIds.includes("resource-policy")
+  );
+
+  assert.doesNotThrow(() =>
+    validateReverseEngineeringImportDependencies({
+      storedScanResult,
+      importExistingResourceIds: ["resource-attachment", "resource-role", "resource-policy"]
+    })
+  );
+});
+
 test("서버가 결정을 기록하기 전에 누락된 함께 가져오기 선택을 거부한다", () => {
   const storedScanResult = dependencyScanResult();
 
@@ -228,6 +250,113 @@ function dependencyScanResult(): ReverseEngineeringScanResult {
         handoffReady: true,
         terraformAddress,
         importCommand: `terraform import ${terraformAddress} ${item.providerResourceId}`
+      };
+    }),
+    scanErrors: []
+  };
+}
+
+function detailedDependencyScanResult(): ReverseEngineeringScanResult {
+  const ready = {
+    managementReady: true,
+    reverseEngineeringDetailsComplete: true,
+    reverseEngineeringDetailsVersion: 1,
+    reverseEngineeringIncompleteDetails: []
+  };
+  const role = resource("IAM_ROLE", {
+    id: "resource-role",
+    providerResourceType: "AWS::IAM::Role",
+    providerResourceId: "arn:aws:iam::111122223333:role/orders-role",
+    displayName: "Orders Role",
+    config: {
+      ...ready,
+      roleName: "orders-role",
+      trustPolicyDocument: { Version: "2012-10-17", Statement: [] },
+      terraformImportId: "orders-role"
+    }
+  });
+  const policy = resource("IAM_POLICY", {
+    id: "resource-policy",
+    providerResourceType: "AWS::IAM::Policy",
+    providerResourceId: "arn:aws:iam::111122223333:policy/orders-read",
+    displayName: "Orders Read Policy",
+    config: {
+      ...ready,
+      policyName: "orders-read",
+      policyDocument: { Version: "2012-10-17", Statement: [] },
+      terraformImportId: "arn:aws:iam::111122223333:policy/orders-read"
+    }
+  });
+  const attachment = resource("IAM_POLICY", {
+    id: "resource-attachment",
+    providerResourceType: "AWS::IAM::RolePolicyAttachment",
+    providerResourceId: "orders-role/arn:aws:iam::111122223333:policy/orders-read",
+    displayName: "Orders Policy Attachment",
+    config: {
+      ...ready,
+      roleName: "orders-role",
+      policyName: "orders-read",
+      policyArn: "arn:aws:iam::111122223333:policy/orders-read",
+      terraformImportId: "orders-role/arn:aws:iam::111122223333:policy/orders-read"
+    },
+    relationships: [
+      { type: "depends_on", targetResourceId: role.id },
+      { type: "depends_on", targetResourceId: policy.id }
+    ]
+  });
+  const resources = [role, policy, attachment];
+  const createdAt = "2026-07-23T00:00:00.000Z";
+  const architectureJson = {
+    nodes: resources.map((item, index) => ({
+      id: item.id,
+      type: item.resourceType,
+      label: item.displayName,
+      positionX: index * 80,
+      positionY: 0,
+      config: structuredClone(item.config)
+    })),
+    edges: []
+  };
+
+  return {
+    scan: {
+      id: "scan-detailed-dependency",
+      projectId: "project-1",
+      awsConnectionId: "connection-1",
+      provider: "aws",
+      region: "ap-northeast-2",
+      resourceTypes: ["ALL"],
+      status: "completed",
+      createdAt,
+      updatedAt: createdAt,
+      startedAt: createdAt,
+      completedAt: createdAt,
+      cancelRequestedAt: null,
+      deletedAt: null,
+      errorSummary: null
+    },
+    discoveredResources: resources,
+    reverseEngineeringDraft: {
+      id: "draft-detailed-dependency",
+      scanId: "scan-detailed-dependency",
+      architectureJson,
+      protectedValueKeys: [],
+      editableValueKeys: [],
+      createdAt
+    },
+    architectureJson,
+    findings: [],
+    analysisExclusions: [],
+    importSuggestions: resources.map((item) => {
+      const projection = createReverseEngineeringTerraformProjection(item, resources);
+      const terraformAddress = `${projection.terraformResourceType}.${projection.terraformResourceName}`;
+      return {
+        id: `import-${item.id}`,
+        resourceId: item.id,
+        status: "ready" as const,
+        handoffReady: true,
+        terraformAddress,
+        importCommand: `terraform import ${terraformAddress} ${String(item.config["terraformImportId"])}`
       };
     }),
     scanErrors: []

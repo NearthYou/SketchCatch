@@ -44,12 +44,60 @@ const TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE = new Map<ResourceType, string>([
   ["ECS_TASK_DEFINITION", "aws_ecs_task_definition"]
 ]);
 
+const DETAILED_TERRAFORM_RESOURCE_TYPE_BY_PROVIDER_RESOURCE_TYPE = new Map<string, string>([
+  ["AWS::IAM::Role", "aws_iam_role"],
+  ["AWS::IAM::Policy", "aws_iam_policy"],
+  ["AWS::IAM::RolePolicy", "aws_iam_role_policy"],
+  ["AWS::IAM::RolePolicyAttachment", "aws_iam_role_policy_attachment"],
+  ["AWS::IAM::InstanceProfile", "aws_iam_instance_profile"],
+  ["AWS::Lambda::Function", "aws_lambda_function"],
+  ["AWS::Lambda::Permission", "aws_lambda_permission"],
+  ["AWS::KMS::Key", "aws_kms_key"],
+  ["AWS::KMS::Alias", "aws_kms_alias"],
+  ["AWS::ApiGateway::Resource", "aws_api_gateway_resource"],
+  ["AWS::ApiGateway::Method", "aws_api_gateway_method"],
+  ["AWS::ApiGateway::Integration", "aws_api_gateway_integration"],
+  ["AWS::ApiGateway::Deployment", "aws_api_gateway_deployment"],
+  ["AWS::ApiGateway::Stage", "aws_api_gateway_stage"]
+]);
+
+const DETAILED_PROVIDER_RESOURCE_TYPES_BY_RESOURCE_TYPE = new Map<
+  ResourceType,
+  ReadonlySet<string>
+>([
+  ["IAM_ROLE", new Set(["AWS::IAM::Role"])],
+  [
+    "IAM_POLICY",
+    new Set(["AWS::IAM::Policy", "AWS::IAM::RolePolicy", "AWS::IAM::RolePolicyAttachment"])
+  ],
+  ["IAM_INSTANCE_PROFILE", new Set(["AWS::IAM::InstanceProfile"])],
+  ["LAMBDA", new Set(["AWS::Lambda::Function"])],
+  ["LAMBDA_PERMISSION", new Set(["AWS::Lambda::Permission"])],
+  ["KMS_KEY", new Set(["AWS::KMS::Key"])],
+  ["KMS_ALIAS", new Set(["AWS::KMS::Alias"])],
+  ["API_GATEWAY_RESOURCE", new Set(["AWS::ApiGateway::Resource"])],
+  ["API_GATEWAY_METHOD", new Set(["AWS::ApiGateway::Method"])],
+  ["API_GATEWAY_INTEGRATION", new Set(["AWS::ApiGateway::Integration"])],
+  ["API_GATEWAY_DEPLOYMENT", new Set(["AWS::ApiGateway::Deployment"])],
+  ["API_GATEWAY_STAGE", new Set(["AWS::ApiGateway::Stage"])]
+]);
+
 const SAME_SCAN_REFERENCE_RESOURCE_TYPES = new Set<ResourceType>([
   "ROUTE_TABLE_ASSOCIATION",
   "ELASTIC_IP",
   "NAT_GATEWAY",
   "LOAD_BALANCER_TARGET_GROUP",
-  "LOAD_BALANCER_LISTENER"
+  "LOAD_BALANCER_LISTENER",
+  "IAM_POLICY",
+  "IAM_INSTANCE_PROFILE",
+  "LAMBDA",
+  "LAMBDA_PERMISSION",
+  "KMS_ALIAS",
+  "API_GATEWAY_RESOURCE",
+  "API_GATEWAY_METHOD",
+  "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
+  "API_GATEWAY_STAGE"
 ]);
 
 /** 기존 AWS 리소스를 보드에서 편집 가능한 Terraform identity와 명시적 인수로 투영한다. */
@@ -58,7 +106,10 @@ export function createReverseEngineeringTerraformProjection(
   sameScanResources?: readonly DiscoveredResource[]
 ): ReverseEngineeringTerraformProjection {
   const management = classifyReverseEngineeringManagement(resource);
-  const terraformResourceType = TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE.get(resource.resourceType);
+  const terraformResourceType = getReverseEngineeringTerraformResourceType(
+    resource.resourceType,
+    resource.providerResourceType
+  );
 
   if (management !== "managed" || !terraformResourceType) {
     return { management, terraformValues: {} };
@@ -84,8 +135,15 @@ export function createReverseEngineeringTerraformProjection(
 
 /** import suggestion과 Board identity가 공유할 ResourceType별 Terraform type을 반환한다. */
 export function getReverseEngineeringTerraformResourceType(
-  resourceType: ResourceType
+  resourceType: ResourceType,
+  providerResourceType?: string
 ): string | undefined {
+  const detailedProviderTypes = DETAILED_PROVIDER_RESOURCE_TYPES_BY_RESOURCE_TYPE.get(resourceType);
+  if (detailedProviderTypes) {
+    return providerResourceType && detailedProviderTypes.has(providerResourceType)
+      ? DETAILED_TERRAFORM_RESOURCE_TYPE_BY_PROVIDER_RESOURCE_TYPE.get(providerResourceType)
+      : undefined;
+  }
   return TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE.get(resourceType);
 }
 
@@ -109,6 +167,40 @@ export function createReverseEngineeringTerraformValues(
   const { config } = resource;
 
   switch (resource.resourceType) {
+    case "IAM_ROLE":
+      return createIamRoleTerraformValues(resource, sameScanResources);
+    case "IAM_POLICY":
+      return createIamPolicyTerraformValues(resource, sameScanResources);
+    case "IAM_INSTANCE_PROFILE":
+      return createIamInstanceProfileTerraformValues(resource, sameScanResources);
+    case "LAMBDA":
+      return createLambdaFunctionTerraformValues(resource, sameScanResources);
+    case "LAMBDA_PERMISSION":
+      return createLambdaPermissionTerraformValues(resource, sameScanResources);
+    case "KMS_KEY":
+      return compactConfig({
+        description: config["description"],
+        keyUsage: config["keyUsage"],
+        customerMasterKeySpec: config["keySpec"],
+        policy: normalizeJsonDocument(config["policyDocument"]),
+        isEnabled: config["enabled"],
+        enableKeyRotation: config["rotationEnabled"],
+        rotationPeriodInDays: config["rotationPeriodInDays"],
+        multiRegion: config["multiRegion"],
+        tags: normalizeTerraformTags(config["tags"])
+      });
+    case "KMS_ALIAS":
+      return createKmsAliasTerraformValues(resource, sameScanResources);
+    case "API_GATEWAY_RESOURCE":
+      return createApiGatewayResourceTerraformValues(resource, sameScanResources);
+    case "API_GATEWAY_METHOD":
+      return createApiGatewayMethodTerraformValues(resource, sameScanResources);
+    case "API_GATEWAY_INTEGRATION":
+      return createApiGatewayIntegrationTerraformValues(resource, sameScanResources);
+    case "API_GATEWAY_DEPLOYMENT":
+      return createApiGatewayDeploymentTerraformValues(resource, sameScanResources);
+    case "API_GATEWAY_STAGE":
+      return createApiGatewayStageTerraformValues(resource, sameScanResources);
     case "API_GATEWAY_REST_API":
       return compactConfig({
         name: config["name"],
@@ -297,6 +389,419 @@ export function createReverseEngineeringTerraformValues(
     default:
       return {};
   }
+}
+
+function createIamRoleTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  const permissionsBoundaryArn = getNonEmptyString(resource.config["permissionsBoundaryArn"]);
+  const boundaryPolicy = permissionsBoundaryArn
+    ? findSameScanRelatedManagedProviderTarget(
+        resource,
+        sameScanResources,
+        "IAM_POLICY",
+        "AWS::IAM::Policy",
+        permissionsBoundaryArn
+      )
+    : undefined;
+
+  return compactConfig({
+    name: resource.config["roleName"],
+    path: resource.config["path"],
+    description: resource.config["description"],
+    maxSessionDuration: resource.config["maxSessionDuration"],
+    assumeRolePolicy: normalizeJsonDocument(resource.config["trustPolicyDocument"]),
+    permissionsBoundary: boundaryPolicy
+      ? createTerraformArnReference("aws_iam_policy", boundaryPolicy)
+      : permissionsBoundaryArn,
+    tags: normalizeTerraformTags(resource.config["tags"])
+  });
+}
+
+function createIamPolicyTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  if (resource.providerResourceType === "AWS::IAM::Policy") {
+    return compactConfig({
+      name: resource.config["policyName"],
+      path: resource.config["path"],
+      description: resource.config["description"],
+      policy: normalizeJsonDocument(resource.config["policyDocument"]),
+      tags: normalizeTerraformTags(resource.config["tags"])
+    });
+  }
+
+  const role = findSameScanRelatedManagedProviderTarget(
+    resource,
+    sameScanResources,
+    "IAM_ROLE",
+    "AWS::IAM::Role"
+  );
+  if (!role) return {};
+
+  if (resource.providerResourceType === "AWS::IAM::RolePolicy") {
+    return compactConfig({
+      name: resource.config["policyName"],
+      role: createTerraformNameReference("aws_iam_role", role),
+      policy: normalizeJsonDocument(resource.config["policyDocument"])
+    });
+  }
+
+  if (resource.providerResourceType === "AWS::IAM::RolePolicyAttachment") {
+    const managedPolicy = findSameScanRelatedManagedProviderTarget(
+      resource,
+      sameScanResources,
+      "IAM_POLICY",
+      "AWS::IAM::Policy",
+      resource.config["policyArn"]
+    );
+    if (!managedPolicy) return {};
+    return {
+      role: createTerraformNameReference("aws_iam_role", role),
+      policyArn: createTerraformArnReference("aws_iam_policy", managedPolicy)
+    };
+  }
+
+  return {};
+}
+
+function createIamInstanceProfileTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  const roleNames = getStringValues(resource.config["roleNames"]);
+  const role =
+    roleNames.length === 1
+      ? findSameScanRelatedManagedProviderTarget(
+          resource,
+          sameScanResources,
+          "IAM_ROLE",
+          "AWS::IAM::Role"
+        )
+      : undefined;
+  if (roleNames.length > 1 || (roleNames.length === 1 && !role)) return {};
+
+  return compactConfig({
+    name: resource.config["instanceProfileName"],
+    path: resource.config["path"],
+    role: role ? createTerraformNameReference("aws_iam_role", role) : undefined,
+    tags: normalizeTerraformTags(resource.config["tags"])
+  });
+}
+
+function createLambdaFunctionTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  if (!sameScanResources) return {};
+  const configuration = readRecord(resource.config["functionConfiguration"]);
+  const codeSource = readRecord(resource.config["codeSource"]);
+  if (!configuration || !codeSource) return {};
+
+  const role = findSameScanRelatedManagedProviderTarget(
+    resource,
+    sameScanResources,
+    "IAM_ROLE",
+    "AWS::IAM::Role",
+    configuration["Role"]
+  );
+  if (!role) return {};
+
+  const kmsKeyArn = getNonEmptyString(configuration["KMSKeyArn"]);
+  const kmsKey = kmsKeyArn
+    ? findSameScanRelatedManagedProviderTarget(
+        resource,
+        sameScanResources,
+        "KMS_KEY",
+        "AWS::KMS::Key",
+        kmsKeyArn
+      )
+    : undefined;
+  if (kmsKeyArn && !kmsKey) return {};
+
+  const vpcConfig = readRecord(configuration["VpcConfig"]);
+  const subnetIds = getStringValues(vpcConfig?.["SubnetIds"]);
+  const securityGroupIds = getStringValues(vpcConfig?.["SecurityGroupIds"]);
+  const subnetReferences = createSameScanIdReferences(
+    resource,
+    sameScanResources,
+    "SUBNET",
+    "aws_subnet",
+    subnetIds
+  );
+  const securityGroupReferences = createSameScanIdReferences(
+    resource,
+    sameScanResources,
+    "SECURITY_GROUP",
+    "aws_security_group",
+    securityGroupIds
+  );
+  if (subnetReferences === null || securityGroupReferences === null) return {};
+
+  const deadLetterConfig = readRecord(configuration["DeadLetterConfig"]);
+  const tracingConfig = readRecord(configuration["TracingConfig"]);
+  const ephemeralStorage = readRecord(configuration["EphemeralStorage"]);
+  const imageConfigResponse = readRecord(configuration["ImageConfigResponse"]);
+  const imageConfig = readRecord(imageConfigResponse?.["ImageConfig"]);
+  const loggingConfig = readRecord(configuration["LoggingConfig"]);
+  const snapStart = readRecord(configuration["SnapStart"]);
+
+  return compactConfig({
+    functionName: resource.config["functionName"],
+    packageType: configuration["PackageType"],
+    imageUri: codeSource["imageUri"],
+    role: createTerraformArnReference("aws_iam_role", role),
+    description: configuration["Description"],
+    architectures: configuration["Architectures"],
+    memorySize: configuration["MemorySize"],
+    timeout: configuration["Timeout"],
+    reservedConcurrentExecutions: resource.config["reservedConcurrentExecutions"],
+    ephemeralStorage: ephemeralStorage
+      ? compactConfig({ size: ephemeralStorage["Size"] })
+      : undefined,
+    environment: compactConfig({ variables: resource.config["environmentVariables"] }),
+    vpcConfig: vpcConfig
+      ? compactConfig({
+          subnetIds: subnetReferences,
+          securityGroupIds: securityGroupReferences,
+          ipv6AllowedForDualStack: vpcConfig["Ipv6AllowedForDualStack"]
+        })
+      : undefined,
+    layers: normalizeLambdaLayerArns(configuration["Layers"]),
+    kmsKeyArn: kmsKey ? createTerraformArnReference("aws_kms_key", kmsKey) : undefined,
+    deadLetterConfig: deadLetterConfig
+      ? compactConfig({ targetArn: deadLetterConfig["TargetArn"] })
+      : undefined,
+    fileSystemConfig: normalizeLambdaFileSystemConfigs(configuration["FileSystemConfigs"]),
+    tracingConfig: tracingConfig ? compactConfig({ mode: tracingConfig["Mode"] }) : undefined,
+    imageConfig: imageConfig
+      ? compactConfig({
+          command: imageConfig["Command"],
+          entryPoint: imageConfig["EntryPoint"],
+          workingDirectory: imageConfig["WorkingDirectory"]
+        })
+      : undefined,
+    loggingConfig: loggingConfig
+      ? compactConfig({
+          logGroup: loggingConfig["LogGroup"],
+          logFormat: loggingConfig["LogFormat"],
+          applicationLogLevel: loggingConfig["ApplicationLogLevel"],
+          systemLogLevel: loggingConfig["SystemLogLevel"]
+        })
+      : undefined,
+    snapStart: snapStart ? compactConfig({ applyOn: snapStart["ApplyOn"] }) : undefined,
+    tags: normalizeTerraformTags(resource.config["tags"])
+  });
+}
+
+function createLambdaPermissionTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  const lambdaFunction = findSameScanRelatedManagedProviderTarget(
+    resource,
+    sameScanResources,
+    "LAMBDA",
+    "AWS::Lambda::Function"
+  );
+  const statement = readRecord(resource.config["statement"]);
+  if (!lambdaFunction || !statement) return {};
+
+  const condition = readRecord(statement["Condition"]);
+  const arnCondition = readRecord(condition?.["ArnLike"]) ?? readRecord(condition?.["ArnEquals"]);
+  const stringEquals = readRecord(condition?.["StringEquals"]);
+  const boolCondition = readRecord(condition?.["Bool"]);
+  const invokedViaFunctionUrl = boolCondition?.["lambda:InvokedViaFunctionUrl"];
+
+  return compactConfig({
+    statementId: statement["Sid"],
+    action: statement["Action"],
+    functionName: createTerraformAttributeReference(
+      "aws_lambda_function",
+      lambdaFunction,
+      "function_name"
+    ),
+    principal: readLambdaPrincipal(statement["Principal"]),
+    qualifier: readLambdaPermissionQualifier(resource.config["terraformImportId"]),
+    sourceArn: arnCondition?.["AWS:SourceArn"],
+    sourceAccount: stringEquals?.["AWS:SourceAccount"],
+    principalOrgId: stringEquals?.["AWS:PrincipalOrgID"],
+    functionUrlAuthType: stringEquals?.["lambda:FunctionUrlAuthType"],
+    invokedViaFunctionUrl:
+      invokedViaFunctionUrl === true || invokedViaFunctionUrl === "true"
+        ? true
+        : invokedViaFunctionUrl === false || invokedViaFunctionUrl === "false"
+          ? false
+          : undefined
+  });
+}
+
+function createKmsAliasTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  const key = findSameScanRelatedManagedProviderTarget(
+    resource,
+    sameScanResources,
+    "KMS_KEY",
+    "AWS::KMS::Key"
+  );
+  return key
+    ? {
+        name: resource.config["aliasName"],
+        targetKeyId: createTerraformAttributeReference("aws_kms_key", key, "key_id")
+      }
+    : {};
+}
+
+function createApiGatewayResourceTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  const restApi = findApiGatewayRestApi(resource, sameScanResources);
+  if (!restApi) return {};
+  const parent = findApiGatewayResource(
+    resource.config["restApiId"],
+    resource.config["parentResourceId"],
+    sameScanResources,
+    resource
+  );
+  if (parent === null) return {};
+
+  return {
+    restApiId: createTerraformIdReference("aws_api_gateway_rest_api", restApi),
+    parentId: parent
+      ? createTerraformIdReference("aws_api_gateway_resource", parent)
+      : createTerraformAttributeReference("aws_api_gateway_rest_api", restApi, "root_resource_id"),
+    pathPart: resource.config["pathPart"]
+  };
+}
+
+function createApiGatewayMethodTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  const parent = resolveApiGatewayMethodParent(resource, sameScanResources);
+  if (!parent) return {};
+  return compactConfig({
+    restApiId: createTerraformIdReference("aws_api_gateway_rest_api", parent.restApi),
+    resourceId: parent.resource
+      ? createTerraformIdReference("aws_api_gateway_resource", parent.resource)
+      : createTerraformAttributeReference(
+          "aws_api_gateway_rest_api",
+          parent.restApi,
+          "root_resource_id"
+        ),
+    httpMethod: resource.config["httpMethod"],
+    authorization: resource.config["authorizationType"],
+    authorizerId: resource.config["authorizerId"],
+    apiKeyRequired: resource.config["apiKeyRequired"],
+    requestValidatorId: resource.config["requestValidatorId"],
+    operationName: resource.config["operationName"],
+    requestParameters: resource.config["requestParameters"],
+    requestModels: resource.config["requestModels"],
+    authorizationScopes: resource.config["authorizationScopes"]
+  });
+}
+
+function createApiGatewayIntegrationTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  const restApi = findApiGatewayRestApi(resource, sameScanResources);
+  const apiResource = findApiGatewayResource(
+    resource.config["restApiId"],
+    resource.config["resourceId"],
+    sameScanResources
+  );
+  const method = findApiGatewayMethod(resource, sameScanResources);
+  if (!restApi || apiResource === null || !method) return {};
+
+  return compactConfig({
+    restApiId: createTerraformIdReference("aws_api_gateway_rest_api", restApi),
+    resourceId: apiResource
+      ? createTerraformIdReference("aws_api_gateway_resource", apiResource)
+      : createTerraformAttributeReference("aws_api_gateway_rest_api", restApi, "root_resource_id"),
+    httpMethod: createTerraformAttributeReference("aws_api_gateway_method", method, "http_method"),
+    type: resource.config["integrationType"],
+    integrationHttpMethod: resource.config["integrationHttpMethod"],
+    uri: resource.config["integrationUri"],
+    connectionType: resource.config["connectionType"],
+    connectionId: resource.config["connectionId"],
+    credentials: resource.config["credentialsArn"],
+    requestParameters: resource.config["requestParameters"],
+    requestTemplates: resource.config["requestTemplates"],
+    passthroughBehavior: resource.config["passthroughBehavior"],
+    contentHandling: resource.config["contentHandling"],
+    timeoutMilliseconds: resource.config["timeoutInMillis"],
+    cacheNamespace: resource.config["cacheNamespace"],
+    cacheKeyParameters: resource.config["cacheKeyParameters"],
+    tlsConfig: resource.config["tlsConfig"]
+  });
+}
+
+function createApiGatewayDeploymentTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  const restApi = findApiGatewayRestApi(resource, sameScanResources);
+  if (!restApi || !sameScanResources) return {};
+  const dependencies = sameScanResources
+    .filter(
+      (candidate) =>
+        (candidate.resourceType === "API_GATEWAY_METHOD" ||
+          candidate.resourceType === "API_GATEWAY_INTEGRATION") &&
+        candidate.config["restApiId"] === resource.config["restApiId"] &&
+        classifyReverseEngineeringManagement(candidate) === "managed"
+    )
+    .map((candidate) => {
+      const terraformType = getReverseEngineeringTerraformResourceType(
+        candidate.resourceType,
+        candidate.providerResourceType
+      );
+      return terraformType
+        ? `${terraformType}.${createStableTerraformResourceName(candidate.id)}`
+        : null;
+    })
+    .filter((value): value is string => value !== null)
+    .sort((left, right) => {
+      const leftRank = left.startsWith("aws_api_gateway_method.") ? 0 : 1;
+      const rightRank = right.startsWith("aws_api_gateway_method.") ? 0 : 1;
+      return leftRank - rightRank || left.localeCompare(right);
+    });
+
+  return compactConfig({
+    restApiId: createTerraformIdReference("aws_api_gateway_rest_api", restApi),
+    description: resource.config["description"],
+    dependsOn: dependencies
+  });
+}
+
+function createApiGatewayStageTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  const restApi = findApiGatewayRestApi(resource, sameScanResources);
+  const deployment = findSameScanDetailedResource(
+    sameScanResources,
+    "API_GATEWAY_DEPLOYMENT",
+    "AWS::ApiGateway::Deployment",
+    `${String(resource.config["restApiId"] ?? "")}/${String(resource.config["deploymentId"] ?? "")}`
+  );
+  if (!restApi || !deployment || !hasRelationshipTo(resource, deployment)) return {};
+
+  return compactConfig({
+    restApiId: createTerraformIdReference("aws_api_gateway_rest_api", restApi),
+    deploymentId: createTerraformIdReference("aws_api_gateway_deployment", deployment),
+    stageName: resource.config["stageName"],
+    description: resource.config["description"],
+    clientCertificateId: resource.config["clientCertificateId"],
+    documentationVersion: resource.config["documentationVersion"],
+    tracingEnabled: resource.config["tracingEnabled"],
+    tags: normalizeTerraformTags(resource.config["tags"])
+  });
 }
 
 /** gg: Target Group은 같은 scan의 관리 가능한 VPC와 정확히 한 ALB 관계가 있을 때만 투영합니다. */
@@ -559,6 +1064,155 @@ function findSameScanRelatedManagedTarget(
   return management === "managed" ? target : undefined;
 }
 
+function findSameScanRelatedManagedProviderTarget(
+  source: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined,
+  resourceType: ResourceType,
+  providerResourceType: string,
+  providerIdentity?: unknown
+): DiscoveredResource | undefined {
+  if (!sameScanResources) return undefined;
+  const exactIdentity = getNonEmptyString(providerIdentity);
+  const candidates = sameScanResources.filter(
+    (candidate) =>
+      candidate.resourceType === resourceType &&
+      candidate.providerResourceType === providerResourceType &&
+      hasRelationshipTo(source, candidate) &&
+      (!exactIdentity || hasProviderIdentity(candidate, exactIdentity))
+  );
+  const target = candidates.length === 1 ? candidates[0] : undefined;
+  return target && classifyReverseEngineeringManagement(target) === "managed" ? target : undefined;
+}
+
+function hasProviderIdentity(resource: DiscoveredResource, exactIdentity: string): boolean {
+  return [
+    resource.providerResourceId,
+    resource.config["providerResourceId"],
+    resource.config["resourceArn"],
+    resource.config["keyId"]
+  ].some((candidate) => getNonEmptyString(candidate) === exactIdentity);
+}
+
+function createSameScanIdReferences(
+  source: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[],
+  resourceType: ResourceType,
+  terraformResourceType: string,
+  providerResourceIds: readonly string[]
+): string[] | null {
+  const references = providerResourceIds.map((providerResourceId) => {
+    const target = findSameScanManagedTarget(
+      source,
+      sameScanResources,
+      resourceType,
+      providerResourceId
+    );
+    return target ? createTerraformIdReference(terraformResourceType, target) : null;
+  });
+  return references.every((reference): reference is string => reference !== null)
+    ? references
+    : null;
+}
+
+function findApiGatewayRestApi(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): DiscoveredResource | undefined {
+  if (!sameScanResources) return undefined;
+  const restApiId = getNonEmptyString(resource.config["restApiId"]);
+  if (!restApiId) return undefined;
+  const candidates = sameScanResources.filter(
+    (candidate) =>
+      candidate.resourceType === "API_GATEWAY_REST_API" &&
+      candidate.providerResourceType === "AWS::ApiGateway::RestApi" &&
+      candidate.providerResourceId === restApiId
+  );
+  const target = candidates.length === 1 ? candidates[0] : undefined;
+  return target && classifyReverseEngineeringManagement(target) === "managed" ? target : undefined;
+}
+
+function findApiGatewayResource(
+  restApiIdValue: unknown,
+  resourceIdValue: unknown,
+  sameScanResources: readonly DiscoveredResource[] | undefined,
+  source?: DiscoveredResource
+): DiscoveredResource | undefined | null {
+  const restApiId = getNonEmptyString(restApiIdValue);
+  const resourceId = getNonEmptyString(resourceIdValue);
+  if (!restApiId || !resourceId || !sameScanResources) return null;
+  const target = findSameScanDetailedResource(
+    sameScanResources,
+    "API_GATEWAY_RESOURCE",
+    "AWS::ApiGateway::Resource",
+    `${restApiId}/${resourceId}`
+  );
+  if (target) return target;
+
+  const restApi = sameScanResources.find(
+    (candidate) =>
+      candidate.resourceType === "API_GATEWAY_REST_API" &&
+      candidate.providerResourceId === restApiId
+  );
+  return restApi &&
+    (restApi.config["rootResourceId"] === resourceId ||
+      (source && hasRelationshipTo(source, restApi)))
+    ? undefined
+    : null;
+}
+
+function resolveApiGatewayMethodParent(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): { readonly restApi: DiscoveredResource; readonly resource?: DiscoveredResource } | null {
+  const restApi = findApiGatewayRestApi(resource, sameScanResources);
+  if (!restApi) return null;
+  const apiResource = findApiGatewayResource(
+    resource.config["restApiId"],
+    resource.config["resourceId"],
+    sameScanResources,
+    resource
+  );
+  if (apiResource === null) return null;
+  if (apiResource && !hasRelationshipTo(resource, apiResource)) return null;
+  if (!apiResource && !hasRelationshipTo(resource, restApi)) return null;
+  return apiResource ? { restApi, resource: apiResource } : { restApi };
+}
+
+function findApiGatewayMethod(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): DiscoveredResource | undefined {
+  const restApiId = getNonEmptyString(resource.config["restApiId"]);
+  const resourceId = getNonEmptyString(resource.config["resourceId"]);
+  const httpMethod = getNonEmptyString(resource.config["httpMethod"]);
+  if (!restApiId || !resourceId || !httpMethod) return undefined;
+  const method = findSameScanDetailedResource(
+    sameScanResources,
+    "API_GATEWAY_METHOD",
+    "AWS::ApiGateway::Method",
+    `${restApiId}/${resourceId}/${httpMethod}`
+  );
+  return method && hasRelationshipTo(resource, method) ? method : undefined;
+}
+
+function findSameScanDetailedResource(
+  sameScanResources: readonly DiscoveredResource[] | undefined,
+  resourceType: ResourceType,
+  providerResourceType: string,
+  terraformImportId: string
+): DiscoveredResource | undefined {
+  if (!sameScanResources || !terraformImportId) return undefined;
+  const candidates = sameScanResources.filter(
+    (candidate) =>
+      candidate.resourceType === resourceType &&
+      candidate.providerResourceType === providerResourceType &&
+      (candidate.config["terraformImportId"] === terraformImportId ||
+        candidate.providerResourceId === terraformImportId)
+  );
+  const target = candidates.length === 1 ? candidates[0] : undefined;
+  return target && classifyReverseEngineeringManagement(target) === "managed" ? target : undefined;
+}
+
 function hasRelationshipTo(source: DiscoveredResource, target: DiscoveredResource): boolean {
   return (source.relationships ?? []).some(
     (relationship) => relationship.targetResourceId === target.id
@@ -578,6 +1232,71 @@ function createTerraformArnReference(
   resource: DiscoveredResource
 ): string {
   return `${terraformResourceType}.${createStableTerraformResourceName(resource.id)}.arn`;
+}
+
+function createTerraformNameReference(
+  terraformResourceType: string,
+  resource: DiscoveredResource
+): string {
+  return createTerraformAttributeReference(terraformResourceType, resource, "name");
+}
+
+function createTerraformAttributeReference(
+  terraformResourceType: string,
+  resource: DiscoveredResource,
+  attributeName: string
+): string {
+  return `${terraformResourceType}.${createStableTerraformResourceName(resource.id)}.${attributeName}`;
+}
+
+function normalizeJsonDocument(value: unknown): string | undefined {
+  try {
+    const parsed = typeof value === "string" ? (JSON.parse(value) as unknown) : value;
+    return isRecord(parsed) ? JSON.stringify(parsed) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
+}
+
+function normalizeLambdaLayerArns(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const arns = value.flatMap((entry) => {
+    const arn = isRecord(entry) ? getNonEmptyString(entry["Arn"]) : null;
+    return arn ? [arn] : [];
+  });
+  return arns.length > 0 ? arns : undefined;
+}
+
+function normalizeLambdaFileSystemConfigs(value: unknown): ResourceConfig[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const configs = value.flatMap((entry) => {
+    if (!isRecord(entry)) return [];
+    const normalized = compactConfig({
+      arn: entry["Arn"],
+      localMountPath: entry["LocalMountPath"]
+    });
+    return Object.keys(normalized).length > 0 ? [normalized] : [];
+  });
+  return configs.length > 0 ? configs : undefined;
+}
+
+function readLambdaPrincipal(value: unknown): string | undefined {
+  const direct = getNonEmptyString(value);
+  if (direct) return direct;
+  if (!isRecord(value) || Object.keys(value).length !== 1) return undefined;
+  return getNonEmptyString(Object.values(value)[0]) ?? undefined;
+}
+
+function readLambdaPermissionQualifier(value: unknown): string | undefined {
+  const importId = getNonEmptyString(value);
+  if (!importId) return undefined;
+  const slashIndex = importId.lastIndexOf("/");
+  const colonIndex = importId.slice(0, slashIndex).indexOf(":");
+  return slashIndex > 0 && colonIndex > 0 ? importId.slice(colonIndex + 1, slashIndex) : undefined;
 }
 
 function getNonEmptyString(value: unknown): string | null {
