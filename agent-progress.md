@@ -126,3 +126,13 @@ Short English-only working log for the current agent context. Older records are 
 - Cross-impact verification found zero remaining TypeScript references to the 20 removed focused-flow CSS classes and no changes under API, shared types, AWS connection, Deployment, or CI/CD implementation files. AWS connection, Deployment, and CI/CD regressions pass 318/320; the two failures are unchanged stale CI/CD blue-primary contracts whose implementation files are outside this diff.
 - Browser verification confirms the telemetry summary is the first dashboard content and the removed status/flow sections do not render. The local fixture still reports a pre-existing server/client Korean time-format hydration mismatch.
 - No migration, dependency, cloud, traffic, or deployment mutation was performed.
+
+### 2026-07-24 - Deploy and verify Live Observation feedback
+
+- Pushed `codex/live-observation-feedback` at `fe570d60dd3809c4c2f9a3f64a392b5bc625d0f9` and deployed that exact SHA with GitHub Actions run `30033156323`.
+- The production workflow passed lint, typecheck, build, migration compatibility, environment validation, parallel API/Web image builds, production preflight, worker registration, and ECS stabilization. Web stabilized in 220 seconds and API in 295 seconds.
+- Production smoke passed: `/`, `/health`, and `/health/db` returned 200; unauthenticated `/api/projects` returned the expected 401.
+- Authenticated Chrome QA confirmed the surge banner and chronological record are absent, the pre-observation Task state reads `실행 확인 중 · 예상 계산 중`, and it later settles to `실행 1개 · 예상 1개`.
+- Four real audience check-ins were accepted. During the resulting high request count, connector animation remained `running` and its computed background position advanced across a 350 ms sample.
+- The design judgment and next action remained visible while observing and after the test session ended. Workspace and audience pages emitted no browser console warnings or errors.
+- The test observation session was ended after verification. No DB migration, dependency change, Terraform action, provider scale-out load cycle, or infrastructure mutation was performed.

@@ -304,7 +304,7 @@
         "실제 AWS apply/destroy는 별도 명시 승인이 있을 때만 수행한다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-22",
+        "lastVerified": "2026-07-24",
         "commands": [
           "pnpm --filter api exec tsx --test --test-concurrency=1 src/live-observations/redis-live-observation-store.integration.ts",
           "pnpm harness:check",
@@ -312,9 +312,12 @@
           "pnpm typecheck",
           "pnpm build",
           "GitHub Actions production workflow 29876627509",
-          "Chrome acceptance: session c815c2b8-9eb9-44f2-aeba-0eec1f31394b, audience connected, request count +1 -> +2 -> +3"
+          "Chrome acceptance: session c815c2b8-9eb9-44f2-aeba-0eec1f31394b, audience connected, request count +1 -> +2 -> +3",
+          "GitHub Actions production workflow 30033156323 for fe570d60dd3809c4c2f9a3f64a392b5bc625d0f9",
+          "Production HTTP smoke: /, /health, /health/db = 200; unauthenticated /api/projects = 401",
+          "Authenticated Chrome acceptance: four audience check-ins, Task forecast phase, persistent judgment, continuous connector motion"
         ],
-        "notes": "Production API task definition 58 now accepts the optional audience application URL in Redis manifests. Fresh session creation, SSE continuity, one observed Fargate Task, real audience participation, repeat participation, and heartbeat receipt growth passed."
+        "notes": "Production API task definition 58 accepts the optional audience application URL in Redis manifests. Fresh session creation, SSE continuity, one observed Fargate Task, real audience participation, repeat participation, and heartbeat receipt growth passed. The 2026-07-24 branch deployment also verified the simplified Live Observation UI, delayed Task forecast presentation, persistent judgment records, and continuous high-request animation without running the separately gated provider scale-out profile."
       },
       "notes": "Implementation merged in PR #382. On 2026-07-19 the approved non-production sandbox verified real CloudFront/ALB/ECS traffic and clean Destroy, and the local authenticated modal opened successfully. On 2026-07-22 the production manifest-contract repair restored fresh sessions and real audience receipt/heartbeat continuity. Status remains blocked only for the separately approved provider-confirmed scale-out cycle."
     },
