@@ -6,6 +6,17 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-23 - Rebuild Repository analysis and Template preview UI
+
+- Split `/workspace/repository` into a focused pre-analysis form and a completed result with compact Repository metadata, mapped evidence, real Template thumbnails, and a Preview-first 28/72 layout.
+- Candidate arrows change only the local Preview index. Explicit Template acceptance is required before Board creation, and new recommendation results reset to the first candidate.
+- Preserved public/private recovery, follow-up questions, AI new-design entry, recommendation order and confidence, runtime Secret handoff, Board persistence, Analysis Record provenance, and Project Draft revision contracts.
+- Added responsive CSS, compact actions, one accessible live candidate announcement, pending/completed status, keyboard-native navigation, and neutral thumbnail/evidence fallbacks.
+- Fixed final-review regressions: changing the Repository URL now clears its stale branch, Repository TSX render tests run in the default Web suite, connected analyses fall back to safe `aiHandoff.evidence`, generation locks configuration changes, and deployment-type changes no longer remount the result or lose focus.
+- Browser-verified loading, success, failure recovery, candidate navigation, explicit Template use, AI new-design navigation, thumbnail fallback, keyboard focus, and form reset. The result has no console errors or horizontal overflow at 1440×900 and 390×844.
+- Verified 42 Repository tests and 28 recommendation/handoff tests. Harness, root lint, root typecheck, production build, diff checks, and 25 sandbox E2E tests pass.
+- The untouched full Web baseline remains at 1,219/1,227 and the untouched API baseline remains at 1,523/1,557. Root `pnpm test` stops in `test:core`; Terraform tests also require a newer Terraform than local v1.6.6 for `mock_provider` and `override_resource`.
+
 ### 2026-07-23 - Clear Repository Analysis result UI
 
 - Removed the old Repository result presentation layer: CSS module, architecture preview, cards, candidate list, visual wrappers, icon wrappers, and old full-width action layout.
@@ -17,8 +28,8 @@ Short English-only working log for the current agent context. Older records are 
 
 ### Risk and next action
 
-- Browser entry, session, console, and initial overflow were checked. Full success/error/retry browser states need a deterministic local API fixture; their contracts are covered by focused tests.
-- Build the replacement Repository result UI in a separate task. Do not restore the deleted cards, preview, or route-specific CSS.
+- No Repository UI follow-up is required before commit. The remaining failing suites are outside this diff and should be repaired separately.
+- Do not restore the deleted legacy result cards or change the preserved Repository Analysis, recommendation, Board creation, AI, auth, or route contracts.
 
 ### 2026-07-22 - Make Live Observation traffic dense, dramatic, and load-testable
 
