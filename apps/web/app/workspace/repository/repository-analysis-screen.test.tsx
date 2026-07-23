@@ -82,12 +82,15 @@ test("completed result renders repository evidence and the real Template thumbna
   assert.match(html, /role="status"/);
   assert.match(html, /실행 방식/);
   assert.match(html, /ECS Fargate container app/);
+  assert.match(html, />1순위 추천</);
+  assert.doesNotMatch(html, /Template Preview/);
   assert.match(html, /적합도 92%/);
   assert.match(html, /컨테이너 런타임과 일치합니다/);
   assert.match(html, /<img[^>]+Template 미리보기/);
   assert.match(html, /aria-label="이전 Template"/);
   assert.match(html, /aria-label="다음 Template"/);
   assert.match(html, />1 \/ 2</);
+  assert.match(html, />AI로 직접 설계</);
 });
 
 test("one recommendation hides candidate navigation", () => {
