@@ -36,7 +36,9 @@ export type AwsApiGatewayRestTopologyAdvancedFeature =
   | "authorizers"
   | "models"
   | "validators"
+  | "response_mappings"
   | "vpc_link"
+  | "integration_uri"
   | "integration_credentials"
   | "stage_variables"
   | "access_logs"
@@ -159,12 +161,18 @@ type RecordIdentity = {
   readonly terraformImportId: string;
 };
 
+type RelatedRecordIdentity = RecordIdentity & {
+  readonly publicRecordId?: string;
+};
+
 const ADVANCED_FEATURE_ORDER: readonly AwsApiGatewayRestTopologyAdvancedFeature[] = [
   "resource_policy",
   "authorizers",
   "models",
   "validators",
+  "response_mappings",
   "vpc_link",
+  "integration_uri",
   "integration_credentials",
   "stage_variables",
   "access_logs",
@@ -608,7 +616,7 @@ async function addMethodAndIntegrationRecord(input: {
     return;
   }
 
-  addIntegrationAdvancedFeatures(input.state, integration);
+  const relatedIdentities = analyzeIntegration(input.state, integration);
   const integrationIdentity = createIdentity(
     "AWS::ApiGateway::Integration",
     `${input.restApiId}/${input.resourceId}/${httpMethod}`
@@ -617,6 +625,7 @@ async function addMethodAndIntegrationRecord(input: {
     identity: integrationIdentity,
     familyIdentity: input.restApiIdentity,
     parentIdentity: methodIdentity,
+    relatedIdentities,
     region: input.region,
     displayName: `${httpMethod} ${getNonEmptyString(input.resource.path) ?? "/"} Integration`,
     publicConfig: createPublicIntegrationConfig(integration),
@@ -862,21 +871,97 @@ function addMethodAdvancedFeatures(state: FamilyReadState, method: Method): void
   if (hasCustomModelReference(method.requestModels, method.methodResponses)) {
     state.advancedFeatures.add("models");
   }
+  if (hasRecordEntries(method.methodResponses)) {
+    state.advancedFeatures.add("response_mappings");
+  }
 }
 
-/** gg: Integration의 private 연결·Role·cache 사용 여부만 공개 분류로 올립니다. */
-function addIntegrationAdvancedFeatures(state: FamilyReadState, integration: Integration): void {
+/** gg: 안전하게 해석한 Lambda·Role만 opaque 관계로 만들고 나머지 integration 원문은 자동 관리에서 닫습니다. */
+function analyzeIntegration(
+  state: FamilyReadState,
+  integration: Integration
+): readonly RelatedRecordIdentity[] {
+  const relatedIdentities: RelatedRecordIdentity[] = [];
   if (
     integration.connectionType === "VPC_LINK" ||
     Boolean(getNonEmptyString(integration.connectionId))
   ) {
     state.advancedFeatures.add("vpc_link");
   }
-  if (getNonEmptyString(integration.credentials)) {
-    state.advancedFeatures.add("integration_credentials");
+
+  const integrationType = getNonEmptyString(integration.type)?.toUpperCase();
+  const integrationUri = getNonEmptyString(integration.uri);
+  if (integrationType === "AWS" || integrationType === "AWS_PROXY") {
+    const lambdaIdentity = integrationUri ? parseLambdaIntegrationUri(integrationUri) : undefined;
+    if (lambdaIdentity) relatedIdentities.push(lambdaIdentity);
+    else state.advancedFeatures.add("integration_uri");
+  } else if (integrationType === "HTTP" || integrationType === "HTTP_PROXY") {
+    if (!integrationUri || !isHttpIntegrationUri(integrationUri)) {
+      state.advancedFeatures.add("integration_uri");
+    }
+  } else if (integrationType === "MOCK") {
+    if (integrationUri) state.advancedFeatures.add("integration_uri");
+  } else {
+    state.advancedFeatures.add("integration_uri");
+  }
+
+  const credentials = getNonEmptyString(integration.credentials);
+  if (credentials) {
+    const roleIdentity = parseIamRoleCredentials(credentials);
+    if (roleIdentity) relatedIdentities.push(roleIdentity);
+    else state.advancedFeatures.add("integration_credentials");
   }
   if ((integration.cacheKeyParameters?.length ?? 0) > 0) {
     state.advancedFeatures.add("cache");
+  }
+  if (hasRecordEntries(integration.integrationResponses)) {
+    state.advancedFeatures.add("response_mappings");
+  }
+
+  return relatedIdentities;
+}
+
+/** gg: Lambda invoke URI의 partition·region·account·함수 이름이 정확히 일치할 때만 cross-service 관계를 만듭니다. */
+function parseLambdaIntegrationUri(value: string): RelatedRecordIdentity | undefined {
+  const match =
+    /^arn:(aws(?:-[a-z0-9-]+)?):apigateway:([a-z0-9-]+):lambda:path\/2015-03-31\/functions\/(arn:\1:lambda:\2:\d{12}:function:([A-Za-z0-9-_]{1,64}))\/invocations$/u.exec(
+      value
+    );
+  const functionArn = match?.[3];
+  const functionName = match?.[4];
+  return functionArn && functionName
+    ? {
+        providerResourceType: "AWS::Lambda::Function",
+        terraformImportId: functionName,
+        publicRecordId: createOpaqueAwsProviderResourceId("AWS::Lambda::Function", functionArn)
+      }
+    : undefined;
+}
+
+/** gg: API Gateway가 assume할 수 있는 exact IAM Role ARN만 연결하고 user passthrough 등은 고급 기능으로 남깁니다. */
+function parseIamRoleCredentials(value: string): RelatedRecordIdentity | undefined {
+  const match =
+    /^arn:aws(?:-[a-z0-9-]+)?:iam::\d{12}:role\/((?:[A-Za-z0-9+=,.@_-]+\/)*([A-Za-z0-9+=,.@_-]{1,64}))$/u.exec(
+      value
+    );
+  const rolePathAndName = match?.[1];
+  const roleName = match?.[2];
+  return rolePathAndName && roleName && rolePathAndName.length <= 512
+    ? {
+        providerResourceType: "AWS::IAM::Role",
+        terraformImportId: roleName,
+        publicRecordId: createOpaqueAwsProviderResourceId("AWS::IAM::Role", value)
+      }
+    : undefined;
+}
+
+/** gg: HTTP integration은 유효한 http/https URL만 단순 topology로 인정합니다. */
+function isHttpIntegrationUri(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:") && Boolean(url.hostname);
+  } catch {
+    return false;
   }
 }
 
@@ -1078,7 +1163,7 @@ function createTopologyRecord(input: {
   readonly identity: RecordIdentity;
   readonly familyIdentity: RecordIdentity;
   readonly parentIdentity?: RecordIdentity;
-  readonly relatedIdentities?: readonly RecordIdentity[];
+  readonly relatedIdentities?: readonly RelatedRecordIdentity[];
   readonly region: string;
   readonly displayName: string;
   readonly publicConfig: Readonly<Record<string, unknown>>;
@@ -1099,7 +1184,9 @@ function createTopologyRecord(input: {
       ...(input.parentIdentity
         ? { parentRecordId: createPublicRecordId(input.parentIdentity) }
         : {}),
-      relatedRecordIds: relatedIdentities.map(createPublicRecordId)
+      relatedRecordIds: relatedIdentities.map(
+        (identity) => identity.publicRecordId ?? createPublicRecordId(identity)
+      )
     },
     serverOnlyRecord: {
       publicRecordId: recordId,
@@ -1112,7 +1199,12 @@ function createTopologyRecord(input: {
             parentTerraformImportId: input.parentIdentity.terraformImportId
           }
         : {}),
-      relatedTerraformImportIdentities: relatedIdentities,
+      relatedTerraformImportIdentities: relatedIdentities.map(
+        ({ providerResourceType, terraformImportId }) => ({
+          providerResourceType,
+          terraformImportId
+        })
+      ),
       serverOnlyConfig: input.serverOnlyConfig
     }
   };
@@ -1146,6 +1238,17 @@ function createPublicRecordId(identity: RecordIdentity): string {
     .update(identity.providerResourceType)
     .update("\0")
     .update(identity.terraformImportId)
+    .digest("hex")
+    .slice(0, 24)}`;
+}
+
+/** gg: 다른 상세 reader와 같은 opaque ID를 사용해 공개 ARN 없이 same-scan 관계를 연결합니다. */
+function createOpaqueAwsProviderResourceId(
+  providerResourceType: string,
+  exactProviderResourceId: string
+): string {
+  return `aws-ref-${createHash("sha256")
+    .update(`${providerResourceType}\0${exactProviderResourceId}`)
     .digest("hex")
     .slice(0, 24)}`;
 }

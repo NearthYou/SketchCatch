@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   GetAuthorizersCommand,
@@ -22,6 +23,17 @@ const credentials: TerraformAwsCredentialEnv = {
   AWS_SECRET_ACCESS_KEY: "fixture-secret-key",
   AWS_REGION: "ap-northeast-2"
 };
+
+/** gg: 상세 reader들과 같은 opaque ID 규칙으로 API Gateway의 cross-service 관계를 검증합니다. */
+function createOpaqueProviderResourceId(
+  providerResourceType: string,
+  exactProviderResourceId: string
+): string {
+  return `aws-ref-${createHash("sha256")
+    .update(`${providerResourceType}\0${exactProviderResourceId}`)
+    .digest("hex")
+    .slice(0, 24)}`;
+}
 
 /** gg: 실제 SDK command 입력과 같은 경계를 사용하면서 테스트 응답만 결정적으로 바꿉니다. */
 function createSimpleTopologyClient(): {
@@ -405,7 +417,7 @@ test("API Gateway REST topology reader는 고급 기능을 단순 topology와 �
       "models",
       "validators",
       "vpc_link",
-      "integration_credentials",
+      "integration_uri",
       "stage_variables",
       "access_logs",
       "canary",
@@ -900,4 +912,196 @@ test("API Gateway REST topology reader는 cache가 아닌 Method Settings도 adv
   assert.equal(result.families[0]?.classification, "advanced");
   assert.equal(result.families[0]?.managementReady, false);
   assert.equal(result.families[0]?.advancedFeatures.includes("method_settings"), true);
+});
+
+test("API Gateway REST topology reader는 Method와 Integration 응답 매핑을 조용히 버리지 않고 advanced로 닫는다", async () => {
+  const cases: readonly {
+    readonly name: string;
+    readonly method: Readonly<Record<string, unknown>>;
+    readonly integration: Readonly<Record<string, unknown>>;
+  }[] = [
+    {
+      name: "Method response",
+      method: {
+        httpMethod: "GET",
+        authorizationType: "NONE",
+        methodResponses: { "200": { statusCode: "200" } },
+        methodIntegration: { type: "MOCK" }
+      },
+      integration: { type: "MOCK", httpMethod: "GET" }
+    },
+    {
+      name: "Integration response",
+      method: {
+        httpMethod: "GET",
+        authorizationType: "NONE",
+        methodIntegration: { type: "MOCK" }
+      },
+      integration: {
+        type: "MOCK",
+        httpMethod: "GET",
+        integrationResponses: { default: { statusCode: "200" } }
+      }
+    }
+  ];
+
+  for (const testCase of cases) {
+    const result = await readAwsApiGatewayRestTopology({
+      region: "ap-northeast-2",
+      credentials,
+      createClient: () =>
+        createStaticTopologyClient({
+          resources: [
+            { id: "root", path: "/" },
+            {
+              id: "orders",
+              parentId: "root",
+              path: "/orders",
+              pathPart: "orders",
+              resourceMethods: { GET: {} }
+            }
+          ],
+          method: testCase.method,
+          integration: testCase.integration
+        })
+    });
+
+    assert.equal(result.families[0]?.classification, "advanced", testCase.name);
+    assert.equal(result.families[0]?.managementReady, false, testCase.name);
+    assert.equal(
+      result.families[0]?.advancedFeatures.includes("response_mappings"),
+      true,
+      testCase.name
+    );
+  }
+});
+
+test("API Gateway REST topology reader는 정확한 Lambda URI와 IAM Role credentials를 opaque 관계로 보존한다", async () => {
+  const lambdaFunctionArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler";
+  const integrationUri = `arn:aws:apigateway:ap-northeast-2:lambda:path/2015-03-31/functions/${lambdaFunctionArn}/invocations`;
+  const roleArn = "arn:aws:iam::123456789012:role/service/api-invoke-role";
+  const result = await readAwsApiGatewayRestTopology({
+    region: "ap-northeast-2",
+    credentials,
+    createClient: () =>
+      createStaticTopologyClient({
+        resources: [
+          { id: "root", path: "/" },
+          {
+            id: "orders",
+            parentId: "root",
+            path: "/orders",
+            pathPart: "orders",
+            resourceMethods: { POST: {} }
+          }
+        ],
+        method: {
+          httpMethod: "POST",
+          authorizationType: "NONE",
+          methodIntegration: { type: "AWS_PROXY" }
+        },
+        integration: {
+          type: "AWS_PROXY",
+          httpMethod: "POST",
+          uri: integrationUri,
+          credentials: roleArn
+        }
+      })
+  });
+
+  assert.equal(result.families[0]?.classification, "simple");
+  assert.equal(result.families[0]?.managementReady, true);
+  const integration = result.publicRecords.find(
+    (record) => record.providerResourceType === "AWS::ApiGateway::Integration"
+  );
+  assert.deepEqual(integration?.relatedRecordIds, [
+    createOpaqueProviderResourceId("AWS::Lambda::Function", lambdaFunctionArn),
+    createOpaqueProviderResourceId("AWS::IAM::Role", roleArn)
+  ]);
+  const serverOnlyIntegration = result.serverOnlyRecords.find(
+    (record) => record.publicRecordId === integration?.recordId
+  );
+  assert.deepEqual(serverOnlyIntegration?.relatedTerraformImportIdentities, [
+    {
+      providerResourceType: "AWS::Lambda::Function",
+      terraformImportId: "orders-handler"
+    },
+    {
+      providerResourceType: "AWS::IAM::Role",
+      terraformImportId: "api-invoke-role"
+    }
+  ]);
+  assert.doesNotMatch(
+    JSON.stringify({ family: result.families[0], record: integration }),
+    /arn:aws|123456789012|orders-handler|api-invoke-role/u
+  );
+});
+
+test("API Gateway REST topology reader는 해석할 수 없는 URI와 credentials를 advanced로 닫는다", async () => {
+  const cases = [
+    {
+      name: "qualified Lambda URI",
+      integration: {
+        type: "AWS_PROXY",
+        httpMethod: "POST",
+        uri: "arn:aws:apigateway:ap-northeast-2:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler:live/invocations"
+      },
+      feature: "integration_uri"
+    },
+    {
+      name: "non-role credentials",
+      integration: {
+        type: "HTTP_PROXY",
+        httpMethod: "POST",
+        uri: "https://example.com/orders",
+        credentials: "arn:aws:iam::*:user/*"
+      },
+      feature: "integration_credentials"
+    },
+    {
+      name: "VPC link",
+      integration: {
+        type: "HTTP_PROXY",
+        httpMethod: "POST",
+        uri: "https://example.com/orders",
+        connectionType: "VPC_LINK",
+        connectionId: "private-vpc-link"
+      },
+      feature: "vpc_link"
+    }
+  ] as const;
+
+  for (const testCase of cases) {
+    const result = await readAwsApiGatewayRestTopology({
+      region: "ap-northeast-2",
+      credentials,
+      createClient: () =>
+        createStaticTopologyClient({
+          resources: [
+            { id: "root", path: "/" },
+            {
+              id: "orders",
+              parentId: "root",
+              path: "/orders",
+              pathPart: "orders",
+              resourceMethods: { POST: {} }
+            }
+          ],
+          method: {
+            httpMethod: "POST",
+            authorizationType: "NONE",
+            methodIntegration: { type: testCase.integration.type }
+          },
+          integration: testCase.integration
+        })
+    });
+
+    assert.equal(result.families[0]?.classification, "advanced", testCase.name);
+    assert.equal(result.families[0]?.managementReady, false, testCase.name);
+    assert.equal(
+      result.families[0]?.advancedFeatures.includes(testCase.feature),
+      true,
+      testCase.name
+    );
+  }
 });
