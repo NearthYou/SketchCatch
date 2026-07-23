@@ -158,7 +158,9 @@ test("CloudFront와 Auto Scaling probe는 첫 Resource의 태그만 읽는다", 
       cloudFrontCalls.push({ name: value.constructor.name, input: value.input });
       if (value.constructor.name === "ListDistributionsCommand") {
         return {
-          DistributionList: { Items: [{ ARN: "arn:aws:cloudfront::123:distribution/D1" }] }
+          DistributionList: {
+            Items: [{ ARN: "arn:aws:cloudfront::123:distribution/D1", Id: "D1" }]
+          }
         };
       }
       return {};
@@ -166,10 +168,16 @@ test("CloudFront와 Auto Scaling probe는 첫 Resource의 태그만 읽는다", 
   });
   assert.deepEqual(
     cloudFrontCalls.map((call) => call.name),
-    ["ListDistributionsCommand", "ListTagsForResourceCommand", "ListOriginAccessControlsCommand"]
+    [
+      "ListDistributionsCommand",
+      "GetDistributionConfigCommand",
+      "ListTagsForResourceCommand",
+      "ListOriginAccessControlsCommand"
+    ]
   );
   assert.equal(cloudFrontCalls[0]?.input["MaxItems"], 1);
-  assert.equal(cloudFrontCalls[1]?.input["Resource"], "arn:aws:cloudfront::123:distribution/D1");
+  assert.equal(cloudFrontCalls[1]?.input["Id"], "D1");
+  assert.equal(cloudFrontCalls[2]?.input["Resource"], "arn:aws:cloudfront::123:distribution/D1");
 
   const scalingCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
   await probeApplicationAutoScaling({
@@ -824,14 +832,45 @@ test("Lambda without a resource policy is a successful readable seed", async () 
   ]);
 });
 
+test("S3 probe는 Object 목록 권한만 확인하고 Object data는 읽지 않는다", async () => {
+  const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
+  const outcome = await probeS3({
+    async send(command) {
+      const value = command as { constructor: { name: string }; input: Record<string, unknown> };
+      calls.push({ name: value.constructor.name, input: value.input });
+      if (value.constructor.name === "ListBucketsCommand") {
+        return { Buckets: [{ Name: "seed" }] };
+      }
+      if (value.constructor.name === "ListObjectsV2Command") {
+        return { Contents: [{ Key: "index.html" }] };
+      }
+      return {};
+    }
+  });
+
+  assert.equal(outcome, "success");
+  assert.equal(calls[0]?.input["MaxBuckets"], 1);
+  const objectList = calls.find((call) => call.name === "ListObjectsV2Command");
+  assert.equal(objectList?.input["Bucket"], "seed");
+  assert.equal(objectList?.input["MaxKeys"], 1);
+  assert.doesNotMatch(calls.map((call) => call.name).join("\n"), /(?:HeadObject|GetObject)/u);
+});
+
 test("S3 optional bucket configuration absence still proves read access", async () => {
   for (const missingName of ["NoSuchPublicAccessBlockConfiguration", "NoSuchBucketPolicy"]) {
-    let calls = 0;
     const outcome = await probeS3({
-      async send() {
-        calls += 1;
-        if (calls === 1) return { Buckets: [{ Name: "seed" }] };
-        throw Object.assign(new Error("optional setup missing"), { name: missingName });
+      async send(command) {
+        const name = command.constructor.name;
+        if (name === "ListBucketsCommand") return { Buckets: [{ Name: "seed" }] };
+        if (name === "ListObjectsV2Command") return { Contents: [] };
+        if (
+          (missingName === "NoSuchPublicAccessBlockConfiguration" &&
+            name === "GetPublicAccessBlockCommand") ||
+          (missingName === "NoSuchBucketPolicy" && name === "GetBucketPolicyCommand")
+        ) {
+          throw Object.assign(new Error("optional setup missing"), { name: missingName });
+        }
+        return {};
       }
     });
     assert.equal(outcome, "success", missingName);

@@ -549,6 +549,14 @@ function createResource(overrides: {
       providerResourceType,
       providerResourceId: overrides.providerResourceId,
       ...(resourceType === "S3" ? { bucket: overrides.displayName.replaceAll(" ", "-") } : {}),
+      ...(resourceType === "S3"
+        ? {
+            tags: [],
+            tagsReadComplete: true,
+            hasEncryptionConfiguration: false,
+            hasWebsiteConfiguration: false
+          }
+        : {}),
       terraformBlockType: "resource",
       terraformResourceType: resourceType === "S3" ? "aws_s3_bucket" : "",
       terraformResourceName: overrides.id.replaceAll("-", "_"),

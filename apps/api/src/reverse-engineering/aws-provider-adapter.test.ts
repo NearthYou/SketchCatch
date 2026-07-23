@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ReverseEngineeringScanResult } from "@sketchcatch/types";
 import {
+  createAwsPublicDisplayName,
   createAwsProviderAdapter,
+  createAwsPublicResourceConfig,
   type AwsDiscoveredResourceRecord
 } from "./aws-provider-adapter.js";
 
@@ -275,6 +277,148 @@ test("ALB와 CloudFront를 supported ResourceType으로 변환하고 공개 가�
     assert.equal(suggestion?.handoffReady, false);
     assert.equal(suggestion?.importCommand, undefined);
   }
+});
+
+test("CloudFront의 /api와 /health 경로 설정을 보드 Terraform 값까지 그대로 보존한다", async () => {
+  const orderedCacheBehavior = [
+    {
+      pathPattern: "/api/*",
+      targetOriginId: "api-alb",
+      viewerProtocolPolicy: "redirect-to-https",
+      allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+      cachedMethods: ["GET", "HEAD"],
+      cachePolicyId: "managed-disabled",
+      originRequestPolicyId: "managed-all-viewer"
+    },
+    {
+      pathPattern: "/health",
+      targetOriginId: "api-alb",
+      viewerProtocolPolicy: "redirect-to-https",
+      allowedMethods: ["GET", "HEAD"],
+      cachedMethods: ["GET", "HEAD"],
+      cachePolicyId: "managed-disabled"
+    }
+  ];
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::CloudFront::Distribution",
+      providerResourceId: CLOUDFRONT_ARN_A,
+      displayName: "demo edge",
+      region: "global",
+      config: {
+        ...createCloudFrontConfig("EDISTRIBUTIONA"),
+        aliases: ["app.example.com"],
+        defaultRootObject: "index.html",
+        origin: [
+          {
+            originId: "assets",
+            domainName: "assets.example.s3.ap-northeast-2.amazonaws.com",
+            s3OriginConfig: { originAccessIdentity: "" }
+          },
+          {
+            originId: "api-alb",
+            domainName: "api.example.com",
+            customOriginConfig: {
+              httpPort: 80,
+              httpsPort: 443,
+              originProtocolPolicy: "https-only",
+              originSslProtocols: ["TLSv1.2"]
+            }
+          }
+        ],
+        orderedCacheBehavior,
+        priceClass: "PriceClass_100",
+        tags: [{ key: "Environment", value: "demo" }]
+      }
+    })
+  ]);
+
+  assertReadyImport(
+    result.importSuggestions[0],
+    "aws_cloudfront_distribution",
+    "EDISTRIBUTIONA"
+  );
+  assert.deepEqual(
+    result.architectureJson.nodes[0]?.config["orderedCacheBehavior"],
+    orderedCacheBehavior
+  );
+  assert.equal(result.architectureJson.nodes[0]?.config["defaultRootObject"], "index.html");
+  assert.equal(result.architectureJson.nodes[0]?.config["priceClass"], "PriceClass_100");
+  assert.deepEqual(result.architectureJson.nodes[0]?.config["tags"], {
+    Environment: "demo"
+  });
+});
+
+test("CloudFront의 인증서와 WAF ARN은 공개하지 않고 private 원본만 보존한다", async () => {
+  const certificateArn =
+    "arn:aws:acm:us-east-1:123456789012:certificate/11111111-2222-3333-4444-555555555555";
+  const webAclArn =
+    "arn:aws:wafv2:us-east-1:123456789012:global/webacl/demo/11111111-2222-3333-4444-555555555555";
+  const exactConfig = {
+    ...createCloudFrontConfig("EDISTRIBUTIONA"),
+    configReadComplete: true,
+    unsupportedConfiguration: ["ViewerCertificate.ACMCertificateArn", "WebACLId"],
+    viewerCertificate: {
+      acmCertificateArn: certificateArn,
+      cloudfrontDefaultCertificate: false,
+      minimumProtocolVersion: "TLSv1.2_2021",
+      sslSupportMethod: "sni-only"
+    },
+    webAclId: webAclArn
+  };
+  const cloudFront = record({
+    providerResourceType: "AWS::CloudFront::Distribution",
+    providerResourceId: CLOUDFRONT_ARN_A,
+    displayName: "private edge",
+    region: "global",
+    config: exactConfig,
+    serverOnly: {
+      terraformImportId: "EDISTRIBUTIONA",
+      config: exactConfig
+    }
+  });
+
+  const publicResult = await scan([cloudFront]);
+  const privateResult = await scanPrivate([cloudFront]);
+
+  assert.doesNotMatch(JSON.stringify(publicResult), /123456789012|arn:aws/iu);
+  assert.equal(publicResult.importSuggestions[0]?.status, "manual_review");
+  assert.equal(
+    privateResult.discoveredResources[0]?.config["viewerCertificate"],
+    exactConfig.viewerCertificate
+  );
+  assert.equal(privateResult.discoveredResources[0]?.config["webAclId"], webAclArn);
+});
+
+test("CloudFront WAF Classic ID도 공개하지 않고 존재 여부만 표시한다", async () => {
+  const webAclId = "a1b2c3d4-5678-90ab-cdef-a1b2c3d4e5f6";
+  const exactConfig = {
+    ...createCloudFrontConfig("EDISTRIBUTIONA"),
+    configReadComplete: true,
+    webAclId
+  };
+  const cloudFront = record({
+    providerResourceType: "AWS::CloudFront::Distribution",
+    providerResourceId: CLOUDFRONT_ARN_A,
+    displayName: "classic waf edge",
+    region: "global",
+    config: exactConfig,
+    serverOnly: {
+      terraformImportId: "EDISTRIBUTIONA",
+      config: exactConfig
+    }
+  });
+
+  const publicResult = await scan([cloudFront]);
+  const privateResult = await scanPrivate([cloudFront]);
+  const publicConfig = publicResult.discoveredResources[0]?.config;
+
+  assert.equal(publicConfig?.["webAclId"], undefined);
+  assert.equal(publicConfig?.["hasWebAcl"], true);
+  assert.equal(publicConfig?.["configReadComplete"], false);
+  assert.doesNotMatch(JSON.stringify(publicResult), new RegExp(webAclId, "u"));
+  assert.equal(publicResult.importSuggestions[0]?.status, "manual_review");
+  assert.equal(privateResult.discoveredResources[0]?.config["webAclId"], webAclId);
 });
 
 test("AWS 전용 reader가 찾은 Resource를 실제 Catalog 타입으로 보드에 표시한다", async () => {
@@ -1921,6 +2065,325 @@ test("AWS 서비스 관리 EIP는 Terraform 관리와 import에서 제외한다"
   assertManualImportWithoutIdentity(suggestion);
 });
 
+test("예전 S3 Object record도 공개 결과에서는 Bucket 파일 수 요약으로만 합친다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::S3::Bucket",
+      providerResourceId: "audience-web",
+      displayName: "audience-web",
+      config: {
+        versioningStatus: "Enabled",
+        objectInventoryObservedCount: 2,
+        objectInventoryCountIsExact: false,
+        objectInventoryTruncated: true,
+        objectInventorySummary: "저장된 파일 2개 이상"
+      }
+    }),
+    record({
+      providerResourceType: "AWS::S3::Object",
+      providerResourceId:
+        "arn:aws:s3:::audience-web/private/users/customer@example.com/session-token.json",
+      displayName: "session-token.json",
+      config: {
+        bucketName: "audience-web",
+        key: "private/users/customer@example.com/session-token.json",
+        bodyRead: false,
+        metadataReadComplete: false,
+        tagsReadComplete: false,
+        etag: '"private-etag"'
+      },
+      serverOnly: {
+        terraformImportId:
+          "audience-web/private/users/customer@example.com/session-token.json"
+      }
+    })
+  ]);
+
+  assert.equal(result.discoveredResources.length, 1);
+  assert.equal(result.discoveredResources[0]?.providerResourceType, "AWS::S3::Bucket");
+  assert.equal(result.discoveredResources[0]?.config["objectInventoryObservedCount"], 2);
+  assert.equal(result.discoveredResources[0]?.config["objectInventoryCountIsExact"], false);
+  assert.equal(result.discoveredResources[0]?.config["objectInventorySummary"], "저장된 파일 2개 이상");
+  assert.equal(
+    result.architectureJson.nodes.some(
+      (node) => node.config["providerResourceType"] === "AWS::S3::Object"
+    ),
+    false
+  );
+  assert.doesNotMatch(
+    JSON.stringify(result),
+    /customer@example\.com|session-token|private-etag|AWS::S3::Object/u
+  );
+});
+
+test("S3 tag에 AWS 원본 식별자가 있으면 tag를 일부만 남기지 않고 자동 관리를 닫는다", async () => {
+  const privateArn = "arn:aws:iam::123456789012:role/private-owner";
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::S3::Bucket",
+      providerResourceId: "audience-web",
+      displayName: "audience-web",
+      config: {
+        tags: [
+          { key: "Environment", value: "production" },
+          { key: "Owner", value: privateArn }
+        ],
+        tagsReadComplete: true,
+        hasEncryptionConfiguration: false,
+        hasWebsiteConfiguration: false
+      }
+    })
+  ]);
+
+  const bucket = result.discoveredResources[0];
+  assert.equal(bucket?.config["tags"], undefined);
+  assert.equal(bucket?.config["tagsReadComplete"], false);
+  assert.equal(bucket?.importSuggestionStatus, "manual_review");
+  assert.equal(result.importSuggestions[0]?.handoffReady, false);
+  assert.doesNotMatch(JSON.stringify(result), /123456789012|private-owner/u);
+});
+
+test("배포 지원 Resource의 ARN tag와 Secret 설명은 공개 결과에서 완료로 오인하지 않는다", async () => {
+  const privateArn = "arn:aws:iam::123456789012:role/private-owner";
+  const fixtures: AwsDiscoveredResourceRecord[] = [
+    record({
+      providerResourceType: "AWS::ECR::Repository",
+      providerResourceId:
+        "arn:aws:ecr:ap-northeast-2:123456789012:repository/audience-live-check-api",
+      displayName: "audience-live-check-api",
+      config: {
+        repositoryName: "audience-live-check-api",
+        imageTagMutability: "IMMUTABLE",
+        scanOnPush: true,
+        encryptionType: "AES256",
+        tags: [{ key: "Owner", value: privateArn }],
+        tagsReadComplete: true
+      },
+      serverOnly: {
+        terraformImportId: "audience-live-check-api",
+        config: {
+          tags: [{ key: "Owner", value: privateArn }],
+          tagsReadComplete: true
+        }
+      }
+    }),
+    record({
+      providerResourceType: "AWS::ApplicationAutoScaling::ScalableTarget",
+      providerResourceId:
+        "arn:aws:application-autoscaling:ap-northeast-2:123456789012:scalable-target/demo",
+      displayName: "api 자동 확장",
+      config: {
+        serviceNamespace: "ecs",
+        resourceId: "service/demo/api",
+        scalableDimension: "ecs:service:DesiredCount",
+        minCapacity: 1,
+        maxCapacity: 2,
+        suspendedState: {
+          dynamicScalingInSuspended: false,
+          dynamicScalingOutSuspended: false,
+          scheduledScalingSuspended: false
+        },
+        tags: [{ key: "Owner", value: privateArn }],
+        tagsReadComplete: true
+      },
+      serverOnly: {
+        terraformImportId: "ecs/service/demo/api/ecs:service:DesiredCount",
+        config: {
+          tags: [{ key: "Owner", value: privateArn }],
+          tagsReadComplete: true
+        }
+      }
+    }),
+    record({
+      providerResourceType: "AWS::SecretsManager::Secret",
+      providerResourceId:
+        "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:check-in-signing",
+      displayName: "check-in-signing",
+      config: {
+        name: "check-in-signing",
+        description: privateArn,
+        hasKmsKey: false,
+        rotationEnabled: false,
+        replicaRegionCount: 0,
+        replicationReadComplete: true,
+        isReplica: false,
+        serviceOwned: false,
+        deleted: false,
+        valueRead: false,
+        metadataReadComplete: true,
+        tags: [{ key: "Environment", value: "demo" }],
+        tagsReadComplete: true
+      },
+      serverOnly: {
+        terraformImportId:
+          "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:check-in-signing",
+        config: {
+          description: privateArn,
+          metadataReadComplete: true,
+          tags: [{ key: "Environment", value: "demo" }],
+          tagsReadComplete: true
+        }
+      }
+    })
+  ];
+
+  const publicResult = await scan(fixtures);
+  const privateResult = await scanPrivate(fixtures);
+
+  for (const [index, resource] of publicResult.discoveredResources.entries()) {
+    if (resource.resourceType === "SECRETS_MANAGER_SECRET") {
+      assert.equal(resource.config["description"], undefined);
+      assert.equal(resource.config["metadataReadComplete"], false);
+    } else {
+      assert.equal(resource.config["tags"], undefined);
+      assert.equal(resource.config["tagsReadComplete"], false);
+    }
+    assert.equal(publicResult.importSuggestions[index]?.status, "manual_review");
+    assert.equal(publicResult.importSuggestions[index]?.handoffReady, false);
+    assert.equal(
+      publicResult.architectureJson.nodes[index]?.config["reverseEngineeringManagement"],
+      "needs_mapping"
+    );
+  }
+  assert.doesNotMatch(JSON.stringify(publicResult), /private-owner|arn:aws/iu);
+
+  const privateRepository = privateResult.discoveredResources.find(
+    (resource) => resource.resourceType === "ECR_REPOSITORY"
+  );
+  const privateTarget = privateResult.discoveredResources.find(
+    (resource) => resource.resourceType === "APPLICATION_AUTO_SCALING_TARGET"
+  );
+  const privateSecret = privateResult.discoveredResources.find(
+    (resource) => resource.resourceType === "SECRETS_MANAGER_SECRET"
+  );
+  assert.deepEqual(privateRepository?.config["tags"], [
+    { key: "Owner", value: privateArn }
+  ]);
+  assert.equal(privateRepository?.config["tagsReadComplete"], true);
+  assert.deepEqual(privateTarget?.config["tags"], [
+    { key: "Owner", value: privateArn }
+  ]);
+  assert.equal(privateTarget?.config["tagsReadComplete"], true);
+  assert.equal(privateSecret?.config["description"], privateArn);
+  assert.equal(privateSecret?.config["metadataReadComplete"], true);
+});
+
+test("공개 결과는 독립된 AWS 계정 ID를 숨기고 짧은 일반 이름은 유지한다", async () => {
+  const accountId = "123456789012";
+  const secret = record({
+    providerResourceType: "AWS::SecretsManager::Secret",
+    providerResourceId:
+      "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:check-in-signing",
+    displayName: `signing for ${accountId}`,
+    config: {
+      name: "check-in-signing",
+      description: `owned by ${accountId}`,
+      hasKmsKey: false,
+      rotationEnabled: false,
+      replicaRegionCount: 0,
+      replicationReadComplete: true,
+      isReplica: false,
+      serviceOwned: false,
+      deleted: false,
+      valueRead: false,
+      metadataReadComplete: true,
+      tags: [{ key: "BillingAccount", value: accountId }],
+      tagsReadComplete: true
+    },
+    serverOnly: {
+      terraformImportId:
+        "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:check-in-signing",
+      config: {
+        description: `owned by ${accountId}`,
+        metadataReadComplete: true,
+        tags: [{ key: "BillingAccount", value: accountId }],
+        tagsReadComplete: true
+      }
+    }
+  });
+
+  const publicResult = await scan([secret]);
+  const publicSecret = publicResult.discoveredResources[0];
+  assert.equal(publicSecret?.config["name"], "check-in-signing");
+  assert.equal(publicSecret?.config["description"], undefined);
+  assert.equal(publicSecret?.config["metadataReadComplete"], false);
+  assert.equal(publicSecret?.config["tags"], undefined);
+  assert.equal(publicSecret?.config["tagsReadComplete"], false);
+  assert.doesNotMatch(publicSecret?.displayName ?? "", /123456789012/u);
+  assert.doesNotMatch(JSON.stringify(publicResult), /123456789012/u);
+
+  const safeRecord = {
+    providerResourceType: "AWS::CloudFront::Distribution",
+    providerResourceId: "EDISTRIBUTION",
+    config: {
+      comment: "demo web",
+      enabled: true
+    }
+  };
+  assert.deepEqual(createAwsPublicResourceConfig(safeRecord), {
+    comment: "demo web",
+    enabled: true,
+    tagsReadComplete: false
+  });
+  assert.equal(createAwsPublicDisplayName(safeRecord, "demo web"), "demo web");
+});
+
+test("자동 확장 Target 선택은 Policy를 제외하고 Policy 선택은 Target 의존성을 유지한다", async () => {
+  const targetArn =
+    "arn:aws:application-autoscaling:ap-northeast-2:123456789012:scalable-target/target-1";
+  const target = record({
+    providerResourceType: "AWS::ApplicationAutoScaling::ScalableTarget",
+    providerResourceId: targetArn,
+    displayName: "api 자동 확장"
+  });
+  const policy = record({
+    providerResourceType: "AWS::ApplicationAutoScaling::ScalingPolicy",
+    providerResourceId:
+      "arn:aws:autoscaling:ap-northeast-2:123456789012:scalingPolicy:policy-1",
+    displayName: "api 요청 자동 확장",
+    relationships: [{ type: "depends_on", targetProviderResourceId: targetArn }]
+  });
+
+  const targetOnly = await scanWithSelection(
+    [target, policy],
+    ["APPLICATION_AUTO_SCALING_TARGET"]
+  );
+  assert.deepEqual(
+    targetOnly.discoveredResources.map((resource) => resource.resourceType),
+    ["APPLICATION_AUTO_SCALING_TARGET"]
+  );
+
+  const policyWithTarget = await scanWithSelection(
+    [target, policy],
+    ["APPLICATION_AUTO_SCALING_POLICY"]
+  );
+  assert.deepEqual(
+    policyWithTarget.discoveredResources.map((resource) => resource.resourceType),
+    ["APPLICATION_AUTO_SCALING_TARGET", "APPLICATION_AUTO_SCALING_POLICY"]
+  );
+});
+
+test("자동 관리 정보가 부족한 안내에는 내부 필드 이름을 노출하지 않는다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::ECR::Repository",
+      providerResourceId:
+        "arn:aws:ecr:ap-northeast-2:123456789012:repository/incomplete-repository",
+      displayName: "incomplete-repository",
+      config: { repositoryName: "incomplete-repository", tags: [], tagsReadComplete: true },
+      serverOnly: { terraformImportId: "incomplete-repository" }
+    })
+  ]);
+
+  assert.doesNotMatch(
+    JSON.stringify({
+      suggestion: result.importSuggestions[0]?.reason,
+      findings: result.findings.map((finding) => finding.description)
+    }),
+    /imageTagMutability|scanOnPush|encryptionType/iu
+  );
+});
+
 test("NAT만 선택하면 해당 NAT가 참조하는 Subnet과 EIP만 함께 가져온다", async () => {
   const selectedSubnetId = "subnet-0123456789abcdef0";
   const unrelatedSubnetId = "subnet-fedcba98765432100";
@@ -2169,8 +2632,15 @@ function createCloudFrontConfig(distributionId: string | undefined): Record<stri
   return {
     arn: CLOUDFRONT_ARN_A,
     ...(distributionId ? { id: distributionId } : {}),
+    aliases: [],
     enabled: true,
     comment: "shared edge",
+    configReadComplete: true,
+    customErrorResponse: [],
+    defaultRootObject: "",
+    httpVersion: "http2",
+    isIpv6Enabled: true,
+    loggingConfig: { enabled: false, includeCookies: false, bucket: "", prefix: "" },
     origin: [
       {
         originId: "assets",
@@ -2185,7 +2655,12 @@ function createCloudFrontConfig(distributionId: string | undefined): Record<stri
       cachedMethods: ["GET", "HEAD"],
       forwardedValues: { queryString: false, cookies: { forward: "none" } }
     },
+    orderedCacheBehavior: [],
+    priceClass: "PriceClass_All",
     restrictions: { geoRestriction: { restrictionType: "none" } },
+    staging: false,
+    tags: [],
+    tagsReadComplete: true,
     viewerCertificate: { cloudfrontDefaultCertificate: true }
   };
 }
@@ -2222,6 +2697,7 @@ function record(input: {
   region?: string;
   config?: Record<string, unknown>;
   relationships?: AwsDiscoveredResourceRecord["relationships"];
+  serverOnly?: AwsDiscoveredResourceRecord["serverOnly"];
 }): AwsDiscoveredResourceRecord {
   return {
     providerResourceType: input.providerResourceType,
@@ -2229,6 +2705,7 @@ function record(input: {
     displayName: input.displayName,
     region: input.region ?? "ap-northeast-2",
     config: input.config ?? {},
-    relationships: input.relationships ?? []
+    relationships: input.relationships ?? [],
+    ...(input.serverOnly ? { serverOnly: input.serverOnly } : {})
   };
 }

@@ -150,6 +150,68 @@ test("상세 리소스는 marker, provider 종류, import ID 형식이 어긋나
   assert.equal(mismatched.importId, null);
 });
 
+test("암호화 또는 웹사이트 설정이 있는 S3 Bucket은 설정을 잃지 않도록 자동 생성을 닫는다", () => {
+  for (const config of [
+    { hasEncryptionConfiguration: true, hasWebsiteConfiguration: false },
+    { hasEncryptionConfiguration: false, hasWebsiteConfiguration: true },
+    { hasEncryptionConfiguration: true, hasWebsiteConfiguration: true }
+  ]) {
+    const bucket: DiscoveredResource = {
+      id: "resource-configured-bucket",
+      provider: "aws",
+      providerResourceType: "AWS::S3::Bucket",
+      providerResourceId: "configured-bucket",
+      region: "ap-northeast-2",
+      displayName: "configured-bucket",
+      resourceType: "S3",
+      config
+    };
+    const result = getReverseEngineeringTerraformCompleteness(bucket);
+
+    assert.equal(result.importId, "configured-bucket");
+    assert.notDeepEqual(result.missingCreationFields, []);
+    assert(
+      result.missingCreationFields.some((field) =>
+        ["bucketEncryptionConfiguration", "bucketWebsiteConfiguration"].includes(field)
+      )
+    );
+  }
+});
+
+test("S3 Bucket tag를 전부 안전하게 읽은 경우에만 자동 생성을 연다", () => {
+  const bucket = (config: Record<string, unknown>): DiscoveredResource => ({
+    id: "resource-tagged-bucket",
+    provider: "aws",
+    providerResourceType: "AWS::S3::Bucket",
+    providerResourceId: "tagged-bucket",
+    region: "ap-northeast-2",
+    displayName: "tagged-bucket",
+    resourceType: "S3",
+    config: {
+      hasEncryptionConfiguration: false,
+      hasWebsiteConfiguration: false,
+      ...config
+    }
+  });
+
+  const complete = getReverseEngineeringTerraformCompleteness(
+    bucket({
+      tags: [{ key: "Environment", value: "production" }],
+      tagsReadComplete: true
+    })
+  );
+  assert.deepEqual(complete.missingCreationFields, []);
+
+  for (const config of [
+    { tags: [{ key: "Environment", value: "production" }] },
+    { tagsReadComplete: true },
+    { tags: [{ key: "Environment" }], tagsReadComplete: true }
+  ]) {
+    const incomplete = getReverseEngineeringTerraformCompleteness(bucket(config));
+    assert.ok(incomplete.missingCreationFields.includes("tags"));
+  }
+});
+
 function apiGatewayCases(): Array<{
   resourceType: ResourceType;
   providerResourceType: string;

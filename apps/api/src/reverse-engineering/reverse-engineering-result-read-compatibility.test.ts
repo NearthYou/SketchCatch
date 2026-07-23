@@ -449,7 +449,7 @@ test("과거 ARN 정규화 ID와 파생 참조도 raw provider ID 기준의 cano
   assert.doesNotMatch(JSON.stringify(result), /123456789012|resource-arn-aws-lambda/iu);
 });
 
-test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호환 draft를 만든다", () => {
+test("과거 draft 없는 결과는 원본을 바꾸지 않고 안전한 호환 draft를 만든다", () => {
   const legacyResult = createLegacyResult();
   const persistedArchitectureBeforeRead = structuredClone(legacyResult.architectureJson);
   const persistedLambdaBeforeRead = structuredClone(legacyResult.discoveredResources[0]);
@@ -473,9 +473,10 @@ test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호�
     analysisExcluded: true
   });
   assert.equal(bucketNode?.label, "safe-bucket");
-  assert.equal(bucketNode?.config["legacyConfigMarker"], "keep-bucket-raw");
+  assert.equal(bucketNode?.config["legacyConfigMarker"], undefined);
   assert.equal(bucketNode?.config["providerResourceId"], "sketchcatch-safe-bucket");
-  assert.equal(bucketNode?.config["analysisExcluded"], false);
+  assert.equal(bucketNode?.config["reverseEngineeringManagement"], "needs_mapping");
+  assert.equal(bucketNode?.config["analysisExcluded"], true);
   assert.equal(result.reverseEngineeringDraft.architectureJson, result.architectureJson);
   assert.deepEqual(result.reverseEngineeringDraft.protectedValueKeys, [
     "providerResourceId",
@@ -499,10 +500,10 @@ test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호�
   assert.deepEqual(result.importSuggestions[2], {
     id: "import-safe-bucket",
     resourceId: "safe-bucket",
-    status: "ready",
-    handoffReady: true,
-    terraformAddress: "aws_s3_bucket.safe_bucket",
-    terraformBlockDraft: 'resource "aws_s3_bucket" "safe_bucket" {}'
+    status: "manual_review",
+    handoffReady: false,
+    reason:
+      "AWS에서 찾았지만 현재 설정을 안전하게 Terraform으로 옮길 수 없습니다. 보드에서 구조를 확인할 수 있습니다."
   });
   assert.match(legacyResult.importSuggestions[2]?.importCommand ?? "", /^terraform import /u);
   assert.equal(legacyResult.importSuggestions[0]?.status, "ready");
@@ -529,6 +530,11 @@ test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호�
         nodeId: publicLambdaId,
         resourceAddress: "aws_lambda_function.orders_handler",
         excludedResourceAddress: "aws_lambda_function"
+      },
+      {
+        nodeId: "legacy-safe-bucket-node",
+        resourceAddress: "aws_s3_bucket.safe_bucket",
+        excludedResourceAddress: "aws_s3_bucket"
       }
     ]
   );

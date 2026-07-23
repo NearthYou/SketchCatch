@@ -384,7 +384,10 @@ function completeCoreRecords(): AwsDiscoveredResourceRecord[] {
       storageType: "gp3",
       vpcSecurityGroupIds: ["sg-database"]
     }),
-    record("AWS::S3::Bucket", "assets-main", {}),
+    record("AWS::S3::Bucket", "assets-main", {
+      tags: [],
+      tagsReadComplete: true
+    }),
     record("AWS::ApiGateway::RestApi", "api-main", {
       hasResourcePolicy: false,
       name: "customer-api",

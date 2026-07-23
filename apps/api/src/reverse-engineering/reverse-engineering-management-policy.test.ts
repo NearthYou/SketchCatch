@@ -533,6 +533,10 @@ function resource(
   config: Record<string, unknown> = {},
   providerResourceType = PROVIDER_RESOURCE_TYPES[resourceType] ?? `AWS::Test::${resourceType}`
 ): DiscoveredResource {
+  const completeConfig =
+    resourceType === "S3" && providerResourceType === "AWS::S3::Bucket"
+      ? { tags: [], tagsReadComplete: true, ...config }
+      : config;
   return {
     id: `resource-${resourceType}`,
     provider: "aws",
@@ -541,12 +545,13 @@ function resource(
     region: "ap-northeast-2",
     displayName: `customer-${resourceType.toLowerCase()}`,
     resourceType,
-    config
+    config: completeConfig
   };
 }
 
 const PROVIDER_RESOURCE_TYPES: Partial<Record<ResourceType, string>> = {
   IAM_ROLE: "AWS::IAM::Role",
   IAM_POLICY: "AWS::IAM::Policy",
-  KMS_KEY: "AWS::KMS::Key"
+  KMS_KEY: "AWS::KMS::Key",
+  S3: "AWS::S3::Bucket"
 };

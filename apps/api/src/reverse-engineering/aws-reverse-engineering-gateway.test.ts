@@ -3,7 +3,11 @@ import test from "node:test";
 import { GetRestApisCommand } from "@aws-sdk/client-api-gateway";
 import { DescribeImagesCommand } from "@aws-sdk/client-ec2";
 import { DescribeLoadBalancersCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
-import { ListDistributionsCommand } from "@aws-sdk/client-cloudfront";
+import {
+  GetDistributionConfigCommand,
+  ListDistributionsCommand,
+  ListTagsForResourceCommand as ListCloudFrontTagsForResourceCommand
+} from "@aws-sdk/client-cloudfront";
 import {
   DescribeAlarmsCommand,
   ListTagsForResourceCommand as ListCloudWatchTagsForResourceCommand
@@ -13,8 +17,13 @@ import {
   ListTagsForResourceCommand as ListLogGroupTagsForResourceCommand
 } from "@aws-sdk/client-cloudwatch-logs";
 import {
+  GetBucketEncryptionCommand,
+  GetBucketPolicyCommand,
   GetBucketTaggingCommand,
   GetBucketVersioningCommand,
+  GetBucketWebsiteCommand,
+  GetPublicAccessBlockCommand,
+  ListObjectsV2Command,
   ListBucketsCommand
 } from "@aws-sdk/client-s3";
 import {
@@ -53,6 +62,7 @@ import {
   describeSecurityGroups,
   describeSubnets,
   describeVpcs,
+  filterGenericSelectedFallback,
   isReverseEngineeringPromotedResourceArn,
   listAmiImagesAsUnknown,
   listApplicationLoadBalancers,
@@ -68,6 +78,7 @@ import {
   readEcsResourcesWithDiagnostics,
   readResourceExplorerResourcesWithDiagnostics,
   resolveCloudFrontOriginRelationships,
+  resolveDeploymentSupportRelationships,
   resolveNatGatewayElasticIpRelationships,
   shouldReadResourceGroup,
   shouldReadUnknownResourceGroup,
@@ -1020,6 +1031,297 @@ test("S3 상세 권한 실패는 리소스별 불완전 표시를 남기고 impo
   assert.match(result.importSuggestions[0]?.reason ?? "", /details\.versioning/);
 });
 
+test("S3 reader는 파일 이름을 저장하지 않고 Bucket에 안전한 파일 수 요약만 남긴다", async () => {
+  const commands: object[] = [];
+  const records = await listBucketsWithDetails("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      commands.push(command);
+      if (command instanceof ListBucketsCommand) {
+        return { Buckets: [{ Name: "audience-live-check-web" }] };
+      }
+      if (command instanceof GetBucketVersioningCommand) {
+        return { Status: "Enabled", MFADelete: "Disabled" };
+      }
+      if (command instanceof GetPublicAccessBlockCommand) {
+        return {
+          PublicAccessBlockConfiguration: {
+            BlockPublicAcls: true,
+            IgnorePublicAcls: true,
+            BlockPublicPolicy: true,
+            RestrictPublicBuckets: true
+          }
+        };
+      }
+      if (command instanceof GetBucketPolicyCommand) {
+        return { Policy: '{"Version":"2012-10-17","Statement":[]}' };
+      }
+      if (command instanceof ListObjectsV2Command) {
+        return {
+          Contents: [
+            {
+              Key: "private/users/customer@example.com/token.txt",
+              ETag: '"fixture-etag"',
+              StorageClass: "STANDARD"
+            }
+          ],
+          KeyCount: 1,
+          IsTruncated: true,
+          NextContinuationToken: "private-continuation-token"
+        };
+      }
+      return {};
+    }
+  }));
+
+  assert.deepEqual(
+    records.map((record) => record.providerResourceType),
+    [
+      "AWS::S3::Bucket",
+      "AWS::S3::BucketVersioning",
+      "AWS::S3::BucketPublicAccessBlock",
+      "AWS::S3::BucketPolicy"
+    ]
+  );
+  for (const child of records.slice(1)) {
+    assert.deepEqual(child.relationships, [
+      { type: "depends_on", targetProviderResourceId: "audience-live-check-web" }
+    ]);
+  }
+  assert.equal(records[1]?.serverOnly?.terraformImportId, "audience-live-check-web");
+  assert.equal(records[2]?.serverOnly?.terraformImportId, "audience-live-check-web");
+  assert.equal(records[3]?.serverOnly?.terraformImportId, "audience-live-check-web");
+  assert.deepEqual(records[3]?.serverOnly?.config?.["policyDocument"], {
+    Version: "2012-10-17",
+    Statement: []
+  });
+  assert.equal(records[0]?.config["objectInventoryObservedCount"], 1);
+  assert.equal(records[0]?.config["objectInventoryCountIsExact"], false);
+  assert.equal(records[0]?.config["objectInventoryTruncated"], true);
+  assert.equal(records[0]?.config["objectInventorySummary"], "저장된 파일 1개 이상");
+  assert.deepEqual(records[0]?.config["tags"], []);
+  assert.equal(records[0]?.config["tagsReadComplete"], true);
+  assert.doesNotMatch(
+    JSON.stringify(records),
+    /customer@example\.com|token\.txt|fixture-etag|private-continuation-token/u
+  );
+
+  const objectLists = commands.filter(
+    (command): command is ListObjectsV2Command => command instanceof ListObjectsV2Command
+  );
+  assert.equal(objectLists.length, 1);
+  assert.equal(objectLists[0]?.input.MaxKeys, 1);
+  assert.equal(objectLists[0]?.input.ContinuationToken, undefined);
+  assert.doesNotMatch(
+    commands.map((command) => command.constructor.name).join("\n"),
+    /(?:HeadObject|GetObject)/u
+  );
+});
+
+test("S3 암호화와 웹사이트 원문은 서버에만 두고 Bucket 자동 관리는 안전하게 닫는다", async () => {
+  const kmsKeyArn =
+    "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555";
+  const privateWebsitePath = "private/customer@example.com/error.html";
+  const records = await listBucketsWithDetails("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      if (command instanceof ListBucketsCommand) {
+        return { Buckets: [{ Name: "configured-bucket" }] };
+      }
+      if (command instanceof GetBucketEncryptionCommand) {
+        return {
+          ServerSideEncryptionConfiguration: {
+            Rules: [
+              {
+                ApplyServerSideEncryptionByDefault: {
+                  SSEAlgorithm: "aws:kms",
+                  KMSMasterKeyID: kmsKeyArn
+                }
+              }
+            ]
+          }
+        };
+      }
+      if (command instanceof GetBucketWebsiteCommand) {
+        return {
+          IndexDocument: { Suffix: "index.html" },
+          ErrorDocument: { Key: privateWebsitePath }
+        };
+      }
+      if (command instanceof ListObjectsV2Command) {
+        return { Contents: [], KeyCount: 0, IsTruncated: false };
+      }
+      return {};
+    }
+  }));
+
+  const bucket = records[0];
+  assert.equal(bucket?.config["hasEncryptionConfiguration"], true);
+  assert.equal(bucket?.config["hasWebsiteConfiguration"], true);
+  assert.equal(bucket?.config["encryptionRules"], undefined);
+  assert.equal(bucket?.config["websiteIndexDocument"], undefined);
+  assert.equal(bucket?.config["websiteErrorDocument"], undefined);
+  assert.deepEqual(bucket?.serverOnly?.config?.["encryptionRules"], [
+    {
+      ApplyServerSideEncryptionByDefault: {
+        SSEAlgorithm: "aws:kms",
+        KMSMasterKeyID: kmsKeyArn
+      }
+    }
+  ]);
+  assert.equal(
+    (
+      bucket?.serverOnly?.config?.["websiteConfiguration"] as {
+        ErrorDocument?: { Key?: string };
+      }
+    )?.ErrorDocument?.Key,
+    privateWebsitePath
+  );
+
+  const result = await scanGatewayRecords(records);
+  const publicBucket = result.discoveredResources[0];
+  assert.equal(publicBucket?.config["hasEncryptionConfiguration"], true);
+  assert.equal(publicBucket?.config["hasWebsiteConfiguration"], true);
+  assert.equal(publicBucket?.importSuggestionStatus, "manual_review");
+  assert.match(result.importSuggestions[0]?.reason ?? "", /암호화.*웹사이트/u);
+  assert.doesNotMatch(JSON.stringify(result), /123456789012|customer@example\.com|KMSMasterKeyID/u);
+});
+
+test("S3 파일 수 확인은 한 건만 읽고 continuation token을 따라가지 않는다", async () => {
+  const objectListCommands: ListObjectsV2Command[] = [];
+  const records = await listBucketsWithDetails("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      if (command instanceof ListBucketsCommand) {
+        return { Buckets: [{ Name: "paged-bucket" }] };
+      }
+      if (command instanceof ListObjectsV2Command) {
+        objectListCommands.push(command);
+        return {
+          Contents: [{ Key: "users/alice@example.com/session-token.json" }],
+          KeyCount: 1,
+          IsTruncated: true,
+          NextContinuationToken: "page-2"
+        };
+      }
+      return {};
+    }
+  }));
+
+  assert.equal(
+    records.some((record) => record.providerResourceType === "AWS::S3::Object"),
+    false
+  );
+  assert.equal(records[0]?.config["objectInventoryObservedCount"], 1);
+  assert.equal(records[0]?.config["objectInventoryCountIsExact"], false);
+  assert.equal(records[0]?.config["objectInventorySummary"], "저장된 파일 1개 이상");
+  assert.equal(objectListCommands.length, 1);
+  assert.equal(objectListCommands[0]?.input.ContinuationToken, undefined);
+  assert.doesNotMatch(JSON.stringify(records), /alice@example\.com|session-token|page-2/u);
+});
+
+test("S3 파일 수 확인 실패는 이름 없이 실패 상태만 남기고 Bucket 설정 관리는 유지한다", async () => {
+  const failures: Array<{ outcome: string }> = [];
+  const records = await listBucketsWithDetails(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        if (command instanceof ListBucketsCommand) {
+          return { Buckets: [{ Name: "partially-listed-bucket" }] };
+        }
+        if (command instanceof ListObjectsV2Command) {
+          throw Object.assign(new Error("private/users/customer@example.com/token.txt"), {
+            name: "AccessDeniedException"
+          });
+        }
+        return {};
+      }
+    }),
+    (failure) => failures.push(failure)
+  );
+
+  const bucket = records.find(
+    (record) => record.providerResourceType === "AWS::S3::Bucket"
+  );
+  assert.equal(
+    records.some((record) => record.providerResourceType === "AWS::S3::Object"),
+    false
+  );
+  assert.equal(bucket?.config["objectInventoryObservedCount"], undefined);
+  assert.equal(bucket?.config["objectInventoryCountIsExact"], false);
+  assert.equal(bucket?.config["objectInventoryTruncated"], true);
+  assert.equal(bucket?.config["objectInventorySummary"], "저장된 파일 수를 확인하지 못했습니다.");
+  assert.equal(bucket?.config["reverseEngineeringIncompleteDetails"], undefined);
+  assert.deepEqual(failures, [{ outcome: "permission_denied" }]);
+  assert.doesNotMatch(JSON.stringify(records), /customer@example\.com|token\.txt/u);
+
+  const scanResult = await scanGatewayRecords(records);
+  const importedBucket = scanResult.discoveredResources.find(
+    (resource) => resource.providerResourceType === "AWS::S3::Bucket"
+  );
+  assert.equal(
+    scanResult.architectureJson.nodes.find((node) => node.id === importedBucket?.id)?.config[
+      "reverseEngineeringManagement"
+    ],
+    "managed"
+  );
+});
+
+test("S3 policy와 Object 목록 상세 실패는 Bucket을 보존하고 scan 오류로 전달한다", async () => {
+  for (const failingCommand of ["GetBucketPolicyCommand", "ListObjectsV2Command"] as const) {
+    const failures: Array<{ outcome: string }> = [];
+    const records = await listBucketsWithDetails(
+      "ap-northeast-2",
+      credentials,
+      () => ({
+        async send(command: object): Promise<unknown> {
+          if (command instanceof ListBucketsCommand) {
+            return { Buckets: [{ Name: "partial-detail-bucket" }] };
+          }
+          if (command.constructor.name === failingCommand) {
+            throw Object.assign(new Error("private provider failure"), {
+              name: "AccessDeniedException"
+            });
+          }
+          return {};
+        }
+      }),
+      (failure) => failures.push(failure)
+    );
+
+    assert.equal(records[0]?.providerResourceType, "AWS::S3::Bucket");
+    assert.deepEqual(
+      records[0]?.config["reverseEngineeringIncompleteDetails"],
+      failingCommand === "GetBucketPolicyCommand" ? ["policy"] : undefined
+    );
+    assert.deepEqual(failures, [{ outcome: "permission_denied" }]);
+  }
+});
+
+test("S3 reader는 여러 Bucket 상세 조회를 한 Bucket씩 처리한다", async () => {
+  const activeRequestCounts = new Map<string, number>();
+  let maxConcurrentBuckets = 0;
+
+  await listBucketsWithDetails("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      if (command instanceof ListBucketsCommand) {
+        return { Buckets: [{ Name: "bucket-a" }, { Name: "bucket-b" }, { Name: "bucket-c" }] };
+      }
+
+      const bucket = (command as { input?: { Bucket?: string } }).input?.Bucket;
+      if (!bucket) return {};
+      activeRequestCounts.set(bucket, (activeRequestCounts.get(bucket) ?? 0) + 1);
+      maxConcurrentBuckets = Math.max(maxConcurrentBuckets, activeRequestCounts.size);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      const remaining = (activeRequestCounts.get(bucket) ?? 1) - 1;
+      if (remaining === 0) activeRequestCounts.delete(bucket);
+      else activeRequestCounts.set(bucket, remaining);
+      return {};
+    }
+  }));
+
+  assert.equal(maxConcurrentBuckets, 1);
+  assert.equal(activeRequestCounts.size, 0);
+});
+
 test("AMI pagination preserves page-one images and reports one safe later failure", async () => {
   const commands: DescribeImagesCommand[] = [];
   const failures: Array<{ outcome: string }> = [];
@@ -1415,6 +1717,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     ecsResources: true,
     eventBridgeResources: true,
     detailedResources: true,
+    deploymentSupportResources: true,
     unknownResources: true
   });
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["LOAD_BALANCER"])), {
@@ -1423,6 +1726,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     ecsResources: false,
     eventBridgeResources: false,
     detailedResources: false,
+    deploymentSupportResources: false,
     unknownResources: true
   });
   for (const resourceType of ["LOAD_BALANCER_TARGET_GROUP", "LOAD_BALANCER_LISTENER"] as const) {
@@ -1432,6 +1736,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
       ecsResources: false,
       eventBridgeResources: false,
       detailedResources: false,
+      deploymentSupportResources: false,
       unknownResources: true
     });
   }
@@ -1441,7 +1746,8 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     ecsResources: false,
     eventBridgeResources: false,
     detailedResources: false,
-    unknownResources: false
+    deploymentSupportResources: true,
+    unknownResources: true
   });
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["UNKNOWN"])), {
     loadBalancers: false,
@@ -1449,6 +1755,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     ecsResources: false,
     eventBridgeResources: false,
     detailedResources: false,
+    deploymentSupportResources: false,
     unknownResources: true
   });
 
@@ -1459,6 +1766,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
       ecsResources: true,
       eventBridgeResources: false,
       detailedResources: false,
+      deploymentSupportResources: false,
       unknownResources: false
     });
   }
@@ -1491,6 +1799,123 @@ test("IAM, Lambda, KMS, API Gateway 선택은 상세 reader만 켜고 UNKNOWN �
   const unknownPlan = createAwsReverseEngineeringReaderPlan(scanInput(["UNKNOWN"]));
   assert.equal(unknownPlan.detailedResources, false);
   assert.equal(unknownPlan.unknownResources, true);
+});
+
+test("배포 지원 상세 reader를 선택해도 generic inventory fallback을 함께 유지한다", () => {
+  for (const resourceType of [
+    "ECR_REPOSITORY",
+    "SECRETS_MANAGER_SECRET",
+    "APPLICATION_AUTO_SCALING_TARGET",
+    "APPLICATION_AUTO_SCALING_POLICY",
+    "CLOUDFRONT"
+  ] as const) {
+    const input = scanInput([resourceType]);
+    const plan = createAwsReverseEngineeringReaderPlan(input);
+
+    assert.equal(plan.deploymentSupportResources, true, `${resourceType} 상세 reader`);
+    assert.equal(plan.unknownResources, true, `${resourceType} generic fallback`);
+    assert.equal(shouldReadUnknownResourceGroup(input), true);
+  }
+});
+
+test("배포 지원 상세 reader가 실패하면 generic inventory 결과를 보존한다", async () => {
+  const awsConnection: AwsConnection = {
+    id: "aws-connection-fallback",
+    userId: "user-test",
+    accountId: "111122223333",
+    roleArn: "arn:aws:iam::111122223333:role/SketchCatchRole",
+    externalId: "external-id-test",
+    region: "ap-northeast-2",
+    status: "verified",
+    lastVerifiedAt: "2026-07-23T00:00:00.000Z",
+    createdAt: "2026-07-23T00:00:00.000Z",
+    updatedAt: "2026-07-23T00:00:00.000Z"
+  };
+  const generic = safeRecord(
+    "AWS::ECR::Repository",
+    "arn:aws:ecr:ap-northeast-2:111122223333:repository/audience-api",
+    "audience-api"
+  );
+  const options = {
+    prepareCredentials: async () => credentials,
+    readDeploymentSupportResources: async () => ({
+      records: [],
+      scanErrors: [
+        {
+          id: "scan-error-service-ecr",
+          serviceKey: "ecr",
+          resourceType: "ECR_REPOSITORY" as const,
+          stage: "provider_api" as const,
+          reason: "permission_denied" as const,
+          message: "이 서비스를 읽을 권한이 부족합니다.",
+          retryable: false
+        }
+      ]
+    }),
+    readUnknownResources: async () => ({ records: [generic], scanErrors: [] })
+  };
+
+  const discoveryResult = await createAwsReverseEngineeringGateway(
+    awsConnection,
+    options
+  ).discoverResources(scanInput(["ECR_REPOSITORY"]));
+  const result = Array.isArray(discoveryResult)
+    ? { records: discoveryResult, scanErrors: [] }
+    : discoveryResult;
+
+  assert.deepEqual(result.records, [generic]);
+  assert.equal(result.scanErrors[0]?.serviceKey, "ecr");
+});
+
+test("ELB와 ECR을 함께 선택하면 두 family의 generic fallback을 모두 보존한다", () => {
+  const loadBalancer = safeRecord(
+    "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    "arn:aws:elasticloadbalancing:ap-northeast-2:111122223333:loadbalancer/app/web/one",
+    "web"
+  );
+  const repository = safeRecord(
+    "AWS::ECR::Repository",
+    "arn:aws:ecr:ap-northeast-2:111122223333:repository/api",
+    "api"
+  );
+  const secret = safeRecord(
+    "AWS::SecretsManager::Secret",
+    "arn:aws:secretsmanager:ap-northeast-2:111122223333:secret:not-selected",
+    "not-selected"
+  );
+
+  const result = filterGenericSelectedFallback(
+    scanInput(["LOAD_BALANCER", "ECR_REPOSITORY"]),
+    { records: [loadBalancer, repository, secret], scanErrors: [] }
+  );
+
+  assert.deepEqual(result.records, [loadBalancer, repository]);
+});
+
+test("generic OAC ARN과 상세 OAC ID는 한 Resource로 합치고 상세 설정을 우선한다", () => {
+  const id = "E123OAC";
+  const generic = safeRecord(
+    "AWS::CloudFront::OriginAccessControl",
+    `arn:aws:cloudfront::111122223333:origin-access-control/${id}`,
+    "Origin Access Control · generic"
+  );
+  const detailed: AwsDiscoveredResourceRecord = {
+    ...safeRecord("AWS::CloudFront::OriginAccessControl", id, "audience-web-oac"),
+    config: {
+      id,
+      name: "audience-web-oac",
+      originAccessControlOriginType: "s3",
+      signingBehavior: "always",
+      signingProtocol: "sigv4"
+    },
+    serverOnly: { terraformImportId: id }
+  };
+
+  const records = uniqueDiscoveredRecordsByProviderId([generic, detailed]);
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceId, id);
+  assert.equal(records[0]?.config["signingProtocol"], "sigv4");
 });
 
 test("gateway는 선택한 상세 reader를 주입 credential로 한 번 실행하고 결과를 합친다", async () => {
@@ -2056,59 +2481,130 @@ test("ALB later-page failure returns earlier records with one safe diagnostic ou
   assert.doesNotMatch(JSON.stringify(failures), /RequestId|private-request|arn:aws/iu);
 });
 
-test("CloudFront reader는 distribution ID와 생성에 필요한 응답 구조만 보존한다", async () => {
+test("CloudFront reader는 exact Distribution config와 태그를 모두 보존한다", async () => {
   const commands: object[] = [];
   const records = await listCloudFrontDistributions("ap-northeast-2", credentials, () => ({
     async send(command: object): Promise<unknown> {
       commands.push(command);
-      return {
-        DistributionList: {
-          Items: [
-            {
-              ARN: "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTION",
-              Id: "EDISTRIBUTION",
-              DomainName: "d111111abcdef8.cloudfront.net",
-              Comment: "orders entry",
-              Enabled: true,
-              Status: "Deployed",
-              Origins: {
-                Items: [
-                  {
-                    Id: "orders-alb",
-                    DomainName: "orders-123.ap-northeast-2.elb.amazonaws.com",
-                    CustomOriginConfig: {
-                      HTTPPort: 80,
-                      HTTPSPort: 443,
-                      OriginProtocolPolicy: "https-only",
-                      OriginSslProtocols: { Items: ["TLSv1.2"] }
-                    }
-                  }
-                ]
-              },
-              DefaultCacheBehavior: {
-                TargetOriginId: "orders-alb",
-                ViewerProtocolPolicy: "redirect-to-https",
-                AllowedMethods: {
-                  Items: ["GET", "HEAD"],
-                  CachedMethods: { Items: ["GET", "HEAD"] }
+      if (command instanceof ListDistributionsCommand) {
+        return {
+          DistributionList: {
+            Items: [
+              {
+                ARN: "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTION",
+                Id: "EDISTRIBUTION",
+                DomainName: "d111111abcdef8.cloudfront.net",
+                Status: "Deployed"
+              }
+            ]
+          }
+        };
+      }
+      if (command instanceof GetDistributionConfigCommand) {
+        return {
+          DistributionConfig: {
+            CallerReference: "caller-reference",
+            Aliases: { Quantity: 1, Items: ["app.example.com"] },
+            DefaultRootObject: "index.html",
+            Origins: {
+              Quantity: 2,
+              Items: [
+                {
+                  Id: "web-assets",
+                  DomainName: "web.s3.ap-northeast-2.amazonaws.com",
+                  OriginAccessControlId: "E123OAC"
                 },
-                ForwardedValues: {
-                  QueryString: false,
-                  Cookies: { Forward: "none" }
+                {
+                  Id: "api-alb",
+                  DomainName: "orders-123.ap-northeast-2.elb.amazonaws.com",
+                  CustomOriginConfig: {
+                    HTTPPort: 80,
+                    HTTPSPort: 443,
+                    OriginProtocolPolicy: "https-only",
+                    OriginSslProtocols: { Quantity: 1, Items: ["TLSv1.2"] }
+                  }
                 }
+              ]
+            },
+            DefaultCacheBehavior: {
+              TargetOriginId: "web-assets",
+              ViewerProtocolPolicy: "redirect-to-https",
+              AllowedMethods: {
+                Quantity: 2,
+                Items: ["GET", "HEAD"],
+                CachedMethods: { Quantity: 2, Items: ["GET", "HEAD"] }
               },
-              Restrictions: { GeoRestriction: { RestrictionType: "none" } },
-              ViewerCertificate: { CloudFrontDefaultCertificate: true }
-            }
-          ]
-        }
-      };
+              CachePolicyId: "managed-static"
+            },
+            CacheBehaviors: {
+              Quantity: 2,
+              Items: [
+                {
+                  PathPattern: "/api/*",
+                  TargetOriginId: "api-alb",
+                  ViewerProtocolPolicy: "redirect-to-https",
+                  AllowedMethods: {
+                    Quantity: 7,
+                    Items: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+                    CachedMethods: { Quantity: 2, Items: ["GET", "HEAD"] }
+                  },
+                  CachePolicyId: "managed-disabled",
+                  OriginRequestPolicyId: "managed-all-viewer"
+                },
+                {
+                  PathPattern: "/health",
+                  TargetOriginId: "api-alb",
+                  ViewerProtocolPolicy: "redirect-to-https",
+                  AllowedMethods: {
+                    Quantity: 2,
+                    Items: ["GET", "HEAD"],
+                    CachedMethods: { Quantity: 2, Items: ["GET", "HEAD"] }
+                  },
+                  CachePolicyId: "managed-disabled"
+                }
+              ]
+            },
+            CustomErrorResponses: { Quantity: 0 },
+            Comment: "orders entry",
+            Logging: { Enabled: false, IncludeCookies: false, Bucket: "", Prefix: "" },
+            PriceClass: "PriceClass_100",
+            Enabled: true,
+            ViewerCertificate: { CloudFrontDefaultCertificate: true },
+            Restrictions: {
+              GeoRestriction: { Quantity: 0, RestrictionType: "none" }
+            },
+            WebACLId: "",
+            HttpVersion: "http2and3",
+            IsIPV6Enabled: true,
+            Staging: false,
+            ConnectionMode: "direct"
+          }
+        };
+      }
+      if (command instanceof ListCloudFrontTagsForResourceCommand) {
+        return { Tags: { Items: [{ Key: "Environment", Value: "demo" }] } };
+      }
+      throw new Error("unexpected command");
     }
   }));
 
-  assert.equal(commands.length, 1);
+  assert.equal(commands.length, 3);
   assert.ok(commands[0] instanceof ListDistributionsCommand);
-  assert.deepEqual(records, [
+  assert.ok(commands[1] instanceof GetDistributionConfigCommand);
+  assert.deepEqual((commands[1] as GetDistributionConfigCommand).input, {
+    Id: "EDISTRIBUTION"
+  });
+  assert.ok(commands[2] instanceof ListCloudFrontTagsForResourceCommand);
+  assert.deepEqual((commands[2] as ListCloudFrontTagsForResourceCommand).input, {
+    Resource: "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTION"
+  });
+  assert.deepEqual(records[0]?.serverOnly?.config, records[0]?.config);
+  assert.deepEqual(
+    records.map((record) => ({
+      ...record,
+      serverOnly: { terraformImportId: record.serverOnly?.terraformImportId }
+    })),
+    [
     {
       providerResourceType: "AWS::CloudFront::Distribution",
       providerResourceId: "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTION",
@@ -2119,12 +2615,48 @@ test("CloudFront reader는 distribution ID와 생성에 필요한 응답 구조�
         accountId: "123456789012",
         id: "EDISTRIBUTION",
         domainName: "d111111abcdef8.cloudfront.net",
+        aliases: ["app.example.com"],
         comment: "orders entry",
+        configReadComplete: true,
+        customErrorResponse: [],
+        defaultRootObject: "index.html",
         enabled: true,
+        httpVersion: "http2and3",
+        isIpv6Enabled: true,
+        loggingConfig: {
+          enabled: false,
+          includeCookies: false,
+          bucket: "",
+          prefix: ""
+        },
+        orderedCacheBehavior: [
+          {
+            pathPattern: "/api/*",
+            targetOriginId: "api-alb",
+            viewerProtocolPolicy: "redirect-to-https",
+            allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+            cachedMethods: ["GET", "HEAD"],
+            cachePolicyId: "managed-disabled",
+            originRequestPolicyId: "managed-all-viewer"
+          },
+          {
+            pathPattern: "/health",
+            targetOriginId: "api-alb",
+            viewerProtocolPolicy: "redirect-to-https",
+            allowedMethods: ["GET", "HEAD"],
+            cachedMethods: ["GET", "HEAD"],
+            cachePolicyId: "managed-disabled"
+          }
+        ],
         status: "Deployed",
         origin: [
           {
-            originId: "orders-alb",
+            originId: "web-assets",
+            domainName: "web.s3.ap-northeast-2.amazonaws.com",
+            originAccessControlId: "E123OAC"
+          },
+          {
+            originId: "api-alb",
             domainName: "orders-123.ap-northeast-2.elb.amazonaws.com",
             customOriginConfig: {
               httpPort: 80,
@@ -2135,48 +2667,163 @@ test("CloudFront reader는 distribution ID와 생성에 필요한 응답 구조�
           }
         ],
         defaultCacheBehavior: {
-          targetOriginId: "orders-alb",
+          targetOriginId: "web-assets",
           viewerProtocolPolicy: "redirect-to-https",
           allowedMethods: ["GET", "HEAD"],
           cachedMethods: ["GET", "HEAD"],
-          forwardedValues: { queryString: false, cookies: { forward: "none" } }
+          cachePolicyId: "managed-static"
         },
+        priceClass: "PriceClass_100",
         restrictions: { geoRestriction: { restrictionType: "none" } },
-        viewerCertificate: { cloudfrontDefaultCertificate: true }
+        staging: false,
+        tags: [{ key: "Environment", value: "demo" }],
+        tagsReadComplete: true,
+        terraformImportId: "EDISTRIBUTION",
+        viewerCertificate: { cloudfrontDefaultCertificate: true },
+        webAclId: ""
       },
-      relationships: []
+      relationships: [],
+      serverOnly: { terraformImportId: "EDISTRIBUTION" }
+    }
+    ]
+  );
+});
+
+test("CloudFront custom origin header는 원문을 버리고 존재 marker만 남긴다", async () => {
+  const records = await listCloudFrontDistributions("ap-northeast-2", credentials, () => ({
+    async send(command): Promise<unknown> {
+      if (command instanceof ListDistributionsCommand) {
+        return {
+          DistributionList: {
+            Items: [
+              {
+                ARN: "arn:aws:cloudfront::123456789012:distribution/EPRIVATEHEADER",
+                Id: "EPRIVATEHEADER",
+                DomainName: "private-header.cloudfront.net"
+              }
+            ]
+          }
+        };
+      }
+      if (command instanceof GetDistributionConfigCommand) {
+        return {
+          DistributionConfig: {
+            CallerReference: "private-header-fixture",
+            Origins: {
+              Quantity: 1,
+              Items: [
+                {
+                  Id: "private-origin",
+                  DomainName: "origin.example.com",
+                  CustomHeaders: {
+                    Quantity: 1,
+                    Items: [
+                      {
+                        HeaderName: "X-Origin-Secret",
+                        HeaderValue: "synthetic-never-public"
+                      }
+                    ]
+                  },
+                  S3OriginConfig: { OriginAccessIdentity: "" }
+                }
+              ]
+            },
+            DefaultCacheBehavior: {
+              TargetOriginId: "private-origin",
+              ViewerProtocolPolicy: "redirect-to-https",
+              AllowedMethods: {
+                Quantity: 2,
+                Items: ["GET", "HEAD"],
+                CachedMethods: { Quantity: 2, Items: ["GET", "HEAD"] }
+              },
+              CachePolicyId: "managed-static"
+            },
+            Comment: "",
+            Enabled: true,
+            Restrictions: { GeoRestriction: { Quantity: 0, RestrictionType: "none" } },
+            ViewerCertificate: { CloudFrontDefaultCertificate: true },
+            PriceClass: "PriceClass_All",
+            HttpVersion: "http2",
+            IsIPV6Enabled: true
+          }
+        };
+      }
+      return { Tags: { Items: [] } };
+    }
+  }));
+
+  assert.doesNotMatch(JSON.stringify(records), /X-Origin-Secret|synthetic-never-public/u);
+  assert.deepEqual(records[0]?.config["origin"], [
+    {
+      originId: "private-origin",
+      domainName: "origin.example.com",
+      hasCustomHeaders: true,
+      customHeaderCount: 1,
+      s3OriginConfig: { originAccessIdentity: "" }
     }
   ]);
+  assert.deepEqual(records[0]?.config["unsupportedConfiguration"], [
+    "Origins[0].CustomHeaders"
+  ]);
+  assert.deepEqual(records[0]?.serverOnly?.config?.["origin"], records[0]?.config["origin"]);
 });
 
 test("CloudFront reader는 VpcOriginConfig를 보존해 새 Terraform 생성 경계를 판단할 수 있게 한다", async () => {
   const records = await listCloudFrontDistributions("ap-northeast-2", credentials, () => ({
-    async send(): Promise<unknown> {
-      return {
-        DistributionList: {
-          Items: [
-            {
-              ARN: "arn:aws:cloudfront::123456789012:distribution/EVPCORIGIN",
-              Id: "EVPCORIGIN",
-              DomainName: "d111111abcdef8.cloudfront.net",
-              Origins: {
-                Items: [
-                  {
-                    Id: "private-origin",
-                    DomainName: "internal.example.com",
-                    VpcOriginConfig: {
-                      VpcOriginId: "vo_0123456789abcdef0",
-                      OwnerAccountId: "123456789012",
-                      OriginReadTimeout: 30,
-                      OriginKeepaliveTimeout: 5
-                    }
-                  }
-                ]
+    async send(command): Promise<unknown> {
+      if (command instanceof ListDistributionsCommand) {
+        return {
+          DistributionList: {
+            Items: [
+              {
+                ARN: "arn:aws:cloudfront::123456789012:distribution/EVPCORIGIN",
+                Id: "EVPCORIGIN",
+                DomainName: "d111111abcdef8.cloudfront.net"
               }
-            }
-          ]
-        }
-      };
+            ]
+          }
+        };
+      }
+      if (command instanceof GetDistributionConfigCommand) {
+        return {
+          DistributionConfig: {
+            CallerReference: "fixture",
+            Origins: {
+              Quantity: 1,
+              Items: [
+                {
+                  Id: "private-origin",
+                  DomainName: "internal.example.com",
+                  VpcOriginConfig: {
+                    VpcOriginId: "vo_0123456789abcdef0",
+                    OwnerAccountId: "123456789012",
+                    OriginReadTimeout: 30,
+                    OriginKeepaliveTimeout: 5
+                  }
+                }
+              ]
+            },
+            DefaultCacheBehavior: {
+              TargetOriginId: "private-origin",
+              ViewerProtocolPolicy: "https-only",
+              AllowedMethods: {
+                Quantity: 2,
+                Items: ["GET", "HEAD"],
+                CachedMethods: { Quantity: 2, Items: ["GET", "HEAD"] }
+              },
+              CachePolicyId: "managed-static"
+            },
+            Comment: "",
+            Enabled: true,
+            Restrictions: { GeoRestriction: { Quantity: 0, RestrictionType: "none" } },
+            ViewerCertificate: { CloudFrontDefaultCertificate: true },
+            PriceClass: "PriceClass_All",
+            HttpVersion: "http2",
+            IsIPV6Enabled: true
+          }
+        };
+      }
+      return { Tags: { Items: [] } };
     }
   }));
 
@@ -2192,6 +2839,91 @@ test("CloudFront reader는 VpcOriginConfig를 보존해 새 Terraform 생성 경
       }
     }
   ]);
+});
+
+test("CloudFront 상세 설정 또는 태그 조회 실패는 partial record와 안전한 실패만 남긴다", async () => {
+  const failures: Array<{ outcome: string }> = [];
+  const records = await listCloudFrontDistributions(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command): Promise<unknown> {
+        if (command instanceof ListDistributionsCommand) {
+          return {
+            DistributionList: {
+              Items: [
+                {
+                  ARN: "arn:aws:cloudfront::123456789012:distribution/ECONFIGFAIL",
+                  Id: "ECONFIGFAIL",
+                  DomainName: "config-fail.cloudfront.net",
+                  Enabled: true
+                },
+                {
+                  ARN: "arn:aws:cloudfront::123456789012:distribution/ETAGFAIL",
+                  Id: "ETAGFAIL",
+                  DomainName: "tag-fail.cloudfront.net",
+                  Enabled: true
+                }
+              ]
+            }
+          };
+        }
+        if (command instanceof GetDistributionConfigCommand) {
+          if (command.input.Id === "ECONFIGFAIL") {
+            throw Object.assign(new Error("private config detail"), {
+              name: "AccessDenied",
+              requestId: "private-request"
+            });
+          }
+          return {
+            DistributionConfig: {
+              CallerReference: "fixture",
+              Origins: {
+                Quantity: 1,
+                Items: [{ Id: "web", DomainName: "web.example.com" }]
+              },
+              DefaultCacheBehavior: {
+                TargetOriginId: "web",
+                ViewerProtocolPolicy: "redirect-to-https",
+                AllowedMethods: {
+                  Quantity: 2,
+                  Items: ["GET", "HEAD"],
+                  CachedMethods: { Quantity: 2, Items: ["GET", "HEAD"] }
+                },
+                CachePolicyId: "managed-static"
+              },
+              Comment: "",
+              Enabled: true,
+              Restrictions: { GeoRestriction: { Quantity: 0, RestrictionType: "none" } },
+              ViewerCertificate: { CloudFrontDefaultCertificate: true },
+              PriceClass: "PriceClass_All",
+              HttpVersion: "http2",
+              IsIPV6Enabled: true
+            }
+          };
+        }
+        if (command instanceof ListCloudFrontTagsForResourceCommand) {
+          if (command.input.Resource?.includes("ETAGFAIL")) {
+            throw Object.assign(new Error("private tag detail"), {
+              name: "ThrottlingException",
+              requestId: "private-request"
+            });
+          }
+          return { Tags: { Items: [] } };
+        }
+        throw new Error("unexpected command");
+      }
+    }),
+    (failure) => failures.push(failure)
+  );
+
+  assert.equal(records.length, 2);
+  assert.equal(records[0]?.config["configReadComplete"], false);
+  assert.equal(records[0]?.config["tagsReadComplete"], true);
+  assert.equal(records[1]?.config["configReadComplete"], true);
+  assert.equal(records[1]?.config["tagsReadComplete"], false);
+  assert.deepEqual(failures, [{ outcome: "permission_denied" }, { outcome: "throttled" }]);
+  assert.doesNotMatch(JSON.stringify(failures), /private|request|arn:aws/iu);
 });
 
 test("CloudFront origin은 동일 response 증거가 있는 ALB와 S3에만 연결한다", () => {
@@ -2264,6 +2996,43 @@ test("CloudFront S3 origin은 AWS endpoint suffix가 아닌 lookalike hostname�
   assert.deepEqual(resolvedCloudFront?.relationships, []);
 });
 
+test("자동 확장 Target과 OAC는 같은 snapshot의 ECS Service와 Distribution에 exact ID로 연결한다", () => {
+  const ecsService: AwsDiscoveredResourceRecord = {
+    ...safeRecord(
+      "AWS::ECS::Service",
+      "arn:aws:ecs:ap-northeast-2:123456789012:service/demo/api",
+      "api"
+    ),
+    config: { clusterName: "demo", name: "api" }
+  };
+  const target: AwsDiscoveredResourceRecord = {
+    ...safeRecord(
+      "AWS::ApplicationAutoScaling::ScalableTarget",
+      "arn:aws:application-autoscaling:ap-northeast-2:123456789012:scalable-target/one",
+      "api 자동 확장"
+    ),
+    config: { resourceId: "service/demo/api" }
+  };
+  const oac = safeRecord("AWS::CloudFront::OriginAccessControl", "E123OAC", "web-oac");
+  oac.config = { id: "E123OAC" };
+  const distribution: AwsDiscoveredResourceRecord = {
+    ...safeRecord(
+      "AWS::CloudFront::Distribution",
+      "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTION",
+      "web"
+    ),
+    config: { origin: [{ originId: "web", originAccessControlId: "E123OAC" }] }
+  };
+
+  const resolved = resolveDeploymentSupportRelationships([ecsService, target, oac, distribution]);
+  assert.deepEqual(resolved[1]?.relationships, [
+    { type: "depends_on", targetProviderResourceId: ecsService.providerResourceId }
+  ]);
+  assert.deepEqual(resolved[3]?.relationships, [
+    { type: "depends_on", targetProviderResourceId: oac.providerResourceId }
+  ]);
+});
+
 test("fallback이 필요한 ELBv2 ARN은 UNKNOWN inventory에 남긴다", () => {
   assert.equal(
     isReverseEngineeringPromotedResourceArn(
@@ -2274,6 +3043,12 @@ test("fallback이 필요한 ELBv2 ARN은 UNKNOWN inventory에 남긴다", () => 
   assert.equal(
     isReverseEngineeringPromotedResourceArn(
       "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTION"
+    ),
+    true
+  );
+  assert.equal(
+    isReverseEngineeringPromotedResourceArn(
+      "arn:aws:cloudfront::123456789012:origin-access-control/E123OAC"
     ),
     true
   );

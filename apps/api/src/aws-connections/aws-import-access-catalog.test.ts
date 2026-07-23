@@ -36,6 +36,19 @@ test("import policy fingerprint addresses the exact deterministic document", () 
   assert.equal(getAwsImportPolicyFingerprint(), getAwsImportPolicyFingerprint());
 });
 
+test("S3 Bucket 이름을 미리 모르므로 목록 확인은 전체 Bucket 대상이지만 파일 data 권한은 요청하지 않는다", () => {
+  const s3Actions: readonly string[] =
+    AWS_IMPORT_READERS.find((reader) => reader.serviceKey === "s3")?.actions ?? [];
+  const policy = createAwsImportReadPolicyDocument();
+
+  assert.equal(policy.Statement[0]?.Resource, "*");
+  assert(s3Actions.includes("s3:ListBucket"));
+  assert.doesNotMatch(
+    s3Actions.join("\n"),
+    /s3:(?:GetObject|GetObjectAttributes|GetObjectTagging|HeadObject|ListBucketVersions)/u
+  );
+});
+
 test("EventBridge import reader는 Rule과 Target을 읽는 최소 권한만 요청한다", () => {
   const reader = AWS_IMPORT_READERS.find((candidate) => candidate.serviceKey === "eventbridge");
 
@@ -56,6 +69,19 @@ test("EventBridge import reader는 Rule과 Target을 읽는 최소 권한만 요
 test("데모 토폴로지 reader는 필요한 metadata 읽기 권한만 요청한다", () => {
   const readers = new Map(AWS_IMPORT_READERS.map((reader) => [reader.serviceKey, reader]));
 
+  assert.deepEqual(readers.get("s3")?.actions, [
+    "s3:ListAllMyBuckets",
+    "s3:GetBucketLocation",
+    "s3:GetBucketVersioning",
+    "s3:GetBucketPublicAccessBlock",
+    "s3:GetEncryptionConfiguration",
+    "s3:GetBucketWebsite",
+    "s3:GetBucketTagging",
+    "s3:GetBucketPolicyStatus",
+    "s3:GetBucketPolicy",
+    "s3:ListBucket"
+  ]);
+
   assert.deepEqual(readers.get("ec2")?.actions.slice(-2), [
     "ec2:DescribeAddresses",
     "ec2:DescribeNatGateways"
@@ -72,6 +98,7 @@ test("데모 토폴로지 reader는 필요한 metadata 읽기 권한만 요청�
   ]);
   assert.deepEqual(readers.get("cloudfront")?.actions, [
     "cloudfront:ListDistributions",
+    "cloudfront:GetDistributionConfig",
     "cloudfront:ListTagsForResource",
     "cloudfront:ListOriginAccessControls",
     "cloudfront:GetOriginAccessControl"

@@ -47,7 +47,9 @@ export const AWS_IMPORT_READERS = [
       "s3:GetEncryptionConfiguration",
       "s3:GetBucketWebsite",
       "s3:GetBucketTagging",
-      "s3:GetBucketPolicyStatus"
+      "s3:GetBucketPolicyStatus",
+      "s3:GetBucketPolicy",
+      "s3:ListBucket"
     ]
   },
   {
@@ -89,6 +91,7 @@ export const AWS_IMPORT_READERS = [
     tier: "core",
     actions: [
       "cloudfront:ListDistributions",
+      "cloudfront:GetDistributionConfig",
       "cloudfront:ListTagsForResource",
       "cloudfront:ListOriginAccessControls",
       "cloudfront:GetOriginAccessControl"

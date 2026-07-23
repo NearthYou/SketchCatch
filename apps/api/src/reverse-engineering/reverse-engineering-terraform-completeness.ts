@@ -301,7 +301,55 @@ function getMissingTerraformResourceFields(
   }
 
   if (resourceType === "S3") {
-    return [];
+    if (providerResourceType === "AWS::S3::Bucket") {
+      return [
+        ...(config["tagsReadComplete"] === true && hasCompleteS3Tags(config["tags"])
+          ? []
+          : ["tags"]),
+        ...(config["hasEncryptionConfiguration"] === true
+          ? ["bucketEncryptionConfiguration"]
+          : []),
+        ...(config["hasWebsiteConfiguration"] === true ? ["bucketWebsiteConfiguration"] : [])
+      ];
+    }
+    if (providerResourceType === "AWS::S3::BucketVersioning") {
+      return [
+        ...(getNonEmptyString(config["bucketName"]) ? [] : ["bucketName"]),
+        ...(["Enabled", "Suspended"].includes(String(config["versioningStatus"]))
+          ? []
+          : ["versioningStatus"]),
+        ...(config["mfaDelete"] === "Enabled" ? ["mfaDelete=Disabled"] : [])
+      ];
+    }
+    if (providerResourceType === "AWS::S3::BucketPublicAccessBlock") {
+      return [
+        ...(getNonEmptyString(config["bucketName"]) ? [] : ["bucketName"]),
+        ...[
+          "blockPublicAcls",
+          "ignorePublicAcls",
+          "blockPublicPolicy",
+          "restrictPublicBuckets"
+        ].filter((key) => typeof config[key] !== "boolean")
+      ];
+    }
+    if (providerResourceType === "AWS::S3::BucketPolicy") {
+      return [
+        ...(getNonEmptyString(config["bucketName"]) ? [] : ["bucketName"]),
+        ...(config["policyReadComplete"] === true ? [] : ["policyReadComplete"]),
+        ...(hasJsonObject(config["policyDocument"]) ? [] : ["policyDocument"])
+      ];
+    }
+    if (providerResourceType === "AWS::S3::Object") {
+      return [
+        ...(getNonEmptyString(config["bucketName"]) ? [] : ["bucketName"]),
+        ...(getNonEmptyString(config["key"]) ? [] : ["key"]),
+        ...(config["bodyRead"] === false ? [] : ["bodyRead=false"]),
+        ...(config["metadataReadComplete"] === true ? [] : ["metadataReadComplete"]),
+        ...(config["tagsReadComplete"] === true ? [] : ["tagsReadComplete"]),
+        "objectBodyUnavailable"
+      ];
+    }
+    return ["providerResourceType"];
   }
 
   if (resourceType === "CLOUDWATCH_METRIC_ALARM") {
@@ -396,18 +444,54 @@ function getMissingTerraformResourceFields(
   }
 
   if (resourceType === "CLOUDFRONT") {
+    if (providerResourceType === "AWS::CloudFront::OriginAccessControl") {
+      return [
+        ...(getNonEmptyString(config["id"]) ? [] : ["id"]),
+        ...(getNonEmptyString(config["name"]) ? [] : ["name"]),
+        ...(config["originAccessControlOriginType"] === "s3"
+          ? []
+          : ["originAccessControlOriginType=s3"]),
+        ...(config["signingBehavior"] === "always" ? [] : ["signingBehavior=always"]),
+        ...(config["signingProtocol"] === "sigv4" ? [] : ["signingProtocol=sigv4"])
+      ];
+    }
     const hasVpcOrigin = hasCloudFrontVpcOrigin(config["origin"]);
 
     return [
+      ...(config["configReadComplete"] === true ? [] : ["configReadComplete"]),
+      ...(config["tagsReadComplete"] === true ? [] : ["tagsReadComplete"]),
+      ...(hasCloudFrontTags(config["tags"]) ? [] : ["tags"]),
       ...(typeof config["enabled"] === "boolean" ? [] : ["enabled"]),
+      ...(hasCloudFrontAliases(config["aliases"]) ? [] : ["aliases"]),
+      ...(hasSupportedCloudFrontHttpVersion(config["httpVersion"]) ? [] : ["httpVersion"]),
+      ...(typeof config["isIpv6Enabled"] === "boolean" ? [] : ["isIpv6Enabled"]),
+      ...(hasSupportedCloudFrontPriceClass(config["priceClass"]) ? [] : ["priceClass"]),
       ...(hasCloudFrontOrigin(config["origin"])
         ? []
         : [hasVpcOrigin ? "origin.vpcOriginConfig" : "origin"]),
       ...(hasCloudFrontDefaultCacheBehavior(config["defaultCacheBehavior"])
         ? []
         : ["defaultCacheBehavior"]),
+      ...(hasCloudFrontOrderedCacheBehaviors(config["orderedCacheBehavior"])
+        ? []
+        : ["orderedCacheBehavior"]),
       ...(hasGeoRestriction(config["restrictions"]) ? [] : ["restrictions"]),
-      ...(hasCloudFrontViewerCertificate(config["viewerCertificate"]) ? [] : ["viewerCertificate"])
+      ...(hasCloudFrontViewerCertificate(config["viewerCertificate"]) ? [] : ["viewerCertificate"]),
+      ...(Array.isArray(config["customErrorResponse"]) &&
+      config["customErrorResponse"].length === 0
+        ? []
+        : ["customErrorResponse"]),
+      ...(hasDisabledCloudFrontLogging(config["loggingConfig"]) ? [] : ["loggingConfig"]),
+      ...(getNonEmptyString(config["continuousDeploymentPolicyId"])
+        ? ["continuousDeploymentPolicyId"]
+        : []),
+      ...(config["staging"] === true ? ["staging=false"] : []),
+      ...(Array.isArray(config["unsupportedConfiguration"]) &&
+      config["unsupportedConfiguration"].length > 0
+        ? ["unsupportedConfiguration"]
+        : config["unsupportedConfiguration"] === undefined
+          ? []
+          : ["unsupportedConfiguration"])
     ];
   }
 
@@ -447,6 +531,88 @@ function getMissingTerraformResourceFields(
       ...(config["requiresManualEnvironmentInput"] === true
         ? ["containerDefinitions.environment"]
         : [])
+    ];
+  }
+
+  if (resourceType === "ECR_REPOSITORY") {
+    return [
+      ...(getValidEcrRepositoryName(config["repositoryName"]) ? [] : ["repositoryName"]),
+      ...(["MUTABLE", "IMMUTABLE"].includes(String(config["imageTagMutability"]))
+        ? []
+        : ["imageTagMutability"]),
+      ...(typeof config["scanOnPush"] === "boolean" ? [] : ["scanOnPush"]),
+      ...(["AES256", "KMS", "KMS_DSSE"].includes(String(config["encryptionType"]))
+        ? []
+        : ["encryptionType"]),
+      ...(["KMS", "KMS_DSSE"].includes(String(config["encryptionType"])) &&
+      getNonEmptyString(config["kmsKey"]) === null
+        ? ["kmsKey"]
+        : []),
+      ...(config["tagsReadComplete"] === true ? [] : ["tagsReadComplete"])
+    ];
+  }
+
+  if (resourceType === "SECRETS_MANAGER_SECRET") {
+    return [
+      ...(getValidSecretName(config["name"]) ? [] : ["name"]),
+      ...(config["metadataReadComplete"] === true ? [] : ["metadataReadComplete"]),
+      ...(config["tagsReadComplete"] === true ? [] : ["tagsReadComplete"]),
+      ...(config["valueRead"] === false ? [] : ["valueRead=false"]),
+      ...(config["rotationEnabled"] === false ? [] : ["rotationEnabled=false"]),
+      ...(config["replicationReadComplete"] === true ? [] : ["replicationReadComplete"]),
+      ...(config["isReplica"] === false ? [] : ["isReplica=false"]),
+      ...(config["replicaRegionCount"] === 0 ? [] : ["replicaRegionCount=0"]),
+      ...(config["serviceOwned"] === false ? [] : ["serviceOwned=false"]),
+      ...(config["deleted"] === false ? [] : ["deleted=false"]),
+      ...(config["hasKmsKey"] === true && getNonEmptyString(config["kmsKeyId"]) === null
+        ? ["kmsKeyId"]
+        : [])
+    ];
+  }
+
+  if (resourceType === "APPLICATION_AUTO_SCALING_TARGET") {
+    const minCapacity = config["minCapacity"];
+    const maxCapacity = config["maxCapacity"];
+    const roleArn = getNonEmptyString(config["roleArn"]);
+    return [
+      ...(config["serviceNamespace"] === "ecs" ? [] : ["serviceNamespace=ecs"]),
+      ...(isEcsScalableResourceId(config["resourceId"]) ? [] : ["resourceId"]),
+      ...(config["scalableDimension"] === "ecs:service:DesiredCount" ? [] : ["scalableDimension"]),
+      ...(isNonNegativeInteger(minCapacity) ? [] : ["minCapacity"]),
+      ...(isNonNegativeInteger(maxCapacity) &&
+      typeof minCapacity === "number" &&
+      typeof maxCapacity === "number" &&
+      maxCapacity >= minCapacity
+        ? []
+        : ["maxCapacity"]),
+      ...(config["hasRoleArn"] === true
+        ? isValidApplicationAutoScalingRoleArn(roleArn)
+          ? []
+          : ["roleArn"]
+        : config["hasRoleArn"] === false
+          ? roleArn === null
+            ? []
+            : ["hasRoleArn"]
+          : roleArn === null
+            ? []
+            : ["hasRoleArn"]),
+      ...(hasCompleteSuspendedState(config["suspendedState"]) ? [] : ["suspendedState"]),
+      ...(config["tagsReadComplete"] === true ? [] : ["tagsReadComplete"])
+    ];
+  }
+
+  if (resourceType === "APPLICATION_AUTO_SCALING_POLICY") {
+    return [
+      ...(getValidApplicationAutoScalingPolicyName(config["policyName"]) ? [] : ["policyName"]),
+      ...(config["policyType"] === "TargetTrackingScaling"
+        ? []
+        : ["policyType=TargetTrackingScaling"]),
+      ...(config["serviceNamespace"] === "ecs" ? [] : ["serviceNamespace=ecs"]),
+      ...(isEcsScalableResourceId(config["resourceId"]) ? [] : ["resourceId"]),
+      ...(config["scalableDimension"] === "ecs:service:DesiredCount" ? [] : ["scalableDimension"]),
+      ...(hasCompleteTargetTrackingPolicy(config["targetTrackingScalingPolicyConfiguration"])
+        ? []
+        : ["targetTrackingScalingPolicyConfiguration"])
     ];
   }
 
@@ -515,7 +681,46 @@ function getStableTerraformImportId(
   }
 
   if (resource.resourceType === "CLOUDFRONT") {
+    if (resource.providerResourceType === "AWS::CloudFront::OriginAccessControl") {
+      const importId = getNonEmptyString(resource.config["terraformImportId"]);
+      return importId && /^[A-Z0-9]+$/u.test(importId) ? importId : null;
+    }
     return getNonEmptyString(resource.config["id"]);
+  }
+
+  if (resource.resourceType === "S3" && resource.providerResourceType !== "AWS::S3::Bucket") {
+    const importId = getNonEmptyString(resource.config["terraformImportId"]);
+    if (!importId || hasControlCharacter(importId)) return null;
+    return resource.providerResourceType === "AWS::S3::Object" && !importId.includes("/")
+      ? null
+      : importId;
+  }
+
+  if (resource.resourceType === "ECR_REPOSITORY") {
+    return getValidEcrRepositoryName(resource.config["terraformImportId"]);
+  }
+
+  if (resource.resourceType === "SECRETS_MANAGER_SECRET") {
+    const importId = getNonEmptyString(resource.config["terraformImportId"]);
+    return importId && /^arn:[^:]+:secretsmanager:[^:]+:\d{12}:secret:.+$/u.test(importId)
+      ? importId
+      : null;
+  }
+
+  if (
+    resource.resourceType === "APPLICATION_AUTO_SCALING_TARGET" ||
+    resource.resourceType === "APPLICATION_AUTO_SCALING_POLICY"
+  ) {
+    const importId = getNonEmptyString(resource.config["terraformImportId"]);
+    const expected = [
+      resource.config["serviceNamespace"],
+      resource.config["resourceId"],
+      resource.config["scalableDimension"],
+      ...(resource.resourceType === "APPLICATION_AUTO_SCALING_POLICY"
+        ? [resource.config["policyName"]]
+        : [])
+    ].join("/");
+    return importId === expected ? importId : null;
   }
 
   if (resource.resourceType === "LOAD_BALANCER") {
@@ -876,6 +1081,24 @@ function isNonNegativeNumber(value: unknown): boolean {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
+/** gg: AWS capacity는 소수 Task를 허용하지 않으므로 0 이상의 정수만 재생성 값으로 승인합니다. */
+function isNonNegativeInteger(value: unknown): boolean {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+/** gg: Bucket 태그 전체를 재생성할 수 있는 문자열 key/value 쌍으로 읽은 경우만 자동 관리를 엽니다. */
+function hasCompleteS3Tags(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((tag) => {
+      if (!isRecord(tag)) return false;
+      const key = tag["key"] ?? tag["Key"];
+      const tagValue = tag["value"] ?? tag["Value"];
+      return typeof key === "string" && key.trim().length > 0 && typeof tagValue === "string";
+    })
+  );
+}
+
 function hasCloudFrontOrigin(value: unknown): boolean {
   return (
     Array.isArray(value) &&
@@ -884,6 +1107,7 @@ function hasCloudFrontOrigin(value: unknown): boolean {
       (origin) =>
         isRecord(origin) &&
         !hasCloudFrontVpcOriginConfig(origin) &&
+        hasNoUnsupportedCloudFrontOriginSettings(origin) &&
         getNonEmptyString(origin["originId"]) !== null &&
         getNonEmptyString(origin["domainName"]) !== null
     )
@@ -919,14 +1143,108 @@ function hasSupportedLoadBalancerIpAddressType(value: unknown): boolean {
   return value === "ipv4" || value === "dualstack" || value === "dualstack-without-public-ipv4";
 }
 
+/** gg: alias는 비어 있을 수 있지만 값이 있으면 모두 실제 hostname 문자열이어야 합니다. */
+function hasCloudFrontAliases(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((alias) => typeof alias === "string" && alias.trim().length > 0)
+  );
+}
+
+/** gg: Terraform provider가 지원하는 CloudFront HTTP version만 자동 관리합니다. */
+function hasSupportedCloudFrontHttpVersion(value: unknown): boolean {
+  return ["http1.1", "http2", "http2and3", "http3"].includes(String(value));
+}
+
+/** gg: Terraform provider의 세 PriceClass 값만 자동 관리합니다. */
+function hasSupportedCloudFrontPriceClass(value: unknown): boolean {
+  return ["PriceClass_All", "PriceClass_100", "PriceClass_200"].includes(String(value));
+}
+
 function hasCloudFrontDefaultCacheBehavior(value: unknown): boolean {
   return (
     isRecord(value) &&
+    hasNoUnsupportedCloudFrontCacheBehaviorSettings(value) &&
     getNonEmptyString(value["targetOriginId"]) !== null &&
     getNonEmptyString(value["viewerProtocolPolicy"]) !== null &&
     getStringArray(value["allowedMethods"]).length > 0 &&
     getStringArray(value["cachedMethods"]).length > 0 &&
     (isRecord(value["forwardedValues"]) || getNonEmptyString(value["cachePolicyId"]) !== null)
+  );
+}
+
+/** gg: ordered behavior는 AWS 우선순위를 지키는 배열이며 각 path pattern과 공통 설정이 완전해야 합니다. */
+function hasCloudFrontOrderedCacheBehaviors(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (behavior) =>
+        isRecord(behavior) &&
+        getNonEmptyString(behavior["pathPattern"]) !== null &&
+        hasCloudFrontDefaultCacheBehavior(behavior)
+    )
+  );
+}
+
+/** gg: 현재 generator가 버리는 association·gRPC 설정이 있으면 자동 관리를 막습니다. */
+function hasNoUnsupportedCloudFrontCacheBehaviorSettings(
+  value: Record<string, unknown>
+): boolean {
+  return (
+    hasNoConfiguredCloudFrontList(value["functionAssociations"]) &&
+    hasNoConfiguredCloudFrontList(value["lambdaFunctionAssociations"]) &&
+    value["grpcConfig"] === undefined
+  );
+}
+
+/** gg: custom header·Origin Shield·mTLS·VPC origin처럼 아직 투영하지 않는 설정은 닫힌 상태로 둡니다. */
+function hasNoUnsupportedCloudFrontOriginSettings(
+  value: Record<string, unknown>
+): boolean {
+  const customOriginConfig = value["customOriginConfig"];
+  return (
+    hasNoConfiguredCloudFrontList(value["customHeaders"]) &&
+    value["hasCustomHeaders"] !== true &&
+    (value["customHeaderCount"] === undefined || value["customHeaderCount"] === 0) &&
+    value["originShield"] === undefined &&
+    value["originMtlsConfig"] === undefined &&
+    (!isRecord(customOriginConfig) ||
+      (customOriginConfig["ipAddressType"] === undefined &&
+        customOriginConfig["responseCompletionTimeout"] === undefined))
+  );
+}
+
+/** gg: optional list가 없거나 비어 있는 경우만 unsupported 기능이 꺼진 것으로 판단합니다. */
+function hasNoConfiguredCloudFrontList(value: unknown): boolean {
+  return value === undefined || (Array.isArray(value) && value.length === 0);
+}
+
+/** gg: 성공한 태그 응답은 object 또는 key/value 배열 전체가 문자열이어야 합니다. */
+function hasCloudFrontTags(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.every(
+      (tag) =>
+        isRecord(tag) &&
+        getNonEmptyString(tag["key"]) !== null &&
+        typeof tag["value"] === "string"
+    );
+  }
+  return (
+    isRecord(value) &&
+    Object.entries(value).every(
+      ([key, tagValue]) => key.trim().length > 0 && typeof tagValue === "string"
+    )
+  );
+}
+
+/** gg: CloudFront logging 기본 비활성 상태만 현재 Terraform projection의 무손실 범위로 봅니다. */
+function hasDisabledCloudFrontLogging(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    value["enabled"] === false &&
+    value["includeCookies"] === false &&
+    value["bucket"] === "" &&
+    value["prefix"] === ""
   );
 }
 
@@ -957,6 +1275,67 @@ function getValidEcsName(value: unknown): string | null {
   const name = getNonEmptyString(value);
 
   return name && /^[A-Za-z0-9_-]+$/u.test(name) ? name : null;
+}
+
+/** gg: ECR import와 name 인수에 AWS가 허용하는 경로형 Repository 이름만 사용합니다. */
+function getValidEcrRepositoryName(value: unknown): string | null {
+  const name = getNonEmptyString(value);
+  return name &&
+    name.length <= 256 &&
+    /^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*\/)*[a-z0-9]+(?:[._-][a-z0-9]+)*$/u.test(name)
+    ? name
+    : null;
+}
+
+/** gg: Secret 이름은 ARN이 아닌 사용자가 알아볼 수 있는 AWS name 규칙만 허용합니다. */
+function getValidSecretName(value: unknown): string | null {
+  const name = getNonEmptyString(value);
+  return name && name.length <= 512 && /^[A-Za-z0-9/_+=.@-]+$/u.test(name) ? name : null;
+}
+
+/** gg: 현재 자동 관리 범위는 ECS Service desired count target으로 제한합니다. */
+function isEcsScalableResourceId(value: unknown): boolean {
+  const resourceId = getNonEmptyString(value);
+  return resourceId !== null && /^service\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/u.test(resourceId);
+}
+
+/** gg: 자동 확장 Target에는 계정과 Role path가 포함된 exact IAM Role ARN만 허용합니다. */
+function isValidApplicationAutoScalingRoleArn(value: string | null): boolean {
+  return (
+    value !== null &&
+    /^arn:[^:]+:iam::[0-9]{12}:role\/[A-Za-z0-9+=,.@_/-]+$/u.test(value) &&
+    !hasControlCharacter(value)
+  );
+}
+
+/** gg: 세 종류의 suspend 상태를 모두 읽은 경우에만 Target 재생성을 허용합니다. */
+function hasCompleteSuspendedState(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value["dynamicScalingInSuspended"] === "boolean" &&
+    typeof value["dynamicScalingOutSuspended"] === "boolean" &&
+    typeof value["scheduledScalingSuspended"] === "boolean"
+  );
+}
+
+/** gg: Step/Predictive가 아닌 완전한 Target Tracking 설정만 자동 관리합니다. */
+function hasCompleteTargetTrackingPolicy(value: unknown): boolean {
+  if (!isRecord(value) || !isPositiveNumber(value["targetValue"])) return false;
+  const predefined = value["predefinedMetricSpecification"];
+  if (!isRecord(predefined)) return false;
+  const metricType = getNonEmptyString(predefined["predefinedMetricType"]);
+  if (metricType === null) return false;
+  return metricType !== "ALBRequestCountPerTarget"
+    ? true
+    : getNonEmptyString(predefined["resourceLabel"]) !== null;
+}
+
+/** gg: Application Auto Scaling Policy name은 import ID 구분자를 깨지 않는 AWS 이름만 허용합니다. */
+function getValidApplicationAutoScalingPolicyName(value: unknown): string | null {
+  const name = getNonEmptyString(value);
+  return name && name.length <= 256 && !name.includes("/") && !hasControlCharacter(name)
+    ? name
+    : null;
 }
 
 function getValidElasticIpAllocationId(value: unknown): string | null {

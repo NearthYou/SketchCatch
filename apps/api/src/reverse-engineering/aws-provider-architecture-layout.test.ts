@@ -64,7 +64,8 @@ test("관리 가능한 기존 AWS 리소스는 Terraform 편집값을 받고 보
       resourceType: "S3",
       config: {
         createdAt: "2026-07-20T00:00:00.000Z",
-        tags: [{ key: "Environment", value: "production" }]
+        tags: [{ key: "Environment", value: "production" }],
+        tagsReadComplete: true
       }
     },
     {
@@ -92,7 +93,8 @@ test("관리 가능한 기존 AWS 리소스는 Terraform 편집값을 받고 보
     reverseEngineeringManagement: "managed",
     reverseEngineeringObservedConfig: {
       createdAt: "2026-07-20T00:00:00.000Z",
-      tags: [{ key: "Environment", value: "production" }]
+      tags: [{ key: "Environment", value: "production" }],
+      tagsReadComplete: true
     },
     providerResourceType: "AWS::S3::Bucket",
     providerResourceId: "customer-assets",
@@ -206,7 +208,14 @@ test("ALB는 VPC 상위 서비스로, CloudFront는 global edge 영역의 suppor
       resourceType: "CLOUDFRONT",
       config: {
         id: "EDISTRIBUTION",
+        configReadComplete: true,
+        tagsReadComplete: true,
+        tags: [],
         enabled: true,
+        aliases: [],
+        httpVersion: "http2",
+        isIpv6Enabled: true,
+        priceClass: "PriceClass_100",
         origin: [{ originId: "orders", domainName: "orders.example.com" }],
         defaultCacheBehavior: {
           targetOriginId: "orders",
@@ -215,8 +224,16 @@ test("ALB는 VPC 상위 서비스로, CloudFront는 global edge 영역의 suppor
           cachedMethods: ["GET", "HEAD"],
           cachePolicyId: "cache-policy"
         },
+        orderedCacheBehavior: [],
         restrictions: { geoRestriction: { restrictionType: "none" } },
-        viewerCertificate: { cloudfrontDefaultCertificate: true }
+        viewerCertificate: { cloudfrontDefaultCertificate: true },
+        customErrorResponse: [],
+        loggingConfig: {
+          enabled: false,
+          includeCookies: false,
+          bucket: "",
+          prefix: ""
+        }
       },
       relationships: [{ type: "depends_on", targetResourceId: "alb-1" }]
     }

@@ -122,8 +122,14 @@ const issuedV8AddedActions = [
   "lambda:GetFunctionConcurrency"
 ].sort();
 
-test("Policy contract v8은 Grant와 Lambda 안전 조회만 추가하고 발급된 v1-v7 권한은 보존한다", () => {
-  assert.equal(AWS_IMPORT_POLICY_CONTRACT_VERSION, "8");
+const issuedV8Actions = [...issuedV7Actions, ...issuedV8AddedActions].sort();
+
+const issuedV9AddedActions = ["s3:GetBucketPolicy", "s3:ListBucket"].sort();
+const issuedV9Actions = [...issuedV8Actions, ...issuedV9AddedActions].sort();
+const issuedV10AddedActions = ["cloudfront:GetDistributionConfig"];
+
+test("Policy contract v10은 CloudFront exact config 조회만 추가하고 v1-v9를 보존한다", () => {
+  assert.equal(AWS_IMPORT_POLICY_CONTRACT_VERSION, "10");
   assert.deepEqual(Object.keys(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION), [
     "1",
     "2",
@@ -132,7 +138,9 @@ test("Policy contract v8은 Grant와 Lambda 안전 조회만 추가하고 발급
     "5",
     "6",
     "7",
-    "8"
+    "8",
+    "9",
+    "10"
   ]);
   assert.deepEqual(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["1"], issuedV1Actions);
   assert.deepEqual([...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["2"]].sort(), issuedV2Actions);
@@ -141,18 +149,26 @@ test("Policy contract v8은 Grant와 Lambda 안전 조회만 추가하고 발급
   assert.deepEqual([...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["5"]].sort(), issuedV5Actions);
   assert.deepEqual([...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["6"]].sort(), issuedV6Actions);
   assert.deepEqual([...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["7"]].sort(), issuedV7Actions);
+  assert.deepEqual([...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["8"]].sort(), issuedV8Actions);
+  assert.deepEqual([...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["9"]].sort(), issuedV9Actions);
   assert.deepEqual(
-    [...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["8"]].sort(),
+    AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["9"]
+      .filter((action) => !issuedV8Actions.includes(action))
+      .sort(),
+    issuedV9AddedActions
+  );
+  assert.deepEqual(
+    [...AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["10"]].sort(),
     [...createAwsImportReadPolicyDocument().Statement[0].Action].sort()
   );
   assert.deepEqual(
-    AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["8"]
-      .filter((action) => !issuedV7Actions.includes(action))
+    AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["10"]
+      .filter((action) => !issuedV9Actions.includes(action))
       .sort(),
-    issuedV8AddedActions
+    issuedV10AddedActions
   );
   assert.doesNotMatch(
-    JSON.stringify(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["8"]),
+    JSON.stringify(AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION["10"]),
     /GetSecretValue|Create|Update|Put|Delete|(?:^|:)TagResource|UntagResource/u
   );
 });
@@ -196,6 +212,6 @@ test("policy template contract is deterministic, immutable, and hash-verifiable"
   assert.equal(first.postVerification.templateSha256, expectedHash);
   assert.equal(first.postVerification.policyFingerprint, first.policyFingerprint);
   assert.equal(first.postVerification.targetRoleArn, connectionFixture.targetRoleArn);
-  assert.equal(first.contractVersion, "8");
-  assert.equal(first.postVerification.contractVersion, "8");
+  assert.equal(first.contractVersion, "10");
+  assert.equal(first.postVerification.contractVersion, "10");
 });

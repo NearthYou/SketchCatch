@@ -16,10 +16,16 @@ import {
 } from "@aws-sdk/client-resource-explorer-2";
 import {
   CloudFrontClient,
+  GetDistributionConfigCommand,
   ListDistributionsCommand,
+  ListTagsForResourceCommand as ListCloudFrontTagsForResourceCommand,
+  type CacheBehavior,
   type DefaultCacheBehavior,
+  type DistributionConfig,
   type DistributionSummary,
   type ForwardedValues,
+  type GetDistributionConfigCommandOutput,
+  type ListTagsForResourceCommandOutput as ListCloudFrontTagsForResourceCommandOutput,
   type ListDistributionsCommandOutput
 } from "@aws-sdk/client-cloudfront";
 import {
@@ -136,21 +142,25 @@ import {
 import {
   GetBucketEncryptionCommand,
   GetBucketLocationCommand,
+  GetBucketPolicyCommand,
   GetBucketPolicyStatusCommand,
   GetBucketTaggingCommand,
   GetBucketVersioningCommand,
   GetBucketWebsiteCommand,
   GetPublicAccessBlockCommand,
   ListBucketsCommand,
+  ListObjectsV2Command,
   S3Client,
   type GetBucketEncryptionCommandOutput,
   type GetBucketLocationCommandOutput,
+  type GetBucketPolicyCommandOutput,
   type GetBucketPolicyStatusCommandOutput,
   type GetBucketTaggingCommandOutput,
   type GetBucketVersioningCommandOutput,
   type GetBucketWebsiteCommandOutput,
   type GetPublicAccessBlockCommandOutput,
-  type ListBucketsCommandOutput
+  type ListBucketsCommandOutput,
+  type ListObjectsV2CommandOutput
 } from "@aws-sdk/client-s3";
 import type { AwsConnection, ResourceType, ReverseEngineeringScanError } from "@sketchcatch/types";
 import { createAwsSdkStsGateway } from "../aws-connections/aws-connection-test-service.js";
@@ -164,6 +174,7 @@ import type {
   AwsProviderScanGateway,
   AwsProviderScanInput
 } from "./aws-provider-adapter.js";
+import { readAwsDeploymentSupportReverseEngineeringResources } from "./aws-deployment-support-reverse-engineering-reader.js";
 import { readAwsDetailedReverseEngineeringResources } from "./aws-detailed-reverse-engineering-reader.js";
 import { selectHigherPriorityReverseEngineeringScanError } from "./reverse-engineering-scan-error-priority.js";
 import {
@@ -189,6 +200,8 @@ export type AwsReverseEngineeringGatewayOptions = {
   fetchXml?: typeof fetch;
   prepareCredentials?: (awsConnection: AwsConnection) => Promise<TerraformAwsCredentialEnv>;
   readDetailedResources?: typeof readAwsDetailedReverseEngineeringResources;
+  readDeploymentSupportResources?: typeof readAwsDeploymentSupportReverseEngineeringResources;
+  readUnknownResources?: typeof listUnknownResources;
 };
 
 export type AwsReverseEngineeringReaderPlan = {
@@ -197,6 +210,7 @@ export type AwsReverseEngineeringReaderPlan = {
   readonly ecsResources: boolean;
   readonly eventBridgeResources: boolean;
   readonly detailedResources: boolean;
+  readonly deploymentSupportResources: boolean;
   readonly unknownResources: boolean;
 };
 
@@ -444,14 +458,34 @@ export function createAwsReverseEngineeringGateway(
               )
             ]
           : []),
-        ...(readerPlan.unknownResources ? [readUnknownResourceGroup(input, credentials)] : [])
+        ...(readerPlan.deploymentSupportResources
+          ? [
+              (
+                options.readDeploymentSupportResources ??
+                readAwsDeploymentSupportReverseEngineeringResources
+              )(input, credentials)
+            ]
+          : []),
+        ...(readerPlan.unknownResources
+          ? [
+              readUnknownResourceGroup(
+                input,
+                credentials,
+                options.readUnknownResources ?? listUnknownResources
+              )
+            ]
+          : [])
       ]);
 
-      const records = resolveEcsRelationships(
-        resolveCloudFrontOriginRelationships(
-          resolveEventBridgeTargetRelationships(
-            resolveNatGatewayElasticIpRelationships(
-              uniqueDiscoveredRecordsByProviderId(resourceGroups.flatMap((group) => group.records))
+      const records = resolveDeploymentSupportRelationships(
+        resolveEcsRelationships(
+          resolveCloudFrontOriginRelationships(
+            resolveEventBridgeTargetRelationships(
+              resolveNatGatewayElasticIpRelationships(
+                uniqueDiscoveredRecordsByProviderId(
+                  resourceGroups.flatMap((group) => group.records)
+                )
+              )
             )
           )
         )
@@ -496,15 +530,17 @@ async function readResourceGroup(
   }
 }
 
+/** gg: 상세 reader와 함께 실행할 generic fallback을 주입 가능하게 분리합니다. */
 async function readUnknownResourceGroup(
   input: AwsProviderScanInput,
-  credentials: TerraformAwsCredentialEnv
+  credentials: TerraformAwsCredentialEnv,
+  readUnknownResources: typeof listUnknownResources
 ): Promise<AwsProviderDiscoveryResult> {
   if (!shouldReadUnknownResourceGroup(input)) {
     return { records: [], scanErrors: [] };
   }
 
-  return listUnknownResources(input, credentials);
+  return readUnknownResources(input, credentials);
 }
 
 /** gg: 정식 reader와 UNKNOWN inventory의 경계를 한 곳에서 계산해 같은 서비스를 두 번 읽지 않습니다. */
@@ -517,8 +553,21 @@ export function createAwsReverseEngineeringReaderPlan(
     ecsResources: shouldReadEcsResourceGroup(input),
     eventBridgeResources: shouldReadEventBridgeResourceGroup(input),
     detailedResources: shouldReadDetailedResourceGroup(input),
+    deploymentSupportResources: shouldReadDeploymentSupportResourceGroup(input),
     unknownResources: shouldReadUnknownResourceGroup(input)
   };
+}
+
+/** gg: 배포 결과에서 다시 편집할 ECR·Secret·OAC·자동 확장은 전용 metadata reader로 묶습니다. */
+function shouldReadDeploymentSupportResourceGroup(input: AwsProviderScanInput): boolean {
+  return (
+    input.resourceTypes.includes("ALL") ||
+    input.resourceTypes.includes("ECR_REPOSITORY") ||
+    input.resourceTypes.includes("SECRETS_MANAGER_SECRET") ||
+    input.resourceTypes.includes("APPLICATION_AUTO_SCALING_TARGET") ||
+    input.resourceTypes.includes("APPLICATION_AUTO_SCALING_POLICY") ||
+    input.resourceTypes.includes("CLOUDFRONT")
+  );
 }
 
 /** gg: IAM, Lambda, KMS, API Gateway는 family 상세 reader 한 번으로 topology와 import 정보를 함께 읽습니다. */
@@ -563,7 +612,9 @@ function shouldReadEcsResourceGroup(input: AwsProviderScanInput): boolean {
     input.resourceTypes.includes("ALL") ||
     input.resourceTypes.includes("ECS_CLUSTER") ||
     input.resourceTypes.includes("ECS_SERVICE") ||
-    input.resourceTypes.includes("ECS_TASK_DEFINITION")
+    input.resourceTypes.includes("ECS_TASK_DEFINITION") ||
+    input.resourceTypes.includes("APPLICATION_AUTO_SCALING_TARGET") ||
+    input.resourceTypes.includes("APPLICATION_AUTO_SCALING_POLICY")
   );
 }
 
@@ -843,15 +894,20 @@ export async function listBucketsWithDetails(
         ...(continuationToken ? { ContinuationToken: continuationToken } : {})
       })
     );
-    const bucketRecords = await Promise.all(
-      (response.Buckets ?? []).map((bucket) =>
-        createS3BucketRecord(bucket.Name, bucket.CreationDate, region, client)
-      )
-    );
+    const bucketRecordGroups: AwsDiscoveredResourceRecord[][] = [];
+    for (const bucket of response.Buckets ?? []) {
+      bucketRecordGroups.push(
+        await createS3BucketRecords(
+          bucket.Name,
+          bucket.CreationDate,
+          region,
+          client,
+          reportPageFailure
+        )
+      );
+    }
     return {
-      items: bucketRecords.filter(
-        (record): record is AwsDiscoveredResourceRecord => record !== null
-      ),
+      items: bucketRecordGroups.flat(),
       nextToken: response.ContinuationToken
     };
   });
@@ -871,14 +927,16 @@ function createDefaultS3ReadClient(
   };
 }
 
-async function createS3BucketRecord(
+/** gg: Bucket 설정과 파일 존재 요약을 읽되 파일 이름이나 본문은 보존하지 않습니다. */
+async function createS3BucketRecords(
   bucketName: string | undefined,
   createdAt: Date | undefined,
   fallbackRegion: string,
-  client: AwsS3ReadClient
-): Promise<AwsDiscoveredResourceRecord | null> {
+  client: AwsS3ReadClient,
+  reportPageFailure: (failure: AwsPageFailure) => void
+): Promise<AwsDiscoveredResourceRecord[]> {
   if (!bucketName) {
-    return null;
+    return [];
   }
 
   const [
@@ -888,7 +946,9 @@ async function createS3BucketRecord(
     encryptionRead,
     websiteRead,
     taggingRead,
-    policyStatusRead
+    policyStatusRead,
+    policyRead,
+    objectInventoryRead
   ] = await Promise.all([
     readS3BucketDetail(() =>
       sendS3Command<GetBucketLocationCommandOutput>(
@@ -931,7 +991,14 @@ async function createS3BucketRecord(
         client,
         new GetBucketPolicyStatusCommand({ Bucket: bucketName })
       )
-    )
+    ),
+    readS3BucketDetail(() =>
+      sendS3Command<GetBucketPolicyCommandOutput>(
+        client,
+        new GetBucketPolicyCommand({ Bucket: bucketName })
+      )
+    ),
+    readS3ObjectInventory(bucketName, client)
   ]);
   const location = locationRead.value;
   const versioning = versioningRead.value;
@@ -940,21 +1007,37 @@ async function createS3BucketRecord(
   const website = websiteRead.value;
   const tagging = taggingRead.value;
   const policyStatus = policyStatusRead.value;
-  const detailReads: ReadonlyArray<readonly [string, S3BucketDetailRead<unknown>]> = [
+  const policy = policyRead.value;
+  const objectInventory = objectInventoryRead.value;
+  const bucketSettingReads: ReadonlyArray<readonly [string, S3BucketDetailRead<unknown>]> = [
     ["location", locationRead],
     ["versioning", versioningRead],
     ["publicAccessBlock", publicAccessBlockRead],
     ["encryption", encryptionRead],
     ["website", websiteRead],
     ["tags", taggingRead],
-    ["policyStatus", policyStatusRead]
+    ["policyStatus", policyStatusRead],
+    ["policy", policyRead]
   ];
-  const incompleteDetails = detailReads.flatMap(([detailName, read]) =>
-    read.complete ? [] : [detailName]
-  );
+  for (const [, read] of [...bucketSettingReads, ["objects", objectInventoryRead] as const]) {
+    if (read.failure) reportPageFailure(read.failure);
+  }
+  const policyDocument = parseS3PolicyDocument(policy?.Policy);
+  const incompleteDetails = [
+    ...bucketSettingReads.flatMap(([detailName, read]) => (read.complete ? [] : [detailName])),
+    ...(policy?.Policy && !policyDocument ? ["policyDocument"] : [])
+  ];
   const bucketRegion = normalizeS3BucketRegion(location?.LocationConstraint, fallbackRegion);
+  const encryptionRules = encryption?.ServerSideEncryptionConfiguration?.Rules;
+  const hasEncryptionConfiguration =
+    Array.isArray(encryptionRules) && encryptionRules.length > 0;
+  const hasWebsiteConfiguration = hasS3WebsiteConfiguration(website);
+  const objectInventorySummary = createS3ObjectInventorySummary(
+    objectInventory,
+    objectInventoryRead.complete
+  );
 
-  return {
+  const bucketRecord: AwsDiscoveredResourceRecord = {
     providerResourceType: "AWS::S3::Bucket",
     providerResourceId: bucketName,
     displayName: bucketName,
@@ -965,11 +1048,18 @@ async function createS3BucketRecord(
       versioningStatus: versioning?.Status,
       mfaDelete: versioning?.MFADelete,
       publicAccessBlock: publicAccessBlock?.PublicAccessBlockConfiguration,
-      encryptionRules: encryption?.ServerSideEncryptionConfiguration?.Rules,
-      websiteIndexDocument: website?.IndexDocument?.Suffix,
-      websiteErrorDocument: website?.ErrorDocument?.Key,
-      tags: tagging?.TagSet?.map((tag) => ({ key: tag.Key, value: tag.Value })),
+      hasEncryptionConfiguration,
+      hasWebsiteConfiguration,
+      tags: taggingRead.complete
+        ? (tagging?.TagSet?.map((tag) => ({ key: tag.Key, value: tag.Value })) ?? [])
+        : undefined,
+      tagsReadComplete: taggingRead.complete,
       policyStatusIsPublic: policyStatus?.PolicyStatus?.IsPublic,
+      objectInventoryObservedCount: objectInventory?.observedCount,
+      objectInventoryCountIsExact: objectInventory?.countIsExact ?? false,
+      objectInventoryTruncated:
+        objectInventory?.isTruncated === true || objectInventoryRead.complete === false,
+      objectInventorySummary,
       reverseEngineeringIncompleteDetails:
         incompleteDetails.length > 0 ? incompleteDetails : undefined,
       providerParameters: toProviderParameterSnapshot({
@@ -983,16 +1073,123 @@ async function createS3BucketRecord(
         encryption,
         website,
         tagging,
-        policyStatus
+        policyStatus,
+        objectInventory
       })
     },
-    relationships: []
+    relationships: [],
+    serverOnly: {
+      config: {
+        ...(hasEncryptionConfiguration ? { encryptionRules } : {}),
+        ...(hasWebsiteConfiguration ? { websiteConfiguration: website } : {})
+      }
+    }
   };
+
+  const childRecords: AwsDiscoveredResourceRecord[] = [];
+  if (versioning?.Status) {
+    childRecords.push(createS3VersioningRecord(bucketName, bucketRegion, versioning));
+  }
+  if (publicAccessBlock?.PublicAccessBlockConfiguration) {
+    childRecords.push(
+      createS3PublicAccessBlockRecord(
+        bucketName,
+        bucketRegion,
+        publicAccessBlock.PublicAccessBlockConfiguration
+      )
+    );
+  }
+  if (policyDocument) {
+    childRecords.push(createS3BucketPolicyRecord(bucketName, bucketRegion, policyDocument));
+  }
+
+  return [bucketRecord, ...childRecords];
+}
+
+/** gg: Bucket versioning은 Bucket과 별도 import되는 Terraform child로 정규화합니다. */
+function createS3VersioningRecord(
+  bucketName: string,
+  region: string,
+  versioning: GetBucketVersioningCommandOutput
+): AwsDiscoveredResourceRecord {
+  return {
+    providerResourceType: "AWS::S3::BucketVersioning",
+    providerResourceId: `arn:aws:s3:::${bucketName}#versioning`,
+    displayName: `${bucketName} 버전 관리`,
+    region,
+    config: {
+      bucketName,
+      versioningStatus: versioning.Status,
+      mfaDelete: versioning.MFADelete
+    },
+    relationships: [{ type: "depends_on", targetProviderResourceId: bucketName }],
+    serverOnly: { terraformImportId: bucketName }
+  };
+}
+
+/** gg: Bucket 공개 차단 boolean 네 개를 빠짐없이 별도 Terraform child로 보존합니다. */
+function createS3PublicAccessBlockRecord(
+  bucketName: string,
+  region: string,
+  config: NonNullable<GetPublicAccessBlockCommandOutput["PublicAccessBlockConfiguration"]>
+): AwsDiscoveredResourceRecord {
+  return {
+    providerResourceType: "AWS::S3::BucketPublicAccessBlock",
+    providerResourceId: `arn:aws:s3:::${bucketName}#public-access-block`,
+    displayName: `${bucketName} 공개 차단`,
+    region,
+    config: {
+      bucketName,
+      blockPublicAcls: config.BlockPublicAcls,
+      ignorePublicAcls: config.IgnorePublicAcls,
+      blockPublicPolicy: config.BlockPublicPolicy,
+      restrictPublicBuckets: config.RestrictPublicBuckets
+    },
+    relationships: [{ type: "depends_on", targetProviderResourceId: bucketName }],
+    serverOnly: { terraformImportId: bucketName }
+  };
+}
+
+/** gg: Bucket policy 원문은 server-only에만 두고 Board에는 존재·완료 marker만 전달합니다. */
+function createS3BucketPolicyRecord(
+  bucketName: string,
+  region: string,
+  policyDocument: Record<string, unknown>
+): AwsDiscoveredResourceRecord {
+  return {
+    providerResourceType: "AWS::S3::BucketPolicy",
+    providerResourceId: `arn:aws:s3:::${bucketName}#policy`,
+    displayName: `${bucketName} 버킷 정책`,
+    region,
+    config: { bucketName, hasPolicy: true, policyReadComplete: true },
+    relationships: [{ type: "depends_on", targetProviderResourceId: bucketName }],
+    serverOnly: { terraformImportId: bucketName, config: { policyDocument } }
+  };
+}
+
+/** gg: JSON object인 Bucket policy만 Terraform projection에 넘기고 손상된 원문은 승격하지 않습니다. */
+function parseS3PolicyDocument(value: string | undefined): Record<string, unknown> | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 type S3BucketDetailRead<TOutput> = {
   readonly complete: boolean;
   readonly value: TOutput | null;
+  readonly failure?: AwsPageFailure;
+};
+
+type S3ObjectInventorySnapshot = {
+  readonly observedCount: number;
+  readonly countIsExact: boolean;
+  readonly isTruncated: boolean;
 };
 
 // gg: optional 설정 부재와 읽기 실패를 나눠 S3를 완전하게 읽지 못한 경우만 표시합니다.
@@ -1002,11 +1199,84 @@ async function readS3BucketDetail<TOutput>(
   try {
     return { complete: true, value: await read() };
   } catch (error) {
+    const complete = isMissingS3BucketConfiguration(error);
     return {
-      complete: isMissingS3BucketConfiguration(error),
-      value: null
+      complete,
+      value: null,
+      ...(complete ? {} : { failure: { outcome: classifyAwsPageFailureOutcome(error) } })
     };
   }
+}
+
+const S3_OBJECT_INVENTORY_SAMPLE_SIZE = 1;
+
+/** gg: 파일 존재 여부만 한 건 확인하고 응답의 key·ETag·continuation token은 즉시 버립니다. */
+async function readS3ObjectInventory(
+  bucketName: string,
+  client: AwsS3ReadClient
+): Promise<S3BucketDetailRead<S3ObjectInventorySnapshot>> {
+  try {
+    const page = await sendS3Command<ListObjectsV2CommandOutput>(
+      client,
+      new ListObjectsV2Command({
+        Bucket: bucketName,
+        MaxKeys: S3_OBJECT_INVENTORY_SAMPLE_SIZE
+      })
+    );
+    const observedCount = normalizeS3ObservedObjectCount(page);
+    const isTruncated = page.IsTruncated === true;
+    return {
+      complete: true,
+      value: {
+        observedCount,
+        countIsExact: !isTruncated,
+        isTruncated
+      }
+    };
+  } catch (error) {
+    return {
+      complete: false,
+      value: null,
+      failure: { outcome: classifyAwsPageFailureOutcome(error) }
+    };
+  }
+}
+
+/** gg: AWS가 반환한 key 개수만 사용하고 목록 항목 자체는 읽거나 저장하지 않습니다. */
+function normalizeS3ObservedObjectCount(page: ListObjectsV2CommandOutput): number {
+  const keyCount = page.KeyCount;
+  if (Number.isInteger(keyCount) && Number(keyCount) >= 0) {
+    return Math.min(Number(keyCount), S3_OBJECT_INVENTORY_SAMPLE_SIZE);
+  }
+  return Math.min(page.Contents?.length ?? 0, S3_OBJECT_INVENTORY_SAMPLE_SIZE);
+}
+
+/** gg: 파일 목록 대신 사용자가 이해할 수 있는 개수 또는 부분 확인 안내만 만듭니다. */
+function createS3ObjectInventorySummary(
+  inventory: S3ObjectInventorySnapshot | null,
+  readComplete: boolean
+): string {
+  if (!readComplete || !inventory) {
+    return "저장된 파일 수를 확인하지 못했습니다.";
+  }
+  if (inventory.observedCount === 0) {
+    return "저장된 파일 없음";
+  }
+  return inventory.countIsExact
+    ? `저장된 파일 ${inventory.observedCount}개`
+    : `저장된 파일 ${inventory.observedCount}개 이상`;
+}
+
+/** gg: 실제 website 설정이 하나라도 있을 때만 안전 marker를 켭니다. */
+function hasS3WebsiteConfiguration(
+  website: GetBucketWebsiteCommandOutput | null
+): boolean {
+  return Boolean(
+    website?.IndexDocument ||
+      website?.ErrorDocument ||
+      website?.RedirectAllRequestsTo ||
+      (Array.isArray(website?.RoutingRules) && website.RoutingRules.length > 0)
+  );
 }
 
 // gg: S3에 optional 설정이 없는 정상 상태는 상세 조회 실패로 계산하지 않습니다.
@@ -1417,7 +1687,7 @@ async function readUnknownResourceRecords(
   }
 }
 
-/** gg: UNKNOWN inventory는 generic discovery만 담당하고 정식 상세 family를 다시 조회하지 않습니다. */
+/** gg: UNKNOWN inventory는 상세 reader 실패 시 원본 존재를 보존하는 generic fallback도 함께 담당합니다. */
 async function listUnknownResources(
   input: AwsProviderScanInput,
   credentials: TerraformAwsCredentialEnv
@@ -1440,14 +1710,17 @@ async function listUnknownResources(
         listCloudWatchMetricAlarmsAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
-  } else if (shouldReadElasticLoadBalancingResourceGroup(input)) {
+  } else if (
+    shouldReadElasticLoadBalancingResourceGroup(input) ||
+    shouldReadDeploymentSupportResourceGroup(input)
+  ) {
     reads.push(
       readResourceExplorerResourcesWithDiagnostics(input.region, credentials).then((result) =>
-        filterGenericElasticLoadBalancingFallback(input, result)
+        filterGenericSelectedFallback(input, result)
       ),
       readUnknownResourceRecords("UNKNOWN", "resource-groups-tagging", (reportPageFailure) =>
         listTaggedUnknownResources(input.region, credentials, undefined, reportPageFailure)
-      ).then((result) => filterGenericElasticLoadBalancingFallback(input, result))
+      ).then((result) => filterGenericSelectedFallback(input, result))
     );
   }
 
@@ -1479,9 +1752,7 @@ async function listUnknownResources(
 
   return {
     records: uniqueDiscoveredRecordsByProviderId(
-      discoveryResults
-        .flatMap((result) => result.records)
-        .filter((record) => !isReverseEngineeringPromotedResourceArn(record.providerResourceId))
+      discoveryResults.flatMap((result) => result.records)
     ),
     scanErrors: deduplicateReverseEngineeringScanErrors(
       discoveryResults.flatMap((result) => result.scanErrors)
@@ -1489,18 +1760,33 @@ async function listUnknownResources(
   };
 }
 
-/** gg: 개별 ELBv2 선택에서는 generic inventory 중 선택 Resource와 안전 의존 후보만 남깁니다. */
-function filterGenericElasticLoadBalancingFallback(
+/** gg: 함께 선택한 ELB·배포 지원 family의 generic fallback을 합쳐 한 번의 inventory 결과에서 남깁니다. */
+export function filterGenericSelectedFallback(
   input: AwsProviderScanInput,
   result: AwsProviderDiscoveryResult
 ): AwsProviderDiscoveryResult {
   const providerResourceTypes = new Set([
-    "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    ...(shouldReadElasticLoadBalancingResourceGroup(input)
+      ? ["AWS::ElasticLoadBalancingV2::LoadBalancer"]
+      : []),
     ...(shouldReadElasticLoadBalancingTargetGroups(input)
       ? ["AWS::ElasticLoadBalancingV2::TargetGroup"]
       : []),
     ...(shouldReadElasticLoadBalancingListeners(input)
       ? ["AWS::ElasticLoadBalancingV2::Listener"]
+      : []),
+    ...(input.resourceTypes.includes("ECR_REPOSITORY") ? ["AWS::ECR::Repository"] : []),
+    ...(input.resourceTypes.includes("SECRETS_MANAGER_SECRET")
+      ? ["AWS::SecretsManager::Secret"]
+      : []),
+    ...(input.resourceTypes.includes("APPLICATION_AUTO_SCALING_TARGET")
+      ? ["AWS::ApplicationAutoScaling::ScalableTarget"]
+      : []),
+    ...(input.resourceTypes.includes("APPLICATION_AUTO_SCALING_POLICY")
+      ? ["AWS::ApplicationAutoScaling::ScalingPolicy"]
+      : []),
+    ...(input.resourceTypes.includes("CLOUDFRONT")
+      ? ["AWS::CloudFront::Distribution", "AWS::CloudFront::OriginAccessControl"]
       : [])
   ]);
 
@@ -2416,7 +2702,7 @@ export async function listLambdaPermissionsAsUnknown(
   return result.items;
 }
 
-// CloudFront는 global 서비스지만 연결 계정의 credentials로 읽고 결과 region은 global로 고정합니다.
+/** gg: CloudFront 목록은 identity만 사용하고 각 Distribution의 exact 설정과 태그를 별도로 읽습니다. */
 export async function listCloudFrontDistributions(
   region: string,
   credentials: TerraformAwsCredentialEnv,
@@ -2430,13 +2716,105 @@ export async function listCloudFrontDistributions(
       new ListDistributionsCommand({ Marker: marker })
     );
     return {
-      items: (response.DistributionList?.Items ?? []).flatMap(toCloudFrontDistributionRecord),
+      items: response.DistributionList?.Items ?? [],
       nextToken: response.DistributionList?.NextMarker
     };
   });
 
   if (result.failure) reportPageFailure(result.failure);
-  return result.items;
+
+  const records: AwsDiscoveredResourceRecord[] = [];
+  for (const distribution of result.items) {
+    const configEvidence = await readCloudFrontDistributionConfig(
+      distribution,
+      client,
+      reportPageFailure
+    );
+    const tagEvidence = await readCloudFrontDistributionTags(
+      distribution,
+      client,
+      reportPageFailure
+    );
+    records.push(
+      ...toCloudFrontDistributionRecord(distribution, configEvidence, tagEvidence)
+    );
+  }
+
+  return records;
+}
+
+type CloudFrontDistributionConfigEvidence = {
+  readonly config?: DistributionConfig;
+  readonly configReadComplete: boolean;
+};
+
+/** gg: Distribution ID가 있고 exact config 응답이 완전할 때만 자동 관리 가능한 증거로 표시합니다. */
+async function readCloudFrontDistributionConfig(
+  distribution: DistributionSummary,
+  client: AwsCloudFrontReadClient,
+  reportFailure: (failure: AwsPageFailure) => void
+): Promise<CloudFrontDistributionConfigEvidence> {
+  const distributionId = getNonEmptyStringValue(distribution.Id);
+  if (!distributionId) {
+    return { configReadComplete: false };
+  }
+
+  try {
+    const response = await sendCloudFrontCommand<GetDistributionConfigCommandOutput>(
+      client,
+      new GetDistributionConfigCommand({ Id: distributionId })
+    );
+    const config = response.DistributionConfig;
+    return {
+      ...(config ? { config } : {}),
+      configReadComplete: hasCompleteCloudFrontDistributionConfig(config)
+    };
+  } catch (error) {
+    reportFailure({ outcome: classifyAwsPageFailureOutcome(error) });
+    return { configReadComplete: false };
+  }
+}
+
+/** gg: Distribution ARN의 태그를 전부 읽은 경우만 tagsReadComplete를 true로 기록합니다. */
+async function readCloudFrontDistributionTags(
+  distribution: DistributionSummary,
+  client: AwsCloudFrontReadClient,
+  reportFailure: (failure: AwsPageFailure) => void
+): Promise<AwsTagReadEvidence> {
+  const arn = getNonEmptyStringValue(distribution.ARN);
+  if (!arn) {
+    return { tagsReadComplete: false };
+  }
+
+  try {
+    const response = await sendCloudFrontCommand<ListCloudFrontTagsForResourceCommandOutput>(
+      client,
+      new ListCloudFrontTagsForResourceCommand({ Resource: arn })
+    );
+    if (!response.Tags) {
+      return { tagsReadComplete: false };
+    }
+
+    const tags = response.Tags.Items ?? [];
+    if (
+      !tags.every(
+        (tag) =>
+          typeof tag.Key === "string" &&
+          tag.Key.trim().length > 0 &&
+          typeof tag.Value === "string"
+      )
+    ) {
+      return { tagsReadComplete: false };
+    }
+
+    return {
+      tags: tags.map((tag) => ({ key: tag.Key as string, value: tag.Value as string })),
+      tagsReadComplete: true
+    };
+  } catch (error) {
+    reportFailure({ outcome: classifyAwsPageFailureOutcome(error) });
+    return { tagsReadComplete: false };
+  }
 }
 
 /** gg: AMI NextToken pagination도 앞 page UNKNOWN records와 safe failure를 함께 유지합니다. */
@@ -3253,7 +3631,9 @@ function toUnknownLambdaPermissionRecord(
 }
 
 function toCloudFrontDistributionRecord(
-  distribution: DistributionSummary
+  distribution: DistributionSummary,
+  configEvidence: CloudFrontDistributionConfigEvidence,
+  tagEvidence: AwsTagReadEvidence
 ): AwsDiscoveredResourceRecord[] {
   const arn = distribution.ARN;
 
@@ -3262,6 +3642,46 @@ function toCloudFrontDistributionRecord(
   }
 
   const arnParts = parseAwsArn(arn);
+  const exactConfig = configEvidence.config;
+  const configSource = exactConfig ?? distribution;
+  const distributionId = getNonEmptyStringValue(distribution.Id);
+  const unsupportedConfiguration = exactConfig
+    ? getUnsupportedCloudFrontDistributionConfiguration(exactConfig)
+    : [];
+  const normalizedConfig = compactRecord({
+    accountId: arnParts.accountId || undefined,
+    arn,
+    aliases: exactConfig?.Aliases?.Items ?? (exactConfig ? [] : undefined),
+    comment: configSource.Comment,
+    configReadComplete: configEvidence.configReadComplete,
+    continuousDeploymentPolicyId: exactConfig?.ContinuousDeploymentPolicyId,
+    customErrorResponse: exactConfig
+      ? normalizeCloudFrontCustomErrorResponses(exactConfig)
+      : undefined,
+    defaultCacheBehavior: normalizeCloudFrontCacheBehavior(configSource.DefaultCacheBehavior),
+    defaultRootObject: exactConfig?.DefaultRootObject,
+    domainName: distribution.DomainName,
+    enabled: configSource.Enabled,
+    httpVersion: exactConfig?.HttpVersion,
+    id: distribution.Id,
+    isIpv6Enabled: exactConfig?.IsIPV6Enabled,
+    loggingConfig: exactConfig ? normalizeCloudFrontLogging(exactConfig) : undefined,
+    orderedCacheBehavior: exactConfig
+      ? normalizeCloudFrontOrderedCacheBehaviors(exactConfig)
+      : undefined,
+    origin: normalizeCloudFrontOrigins(configSource),
+    priceClass: exactConfig?.PriceClass,
+    restrictions: normalizeCloudFrontRestrictions(configSource),
+    staging: exactConfig?.Staging,
+    status: distribution.Status,
+    tags: tagEvidence.tags,
+    tagsReadComplete: tagEvidence.tagsReadComplete,
+    terraformImportId: distributionId ?? undefined,
+    unsupportedConfiguration:
+      unsupportedConfiguration.length > 0 ? unsupportedConfiguration : undefined,
+    viewerCertificate: normalizeCloudFrontViewerCertificate(configSource),
+    webAclId: exactConfig?.WebACLId
+  });
 
   return [
     {
@@ -3269,45 +3689,55 @@ function toCloudFrontDistributionRecord(
       providerResourceId: arn,
       displayName: distribution.DomainName ?? distribution.Id ?? arn,
       region: "global",
-      config: compactRecord({
-        accountId: arnParts.accountId || undefined,
-        arn,
-        comment: distribution.Comment,
-        defaultCacheBehavior: normalizeCloudFrontDefaultCacheBehavior(
-          distribution.DefaultCacheBehavior
-        ),
-        domainName: distribution.DomainName,
-        enabled: distribution.Enabled,
-        id: distribution.Id,
-        origin: normalizeCloudFrontOrigins(distribution),
-        restrictions: normalizeCloudFrontRestrictions(distribution),
-        status: distribution.Status,
-        viewerCertificate: normalizeCloudFrontViewerCertificate(distribution)
-      }),
-      relationships: []
+      config: normalizedConfig,
+      relationships: [],
+      ...(distributionId
+        ? {
+            serverOnly: {
+              terraformImportId: distributionId,
+              config: normalizedConfig
+            }
+          }
+        : {})
     }
   ];
 }
 
-function normalizeCloudFrontOrigins(distribution: DistributionSummary): Record<string, unknown>[] {
-  return (distribution.Origins?.Items ?? []).map((origin) =>
-    compactRecord({
+/** gg: exact Origins를 Terraform 필드 이름으로 정규화하고 OAC·VPC origin 증거를 보존합니다. */
+function normalizeCloudFrontOrigins(
+  distribution: Pick<DistributionConfig, "Origins"> | Pick<DistributionSummary, "Origins">
+): Record<string, unknown>[] {
+  return (distribution.Origins?.Items ?? []).map((origin) => {
+    const customHeaderCount = origin.CustomHeaders?.Quantity ?? 0;
+    return compactRecord({
       connectionAttempts: origin.ConnectionAttempts,
       connectionTimeout: origin.ConnectionTimeout,
+      customHeaderCount: customHeaderCount > 0 ? customHeaderCount : undefined,
       customOriginConfig: origin.CustomOriginConfig
         ? compactRecord({
             httpPort: origin.CustomOriginConfig.HTTPPort,
             httpsPort: origin.CustomOriginConfig.HTTPSPort,
+            ipAddressType: origin.CustomOriginConfig.IpAddressType,
             originKeepaliveTimeout: origin.CustomOriginConfig.OriginKeepaliveTimeout,
             originProtocolPolicy: origin.CustomOriginConfig.OriginProtocolPolicy,
             originReadTimeout: origin.CustomOriginConfig.OriginReadTimeout,
-            originSslProtocols: origin.CustomOriginConfig.OriginSslProtocols?.Items
+            originSslProtocols: origin.CustomOriginConfig.OriginSslProtocols?.Items,
+            responseCompletionTimeout: (
+              origin.CustomOriginConfig as unknown as Record<string, unknown>
+            )["ResponseCompletionTimeout"]
           })
         : undefined,
       domainName: origin.DomainName,
+      hasCustomHeaders: customHeaderCount > 0 ? true : undefined,
       originAccessControlId: origin.OriginAccessControlId,
       originId: origin.Id,
       originPath: origin.OriginPath,
+      originShield: origin.OriginShield
+        ? compactRecord({
+            enabled: origin.OriginShield.Enabled,
+            originShieldRegion: origin.OriginShield.OriginShieldRegion
+          })
+        : undefined,
       s3OriginConfig: origin.S3OriginConfig
         ? compactRecord({ originAccessIdentity: origin.S3OriginConfig.OriginAccessIdentity })
         : undefined,
@@ -3319,12 +3749,13 @@ function normalizeCloudFrontOrigins(distribution: DistributionSummary): Record<s
             vpcOriginId: origin.VpcOriginConfig.VpcOriginId
           })
         : undefined
-    })
-  );
+    });
+  });
 }
 
-function normalizeCloudFrontDefaultCacheBehavior(
-  behavior: DefaultCacheBehavior | undefined
+/** gg: 기본·경로별 cache behavior의 공통 Terraform 필드와 검토용 unsupported metadata를 보존합니다. */
+function normalizeCloudFrontCacheBehavior(
+  behavior: DefaultCacheBehavior | CacheBehavior | undefined
 ): Record<string, unknown> | undefined {
   if (!behavior) {
     return undefined;
@@ -3338,9 +3769,13 @@ function normalizeCloudFrontDefaultCacheBehavior(
     defaultTtl: behavior.DefaultTTL,
     fieldLevelEncryptionId: behavior.FieldLevelEncryptionId,
     forwardedValues: normalizeCloudFrontForwardedValues(behavior.ForwardedValues),
+    functionAssociations: behavior.FunctionAssociations?.Items,
+    grpcConfig: behavior.GrpcConfig,
+    lambdaFunctionAssociations: behavior.LambdaFunctionAssociations?.Items,
     maxTtl: behavior.MaxTTL,
     minTtl: behavior.MinTTL,
     originRequestPolicyId: behavior.OriginRequestPolicyId,
+    pathPattern: "PathPattern" in behavior ? behavior.PathPattern : undefined,
     realtimeLogConfigArn: behavior.RealtimeLogConfigArn,
     responseHeadersPolicyId: behavior.ResponseHeadersPolicyId,
     smoothStreaming: behavior.SmoothStreaming,
@@ -3351,6 +3786,45 @@ function normalizeCloudFrontDefaultCacheBehavior(
   });
 }
 
+/** gg: ordered behavior 순서는 CloudFront 우선순위이므로 AWS 응답 순서를 그대로 유지합니다. */
+function normalizeCloudFrontOrderedCacheBehaviors(
+  distribution: DistributionConfig
+): Record<string, unknown>[] {
+  return (distribution.CacheBehaviors?.Items ?? []).map(
+    (behavior) => normalizeCloudFrontCacheBehavior(behavior) ?? {}
+  );
+}
+
+/** gg: custom error response는 현재 자동 투영하지 않지만 UI 검토와 fail-close 판단을 위해 보존합니다. */
+function normalizeCloudFrontCustomErrorResponses(
+  distribution: DistributionConfig
+): Record<string, unknown>[] {
+  return (distribution.CustomErrorResponses?.Items ?? []).map((response) =>
+    compactRecord({
+      errorCachingMinTtl: response.ErrorCachingMinTTL,
+      errorCode: response.ErrorCode,
+      responseCode: response.ResponseCode,
+      responsePagePath: response.ResponsePagePath
+    })
+  );
+}
+
+/** gg: logging은 비활성 기본값까지 exact하게 보존해 숨은 drift를 구분합니다. */
+function normalizeCloudFrontLogging(
+  distribution: DistributionConfig
+): Record<string, unknown> | undefined {
+  const logging = distribution.Logging;
+  return logging
+    ? compactRecord({
+        bucket: logging.Bucket,
+        enabled: logging.Enabled,
+        includeCookies: logging.IncludeCookies,
+        prefix: logging.Prefix
+      })
+    : undefined;
+}
+
+/** gg: forwarded values의 cookies·header·query 설정을 한 snapshot으로 보존합니다. */
 function normalizeCloudFrontForwardedValues(
   forwardedValues: ForwardedValues | undefined
 ): Record<string, unknown> | undefined {
@@ -3371,8 +3845,11 @@ function normalizeCloudFrontForwardedValues(
   });
 }
 
+/** gg: geo restriction의 전체 location 목록과 제한 방식을 exact config에서 보존합니다. */
 function normalizeCloudFrontRestrictions(
-  distribution: DistributionSummary
+  distribution:
+    | Pick<DistributionConfig, "Restrictions">
+    | Pick<DistributionSummary, "Restrictions">
 ): Record<string, unknown> | undefined {
   const geoRestriction = distribution.Restrictions?.GeoRestriction;
 
@@ -3386,8 +3863,11 @@ function normalizeCloudFrontRestrictions(
     : undefined;
 }
 
+/** gg: Viewer Certificate의 인증서 종류와 TLS 설정을 exact config에서 보존합니다. */
 function normalizeCloudFrontViewerCertificate(
-  distribution: DistributionSummary
+  distribution:
+    | Pick<DistributionConfig, "ViewerCertificate">
+    | Pick<DistributionSummary, "ViewerCertificate">
 ): Record<string, unknown> | undefined {
   const certificate = distribution.ViewerCertificate;
 
@@ -3400,6 +3880,291 @@ function normalizeCloudFrontViewerCertificate(
         sslSupportMethod: certificate.SSLSupportMethod
       })
     : undefined;
+}
+
+const KNOWN_CLOUDFRONT_DISTRIBUTION_CONFIG_KEYS = new Set([
+  "Aliases",
+  "AnycastIpListId",
+  "CacheBehaviors",
+  "CacheTagConfig",
+  "CallerReference",
+  "Comment",
+  "ConnectionFunctionAssociation",
+  "ConnectionMode",
+  "ContinuousDeploymentPolicyId",
+  "CustomErrorResponses",
+  "DefaultCacheBehavior",
+  "DefaultRootObject",
+  "Enabled",
+  "HttpVersion",
+  "IsIPV6Enabled",
+  "Logging",
+  "OriginGroups",
+  "Origins",
+  "PriceClass",
+  "Restrictions",
+  "Staging",
+  "TenantConfig",
+  "ViewerCertificate",
+  "ViewerMtlsConfig",
+  "WebACLId"
+]);
+
+const KNOWN_CLOUDFRONT_ORIGIN_KEYS = new Set([
+  "ConnectionAttempts",
+  "ConnectionTimeout",
+  "CustomHeaders",
+  "CustomOriginConfig",
+  "DomainName",
+  "Id",
+  "OriginAccessControlId",
+  "OriginMtlsConfig",
+  "OriginPath",
+  "OriginShield",
+  "S3OriginConfig",
+  "VpcOriginConfig"
+]);
+
+const KNOWN_CLOUDFRONT_CACHE_BEHAVIOR_KEYS = new Set([
+  "AllowedMethods",
+  "CachePolicyId",
+  "Compress",
+  "DefaultTTL",
+  "FieldLevelEncryptionId",
+  "ForwardedValues",
+  "FunctionAssociations",
+  "GrpcConfig",
+  "LambdaFunctionAssociations",
+  "MaxTTL",
+  "MinTTL",
+  "OriginRequestPolicyId",
+  "PathPattern",
+  "RealtimeLogConfigArn",
+  "ResponseHeadersPolicyId",
+  "SmoothStreaming",
+  "TargetOriginId",
+  "TrustedKeyGroups",
+  "TrustedSigners",
+  "ViewerProtocolPolicy"
+]);
+
+/** gg: AWS Quantity/Items 쌍이 잘리지 않았는지 확인해 partial response를 완료로 오인하지 않습니다. */
+function hasCompleteCloudFrontQuantityList(value: unknown, required = false): boolean {
+  if (value === undefined) {
+    return !required;
+  }
+  if (!isRecordValue(value)) {
+    return false;
+  }
+
+  const quantity = value["Quantity"];
+  const items = value["Items"];
+  if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity < 0) {
+    return false;
+  }
+  if (quantity === 0) {
+    return items === undefined || (Array.isArray(items) && items.length === 0);
+  }
+  return Array.isArray(items) && items.length === quantity;
+}
+
+/** gg: exact DistributionConfig의 필수 필드와 모든 중첩 목록이 완전한 경우만 true를 반환합니다. */
+function hasCompleteCloudFrontDistributionConfig(
+  config: DistributionConfig | undefined
+): boolean {
+  if (
+    !config ||
+    getNonEmptyStringValue(config.CallerReference) === null ||
+    typeof config.Comment !== "string" ||
+    typeof config.Enabled !== "boolean" ||
+    typeof config.PriceClass !== "string" ||
+    typeof config.HttpVersion !== "string" ||
+    typeof config.IsIPV6Enabled !== "boolean" ||
+    !hasCompleteCloudFrontQuantityList(config.Aliases) ||
+    !hasCompleteCloudFrontQuantityList(config.Origins, true) ||
+    !hasCompleteCloudFrontQuantityList(config.OriginGroups) ||
+    !hasCompleteCloudFrontQuantityList(config.CacheBehaviors) ||
+    !hasCompleteCloudFrontQuantityList(config.CustomErrorResponses) ||
+    !isRecordValue(config.DefaultCacheBehavior) ||
+    !isRecordValue(config.Restrictions) ||
+    !isRecordValue(config.ViewerCertificate)
+  ) {
+    return false;
+  }
+
+  const origins = config.Origins?.Items ?? [];
+  if (
+    origins.some(
+      (origin) =>
+        !hasCompleteCloudFrontQuantityList(origin.CustomHeaders) ||
+        (origin.CustomOriginConfig !== undefined &&
+          !hasCompleteCloudFrontQuantityList(
+            origin.CustomOriginConfig.OriginSslProtocols,
+            true
+          ))
+    )
+  ) {
+    return false;
+  }
+
+  const originGroups = config.OriginGroups?.Items ?? [];
+  if (
+    originGroups.some(
+      (group) =>
+        !hasCompleteCloudFrontQuantityList(group.FailoverCriteria?.StatusCodes, true) ||
+        !hasCompleteCloudFrontQuantityList(group.Members, true)
+    )
+  ) {
+    return false;
+  }
+
+  const behaviors = [
+    config.DefaultCacheBehavior,
+    ...(config.CacheBehaviors?.Items ?? [])
+  ];
+  if (behaviors.some((behavior) => !hasCompleteCloudFrontCacheBehaviorLists(behavior))) {
+    return false;
+  }
+
+  return hasCompleteCloudFrontQuantityList(config.Restrictions.GeoRestriction, true);
+}
+
+/** gg: cache behavior의 method·association·trust 목록이 모두 온전한지 확인합니다. */
+function hasCompleteCloudFrontCacheBehaviorLists(
+  behavior: DefaultCacheBehavior | CacheBehavior
+): boolean {
+  return (
+    hasCompleteCloudFrontQuantityList(behavior.AllowedMethods, true) &&
+    hasCompleteCloudFrontQuantityList(behavior.AllowedMethods?.CachedMethods, true) &&
+    hasCompleteCloudFrontQuantityList(behavior.FunctionAssociations) &&
+    hasCompleteCloudFrontQuantityList(behavior.LambdaFunctionAssociations) &&
+    hasCompleteCloudFrontQuantityList(behavior.TrustedKeyGroups) &&
+    hasCompleteCloudFrontQuantityList(behavior.TrustedSigners) &&
+    (behavior.ForwardedValues === undefined ||
+      (hasCompleteCloudFrontQuantityList(behavior.ForwardedValues.Headers) &&
+        hasCompleteCloudFrontQuantityList(
+          behavior.ForwardedValues.QueryStringCacheKeys
+        ) &&
+        hasCompleteCloudFrontQuantityList(
+          behavior.ForwardedValues.Cookies?.WhitelistedNames
+        )))
+  );
+}
+
+/** gg: 아직 Terraform에 그대로 투영하지 못하는 nondefault·unknown 설정의 경로만 기록합니다. */
+function getUnsupportedCloudFrontDistributionConfiguration(
+  config: DistributionConfig
+): string[] {
+  const unsupported = new Set<string>();
+  addUnknownCloudFrontKeys(
+    unsupported,
+    config as unknown as Record<string, unknown>,
+    KNOWN_CLOUDFRONT_DISTRIBUTION_CONFIG_KEYS,
+    "DistributionConfig"
+  );
+
+  if ((config.OriginGroups?.Quantity ?? 0) > 0) unsupported.add("OriginGroups");
+  if ((config.CustomErrorResponses?.Quantity ?? 0) > 0) {
+    unsupported.add("CustomErrorResponses");
+  }
+  if (
+    config.Logging &&
+    (config.Logging.Enabled ||
+      config.Logging.IncludeCookies ||
+      (config.Logging.Bucket ?? "").length > 0 ||
+      (config.Logging.Prefix ?? "").length > 0)
+  ) {
+    unsupported.add("Logging");
+  }
+  if (getNonEmptyStringValue(config.ContinuousDeploymentPolicyId)) {
+    unsupported.add("ContinuousDeploymentPolicyId");
+  }
+  if (config.Staging === true) unsupported.add("Staging");
+  if (getNonEmptyStringValue(config.AnycastIpListId)) unsupported.add("AnycastIpListId");
+  if (config.TenantConfig !== undefined) unsupported.add("TenantConfig");
+  if (config.ConnectionMode !== undefined && config.ConnectionMode !== "direct") {
+    unsupported.add("ConnectionMode");
+  }
+  if (config.ViewerMtlsConfig !== undefined) unsupported.add("ViewerMtlsConfig");
+  if (config.ConnectionFunctionAssociation !== undefined) {
+    unsupported.add("ConnectionFunctionAssociation");
+  }
+  if (config.CacheTagConfig !== undefined) unsupported.add("CacheTagConfig");
+  if (getNonEmptyStringValue(config.ViewerCertificate?.ACMCertificateArn)) {
+    unsupported.add("ViewerCertificate.ACMCertificateArn");
+  }
+  if (getNonEmptyStringValue(config.ViewerCertificate?.IAMCertificateId)) {
+    unsupported.add("ViewerCertificate.IAMCertificateId");
+  }
+  if (getNonEmptyStringValue(config.WebACLId)) unsupported.add("WebACLId");
+
+  for (const [index, origin] of (config.Origins?.Items ?? []).entries()) {
+    const prefix = `Origins[${index}]`;
+    addUnknownCloudFrontKeys(
+      unsupported,
+      origin as unknown as Record<string, unknown>,
+      KNOWN_CLOUDFRONT_ORIGIN_KEYS,
+      prefix
+    );
+    if ((origin.CustomHeaders?.Quantity ?? 0) > 0) {
+      unsupported.add(`${prefix}.CustomHeaders`);
+    }
+    if (origin.OriginShield !== undefined) unsupported.add(`${prefix}.OriginShield`);
+    if ((origin as unknown as Record<string, unknown>)["OriginMtlsConfig"] !== undefined) {
+      unsupported.add(`${prefix}.OriginMtlsConfig`);
+    }
+    if (origin.CustomOriginConfig?.IpAddressType !== undefined) {
+      unsupported.add(`${prefix}.CustomOriginConfig.IpAddressType`);
+    }
+    if (
+      origin.CustomOriginConfig &&
+      (origin.CustomOriginConfig as unknown as Record<string, unknown>)[
+        "ResponseCompletionTimeout"
+      ] !== undefined
+    ) {
+      unsupported.add(`${prefix}.CustomOriginConfig.ResponseCompletionTimeout`);
+    }
+  }
+
+  const behaviors: Array<readonly [string, DefaultCacheBehavior | CacheBehavior]> = [
+    ...(config.CacheBehaviors?.Items ?? []).map(
+      (behavior, index) => [`CacheBehaviors[${index}]`, behavior] as const
+    )
+  ];
+  if (config.DefaultCacheBehavior) {
+    behaviors.unshift(["DefaultCacheBehavior", config.DefaultCacheBehavior]);
+  }
+  for (const [prefix, behavior] of behaviors) {
+    addUnknownCloudFrontKeys(
+      unsupported,
+      behavior as unknown as Record<string, unknown>,
+      KNOWN_CLOUDFRONT_CACHE_BEHAVIOR_KEYS,
+      prefix
+    );
+    if ((behavior.FunctionAssociations?.Quantity ?? 0) > 0) {
+      unsupported.add(`${prefix}.FunctionAssociations`);
+    }
+    if ((behavior.LambdaFunctionAssociations?.Quantity ?? 0) > 0) {
+      unsupported.add(`${prefix}.LambdaFunctionAssociations`);
+    }
+    if (behavior.GrpcConfig !== undefined) unsupported.add(`${prefix}.GrpcConfig`);
+  }
+
+  return [...unsupported].sort();
+}
+
+/** gg: SDK가 새 필드를 추가해도 조용히 버리지 않고 needs_mapping 근거로 남깁니다. */
+function addUnknownCloudFrontKeys(
+  target: Set<string>,
+  source: Record<string, unknown>,
+  knownKeys: ReadonlySet<string>,
+  prefix: string
+): void {
+  for (const key of Object.keys(source)) {
+    if (!knownKeys.has(key)) {
+      target.add(`${prefix}.${key}`);
+    }
+  }
 }
 
 function toUnknownAmiImageRecord(
@@ -3874,7 +4639,7 @@ function isKnownTaggedResourceArn(arn: string): boolean {
   );
 }
 
-// 정식 reader가 담당하는 ARN은 Resource Explorer/Tagging의 UNKNOWN 결과에서 다시 만들지 않습니다.
+/** gg: 전용 reader가 담당하는 ARN은 generic inventory에서 제외해 Board 중복을 막습니다. */
 export function isReverseEngineeringPromotedResourceArn(arn: string): boolean {
   if (!arn.startsWith("arn:")) {
     return false;
@@ -3883,8 +4648,12 @@ export function isReverseEngineeringPromotedResourceArn(arn: string): boolean {
   const parsedArn = parseAwsArn(arn);
 
   return (
-    (parsedArn.service === "cloudfront" && parsedArn.resourceKind === "distribution") ||
+    (parsedArn.service === "cloudfront" &&
+      ["distribution", "origin-access-control"].includes(parsedArn.resourceKind)) ||
     (parsedArn.service === "events" && parsedArn.resourceKind === "rule") ||
+    parsedArn.service === "application-autoscaling" ||
+    parsedArn.service === "ecr" ||
+    parsedArn.service === "secretsmanager" ||
     (parsedArn.service === "ecs" &&
       ["cluster", "service", "task-definition"].includes(parsedArn.resourceKind))
   );
@@ -4089,6 +4858,68 @@ export function resolveEcsRelationships(
         )
       )
     };
+  });
+}
+
+/** gg: 자동 확장 Target과 OAC를 같은 scan의 ECS Service·CloudFront Distribution에 exact ID로만 연결합니다. */
+export function resolveDeploymentSupportRelationships(
+  records: AwsDiscoveredResourceRecord[]
+): AwsDiscoveredResourceRecord[] {
+  const ecsServices = records.filter(
+    (record) => record.providerResourceType === "AWS::ECS::Service"
+  );
+  const originAccessControls = new Map(
+    records
+      .filter((record) => record.providerResourceType === "AWS::CloudFront::OriginAccessControl")
+      .flatMap((record) => {
+        const id = getNonEmptyStringValue(record.config["id"]);
+        return id ? [[id, record] as const] : [];
+      })
+  );
+
+  return records.map((record) => {
+    if (record.providerResourceType === "AWS::ApplicationAutoScaling::ScalableTarget") {
+      const resourceId = getNonEmptyStringValue(record.config["resourceId"]);
+      const resourceIdParts = resourceId?.split("/") ?? [];
+      const clusterName = resourceIdParts.length === 3 ? resourceIdParts[1] : undefined;
+      const serviceName =
+        resourceIdParts.length === 3 && resourceIdParts[0] === "service"
+          ? resourceIdParts[2]
+          : undefined;
+      const service = ecsServices.find(
+        (candidate) =>
+          candidate.config["clusterName"] === clusterName &&
+          candidate.config["name"] === serviceName
+      );
+      return service
+        ? {
+            ...record,
+            relationships: uniqueDiscoveredRelationships([
+              ...record.relationships,
+              { type: "depends_on", targetProviderResourceId: service.providerResourceId }
+            ])
+          }
+        : record;
+    }
+
+    if (record.providerResourceType === "AWS::CloudFront::Distribution") {
+      const origins = Array.isArray(record.config["origin"])
+        ? record.config["origin"].filter(isRecordValue)
+        : [];
+      const oacRelationships = origins.flatMap((origin) => {
+        const oacId = getNonEmptyStringValue(origin["originAccessControlId"]);
+        const oac = oacId ? originAccessControls.get(oacId) : undefined;
+        return oac
+          ? [{ type: "depends_on" as const, targetProviderResourceId: oac.providerResourceId }]
+          : [];
+      });
+      return {
+        ...record,
+        relationships: uniqueDiscoveredRelationships([...record.relationships, ...oacRelationships])
+      };
+    }
+
+    return record;
   });
 }
 
@@ -4398,6 +5229,19 @@ function normalizeDiscoveredRecordTags(value: unknown): Array<{ key: string; val
 
 /** gg: opaque 상세 ID는 서버 전용 exact identity로 환원해 같은 generic ARN과만 합칩니다. */
 function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord): string {
+  if (record.providerResourceType === "AWS::CloudFront::OriginAccessControl") {
+    const configuredId = getNonEmptyStringValue(record.config["id"]);
+    const privateId =
+      getNonEmptyStringValue(record.serverOnly?.providerResourceId) ??
+      getNonEmptyStringValue(record.serverOnly?.terraformImportId);
+    const arnId = /^arn:[^:]+:cloudfront::[^:]+:origin-access-control\/([^/]+)$/u.exec(
+      record.providerResourceId
+    )?.[1];
+    const id = privateId ?? configuredId ?? arnId ?? record.providerResourceId;
+
+    return `AWS::CloudFront::OriginAccessControl:${id}`;
+  }
+
   if (
     [
       "AWS::IAM::Role",
@@ -4542,7 +5386,12 @@ const DEDICATED_RECORD_DETAIL_KEY_BY_PROVIDER_RESOURCE_TYPE = new Map<string, st
   ["AWS::IAM::RolePolicy", "policyName"],
   ["AWS::IAM::RolePolicyAttachment", "policyName"],
   ["AWS::KMS::Key", "keyId"],
-  ["AWS::KMS::Alias", "aliasName"]
+  ["AWS::KMS::Alias", "aliasName"],
+  ["AWS::CloudFront::OriginAccessControl", "name"],
+  ["AWS::ECR::Repository", "repositoryName"],
+  ["AWS::SecretsManager::Secret", "name"],
+  ["AWS::ApplicationAutoScaling::ScalableTarget", "resourceId"],
+  ["AWS::ApplicationAutoScaling::ScalingPolicy", "policyName"]
 ]);
 
 const ELASTIC_LOAD_BALANCING_PROVIDER_RESOURCE_TYPES = new Set([
@@ -4682,7 +5531,12 @@ export function shouldReadUnknownResourceGroup(input: AwsProviderScanInput): boo
     input.resourceTypes.includes("CLOUDWATCH_METRIC_ALARM") ||
     input.resourceTypes.includes("LOAD_BALANCER") ||
     input.resourceTypes.includes("LOAD_BALANCER_TARGET_GROUP") ||
-    input.resourceTypes.includes("LOAD_BALANCER_LISTENER")
+    input.resourceTypes.includes("LOAD_BALANCER_LISTENER") ||
+    input.resourceTypes.includes("ECR_REPOSITORY") ||
+    input.resourceTypes.includes("SECRETS_MANAGER_SECRET") ||
+    input.resourceTypes.includes("APPLICATION_AUTO_SCALING_TARGET") ||
+    input.resourceTypes.includes("APPLICATION_AUTO_SCALING_POLICY") ||
+    input.resourceTypes.includes("CLOUDFRONT")
   );
 }
 

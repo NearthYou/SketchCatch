@@ -94,6 +94,11 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::EC2::Image", "AMI"],
   ["AWS::RDS::DBInstance", "RDS"],
   ["AWS::S3::Bucket", "S3"],
+  ["AWS::S3::BucketVersioning", "S3"],
+  ["AWS::S3::BucketPublicAccessBlock", "S3"],
+  ["AWS::S3::BucketPolicy", "S3"],
+  ["AWS::S3::Object", "S3"],
+  ["AWS::SecretsManager::Secret", "SECRETS_MANAGER_SECRET"],
   ["AWS::Lambda::Function", "LAMBDA"],
   ["AWS::Lambda::Permission", "LAMBDA_PERMISSION"],
   ["AWS::IAM::Role", "IAM_ROLE"],
@@ -117,9 +122,13 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::ElasticLoadBalancingV2::TargetGroup", "LOAD_BALANCER_TARGET_GROUP"],
   ["AWS::ElasticLoadBalancingV2::Listener", "LOAD_BALANCER_LISTENER"],
   ["AWS::CloudFront::Distribution", "CLOUDFRONT"],
+  ["AWS::CloudFront::OriginAccessControl", "CLOUDFRONT"],
+  ["AWS::ECR::Repository", "ECR_REPOSITORY"],
   ["AWS::ECS::Cluster", "ECS_CLUSTER"],
   ["AWS::ECS::Service", "ECS_SERVICE"],
-  ["AWS::ECS::TaskDefinition", "ECS_TASK_DEFINITION"]
+  ["AWS::ECS::TaskDefinition", "ECS_TASK_DEFINITION"],
+  ["AWS::ApplicationAutoScaling::ScalableTarget", "APPLICATION_AUTO_SCALING_TARGET"],
+  ["AWS::ApplicationAutoScaling::ScalingPolicy", "APPLICATION_AUTO_SCALING_POLICY"]
 ]);
 
 const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
@@ -149,7 +158,11 @@ const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
   "LAMBDA",
   "LAMBDA_PERMISSION",
   "KMS_KEY",
-  "KMS_ALIAS"
+  "KMS_ALIAS",
+  "ECR_REPOSITORY",
+  "SECRETS_MANAGER_SECRET",
+  "APPLICATION_AUTO_SCALING_TARGET",
+  "APPLICATION_AUTO_SCALING_POLICY"
 ]);
 const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_REST_API",
@@ -186,7 +199,11 @@ const REVERSE_ENGINEERING_AUTOMATED_RESOURCE_TYPES = new Set<ResourceType>([
   "LAMBDA",
   "LAMBDA_PERMISSION",
   "KMS_KEY",
-  "KMS_ALIAS"
+  "KMS_ALIAS",
+  "ECR_REPOSITORY",
+  "SECRETS_MANAGER_SECRET",
+  "APPLICATION_AUTO_SCALING_TARGET",
+  "APPLICATION_AUTO_SCALING_POLICY"
 ]);
 const SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES = new Set<ResourceType>([
   "ROUTE_TABLE_ASSOCIATION",
@@ -203,7 +220,9 @@ const SAME_SCAN_TERRAFORM_REFERENCE_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_METHOD",
   "API_GATEWAY_INTEGRATION",
   "API_GATEWAY_DEPLOYMENT",
-  "API_GATEWAY_STAGE"
+  "API_GATEWAY_STAGE",
+  "S3",
+  "APPLICATION_AUTO_SCALING_POLICY"
 ]);
 const DETAILED_TERRAFORM_VALIDATION_RESOURCE_TYPES = new Set<ResourceType>([
   "IAM_ROLE",
@@ -217,7 +236,10 @@ const DETAILED_TERRAFORM_VALIDATION_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_METHOD",
   "API_GATEWAY_INTEGRATION",
   "API_GATEWAY_DEPLOYMENT",
-  "API_GATEWAY_STAGE"
+  "API_GATEWAY_STAGE",
+  "ECR_REPOSITORY",
+  "SECRETS_MANAGER_SECRET",
+  "APPLICATION_AUTO_SCALING_TARGET"
 ]);
 const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
   "providerResourceId",
@@ -253,6 +275,10 @@ const ELASTIC_LOAD_BALANCING_RESOURCE_TYPES = new Set([
   "AWS::ElasticLoadBalancingV2::LoadBalancer",
   "AWS::ElasticLoadBalancingV2::TargetGroup",
   "AWS::ElasticLoadBalancingV2::Listener"
+]);
+const DEPLOYMENT_SUPPORT_LIST_TAG_RESOURCE_TYPES = new Set([
+  "AWS::ECR::Repository",
+  "AWS::ApplicationAutoScaling::ScalableTarget"
 ]);
 const IAM_CLOUD_FORMATION_OWNERSHIP_TAG_KEYS = new Set([
   "aws:cloudformation:stack-id",
@@ -457,14 +483,136 @@ const PUBLIC_CONFIG_KEYS_BY_RESOURCE_TYPE = new Map<string, ReadonlySet<string>>
   [
     "AWS::CloudFront::Distribution",
     new Set([
+      "aliases",
       "comment",
+      "configReadComplete",
+      "continuousDeploymentPolicyId",
+      "customErrorResponse",
       "defaultCacheBehavior",
+      "defaultRootObject",
       "enabled",
+      "httpVersion",
       "id",
+      "isIpv6Enabled",
+      "loggingConfig",
+      "orderedCacheBehavior",
       "origin",
+      "priceClass",
       "restrictions",
+      "staging",
+      "tags",
+      "tagsReadComplete",
+      "unsupportedConfiguration",
       "viewerCertificate"
     ])
+  ],
+  [
+    "AWS::CloudFront::OriginAccessControl",
+    new Set([
+      "description",
+      "id",
+      "name",
+      "originAccessControlOriginType",
+      "scanRegion",
+      "signingBehavior",
+      "signingProtocol"
+    ])
+  ],
+  [
+    "AWS::ECR::Repository",
+    new Set([
+      "encryptionType",
+      "hasKmsKey",
+      "imageTagMutability",
+      "repositoryName",
+      "scanOnPush",
+      "tags",
+      "tagsReadComplete"
+    ])
+  ],
+  [
+    "AWS::SecretsManager::Secret",
+    new Set([
+      "deleted",
+      "description",
+      "hasKmsKey",
+      "isReplica",
+      "metadataReadComplete",
+      "name",
+      "replicaRegionCount",
+      "replicationReadComplete",
+      "rotationEnabled",
+      "serviceOwned",
+      "tags",
+      "tagsReadComplete",
+      "valueRead"
+    ])
+  ],
+  [
+    "AWS::ApplicationAutoScaling::ScalableTarget",
+    new Set([
+      "hasRoleArn",
+      "maxCapacity",
+      "minCapacity",
+      "resourceId",
+      "scalableDimension",
+      "serviceNamespace",
+      "suspendedState",
+      "tags",
+      "tagsReadComplete"
+    ])
+  ],
+  [
+    "AWS::ApplicationAutoScaling::ScalingPolicy",
+    new Set([
+      "policyName",
+      "policyType",
+      "resourceId",
+      "scalableDimension",
+      "serviceNamespace",
+      "tags",
+      "tagsReadComplete",
+      "targetTrackingScalingPolicyConfiguration"
+    ])
+  ],
+  [
+    "AWS::S3::Bucket",
+    new Set([
+      "bucketRegion",
+      "createdAt",
+      "hasEncryptionConfiguration",
+      "hasWebsiteConfiguration",
+      "mfaDelete",
+      "objectInventoryCountIsExact",
+      "objectInventoryObservedCount",
+      "objectInventorySummary",
+      "objectInventoryTruncated",
+      "policyStatusIsPublic",
+      "publicAccessBlock",
+      "reverseEngineeringIncompleteDetails",
+      "tags",
+      "tagsReadComplete",
+      "versioningStatus"
+    ])
+  ],
+  ["AWS::S3::BucketVersioning", new Set(["bucketName", "mfaDelete", "versioningStatus"])],
+  [
+    "AWS::S3::BucketPublicAccessBlock",
+    new Set([
+      "blockPublicAcls",
+      "blockPublicPolicy",
+      "bucketName",
+      "ignorePublicAcls",
+      "restrictPublicBuckets"
+    ])
+  ],
+  [
+    "AWS::S3::BucketPolicy",
+    new Set(["bucketName", "hasPolicy", "policyDigest", "policyReadComplete"])
+  ],
+  [
+    "AWS::S3::Object",
+    new Set<string>()
   ],
   ["AWS::ECS::Cluster", new Set(["capacityProviders", "configuration", "name", "status"])],
   [
@@ -674,7 +822,10 @@ export function createAwsProviderAdapter(
       const discoveryResult = normalizeDiscoveryResult(await gateway.discoverResources(input));
       const scanErrors = sanitizeReverseEngineeringScanErrors(discoveryResult.scanErrors);
       const { coverage } = createReverseEngineeringPublicCoverage(scanErrors);
-      const records = filterMultiplexedReaderRecordsForOutput(input, discoveryResult.records);
+      const records = filterMultiplexedReaderRecordsForOutput(
+        input,
+        collapseS3ObjectInventoryRecords(discoveryResult.records)
+      );
       const idMap = createResourceIdMap(records);
       const displayNameMap = createAwsResourceDisplayNameMap(records);
       const baseDiscoveredResources = records.map((record) =>
@@ -798,8 +949,36 @@ function filterMultiplexedReaderRecordsForOutput(
       ])
       .filter((value): value is string => value !== null)
   );
+  const autoScalingPolicyTargetIds = new Set(
+    records
+      .filter(
+        (record) =>
+          record.providerResourceType === "AWS::ApplicationAutoScaling::ScalingPolicy"
+      )
+      .flatMap((record) =>
+        record.relationships.map((relationship) => relationship.targetProviderResourceId)
+      )
+  );
 
   return records.filter((record) => {
+    if (
+      record.providerResourceType === "AWS::ApplicationAutoScaling::ScalingPolicy" &&
+      !selectedResourceTypes.has("APPLICATION_AUTO_SCALING_POLICY")
+    ) {
+      return false;
+    }
+
+    if (
+      record.providerResourceType === "AWS::ApplicationAutoScaling::ScalableTarget" &&
+      !selectedResourceTypes.has("APPLICATION_AUTO_SCALING_TARGET") &&
+      !(
+        selectedResourceTypes.has("APPLICATION_AUTO_SCALING_POLICY") &&
+        autoScalingPolicyTargetIds.has(record.providerResourceId)
+      )
+    ) {
+      return false;
+    }
+
     if (
       record.providerResourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer" &&
       !selectedResourceTypes.has("LOAD_BALANCER") &&
@@ -859,6 +1038,52 @@ function normalizeDiscoveryResult(
   return Array.isArray(discoveryResult)
     ? { records: discoveryResult, scanErrors: [] }
     : discoveryResult;
+}
+
+/** gg: 예전 Object record도 key를 보존하지 않고 해당 Bucket의 파일 수 요약으로만 합칩니다. */
+function collapseS3ObjectInventoryRecords(
+  records: readonly AwsDiscoveredResourceRecord[]
+): AwsDiscoveredResourceRecord[] {
+  const objectCountByBucket = new Map<string, number>();
+  for (const record of records) {
+    if (record.providerResourceType !== "AWS::S3::Object") continue;
+    const bucketName =
+      getNonEmptyString(record.config["bucketName"]) ??
+      record.relationships
+        .map((relationship) => getNonEmptyString(relationship.targetProviderResourceId))
+        .find((value): value is string => value !== null);
+    if (!bucketName) continue;
+    objectCountByBucket.set(bucketName, (objectCountByBucket.get(bucketName) ?? 0) + 1);
+  }
+
+  return records.flatMap((record) => {
+    if (record.providerResourceType === "AWS::S3::Object") return [];
+    if (record.providerResourceType !== "AWS::S3::Bucket") return [record];
+    const legacyObjectCount = objectCountByBucket.get(record.providerResourceId);
+    if (!legacyObjectCount) return [record];
+
+    const existingObservedCount = readNonNegativeInteger(
+      record.config["objectInventoryObservedCount"]
+    );
+    const observedCount = Math.max(existingObservedCount ?? 0, legacyObjectCount);
+    return [
+      {
+        ...record,
+        config: {
+          ...record.config,
+          objectInventoryObservedCount: observedCount,
+          objectInventoryCountIsExact: false,
+          objectInventoryTruncated: true,
+          objectInventorySummary: `저장된 파일 ${observedCount}개 이상`
+        }
+      }
+    ];
+  });
+}
+
+/** gg: 파일 수 marker에는 음수가 아닌 정수만 사용합니다. */
+function readNonNegativeInteger(value: unknown): number | null {
+  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : null;
 }
 
 function createEmptyScan(input: AwsProviderScanInput): ReverseEngineeringScanResult["scan"] {
@@ -1175,7 +1400,10 @@ function createAnalysisExclusions(
         DETAILED_TERRAFORM_VALIDATION_RESOURCE_TYPES.has(resource.resourceType)
           ? "missing_required_data"
           : "unsupported_resource_type",
-      message: isApiGatewayRestApiRequiringMapping(resource)
+      message:
+        resource.providerResourceType === "AWS::S3::Object"
+          ? "이 S3 Object는 목록 확인용이며 자동 배포 대상이 아닙니다."
+          : isApiGatewayRestApiRequiringMapping(resource)
         ? createApiGatewayRestApiMappingReason(resource)
         : isCloudWatchLogGroupRequiringMapping(resource)
           ? createCloudWatchLogGroupMappingReason(resource)
@@ -1301,9 +1529,7 @@ function createImportSuggestions(
         id: `import-${resource.id}`,
         resourceId: resource.id,
         status: "manual_review",
-        reason: importId
-          ? `Terraform 생성과 배포에 필요한 ${missingTerraformFields.join(", ")} 값이 없습니다.`
-          : `${createMissingImportIdReason(resource.resourceType)} 새 Terraform 생성에는 ${missingTerraformFields.join(", ")} 값이 필요합니다.`,
+        reason: createMissingTerraformValuesReason(resource, missingTerraformFields, importId),
         handoffReady: false
       };
     }
@@ -1363,16 +1589,73 @@ function createMissingImportIdReason(resourceType: ResourceType): string {
             : resourceType === "CLOUDWATCH_LOG_GROUP"
               ? "Terraform import에 필요한 CloudWatch log group name이 없습니다."
               : resourceType === "CLOUDFRONT"
-                ? "Terraform import에 필요한 CloudFront distribution ID가 없습니다."
-                : resourceType === "LOAD_BALANCER"
-                  ? "보안상 ALB의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
-                  : resourceType === "ECS_CLUSTER"
-                    ? "보안상 ECS Cluster의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
-                    : resourceType === "ECS_SERVICE"
-                      ? "Terraform import에 필요한 ECS cluster name과 service name이 없습니다."
-                      : resourceType === "ECS_TASK_DEFINITION"
-                        ? "보안상 ECS Task Definition의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
-                        : "Terraform import에 필요한 provider Resource ID가 없습니다.";
+                ? "Terraform import에 필요한 CloudFront Resource ID가 없습니다."
+                : resourceType === "ECR_REPOSITORY"
+                  ? "Terraform import에 필요한 ECR Repository 이름이 없습니다."
+                  : resourceType === "SECRETS_MANAGER_SECRET"
+                    ? "Terraform import에 필요한 Secret ARN이 없습니다."
+                    : resourceType === "APPLICATION_AUTO_SCALING_TARGET" ||
+                        resourceType === "APPLICATION_AUTO_SCALING_POLICY"
+                      ? "Terraform import에 필요한 자동 확장 대상 정보가 없습니다."
+                      : resourceType === "LOAD_BALANCER"
+                        ? "보안상 ALB의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
+                        : resourceType === "ECS_CLUSTER"
+                          ? "보안상 ECS Cluster의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
+                          : resourceType === "ECS_SERVICE"
+                            ? "Terraform import에 필요한 ECS cluster name과 service name이 없습니다."
+                            : resourceType === "ECS_TASK_DEFINITION"
+                              ? "보안상 ECS Task Definition의 원본 AWS 식별자를 공개하지 않아 자동 import를 만들 수 없습니다."
+                              : "Terraform import에 필요한 provider Resource ID가 없습니다.";
+}
+
+/** gg: 내부 필드명 대신 사용자가 바로 조치할 수 있는 자동 관리 제한 이유를 반환합니다. */
+function createMissingTerraformValuesReason(
+  resource: DiscoveredResource,
+  missingFields: readonly string[],
+  importId: string | null
+): string {
+  if (
+    resource.providerResourceType === "AWS::S3::Object" &&
+    missingFields.includes("objectBodyUnavailable")
+  ) {
+    return "이 S3 Object는 목록 확인용이며 자동 배포 대상이 아닙니다.";
+  }
+  if (
+    resource.providerResourceType === "AWS::S3::Bucket" &&
+    (missingFields.includes("bucketEncryptionConfiguration") ||
+      missingFields.includes("bucketWebsiteConfiguration"))
+  ) {
+    const hasEncryption = missingFields.includes("bucketEncryptionConfiguration");
+    const hasWebsite = missingFields.includes("bucketWebsiteConfiguration");
+    const configuredFeature = hasEncryption && hasWebsite
+      ? "암호화와 웹사이트"
+      : hasEncryption
+        ? "암호화"
+        : "웹사이트";
+    return `이 S3 Bucket에는 ${configuredFeature} 설정이 있습니다. 기존 설정을 잃지 않도록 현재는 자동 배포하지 않습니다.`;
+  }
+  if (resource.resourceType === "APPLICATION_AUTO_SCALING_POLICY") {
+    return resource.config["policyType"] === "TargetTrackingScaling"
+      ? "자동 확장 정책 설정을 전부 확인하지 못했습니다. 내용을 확인한 뒤 직접 수정해 주세요."
+      : "현재는 Target Tracking 방식의 자동 확장 정책만 안전하게 수정할 수 있습니다.";
+  }
+  if (resource.resourceType === "SECRETS_MANAGER_SECRET") {
+    return "Secret 값은 읽지 않습니다. 회전·복제·서비스 소유·삭제 상태를 모두 확인한 Secret만 자동 관리합니다.";
+  }
+  if (missingFields.includes("kmsKey") || missingFields.includes("kmsKeyId")) {
+    return "KMS 암호화 키를 확인하지 못해 기존 암호화 설정을 안전하게 보존할 수 없습니다.";
+  }
+  if (
+    resource.resourceType === "ECR_REPOSITORY" ||
+    resource.resourceType === "APPLICATION_AUTO_SCALING_TARGET"
+  ) {
+    return importId
+      ? "자동 관리에 필요한 정보를 모두 확인하지 못했습니다. 보드에서 내용을 확인한 뒤 직접 수정해 주세요."
+      : `${createMissingImportIdReason(resource.resourceType)} 새 Terraform 생성에 필요한 정보를 모두 확인하지 못했습니다.`;
+  }
+  return importId
+    ? `Terraform 생성과 배포에 필요한 ${missingFields.join(", ")} 값이 없습니다.`
+    : `${createMissingImportIdReason(resource.resourceType)} 새 Terraform 생성에는 ${missingFields.join(", ")} 값이 필요합니다.`;
 }
 
 /** 같은 Scan의 의존성이 모자라면 임의로 추측하지 않고 함께 확인할 Resource를 안내한다. */
@@ -1383,19 +1666,24 @@ function createSameScanReferenceReason(resourceType: ResourceType): string {
       ? "같은 스캔의 관리 가능한 Subnet과 모든 EIP를 먼저 확인해야 안전하게 가져올 수 있습니다."
       : resourceType === "LOAD_BALANCER_TARGET_GROUP"
         ? "같은 스캔의 관리 가능한 VPC와 정확히 하나의 ALB 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
-      : resourceType === "LOAD_BALANCER_LISTENER"
-        ? "같은 스캔의 관리 가능한 ALB와 Target Group 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
-        : resourceType === "IAM_POLICY" || resourceType === "IAM_INSTANCE_PROFILE"
-          ? "같은 스캔의 IAM Role과 Policy 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
-          : resourceType === "LAMBDA" || resourceType === "LAMBDA_PERMISSION"
-            ? "같은 스캔의 Lambda Function과 실행 Role 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
-            : resourceType === "KMS_ALIAS"
-              ? "같은 스캔의 KMS Key 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
-              : resourceType.startsWith("API_GATEWAY_")
-                ? "같은 스캔의 REST API와 상위 API 리소스를 먼저 확인해야 안전하게 가져올 수 있습니다."
-                : "같은 스캔의 관리 가능한 Subnet과 Route Table을 먼저 확인해야 안전하게 가져올 수 있습니다.";
+        : resourceType === "LOAD_BALANCER_LISTENER"
+          ? "같은 스캔의 관리 가능한 ALB와 Target Group 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
+          : resourceType === "IAM_POLICY" || resourceType === "IAM_INSTANCE_PROFILE"
+            ? "같은 스캔의 IAM Role과 Policy 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
+            : resourceType === "LAMBDA" || resourceType === "LAMBDA_PERMISSION"
+              ? "같은 스캔의 Lambda Function과 실행 Role 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
+              : resourceType === "KMS_ALIAS"
+                ? "같은 스캔의 KMS Key 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
+                : resourceType === "S3"
+                  ? "같은 스캔의 S3 Bucket 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
+                  : resourceType === "APPLICATION_AUTO_SCALING_POLICY"
+                    ? "같은 스캔의 자동 확장 Target 연결을 먼저 확인해야 안전하게 가져올 수 있습니다."
+                    : resourceType.startsWith("API_GATEWAY_")
+                      ? "같은 스캔의 REST API와 상위 API 리소스를 먼저 확인해야 안전하게 가져올 수 있습니다."
+                      : "같은 스캔의 관리 가능한 Subnet과 Route Table을 먼저 확인해야 안전하게 가져올 수 있습니다.";
 }
 
+/** gg: 자동 생성이 닫힌 이유를 내부 필드명 대신 같은 사용자 안내로 finding에 표시합니다. */
 function createTerraformCreationValidationFindings(
   discoveredResources: DiscoveredResource[]
 ): CheckFinding[] {
@@ -1417,7 +1705,7 @@ function createTerraformCreationValidationFindings(
         severity: "medium" as const,
         resourceId: resource.id,
         title: "새 Terraform 생성에 필요한 정보가 부족합니다",
-        description: `AWS 조회 결과에 ${missingFields.join(", ")} 값이 없습니다.`,
+        description: createMissingTerraformValuesReason(resource, missingFields, null),
         recommendation:
           "기존 Resource import 제안을 검토하거나 누락 값을 직접 채운 뒤 Terraform 생성과 배포를 진행하세요."
       }
@@ -1480,8 +1768,27 @@ export function createAwsPublicResourceConfig(
     return sanitizePublicCloudWatchMetricAlarmConfig(publicConfig, record.config);
   }
 
+  if (record.providerResourceType === "AWS::CloudFront::Distribution") {
+    return sanitizePublicCloudFrontDistributionConfig(
+      sanitizePublicListTagEvidence(publicConfig, record.config),
+      record.config
+    );
+  }
+
   if (ELASTIC_LOAD_BALANCING_RESOURCE_TYPES.has(record.providerResourceType)) {
     return sanitizePublicListTagEvidence(publicConfig, record.config);
+  }
+
+  if (DEPLOYMENT_SUPPORT_LIST_TAG_RESOURCE_TYPES.has(record.providerResourceType)) {
+    return sanitizePublicListTagEvidence(publicConfig, record.config);
+  }
+
+  if (record.providerResourceType === "AWS::SecretsManager::Secret") {
+    return sanitizePublicSecretsManagerConfig(publicConfig, record.config);
+  }
+
+  if (record.providerResourceType === "AWS::S3::Bucket") {
+    return sanitizePublicS3BucketConfig(publicConfig, record.config);
   }
 
   if (IAM_OWNERSHIP_RESOURCE_TYPES.has(record.providerResourceType)) {
@@ -1489,6 +1796,39 @@ export function createAwsPublicResourceConfig(
   }
 
   return publicConfig;
+}
+
+/** gg: S3 암호화·웹사이트 원문은 숨기고 설정 존재 여부만 공개합니다. */
+function sanitizePublicS3BucketConfig(
+  publicConfig: Record<string, unknown>,
+  sourceConfig: Record<string, unknown>
+): Record<string, unknown> {
+  const configWithTagEvidence = sanitizePublicListTagEvidence(publicConfig, sourceConfig);
+  const hasEncryptionConfiguration =
+    sourceConfig["hasEncryptionConfiguration"] === true ||
+    (Array.isArray(sourceConfig["encryptionRules"]) &&
+      sourceConfig["encryptionRules"].length > 0);
+  const hasWebsiteConfiguration =
+    sourceConfig["hasWebsiteConfiguration"] === true ||
+    ["websiteIndexDocument", "websiteErrorDocument", "websiteRedirect"].some(
+      (key) => sourceConfig[key] !== undefined
+    ) ||
+    (Array.isArray(sourceConfig["websiteRoutingRules"]) &&
+      sourceConfig["websiteRoutingRules"].length > 0);
+
+  return {
+    ...configWithTagEvidence,
+    ...(hasEncryptionConfiguration
+      ? { hasEncryptionConfiguration: true }
+      : sourceConfig["hasEncryptionConfiguration"] === false
+        ? { hasEncryptionConfiguration: false }
+        : {}),
+    ...(hasWebsiteConfiguration
+      ? { hasWebsiteConfiguration: true }
+      : sourceConfig["hasWebsiteConfiguration"] === false
+        ? { hasWebsiteConfiguration: false }
+        : {})
+  };
 }
 
 // gg: API policy와 tag 원문을 공개할 수 있을 때만 자동 관리에 필요한 완료 marker를 남깁니다.
@@ -1531,9 +1871,9 @@ function sanitizePublicApiGatewayTagEvidence(
   for (const [key, value] of Object.entries(sourceTags)) {
     if (
       key.trim().length === 0 ||
-      containsAwsArn(key) ||
+      containsAwsSensitiveIdentity(key) ||
       typeof value !== "string" ||
-      containsAwsArn(value)
+      containsAwsSensitiveIdentity(value)
     ) {
       return { ...configWithoutTags, tagsReadComplete: false };
     }
@@ -1568,7 +1908,7 @@ function sanitizePublicIamOwnershipConfig(
           return [];
         }
 
-        return [{ key, value: containsAwsArn(value) ? "present" : value }];
+        return [{ key, value: containsAwsSensitiveIdentity(value) ? "present" : value }];
       })
     : [];
 
@@ -1599,6 +1939,20 @@ function createAwsStoredResourceConfig(
   };
 
   return privateConfig;
+}
+
+/** gg: Secret 설명·tag가 공개 경계에서 제거되면 metadata 완료 marker도 닫아 자동 관리를 막습니다. */
+function sanitizePublicSecretsManagerConfig(
+  publicConfig: Record<string, unknown>,
+  sourceConfig: Record<string, unknown>
+): Record<string, unknown> {
+  const configWithTagEvidence = sanitizePublicListTagEvidence(publicConfig, sourceConfig);
+  const sourceDescription = getNonEmptyString(sourceConfig["description"]);
+  const publicDescription = getNonEmptyString(configWithTagEvidence["description"]);
+
+  return sourceDescription && !publicDescription
+    ? { ...configWithTagEvidence, metadataReadComplete: false }
+    : configWithTagEvidence;
 }
 
 // gg: 공개 결과에는 KMS ARN 대신 암호화 연결 여부만 남겨 안전한 관리 경계를 전달합니다.
@@ -1640,9 +1994,9 @@ function sanitizePublicCloudWatchMetricAlarmConfig(
       return (
         typeof name !== "string" ||
         name.trim().length === 0 ||
-        containsAwsArn(name) ||
+        containsAwsSensitiveIdentity(name) ||
         typeof value !== "string" ||
-        containsAwsArn(value)
+        containsAwsSensitiveIdentity(value)
       );
     });
 
@@ -1688,9 +2042,9 @@ function sanitizePublicListTagEvidence(
     if (
       typeof key !== "string" ||
       key.trim().length === 0 ||
-      containsAwsArn(key) ||
+      containsAwsSensitiveIdentity(key) ||
       typeof value !== "string" ||
-      containsAwsArn(value)
+      containsAwsSensitiveIdentity(value)
     ) {
       return { ...configWithoutTags, tagsReadComplete: false };
     }
@@ -1698,6 +2052,74 @@ function sanitizePublicListTagEvidence(
   }
 
   return { ...configWithoutTags, tags, tagsReadComplete: true };
+}
+
+/** gg: CloudFront 공개 결과에서는 custom header와 계정이 포함된 인증서·WAF 식별자를 marker로만 남깁니다. */
+function sanitizePublicCloudFrontDistributionConfig(
+  publicConfig: Record<string, unknown>,
+  sourceConfig: Record<string, unknown>
+): Record<string, unknown> {
+  const { webAclId: _publicWebAclId, ...publicConfigWithoutWebAcl } = publicConfig;
+  const sourceOrigins = Array.isArray(sourceConfig["origin"]) ? sourceConfig["origin"] : [];
+  const publicOrigins = Array.isArray(publicConfig["origin"]) ? publicConfig["origin"] : [];
+  const origin = publicOrigins.map((candidate, index) => {
+    if (!isRecord(candidate)) return candidate;
+    const { customHeaders: _customHeaders, ...safeOrigin } = candidate;
+    const sourceOrigin = sourceOrigins[index];
+    const customHeaderCount =
+      isRecord(sourceOrigin) && Array.isArray(sourceOrigin["customHeaders"])
+        ? sourceOrigin["customHeaders"].length
+        : isRecord(sourceOrigin) && typeof sourceOrigin["customHeaderCount"] === "number"
+          ? sourceOrigin["customHeaderCount"]
+          : 0;
+    return customHeaderCount > 0
+      ? { ...safeOrigin, hasCustomHeaders: true, customHeaderCount }
+      : safeOrigin;
+  });
+
+  const sourceViewerCertificate = isRecord(sourceConfig["viewerCertificate"])
+    ? sourceConfig["viewerCertificate"]
+    : null;
+  const publicViewerCertificate = isRecord(publicConfig["viewerCertificate"])
+    ? publicConfig["viewerCertificate"]
+    : null;
+  const hasCustomCertificate =
+    sourceViewerCertificate !== null &&
+    (getNonEmptyString(sourceViewerCertificate["acmCertificateArn"]) !== null ||
+      getNonEmptyString(sourceViewerCertificate["iamCertificateId"]) !== null);
+  const viewerCertificate = publicViewerCertificate
+    ? Object.fromEntries(
+        Object.entries(publicViewerCertificate).filter(
+          ([key]) => key !== "acmCertificateArn" && key !== "iamCertificateId"
+        )
+      )
+    : undefined;
+  const sourceWebAclId = getNonEmptyString(sourceConfig["webAclId"]);
+  const hasCustomHeaders = sourceOrigins.some(
+    (candidate) =>
+      isRecord(candidate) &&
+      ((Array.isArray(candidate["customHeaders"]) && candidate["customHeaders"].length > 0) ||
+        (typeof candidate["customHeaderCount"] === "number" &&
+          candidate["customHeaderCount"] > 0) ||
+        candidate["hasCustomHeaders"] === true)
+  );
+
+  return {
+    ...publicConfigWithoutWebAcl,
+    ...(publicOrigins.length > 0 ? { origin } : {}),
+    ...(viewerCertificate
+      ? {
+          viewerCertificate: {
+            ...viewerCertificate,
+            ...(hasCustomCertificate ? { hasCustomCertificate: true } : {})
+          }
+        }
+      : {}),
+    ...(sourceWebAclId !== null ? { hasWebAcl: true } : {}),
+    ...((hasCustomCertificate || sourceWebAclId !== null || hasCustomHeaders) && {
+      configReadComplete: false
+    })
+  };
 }
 
 function sanitizePublicEcsTaskDefinitionConfig(
@@ -1800,7 +2222,7 @@ export function createAwsPublicProviderResourceId(
 
   if (
     !OPAQUE_PUBLIC_ID_RESOURCE_TYPES.has(record.providerResourceType) &&
-    !containsAwsArn(record.providerResourceId)
+    !containsAwsSensitiveIdentity(record.providerResourceId)
   ) {
     return record.providerResourceId;
   }
@@ -1815,11 +2237,12 @@ function createOpaquePublicId(providerResourceType: string, providerResourceId: 
     .slice(0, 24)}`;
 }
 
+/** gg: ARN이나 계정 ID가 섞인 이름은 안전한 짧은 Resource 이름으로 바꿉니다. */
 export function createAwsPublicDisplayName(
   record: Pick<AwsDiscoveredResourceRecord, "providerResourceType" | "providerResourceId">,
   displayName: string
 ): string {
-  if (!containsAwsArn(displayName)) {
+  if (!containsAwsSensitiveIdentity(displayName)) {
     return displayName;
   }
 
@@ -1827,9 +2250,10 @@ export function createAwsPublicDisplayName(
   return `${resourceLabel} · ${createAwsPublicProviderResourceId(record).slice(-7)}`;
 }
 
+/** gg: 공개 config의 모든 중첩 문자열에서 AWS 원본 식별자를 fail-close로 제거합니다. */
 function sanitizePublicConfigValue(value: unknown): unknown | typeof OMIT_PUBLIC_VALUE {
   if (typeof value === "string") {
-    return containsAwsArn(value) ? OMIT_PUBLIC_VALUE : value;
+    return containsAwsSensitiveIdentity(value) ? OMIT_PUBLIC_VALUE : value;
   }
 
   if (Array.isArray(value)) {
@@ -1842,7 +2266,7 @@ function sanitizePublicConfigValue(value: unknown): unknown | typeof OMIT_PUBLIC
   if (isRecord(value)) {
     return Object.fromEntries(
       Object.entries(value).flatMap(([key, nestedValue]) => {
-        if (containsAwsArn(key)) {
+        if (containsAwsSensitiveIdentity(key)) {
           return [];
         }
 
@@ -1857,6 +2281,11 @@ function sanitizePublicConfigValue(value: unknown): unknown | typeof OMIT_PUBLIC
 
 export function containsAwsArn(value: string): boolean {
   return /(?:^|[^a-z0-9])arn:aws(?:-[a-z0-9-]+)?:/iu.test(value);
+}
+
+/** gg: ARN이 아니어도 12자리 AWS 계정 ID처럼 보이는 값은 공개 경계에서 숨깁니다. */
+function containsAwsSensitiveIdentity(value: string): boolean {
+  return containsAwsArn(value) || /(?:^|[^0-9])[0-9]{12}(?![0-9])/u.test(value);
 }
 
 // AWS ARN처럼 긴 ID를 보드 node id에 넣을 수 있는 안전한 문자열로 정리합니다.

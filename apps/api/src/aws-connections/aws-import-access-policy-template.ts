@@ -8,12 +8,12 @@ import {
   getAwsImportPolicyFingerprint
 } from "./aws-import-access-catalog.js";
 
-export const AWS_IMPORT_POLICY_CONTRACT_VERSION = "8";
+export const AWS_IMPORT_POLICY_CONTRACT_VERSION = "10";
 
 export type AwsImportIssuedPolicyActionRegistry = Readonly<Record<string, readonly string[]>>;
 
 /** gg: 이미 발급한 Policy contract별 exact action set만 수동으로 보존합니다. */
-export const AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION = {
+const AWS_IMPORT_ISSUED_POLICY_ACTIONS_THROUGH_V8 = {
   "1": [
     "apigateway:GET",
     "cloudfront:ListDistributions",
@@ -491,6 +491,25 @@ export const AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION = {
     "secretsmanager:ListSecrets",
     "tag:GetResources"
   ]
+} as const satisfies AwsImportIssuedPolicyActionRegistry;
+
+/** gg: v8은 불변으로 두고 S3 Bucket 설정과 Object 목록 조회 권한만 v9에 추가합니다. */
+const AWS_IMPORT_ISSUED_POLICY_ACTIONS_THROUGH_V9 = {
+  ...AWS_IMPORT_ISSUED_POLICY_ACTIONS_THROUGH_V8,
+  "9": [
+    ...AWS_IMPORT_ISSUED_POLICY_ACTIONS_THROUGH_V8["8"],
+    "s3:GetBucketPolicy",
+    "s3:ListBucket"
+  ].sort()
+} as const satisfies AwsImportIssuedPolicyActionRegistry;
+
+/** gg: v9은 그대로 보존하고 CloudFront exact config 조회 권한만 v10에 추가합니다. */
+export const AWS_IMPORT_ISSUED_POLICY_ACTIONS_BY_VERSION = {
+  ...AWS_IMPORT_ISSUED_POLICY_ACTIONS_THROUGH_V9,
+  "10": [
+    ...AWS_IMPORT_ISSUED_POLICY_ACTIONS_THROUGH_V9["9"],
+    "cloudfront:GetDistributionConfig"
+  ].sort()
 } as const satisfies AwsImportIssuedPolicyActionRegistry;
 
 export type AwsImportPolicyContractInput = {

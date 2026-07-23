@@ -10,13 +10,15 @@ import {
 test("기존 S3를 안정적인 Terraform 주소와 실제 편집값으로 투영한다", () => {
   const projection = createReverseEngineeringTerraformProjection(
     resource("S3", {
+      providerResourceType: "AWS::S3::Bucket",
       providerResourceId: "customer-assets",
       config: {
         createdAt: "2026-07-20T00:00:00.000Z",
         tags: [
           { key: "Environment", value: "production" },
           { Key: "Owner", Value: "platform" }
-        ]
+        ],
+        tagsReadComplete: true
       }
     })
   );

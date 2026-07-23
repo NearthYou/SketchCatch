@@ -39,6 +39,10 @@ const TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE = new Map<ResourceType, string>([
   ["LOAD_BALANCER_TARGET_GROUP", "aws_lb_target_group"],
   ["LOAD_BALANCER_LISTENER", "aws_lb_listener"],
   ["CLOUDFRONT", "aws_cloudfront_distribution"],
+  ["ECR_REPOSITORY", "aws_ecr_repository"],
+  ["SECRETS_MANAGER_SECRET", "aws_secretsmanager_secret"],
+  ["APPLICATION_AUTO_SCALING_TARGET", "aws_appautoscaling_target"],
+  ["APPLICATION_AUTO_SCALING_POLICY", "aws_appautoscaling_policy"],
   ["ECS_CLUSTER", "aws_ecs_cluster"],
   ["ECS_SERVICE", "aws_ecs_service"],
   ["ECS_TASK_DEFINITION", "aws_ecs_task_definition"]
@@ -58,7 +62,12 @@ const DETAILED_TERRAFORM_RESOURCE_TYPE_BY_PROVIDER_RESOURCE_TYPE = new Map<strin
   ["AWS::ApiGateway::Method", "aws_api_gateway_method"],
   ["AWS::ApiGateway::Integration", "aws_api_gateway_integration"],
   ["AWS::ApiGateway::Deployment", "aws_api_gateway_deployment"],
-  ["AWS::ApiGateway::Stage", "aws_api_gateway_stage"]
+  ["AWS::ApiGateway::Stage", "aws_api_gateway_stage"],
+  ["AWS::S3::BucketVersioning", "aws_s3_bucket_versioning"],
+  ["AWS::S3::BucketPublicAccessBlock", "aws_s3_bucket_public_access_block"],
+  ["AWS::S3::BucketPolicy", "aws_s3_bucket_policy"],
+  ["AWS::S3::Object", "aws_s3_object"],
+  ["AWS::CloudFront::OriginAccessControl", "aws_cloudfront_origin_access_control"]
 ]);
 
 const DETAILED_PROVIDER_RESOURCE_TYPES_BY_RESOURCE_TYPE = new Map<
@@ -97,7 +106,9 @@ const SAME_SCAN_REFERENCE_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_METHOD",
   "API_GATEWAY_INTEGRATION",
   "API_GATEWAY_DEPLOYMENT",
-  "API_GATEWAY_STAGE"
+  "API_GATEWAY_STAGE",
+  "S3",
+  "APPLICATION_AUTO_SCALING_POLICY"
 ]);
 
 /** 기존 AWS 리소스를 보드에서 편집 가능한 Terraform identity와 명시적 인수로 투영한다. */
@@ -144,6 +155,12 @@ export function getReverseEngineeringTerraformResourceType(
       ? DETAILED_TERRAFORM_RESOURCE_TYPE_BY_PROVIDER_RESOURCE_TYPE.get(providerResourceType)
       : undefined;
   }
+
+  const providerSpecificType = providerResourceType
+    ? DETAILED_TERRAFORM_RESOURCE_TYPE_BY_PROVIDER_RESOURCE_TYPE.get(providerResourceType)
+    : undefined;
+  if (providerSpecificType) return providerSpecificType;
+
   return TERRAFORM_RESOURCE_TYPE_BY_RESOURCE_TYPE.get(resourceType);
 }
 
@@ -159,7 +176,7 @@ export function createStableTerraformResourceName(resourceId: string): string {
   return /^[a-z_]/u.test(safeName) ? safeName : `resource_${safeName}`;
 }
 
-/** Resource 종류별로 AWS 관찰값 중 Terraform에서 실제로 선언할 값만 allowlist한다. */
+/** gg: Resource 종류별 AWS 관찰값 중 Terraform에서 실제로 선언할 값만 allowlist합니다. */
 export function createReverseEngineeringTerraformValues(
   resource: DiscoveredResource,
   sameScanResources?: readonly DiscoveredResource[]
@@ -284,10 +301,7 @@ export function createReverseEngineeringTerraformValues(
         tags: normalizeTerraformTags(config["tags"])
       });
     case "S3":
-      return compactConfig({
-        bucket: resource.providerResourceId,
-        tags: normalizeTerraformTags(config["tags"])
-      });
+      return createS3TerraformValues(resource, sameScanResources);
     case "CLOUDWATCH_LOG_GROUP":
       return compactConfig({
         name: config["logGroupName"],
@@ -347,15 +361,47 @@ export function createReverseEngineeringTerraformValues(
     case "LOAD_BALANCER_LISTENER":
       return createLoadBalancerListenerTerraformValues(resource, sameScanResources);
     case "CLOUDFRONT":
+      if (resource.providerResourceType === "AWS::CloudFront::OriginAccessControl") {
+        return compactConfig({
+          name: config["name"],
+          description: config["description"],
+          originAccessControlOriginType: config["originAccessControlOriginType"],
+          signingBehavior: config["signingBehavior"],
+          signingProtocol: config["signingProtocol"]
+        });
+      }
+      return createCloudFrontDistributionTerraformValues(resource, sameScanResources);
+    case "ECR_REPOSITORY":
       return compactConfig({
-        comment: config["comment"],
-        enabled: config["enabled"],
-        origin: config["origin"],
-        defaultCacheBehavior: config["defaultCacheBehavior"],
-        restrictions: config["restrictions"],
-        viewerCertificate: config["viewerCertificate"],
+        name: config["repositoryName"],
+        imageTagMutability: config["imageTagMutability"],
+        imageScanningConfiguration: compactConfig({ scanOnPush: config["scanOnPush"] }),
+        encryptionConfiguration: compactConfig({
+          encryptionType: config["encryptionType"],
+          kmsKey: config["kmsKey"]
+        }),
         tags: normalizeTerraformTags(config["tags"])
       });
+    case "SECRETS_MANAGER_SECRET":
+      return compactConfig({
+        name: config["name"],
+        description: config["description"],
+        kmsKeyId: config["kmsKeyId"],
+        tags: normalizeTerraformTags(config["tags"])
+      });
+    case "APPLICATION_AUTO_SCALING_TARGET":
+      return compactConfig({
+        minCapacity: config["minCapacity"],
+        maxCapacity: config["maxCapacity"],
+        resourceId: config["resourceId"],
+        roleArn: config["roleArn"],
+        scalableDimension: config["scalableDimension"],
+        serviceNamespace: config["serviceNamespace"],
+        suspendedState: config["suspendedState"],
+        tags: normalizeTerraformTags(config["tags"])
+      });
+    case "APPLICATION_AUTO_SCALING_POLICY":
+      return createApplicationAutoScalingPolicyTerraformValues(resource, sameScanResources);
     case "ECS_CLUSTER":
       return compactConfig({
         name: config["name"],
@@ -389,6 +435,159 @@ export function createReverseEngineeringTerraformValues(
     default:
       return {};
   }
+}
+
+/** gg: 같은 scan에서 exact OAC 관계가 확인되면 Distribution의 기존 literal ID를 Terraform 참조로 바꿉니다. */
+function createCloudFrontDistributionTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  const origins = Array.isArray(resource.config["origin"])
+    ? resource.config["origin"].map((origin) => {
+        if (!isRecord(origin)) return origin;
+        const originAccessControlId = getNonEmptyString(origin["originAccessControlId"]);
+        const originAccessControl = originAccessControlId
+          ? findSameScanRelatedManagedProviderTarget(
+              resource,
+              sameScanResources,
+              "CLOUDFRONT",
+              "AWS::CloudFront::OriginAccessControl",
+              originAccessControlId
+            )
+          : undefined;
+
+        return originAccessControl
+          ? {
+              ...origin,
+              originAccessControlId: createTerraformIdReference(
+                "aws_cloudfront_origin_access_control",
+                originAccessControl
+              )
+            }
+          : origin;
+      })
+    : resource.config["origin"];
+
+  return compactConfig({
+    aliases: resource.config["aliases"],
+    comment: resource.config["comment"],
+    defaultCacheBehavior: resource.config["defaultCacheBehavior"],
+    defaultRootObject: resource.config["defaultRootObject"],
+    enabled: resource.config["enabled"],
+    httpVersion: resource.config["httpVersion"],
+    isIpv6Enabled: resource.config["isIpv6Enabled"],
+    orderedCacheBehavior: resource.config["orderedCacheBehavior"],
+    origin: origins,
+    priceClass: resource.config["priceClass"],
+    restrictions: resource.config["restrictions"],
+    tags: normalizeTerraformTags(resource.config["tags"]),
+    viewerCertificate: resource.config["viewerCertificate"],
+    webAclId: resource.config["webAclId"]
+  });
+}
+
+/** gg: S3 하위 설정은 같은 scan의 Bucket과 정확한 관계가 있을 때만 Terraform 참조로 바꿉니다. */
+function createS3TerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  if (resource.providerResourceType === "AWS::S3::Bucket") {
+    return compactConfig({
+      bucket: resource.providerResourceId,
+      tags: normalizeTerraformTags(resource.config["tags"])
+    });
+  }
+
+  const bucket = findSameScanRelatedManagedProviderTarget(
+    resource,
+    sameScanResources,
+    "S3",
+    "AWS::S3::Bucket",
+    resource.config["bucketName"]
+  );
+  if (!bucket) return {};
+  const bucketReference = createTerraformIdReference("aws_s3_bucket", bucket);
+
+  if (resource.providerResourceType === "AWS::S3::BucketVersioning") {
+    return compactConfig({
+      bucket: bucketReference,
+      versioningConfiguration: compactConfig({
+        status: resource.config["versioningStatus"],
+        mfaDelete: resource.config["mfaDelete"]
+      })
+    });
+  }
+
+  if (resource.providerResourceType === "AWS::S3::BucketPublicAccessBlock") {
+    return compactConfig({
+      bucket: bucketReference,
+      blockPublicAcls: resource.config["blockPublicAcls"],
+      ignorePublicAcls: resource.config["ignorePublicAcls"],
+      blockPublicPolicy: resource.config["blockPublicPolicy"],
+      restrictPublicBuckets: resource.config["restrictPublicBuckets"]
+    });
+  }
+
+  if (resource.providerResourceType === "AWS::S3::BucketPolicy") {
+    return compactConfig({
+      bucket: bucketReference,
+      policy: normalizeJsonDocument(resource.config["policyDocument"])
+    });
+  }
+
+  if (resource.providerResourceType === "AWS::S3::Object") {
+    return compactConfig({
+      bucket: bucketReference,
+      key: resource.config["key"],
+      contentType: resource.config["contentType"],
+      cacheControl: resource.config["cacheControl"],
+      contentDisposition: resource.config["contentDisposition"],
+      contentEncoding: resource.config["contentEncoding"],
+      contentLanguage: resource.config["contentLanguage"],
+      websiteRedirect: resource.config["websiteRedirect"],
+      storageClass: resource.config["storageClass"],
+      tags: normalizeTerraformTags(resource.config["tags"]),
+      lifecycle: { ignoreChanges: ["content", "source", "etag"] }
+    });
+  }
+
+  return {};
+}
+
+/** gg: Scaling Policy는 같은 scan의 Target을 exact Terraform 속성으로만 참조합니다. */
+function createApplicationAutoScalingPolicyTerraformValues(
+  resource: DiscoveredResource,
+  sameScanResources: readonly DiscoveredResource[] | undefined
+): ResourceConfig {
+  const target = findSameScanRelatedManagedProviderTarget(
+    resource,
+    sameScanResources,
+    "APPLICATION_AUTO_SCALING_TARGET",
+    "AWS::ApplicationAutoScaling::ScalableTarget"
+  );
+  if (!target) return {};
+
+  return compactConfig({
+    name: resource.config["policyName"],
+    policyType: resource.config["policyType"],
+    resourceId: createTerraformAttributeReference(
+      "aws_appautoscaling_target",
+      target,
+      "resource_id"
+    ),
+    scalableDimension: createTerraformAttributeReference(
+      "aws_appautoscaling_target",
+      target,
+      "scalable_dimension"
+    ),
+    serviceNamespace: createTerraformAttributeReference(
+      "aws_appautoscaling_target",
+      target,
+      "service_namespace"
+    ),
+    targetTrackingScalingPolicyConfiguration:
+      resource.config["targetTrackingScalingPolicyConfiguration"]
+  });
 }
 
 function createIamRoleTerraformValues(
@@ -1084,12 +1283,14 @@ function findSameScanRelatedManagedProviderTarget(
   return target && classifyReverseEngineeringManagement(target) === "managed" ? target : undefined;
 }
 
+/** gg: 공개 ID·server-only ID·정규화 config가 같은 exact provider identity인지 확인합니다. */
 function hasProviderIdentity(resource: DiscoveredResource, exactIdentity: string): boolean {
   return [
     resource.providerResourceId,
     resource.config["providerResourceId"],
     resource.config["resourceArn"],
-    resource.config["keyId"]
+    resource.config["keyId"],
+    resource.config["id"]
   ].some((candidate) => getNonEmptyString(candidate) === exactIdentity);
 }
 
@@ -1249,13 +1450,19 @@ function createTerraformAttributeReference(
   return `${terraformResourceType}.${createStableTerraformResourceName(resource.id)}.${attributeName}`;
 }
 
+/** gg: JSON 정책을 안정적인 문자열로 만들고 AWS 정책 변수를 Terraform literal로 보존합니다. */
 function normalizeJsonDocument(value: unknown): string | undefined {
   try {
     const parsed = typeof value === "string" ? (JSON.parse(value) as unknown) : value;
-    return isRecord(parsed) ? JSON.stringify(parsed) : undefined;
+    return isRecord(parsed) ? escapeTerraformStringInterpolation(JSON.stringify(parsed)) : undefined;
   } catch {
     return undefined;
   }
+}
+
+/** gg: AWS policy 변수 `${...}`는 Terraform 표현식이 아니라 JSON literal이므로 `$${...}`로 보존합니다. */
+function escapeTerraformStringInterpolation(value: string): string {
+  return value.replace(/(?<!\$)\$\{/gu, () => "$${");
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {

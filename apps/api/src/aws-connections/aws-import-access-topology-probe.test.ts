@@ -128,7 +128,7 @@ test("CloudFront topology probe는 Distribution과 OAC metadata를 bounded read�
   const distributionArn = "arn:aws:cloudfront::123456789012:distribution/D1";
   const calls = await runProbe(probe, (name) => {
     if (name === "ListDistributionsCommand") {
-      return { DistributionList: { Items: [{ ARN: distributionArn }] } };
+      return { DistributionList: { Items: [{ ARN: distributionArn, Id: "D1" }] } };
     }
     if (name === "ListOriginAccessControlsCommand") {
       return { OriginAccessControlList: { Items: [{ Id: "oac-demo" }] } };
@@ -138,14 +138,16 @@ test("CloudFront topology probe는 Distribution과 OAC metadata를 bounded read�
 
   assert.deepEqual(calls.map((call) => call.name), [
     "ListDistributionsCommand",
+    "GetDistributionConfigCommand",
     "ListTagsForResourceCommand",
     "ListOriginAccessControlsCommand",
     "GetOriginAccessControlCommand"
   ]);
   assert.equal(calls[0]?.input["MaxItems"], 1);
-  assert.equal(calls[1]?.input["Resource"], distributionArn);
-  assert.equal(calls[2]?.input["MaxItems"], 1);
-  assert.equal(calls[3]?.input["Id"], "oac-demo");
+  assert.equal(calls[1]?.input["Id"], "D1");
+  assert.equal(calls[2]?.input["Resource"], distributionArn);
+  assert.equal(calls[3]?.input["MaxItems"], 1);
+  assert.equal(calls[4]?.input["Id"], "oac-demo");
 });
 
 async function getProbe(name: string): Promise<Probe> {

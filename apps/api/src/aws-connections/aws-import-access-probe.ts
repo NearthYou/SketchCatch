@@ -19,6 +19,7 @@ import {
 } from "@aws-sdk/client-api-gateway";
 import {
   CloudFrontClient,
+  GetDistributionConfigCommand,
   GetOriginAccessControlCommand,
   ListDistributionsCommand,
   ListOriginAccessControlsCommand,
@@ -132,12 +133,14 @@ import {
 import {
   GetBucketEncryptionCommand,
   GetBucketLocationCommand,
+  GetBucketPolicyCommand,
   GetBucketPolicyStatusCommand,
   GetBucketTaggingCommand,
   GetBucketVersioningCommand,
   GetBucketWebsiteCommand,
   GetPublicAccessBlockCommand,
   ListBucketsCommand,
+  ListObjectsV2Command,
   S3Client
 } from "@aws-sdk/client-s3";
 import type { TerraformAwsCredentialEnv } from "./aws-connection-runtime-credentials.js";
@@ -496,7 +499,7 @@ async function probeS3Executor(
   });
 }
 
-/** gg: S3는 bucket 목록 한 page와 첫 bucket의 optional 설정만 확인합니다. */
+/** gg: S3는 첫 Bucket의 설정과 Object 목록 권한만 확인하고 Object data는 읽지 않습니다. */
 export async function probeS3(client: AwsImportProbeReadClient): Promise<AwsImportProbeOutcome> {
   const listed = (await client.send(new ListBucketsCommand({ MaxBuckets: 1 }))) as {
     Buckets?: Array<{ Name?: string }>;
@@ -510,7 +513,8 @@ export async function probeS3(client: AwsImportProbeReadClient): Promise<AwsImpo
     new GetBucketEncryptionCommand({ Bucket: bucket }),
     new GetBucketWebsiteCommand({ Bucket: bucket }),
     new GetBucketTaggingCommand({ Bucket: bucket }),
-    new GetBucketPolicyStatusCommand({ Bucket: bucket })
+    new GetBucketPolicyStatusCommand({ Bucket: bucket }),
+    new GetBucketPolicyCommand({ Bucket: bucket })
   ]) {
     try {
       await client.send(command);
@@ -518,6 +522,7 @@ export async function probeS3(client: AwsImportProbeReadClient): Promise<AwsImpo
       if (!isMissingConfigurationError(error)) throw error;
     }
   }
+  await client.send(new ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1 }));
   return "success";
 }
 
@@ -619,14 +624,19 @@ async function probeCloudFront(
   });
 }
 
-/** gg: Distribution과 첫 Origin Access Control metadata만 읽습니다. */
+/** gg: 첫 Distribution의 exact config·태그와 첫 OAC metadata를 bounded read합니다. */
 export async function probeCloudFrontTopology(
   client: AwsImportProbeReadClient
 ): Promise<AwsImportProbeOutcome> {
   const distributions = (await client.send(new ListDistributionsCommand({ MaxItems: 1 }))) as {
-    DistributionList?: { Items?: Array<{ ARN?: string }> };
+    DistributionList?: { Items?: Array<{ ARN?: string; Id?: string }> };
   };
-  const distributionArn = distributions.DistributionList?.Items?.[0]?.ARN;
+  const distribution = distributions.DistributionList?.Items?.[0];
+  const distributionArn = distribution?.ARN;
+  const distributionId = distribution?.Id;
+  if (distributionId) {
+    await client.send(new GetDistributionConfigCommand({ Id: distributionId }));
+  }
   if (distributionArn) {
     await client.send(new ListCloudFrontTagsForResourceCommand({ Resource: distributionArn }));
   }

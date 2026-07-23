@@ -964,7 +964,11 @@ function createReverseEngineeringImportScanResult(): ReverseEngineeringScanResul
         region: "ap-northeast-2",
         displayName: "existing-bucket",
         resourceType: "S3",
-        config: { bucket: "existing-bucket" },
+        config: {
+          bucket: "existing-bucket",
+          tags: [],
+          tagsReadComplete: true
+        },
         relationships: []
       }
     ],
