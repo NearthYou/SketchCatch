@@ -70,7 +70,10 @@ export function RepositoryAnalysisForm({
             />
           </label>
           <label className={styles.field} htmlFor="repository-branch">
-            <span>Branch</span>
+            <span className={styles.fieldLabel}>
+              <GitBranch aria-hidden="true" size={24} />
+              <span>Branch</span>
+            </span>
             <input
               autoComplete="off"
               id="repository-branch"

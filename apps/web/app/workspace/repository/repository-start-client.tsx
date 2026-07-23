@@ -148,6 +148,8 @@ export function RepositoryStartClient({
   const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
   const isPublicAnalysisBusy = publicAnalysisState === "loading";
   const showUrlAnalysis = Boolean(!activeRepository || publicAnalysis);
+  const isUrlEntryStage =
+    showUrlAnalysis && !publicAnalysis && publicRecommendationStage === "configuration";
   const publicRecommendation = publicAnalysis
     ? createPublicRepositoryRecommendation({
         analysis: publicAnalysis,
@@ -670,12 +672,15 @@ export function RepositoryStartClient({
         </Link>
       </header>
       <div className={styles.shell}>
-        <header className={styles.pageHeading}>
+        <header
+          className={`${styles.pageHeading}${
+            isUrlEntryStage ? ` ${styles.entryPageHeading}` : ""
+          }`}
+        >
           <h1 id="repository-start-title">GitHub 저장소</h1>
         </header>
 
-        {showUrlAnalysis && !publicAnalysis &&
-        publicRecommendationStage === "configuration" ? (
+        {isUrlEntryStage ? (
           <RepositoryAnalysisForm
             branch={defaultBranch}
             errorMessage={publicAnalysisState === "repository_error" ? "" : errorMessage}
