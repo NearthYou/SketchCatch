@@ -181,8 +181,12 @@ The service capability that scans existing cloud Resources through provider adap
 _Avoid_: Resource list, AWS scan, diagram import
 
 **Imported Architecture Original**:
-The Reverse Engineering result that preserves the discovered Resources, relationships, and configuration exactly, while applying only a deterministic collision-free initial position because cloud providers do not store Architecture Board coordinates. It is distinct from Board Auto Arrange and any semantic Compiler proposal.
+The Reverse Engineering result that preserves the discovered Resources, relationships, and configuration exactly, while applying only a deterministic collision-free initial position because cloud providers do not store Architecture Board coordinates. It is a preview and becomes a saved Workspace Board only when the user chooses `보드에 적용`; it is distinct from Board Auto Arrange and any semantic Compiler proposal.
 _Avoid_: Raw provider response, automatically improved architecture, Compiler result
+
+**Imported Infrastructure Frame**:
+A presentation-only frame that distinguishes recognizable infrastructure sets inside one imported cloud account. It is inferred from `Project`, `Service`, and `Environment` tags first, then from VPC and relationship context when tags are absent; users may freely edit or remove it without changing cloud or IaC ownership. Board Auto Arrange lays out only the Resources inside each frame and never moves a Resource into another frame or moves, resizes, merges, splits, or removes the frame itself.
+_Avoid_: AWS resource group, Terraform module, containment, deployment boundary
 
 **AWS Import Access Update**:
 A user-approved permission update owned by AWS connection settings so Reverse Engineering can read supported services. It preserves the existing connection identity, Role, original Stack, deployment policy, and deployment verification. Reverse Engineering may detect missing access and route the user to this flow, but never changes AWS permissions itself. Cleanup removes only the access artifacts owned by this update; an uncertain cleanup remains inactive and retryable.
@@ -199,6 +203,10 @@ _Avoid_: AWS connection status, deployment verification, Stack status
 **Partial Architecture Import**:
 A usable Reverse Engineering result containing every Resource successfully discovered even when one or more supported services could not be read. The Board remains visible and the UI gives a short notice plus an AWS Import Access Update action instead of blocking the result or exposing provider errors. `Use Imported Items Only` is the single explicit approval for applying this incomplete result and makes the incompleteness visible without a second confirmation dialog.
 _Avoid_: Failed import, complete architecture, raw scan error
+
+**Reverse Engineering Result Summary**:
+The compact first result shown after an existing cloud scan. It contains only the discovered Resource count, relationship count, the primary `Apply to Board` action, and the optional `Arrange for readability` action; diagnostics and Terraform management details are available only when the user asks to see them.
+_Avoid_: Full scan report, provider diagnostics, import debug panel
 
 **IaC Preview**:
 The generated infrastructure-as-code representation of a Practice Architecture before the user approves deployment.
