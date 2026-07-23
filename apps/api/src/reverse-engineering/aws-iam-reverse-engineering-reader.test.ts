@@ -157,7 +157,8 @@ test("reads customer IAM role, inline policy, managed policy, attachment and ins
     "AWS::IAM::InstanceProfile",
     "AWS::IAM::Policy",
     "AWS::IAM::Role",
-    "AWS::IAM::RolePolicy"
+    "AWS::IAM::RolePolicy",
+    "AWS::IAM::RolePolicyAttachment"
   ]);
   const role = result.records.find((record) => record.displayName === "app-role");
   assert.match(role?.providerResourceId ?? "", /^aws-ref-[a-f0-9]{24}$/u);
@@ -179,6 +180,20 @@ test("reads customer IAM role, inline policy, managed policy, attachment and ins
   assert.equal(inlinePolicy?.config["policyDocumentRedacted"], true);
   assert.equal(inlinePolicy?.config["managementReady"], true);
 
+  const attachment = result.records.find(
+    (record) => record.providerResourceType === "AWS::IAM::RolePolicyAttachment"
+  );
+  assert.deepEqual(attachment?.config, {
+    managementReady: true,
+    ownership: "customer",
+    policyName: "app-policy",
+    reverseEngineeringDetailsComplete: true,
+    reverseEngineeringDetailsVersion: 1,
+    reverseEngineeringIncompleteDetails: [],
+    roleName: "app-role"
+  });
+  assert.equal(attachment?.relationships.length, 2);
+
   const roleServerDetail = result.serverOnlyDetails.find(
     (detail) => detail.resourceKind === "role"
   );
@@ -191,10 +206,15 @@ test("reads customer IAM role, inline policy, managed policy, attachment and ins
   const profileServerDetail = result.serverOnlyDetails.find(
     (detail) => detail.resourceKind === "instance_profile"
   );
+  const attachmentServerDetail = result.serverOnlyDetails.find(
+    (detail) => detail.resourceKind === "role_policy_attachment"
+  );
   assert.equal(roleServerDetail?.terraformImportId, "app-role");
   assert.equal(inlineServerDetail?.terraformImportId, "app-role:inline-app");
   assert.equal(managedPolicyServerDetail?.terraformImportId, policyArn);
   assert.equal(profileServerDetail?.terraformImportId, "app-profile");
+  assert.equal(attachmentServerDetail?.terraformImportId, `app-role/${policyArn}`);
+  assert.equal(attachmentServerDetail?.policyArn, policyArn);
 
   const publicJson = JSON.stringify({ records: result.records, failures: result.failures });
   assert.doesNotMatch(publicJson, new RegExp(trustSecret));
@@ -208,6 +228,66 @@ test("reads customer IAM role, inline policy, managed policy, attachment and ins
   assert.match(JSON.stringify(result.serverOnlyDetails), new RegExp(profileArn));
   assert.ok(commands.some((command) => command instanceof GetRoleCommand));
   assert.ok(commands.some((command) => command instanceof GetPolicyVersionCommand));
+});
+
+test("Instance Profile은 정확히 하나의 완전한 Role 관계가 있을 때만 관리 가능하다", async () => {
+  const profileArn = "arn:aws:iam::123456789012:instance-profile/app-profile";
+  const roleArn = "arn:aws:iam::123456789012:role/app-role";
+  const secondRoleArn = "arn:aws:iam::123456789012:role/second-role";
+
+  for (const roles of [
+    [],
+    [{ Arn: roleArn }],
+    [
+      { Arn: roleArn, RoleName: "app-role" },
+      { Arn: secondRoleArn, RoleName: "second-role" }
+    ]
+  ]) {
+    const client: AwsIamDetailReadClient = {
+      async send(command) {
+        if (command instanceof ListRolesCommand) {
+          return { Roles: [], IsTruncated: false };
+        }
+        if (command instanceof ListPoliciesCommand) {
+          return { Policies: [], IsTruncated: false };
+        }
+        if (command instanceof ListInstanceProfilesCommand) {
+          return {
+            InstanceProfiles: [
+              { Arn: profileArn, InstanceProfileName: "app-profile", Path: "/", Roles: roles }
+            ],
+            IsTruncated: false
+          };
+        }
+        if (command instanceof GetInstanceProfileCommand) {
+          return {
+            InstanceProfile: {
+              Arn: profileArn,
+              InstanceProfileName: "app-profile",
+              Path: "/",
+              Roles: roles
+            }
+          };
+        }
+        if (command instanceof ListInstanceProfileTagsCommand) {
+          return { Tags: [], IsTruncated: false };
+        }
+        throw new Error(`Unexpected command ${command.constructor.name}`);
+      }
+    };
+
+    const result = await readDetailedIamResources("ap-northeast-2", credentials, () => client);
+    const profile = result.records.find(
+      (record) => record.providerResourceType === "AWS::IAM::InstanceProfile"
+    );
+
+    assert.equal(profile?.config["managementReady"], false);
+    assert.equal(profile?.config["reverseEngineeringDetailsComplete"], false);
+    assert.deepEqual(profile?.config["reverseEngineeringIncompleteDetails"], [
+      "instanceProfileRole"
+    ]);
+    assert.equal(profile?.relationships.length, roles.length === 2 ? 2 : 0);
+  }
 });
 
 test("marks IAM records incomplete when a detail permission is missing and keeps prior pages fail-closed", async () => {

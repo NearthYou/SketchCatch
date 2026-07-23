@@ -63,10 +63,17 @@ export type AwsIamReverseEngineeringOwnership = "customer" | "aws_managed" | "sk
 
 export type AwsIamServerOnlyDetail = {
   readonly providerResourceId: string;
-  readonly resourceKind: "role" | "managed_policy" | "inline_policy" | "instance_profile";
+  readonly resourceKind:
+    | "role"
+    | "managed_policy"
+    | "inline_policy"
+    | "role_policy_attachment"
+    | "instance_profile";
   readonly terraformImportId: string;
   readonly resourceArn?: string;
   readonly parentRoleArn?: string;
+  readonly roleName?: string;
+  readonly policyArn?: string;
   readonly attachedPolicyArns?: readonly string[];
   readonly permissionsBoundaryArn?: string;
   readonly roleArns?: readonly string[];
@@ -319,11 +326,19 @@ async function readDetailedIamRole(
     path: exactRole.Path ?? "/",
     tags: publicTags
   });
+  const attachedPolicyIdentities = attachedPolicies.items.flatMap((policy) => {
+    const policyArn = nonEmptyString(policy.PolicyArn);
+    const policyName = nonEmptyString(policy.PolicyName);
+    return policyArn && policyName ? [{ policyArn, policyName }] : [];
+  });
+  const attachedPolicyIdentitiesComplete =
+    attachedPolicyIdentities.length === attachedPolicies.items.length;
   const missingDetails = uniqueSorted([
     ...(getRole.complete ? [] : ["role"]),
     ...(trustPolicy.complete ? [] : ["trustPolicy"]),
     ...(tags.complete ? [] : ["tags"]),
     ...(attachedPolicies.complete ? [] : ["attachedPolicies"]),
+    ...(attachedPolicyIdentitiesComplete ? [] : ["attachedPolicyIdentity"]),
     ...(inlinePolicyNames.complete ? [] : ["inlinePolicies"]),
     ...inlinePolicyDetails.flatMap(({ policyName, detail }) => {
       const decoded = detail.complete
@@ -332,9 +347,7 @@ async function readDetailedIamRole(
       return decoded.complete ? [] : [`inlinePolicy:${policyName}`];
     })
   ]);
-  const attachedPolicyArns = attachedPolicies.items.flatMap((policy) =>
-    nonEmptyString(policy.PolicyArn) ? [policy.PolicyArn as string] : []
-  );
+  const attachedPolicyArns = attachedPolicyIdentities.map(({ policyArn }) => policyArn);
   const boundaryArn = nonEmptyString(exactRole.PermissionsBoundary?.PermissionsBoundaryArn);
   const roleProviderResourceId = createOpaqueAwsProviderResourceId("AWS::IAM::Role", roleArn);
   const roleRecord: AwsDiscoveredResourceRecord = {
@@ -410,6 +423,34 @@ async function readDetailedIamRole(
       } satisfies AwsDiscoveredResourceRecord
     ];
   });
+  const attachmentRecords = attachedPolicyIdentities.map(({ policyArn, policyName }) => {
+    const providerResourceId = createOpaqueAwsProviderResourceId(
+      "AWS::IAM::RolePolicyAttachment",
+      `${roleArn}:managed-policy:${policyArn}`
+    );
+    return {
+      providerResourceType: "AWS::IAM::RolePolicyAttachment",
+      providerResourceId,
+      displayName: `${roleName} · ${policyName}`,
+      region: "global",
+      config: {
+        roleName,
+        policyName,
+        ownership,
+        managementReady: ownership === "customer" && missingDetails.length === 0,
+        reverseEngineeringDetailsVersion: 1,
+        reverseEngineeringDetailsComplete: missingDetails.length === 0,
+        reverseEngineeringIncompleteDetails: missingDetails
+      },
+      relationships: [
+        { type: "depends_on" as const, targetProviderResourceId: roleProviderResourceId },
+        {
+          type: "depends_on" as const,
+          targetProviderResourceId: createOpaqueAwsProviderResourceId("AWS::IAM::Policy", policyArn)
+        }
+      ]
+    } satisfies AwsDiscoveredResourceRecord;
+  });
   const serverOnlyDetails: AwsIamServerOnlyDetail[] = [
     {
       providerResourceId: roleProviderResourceId,
@@ -438,11 +479,22 @@ async function readDetailedIamRole(
             }
           ]
         : [];
-    })
+    }),
+    ...attachedPolicyIdentities.map(({ policyArn }) => ({
+      providerResourceId: createOpaqueAwsProviderResourceId(
+        "AWS::IAM::RolePolicyAttachment",
+        `${roleArn}:managed-policy:${policyArn}`
+      ),
+      resourceKind: "role_policy_attachment" as const,
+      terraformImportId: `${roleName}/${policyArn}`,
+      parentRoleArn: roleArn,
+      roleName,
+      policyArn
+    }))
   ];
 
   return {
-    records: [roleRecord, ...inlineRecords],
+    records: [roleRecord, ...inlineRecords, ...attachmentRecords],
     serverOnlyDetails,
     failures: [
       ...toDetailFailure("AWS::IAM::Role", roleProviderResourceId, "role", getRole),
@@ -672,11 +724,15 @@ async function readDetailedIamInstanceProfile(
   });
   const missingDetails = uniqueSorted([
     ...(profileDetail.complete ? [] : ["instanceProfile"]),
-    ...(tags.complete ? [] : ["tags"])
+    ...(tags.complete ? [] : ["tags"]),
+    ...(hasSingleCompleteInstanceProfileRole(exactProfile.Roles) ? [] : ["instanceProfileRole"])
   ]);
-  const roleArns = (exactProfile.Roles ?? []).flatMap((role) =>
-    nonEmptyString(role.Arn) ? [role.Arn as string] : []
-  );
+  const completeRoles = (exactProfile.Roles ?? []).flatMap((role) => {
+    const roleArn = nonEmptyString(role.Arn);
+    const roleName = nonEmptyString(role.RoleName);
+    return roleArn && roleName ? [{ roleArn, roleName }] : [];
+  });
+  const roleArns = completeRoles.map(({ roleArn }) => roleArn);
   const profileProviderResourceId = createOpaqueAwsProviderResourceId(
     "AWS::IAM::InstanceProfile",
     profileArn
@@ -690,9 +746,7 @@ async function readDetailedIamInstanceProfile(
       instanceProfileName: profileName,
       path: exactProfile.Path,
       createdAt: exactProfile.CreateDate?.toISOString(),
-      roleNames: (exactProfile.Roles ?? []).flatMap((role) =>
-        nonEmptyString(role.RoleName) ? [role.RoleName as string] : []
-      ),
+      roleNames: completeRoles.map(({ roleName }) => roleName),
       ownership,
       managementReady: ownership === "customer" && missingDetails.length === 0,
       reverseEngineeringDetailsVersion: 1,
@@ -726,9 +780,24 @@ async function readDetailedIamInstanceProfile(
         "instanceProfile",
         profileDetail
       ),
-      ...toPageFailure("AWS::IAM::InstanceProfile", profileProviderResourceId, "tags", tags)
+      ...toPageFailure("AWS::IAM::InstanceProfile", profileProviderResourceId, "tags", tags),
+      ...(hasSingleCompleteInstanceProfileRole(exactProfile.Roles)
+        ? []
+        : [
+            createFailure(
+              "AWS::IAM::InstanceProfile",
+              profileProviderResourceId,
+              "instanceProfileRole"
+            )
+          ])
     ]
   };
+}
+
+/** gg: Terraform의 Instance Profile은 Role 하나만 받을 수 있으므로 누락·복수 관계를 추측하지 않습니다. */
+function hasSingleCompleteInstanceProfileRole(roles: readonly Role[] | undefined): boolean {
+  if (roles?.length !== 1) return false;
+  return nonEmptyString(roles[0]?.Arn) !== null && nonEmptyString(roles[0]?.RoleName) !== null;
 }
 
 /** gg: 개별 상세 조회 오류는 provider 문구 없이 고정된 안전 분류만 남깁니다. */
