@@ -53,19 +53,19 @@ function view(
 test("verified deployment connection can still require import access", () => {
   const result = view("update_required", "preview_policy");
 
-  assert.equal(result.title, "가져오기 권한 업데이트 필요");
-  assert.equal(result.primaryAction, "가져오기 권한 업데이트");
+  assert.equal(result.title, "AWS 구조 분석 권한 설정 필요");
+  assert.equal(result.primaryAction, "AWS에서 권한 설정");
   assert.equal(result.primaryCommand, "preview_policy");
   assert.equal(result.deploymentConnectionPreserved, true);
 });
 
 test("retry_required follows the server operation-aware nextAction", () => {
   const cases = [
-    ["prepare_manager", "AWS Console 다시 열기"],
-    ["check_manager", "Manager 준비 확인"],
-    ["preview_policy", "가져오기 권한 업데이트"],
-    ["check_reads", "읽기 권한 다시 확인"],
-    ["check_cleanup", "정리 상태 확인"]
+    ["prepare_manager", "AWS에서 권한 설정"],
+    ["check_manager", "권한 상태 확인"],
+    ["preview_policy", "AWS에서 권한 설정"],
+    ["check_reads", "권한 상태 확인"],
+    ["check_cleanup", "권한 상태 확인"]
   ] as const;
 
   for (const [nextAction, label] of cases) {
@@ -87,21 +87,21 @@ test("manager reload can mint a fresh Console link and still check AWS", () => {
   const result = view("manager_approval_required", "check_manager");
 
   assert.equal(result.primaryCommand, "check_manager");
-  assert.equal(result.primaryAction, "Manager 준비 확인");
+  assert.equal(result.primaryAction, "권한 상태 확인");
   assert.equal(result.secondaryCommand, "prepare_manager");
-  assert.equal(result.secondaryAction, "AWS Console 다시 열기");
+  assert.equal(result.secondaryAction, "AWS에서 권한 설정");
 });
 
 test("policy approval reload previews a fresh single-use approval before apply", () => {
   const reloaded = view("policy_approval_required", "apply_policy");
   assert.equal(reloaded.primaryCommand, "preview_policy");
-  assert.equal(reloaded.primaryAction, "권한 변경 내용 확인");
+  assert.equal(reloaded.primaryAction, "권한 설정 내용 확인");
 
   const previewed = view("policy_approval_required", "apply_policy", {
     hasPolicyApproval: true
   });
   assert.equal(previewed.primaryCommand, "apply_policy");
-  assert.equal(previewed.primaryAction, "확인한 권한 적용");
+  assert.equal(previewed.primaryAction, "AWS에서 권한 설정");
 });
 
 test("connection and cleanup states expose distinct state-driven actions", () => {
@@ -117,21 +117,21 @@ test("connection and cleanup states expose distinct state-driven actions", () =>
       command: view("cleanup_policy_required", "delete_policy_stack").primaryCommand,
       title: view("cleanup_policy_required", "delete_policy_stack").title
     },
-    { command: "prepare_cleanup", title: "가져오기 권한 정리 필요" }
+    { command: "prepare_cleanup", title: "AWS 구조 분석 권한 해제 필요" }
   );
   assert.deepEqual(
     {
       command: view("cleanup_manager_required", "delete_manager_stack").primaryCommand,
       title: view("cleanup_manager_required", "delete_manager_stack").title
     },
-    { command: "prepare_cleanup", title: "Manager 정리 필요" }
+    { command: "prepare_cleanup", title: "AWS 구조 분석 권한 해제 필요" }
   );
   assert.deepEqual(
     {
       command: view("cleanup_required", "check_cleanup").primaryCommand,
       title: view("cleanup_required", "check_cleanup").title
     },
-    { command: "check_cleanup", title: "AWS 권한 정리 확인 필요" }
+    { command: "check_cleanup", title: "AWS 구조 분석 권한 확인 필요" }
   );
 
   for (const status of ["cleanup_policy_required", "cleanup_manager_required"] as const) {
@@ -142,19 +142,19 @@ test("connection and cleanup states expose distinct state-driven actions", () =>
         : "delete_manager_stack"
     );
     assert.equal(cleanup.secondaryCommand, "check_cleanup");
-    assert.equal(cleanup.secondaryAction, "정리 상태 확인");
+    assert.equal(cleanup.secondaryAction, "권한 상태 확인");
   }
 });
 
 test("cleanup recovery reuses manager preparation only when the API explicitly allows it", () => {
   const recoverable = view("cleanup_required", "prepare_manager");
 
-  assert.equal(recoverable.title, "가져오기 권한 다시 준비 필요");
-  assert.equal(recoverable.primaryAction, "가져오기 권한 다시 준비");
+  assert.equal(recoverable.title, "AWS 구조 분석 권한 설정 필요");
+  assert.equal(recoverable.primaryAction, "AWS에서 권한 설정");
   assert.equal(recoverable.primaryCommand, "prepare_manager");
 
   const stillCleaning = view("cleanup_required", "check_cleanup");
-  assert.equal(stillCleaning.primaryAction, "정리 상태 확인");
+  assert.equal(stillCleaning.primaryAction, "권한 상태 확인");
   assert.equal(stillCleaning.primaryCommand, "check_cleanup");
 
   const completed = view("cleanup_complete", "prepare_manager");
@@ -188,21 +188,17 @@ test("only ready and limited states can return to Reverse Engineering", () => {
   }
 });
 
-test("every non-retry server status follows its contracted next action", () => {
+test("idle server statuses follow their contracted next action", () => {
   const cases = [
     ["check_required", "prepare_manager", "prepare_manager"],
     ["manager_approval_required", "check_manager", "check_manager"],
-    ["manager_checking", "check_manager", "check_manager"],
     ["policy_approval_required", "preview_policy", "preview_policy"],
-    ["policy_working", "check_reads", "check_reads"],
-    ["checking_reads", "check_reads", "check_reads"],
     ["ready", null, null],
     ["limited", "check_reads", "check_reads"],
     ["update_required", "preview_policy", "preview_policy"],
     ["connection_required", "open_settings", "open_settings"],
     ["cleanup_policy_required", "delete_policy_stack", "prepare_cleanup"],
     ["cleanup_manager_required", "delete_manager_stack", "prepare_cleanup"],
-    ["cleanup_checking", "check_cleanup", "check_cleanup"],
     ["cleanup_required", "check_cleanup", "check_cleanup"],
     ["cleanup_complete", null, null]
   ] as const;
@@ -212,13 +208,31 @@ test("every non-retry server status follows its contracted next action", () => {
   }
 });
 
+test("권한 상태를 확인하거나 설정하는 동안에는 실행 버튼을 함께 보여주지 않는다", () => {
+  const cases = [
+    ["manager_checking", "check_manager"],
+    ["policy_working", "check_reads"],
+    ["checking_reads", "check_reads"],
+    ["cleanup_checking", "check_cleanup"]
+  ] as const;
+
+  for (const [status, nextAction] of cases) {
+    const result = view(status, nextAction, { cleanupAvailable: true });
+
+    assert.equal(result.isBusy, true, status);
+    assert.equal(result.primaryAction, null, status);
+    assert.equal(result.primaryCommand, null, status);
+    assert.equal(result.secondaryAction, null, status);
+    assert.equal(result.secondaryCommand, null, status);
+    assert.equal(result.cleanupAction, null, status);
+    assert.equal(result.cleanupCommand, null, status);
+  }
+});
+
 test("persisted setup states offer cleanup without misclassifying synthesized or cleanup states", () => {
   const setupCases = [
     ["manager_approval_required", "check_manager"],
-    ["manager_checking", "check_manager"],
     ["policy_approval_required", "apply_policy"],
-    ["policy_working", "check_reads"],
-    ["checking_reads", "check_reads"],
     ["ready", null],
     ["limited", "check_reads"],
     ["update_required", "preview_policy"],
@@ -230,7 +244,7 @@ test("persisted setup states offer cleanup without misclassifying synthesized or
   for (const [status, nextAction] of setupCases) {
     const result = view(status, nextAction);
     assert.equal(result.cleanupCommand, "prepare_cleanup", `${status}/${nextAction}`);
-    assert.equal(result.cleanupAction, "가져오기 권한 정리", `${status}/${nextAction}`);
+    assert.equal(result.cleanupAction, "구조 분석 권한 해제", `${status}/${nextAction}`);
   }
 
   const excludedCases = [
@@ -260,7 +274,41 @@ test("cleanupAvailable distinguishes persisted and synthesized check_required st
 
   assert.equal(synthesized.cleanupCommand, null);
   assert.equal(persisted.cleanupCommand, "prepare_cleanup");
-  assert.equal(persisted.cleanupAction, "가져오기 권한 정리");
+  assert.equal(persisted.cleanupAction, "구조 분석 권한 해제");
+});
+
+test("AWS 구조 분석 상태 문구는 내부 용어 대신 사용자 행동만 보여준다", () => {
+  const cases = [
+    ["check_required", "prepare_manager"],
+    ["manager_approval_required", "check_manager"],
+    ["manager_checking", "check_manager"],
+    ["policy_approval_required", "preview_policy"],
+    ["policy_working", "check_reads"],
+    ["checking_reads", "check_reads"],
+    ["ready", null],
+    ["limited", "check_reads"],
+    ["update_required", "preview_policy"],
+    ["retry_required", "prepare_manager"],
+    ["connection_required", "open_settings"],
+    ["cleanup_policy_required", "delete_policy_stack"],
+    ["cleanup_manager_required", "delete_manager_stack"],
+    ["cleanup_checking", "check_cleanup"],
+    ["cleanup_required", "check_cleanup"],
+    ["cleanup_complete", null]
+  ] as const;
+
+  for (const [status, nextAction] of cases) {
+    const result = view(status, nextAction);
+    const visibleCopy = [
+      result.title,
+      result.description,
+      result.primaryAction,
+      result.secondaryAction,
+      result.cleanupAction
+    ].filter((value): value is string => value !== null).join(" ");
+
+    assert.doesNotMatch(visibleCopy, /가져오기|Manager|Policy Stack/, status);
+  }
 });
 
 test("a failed base connection can still clean up persisted import setup", () => {

@@ -31,74 +31,74 @@ export type AwsImportAccessView = {
 
 const STATUS_PRESENTATION = {
   check_required: {
-    title: "가져오기 권한 확인 필요",
-    description: "AWS 구조를 가져오기 위한 읽기 권한을 확인해 주세요."
+    title: "AWS 구조 분석 권한 확인 필요",
+    description: "기존 AWS 구조 분석에 필요한 권한을 확인해 주세요."
   },
   manager_approval_required: {
-    title: "AWS에서 Manager 준비 필요",
-    description: "AWS Console에서 가져오기 권한을 관리할 기반을 먼저 확인해 주세요."
+    title: "AWS에서 권한 설정 필요",
+    description: "기존 AWS 구조 분석에 필요한 권한을 AWS Console에서 설정해 주세요."
   },
   manager_checking: {
-    title: "Manager 준비 확인 중",
-    description: "AWS에서 준비한 내용을 확인하고 있습니다."
+    title: "권한 상태 확인 중",
+    description: "AWS에서 설정한 구조 분석 권한을 확인하고 있습니다."
   },
   policy_approval_required: {
-    title: "가져오기 권한 승인 필요",
-    description: "추가할 읽기 범위를 확인한 뒤 직접 적용해 주세요."
+    title: "AWS 구조 분석 권한 설정 필요",
+    description: "추가할 권한을 확인한 뒤 AWS에서 설정해 주세요."
   },
   policy_working: {
-    title: "가져오기 권한 적용 중",
-    description: "AWS에서 읽기 권한을 준비하고 있습니다."
+    title: "AWS 구조 분석 권한 설정 중",
+    description: "AWS에서 기존 AWS 구조 분석에 필요한 권한을 설정하고 있습니다."
   },
   checking_reads: {
-    title: "가져오기 준비 확인 중",
-    description: "AWS 항목을 바꾸지 않는 읽기 요청으로 준비 상태를 확인합니다."
+    title: "권한 상태 확인 중",
+    description: "기존 AWS 구조를 분석할 수 있는지 확인하고 있습니다."
   },
   ready: {
-    title: "가져오기 준비됨",
-    description: "이 AWS 연결로 구조를 가져올 수 있습니다."
+    title: "AWS 구조 분석 준비됨",
+    description: "이 AWS 연결로 기존 AWS 구조를 분석할 수 있습니다."
   },
   limited: {
-    title: "가져오기 가능 · 일부 확장 정보 제한",
-    description: "핵심 구조는 가져올 수 있고 일부 부가 정보만 제한됩니다."
+    title: "AWS 구조 분석 가능 · 일부 정보 제한",
+    description: "핵심 구조는 분석할 수 있고 일부 부가 정보만 제한됩니다."
   },
   update_required: {
-    title: "가져오기 권한 업데이트 필요",
-    description: "기존 연결은 유지하고 부족한 읽기 권한만 보완합니다."
+    title: "AWS 구조 분석 권한 설정 필요",
+    description: "기존 연결은 유지하고 구조 분석에 필요한 권한만 보완합니다."
   },
   retry_required: {
     title: "잠시 후 다시 확인해 주세요",
-    description: "기존 연결은 유지됩니다. 서버가 안내한 단계부터 다시 진행해 주세요."
+    description: "기존 AWS 연결은 유지됩니다. 안내한 단계부터 다시 진행해 주세요."
   },
   connection_required: {
     title: "AWS 연결 확인 필요",
-    description: "가져오기 권한과 별개로 기존 AWS 연결을 먼저 확인해 주세요."
+    description: "기존 AWS 구조 분석 권한과 별개로 AWS 연결을 먼저 확인해 주세요."
   },
   cleanup_policy_required: {
-    title: "가져오기 권한 정리 필요",
-    description: "가져오기 권한 Stack이 남아 있습니다. AWS에서 먼저 정리해 주세요."
+    title: "AWS 구조 분석 권한 해제 필요",
+    description: "기존 AWS 구조 분석에 사용한 권한이 남아 있습니다. AWS에서 먼저 해제해 주세요."
   },
   cleanup_manager_required: {
-    title: "Manager 정리 필요",
-    description: "가져오기 권한 정리가 끝났습니다. 이제 Manager를 정리해 주세요."
+    title: "AWS 구조 분석 권한 해제 필요",
+    description: "구조 분석 권한을 해제할 준비가 끝났습니다. AWS에서 남은 권한을 해제해 주세요."
   },
   cleanup_checking: {
-    title: "AWS 권한 정리 확인 중",
-    description: "SketchCatch가 추가한 항목이 모두 정리됐는지 확인하고 있습니다."
+    title: "권한 상태 확인 중",
+    description: "SketchCatch가 구조 분석을 위해 추가한 권한이 모두 해제됐는지 확인하고 있습니다."
   },
   cleanup_required: {
-    title: "AWS 권한 정리 확인 필요",
-    description: "이전에 사용한 가져오기 권한이 남아 있는지 확인해 주세요."
+    title: "AWS 구조 분석 권한 확인 필요",
+    description: "이전에 사용한 구조 분석 권한 상태를 확인해 주세요."
   },
   cleanup_complete: {
-    title: "가져오기 권한 정리 완료",
-    description: "SketchCatch가 추가한 가져오기 권한 정리가 끝났습니다."
+    title: "AWS 구조 분석 권한 해제 완료",
+    description: "SketchCatch가 구조 분석을 위해 추가한 권한을 모두 해제했습니다."
   }
 } satisfies Record<AwsImportAccessStatus, { readonly title: string; readonly description: string }>;
 
 const REPREPARE_PRESENTATION = {
-  title: "가져오기 권한 다시 준비 필요",
-  description: "AWS 구조를 다시 가져올 수 있도록 필요한 읽기 권한을 준비해 주세요."
+  title: "AWS 구조 분석 권한 설정 필요",
+  description: "기존 AWS 구조를 분석할 수 있도록 AWS에서 권한을 설정해 주세요."
 } as const;
 
 const BUSY_STATUSES = new Set<AwsImportAccessStatus>([
@@ -117,6 +117,24 @@ export function deriveAwsImportAccessView(input: {
   const presentation = canReprepareAwsImportAccess(input.state)
     ? REPREPARE_PRESENTATION
     : STATUS_PRESENTATION[input.state.status];
+  const isBusy = BUSY_STATUSES.has(input.state.status);
+
+  /** gg: 권한 설정이나 확인이 진행 중이면 이전 행동을 함께 보여 주어 중복 실행을 막습니다. */
+  if (isBusy) {
+    return {
+      ...presentation,
+      primaryAction: null,
+      primaryCommand: null,
+      secondaryAction: null,
+      secondaryCommand: null,
+      cleanupAction: null,
+      cleanupCommand: null,
+      deploymentConnectionPreserved: true,
+      isBusy: true,
+      canContinue: false
+    };
+  }
+
   const canStartCleanup = canStartAwsImportAccessCleanup(
     input.state.status,
     input.state.nextAction,
@@ -132,7 +150,7 @@ export function deriveAwsImportAccessView(input: {
       primaryCommand: "open_settings",
       secondaryAction: null,
       secondaryCommand: null,
-      cleanupAction: canStartCleanup ? "가져오기 권한 정리" : null,
+      cleanupAction: canStartCleanup ? "구조 분석 권한 해제" : null,
       cleanupCommand: canStartCleanup ? "prepare_cleanup" : null,
       deploymentConnectionPreserved: true,
       isBusy: false,
@@ -151,19 +169,19 @@ export function deriveAwsImportAccessView(input: {
     primaryAction: getCommandLabel(primaryCommand, input.state),
     primaryCommand,
     secondaryAction: managerReload
-      ? "AWS Console 다시 열기"
+      ? "AWS에서 권한 설정"
       : cleanupCheck
-        ? "정리 상태 확인"
+        ? "권한 상태 확인"
         : null,
     secondaryCommand: managerReload
       ? "prepare_manager"
       : cleanupCheck
         ? "check_cleanup"
         : null,
-    cleanupAction: canStartCleanup ? "가져오기 권한 정리" : null,
+    cleanupAction: canStartCleanup ? "구조 분석 권한 해제" : null,
     cleanupCommand: canStartCleanup ? "prepare_cleanup" : null,
     deploymentConnectionPreserved: true,
-    isBusy: BUSY_STATUSES.has(input.state.status),
+    isBusy: false,
     canContinue: input.state.status === "ready" || input.state.status === "limited"
   };
 }
@@ -236,29 +254,23 @@ function mapNextAction(nextAction: AwsImportAccessNextAction | null): AwsImportA
   }
 }
 
-/** gg: 같은 command라도 최초 승인·업데이트·정리 단계에 맞는 쉬운 문구를 고릅니다. */
+/** gg: 내부 command 이름 대신 AWS 구조 분석에 필요한 다음 행동만 보여줍니다. */
 function getCommandLabel(
   command: AwsImportAccessUiCommand | null,
   state: AwsImportAccessState
 ): string | null {
   switch (command) {
     case null: return null;
-    case "prepare_manager": return canReprepareAwsImportAccess(state)
-      ? "가져오기 권한 다시 준비"
-      : state.status === "retry_required"
-        ? "AWS Console 다시 열기"
-        : "AWS에서 준비";
-    case "check_manager": return "Manager 준비 확인";
+    case "prepare_manager": return "AWS에서 권한 설정";
+    case "check_manager": return "권한 상태 확인";
     case "preview_policy": return state.status === "policy_approval_required"
-      ? "권한 변경 내용 확인"
-      : "가져오기 권한 업데이트";
-    case "apply_policy": return "확인한 권한 적용";
-    case "check_reads": return "읽기 권한 다시 확인";
+      ? "권한 설정 내용 확인"
+      : "AWS에서 권한 설정";
+    case "apply_policy": return "AWS에서 권한 설정";
+    case "check_reads": return "권한 상태 확인";
     case "open_settings": return "AWS 연결 확인";
-    case "prepare_cleanup": return state.status === "cleanup_manager_required"
-      ? "AWS에서 Manager 정리"
-      : "AWS에서 가져오기 권한 정리";
-    case "check_cleanup": return "정리 상태 확인";
+    case "prepare_cleanup": return "구조 분석 권한 해제";
+    case "check_cleanup": return "권한 상태 확인";
   }
 }
 
