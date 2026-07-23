@@ -84,12 +84,28 @@ export async function updateProfile(input: {
     throw new ProfileUpdateError("password_reused");
   }
 
-  const now = input.now ?? new Date();
+  const requestedNow = input.now ?? new Date();
+  const now = new Date(
+    Math.max(requestedNow.getTime(), user.updatedAt.getTime() + 1)
+  );
   const nextPasswordHash = input.newPassword
     ? await hashPassword(input.newPassword)
     : undefined;
 
   const updatedUser = await db.transaction(async (tx) => {
+    const [lockedUser] = await tx
+      .select()
+      .from(users)
+      .where(eq(users.id, user.id))
+      .for("update");
+
+    if (
+      !lockedUser ||
+      lockedUser.updatedAt.getTime() !== user.updatedAt.getTime()
+    ) {
+      throw new ProfileUpdateError("verification_expired");
+    }
+
     const [updated] = await tx
       .update(users)
       .set({
@@ -97,7 +113,7 @@ export async function updateProfile(input: {
         updatedAt: now,
         ...(nextPasswordHash ? { passwordHash: nextPasswordHash } : {})
       })
-      .where(and(eq(users.id, user.id), eq(users.updatedAt, user.updatedAt)))
+      .where(eq(users.id, user.id))
       .returning();
 
     if (!updated) {

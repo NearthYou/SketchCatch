@@ -896,7 +896,7 @@ test("PATCH /api/auth/me updates a password account after verification", async (
     user.updatedAt.toISOString()
   );
   const fakeDb = new AuthScenarioFakeDb({
-    selectResults: [[{ id: USER_ID, deletedAt: null }], [user]]
+    selectResults: [[{ id: USER_ID, deletedAt: null }], [user], [user]]
   });
   const app = buildApp({
     getDatabaseClient: () => fakeDb.client
@@ -932,7 +932,7 @@ test("PATCH /api/auth/me updates a password account after verification", async (
 test("PATCH /api/auth/me lets a social-only user update only their nickname", async () => {
   const user = makeUser({ passwordHash: null });
   const fakeDb = new AuthScenarioFakeDb({
-    selectResults: [[{ id: USER_ID, deletedAt: null }], [user]]
+    selectResults: [[{ id: USER_ID, deletedAt: null }], [user], [user]]
   });
   const app = buildApp({
     getDatabaseClient: () => fakeDb.client
@@ -1326,6 +1326,10 @@ class SelectQuery {
   }
 
   orderBy(): Promise<unknown[]> {
+    return Promise.resolve(this.resolveRows());
+  }
+
+  for(): Promise<unknown[]> {
     return Promise.resolve(this.resolveRows());
   }
 
