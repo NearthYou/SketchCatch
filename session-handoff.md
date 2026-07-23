@@ -1,31 +1,31 @@
 # Session Handoff
 
-Use this file only for compact continuation context. Write it in English and reference durable artifacts instead of repeating them.
-
 ## Currently Verified
 
-- Branch `Refactor/jh/531-cicd-pr개선-및-편의성-추가` implements the minimal CI/CD setup convergence scope on top of `origin/dev` at `334e33c5`; the earlier written design commit is `a7e3e4e2`.
-- One Phase 3 action now persists a draft before applying GitHub Repository settings, a target-branch Environment policy, scoped AWS trust, and PR changes in order.
-- Partial handoffs resume with the same accepted Plan. Failed/cancelled Pipeline state creates a retry-only file and safe retry PR without Direct Destroy or redeployment.
-- Provider hardening preserves unrelated GitHub branches and IAM statements, avoids exact-state writes, verifies remote read-back, and requires persisted Repository/AWS evidence before Phase 3 completion.
-- Generated workflows reject a stale `SKETCHCATCH_PROJECT_ID` before external work and retain API error bodies.
-- Focused verification passes: API setup/provider 42, full Git/CI/CD API 246, readiness 96, Web 54, root lint, root typecheck, and all five production build tasks.
+- Branch `codex/live-observation-feedback` was created from `dev`.
+- Live Observation now has an always-visible telemetry summary for Store requests, rolling RPS, projected requests/minute, pressure, expected/actual Task count, provider state, and AI state.
+- The rendered `현재 상태` card and `실시간 트래픽 · 핵심 데이터 흐름` diagram are removed.
+- The deployment selector shows `배포 시각` inline to the left of the selected timestamp.
+- Terraform reference edges are recovered before capacity projection, exact request accounting is preserved, and burst animation work is capped at 12 particles with redundant connector sweep disabled.
+- AI simulation results retain and render the LLM/deterministic explanation while loading remains visible immediately.
+- Modal contracts pass 18/18, dashboard render tests pass 8/8, Web typecheck and lint pass, and the root build passes all five packages.
+- Local Chrome verification confirms the telemetry-first dashboard layout and removed sections.
+- No DB migration, dependency, cloud traffic, deployment, or external mutation was performed.
 
 ## Changes This Session
 
-- Added the resumable setup API, persisted verification evidence, exact GitHub/AWS convergence, safe PR recovery, workflow project binding guard, and Phase 4 retry CTA.
-- Updated shared contracts and canonical data/deployment/architecture documentation.
-- No DB schema, Drizzle migration, dependency, worker, or lease change was added.
-- No live GitHub/AWS mutation, PR merge, Terraform Plan/Apply/Destroy, deployment, or push was performed.
-- The combined user approval covers Repository variables, Environment branch policy, the current scoped AWS trust statement, and PR preparation. It does not approve merge or Pipeline/cloud execution.
+- Added `LiveObservationTelemetrySummary` and its pure telemetry model/test.
+- Updated `LiveObservationModal`, `LiveObservationSignalDashboard`, and `LiveObservationNextActions` to expose AI state and explanation.
+- Removed the old status summary and focused flow from the modal rendering path, and moved the `배포 시각` label inline with its select.
+- Added capacity reference recovery regression coverage and reduced live particle rendering cost.
+- Created this branch from local `dev` as requested.
 
 ## Broken Or Unverified
 
-- No changed local regression is known to be broken.
-- Live GitHub/AWS acceptance is intentionally unverified until the reviewed branch is deployed.
+- The local Live Observation fixture reports an existing hydration mismatch because server and browser time formatting differ (`AM 10:00` versus `오전 10:00`); this request did not change that formatting path.
+- The deployment selector alignment is covered by source-level contract and CSS checks; the standalone dashboard fixture does not render the surrounding modal header.
 
 ## Best Next Action
 
-1. Review and deploy this branch through the normal production workflow.
-2. Confirm the GitHub App installation has Administration and Variables Read/write plus Actions Read-only.
-3. Run one authorized production acceptance covering first setup and one failed-Pipeline retry.
+1. Review the final branch diff and create a focused commit when approved.
+2. Repair the fixture time-format hydration mismatch separately if a clean development overlay is required.
