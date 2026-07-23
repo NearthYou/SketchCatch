@@ -193,7 +193,7 @@ export function ResourceSettingsPanel({
   return (
     <aside className="resourcePanel" aria-label="Resource settings panel">
       <div className="resourceTabs">
-        <div className="resourceTabGroup" role="tablist" aria-label="Resource panel tabs">
+        <div className="resourceTabGroup" role="tablist" aria-label="리소스 패널 탭">
           <button
             aria-selected={activeTab === "resources"}
             className={activeTab === "resources" ? "resourceTabActive" : "resourceTab"}
@@ -201,7 +201,7 @@ export function ResourceSettingsPanel({
             role="tab"
             type="button"
           >
-            Resources
+            리소스
           </button>
           <button
             aria-selected={activeTab === "templates"}
@@ -210,7 +210,7 @@ export function ResourceSettingsPanel({
             role="tab"
             type="button"
           >
-            Templates
+            템플릿
           </button>
         </div>
         <button
@@ -317,8 +317,8 @@ export function ResourceSettingsPanel({
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search TF resources"
-              aria-label="Search resources by name"
+              placeholder="Terraform 리소스 검색"
+              aria-label="이름으로 Terraform 리소스 검색"
             />
           </label>
 
