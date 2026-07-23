@@ -28,7 +28,7 @@ test("renders the live infrastructure motion in the observation modal", () => {
 });
 
 test("bounds request particles and keeps their identities stable", () => {
-  assert.match(helperSource, /MAX_ANIMATED_REQUEST_PARTICLES = 12/);
+  assert.match(helperSource, /MAX_ANIMATED_REQUEST_PARTICLES = 4/);
   assert.match(flowSource, /appendLiveObservationParticleIds/);
   assert.match(flowSource, /getLiveObservationAnimatedParticleCount/);
 });

@@ -6,7 +6,7 @@ import type {
 } from "@sketchcatch/types";
 
 const MAX_VISIBLE_REQUEST_PARTICLES = 24;
-export const MAX_ANIMATED_REQUEST_PARTICLES = 12;
+export const MAX_ANIMATED_REQUEST_PARTICLES = 4;
 
 export type LiveObservationDeploymentCandidate = {
   readonly id: string;
@@ -58,6 +58,9 @@ export function appendLiveObservationParticleIds(
   if (particleLimit === 0) return [];
 
   const incomingVisibleCount = Math.min(Math.max(0, incomingRequestCount), particleLimit);
+  if (currentIds.length === particleLimit) return currentIds;
+  if (currentIds.length > particleLimit) return currentIds.slice(-particleLimit);
+
   const incomingIds = Array.from({ length: incomingVisibleCount }, nextId);
 
   return [...currentIds, ...incomingIds].slice(-particleLimit);

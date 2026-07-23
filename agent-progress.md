@@ -7,9 +7,19 @@ Short English-only working log for the current agent context. Older records are 
 - The new-project screen shows local AWS, multicolor Google Cloud, and Azure brand icons and uses a wider, larger start-method layout with single-line desktop copy.
 - Workspace start cards keep every desktop title on one line, use subdued description typography, and place the AWS Role badge in the Reverse Engineering title row.
 - Live Observation keeps up to three problem records stable per session, omits raw logs and the chronological timeline, and shows actual versus expected Task capacity with sustained traffic motion.
+- High-traffic motion uses four stable particle lanes and compositor-only transforms instead of request-key churn and layout-bound `left` animation.
 
 ## Session Record
 
+### 2026-07-24 - Smooth high-traffic Live Observation motion
+
+- Added a red-capable performance contract that reproduced 12 particles per connector and layout-bound `left` keyframes.
+- Reduced rendered particles to four fixed lanes per connector while preserving the exact request total in the burst meter.
+- Reused lane identities at the cap and moved particles with infinite `translate3d` animation plus `will-change: transform, opacity`.
+- Neutralized busy/surge particle size and blur overrides so traffic intensity no longer changes layout geometry.
+- Browser verification found no console issues or layout regression; connector and node frames continued changing across a 1.15-second sample.
+- Verification: 133 scoped Live Observation tests, root lint, root typecheck, root build task completion, diff checks, and harness check pass. The known Turbo post-success runner hang still required termination.
+- No migration, dependency, cloud traffic, deployment, or external mutation was performed.
 ### 2026-07-24 - Stabilize and clarify Live Observation
 
 - Removed the traffic-surge banner, raw log groups, and chronological incident timeline from the rendered observation UI.

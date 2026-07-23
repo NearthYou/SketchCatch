@@ -154,7 +154,7 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
       particleIds: appendLiveObservationParticleIds(
         burstRef.current?.particleIds ?? [],
         incomingRequestCount,
-        mergedBurst.visibleParticleCount,
+        getLiveObservationAnimatedParticleCount(mergedBurst.visibleParticleCount),
         () => {
           particleSequenceRef.current += 1;
           return particleSequenceRef.current;
