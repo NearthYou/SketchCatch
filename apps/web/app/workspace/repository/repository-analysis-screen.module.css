@@ -353,7 +353,7 @@
 .previewFooter {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
+  align-items: start;
   gap: 24px;
   min-height: 60px;
   padding: 16px 0;
@@ -442,13 +442,15 @@
 }
 
 .questionStepBody {
-  padding: 24px 28px 28px;
+  padding: 16px 32px 28px;
 }
 
-.questionStepBody > h3 {
+.selectedTemplateName {
   margin: 0;
-  font-size: calc(18px + var(--presentation-font-size-increase));
-  line-height: 1.4;
+  color: var(--color-body);
+  font-size: calc(15px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-regular);
+  line-height: 1.5;
 }
 
 .secondarySettingsPanel h2,
@@ -475,43 +477,96 @@
 
 .questionList {
   display: grid;
-  gap: 20px;
-  margin-top: 20px;
+  gap: 28px;
+  margin-top: 8px;
 }
 
 .questionList h3 {
-  margin: 0;
-  font-size: calc(16px + var(--presentation-font-size-increase));
-  line-height: 1.4;
+  margin: 0 0 8px;
+  color: var(--color-ink);
+  font-size: calc(24px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  line-height: 1.3;
+  letter-spacing: -0.015em;
 }
 
 .questionField {
   display: grid;
-  gap: 10px;
+  gap: 0;
   min-width: 0;
   margin: 0;
   border: 0;
   padding: 0;
 }
 
-.questionField legend,
+.questionField + .questionField {
+  margin-top: 8px;
+}
+
+.questionField legend {
+  width: 100%;
+  margin: 0 0 10px;
+  color: var(--color-ink);
+  font-size: calc(18px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  line-height: 1.45;
+}
+
 .questionField > label {
-  font-size: calc(14px + var(--presentation-font-size-increase));
+  margin-bottom: 8px;
+  color: var(--color-body);
+  font-size: calc(13px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   line-height: 1.5;
 }
 
-.questionOption {
+.questionOptions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.questionOption {
+  position: relative;
+  display: inline-flex;
+  min-width: 120px;
+  min-height: 50px;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-canvas);
+  color: var(--color-body);
   font-size: calc(14px + var(--presentation-font-size-increase));
-  line-height: 1.4;
+  font-weight: var(--presentation-font-weight-bold);
+  line-height: 1;
+  cursor: pointer;
+  padding: 10px 20px;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.questionOption:hover {
+  border-color: var(--color-ink);
+  background: var(--color-surface-strong);
+}
+
+.questionOption:has(input:checked) {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.questionOption:has(input:focus-visible) {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
 }
 
 .questionOption input {
-  width: 16px;
-  height: 16px;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .panelActions {
@@ -662,6 +717,29 @@
   }
 
   .questionStepBody {
-    padding: 20px;
+    padding: 14px 20px 20px;
+  }
+
+  .questionList {
+    gap: 24px;
+    margin-top: 8px;
+  }
+
+  .questionList h3 {
+    font-size: calc(22px + var(--presentation-font-size-increase));
+  }
+
+  .questionField + .questionField {
+    margin-top: 6px;
+  }
+
+  .questionOptions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .questionOption {
+    width: 100%;
+    min-width: 0;
   }
 }

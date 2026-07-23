@@ -99,6 +99,50 @@ test("Repository result gives most space to Preview and collapses without overfl
   assert.match(repositoryStylesSource, /overflow-wrap:\s*anywhere/);
 });
 
+test("Repository preview navigation stays anchored when the recommendation reason grows", () => {
+  assert.match(repositoryStylesSource, /\.previewFooter\s*\{[\s\S]*align-items:\s*start/);
+});
+
+test("Repository follow-up questions expose clear hierarchy and selectable choices", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.match(source, /className=\{styles\.selectedTemplateName\}/);
+  assert.doesNotMatch(source, /선택한 Template/);
+  assert.match(source, /className=\{styles\.questionOptions\}/);
+  assert.match(
+    repositoryStylesSource,
+    /\.questionStepBody\s*\{[^}]*padding:\s*16px 32px 28px/
+  );
+  assert.match(
+    repositoryStylesSource,
+    /\.questionList h3\s*\{[\s\S]*font-size:\s*calc\(24px/
+  );
+  assert.match(
+    repositoryStylesSource,
+    /\.questionList\s*\{[\s\S]*gap:\s*28px/
+  );
+  assert.match(
+    repositoryStylesSource,
+    /\.questionList\s*\{[^}]*gap:\s*28px;[^}]*margin-top:\s*8px/
+  );
+  assert.doesNotMatch(
+    repositoryStylesSource,
+    /\.selectedTemplateSummary\s*\{|\.questionField\s*\{[\s\S]*border-top/
+  );
+  assert.match(
+    repositoryStylesSource,
+    /\.questionField legend\s*\{[\s\S]*margin:\s*0 0 10px/
+  );
+  assert.match(
+    repositoryStylesSource,
+    /\.questionField \+ \.questionField\s*\{[\s\S]*margin-top:\s*8px/
+  );
+  assert.match(
+    repositoryStylesSource,
+    /\.questionOption:has\(input:checked\)\s*\{[\s\S]*background:\s*var\(--color-primary\)/
+  );
+});
+
 test("Repository draft saves retain the server revision loaded with the screen", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
 
@@ -122,7 +166,7 @@ test("Repository start preserves the explicit AI new-design entry", () => {
   assert.doesNotMatch(source, /createPublicRepositoryArchitectureDraftRequest/);
   assert.doesNotMatch(source, /createAiArchitectureDraft/);
   assert.match(source, /createWorkspaceAiStartHref/);
-  assert.match(repositoryScreenSource, /<Link[\s\S]*href=\{aiDesignHref\}[\s\S]*AI 새 설계/);
+  assert.match(repositoryScreenSource, /<Link[\s\S]*href=\{aiDesignHref\}[\s\S]*AI로 직접 설계/);
   assert.doesNotMatch(source, /createPublicRepositoryDiagram/);
   assert.doesNotMatch(source, /AI FALLBACK/);
   assert.doesNotMatch(source, /fallbackAdditionalRequirements/);
