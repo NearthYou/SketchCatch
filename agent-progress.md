@@ -9,6 +9,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+- 2026-07-23: Added user-scoped Settings caches for AWS, GitHub, and AWS CodeConnections. Cached connection details now survive tab remounts for 30 minutes, stay fresh for 5 minutes, and explicit refresh updates every connection source. Verified with the focused cache regression test, Web typecheck, scoped diff review, and harness check.
 - 2026-07-23: Aligned the empty Cost Usage refresh action with the shared dashboard secondary-button UI, typography, icon, and busy state. Verified by scoped diff review and harness check.
 - 2026-07-23: Removed the redundant empty-project `새 설계 시작` CTA from both project-list implementations while preserving the top-level `새 프로젝트` action. Verified by scoped diff review and harness check.
 - 2026-07-23: Enlarged the `/workspace/new` content area, start cards, titles, descriptions, and icons; added local cloud-provider brand assets and responsive single-column fallback. The focused start-screen test passes 2/2, and lint, typecheck, and production build pass.

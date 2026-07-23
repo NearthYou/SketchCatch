@@ -7,6 +7,11 @@ import { keepPreviousData, QueryObserver } from "@tanstack/react-query";
 import type { AwsConnection } from "@sketchcatch/types";
 import { createAppQueryClient } from "../../components/query/create-query-client";
 import { queryKeys } from "../../lib/query-keys";
+import {
+  createAwsCodeConnectionQueryOptions,
+  SETTINGS_CONNECTION_GC_TIME_MS,
+  SETTINGS_CONNECTION_STALE_TIME_MS
+} from "./connection-queries";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const connectionQuerySource = readFileSync(join(currentDir, "connection-queries.ts"), "utf8");
@@ -82,4 +87,35 @@ test("AWS 연결 query는 복구 화면에서만 이전 목록을 유지한다",
     awsConnectionsQuerySource,
     /\.\.\.\(includeUnverified\s*\?\s*\{\s*placeholderData:\s*keepPreviousData\s*\}\s*:\s*\{\s*\}\)/
   );
+});
+
+test("settings connection cache survives tab remounts without reloading", async () => {
+  const queryClient = createAppQueryClient();
+  let loadCount = 0;
+  const options = createAwsCodeConnectionQueryOptions(
+    { awsConnectionId: "connection-1", userId: "user-1" },
+    {
+      load: async () => {
+        loadCount += 1;
+        return { codeConnection: null };
+      }
+    }
+  );
+
+  const first = await queryClient.fetchQuery(options);
+  const cached = await queryClient.fetchQuery(options);
+
+  assert.deepEqual(options.queryKey, [
+    "user",
+    "user-1",
+    "connections",
+    "aws",
+    "connection-1",
+    "codeconnection"
+  ]);
+  assert.equal(options.staleTime, SETTINGS_CONNECTION_STALE_TIME_MS);
+  assert.equal(options.gcTime, SETTINGS_CONNECTION_GC_TIME_MS);
+  assert.equal(cached, first);
+  assert.equal(loadCount, 1);
+  queryClient.clear();
 });
