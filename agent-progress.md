@@ -8,6 +8,13 @@ Short English-only working log for the current agent context. Older records are 
 - Workspace start cards keep every desktop title on one line, use subdued description typography, and place the AWS Role badge in the Reverse Engineering title row.
 - Repository Template previews show a dynamic recommendation rank, use the clearer AI design action, and keep candidate navigation anchored independently of recommendation-reason length.
 - Repository follow-up questions separate selected Template context, section hierarchy, individual prompts, and card-style answer choices.
+- 2026-07-24: Fixed AI Architecture chat patches for Application Auto Scaling target values. Exact resource IDs and the sole matching scaling policy now resolve deterministically, nested target-tracking config shapes are preserved, supported local plans skip Bedrock latency, and no-op requests return clarification instead of fake success.
+- Added synchronous submission and patch-application locks. Board patch success now appears only after Project Draft persistence returns either an explicit local-save success or a valid saved server revision; missing callbacks and failed save results no longer claim success.
+- Verified the focused API suite 7/7 and Web routing/consolidation suite 17/17, including the exact ecs_service_requests target value 50 to 5 regression, provider bypass, duplicate prevention, local-save results, and resolved { ok: false } handling.
+- Root lint and typecheck passed. All five package production builds passed directly; the final Turbo wrapper did not exit after completing work, so it was terminated after package-level verification.
+- Root pnpm test remains red in unrelated pre-existing Web baseline tests such as Settings CodeConnection refresh, Live Observation layout contracts, and Repository start behavior. The focused suites for this workstream pass.
+- No schema, dependency, shared contract, cloud resource, deployment, or migration changes were made.
+
 
 ## Session Record
 - 2026-07-23: Stabilized Template Gallery cards by moving Resource/relationship counts into a bordered summary, widening Korean descriptions with word-safe wrapping, anchoring preview actions to the card bottom, and separating the fixed modal header from the scrollable gallery. Focused regressions, root lint, root typecheck, and all five production build tasks passed; the full test command remains red in unrelated pre-existing Web baseline suites.

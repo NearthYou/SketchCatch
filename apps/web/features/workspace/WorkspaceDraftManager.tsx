@@ -147,9 +147,28 @@ export function WorkspaceDraftManager({
     clearLocalSaveTimer();
 
     try {
-      await persistLocalDraftNow();
-    } catch {
+      const draft = await persistLocalDraftNow();
+
+      if (draft === null) {
+        setSaveState("failed");
+        return {
+          error: new Error("Local workspace draft is not ready."),
+          ok: false as const,
+          persistence: "local" as const
+        };
+      }
+
+      return {
+        ok: true as const,
+        persistence: "local" as const
+      };
+    } catch (error) {
       setSaveState("failed");
+      return {
+        error,
+        ok: false as const,
+        persistence: "local" as const
+      };
     }
   }, [clearLocalSaveTimer, persistLocalDraftNow]);
 
