@@ -172,7 +172,7 @@ export function ProfileSettingsClient() {
             </label>
 
             {canChangePassword ? (
-              <>
+              <div className={styles.passwordFields}>
                 <label className={styles.field}>
                   <span>
                     <LockKeyhole aria-hidden="true" size={17} />
@@ -192,12 +192,6 @@ export function ProfileSettingsClient() {
                     type="password"
                     value={newPassword}
                   />
-                  <small
-                    className={passwordPolicyError ? styles.errorMessage : styles.fieldHint}
-                    id={passwordPolicyError ? "new-password-error" : "password-hint"}
-                  >
-                    {passwordPolicyError ?? PASSWORD_POLICY_HELP_TEXT}
-                  </small>
                 </label>
 
                 <label className={styles.field}>
@@ -219,13 +213,25 @@ export function ProfileSettingsClient() {
                     type="password"
                     value={passwordConfirmation}
                   />
+                </label>
+
+                <div className={styles.passwordFeedback}>
+                  {passwordPolicyError ? (
+                    <small className={styles.errorMessage} id="new-password-error">
+                      {passwordPolicyError}
+                    </small>
+                  ) : passwordsMatch ? (
+                    <small className={styles.fieldHint} id="password-hint">
+                      {PASSWORD_POLICY_HELP_TEXT}
+                    </small>
+                  ) : null}
                   {!passwordsMatch ? (
                     <small className={styles.errorMessage} id="password-confirmation-error">
                       비밀번호가 일치하지 않습니다.
                     </small>
                   ) : null}
-                </label>
-              </>
+                </div>
+              </div>
             ) : null}
           </div>
 
