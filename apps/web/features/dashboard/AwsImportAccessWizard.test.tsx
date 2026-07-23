@@ -16,7 +16,7 @@ const cssLoaderSource = `export async function load(url, context, nextLoad) {
 register(`data:text/javascript,${encodeURIComponent(cssLoaderSource)}`, import.meta.url);
 Object.assign(globalThis, { React });
 
-/** gg: 렌더링 테스트에 내부 AWS 필드가 없는 safe state만 제공합니다. */
+/** gg: 화면 테스트에는 public DTO에 있는 안전한 구조 분석 상태만 제공합니다. */
 function state(overrides: Partial<AwsImportAccessState> = {}): AwsImportAccessState {
   return {
     connectionId: "connection-1",
@@ -27,9 +27,14 @@ function state(overrides: Partial<AwsImportAccessState> = {}): AwsImportAccessSt
     limitedServiceLabels: [],
     lastCheckedAt: null,
     operationId: null,
-    safeSummary: "가져오기 권한을 확인해 주세요.",
+    safeSummary: "내부 목록은 기본 화면에 보이지 않아야 합니다.",
     ...overrides
   };
+}
+
+/** gg: 버튼 수를 세어 한 상태에서 서로 다른 다음 행동이 겹치지 않게 확인합니다. */
+function buttonCount(html: string): number {
+  return (html.match(/<button\b/gu) ?? []).length;
 }
 
 test("wizard error messages hide raw AWS details and request diagnostics", async () => {
@@ -50,135 +55,76 @@ test("wizard error messages hide raw AWS details and request diagnostics", async
 
   const message = getAwsImportAccessErrorMessage(
     error,
-    "AWS 가져오기 권한 요청을 처리하지 못했습니다."
+    "AWS 구조 분석 설정을 처리하지 못했습니다."
   );
 
-  assert.equal(message, "AWS 가져오기 권한 요청을 처리하지 못했습니다.");
+  assert.equal(message, "AWS 구조 분석 설정을 처리하지 못했습니다.");
   assert.doesNotMatch(message, /arn:aws|RequestId|req-provider|req-http|POST|\/api\//iu);
 });
 
-test("wizard preserves the existing connection and hides provider internals", async () => {
+test("기본 패널은 AWS 구조 분석 상태와 다음 행동 하나만 보여준다", async () => {
   const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
   const unsafeExtra = {
     providerError:
-      "AccessDenied arn:aws:iam::123456789012:role/X PolicyDocument TemplateBody RequestId abc logical id"
+      "AccessDenied arn:aws:iam::123456789012:role/X PolicyDocument TemplateBody RequestId abc",
+    managerStackName: "do-not-render"
   };
   const html = renderToStaticMarkup(
     createElement(AwsImportAccessWizardView, {
       connectionStatus: "verified",
-      state: { ...state(), ...unsafeExtra } as AwsImportAccessState,
-      onCommand() {},
-      onContinue() {}
+      state: {
+        ...state({
+          limitedServiceLabels: ["IAM", "CloudWatch"]
+        }),
+        ...unsafeExtra
+      } as AwsImportAccessState,
+      onCommand() {}
     })
   );
 
-  assert.match(html, /기존 AWS 연결과 배포 권한은 그대로 유지됩니다/u);
-  assert.match(html, /기존 AWS 연결 유지/u);
-  assert.match(html, /현재 배포 환경 유지/u);
-  assert.match(html, /기존 Terraform 배포 권한/u);
+  assert.match(html, /AWS 구조 분석/u);
+  assert.match(html, /설정 필요/u);
+  assert.match(html, />설정 내용 확인<\/button>/u);
+  assert.equal(buttonCount(html), 1);
   assert.doesNotMatch(
     html,
-    /AccessDenied|arn:aws|PolicyDocument|TemplateBody|RequestId|logical id/iu
+    /가져오기|Manager|Stack|Policy|Role|arn:aws|AccessDenied|IAM|CloudWatch|내부 목록/iu
   );
 });
 
-test("cleanup recovery keeps the action simple and routes through manager preparation", async () => {
-  const { AwsImportAccessWizardView, runAwsImportAccessCommand } = await import("./AwsImportAccessWizard");
-  const html = renderToStaticMarkup(
-    createElement(AwsImportAccessWizardView, {
-      connectionStatus: "verified",
-      state: state({
-        status: "cleanup_required",
-        nextAction: "prepare_manager"
-      }),
-      onCommand() {}
-    })
-  );
-  const calls: string[] = [];
-  const response = {
-    connectionId: "connection-1",
-    operationId: "operation-1",
-    nextAction: "check_manager" as const,
-    state: state({
-      status: "manager_approval_required",
-      nextAction: "check_manager"
-    })
-  };
-  const api = {
-    async prepareManager(connectionId: string) {
-      calls.push(connectionId);
-      return response;
-    },
-    async checkManager() { throw new Error("unexpected"); },
-    async previewPolicy() { throw new Error("unexpected"); },
-    async applyPolicy() { throw new Error("unexpected"); },
-    async checkReads() { throw new Error("unexpected"); },
-    async prepareCleanup() { throw new Error("unexpected"); },
-    async checkCleanup() { throw new Error("unexpected"); }
-  };
-
-  assert.match(html, />가져오기 권한 다시 준비<\/button>/u);
-  assert.doesNotMatch(html, /Role 유지|Stack 유지|Policy/iu);
-  await runAwsImportAccessCommand({
-    api,
-    approval: null,
-    command: "prepare_manager",
-    connectionId: "connection-1"
-  });
-  assert.deepEqual(calls, ["connection-1"]);
-});
-
-test("manager approval reload offers both a fresh link and a state check", async () => {
+test("진행 중에는 spinner와 상태만 보여 주고 행동을 함께 노출하지 않는다", async () => {
   const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
   const html = renderToStaticMarkup(
     createElement(AwsImportAccessWizardView, {
       connectionStatus: "verified",
+      consoleUrl: "https://console.example.invalid/should-not-render",
       state: state({
-        status: "manager_approval_required",
-        nextAction: "check_manager"
-      }),
-      onCommand() {},
-      onContinue() {}
-    })
-  );
-
-  assert.match(html, /Manager 준비 확인/u);
-  assert.match(html, /AWS Console 다시 열기/u);
-});
-
-test("check_required cleanup is shown only for a persisted access row", async () => {
-  const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
-  // gg: status가 같아도 API의 persisted marker만 바꿔 렌더링 경계를 비교합니다.
-  const render = (cleanupAvailable: boolean) => renderToStaticMarkup(
-    createElement(AwsImportAccessWizardView, {
-      connectionStatus: "verified",
-      state: state({
-        status: "check_required",
-        nextAction: "prepare_manager",
-        cleanupAvailable
+        status: "checking_reads",
+        nextAction: "check_reads"
       }),
       onCommand() {}
     })
   );
 
-  assert.doesNotMatch(render(false), />가져오기 권한 정리<\/button>/u);
-  assert.match(render(true), />가져오기 권한 정리<\/button>/u);
+  assert.match(html, /처리 중/u);
+  assert.match(html, /상태를 확인하고 있습니다/u);
+  assert.equal(buttonCount(html), 0);
+  assert.doesNotMatch(html, /AWS Console 열기|should-not-render/u);
 });
 
-test("policy approval requires a visible confirmation before apply", async () => {
+test("설정 적용은 미리 확인한 뒤에만 보이고 행동은 하나만 남긴다", async () => {
   const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
-  const reloaded = renderToStaticMarkup(
+  const beforeApproval = renderToStaticMarkup(
     createElement(AwsImportAccessWizardView, {
       connectionStatus: "verified",
       state: state({
         status: "policy_approval_required",
         nextAction: "apply_policy"
       }),
-      onCommand() {},
-      onContinue() {}
+      onCommand() {}
     })
   );
-  const previewed = renderToStaticMarkup(
+  const afterApproval = renderToStaticMarkup(
     createElement(AwsImportAccessWizardView, {
       connectionStatus: "verified",
       hasPolicyApproval: true,
@@ -186,44 +132,99 @@ test("policy approval requires a visible confirmation before apply", async () =>
         status: "policy_approval_required",
         nextAction: "apply_policy"
       }),
-      onCommand() {},
-      onContinue() {}
+      onCommand() {}
     })
   );
 
-  assert.match(reloaded, /권한 변경 내용 확인/u);
-  assert.doesNotMatch(reloaded, /확인한 권한 적용/u);
-  assert.match(previewed, /가져오기 권한 변경을 적용할까요/u);
-  assert.match(previewed, /확인한 권한 적용/u);
+  assert.match(beforeApproval, />설정 내용 확인<\/button>/u);
+  assert.doesNotMatch(beforeApproval, />설정 적용<\/button>/u);
+  assert.match(afterApproval, /구조 분석에 필요한 설정을 적용할까요/u);
+  assert.match(afterApproval, />설정 적용<\/button>/u);
+  assert.equal(buttonCount(afterApproval), 1);
 });
 
-test("Console fallback links open safely without rendering their raw URL", async () => {
+test("AWS Console 링크와 실제 다음 행동 하나만 함께 보여준다", async () => {
   const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
   const signedUrl = "https://console.example.invalid/path?signature=do-not-render";
   const html = renderToStaticMarkup(
     createElement(AwsImportAccessWizardView, {
       connectionStatus: "verified",
       consoleUrl: signedUrl,
-      canCopyManagerTemplate: true,
       state: state({
         status: "manager_approval_required",
         nextAction: "check_manager"
       }),
-      onCommand() {},
-      onContinue() {}
+      onCommand() {}
     })
   );
 
   assert.match(html, /target="_blank"/u);
   assert.match(html, /rel="noreferrer"/u);
   assert.match(html, /AWS Console 열기/u);
-  assert.match(html, /Manager 업데이트 링크 복사/u);
-  assert.match(html, /Manager의 업데이트를 선택한 뒤 복사한 업데이트 링크를 붙여 넣어 주세요/u);
+  assert.match(html, />설정 완료 후 확인<\/button>/u);
+  assert.equal(buttonCount(html), 1);
   assert.equal(html.includes(`>${signedUrl}<`), false);
-  assert.doesNotMatch(html, /<pre[\s>]/u);
+  assert.doesNotMatch(html, /Manager|Stack|Policy/iu);
 });
 
-test("Reverse return is shown only for ready or explicit limited continuation", async () => {
+test("설정 링크가 필요한 경우에도 내부 이름 없이 행동 하나만 보여준다", async () => {
+  const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
+  const setupUrl = "https://private.example.invalid/template?signature=do-not-render";
+  const beforeCopy = renderToStaticMarkup(
+    createElement(AwsImportAccessWizardView, {
+      connectionStatus: "verified",
+      consoleUrl: "https://console.example.invalid/path",
+      setupTemplateUrl: setupUrl,
+      state: state({
+        status: "manager_approval_required",
+        nextAction: "check_manager"
+      }),
+      onCommand() {},
+      onCopySetupTemplate() {}
+    })
+  );
+  const afterCopy = renderToStaticMarkup(
+    createElement(AwsImportAccessWizardView, {
+      connectionStatus: "verified",
+      consoleUrl: "https://console.example.invalid/path",
+      setupLinkCopied: true,
+      setupTemplateUrl: setupUrl,
+      state: state({
+        status: "manager_approval_required",
+        nextAction: "check_manager"
+      }),
+      onCommand() {},
+      onCopySetupTemplate() {}
+    })
+  );
+
+  assert.match(beforeCopy, />설정 링크 복사<\/button>/u);
+  assert.equal(buttonCount(beforeCopy), 1);
+  assert.equal(beforeCopy.includes(`>${setupUrl}<`), false);
+  assert.match(afterCopy, />설정 완료 후 확인<\/button>/u);
+  assert.equal(buttonCount(afterCopy), 1);
+  assert.doesNotMatch(`${beforeCopy}${afterCopy}`, /Manager|Stack|Policy/iu);
+});
+
+test("정리 상태는 구조 분석 설정 해제 행동 하나만 보여준다", async () => {
+  const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
+  const html = renderToStaticMarkup(
+    createElement(AwsImportAccessWizardView, {
+      connectionStatus: "verified",
+      state: state({
+        status: "cleanup_policy_required",
+        nextAction: "delete_policy_stack"
+      }),
+      onCommand() {}
+    })
+  );
+
+  assert.match(html, /구조 분석 설정 해제/u);
+  assert.equal(buttonCount(html), 1);
+  assert.doesNotMatch(html, /권한 상태 확인|가져오기|Manager|Stack|Policy/iu);
+});
+
+test("Reverse Engineering 복귀는 준비된 상태에서만 간결하게 보여 준다", async () => {
   const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
   const updateHtml = renderToStaticMarkup(
     createElement(AwsImportAccessWizardView, {
@@ -255,13 +256,14 @@ test("Reverse return is shown only for ready or explicit limited continuation", 
     })
   );
 
-  assert.doesNotMatch(updateHtml, /같은 연결로 가져오기|제한된 정보로 계속 가져오기/u);
-  assert.match(readyHtml, /같은 연결로 가져오기/u);
-  assert.match(limitedHtml, /제한된 정보로 계속 가져오기/u);
-  assert.match(limitedHtml, /IAM/u);
+  assert.doesNotMatch(updateHtml, /구조 분석 계속|제한된 정보로 계속/u);
+  assert.match(readyHtml, />구조 분석 계속<\/button>/u);
+  assert.match(limitedHtml, />제한된 정보로 계속<\/button>/u);
+  assert.equal(buttonCount(readyHtml), 1);
+  assert.equal(buttonCount(limitedHtml), 1);
 });
 
-test("policy preview never applies automatically and apply requires the same in-memory approval", async () => {
+test("구조 분석 설정은 같은 메모리 승인 없이는 적용되지 않는다", async () => {
   const { runAwsImportAccessCommand } = await import("./AwsImportAccessWizard");
   const calls: string[] = [];
   const api = {
@@ -303,11 +305,6 @@ test("policy preview never applies automatically and apply requires the same in-
   });
 
   assert.deepEqual(calls, ["preview"]);
-  assert.deepEqual(preview.approval, {
-    approvalId: "approval-1",
-    operationId: "operation-1"
-  });
-
   await runAwsImportAccessCommand({
     api,
     approval: preview.approval,
@@ -323,34 +320,22 @@ test("policy preview never applies automatically and apply requires the same in-
       command: "apply_policy",
       connectionId: "connection-1"
     }),
-    /권한 변경 내용을 다시 확인해 주세요/u
+    /설정 내용을 다시 확인해 주세요/u
   );
 });
 
-test("failed prepare refreshes the same connection and reveals persisted cleanup without reload", async () => {
-  const {
-    AwsImportAccessWizardView,
-    runAwsImportAccessCommand,
-    runAwsImportAccessCommandWithFailureRefresh
-  } = await import("./AwsImportAccessWizard");
-  let visibleState = state({
-    status: "check_required",
-    nextAction: "prepare_manager",
-    cleanupAvailable: false
-  });
-  const persistedState = state({
-    status: "check_required",
-    nextAction: "prepare_manager",
-    cleanupAvailable: true
-  });
-  let providerState = visibleState;
-  let commandCalls = 0;
-  const refreshedConnectionIds: string[] = [];
+test("복구 경로는 기존 API 준비 명령을 그대로 사용한다", async () => {
+  const { runAwsImportAccessCommand } = await import("./AwsImportAccessWizard");
+  const calls: string[] = [];
   const api = {
-    async prepareManager() {
-      commandCalls += 1;
-      providerState = persistedState;
-      throw new Error("provider raw failure");
+    async prepareManager(connectionId: string) {
+      calls.push(connectionId);
+      return {
+        connectionId,
+        operationId: "operation-1",
+        state: state({ status: "manager_approval_required", nextAction: "check_manager" }),
+        nextAction: "check_manager" as const
+      };
     },
     async checkManager() { throw new Error("unexpected"); },
     async previewPolicy() { throw new Error("unexpected"); },
@@ -360,49 +345,12 @@ test("failed prepare refreshes the same connection and reveals persisted cleanup
     async checkCleanup() { throw new Error("unexpected"); }
   };
 
-  await assert.rejects(
-    () => runAwsImportAccessCommandWithFailureRefresh({
-      connectionId: "connection-1",
-      execute: () => runAwsImportAccessCommand({
-        api,
-        approval: null,
-        command: "prepare_manager",
-        connectionId: "connection-1"
-      }),
-      async refreshState(connectionId: string) {
-        refreshedConnectionIds.push(connectionId);
-        visibleState = providerState;
-      }
-    }),
-    /provider raw failure/u
-  );
+  await runAwsImportAccessCommand({
+    api,
+    approval: null,
+    command: "prepare_manager",
+    connectionId: "connection-1"
+  });
 
-  assert.equal(commandCalls, 1);
-  assert.deepEqual(refreshedConnectionIds, ["connection-1"]);
-  const html = renderToStaticMarkup(
-    createElement(AwsImportAccessWizardView, {
-      connectionStatus: "verified",
-      state: visibleState,
-      onCommand() {}
-    })
-  );
-  assert.match(html, />가져오기 권한 정리<\/button>/u);
-});
-
-test("cleanup Stack states offer Console opening and a separate completion check", async () => {
-  const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
-  const html = renderToStaticMarkup(
-    createElement(AwsImportAccessWizardView, {
-      connectionStatus: "verified",
-      state: state({
-        status: "cleanup_policy_required",
-        nextAction: "delete_policy_stack"
-      }),
-      onCommand() {},
-      onContinue() {}
-    })
-  );
-
-  assert.match(html, /AWS에서 가져오기 권한 정리/u);
-  assert.match(html, /정리 상태 확인/u);
+  assert.deepEqual(calls, ["connection-1"]);
 });

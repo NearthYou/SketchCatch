@@ -8,7 +8,6 @@ import type {
 import {
   AlertTriangle,
   CheckCircle2,
-  Copy,
   ExternalLink,
   LoaderCircle
 } from "lucide-react";
@@ -86,8 +85,8 @@ export function AwsImportAccessWizard({
   const stateQuery = useAwsImportAccessQuery(connectionId);
   const [approval, setApproval] = useState<PolicyApproval | null>(null);
   const [consoleUrl, setConsoleUrl] = useState<string | null>(null);
-  const [managerTemplateUrl, setManagerTemplateUrl] = useState<string | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [setupTemplateUrl, setSetupTemplateUrl] = useState<string | null>(null);
+  const [setupLinkCopied, setSetupLinkCopied] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -99,9 +98,9 @@ export function AwsImportAccessWizard({
     }
     setIsBusy(true);
     setErrorMessage("");
-    setCopyFeedback(null);
+    setSetupLinkCopied(false);
     setConsoleUrl(null);
-    setManagerTemplateUrl(null);
+    setSetupTemplateUrl(null);
     try {
       const result = await runAwsImportAccessCommandWithFailureRefresh({
         connectionId,
@@ -120,7 +119,7 @@ export function AwsImportAccessWizard({
       setApproval(result.approval);
       const nextConsoleUrl = result.response.consoleUrl ?? null;
       setConsoleUrl(nextConsoleUrl);
-      setManagerTemplateUrl(result.response.managerTemplateUrl ?? null);
+      setSetupTemplateUrl(result.response.managerTemplateUrl ?? null);
       if (nextConsoleUrl) {
         openAwsConsole(nextConsoleUrl);
       }
@@ -132,7 +131,7 @@ export function AwsImportAccessWizard({
       setErrorMessage(
         getAwsImportAccessErrorMessage(
           error,
-          "AWS 가져오기 권한 요청을 처리하지 못했습니다."
+          "AWS 구조 분석 설정을 처리하지 못했습니다."
         )
       );
     } finally {
@@ -140,23 +139,27 @@ export function AwsImportAccessWizard({
     }
   }
 
-  // gg: Manager update Template URL은 화면에 쓰지 않고 사용자가 요청할 때만 복사합니다.
-  async function copyManagerTemplate(): Promise<void> {
-    if (!managerTemplateUrl) return;
+  // gg: AWS 설정 링크는 현재 화면에만 두고 복사 뒤에도 기존 승인 순서를 바꾸지 않습니다.
+  async function copySetupTemplate(): Promise<void> {
+    if (!setupTemplateUrl) return;
+    setIsBusy(true);
+    setErrorMessage("");
     try {
-      await copyTextToClipboard(managerTemplateUrl);
-      setCopyFeedback("Manager Template 링크를 복사했습니다.");
+      await copyTextToClipboard(setupTemplateUrl);
+      setSetupLinkCopied(true);
     } catch (error) {
-      setCopyFeedback(getAwsImportAccessErrorMessage(error, "링크를 복사하지 못했습니다."));
+      setErrorMessage(getAwsImportAccessErrorMessage(error, "설정 링크를 복사하지 못했습니다."));
+    } finally {
+      setIsBusy(false);
     }
   }
 
   if (stateQuery.isPending && !stateQuery.data) {
     return (
-      <section aria-label="AWS 가져오기 권한" className={styles.importAccessCard}>
+      <section aria-label="AWS 구조 분석" className={styles.importAccessCard}>
         <div className={styles.importAccessLoading} role="status">
           <LoaderCircle aria-hidden="true" size={18} />
-          <span>가져오기 권한 상태를 확인하고 있습니다.</span>
+          <span>AWS 구조 분석 상태를 확인하고 있습니다.</span>
         </div>
       </section>
     );
@@ -164,9 +167,9 @@ export function AwsImportAccessWizard({
 
   if (!stateQuery.data) {
     return (
-      <section aria-label="AWS 가져오기 권한" className={styles.importAccessCard}>
+      <section aria-label="AWS 구조 분석" className={styles.importAccessCard}>
         <div className={styles.importAccessError} role="alert">
-          <strong>가져오기 권한 상태를 불러오지 못했습니다.</strong>
+          <strong>AWS 구조 분석 상태를 불러오지 못했습니다.</strong>
           <p>{getAwsImportAccessErrorMessage(
             stateQuery.error,
             "잠시 후 다시 시도해 주세요."
@@ -179,15 +182,15 @@ export function AwsImportAccessWizard({
 
   return (
     <AwsImportAccessWizardView
-      canCopyManagerTemplate={managerTemplateUrl !== null}
       connectionStatus={connectionStatus}
       consoleUrl={consoleUrl}
-      copyFeedback={copyFeedback}
       errorMessage={errorMessage}
       hasPolicyApproval={approval !== null}
       isBusy={isBusy}
       onCommand={(command) => void runCommand(command)}
-      onCopyManagerTemplate={() => void copyManagerTemplate()}
+      onCopySetupTemplate={() => void copySetupTemplate()}
+      setupLinkCopied={setupLinkCopied}
+      setupTemplateUrl={setupTemplateUrl}
       state={stateQuery.data.state}
       {...(onContinue ? { onContinue } : {})}
     />
@@ -223,30 +226,193 @@ export function getAwsImportAccessErrorMessage(
   return getApiErrorMessage(redactedError, fallbackMessage, { developerMode: false });
 }
 
-/** gg: safe 상태만 사용자 문구로 렌더링하고 Stack·Role 내부 식별자는 읽지 않습니다. */
+type AwsStructureAnalysisAction =
+  | { readonly kind: "command"; readonly command: AwsImportAccessUiCommand; readonly label: string }
+  | { readonly kind: "continue"; readonly label: string }
+  | { readonly kind: "copy_setup_link"; readonly label: string };
+
+type AwsStructureAnalysisPresentation = {
+  readonly title: string;
+  readonly description: string;
+};
+
+/** gg: 구조 분석 설정의 내부 단계는 숨기고 사용자가 지금 해야 할 일만 짧게 보여줍니다. */
+function getAwsStructureAnalysisPresentation(input: {
+  readonly connectionStatus: AwsConnectionStatus;
+  readonly hasPolicyApproval: boolean;
+  readonly state: AwsImportAccessState;
+}): AwsStructureAnalysisPresentation {
+  const { connectionStatus, hasPolicyApproval, state } = input;
+  if (connectionStatus !== "verified" && !isAwsStructureAnalysisCleanupState(state)) {
+    return {
+      title: "AWS 연결 확인 필요",
+      description: "구조 분석을 시작하기 전에 AWS 연결을 먼저 확인해 주세요."
+    };
+  }
+  if (hasPolicyApproval) {
+    return {
+      title: "설정 내용 확인",
+      description: "구조 분석에 필요한 설정을 적용할까요?"
+    };
+  }
+
+  switch (state.status) {
+    case "check_required":
+    case "manager_approval_required":
+    case "policy_approval_required":
+    case "update_required":
+      return {
+        title: "설정 필요",
+        description: "기존 AWS 구조를 분석하려면 AWS에서 설정해 주세요."
+      };
+    case "manager_checking":
+    case "policy_working":
+    case "checking_reads":
+      return {
+        title: "처리 중",
+        description: "상태를 확인하고 있습니다."
+      };
+    case "ready":
+      return {
+        title: "사용 가능",
+        description: "이 AWS 연결로 기존 AWS 구조를 분석할 수 있습니다."
+      };
+    case "limited":
+      return {
+        title: "일부 정보 제한",
+        description: "기본 구조는 분석할 수 있지만 일부 정보는 보이지 않을 수 있습니다."
+      };
+    case "retry_required":
+      return {
+        title: "다시 확인 필요",
+        description: "잠시 후 상태를 다시 확인해 주세요."
+      };
+    case "connection_required":
+      return {
+        title: "AWS 연결 확인 필요",
+        description: "구조 분석을 시작하기 전에 AWS 연결을 먼저 확인해 주세요."
+      };
+    case "cleanup_policy_required":
+    case "cleanup_manager_required":
+      return {
+        title: "해제 필요",
+        description: "AWS 연결을 해제하려면 구조 분석 설정을 먼저 해제해 주세요."
+      };
+    case "cleanup_checking":
+      return {
+        title: "처리 중",
+        description: "구조 분석 설정이 해제됐는지 확인하고 있습니다."
+      };
+    case "cleanup_required":
+      return state.nextAction === "prepare_manager"
+        ? {
+          title: "설정 필요",
+          description: "기존 AWS 구조를 분석하려면 AWS에서 설정해 주세요."
+        }
+        : {
+          title: "해제 확인 필요",
+          description: "구조 분석 설정이 남아 있는지 확인해 주세요."
+        };
+    case "cleanup_complete":
+      return {
+        title: "설정 해제됨",
+        description: "구조 분석 설정이 해제되었습니다."
+      };
+  }
+}
+
+/** gg: 정리 상태에서도 안전한 해제 순서를 유지하려고 연결 상태보다 먼저 구분합니다. */
+function isAwsStructureAnalysisCleanupState(state: AwsImportAccessState): boolean {
+  return state.status === "cleanup_policy_required" ||
+    state.status === "cleanup_manager_required" ||
+    state.status === "cleanup_checking" ||
+    state.status === "cleanup_required" ||
+    state.status === "cleanup_complete";
+}
+
+/** gg: 설정·확인·해제·복귀 중 현재 상태에 맞는 행동 하나만 남겨 중복 실행을 막습니다. */
+function selectAwsStructureAnalysisAction(input: {
+  readonly hasPolicyApproval: boolean;
+  readonly onContinue: (() => void) | undefined;
+  readonly setupLinkCopied: boolean;
+  readonly setupTemplateUrl: string | null;
+  readonly state: AwsImportAccessState;
+  readonly view: ReturnType<typeof deriveAwsImportAccessView>;
+}): AwsStructureAnalysisAction | null {
+  const { hasPolicyApproval, onContinue, setupLinkCopied, setupTemplateUrl, state, view } = input;
+  if (view.isBusy) return null;
+  if (view.canContinue && onContinue) {
+    return {
+      kind: "continue",
+      label: state.status === "limited" ? "제한된 정보로 계속" : "구조 분석 계속"
+    };
+  }
+  if (setupTemplateUrl && !setupLinkCopied && view.primaryCommand === "check_manager") {
+    return { kind: "copy_setup_link", label: "설정 링크 복사" };
+  }
+  const command = view.primaryCommand ?? view.cleanupCommand;
+  if (!command) return null;
+  return {
+    kind: "command",
+    command,
+    label: getAwsStructureAnalysisActionLabel(command, hasPolicyApproval)
+  };
+}
+
+/** gg: API command 이름을 노출하지 않고 사용자가 이해할 수 있는 한 가지 행동으로 바꿉니다. */
+function getAwsStructureAnalysisActionLabel(
+  command: AwsImportAccessUiCommand,
+  hasPolicyApproval: boolean
+): string {
+  switch (command) {
+    case "prepare_manager": return "AWS에서 설정";
+    case "check_manager": return "설정 완료 후 확인";
+    case "preview_policy": return "설정 내용 확인";
+    case "apply_policy": return hasPolicyApproval ? "설정 적용" : "설정 내용 확인";
+    case "check_reads": return "상태 다시 확인";
+    case "open_settings": return "AWS 연결 확인";
+    case "prepare_cleanup": return "구조 분석 설정 해제";
+    case "check_cleanup": return "해제 상태 확인";
+  }
+}
+
+/** gg: 내부 상태 이름을 DOM에 남기지 않고 사용자가 보는 경고 색만 안전하게 고릅니다. */
+function getAwsStructureAnalysisTone(state: AwsImportAccessState): "default" | "ready" | "warning" {
+  if (state.status === "ready") return "ready";
+  if (
+    state.status === "limited" ||
+    state.status === "retry_required" ||
+    isAwsStructureAnalysisCleanupState(state)
+  ) {
+    return "warning";
+  }
+  return "default";
+}
+
+/** gg: safe 상태만 간결한 구조 분석 패널로 렌더링하고 내부 AWS 식별자는 읽지 않습니다. */
 export function AwsImportAccessWizardView({
-  canCopyManagerTemplate = false,
   connectionStatus,
   consoleUrl = null,
-  copyFeedback = null,
   errorMessage = "",
   hasPolicyApproval = false,
   isBusy = false,
   onCommand,
   onContinue,
-  onCopyManagerTemplate,
+  onCopySetupTemplate,
+  setupLinkCopied = false,
+  setupTemplateUrl = null,
   state
 }: {
-  readonly canCopyManagerTemplate?: boolean;
   readonly connectionStatus: AwsConnectionStatus;
   readonly consoleUrl?: string | null;
-  readonly copyFeedback?: string | null;
   readonly errorMessage?: string;
   readonly hasPolicyApproval?: boolean;
   readonly isBusy?: boolean;
   readonly onCommand: (command: AwsImportAccessUiCommand) => void;
   readonly onContinue?: () => void;
-  readonly onCopyManagerTemplate?: () => void;
+  readonly onCopySetupTemplate?: () => void;
+  readonly setupLinkCopied?: boolean;
+  readonly setupTemplateUrl?: string | null;
   readonly state: AwsImportAccessState;
 }) {
   const view = deriveAwsImportAccessView({
@@ -255,48 +421,54 @@ export function AwsImportAccessWizardView({
     state
   });
   const pending = isBusy || view.isBusy;
+  const presentation = getAwsStructureAnalysisPresentation({
+    connectionStatus,
+    hasPolicyApproval,
+    state
+  });
+  const action = selectAwsStructureAnalysisAction({
+    hasPolicyApproval,
+    onContinue,
+    setupLinkCopied,
+    setupTemplateUrl,
+    state,
+    view
+  });
+
+  if (pending) {
+    return (
+      <section
+        aria-busy="true"
+        aria-label="AWS 구조 분석"
+        className={styles.importAccessCard}
+        data-tone={getAwsStructureAnalysisTone(state)}
+      >
+        <header className={styles.importAccessHeader} role="status">
+          <StatusIcon busy ready={false} />
+          <div>
+            <span>AWS 구조 분석</span>
+            <h3>처리 중</h3>
+            <p>상태를 확인하고 있습니다.</p>
+          </div>
+        </header>
+      </section>
+    );
+  }
 
   return (
     <section
-      aria-label="AWS 가져오기 권한"
+      aria-label="AWS 구조 분석"
       className={styles.importAccessCard}
-      data-status={state.status}
+      data-tone={getAwsStructureAnalysisTone(state)}
     >
       <header className={styles.importAccessHeader}>
-        <StatusIcon busy={pending} ready={state.status === "ready"} />
+        <StatusIcon busy={false} ready={state.status === "ready"} />
         <div>
-          <span>AWS 구조 가져오기</span>
-          <h3>{view.title}</h3>
-          <p>{view.description}</p>
+          <span>AWS 구조 분석</span>
+          <h3>{presentation.title}</h3>
+          <p>{presentation.description}</p>
         </div>
       </header>
-
-      {state.safeSummary ? <p className={styles.importAccessSummary}>{state.safeSummary}</p> : null}
-
-      {state.status === "limited" && state.limitedServiceLabels.length > 0 ? (
-        <div className={styles.importAccessLimited}>
-          <strong>추가 확인이 필요한 정보</strong>
-          <ul>
-            {state.limitedServiceLabels.map((label) => <li key={label}>{label}</li>)}
-          </ul>
-        </div>
-      ) : null}
-
-      <div className={styles.importAccessPreserved}>
-        <strong>기존 AWS 연결과 배포 권한은 그대로 유지됩니다.</strong>
-        <ul>
-          <li>기존 AWS 연결 유지</li>
-          <li>현재 배포 환경 유지</li>
-          <li>기존 Terraform 배포 권한 유지</li>
-        </ul>
-      </div>
-
-      {hasPolicyApproval ? (
-        <div className={styles.importAccessApproval} role="group" aria-label="가져오기 권한 적용 확인">
-          <strong>가져오기 권한 변경을 적용할까요?</strong>
-          <p>가져오기에 필요한 읽기 범위만 추가하거나 업데이트합니다.</p>
-        </div>
-      ) : null}
 
       {errorMessage ? <p className={styles.importAccessError} role="alert">{errorMessage}</p> : null}
 
@@ -311,64 +483,35 @@ export function AwsImportAccessWizardView({
         </a>
       ) : null}
 
-      {canCopyManagerTemplate ? (
-        <div className={styles.importAccessManagerUpdate}>
-          <p>Manager의 업데이트를 선택한 뒤 복사한 업데이트 링크를 붙여 넣어 주세요.</p>
-          <button
-            className={styles.importAccessCopyAction}
-            disabled={isBusy}
-            onClick={onCopyManagerTemplate}
-            type="button"
-          >
-            <Copy aria-hidden="true" size={15} /> Manager 업데이트 링크 복사
-          </button>
+      {action ? (
+        <div className={styles.importAccessActions}>
+          {action.kind === "command" ? (
+            <button
+              className={styles.importAccessPrimaryAction}
+              onClick={() => onCommand(action.command)}
+              type="button"
+            >
+              {action.label}
+            </button>
+          ) : action.kind === "continue" ? (
+            <button
+              className={styles.importAccessPrimaryAction}
+              onClick={onContinue}
+              type="button"
+            >
+              {action.label}
+            </button>
+          ) : (
+            <button
+              className={styles.importAccessPrimaryAction}
+              onClick={() => onCopySetupTemplate?.()}
+              type="button"
+            >
+              {action.label}
+            </button>
+          )}
         </div>
       ) : null}
-      {copyFeedback ? <p className={styles.importAccessFeedback} role="status">{copyFeedback}</p> : null}
-
-      <div className={styles.importAccessActions}>
-        {view.cleanupAction && view.cleanupCommand ? (
-          <button
-            className={styles.importAccessCleanupAction}
-            disabled={isBusy}
-            onClick={() => onCommand(view.cleanupCommand!)}
-            type="button"
-          >
-            {view.cleanupAction}
-          </button>
-        ) : null}
-        {view.secondaryAction && view.secondaryCommand ? (
-          <button
-            disabled={isBusy}
-            onClick={() => onCommand(view.secondaryCommand!)}
-            type="button"
-          >
-            {view.secondaryAction}
-          </button>
-        ) : null}
-        {view.primaryAction && view.primaryCommand ? (
-          <button
-            className={styles.importAccessPrimaryAction}
-            disabled={isBusy}
-            onClick={() => onCommand(view.primaryCommand!)}
-            type="button"
-          >
-            {isBusy ? "처리 중…" : view.primaryAction}
-          </button>
-        ) : null}
-        {view.canContinue && onContinue ? (
-          <button
-            className={styles.importAccessPrimaryAction}
-            disabled={isBusy}
-            onClick={onContinue}
-            type="button"
-          >
-            {state.status === "limited"
-              ? "제한된 정보로 계속 가져오기"
-              : "같은 연결로 가져오기"}
-          </button>
-        ) : null}
-      </div>
     </section>
   );
 }
@@ -397,7 +540,7 @@ export async function runAwsImportAccessCommand(input: {
     }
     case "apply_policy": {
       if (!input.approval) {
-        throw new Error("권한 변경 내용을 다시 확인해 주세요.");
+        throw new Error("설정 내용을 다시 확인해 주세요.");
       }
       return {
         response: await input.api.applyPolicy({

@@ -1,7 +1,7 @@
 .importAccessCard {
   display: grid;
   min-width: 0;
-  gap: 14px;
+  gap: 12px;
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-control);
   padding: 16px;
@@ -13,14 +13,12 @@
   grid-column: 1 / -1;
 }
 
-.importAccessCard[data-status="ready"] {
+.importAccessCard[data-tone="ready"] {
   border-color: var(--color-success);
   background: var(--color-success-surface);
 }
 
-.importAccessCard[data-status="limited"],
-.importAccessCard[data-status="retry_required"],
-.importAccessCard[data-status^="cleanup_"] {
+.importAccessCard[data-tone="warning"] {
   border-color: var(--color-warning);
   background: var(--color-warning-surface);
 }
@@ -39,6 +37,10 @@
   color: var(--color-ink);
 }
 
+.importAccessHeader[role="status"] > svg {
+  animation: importAccessSpin 900ms linear infinite;
+}
+
 .importAccessHeader > div {
   min-width: 0;
 }
@@ -55,11 +57,7 @@
   font-size: calc(16px + var(--presentation-font-size-increase));
 }
 
-.importAccessHeader p,
-.importAccessSummary,
-.importAccessFeedback,
-.importAccessManagerUpdate p,
-.importAccessApproval p {
+.importAccessHeader p {
   margin: 4px 0 0;
   overflow-wrap: anywhere;
   color: var(--color-body);
@@ -67,114 +65,59 @@
   line-height: 1.5;
 }
 
-.importAccessManagerUpdate {
-  display: grid;
-  gap: 8px;
-}
-
-.importAccessPreserved,
-.importAccessLimited,
-.importAccessApproval {
-  display: grid;
-  gap: 7px;
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-control);
-  padding: 12px;
-  background: var(--color-canvas);
-}
-
-.importAccessPreserved strong,
-.importAccessLimited strong,
-.importAccessApproval strong {
-  color: var(--color-ink);
-  font-size: calc(13px + var(--presentation-font-size-increase));
-}
-
-.importAccessPreserved ul,
-.importAccessLimited ul {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding-left: 20px;
-  color: var(--color-body);
-  font-size: calc(12px + var(--presentation-font-size-increase));
-  line-height: 1.45;
-}
-
 .importAccessActions {
   display: flex;
-  flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
 }
 
-.importAccessActions button,
-.importAccessCopyAction,
+.importAccessPrimaryAction,
 .importAccessError button {
   display: inline-flex;
   min-height: 38px;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--color-ink);
   border-radius: var(--radius-control);
   padding: 0 12px;
-  background: var(--color-canvas);
-  color: var(--color-ink);
+  background: var(--color-ink);
+  color: var(--color-on-primary);
   cursor: pointer;
   font-size: calc(12px + var(--presentation-font-size-increase));
   font-weight: calc(700 - var(--presentation-font-weight-reduction));
-}
-
-.importAccessActions .importAccessPrimaryAction {
-  border-color: var(--color-ink);
-  background: var(--color-ink);
-  color: var(--color-on-primary);
-}
-
-.importAccessActions .importAccessCleanupAction {
-  border-color: var(--color-error);
-  color: var(--color-error);
-}
-
-.importAccessActions button:disabled,
-.importAccessCopyAction:disabled {
-  cursor: wait;
-  opacity: 0.55;
 }
 
 .importAccessConsoleLink {
   display: inline-flex;
   width: fit-content;
   max-width: 100%;
-  min-height: 38px;
+  min-height: 36px;
   align-items: center;
   gap: 6px;
+  border: 1px solid var(--color-hairline-strong);
   border-radius: var(--radius-control);
   padding: 0 12px;
-  background: var(--color-ink);
-  color: var(--color-on-primary);
+  background: var(--color-canvas);
+  color: var(--color-ink);
   font-size: calc(12px + var(--presentation-font-size-increase));
   font-weight: calc(700 - var(--presentation-font-weight-reduction));
   text-decoration: none;
 }
 
-.importAccessCopyAction {
-  width: fit-content;
-}
-
 .importAccessError {
-  display: grid;
-  gap: 8px;
+  margin: 0;
   border-left: 3px solid var(--color-error);
   padding: 10px 12px;
   background: var(--color-error-surface);
   color: var(--color-ink);
   font-size: calc(13px + var(--presentation-font-size-increase));
+  line-height: 1.5;
 }
 
-.importAccessError p {
-  margin: 0;
+.importAccessError button {
+  margin-top: 8px;
+  border-color: var(--color-hairline-strong);
+  background: var(--color-canvas);
+  color: var(--color-ink);
 }
 
 .importAccessLoading {
@@ -185,18 +128,24 @@
   font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
+.importAccessLoading > svg {
+  animation: importAccessSpin 900ms linear infinite;
+}
+
+@keyframes importAccessSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 760px) {
   .importAccessCard {
     padding: 14px;
   }
 
-  .importAccessActions {
-    display: grid;
-  }
-
-  .importAccessActions button,
-  .importAccessConsoleLink,
-  .importAccessCopyAction {
+  .importAccessActions,
+  .importAccessPrimaryAction,
+  .importAccessConsoleLink {
     width: 100%;
   }
 }
