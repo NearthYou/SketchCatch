@@ -221,6 +221,7 @@ export function WorkspaceAiShell({
             onOpenPreview={() => setMobilePreviewRequested(true)}
             onRetry={workflow.retryDraft}
             onSuggestionSelect={handleSuggestionSelect}
+            progressSnapshot={workflow.progressSnapshot}
             requestState={workflow.requestState}
             selections={selections}
           />
