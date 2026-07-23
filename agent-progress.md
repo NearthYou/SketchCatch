@@ -4,10 +4,15 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Workspace start cards keep every desktop title on one line, use subdued description typography, and place the AWS Role badge in the Reverse Engineering title row.
+
 ## Session Record
+
+- 2026-07-23: Refined the `/workspace/new` start-method cards to match the selected compact UI direction. Added a focused regression test. Verified with the focused test, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`.
 
 ## Known Risk
 
+- Authenticated browser visual smoke testing for `/workspace/new` was not available in the clean browser session; the route redirected to login. Source-level regression coverage and the production build are green.
 - The manifest-contract repair and audience receipt flow are production-verified, but provider-confirmed scale-out remains a separate blocked acceptance item.
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
 - Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.

@@ -418,10 +418,12 @@ export function WorkspaceStartClient({
                       )}
                     </span>
                     <span className={styles.optionCopy}>
-                      <strong>{option.title}</strong>
+                      <span className={styles.optionTitleRow}>
+                        <strong>{option.title}</strong>
+                        {option.kind === "reverse" ? <em>AWS Role 필요</em> : null}
+                      </span>
                       <small>{option.description}</small>
                     </span>
-                    {option.kind === "reverse" ? <em>AWS Role 필요</em> : null}
                   </button>
                 );
               })}
