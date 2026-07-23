@@ -117,7 +117,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
                     }
                     href={PROFILE_PATH}
                   >
-                    <span>마이페이지</span>
+                    <span>개인정보 수정</span>
                   </Link>
                 ) : null}
               </div>
@@ -127,7 +127,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
 
         <div className="dashboardAccount">
           <Link
-            aria-label="마이페이지로 이동"
+            aria-label="개인정보 수정으로 이동"
             className="dashboardAccountProfile"
             href={PROFILE_PATH}
           >
@@ -214,7 +214,7 @@ function isDashboardNavItemActive(pathname: string, href: string): boolean {
 // route 이름을 사용자가 이해할 수 있는 짧은 화면 제목으로 바꿉니다.
 function getDashboardPageTitle(pathname: string): string {
   if (pathname === PROFILE_PATH) {
-    return "마이페이지";
+    return "개인정보 수정";
   }
 
   if (pathname.startsWith("/dashboard/projects/")) {

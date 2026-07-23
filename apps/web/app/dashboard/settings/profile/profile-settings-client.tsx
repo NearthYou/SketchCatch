@@ -90,7 +90,7 @@ export function ProfileSettingsClient() {
     return (
       <section className={styles.page} aria-labelledby="profile-verification-title">
         <header className={styles.pageHeader}>
-          <h1 id="profile-verification-title">마이페이지</h1>
+          <h1 id="profile-verification-title">개인정보 수정</h1>
         </header>
 
         <div className={`${styles.profileCard} ${styles.verificationCard}`}>
