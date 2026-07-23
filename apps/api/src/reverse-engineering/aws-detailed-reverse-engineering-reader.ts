@@ -256,6 +256,12 @@ function toApiGatewayDiscoveryResult(
     result.publicRecords.map((publicRecord) => {
       const family = familyById.get(publicRecord.familyRecordId);
       const serverOnly = serverOnlyById.get(publicRecord.recordId);
+      const tagEvidence = createApiGatewayRestApiTagEvidence({
+        catalogReadComplete: result.catalogReadComplete,
+        familyReadComplete: family?.readComplete === true,
+        providerResourceType: publicRecord.providerResourceType,
+        serverOnlyConfig: serverOnly?.serverOnlyConfig
+      });
       const record: AwsDiscoveredResourceRecord = {
         providerResourceType: publicRecord.providerResourceType,
         providerResourceId: publicRecord.recordId,
@@ -267,7 +273,8 @@ function toApiGatewayDiscoveryResult(
           reverseEngineeringDetailsComplete: family?.readComplete === true,
           reverseEngineeringDetailsVersion: 1,
           apiGatewayTopologyClassification: family?.classification ?? "incomplete",
-          apiGatewayAdvancedFeatures: family?.advancedFeatures ?? []
+          apiGatewayAdvancedFeatures: family?.advancedFeatures ?? [],
+          ...tagEvidence.publicConfig
         },
         relationships: [
           ...publicRecord.relatedRecordIds.map((targetProviderResourceId) => ({
@@ -290,6 +297,7 @@ function toApiGatewayDiscoveryResult(
                 terraformImportId: serverOnly.terraformImportId,
                 config: {
                   ...serverOnly.serverOnlyConfig,
+                  ...tagEvidence.serverOnlyConfig,
                   parentProviderResourceType: serverOnly.parentProviderResourceType,
                   parentTerraformImportId: serverOnly.parentTerraformImportId,
                   relatedTerraformImportIdentities: serverOnly.relatedTerraformImportIdentities
@@ -308,6 +316,41 @@ function toApiGatewayDiscoveryResult(
       createSafeReaderError("API_GATEWAY_REST_API", "api-gateway", failure.outcome)
     )
   };
+}
+
+/** gg: REST API tag는 catalog와 family가 모두 완전할 때만 공개 sanitizer의 완료 evidence로 넘깁니다. */
+function createApiGatewayRestApiTagEvidence(input: {
+  readonly catalogReadComplete: boolean;
+  readonly familyReadComplete: boolean;
+  readonly providerResourceType: string;
+  readonly serverOnlyConfig: Readonly<Record<string, unknown>> | undefined;
+}): {
+  readonly publicConfig: Readonly<Record<string, unknown>>;
+  readonly serverOnlyConfig: Readonly<Record<string, unknown>>;
+} {
+  if (input.providerResourceType !== "AWS::ApiGateway::RestApi") {
+    return { publicConfig: {}, serverOnlyConfig: {} };
+  }
+
+  const tags = readStringMap(input.serverOnlyConfig?.["tags"]);
+  const tagsReadComplete = input.catalogReadComplete && input.familyReadComplete && tags !== null;
+
+  return {
+    publicConfig: tagsReadComplete ? { tags, tagsReadComplete: true } : { tagsReadComplete: false },
+    serverOnlyConfig: { tagsReadComplete }
+  };
+}
+
+/** gg: AWS tag map이 전부 문자열일 때만 손실 없는 완료 evidence로 인정합니다. */
+function readStringMap(value: unknown): Record<string, string> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const entries = Object.entries(value);
+  return entries.every(([key, tagValue]) => key.trim().length > 0 && typeof tagValue === "string")
+    ? Object.fromEntries(entries)
+    : null;
 }
 
 /** gg: 상세 결과 join key와 공개 record ID를 맞춘 뒤 원문 detail을 복제해 공유 객체 변이를 막습니다. */

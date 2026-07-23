@@ -5,7 +5,11 @@ import {
   readAwsDetailedReverseEngineeringResources,
   type AwsDetailedReverseEngineeringReaderDependencies
 } from "./aws-detailed-reverse-engineering-reader.js";
-import type { AwsDiscoveredResourceRecord } from "./aws-provider-adapter.js";
+import {
+  createAwsProviderAdapter,
+  type AwsDiscoveredResourceRecord
+} from "./aws-provider-adapter.js";
+import { classifyReverseEngineeringManagement } from "./reverse-engineering-management-policy.js";
 
 const CREDENTIALS: TerraformAwsCredentialEnv = {
   AWS_ACCESS_KEY_ID: "test-access-key",
@@ -78,6 +82,24 @@ test("ALL은 IAM, Lambda, KMS, API Gateway 상세 reader를 각각 한 번만 �
     (record) => record.providerResourceType === "AWS::ApiGateway::RestApi"
   );
   assert.deepEqual(restApi?.relationships, []);
+  assert.deepEqual(restApi?.config["tags"], { Environment: "production" });
+  assert.equal(restApi?.config["tagsReadComplete"], true);
+  assert.deepEqual(restApi?.serverOnly?.config?.["tags"], { Environment: "production" });
+  assert.equal(restApi?.serverOnly?.config?.["tagsReadComplete"], true);
+  const publicScan = await createAwsProviderAdapter({
+    async discoverResources() {
+      return result;
+    }
+  }).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
+  const publicRestApi = publicScan.discoveredResources.find(
+    (resource) => resource.resourceType === "API_GATEWAY_REST_API"
+  );
+  assert.deepEqual(publicRestApi?.config["tags"], { Environment: "production" });
+  assert.equal(publicRestApi?.config["tagsReadComplete"], true);
+  assert.equal(
+    publicRestApi ? classifyReverseEngineeringManagement(publicRestApi) : undefined,
+    "managed"
+  );
   const deployment = result.records.find(
     (record) => record.providerResourceType === "AWS::ApiGateway::Deployment"
   );
@@ -91,6 +113,59 @@ test("ALL은 IAM, Lambda, KMS, API Gateway 상세 reader를 각각 한 번만 �
   assert.equal(stage.serverOnly?.terraformImportId, "api-123/prod");
   assert.deepEqual(stage.serverOnly?.config?.["variables"], { private: "never-public" });
   assert.equal(stage.config["managementReady"], true);
+});
+
+test("API Gateway catalog 또는 family 조회가 불완전하면 tag 완료 evidence를 닫는다", async () => {
+  const baseDependencies = createDependencies([]);
+  const completeResult = await baseDependencies.readApiGateway("ap-northeast-2", CREDENTIALS);
+
+  for (const incompleteResult of [
+    { ...completeResult, catalogReadComplete: false },
+    {
+      ...completeResult,
+      families: completeResult.families.map((family) => ({
+        ...family,
+        readComplete: false,
+        managementReady: false
+      }))
+    }
+  ]) {
+    const dependencies = createDependencies([]);
+    dependencies.readApiGateway = async () => incompleteResult;
+
+    const result = await readAwsDetailedReverseEngineeringResources(
+      {
+        provider: "aws",
+        region: "ap-northeast-2",
+        resourceTypes: ["API_GATEWAY_REST_API"]
+      },
+      CREDENTIALS,
+      dependencies
+    );
+    const restApi = result.records.find(
+      (record) => record.providerResourceType === "AWS::ApiGateway::RestApi"
+    );
+
+    assert.equal(restApi?.config["tagsReadComplete"], false);
+    assert.equal("tags" in (restApi?.config ?? {}), false);
+    assert.deepEqual(restApi?.serverOnly?.config?.["tags"], { Environment: "production" });
+    assert.equal(restApi?.serverOnly?.config?.["tagsReadComplete"], false);
+    const publicScan = await createAwsProviderAdapter({
+      async discoverResources() {
+        return result;
+      }
+    }).scan({
+      provider: "aws",
+      region: "ap-northeast-2",
+      resourceTypes: ["API_GATEWAY_REST_API"]
+    });
+    assert.equal(
+      publicScan.discoveredResources[0]
+        ? classifyReverseEngineeringManagement(publicScan.discoveredResources[0])
+        : undefined,
+      "needs_mapping"
+    );
+  }
 });
 
 test("API Gateway Stage만 선택하면 Stage의 parent와 deployment 의존성만 남긴다", async () => {
@@ -325,7 +400,7 @@ function createDependencies(calls: string[]): AwsDetailedReverseEngineeringReade
             providerResourceType: "AWS::ApiGateway::RestApi",
             displayName: "api",
             region: "ap-northeast-2",
-            config: {},
+            config: { hasResourcePolicy: false, name: "api" },
             relatedRecordIds: []
           },
           {
@@ -366,7 +441,10 @@ function createDependencies(calls: string[]): AwsDetailedReverseEngineeringReade
             providerResourceType: "AWS::ApiGateway::RestApi",
             terraformImportId: "api-123",
             relatedTerraformImportIdentities: [],
-            serverOnlyConfig: { rootResourceId: "root-private" }
+            serverOnlyConfig: {
+              rootResourceId: "root-private",
+              tags: { Environment: "production" }
+            }
           },
           {
             publicRecordId: "api-deployment-ref",

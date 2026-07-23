@@ -4345,10 +4345,15 @@ function mergeDuplicateDiscoveredRecords(
   };
 }
 
+/** gg: 상세 reader의 완전한 tag map은 generic inventory의 배열형 tag로 덮어쓰지 않습니다. */
 function mergeDiscoveredRecordConfig(
   secondaryConfig: Record<string, unknown>,
   preferredConfig: Record<string, unknown>
 ): Record<string, unknown> {
+  if (isRecordValue(preferredConfig["tags"])) {
+    return preferredConfig;
+  }
+
   const mergedTags = mergeDiscoveredRecordTags(secondaryConfig["tags"], preferredConfig["tags"]);
 
   return mergedTags.length > 0 ? { ...preferredConfig, tags: mergedTags } : preferredConfig;
@@ -4391,8 +4396,34 @@ function normalizeDiscoveredRecordTags(value: unknown): Array<{ key: string; val
     : [];
 }
 
-/** CloudWatch Logs SDK ARN의 끝 `:*`와 Resource Explorer ARN을 같은 Log Group으로 맞춥니다. */
+/** gg: opaque 상세 ID는 서버 전용 exact identity로 환원해 같은 generic ARN과만 합칩니다. */
 function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord): string {
+  if (
+    [
+      "AWS::IAM::Role",
+      "AWS::IAM::Policy",
+      "AWS::IAM::InstanceProfile",
+      "AWS::IAM::RolePolicy",
+      "AWS::Lambda::Function",
+      "AWS::Lambda::Permission"
+    ].includes(record.providerResourceType)
+  ) {
+    const exactProviderResourceId =
+      getNonEmptyStringValue(record.serverOnly?.providerResourceId) ?? record.providerResourceId;
+
+    return `${record.providerResourceType}:${exactProviderResourceId}`;
+  }
+
+  if (
+    record.providerResourceType === "AWS::KMS::Key" ||
+    record.providerResourceType === "AWS::KMS::Alias"
+  ) {
+    const kmsIdentity = createKmsDiscoveredRecordIdentity(record);
+    if (kmsIdentity) {
+      return `${record.providerResourceType}:${kmsIdentity}`;
+    }
+  }
+
   if (record.providerResourceType === "AWS::Logs::LogGroup") {
     return record.providerResourceId.endsWith(":*")
       ? record.providerResourceId.slice(0, -2)
@@ -4432,15 +4463,45 @@ function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord):
 
   if (record.providerResourceType === "AWS::ApiGateway::RestApi") {
     const configId = getNonEmptyStringValue(record.config["id"]);
+    const exactId =
+      getNonEmptyStringValue(record.serverOnly?.providerResourceId) ??
+      getNonEmptyStringValue(record.serverOnly?.terraformImportId);
     const arnId = /^arn:[^:]+:apigateway:[^:]+::\/restapis\/([^/]+)$/u.exec(
       record.providerResourceId
     )?.[1];
-    const restApiId = configId ?? arnId ?? record.providerResourceId;
+    const restApiId = exactId ?? configId ?? arnId ?? record.providerResourceId;
 
     return `AWS::ApiGateway::RestApi:${restApiId}`;
   }
 
   return record.providerResourceId;
+}
+
+/** gg: KMS ARN과 상세 reader의 Key ID·Alias 이름을 같은 exact import identity로 정규화합니다. */
+function createKmsDiscoveredRecordIdentity(record: AwsDiscoveredResourceRecord): string | null {
+  const configKey = record.providerResourceType === "AWS::KMS::Key" ? "keyId" : "aliasName";
+  const expectedKind = record.providerResourceType === "AWS::KMS::Key" ? "key" : "alias";
+  const candidates = [
+    getNonEmptyStringValue(record.serverOnly?.providerResourceId),
+    getNonEmptyStringValue(record.serverOnly?.terraformImportId),
+    getNonEmptyStringValue(record.config[configKey]),
+    record.providerResourceId
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const arnIdentity = new RegExp(`^arn:[^:]+:kms:[^:]+:[^:]+:${expectedKind}\\/(.+)$`, "u").exec(
+      candidate
+    )?.[1];
+    if (arnIdentity) {
+      return expectedKind === "alias" ? `alias/${arnIdentity}` : arnIdentity;
+    }
+    if (!candidate.startsWith("arn:")) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 function extractEc2InventoryId(
@@ -4477,7 +4538,9 @@ const DEDICATED_RECORD_DETAIL_KEY_BY_PROVIDER_RESOURCE_TYPE = new Map<string, st
   ["AWS::IAM::Role", "roleName"],
   ["AWS::IAM::Policy", "policyName"],
   ["AWS::IAM::InstanceProfile", "instanceProfileName"],
-  ["AWS::KMS::Key", "keyId"]
+  ["AWS::IAM::RolePolicy", "policyName"],
+  ["AWS::KMS::Key", "keyId"],
+  ["AWS::KMS::Alias", "aliasName"]
 ]);
 
 const ELASTIC_LOAD_BALANCING_PROVIDER_RESOURCE_TYPES = new Set([

@@ -45,6 +45,96 @@ test("ALL 스캔은 Lambda IAM KMS의 generic inventory보다 전용 조회 결�
   assert.deepEqual(records, detailedRecords);
 });
 
+test("ALL 스캔은 raw ARN inventory와 opaque 상세 결과를 exact AWS identity로 합친다", () => {
+  const roleArn = "arn:aws:iam::123456789012:role/orders-api";
+  const policyArn = "arn:aws:iam::123456789012:policy/orders-read";
+  const profileArn = "arn:aws:iam::123456789012:instance-profile/orders-api";
+  const lambdaArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler";
+  const kmsKeyId = "11111111-2222-3333-4444-555555555555";
+  const kmsArn = `arn:aws:kms:ap-northeast-2:123456789012:key/${kmsKeyId}`;
+  const kmsAlias = "alias/orders";
+  const kmsAliasArn = `arn:aws:kms:ap-northeast-2:123456789012:${kmsAlias}`;
+  const apiArn = "arn:aws:apigateway:ap-northeast-2::/restapis/api123";
+  const unsupportedArn = "arn:aws:sns:ap-northeast-2:123456789012:orders";
+  const detailedRecords: AwsDiscoveredResourceRecord[] = [
+    {
+      ...record("AWS::IAM::Role", "opaque-role", "orders-api", { roleName: "orders-api" }),
+      serverOnly: { providerResourceId: roleArn, terraformImportId: "orders-api" }
+    },
+    {
+      ...record("AWS::IAM::Policy", "opaque-policy", "orders-read", {
+        policyName: "orders-read"
+      }),
+      serverOnly: { providerResourceId: policyArn, terraformImportId: policyArn }
+    },
+    {
+      ...record("AWS::IAM::InstanceProfile", "opaque-profile", "orders-api", {
+        instanceProfileName: "orders-api"
+      }),
+      serverOnly: { providerResourceId: profileArn, terraformImportId: "orders-api" }
+    },
+    {
+      ...record("AWS::Lambda::Function", "opaque-lambda", "orders-handler", {
+        functionName: "orders-handler"
+      }),
+      serverOnly: { providerResourceId: lambdaArn, terraformImportId: "orders-handler" }
+    },
+    {
+      ...record("AWS::KMS::Key", "opaque-kms-key", "orders-key", {
+        keyId: kmsKeyId
+      }),
+      serverOnly: { providerResourceId: kmsKeyId, terraformImportId: kmsKeyId }
+    },
+    {
+      ...record("AWS::KMS::Alias", "opaque-kms-alias", "orders", {
+        aliasName: kmsAlias
+      }),
+      serverOnly: { providerResourceId: kmsAlias, terraformImportId: kmsAlias }
+    },
+    {
+      ...record("AWS::ApiGateway::RestApi", "opaque-api", "orders-api", {
+        name: "orders-api",
+        tags: { Environment: "production" },
+        tagsReadComplete: true
+      }),
+      serverOnly: { providerResourceId: "api123", terraformImportId: "api123" }
+    }
+  ];
+  const genericRecords = [
+    record("AWS::IAM::Role", roleArn, "role inventory", { resourceKind: "role" }),
+    record("AWS::IAM::Policy", policyArn, "policy inventory", { resourceKind: "policy" }),
+    record("AWS::IAM::InstanceProfile", profileArn, "profile inventory", {
+      resourceKind: "instance-profile"
+    }),
+    record("AWS::Lambda::Function", lambdaArn, "lambda inventory", {
+      resourceKind: "function"
+    }),
+    record("AWS::KMS::Key", kmsArn, "key inventory", { resourceKind: "key" }),
+    record("AWS::KMS::Alias", kmsAliasArn, "alias inventory", { resourceKind: "alias" }),
+    record("AWS::ApiGateway::RestApi", apiArn, "api inventory", {
+      resourceKind: "restapis",
+      tags: [{ key: "Environment", value: "production" }]
+    }),
+    record("AWS::SNS::Topic", unsupportedArn, "unsupported inventory", {
+      resourceKind: "topic"
+    })
+  ];
+
+  const records = uniqueDiscoveredRecordsByProviderId([...genericRecords, ...detailedRecords]);
+
+  assert.equal(records.length, detailedRecords.length + 1);
+  assert.deepEqual(
+    records.filter((resource) => resource.providerResourceType !== "AWS::SNS::Topic"),
+    detailedRecords
+  );
+  assert.equal(records.at(-1)?.providerResourceId, unsupportedArn);
+  const api = records.find(
+    (resource) => resource.providerResourceType === "AWS::ApiGateway::RestApi"
+  );
+  assert.deepEqual(api?.config["tags"], { Environment: "production" });
+  assert.equal(api?.config["tagsReadComplete"], true);
+});
+
 test("ALL 스캔의 Lambda IAM KMS 상세 설정과 관계를 보드 후보까지 보존한다", async () => {
   const relationshipTargets = [
     record("AWS::EC2::VPC", "vpc-orders", "orders-vpc"),
@@ -70,7 +160,10 @@ test("ALL 스캔의 Lambda IAM KMS 상세 설정과 관계를 보드 후보까�
     }
   }).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
 
-  assert.equal(result.discoveredResources.length, relationshipTargets.length + detailedRecords.length);
+  assert.equal(
+    result.discoveredResources.length,
+    relationshipTargets.length + detailedRecords.length
+  );
   const resourcesByType = new Map(
     result.discoveredResources.map((resource) => [resource.resourceType, resource])
   );
@@ -104,26 +197,22 @@ test("ALL 스캔의 Lambda IAM KMS 상세 설정과 관계를 보드 후보까�
 
 test("Tagging API의 실제 IAM ARN도 전용 reader와 합치며 CloudFormation 소유 태그를 보존한다", async () => {
   const roleArn = "arn:aws:iam::123456789012:role/customer-api";
-  const genericRecords = await listTaggedUnknownResources(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command: object): Promise<unknown> {
-        assert.ok(command instanceof GetResourcesCommand);
-        return {
-          ResourceTagMappingList: [
-            {
-              ResourceARN: roleArn,
-              Tags: [
-                { Key: "Name", Value: "customer-api" },
-                { Key: "aws:cloudformation:stack-name", Value: "customer-production" }
-              ]
-            }
-          ]
-        };
-      }
-    })
-  );
+  const genericRecords = await listTaggedUnknownResources("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      assert.ok(command instanceof GetResourcesCommand);
+      return {
+        ResourceTagMappingList: [
+          {
+            ResourceARN: roleArn,
+            Tags: [
+              { Key: "Name", Value: "customer-api" },
+              { Key: "aws:cloudformation:stack-name", Value: "customer-production" }
+            ]
+          }
+        ]
+      };
+    }
+  }));
   const detailed = record(
     "AWS::IAM::Role",
     roleArn,
@@ -145,29 +234,23 @@ test("Tagging API의 실제 IAM ARN도 전용 reader와 합치며 CloudFormation
 });
 
 test("Tagging API의 API Gateway ARN은 전용 reader ID와 하나로 합친다", async () => {
-  const genericRecords = await listTaggedUnknownResources(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command: object): Promise<unknown> {
-        assert.ok(command instanceof GetResourcesCommand);
-        return {
-          ResourceTagMappingList: [
-            {
-              ResourceARN: "arn:aws:apigateway:ap-northeast-2::/restapis/api123",
-              Tags: [{ Key: "Environment", Value: "production" }]
-            }
-          ]
-        };
-      }
-    })
-  );
-  const detailed = record(
-    "AWS::ApiGateway::RestApi",
-    "api123",
-    "customer-api",
-    { id: "api123", name: "customer-api" }
-  );
+  const genericRecords = await listTaggedUnknownResources("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      assert.ok(command instanceof GetResourcesCommand);
+      return {
+        ResourceTagMappingList: [
+          {
+            ResourceARN: "arn:aws:apigateway:ap-northeast-2::/restapis/api123",
+            Tags: [{ Key: "Environment", Value: "production" }]
+          }
+        ]
+      };
+    }
+  }));
+  const detailed = record("AWS::ApiGateway::RestApi", "api123", "customer-api", {
+    id: "api123",
+    name: "customer-api"
+  });
 
   const records = uniqueDiscoveredRecordsByProviderId([...genericRecords, detailed]);
 
@@ -175,9 +258,7 @@ test("Tagging API의 API Gateway ARN은 전용 reader ID와 하나로 합친다"
   assert.equal(records.length, 1);
   assert.equal(records[0]?.providerResourceId, "api123");
   assert.equal(records[0]?.config["name"], "customer-api");
-  assert.deepEqual(records[0]?.config["tags"], [
-    { key: "Environment", value: "production" }
-  ]);
+  assert.deepEqual(records[0]?.config["tags"], [{ key: "Environment", value: "production" }]);
 });
 
 test("IAM 소유권 태그는 public과 private 후보의 관리 경계까지 안전하게 전달한다", async () => {
@@ -208,8 +289,7 @@ test("IAM 소유권 태그는 public과 private 후보의 관리 경계까지 �
         tags: [
           {
             key: "aws:cloudformation:stack-id",
-            value:
-              "arn:aws:cloudformation:ap-northeast-2:123456789012:stack/customer/stack-id"
+            value: "arn:aws:cloudformation:ap-northeast-2:123456789012:stack/customer/stack-id"
           },
           { key: "Environment", value: "production" }
         ]
@@ -231,14 +311,16 @@ test("IAM 소유권 태그는 public과 private 후보의 관리 경계까지 �
 
   for (const resultVisibility of ["public", "private"] as const) {
     const result = await createAwsProviderAdapter(
-      { async discoverResources() { return records; } },
+      {
+        async discoverResources() {
+          return records;
+        }
+      },
       { resultVisibility }
     ).scan({ provider: "aws", region: "ap-northeast-2", resourceTypes: ["ALL"] });
 
     assert.deepEqual(
-      result.discoveredResources.map((resource) =>
-        classifyReverseEngineeringManagement(resource)
-      ),
+      result.discoveredResources.map((resource) => classifyReverseEngineeringManagement(resource)),
       iamResources.flatMap(() => ["reference", "sketchcatch_managed"])
     );
     assert.equal(JSON.stringify(result.discoveredResources).includes("Environment"), false);
@@ -257,26 +339,22 @@ test("IAM 소유권 태그는 public과 private 후보의 관리 경계까지 �
 test("Tagging API의 AMI ARN은 전용 AMI와 합치고 상세 설정과 소유권 태그를 보존한다", async () => {
   const imageId = "ami-0123456789abcdef0";
   const imageArn = `arn:aws:ec2:ap-northeast-2:123456789012:image/${imageId}`;
-  const genericRecords = await listTaggedUnknownResources(
-    "ap-northeast-2",
-    credentials,
-    () => ({
-      async send(command: object): Promise<unknown> {
-        assert.ok(command instanceof GetResourcesCommand);
-        return {
-          ResourceTagMappingList: [
-            {
-              ResourceARN: imageArn,
-              Tags: [
-                { Key: "Name", Value: "customer-base" },
-                { Key: "aws:cloudformation:stack-name", Value: "customer-images" }
-              ]
-            }
-          ]
-        };
-      }
-    })
-  );
+  const genericRecords = await listTaggedUnknownResources("ap-northeast-2", credentials, () => ({
+    async send(command: object): Promise<unknown> {
+      assert.ok(command instanceof GetResourcesCommand);
+      return {
+        ResourceTagMappingList: [
+          {
+            ResourceARN: imageArn,
+            Tags: [
+              { Key: "Name", Value: "customer-base" },
+              { Key: "aws:cloudformation:stack-name", Value: "customer-images" }
+            ]
+          }
+        ]
+      };
+    }
+  }));
   assert.ok(genericRecords[0]);
   genericRecords[0].relationships = [
     { type: "depends_on", targetProviderResourceId: "snapshot/snap-customer" }
@@ -317,8 +395,7 @@ test("Tagging API의 AMI ARN은 전용 AMI와 합치고 상세 설정과 소유�
 test("Resource Explorer의 AMI ARN은 전용 AMI와 합치고 상세 설정과 관계를 보존한다", async () => {
   const imageId = "ami-0fedcba9876543210";
   const imageArn = `arn:aws:ec2:ap-northeast-2:123456789012:image/${imageId}`;
-  const viewArn =
-    "arn:aws:resource-explorer-2:ap-northeast-2:123456789012:view/default/example";
+  const viewArn = "arn:aws:resource-explorer-2:ap-northeast-2:123456789012:view/default/example";
   const genericRecords = await listResourceExplorerResourcesAsUnknown(
     "ap-northeast-2",
     credentials,
@@ -370,26 +447,30 @@ test("Resource Explorer의 AMI ARN은 전용 AMI와 합치고 상세 설정과 �
 });
 
 function createDetailedRecords(): AwsDiscoveredResourceRecord[] {
-  const lambdaArn =
-    "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-api";
+  const lambdaArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-api";
   const roleArn = "arn:aws:iam::123456789012:role/orders-api";
   const policyArn = "arn:aws:iam::123456789012:policy/orders-read";
   const profileArn = "arn:aws:iam::123456789012:instance-profile/orders-api";
-  const kmsArn =
-    "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555";
+  const kmsArn = "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555";
 
   return [
-    record("AWS::Lambda::Function", lambdaArn, "orders-api", {
-      functionName: "orders-api",
-      runtime: "nodejs22.x",
-      vpcId: "vpc-orders",
-      subnetIds: ["subnet-orders"],
-      securityGroupIds: ["sg-orders"]
-    }, [
-      { type: "depends_on", targetProviderResourceId: "vpc-orders" },
-      { type: "attached_to", targetProviderResourceId: "subnet-orders" },
-      { type: "attached_to", targetProviderResourceId: "sg-orders" }
-    ]),
+    record(
+      "AWS::Lambda::Function",
+      lambdaArn,
+      "orders-api",
+      {
+        functionName: "orders-api",
+        runtime: "nodejs22.x",
+        vpcId: "vpc-orders",
+        subnetIds: ["subnet-orders"],
+        securityGroupIds: ["sg-orders"]
+      },
+      [
+        { type: "depends_on", targetProviderResourceId: "vpc-orders" },
+        { type: "attached_to", targetProviderResourceId: "subnet-orders" },
+        { type: "attached_to", targetProviderResourceId: "sg-orders" }
+      ]
+    ),
     record("AWS::IAM::Role", roleArn, "orders-api", {
       roleName: "orders-api",
       path: "/service/"
@@ -398,10 +479,16 @@ function createDetailedRecords(): AwsDiscoveredResourceRecord[] {
       policyName: "orders-read",
       path: "/service/"
     }),
-    record("AWS::IAM::InstanceProfile", profileArn, "orders-api", {
-      instanceProfileName: "orders-api",
-      roleNames: ["orders-api"]
-    }, [{ type: "attached_to", targetProviderResourceId: roleArn }]),
+    record(
+      "AWS::IAM::InstanceProfile",
+      profileArn,
+      "orders-api",
+      {
+        instanceProfileName: "orders-api",
+        roleNames: ["orders-api"]
+      },
+      [{ type: "attached_to", targetProviderResourceId: roleArn }]
+    ),
     record("AWS::KMS::Key", kmsArn, "orders-key", {
       arn: kmsArn,
       keyId: "11111111-2222-3333-4444-555555555555",
