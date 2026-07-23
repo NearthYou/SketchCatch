@@ -9,6 +9,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+- 2026-07-23: Refined the Dashboard Settings submenu with the shared Pretendard font, a 2px smaller My Page label, 4px additional separation, and a reduced-motion-safe downward reveal. No test command was run at the user's explicit request.
 - 2026-07-23: Aligned the My Page new-password and confirmation controls as an equal-width desktop row with shared feedback below and a single-column mobile fallback. No test command was run at the user's explicit request.
 - 2026-07-23: Completed Dashboard My Page profile updates without a DB migration. Password accounts now require server-verified current-password proof in an HttpOnly cookie before a conditional nickname or optional-password update; social-only accounts can change only their nickname. Password changes revoke prior refresh/reset tokens and issue a fresh current-browser session. The focused eight-route auth checks, root lint, typecheck, build, and harness check passed before the final internal concurrency/cookie hardening; no further test run was made at the user's explicit request.
 - 2026-07-23: Removed the legacy `template-live-observation` demo fixture from the user-facing Template Gallery while retaining it for legacy Draft and Live Observation contract verification. Web typecheck and harness check pass; the focused compiler-heavy review test exceeded its 60-second execution limit.

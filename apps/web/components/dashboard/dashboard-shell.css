@@ -21,6 +21,7 @@
   background: rgba(255, 255, 255, 0.96);
   box-shadow: var(--shadow-card);
   backdrop-filter: blur(16px);
+  font-family: var(--font-sans);
 }
 
 .dashboardSidebarHeader {
@@ -98,22 +99,42 @@
   display: flex;
   min-height: 34px;
   align-items: center;
+  margin-top: 4px;
   margin-left: 30px;
   border-radius: 8px;
   padding: 0 12px;
   color: #60646c;
-  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-size: calc(11px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-medium);
   text-decoration: none;
+  animation: dashboardSubNavReveal 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
   transition:
     background-color var(--motion-fast),
     color var(--motion-fast);
+}
+
+@keyframes dashboardSubNavReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .dashboardSubNavItem:hover,
 .dashboardSubNavItemActive {
   background: #f7f8fa;
   color: #171717;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboardSubNavItem {
+    animation: none;
+  }
 }
 
 .dashboardAccount {
