@@ -263,6 +263,13 @@ export function createTerraformImportSafetyEvidence(result) {
   if (typeof result?.mutationPerformed === "boolean") {
     evidence.mutationPerformed = result.mutationPerformed;
   }
+  if (
+    result?.mutationStage === "none" ||
+    result?.mutationStage === "fixture_created" ||
+    result?.mutationStage === "allowlisted_update_applied"
+  ) {
+    evidence.mutationStage = result.mutationStage;
+  }
   if (typeof result?.fixtureFingerprint === "string") {
     evidence.fixtureFingerprint = result.fixtureFingerprint;
   }
@@ -995,12 +1002,20 @@ function resolveHarnessDependencies(dependencies = {}) {
 // Execute the import proof only after preflight and the exact mutation approval gate.
 export async function runTerraformImportSafetyHarness(env = process.env, dependencies = {}) {
   const config = readTerraformImportSafetyConfig(env);
+  const reportProgress =
+    typeof dependencies.onProgress === "function" ? dependencies.onProgress : () => undefined;
   const {
     commandRunner: baseCommandRunner,
     fileSystem,
     temporaryRoot
   } = resolveHarnessDependencies(dependencies);
   const preflightTerraformEnv = createProtectedTerraformEnvironment(env);
+  reportProgress({
+    mode: config.mode,
+    mutationPerformed: false,
+    mutationStage: "none",
+    fixtureCreated: false
+  });
   await baseCommandRunner("terraform", ["version", "-json"], {
     env: preflightTerraformEnv
   });
@@ -1016,6 +1031,13 @@ export async function runTerraformImportSafetyHarness(env = process.env, depende
     await verifyDisposableFixtureAbsent(config, baseCommandRunner);
     const request = createDisposableS3FixtureCommand(config);
     await baseCommandRunner(request.command, request.args);
+    // gg: 생성 직후부터 이후 검증 실패도 이미 발생한 AWS 변경으로 기록합니다.
+    reportProgress({
+      mode: config.mode,
+      mutationPerformed: true,
+      mutationStage: "fixture_created",
+      fixtureCreated: true
+    });
     const createdEvidence = await collectAwsFixtureEvidence(config, accountId, baseCommandRunner);
     const createdPreflight = evaluateTerraformImportFixturePreflight(config, createdEvidence);
     return Object.freeze({
@@ -1110,6 +1132,13 @@ export async function runTerraformImportSafetyHarness(env = process.env, depende
       ["apply", "-input=false", "-no-color", updatePlanPath],
       { cwd: workdir }
     );
+    // gg: provider 재확인 전에 실패해도 허용된 tag 변경이 수행됐음을 blocked evidence에 남깁니다.
+    reportProgress({
+      mode: config.mode,
+      mutationPerformed: true,
+      mutationStage: "allowlisted_update_applied",
+      fixtureCreated: false
+    });
     await verifyUpdatedFixtureTags(config, terraformCommandRunner);
 
     const finalNoOpPath = join(workdir, "final-noop.tfplan");
@@ -1142,6 +1171,11 @@ export async function runTerraformImportSafetyHarness(env = process.env, depende
 // Keep CLI output to a redacted proof summary and stable failure code.
 async function runCli() {
   let evidencePath = null;
+  let progress = {
+    mutationPerformed: false,
+    mutationStage: "none",
+    fixtureCreated: false
+  };
   const invocation = {
     invocationId: randomUUID(),
     startedAt: new Date().toISOString()
@@ -1149,7 +1183,11 @@ async function runCli() {
   try {
     evidencePath = readTerraformImportSafetyEvidencePath(process.env, process.argv.slice(2));
     await clearTerraformImportSafetyEvidence(evidencePath);
-    const result = await runTerraformImportSafetyHarness(process.env);
+    const result = await runTerraformImportSafetyHarness(process.env, {
+      onProgress(value) {
+        progress = value;
+      }
+    });
     const completedResult = { ...result, ...invocation };
     await writeTerraformImportSafetyEvidence(evidencePath, completedResult);
     process.stdout.write(`${JSON.stringify(completedResult, null, 2)}\n`);
@@ -1160,6 +1198,7 @@ async function runCli() {
       kind: HARNESS_KIND,
       status: "blocked",
       errorCode: code,
+      ...progress,
       ...invocation
     };
     if (evidencePath) {

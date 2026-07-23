@@ -182,12 +182,16 @@ function createFakeHarnessDependencies(options = {}) {
       return { exitCode: 0, stdout: "{}" };
     }
     if (command === "aws" && args.includes("get-bucket-location")) {
+      if (options.failAt === "fixture_verify") throw new Error("fixture verify failed");
       return {
         exitCode: 0,
         stdout: JSON.stringify({ LocationConstraint: REGION })
       };
     }
     if (command === "aws" && args.includes("get-bucket-tagging")) {
+      if (options.failAt === "provider_update_verify" && updateApplied) {
+        throw new Error("provider update verify failed");
+      }
       return {
         exitCode: 0,
         stdout: JSON.stringify({
@@ -376,6 +380,27 @@ test("create_fixture orchestration creates once and verifies without Terraform a
   assert.deepEqual(fake.removals, []);
 });
 
+test("fixture 생성 뒤 검증 실패는 이미 생긴 AWS 변경을 안전한 progress로 남긴다", async () => {
+  const progress = [];
+  const fake = createFakeHarnessDependencies({ failAt: "fixture_verify" });
+
+  await assert.rejects(
+    runTerraformImportSafetyHarness(buildCreateFixtureEnv(), {
+      ...fake.dependencies,
+      onProgress(value) {
+        progress.push(value);
+      }
+    })
+  );
+
+  assert.deepEqual(progress.at(-1), {
+    mode: "create_fixture",
+    mutationPerformed: true,
+    mutationStage: "fixture_created",
+    fixtureCreated: true
+  });
+});
+
 test("execute orchestration proves import, one update, final no-op, and local cleanup", async () => {
   const fake = createFakeHarnessDependencies();
   const result = await runTerraformImportSafetyHarness(buildExecuteEnv(), fake.dependencies);
@@ -406,6 +431,27 @@ test("execute orchestration proves import, one update, final no-op, and local cl
     );
     assert.equal("TF_WORKSPACE" in (call.options.env ?? {}), false);
   }
+});
+
+test("허용된 tag 변경 뒤 검증 실패도 blocked evidence용 mutation progress를 남긴다", async () => {
+  const progress = [];
+  const fake = createFakeHarnessDependencies({ failAt: "provider_update_verify" });
+
+  await assert.rejects(
+    runTerraformImportSafetyHarness(buildExecuteEnv(), {
+      ...fake.dependencies,
+      onProgress(value) {
+        progress.push(value);
+      }
+    })
+  );
+
+  assert.deepEqual(progress.at(-1), {
+    mode: "execute",
+    mutationPerformed: true,
+    mutationStage: "allowlisted_update_applied",
+    fixtureCreated: false
+  });
 });
 
 test("an import apply failure stops later mutations and still removes local state", async () => {
@@ -816,11 +862,15 @@ test("evidence는 현재 CLI 실행과 대조할 수 있는 invocation id를 보
   const evidence = createTerraformImportSafetyEvidence({
     status: "passed",
     invocationId: "6f27cc6b-9236-4ad1-9e6c-8ef576c9ed3d",
-    startedAt: "2026-07-23T08:00:00.000Z"
+    startedAt: "2026-07-23T08:00:00.000Z",
+    mutationPerformed: true,
+    mutationStage: "allowlisted_update_applied"
   });
 
   assert.equal(evidence.invocationId, "6f27cc6b-9236-4ad1-9e6c-8ef576c9ed3d");
   assert.equal(evidence.startedAt, "2026-07-23T08:00:00.000Z");
+  assert.equal(evidence.mutationPerformed, true);
+  assert.equal(evidence.mutationStage, "allowlisted_update_applied");
 });
 
 test("새 실행 전에 이전 성공 evidence를 제거해 실패 뒤 stale pass가 남지 않게 한다", async () => {
