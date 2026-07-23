@@ -287,6 +287,7 @@ function DiagramEditorInner({
   boardAutoOrganizeTerraformFiles = [],
   dashboardHref = "/dashboard",
   draftStatusPanel,
+  emptyBoardContent,
   emptyBoardDescription = "왼쪽 패널에서 필요한 항목을 끌어오세요.",
   floatingPanel,
   initialBoardZoom,
@@ -3618,9 +3619,20 @@ function DiagramEditorInner({
           ) : null}
 
           {visibleDiagram.nodes.length === 0 ? (
-            <div className={styles.emptyState} aria-hidden="true">
-              <strong>빈 보드</strong>
-              <span>{emptyBoardDescription}</span>
+            <div
+              className={`${styles.emptyState}${
+                emptyBoardContent ? ` ${styles.emptyStateInteractive}` : ""
+              }`}
+              aria-hidden={emptyBoardContent ? undefined : true}
+            >
+              {emptyBoardContent ? (
+                emptyBoardContent
+              ) : (
+                <>
+                  <strong>빈 보드</strong>
+                  <span>{emptyBoardDescription}</span>
+                </>
+              )}
             </div>
           ) : null}
 

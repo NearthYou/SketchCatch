@@ -11,6 +11,10 @@ const diagramEditorStyles = readFileSync(
   fileURLToPath(new URL("./diagram-editor.module.css", import.meta.url)),
   "utf8"
 );
+const diagramEditorTypesSource = readFileSync(
+  fileURLToPath(new URL("./types.ts", import.meta.url)),
+  "utf8"
+);
 const dragTransactionSource = readFileSync(
   fileURLToPath(new URL("./drag-transaction.ts", import.meta.url)),
   "utf8"
@@ -549,6 +553,20 @@ test("a dedicated workflow can replace the default empty board guidance", () => 
   );
   assert.doesNotMatch(diagramEditorSource, /emptyBoardDescription = "[^"]*Resource/);
   assert.match(diagramEditorSource, /<span>\{emptyBoardDescription\}<\/span>/);
+});
+
+test("a dedicated workflow can supply interactive empty board content without changing the inert fallback", () => {
+  assert.match(diagramEditorTypesSource, /emptyBoardContent\?: ReactNode \| undefined;/);
+  assert.match(diagramEditorSource, /emptyBoardContent,/);
+  assert.match(
+    diagramEditorSource,
+    /aria-hidden=\{emptyBoardContent \? undefined : true\}/
+  );
+  assert.match(diagramEditorSource, /emptyBoardContent \? \(\s*emptyBoardContent\s*\) : \(/s);
+  assert.match(
+    diagramEditorStyles,
+    /\.emptyStateInteractive\s*\{[\s\S]*?pointer-events:\s*auto;/
+  );
 });
 
 test("a preview-only workflow can hide the project save action", () => {

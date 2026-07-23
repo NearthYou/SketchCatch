@@ -137,6 +137,7 @@ export type DiagramEditorPanelContext = {
 export type DiagramEditorProps = {
   allowPreviewInspection?: boolean | undefined;
   draftStatusPanel?: ReactNode | undefined;
+  emptyBoardContent?: ReactNode | undefined;
   emptyBoardDescription?: string | undefined;
   floatingPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
   initialBoardZoom?: number | undefined;

@@ -1523,6 +1523,10 @@ button.rightRailResizeHandle {
   z-index: 3;
 }
 
+.emptyStateInteractive {
+  pointer-events: auto;
+}
+
 .emptyState strong {
   color: #171c2f;
   font-size: calc(0.95rem + var(--presentation-font-size-increase));
