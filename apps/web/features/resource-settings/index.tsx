@@ -467,7 +467,7 @@ function TemplateLibraryModal({
       <section
         aria-label="템플릿 전체보기"
         aria-modal="true"
-        className={modalStyles.dialog}
+        className={[modalStyles.dialog, modalStyles.libraryDialog].join(" ")}
         ref={dialogRef}
         role="dialog"
       >
@@ -485,6 +485,7 @@ function TemplateLibraryModal({
           </button>
         </div>
 
+        <div className={modalStyles.libraryContent}>
         <TemplateGallery
           actionLabel="상세 미리보기"
           onSelect={(templateId) => {
@@ -493,6 +494,7 @@ function TemplateLibraryModal({
           }}
           templates={templates}
         />
+        </div>
       </section>
     </div>,
     document.body
