@@ -164,6 +164,7 @@ import type {
   AwsProviderScanGateway,
   AwsProviderScanInput
 } from "./aws-provider-adapter.js";
+import { readAwsDetailedReverseEngineeringResources } from "./aws-detailed-reverse-engineering-reader.js";
 import { selectHigherPriorityReverseEngineeringScanError } from "./reverse-engineering-scan-error-priority.js";
 import {
   parseAddressesFromXml,
@@ -186,6 +187,8 @@ type ElasticLoadBalancingAttribute = {
 
 export type AwsReverseEngineeringGatewayOptions = {
   fetchXml?: typeof fetch;
+  prepareCredentials?: (awsConnection: AwsConnection) => Promise<TerraformAwsCredentialEnv>;
+  readDetailedResources?: typeof readAwsDetailedReverseEngineeringResources;
 };
 
 export type AwsReverseEngineeringReaderPlan = {
@@ -193,6 +196,7 @@ export type AwsReverseEngineeringReaderPlan = {
   readonly cloudFrontDistributions: boolean;
   readonly ecsResources: boolean;
   readonly eventBridgeResources: boolean;
+  readonly detailedResources: boolean;
   readonly unknownResources: boolean;
 };
 
@@ -373,18 +377,16 @@ type LambdaPolicyDocument = {
   readonly Statement?: LambdaPolicyStatement | LambdaPolicyStatement[];
 };
 
-// 검증된 AWS 연결로 실제 read-only 조회를 수행하는 gateway를 만듭니다.
+/** gg: 검증된 연결의 credential과 상세 reader를 주입 가능하게 묶어 실제 조회와 테스트 경계를 분리합니다. */
 export function createAwsReverseEngineeringGateway(
   awsConnection: AwsConnection,
   options: AwsReverseEngineeringGatewayOptions = {}
 ): AwsProviderScanGateway {
   return {
     async discoverResources(input) {
-      const preparedCredentials = await prepareTerraformAwsCredentialEnv(
-        awsConnection,
-        createAwsSdkStsGateway()
-      );
-      const credentials = preparedCredentials.env;
+      const credentials = options.prepareCredentials
+        ? await options.prepareCredentials(awsConnection)
+        : (await prepareTerraformAwsCredentialEnv(awsConnection, createAwsSdkStsGateway())).env;
       const fetchXml = options.fetchXml ?? fetch;
       const readerPlan = createAwsReverseEngineeringReaderPlan(input);
       const resourceGroups = await Promise.all([
@@ -433,6 +435,14 @@ export function createAwsReverseEngineeringGateway(
           : []),
         ...(readerPlan.eventBridgeResources
           ? [readEventBridgeResourcesWithDiagnostics(input.region, credentials)]
+          : []),
+        ...(readerPlan.detailedResources
+          ? [
+              (options.readDetailedResources ?? readAwsDetailedReverseEngineeringResources)(
+                input,
+                credentials
+              )
+            ]
           : []),
         ...(readerPlan.unknownResources ? [readUnknownResourceGroup(input, credentials)] : [])
       ]);
@@ -497,7 +507,7 @@ async function readUnknownResourceGroup(
   return listUnknownResources(input, credentials);
 }
 
-// 정식 reader와 UNKNOWN inventory의 경계를 한 곳에서 계산해 같은 서비스를 두 번 읽지 않습니다.
+/** gg: 정식 reader와 UNKNOWN inventory의 경계를 한 곳에서 계산해 같은 서비스를 두 번 읽지 않습니다. */
 export function createAwsReverseEngineeringReaderPlan(
   input: AwsProviderScanInput
 ): AwsReverseEngineeringReaderPlan {
@@ -506,9 +516,37 @@ export function createAwsReverseEngineeringReaderPlan(
     cloudFrontDistributions: shouldReadResourceGroup(input, "CLOUDFRONT"),
     ecsResources: shouldReadEcsResourceGroup(input),
     eventBridgeResources: shouldReadEventBridgeResourceGroup(input),
+    detailedResources: shouldReadDetailedResourceGroup(input),
     unknownResources: shouldReadUnknownResourceGroup(input)
   };
 }
+
+/** gg: IAM, Lambda, KMS, API Gateway는 family 상세 reader 한 번으로 topology와 import 정보를 함께 읽습니다. */
+function shouldReadDetailedResourceGroup(input: AwsProviderScanInput): boolean {
+  return (
+    input.resourceTypes.includes("ALL") ||
+    input.resourceTypes.some(
+      (resourceType) =>
+        resourceType !== "ALL" && DETAILED_REVERSE_ENGINEERING_TYPES.has(resourceType)
+    )
+  );
+}
+
+const DETAILED_REVERSE_ENGINEERING_TYPES = new Set<ResourceType>([
+  "IAM_ROLE",
+  "IAM_POLICY",
+  "IAM_INSTANCE_PROFILE",
+  "LAMBDA",
+  "LAMBDA_PERMISSION",
+  "KMS_KEY",
+  "KMS_ALIAS",
+  "API_GATEWAY_REST_API",
+  "API_GATEWAY_RESOURCE",
+  "API_GATEWAY_METHOD",
+  "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
+  "API_GATEWAY_STAGE"
+]);
 
 /** gg: ALB family 선택 하나라도 있으면 같은 reader에서 안전한 의존 리소스를 함께 읽습니다. */
 function shouldReadElasticLoadBalancingResourceGroup(input: AwsProviderScanInput): boolean {
@@ -1379,7 +1417,7 @@ async function readUnknownResourceRecords(
   }
 }
 
-// 지금 정식 지원하지 않는 AWS 리소스도 숨기지 않기 위해 여러 read-only 조회 결과를 UNKNOWN으로 모읍니다.
+/** gg: UNKNOWN inventory는 generic discovery만 담당하고 정식 상세 family를 다시 조회하지 않습니다. */
 async function listUnknownResources(
   input: AwsProviderScanInput,
   credentials: TerraformAwsCredentialEnv
@@ -1392,32 +1430,14 @@ async function listUnknownResources(
       readUnknownResourceRecords("UNKNOWN", "resource-groups-tagging", (reportPageFailure) =>
         listTaggedUnknownResources(input.region, credentials, undefined, reportPageFailure)
       ),
-      readUnknownResourceRecords("UNKNOWN", "iam", (reportPageFailure) =>
-        listIamRolesAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      ),
-      readUnknownResourceRecords("UNKNOWN", "kms", (reportPageFailure) =>
-        listKmsKeysAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      ),
       readUnknownResourceRecords("UNKNOWN", "cloudwatch-logs", (reportPageFailure) =>
         listCloudWatchLogGroupsAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      ),
-      readUnknownResourceRecords("UNKNOWN", "api-gateway", (reportPageFailure) =>
-        listApiGatewayRestApisAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
       readUnknownResourceRecords("UNKNOWN", "ec2", (reportPageFailure) =>
         listAmiImagesAsUnknown(input.region, credentials, undefined, reportPageFailure)
       ),
-      readUnknownResourceRecords("UNKNOWN", "iam", (reportPageFailure) =>
-        listIamPoliciesAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      ),
-      readUnknownResourceRecords("UNKNOWN", "iam", (reportPageFailure) =>
-        listIamInstanceProfilesAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      ),
       readUnknownResourceRecords("UNKNOWN", "cloudwatch", (reportPageFailure) =>
         listCloudWatchMetricAlarmsAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      ),
-      readUnknownResourceRecords("UNKNOWN", "lambda", (reportPageFailure) =>
-        listLambdaPermissionsAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   } else if (shouldReadElasticLoadBalancingResourceGroup(input)) {
@@ -1439,38 +1459,6 @@ async function listUnknownResources(
     );
   }
 
-  if (input.resourceTypes.includes("IAM_ROLE")) {
-    reads.push(
-      readUnknownResourceRecords("IAM_ROLE", "iam", (reportPageFailure) =>
-        listIamRolesAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      )
-    );
-  }
-
-  if (input.resourceTypes.includes("IAM_POLICY")) {
-    reads.push(
-      readUnknownResourceRecords("IAM_POLICY", "iam", (reportPageFailure) =>
-        listIamPoliciesAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      )
-    );
-  }
-
-  if (input.resourceTypes.includes("IAM_INSTANCE_PROFILE")) {
-    reads.push(
-      readUnknownResourceRecords("IAM_INSTANCE_PROFILE", "iam", (reportPageFailure) =>
-        listIamInstanceProfilesAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      )
-    );
-  }
-
-  if (input.resourceTypes.includes("KMS_KEY")) {
-    reads.push(
-      readUnknownResourceRecords("KMS_KEY", "kms", (reportPageFailure) =>
-        listKmsKeysAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      )
-    );
-  }
-
   if (input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP")) {
     reads.push(
       readUnknownResourceRecords("CLOUDWATCH_LOG_GROUP", "cloudwatch-logs", (reportPageFailure) =>
@@ -1483,34 +1471,6 @@ async function listUnknownResources(
     reads.push(
       readUnknownResourceRecords("CLOUDWATCH_METRIC_ALARM", "cloudwatch", (reportPageFailure) =>
         listCloudWatchMetricAlarmsAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      )
-    );
-  }
-
-  if (input.resourceTypes.includes("API_GATEWAY_REST_API")) {
-    reads.push(
-      readUnknownResourceRecords("API_GATEWAY_REST_API", "api-gateway", (reportPageFailure) =>
-        listApiGatewayRestApisAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      )
-    );
-  }
-
-  if (
-    input.resourceTypes.includes("ALL") ||
-    input.resourceTypes.includes("UNKNOWN") ||
-    input.resourceTypes.includes("LAMBDA")
-  ) {
-    reads.push(
-      readUnknownResourceRecords("LAMBDA", "lambda", (reportPageFailure) =>
-        listLambdaFunctionsAsUnknown(input.region, credentials, undefined, reportPageFailure)
-      )
-    );
-  }
-
-  if (input.resourceTypes.includes("LAMBDA_PERMISSION")) {
-    reads.push(
-      readUnknownResourceRecords("LAMBDA_PERMISSION", "lambda", (reportPageFailure) =>
-        listLambdaPermissionsAsUnknown(input.region, credentials, undefined, reportPageFailure)
       )
     );
   }
@@ -4647,20 +4607,14 @@ export function shouldReadResourceGroup(
   );
 }
 
+/** gg: UNKNOWN과 generic fallback 대상만 inventory reader로 보내 상세 family 중복 호출을 막습니다. */
 export function shouldReadUnknownResourceGroup(input: AwsProviderScanInput): boolean {
   return (
     input.resourceTypes.includes("ALL") ||
     input.resourceTypes.includes("UNKNOWN") ||
     input.resourceTypes.includes("AMI") ||
-    input.resourceTypes.includes("LAMBDA") ||
-    input.resourceTypes.includes("LAMBDA_PERMISSION") ||
-    input.resourceTypes.includes("IAM_ROLE") ||
-    input.resourceTypes.includes("IAM_POLICY") ||
-    input.resourceTypes.includes("IAM_INSTANCE_PROFILE") ||
-    input.resourceTypes.includes("KMS_KEY") ||
     input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP") ||
     input.resourceTypes.includes("CLOUDWATCH_METRIC_ALARM") ||
-    input.resourceTypes.includes("API_GATEWAY_REST_API") ||
     input.resourceTypes.includes("LOAD_BALANCER") ||
     input.resourceTypes.includes("LOAD_BALANCER_TARGET_GROUP") ||
     input.resourceTypes.includes("LOAD_BALANCER_LISTENER")

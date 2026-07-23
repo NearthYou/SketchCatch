@@ -31,7 +31,7 @@ import {
 } from "@aws-sdk/client-ecs";
 import { ListRolesCommand } from "@aws-sdk/client-iam";
 import { GetPolicyCommand, ListFunctionsCommand } from "@aws-sdk/client-lambda";
-import type { ReverseEngineeringScanResult } from "@sketchcatch/types";
+import type { AwsConnection, ReverseEngineeringScanResult } from "@sketchcatch/types";
 import type { TerraformAwsCredentialEnv } from "../aws-connections/aws-connection-runtime-credentials.js";
 import {
   createAwsProviderAdapter,
@@ -41,6 +41,7 @@ import {
 import { sendAwsQuery } from "./aws-reverse-engineering-query.js";
 import {
   collectAwsPages,
+  createAwsReverseEngineeringGateway,
   createAwsReverseEngineeringReaderPlan,
   deduplicateReverseEngineeringScanErrors,
   describeAddresses,
@@ -69,6 +70,7 @@ import {
   resolveCloudFrontOriginRelationships,
   resolveNatGatewayElasticIpRelationships,
   shouldReadResourceGroup,
+  shouldReadUnknownResourceGroup,
   uniqueDiscoveredRecordsByProviderId
 } from "./aws-reverse-engineering-gateway.js";
 import {
@@ -1412,6 +1414,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     cloudFrontDistributions: true,
     ecsResources: true,
     eventBridgeResources: true,
+    detailedResources: true,
     unknownResources: true
   });
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["LOAD_BALANCER"])), {
@@ -1419,6 +1422,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     cloudFrontDistributions: false,
     ecsResources: false,
     eventBridgeResources: false,
+    detailedResources: false,
     unknownResources: true
   });
   for (const resourceType of ["LOAD_BALANCER_TARGET_GROUP", "LOAD_BALANCER_LISTENER"] as const) {
@@ -1427,6 +1431,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
       cloudFrontDistributions: false,
       ecsResources: false,
       eventBridgeResources: false,
+      detailedResources: false,
       unknownResources: true
     });
   }
@@ -1435,6 +1440,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     cloudFrontDistributions: true,
     ecsResources: false,
     eventBridgeResources: false,
+    detailedResources: false,
     unknownResources: false
   });
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["UNKNOWN"])), {
@@ -1442,6 +1448,7 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
     cloudFrontDistributions: false,
     ecsResources: false,
     eventBridgeResources: false,
+    detailedResources: false,
     unknownResources: true
   });
 
@@ -1451,9 +1458,76 @@ test("ELBv2와 CloudFront reader 선택은 ALL 및 직접 선택 범위에 맞�
       cloudFrontDistributions: false,
       ecsResources: true,
       eventBridgeResources: false,
+      detailedResources: false,
       unknownResources: false
     });
   }
+});
+
+test("IAM, Lambda, KMS, API Gateway 선택은 상세 reader만 켜고 UNKNOWN 중복 조회를 끈다", () => {
+  for (const resourceType of [
+    "IAM_ROLE",
+    "IAM_POLICY",
+    "IAM_INSTANCE_PROFILE",
+    "LAMBDA",
+    "LAMBDA_PERMISSION",
+    "KMS_KEY",
+    "KMS_ALIAS",
+    "API_GATEWAY_REST_API",
+    "API_GATEWAY_RESOURCE",
+    "API_GATEWAY_METHOD",
+    "API_GATEWAY_INTEGRATION",
+    "API_GATEWAY_DEPLOYMENT",
+    "API_GATEWAY_STAGE"
+  ] as const) {
+    const input = scanInput([resourceType]);
+    const plan = createAwsReverseEngineeringReaderPlan(input);
+
+    assert.equal(plan.detailedResources, true, `${resourceType} 상세 reader`);
+    assert.equal(plan.unknownResources, false, `${resourceType} UNKNOWN 중복 방지`);
+    assert.equal(shouldReadUnknownResourceGroup(input), false);
+  }
+
+  const unknownPlan = createAwsReverseEngineeringReaderPlan(scanInput(["UNKNOWN"]));
+  assert.equal(unknownPlan.detailedResources, false);
+  assert.equal(unknownPlan.unknownResources, true);
+});
+
+test("gateway는 선택한 상세 reader를 주입 credential로 한 번 실행하고 결과를 합친다", async () => {
+  const awsConnection: AwsConnection = {
+    id: "aws-connection-test",
+    userId: "user-test",
+    accountId: "111122223333",
+    roleArn: "arn:aws:iam::111122223333:role/SketchCatchRole",
+    externalId: "external-id-test",
+    region: "ap-northeast-2",
+    status: "verified",
+    lastVerifiedAt: "2026-07-23T00:00:00.000Z",
+    createdAt: "2026-07-23T00:00:00.000Z",
+    updatedAt: "2026-07-23T00:00:00.000Z"
+  };
+  const calls: AwsProviderScanInput[] = [];
+  const gateway = createAwsReverseEngineeringGateway(awsConnection, {
+    prepareCredentials: async () => credentials,
+    readDetailedResources: async (input, receivedCredentials) => {
+      calls.push(input);
+      assert.deepEqual(receivedCredentials, credentials);
+      return {
+        records: [safeRecord("AWS::IAM::Role", "aws-ref-role", "app-role")],
+        scanErrors: []
+      };
+    }
+  });
+
+  const result = await gateway.discoverResources(scanInput(["IAM_ROLE"]));
+
+  if (Array.isArray(result)) {
+    assert.fail("상세 gateway는 scan error를 보존하는 discovery result를 반환해야 합니다.");
+  }
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0]?.resourceTypes, ["IAM_ROLE"]);
+  assert.deepEqual(result.records, [safeRecord("AWS::IAM::Role", "aws-ref-role", "app-role")]);
+  assert.deepEqual(result.scanErrors, []);
 });
 
 test("EventBridge reader 선택은 ALL과 Rule/Target 동시 선택에서도 한 번만 켜진다", () => {
