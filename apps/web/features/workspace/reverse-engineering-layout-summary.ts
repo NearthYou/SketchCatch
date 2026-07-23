@@ -1,4 +1,7 @@
 import type { BoardAutoOrganizeCandidate, DiagramJson, DiagramNode } from "@sketchcatch/types";
+import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-visual-footprint";
+
+const SAFE_REGRESSION_EXPLANATION = /^(?:Resource 겹침|같은 단계 영역 겹침|영역 경계 이탈|Resource를 지나는 연결선|영역 제목을 지나는 연결선|연결선 교차|반대 방향 연결선|지원 Resource의 주 흐름 침범)(?:이|가) \d+곳 늘었습니다\. 원본과 비교해 주세요\.$/u;
 
 /** gg: 자동 정리 결과에서 사용자가 실제로 확인할 화면 변화만 쉬운 문장으로 만듭니다. */
 export function createReverseEngineeringLayoutSummary(
@@ -7,9 +10,10 @@ export function createReverseEngineeringLayoutSummary(
 ): readonly string[] {
   const sourceOverlapCount = countResourceOverlaps(sourceDiagram);
   const organizedOverlapCount = countResourceOverlaps(candidate.diagram);
-  const sourceOutsideSubnetCount = countResourcesOutsideSubnet(sourceDiagram);
-  const organizedOutsideSubnetCount = countResourcesOutsideSubnet(candidate.diagram);
+  const sourceOutsideSubnetIds = getResourcesOutsideSubnet(sourceDiagram);
+  const organizedOutsideSubnetIds = getResourcesOutsideSubnet(candidate.diagram);
   const summary = [
+    ...getSafeRegressionExplanations(candidate),
     summarizeCountChange({
       before: sourceOverlapCount,
       after: organizedOverlapCount,
@@ -19,19 +23,21 @@ export function createReverseEngineeringLayoutSummary(
       partialMessage: (improved, remaining) =>
         `리소스 겹침 ${improved}곳을 정리했고, ${remaining}곳은 확인이 필요합니다.`
     }),
-    summarizeCountChange({
-      before: sourceOutsideSubnetCount,
-      after: organizedOutsideSubnetCount,
-      emptyMessage: "서브넷 밖 리소스가 없습니다.",
-      improvedMessage: (count) => `서브넷 밖 리소스 ${count}개를 안으로 옮겼습니다.`,
-      remainingMessage: (count) => `서브넷 밖 리소스 ${count}개를 확인해 주세요.`,
-      partialMessage: (improved, remaining) =>
-        `서브넷 밖 리소스 ${improved}개를 옮겼고, ${remaining}개는 확인이 필요합니다.`
-    }),
+    summarizeSubnetChange(
+      sourceDiagram,
+      candidate.diagram,
+      sourceOutsideSubnetIds,
+      organizedOutsideSubnetIds
+    ),
     summarizeVisualDiff(candidate)
   ];
 
-  return summary.filter((message): message is string => message !== null).slice(0, 3);
+  return [...new Set(summary.filter((message): message is string => message !== null))].slice(0, 6);
+}
+
+/** gg: Compiler가 직접 계산한 악화 문장 중 고정된 사용자 안전 형식만 먼저 노출합니다. */
+function getSafeRegressionExplanations(candidate: BoardAutoOrganizeCandidate): string[] {
+  return candidate.explanations.filter((message) => SAFE_REGRESSION_EXPLANATION.test(message)).slice(0, 3);
 }
 
 type CountSummaryInput = {
@@ -83,16 +89,48 @@ function countResourceOverlaps(diagram: DiagramJson): number {
 }
 
 /** gg: Subnet 소속으로 기록된 Resource가 실제 화면 경계 안에 들어왔는지만 확인합니다. */
-function countResourcesOutsideSubnet(diagram: DiagramJson): number {
+function getResourcesOutsideSubnet(diagram: DiagramJson): ReadonlySet<string> {
   const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
   const parentByChildId = createParentByChildId(diagram);
 
-  return diagram.nodes.filter((node) => {
+  return new Set(diagram.nodes.flatMap((node) => {
     const parentId = parentByChildId.get(node.id);
     const parent = parentId ? nodeById.get(parentId) : undefined;
 
-    return parent && isSubnet(parent) && !rectangleContains(parent, node);
-  }).length;
+    return parent && isSubnet(parent) && !rectangleContains(parent, node) ? [node.id] : [];
+  }));
+}
+
+/** gg: Resource 이동과 Area 크기 조정을 구분해 실제로 하지 않은 이동을 주장하지 않습니다. */
+function summarizeSubnetChange(
+  sourceDiagram: DiagramJson,
+  candidateDiagram: DiagramJson,
+  sourceOutsideIds: ReadonlySet<string>,
+  candidateOutsideIds: ReadonlySet<string>
+): string {
+  if (candidateOutsideIds.size === 0) {
+    if (sourceOutsideIds.size === 0) return "서브넷 밖 리소스가 없습니다.";
+    const resolvedIds = [...sourceOutsideIds];
+    return resolvedIds.every((id) => didNodeMove(sourceDiagram, candidateDiagram, id))
+      ? `서브넷 밖 리소스 ${resolvedIds.length}개를 안으로 옮겼습니다.`
+      : `서브넷 경계를 조정해 리소스 ${resolvedIds.length}개를 안에 포함했습니다.`;
+  }
+
+  const improvement = Math.max(0, sourceOutsideIds.size - candidateOutsideIds.size);
+  if (improvement === 0) {
+    return `서브넷 밖 리소스 ${candidateOutsideIds.size}개를 확인해 주세요.`;
+  }
+
+  const resolvedIds = [...sourceOutsideIds].filter((id) => !candidateOutsideIds.has(id));
+  return resolvedIds.every((id) => didNodeMove(sourceDiagram, candidateDiagram, id))
+    ? `서브넷 밖 리소스 ${improvement}개를 옮겼고, ${candidateOutsideIds.size}개는 확인이 필요합니다.`
+    : `서브넷 경계 밖 문제가 ${improvement}개 줄었고, ${candidateOutsideIds.size}개는 확인이 필요합니다.`;
+}
+
+function didNodeMove(source: DiagramJson, candidate: DiagramJson, nodeId: string): boolean {
+  const before = source.nodes.find((node) => node.id === nodeId)?.position;
+  const after = candidate.nodes.find((node) => node.id === nodeId)?.position;
+  return Boolean(before && after && (before.x !== after.x || before.y !== after.y));
 }
 
 /** gg: RE 원본의 contains/hosts edge와 Board metadata를 같은 실제 포함관계로 읽습니다. */
@@ -150,20 +188,24 @@ function isSubnet(node: DiagramNode): boolean {
 }
 
 function rectanglesOverlap(left: DiagramNode, right: DiagramNode): boolean {
+  const leftBounds = getResourceNodeVisualBounds(left);
+  const rightBounds = getResourceNodeVisualBounds(right);
   return (
-    left.position.x < right.position.x + right.size.width &&
-    left.position.x + left.size.width > right.position.x &&
-    left.position.y < right.position.y + right.size.height &&
-    left.position.y + left.size.height > right.position.y
+    leftBounds.x < rightBounds.x + rightBounds.width &&
+    leftBounds.x + leftBounds.width > rightBounds.x &&
+    leftBounds.y < rightBounds.y + rightBounds.height &&
+    leftBounds.y + leftBounds.height > rightBounds.y
   );
 }
 
 function rectangleContains(parent: DiagramNode, child: DiagramNode): boolean {
+  const parentBounds = getResourceNodeVisualBounds(parent);
+  const childBounds = getResourceNodeVisualBounds(child);
   return (
-    child.position.x >= parent.position.x &&
-    child.position.y >= parent.position.y &&
-    child.position.x + child.size.width <= parent.position.x + parent.size.width &&
-    child.position.y + child.size.height <= parent.position.y + parent.size.height
+    childBounds.x >= parentBounds.x &&
+    childBounds.y >= parentBounds.y &&
+    childBounds.x + childBounds.width <= parentBounds.x + parentBounds.width &&
+    childBounds.y + childBounds.height <= parentBounds.y + parentBounds.height
   );
 }
 

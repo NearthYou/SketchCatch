@@ -187,24 +187,32 @@ Local Terraform plans and state are removed without printing their contents.
 /** gg: evidence 경로가 없으면 기존 stdout 전용 동작을 유지하고, 있으면 절대 경로만 받습니다. */
 export function readTerraformImportSafetyEvidencePath(env = process.env, args = []) {
   let optionValue;
+  let optionProvided = false;
   for (let index = 0; index < args.length; index += 1) {
     const argument = String(args[index] ?? "");
     if (argument === "--evidence-output") {
       requireCondition(
-        optionValue === undefined,
+        !optionProvided,
         "invalid_cli_argument",
         "Evidence output may be specified only once"
       );
+      optionProvided = true;
       optionValue = args[index + 1];
+      requireCondition(
+        typeof optionValue === "string" && optionValue.length > 0 && !optionValue.startsWith("--"),
+        "invalid_cli_argument",
+        "Evidence output requires an absolute path value"
+      );
       index += 1;
       continue;
     }
     if (argument.startsWith("--evidence-output=")) {
       requireCondition(
-        optionValue === undefined,
+        !optionProvided,
         "invalid_cli_argument",
         "Evidence output may be specified only once"
       );
+      optionProvided = true;
       optionValue = argument.slice("--evidence-output=".length);
       continue;
     }
@@ -217,7 +225,7 @@ export function readTerraformImportSafetyEvidencePath(env = process.env, args = 
     optionValue ?? env.SKETCHCATCH_TF_IMPORT_EVIDENCE_PATH ?? ""
   ).trim();
 
-  if (configuredPath.length === 0 && optionValue === undefined) {
+  if (configuredPath.length === 0 && !optionProvided) {
     return null;
   }
 
@@ -264,8 +272,17 @@ export function createTerraformImportSafetyEvidence(result) {
     evidence.mutationPerformed = result.mutationPerformed;
   }
   if (
+    result?.mutationStatus === "not_started" ||
+    result?.mutationStatus === "attempted_unknown" ||
+    result?.mutationStatus === "confirmed"
+  ) {
+    evidence.mutationStatus = result.mutationStatus;
+  }
+  if (
     result?.mutationStage === "none" ||
+    result?.mutationStage === "fixture_create_requested" ||
     result?.mutationStage === "fixture_created" ||
+    result?.mutationStage === "allowlisted_update_requested" ||
     result?.mutationStage === "allowlisted_update_applied"
   ) {
     evidence.mutationStage = result.mutationStage;
@@ -1013,6 +1030,7 @@ export async function runTerraformImportSafetyHarness(env = process.env, depende
   reportProgress({
     mode: config.mode,
     mutationPerformed: false,
+    mutationStatus: "not_started",
     mutationStage: "none",
     fixtureCreated: false
   });
@@ -1030,11 +1048,19 @@ export async function runTerraformImportSafetyHarness(env = process.env, depende
   if (config.mode === "create_fixture") {
     await verifyDisposableFixtureAbsent(config, baseCommandRunner);
     const request = createDisposableS3FixtureCommand(config);
+    // gg: AWS가 요청을 처리한 뒤 응답만 잃을 수 있으므로 실행 전부터 결과를 미확정으로 기록합니다.
+    reportProgress({
+      mode: config.mode,
+      mutationStatus: "attempted_unknown",
+      mutationStage: "fixture_create_requested",
+      fixtureCreated: false
+    });
     await baseCommandRunner(request.command, request.args);
     // gg: 생성 직후부터 이후 검증 실패도 이미 발생한 AWS 변경으로 기록합니다.
     reportProgress({
       mode: config.mode,
       mutationPerformed: true,
+      mutationStatus: "confirmed",
       mutationStage: "fixture_created",
       fixtureCreated: true
     });
@@ -1127,6 +1153,13 @@ export async function runTerraformImportSafetyHarness(env = process.env, depende
     assertSingleAllowlistedUpdatePlan(
       await readTerraformPlan(workdir, updatePlanPath, terraformCommandRunner)
     );
+    // gg: Terraform apply도 원격 변경 후 state 기록에서 실패할 수 있어 호출 전에 미확정으로 남깁니다.
+    reportProgress({
+      mode: config.mode,
+      mutationStatus: "attempted_unknown",
+      mutationStage: "allowlisted_update_requested",
+      fixtureCreated: false
+    });
     await terraformCommandRunner(
       "terraform",
       ["apply", "-input=false", "-no-color", updatePlanPath],
@@ -1136,6 +1169,7 @@ export async function runTerraformImportSafetyHarness(env = process.env, depende
     reportProgress({
       mode: config.mode,
       mutationPerformed: true,
+      mutationStatus: "confirmed",
       mutationStage: "allowlisted_update_applied",
       fixtureCreated: false
     });
@@ -1173,6 +1207,7 @@ async function runCli() {
   let evidencePath = null;
   let progress = {
     mutationPerformed: false,
+    mutationStatus: "not_started",
     mutationStage: "none",
     fixtureCreated: false
   };
@@ -1188,7 +1223,7 @@ async function runCli() {
         progress = value;
       }
     });
-    const completedResult = { ...result, ...invocation };
+    const completedResult = { ...result, ...progress, ...invocation };
     await writeTerraformImportSafetyEvidence(evidencePath, completedResult);
     process.stdout.write(`${JSON.stringify(completedResult, null, 2)}\n`);
   } catch (error) {

@@ -178,6 +178,9 @@ function createFakeHarnessDependencies(options = {}) {
       return { exitCode: 0, stdout: "[]" };
     }
     if (command === "aws" && args.includes("create-bucket")) {
+      if (options.failAt === "fixture_create_response_lost") {
+        throw new Error("fixture create response lost");
+      }
       if (options.failAt === "fixture_create") throw new Error("fixture create failed");
       return { exitCode: 0, stdout: "{}" };
     }
@@ -237,7 +240,12 @@ function createFakeHarnessDependencies(options = {}) {
       if (planPath.includes("import.tfplan") && options.failAt === "import_apply") {
         throw new Error("import apply failed");
       }
-      if (planPath.includes("allowlisted-update.tfplan")) updateApplied = true;
+      if (planPath.includes("allowlisted-update.tfplan")) {
+        updateApplied = true;
+        if (options.failAt === "update_apply_response_lost") {
+          throw new Error("update apply response lost");
+        }
+      }
       return { exitCode: 0, stdout: "" };
     }
     throw new Error(`Unexpected protected command: ${command} ${args.join(" ")}`);
@@ -396,8 +404,30 @@ test("fixture 생성 뒤 검증 실패는 이미 생긴 AWS 변경을 안전한 
   assert.deepEqual(progress.at(-1), {
     mode: "create_fixture",
     mutationPerformed: true,
+    mutationStatus: "confirmed",
     mutationStage: "fixture_created",
     fixtureCreated: true
+  });
+});
+
+test("fixture 생성 요청의 응답을 잃으면 변경 여부를 false로 단정하지 않는다", async () => {
+  const progress = [];
+  const fake = createFakeHarnessDependencies({ failAt: "fixture_create_response_lost" });
+
+  await assert.rejects(
+    runTerraformImportSafetyHarness(buildCreateFixtureEnv(), {
+      ...fake.dependencies,
+      onProgress(value) {
+        progress.push(value);
+      }
+    })
+  );
+
+  assert.deepEqual(progress.at(-1), {
+    mode: "create_fixture",
+    mutationStatus: "attempted_unknown",
+    mutationStage: "fixture_create_requested",
+    fixtureCreated: false
   });
 });
 
@@ -449,7 +479,29 @@ test("허용된 tag 변경 뒤 검증 실패도 blocked evidence용 mutation pro
   assert.deepEqual(progress.at(-1), {
     mode: "execute",
     mutationPerformed: true,
+    mutationStatus: "confirmed",
     mutationStage: "allowlisted_update_applied",
+    fixtureCreated: false
+  });
+});
+
+test("tag apply 응답을 잃으면 AWS 변경 여부를 false로 단정하지 않는다", async () => {
+  const progress = [];
+  const fake = createFakeHarnessDependencies({ failAt: "update_apply_response_lost" });
+
+  await assert.rejects(
+    runTerraformImportSafetyHarness(buildExecuteEnv(), {
+      ...fake.dependencies,
+      onProgress(value) {
+        progress.push(value);
+      }
+    })
+  );
+
+  assert.deepEqual(progress.at(-1), {
+    mode: "execute",
+    mutationStatus: "attempted_unknown",
+    mutationStage: "allowlisted_update_requested",
     fixtureCreated: false
   });
 });
@@ -856,6 +908,18 @@ test("evidence 출력 경로는 명시한 절대 경로만 허용하고 없으�
     () => readTerraformImportSafetyEvidencePath({}, ["--evidnce-output", "/tmp/typo.json"]),
     "invalid_cli_argument"
   );
+  assertSafetyError(
+    () => readTerraformImportSafetyEvidencePath({}, ["--evidence-output"]),
+    "invalid_cli_argument"
+  );
+  assertSafetyError(
+    () =>
+      readTerraformImportSafetyEvidencePath(
+        { SKETCHCATCH_TF_IMPORT_EVIDENCE_PATH: "/tmp/from-env.json" },
+        ["--evidence-output"]
+      ),
+    "invalid_cli_argument"
+  );
 });
 
 test("evidence는 현재 CLI 실행과 대조할 수 있는 invocation id를 보존한다", () => {
@@ -864,12 +928,14 @@ test("evidence는 현재 CLI 실행과 대조할 수 있는 invocation id를 보
     invocationId: "6f27cc6b-9236-4ad1-9e6c-8ef576c9ed3d",
     startedAt: "2026-07-23T08:00:00.000Z",
     mutationPerformed: true,
+    mutationStatus: "confirmed",
     mutationStage: "allowlisted_update_applied"
   });
 
   assert.equal(evidence.invocationId, "6f27cc6b-9236-4ad1-9e6c-8ef576c9ed3d");
   assert.equal(evidence.startedAt, "2026-07-23T08:00:00.000Z");
   assert.equal(evidence.mutationPerformed, true);
+  assert.equal(evidence.mutationStatus, "confirmed");
   assert.equal(evidence.mutationStage, "allowlisted_update_applied");
 });
 
