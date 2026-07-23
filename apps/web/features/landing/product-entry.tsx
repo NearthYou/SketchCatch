@@ -20,7 +20,7 @@ const FLOW_STEPS = [
   "승인 후 배포"
 ] as const;
 
-// 로그인 전 사용자가 제품을 둘러보고 로그인이나 회원가입으로 들어가는 첫 화면입니다.
+// 로그인 전 사용자가 제품을 둘러보고 로그인으로 들어가는 첫 화면입니다.
 export function ProductEntry() {
   const router = useRouter();
   const { status } = useAuth();
@@ -93,36 +93,29 @@ export function ProductEntry() {
             href="#workflow"
             onClick={(event) => handleSectionNavigation(event, "workflow", "#workflow", "center")}
           >
-            Workflow
+            작업 흐름
           </a>
           <a
             href="#workspace"
             onClick={(event) => handleSectionNavigation(event, "workspace-title", "#workspace")}
           >
-            Workspace
+            통합 작업 공간
           </a>
           <a
             href="#reverse"
             onClick={(event) => handleSectionNavigation(event, "reverse-content", "#reverse", "center")}
           >
-            Reverse Engineering
+            기존 환경 가져오기
           </a>
           <a
             href="#deployment"
             onClick={(event) => handleSectionNavigation(event, "deployment-content", "#deployment", "center")}
           >
-            Deployment
+            배포 방식
           </a>
         </nav>
 
         <div className={styles.headerActions}>
-          <a
-            className={`${styles.button} ${styles.buttonSecondary} ${styles.desktopAction}`}
-            href="#workspace"
-            onClick={(event) => handleSectionNavigation(event, "workspace-title", "#workspace")}
-          >
-            제품 둘러보기
-          </a>
           <Link className={`${styles.button} ${styles.buttonSecondary}`} href="/login">
             로그인
           </Link>
@@ -146,7 +139,7 @@ export function ProductEntry() {
               서비스를 설명하면 아키텍처와 Terraform을 만들고, 비용·보안 검토부터 배포까지 한곳에서 이어집니다.
             </p>
             <div className={styles.heroActions}>
-              <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
+              <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/login">
                 설계 시작
                 <span className={styles.buttonIcon} aria-hidden="true">→</span>
               </Link>
