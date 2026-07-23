@@ -31,13 +31,17 @@ import {
   type LiveObservationCapacityProjection
 } from "./live-observation-capacity-projection";
 import {
+  appendLiveObservationParticleIds,
+  getLiveObservationTrafficIntensity,
   getLiveObservationTrafficBurst,
   getLiveObservationTrafficCursor,
+  mergeLiveObservationRequestBursts,
   type LiveObservationRequestBurst
 } from "./live-observation";
 import styles from "./workspace.module.css";
 
 type SequencedTrafficBurst = LiveObservationRequestBurst & {
+  readonly particleIds: readonly number[];
   readonly sequence: number;
 };
 
@@ -63,8 +67,11 @@ export function LiveObservationFocusedFlow({
     [architecture, snapshot]
   );
   const previousTrafficRef = useRef(getLiveObservationTrafficCursor(snapshot));
+  const particleSequenceRef = useRef(0);
   const burstSequenceRef = useRef(0);
   const [burst, setBurst] = useState<SequencedTrafficBurst | null>(null);
+  const burstRef = useRef<SequencedTrafficBurst | null>(null);
+  const burstTimerRef = useRef<number | null>(null);
   const modelCapacityUnits = model.status === "ready"
     ? model.capacityUnits
     : EMPTY_CAPACITY_UNITS;
@@ -123,25 +130,69 @@ export function LiveObservationFocusedFlow({
   }, [displayedCapacityUnits]);
 
   useEffect(() => {
-    const nextBurst = getLiveObservationTrafficBurst(previousTrafficRef.current, snapshot);
-    previousTrafficRef.current = getLiveObservationTrafficCursor(snapshot);
+    const previousCursor = previousTrafficRef.current;
+    const nextCursor = getLiveObservationTrafficCursor(snapshot);
+    const nextBurst = getLiveObservationTrafficBurst(previousCursor, snapshot);
+    previousTrafficRef.current = nextCursor;
 
-    if (!nextBurst) {
+    if (
+      previousCursor &&
+      nextCursor &&
+      previousCursor.observationId !== nextCursor.observationId
+    ) {
+      if (burstTimerRef.current !== null) window.clearTimeout(burstTimerRef.current);
+      burstTimerRef.current = null;
+      burstRef.current = null;
       setBurst(null);
+      particleSequenceRef.current = 0;
       return;
     }
 
+    if (!nextBurst) return;
+
     burstSequenceRef.current += 1;
-    const sequencedBurst = { ...nextBurst, sequence: burstSequenceRef.current };
+    const mergedBurst = mergeLiveObservationRequestBursts(
+      burstRef.current,
+      nextBurst
+    );
+    const incomingRequestCount =
+      nextBurst.visibleParticleCount + nextBurst.overflowCount;
+    const sequencedBurst = {
+      ...mergedBurst,
+      particleIds: appendLiveObservationParticleIds(
+        burstRef.current?.particleIds ?? [],
+        incomingRequestCount,
+        mergedBurst.visibleParticleCount,
+        () => {
+          particleSequenceRef.current += 1;
+          return particleSequenceRef.current;
+        }
+      ),
+      sequence: burstSequenceRef.current
+    };
+    burstRef.current = sequencedBurst;
     setBurst(sequencedBurst);
 
+    if (burstTimerRef.current !== null) window.clearTimeout(burstTimerRef.current);
     const lifetimeMs = getLiveObservationDiagramBurstLifetimeMs(
       getLiveObservationDiagramSegmentCount(diagram),
-      nextBurst.visibleParticleCount
+      sequencedBurst.visibleParticleCount
     );
-    const timer = window.setTimeout(() => setBurst(null), lifetimeMs);
-    return () => window.clearTimeout(timer);
+    burstTimerRef.current = window.setTimeout(() => {
+      if (burstRef.current?.sequence !== sequencedBurst.sequence) return;
+      burstRef.current = null;
+      burstTimerRef.current = null;
+      setBurst(null);
+    }, lifetimeMs);
   }, [diagram, snapshot]);
+
+  useEffect(
+    () => () => {
+      if (burstTimerRef.current !== null) window.clearTimeout(burstTimerRef.current);
+    },
+    []
+  );
+
 
   if (model.status === "unavailable") {
     return (
@@ -158,17 +209,14 @@ export function LiveObservationFocusedFlow({
     );
   }
 
-  const visibleParticleCount = burst?.visibleParticleCount ?? 0;
+  const particleIds = burst?.particleIds ?? [];
   const burstRequestCount = burst
     ? burst.visibleParticleCount + burst.overflowCount
     : 0;
-  const trafficIntensity = burstRequestCount >= 100
-    ? "surge"
-    : burstRequestCount >= 20
-      ? "busy"
-      : burstRequestCount > 0
-        ? "flow"
-        : "idle";
+  const trafficIntensity = getLiveObservationTrafficIntensity(
+    burstRequestCount,
+    snapshot?.live.pressureLevel ?? "normal"
+  );
   const capacityColumnCount = Math.min(5, presentedCapacityUnits.length);
   const capacityDensity =
     presentedCapacityUnits.length >= 6
@@ -273,10 +321,10 @@ export function LiveObservationFocusedFlow({
                 {index < model.stages.length - 1 || presentedCapacityUnits.length > 0 ? (
                   <i aria-hidden="true" className={styles.liveObservationPresentationConnector}>
                     {burst
-                      ? Array.from({ length: visibleParticleCount }, (_, particleIndex) => (
+                      ? particleIds.map((particleId, particleIndex) => (
                           <i
                             className={styles.liveObservationPresentationSegmentParticle}
-                            key={`${burst.sequence}-${stage.node.id}-segment-${particleIndex}`}
+                            key={`${stage.node.id}-segment-${particleId}`}
                             style={{
                               animationDelay: `${getLiveObservationDiagramParticleDelayMs(index, particleIndex)}ms`,
                               animationDuration: `${LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS}ms`
@@ -295,10 +343,10 @@ export function LiveObservationFocusedFlow({
                 className={`${styles.liveObservationPresentationConnector} ${styles.liveObservationCapacityConnector}`}
               >
                 {burst
-                  ? Array.from({ length: visibleParticleCount }, (_, particleIndex) => (
+                  ? particleIds.map((particleId, particleIndex) => (
                       <i
                         className={styles.liveObservationPresentationSegmentParticle}
-                        key={`${burst.sequence}-capacity-segment-${particleIndex}`}
+                        key={`capacity-segment-${particleId}`}
                         style={{
                           animationDelay: `${getLiveObservationDiagramParticleDelayMs(model.stages.length, particleIndex)}ms`,
                           animationDuration: `${LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS}ms`

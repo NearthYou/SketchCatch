@@ -1745,10 +1745,19 @@ export async function streamLiveObservationSnapshots(input: {
   readonly retryBaseDelayMs?: number | undefined;
 }): Promise<void> {
   let retryCount = 0;
+  const handleSnapshot = (snapshot: LiveObservationV2Snapshot) => {
+    retryCount = 0;
+    input.onSnapshot(snapshot);
+  };
 
   while (!input.signal.aborted) {
     try {
-      const finalStatus = await readLiveObservationSnapshotStream(input);
+      const finalStatus = await readLiveObservationSnapshotStream({
+        deploymentId: input.deploymentId,
+        observationId: input.observationId,
+        signal: input.signal,
+        onSnapshot: handleSnapshot
+      });
       if (finalStatus && finalStatus !== "active") {
         return;
       }
@@ -1765,7 +1774,7 @@ export async function streamLiveObservationSnapshots(input: {
         input.observationId,
         input.signal
       );
-      input.onSnapshot(snapshot);
+      handleSnapshot(snapshot);
       if (snapshot.status !== "active") {
         return;
       }
