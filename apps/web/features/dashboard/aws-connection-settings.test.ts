@@ -60,10 +60,10 @@ test("settings gates AWS CodeBuild GitHub authorization behind one GitHub App an
   );
 
   assert.match(source, /AWS CodeBuild용 GitHub 권한/);
-  assert.match(source, /GitHub App 연결이 먼저 필요합니다/);
+  assert.match(source, /CodeBuild 연동을 위해 GitHub App을 먼저 연결해 주세요/);
   assert.match(source, /GitHub App 연결하기/);
-  assert.match(source, /GitHub 연결 정리 필요/);
-  assert.match(source, /승인 대상 GitHub 계정/);
+  assert.match(source, /CodeBuild에서 사용할 GitHub App 연결을 하나만 유지해 주세요/);
+  assert.match(source, /GitHub 연결 정보/);
   assert.match(source, /useGitHubInstallationsQuery/);
   assert.match(source, /deriveGitHubCodeBuildAuthorizationTarget/);
   assert.match(source, /AWS 연결이 먼저 필요합니다/);
