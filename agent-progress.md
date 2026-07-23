@@ -11,6 +11,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+- 2026-07-23: Renamed the Dashboard profile route label from My Page to 개인정보 수정 and expanded its page header across the shared Dashboard content width while preserving the centered 760px form card. No test command was run at the user's explicit request.
+- 2026-07-23: Fixed My Page profile updates that falsely returned an expired-verification 401 because PostgreSQL stored `users.updated_at` with microsecond precision while JavaScript `Date` compared only milliseconds. The update now locks the user row, validates the millisecond credential version inside the transaction, and advances `updated_at`; the exact local signup → verification → password update flow changed from 401 to 200. No broad test suite was run.
+- 2026-07-23: Refined the Dashboard Settings submenu with the shared Pretendard font, a 2px smaller My Page label, 4px additional separation, and a reduced-motion-safe downward reveal. No test command was run at the user's explicit request.
+- 2026-07-23: Aligned the My Page new-password and confirmation controls as an equal-width desktop row with shared feedback below and a single-column mobile fallback. No test command was run at the user's explicit request.
+- 2026-07-23: Completed Dashboard My Page profile updates without a DB migration. Password accounts now require server-verified current-password proof in an HttpOnly cookie before a conditional nickname or optional-password update; social-only accounts can change only their nickname. Password changes revoke prior refresh/reset tokens and issue a fresh current-browser session. The focused eight-route auth checks, root lint, typecheck, build, and harness check passed before the final internal concurrency/cookie hardening; no further test run was made at the user's explicit request.
+
 ### 2026-07-23 - Stabilize Repository Template preview controls
 
 - Replaced the generic Template Preview eyebrow with the active candidate rank and renamed the AI design action to AI로 직접 설계.

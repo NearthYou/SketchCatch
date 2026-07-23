@@ -6,9 +6,13 @@ import type {
   PasswordResetConfirmResponse,
   PasswordResetRequest,
   PasswordResetRequestResponse,
+  ProfilePasswordVerificationRequest,
+  ProfilePasswordVerificationResponse,
   SignupAvailabilityRequest,
   SignupAvailabilityResponse,
-  SignupRequest
+  SignupRequest,
+  UpdateProfileRequest,
+  UpdateProfileResponse
 } from "@sketchcatch/types";
 import { apiFetch, hasRefreshSessionCookieHint, refreshAuthSession } from "./api-client";
 
@@ -59,6 +63,27 @@ export function requestCurrentUser(): Promise<CurrentUserResponse> {
   return apiFetch<CurrentUserResponse>("/auth/me", {
     auth: true,
     method: "GET"
+  });
+}
+
+export function requestProfilePasswordVerification(
+  payload: ProfilePasswordVerificationRequest
+): Promise<ProfilePasswordVerificationResponse> {
+  return apiFetch<ProfilePasswordVerificationResponse>("/auth/me/password-verification", {
+    auth: true,
+    body: payload,
+    method: "POST",
+    retryOnUnauthorized: false
+  });
+}
+
+export function requestProfileUpdate(
+  payload: UpdateProfileRequest
+): Promise<UpdateProfileResponse> {
+  return apiFetch<UpdateProfileResponse>("/auth/me", {
+    auth: true,
+    body: payload,
+    method: "PATCH"
   });
 }
 

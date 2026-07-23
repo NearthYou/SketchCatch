@@ -12,7 +12,9 @@ import {
   type LoginLockedErrorResponse,
   type PasswordResetConfirmResponse,
   type PasswordResetRequestResponse,
-  type SignupAvailabilityResponse
+  type ProfilePasswordVerificationResponse,
+  type SignupAvailabilityResponse,
+  type UpdateProfileResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import {
@@ -23,6 +25,11 @@ import {
 } from "../auth/login-attempt-policy.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import {
+  ProfileUpdateError,
+  updateProfile,
+  verifyProfilePassword
+} from "../auth/profile-update.js";
+import {
   buildPasswordResetDebugUrl,
   createPasswordResetToken,
   getPasswordResetTokenExpiresAt,
@@ -31,9 +38,11 @@ import {
 import {
   clearRefreshTokenCookie,
   createAuthSession,
+  getProfileUpdateTokenCookie,
   getRefreshTokenCookie,
   getRefreshTokenPersistence,
   hasValidCsrfToken,
+  setProfileUpdateTokenCookie,
   toPublicUser
 } from "../auth/session.js";
 import { hashToken } from "../auth/tokens.js";
@@ -95,6 +104,49 @@ const passwordResetConfirmBodySchema = z.object({
   resetToken: z.string().trim().min(20).max(512),
   newPassword: passwordPolicySchema
 });
+
+const profilePasswordVerificationBodySchema = z.object({
+  currentPassword: z.string().min(1).max(PASSWORD_MAX_LENGTH)
+});
+
+const updateProfileBodySchema = z
+  .object({
+    nickname: z.string().trim().min(1).max(40),
+    newPassword: passwordPolicySchema.optional(),
+    newPasswordConfirmation: z.string().max(PASSWORD_MAX_LENGTH).optional()
+  })
+  .superRefine((body, context) => {
+    const includesPasswordChange =
+      body.newPassword !== undefined || body.newPasswordConfirmation !== undefined;
+
+    if (!includesPasswordChange) return;
+
+    if (!body.newPassword) {
+      context.addIssue({
+        code: "custom",
+        message: "새 비밀번호를 입력해주세요.",
+        path: ["newPassword"]
+      });
+    }
+    if (!body.newPasswordConfirmation) {
+      context.addIssue({
+        code: "custom",
+        message: "새 비밀번호 확인을 입력해주세요.",
+        path: ["newPasswordConfirmation"]
+      });
+    }
+    if (
+      body.newPassword &&
+      body.newPasswordConfirmation &&
+      body.newPassword !== body.newPasswordConfirmation
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "새 비밀번호와 비밀번호 확인이 일치하지 않습니다.",
+        path: ["newPasswordConfirmation"]
+      });
+    }
+  });
 
 type AuthRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
@@ -502,7 +554,117 @@ export async function registerAuthRoutes(
     }
 
     const response: CurrentUserResponse = {
-      user: toPublicUser(user)
+      user: toPublicUser(user),
+      canChangePassword: user.passwordHash !== null
+    };
+
+    return response;
+  });
+
+  app.post("/auth/me/password-verification", async (request, reply) => {
+    const body = profilePasswordVerificationBodySchema.parse(request.body);
+    const currentUserId = await requireActiveUserId(request, getAuthDatabaseClient);
+    const { db } = getAuthDatabaseClient();
+    const [user] = await db.select().from(users).where(eq(users.id, currentUserId));
+
+    if (!user || user.deletedAt) {
+      return sendUnauthorized(reply, "인증이 필요합니다.");
+    }
+    const activeLock = await getActiveLoginLock(db, user.username, request.ip);
+    if (activeLock) {
+      return sendLoginLocked(reply, activeLock);
+    }
+
+    const verification = await verifyProfilePassword(user, body.currentPassword);
+    if (verification.status === "social_account") {
+      return sendConflict(
+        reply,
+        "소셜 로그인 사용자는 현재 비밀번호 확인 없이 이름만 변경할 수 있습니다."
+      );
+    }
+    if (verification.status === "invalid_password") {
+      const lockedUntil = await recordFailedLoginAttempt(db, request, {
+        userId: user.id,
+        username: user.username,
+        failureReason: "profile_reauthentication_failed"
+      });
+      if (lockedUntil) {
+        return sendLoginLocked(reply, lockedUntil);
+      }
+
+      return sendUnauthorized(reply, "현재 비밀번호가 올바르지 않습니다.");
+    }
+
+    await recordLoginAttempt(db, request, {
+      userId: user.id,
+      username: user.username,
+      success: true
+    });
+
+    setProfileUpdateTokenCookie(
+      reply,
+      verification.verificationToken,
+      verification.expiresInSeconds
+    );
+    const response: ProfilePasswordVerificationResponse = {
+      expiresInSeconds: verification.expiresInSeconds
+    };
+
+    return response;
+  });
+
+  app.patch("/auth/me", async (request, reply) => {
+    const body = updateProfileBodySchema.parse(request.body);
+    const currentUserId = await requireActiveUserId(request, getAuthDatabaseClient);
+    const { db } = getAuthDatabaseClient();
+    const [user] = await db.select().from(users).where(eq(users.id, currentUserId));
+
+    if (!user || user.deletedAt) {
+      return sendUnauthorized(reply, "인증이 필요합니다.");
+    }
+
+    const verificationToken = getProfileUpdateTokenCookie(request);
+    let updateResult;
+    try {
+      updateResult = await updateProfile({
+        db,
+        user,
+        nickname: body.nickname,
+        ...(verificationToken ? { verificationToken } : {}),
+        ...(body.newPassword ? { newPassword: body.newPassword } : {})
+      });
+    } catch (error) {
+      if (!(error instanceof ProfileUpdateError)) {
+        throw error;
+      }
+
+      if (error.reason === "password_change_not_supported") {
+        return sendConflict(reply, "소셜 로그인 사용자는 비밀번호를 변경할 수 없습니다.");
+      }
+      if (error.reason === "password_reused") {
+        return sendConflict(reply, "새 비밀번호는 현재 비밀번호와 다르게 입력해주세요.");
+      }
+      if (error.reason === "verification_required") {
+        return sendUnauthorized(reply, "현재 비밀번호 확인이 필요합니다.");
+      }
+
+      return sendUnauthorized(
+        reply,
+        "현재 비밀번호 확인이 만료되었습니다. 다시 확인해주세요."
+      );
+    }
+
+    const refreshToken = getRefreshTokenCookie(request);
+    const session = updateResult.passwordChanged
+      ? await createAuthSession(db, currentUserId, request, reply, {
+          persistent:
+            refreshToken !== null &&
+            getRefreshTokenPersistence(refreshToken) === "persistent"
+        })
+      : undefined;
+    const response: UpdateProfileResponse = {
+      user: toPublicUser(updateResult.user),
+      ...(session ? { session } : {})
     };
 
     return response;
@@ -754,6 +916,15 @@ function sendUnauthorized(reply: FastifyReply, message: string): FastifyReply {
   };
 
   return reply.status(401).send(response);
+}
+
+function sendConflict(reply: FastifyReply, message: string): FastifyReply {
+  const response: ApiErrorResponse = {
+    error: "conflict",
+    message
+  };
+
+  return reply.status(409).send(response);
 }
 
 function sendLoginLocked(reply: FastifyReply, lockedUntil: Date): FastifyReply {
