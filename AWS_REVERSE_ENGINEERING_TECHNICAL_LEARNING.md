@@ -188,20 +188,20 @@ Cloud Control이 특정 type의 `ListResources`를 지원하지 않을 수 있�
 - 권한 오류·재시도 오류와 합치지 않는다.
 - 새 type alias, ARN fallback, visual fallback을 추가할 대상이다.
 
-## 8. 상세 화면이 결과를 설명하는 방식
+## 8. 웹 화면과 워크플로의 경계
 
-파일: [`apps/web/features/workspace/ReverseEngineeringResultPanel.tsx`](apps/web/features/workspace/ReverseEngineeringResultPanel.tsx)
+현재 화면 조합은 [`apps/web/features/workspace/ReverseEngineeringPanel.tsx`](apps/web/features/workspace/ReverseEngineeringPanel.tsx)이고, 실행 흐름은 [`apps/web/features/workspace/useReverseEngineeringWorkflow.ts`](apps/web/features/workspace/useReverseEngineeringWorkflow.ts)에 있다.
 
-상세 정보는 처음에 **가져오기 요약**만 열고 시작한다. 나머지는 접혀 있다.
+화면은 의도적으로 최소 HTML만 둔다. 이 단계에서 중요한 것은 예쁜 카드나 상세 모달이 아니라 아래 기능이 실제로 이어지는지다.
 
-1. 가져오기 요약 — 리소스 수, 연결 수, 스캔 시간, 전체/부분 성공
-2. 가져온 리소스 — 네트워크 / 서버·컴퓨팅 / 데이터·저장소 / 보안·권한 / 애플리케이션·운영 / 기타 AWS 리소스
-3. 연결과 구조 — 원본 배치와 정리 배치, 리소스 간 연결
-4. AWS 읽기 범위 — 읽지 못한 서비스, 원인, 권한·재시도 방법
-5. 확인 사항 — 지원 범위 제한, 추가 검토가 필요한 설정
-6. 원본 정보 — AWS 서비스명, 원본 type, 리전, 안전한 식별 정보
+1. AWS 연결과 리전, 전체/개별 Resource 범위를 고른다.
+2. scan 시작·진행·취소·기록 열기·삭제를 실행한다.
+3. 원본 배치와 사용자가 요청한 자동 정리 미리보기를 전환한다.
+4. 사용자가 누를 때만 보드에 저장한다.
+5. 리소스 원본 type·리전·관계, 읽기 범위와 안전한 scan log를 확인한다.
+6. AWS 연결 문제만 같은 연결의 환경설정으로 이동한다.
 
-검색하면 결과가 있는 카테고리만 자동으로 펼친다. 분류 모델은 [`apps/web/features/workspace/reverse-engineering-detail-model.ts`](apps/web/features/workspace/reverse-engineering-detail-model.ts)에 있다.
+`discoveredResources`, `coverage`, `scanErrors`, `findings`, `analysisExclusions`, `importSuggestions`은 API 결과 계약에 그대로 남는다. 화면을 다시 설계해도 이 데이터를 새 UI에서 사용하면 된다.
 
 ## 9. “보드에 적용”이 하는 일과 하지 않는 일
 
@@ -240,7 +240,7 @@ Cloud Control이 특정 type의 `ListResources`를 지원하지 않을 수 있�
 4. [`apps/api/src/reverse-engineering/aws-provider-adapter.ts`](apps/api/src/reverse-engineering/aws-provider-adapter.ts)
 5. [`packages/types/src/resource-definitions.ts`](packages/types/src/resource-definitions.ts)
 6. [`apps/api/src/reverse-engineering/reverse-engineering-public-errors.ts`](apps/api/src/reverse-engineering/reverse-engineering-public-errors.ts)
-7. [`apps/web/features/workspace/ReverseEngineeringResultPanel.tsx`](apps/web/features/workspace/ReverseEngineeringResultPanel.tsx)
+7. [`apps/web/features/workspace/useReverseEngineeringWorkflow.ts`](apps/web/features/workspace/useReverseEngineeringWorkflow.ts)
 
 ## 12. 직접 확인할 테스트
 
@@ -251,7 +251,8 @@ Cloud Control이 특정 type의 `ListResources`를 지원하지 않을 수 있�
 | 원본/공개 결과 경계·관리 상태 | `apps/api/src/reverse-engineering/aws-provider-adapter.test.ts` |
 | 권한 오류·capability limit·SSO 분류 | `apps/api/src/reverse-engineering/reverse-engineering-public-errors.test.ts` |
 | 연결 검증과 preview 안전성 | `apps/api/src/reverse-engineering/reverse-engineering-connection-safety.test.ts` |
-| 상세 정보·검색·Terraform 비실행 | `apps/web/features/workspace/ReverseEngineeringResultPanel.test.tsx` |
+| 보드 적용의 source-exact·Terraform 비실행 | `apps/web/features/workspace/reverse-engineering-apply-flow.test.ts` |
+| 스캔 기록 순서·삭제·stale 판정 | `apps/web/features/workspace/useReverseEngineeringScanHistory.test.ts` |
 
 ## 13. 공식 자료
 
@@ -268,4 +269,3 @@ Cloud Control이 특정 type의 `ListResources`를 지원하지 않을 수 있�
 > `UNKNOWN` 노드가 보인다. 스캔을 다시 돌리면 해결될까?
 
 반드시 그렇지 않다. 읽기는 성공했지만 팔레트 매핑이 없을 수 있다. `providerResourceType`, ARN fallback, visual fallback을 먼저 확인해야 한다.
-

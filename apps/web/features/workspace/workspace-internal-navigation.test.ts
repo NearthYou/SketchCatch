@@ -10,16 +10,17 @@ function readSource(relativePath: string): string {
 const cicdSource = readSource("./CicdConsoleScreen.tsx");
 const cicdHandoffSource = readSource("./CicdHandoffPanel.tsx");
 const directDeploymentSource = readSource("./DirectDeploymentScreen.tsx");
-const reverseEngineeringSource = readSource("./ReverseEngineeringScanCriteriaForm.tsx");
 
 test("Workspace settings and project routes use client navigation", () => {
-  for (const source of [cicdSource, directDeploymentSource, reverseEngineeringSource]) {
+  for (const source of [cicdSource, directDeploymentSource]) {
     assert.match(source, /import Link from "next\/link";/);
   }
 
-  assert.doesNotMatch(cicdSource, /<a[^>]+href=\{(?:projectSettingsHref|githubAccountSettingsHref|repositoryHref|item\.href)\}/);
+  assert.doesNotMatch(
+    cicdSource,
+    /<a[^>]+href=\{(?:projectSettingsHref|githubAccountSettingsHref|repositoryHref|item\.href)\}/
+  );
   assert.doesNotMatch(directDeploymentSource, /<a[^>]+href="\/(?:dashboard|workspace)/);
-  assert.doesNotMatch(reverseEngineeringSource, /<a[^>]+href="\/dashboard/);
 });
 
 test("Workspace deployment output and GitHub links remain external anchors", () => {

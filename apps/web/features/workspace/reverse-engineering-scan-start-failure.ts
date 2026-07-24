@@ -1,5 +1,10 @@
 import { ApiClientError } from "../../lib/api-client";
-import type { ReverseEngineeringStartFailure } from "./ReverseEngineeringStartCard";
+
+export type ReverseEngineeringStartFailure = {
+  readonly action: "open_settings" | "retry";
+  readonly description: string;
+  readonly title: string;
+};
 
 // gg: API가 준 안전한 행동 코드만 보고 설정 이동과 재시도를 나눠 raw AWS 오류를 화면에 보이지 않습니다.
 export function getReverseEngineeringStartFailure(error: unknown): ReverseEngineeringStartFailure {
