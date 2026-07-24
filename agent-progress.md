@@ -146,3 +146,13 @@ Short English-only working log for the current agent context. Older records are 
 - Replaced Reverse Engineering-only cards, panels, CSS, and presentation helpers with semantic controls backed by `useReverseEngineeringWorkflow`, while preserving scan, recovery, preview, apply, history, and source-exact Board flows.
 - Removed the old UI-only tests and formatters, added pure scan-history coverage, and updated the technical learning guide to point at the retained workflow.
 - Verification passed: focused Reverse Engineering tests, Web lint/typecheck/build, harness, migration compatibility, and diff checks. No API/type/provider/AWS permission, Terraform execution, or AWS mutation changes were made.
+
+### 2026-07-24 - Repair Reverse Engineering preview runtime and scan presentation
+
+- Repaired the detail dialog Portal styling and focus lifecycle so it opens as an opaque modal instead of an apparently stalled transparent overlay; removed the missing `useMemo` runtime path from the scan settings panel.
+- Removed remaining candidate UI, duplicate side scan action, legacy preview notice, and Terraform/AWS implementation hints from the user-facing Reverse Engineering workbench.
+- Made the AWS settings action conditional on a genuine connection or permission recovery path. Retryable partial scans now retain the usable Preview without sending users to settings.
+- Normalized Resource Explorer and detailed-reader identities before merge. A read-only scan of the configured account now produces 309 resources rather than the prior 328, removing 19 duplicate representations while retaining the detailed record and source-type provenance.
+- Added a responsive large-board organization path and explicit organizing state so a 300-plus-resource Preview remains responsive and shows progress before any layout work completes.
+- Verification passed: 107 focused Reverse Engineering and layout tests, 72 API gateway tests, Web lint, Web typecheck, API lint/typecheck, API and Web builds, harness, and `git diff --check`. Browser smoke testing confirmed the opaque detail dialog, 309-resource current scan, no AWS settings link for the partial result, no candidate/duplicate scan UI, and successful organization without saving the Board.
+- Three unrelated static `DiagramEditor` layout assertions remain stale on the base commit; their expected source snippets already differ from `HEAD` before this change. No AWS resource, Terraform state, deployment, or Board save was performed.
