@@ -156,3 +156,11 @@ Short English-only working log for the current agent context. Older records are 
 - Added a responsive large-board organization path and explicit organizing state so a 300-plus-resource Preview remains responsive and shows progress before any layout work completes.
 - Verification passed: 107 focused Reverse Engineering and layout tests, 72 API gateway tests, Web lint, Web typecheck, API lint/typecheck, API and Web builds, harness, and `git diff --check`. Browser smoke testing confirmed the opaque detail dialog, 309-resource current scan, no AWS settings link for the partial result, no candidate/duplicate scan UI, and successful organization without saving the Board.
 - Three unrelated static `DiagramEditor` layout assertions remain stale on the base commit; their expected source snippets already differ from `HEAD` before this change. No AWS resource, Terraform state, deployment, or Board save was performed.
+
+### 2026-07-25 - Repair Reverse Engineering detail toggles and startup panels
+
+- Reproduced the detail-dialog defect in the browser: expanded accordion bodies existed but the modal grid constrained each parent section to 112px, clipping bodies such as the 443px coverage section and the large findings list.
+- Made modal grid rows content-sized and scrollable, then replaced title-derived accordion IDs with stable section IDs. The four top-level `aria-controls` values are now unique instead of all collapsing to an empty Korean-title suffix.
+- Replaced the large amber partial-scan card with a 48px compact status row that preserves the recovery action only when settings are genuinely required.
+- Opened the Reverse Engineering start screen’s left panel at its 300px minimum width and placed the `시작 방식 다시 선택` navigation action inside it.
+- Verification passed: browser reproduction before the fix failed with `section=112, body=443`; the same check passed afterward with `section=542, body=443`, category content rendered within the modal scroll area, the compact partial status was 48px high, and the initial left panel was open at 300px. Web lint, Web typecheck, 31 focused tests, and `git diff --check` pass. No Board save, Terraform action, or AWS mutation was performed.
