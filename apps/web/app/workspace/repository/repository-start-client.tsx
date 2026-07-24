@@ -148,6 +148,8 @@ export function RepositoryStartClient({
   const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
   const isPublicAnalysisBusy = publicAnalysisState === "loading";
   const showUrlAnalysis = Boolean(!activeRepository || publicAnalysis);
+  const isUrlEntryStage =
+    showUrlAnalysis && !publicAnalysis && publicRecommendationStage === "configuration";
   const publicRecommendation = publicAnalysis
     ? createPublicRepositoryRecommendation({
         analysis: publicAnalysis,
@@ -670,12 +672,15 @@ export function RepositoryStartClient({
         </Link>
       </header>
       <div className={styles.shell}>
-        <header className={styles.pageHeading}>
+        <header
+          className={`${styles.pageHeading}${
+            isUrlEntryStage ? ` ${styles.entryPageHeading}` : ""
+          }`}
+        >
           <h1 id="repository-start-title">GitHub 저장소</h1>
         </header>
 
-        {showUrlAnalysis && !publicAnalysis &&
-        publicRecommendationStage === "configuration" ? (
+        {isUrlEntryStage ? (
           <RepositoryAnalysisForm
             branch={defaultBranch}
             errorMessage={publicAnalysisState === "repository_error" ? "" : errorMessage}
@@ -748,7 +753,9 @@ export function RepositoryStartClient({
               statusLabel={isPublicAnalysisBusy ? "처리 중" : "분석 완료"}
             />
             <div className={styles.questionStepBody}>
-              <h3>{selectedPublicCandidate?.displayTitle ?? "선택한 Template"}</h3>
+              <p className={styles.selectedTemplateName}>
+                {selectedPublicCandidate?.displayTitle ?? "Template"}
+              </p>
               <RepositoryQuestions
                 answers={answers}
                 onAnswer={(questionId, value) => {
@@ -771,7 +778,7 @@ export function RepositoryStartClient({
                   Template 다시 선택
                 </button>
                 <Link className={styles.aiAction} href={aiDesignHref}>
-                  AI 새 설계
+                  AI로 직접 설계
                 </Link>
                 <button
                   className={styles.primaryButton}
@@ -1091,7 +1098,8 @@ function RepositoryQuestions({
         <fieldset className={styles.questionField} key={question.id}>
           <legend>{question.prompt}</legend>
           {question.answerType === "boolean" || question.answerType === "single_select" ? (
-            (question.answerType === "boolean"
+            <div className={styles.questionOptions}>
+              {(question.answerType === "boolean"
               ? [
                   { label: "예", value: "true" },
                   { label: "아니요", value: "false" }
@@ -1119,7 +1127,8 @@ function RepositoryQuestions({
                   {option.label}
                 </label>
               );
-            })
+              })}
+            </div>
           ) : (
             <>
               <label htmlFor={`repository-question-${question.id}`}>답변</label>

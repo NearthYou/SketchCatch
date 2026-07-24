@@ -3155,12 +3155,12 @@ function applyStrictRepositoryEvidencePolicy(
     "log-group",
     ...(hasFact("frontend_delivery", "s3_cloudfront_static") ? ["distribution"] : [])
   ]);
-  const scalingTemplateResourceIds = new Set(["scaling-target", "scaling-policy"]);
   const coreNodes = fixedTemplateDraft.architectureJson.nodes.filter(
     (node) =>
       node.id.startsWith(templatePrefix) &&
       !strictEvidenceManagedTemplateResourceIds.has(String(node.config.templateResourceId ?? "")) &&
-      (scalesToThree || !scalingTemplateResourceIds.has(String(node.config.templateResourceId ?? "")))
+      node.config.templateResourceId !== "scaling-target" &&
+      (scalesToThree || node.config.templateResourceId !== "scaling-policy")
   );
   const nodeByTemplateResourceId = new Map(
     coreNodes.flatMap((node) =>
@@ -3888,6 +3888,9 @@ function applyStrictRepositoryEvidencePolicy(
           config: {
             ...node.config,
             ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
+            resourceId: "aws_appautoscaling_target.ecs_service_requests.resource_id",
+            scalableDimension: "aws_appautoscaling_target.ecs_service_requests.scalable_dimension",
+            serviceNamespace: "aws_appautoscaling_target.ecs_service_requests.service_namespace",
             targetTrackingScalingPolicyConfiguration: {
               targetValue: 10,
               scaleInCooldown: 60,
@@ -4019,10 +4022,6 @@ function applyStrictRepositoryEvidencePolicy(
   connect(coreNodeId("cluster"), coreNodeId("service"), "runs the API service");
   connect(coreNodeId("task"), coreNodeId("service"), "defines the deployed revision");
   connect(coreNodeId("service"), fargateRuntimeId, "schedules desired task in private app subnets");
-  if (scalesToThree) {
-    connect(coreNodeId("service"), coreNodeId("scaling-target"), "scales desired task count 1–3");
-    connect(coreNodeId("scaling-target"), coreNodeId("scaling-policy"), "tracks ALB requests per target");
-  }
   if (usesCheckInSigningSecret) {
     connect(checkInSecretMaterialId, checkInSecretVersionId, "generates isolated signing material");
     connect(checkInSecretId, checkInSecretVersionId, "stores the generated secret version");

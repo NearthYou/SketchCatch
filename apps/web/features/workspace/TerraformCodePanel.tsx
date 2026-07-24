@@ -343,6 +343,7 @@ export const TerraformCodePanel = forwardRef<
   const latestTerraformRefreshRequestIdRef = useRef(context.terraformRefreshRequestId);
   const classifiedPreservedResourceAddressesRef = useRef(new Set<string>());
   const initialTerraformSourceClassifiedRef = useRef(!initialTerraformFiles?.length);
+  const syntaxHighlightRef = useRef<HTMLPreElement | null>(null);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
   const lastScrolledNodeIdRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -503,7 +504,7 @@ export const TerraformCodePanel = forwardRef<
   );
   const terraformSyntaxHighlightStyle = useMemo(
     () => ({
-      transform: `translate(${-codeScrollLeft}px, ${-codeScrollTop}px)`
+      transform: `translate3d(${-codeScrollLeft}px, ${-codeScrollTop}px, 0)`
     }),
     [codeScrollLeft, codeScrollTop]
   );
@@ -1588,7 +1589,11 @@ export const TerraformCodePanel = forwardRef<
           handleKeyDown: handleCodeKeyDown,
           handleScroll: handleCodeScroll
         }}
-        refs={{ lineNumbers: lineNumberRef, textarea: textareaRef }}
+        refs={{
+          lineNumbers: lineNumberRef,
+          syntaxHighlight: syntaxHighlightRef,
+          textarea: textareaRef
+        }}
         state={{
           code: displayedTerraformCode,
           diagnosticLineNumbers: diagnosticLineNumberSet,

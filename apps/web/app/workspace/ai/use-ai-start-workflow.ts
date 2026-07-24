@@ -457,7 +457,7 @@ export function useAiStartWorkflow({
   }
 
   function publishDraftProgressState(nextState: DraftProgressState): void {
-    setProgressSnapshot(nextState.visibleSnapshot);
+    setProgressSnapshot(nextState.requestSnapshot);
     setProgressStatus(nextState.status);
   }
 
