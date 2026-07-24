@@ -158,7 +158,9 @@ export function ReverseEngineeringResultPanel({
   const hasApplicableResources = summary.boardCount > 0;
   const hasPartialFailure = result.coverage
     ? result.coverage.status === "partial"
-    : result.scanErrors.length > 0;
+    : result.scanErrors.some((scanError) => scanError.reason !== "unsupported");
+  const scanStatusLabel = getReverseEngineeringScanStatusLabel(response.scan.status, result.coverage);
+  const scanTimeLabel = formatReverseEngineeringScanTime(response.scan);
   const hasAwsSettingsRecovery = result.coverage
     ? result.coverage.unavailableServices.some((service) => service.remedy === "open_settings")
     : result.scanErrors.some(
@@ -389,6 +391,10 @@ export function ReverseEngineeringResultPanel({
                   <strong>{summary.discoveredCount}</strong>
                 </span>
                 <span>
+                  연결
+                  <strong>{connectionCount}</strong>
+                </span>
+                <span>
                   보드 표시
                   <strong>{summary.boardCount}</strong>
                 </span>
@@ -399,6 +405,14 @@ export function ReverseEngineeringResultPanel({
                 <span>
                   읽지 못한 서비스
                   <strong>{summary.unreadableServiceCount}</strong>
+                </span>
+                <span>
+                  스캔 상태
+                  <strong>{scanStatusLabel}</strong>
+                </span>
+                <span>
+                  스캔 시간
+                  <strong>{scanTimeLabel}</strong>
                 </span>
               </div>
               <p className={styles.detailLimitNotice}>
@@ -958,6 +972,40 @@ function toggleAccordionSet<T>(current: ReadonlySet<T>, key: T): ReadonlySet<T> 
   }
 
   return next;
+}
+
+function getReverseEngineeringScanStatusLabel(
+  status: ReverseEngineeringScanResponse["scan"]["status"],
+  coverage: ReverseEngineeringServiceCoverage | undefined
+): string {
+  if (status === "completed") {
+    return coverage?.status === "partial" ? "부분 성공" : "완료";
+  }
+
+  if (status === "failed") {
+    return "실패";
+  }
+
+  if (status === "cancelled") {
+    return "취소됨";
+  }
+
+  return status === "running" ? "진행 중" : "대기 중";
+}
+
+function formatReverseEngineeringScanTime(scan: ReverseEngineeringScanResponse["scan"]): string {
+  const finishedAt = scan.completedAt ?? scan.updatedAt ?? scan.createdAt;
+  const date = new Date(finishedAt);
+
+  if (Number.isNaN(date.getTime())) {
+    return "시간 정보 없음";
+  }
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "Asia/Seoul"
+  }).format(date);
 }
 
 // 사용자가 적용하기 전에 이번 스캔이 전체 결과인지 부분 결과인지 먼저 알려줍니다.

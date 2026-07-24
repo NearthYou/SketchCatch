@@ -220,6 +220,9 @@ test("기본 미리보기는 핵심 수치와 세 가지 행동만 먼저 보여
   assert.match(html, /전체[^0-9]*2/);
   assert.match(html, /보드 표시[^0-9]*2/);
   assert.match(html, /추가 확인[^0-9]*1/);
+  assert.match(html, /연결[^0-9]*1/);
+  assert.match(html, /스캔 상태\s*<strong>완료<\/strong>/);
+  assert.match(html, /스캔 시간/);
   assert.match(html, /보드에 적용은 가져온 구조를 보드에 저장하는 동작입니다/);
   assert.match(html, /Terraform 코드 생성, import, AWS 변경은 실행하지 않습니다/);
   assert.doesNotMatch(html, /Terraform으로 관리할 리소스 선택/);
@@ -421,6 +424,27 @@ test("Cloud Control 목록 조회 미지원은 부분 실패나 환경설정 행
     /못 읽은 서비스 자세히 보기|필요한 읽기 권한|환경설정에서 읽기 권한|다시 시도해 주세요/
   );
   assert.doesNotMatch(previewHtml, />AWS 연결 설정</);
+});
+
+test("coverage가 없는 과거 결과에서도 Cloud Control 목록 제한만으로 부분 실패를 만들지 않는다", () => {
+  const html = renderPanel("original", {
+    boardNodeCount: 1,
+    scanErrors: [
+      {
+        id: "scan-error-service-cloud-control-capability",
+        serviceKey: "cloud-control-capability",
+        resourceType: "UNKNOWN",
+        stage: "provider_api",
+        reason: "unsupported",
+        message: "legacy unsupported handler",
+        retryable: false,
+        affectedProviderResourceTypes: ["AWS::CertificateManager::Certificate"]
+      }
+    ]
+  });
+  const previewHtml = html.slice(0, html.indexOf('role="dialog"'));
+
+  assert.doesNotMatch(previewHtml, /일부 AWS 서비스를 읽지 못했어요|AWS 연결 설정/);
 });
 
 test("coverage가 있어도 실제 실패 원인을 연결 만료와 리전 오류로 구분한다", () => {
