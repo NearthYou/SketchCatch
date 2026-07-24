@@ -35,7 +35,7 @@
 1. `HARNESS-006`: `feature_list.json`, `agent-progress.md`, `session-handoff.md`를 검사하는 automated harness lint 추가
 2. `HARNESS-007`: Representative Use Journey의 최소 browser/API smoke 정의
 3. 코드 변경 시 package별 nearest `AGENTS.md`와 canonical docs를 읽었는지 확인하는 PR 템플릿 또는 CI 체크 추가
-4. 실제 Direct Deployment Path의 cleanup evidence를 세션 산출물과 연결하는 run report 형식 추가
+4. 실제 managed deployment의 cleanup evidence를 세션 산출물과 연결하는 run report 형식 추가
 
 ## 업데이트 규칙
 

@@ -208,7 +208,7 @@ export function isRepositoryTemplateAiRankingConfigured(
 
 function createRepositoryTemplateRankingInstructions(): string {
   return [
-    "당신은 Source Repository 증거를 근거로 Terraform 기반 Practice Architecture 템플릿을 비교하는 아키텍트입니다.",
+    "당신은 Source Repository 증거를 근거로 Terraform 기반 infrastructure design 템플릿을 비교하는 아키텍트입니다.",
     "모든 사용자 표시 문구(reasons, tradeoffs, question prompt와 reason)는 자연스러운 한국어로 작성하세요.",
     "각 후보의 reasons와 tradeoffs는 각각 2개 이상 4개 이하로 작성하세요.",
     "추천 이유에는 감지된 Application Unit, framework, Dockerfile, 데이터 계층 또는 배포 파일처럼 실제 저장소 근거를 구체적으로 연결하세요.",

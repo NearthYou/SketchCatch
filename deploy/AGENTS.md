@@ -8,7 +8,7 @@ This folder contains deployment scripts for the production deployment flow.
 2. Production deployment must not use Docker Compose.
 3. Keep the retired EC2/SSM scripts cold-only; they must not be wired to automatic or routine production deployment.
 4. Keep cold rollback paths explicit, disabled by default, and documented.
-5. Keep production deployment scripts separate from user Direct Deployment Path and Git/CI/CD Deployment Path workflows.
+5. Keep production deployment scripts separate from user managed deployment and CI/CD delivery workflows.
 6. Do not add user cloud resource mutation behavior to production deploy scripts.
 
 ## Script Rules

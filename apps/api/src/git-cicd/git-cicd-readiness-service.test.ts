@@ -602,7 +602,7 @@ test("inspect still propagates an unexpected Apply Plan verifier defect", async 
   );
 });
 
-test("integration refresh reconciles a missing target from the latest Direct deployment's older verified Apply", async () => {
+test("integration refresh reconciles a missing target from the latest managed deployment's older verified Apply", async () => {
   const successfulDeploymentId = "latest-successful-direct-deployment";
   const destroyPlanId = "current-approved-destroy-plan";
   const olderApplyPlanId = "older-verified-apply-plan";
@@ -724,7 +724,7 @@ test("creates a canonical ECS Fargate target from successful outputs without AWS
   assert.match(saved.deploymentTargetFingerprint, /^[0-9a-f]{64}$/);
 });
 
-test("Git/CI/CD readiness blocks a build environment whose repository checkout was not verified", async () => {
+test("CI/CD readiness blocks a build environment whose repository checkout was not verified", async () => {
   const state = createRepositoryState({ readyContext: true });
   assert.ok(state.buildEnvironment);
   state.buildEnvironment.repositoryVerificationStatus = "not_checked";
@@ -741,7 +741,7 @@ test("Git/CI/CD readiness blocks a build environment whose repository checkout w
   assert.equal(state.savedTargets.length, 0);
 });
 
-test("Git/CI/CD readiness rejects stale Repository and commit verification evidence", async () => {
+test("CI/CD readiness rejects stale Repository and commit verification evidence", async () => {
   const state = createRepositoryState({ readyContext: true });
   assert.ok(state.buildEnvironment);
   state.buildEnvironment.repositoryVerificationRequestedCommitSha = "a".repeat(40);
@@ -1387,7 +1387,7 @@ test("post-Apply synchronization rejects invalid project, deployment scope, stat
       expected: /Deployment not found/
     },
     {
-      name: "direct deployment source",
+      name: "managed deployment source",
       deployment: createDeployment({ id: "gitops", source: "gitops" }),
       expected: /Deployment not found/
     },

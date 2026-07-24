@@ -406,24 +406,24 @@ test("stops auto-refreshing after Terraform work reaches a stable state", () => 
   }
 });
 
-test("auto-refreshes Git/CI/CD handoffs while PR or pipeline work can still change", () => {
+test("auto-refreshes CI/CD handoffs while PR or pipeline work can still change", () => {
   assert.equal(shouldAutoRefreshGitCicdHandoff(createGitCicdHandoff("pr_created")), true);
   assert.equal(shouldAutoRefreshGitCicdHandoff(createGitCicdHandoff("pipeline_running")), true);
 });
 
-test("stops auto-refreshing Git/CI/CD handoffs after terminal states", () => {
+test("stops auto-refreshing CI/CD handoffs after terminal states", () => {
   for (const status of ["draft", "pipeline_success", "pipeline_failed", "cancelled"] as const) {
     assert.equal(shouldAutoRefreshGitCicdHandoff(createGitCicdHandoff(status)), false);
   }
 });
 
-test("labels Git/CI/CD handoff status separately from Direct Deployment status", () => {
+test("labels CI/CD handoff status separately from managed deployment status", () => {
   assert.equal(getGitCicdHandoffStatusLabel(createGitCicdHandoff("pr_created")), "PR created");
   assert.equal(
     getGitCicdHandoffStatusLabel(createGitCicdHandoff("pipeline_running")),
     "Pipeline running"
   );
-  assert.equal(getGitCicdHandoffStatusLabel(null), "No Git/CI/CD handoff");
+  assert.equal(getGitCicdHandoffStatusLabel(null), "No CI/CD handoff");
 });
 
 test("hides empty deployment info values from the detail list", () => {

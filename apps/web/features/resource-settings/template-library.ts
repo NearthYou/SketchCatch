@@ -23,7 +23,7 @@ import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geom
 import { materializeTemplateDiagram } from "./template-resource-materializer";
 import { applyBoardTemplatePresentationCorrections } from "./template-presentation-corrections";
 import { getTemplateThumbnailAsset } from "./template-thumbnail-manifest";
-import { getBrainboardTemplateThumbnailAsset } from "./brainboard-template-thumbnail-manifest";
+import { getReferenceTemplateThumbnailAsset } from "./reference-template-thumbnail-manifest";
 
 export const TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY = "sketchcatch.templateOverwriteBackups";
 
@@ -765,7 +765,7 @@ const brainboardBoardTemplates: readonly AvailableBoardTemplate[] = brainboardTe
       description: descriptions[evidence.title] ?? "AWS 리소스를 조합한 인프라 구성 템플릿입니다.",
       id: entry.id,
       tags: ["AWS"],
-      thumbnailSrc: getBrainboardTemplateThumbnailAsset(entry.id).src,
+      thumbnailSrc: getReferenceTemplateThumbnailAsset(entry.id).src,
       title: evidence.title
     } as const;
 

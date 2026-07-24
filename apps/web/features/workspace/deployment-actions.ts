@@ -228,7 +228,7 @@ export function shouldAutoRefreshGitCicdHandoff(handoff: GitCicdHandoff | null):
 
 export function getGitCicdHandoffStatusLabel(handoff: GitCicdHandoff | null): string {
   if (!handoff) {
-    return "No Git/CI/CD handoff";
+    return "No CI/CD handoff";
   }
 
   switch (handoff.status) {

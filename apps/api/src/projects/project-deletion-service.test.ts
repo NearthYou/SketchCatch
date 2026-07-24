@@ -207,7 +207,7 @@ test("createProjectDeletePreview treats destroyed deployments as deployment hist
   assert.deepEqual(preview.availableActions, ["delete_project"]);
 });
 
-test("deleteProjectRecords removes Git/CI/CD handoffs before deleting referenced assets and architectures", async () => {
+test("deleteProjectRecords removes CI/CD handoffs before deleting referenced assets and architectures", async () => {
   const fakeDb = new FakeProjectDeletionDb({
     deployments: [
       {

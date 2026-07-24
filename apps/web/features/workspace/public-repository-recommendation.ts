@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   CreateArchitectureDraftRequest,
   RepositoryAnalysisTemplateId,
   RepositoryDeploymentType,
@@ -178,7 +178,7 @@ export function createPublicRepositoryArchitectureDraftRequest(input: {
         }
       : {}),
     prompt: [
-      "Generate a production-quality Practice Architecture for this source repository.",
+      "Generate a production-quality infrastructure design for this source repository.",
       "Priority rules:",
       "1. The selected Template is the highest-priority constraint. Keep its core service and deployment model.",
       "2. Apply every confirmed follow-up answer by adding, removing, or configuring supporting resources when compatible with the selected Template.",
@@ -187,7 +187,7 @@ export function createPublicRepositoryArchitectureDraftRequest(input: {
       `Selected Template: ${input.templateId} (${formatPublicRepositoryTemplate(input.templateId)}).`,
       `Repository: ${input.analysis.repositoryUrl} at ${input.analysis.defaultBranch}.`,
       `Deployment type: ${input.deploymentType}.`,
-      `Git/CI/CD handoff requested: ${input.usesCiCd ? "yes" : "no"}.`,
+      `CI/CD handoff requested: ${input.usesCiCd ? "yes" : "no"}.`,
       `Detected signals: ${detectedSignals.join(", ") || "none"}.`,
       strictRepositoryEvidence
         ? "Repository recommendation context: candidate ranking only; authoritative architecture facts below control the draft."
@@ -314,7 +314,7 @@ function createInferredRepositoryRequirementLines(input: {
   const ciCd = hasArchitectureFact("ci_cd", "github_actions")
     ? "GitHub Actions builds and deploys; do not substitute CodePipeline, CodeBuild, or CodeDeploy"
     : input.usesCiCd
-      ? "Git/CI/CD handoff requested, but the pipeline implementation is not established by repository evidence"
+      ? "CI/CD handoff requested, but the pipeline implementation is not established by repository evidence"
       : "not required in this draft";
 
   return [
@@ -333,7 +333,7 @@ function createInferredRepositoryRequirementLines(input: {
     `- Runtime scale: ${runtimeScale}.`,
     "- Traffic pattern: not established by repository evidence.",
     "- Availability target: not established by repository evidence.",
-    `- Git/CI/CD: ${ciCd}.`
+    `- CI/CD: ${ciCd}.`
   ];
 }
 

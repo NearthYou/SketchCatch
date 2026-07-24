@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { createAmazonQArchitectureDraftResponse } from "./aiArchitectureDrafts.js";
 import { AUDIENCE_LIVE_CHECK_MANUAL_DIAGRAM } from "./audienceLiveCheckManualDiagram.js";
-
 import { generateTerraformFromDiagramJson } from "./terraform/terraform-preview.js";
 
 const prompt = "데모용 실시간 배포 사이트의 다이어그램 만들어줘.";
@@ -61,10 +60,17 @@ test("the realtime deployment demo prompt keeps questions but always returns the
   assert.equal("status" in second, false);
   if ("status" in first || "status" in second) return;
 
+  assert.ok(first.diagramJson);
+  assert.ok(second.diagramJson);
   assert.deepEqual(first.diagramJson, AUDIENCE_LIVE_CHECK_MANUAL_DIAGRAM);
   assert.deepEqual(second.diagramJson, AUDIENCE_LIVE_CHECK_MANUAL_DIAGRAM);
+  assert.equal(
+    first.diagramJson.nodes.some((node) =>
+      node.parameters?.resourceName.includes("fixed_template")
+    ),
+    false
+  );
   assert.equal(first.metadata.authoredSourceId, "audience-live-check");
-  assert.ok(first.diagramJson);
   const terraform = generateTerraformFromDiagramJson(first.diagramJson);
 
   const expectedTerraform = readFileSync(
@@ -84,10 +90,8 @@ test("the realtime deployment demo prompt keeps questions but always returns the
   };
   assert.equal(generateTerraformFromDiagramJson(catalogPresentedDiagram), expectedTerraform);
   assert.equal(first.diagramJson.nodes.length, 42);
-  assert.match(
-    terraform,
-    /resource "aws_ecs_service" "ecs_service_fixed_template_fargate_container_app"/u
-  );
+  assert.match(terraform, /resource "aws_ecs_service" "ecs_service"/u);
+  assert.doesNotMatch(terraform, /fixed_template/u);
   assert.match(terraform, /target_value\s*=\s*5/u);
   assert.match(terraform, /resource "aws_cloudfront_distribution" "cdn_web"/u);
   assert.match(terraform, /resource "aws_secretsmanager_secret" "check_in_signing"/u);

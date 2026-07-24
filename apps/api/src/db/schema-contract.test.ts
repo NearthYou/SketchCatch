@@ -157,7 +157,7 @@ test("Runtime convergence storage is additive and preserves legacy release rows"
   assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i);
 });
 
-test("Git/CI/CD monitoring tables expose commit-scoped run history", () => {
+test("CI/CD monitoring tables expose commit-scoped run history", () => {
   assert.ok(gitCicdMonitoringConfigs.sourceRepositoryId);
   assert.ok(gitCicdMonitoringConfigs.validationStatus);
   assert.ok(gitCicdPipelineRuns.commitSha);
@@ -215,7 +215,7 @@ test("Pipeline Run revision migration adds deterministic concurrency and log res
   assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM|TRUNCATE/i);
 });
 
-test("Git/CI/CD monitoring migration safely backfills active repositories", () => {
+test("CI/CD monitoring migration safely backfills active repositories", () => {
   const migrationUrl = new URL("../../drizzle/0032_git_cicd_monitoring_runs.sql", import.meta.url);
 
   assert.equal(existsSync(migrationUrl), true);
@@ -506,7 +506,7 @@ test("AWS connections store generated external ids without raw credentials", () 
   assert(hasUniqueIndex(config.indexes, "aws_connections_external_id_unique", ["external_id"]));
 });
 
-test("Git/CI/CD handoffs store repository metadata without raw provider secrets", () => {
+test("CI/CD handoffs store repository metadata without raw provider secrets", () => {
   const config = getTableConfig(gitCicdHandoffs);
 
   assert.equal(gitCicdRepositoryProviderEnum.enumName, "git_cicd_repository_provider");

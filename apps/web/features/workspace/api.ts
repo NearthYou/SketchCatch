@@ -633,7 +633,7 @@ export async function createAiArchitecturePatchPreview(
   );
 }
 
-// 현재 Architecture Board를 기준으로 Pre-Deployment Check를 실행합니다.
+// 현재 Architecture Board를 기준으로 deployment check를 실행합니다.
 export async function runAiPreDeploymentCheck(
   input: AiPreDeploymentCheckRequest
 ): Promise<AiPreDeploymentAnalysisResult> {

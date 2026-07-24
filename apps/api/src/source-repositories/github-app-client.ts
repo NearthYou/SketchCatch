@@ -1325,7 +1325,7 @@ async function createInitialTargetBranch(
             path: "README.md",
             mode: "100644",
             type: "blob",
-            content: `# ${input.name}\n\nInitialized by SketchCatch for Git/CI/CD handoff.\n`
+            content: `# ${input.name}\n\nInitialized by SketchCatch for CI/CD handoff.\n`
           }
         ]
       }
@@ -1632,7 +1632,7 @@ function createPullRequestResult(
 }
 
 function createNoPullRequestFileChangesError(): Error {
-  const error = new Error("No Git/CI/CD handoff file changes were needed") as Error & {
+  const error = new Error("No CI/CD handoff file changes were needed") as Error & {
     statusCode?: number;
   };
   error.statusCode = 409;
