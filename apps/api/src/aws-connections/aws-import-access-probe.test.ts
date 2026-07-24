@@ -6,6 +6,7 @@ import {
   AWS_IMPORT_PROBE_EXECUTORS,
   probeApplicationAutoScaling,
   probeApiGatewayTopology,
+  probeCloudControl,
   probeAwsImportAccess,
   probeCloudFrontTopology,
   probeCloudWatchMetadata,
@@ -20,6 +21,31 @@ import {
   type AwsImportProbeExecutor,
   type AwsImportProbeOutcome
 } from "./aws-import-access-probe.js";
+
+test("Cloud Control probe는 목록과 첫 리소스의 상세 조회 권한을 모두 확인한다", async () => {
+  const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
+
+  const outcome = await probeCloudControl({
+    async send(command) {
+      const value = command as { constructor: { name: string }; input: Record<string, unknown> };
+      calls.push({ name: value.constructor.name, input: value.input });
+      return value.constructor.name === "ListResourcesCommand"
+        ? { ResourceDescriptions: [{ Identifier: "vpc-safe-test" }] }
+        : {};
+    }
+  });
+
+  assert.equal(outcome, "success");
+  assert.deepEqual(
+    calls.map((call) => call.name),
+    ["ListResourcesCommand", "GetResourceCommand"]
+  );
+  assert.deepEqual(calls[0]?.input, { TypeName: "AWS::EC2::VPC", MaxResults: 1 });
+  assert.deepEqual(calls[1]?.input, {
+    TypeName: "AWS::EC2::VPC",
+    Identifier: "vpc-safe-test"
+  });
+});
 
 test("ELBv2 probe는 첫 LB, Target Group, Listener의 속성과 태그만 읽는다", async () => {
   const calls: Array<{ name: string; input: Record<string, unknown> }> = [];

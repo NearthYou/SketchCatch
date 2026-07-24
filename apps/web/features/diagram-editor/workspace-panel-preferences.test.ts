@@ -89,6 +89,27 @@ test("existing boards start in read mode while empty boards expose only resource
   );
 });
 
+test("an empty workspace can explicitly open both panels before its first action", () => {
+  const emptyBoardPanelState = { leftPanelOpen: true, rightPanelOpen: true } as const;
+
+  assert.deepEqual(
+    deriveInitialWorkspacePanelState({
+      emptyBoardPanelState,
+      hasDiagramNodes: false,
+      isCompactViewport: false
+    }),
+    emptyBoardPanelState
+  );
+  assert.deepEqual(
+    deriveInitialWorkspacePanelState({
+      emptyBoardPanelState,
+      hasDiagramNodes: false,
+      isCompactViewport: true
+    }),
+    { leftPanelOpen: false, rightPanelOpen: false }
+  );
+});
+
 test("compact workspaces prioritize the board regardless of its contents", () => {
   assert.deepEqual(
     deriveInitialWorkspacePanelState({ hasDiagramNodes: false, isCompactViewport: true }),

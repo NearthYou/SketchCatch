@@ -27,6 +27,7 @@ import {
 } from "@aws-sdk/client-cloudfront";
 import {
   CloudControlClient,
+  GetResourceCommand as GetCloudControlResourceCommand,
   ListResourcesCommand as ListCloudControlResourcesCommand
 } from "@aws-sdk/client-cloudcontrol";
 import {
@@ -770,7 +771,7 @@ async function probeResourceExplorerExecutor(
   return probeResourceExplorer({ send: (command) => client.send(command as never) });
 }
 
-/** gg: Cloud Control은 대표 AWS 종류의 첫 Resource 목록만 읽어 inventory 권한을 확인합니다. */
+/** gg: Cloud Control은 실제 scan과 같이 목록 뒤 첫 Resource의 상세까지 읽어 두 read 권한을 함께 확인합니다. */
 async function probeCloudControlExecutor(
   context: AwsImportProbeExecutorContext
 ): Promise<AwsImportProbeOutcome> {
@@ -778,12 +779,30 @@ async function probeCloudControlExecutor(
     new CloudControlClient({ region: context.region, credentials: context.credentials }),
     context.abortSignal
   );
-  await client.send(
+  return probeCloudControl({
+    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  });
+}
+
+/** gg: 대표 VPC 한 건의 목록·상세 read를 모두 확인하되 빈 계정에서는 목록 권한만 확인합니다. */
+export async function probeCloudControl(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  const listed = (await client.send(
     new ListCloudControlResourcesCommand({
       TypeName: "AWS::EC2::VPC",
       MaxResults: 1
     })
-  );
+  )) as { ResourceDescriptions?: Array<{ Identifier?: string }> };
+  const identifier = listed.ResourceDescriptions?.[0]?.Identifier;
+  if (identifier) {
+    await client.send(
+      new GetCloudControlResourceCommand({
+        TypeName: "AWS::EC2::VPC",
+        Identifier: identifier
+      })
+    );
+  }
   return "success";
 }
 

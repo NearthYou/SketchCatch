@@ -2297,6 +2297,7 @@ type ReverseEngineeringScanResult = {
   analysisExclusions: ReverseEngineeringAnalysisExclusion[];
   importSuggestions: ReverseEngineeringImportSuggestion[];
   scanErrors: ReverseEngineeringScanError[];
+  coverage?: ReverseEngineeringServiceCoverage;
 };
 ```
 
@@ -2308,6 +2309,11 @@ type ReverseEngineeringScanResult = {
 - `analysisExclusions`: 아직 분석하지 못하는 리소스와 그 이유
 - `importSuggestions`: Terraform import로 넘길 수 있는 제안
 - `scanErrors`: 일부 리소스를 읽지 못했을 때의 이유
+- `coverage`: 읽지 못한 서비스를 한 번씩 묶은 안전한 범위 요약
+
+Cloud Control처럼 한 서비스가 여러 AWS Resource type을 읽는 경우 `scanErrors`와 `coverage`에는
+`affectedProviderResourceTypes`를 남길 수 있다. 이 값은 `AWS::Service::Type` 형태의 안전한 종류 이름만
+포함하며, ARN·리소스 ID·AWS 원문 오류는 포함하지 않는다.
 
 Reverse Engineering의 `원본`은 `architectureJson`에 담긴 Resource, 관계, 설정을 그대로 유지한다. Cloud provider에는
 Architecture Board 좌표가 없으므로 화면에 처음 보여주기 위한 결정론적 기본 위치만 계산한다. 이때 Resource 의미를

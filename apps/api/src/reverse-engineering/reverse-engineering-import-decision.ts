@@ -17,7 +17,6 @@ export type ReverseEngineeringImportDecisionValidationReason =
   | "overlapping_resource_id"
   | "unknown_resource_id"
   | "resource_outside_applied_set"
-  | "missing_review_acknowledgement"
   | "resource_not_ready"
   | "resource_not_review_only"
   | "invalid_applied_source"
@@ -32,7 +31,6 @@ const VALIDATION_MESSAGE_BY_REASON: Readonly<
   overlapping_resource_id: "한 리소스에 서로 다른 가져오기 결정을 할 수 없습니다.",
   unknown_resource_id: "확인할 수 없는 가져오기 대상이 포함되어 있습니다.",
   resource_outside_applied_set: "적용하지 않은 리소스의 가져오기 결정을 저장할 수 없습니다.",
-  missing_review_acknowledgement: "보드에서 바로 수정할 수 없는 리소스를 확인해 주세요.",
   resource_not_ready: "준비되지 않은 리소스는 기존 리소스로 가져올 수 없습니다.",
   resource_not_review_only: "바로 수정할 수 있는 리소스에는 별도 확인을 사용할 수 없습니다.",
   invalid_applied_source: "적용할 Reverse Engineering 원본을 확인할 수 없습니다.",
@@ -80,7 +78,6 @@ export function validateAndStampReverseEngineeringImportDecisions({
   const acknowledgedReviewOnlyResourceIdSet = new Set(request.acknowledgedReviewOnlyResourceIds);
 
   validateStatuses({
-    appliedSourceNodeIdSet,
     selectedReadyResourceIdSet,
     acknowledgedReviewOnlyResourceIdSet,
     suggestionStatusByResourceId
@@ -269,14 +266,12 @@ function validateRequestedResourceIds(
   }
 }
 
-/** gg: 적용 가능한 리소스 선택과 확인 필수 리소스 승인이 서로 뒤바뀌지 않게 검증합니다. */
+/** gg: 명시적으로 고른 기존 리소스 연결과 보드 확인 항목이 서로 뒤바뀌지 않게 검증합니다. */
 function validateStatuses({
-  appliedSourceNodeIdSet,
   selectedReadyResourceIdSet,
   acknowledgedReviewOnlyResourceIdSet,
   suggestionStatusByResourceId
 }: {
-  appliedSourceNodeIdSet: ReadonlySet<string>;
   selectedReadyResourceIdSet: ReadonlySet<string>;
   acknowledgedReviewOnlyResourceIdSet: ReadonlySet<string>;
   suggestionStatusByResourceId: ReadonlyMap<string, ReverseEngineeringImportSuggestionStatus>;
@@ -290,13 +285,6 @@ function validateStatuses({
   for (const resourceId of acknowledgedReviewOnlyResourceIdSet) {
     if (suggestionStatusByResourceId.get(resourceId) === "ready") {
       throw new ReverseEngineeringImportDecisionValidationError("resource_not_review_only");
-    }
-  }
-
-  for (const resourceId of appliedSourceNodeIdSet) {
-    const status = suggestionStatusByResourceId.get(resourceId);
-    if (status !== "ready" && !acknowledgedReviewOnlyResourceIdSet.has(resourceId)) {
-      throw new ReverseEngineeringImportDecisionValidationError("missing_review_acknowledgement");
     }
   }
 }

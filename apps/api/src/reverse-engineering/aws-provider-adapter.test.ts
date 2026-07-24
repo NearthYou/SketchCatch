@@ -1607,6 +1607,62 @@ test("ECS import name 또는 Terraform 생성 입력이 부족하면 import와 �
   assert.match(result.findings[1]?.description ?? "", /containerDefinitions\.environment/);
 });
 
+test("가까운 팔레트 아이콘이 있어도 정확하지 않은 AWS 종류는 Terraform 대상이 되지 않는다", async () => {
+  const providerResourceTypes = [
+    "ec2:security-group-rule",
+    "AWS::EC2::SecurityGroupRule",
+    "rds:og",
+    "AWS::RDS::OptionGroup",
+    "rds:pg",
+    "AWS::RDS::DBParameterGroup",
+    "ec2:network-interface"
+  ] as const;
+  const result = await scan(
+    providerResourceTypes.map((providerResourceType, index) =>
+      record({
+        providerResourceType,
+        providerResourceId: `fallback-resource-${index}`,
+        displayName: `Fallback ${index}`
+      })
+    )
+  );
+
+  assert.deepEqual(
+    result.discoveredResources.map((resource) => ({
+      analysisExcluded: resource.analysisExcluded,
+      providerResourceType: resource.providerResourceType,
+      resourceType: resource.resourceType,
+      terraformResourceType: resource.config["terraformResourceType"]
+    })),
+    providerResourceTypes.map((providerResourceType) => ({
+      analysisExcluded: true,
+      providerResourceType,
+      resourceType: "UNKNOWN",
+      terraformResourceType: undefined
+    }))
+  );
+  assert.ok(
+    result.importSuggestions.every(
+      (suggestion) =>
+        suggestion.status === "unsupported_resource_type" &&
+        suggestion.handoffReady === false &&
+        suggestion.importCommand === undefined
+    )
+  );
+  assert.deepEqual(
+    result.architectureJson.nodes.map((node) => ({
+      analysisExcluded: node.config["analysisExcluded"],
+      providerResourceType: node.config["providerResourceType"],
+      type: node.type
+    })),
+    providerResourceTypes.map((providerResourceType) => ({
+      analysisExcluded: true,
+      providerResourceType,
+      type: "UNKNOWN"
+    }))
+  );
+});
+
 test("정규화된 application 증거가 없는 ELBv2 record는 NLB를 포함해 review-only로 남긴다", async () => {
   const nlbArn =
     "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/net/shared/1111111111111111";

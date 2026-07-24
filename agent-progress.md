@@ -4,6 +4,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- 2026-07-24: Applied the pending local database migration `0057_reverse_engineering_scan_previews`. It creates the preview-persistence table required by the Reverse Engineering preview endpoint. Verified the 14-column table, migration ledger, and API `/health` plus `/health/db` afterward.
+- 2026-07-24: Rebuilt the current Web standalone runtime and atomically refreshed the local launchd `com.sketchcatch.web.stable` service. Port 3000 now serves the current Reverse Engineering UI bundle and proxies unauthenticated GitHub-installation requests to the current API (401 expected). Replaced local runtimes remain under `web-runtime.backup.*` for rollback until visual confirmation.
+- 2026-07-24: Reverse Engineering now opens both desktop panels at their minimum widths on the initial empty-board entry. Compact viewports still collapse both panels, and the existing resize controls remain available. Focused panel/reverse tests, lint, typecheck, and production builds passed before the refreshed Web runtime was started.
 - The new-project screen shows local AWS, multicolor Google Cloud, and Azure brand icons and uses a wider, larger start-method layout with single-line desktop copy.
 - Workspace start cards keep every desktop title on one line, use subdued description typography, and place the AWS Role badge in the Reverse Engineering title row.
 - Repository Template previews show a dynamic recommendation rank, use the clearer AI design action, and keep candidate navigation anchored independently of recommendation-reason length.

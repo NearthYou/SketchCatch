@@ -7,11 +7,14 @@ import { selectHigherPriorityReverseEngineeringScanError } from "./reverse-engin
 
 const SERVICE_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   "api-gateway": "API Gateway",
+  "application-autoscaling": "Application Auto Scaling",
   "aws-inventory": "AWS 리소스 목록",
+  "cloud-control": "Cloud Control",
   cloudfront: "CloudFront",
   cloudwatch: "CloudWatch",
   "cloudwatch-logs": "CloudWatch Logs",
   ec2: "EC2",
+  ecr: "ECR",
   ecs: "ECS",
   "elastic-load-balancing": "Elastic Load Balancing",
   eventbridge: "EventBridge",
@@ -22,7 +25,8 @@ const SERVICE_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   "resource-explorer": "Resource Explorer",
   "resource-explorer-2": "Resource Explorer",
   "resource-groups-tagging": "Resource Groups Tagging API",
-  s3: "S3"
+  s3: "S3",
+  secretsmanager: "Secrets Manager"
 };
 
 export type ReverseEngineeringConnectionFailureClassification = {
@@ -40,9 +44,15 @@ export function createReverseEngineeringPublicCoverage(
   scanErrors: readonly ReverseEngineeringScanError[]
 ): { readonly coverage: ReverseEngineeringServiceCoverage } {
   const strongestErrors = new Map<string, ReverseEngineeringScanError>();
+  const affectedProviderResourceTypesByService = new Map<string, Set<string>>();
 
   for (const scanError of scanErrors) {
     const serviceKey = getSafeServiceKey(scanError);
+    addSafeAffectedProviderResourceTypes(
+      affectedProviderResourceTypesByService,
+      serviceKey,
+      scanError
+    );
     strongestErrors.set(
       serviceKey,
       selectHigherPriorityReverseEngineeringScanError(strongestErrors.get(serviceKey), scanError)
@@ -51,11 +61,16 @@ export function createReverseEngineeringPublicCoverage(
 
   const unavailableServices = [...strongestErrors].map(([serviceKey, scanError]) => {
     const reason = getPublicCoverageReason(scanError.reason);
+    const affectedProviderResourceTypes = getAffectedProviderResourceTypes(
+      affectedProviderResourceTypesByService,
+      serviceKey
+    );
     return {
       serviceKey,
       displayName: SERVICE_DISPLAY_NAMES[serviceKey] ?? "AWS 서비스",
       reason,
-      remedy: reason === "permission_required" ? ("open_settings" as const) : ("retry" as const)
+      remedy: reason === "permission_required" ? ("open_settings" as const) : ("retry" as const),
+      ...(affectedProviderResourceTypes.length > 0 ? { affectedProviderResourceTypes } : {})
     };
   });
 
@@ -72,24 +87,73 @@ export function sanitizeReverseEngineeringScanErrors(
   scanErrors: readonly ReverseEngineeringScanError[]
 ): ReverseEngineeringScanError[] {
   const strongestErrors = new Map<string, ReverseEngineeringScanError>();
+  const affectedProviderResourceTypesByService = new Map<string, Set<string>>();
 
   for (const scanError of scanErrors) {
     const serviceKey = getSafeServiceKey(scanError);
+    addSafeAffectedProviderResourceTypes(
+      affectedProviderResourceTypesByService,
+      serviceKey,
+      scanError
+    );
     strongestErrors.set(
       serviceKey,
       selectHigherPriorityReverseEngineeringScanError(strongestErrors.get(serviceKey), scanError)
     );
   }
 
-  return [...strongestErrors].map(([serviceKey, scanError]) => ({
-    id: `scan-error-service-${serviceKey}`,
-    serviceKey,
-    resourceType: scanError.resourceType,
-    stage: "provider_api",
-    reason: scanError.reason,
-    message: getSafeScanErrorMessage(scanError.reason),
-    retryable: scanError.reason === "throttled" || scanError.reason === "provider_error"
-  }));
+  return [...strongestErrors].map(([serviceKey, scanError]) => {
+    const affectedProviderResourceTypes = getAffectedProviderResourceTypes(
+      affectedProviderResourceTypesByService,
+      serviceKey
+    );
+    return {
+      id: `scan-error-service-${serviceKey}`,
+      serviceKey,
+      resourceType: scanError.resourceType,
+      stage: "provider_api",
+      reason: scanError.reason,
+      message: getSafeScanErrorMessage(scanError.reason),
+      retryable: scanError.reason === "throttled" || scanError.reason === "provider_error",
+      ...(affectedProviderResourceTypes.length > 0 ? { affectedProviderResourceTypes } : {})
+    };
+  });
+}
+
+/** gg: provider type은 AWS CloudFormation type syntax만 공개하고 ARN·식별자·원문 오류는 버립니다. */
+function addSafeAffectedProviderResourceTypes(
+  affectedProviderResourceTypesByService: Map<string, Set<string>>,
+  serviceKey: string,
+  scanError: ReverseEngineeringScanError
+): void {
+  const types = getSafeAffectedProviderResourceTypes(scanError);
+  if (types.length === 0) return;
+
+  const collected =
+    affectedProviderResourceTypesByService.get(serviceKey) ?? new Set<string>();
+  for (const providerResourceType of types) {
+    collected.add(providerResourceType);
+  }
+  affectedProviderResourceTypesByService.set(serviceKey, collected);
+}
+
+function getAffectedProviderResourceTypes(
+  affectedProviderResourceTypesByService: ReadonlyMap<string, ReadonlySet<string>>,
+  serviceKey: string
+): string[] {
+  return [...(affectedProviderResourceTypesByService.get(serviceKey) ?? [])].sort();
+}
+
+function getSafeAffectedProviderResourceTypes(scanError: ReverseEngineeringScanError): string[] {
+  return [
+    ...new Set(
+      (scanError.affectedProviderResourceTypes ?? []).filter(isSafeAwsProviderResourceType)
+    )
+  ].sort();
+}
+
+function isSafeAwsProviderResourceType(value: string): boolean {
+  return /^AWS::[A-Za-z0-9]{1,64}::[A-Za-z0-9]{1,64}$/u.test(value);
 }
 
 /** gg: 서버 자격 증명 문제와 고객 Role 문제를 서로 다른 안전한 다음 행동으로 분리합니다. */

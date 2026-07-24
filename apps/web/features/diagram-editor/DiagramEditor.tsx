@@ -292,6 +292,7 @@ function DiagramEditorInner({
   floatingPanel,
   initialBoardZoom,
   initialDiagram,
+  initialPanelLayout,
   initialPreviewAnnotations,
   initialPreviewDiagram,
   initialReferenceDropTargetNodeId,
@@ -353,6 +354,7 @@ function DiagramEditorInner({
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
   const initialPanelStateRef = useRef(
     deriveInitialWorkspacePanelState({
+      emptyBoardPanelState: initialPanelLayout,
       hasDiagramNodes: diagram.nodes.length > 0,
       isCompactViewport:
         typeof window !== "undefined" && window.matchMedia("(max-width: 1120px)").matches
@@ -364,8 +366,16 @@ function DiagramEditorInner({
   const [isRightPanelOpen, setRightPanelOpen] = useState(() =>
     viewerPolicy.isViewer ? true : initialPanelStateRef.current.rightPanelOpen
   );
-  const [leftPanelWidth, setLeftPanelWidth] = useState(readStoredLeftPanelWidth);
-  const [rightPanelWidth, setRightPanelWidth] = useState(readStoredRightPanelWidth);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() =>
+    initialPanelLayout?.startWithMinimumWidths
+      ? clampLeftPanelWidth(MIN_LEFT_PANEL_WIDTH)
+      : readStoredLeftPanelWidth()
+  );
+  const [rightPanelWidth, setRightPanelWidth] = useState(() =>
+    initialPanelLayout?.startWithMinimumWidths
+      ? clampRightPanelWidth(MIN_RIGHT_PANEL_WIDTH)
+      : readStoredRightPanelWidth()
+  );
   const [autoExpandAreasEnabled, setAutoExpandAreasEnabled] = useState(() =>
     readAutoExpandAreasEnabled(typeof window === "undefined" ? null : window.localStorage)
   );
@@ -3197,6 +3207,7 @@ function DiagramEditorInner({
 
     function restoreContextualPanelState(): void {
       const initialPanelState = deriveInitialWorkspacePanelState({
+        emptyBoardPanelState: initialPanelLayout,
         hasDiagramNodes: diagramRef.current.nodes.length > 0,
         isCompactViewport: false
       });
@@ -3223,7 +3234,7 @@ function DiagramEditorInner({
     compactViewport.addEventListener("change", collapsePanelsForCompactViewport);
 
     return () => compactViewport.removeEventListener("change", collapsePanelsForCompactViewport);
-  }, [viewerPolicy.isViewer]);
+  }, [initialPanelLayout, viewerPolicy.isViewer]);
 
   useEffect(() => {
     const canvasPanel = canvasPanelRef.current;

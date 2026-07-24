@@ -219,9 +219,15 @@ export function ReverseEngineeringResultPanel({
   const hasPartialFailure = result.coverage
     ? result.coverage.status === "partial"
     : result.scanErrors.length > 0;
-  const hasPermissionFailure = result.coverage
+  const hasAwsSettingsRecovery = result.coverage
     ? result.coverage.unavailableServices.some((service) => service.remedy === "open_settings")
-    : result.scanErrors.some((scanError) => scanError.reason === "permission_denied");
+    : result.scanErrors.some(
+        (scanError) =>
+          scanError.reason === "permission_denied" ||
+          scanError.reason === "not_configured" ||
+          scanError.reason === "invalid_region" ||
+          scanError.reason === "expired_credential"
+      );
   const unsupportedResources = result.discoveredResources.filter(
     (resource) => presentReverseEngineeringResource(resource).displayState === "review_only"
   );
@@ -236,7 +242,6 @@ export function ReverseEngineeringResultPanel({
   const selectedApplyDisabled =
     isApplying ||
     !hasApplicableResources ||
-    !importDecisionComplete ||
     (applicationMode === "append" && comparison.additions.length === 0);
 
   // 정리 계산 전에 진행 상태를 한 번 그려 긴 계산이 멈춤처럼 보이지 않게 합니다.
@@ -302,9 +307,16 @@ export function ReverseEngineeringResultPanel({
           </span>
         </div>
         {hasPartialFailure ? (
-          <p className={styles.warning} role="status">
-            일부 AWS 서비스를 읽지 못했어요. 가져온 항목만 보드에 적용합니다.
-          </p>
+          <>
+            <p className={styles.warning} role="status">
+              일부 AWS 서비스를 읽지 못했어요. 가져온 항목만 보드에 적용합니다.
+            </p>
+            {hasAwsSettingsRecovery ? (
+              <a className={styles.secondaryButton} href={permissionRecoveryHref}>
+                AWS 연결 설정
+              </a>
+            ) : null}
+          </>
         ) : null}
         <div className={styles.previewActions}>
           <button
@@ -438,7 +450,7 @@ export function ReverseEngineeringResultPanel({
               <div className={styles.warning} role="alert">
                 <strong>일부 항목을 가져오지 못했어요</strong>
                 <p>가져온 항목만 사용해 계속 진행할 수 있어요.</p>
-                {hasPermissionFailure ? (
+                {hasAwsSettingsRecovery ? (
                   <a className={styles.secondaryButton} href={permissionRecoveryHref}>
                     환경설정에서 권한 보완
                   </a>
@@ -676,7 +688,11 @@ function ReverseEngineeringScanCoveragePanel({
           key: service.serviceKey,
           serviceName: service.displayName,
           causeLabel: detailedPresentation?.causeLabel ?? getCoverageCauseLabel(service.reason),
-          remedy: getCoverageRemedy(service.reason)
+          remedy: getCoverageRemedy(service.reason),
+          affectedProviderResourceTypes:
+            service.affectedProviderResourceTypes ??
+            detailedPresentation?.affectedProviderResourceTypes ??
+            []
         };
       })
     : presentReverseEngineeringScanErrors(scanErrors);
@@ -694,6 +710,11 @@ function ReverseEngineeringScanCoveragePanel({
                   <strong>{presentation.serviceName}</strong>
                   <span className={styles.errorBadge}>{presentation.causeLabel}</span>
                   <span>{presentation.remedy}</span>
+                  {(presentation.affectedProviderResourceTypes?.length ?? 0) > 0 ? (
+                    <span>
+                      읽지 못한 종류: {presentation.affectedProviderResourceTypes?.join(", ")}
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>

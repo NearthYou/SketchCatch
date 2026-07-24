@@ -181,37 +181,26 @@ test("unknown ID, private ID, 적용 source 범위 밖의 공개 ID를 거부한
   );
 });
 
-test("manual_review와 unsupported_resource_type은 각각 명시적 확인이 없으면 거부한다", () => {
+test("빈 결정은 모든 적용 source를 observe_only로 기록한다", () => {
   const fixture = createDecisionFixture();
-  const manualId = fixture.resourceIds.manual_review[0]!;
-  const unsupportedId = fixture.resourceIds.unsupported_resource_type[0]!;
+  const stamped = validateAndStampReverseEngineeringImportDecisions({
+    ...fixture.input,
+    request: {
+      version: 1,
+      selectedReadyResourceIds: [],
+      acknowledgedReviewOnlyResourceIds: []
+    }
+  });
 
-  assertDecisionRejects(
-    {
-      ...fixture.input,
-      request: {
-        ...fixture.input.request,
-        acknowledgedReviewOnlyResourceIds:
-          fixture.input.request.acknowledgedReviewOnlyResourceIds.filter(
-            (resourceId) => resourceId !== manualId
-          )
-      }
-    },
-    "missing_review_acknowledgement"
-  );
-  assertDecisionRejects(
-    {
-      ...fixture.input,
-      request: {
-        ...fixture.input.request,
-        acknowledgedReviewOnlyResourceIds:
-          fixture.input.request.acknowledgedReviewOnlyResourceIds.filter(
-            (resourceId) => resourceId !== unsupportedId
-          )
-      }
-    },
-    "missing_review_acknowledgement"
-  );
+  for (const [status, resourceIds] of Object.entries(fixture.resourceIds)) {
+    for (const resourceId of resourceIds) {
+      assert.deepEqual(readImportDecision(stamped, resourceId), {
+        version: 1,
+        mode: "observe_only",
+        statusAtConfirmation: status
+      });
+    }
+  }
 });
 
 test("ready가 아닌 선택과 ready에 대한 review-only 확인을 거부한다", () => {

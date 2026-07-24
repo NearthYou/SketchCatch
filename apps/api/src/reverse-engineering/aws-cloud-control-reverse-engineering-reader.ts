@@ -59,7 +59,7 @@ export async function readAwsCloudControlReverseEngineeringResources(
         if (record) records.push(record);
       }
     } catch (error) {
-      scanErrors.push(createCloudControlScanError(error));
+      scanErrors.push(createCloudControlScanError(error, providerResourceType));
     }
   }
 
@@ -231,7 +231,10 @@ function createCloudControlDisplayName(
 }
 
 /** gg: Provider 오류 원문 없이 권한·재시도 여부만 공통 부분 실패로 전달합니다. */
-function createCloudControlScanError(error: unknown): ReverseEngineeringScanError {
+function createCloudControlScanError(
+  error: unknown,
+  providerResourceType: string
+): ReverseEngineeringScanError {
   const classifier = [
     isRecord(error) ? error["name"] : undefined,
     isRecord(error) ? error["code"] : undefined,
@@ -252,6 +255,7 @@ function createCloudControlScanError(error: unknown): ReverseEngineeringScanErro
   return {
     id: "scan-error-service-cloud-control",
     serviceKey: "cloud-control",
+    affectedProviderResourceTypes: [providerResourceType],
     resourceType: "UNKNOWN",
     stage: "provider_api",
     reason,

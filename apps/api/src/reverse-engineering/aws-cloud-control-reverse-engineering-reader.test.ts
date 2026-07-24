@@ -119,6 +119,7 @@ test("한 Resource 종류 조회 실패는 다른 종류의 결과를 지우지 
   assert.equal(result.scanErrors.length, 1);
   assert.equal(result.scanErrors[0]?.serviceKey, "cloud-control");
   assert.equal(result.scanErrors[0]?.reason, "permission_denied");
+  assert.deepEqual(result.scanErrors[0]?.affectedProviderResourceTypes, ["AWS::SQS::Queue"]);
   assert.doesNotMatch(JSON.stringify(result.scanErrors), /AccessDenied/u);
 });
 

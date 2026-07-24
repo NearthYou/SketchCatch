@@ -396,7 +396,7 @@ test("workspace shell docks both panels and collapses them on compact screens", 
 });
 
 test("editor derives contextual read-mode panels while viewer mode stays isolated", () => {
-  assert.match(diagramEditorSource, /deriveInitialWorkspacePanelState\(\{\s*hasDiagramNodes:/);
+  assert.match(diagramEditorSource, /deriveInitialWorkspacePanelState\(\{[\s\S]*?hasDiagramNodes:/);
   assert.doesNotMatch(diagramEditorSource, /\{ leftPanelOpen: nextOpen \}/);
   assert.doesNotMatch(diagramEditorSource, /\{ rightPanelOpen: nextOpen \}/);
   assert.match(

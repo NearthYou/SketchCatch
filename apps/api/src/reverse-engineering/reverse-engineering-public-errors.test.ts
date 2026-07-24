@@ -79,6 +79,89 @@ test("같은 AWS 서비스의 여러 reader 실패는 공개 범위에서 한 �
   assert.equal(result.coverage.unavailableServices[0]?.displayName, "EC2");
 });
 
+test("Cloud Control 조회 실패는 일반 AWS 인벤토리가 아니라 원래 서비스로 안내한다", () => {
+  const scanErrors = [
+    {
+      id: "scan-error-service-cloud-control",
+      serviceKey: "cloud-control",
+      resourceType: "UNKNOWN" as const,
+      stage: "provider_api" as const,
+      reason: "permission_denied" as const,
+      message: "AccessDenied private Cloud Control detail",
+      retryable: false,
+      affectedProviderResourceTypes: [
+        "AWS::SQS::Queue",
+        "arn:aws:sqs:ap-northeast-2:123456789012:private"
+      ]
+    },
+    {
+      id: "scan-error-service-cloud-control-second-type",
+      serviceKey: "cloud-control",
+      resourceType: "UNKNOWN" as const,
+      stage: "provider_api" as const,
+      reason: "provider_error" as const,
+      message: "private DynamoDB reader failure",
+      retryable: true,
+      affectedProviderResourceTypes: ["AWS::DynamoDB::Table"]
+    }
+  ];
+
+  const sanitized = sanitizeReverseEngineeringScanErrors(scanErrors);
+  const coverage = createReverseEngineeringPublicCoverage(sanitized).coverage;
+
+  assert.deepEqual(sanitized, [
+    {
+      id: "scan-error-service-cloud-control",
+      serviceKey: "cloud-control",
+      resourceType: "UNKNOWN",
+      stage: "provider_api",
+      reason: "permission_denied",
+      message: "이 서비스를 읽을 권한이 부족합니다.",
+      retryable: false,
+      affectedProviderResourceTypes: ["AWS::DynamoDB::Table", "AWS::SQS::Queue"]
+    }
+  ]);
+  assert.deepEqual(coverage.unavailableServices, [
+    {
+      serviceKey: "cloud-control",
+      displayName: "Cloud Control",
+      reason: "permission_required",
+      remedy: "open_settings",
+      affectedProviderResourceTypes: ["AWS::DynamoDB::Table", "AWS::SQS::Queue"]
+    }
+  ]);
+  assert.doesNotMatch(JSON.stringify({ sanitized, coverage }), /arn:aws|private/iu);
+});
+
+test("확장 reader의 서비스 이름은 일반 AWS 인벤토리로 뭉개지지 않는다", () => {
+  const scanErrors = [
+    ["application-autoscaling", "Application Auto Scaling"],
+    ["ecr", "ECR"],
+    ["secretsmanager", "Secrets Manager"]
+  ].map(([serviceKey]) => ({
+    id: `scan-error-service-${serviceKey}`,
+    serviceKey,
+    resourceType: "UNKNOWN" as const,
+    stage: "provider_api" as const,
+    reason: "provider_error" as const,
+    message: "private provider failure",
+    retryable: true
+  }));
+
+  const coverage = createReverseEngineeringPublicCoverage(
+    sanitizeReverseEngineeringScanErrors(scanErrors)
+  ).coverage;
+
+  assert.deepEqual(
+    coverage.unavailableServices.map((service) => [service.serviceKey, service.displayName]),
+    [
+      ["application-autoscaling", "Application Auto Scaling"],
+      ["ecr", "ECR"],
+      ["secretsmanager", "Secrets Manager"]
+    ]
+  );
+});
+
 test("같은 서비스의 일시 오류 뒤 권한 오류가 오면 권한 보완 안내를 우선한다", () => {
   const scanErrors = [
     {

@@ -513,6 +513,34 @@ test("부분 실패는 실제 AWS 서비스별로 합치고 내부 오류 대신
   assert.doesNotMatch(JSON.stringify(errors), /AccessDenied|arn:aws|DescribeVpcs|RequestId|provider_api/);
 });
 
+test("Cloud Control 실패는 안전한 AWS 종류만 상세 안내에 남긴다", () => {
+  const errors = presentReverseEngineeringScanErrors([
+    {
+      id: "scan-error-service-cloud-control",
+      serviceKey: "cloud-control",
+      resourceType: "UNKNOWN",
+      stage: "provider_api",
+      reason: "provider_error",
+      message: "raw private provider error",
+      retryable: true,
+      affectedProviderResourceTypes: [
+        "AWS::SQS::Queue",
+        "arn:aws:sqs:ap-northeast-2:123456789012:private"
+      ]
+    }
+  ]);
+
+  assert.deepEqual(errors, [
+    {
+      key: "cloud-control",
+      serviceName: "Cloud Control",
+      causeLabel: "AWS 서비스 일시 오류",
+      remedy: "잠시 후 다시 시도해 주세요.",
+      affectedProviderResourceTypes: ["AWS::SQS::Queue"]
+    }
+  ]);
+});
+
 test("부분 실패 원인을 내부 오류 없이 쉬운 한국어로 구분한다", () => {
   const reasons = [
     ["permission_denied", "권한 부족"],

@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReverseEngineeringCandidatePanelState } from "../../../features/workspace/ReverseEngineeringPanel";
 import { ReverseBoardCandidateSelectionPanel } from "./reverse-workspace-client";
+
+const reverseWorkspaceClientSource = readFileSync(
+  new URL("./reverse-workspace-client.tsx", import.meta.url),
+  "utf8"
+);
 
 const emptyState: ReverseEngineeringCandidatePanelState = {
   candidates: [],
@@ -50,4 +56,15 @@ test("스캔 뒤 왼쪽 패널은 가져온 구조 요약만 보여준다", () =
 
   assert.match(html, /가져온 구조/);
   assert.doesNotMatch(html, /보드 후보 선택/);
+});
+
+test("리버스 엔지니어링은 처음에 양쪽 패널을 최소 폭으로 연다", () => {
+  assert.match(
+    reverseWorkspaceClientSource,
+    /const REVERSE_ENGINEERING_INITIAL_PANEL_LAYOUT = \{\s*leftPanelOpen: true,\s*rightPanelOpen: true,\s*startWithMinimumWidths: true\s*\} as const;/s
+  );
+  assert.match(
+    reverseWorkspaceClientSource,
+    /<DiagramEditor[\s\S]*?initialPanelLayout=\{REVERSE_ENGINEERING_INITIAL_PANEL_LAYOUT\}/
+  );
 });

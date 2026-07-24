@@ -25,6 +25,11 @@ type ReverseWorkspaceClientProps = {
 };
 
 const REVERSE_PREVIEW_PROJECT_ID = "reverse-preview-project";
+const REVERSE_ENGINEERING_INITIAL_PANEL_LAYOUT = {
+  leftPanelOpen: true,
+  rightPanelOpen: true,
+  startWithMinimumWidths: true
+} as const;
 const EMPTY_CANDIDATE_PANEL_STATE: ReverseEngineeringCandidatePanelState = {
   candidates: [],
   hasScanResult: false,
@@ -96,6 +101,7 @@ export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientPr
       }
       emptyBoardDescription="AWS 연결을 확인하는 중입니다."
       initialDiagram={EMPTY_DIAGRAM}
+      initialPanelLayout={REVERSE_ENGINEERING_INITIAL_PANEL_LAYOUT}
       leftPanel={
         <ReverseBoardCandidateSelectionPanel
           onChooseAnotherStartMode={chooseAnotherStartMode}

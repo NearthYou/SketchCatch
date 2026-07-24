@@ -1253,6 +1253,30 @@ export type ReverseEngineeringAwsResourceCatalogEntry = {
   readonly terraformResourceTypes: readonly string[];
 };
 
+/**
+ * These keys let the board render an observed AWS service with its own icon when no
+ * existing SketchCatch palette ResourceType represents it. They deliberately do not
+ * make that resource Terraform-manageable.
+ */
+export type ReverseEngineeringAwsProviderVisualFallbackKey =
+  | "athena_data_catalog"
+  | "athena_workgroup"
+  | "cloudformation_stack"
+  | "ec2_dhcp_options"
+  | "ec2_network_interface"
+  | "ec2_security_group_rule"
+  | "elasticache_user"
+  | "eventbridge_event_bus"
+  | "rds_option_group"
+  | "rds_parameter_group"
+  | "resource_explorer_index"
+  | "resource_explorer_view";
+
+export type ReverseEngineeringAwsProviderVisualFallback = {
+  readonly key: ReverseEngineeringAwsProviderVisualFallbackKey;
+  readonly label: string;
+};
+
 const REVERSE_ENGINEERING_AWS_PROVIDER_TYPE_ALIASES = [
   ["AWS::EC2::VPC", "VPC"],
   ["AWS::EC2::Subnet", "SUBNET"],
@@ -1372,6 +1396,55 @@ const REVERSE_ENGINEERING_AWS_PROVIDER_TYPE_ALIASES = [
   ["AWS::GuardDuty::Detector", "GUARDDUTY_DETECTOR"]
 ] as const satisfies readonly (readonly [string, ResourceType])[];
 
+/**
+ * These are exact AWS resources already represented by an existing palette entry,
+ * but Resource Explorer and the Tagging API spell them differently from CloudFormation.
+ */
+const REVERSE_ENGINEERING_AWS_PROVIDER_TYPE_SOURCE_ALIASES = [
+  ["AWS::EC2::ElasticIp", "ELASTIC_IP"],
+  ["ec2:eip-allocation", "ELASTIC_IP"],
+  ["ec2:elastic-ip", "ELASTIC_IP"],
+  ["rds:subgrp", "DB_SUBNET_GROUP"]
+] as const satisfies readonly (readonly [string, ResourceType])[];
+
+/**
+ * Unknown palette resources still need a clear board icon. Keep the original provider
+ * type and return a semantic key instead of pretending the resource is a Terraform type.
+ */
+const REVERSE_ENGINEERING_AWS_PROVIDER_VISUAL_FALLBACKS = [
+  ["AWS::Athena::DataCatalog", { key: "athena_data_catalog", label: "Athena Data Catalog" }],
+  ["AWS::Athena::WorkGroup", { key: "athena_workgroup", label: "Athena Workgroup" }],
+  [
+    "AWS::CloudFormation::Stack",
+    { key: "cloudformation_stack", label: "CloudFormation Stack" }
+  ],
+  ["AWS::EC2::DhcpOptions", { key: "ec2_dhcp_options", label: "EC2 DHCP Options" }],
+  [
+    "AWS::EC2::NetworkInterface",
+    { key: "ec2_network_interface", label: "EC2 Network Interface" }
+  ],
+  [
+    "AWS::EC2::SecurityGroupRule",
+    { key: "ec2_security_group_rule", label: "EC2 Security Group Rule" }
+  ],
+  ["AWS::ElastiCache::User", { key: "elasticache_user", label: "ElastiCache User" }],
+  ["AWS::Events::EventBus", { key: "eventbridge_event_bus", label: "EventBridge Event Bus" }],
+  ["AWS::RDS::DBParameterGroup", { key: "rds_parameter_group", label: "RDS Parameter Group" }],
+  ["AWS::RDS::OptionGroup", { key: "rds_option_group", label: "RDS Option Group" }],
+  ["rds:og", { key: "rds_option_group", label: "RDS Option Group" }],
+  ["rds:pg", { key: "rds_parameter_group", label: "RDS Parameter Group" }],
+  [
+    "AWS::ResourceExplorer2::Index",
+    { key: "resource_explorer_index", label: "Resource Explorer Index" }
+  ],
+  [
+    "AWS::ResourceExplorer2::View",
+    { key: "resource_explorer_view", label: "Resource Explorer View" }
+  ]
+] as const satisfies readonly (
+  readonly [string, ReverseEngineeringAwsProviderVisualFallback]
+)[];
+
 const REVERSE_ENGINEERING_AWS_SCAN_PARENT = {
   NETWORK_ACL_RULE: "NETWORK_ACL",
   AUTO_SCALING_POLICY: "AUTO_SCALING_GROUP",
@@ -1490,14 +1563,21 @@ const REVERSE_ENGINEERING_AWS_ARN_SERVICE_DEFAULTS = {
   sqs: "SQS_QUEUE"
 } as const satisfies Readonly<Record<string, ResourceType>>;
 
-const reverseEngineeringAwsProviderTypeMap = new Map<string, ResourceType>(
-  REVERSE_ENGINEERING_AWS_PROVIDER_TYPE_ALIASES.map(([providerType, resourceType]) => [
-    normalizeReverseEngineeringAwsIdentity(providerType),
-    resourceType
-  ])
-);
+const reverseEngineeringAwsProviderTypeMap = createReverseEngineeringAwsProviderTypeMap([
+  ...REVERSE_ENGINEERING_AWS_PROVIDER_TYPE_ALIASES,
+  ...REVERSE_ENGINEERING_AWS_PROVIDER_TYPE_SOURCE_ALIASES
+]);
 const reverseEngineeringAwsArnTypeMap = new Map<string, ResourceType>(
   REVERSE_ENGINEERING_AWS_ARN_ALIASES
+);
+const reverseEngineeringAwsProviderVisualFallbackMap = new Map<
+  string,
+  ReverseEngineeringAwsProviderVisualFallback
+>(
+  REVERSE_ENGINEERING_AWS_PROVIDER_VISUAL_FALLBACKS.map(([providerType, fallback]) => [
+    normalizeReverseEngineeringAwsProviderTypeIdentity(providerType),
+    fallback
+  ])
 );
 const reverseEngineeringAwsProviderTypesByResourceType = new Map<ResourceType, readonly string[]>(
   reverseEngineeringAwsResourceTypesFromDefinitions().map((resourceType) => [
@@ -1541,7 +1621,20 @@ export function resolveReverseEngineeringAwsProviderResourceType(
   providerResourceType: string
 ): ResourceType | undefined {
   return reverseEngineeringAwsProviderTypeMap.get(
-    normalizeReverseEngineeringAwsIdentity(providerResourceType)
+    normalizeReverseEngineeringAwsProviderTypeIdentity(providerResourceType)
+  );
+}
+
+/**
+ * Returns an icon presentation only when SketchCatch has no exact ResourceType for the
+ * observed AWS resource. Callers must keep these resources review-only and preserve their
+ * original providerResourceType.
+ */
+export function getReverseEngineeringAwsProviderResourceVisualFallback(
+  providerResourceType: string
+): ReverseEngineeringAwsProviderVisualFallback | undefined {
+  return reverseEngineeringAwsProviderVisualFallbackMap.get(
+    normalizeReverseEngineeringAwsProviderTypeIdentity(providerResourceType)
   );
 }
 
@@ -1567,6 +1660,7 @@ export function resolveReverseEngineeringAwsResourceTypeFromArn(
   return (
     reverseEngineeringAwsArnTypeMap.get(`${service}/${resourceKind}`) ??
     reverseEngineeringAwsArnTypeMap.get(`${service}/*`) ??
+    resolveReverseEngineeringAwsProviderResourceType(`${service}:${resourceKind}`) ??
     REVERSE_ENGINEERING_AWS_ARN_SERVICE_DEFAULTS[
       service as keyof typeof REVERSE_ENGINEERING_AWS_ARN_SERVICE_DEFAULTS
     ]
@@ -1635,6 +1729,46 @@ function reverseEngineeringAwsResourceTypesFromDefinitions(): ResourceType[] {
         .map((definition) => definition.resourceType)
     )
   ];
+}
+
+function createReverseEngineeringAwsProviderTypeMap(
+  aliases: readonly (readonly [string, ResourceType])[]
+): Map<string, ResourceType> {
+  const providerTypes = new Map<string, ResourceType>();
+
+  for (const [providerType, resourceType] of aliases) {
+    const normalizedProviderType = normalizeReverseEngineeringAwsProviderTypeIdentity(providerType);
+    const existingResourceType = providerTypes.get(normalizedProviderType);
+
+    if (existingResourceType && existingResourceType !== resourceType) {
+      throw new Error(
+        `Conflicting Reverse Engineering AWS provider type alias: ${providerType} (${existingResourceType} / ${resourceType})`
+      );
+    }
+
+    providerTypes.set(normalizedProviderType, resourceType);
+  }
+
+  return providerTypes;
+}
+
+/**
+ * CloudFormation uses AWS::Service::Kind while Resource Explorer and Tagging can use
+ * service:kind or service/kind. Normalize only the comparison form; callers retain the
+ * original provider string on the discovered resource.
+ */
+function normalizeReverseEngineeringAwsProviderTypeIdentity(value: string): string {
+  const segments = value
+    .trim()
+    .toLowerCase()
+    .split(/[:/]+/u)
+    .map((segment) => segment.replace(/[^a-z0-9]/gu, ""))
+    .filter(Boolean);
+  const [firstSegment, ...remainingSegments] = segments;
+  const providerSegments = firstSegment === "aws" ? remainingSegments : segments;
+  const [service, ...resourceKind] = providerSegments;
+
+  return service && resourceKind.length > 0 ? `${service}/${resourceKind.join("")}` : "";
 }
 
 /** gg: AWS type·ARN 비교에 필요 없는 대소문자와 공백 차이를 제거합니다. */

@@ -28,6 +28,7 @@ export type ReverseEngineeringScanErrorPresentation = {
   readonly serviceName: string;
   readonly causeLabel: string;
   readonly remedy: string;
+  readonly affectedProviderResourceTypes?: readonly string[];
 };
 
 type ReverseEngineeringScanSummaryInput = Pick<
@@ -77,6 +78,7 @@ const SCAN_ERROR_SERVICE_NAMES: Readonly<Record<string, string>> = {
   "api-gateway": "API Gateway",
   "application-autoscaling": "Application Auto Scaling",
   "aws-inventory": "AWS 리소스 목록",
+  "cloud-control": "Cloud Control",
   cloudfront: "CloudFront",
   cloudwatch: "CloudWatch",
   "cloudwatch-logs": "CloudWatch Logs",
@@ -147,15 +149,30 @@ export function presentReverseEngineeringScanErrors(
       continue;
     }
 
+    const affectedProviderResourceTypes = getSafeAffectedProviderResourceTypes(scanError);
     presentationByService.set(key, {
       key,
       serviceName: getScanErrorServiceName(key),
       causeLabel: getScanErrorCauseLabel(scanError.reason),
-      remedy: getScanErrorRemedy(scanError.reason)
+      remedy: getScanErrorRemedy(scanError.reason),
+      ...(affectedProviderResourceTypes.length > 0 ? { affectedProviderResourceTypes } : {})
     });
   }
 
   return [...presentationByService.values()];
+}
+
+/** gg: API contract 밖의 ARN·식별자는 상세 오류에서도 보여주지 않습니다. */
+function getSafeAffectedProviderResourceTypes(
+  scanError: ReverseEngineeringScanError
+): string[] {
+  return [
+    ...new Set(
+      (scanError.affectedProviderResourceTypes ?? []).filter((providerResourceType) =>
+        /^AWS::[A-Za-z0-9]{1,64}::[A-Za-z0-9]{1,64}$/u.test(providerResourceType)
+      )
+    )
+  ].sort();
 }
 
 // gg: 새 응답의 allowlisted serviceKey를 우선하고 과거 저장 결과는 기존 ID/type으로 보정합니다.

@@ -87,6 +87,13 @@ export type DiagramPreviewAnnotations = {
   readonly edgeStates: Readonly<Record<string, DiagramPreviewState>>;
 };
 
+/** 특정 Workspace 진입점이 빈 Board에서만 요청하는 초기 패널 배치입니다. */
+export type DiagramEditorInitialPanelLayout = {
+  readonly leftPanelOpen: boolean;
+  readonly rightPanelOpen: boolean;
+  readonly startWithMinimumWidths?: boolean | undefined;
+};
+
 export type DiagramEditorPanelContext = {
   diagram: DiagramJson;
   inspectedNodeId: string | null;
@@ -142,6 +149,7 @@ export type DiagramEditorProps = {
   floatingPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
   initialBoardZoom?: number | undefined;
   initialDiagram?: DiagramJson | undefined;
+  initialPanelLayout?: DiagramEditorInitialPanelLayout | undefined;
   initialPreviewAnnotations?: DiagramPreviewAnnotations | undefined;
   initialPreviewDiagram?: DiagramJson | undefined;
   initialReferenceDropTargetNodeId?: string | undefined;

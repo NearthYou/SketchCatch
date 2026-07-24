@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   DiagramJson,
+  ReverseEngineeringImportDecisionRequest,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScan,
   ReverseEngineeringScanLogLine,
@@ -51,7 +52,6 @@ import {
 } from "./reverse-engineering-resource-types";
 import {
   createReverseEngineeringImportDecisionOptions,
-  createReverseEngineeringImportDecisionRequest,
   isReverseEngineeringImportDecisionComplete
 } from "./reverse-engineering-import-decision";
 import { createReverseEngineeringLayoutSummary } from "./reverse-engineering-layout-summary";
@@ -113,6 +113,14 @@ type ReverseEngineeringOrganizedDiagrams = {
 };
 const SCAN_POLL_INTERVAL_MS = 1000;
 const SCAN_POLL_ATTEMPT_COUNT = 30;
+
+function createObserveOnlyReverseEngineeringImportDecision(): ReverseEngineeringImportDecisionRequest {
+  return {
+    version: 1,
+    selectedReadyResourceIds: [],
+    acknowledgedReviewOnlyResourceIds: []
+  };
+}
 
 // 기존 AWS 읽어오기 화면의 상태와 버튼 흐름을 관리합니다.
 export function ReverseEngineeringPanel({
@@ -635,16 +643,7 @@ export function ReverseEngineeringPanel({
     if (!application) {
       return;
     }
-    if (!isImportDecisionComplete) {
-      setApplyState("error");
-      setApplyMessage("보드에서 바로 수정할 수 없는 리소스를 모두 확인해 주세요.");
-      return;
-    }
-    const importDecision = createReverseEngineeringImportDecisionRequest({
-      options: importDecisionOptions,
-      selectedReadyResourceIds,
-      acknowledgedReviewOnlyResourceIds
-    });
+    const importDecision = createObserveOnlyReverseEngineeringImportDecision();
     const diagramToApply = attachReverseEngineeringSourceToDiagram({
       diagram: application.diagram,
       sourceScanId: result.scan.id,
