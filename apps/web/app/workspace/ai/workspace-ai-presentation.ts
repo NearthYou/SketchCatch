@@ -83,13 +83,11 @@ export function getWorkspaceAiOrbitPresentation({
 }
 
 export function createWorkspaceAiOrbitReactionKey({
-  lastMessageId,
-  selectionCount
+  stagePhase
 }: {
-  readonly lastMessageId: string | null;
-  readonly selectionCount: number;
+  readonly stagePhase: WorkspaceAiStagePhase;
 }): string {
-  return `${lastMessageId ?? "empty"}:${Math.max(0, selectionCount)}`;
+  return stagePhase;
 }
 
 export function resolveWorkspaceAiMobileView({

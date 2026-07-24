@@ -111,6 +111,7 @@ import {
   type WorkspaceTerraformAiContext
 } from "./workspace-terraform-ai";
 import { formatTerraformReviewContext } from "./workspace-ai-result-presentation";
+import { requireSuccessfulWorkspaceDiagramSave } from "./project-deployment-preparation";
 import { getWorkspaceAiChatDockStatus } from "./workspace-ai-chat-status";
 import {
   isWorkspaceAiChatAbortError,
@@ -386,6 +387,8 @@ export function WorkspaceAiChatDock({
   const latestTerraformSafeFixResultRequestIdRef = useRef<number | null>(null);
   const requestRegistryRef = useRef(new WorkspaceAiChatRequestRegistry());
   const suggestionSubmissionRegistryRef = useRef(new WorkspaceAiChatSuggestionSubmissionRegistry());
+  const messageSubmissionInFlightRef = useRef(false);
+  const patchApplicationInFlightRef = useRef(false);
   terraformAiContextRef.current = terraformAiContext;
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(context.diagram),
@@ -1436,7 +1439,12 @@ export function WorkspaceAiChatDock({
   ): Promise<void> {
     const trimmedPrompt = value.trim();
 
-    if (!activeScopeDefinition.inputAvailable || trimmedPrompt.length === 0 || isChatBusy) {
+    if (
+      !activeScopeDefinition.inputAvailable ||
+      trimmedPrompt.length === 0 ||
+      isChatBusy ||
+      messageSubmissionInFlightRef.current
+    ) {
       return;
     }
 
@@ -1467,7 +1475,12 @@ export function WorkspaceAiChatDock({
     setComposerValue("");
     setSelectedSuggestionLabelsByMessageId({});
     setMessages(nextMessages);
-    await handleUserMessage(trimmedPrompt, nextMessages);
+    messageSubmissionInFlightRef.current = true;
+    try {
+      await handleUserMessage(trimmedPrompt, nextMessages);
+    } finally {
+      messageSubmissionInFlightRef.current = false;
+    }
   }
 
   async function handleUserMessage(
@@ -1954,7 +1967,11 @@ export function WorkspaceAiChatDock({
     appendAssistantMessage("status", "생성했습니다. 현재 보드가 AI 초안으로 전체 교체되었습니다.");
   }
 
-  function applyPatchPreviewToBoard(): void {
+  async function applyPatchPreviewToBoard(): Promise<void> {
+    if (patchApplicationInFlightRef.current) {
+      return;
+    }
+
     if (patchPreviewModel === null || patchPreviewIsStale) {
       if (patchPreviewIsStale) {
         appendAssistantMessage(
@@ -1965,14 +1982,36 @@ export function WorkspaceAiChatDock({
       return;
     }
 
-    context.applyDiagramJson(patchPreviewModel.proposedDiagram);
-    context.requestTerraformRefresh();
-    requestImmediateDiagramSave();
-    setPatchPreviewModel(null);
-    setPatchClarification(null);
-    setPatchPreviewSourceFingerprint(null);
-    setPatchPreviewSourceRevision(null);
-    appendAssistantMessage("status", "수정 사항을 보드에 적용했습니다.");
+    const saveDiagramNow = context.saveDiagramNow;
+
+    if (saveDiagramNow === undefined) {
+      appendAssistantMessage(
+        "error",
+        "프로젝트 저장 기능을 사용할 수 없어 수정 사항을 보드에 적용하지 않았습니다. 페이지를 새로고침한 뒤 다시 시도해주세요."
+      );
+      return;
+    }
+
+    patchApplicationInFlightRef.current = true;
+    try {
+      context.applyDiagramJson(patchPreviewModel.proposedDiagram);
+      context.requestTerraformRefresh();
+      setPatchPreviewModel(null);
+      setPatchClarification(null);
+      setPatchPreviewSourceFingerprint(null);
+      setPatchPreviewSourceRevision(null);
+
+      const saveResult = await saveDiagramNow();
+      requireSuccessfulWorkspaceDiagramSave(saveResult);
+      appendAssistantMessage("status", "수정 사항을 보드에 적용하고 저장했습니다.");
+    } catch {
+      appendAssistantMessage(
+        "error",
+        "수정 사항은 현재 보드에 적용했지만 프로젝트 저장에 실패했습니다. 다시 저장해주세요."
+      );
+    } finally {
+      patchApplicationInFlightRef.current = false;
+    }
   }
 
   function requestImmediateDiagramSave(): void {
@@ -2726,7 +2765,7 @@ export function WorkspaceAiChatDock({
               <button
                 className={styles.primaryAction}
                 disabled={patchPreviewIsStale}
-                onClick={applyPatchPreviewToBoard}
+                onClick={() => void applyPatchPreviewToBoard()}
                 type="button"
               >
                 Board에 적용

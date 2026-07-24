@@ -310,12 +310,18 @@ test("palette drag preview and drop use the same Area size transformer", () => {
   );
 });
 
+test("resource name visibility remains authoritative at far zoom", () => {
+  assert.match(
+    diagramEditorStyles,
+    /\.canvasPanelResourceNamesVisible\s+\.nodeShellZoomFar\s+\.resourceNodeLabel\s*\{[^}]*opacity:\s*1;[^}]*visibility:\s*visible;/s
+  );
+});
+
 test("diagram editor restores the light canvas with a restrained two-level grid", () => {
   const editorShellBlock = getCssBlock(".editorShell");
   const canvasPanelBlock = getCssBlock(".canvasPanel");
   const reactFlowBlock = getCssRuleContaining(".canvasPanel :global(.react-flow)");
   const selectionBlock = getCssRuleContaining(".canvasPanel :global(.react-flow__selection)");
-
   assert.match(editorShellBlock, /--board-canvas:\s*#f6f8fc;/i);
   assert.match(editorShellBlock, /--board-surface:\s*#ffffff;/i);
   assert.match(editorShellBlock, /--board-ink:\s*#172033;/i);

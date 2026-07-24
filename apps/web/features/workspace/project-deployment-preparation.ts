@@ -17,3 +17,18 @@ export function requireSavedProjectDraftRevision(result: unknown): number {
 
   return result.serverDraft.revision;
 }
+
+export function requireSuccessfulWorkspaceDiagramSave(result: unknown): void {
+  if (
+    typeof result === "object" &&
+    result !== null &&
+    "ok" in result &&
+    result.ok === true &&
+    "persistence" in result &&
+    result.persistence === "local"
+  ) {
+    return;
+  }
+
+  requireSavedProjectDraftRevision(result);
+}
