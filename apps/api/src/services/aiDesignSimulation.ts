@@ -326,8 +326,9 @@ function createRecommendations(
     );
     if (requiredCapacity >= scaling.maxCapacity) {
       const nextMaxCapacity = scaling.maxCapacity + 1;
+      const nextTargetValue = scaling.targetValue + 1;
       recommendations.push(
-        `aws_appautoscaling_target.max_capacity를 ${scaling.maxCapacity}에서 ${nextMaxCapacity}으로 늘리고 새 Terraform Plan으로 재배포하세요.`
+        `aws_appautoscaling_target.max_capacity를 ${scaling.maxCapacity}에서 ${nextMaxCapacity}으로, aws_appautoscaling_policy.target_value를 ${scaling.targetValue}에서 ${nextTargetValue}으로 늘리고 새 Terraform Plan으로 재배포하세요.`
       );
     }
   }

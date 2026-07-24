@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import type { Deployment, DeploymentProgressSnapshot } from "@sketchcatch/types";
+import type {
+  Deployment,
+  DeploymentProgressSnapshot,
+  DeploymentScope
+} from "@sketchcatch/types";
 import { Code2 } from "lucide-react";
 import { getDeploymentProgressSnapshot } from "./api";
 import { DeploymentProgressPoller } from "./deployment-progress-poller";
@@ -13,12 +17,14 @@ export type DeploymentProgressBarProps = {
   readonly deployment: Deployment | null;
   readonly isStarting: boolean;
   readonly operationHint: DeploymentProgressOperation | null;
+  readonly scopeHint: DeploymentScope | null;
 };
 
 export function DeploymentProgressBar({
   deployment,
   isStarting,
-  operationHint
+  operationHint,
+  scopeHint
 }: DeploymentProgressBarProps) {
   const [snapshot, setSnapshot] = useState<DeploymentProgressSnapshot | null>(null);
   const [poller] = useState(
@@ -56,6 +62,7 @@ export function DeploymentProgressBar({
     deployment,
     isStarting,
     operationHint,
+    scopeHint,
     snapshot
   });
 

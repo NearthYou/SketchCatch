@@ -1,5 +1,9 @@
 import { getDatabaseClient } from "./db/client.js";
 import {
+  assertPostgresDatabaseMigrationsCurrent,
+  type DatabaseMigrationStatus
+} from "./db/migration-readiness.js";
+import {
   assertNoStaticAwsCredentialsForApiServer,
   getDeploymentWorkerMode,
   requireDatabaseUrl
@@ -39,6 +43,8 @@ export type StartApiServerOptions = {
   app: StartupApp;
   host: string;
   port: number;
+  assertDatabaseMigrationsCurrent?: () => Promise<DatabaseMigrationStatus>;
+  requireDatabaseUrl?: () => string;
   validateAwsCredentialSource?: () => void;
   warmTerraformPluginCache?: () => Promise<TerraformRunResult>;
   warmTrivyCheckBundle?: () => Promise<void>;
@@ -51,6 +57,10 @@ export type StartApiServerOptions = {
 export async function startApiServer(options: StartApiServerOptions): Promise<void> {
   const validateAwsCredentialSource =
     options.validateAwsCredentialSource ?? assertNoStaticAwsCredentialsForApiServer;
+  const requireConfiguredDatabaseUrl = options.requireDatabaseUrl ?? requireDatabaseUrl;
+  const assertDatabaseMigrationsCurrent =
+    options.assertDatabaseMigrationsCurrent ??
+    (() => assertPostgresDatabaseMigrationsCurrent(getDatabaseClient().pool));
   const warmTerraformPluginCache =
     options.warmTerraformPluginCache ?? defaultWarmTerraformPluginCache;
   const warmTrivyCheckBundle = options.warmTrivyCheckBundle ?? defaultWarmTrivyCheckBundle;
@@ -58,7 +68,8 @@ export async function startApiServer(options: StartApiServerOptions): Promise<vo
     options.recoverInterruptedDeployments ?? defaultRecoverInterruptedDeployments;
 
   validateAwsCredentialSource();
-  requireDatabaseUrl();
+  requireConfiguredDatabaseUrl();
+  await assertDatabaseMigrationsCurrent();
   await warmTerraformCacheBeforeListen(options.app, warmTerraformPluginCache);
   await warmTrivyCacheBeforeListen(options.app, warmTrivyCheckBundle);
   const recoveryResult = await recoverInterruptedDeploymentsBeforeListen(

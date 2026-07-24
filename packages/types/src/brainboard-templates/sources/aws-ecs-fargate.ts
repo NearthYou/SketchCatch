@@ -43,7 +43,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "162f4029-6160-4b56-80d0-e6de1b294c83",
       domOrder: 1,
-      label: "VPC - default",
+      label: "VPC",
       position: {
         x: 390.1519485675814,
         y: 184.40406376280453
@@ -61,7 +61,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "1eca88fe-e8bd-4240-856e-92e7187e1114",
       domOrder: 2,
-      label: "ecs_security_group",
+      label: "Service SG",
       position: {
         x: 450.1519485675814,
         y: 374.4040637628045
@@ -79,7 +79,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5b67f9b3-34fa-4d25-9451-471ad56e4291",
       domOrder: 3,
-      label: "default",
+      label: "ECS Subnet",
       position: {
         x: 540.1519485675815,
         y: 474.4040637628045
@@ -97,7 +97,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5a76bfb2-b71d-4cbc-919e-3611a1b70e1e",
       domOrder: 4,
-      label: "ecs_task_definition",
+      label: "ECS Task Definition",
       position: {
         x: 1480.1519485675817,
         y: 574.4040637628045
@@ -115,7 +115,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "aedad806-5d41-458e-82d0-58daac33cc37",
       domOrder: 5,
-      label: "ecs_task_role",
+      label: "Task IAM Role",
       position: {
         x: 1480.1519485675817,
         y: 754.4040637628045
@@ -133,7 +133,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f005a130-edd2-4747-8956-e1d409272c67",
       domOrder: 6,
-      label: "ecs_task_role_attachment",
+      label: "Task Execution Policy Attachment",
       position: {
         x: 1690.1519485675817,
         y: 754.4040637628045
@@ -151,7 +151,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2eb5aa4e-4e9a-4d27-ae3a-3b10469e02a1",
       domOrder: 7,
-      label: "ecs_cluster",
+      label: "ECS Cluster",
       position: {
         x: 845.1519485675815,
         y: 274.4040637628045
@@ -169,7 +169,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fef60bd4-81d1-4069-a6bd-01727d5903e4",
       domOrder: 8,
-      label: "ecs_vpc_igw",
+      label: "Internet Gateway",
       position: {
         x: 850.1519485675815,
         y: 154.40406376280453
@@ -187,7 +187,7 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fd1b2a28-24e2-4d3e-a14d-6560424de9bd",
       domOrder: 9,
-      label: "default",
+      label: "ECS Service",
       position: {
         x: 845.1519485675815,
         y: 574.4040637628045
@@ -436,49 +436,49 @@ export const awsEcsFargateSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_security_group.ecs_security_group",
       fileName: "fargate.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "5b67f9b3-34fa-4d25-9451-471ad56e4291": {
       kind: "resource",
       address: "aws_subnet.default",
       fileName: "fargate.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "5a76bfb2-b71d-4cbc-919e-3611a1b70e1e": {
       kind: "resource",
       address: "aws_ecs_task_definition.ecs_task_definition",
       fileName: "fargate.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "aedad806-5d41-458e-82d0-58daac33cc37": {
       kind: "resource",
       address: "aws_iam_role.ecs_task_role",
       fileName: "fargate.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "f005a130-edd2-4747-8956-e1d409272c67": {
       kind: "resource",
       address: "aws_iam_role_policy_attachment.ecs_task_role_attachment",
       fileName: "fargate.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "2eb5aa4e-4e9a-4d27-ae3a-3b10469e02a1": {
       kind: "resource",
       address: "aws_ecs_cluster.ecs_cluster",
       fileName: "fargate.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "fef60bd4-81d1-4069-a6bd-01727d5903e4": {
       kind: "resource",
       address: "aws_internet_gateway.ecs_vpc_igw",
       fileName: "fargate.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "fd1b2a28-24e2-4d3e-a14d-6560424de9bd": {
       kind: "resource",
       address: "aws_ecs_service.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     }
   }
 });

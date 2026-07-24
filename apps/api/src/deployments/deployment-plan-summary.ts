@@ -15,7 +15,20 @@ type TerraformResourceChange = {
   type?: unknown;
   change?: {
     actions?: unknown;
+    importing?: unknown;
   };
+};
+
+export type TerraformImportChange = {
+  readonly address: string | null;
+  readonly actions: readonly string[] | null;
+  readonly importingMetadataValid: boolean;
+};
+
+export type TerraformPlanChange = {
+  readonly address: string | null;
+  readonly actions: readonly string[] | null;
+  readonly isImport: boolean;
 };
 
 const baselineLiveApplySupportedResourceTypes = new Set([
@@ -188,11 +201,13 @@ export function createDeploymentPlanSummaryFromTerraformShowJson(
     updateCount: 0,
     deleteCount: 0,
     replaceCount: 0,
+    importCount: 0,
     blocked: false,
     warnings
   };
 
   const resourceChanges = Array.isArray(parsed.resource_changes) ? parsed.resource_changes : [];
+  summary.importCount = findTerraformImportChanges(parsed).length;
 
   for (const resourceChange of resourceChanges) {
     if (!isTerraformResourceChange(resourceChange)) {
@@ -236,6 +251,37 @@ export function createDeploymentPlanSummaryFromTerraformShowJson(
   return summary;
 }
 
+export function findTerraformImportChangesFromTerraformShowJson(
+  terraformShowJson: string
+): TerraformImportChange[] {
+  return findTerraformImportChanges(parseTerraformShowJson(terraformShowJson));
+}
+
+export function findTerraformPlanChangesFromTerraformShowJson(
+  terraformShowJson: string
+): TerraformPlanChange[] {
+  const parsed = parseTerraformShowJson(terraformShowJson);
+  const resourceChanges = Array.isArray(parsed.resource_changes) ? parsed.resource_changes : [];
+
+  return resourceChanges
+    .filter(isTerraformResourceChange)
+    .map((resourceChange) => {
+      const change = resourceChange.change;
+      const actions = change?.actions;
+
+      return {
+        address: normalizeTerraformResourceAddress(resourceChange.address),
+        actions:
+          Array.isArray(actions) && actions.every((action) => typeof action === "string")
+            ? [...actions]
+            : null,
+        isImport:
+          isRecord(change) && Object.prototype.hasOwnProperty.call(change, "importing")
+      };
+    })
+    .sort(compareTerraformPlanChanges);
+}
+
 export function findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
   terraformShowJson: string,
   liveProfile: DeploymentLiveProfile = "demo_web_service"
@@ -276,6 +322,72 @@ export function findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
 
 function isTerraformResourceChange(value: unknown): value is TerraformResourceChange {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function findTerraformImportChanges(parsed: TerraformShowJson): TerraformImportChange[] {
+  const resourceChanges = Array.isArray(parsed.resource_changes) ? parsed.resource_changes : [];
+  const importChanges: TerraformImportChange[] = [];
+
+  for (const resourceChange of resourceChanges) {
+    if (!isTerraformResourceChange(resourceChange) || !isRecord(resourceChange.change)) {
+      continue;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(resourceChange.change, "importing")) {
+      continue;
+    }
+
+    const actions = resourceChange.change.actions;
+    const importing = resourceChange.change.importing;
+    importChanges.push({
+      address: normalizeTerraformResourceAddress(resourceChange.address),
+      actions:
+        Array.isArray(actions) && actions.every((action) => typeof action === "string")
+          ? [...actions]
+          : null,
+      importingMetadataValid:
+        isRecord(importing) &&
+        typeof importing.id === "string" &&
+        importing.id.trim().length > 0
+    });
+  }
+
+  return importChanges.sort(compareTerraformImportChanges);
+}
+
+function normalizeTerraformResourceAddress(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function compareTerraformImportChanges(
+  left: TerraformImportChange,
+  right: TerraformImportChange
+): number {
+  const leftAddress = left.address ?? "";
+  const rightAddress = right.address ?? "";
+
+  if (leftAddress < rightAddress) return -1;
+  if (leftAddress > rightAddress) return 1;
+
+  const leftActions = left.actions?.join(",") ?? "";
+  const rightActions = right.actions?.join(",") ?? "";
+  if (leftActions < rightActions) return -1;
+  if (leftActions > rightActions) return 1;
+  return Number(left.importingMetadataValid) - Number(right.importingMetadataValid);
+}
+
+function compareTerraformPlanChanges(
+  left: TerraformPlanChange,
+  right: TerraformPlanChange
+): number {
+  const leftAddress = left.address ?? "";
+  const rightAddress = right.address ?? "";
+
+  return leftAddress.localeCompare(rightAddress);
 }
 
 function parseTerraformShowJson(terraformShowJson: string): TerraformShowJson {

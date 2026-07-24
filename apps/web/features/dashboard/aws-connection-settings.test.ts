@@ -51,7 +51,7 @@ test("pending AWS connections restore the saved verification setup", async () =>
   });
 });
 
-test("settings gates AWS CodeBuild GitHub authorization behind one GitHub App and a verified AWS connection", () => {
+test("settings gates GitHub deployment connection behind one GitHub App and a verified AWS connection", () => {
   const source = readFileSync(
     fileURLToPath(
       new URL("../../app/dashboard/settings/settings-dashboard-client.tsx", import.meta.url)
@@ -59,11 +59,10 @@ test("settings gates AWS CodeBuild GitHub authorization behind one GitHub App an
     "utf8"
   );
 
-  assert.match(source, /AWS CodeBuild용 GitHub 권한/);
-  assert.match(source, /GitHub App 연결이 먼저 필요합니다/);
+  assert.match(source, /GitHub 배포 연결/);
+  assert.match(source, /GitHub 배포 연결을 위해 GitHub App을 먼저 연결해 주세요/);
   assert.match(source, /GitHub App 연결하기/);
-  assert.match(source, /GitHub 연결 정리 필요/);
-  assert.match(source, /승인 대상 GitHub 계정/);
+  assert.match(source, /GitHub 배포에 사용할 GitHub App 연결을 하나만 유지해 주세요/);
   assert.match(source, /useGitHubInstallationsQuery/);
   assert.match(source, /deriveGitHubCodeBuildAuthorizationTarget/);
   assert.match(source, /AWS 연결이 먼저 필요합니다/);
@@ -84,7 +83,7 @@ test("settings gates AWS CodeBuild GitHub authorization behind one GitHub App an
   assert.match(source, /GitHub 빌드 연결 해제/);
   assert.match(source, /연결 해제 재시도/);
   assert.match(source, /cleanupRetryRequired/);
-  assert.match(source, /배포된 애플리케이션 및 인프라는 유지됩니다\./);
+  assert.match(source, /AWS 연결과 배포한 애플리케이션 및 인프라는 유지됩니다\./);
   assert.match(source, /confirmedManagedCleanup: true/);
   assert.match(source, /onDisconnect/);
   assert.match(source, /connection\.status === "verified"/);
@@ -95,7 +94,7 @@ test("settings gates AWS CodeBuild GitHub authorization behind one GitHub App an
   assert.doesNotMatch(source, /CodeConnection ARN.*input|connectionArn.*onChange/is);
 });
 
-test("settings previews exact SketchCatch managed cleanup before AWS connection deletion", () => {
+test("settings previews exact SketchCatch managed cleanup before AWS connection removal", () => {
   const source = readFileSync(
     fileURLToPath(
       new URL("../../app/dashboard/settings/settings-dashboard-client.tsx", import.meta.url)
@@ -104,17 +103,17 @@ test("settings previews exact SketchCatch managed cleanup before AWS connection 
   );
 
   assert.match(source, /getAwsConnectionDeletionPreview/);
-  assert.match(source, /AWS 연결 삭제 대상 확인/);
-  assert.match(source, /정리할 리소스/);
-  assert.match(source, /삭제하지 않는 리소스/);
+  assert.match(source, /AWS 연결 해제 확인/);
+  assert.match(source, /정리되는 연결 항목/);
+  assert.match(source, /유지되는 항목/);
   assert.match(source, /confirmedManagedCleanup: true/);
   assert.match(source, /confirmationToken: deletionPreview\.confirmationToken/);
-  assert.match(source, /관리 리소스 정리 후 연결 삭제/);
-  assert.match(source, /보존하는 기록/);
-  assert.match(source, /Reverse Engineering 결과/);
+  assert.match(source, /AWS 연결 해제/);
+  assert.match(source, /구조 분석 설정이 남아 있으면 먼저 정리해야 합니다/);
+  assert.doesNotMatch(source, /구조 분석 설정은 유지됩니다/);
   assert.doesNotMatch(source, /GitHub CodeConnection \{deletionPreview/);
-  assert.match(source, /삭제가 완료되지 않았습니다\. 연결은 유지되었습니다\./);
-  assert.match(source, /삭제 중…/);
+  assert.match(source, /연결 해제가 완료되지 않았습니다\. AWS 연결은 유지되었습니다\./);
+  assert.match(source, /연결 해제 중…/);
   assert.match(source, /deletionErrorMessage/);
   assert.doesNotMatch(source, /한 번 더 눌러 삭제/);
 });
@@ -141,7 +140,7 @@ test("settings separates failed cleanup retries from connections that can run Gi
   assert.match(source, /이전 AWS 연결 정리를 완료해야 같은 계정을 다시 연결할 수 있습니다\./);
   assert.match(source, /onClick=\{\(\) => void removeConnection\(retry\.id\)\}/);
   assert.match(source, /AWS 연결 정리 재시도/);
-  assert.match(source, /관리 리소스 정리 재시도/);
+  assert.match(source, /AWS 연결 정리 재시도/);
   assert.match(source, /connectionsQuery\.isError && connections\.length === 0 && cleanupRetries\.length === 0/);
   assert.match(source, /AWS 연결 정리 재시도 닫기/);
 });

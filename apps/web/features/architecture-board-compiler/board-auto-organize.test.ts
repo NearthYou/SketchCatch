@@ -50,10 +50,7 @@ test("Board 자동 정리 경계는 Resource·관계·설정·영역 소속을 �
   assert.equal(constrained.diagram.edges[0]?.label, "request");
   assert.deepEqual(constrained.diagram.variables, original.variables);
   assert.deepEqual(constrained.diagram.viewport, original.viewport);
-  assert.deepEqual(constrained.diagram.presentation, {
-    geometryPolicy: "catalog-normalized",
-    terraformSourceFingerprint: "source-fingerprint"
-  });
+  assert.deepEqual(constrained.diagram.presentation, original.presentation);
   assert.deepEqual(constrained.changes.map(({ kind }) => kind), ["geometry", "edge-routing"]);
 });
 
@@ -102,6 +99,77 @@ test("관계의 양 끝이 바뀐 후보 경로는 원래 관계에 적용하지
   assert.deepEqual(constrained.diagram.edges[0]?.route, original.edges[0]?.route);
 });
 
+test("Board 자동 정리 경계는 잠긴 자동 프레임과 사용자 그룹을 보존하고 full-tuple 프레임만 받는다", () => {
+  const original = sourceDiagram();
+  const lockedFrame = autoFrame("board-auto-frame:locked", true);
+  const staleFrame = autoFrame("board-auto-frame:stale", false);
+  const prefixOnlyUserFrame = {
+    ...autoFrame("board-auto-frame:user", false),
+    metadata: { presentationCatalogItemId: "design-region" },
+    label: "사용자 그룹"
+  };
+  original.nodes.push(lockedFrame, staleFrame, prefixOnlyUserFrame);
+  const candidate = maliciousProposal(original);
+  const newOwnedFrame = autoFrame("board-auto-frame:new", false);
+  candidate.diagram.nodes.push(newOwnedFrame);
+
+  const constrained = constrainBoardAutoOrganizeProposal(original, candidate);
+
+  assert.deepEqual(
+    constrained.diagram.nodes.find((node) => node.id === lockedFrame.id),
+    lockedFrame
+  );
+  assert.deepEqual(
+    constrained.diagram.nodes.find((node) => node.id === prefixOnlyUserFrame.id),
+    prefixOnlyUserFrame
+  );
+  assert.equal(
+    constrained.diagram.nodes.some((node) => node.id === staleFrame.id),
+    false
+  );
+  assert.equal(
+    constrained.diagram.nodes.some((node) => node.id === newOwnedFrame.id),
+    true
+  );
+  assert.equal(hasSameBoardAutoOrganizeSemantics(original, constrained.diagram), true);
+});
+
+test("Reverse Engineering 표시 프레임과 프레임 밖으로 나간 멤버는 원래 geometry를 유지한다", () => {
+  const original = sourceDiagram();
+  const frame = reverseInfrastructureFrame();
+  original.nodes.push(frame);
+  const candidate = maliciousProposal(original);
+  candidate.diagram.nodes.find((node) => node.id === "service")!.position = {
+    x: 900,
+    y: 800
+  };
+  candidate.diagram.nodes.push({
+    ...structuredClone(frame),
+    position: { x: 900, y: 800 },
+    size: { width: 700, height: 500 },
+    metadata: {
+      ...structuredClone(frame.metadata),
+      reverseEngineeringInfrastructureFrame: {
+        ...structuredClone(frame.metadata!.reverseEngineeringInfrastructureFrame!),
+        memberNodeIds: ["vpc"]
+      }
+    }
+  });
+
+  const constrained = constrainBoardAutoOrganizeProposal(original, candidate);
+
+  assert.deepEqual(
+    constrained.diagram.nodes.find((node) => node.id === frame.id),
+    frame
+  );
+  assert.deepEqual(
+    constrained.diagram.nodes.find((node) => node.id === "service")?.position,
+    original.nodes.find((node) => node.id === "service")?.position
+  );
+  assert.equal(hasSameBoardAutoOrganizeSemantics(original, constrained.diagram), true);
+});
+
+/** presentation까지 원본 그대로 지켜야 하는 자동 정리 fixture를 만듭니다. */
 function sourceDiagram(): DiagramJson {
   return {
     nodes: [
@@ -169,6 +237,7 @@ function sourceDiagram(): DiagramJson {
     ],
     presentation: {
       geometryPolicy: "source-exact",
+      initialViewportPending: true,
       sourceViewBox: { x: -100, y: -80, width: 800, height: 600 },
       terraformSourceFingerprint: "source-fingerprint"
     }
@@ -270,5 +339,43 @@ function change(
     after: null,
     summary: kind,
     cost: 1
+  };
+}
+
+/** Board 자동 정리 소유권 테스트용 full-tuple 프레임을 만듭니다. */
+function autoFrame(id: string, locked: boolean): DiagramJson["nodes"][number] {
+  return {
+    id,
+    type: "design_group",
+    kind: "design",
+    position: { x: 20, y: 20 },
+    size: { width: 300, height: 180 },
+    label: "자동 표시 영역",
+    locked,
+    zIndex: 0,
+    metadata: { presentationCatalogItemId: "design-group" }
+  };
+}
+
+/** gg: 자동 정리가 움직이면 안 되는 AWS 가져오기 표시 프레임을 만듭니다. */
+function reverseInfrastructureFrame(): DiagramJson["nodes"][number] {
+  return {
+    id: "reverse-infra-frame:project:store",
+    type: "design_group",
+    kind: "design",
+    position: { x: 80, y: 80 },
+    size: { width: 360, height: 220 },
+    label: "프로젝트 · store",
+    locked: false,
+    zIndex: 0,
+    metadata: {
+      presentationCatalogItemId: "design-group",
+      reverseEngineeringInfrastructureFrame: {
+        source: "aws_scan",
+        groupBy: "project",
+        groupKey: "store",
+        memberNodeIds: ["service"]
+      }
+    }
   };
 }

@@ -9,6 +9,15 @@ export const queryKeys = {
     [...awsConnectionsRoot(userId), includeUnverified ? "all-statuses" : "verified-only"] as const,
   awsConnectionSettings: (userId: string) =>
     [...userRoot(userId), "connections", "aws", "settings"] as const,
+  // gg: 가져오기 권한 상태는 같은 사용자의 연결별로 절대 섞이지 않게 분리합니다.
+  awsImportAccess: (userId: string, connectionId: string) =>
+    [...awsConnectionsRoot(userId), connectionId, "import-access"] as const,
+  awsCodeConnection: (userId: string, awsConnectionId: string) =>
+    [
+      ...awsConnectionsRoot(userId),
+      awsConnectionId,
+      "codeconnection"
+    ] as const,
   costs: (userId: string) => [...userRoot(userId), "costs"] as const,
   costEstimates: (userId: string, period: string, expectedUserCount: number) =>
     [...userRoot(userId), "costs", "estimate", period, expectedUserCount] as const,

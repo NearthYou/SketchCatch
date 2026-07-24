@@ -3,7 +3,10 @@ import test from "node:test";
 import type { ArchitectureJson, LiveObservationV2Snapshot } from "@sketchcatch/types";
 
 import { createLiveObservationArchitectureModel } from "./live-observation-architecture.js";
-import { createLiveObservationDiagramModel } from "./live-observation-diagram.js";
+import {
+  createLiveObservationDiagramModel,
+  getLiveObservationDiagramSegmentCount
+} from "./live-observation-diagram.js";
 
 const architecture = {
   nodes: [
@@ -38,6 +41,13 @@ test("keeps only the main traffic path and renders running or desired Fargate ta
     ["active", "launching"]
   );
   assert.ok(model.capacityUnits.every((unit) => unit.node.label.startsWith("Fargate Task")));
+});
+
+test("counts the final controller-to-Task connector in the traffic animation", () => {
+  const snapshot = providerSnapshot({ desired: 1, max: 3, running: 1 });
+  const diagram = createLiveObservationArchitectureModel(architecture, snapshot).diagram;
+
+  assert.equal(getLiveObservationDiagramSegmentCount(diagram), 5);
 });
 
 test("does not render inactive task slots up to the autoscaling maximum", () => {

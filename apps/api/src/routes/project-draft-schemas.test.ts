@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DiagramJson } from "@sketchcatch/types";
-import { projectDraftQuerySchema, saveProjectDraftBodySchema } from "./project-draft-schemas.js";
+import {
+  boardAutoOrganizeApplyBodySchema,
+  projectDraftQuerySchema,
+  reverseEngineeringDraftApplyBodySchema,
+  reverseEngineeringImportDecisionRequestSchema,
+  saveProjectDraftBodySchema
+} from "./project-draft-schemas.js";
 
 const validDiagram: DiagramJson = {
   nodes: [
@@ -177,6 +183,63 @@ test("save project draft body preserves empty source labels and workspace-seed a
 
   assert.equal(parsed.diagramJson.nodes[0]?.label, "");
   assert.equal(parsed.diagramJson.nodes[0]?.parameters?.terraformSourceAuthority, "workspace-seed");
+});
+
+test("save project draft body accepts source-exact AWS nodes without invented Terraform identity", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          type: "VPC",
+          parameters: {
+            resourceType: "",
+            resourceName: "",
+            fileName: "",
+            values: {
+              providerResourceId: "vpc-0123456789abcdef0"
+            },
+            invalid: true
+          }
+        }
+      ],
+      presentation: sourceExactPresentation
+    }
+  });
+
+  assert.deepEqual(parsed.diagramJson.nodes[0]?.parameters, {
+    resourceType: "",
+    resourceName: "",
+    fileName: "",
+    values: {
+      providerResourceId: "vpc-0123456789abcdef0"
+    },
+    invalid: true
+  });
+});
+
+test("save project draft body still rejects empty Terraform identity on editable nodes", () => {
+  const result = saveProjectDraftBodySchema.safeParse({
+    expectedRevision: 1,
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          parameters: {
+            resourceType: "",
+            resourceName: "",
+            fileName: "",
+            values: {}
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.success, false);
 });
 
 test("save project draft body preserves Curated Module provenance metadata", () => {
@@ -468,6 +531,142 @@ test("save project draft body accepts reverse engineering node metadata", () => 
   });
 });
 
+test("save project draft body preserves the server-confirmed reverse engineering import decision", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          metadata: {
+            reverseEngineering: {
+              source: "aws_scan",
+              protectedValueKeys: ["providerResourceId", "region"],
+              editableValueKeys: ["displayName", "description"],
+              importDecision: {
+                version: 1,
+                mode: "import_existing",
+                statusAtConfirmation: "ready"
+              }
+            }
+          }
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(parsed.diagramJson.nodes[0]?.metadata?.reverseEngineering?.importDecision, {
+    version: 1,
+    mode: "import_existing",
+    statusAtConfirmation: "ready"
+  });
+});
+
+test("save project draft body rejects an unsupported reverse engineering import decision", () => {
+  const result = saveProjectDraftBodySchema.safeParse({
+    expectedRevision: 1,
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          metadata: {
+            reverseEngineering: {
+              source: "aws_scan",
+              protectedValueKeys: [],
+              editableValueKeys: [],
+              importDecision: {
+                version: 2,
+                mode: "import_everything",
+                statusAtConfirmation: "ready"
+              }
+            }
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.success, false);
+});
+
+test("reverse engineering apply accepts only the exact import decision request", () => {
+  const request = {
+    version: 1 as const,
+    selectedReadyResourceIds: ["resource-ready"],
+    acknowledgedReviewOnlyResourceIds: ["resource-review"]
+  };
+
+  assert.deepEqual(reverseEngineeringImportDecisionRequestSchema.parse(request), request);
+  assert.equal(
+    reverseEngineeringImportDecisionRequestSchema.safeParse({
+      ...request,
+      clientStatus: "ready"
+    }).success,
+    false
+  );
+  assert.equal(
+    reverseEngineeringImportDecisionRequestSchema.safeParse({
+      ...request,
+      version: 2
+    }).success,
+    false
+  );
+});
+
+test("existing reverse engineering apply accepts its complete exact server-validation body", () => {
+  const request = {
+    expectedRevision: 3,
+    sourceScanId: "scan-1",
+    sourceDraftId: "reverse-draft-1",
+    sourceNodeIds: ["node-1"],
+    sourceEdgeIds: ["edge-1"],
+    sourceDiagram: validDiagram,
+    sourceFingerprint: "1234abcd",
+    candidateDiagram: validDiagram,
+    candidateArchitectureJson: {
+      nodes: [
+        {
+          id: "node-1",
+          type: "VPC" as const,
+          label: "서비스 VPC",
+          positionX: 120,
+          positionY: 80,
+          config: { instanceType: "t3.micro" }
+        }
+      ],
+      edges: []
+    },
+    importDecision: {
+      version: 1 as const,
+      selectedReadyResourceIds: ["node-1"],
+      acknowledgedReviewOnlyResourceIds: []
+    },
+    terraformFiles: []
+  };
+
+  assert.deepEqual(reverseEngineeringDraftApplyBodySchema.parse(request), request);
+  assert.equal(
+    reverseEngineeringDraftApplyBodySchema.safeParse({ ...request, trusted: true }).success,
+    false
+  );
+  assert.equal(
+    reverseEngineeringDraftApplyBodySchema.safeParse({
+      ...request,
+      expectedRevision: null
+    }).success,
+    false
+  );
+  assert.equal(
+    reverseEngineeringDraftApplyBodySchema.safeParse({
+      ...request,
+      sourceFingerprint: JSON.stringify(validDiagram)
+    }).success,
+    false
+  );
+});
+
 test("save project draft body rejects legacy awsRegion metadata", () => {
   const result = saveProjectDraftBodySchema.safeParse({
     expectedRevision: 1,
@@ -567,4 +766,49 @@ test("save project draft body rejects architecture-only json without viewport", 
   });
 
   assert.equal(result.success, false);
+});
+
+test("board auto-organize apply accepts only the exact visual candidate request", () => {
+  const candidateDiagram = structuredClone(validDiagram);
+  candidateDiagram.nodes[0]!.position = { x: 360, y: 180 };
+  const payload = {
+    sessionId: "board-auto-session:1234abcd",
+    candidateId: "arrangement-2",
+    sourceDiagram: validDiagram,
+    sourceFingerprint: "1234abcd",
+    candidateDiagram,
+    expectedRevision: 7,
+    terraformFiles: [{ fileName: "main.tf", terraformCode: "" }]
+  };
+
+  const parsed = boardAutoOrganizeApplyBodySchema.parse(payload);
+
+  assert.deepEqual(parsed, payload);
+  assert.equal(
+    boardAutoOrganizeApplyBodySchema.safeParse({
+      ...payload,
+      compilerVersion: "internal-only"
+    }).success,
+    false
+  );
+});
+
+test("board auto-organize apply requires its source fingerprint and draft revision", () => {
+  const payload = {
+    sessionId: "board-auto-session:1234abcd",
+    candidateId: "arrangement-1",
+    sourceDiagram: validDiagram,
+    candidateDiagram: validDiagram,
+    terraformFiles: []
+  };
+
+  assert.equal(boardAutoOrganizeApplyBodySchema.safeParse(payload).success, false);
+  assert.equal(
+    boardAutoOrganizeApplyBodySchema.safeParse({
+      ...payload,
+      sourceFingerprint: "1234abcd",
+      expectedRevision: null
+    }).success,
+    true
+  );
 });

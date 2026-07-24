@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { requireSuccessfulWorkspaceDiagramSave } from "./project-deployment-preparation";
 
 const chatSource = read("WorkspaceAiChatDock.tsx");
+const localDraftManagerSource = read("WorkspaceDraftManager.tsx");
 const toolbarSource = read("TerraformCodeToolbar.tsx");
 const issuesSource = read("TerraformIssuesPanel.tsx");
 const stylesSource = read("workspace-ai-workbench.module.css");
@@ -52,7 +54,7 @@ test("analysis and review actions stay in their corresponding workbench task row
   );
   assert.match(
     patchSection,
-    /className=\{styles\.approvalTray\}[\s\S]*onClick=\{applyPatchPreviewToBoard\}[\s\S]*onClick=\{cancelPatchPreview\}[\s\S]*regeneratePatchPreview/
+    /className=\{styles\.approvalTray\}[\s\S]*onClick=\{\(\) => void applyPatchPreviewToBoard\(\)\}[\s\S]*onClick=\{cancelPatchPreview\}[\s\S]*regeneratePatchPreview/
   );
 });
 
@@ -111,6 +113,76 @@ test("draft failures keep diagnostics out of the transcript and render one user-
   assert.doesNotMatch(draftRequestSection, /setDraftState\("error"\)/);
 });
 
+
+test("Board patch success is shown only after Project Draft save succeeds", () => {
+  const start = chatSource.indexOf("async function applyPatchPreviewToBoard");
+  const end = chatSource.indexOf("function requestImmediateDiagramSave", start);
+  const applySection = chatSource.slice(start, end);
+  const applyIndex = applySection.indexOf("context.applyDiagramJson");
+  const saveGuardIndex = applySection.indexOf("saveDiagramNow === undefined");
+  const saveIndex = applySection.indexOf("const saveResult = await saveDiagramNow()");
+  const validationIndex = applySection.indexOf("requireSuccessfulWorkspaceDiagramSave(saveResult)");
+  const successIndex = applySection.indexOf("수정 사항을 보드에 적용하고 저장했습니다.");
+
+  assert.ok(start > -1);
+  assert.ok(end > start);
+  assert.ok(applyIndex > -1);
+  assert.ok(saveGuardIndex > -1 && saveGuardIndex < applyIndex);
+  assert.ok(saveIndex > applyIndex);
+  assert.ok(validationIndex > saveIndex);
+  assert.ok(successIndex > validationIndex);
+  assert.equal(applySection.includes("await context.saveDiagramNow?.()"), false);
+  assert.match(applySection, /catch \{[\s\S]*프로젝트 저장에 실패했습니다/);
+});
+
+test("resolved Project Draft save failures are rejected before success feedback", () => {
+  assert.throws(
+    () => requireSuccessfulWorkspaceDiagramSave({ ok: false }),
+    /프로젝트 저장이 완료되지 않아/
+  );
+});
+
+test("local Workspace saves return explicit success and failure results", () => {
+  assert.doesNotThrow(() =>
+    requireSuccessfulWorkspaceDiagramSave({ ok: true, persistence: "local" })
+  );
+  assert.ok(localDraftManagerSource.includes('persistence: "local"'));
+  assert.ok(localDraftManagerSource.includes("ok: false"));
+});
+
+test("Board patch application uses a synchronous lock around apply and save", () => {
+  const start = chatSource.indexOf("async function applyPatchPreviewToBoard");
+  const end = chatSource.indexOf("function requestImmediateDiagramSave", start);
+  const applySection = chatSource.slice(start, end);
+  const lockGuardIndex = applySection.indexOf("if (patchApplicationInFlightRef.current)");
+  const lockStartIndex = applySection.indexOf("patchApplicationInFlightRef.current = true");
+  const applyIndex = applySection.indexOf("context.applyDiagramJson");
+  const saveIndex = applySection.indexOf("await saveDiagramNow()");
+  const finallyIndex = applySection.indexOf("finally");
+  const lockReleaseIndex = applySection.indexOf(
+    "patchApplicationInFlightRef.current = false",
+    lockStartIndex
+  );
+
+  assert.ok(chatSource.includes("patchApplicationInFlightRef = useRef(false)"));
+  assert.ok(lockGuardIndex > -1 && lockGuardIndex < lockStartIndex);
+  assert.ok(lockStartIndex < applyIndex);
+  assert.ok(applyIndex < saveIndex);
+  assert.ok(saveIndex < finallyIndex);
+  assert.ok(finallyIndex < lockReleaseIndex);
+});
+
+test("chat submission uses a synchronous lock before awaiting AI", () => {
+  const start = chatSource.indexOf("async function submitUserMessage");
+  const end = chatSource.indexOf("async function handleUserMessage", start);
+  const submitSection = chatSource.slice(start, end);
+
+  assert.match(submitSection, /messageSubmissionInFlightRef\.current/);
+  assert.match(
+    submitSection,
+    /messageSubmissionInFlightRef\.current = true;[\s\S]*await handleUserMessage[\s\S]*finally \{[\s\S]*messageSubmissionInFlightRef\.current = false;/
+  );
+});
 function read(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }

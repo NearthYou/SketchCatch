@@ -9,6 +9,7 @@ import {
 import { queryKeys } from "../../lib/query-keys";
 import {
   invalidateAwsConnectionQueries,
+  invalidateAwsImportAccessQueries,
   invalidateProjectQueries
 } from "./dashboard-query-invalidation";
 
@@ -89,5 +90,23 @@ test("AWS connection invalidation refreshes verified and recovery connection cac
   assert.equal(queryClient.getQueryState(recoveryConnectionKey)?.isInvalidated, true);
   assert.equal(queryClient.getQueryState(dashboardKey)?.isInvalidated, true);
   assert.equal(queryClient.getQueryState(costKey)?.isInvalidated, true);
+  queryClient.clear();
+});
+
+test("AWS import access mutation invalidates only the selected user's connection state", async () => {
+  const queryClient = createAppQueryClient();
+  const selectedKey = queryKeys.awsImportAccess("user-1", "connection-1");
+  const otherConnectionKey = queryKeys.awsImportAccess("user-1", "connection-2");
+  const otherUserKey = queryKeys.awsImportAccess("user-2", "connection-1");
+
+  queryClient.setQueryData(selectedKey, {});
+  queryClient.setQueryData(otherConnectionKey, {});
+  queryClient.setQueryData(otherUserKey, {});
+
+  await invalidateAwsImportAccessQueries(queryClient, "user-1", "connection-1");
+
+  assert.equal(queryClient.getQueryState(selectedKey)?.isInvalidated, true);
+  assert.equal(queryClient.getQueryState(otherConnectionKey)?.isInvalidated, false);
+  assert.equal(queryClient.getQueryState(otherUserKey)?.isInvalidated, false);
   queryClient.clear();
 });

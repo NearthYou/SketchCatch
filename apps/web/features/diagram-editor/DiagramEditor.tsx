@@ -50,17 +50,29 @@ import type {
   DragEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent
+  PointerEvent as ReactPointerEvent,
 } from "react";
-import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
+import type {
+  ApplyReverseEngineeringDraftRequest,
+  DiagramEdge,
+  DiagramJson,
+  DiagramNode,
+  ProjectDraft,
+  ProjectDraftResponse,
+  TerraformSyncFileInput
+} from "../../../../packages/types/src";
 
 import { BOARD_THUMBNAIL_CAPTURE_CONTRACT } from "../../components/architecture-board/board-thumbnail-capture-contract";
 import {
-  createBoardAutoOrganizeProposal,
+  applyBoardAutoOrganizeCandidate,
+  createBoardAutoOrganizeCandidates,
   createBoardAutoOrganizePreviewSession,
+  getBoardAutoOrganizeVisibleDiagram,
   getBoardAutoOrganizeViewportPolicy,
-  resolveBoardAutoOrganizeDecision,
-  type BoardAutoOrganizePreviewSession
+  selectBoardAutoOrganizePreviewView,
+  type BoardAutoOrganizeApplyRequest,
+  type BoardAutoOrganizePreviewSession,
+  type BoardAutoOrganizePreviewView
 } from "../architecture-board-compiler";
 import { ParameterInputPanel } from "../parameter-input";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
@@ -102,6 +114,11 @@ import {
   isCanvasInteractiveElementTarget
 } from "./canvas-pointer-hit-test";
 import { isAwsDiagramConnectionAllowed } from "./aws-resource-connection-policy";
+import { applyAddedApplicationAutoScalingTargetReferences } from "./application-auto-scaling-references";
+import {
+  resolveBoardWheelZoomShortcut,
+  type BoardZoomModifierKey
+} from "./board-wheel-zoom-shortcut";
 import {
   applyInitialSourceViewBoxViewport,
   getFitViewMinimumZoom,
@@ -235,7 +252,33 @@ type AreaBlankDragState = {
   startNodePosition: DiagramNode["position"];
 };
 
-export function DiagramEditor(props: DiagramEditorProps) {
+type DiagramEditorAutoOrganizeProps = DiagramEditorProps & {
+  readonly boardAutoOrganizeTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
+  readonly onBoardAutoOrganizeApplied?:
+    | ((input: { readonly diagramJson: DiagramJson; readonly draft: ProjectDraft }) => void)
+    | undefined;
+  readonly onBoardAutoOrganizeApplyRequest?:
+    | ((request: BoardAutoOrganizeApplyRequest) => Promise<ProjectDraftResponse>)
+    | undefined;
+  readonly onPersistedDiagramApplied?:
+    | ((input: { readonly diagramJson: DiagramJson; readonly draft: ProjectDraft }) => void)
+    | undefined;
+  readonly onPersistedDiagramApplyRequest?:
+    | ((request: {
+        readonly diagramJson: DiagramJson;
+        readonly expectedRevision: number;
+      }) => Promise<ProjectDraftResponse>)
+    | undefined;
+  readonly onReverseEngineeringDraftApplyRequest?:
+    | ((
+        request: Omit<ApplyReverseEngineeringDraftRequest, "terraformFiles">
+      ) => Promise<ProjectDraftResponse>)
+    | undefined;
+  readonly projectDraftRevision?: number | null | undefined;
+};
+
+/** Project Workspace가 제공한 서버 적용 경계를 Editor의 로컬 미리보기와 연결합니다. */
+export function DiagramEditor(props: DiagramEditorAutoOrganizeProps) {
   return (
     <ReactFlowProvider>
       <DiagramEditorInner {...props} />
@@ -246,12 +289,15 @@ export function DiagramEditor(props: DiagramEditorProps) {
 /** Editor와 embedded viewer가 공유하는 React Flow 동작을 mode별 정책으로 적용합니다. */
 function DiagramEditorInner({
   allowPreviewInspection = false,
+  boardAutoOrganizeTerraformFiles = [],
   dashboardHref = "/dashboard",
   draftStatusPanel,
+  emptyBoardContent,
   emptyBoardDescription = "왼쪽 패널에서 필요한 항목을 끌어오세요.",
   floatingPanel,
   initialBoardZoom,
   initialDiagram,
+  initialPanelLayout,
   initialPreviewAnnotations,
   initialPreviewDiagram,
   initialReferenceDropTargetNodeId,
@@ -261,18 +307,24 @@ function DiagramEditorInner({
   leftPanel,
   mode = "editor",
   onBoardReady,
+  onBoardAutoOrganizeApplied,
+  onBoardAutoOrganizeApplyRequest,
+  onPersistedDiagramApplied,
+  onPersistedDiagramApplyRequest,
+  onReverseEngineeringDraftApplyRequest,
   onDiagramChange,
   onDiagramSaveRequest,
   onWorkspacePanelOpen,
   onTemplateWorkspaceApply,
   onSaveAndDeployRequest,
   panOnScroll = true,
+  projectDraftRevision = null,
   projectName = "프로젝트 보드",
   rightPanel,
   saveStatus = "편집 중",
   showSaveAction = true,
   workspaceUserName = "Personal workspace"
-}: DiagramEditorProps) {
+}: DiagramEditorAutoOrganizeProps) {
   const viewerPolicy = getDiagramEditorViewerPolicy(mode, { panOnScroll });
   if (viewerPolicy.isViewer) {
     allowPreviewInspection = false;
@@ -301,11 +353,13 @@ function DiagramEditorInner({
   const [autoOrganizePreview, setAutoOrganizePreview] =
     useState<BoardAutoOrganizePreviewSession | null>(null);
   const [autoOrganizeError, setAutoOrganizeError] = useState(false);
+  const [isAutoOrganizeApplyPending, setAutoOrganizeApplyPending] = useState(false);
   const [terraformRefreshRequestId, setTerraformRefreshRequestId] = useState(0);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
   const initialPanelStateRef = useRef(
     deriveInitialWorkspacePanelState({
+      emptyBoardPanelState: initialPanelLayout,
       hasDiagramNodes: diagram.nodes.length > 0,
       isCompactViewport:
         typeof window !== "undefined" && window.matchMedia("(max-width: 1120px)").matches
@@ -317,8 +371,16 @@ function DiagramEditorInner({
   const [isRightPanelOpen, setRightPanelOpen] = useState(() =>
     viewerPolicy.isViewer ? true : initialPanelStateRef.current.rightPanelOpen
   );
-  const [leftPanelWidth, setLeftPanelWidth] = useState(readStoredLeftPanelWidth);
-  const [rightPanelWidth, setRightPanelWidth] = useState(readStoredRightPanelWidth);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() =>
+    initialPanelLayout?.startWithMinimumWidths
+      ? clampLeftPanelWidth(MIN_LEFT_PANEL_WIDTH)
+      : readStoredLeftPanelWidth()
+  );
+  const [rightPanelWidth, setRightPanelWidth] = useState(() =>
+    initialPanelLayout?.startWithMinimumWidths
+      ? clampRightPanelWidth(MIN_RIGHT_PANEL_WIDTH)
+      : readStoredRightPanelWidth()
+  );
   const [autoExpandAreasEnabled, setAutoExpandAreasEnabled] = useState(() =>
     readAutoExpandAreasEnabled(typeof window === "undefined" ? null : window.localStorage)
   );
@@ -343,10 +405,12 @@ function DiagramEditorInner({
   const [isFlowReady, setFlowReady] = useState(false);
   const [boardMinimumZoom, setBoardMinimumZoom] = useState(0.25);
   const autoOrganizeMinimumZoomRef = useRef<number | null>(null);
+  const autoOrganizeApplyInFlightRef = useRef(false);
   const shouldAutoFitPreviewDiagramRef = useRef(initialPreviewDiagram != null);
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
+  const boardZoomModifierKeysRef = useRef(new Set<BoardZoomModifierKey>());
   const directNodeDragIdsRef = useRef<Set<string> | null>(null);
   const dragAnchorNodeIdRef = useRef<string | null>(null);
   const dragPreviewNodesRef = useRef<DiagramNode[] | null>(null);
@@ -462,8 +526,11 @@ function DiagramEditorInner({
     );
   }, []);
 
+  /** 서버 적용 대기 중에는 어떤 경로도 실제 Diagram을 교체하지 못하게 막습니다. */
   const replaceDiagram = useCallback(
     (nextDiagram: DiagramJson, notifyChange = true) => {
+      if (autoOrganizeApplyInFlightRef.current) return;
+
       if (areDiagramsEqual(diagramRef.current, nextDiagram)) {
         diagramRef.current = nextDiagram;
         setDiagram(nextDiagram);
@@ -486,8 +553,11 @@ function DiagramEditorInner({
     []
   );
 
+  /** 적용 대기 중 다른 panel이 preview source를 바꾸지 못하게 막습니다. */
   const setPreviewDiagram = useCallback<DiagramEditorPanelContext["setPreviewDiagram"]>(
     (nextPreviewDiagram, nextPreviewAnnotations = null) => {
+      if (autoOrganizeApplyInFlightRef.current) return;
+
       autoOrganizeMinimumZoomRef.current = null;
       setAutoOrganizePreview(null);
       setAutoOrganizeError(false);
@@ -612,7 +682,10 @@ function DiagramEditorInner({
     setPreviewDiagram
   ]);
 
+  /** 잠긴 적용 transaction 밖의 실제 변경만 History에 기록합니다. */
   const pushHistory = useCallback((before: DiagramJson, after: DiagramJson) => {
+    if (autoOrganizeApplyInFlightRef.current) return;
+
     if (areDiagramsEqual(before, after)) {
       return;
     }
@@ -623,8 +696,11 @@ function DiagramEditorInner({
     }));
   }, []);
 
+  /** 모든 Resource·설정 변경이 통과하는 단일 잠금 확인 뒤 Diagram과 History를 함께 바꿉니다. */
   const commitDiagramUpdate = useCallback(
     (updater: (currentDiagram: DiagramJson) => DiagramJson) => {
+      if (autoOrganizeApplyInFlightRef.current) return;
+
       const before = diagramRef.current;
       const after = updater(before);
 
@@ -638,8 +714,11 @@ function DiagramEditorInner({
     [pushHistory, replaceDiagram]
   );
 
+  /** drag·resize 같은 live 변경도 서버 적용이 끝날 때까지 받지 않습니다. */
   const applyLiveDiagramUpdate = useCallback(
     (updater: (currentDiagram: DiagramJson) => DiagramJson) => {
+      if (autoOrganizeApplyInFlightRef.current) return;
+
       const before = diagramRef.current;
       const after = updater(before);
 
@@ -915,7 +994,10 @@ function DiagramEditorInner({
 
   useEffect(() => () => cancelQueuedNodeDragPreview(), [cancelQueuedNodeDragPreview]);
 
+  /** pending apply가 History 기준을 고정하는 동안 Undo를 실행하지 않습니다. */
   const undo = useCallback(() => {
+    if (autoOrganizeApplyInFlightRef.current) return;
+
     cancelSnapAnimation();
     const previous = history.past.at(-1);
 
@@ -934,7 +1016,10 @@ function DiagramEditorInner({
     setSelectedEdgeIds([]);
   }, [cancelSnapAnimation, history, replaceDiagram]);
 
+  /** pending apply가 History 기준을 고정하는 동안 Redo를 실행하지 않습니다. */
   const redo = useCallback(() => {
+    if (autoOrganizeApplyInFlightRef.current) return;
+
     cancelSnapAnimation();
     const next = history.future[0];
 
@@ -1007,8 +1092,11 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  /** AI·Terraform·Reverse panel의 전체 Diagram 적용도 같은 pending lock을 지킵니다. */
   const applyDiagramJson = useCallback<DiagramEditorPanelContext["applyDiagramJson"]>(
     (nextDiagram) => {
+      if (autoOrganizeApplyInFlightRef.current) return;
+
       shouldApplySourceViewportRef.current = true;
       commitDiagramUpdate(() => normalizeDiagramResourceNodeGeometry(cloneDiagram(nextDiagram)));
       setPreviewDiagram(null);
@@ -1019,14 +1107,119 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  /** panel Diagram은 서버 CAS 저장이 성공한 뒤에만 한 번의 Board/History 변경으로 적용합니다. */
+  const persistAndApplyDiagramJson = useCallback<
+    NonNullable<DiagramEditorPanelContext["persistAndApplyDiagramJson"]>
+  >(
+    async (nextDiagram, expectedRevision) => {
+      if (autoOrganizeApplyInFlightRef.current) {
+        throw new Error("다른 Board 적용이 진행 중입니다.");
+      }
+      if (!onPersistedDiagramApplyRequest) {
+        throw new Error("Board 서버 저장 경계가 준비되지 않았습니다.");
+      }
+
+      const diagramToApply = normalizeDiagramResourceNodeGeometry(cloneDiagram(nextDiagram));
+      autoOrganizeApplyInFlightRef.current = true;
+      setAutoOrganizeApplyPending(true);
+
+      try {
+        const response = await onPersistedDiagramApplyRequest({
+          diagramJson: cloneDiagram(diagramToApply),
+          expectedRevision
+        });
+
+        if (!response.draft) {
+          throw new Error("Board 서버 저장 결과가 비어 있습니다.");
+        }
+
+        autoOrganizeApplyInFlightRef.current = false;
+        shouldApplySourceViewportRef.current = true;
+        commitDiagramUpdate(() => cloneDiagram(diagramToApply));
+        onPersistedDiagramApplied?.({
+          diagramJson: cloneDiagram(diagramToApply),
+          draft: response.draft
+        });
+        setPreviewDiagram(null);
+        setInspectedNodeId(null);
+        setSelectedNodeIds([]);
+        setSelectedEdgeIds([]);
+      } finally {
+        autoOrganizeApplyInFlightRef.current = false;
+        setAutoOrganizeApplyPending(false);
+      }
+    },
+    [
+      commitDiagramUpdate,
+      onPersistedDiagramApplied,
+      onPersistedDiagramApplyRequest,
+      setPreviewDiagram
+    ]
+  );
+
+  /** Reverse Engineering 후보는 서버가 다시 검증하고 stamp한 Diagram만 Board와 History에 적용합니다. */
+  const persistAndApplyReverseEngineeringDraft = useCallback<
+    NonNullable<DiagramEditorPanelContext["persistAndApplyReverseEngineeringDraft"]>
+  >(
+    async (request) => {
+      if (autoOrganizeApplyInFlightRef.current) {
+        throw new Error("다른 Board 적용이 진행 중입니다.");
+      }
+      if (!onReverseEngineeringDraftApplyRequest) {
+        throw new Error("Reverse Engineering 서버 검증 경계가 준비되지 않았습니다.");
+      }
+
+      const candidateDiagram = normalizeDiagramResourceNodeGeometry(
+        cloneDiagram(request.candidateDiagram)
+      );
+      autoOrganizeApplyInFlightRef.current = true;
+      setAutoOrganizeApplyPending(true);
+
+      try {
+        const response = await onReverseEngineeringDraftApplyRequest({
+          ...request,
+          candidateDiagram
+        });
+
+        if (!response.draft) {
+          throw new Error("Reverse Engineering 서버 저장 결과가 비어 있습니다.");
+        }
+
+        const persistedDiagram = cloneDiagram(response.draft.diagramJson);
+        autoOrganizeApplyInFlightRef.current = false;
+        shouldApplySourceViewportRef.current = true;
+        commitDiagramUpdate(() => cloneDiagram(persistedDiagram));
+        onPersistedDiagramApplied?.({
+          diagramJson: cloneDiagram(persistedDiagram),
+          draft: response.draft
+        });
+        setPreviewDiagram(null);
+        setInspectedNodeId(null);
+        setSelectedNodeIds([]);
+        setSelectedEdgeIds([]);
+      } finally {
+        autoOrganizeApplyInFlightRef.current = false;
+        setAutoOrganizeApplyPending(false);
+      }
+    },
+    [
+      commitDiagramUpdate,
+      onPersistedDiagramApplied,
+      onReverseEngineeringDraftApplyRequest,
+      setPreviewDiagram
+    ]
+  );
+
+  /** 현재 Board를 바꾸지 않고 Task 6의 안전한 후보 전체로 preview session을 엽니다. */
   const previewAutomaticOrganization = useCallback(() => {
     try {
       onWorkspacePanelOpen?.();
       const currentDiagram = diagramRef.current;
-      const proposal = createBoardAutoOrganizeProposal(currentDiagram);
+      const candidateSet = createBoardAutoOrganizeCandidates(currentDiagram);
       const session = createBoardAutoOrganizePreviewSession(
         currentDiagram,
-        proposal.diagram,
+        candidateSet,
+        projectDraftRevision,
         getFlowInstance().getViewport()
       );
       const viewportPolicy = getBoardAutoOrganizeViewportPolicy("open");
@@ -1034,7 +1227,7 @@ function DiagramEditorInner({
       autoOrganizeMinimumZoomRef.current = boardMinimumZoom;
       shouldApplySourceViewportRef.current = viewportPolicy.applySourceViewport;
       shouldAutoFitPreviewDiagramRef.current = viewportPolicy.autoFit;
-      setPreviewDiagramState(cloneDiagram(session.visibleDiagram));
+      setPreviewDiagramState(getBoardAutoOrganizeVisibleDiagram(session));
       setPreviewAnnotations(null);
       setAutoOrganizePreview(session);
       setAutoOrganizeError(false);
@@ -1046,56 +1239,107 @@ function DiagramEditorInner({
       setAutoOrganizePreview(null);
       setAutoOrganizeError(true);
     }
-  }, [boardMinimumZoom, getFlowInstance, onWorkspacePanelOpen]);
+  }, [boardMinimumZoom, getFlowInstance, onWorkspacePanelOpen, projectDraftRevision]);
 
-  const applyAutomaticOrganization = useCallback(() => {
-    if (autoOrganizePreview === null) return;
-    const resolution = resolveBoardAutoOrganizeDecision(
-      autoOrganizePreview,
-      "use-organized",
-      diagramRef.current
-    );
-    const diagramToApply = resolution.diagramToApply;
+  /** 원본·정리안 toggle은 같은 viewport에서 보이는 preview Diagram만 바꿉니다. */
+  const selectAutomaticOrganizationPreview = useCallback(
+    (view: BoardAutoOrganizePreviewView) => {
+      if (autoOrganizePreview === null || autoOrganizeApplyInFlightRef.current) return;
+      const nextSession = selectBoardAutoOrganizePreviewView(autoOrganizePreview, view);
+      const viewportPolicy = getBoardAutoOrganizeViewportPolicy("switch");
 
-    if (resolution.isStale || diagramToApply === null) {
-      if (resolution.viewportToRestore) {
-        restoreAutoOrganizeViewport(resolution.viewportToRestore);
+      shouldApplySourceViewportRef.current = viewportPolicy.applySourceViewport;
+      shouldAutoFitPreviewDiagramRef.current = viewportPolicy.autoFit;
+      setPreviewDiagramState(getBoardAutoOrganizeVisibleDiagram(nextSession));
+      setAutoOrganizePreview(nextSession);
+    },
+    [autoOrganizePreview]
+  );
+
+  /** 전용 API 성공이 확인된 뒤에만 한 번의 Board/History 변경을 commit합니다. */
+  const applyAutomaticOrganization = useCallback(async () => {
+    if (autoOrganizePreview === null || autoOrganizeApplyInFlightRef.current) return;
+    autoOrganizeApplyInFlightRef.current = true;
+    setAutoOrganizeApplyPending(true);
+
+    try {
+      if (!onBoardAutoOrganizeApplyRequest) {
+        throw new Error("Board 정리안 서버 적용 경계가 없습니다.");
       }
+
+      const result = await applyBoardAutoOrganizeCandidate({
+        currentDiagram: diagramRef.current,
+        currentDraftRevision: projectDraftRevision,
+        save: onBoardAutoOrganizeApplyRequest,
+        session: autoOrganizePreview,
+        terraformFiles: boardAutoOrganizeTerraformFiles
+      });
+
+      if (result.status === "stale") {
+        restoreAutoOrganizeViewport(autoOrganizePreview.viewportBeforePreview);
+        setPreviewDiagramState(null);
+        setPreviewAnnotations(null);
+        setAutoOrganizePreview(null);
+        setAutoOrganizeError(true);
+        return;
+      }
+
+      autoOrganizeMinimumZoomRef.current = null;
+      shouldApplySourceViewportRef.current = false;
+      autoOrganizeApplyInFlightRef.current = false;
+      commitDiagramUpdate(() => cloneDiagram(result.diagramToApply));
+
+      if (result.saveResult.draft) {
+        onBoardAutoOrganizeApplied?.({
+          diagramJson: cloneDiagram(result.diagramToApply),
+          draft: result.saveResult.draft
+        });
+      }
+
+      setPreviewDiagramState(null);
+      setPreviewAnnotations(null);
+      setAutoOrganizePreview(null);
+      setAutoOrganizeError(false);
+      setInspectedNodeId(null);
+      setSelectedNodeIds([]);
+      setSelectedEdgeIds([]);
+    } catch (error) {
+      console.error("Board automatic organization apply failed.", error);
+      restoreAutoOrganizeViewport(autoOrganizePreview.viewportBeforePreview);
       setPreviewDiagramState(null);
       setPreviewAnnotations(null);
       setAutoOrganizePreview(null);
       setAutoOrganizeError(true);
-      return;
+    } finally {
+      autoOrganizeApplyInFlightRef.current = false;
+      setAutoOrganizeApplyPending(false);
     }
+  }, [
+    autoOrganizePreview,
+    boardAutoOrganizeTerraformFiles,
+    commitDiagramUpdate,
+    onBoardAutoOrganizeApplied,
+    onBoardAutoOrganizeApplyRequest,
+    projectDraftRevision,
+    restoreAutoOrganizeViewport
+  ]);
 
-    autoOrganizeMinimumZoomRef.current = null;
-    shouldApplySourceViewportRef.current = false;
-    commitDiagramUpdate(() => cloneDiagram(diagramToApply));
-    setPreviewDiagramState(null);
-    setPreviewAnnotations(null);
-    setAutoOrganizePreview(null);
-    setAutoOrganizeError(false);
-    setInspectedNodeId(null);
-    setSelectedNodeIds([]);
-    setSelectedEdgeIds([]);
-  }, [autoOrganizePreview, commitDiagramUpdate, restoreAutoOrganizeViewport]);
-
+  /** 취소는 원래 viewport만 복원하고 Board와 History를 그대로 둡니다. */
   const cancelAutomaticOrganization = useCallback(() => {
-    if (autoOrganizePreview === null) return;
-    const resolution = resolveBoardAutoOrganizeDecision(autoOrganizePreview, "keep-original");
-
-    if (resolution.viewportToRestore) {
-      restoreAutoOrganizeViewport(resolution.viewportToRestore);
-    }
+    if (autoOrganizePreview === null || autoOrganizeApplyInFlightRef.current) return;
+    restoreAutoOrganizeViewport(autoOrganizePreview.viewportBeforePreview);
     setPreviewDiagramState(null);
     setPreviewAnnotations(null);
     setAutoOrganizePreview(null);
     setAutoOrganizeError(false);
   }, [autoOrganizePreview, restoreAutoOrganizeViewport]);
 
+  /** 적용 중에는 Terraform source authority 표시도 바꾸지 않습니다. */
   const commitTerraformSourceAuthority = useCallback<
     DiagramEditorPanelContext["commitTerraformSourceAuthority"]
   >(() => {
+    if (autoOrganizeApplyInFlightRef.current) return diagramRef.current;
+
     const authoritativeDiagram = markTerraformSourceAuthoritative(diagramRef.current);
 
     if (
@@ -1112,7 +1356,7 @@ function DiagramEditorInner({
   // 템플릿 적용은 현재 보드를 백업한 뒤 전체 보드를 템플릿 구조로 교체합니다.
   const applyBoardTemplate = useCallback(
     (template: AvailableBoardTemplate): void => {
-      if (typeof window === "undefined") return;
+      if (typeof window === "undefined" || autoOrganizeApplyInFlightRef.current) return;
 
       const nextDiagram = applyTemplateToDiagramWithBackup({
         currentDiagram: diagramRef.current,
@@ -1136,7 +1380,9 @@ function DiagramEditorInner({
     [applyDiagramJson, onTemplateWorkspaceApply]
   );
 
+  /** 적용 중에는 Terraform 재생성이 고정 source snapshot을 흔들지 않게 막습니다. */
   const requestTerraformRefresh = useCallback(() => {
+    if (autoOrganizeApplyInFlightRef.current) return;
     setTerraformRefreshRequestId((requestId) => requestId + 1);
   }, []);
 
@@ -1214,22 +1460,32 @@ function DiagramEditorInner({
     () => ({
       diagram,
       inspectedNodeId,
+      isMutationLocked: isAutoOrganizeApplyPending,
       isPreviewActive,
       isRightPanelOpen: hasRightRail && isRightPanelOpen,
       previewAnnotations,
       previewDiagram,
+      projectDraftRevision,
       selectedNodeId,
       terraformRefreshRequestId,
       nodes: diagram.nodes,
       edges: diagram.edges,
       applyDiagramJson,
+      persistAndApplyDiagramJson:
+        onPersistedDiagramApplyRequest && projectDraftRevision !== null
+          ? persistAndApplyDiagramJson
+          : undefined,
+      persistAndApplyReverseEngineeringDraft:
+        onReverseEngineeringDraftApplyRequest && projectDraftRevision !== null
+          ? persistAndApplyReverseEngineeringDraft
+          : undefined,
       closeInspectedNode: () => setInspectedNodeId(null),
       commitTerraformSourceAuthority,
       focusResourceNode,
       getDiagramRevision,
       requestTerraformRefresh,
       selectResourceNode,
-      saveDiagramNow: onDiagramSaveRequest,
+      saveDiagramNow: isAutoOrganizeApplyPending ? undefined : onDiagramSaveRequest,
       setPreviewDiagram,
       setRightPanelOpen: updateRightPanelOpen,
       updateNodeParameters,
@@ -1243,11 +1499,17 @@ function DiagramEditorInner({
       getDiagramRevision,
       hasRightRail,
       inspectedNodeId,
+      isAutoOrganizeApplyPending,
       isPreviewActive,
       isRightPanelOpen,
       onDiagramSaveRequest,
+      onPersistedDiagramApplyRequest,
+      onReverseEngineeringDraftApplyRequest,
+      persistAndApplyDiagramJson,
+      persistAndApplyReverseEngineeringDraft,
       previewAnnotations,
       previewDiagram,
+      projectDraftRevision,
       requestTerraformRefresh,
       setPreviewDiagram,
       selectResourceNode,
@@ -2248,12 +2510,16 @@ function DiagramEditorInner({
             )
           : nodesWithAssignedParents;
 
+        const nodesWithReferences = applyContainingReferenceDropTargets(
+          nodesWithReconciledAreas,
+          new Set([nextNode.id]),
+          terraformParameterCatalog
+        );
         const nextDiagram = {
           ...currentDiagram,
-          nodes: applyContainingReferenceDropTargets(
-            nodesWithReconciledAreas,
-            new Set([nextNode.id]),
-            terraformParameterCatalog
+          nodes: applyAddedApplicationAutoScalingTargetReferences(
+            nodesWithReferences,
+            nextNode.id
           )
         };
 
@@ -2615,6 +2881,45 @@ function DiagramEditorInner({
     void getFlowInstance().zoomOut({ duration: getBoardMotionDuration(140) });
   }, [getFlowInstance]);
 
+  const handleCanvasWheel = useCallback(
+    (event: WheelEvent) => {
+      const zoomDirection = resolveBoardWheelZoomShortcut({
+        activeModifierKeys: boardZoomModifierKeysRef.current,
+        ctrlKey: event.ctrlKey,
+        deltaY: event.deltaY,
+        metaKey: event.metaKey
+      });
+
+      if (zoomDirection === null) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (zoomDirection === "zoom_in") {
+        handleZoomIn();
+      } else {
+        handleZoomOut();
+      }
+    },
+    [handleZoomIn, handleZoomOut]
+  );
+
+  useEffect(() => {
+    const canvasPanel = canvasPanelRef.current;
+
+    if (!canvasPanel) {
+      return;
+    }
+
+    canvasPanel.addEventListener("wheel", handleCanvasWheel, { passive: false });
+
+    return () => {
+      canvasPanel.removeEventListener("wheel", handleCanvasWheel);
+    };
+  }, [handleCanvasWheel]);
+
   /** 현재 보드를 화면 크기에 맞추고, 사용자 요청일 때만 시점 변경을 저장합니다. */
   const fitVisibleDiagram = useCallback(
     (shouldPersistViewport: boolean) => {
@@ -2769,11 +3074,7 @@ function DiagramEditorInner({
   ]);
 
   useEffect(() => {
-    if (
-      !isFlowReady ||
-      !shouldAutoFitInitialDiagramRef.current ||
-      diagram.nodes.length === 0
-    ) {
+    if (!isFlowReady || !shouldAutoFitInitialDiagramRef.current || diagram.nodes.length === 0) {
       return;
     }
 
@@ -2919,6 +3220,37 @@ function DiagramEditorInner({
   );
 
   useEffect(() => {
+    const activeModifierKeys = boardZoomModifierKeysRef.current;
+
+    function trackBoardZoomModifier(event: KeyboardEvent): void {
+      if (event.key === "Control" || event.key === "Meta") {
+        activeModifierKeys.add(event.key);
+      }
+    }
+
+    function releaseBoardZoomModifier(event: KeyboardEvent): void {
+      if (event.key === "Control" || event.key === "Meta") {
+        activeModifierKeys.delete(event.key);
+      }
+    }
+
+    function clearBoardZoomModifiers(): void {
+      activeModifierKeys.clear();
+    }
+
+    window.addEventListener("keydown", trackBoardZoomModifier);
+    window.addEventListener("keyup", releaseBoardZoomModifier);
+    window.addEventListener("blur", clearBoardZoomModifiers);
+
+    return () => {
+      window.removeEventListener("keydown", trackBoardZoomModifier);
+      window.removeEventListener("keyup", releaseBoardZoomModifier);
+      window.removeEventListener("blur", clearBoardZoomModifiers);
+      activeModifierKeys.clear();
+    };
+  }, []);
+
+  useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
 
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -2955,6 +3287,7 @@ function DiagramEditorInner({
 
     function restoreContextualPanelState(): void {
       const initialPanelState = deriveInitialWorkspacePanelState({
+        emptyBoardPanelState: initialPanelLayout,
         hasDiagramNodes: diagramRef.current.nodes.length > 0,
         isCompactViewport: false
       });
@@ -2981,7 +3314,7 @@ function DiagramEditorInner({
     compactViewport.addEventListener("change", collapsePanelsForCompactViewport);
 
     return () => compactViewport.removeEventListener("change", collapsePanelsForCompactViewport);
-  }, [viewerPolicy.isViewer]);
+  }, [initialPanelLayout, viewerPolicy.isViewer]);
 
   useEffect(() => {
     const canvasPanel = canvasPanelRef.current;
@@ -3122,15 +3455,15 @@ function DiagramEditorInner({
       {viewerPolicy.showWorkspaceChrome ? (
         <WorkspaceProjectBar
           actions={{
-            onSave: onDiagramSaveRequest,
-            onSaveAndDeploy: onSaveAndDeployRequest
+            onSave: isAutoOrganizeApplyPending ? undefined : onDiagramSaveRequest,
+            onSaveAndDeploy: isAutoOrganizeApplyPending ? undefined : onSaveAndDeployRequest
           }}
           workspace={{
             dashboardHref,
             isDeploymentConsoleOpen,
             projectName,
             saveStatus,
-            showSaveAction,
+            showSaveAction: showSaveAction && !isAutoOrganizeApplyPending,
             userName: workspaceUserName
           }}
         />
@@ -3336,6 +3669,7 @@ function DiagramEditorInner({
             {autoOrganizePreview ? (
               <BoardAutoOrganizePreviewPanel
                 onKeepOriginal={cancelAutomaticOrganization}
+                onSelectView={selectAutomaticOrganizationPreview}
                 onUseOrganized={applyAutomaticOrganization}
                 session={autoOrganizePreview}
               />
@@ -3376,9 +3710,20 @@ function DiagramEditorInner({
           ) : null}
 
           {visibleDiagram.nodes.length === 0 ? (
-            <div className={styles.emptyState} aria-hidden="true">
-              <strong>빈 보드</strong>
-              <span>{emptyBoardDescription}</span>
+            <div
+              className={`${styles.emptyState}${
+                emptyBoardContent ? ` ${styles.emptyStateInteractive}` : ""
+              }`}
+              aria-hidden={emptyBoardContent ? undefined : true}
+            >
+              {emptyBoardContent ? (
+                emptyBoardContent
+              ) : (
+                <>
+                  <strong>빈 보드</strong>
+                  <span>{emptyBoardDescription}</span>
+                </>
+              )}
             </div>
           ) : null}
 
@@ -3406,6 +3751,8 @@ function DiagramEditorInner({
             panOnDrag={viewerPolicy.canPanAndZoom && (isPreviewActive || interactionMode === "pan")}
             panOnScroll={viewerPolicy.panOnScroll}
             panOnScrollMode={PanOnScrollMode.Free}
+            zoomOnPinch={false}
+            zoomOnScroll={false}
             proOptions={{ hideAttribution: true }}
             selectionKeyCode={["Shift", "Meta", "Control"]}
             selectionMode={SelectionMode.Partial}

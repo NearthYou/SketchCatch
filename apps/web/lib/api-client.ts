@@ -43,6 +43,9 @@ const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
   LIVE_OBSERVATION_NOT_FOUND: "실시간 관측 세션을 찾을 수 없습니다.",
   LIVE_OBSERVATION_OUTPUT_INVALID: "배포 결과에 실시간 관측에 필요한 Terraform output이 없습니다.",
   LIVE_OBSERVATION_RATE_LIMITED: "실시간 관측 요청 한도를 초과했습니다.",
+  REVERSE_ENGINEERING_AWS_SETTINGS_REQUIRED: "AWS 연결을 확인해 주세요.",
+  REVERSE_ENGINEERING_SCAN_RETRYABLE:
+    "AWS 구조를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.",
   not_found: "요청한 정보를 찾을 수 없습니다.",
   service_unavailable: "AI 생성 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요.",
   too_many_requests: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
@@ -63,7 +66,7 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
   "A confirmed project deployment target is required for application deployment":
     "전체 스택 또는 애플리케이션 배포 전에 Source Repository를 연결하고 프로젝트 배포 타깃과 빌드 설정을 저장해 주세요.",
   "CHECK_IN_SIGNING_SECRET is required by the Repository build contract but the Terraform runtime Secret mapping is incomplete":
-    "Repository가 요구하는 CHECK_IN_SIGNING_SECRET이 현재 Terraform 초안에 연결되지 않았습니다. Repository를 다시 분석하고 Fixed Template Board를 다시 생성·저장한 뒤 검증을 실행해 주세요.",
+    "Repository가 요구하는 CHECK_IN_SIGNING_SECRET의 생성, Secrets Manager 저장, ECS 실행 역할 권한, Task 주입 연결이 현재 Terraform 초안에 완성되지 않았습니다. 현재 Terraform 코드를 수정·저장한 뒤 다시 검증해 주세요.",
   PROJECT_DEPLOYMENT_TARGET_REQUIRED:
     "프로젝트 배포 대상이 확정되지 않았습니다. 프로젝트 설정에서 검증된 AWS 연결과 Repository 빌드 근거를 저장한 뒤 다시 시도해주세요.",
   GIT_APP_AUTHENTICATION_FAILED:

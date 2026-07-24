@@ -26,6 +26,31 @@ test("toFlowNodes reuses the cached node when its model and display state are un
   assert.equal(second[0], first[0]);
 });
 
+test("자동 표시 프레임은 Resource보다 낮게 보이고 저장된 parent를 화면 층으로 해석하지 않는다", () => {
+  const frame: DiagramNode = {
+    id: "board-auto-frame:group",
+    type: "design_group",
+    kind: "design",
+    position: { x: 0, y: 0 },
+    size: { width: 480, height: 320 },
+    label: "자동 표시 영역",
+    locked: false,
+    zIndex: 20,
+    metadata: { presentationCatalogItemId: "design-group" }
+  };
+  const child = makeNode({
+    id: "child",
+    parentAreaNodeId: frame.id,
+    resourceType: "aws_instance"
+  });
+  const root = makeNode({ id: "root", resourceType: "aws_s3_bucket" });
+
+  const flowNodes = toFlowNodes([frame, child, root], [], null, false, handlers);
+
+  assert(getFlowNodeZIndex(flowNodes, frame.id) < getFlowNodeZIndex(flowNodes, child.id));
+  assert.equal(getFlowNodeZIndex(flowNodes, child.id), getFlowNodeZIndex(flowNodes, root.id));
+});
+
 test("toFlowNodes replaces only the moved node when cached siblings are unchanged", () => {
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
   const bucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });

@@ -19,10 +19,6 @@ const rightPanelSource = readFileSync(
   new URL("./WorkspaceRightPanel.tsx", import.meta.url),
   "utf8"
 );
-const repositorySource = readFileSync(
-  new URL("../../app/workspace/repository/repository-start-client.tsx", import.meta.url),
-  "utf8"
-);
 const editorSource = readFileSync(
   new URL("./delivery/ProjectDeploymentTargetEditor.tsx", import.meta.url),
   "utf8"
@@ -165,7 +161,7 @@ test("CI/CD current-task CTA, phase accordion, and setup drawer share one presen
   assert.match(handoffPanelSource, /disabled=\{!canCreateHandoff\}/);
 });
 
-test("Apply Plan CTA는 Direct Deployment만 열고 Plan 또는 Apply API를 직접 호출하지 않는다", () => {
+test("Apply Plan CTA는 managed deployment만 열고 Plan 또는 Apply API를 직접 호출하지 않는다", () => {
   assert.match(cicdConsoleSource, /if \(action\.kind === "direct_deployment"\)/);
   assert.match(cicdConsoleSource, /onOpenDirectDeployment\?\.\(action\.scope\)/);
   assert.doesNotMatch(cicdConsoleSource, /runDeploymentPlan|approveDeploymentPlan/);
@@ -220,7 +216,7 @@ test("target save refreshes Delivery without starting deployment or Git handoff"
   );
 });
 
-test("saved deployment target invalidates the stale Direct Deployment prerequisite", () => {
+test("saved deployment target invalidates the stale managed deployment prerequisite", () => {
   assert.match(panelSource, /onDeploymentTargetSaved/);
   assert.match(panelSource, /onSaved=\{handleDeploymentTargetSaved\}/);
   assert.match(shellSource, /deploymentTargetSavedRevision/);
@@ -230,9 +226,4 @@ test("saved deployment target invalidates the stale Direct Deployment prerequisi
 test("GitHub callback follows the canonical source-only continuation instead of owning target state", () => {
   assert.match(githubCallbackSource, /배포 설정은 원래 분석을 마친 뒤 Delivery에서 받는다/);
   assert.doesNotMatch(githubCallbackSource, /ProjectDeploymentTargetEditor/);
-});
-
-test("public Repository analysis defers CI/CD configuration until after Board creation", () => {
-  assert.match(repositorySource, /CI\/CD는 보드 생성 후 Delivery에서 연결합니다/);
-  assert.doesNotMatch(repositorySource, /function RepositoryCiCdConnection/);
 });

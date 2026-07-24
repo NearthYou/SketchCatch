@@ -21,7 +21,7 @@ export function ReverseEngineeringImportSuggestionsPanel({
       <h3>Terraform import 제안</h3>
       <div className={styles.deploymentPreflightStats}>
         <span>
-          Git/CI/CD handoff 준비
+          CI/CD handoff 준비
           <strong>{handoffReadyCount}</strong>
         </span>
         <span>
@@ -79,7 +79,7 @@ function ImportSuggestionCards({
           <span>{suggestion.importCommand ?? suggestion.reason ?? "수동 확인 필요"}</span>
           {suggestion.terraformBlockDraft ? <code>{suggestion.terraformBlockDraft}</code> : null}
           <span>
-            Git/CI/CD handoff 준비: {suggestion.handoffReady ? "가능" : "수동 확인 필요"}
+            CI/CD handoff 준비: {suggestion.handoffReady ? "가능" : "수동 확인 필요"}
           </span>
         </li>
       ))}
@@ -110,7 +110,7 @@ function createBulkImportText(importSuggestions: ReverseEngineeringImportSuggest
     "# Terraform block 초안",
     terraformBlocks.join("\n\n") || "준비된 Terraform block 초안이 없습니다.",
     "",
-    "# Git/CI/CD handoff 준비",
+    "# CI/CD handoff 준비",
     handoffSummary.join("\n\n") || "handoff 준비 데이터가 없습니다."
   ].join("\n");
 }

@@ -42,6 +42,13 @@ import {
   isDestroyPlanReadyForApproval,
   shouldShowProjectOnlyDeleteFallback
 } from "../../features/projects/project-delete-flow";
+import {
+  buildBulkProjectDeletePlan,
+  getBulkProjectDeleteProgress,
+  type BulkProjectDeletion,
+  type BulkProjectDeleteCandidate,
+  type BulkProjectDeletePlan
+} from "../../features/projects/project-bulk-delete";
 import { filterProjectsByName } from "../../features/projects/project-search";
 import {
   type ProjectsQueryData,
@@ -83,6 +90,25 @@ type ProjectActionMenuState =
   | { readonly project: Project; readonly status: "loading" }
   | { readonly preview: ProjectDeletePreview; readonly project: Project; readonly status: "ready" }
   | { readonly errorMessage: string; readonly project: Project; readonly status: "error" };
+type BulkProjectDeleteStep = "destroy_plan" | "approving" | "destroying" | "project_cleanup";
+type BulkProjectDeleteDialogState =
+  | { readonly status: "closed" }
+  | { readonly status: "loading" }
+  | { readonly plan: BulkProjectDeletePlan; readonly status: "ready" }
+  | {
+      readonly completedCount: number;
+      readonly currentProjectName: string;
+      readonly currentStep: BulkProjectDeleteStep;
+      readonly plan: BulkProjectDeletePlan;
+      readonly status: "deleting";
+    }
+  | {
+      readonly deletedCount: number;
+      readonly failedCount: number;
+      readonly failedProjectNames: readonly string[];
+      readonly plan: BulkProjectDeletePlan;
+      readonly status: "complete";
+    };
 
 export function ProjectsClient() {
   const { user } = useAuth();
@@ -113,7 +139,17 @@ export function ProjectsClient() {
   const [projectActionMenu, setProjectActionMenu] = useState<ProjectActionMenuState>({
     status: "closed"
   });
+  const [bulkDeleteDialog, setBulkDeleteDialog] = useState<BulkProjectDeleteDialogState>({
+    status: "closed"
+  });
   const isMountedRef = useRef(true);
+  const bulkDeleteDialogRef = useRef<HTMLDivElement>(null);
+  const isBulkDeleteInFlightRef = useRef(false);
+  const isBulkDeletePreflightRef = useRef(false);
+  const bulkDeleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const previousBulkDeleteDialogStatusRef = useRef<BulkProjectDeleteDialogState["status"]>(
+    "closed"
+  );
   const isSearchActive = searchQuery.trim().length > 0;
   const sortedProjects = useMemo(
     () => [...projects].sort((left, right) => compareProjectsBySortMode(left, right, sortMode)),
@@ -158,6 +194,18 @@ export function ProjectsClient() {
     return () => window.clearInterval(intervalId);
   }, [deleteProgressStatus]);
 
+  // gg: Move keyboard focus into a newly opened destructive-action dialog exactly once.
+  useEffect(() => {
+    const previousStatus = previousBulkDeleteDialogStatusRef.current;
+    previousBulkDeleteDialogStatusRef.current = bulkDeleteDialog.status;
+
+    if (previousStatus !== "closed" || bulkDeleteDialog.status === "closed") {
+      return;
+    }
+
+    window.requestAnimationFrame(() => bulkDeleteDialogRef.current?.focus());
+  }, [bulkDeleteDialog.status]);
+
   async function toggleProjectActionMenu(project: Project): Promise<void> {
     if (projectActionMenu.status !== "closed" && projectActionMenu.project.id === project.id) {
       setProjectActionMenu({ status: "closed" });
@@ -196,15 +244,235 @@ export function ProjectsClient() {
     setProjectActionMenu({ status: "closed" });
   }
 
-  function removeProjectFromList(projectId: string): void {
-    if (!user) {
+  // gg: Update the cached list once after either one or many safe project deletions.
+  function removeProjectsFromList(projectIds: readonly string[]): void {
+    if (!user || projectIds.length === 0) {
       return;
     }
 
+    const projectIdSet = new Set(projectIds);
+
     queryClient.setQueryData<ProjectsQueryData>(queryKeys.projects(user.id), (currentData) =>
-      currentData ? removeProjectFromQueryData(currentData, projectId) : currentData
+      currentData
+        ? currentData.projects.reduce(
+            (nextData, project) =>
+              projectIdSet.has(project.id) ? removeProjectFromQueryData(nextData, project.id) : nextData,
+            currentData
+          )
+        : currentData
     );
     void invalidateProjectQueries(queryClient, user.id);
+  }
+
+  // gg: Keep the existing one-project delete flow on the shared cache update path.
+  function removeProjectFromList(projectId: string): void {
+    removeProjectsFromList([projectId]);
+  }
+
+  // gg: Read every project one at a time so preflight does not overwhelm the project API.
+  async function openBulkProjectDeleteDialog(): Promise<void> {
+    if (
+      projects.length === 0 ||
+      bulkDeleteDialog.status === "loading" ||
+      isBulkDeletePreflightRef.current
+    ) {
+      return;
+    }
+
+    isBulkDeletePreflightRef.current = true;
+    setDeleteErrorMessage("");
+    setBulkDeleteDialog({ status: "loading" });
+
+    try {
+      const candidates: BulkProjectDeleteCandidate[] = [];
+
+      for (const project of projects) {
+        try {
+          candidates.push({
+            preview: await getProjectDeletePreview(project.id),
+            project,
+            status: "ready"
+          });
+        } catch {
+          candidates.push({
+            project,
+            status: "unavailable"
+          });
+        }
+      }
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setBulkDeleteDialog({
+        plan: buildBulkProjectDeletePlan(candidates),
+        status: "ready"
+      });
+    } finally {
+      isBulkDeletePreflightRef.current = false;
+    }
+  }
+
+  // gg: Keep the dialog progress truthful while each project's AWS and record cleanup advances.
+  function updateBulkProjectDeleteProgress(input: {
+    readonly completedCount: number;
+    readonly currentProjectName: string;
+    readonly currentStep: BulkProjectDeleteStep;
+    readonly plan: BulkProjectDeletePlan;
+  }): void {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setBulkDeleteDialog({ ...input, status: "deleting" });
+  }
+
+  // gg: Reuse the existing approved destroy flow before removing a deployed project and its AWS resources.
+  async function deleteBulkProject(input: {
+    readonly candidate: BulkProjectDeletion;
+    readonly completedCount: number;
+    readonly plan: BulkProjectDeletePlan;
+  }): Promise<void> {
+    const { candidate, completedCount, plan } = input;
+
+    if (candidate.action === "delete_project") {
+      updateBulkProjectDeleteProgress({
+        completedCount,
+        currentProjectName: candidate.project.name,
+        currentStep: "project_cleanup",
+        plan
+      });
+      await deleteProject(candidate.project.id, "delete_project_with_managed_cleanup");
+      return;
+    }
+
+    const deploymentId = candidate.preview.activeDeploymentId;
+    if (!deploymentId) {
+      throw new Error("삭제할 AWS Deployment를 찾을 수 없습니다.");
+    }
+
+    updateBulkProjectDeleteProgress({
+      completedCount,
+      currentProjectName: candidate.project.name,
+      currentStep: "destroy_plan",
+      plan
+    });
+    await runDeploymentDestroyPlan(deploymentId);
+    const destroyPlan = await waitForProjectDeployment({
+      checkMounted: () => isMountedRef.current,
+      deploymentId,
+      failureMessage: "Destroy Plan 생성이 완료되지 않았습니다.",
+      isReady: isDestroyPlanReadyForApproval,
+      projectId: candidate.project.id,
+      timeoutMessage: "Destroy Plan 생성 시간이 초과되었습니다."
+    });
+
+    updateBulkProjectDeleteProgress({
+      completedCount,
+      currentProjectName: candidate.project.name,
+      currentStep: "approving",
+      plan
+    });
+    await approveDeploymentPlan(
+      destroyPlan.id,
+      getDestroyDeleteAcknowledgedWarningIds(destroyPlan)
+    );
+
+    updateBulkProjectDeleteProgress({
+      completedCount,
+      currentProjectName: candidate.project.name,
+      currentStep: "destroying",
+      plan
+    });
+    await runDeploymentDestroy(destroyPlan.id);
+    await waitForProjectDeployment({
+      checkMounted: () => isMountedRef.current,
+      deploymentId: destroyPlan.id,
+      failureMessage: "AWS 리소스 삭제가 완료되지 않았습니다.",
+      isReady: (deployment) => deployment.status === "DESTROYED",
+      projectId: candidate.project.id,
+      timeoutMessage: "AWS 리소스 삭제 시간이 초과되었습니다."
+    });
+
+    updateBulkProjectDeleteProgress({
+      completedCount,
+      currentProjectName: candidate.project.name,
+      currentStep: "project_cleanup",
+      plan
+    });
+    await deleteProject(candidate.project.id, "delete_project_with_managed_cleanup");
+  }
+
+  // gg: Delete preflighted projects one at a time so each AWS destruction remains visible and isolated.
+  async function confirmBulkProjectDelete(): Promise<void> {
+    if (
+      bulkDeleteDialog.status !== "ready" ||
+      bulkDeleteDialog.plan.deletable.length === 0 ||
+      isBulkDeleteInFlightRef.current
+    ) {
+      return;
+    }
+
+    isBulkDeleteInFlightRef.current = true;
+    const { plan } = bulkDeleteDialog;
+    const deletedProjectIds: string[] = [];
+    let failedCount = 0;
+    const failedProjectNames: string[] = [];
+    updateBulkProjectDeleteProgress({
+      completedCount: 0,
+      currentProjectName: plan.deletable[0]?.project.name ?? "",
+      currentStep: "project_cleanup",
+      plan
+    });
+
+    try {
+      for (const [index, candidate] of plan.deletable.entries()) {
+        try {
+          await deleteBulkProject({
+            candidate,
+            completedCount: index,
+            plan
+          });
+          deletedProjectIds.push(candidate.project.id);
+        } catch {
+          failedCount += 1;
+          failedProjectNames.push(candidate.project.name);
+        }
+
+        if (!isMountedRef.current) {
+          return;
+        }
+
+        updateBulkProjectDeleteProgress({
+          completedCount: index + 1,
+          currentProjectName: candidate.project.name,
+          currentStep: "project_cleanup",
+          plan,
+        });
+      }
+
+      removeProjectsFromList(deletedProjectIds);
+      setBulkDeleteDialog({
+        deletedCount: deletedProjectIds.length,
+        failedCount,
+        failedProjectNames,
+        plan,
+        status: "complete"
+      });
+    } finally {
+      isBulkDeleteInFlightRef.current = false;
+    }
+  }
+
+  // gg: Do not let a user close the bulk dialog while preflight or AWS deletion is active.
+  function closeBulkProjectDeleteDialog(): void {
+    if (bulkDeleteDialog.status === "loading" || bulkDeleteDialog.status === "deleting") {
+      return;
+    }
+
+    setBulkDeleteDialog({ status: "closed" });
+    window.requestAnimationFrame(() => bulkDeleteTriggerRef.current?.focus());
   }
 
   async function openProjectDeleteDialog(
@@ -652,42 +920,284 @@ export function ProjectsClient() {
     );
   }
 
+  // gg: Keep the confirmation explicit while explaining exactly which projects stay untouched.
+  function renderBulkProjectDeleteDialog() {
+    if (bulkDeleteDialog.status === "closed") {
+      return null;
+    }
+
+    const isBusy = bulkDeleteDialog.status === "loading" || bulkDeleteDialog.status === "deleting";
+    const plan = bulkDeleteDialog.status === "loading" ? null : bulkDeleteDialog.plan;
+    const progress =
+      bulkDeleteDialog.status === "deleting"
+        ? getBulkProjectDeleteProgress({
+            completedCount: bulkDeleteDialog.completedCount,
+            totalCount: bulkDeleteDialog.plan.deletable.length
+          })
+        : null;
+    const keptProjectCount = plan ? plan.protected.length + plan.unavailable.length : 0;
+    const infrastructureDeletionCount =
+      plan?.deletable.filter((candidate) => candidate.action === "destroy_then_delete").length ?? 0;
+    const directProjectDeletionCount = (plan?.deletable.length ?? 0) - infrastructureDeletionCount;
+
+    // gg: Keep focus in the confirmation and let Escape close it without interrupting an active deletion.
+    function handleBulkDeleteDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeBulkProjectDeleteDialog();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusableElements = Array.from(
+        event.currentTarget.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((element) => element.offsetParent !== null);
+      const firstFocusableElement = focusableElements[0];
+      const lastFocusableElement = focusableElements.at(-1);
+
+      if (!firstFocusableElement || !lastFocusableElement) {
+        return;
+      }
+
+      if (event.shiftKey && document.activeElement === firstFocusableElement) {
+        event.preventDefault();
+        lastFocusableElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastFocusableElement) {
+        event.preventDefault();
+        firstFocusableElement.focus();
+      }
+    }
+
+    return (
+      <div
+        aria-labelledby="bulk-project-delete-dialog-title"
+        aria-modal="true"
+        className="projectDeleteDialogOverlay"
+        onKeyDown={handleBulkDeleteDialogKeyDown}
+        ref={bulkDeleteDialogRef}
+        role="dialog"
+        tabIndex={-1}
+      >
+        <div className="projectDeleteDialog">
+          <header className="projectDeleteDialogHeader">
+            <div>
+              <p className="dashboardPanelKicker">내 프로젝트</p>
+              <h3 id="bulk-project-delete-dialog-title">전체 프로젝트 삭제</h3>
+            </div>
+            <button
+              aria-label="전체 삭제 창 닫기"
+              className="dashboardSecondaryButton projectDeleteDialogIconButton"
+              disabled={isBusy}
+              onClick={closeBulkProjectDeleteDialog}
+              type="button"
+            >
+              <DashboardIcon name="close" />
+            </button>
+          </header>
+
+          {bulkDeleteDialog.status === "loading" ? (
+            <p className="projectDeleteDialogText">삭제할 수 있는 프로젝트를 확인하는 중입니다.</p>
+          ) : null}
+
+          {bulkDeleteDialog.status === "ready" && plan ? (
+            <>
+              {plan.deletable.length > 0 ? (
+                <div className="projectDeleteDialogConfirmation" role="note">
+                  <strong>프로젝트 {plan.deletable.length}개와 AWS 인프라를 삭제할까요?</strong>
+                  <p>
+                    배포된 프로젝트는 Destroy Plan을 만든 뒤 AWS 리소스를 삭제합니다. 프로젝트
+                    기록과 SketchCatch가 만든 배포 도구도 함께 정리하며, 시작 후에는 취소할 수
+                    없습니다.
+                  </p>
+                </div>
+              ) : (
+                <p className="projectDeleteDialogText">
+                  현재 자동으로 안전하게 삭제할 수 있는 프로젝트가 없습니다. 배포 중이거나
+                  삭제 범위를 확인할 수 없는 프로젝트는 개별 메뉴에서 확인해 주세요.
+                </p>
+              )}
+              <dl className="projectDeleteDialogFacts">
+                <div>
+                  <dt>AWS 인프라 삭제</dt>
+                  <dd>{infrastructureDeletionCount}개</dd>
+                </div>
+                <div>
+                  <dt>프로젝트 정리</dt>
+                  <dd>{directProjectDeletionCount}개</dd>
+                </div>
+                <div>
+                  <dt>그대로 유지</dt>
+                  <dd>{keptProjectCount}개</dd>
+                </div>
+              </dl>
+              <details className="projectBulkDeleteProjectList">
+                <summary>삭제할 프로젝트 {plan.deletable.length}개 보기</summary>
+                <ul>
+                  {plan.deletable.map((candidate) => (
+                    <li key={candidate.project.id}>{candidate.project.name}</li>
+                  ))}
+                </ul>
+              </details>
+              {keptProjectCount > 0 ? (
+                <details className="projectBulkDeleteProjectList">
+                  <summary>그대로 둘 프로젝트 {keptProjectCount}개 보기</summary>
+                  {plan.protected.length > 0 ? (
+                    <>
+                      <p>배포 중이거나 AWS 리소스가 있는 프로젝트</p>
+                      <ul>
+                        {plan.protected.map((candidate) => (
+                          <li key={candidate.project.id}>{candidate.project.name}</li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                  {plan.unavailable.length > 0 ? (
+                    <>
+                      <p>삭제 상태를 확인하지 못한 프로젝트</p>
+                      <ul>
+                        {plan.unavailable.map((candidate) => (
+                          <li key={candidate.project.id}>{candidate.project.name}</li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                </details>
+              ) : null}
+            </>
+          ) : null}
+
+          {bulkDeleteDialog.status === "deleting" && progress ? (
+            <section aria-live="polite" className="projectDeleteDialogProgress">
+              <header className="projectDeleteDialogProgressHeader">
+                <strong>{getBulkProjectDeleteStepLabel(bulkDeleteDialog.currentStep)}</strong>
+                <span>
+                  {progress.currentCount}/{progress.totalCount}
+                </span>
+              </header>
+              <div
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={progress.percent}
+                className="projectDeleteDialogProgressTrack"
+                role="progressbar"
+              >
+                <span style={{ width: `${progress.percent}%` }} />
+              </div>
+              <p>{bulkDeleteDialog.currentProjectName}</p>
+            </section>
+          ) : null}
+
+          {bulkDeleteDialog.status === "complete" && plan ? (
+            <>
+              <p className="projectDeleteDialogText">
+                프로젝트 {bulkDeleteDialog.deletedCount}개를 삭제했습니다.
+                {bulkDeleteDialog.failedCount > 0
+                  ? ` ${bulkDeleteDialog.failedCount}개는 삭제하지 못해 그대로 남았습니다.`
+                  : ""}
+              </p>
+              {bulkDeleteDialog.failedProjectNames.length > 0 ? (
+                <details className="projectBulkDeleteProjectList">
+                  <summary>
+                    삭제하지 못한 프로젝트 {bulkDeleteDialog.failedProjectNames.length}개 보기
+                  </summary>
+                  <p>개별 메뉴에서 현재 상태를 확인한 뒤 다시 삭제해 주세요.</p>
+                  <ul>
+                    {bulkDeleteDialog.failedProjectNames.map((projectName, index) => (
+                      <li key={`${projectName}-${index}`}>{projectName}</li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
+              {keptProjectCount > 0 ? (
+                <p className="projectDeleteDialogText">
+                  배포 중이거나 삭제 범위를 확인할 수 없는 프로젝트 {keptProjectCount}개는
+                  건드리지 않았습니다.
+                </p>
+              ) : null}
+            </>
+          ) : null}
+
+          <footer className="projectDeleteDialogActions">
+            <button
+              className="dashboardSecondaryButton"
+              disabled={isBusy}
+              onClick={closeBulkProjectDeleteDialog}
+              type="button"
+            >
+              {bulkDeleteDialog.status === "complete" ? "닫기" : "취소"}
+            </button>
+            {bulkDeleteDialog.status === "ready" && plan && plan.deletable.length > 0 ? (
+              <button
+                className="dashboardDangerButton"
+                disabled={isBusy}
+                onClick={() => void confirmBulkProjectDelete()}
+                type="button"
+              >
+                <DashboardIcon name="trash" />
+                <span>프로젝트와 AWS 인프라 삭제</span>
+              </button>
+            ) : null}
+          </footer>
+        </div>
+      </div>
+    );
+  }
+
+  const isBulkDeleteBusy =
+    bulkDeleteDialog.status === "loading" || bulkDeleteDialog.status === "deleting";
   const projectControls = (
-    <div className="projectListControls" aria-label="프로젝트 검색, 배포 여부 및 정렬">
-      <label className="dashboardSearchField">
-        <Search aria-hidden="true" size={17} />
-        <span className="dashboardVisuallyHidden">프로젝트 검색</span>
-        <input
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="프로젝트 검색"
-          type="search"
-          value={searchQuery}
-        />
-      </label>
-      <div className="settingsField projectDeploymentFilterField">
-        <span>배포 여부</span>
-        <SelectMenu
-          ariaLabel="프로젝트 배포 여부 필터 선택"
-          emptyLabel="필터 선택"
-          onChange={(value) => setDeploymentFilter(value as ProjectDeploymentFilter)}
-          options={PROJECT_DEPLOYMENT_FILTER_OPTIONS}
-          size="large"
-          tone="surface"
-          value={deploymentFilter}
-        />
+    <div className="projectListToolbar">
+      <div className="projectListControls" aria-label="프로젝트 검색, 배포 여부 및 정렬">
+        <label className="dashboardSearchField">
+          <Search aria-hidden="true" size={17} />
+          <span className="dashboardVisuallyHidden">프로젝트 검색</span>
+          <input
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="프로젝트 검색"
+            type="search"
+            value={searchQuery}
+          />
+        </label>
+        <div className="settingsField projectDeploymentFilterField">
+          <span>배포 여부</span>
+          <SelectMenu
+            ariaLabel="프로젝트 배포 여부 필터 선택"
+            emptyLabel="필터 선택"
+            onChange={(value) => setDeploymentFilter(value as ProjectDeploymentFilter)}
+            options={PROJECT_DEPLOYMENT_FILTER_OPTIONS}
+            size="large"
+            tone="surface"
+            value={deploymentFilter}
+          />
+        </div>
+        <div className="settingsField projectSortField">
+          <span>정렬</span>
+          <SelectMenu
+            ariaLabel="프로젝트 정렬 선택"
+            emptyLabel="정렬 선택"
+            onChange={(value) => setSortMode(value as ProjectSortMode)}
+            options={PROJECT_SORT_OPTIONS}
+            size="large"
+            tone="surface"
+            value={sortMode}
+          />
+        </div>
       </div>
-      <div className="settingsField projectSortField">
-        <span>정렬</span>
-        <SelectMenu
-          ariaLabel="프로젝트 정렬 선택"
-          emptyLabel="정렬 선택"
-          onChange={(value) => setSortMode(value as ProjectSortMode)}
-          options={PROJECT_SORT_OPTIONS}
-          size="large"
-          tone="surface"
-          value={sortMode}
-        />
-      </div>
+      <button
+        className="dashboardDangerButton projectListBulkDeleteButton"
+        disabled={projects.length === 0 || isBulkDeleteBusy}
+        onClick={() => void openBulkProjectDeleteDialog()}
+        ref={bulkDeleteTriggerRef}
+        type="button"
+      >
+        <DashboardIcon name="trash" />
+        <span>전체 삭제</span>
+      </button>
     </div>
   );
 
@@ -737,13 +1247,7 @@ export function ProjectsClient() {
           {isDeploymentFilterActive ? (
             <p>조건에 맞는 프로젝트가 없습니다.</p>
           ) : (
-            <>
-              <p>아직 생성한 프로젝트가 없습니다.</p>
-              <Link className="dashboardTopbarAction" href="/workspace/new">
-                <DashboardIcon name="plus" />
-                <span>새 설계 시작</span>
-              </Link>
-            </>
+            <p>아직 생성한 프로젝트가 없습니다.</p>
           )}
         </div>
       ) : (
@@ -783,6 +1287,7 @@ export function ProjectsClient() {
       )}
 
       {renderDeleteDialog()}
+      {renderBulkProjectDeleteDialog()}
     </section>
   );
 }
@@ -952,6 +1457,20 @@ function ProjectActionMenuDeleteItem({
       <span>{label}</span>
     </button>
   );
+}
+
+// gg: Use short stage names so a long-running bulk deletion explains its current AWS action.
+function getBulkProjectDeleteStepLabel(step: BulkProjectDeleteStep): string {
+  switch (step) {
+    case "destroy_plan":
+      return "AWS 삭제 계획을 만드는 중입니다.";
+    case "approving":
+      return "AWS 삭제 계획을 승인하는 중입니다.";
+    case "destroying":
+      return "AWS 인프라를 삭제하는 중입니다.";
+    case "project_cleanup":
+      return "프로젝트 기록을 정리하는 중입니다.";
+  }
 }
 
 async function waitForProjectDeployment(input: {

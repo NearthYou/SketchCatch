@@ -86,7 +86,7 @@ function createLegacyResult(): LegacyReverseEngineeringScanResult {
         config: {}
       }
     ],
-    architectureJson,
+    architectureJson: structuredClone(architectureJson),
     findings: [],
     analysisExclusions: [
       {
@@ -128,13 +128,336 @@ function createLegacyResult(): LegacyReverseEngineeringScanResult {
   };
 }
 
-test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호환 draft를 만든다", () => {
+test("과거 저장 결과를 읽어도 공개 응답에는 AWS ARN을 남기지 않는다", () => {
+  const result = normalizeReverseEngineeringScanResult(persistedScan, createLegacyResult());
+
+  assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
+  assert.match(result.discoveredResources[0]?.providerResourceId ?? "", /^aws-ref-[a-f0-9]{24}$/u);
+  assert.equal(result.importSuggestions[0]?.handoffReady, false);
+  assert.equal(result.importSuggestions[0]?.importCommand, undefined);
+  assert.ok(result.importSuggestions.every((suggestion) => suggestion.importCommand === undefined));
+});
+
+test("과거 저장된 KMS Log Group도 읽는 순간 관리와 import를 다시 차단한다", () => {
+  const legacyResult = createLegacyResult();
+  const logGroupArn = "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders:*";
+  const kmsKeyArn =
+    "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555";
+  const resourceId = "legacy-kms-log-group";
+
+  legacyResult.discoveredResources.push({
+    id: resourceId,
+    provider: "aws",
+    providerResourceType: "AWS::Logs::LogGroup",
+    providerResourceId: logGroupArn,
+    region: "ap-northeast-2",
+    displayName: "/ecs/orders",
+    resourceType: "CLOUDWATCH_LOG_GROUP",
+    config: {
+      logGroupName: "/ecs/orders",
+      retentionInDays: 30,
+      kmsKeyId: kmsKeyArn
+    }
+  });
+  legacyResult.architectureJson.nodes.push({
+    id: resourceId,
+    type: "CLOUDWATCH_LOG_GROUP",
+    label: "/ecs/orders",
+    positionX: 720,
+    positionY: 80,
+    config: {
+      providerResourceType: "AWS::Logs::LogGroup",
+      providerResourceId: logGroupArn,
+      logGroupName: "/ecs/orders",
+      retentionInDays: 30,
+      kmsKeyId: kmsKeyArn,
+      reverseEngineeringManagement: "managed",
+      terraformBlockType: "resource",
+      terraformResourceType: "aws_cloudwatch_log_group",
+      terraformResourceName: "legacy_kms_log_group",
+      terraformFileName: "reverse-engineering"
+    }
+  });
+  legacyResult.importSuggestions.push({
+    id: "import-legacy-kms-log-group",
+    resourceId,
+    status: "ready",
+    handoffReady: true,
+    terraformAddress: "aws_cloudwatch_log_group.legacy_kms_log_group",
+    importCommand: "terraform import aws_cloudwatch_log_group.legacy_kms_log_group /ecs/orders",
+    terraformBlockDraft: 'resource "aws_cloudwatch_log_group" "legacy_kms_log_group" {}'
+  });
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const resource = result.discoveredResources.at(-1);
+  const node = result.architectureJson.nodes.at(-1);
+  const suggestion = result.importSuggestions.at(-1);
+
+  assert.equal(resource?.analysisExcluded, true);
+  assert.deepEqual(resource?.config, {
+    logGroupName: "/ecs/orders",
+    retentionInDays: 30,
+    tagsReadComplete: false,
+    hasKmsKey: true
+  });
+  assert.equal(node?.config["analysisExcluded"], true);
+  assert.equal(node?.config["reverseEngineeringManagement"], "needs_mapping");
+  assert.equal(node?.config["terraformResourceType"], undefined);
+  assert.equal(node?.config["terraformResourceName"], undefined);
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.equal(suggestion?.terraformAddress, undefined);
+  assert.equal(suggestion?.importCommand, undefined);
+  assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
+});
+
+test("CloudFormation 소유 Resource는 읽는 순간 Terraform 편집 대상으로 표시하지 않는다", () => {
+  const legacyResult = createLegacyResult();
+  const bucket = legacyResult.discoveredResources.find((resource) => resource.id === "safe-bucket");
+  const bucketNode = legacyResult.architectureJson.nodes.find(
+    (node) => node.id === "legacy-safe-bucket-node"
+  );
+
+  assert.ok(bucket);
+  assert.ok(bucketNode);
+
+  bucket.config = {
+    tags: [
+      { key: "aws:cloudformation:stack-name", value: "customer-production" },
+      { key: "Environment", value: "production" }
+    ]
+  };
+  bucketNode.config = {
+    ...bucketNode.config,
+    reverseEngineeringManagement: "managed",
+    terraformBlockType: "resource",
+    terraformResourceType: "aws_s3_bucket",
+    terraformResourceName: "safe_bucket",
+    terraformFileName: "reverse-engineering"
+  };
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const publicBucket = result.discoveredResources.find((resource) => resource.id === "safe-bucket");
+  const publicBucketNode = result.architectureJson.nodes.find(
+    (node) => node.id === "legacy-safe-bucket-node"
+  );
+  const suggestion = result.importSuggestions.find((item) => item.resourceId === "safe-bucket");
+
+  assert.equal(publicBucket?.analysisExcluded, true);
+  assert.equal(publicBucket?.importSuggestionStatus, undefined);
+  assert.equal(publicBucketNode?.config["analysisExcluded"], true);
+  assert.equal(publicBucketNode?.config["reverseEngineeringManagement"], "reference");
+  assert.equal(publicBucketNode?.config["terraformResourceType"], undefined);
+  assert.equal(publicBucketNode?.config["terraformResourceName"], undefined);
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.equal(suggestion?.terraformAddress, undefined);
+  assert.equal(suggestion?.importCommand, undefined);
+});
+
+test("과거 저장된 Action과 Metric Query Alarm도 읽는 순간 관리와 import를 다시 차단한다", () => {
+  const legacyResult = createLegacyResult();
+  const alarmArn = "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:notify-ops";
+  const resourceId = "legacy-cloudwatch-alarm";
+
+  legacyResult.discoveredResources.push({
+    id: resourceId,
+    provider: "aws",
+    providerResourceType: "AWS::CloudWatch::Alarm",
+    providerResourceId: alarmArn,
+    region: "ap-northeast-2",
+    displayName: "notify-ops",
+    resourceType: "CLOUDWATCH_METRIC_ALARM",
+    config: {
+      alarmName: "notify-ops",
+      alarmActions: ["arn:aws:sns:ap-northeast-2:123456789012:ops"],
+      metrics: [{ Id: "e1", Expression: "SUM(METRICS())" }]
+    }
+  });
+  legacyResult.architectureJson.nodes.push({
+    id: resourceId,
+    type: "CLOUDWATCH_METRIC_ALARM",
+    label: "notify-ops",
+    positionX: 720,
+    positionY: 80,
+    config: {
+      providerResourceType: "AWS::CloudWatch::Alarm",
+      providerResourceId: alarmArn,
+      alarmName: "notify-ops",
+      alarmActions: ["arn:aws:sns:ap-northeast-2:123456789012:ops"],
+      metrics: [{ Id: "e1", Expression: "SUM(METRICS())" }],
+      reverseEngineeringManagement: "managed",
+      terraformBlockType: "resource",
+      terraformResourceType: "aws_cloudwatch_metric_alarm",
+      terraformResourceName: "legacy_cloudwatch_alarm",
+      terraformFileName: "reverse-engineering"
+    }
+  });
+  legacyResult.importSuggestions.push({
+    id: "import-legacy-cloudwatch-alarm",
+    resourceId,
+    status: "ready",
+    handoffReady: true,
+    terraformAddress: "aws_cloudwatch_metric_alarm.legacy_cloudwatch_alarm",
+    importCommand:
+      "terraform import aws_cloudwatch_metric_alarm.legacy_cloudwatch_alarm notify-ops",
+    terraformBlockDraft: 'resource "aws_cloudwatch_metric_alarm" "legacy_cloudwatch_alarm" {}'
+  });
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const resource = result.discoveredResources.at(-1);
+  const node = result.architectureJson.nodes.at(-1);
+  const suggestion = result.importSuggestions.at(-1);
+
+  assert.equal(resource?.analysisExcluded, true);
+  assert.deepEqual(resource?.config, {
+    alarmName: "notify-ops",
+    hasActionTargets: true,
+    hasMetricQueries: true,
+    tagsReadComplete: false
+  });
+  assert.equal(node?.config["analysisExcluded"], true);
+  assert.equal(node?.config["reverseEngineeringManagement"], "needs_mapping");
+  assert.equal(node?.config["terraformResourceType"], undefined);
+  assert.equal(node?.config["terraformResourceName"], undefined);
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.equal(suggestion?.terraformAddress, undefined);
+  assert.equal(suggestion?.importCommand, undefined);
+  assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
+});
+
+test("과거 raw ARN 내부 ID와 진단 참조도 하나의 공개 ID로 다시 연결한다", () => {
+  const legacyResult = createLegacyResult();
+  legacyResult.discoveredResources[0]!.id = LEGACY_LAMBDA_ARN;
+  legacyResult.discoveredResources[1]!.relationships = [
+    { type: "depends_on", targetResourceId: LEGACY_LAMBDA_ARN }
+  ];
+  legacyResult.architectureJson = {
+    nodes: [
+      { ...legacyResult.architectureJson.nodes[0]!, id: LEGACY_LAMBDA_ARN },
+      legacyResult.architectureJson.nodes[1]!
+    ],
+    edges: [
+      {
+        id: `edge-${LEGACY_LAMBDA_ARN}`,
+        sourceId: LEGACY_LAMBDA_ARN,
+        targetId: "legacy-safe-bucket-node",
+        label: "depends_on"
+      }
+    ]
+  };
+  legacyResult.findings = [
+    {
+      id: `finding-${LEGACY_LAMBDA_ARN}`,
+      category: "permission",
+      severity: "medium",
+      resourceId: LEGACY_LAMBDA_ARN,
+      title: "AccessDeniedException",
+      description: `iam:ListRoles failed for ${LEGACY_LAMBDA_ARN} RequestId private`,
+      recommendation: '{"Action":"iam:ListRoles","Resource":"*"}'
+    }
+  ];
+  legacyResult.analysisExclusions[0] = {
+    ...legacyResult.analysisExclusions[0]!,
+    id: `exclude-${LEGACY_LAMBDA_ARN}`,
+    resourceId: LEGACY_LAMBDA_ARN,
+    message: `AccessDenied ${LEGACY_LAMBDA_ARN} iam:ListRoles`
+  };
+  legacyResult.importSuggestions[0] = {
+    ...legacyResult.importSuggestions[0]!,
+    id: `import-${LEGACY_LAMBDA_ARN}`,
+    resourceId: LEGACY_LAMBDA_ARN
+  };
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const lambda = result.discoveredResources[0];
+  const bucket = result.discoveredResources[1];
+
+  assert.ok(lambda);
+  assert.equal(result.architectureJson.nodes[0]?.id, lambda.id);
+  assert.equal(result.architectureJson.edges[0]?.sourceId, lambda.id);
+  assert.equal(bucket?.relationships?.[0]?.targetResourceId, lambda.id);
+  assert.equal(result.findings[0]?.resourceId, lambda.id);
+  assert.equal(result.analysisExclusions[0]?.resourceId, lambda.id);
+  assert.equal(result.importSuggestions[0]?.resourceId, lambda.id);
+  assert.doesNotMatch(
+    JSON.stringify(result),
+    /arn:aws|AccessDenied|RequestId|iam:ListRoles|"(?:Action|Resource)"/iu
+  );
+});
+
+test("과거 ARN 정규화 ID와 파생 참조도 raw provider ID 기준의 canonical 공개 ID로 바꾼다", () => {
+  const legacyResult = createLegacyResult();
+  const legacyResourceId =
+    "resource-arn-aws-lambda-ap-northeast-2-123456789012-function-orders-handler";
+  legacyResult.discoveredResources[0]!.id = legacyResourceId;
+  legacyResult.discoveredResources[1]!.relationships = [
+    { type: "depends_on", targetResourceId: legacyResourceId }
+  ];
+  legacyResult.architectureJson = {
+    nodes: [
+      { ...legacyResult.architectureJson.nodes[0]!, id: legacyResourceId },
+      legacyResult.architectureJson.nodes[1]!
+    ],
+    edges: [
+      {
+        id: `edge-${legacyResourceId}-legacy-safe-bucket-node-depends-on`,
+        sourceId: legacyResourceId,
+        targetId: "legacy-safe-bucket-node",
+        label: "depends_on"
+      }
+    ]
+  };
+  legacyResult.findings = [
+    {
+      id: `finding-${legacyResourceId}`,
+      category: "permission",
+      severity: "medium",
+      resourceId: legacyResourceId,
+      title: "확인이 필요합니다.",
+      description: "가져온 Resource를 확인해 주세요.",
+      recommendation: "설정을 확인해 주세요."
+    }
+  ];
+  legacyResult.analysisExclusions[0] = {
+    ...legacyResult.analysisExclusions[0]!,
+    id: `analysis-exclusion-${legacyResourceId}`,
+    resourceId: legacyResourceId
+  };
+  legacyResult.importSuggestions[0] = {
+    ...legacyResult.importSuggestions[0]!,
+    id: `import-${legacyResourceId}`,
+    resourceId: legacyResourceId
+  };
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const lambda = result.discoveredResources[0];
+
+  assert.ok(lambda);
+  assert.match(lambda.id, /^resource-aws-ref-[a-f0-9]{24}$/u);
+  assert.equal(result.architectureJson.nodes[0]?.id, lambda.id);
+  assert.equal(result.architectureJson.edges[0]?.sourceId, lambda.id);
+  assert.match(result.architectureJson.edges[0]?.id ?? "", new RegExp(lambda.id));
+  assert.equal(result.discoveredResources[1]?.relationships?.[0]?.targetResourceId, lambda.id);
+  assert.equal(result.findings[0]?.resourceId, lambda.id);
+  assert.match(result.findings[0]?.id ?? "", new RegExp(lambda.id));
+  assert.equal(result.analysisExclusions[0]?.resourceId, lambda.id);
+  assert.match(result.analysisExclusions[0]?.id ?? "", new RegExp(lambda.id));
+  assert.equal(result.importSuggestions[0]?.resourceId, lambda.id);
+  assert.match(result.importSuggestions[0]?.id ?? "", new RegExp(lambda.id));
+  assert.doesNotMatch(JSON.stringify(result), /123456789012|resource-arn-aws-lambda/iu);
+});
+
+test("과거 draft 없는 결과는 원본을 바꾸지 않고 안전한 호환 draft를 만든다", () => {
   const legacyResult = createLegacyResult();
   const persistedArchitectureBeforeRead = structuredClone(legacyResult.architectureJson);
   const persistedLambdaBeforeRead = structuredClone(legacyResult.discoveredResources[0]);
 
   const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
-  const lambdaNode = result.architectureJson.nodes.find((node) => node.id === "legacy-lambda");
+  const publicLambdaId = result.discoveredResources[0]?.id;
+  assert.ok(publicLambdaId);
+  const lambdaNode = result.architectureJson.nodes.find((node) => node.id === publicLambdaId);
   const bucketNode = result.architectureJson.nodes.find(
     (node) => node.id === "legacy-safe-bucket-node"
   );
@@ -144,16 +467,16 @@ test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호�
   assert.equal(lambdaNode?.label, "orders-handler");
   assert.deepEqual(lambdaNode?.config, {
     functionName: "orders-handler",
-    rawRuntime: "nodejs20.x",
-    legacyConfigMarker: "keep-lambda-raw",
+    reverseEngineeringManagement: "needs_mapping",
     providerResourceType: "AWS::Lambda::Function",
-    providerResourceId: LEGACY_LAMBDA_ARN,
+    providerResourceId: result.discoveredResources[0]?.providerResourceId,
     analysisExcluded: true
   });
   assert.equal(bucketNode?.label, "safe-bucket");
-  assert.equal(bucketNode?.config["legacyConfigMarker"], "keep-bucket-raw");
+  assert.equal(bucketNode?.config["legacyConfigMarker"], undefined);
   assert.equal(bucketNode?.config["providerResourceId"], "sketchcatch-safe-bucket");
-  assert.equal(bucketNode?.config["analysisExcluded"], false);
+  assert.equal(bucketNode?.config["reverseEngineeringManagement"], "needs_mapping");
+  assert.equal(bucketNode?.config["analysisExcluded"], true);
   assert.equal(result.reverseEngineeringDraft.architectureJson, result.architectureJson);
   assert.deepEqual(result.reverseEngineeringDraft.protectedValueKeys, [
     "providerResourceId",
@@ -174,7 +497,15 @@ test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호�
   assert.equal("importCommand" in (result.importSuggestions[0] ?? {}), false);
   assert.equal("terraformBlockDraft" in (result.importSuggestions[0] ?? {}), false);
   assert.equal(result.importSuggestions[1], legacyResult.importSuggestions[1]);
-  assert.equal(result.importSuggestions[2], legacyResult.importSuggestions[2]);
+  assert.deepEqual(result.importSuggestions[2], {
+    id: "import-safe-bucket",
+    resourceId: "safe-bucket",
+    status: "manual_review",
+    handoffReady: false,
+    reason:
+      "AWS에서 찾았지만 현재 설정을 안전하게 Terraform으로 옮길 수 없습니다. 보드에서 구조를 확인할 수 있습니다."
+  });
+  assert.match(legacyResult.importSuggestions[2]?.importCommand ?? "", /^terraform import /u);
   assert.equal(legacyResult.importSuggestions[0]?.status, "ready");
   assert.equal(legacyResult.importSuggestions[0]?.handoffReady, true);
   assert.deepEqual(legacyResult.architectureJson, persistedArchitectureBeforeRead);
@@ -196,12 +527,108 @@ test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호�
     ]),
     [
       {
-        nodeId: "legacy-lambda",
+        nodeId: publicLambdaId,
         resourceAddress: "aws_lambda_function.orders_handler",
         excludedResourceAddress: "aws_lambda_function"
+      },
+      {
+        nodeId: "legacy-safe-bucket-node",
+        resourceAddress: "aws_s3_bucket.safe_bucket",
+        excludedResourceAddress: "aws_s3_bucket"
       }
     ]
   );
+});
+
+test("과거 스캔의 AWS 원문 오류도 읽을 때 서비스 단위 안전 안내로 바꾼다", () => {
+  const legacyResult = createLegacyResult();
+  legacyResult.scanErrors.push({
+    id: "legacy-raw-iam-error",
+    serviceKey: "iam",
+    resourceType: "UNKNOWN",
+    stage: "provider_api",
+    reason: "permission_denied",
+    message: "AccessDenied arn:aws:iam::123456789012:role/private iam:ListRoles RequestId hidden",
+    retryable: false
+  });
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+
+  assert.deepEqual(result.coverage, {
+    status: "partial",
+    unavailableServices: [
+      {
+        serviceKey: "iam",
+        displayName: "IAM",
+        reason: "permission_required",
+        remedy: "open_settings"
+      }
+    ]
+  });
+  assert.doesNotMatch(
+    JSON.stringify({ coverage: result.coverage, scanErrors: result.scanErrors }),
+    /AccessDenied|arn:aws|iam:ListRoles|RequestId|hidden/iu
+  );
+});
+
+test("과거 스캔의 Cloud Control 목록 제한은 읽기 실패와 분리해 다시 안내한다", () => {
+  const legacyResult = createLegacyResult();
+  legacyResult.discoveredResources.push({
+    id: "legacy-certificate",
+    provider: "aws",
+    providerResourceType: "AWS::CertificateManager::Certificate",
+    providerResourceId: "certificate-orders",
+    region: "ap-northeast-2",
+    displayName: "orders-certificate",
+    resourceType: "UNKNOWN",
+    config: {}
+  });
+  legacyResult.scanErrors.push({
+    id: "scan-error-service-cloud-control-capability",
+    serviceKey: "cloud-control-capability",
+    resourceType: "UNKNOWN",
+    stage: "provider_api",
+    reason: "unsupported",
+    message:
+      "UnsupportedActionException arn:aws:acm:ap-northeast-2:123456789012:certificate/private",
+    retryable: false,
+    affectedProviderResourceTypes: [
+      "AWS::CertificateManager::Certificate",
+      "AWS::CertificateManager::CertificateValidation"
+    ],
+    failedAwsApiActions: ["cloudformation:ListResources"]
+  });
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+
+  assert.deepEqual(result.coverage, {
+    status: "complete",
+    unavailableServices: [],
+    capabilityLimits: [
+      {
+        serviceKey: "cloud-control-capability",
+        displayName: "Cloud Control 목록 조회",
+        reason: "not_supported",
+        affectedProviderResourceTypes: ["AWS::CertificateManager::Certificate"]
+      }
+    ]
+  });
+  assert.deepEqual(result.scanErrors, [
+    {
+      id: "scan-error-service-cloud-control-capability",
+      serviceKey: "cloud-control-capability",
+      resourceType: "UNKNOWN",
+      stage: "provider_api",
+      reason: "unsupported",
+      message: "일부 AWS 종류는 Cloud Control 목록 조회를 지원하지 않습니다.",
+      retryable: false,
+      affectedProviderResourceTypes: [
+        "AWS::CertificateManager::Certificate",
+        "AWS::CertificateManager::CertificateValidation"
+      ]
+    }
+  ]);
+  assert.doesNotMatch(JSON.stringify(result), /UnsupportedAction|arn:aws|private|ListResources/iu);
 });
 
 test("과거 analysisExclusion만 남은 Resource도 실행 가능한 import handoff를 제거한다", () => {
@@ -228,10 +655,294 @@ test("과거 analysisExclusion만 남은 Resource도 실행 가능한 import han
     resourceId: "safe-bucket",
     status: "manual_review",
     handoffReady: false,
-    reason: "검토 전용 Resource는 Terraform import 또는 배포에 사용할 수 없습니다."
+    reason:
+      "AWS에서 찾았지만 현재 설정을 안전하게 Terraform으로 옮길 수 없습니다. 보드에서 구조를 확인할 수 있습니다."
   });
   assert.equal(persistedImportSuggestion?.status, "ready");
   assert.equal(persistedImportSuggestion?.handoffReady, true);
+});
+
+test("같은 scan 대상이 사라진 과거 Route Table Association의 Terraform identity를 제거한다", () => {
+  const legacyResult = createLegacyResult();
+  legacyResult.discoveredResources.push({
+    id: "legacy-route-table-association",
+    provider: "aws",
+    providerResourceType: "AWS::EC2::RouteTableAssociation",
+    providerResourceId: "rtbassoc-main-subnet",
+    region: "ap-northeast-2",
+    displayName: "rtbassoc-main-subnet",
+    resourceType: "ROUTE_TABLE_ASSOCIATION",
+    config: {
+      routeTableAssociationId: "rtbassoc-main-subnet",
+      subnetId: "subnet-main",
+      routeTableId: "rtb-main",
+      main: false
+    },
+    relationships: [
+      {
+        type: "connects_to",
+        targetResourceId: "missing-subnet",
+        label: "attached_to"
+      },
+      {
+        type: "depends_on",
+        targetResourceId: "missing-route-table",
+        label: "depends_on"
+      }
+    ]
+  });
+  legacyResult.architectureJson.nodes.push({
+    id: "legacy-route-table-association",
+    type: "ROUTE_TABLE_ASSOCIATION",
+    label: "rtbassoc-main-subnet",
+    positionX: 720,
+    positionY: 80,
+    config: {
+      providerResourceId: "rtbassoc-main-subnet",
+      terraformBlockType: "resource",
+      terraformResourceType: "aws_route_table_association",
+      terraformResourceName: "legacy_route_table_association",
+      terraformFileName: "reverse-engineering",
+      reverseEngineeringManagement: "managed"
+    }
+  });
+  legacyResult.importSuggestions.push({
+    id: "import-legacy-route-table-association",
+    resourceId: "legacy-route-table-association",
+    status: "ready",
+    handoffReady: true,
+    terraformAddress: "aws_route_table_association.legacy_route_table_association",
+    importCommand:
+      "terraform import aws_route_table_association.legacy_route_table_association subnet-main/rtb-main"
+  });
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const association = result.discoveredResources.find(
+    (resource) => resource.resourceType === "ROUTE_TABLE_ASSOCIATION"
+  );
+  const associationNode = result.architectureJson.nodes.find(
+    (node) => node.id === "legacy-route-table-association"
+  );
+  const suggestion = result.importSuggestions.find(
+    (candidate) => candidate.resourceId === "legacy-route-table-association"
+  );
+
+  assert.equal(association?.analysisExcluded, true);
+  assert.equal(association?.importSuggestionStatus, "manual_review");
+  assert.equal(associationNode?.config["analysisExcluded"], true);
+  assert.equal(associationNode?.config["reverseEngineeringManagement"], "needs_mapping");
+  assert.equal(associationNode?.config["terraformBlockType"], undefined);
+  assert.equal(associationNode?.config["terraformResourceType"], undefined);
+  assert.equal(associationNode?.config["terraformResourceName"], undefined);
+  assert.equal(associationNode?.config["terraformFileName"], undefined);
+  assert.deepEqual(suggestion, {
+    id: "import-legacy-route-table-association",
+    resourceId: "legacy-route-table-association",
+    status: "manual_review",
+    handoffReady: false,
+    reason:
+      "AWS에서 찾았지만 현재 설정을 안전하게 Terraform으로 옮길 수 없습니다. 보드에서 구조를 확인할 수 있습니다."
+  });
+});
+
+test("같은 scan 참조가 사라진 과거 EIP/NAT의 Terraform identity를 제거한다", () => {
+  const legacyResult = createLegacyResult();
+  const staleResources = [
+    {
+      id: "legacy-eip",
+      provider: "aws" as const,
+      providerResourceType: "AWS::EC2::EIP",
+      providerResourceId: "eipalloc-0123456789abcdef0",
+      region: "ap-northeast-2",
+      displayName: "egress-ip",
+      resourceType: "ELASTIC_IP" as const,
+      config: {
+        allocationId: "eipalloc-0123456789abcdef0",
+        associationTargetType: "nat_gateway",
+        domain: "vpc"
+      },
+      relationships: [
+        { type: "depends_on" as const, targetResourceId: "missing-nat", label: "depends_on" }
+      ]
+    },
+    {
+      id: "legacy-nat",
+      provider: "aws" as const,
+      providerResourceType: "AWS::EC2::NatGateway",
+      providerResourceId: "nat-0123456789abcdef0",
+      region: "ap-northeast-2",
+      displayName: "private-egress",
+      resourceType: "NAT_GATEWAY" as const,
+      config: {
+        allocationIds: [],
+        connectivityType: "private",
+        natGatewayId: "nat-0123456789abcdef0",
+        state: "available",
+        subnetId: "subnet-0123456789abcdef0"
+      },
+      relationships: [
+        { type: "contains" as const, targetResourceId: "missing-subnet", label: "contains" }
+      ]
+    }
+  ];
+  legacyResult.discoveredResources.push(...staleResources);
+  legacyResult.architectureJson.nodes.push(
+    ...staleResources.map((resource) => ({
+      id: resource.id,
+      type: resource.resourceType,
+      label: resource.displayName,
+      positionX: 720,
+      positionY: 80,
+      config: {
+        providerResourceId: resource.providerResourceId,
+        terraformBlockType: "resource" as const,
+        terraformResourceType:
+          resource.resourceType === "ELASTIC_IP" ? "aws_eip" : "aws_nat_gateway",
+        terraformResourceName: resource.id.replaceAll("-", "_"),
+        terraformFileName: "reverse-engineering",
+        reverseEngineeringManagement: "managed"
+      }
+    }))
+  );
+  legacyResult.importSuggestions.push(
+    ...staleResources.map((resource) => {
+      const terraformType = resource.resourceType === "ELASTIC_IP" ? "aws_eip" : "aws_nat_gateway";
+      const terraformName = resource.id.replaceAll("-", "_");
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "ready" as const,
+        handoffReady: true,
+        terraformAddress: `${terraformType}.${terraformName}`,
+        importCommand: `terraform import ${terraformType}.${terraformName} ${resource.providerResourceId}`
+      };
+    })
+  );
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+
+  for (const staleResource of staleResources) {
+    const resource = result.discoveredResources.find(
+      (candidate) => candidate.id === staleResource.id
+    );
+    const node = result.architectureJson.nodes.find(
+      (candidate) => candidate.id === staleResource.id
+    );
+    const suggestion = result.importSuggestions.find(
+      (candidate) => candidate.resourceId === staleResource.id
+    );
+
+    assert.equal(resource?.analysisExcluded, true);
+    assert.equal(resource?.importSuggestionStatus, "manual_review");
+    assert.equal(node?.config["analysisExcluded"], true);
+    assert.equal(node?.config["reverseEngineeringManagement"], "needs_mapping");
+    assert.equal(node?.config["terraformBlockType"], undefined);
+    assert.equal(node?.config["terraformResourceType"], undefined);
+    assert.equal(node?.config["terraformResourceName"], undefined);
+    assert.equal(node?.config["terraformFileName"], undefined);
+    assert.equal(suggestion?.status, "manual_review");
+    assert.equal(suggestion?.handoffReady, false);
+    assert.equal(suggestion?.terraformAddress, undefined);
+    assert.equal(suggestion?.importCommand, undefined);
+  }
+});
+
+test("같은 scan 참조가 완전한 public NAT은 읽기 보정 후에도 EIP 참조를 유지한다", () => {
+  const legacyResult = createLegacyResult();
+  const subnetId = "subnet-0123456789abcdef0";
+  const primaryAllocationId = "eipalloc-0123456789abcdef0";
+  const secondaryAllocationId = "eipalloc-fedcba98765432100";
+  const natGatewayId = "nat-0123456789abcdef0";
+  const subnet = {
+    id: "resource-subnet-main",
+    provider: "aws" as const,
+    providerResourceType: "AWS::EC2::Subnet",
+    providerResourceId: subnetId,
+    region: "ap-northeast-2",
+    displayName: "private-a",
+    resourceType: "SUBNET" as const,
+    config: {
+      vpcId: "vpc-main",
+      cidrBlock: "10.0.1.0/24",
+      availabilityZone: "ap-northeast-2a",
+      assignIpv6AddressOnCreation: false,
+      mapPublicIpOnLaunch: false
+    }
+  };
+  const eips = [primaryAllocationId, secondaryAllocationId].map((allocationId, index) => ({
+    id: `resource-eip-${index + 1}`,
+    provider: "aws" as const,
+    providerResourceType: "AWS::EC2::EIP",
+    providerResourceId: allocationId,
+    region: "ap-northeast-2",
+    displayName: `egress-${index + 1}`,
+    resourceType: "ELASTIC_IP" as const,
+    config: {
+      allocationId,
+      associationTargetType: "nat_gateway",
+      domain: "vpc"
+    },
+    relationships: [
+      { type: "depends_on" as const, targetResourceId: "resource-nat-main", label: "depends_on" }
+    ]
+  }));
+  const nat = {
+    id: "resource-nat-main",
+    provider: "aws" as const,
+    providerResourceType: "AWS::EC2::NatGateway",
+    providerResourceId: natGatewayId,
+    region: "ap-northeast-2",
+    displayName: "public-egress",
+    resourceType: "NAT_GATEWAY" as const,
+    config: {
+      allocationIds: [primaryAllocationId, secondaryAllocationId],
+      connectivityType: "public",
+      natGatewayId,
+      primaryAllocationId,
+      state: "available",
+      subnetId
+    },
+    relationships: [
+      { type: "contains" as const, targetResourceId: subnet.id, label: "contains" },
+      ...eips.map((eip) => ({
+        type: "depends_on" as const,
+        targetResourceId: eip.id,
+        label: "depends_on"
+      }))
+    ]
+  };
+  const resources = [subnet, ...eips, nat];
+  legacyResult.discoveredResources.push(...resources);
+  legacyResult.architectureJson.nodes.push(
+    ...resources.map((resource, index) => ({
+      id: resource.id,
+      type: resource.resourceType,
+      label: resource.displayName,
+      positionX: 720 + index * 120,
+      positionY: 80,
+      config: {
+        providerResourceId: resource.providerResourceId,
+        terraformBlockType: "resource" as const,
+        terraformResourceType:
+          resource.resourceType === "SUBNET"
+            ? "aws_subnet"
+            : resource.resourceType === "ELASTIC_IP"
+              ? "aws_eip"
+              : "aws_nat_gateway",
+        terraformResourceName: resource.id.replaceAll("-", "_"),
+        terraformFileName: "reverse-engineering",
+        reverseEngineeringManagement: "managed"
+      }
+    }))
+  );
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const natNode = result.architectureJson.nodes.find((node) => node.id === nat.id);
+
+  assert.equal(natNode?.config["reverseEngineeringManagement"], "managed");
+  assert.equal(natNode?.config["terraformResourceType"], "aws_nat_gateway");
+  assert.equal(natNode?.config["allocationId"], "aws_eip.resource_eip_1.id");
+  assert.deepEqual(natNode?.config["secondaryAllocationIds"], ["aws_eip.resource_eip_2.id"]);
 });
 
 test("유일하게 연결된 지원 Resource가 아닌 과거 import handoff는 안전하게 제거한다", () => {
@@ -256,7 +967,8 @@ test("유일하게 연결된 지원 Resource가 아닌 과거 import handoff는 
     resourceId: "missing-resource",
     status: "manual_review",
     handoffReady: false,
-    reason: "검토 전용 Resource는 Terraform import 또는 배포에 사용할 수 없습니다."
+    reason:
+      "AWS에서 찾았지만 현재 설정을 안전하게 Terraform으로 옮길 수 없습니다. 보드에서 구조를 확인할 수 있습니다."
   });
 
   const ambiguousResult = createLegacyResult();
@@ -275,11 +987,12 @@ test("유일하게 연결된 지원 Resource가 아닌 과거 import handoff는 
     resourceId: "safe-bucket",
     status: "manual_review",
     handoffReady: false,
-    reason: "검토 전용 Resource는 Terraform import 또는 배포에 사용할 수 없습니다."
+    reason:
+      "AWS에서 찾았지만 현재 설정을 안전하게 Terraform으로 옮길 수 없습니다. 보드에서 구조를 확인할 수 있습니다."
   });
 });
 
-test("현재의 완전하고 안전한 draft는 결과를 읽어도 그대로 유지한다", () => {
+test("현재의 완전하고 안전한 draft는 호환 보정 후에도 내용을 유지한다", () => {
   const safeArchitectureJson = normalizeReverseEngineeringScanResult(
     persistedScan,
     createLegacyResult()
@@ -300,7 +1013,7 @@ test("현재의 완전하고 안전한 draft는 결과를 읽어도 그대로 �
 
   const result = normalizeReverseEngineeringScanResult(persistedScan, currentResult);
 
-  assert.equal(result.reverseEngineeringDraft, currentDraft);
+  assert.deepEqual(result.reverseEngineeringDraft, currentDraft);
   assert.equal(result.scan, persistedScan);
 });
 
@@ -362,15 +1075,16 @@ test("discovered Resource와 신뢰할 수 있게 연결되지 않는 과거 노
   const node = result.architectureJson.nodes[0];
 
   assert.equal(node?.config["analysisExcluded"], true);
-  assert.equal(node?.config["legacyConfigMarker"], "keep-malformed-raw");
-  assert.equal(node?.config["providerResourceId"], malformedProviderResourceId);
+  assert.equal(node?.config["legacyConfigMarker"], undefined);
+  assert.match(String(node?.config["providerResourceId"]), /^aws-ref-[a-f0-9]{24}$/u);
   assert.equal(node?.config["functionName"], undefined);
   assert.equal(node?.config["rawRuntime"], undefined);
   assert.equal(node?.label, "orders-handler");
+  assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
   assert.deepEqual(malformedResult.architectureJson, malformedArchitecture);
 });
 
-test("label에만 남은 unmatched ARN은 짧게 표시하되 raw provider identity를 보존한다", () => {
+test("label에만 남은 unmatched ARN은 짧은 이름과 opaque identity로 공개한다", () => {
   const unmatchedResult = createLegacyResult();
   const unmatchedArchitecture: ArchitectureJson = {
     nodes: [
@@ -395,8 +1109,9 @@ test("label에만 남은 unmatched ARN은 짧게 표시하되 raw provider ident
 
   assert.equal(node?.label, "orders-handler");
   assert.equal(node?.config["analysisExcluded"], true);
-  assert.equal(node?.config["providerResourceId"], LEGACY_LAMBDA_ARN);
-  assert.equal(node?.config["legacyConfigMarker"], "keep-arn-only-raw");
+  assert.match(String(node?.config["providerResourceId"]), /^aws-ref-[a-f0-9]{24}$/u);
+  assert.equal(node?.config["legacyConfigMarker"], undefined);
+  assert.doesNotMatch(JSON.stringify(result), /arn:aws/iu);
   assert.deepEqual(unmatchedResult.architectureJson, unmatchedArchitecture);
 });
 
@@ -427,8 +1142,8 @@ test("서로 다른 strong identity를 가리키는 모호한 노드는 어느 d
   const node = result.architectureJson.nodes[0];
 
   assert.equal(node?.config["analysisExcluded"], true);
-  assert.equal(node?.config["legacyConfigMarker"], "keep-ambiguous-raw");
-  assert.equal(node?.config["providerResourceId"], "sketchcatch-safe-bucket");
+  assert.equal(node?.config["legacyConfigMarker"], undefined);
+  assert.match(String(node?.config["providerResourceId"]), /^aws-ref-[a-f0-9]{24}$/u);
   assert.equal(node?.config["functionName"], undefined);
   assert.equal(node?.config["rawRuntime"], undefined);
   assert.equal(node?.config["bucketRawMarker"], undefined);

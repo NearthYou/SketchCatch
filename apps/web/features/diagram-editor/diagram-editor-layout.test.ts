@@ -11,6 +11,10 @@ const diagramEditorStyles = readFileSync(
   fileURLToPath(new URL("./diagram-editor.module.css", import.meta.url)),
   "utf8"
 );
+const diagramEditorTypesSource = readFileSync(
+  fileURLToPath(new URL("./types.ts", import.meta.url)),
+  "utf8"
+);
 const dragTransactionSource = readFileSync(
   fileURLToPath(new URL("./drag-transaction.ts", import.meta.url)),
   "utf8"
@@ -34,6 +38,11 @@ test("diagram editor uses partial box selection for overlapping area nodes", () 
     /selectionOnDrag=\{interactionMode === "select" && !isPreviewActive\}/
   );
   assert.match(diagramEditorSource, /selectionMode=\{SelectionMode\.Partial\}/);
+});
+
+test("trackpad pinch does not take over the Architecture Board viewport", () => {
+  assert.match(diagramEditorSource, /panOnScroll=\{viewerPolicy\.panOnScroll\}/);
+  assert.match(diagramEditorSource, /zoomOnPinch=\{false\}/);
 });
 
 test("clicking any interactive flow node replaces the current single selection", () => {
@@ -305,12 +314,18 @@ test("palette drag preview and drop use the same Area size transformer", () => {
   );
 });
 
+test("resource name visibility remains authoritative at far zoom", () => {
+  assert.match(
+    diagramEditorStyles,
+    /\.canvasPanelResourceNamesVisible\s+\.nodeShellZoomFar\s+\.resourceNodeLabel\s*\{[^}]*opacity:\s*1;[^}]*visibility:\s*visible;/s
+  );
+});
+
 test("diagram editor restores the light canvas with a restrained two-level grid", () => {
   const editorShellBlock = getCssBlock(".editorShell");
   const canvasPanelBlock = getCssBlock(".canvasPanel");
   const reactFlowBlock = getCssRuleContaining(".canvasPanel :global(.react-flow)");
   const selectionBlock = getCssRuleContaining(".canvasPanel :global(.react-flow__selection)");
-
   assert.match(editorShellBlock, /--board-canvas:\s*#f6f8fc;/i);
   assert.match(editorShellBlock, /--board-surface:\s*#ffffff;/i);
   assert.match(editorShellBlock, /--board-ink:\s*#172033;/i);
@@ -381,7 +396,7 @@ test("workspace shell docks both panels and collapses them on compact screens", 
 });
 
 test("editor derives contextual read-mode panels while viewer mode stays isolated", () => {
-  assert.match(diagramEditorSource, /deriveInitialWorkspacePanelState\(\{\s*hasDiagramNodes:/);
+  assert.match(diagramEditorSource, /deriveInitialWorkspacePanelState\(\{[\s\S]*?hasDiagramNodes:/);
   assert.doesNotMatch(diagramEditorSource, /\{ leftPanelOpen: nextOpen \}/);
   assert.doesNotMatch(diagramEditorSource, /\{ rightPanelOpen: nextOpen \}/);
   assert.match(
@@ -523,6 +538,29 @@ test("viewport controls use the React Flow instance received from onInit", () =>
   );
 });
 
+test("the board zooms with Ctrl or Meta plus the mouse wheel and otherwise keeps wheel panning", () => {
+  assert.match(diagramEditorSource, /panOnScroll=\{viewerPolicy\.panOnScroll\}/);
+  assert.match(diagramEditorSource, /zoomOnScroll=\{false\}/);
+  assert.match(diagramEditorSource, /zoomOnPinch=\{false\}/);
+  assert.match(
+    diagramEditorSource,
+    /const boardZoomModifierKeysRef = useRef\(new Set<BoardZoomModifierKey>\(\)\);/
+  );
+  assert.match(
+    diagramEditorSource,
+    /const handleCanvasWheel[\s\S]*?resolveBoardWheelZoomShortcut\(\{[\s\S]*?activeModifierKeys: boardZoomModifierKeysRef\.current[\s\S]*?zoomDirection === "zoom_in"[\s\S]*?handleZoomIn\(\)[\s\S]*?handleZoomOut\(\)/
+  );
+  assert.doesNotMatch(diagramEditorSource, /onWheelCapture=\{handleCanvasWheel\}/);
+  assert.match(
+    diagramEditorSource,
+    /canvasPanel\.addEventListener\("wheel", handleCanvasWheel, \{ passive: false \}\)/
+  );
+  assert.match(
+    diagramEditorSource,
+    /canvasPanel\.removeEventListener\("wheel", handleCanvasWheel\)/
+  );
+});
+
 test("a single node click opens the matching resource inspector", () => {
   assert.match(
     diagramEditorSource,
@@ -549,6 +587,20 @@ test("a dedicated workflow can replace the default empty board guidance", () => 
   );
   assert.doesNotMatch(diagramEditorSource, /emptyBoardDescription = "[^"]*Resource/);
   assert.match(diagramEditorSource, /<span>\{emptyBoardDescription\}<\/span>/);
+});
+
+test("a dedicated workflow can supply interactive empty board content without changing the inert fallback", () => {
+  assert.match(diagramEditorTypesSource, /emptyBoardContent\?: ReactNode \| undefined;/);
+  assert.match(diagramEditorSource, /emptyBoardContent,/);
+  assert.match(
+    diagramEditorSource,
+    /aria-hidden=\{emptyBoardContent \? undefined : true\}/
+  );
+  assert.match(diagramEditorSource, /emptyBoardContent \? \(\s*emptyBoardContent\s*\) : \(/s);
+  assert.match(
+    diagramEditorStyles,
+    /\.emptyStateInteractive\s*\{[\s\S]*?pointer-events:\s*auto;/
+  );
 });
 
 test("a preview-only workflow can hide the project save action", () => {

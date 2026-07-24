@@ -43,7 +43,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2abe13e0-233f-4e11-9d24-05e9b3d61bdf",
       domOrder: 1,
-      label: "default",
+      label: "VPC",
       position: {
         x: -430,
         y: 170
@@ -61,7 +61,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8487e22b-1a81-4b45-87f4-3415848b288a",
       domOrder: 2,
-      label: "us-east-2a",
+      label: "AZ us-east-2a",
       position: {
         x: -300,
         y: 305
@@ -79,7 +79,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "a8cbdb9e-1255-44d1-9ccc-af111d08dc6d",
       domOrder: 3,
-      label: "us-east-2b",
+      label: "AZ us-east-2b",
       position: {
         x: 350,
         y: 309
@@ -97,7 +97,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "efe4bfff-0849-45a3-81fd-d78dcec9062e",
       domOrder: 4,
-      label: "us-east-2c",
+      label: "AZ us-east-2c",
       position: {
         x: 990,
         y: 310
@@ -115,7 +115,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ceb5c182-f15b-4fed-8cd2-ae6f38ae57bb",
       domOrder: 5,
-      label: "Public subnet",
+      label: "Public Subnet A",
       position: {
         x: -282.784155214228,
         y: 460
@@ -133,7 +133,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "59330f93-ad09-4e27-8125-9ed70c14f18d",
       domOrder: 6,
-      label: "Public subnet",
+      label: "Public Subnet B",
       position: {
         x: 370,
         y: 458
@@ -151,7 +151,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d8602f90-fb4f-43f4-b4de-810d0117cc46",
       domOrder: 7,
-      label: "Public subnet",
+      label: "Public Subnet C",
       position: {
         x: 1010,
         y: 460
@@ -169,7 +169,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "75bf4e98-45fc-47f3-91d3-3c96bcbbde9c",
       domOrder: 8,
-      label: "Private subnet",
+      label: "Private Subnet A",
       position: {
         x: -281.54138702460847,
         y: 790
@@ -187,7 +187,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c922d942-2e74-48fa-8ad7-588328b69fbd",
       domOrder: 9,
-      label: "Private subnet",
+      label: "Private Subnet B",
       position: {
         x: 380,
         y: 790
@@ -205,7 +205,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "7706801a-075a-4573-ba3c-fa5fcdcb5e39",
       domOrder: 10,
-      label: "Private subnet",
+      label: "Private Subnet C",
       position: {
         x: 1010,
         y: 790
@@ -223,7 +223,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c5e2f82f-fa10-4734-ba7b-13c62eca245c",
       domOrder: 11,
-      label: "eip_a",
+      label: "NAT EIP A",
       position: {
         x: 120,
         y: 500
@@ -241,7 +241,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "930b2ef4-42c3-47c3-a5f2-8f1c8b66eeb2",
       domOrder: 12,
-      label: "nat-gw-2a-public",
+      label: "NAT Gateway A",
       position: {
         x: 120,
         y: 620
@@ -259,7 +259,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "7e887897-a039-4423-90de-08855d52d313",
       domOrder: 13,
-      label: "nat-gw-2b-public",
+      label: "NAT Gateway B",
       position: {
         x: 770,
         y: 620
@@ -277,7 +277,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "63b13b84-61f9-4e19-bb60-a3d254b4ec5c",
       domOrder: 14,
-      label: "nat-gw-2c-public",
+      label: "NAT Gateway C",
       position: {
         x: 1411.5413870246084,
         y: 620
@@ -295,7 +295,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "d1d206eb-491d-49e0-89f8-a079f364504b",
       domOrder: 15,
-      label: "eip_b",
+      label: "NAT EIP B",
       position: {
         x: 770,
         y: 500
@@ -313,7 +313,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "19d29edd-f56f-4e0c-8783-f484e8ba099b",
       domOrder: 16,
-      label: "rt_public_a",
+      label: "Public Route Table A",
       position: {
         x: -240,
         y: 560
@@ -331,7 +331,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "991494f9-ef01-48fc-a913-5fcf1ef4d36f",
       domOrder: 17,
-      label: "rt_public_b",
+      label: "Public Route Table B",
       position: {
         x: 420,
         y: 560
@@ -349,7 +349,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ee5363fd-574a-41db-8101-3f1b3f9a4a89",
       domOrder: 18,
-      label: "eip_c",
+      label: "NAT EIP C",
       position: {
         x: 1410,
         y: 500
@@ -367,7 +367,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "4bcc66c1-1ca5-4598-b191-43978626b5d4",
       domOrder: 19,
-      label: "rt_private_a",
+      label: "Private Route Table A",
       position: {
         x: 120,
         y: 920
@@ -385,7 +385,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3a83b88a-5972-4fa0-a93d-a5e9043dd346",
       domOrder: 20,
-      label: "rt_public_c",
+      label: "Public Route Table C",
       position: {
         x: 1060,
         y: 560
@@ -403,7 +403,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "e2b5b2fc-8c8c-4ba3-ac14-7ef1f114adae",
       domOrder: 21,
-      label: "rt_private_b",
+      label: "Private Route Table B",
       position: {
         x: 770,
         y: 900
@@ -421,7 +421,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ccbad7d3-fe39-4213-953c-0884b6e0aa64",
       domOrder: 22,
-      label: "rt_private_c",
+      label: "Private Route Table C",
       position: {
         x: 1410,
         y: 920
@@ -457,7 +457,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "eafb249d-07f3-431b-9f76-dbd55ad496fe",
       domOrder: 24,
-      label: "default",
+      label: "VPC Flow Log",
       position: {
         x: -400,
         y: 250
@@ -475,7 +475,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b52fd88e-c798-4539-bc2c-c96d2ff2a59a",
       domOrder: 25,
-      label: "default",
+      label: "Internet Gateway",
       position: {
         x: 590,
         y: 140
@@ -1001,7 +1001,7 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_vpc.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "8487e22b-1a81-4b45-87f4-3415848b288a": {
       kind: "presentation",
@@ -1061,73 +1061,73 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_eip.eip_a",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "930b2ef4-42c3-47c3-a5f2-8f1c8b66eeb2": {
       kind: "resource",
       address: "aws_nat_gateway.nat-gw-2a-public",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "7e887897-a039-4423-90de-08855d52d313": {
       kind: "resource",
       address: "aws_nat_gateway.nat-gw-2b-public",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "63b13b84-61f9-4e19-bb60-a3d254b4ec5c": {
       kind: "resource",
       address: "aws_nat_gateway.nat-gw-2c-public",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "d1d206eb-491d-49e0-89f8-a079f364504b": {
       kind: "resource",
       address: "aws_eip.eip_b",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "19d29edd-f56f-4e0c-8783-f484e8ba099b": {
       kind: "resource",
       address: "aws_route_table.rt_public_a",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "991494f9-ef01-48fc-a913-5fcf1ef4d36f": {
       kind: "resource",
       address: "aws_route_table.rt_public_b",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "ee5363fd-574a-41db-8101-3f1b3f9a4a89": {
       kind: "resource",
       address: "aws_eip.eip_c",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "4bcc66c1-1ca5-4598-b191-43978626b5d4": {
       kind: "resource",
       address: "aws_route_table.rt_private_a",
       fileName: "private.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "3a83b88a-5972-4fa0-a93d-a5e9043dd346": {
       kind: "resource",
       address: "aws_route_table.rt_public_c",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "e2b5b2fc-8c8c-4ba3-ac14-7ef1f114adae": {
       kind: "resource",
       address: "aws_route_table.rt_private_b",
       fileName: "private.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "ccbad7d3-fe39-4213-953c-0884b6e0aa64": {
       kind: "resource",
       address: "aws_route_table.rt_private_c",
       fileName: "private.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "33d669e3-4362-4e39-b077-46eaa146ea0b": {
       kind: "presentation",
@@ -1139,13 +1139,13 @@ export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_flow_log.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "b52fd88e-c798-4539-bc2c-c96d2ff2a59a": {
       kind: "resource",
       address: "aws_internet_gateway.default",
       fileName: "public.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     }
   }
 });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ApiErrorResponse } from "@sketchcatch/types";
+import type { ApiErrorResponse, ReverseEngineeringImportDecision } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
 import { createAccessToken } from "../auth/tokens.js";
 import type { Database, DatabaseClient } from "../db/client.js";
@@ -13,12 +13,16 @@ import {
   deploymentPlanArtifacts,
   deployments,
   projectAssets,
+  projectDrafts,
   projects,
+  reverseEngineeringScanPreviews,
+  reverseEngineeringScans,
   users
 } from "../db/schema.js";
 import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-workspace.js";
 import { createFilesystemProjectAssetStorage } from "../projects/filesystem-project-asset-storage.js";
 import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
+import { createPublicReverseEngineeringPreviewResult } from "../reverse-engineering/reverse-engineering-preview-claim-service.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -29,14 +33,28 @@ const ACTIVE_PROJECT_ID = "33333333-3333-4333-8333-333333333333";
 const OTHER_PROJECT_ID = "44444444-4444-4444-8444-444444444444";
 const ACTIVE_ASSET_ID = "77777777-7777-4777-8777-777777777777";
 const ACTIVE_ARCHITECTURE_ID = "55555555-5555-4555-8555-555555555555";
+const REVERSE_ENGINEERING_PREVIEW_ID = "99999999-9999-4999-8999-999999999999";
+const READY_IMPORT_DECISION: ReverseEngineeringImportDecision = {
+  version: 1,
+  mode: "import_existing",
+  statusAtConfirmation: "ready"
+};
+const REVIEW_ONLY_IMPORT_DECISION: ReverseEngineeringImportDecision = {
+  version: 1,
+  mode: "observe_only",
+  statusAtConfirmation: "manual_review"
+};
 
 type UserRow = typeof users.$inferSelect;
 type ProjectRow = typeof projects.$inferSelect;
 type ArchitectureRow = typeof architectures.$inferSelect;
+type ProjectDraftRow = typeof projectDrafts.$inferSelect;
 type ProjectAssetRow = typeof projectAssets.$inferSelect;
 type DeploymentRow = typeof deployments.$inferSelect;
 type DeployedResourceRow = typeof deployedResources.$inferSelect;
 type DeploymentPlanArtifactRow = typeof deploymentPlanArtifacts.$inferSelect;
+type ReverseEngineeringPreviewRow = typeof reverseEngineeringScanPreviews.$inferSelect;
+type ReverseEngineeringScanRow = typeof reverseEngineeringScans.$inferSelect;
 
 test("GET /api/projects returns 401 for a deleted user", async () => {
   const fakeDb = new ProjectRouteFakeDb({
@@ -113,6 +131,211 @@ test("POST /api/projects creates a project for the active user", async () => {
   await app.close();
 });
 
+test("POST /api/projects/reverse-engineering atomically creates Project, Draft, and Snapshot", async () => {
+  const preview = makeReverseEngineeringPreview();
+  const payload = createReverseEngineeringProjectPayload();
+  const publicResult = createPublicReverseEngineeringPreviewResult(preview);
+  assert.deepEqual(
+    payload.architectureJson.nodes[0]?.config,
+    publicResult.reverseEngineeringDraft.architectureJson.nodes[0]?.config
+  );
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    reverseEngineeringScanPreviews: [preview],
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload
+  });
+
+  assert.equal(response.statusCode, 201, response.body);
+  assert.equal(fakeDb.projectRows.length, 1);
+  assert.equal(fakeDb.projectDraftRows.length, 1);
+  assert.equal(fakeDb.architectureRows.length, 1);
+  assert.equal(fakeDb.projectDraftRows[0]?.projectId, fakeDb.projectRows[0]?.id);
+  assert.equal(fakeDb.projectDraftRows[0]?.revision, 1);
+  assert.equal(fakeDb.architectureRows[0]?.projectId, fakeDb.projectRows[0]?.id);
+  assert.equal(fakeDb.architectureRows[0]?.source, "imported");
+  const persistedScanId = fakeDb.reverseEngineeringScanRows[0]?.id;
+  const persistedDraftId = fakeDb.projectDraftRows[0]?.id;
+  assert.notEqual(persistedScanId, REVERSE_ENGINEERING_PREVIEW_ID);
+  assert.equal(
+    fakeDb.projectDraftRows[0]?.diagramJson.nodes[0]?.parameters?.values[
+      "reverseEngineeringSourceScanId"
+    ],
+    persistedScanId
+  );
+  assert.equal(
+    fakeDb.projectDraftRows[0]?.diagramJson.nodes[1]?.parameters?.values[
+      "reverseEngineeringSourceScanId"
+    ],
+    "previous-scan"
+  );
+  assert.equal(
+    fakeDb.projectDraftRows[0]?.diagramJson.nodes[0]?.parameters?.values[
+      "reverseEngineeringSourceKind"
+    ],
+    "saved_scan"
+  );
+  assert.deepEqual(
+    fakeDb.projectDraftRows[0]?.diagramJson.nodes[0]?.metadata?.reverseEngineering?.importDecision,
+    REVIEW_ONLY_IMPORT_DECISION
+  );
+  assert.equal(
+    fakeDb.architectureRows[0]?.architectureJson.nodes[0]?.config["reverseEngineeringSourceScanId"],
+    persistedScanId
+  );
+  assert.equal(
+    fakeDb.architectureRows[0]?.architectureJson.nodes[1]?.config["reverseEngineeringSourceScanId"],
+    "previous-scan"
+  );
+  assert.equal(
+    fakeDb.architectureRows[0]?.architectureJson.nodes[0]?.config["reverseEngineeringSourceKind"],
+    "saved_scan"
+  );
+  assert.equal(
+    fakeDb.architectureRows[0]?.architectureJson.nodes[0]?.config["reverseEngineeringDraftId"],
+    persistedDraftId
+  );
+  assert.equal(response.json().draft.id, persistedDraftId);
+  assert.equal(
+    response.json().architecture.architectureJson.nodes[0]?.config[
+      "reverseEngineeringSourceScanId"
+    ],
+    persistedScanId
+  );
+  assert.equal(response.json().draft.revision, 1);
+  assert.equal(response.json().architecture.source, "imported");
+
+  await app.close();
+});
+
+test("POST /api/projects/reverse-engineering rolls back every row and retries without duplicates", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    failArchitectureInsert: true,
+    reverseEngineeringScanPreviews: [makeReverseEngineeringPreview()],
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+  const request = {
+    method: "POST" as const,
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: createReverseEngineeringProjectPayload()
+  };
+
+  const failedResponse = await app.inject(request);
+
+  assert.equal(failedResponse.statusCode, 500, failedResponse.body);
+  assert.equal(fakeDb.projectRows.length, 0);
+  assert.equal(fakeDb.projectDraftRows.length, 0);
+  assert.equal(fakeDb.architectureRows.length, 0);
+  assert.equal(fakeDb.reverseEngineeringScanRows.length, 0);
+  assert.equal(fakeDb.reverseEngineeringPreviewRows[0]?.claimedAt, null);
+
+  fakeDb.failArchitectureInsert = false;
+  const retryResponse = await app.inject(request);
+
+  assert.equal(retryResponse.statusCode, 201, retryResponse.body);
+  assert.equal(fakeDb.projectRows.length, 1);
+  assert.equal(fakeDb.projectDraftRows.length, 1);
+  assert.equal(fakeDb.architectureRows.length, 1);
+  assert.equal(fakeDb.reverseEngineeringScanRows.length, 1);
+  assert.notEqual(fakeDb.reverseEngineeringPreviewRows[0]?.claimedAt, null);
+
+  await app.close();
+});
+
+test("POST /api/projects/reverse-engineering hides another user's preview", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    reverseEngineeringScanPreviews: [makeReverseEngineeringPreview({ userId: OTHER_USER_ID })],
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: createReverseEngineeringProjectPayload()
+  });
+
+  assert.equal(response.statusCode, 404, response.body);
+  assertErrorResponse(response.json() as ApiErrorResponse, "not_found");
+  assert.equal(fakeDb.projectRows.length, 0);
+  assert.equal(fakeDb.reverseEngineeringScanRows.length, 0);
+
+  await app.close();
+});
+
+test("POST /api/projects/reverse-engineering rejects an expired preview", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    reverseEngineeringScanPreviews: [
+      makeReverseEngineeringPreview({ expiresAt: new Date("2020-01-01T00:00:00.000Z") })
+    ],
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: createReverseEngineeringProjectPayload()
+  });
+
+  assert.equal(response.statusCode, 409, response.body);
+  assertErrorResponse(response.json() as ApiErrorResponse, "conflict");
+  assert.equal(fakeDb.projectRows.length, 0);
+  assert.equal(fakeDb.reverseEngineeringPreviewRows[0]?.claimedAt, null);
+
+  await app.close();
+});
+
+test("POST /api/projects/reverse-engineering consumes a preview only once", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    reverseEngineeringScanPreviews: [makeReverseEngineeringPreview()],
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+  const request = {
+    method: "POST" as const,
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: createReverseEngineeringProjectPayload()
+  };
+
+  const firstResponse = await app.inject(request);
+  const replayResponse = await app.inject(request);
+
+  assert.equal(firstResponse.statusCode, 201, firstResponse.body);
+  assert.equal(replayResponse.statusCode, 409, replayResponse.body);
+  assertErrorResponse(replayResponse.json() as ApiErrorResponse, "conflict");
+  assert.equal(fakeDb.projectRows.length, 1);
+  assert.equal(fakeDb.reverseEngineeringScanRows.length, 1);
+
+  await app.close();
+});
+
 test("GET /api/projects/:id returns 404 for another user's project", async () => {
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
@@ -136,6 +359,90 @@ test("GET /api/projects/:id returns 404 for another user's project", async () =>
   await app.close();
 });
 
+test("GET /api/projects/:id 공개 응답은 과거 AWS Snapshot을 정리하고 일반 Architecture를 유지한다", async () => {
+  const legacyLambdaArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler";
+  const legacyNodeId =
+    "resource-arn-aws-lambda-ap-northeast-2-123456789012-function-orders-handler";
+  const ordinaryNode = {
+    id: "design-client",
+    type: "UNKNOWN" as const,
+    label: "Client",
+    positionX: 320,
+    positionY: 0,
+    config: { diagramKind: "design", note: "ordinary architecture stays exact" }
+  };
+  const legacyArchitecture = makeArchitecture({
+    source: "imported",
+    architectureJson: {
+      nodes: [
+        {
+          id: legacyNodeId,
+          type: "LAMBDA",
+          label: "orders-handler",
+          positionX: 0,
+          positionY: 0,
+          config: {
+            providerResourceType: "AWS::Lambda::Function",
+            providerResourceId: legacyLambdaArn,
+            functionName: "orders-handler",
+            Environment: { Variables: { TOKEN: "private-token" } },
+            Role: "arn:aws:iam::123456789012:role/orders-runtime",
+            analysisExcluded: true,
+            reverseEngineeringSourceScanId: "scan-legacy",
+            reverseEngineeringDraftId: "draft-legacy",
+            reverseEngineeringSourceKind: "saved_scan"
+          }
+        },
+        ordinaryNode
+      ],
+      edges: [
+        {
+          id: `edge-${legacyNodeId}-design-client-uses`,
+          sourceId: legacyNodeId,
+          targetId: ordinaryNode.id,
+          label: "uses"
+        }
+      ]
+    }
+  });
+  const storedArchitecture = structuredClone(legacyArchitecture.architectureJson);
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    architectures: [legacyArchitecture]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+  const responseArchitecture = response.json().architectures[0].architectureJson;
+  const lambda = responseArchitecture.nodes[0];
+
+  assert.equal(response.statusCode, 200);
+  assert.match(lambda.id, /^resource-aws-ref-[a-f0-9]{24}$/u);
+  assert.match(lambda.config.providerResourceId, /^aws-ref-[a-f0-9]{24}$/u);
+  assert.equal(lambda.config.functionName, "orders-handler");
+  assert.equal(lambda.config.Environment, undefined);
+  assert.equal(lambda.config.Role, undefined);
+  assert.equal(responseArchitecture.edges[0].sourceId, lambda.id);
+  assert.match(responseArchitecture.edges[0].id, new RegExp(lambda.id));
+  assert.deepEqual(responseArchitecture.nodes[1], ordinaryNode);
+  assert.doesNotMatch(
+    JSON.stringify(responseArchitecture),
+    /123456789012|resource-arn-aws-lambda|private-token/iu
+  );
+  assert.deepEqual(fakeDb.architectureRows[0]?.architectureJson, storedArchitecture);
+
+  await app.close();
+});
+
 test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and draft source", async () => {
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
@@ -154,7 +461,9 @@ test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and dr
       source: "imported",
       reverseEngineering: {
         sourceScanId: "scan-1",
-        draftId: "draft-scan-1"
+        draftId: "draft-scan-1",
+        sourceNodeIds: ["resource-vpc-main"],
+        sourceKind: "saved_scan"
       },
       architectureJson: {
         nodes: [
@@ -165,6 +474,18 @@ test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and dr
             positionX: 0,
             positionY: 0,
             config: {}
+          },
+          {
+            id: "resource-vpc-existing",
+            type: "VPC",
+            label: "Existing VPC",
+            positionX: 240,
+            positionY: 0,
+            config: {
+              reverseEngineeringSourceScanId: "previous-scan",
+              reverseEngineeringDraftId: "previous-draft",
+              reverseEngineeringSourceKind: "saved_scan"
+            }
           }
         ],
         edges: []
@@ -173,10 +494,13 @@ test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and dr
   });
   const savedArchitecture = fakeDb.architectureRows[0];
   const savedNode = savedArchitecture?.architectureJson.nodes[0];
+  const existingNode = savedArchitecture?.architectureJson.nodes[1];
 
   assert.equal(response.statusCode, 201);
   assert.equal(savedNode?.config["reverseEngineeringSourceScanId"], "scan-1");
   assert.equal(savedNode?.config["reverseEngineeringDraftId"], "draft-scan-1");
+  assert.equal(savedNode?.config["reverseEngineeringSourceKind"], "saved_scan");
+  assert.equal(existingNode?.config["reverseEngineeringSourceScanId"], "previous-scan");
 
   await app.close();
 });
@@ -207,6 +531,33 @@ test("DELETE /api/projects/:id deletes a project owned by the active user", asyn
       s3Status: "success"
     }
   });
+  assert.equal(
+    fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID),
+    false
+  );
+
+  await app.close();
+});
+
+test("DELETE /api/projects/:id accepts strict managed cleanup for bulk deletion", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "DELETE",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: { action: "delete_project_with_managed_cleanup" }
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
   assert.equal(
     fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID),
     false
@@ -586,7 +937,7 @@ test("POST /api/projects/:id/assets/presigned-upload creates a pending asset upl
 });
 
 test("PUT /api/projects/:id/assets/:assetId/upload-content uploads Terraform artifact through API", async () => {
-  const terraformCode = "resource \"aws_s3_bucket\" \"site\" {}\n";
+  const terraformCode = 'resource "aws_s3_bucket" "site" {}\n';
   const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
@@ -626,19 +977,618 @@ test("PUT /api/projects/:id/assets/:assetId/upload-content uploads Terraform art
 
   assert.equal(response.statusCode, 204);
   assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "uploaded");
-  assert.deepEqual(putObjectRequests, [
-    {
-      objectKey: "projects/project-id/diagram.png",
-      contentType: "text/plain",
-      body: terraformCode
+  assert.equal(putObjectRequests.length, 1);
+  assert.match(putObjectRequests[0]?.objectKey ?? "", /^projects\/project-id\/\.attempt-/u);
+  assert.equal(fakeDb.projectAssetRows[0]?.objectKey, putObjectRequests[0]?.objectKey);
+  assert.equal(putObjectRequests[0]?.contentType, "text/plain");
+  assert.equal(putObjectRequests[0]?.body, terraformCode);
+
+  await app.close();
+});
+
+test("concurrent Terraform uploads keep DB metadata aligned with the winning stored object", async () => {
+  const firstTerraformCode = 'resource "aws_s3_bucket" "first" {}\n';
+  const secondTerraformCode = 'resource "aws_s3_bucket" "second" {}\n';
+  const storedObjects = new Map<string, Buffer | string>();
+  const versionByObjectKey = new Map<string, string>();
+  const deletedObjectVersions: Array<{ objectKey: string; versionId: string }> = [];
+  const unversionedDeletes: string[] = [];
+  let releaseWrites: (() => void) | undefined;
+  const bothWritesStarted = new Promise<void>((resolve) => {
+    releaseWrites = resolve;
+  });
+  let writeCount = 0;
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        assetType: "terraform_file",
+        contentType: "text/plain",
+        byteSize: null,
+        uploadStatus: "pending"
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject(input) {
+        storedObjects.set(input.objectKey, input.body);
+        writeCount += 1;
+        const versionId = `version-${writeCount}`;
+        versionByObjectKey.set(input.objectKey, versionId);
+
+        if (writeCount === 2) {
+          releaseWrites?.();
+        }
+
+        await bothWritesStarted;
+        return { versionId };
+      },
+      async deleteObject(input) {
+        unversionedDeletes.push(input.objectKey);
+        storedObjects.delete(input.objectKey);
+      },
+      async deleteObjectVersion(input) {
+        deletedObjectVersions.push(input);
+        storedObjects.delete(input.objectKey);
+      }
+    })
+  });
+  const upload = async (payload: string) =>
+    app.inject({
+      method: "PUT",
+      url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+      headers: {
+        ...(await authHeaders(ACTIVE_USER_ID)),
+        "content-type": "text/plain"
+      },
+      payload
+    });
+
+  const responses = await Promise.all([upload(firstTerraformCode), upload(secondTerraformCode)]);
+  const confirmedAsset = fakeDb.projectAssetRows[0];
+
+  assert.deepEqual(
+    responses.map((response) => response.statusCode).sort((left, right) => left - right),
+    [204, 409]
+  );
+  assert.equal(confirmedAsset?.uploadStatus, "uploaded");
+  assert.equal(storedObjects.size, 1);
+  assert.ok(confirmedAsset?.objectKey.includes("/.attempt-"));
+  const winningBody = storedObjects.get(confirmedAsset?.objectKey ?? "");
+
+  assert.ok(winningBody === firstTerraformCode || winningBody === secondTerraformCode);
+  assert.equal(confirmedAsset?.byteSize, Buffer.byteLength(winningBody));
+  assert.deepEqual(unversionedDeletes, []);
+  assert.equal(deletedObjectVersions.length, 1);
+  assert.equal(
+    deletedObjectVersions[0]?.versionId,
+    versionByObjectKey.get(deletedObjectVersions[0]?.objectKey ?? "")
+  );
+
+  await app.close();
+});
+
+for (const scenario of [
+  {
+    name: "DB 확정은 성공했지만 응답이 실패하면 확정된 candidate를 성공으로 돌려준다",
+    finalizeFailure: "after_commit" as const,
+    failReread: false,
+    expectedStatus: 204,
+    expectedUploadStatus: "uploaded" as const,
+    expectCandidateDeleted: false
+  },
+  {
+    name: "DB 확정 전에 실패하고 pending이면 candidate 실제 버전을 정리한다",
+    finalizeFailure: "before_commit" as const,
+    failReread: false,
+    expectedStatus: 500,
+    expectedUploadStatus: "pending" as const,
+    expectCandidateDeleted: true
+  },
+  {
+    name: "DB 확정 예외 뒤 다른 winner가 보이면 candidate 실제 버전을 정리한다",
+    finalizeFailure: "other_winner" as const,
+    failReread: false,
+    expectedStatus: 409,
+    expectedUploadStatus: "uploaded" as const,
+    expectCandidateDeleted: true
+  },
+  {
+    name: "DB 확정과 재조회가 모두 실패한 모호 상태에서는 candidate를 삭제하지 않는다",
+    finalizeFailure: "before_commit" as const,
+    failReread: true,
+    expectedStatus: 500,
+    expectedUploadStatus: "pending" as const,
+    expectCandidateDeleted: false
+  }
+]) {
+  test(scenario.name, async () => {
+    const terraformCode = 'resource "aws_s3_bucket" "site" {}\n';
+    const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
+    const deletedObjectVersions: Array<{ objectKey: string; versionId: string }> = [];
+    const unversionedDeletes: string[] = [];
+    const fakeDb = new ProjectRouteFakeDb({
+      activeUserId: ACTIVE_USER_ID,
+      requestedProjectAssetId: ACTIVE_ASSET_ID,
+      requestedProjectId: ACTIVE_PROJECT_ID,
+      users: [makeUser({ id: ACTIVE_USER_ID })],
+      projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+      projectAssets: [
+        makeProjectAsset({
+          id: ACTIVE_ASSET_ID,
+          projectId: ACTIVE_PROJECT_ID,
+          assetType: "terraform_file",
+          contentType: "text/plain",
+          byteSize: Buffer.byteLength(terraformCode),
+          uploadStatus: "pending"
+        })
+      ],
+      projectAssetFinalizeFailure: scenario.finalizeFailure,
+      failProjectAssetReadAfterFinalizeFailure: scenario.failReread
+    });
+    const app = buildApp({
+      getDatabaseClient: () => fakeDb.client,
+      projectAssetStorage: createProjectAssetStorageStub({
+        async putObject(input) {
+          putObjectRequests.push(input);
+          return { versionId: "candidate-version" };
+        },
+        async deleteObject(input) {
+          unversionedDeletes.push(input.objectKey);
+        },
+        async deleteObjectVersion(input) {
+          deletedObjectVersions.push(input);
+        }
+      })
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+      headers: {
+        ...(await authHeaders(ACTIVE_USER_ID)),
+        "content-type": "text/plain"
+      },
+      payload: terraformCode
+    });
+    const candidateObjectKey = putObjectRequests[0]?.objectKey ?? "";
+    const currentAsset = fakeDb.projectAssetRows[0];
+
+    assert.equal(response.statusCode, scenario.expectedStatus);
+    assert.equal(currentAsset?.uploadStatus, scenario.expectedUploadStatus);
+    assert.deepEqual(unversionedDeletes, []);
+    assert.deepEqual(
+      deletedObjectVersions,
+      scenario.expectCandidateDeleted
+        ? [{ objectKey: candidateObjectKey, versionId: "candidate-version" }]
+        : []
+    );
+    if (scenario.finalizeFailure === "after_commit") {
+      assert.equal(currentAsset?.objectKey, candidateObjectKey);
     }
-  ]);
+    if (scenario.finalizeFailure === "other_winner") {
+      assert.notEqual(currentAsset?.objectKey, candidateObjectKey);
+    }
+
+    await app.close();
+  });
+}
+
+test("PUT Terraform upload stores server-verified Reverse Engineering imports in the canonical bundle", async () => {
+  const providersTerraformCode = 'terraform { required_version = ">= 1.5.0" }\n';
+  const mainTerraformCode = 'resource "aws_s3_bucket" "existing_bucket" {}\n';
+  const terraformCode = `${providersTerraformCode.trim()}\n\n${mainTerraformCode.trim()}`;
+  const persistedTerraformFiles = [
+    { fileName: "providers.tf", terraformCode: providersTerraformCode },
+    { fileName: "main.tf", terraformCode: mainTerraformCode }
+  ];
+  const expectedImportCode = [
+    "import {",
+    "  to = aws_s3_bucket.existing_bucket",
+    '  id = "existing-bucket"',
+    "}",
+    ""
+  ].join("\n");
+  const expectedBundle = JSON.stringify({
+    schemaVersion: 1,
+    files: [
+      ...persistedTerraformFiles,
+      { fileName: "imports.tf", terraformCode: expectedImportCode }
+    ]
+  });
+  const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectDrafts: [makeReverseEngineeringProjectDraft(persistedTerraformFiles)],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        architectureId: ACTIVE_ARCHITECTURE_ID,
+        assetType: "terraform_file",
+        fileName: "main.tf",
+        contentType: "text/plain",
+        byteSize: Buffer.byteLength(terraformCode),
+        uploadStatus: "pending"
+      })
+    ],
+    reverseEngineeringScans: [makeReverseEngineeringScan()]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject(input) {
+        putObjectRequests.push(input);
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "text/plain"
+    },
+    payload: terraformCode
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.equal(putObjectRequests.length, 1);
+  assert.match(putObjectRequests[0]?.objectKey ?? "", /^projects\/project-id\/\.attempt-/u);
+  assert.equal(fakeDb.projectAssetRows[0]?.objectKey, putObjectRequests[0]?.objectKey);
+  assert.equal(
+    putObjectRequests[0]?.contentType,
+    "application/vnd.sketchcatch.terraform-files+json"
+  );
+  assert.equal(putObjectRequests[0]?.body, expectedBundle);
+  assert.equal(fakeDb.projectAssetRows[0]?.fileName, "terraform-files.json");
+  assert.equal(
+    fakeDb.projectAssetRows[0]?.contentType,
+    "application/vnd.sketchcatch.terraform-files+json"
+  );
+  assert.equal(fakeDb.projectAssetRows[0]?.byteSize, Buffer.byteLength(expectedBundle));
+
+  await app.close();
+});
+
+test("PUT Terraform upload rejects arbitrary bytes for a sourced Reverse Engineering draft with no import targets", async () => {
+  const persistedTerraformFiles = [
+    {
+      fileName: "providers.tf",
+      terraformCode: 'terraform { required_version = ">= 1.5.0" }\n'
+    },
+    {
+      fileName: "main.tf",
+      terraformCode: 'resource "aws_s3_bucket" "existing_bucket" {}\n'
+    }
+  ];
+  const browserContent = 'resource "aws_s3_bucket" "forged" {}\n';
+  let putObjectRan = false;
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectDrafts: [
+      makeReverseEngineeringProjectDraft(persistedTerraformFiles, REVIEW_ONLY_IMPORT_DECISION)
+    ],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        architectureId: ACTIVE_ARCHITECTURE_ID,
+        assetType: "terraform_file",
+        fileName: "main.tf",
+        contentType: "text/plain",
+        byteSize: Buffer.byteLength(browserContent),
+        uploadStatus: "pending"
+      })
+    ],
+    reverseEngineeringScans: [makeReverseEngineeringReferenceScan()]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject() {
+        putObjectRan = true;
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "text/plain"
+    },
+    payload: browserContent
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(putObjectRan, false);
+  assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "pending");
+
+  await app.close();
+});
+
+test("PUT Terraform upload stores a sourced zero-target draft as a canonical base bundle", async () => {
+  const providersTerraformCode = 'terraform { required_version = ">= 1.5.0" }\n';
+  const mainTerraformCode = 'resource "aws_s3_bucket" "existing_bucket" {}\n';
+  const persistedTerraformFiles = [
+    { fileName: "providers.tf", terraformCode: providersTerraformCode },
+    { fileName: "main.tf", terraformCode: mainTerraformCode }
+  ];
+  const browserContent = `${providersTerraformCode.trim()}\n\n${mainTerraformCode.trim()}`;
+  const expectedBundle = JSON.stringify({
+    schemaVersion: 1,
+    files: persistedTerraformFiles
+  });
+  const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectDrafts: [
+      makeReverseEngineeringProjectDraft(persistedTerraformFiles, REVIEW_ONLY_IMPORT_DECISION)
+    ],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        architectureId: ACTIVE_ARCHITECTURE_ID,
+        assetType: "terraform_file",
+        fileName: "main.tf",
+        contentType: "text/plain",
+        byteSize: Buffer.byteLength(browserContent),
+        uploadStatus: "pending"
+      })
+    ],
+    reverseEngineeringScans: [makeReverseEngineeringReferenceScan()]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject(input) {
+        putObjectRequests.push(input);
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "text/plain"
+    },
+    payload: browserContent
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.equal(putObjectRequests.length, 1);
+  assert.match(putObjectRequests[0]?.objectKey ?? "", /^projects\/project-id\/\.attempt-/u);
+  assert.equal(fakeDb.projectAssetRows[0]?.objectKey, putObjectRequests[0]?.objectKey);
+  assert.equal(
+    putObjectRequests[0]?.contentType,
+    "application/vnd.sketchcatch.terraform-files+json"
+  );
+  assert.equal(putObjectRequests[0]?.body, expectedBundle);
+  assert.equal(fakeDb.projectAssetRows[0]?.fileName, "terraform-files.json");
+  assert.equal(
+    fakeDb.projectAssetRows[0]?.contentType,
+    "application/vnd.sketchcatch.terraform-files+json"
+  );
+  assert.equal(fakeDb.projectAssetRows[0]?.byteSize, Buffer.byteLength(expectedBundle));
+
+  await app.close();
+});
+
+test("PUT Terraform upload allows user-owned import blocks and imports.tf for ordinary projects", async () => {
+  const scenarios = [
+    {
+      fileName: "main.tf",
+      terraformCode: [
+        'resource "aws_s3_bucket" "existing" {}',
+        'import { to = aws_s3_bucket.existing id = "existing-bucket" }',
+        ""
+      ].join("\n")
+    },
+    {
+      fileName: "imports.tf",
+      terraformCode: [
+        'resource "aws_s3_bucket" "existing" {}',
+        'import { to = aws_s3_bucket.existing id = "existing-bucket" }',
+        ""
+      ].join("\n")
+    }
+  ];
+
+  for (const scenario of scenarios) {
+    const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
+    const fakeDb = new ProjectRouteFakeDb({
+      activeUserId: ACTIVE_USER_ID,
+      requestedProjectAssetId: ACTIVE_ASSET_ID,
+      requestedProjectId: ACTIVE_PROJECT_ID,
+      users: [makeUser({ id: ACTIVE_USER_ID })],
+      projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+      projectDrafts: [
+        makeProjectDraft({
+          terraformFiles: [{ fileName: scenario.fileName, terraformCode: scenario.terraformCode }]
+        })
+      ],
+      projectAssets: [
+        makeProjectAsset({
+          id: ACTIVE_ASSET_ID,
+          projectId: ACTIVE_PROJECT_ID,
+          architectureId: ACTIVE_ARCHITECTURE_ID,
+          assetType: "terraform_file",
+          fileName: scenario.fileName,
+          contentType: "text/plain",
+          byteSize: Buffer.byteLength(scenario.terraformCode),
+          uploadStatus: "pending"
+        })
+      ]
+    });
+    const app = buildApp({
+      getDatabaseClient: () => fakeDb.client,
+      projectAssetStorage: createProjectAssetStorageStub({
+        async putObject(input) {
+          putObjectRequests.push(input);
+        }
+      })
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+      headers: {
+        ...(await authHeaders(ACTIVE_USER_ID)),
+        "content-type": "text/plain"
+      },
+      payload: scenario.terraformCode
+    });
+
+    assert.equal(response.statusCode, 204, scenario.fileName);
+    assert.equal(putObjectRequests.length, 1);
+    assert.match(putObjectRequests[0]?.objectKey ?? "", /^projects\/project-id\/\.attempt-/u);
+    assert.equal(fakeDb.projectAssetRows[0]?.objectKey, putObjectRequests[0]?.objectKey);
+    assert.equal(putObjectRequests[0]?.contentType, "text/plain");
+    assert.equal(putObjectRequests[0]?.body, scenario.terraformCode);
+    await app.close();
+  }
+});
+
+test("PUT Terraform upload rejects browser-submitted import block content", async () => {
+  const terraformCode = 'resource "aws_s3_bucket" "existing_bucket" {}\n';
+  const browserContent = `${terraformCode}\nimport {\n  to = aws_s3_bucket.existing_bucket\n  id = "browser-forged-bucket"\n}\n`;
+  let putObjectRan = false;
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectDrafts: [makeReverseEngineeringProjectDraft([{ fileName: "main.tf", terraformCode }])],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        architectureId: ACTIVE_ARCHITECTURE_ID,
+        assetType: "terraform_file",
+        fileName: "main.tf",
+        contentType: "text/plain",
+        byteSize: Buffer.byteLength(browserContent),
+        uploadStatus: "pending"
+      })
+    ],
+    reverseEngineeringScans: [makeReverseEngineeringScan()]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject() {
+        putObjectRan = true;
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "text/plain"
+    },
+    payload: browserContent
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(putObjectRan, false);
+  assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "pending");
+
+  await app.close();
+});
+
+test("PUT Terraform upload rejects import blocks persisted inside browser-controlled base files", async () => {
+  const terraformCode = [
+    'resource "aws_s3_bucket" "existing_bucket" {}',
+    "",
+    "import {",
+    "  to = aws_s3_bucket.existing_bucket",
+    '  id = "browser-forged-bucket"',
+    "}",
+    ""
+  ].join("\n");
+  let putObjectRan = false;
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectDrafts: [makeReverseEngineeringProjectDraft([{ fileName: "main.tf", terraformCode }])],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        architectureId: ACTIVE_ARCHITECTURE_ID,
+        assetType: "terraform_file",
+        fileName: "main.tf",
+        contentType: "text/plain",
+        byteSize: Buffer.byteLength(terraformCode),
+        uploadStatus: "pending"
+      })
+    ],
+    reverseEngineeringScans: [makeReverseEngineeringScan()]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject() {
+        putObjectRan = true;
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "text/plain"
+    },
+    payload: terraformCode
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(putObjectRan, false);
+  assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "pending");
 
   await app.close();
 });
 
 test("PUT /api/projects/:id/assets/:assetId/upload-content stores a captured WebP thumbnail", async () => {
-  const thumbnailBytes = Buffer.from("RIFF\u0010\u0000\u0000\u0000WEBPVP8 captured-board", "binary");
+  const thumbnailBytes = Buffer.from(
+    "RIFF\u0010\u0000\u0000\u0000WEBPVP8 captured-board",
+    "binary"
+  );
   const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
@@ -686,7 +1636,10 @@ test("PUT /api/projects/:id/assets/:assetId/upload-content stores a captured Web
 });
 
 test("GET /api/projects/:id/thumbnail returns the latest authenticated Board capture", async () => {
-  const thumbnailBytes = Buffer.from("RIFF\u0010\u0000\u0000\u0000WEBPVP8 captured-board", "binary");
+  const thumbnailBytes = Buffer.from(
+    "RIFF\u0010\u0000\u0000\u0000WEBPVP8 captured-board",
+    "binary"
+  );
   const thumbnailObjectKey = "projects/project-id/assets/thumbnail/latest-board.webp";
   const getObjectRequests: Array<Parameters<ProjectAssetStorage["getObject"]>[0]> = [];
   const fakeDb = new ProjectRouteFakeDb({
@@ -791,6 +1744,7 @@ test("Project thumbnail upload and read share a real filesystem storage instance
     url: `/api/projects/${ACTIVE_PROJECT_ID}/thumbnail`,
     headers: await authHeaders(ACTIVE_USER_ID)
   });
+  const uploadedAsset = fakeDb.projectAssetRows.find((asset) => asset.id === pendingAsset.id);
 
   assert.equal(pendingResponse.statusCode, 201);
   assert.equal(uploadResponse.statusCode, 204);
@@ -799,7 +1753,7 @@ test("Project thumbnail upload and read share a real filesystem storage instance
   assert.deepEqual(thumbnailResponse.rawPayload, thumbnailBytes);
   assert.equal(
     await projectAssetStorage.objectExists({
-      objectKey: pendingAsset.objectKey,
+      objectKey: uploadedAsset?.objectKey ?? "",
       byteSize: thumbnailBytes.byteLength
     }),
     true
@@ -1029,6 +1983,362 @@ function makeArchitecture(overrides: Partial<ArchitectureRow> = {}): Architectur
   };
 }
 
+function makeProjectDraft(overrides: Partial<ProjectDraftRow> = {}): ProjectDraftRow {
+  return {
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    projectId: ACTIVE_PROJECT_ID,
+    diagramJson: {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    terraformFiles: null,
+    revision: 1,
+    serverSavedAt: new Date("2026-06-24T00:00:00.000Z"),
+    createdAt: new Date("2026-06-24T00:00:00.000Z"),
+    updatedAt: new Date("2026-06-24T00:00:00.000Z"),
+    ...overrides
+  };
+}
+
+function makeReverseEngineeringProjectDraft(
+  terraformFiles: NonNullable<ProjectDraftRow["terraformFiles"]>,
+  importDecision: ReverseEngineeringImportDecision = READY_IMPORT_DECISION
+): ProjectDraftRow {
+  return makeProjectDraft({
+    diagramJson: {
+      nodes: [
+        {
+          id: "resource-existing-bucket",
+          type: "aws_s3_bucket",
+          kind: "resource",
+          position: { x: 0, y: 0 },
+          size: { width: 48, height: 48 },
+          label: "existing-bucket",
+          locked: false,
+          zIndex: 1,
+          metadata: {
+            reverseEngineering: {
+              source: "aws_scan",
+              protectedValueKeys: [],
+              editableValueKeys: [],
+              importDecision
+            }
+          },
+          parameters: {
+            terraformBlockType: "resource",
+            resourceType: "aws_s3_bucket",
+            resourceName: "existing_bucket",
+            fileName: "main",
+            values: {
+              importId: "browser-forged-bucket",
+              reverseEngineeringSourceScanId: "scan-1",
+              reverseEngineeringDraftId: "draft-scan-1",
+              reverseEngineeringSourceKind: "saved_scan"
+            }
+          }
+        }
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    terraformFiles
+  });
+}
+
+// gg: browser가 본 공개 draft identity와 source node만 claim 요청에 담습니다.
+function createReverseEngineeringProjectPayload() {
+  return {
+    name: "Imported AWS project",
+    reverseEngineering: {
+      previewId: REVERSE_ENGINEERING_PREVIEW_ID,
+      draftId: `draft-${REVERSE_ENGINEERING_PREVIEW_ID}`,
+      sourceNodeIds: ["imported-vpc"],
+      importDecision: {
+        version: 1 as const,
+        selectedReadyResourceIds: [],
+        acknowledgedReviewOnlyResourceIds: ["imported-vpc"]
+      }
+    },
+    diagramJson: {
+      nodes: [
+        {
+          id: "imported-vpc",
+          type: "aws_vpc",
+          kind: "resource" as const,
+          position: { x: 0, y: 0 },
+          size: { width: 168, height: 96 },
+          label: "Imported VPC",
+          locked: false,
+          zIndex: 1,
+          parameters: {
+            resourceType: "aws_vpc",
+            resourceName: "imported",
+            fileName: "main",
+            values: {
+              providerResourceType: "AWS::EC2::VPC",
+              providerResourceId: "imported-vpc",
+              analysisExcluded: true,
+              reverseEngineeringManagement: "needs_mapping"
+            }
+          }
+        },
+        {
+          id: "existing-vpc",
+          type: "aws_vpc",
+          kind: "resource" as const,
+          position: { x: 240, y: 0 },
+          size: { width: 168, height: 96 },
+          label: "Existing VPC",
+          locked: false,
+          zIndex: 1,
+          parameters: {
+            resourceType: "aws_vpc",
+            resourceName: "existing",
+            fileName: "main",
+            values: {
+              reverseEngineeringSourceScanId: "previous-scan",
+              reverseEngineeringDraftId: "previous-draft"
+            }
+          }
+        }
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    architectureJson: {
+      nodes: [
+        {
+          id: "imported-vpc",
+          type: "VPC" as const,
+          label: "Imported VPC",
+          positionX: 0,
+          positionY: 0,
+          config: {
+            providerResourceType: "AWS::EC2::VPC",
+            providerResourceId: "imported-vpc",
+            analysisExcluded: true,
+            reverseEngineeringManagement: "needs_mapping"
+          }
+        },
+        {
+          id: "existing-vpc",
+          type: "VPC" as const,
+          positionX: 240,
+          positionY: 0,
+          config: {
+            reverseEngineeringSourceScanId: "previous-scan",
+            reverseEngineeringDraftId: "previous-draft"
+          }
+        }
+      ],
+      edges: []
+    }
+  };
+}
+
+// gg: route integration test에서 owner의 unclaimed raw preview를 준비합니다.
+function makeReverseEngineeringPreview(
+  overrides: Partial<ReverseEngineeringPreviewRow> = {}
+): ReverseEngineeringPreviewRow {
+  const createdAt = new Date("2026-07-20T00:00:00.000Z");
+  const architectureJson = {
+    nodes: [
+      {
+        id: "imported-vpc",
+        type: "VPC" as const,
+        label: "Imported VPC",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          providerResourceType: "AWS::EC2::VPC",
+          providerResourceId: "imported-vpc",
+          analysisExcluded: false
+        }
+      }
+    ],
+    edges: []
+  };
+  const scan = {
+    id: "scan-not-persisted",
+    projectId: "project-not-persisted",
+    awsConnectionId: null,
+    provider: "aws" as const,
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL" as const],
+    status: "completed" as const,
+    createdAt: createdAt.toISOString(),
+    updatedAt: createdAt.toISOString(),
+    startedAt: createdAt.toISOString(),
+    completedAt: createdAt.toISOString(),
+    cancelRequestedAt: null,
+    deletedAt: null,
+    errorSummary: null
+  };
+
+  return {
+    id: REVERSE_ENGINEERING_PREVIEW_ID,
+    userId: ACTIVE_USER_ID,
+    awsConnectionId: null,
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL"],
+    rawResult: {
+      scan,
+      discoveredResources: [
+        {
+          id: "imported-vpc",
+          provider: "aws",
+          providerResourceType: "AWS::EC2::VPC",
+          providerResourceId: "imported-vpc",
+          region: "ap-northeast-2",
+          displayName: "Imported VPC",
+          resourceType: "VPC",
+          config: {},
+          relationships: []
+        }
+      ],
+      reverseEngineeringDraft: {
+        id: "draft-scan-not-persisted",
+        scanId: scan.id,
+        architectureJson,
+        protectedValueKeys: ["providerResourceId", "providerResourceType"],
+        editableValueKeys: ["displayName", "description"],
+        createdAt: createdAt.toISOString()
+      },
+      architectureJson,
+      findings: [],
+      analysisExclusions: [],
+      importSuggestions: [
+        {
+          id: "import-imported-vpc",
+          resourceId: "imported-vpc",
+          status: "manual_review",
+          handoffReady: false,
+          reason: "기존 AWS 리소스의 설정을 확인해야 합니다."
+        }
+      ],
+      scanErrors: [],
+      coverage: { status: "complete", unavailableServices: [] }
+    },
+    expiresAt: new Date("2099-07-20T00:30:00.000Z"),
+    claimedAt: null,
+    claimedProjectId: null,
+    claimedScanId: null,
+    claimedDraftId: null,
+    createdAt,
+    updatedAt: createdAt,
+    ...overrides
+  };
+}
+
+function makeReverseEngineeringScan(
+  overrides: Partial<ReverseEngineeringScanRow> = {}
+): ReverseEngineeringScanRow {
+  const createdAt = new Date("2026-07-20T00:00:00.000Z");
+  const scan = {
+    id: "scan-1",
+    projectId: ACTIVE_PROJECT_ID,
+    awsConnectionId: null,
+    provider: "aws" as const,
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL" as const],
+    status: "completed" as const,
+    createdAt: createdAt.toISOString(),
+    updatedAt: createdAt.toISOString(),
+    startedAt: createdAt.toISOString(),
+    completedAt: createdAt.toISOString(),
+    cancelRequestedAt: null,
+    deletedAt: null,
+    errorSummary: null
+  };
+  const architectureJson = { nodes: [], edges: [] };
+
+  return {
+    id: scan.id,
+    projectId: scan.projectId,
+    awsConnectionId: null,
+    provider: "aws",
+    region: scan.region,
+    resourceTypes: ["ALL"],
+    status: "completed",
+    result: {
+      scan,
+      discoveredResources: [
+        {
+          id: "resource-existing-bucket",
+          provider: "aws",
+          providerResourceType: "AWS::S3::Bucket",
+          providerResourceId: "existing-bucket",
+          region: "ap-northeast-2",
+          displayName: "existing-bucket",
+          resourceType: "S3",
+          config: { bucket: "existing-bucket" },
+          relationships: []
+        }
+      ],
+      reverseEngineeringDraft: {
+        id: "draft-scan-1",
+        scanId: scan.id,
+        architectureJson,
+        protectedValueKeys: [],
+        editableValueKeys: [],
+        createdAt: createdAt.toISOString()
+      },
+      architectureJson,
+      findings: [],
+      analysisExclusions: [],
+      importSuggestions: [
+        {
+          id: "import-resource-existing-bucket",
+          resourceId: "resource-existing-bucket",
+          status: "ready",
+          handoffReady: true,
+          terraformAddress: "aws_s3_bucket.existing_bucket",
+          importCommand: "terraform import aws_s3_bucket.existing_bucket existing-bucket"
+        }
+      ],
+      scanErrors: []
+    },
+    errorSummary: null,
+    startedAt: createdAt,
+    completedAt: createdAt,
+    cancelRequestedAt: null,
+    deletedAt: null,
+    createdAt,
+    updatedAt: createdAt,
+    ...overrides
+  };
+}
+
+function makeReverseEngineeringReferenceScan(): ReverseEngineeringScanRow {
+  const scan = makeReverseEngineeringScan();
+  const result = scan.result!;
+
+  return {
+    ...scan,
+    result: {
+      ...result,
+      discoveredResources: result.discoveredResources.map((resource) => ({
+        ...resource,
+        config: {
+          ...resource.config,
+          cloudFormationStackId: "arn:aws:cloudformation:ap-northeast-2:123456789012:stack/existing"
+        }
+      })),
+      importSuggestions: [
+        {
+          id: "import-resource-existing-bucket",
+          resourceId: "resource-existing-bucket",
+          status: "manual_review",
+          handoffReady: false,
+          reason: "AWS가 관리하는 리소스는 보드에서만 확인합니다."
+        }
+      ]
+    }
+  };
+}
+
 function makeProjectAsset(overrides: Partial<ProjectAssetRow> = {}): ProjectAssetRow {
   return {
     architectureId: null,
@@ -1125,41 +2435,63 @@ class ProjectRouteFakeDb {
   requestedProjectId: string | undefined;
   userRows: UserRow[];
   projectRows: ProjectRow[];
+  projectDraftRows: ProjectDraftRow[];
   architectureRows: ArchitectureRow[];
   projectAssetRows: ProjectAssetRow[];
   deploymentRows: DeploymentRow[];
   deployedResourceRows: DeployedResourceRow[];
   deploymentPlanArtifactRows: DeploymentPlanArtifactRow[];
+  reverseEngineeringPreviewRows: ReverseEngineeringPreviewRow[];
+  reverseEngineeringScanRows: ReverseEngineeringScanRow[];
   clearedDeploymentPlanPointers: Array<
     Pick<DeploymentRow, "approvedPlanArtifactId" | "currentPlanArtifactId" | "id">
   >;
   operationLog: string[];
+  failArchitectureInsert: boolean;
+  projectAssetFinalizeFailure: "after_commit" | "before_commit" | "other_winner" | undefined;
+  failProjectAssetReadAfterFinalizeFailure: boolean;
+  projectAssetFinalizeFailed: boolean;
   client: DatabaseClient;
 
+  // gg: route 테스트에서 preview·Scan row까지 같은 fake transaction state로 보존합니다.
   constructor(data: {
     activeUserId: string;
     requestedProjectAssetId?: string;
     requestedProjectId?: string;
     users?: UserRow[];
     projects?: ProjectRow[];
+    projectDrafts?: ProjectDraftRow[];
     architectures?: ArchitectureRow[];
     projectAssets?: ProjectAssetRow[];
     deployments?: DeploymentRow[];
     deployedResources?: DeployedResourceRow[];
     deploymentPlanArtifacts?: DeploymentPlanArtifactRow[];
+    reverseEngineeringScanPreviews?: ReverseEngineeringPreviewRow[];
+    reverseEngineeringScans?: ReverseEngineeringScanRow[];
+    failArchitectureInsert?: boolean;
+    projectAssetFinalizeFailure?: "after_commit" | "before_commit" | "other_winner";
+    failProjectAssetReadAfterFinalizeFailure?: boolean;
   }) {
     this.activeUserId = data.activeUserId;
     this.requestedProjectAssetId = data.requestedProjectAssetId;
     this.requestedProjectId = data.requestedProjectId;
     this.userRows = data.users ?? [];
     this.projectRows = data.projects ?? [];
+    this.projectDraftRows = data.projectDrafts ?? [];
     this.architectureRows = data.architectures ?? [];
     this.projectAssetRows = data.projectAssets ?? [];
     this.deploymentRows = data.deployments ?? [];
     this.deployedResourceRows = data.deployedResources ?? [];
     this.deploymentPlanArtifactRows = data.deploymentPlanArtifacts ?? [];
+    this.reverseEngineeringPreviewRows = data.reverseEngineeringScanPreviews ?? [];
+    this.reverseEngineeringScanRows = data.reverseEngineeringScans ?? [];
     this.clearedDeploymentPlanPointers = [];
     this.operationLog = [];
+    this.failArchitectureInsert = data.failArchitectureInsert ?? false;
+    this.projectAssetFinalizeFailure = data.projectAssetFinalizeFailure;
+    this.failProjectAssetReadAfterFinalizeFailure =
+      data.failProjectAssetReadAfterFinalizeFailure ?? false;
+    this.projectAssetFinalizeFailed = false;
     this.client = {
       db: this.createDb() as Database,
       pool: {
@@ -1168,13 +2500,30 @@ class ProjectRouteFakeDb {
     };
   }
 
+  // gg: Project claim이 사용하는 select·insert·conditional update를 최소 Drizzle 모양으로 모사합니다.
   private createDb(): unknown {
     return {
       select: (selection?: Record<string, unknown>) => ({
-        from: (table: unknown) => new SelectQuery(() => this.selectRows(table, selection))
+        from: (table: unknown) =>
+          new SelectQuery(
+            () => this.selectRows(table, selection),
+            table === reverseEngineeringScans
+              ? () =>
+                  this.selectRows(table, selection).map((scan) => ({
+                    reverse_engineering_scans: scan
+                  }))
+              : undefined
+          )
       }),
       insert: (table: unknown) => ({
-        values: (values: Partial<ArchitectureRow> | Partial<ProjectAssetRow> | Partial<ProjectRow>) => ({
+        values: (
+          values:
+            | Partial<ArchitectureRow>
+            | Partial<ProjectAssetRow>
+            | Partial<ProjectDraftRow>
+            | Partial<ProjectRow>
+            | Partial<ReverseEngineeringScanRow>
+        ) => ({
           returning: async () => {
             if (table === projects) {
               const project = makeProject(values as Partial<ProjectRow>);
@@ -1184,10 +2533,21 @@ class ProjectRouteFakeDb {
             }
 
             if (table === architectures) {
+              if (this.failArchitectureInsert) {
+                throw new Error("architecture insert failed");
+              }
+
               const architecture = makeArchitecture(values as Partial<ArchitectureRow>);
               this.architectureRows.push(architecture);
 
               return [architecture];
+            }
+
+            if (table === projectDrafts) {
+              const draft = makeProjectDraft(values as Partial<ProjectDraftRow>);
+              this.projectDraftRows.push(draft);
+
+              return [draft];
             }
 
             if (table === projectAssets) {
@@ -1197,13 +2557,24 @@ class ProjectRouteFakeDb {
               return [asset];
             }
 
+            if (table === reverseEngineeringScans) {
+              const scan = values as ReverseEngineeringScanRow;
+              this.reverseEngineeringScanRows.push(scan);
+
+              return [scan];
+            }
+
             return [values];
           }
         })
       }),
       update: (table: unknown) => ({
         set: (
-          values: Partial<DeploymentRow> | Partial<ProjectAssetRow> | Partial<ProjectRow>
+          values:
+            | Partial<DeploymentRow>
+            | Partial<ProjectAssetRow>
+            | Partial<ProjectRow>
+            | Partial<ReverseEngineeringPreviewRow>
         ) => ({
           where: () => {
             let updatedRows: unknown[] = [];
@@ -1263,11 +2634,36 @@ class ProjectRouteFakeDb {
 
             if (table === projectAssets) {
               const nextProjectAssetRows: ProjectAssetRow[] = [];
+              const projectAssetValues = values as Partial<ProjectAssetRow>;
+              const requiresPendingUpload =
+                projectAssetValues.uploadStatus === "uploaded" &&
+                typeof projectAssetValues.objectKey === "string";
+
+              if (
+                requiresPendingUpload &&
+                (this.projectAssetFinalizeFailure === "before_commit" ||
+                  this.projectAssetFinalizeFailure === "other_winner")
+              ) {
+                this.projectAssetFinalizeFailed = true;
+                if (this.projectAssetFinalizeFailure === "other_winner") {
+                  this.projectAssetRows = this.projectAssetRows.map((asset) =>
+                    asset.id === this.requestedProjectAssetId
+                      ? {
+                          ...asset,
+                          objectKey: `projects/${asset.projectId}/.attempt-other-winner`,
+                          uploadStatus: "uploaded"
+                        }
+                      : asset
+                  );
+                }
+                throw new Error("project asset finalize failed");
+              }
 
               this.projectAssetRows = this.projectAssetRows.map((asset) => {
                 const shouldUpdate =
                   (!this.requestedProjectId || asset.projectId === this.requestedProjectId) &&
-                  (!this.requestedProjectAssetId || asset.id === this.requestedProjectAssetId);
+                  (!this.requestedProjectAssetId || asset.id === this.requestedProjectAssetId) &&
+                  (!requiresPendingUpload || asset.uploadStatus === "pending");
 
                 if (!shouldUpdate) {
                   return asset;
@@ -1275,7 +2671,7 @@ class ProjectRouteFakeDb {
 
                 const nextAsset = {
                   ...asset,
-                  ...(values as Partial<ProjectAssetRow>)
+                  ...projectAssetValues
                 };
 
                 nextProjectAssetRows.push(nextAsset);
@@ -1285,8 +2681,41 @@ class ProjectRouteFakeDb {
               updatedRows = nextProjectAssetRows;
             }
 
+            if (table === reverseEngineeringScanPreviews) {
+              const previewValues = values as Partial<ReverseEngineeringPreviewRow>;
+              const nextPreviewRows: ReverseEngineeringPreviewRow[] = [];
+
+              this.reverseEngineeringPreviewRows = this.reverseEngineeringPreviewRows.map(
+                (preview) => {
+                  const claimedAt = previewValues.claimedAt;
+                  const shouldUpdate =
+                    preview.userId === this.activeUserId &&
+                    preview.claimedAt === null &&
+                    claimedAt instanceof Date &&
+                    preview.expiresAt > claimedAt;
+
+                  if (!shouldUpdate) {
+                    return preview;
+                  }
+
+                  const nextPreview = { ...preview, ...previewValues };
+                  nextPreviewRows.push(nextPreview);
+                  return nextPreview;
+                }
+              );
+              updatedRows = nextPreviewRows;
+            }
+
             return {
               returning: async (selection?: Record<string, unknown>) => {
+                if (
+                  table === projectAssets &&
+                  this.projectAssetFinalizeFailure === "after_commit"
+                ) {
+                  this.projectAssetFinalizeFailed = true;
+                  throw new Error("project asset finalize response failed");
+                }
+
                 if (table === projects && selection && "startedAt" in selection) {
                   return (updatedRows as ProjectRow[]).map((project) => ({
                     startedAt: project.deletionStartedAt
@@ -1349,10 +2778,28 @@ class ProjectRouteFakeDb {
           return [];
         }
       }),
-      transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(this.createDb())
+      transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
+        const projectRows = [...this.projectRows];
+        const projectDraftRows = [...this.projectDraftRows];
+        const architectureRows = [...this.architectureRows];
+        const reverseEngineeringPreviewRows = structuredClone(this.reverseEngineeringPreviewRows);
+        const reverseEngineeringScanRows = structuredClone(this.reverseEngineeringScanRows);
+
+        try {
+          return await callback(this.createDb());
+        } catch (error) {
+          this.projectRows = projectRows;
+          this.projectDraftRows = projectDraftRows;
+          this.architectureRows = architectureRows;
+          this.reverseEngineeringPreviewRows = reverseEngineeringPreviewRows;
+          this.reverseEngineeringScanRows = reverseEngineeringScanRows;
+          throw error;
+        }
+      }
     };
   }
 
+  // gg: preview 조회는 active user owner row만 반환해 404 소유권 계약을 재현합니다.
   private selectRows(table: unknown, selection?: Record<string, unknown>): unknown[] {
     if (table === users) {
       return this.userRows.filter((user) => user.id === this.activeUserId);
@@ -1377,12 +2824,32 @@ class ProjectRouteFakeDb {
       );
     }
 
+    if (table === projectDrafts) {
+      return this.projectDraftRows.filter(
+        (draft) => !this.requestedProjectId || draft.projectId === this.requestedProjectId
+      );
+    }
+
     if (table === projectAssets) {
+      if (this.projectAssetFinalizeFailed && this.failProjectAssetReadAfterFinalizeFailure) {
+        throw new Error("project asset reread failed");
+      }
+
       return this.projectAssetRows.filter(
         (asset) =>
           (!this.requestedProjectId || asset.projectId === this.requestedProjectId) &&
           (!this.requestedProjectAssetId || asset.id === this.requestedProjectAssetId)
       );
+    }
+
+    if (table === reverseEngineeringScanPreviews) {
+      return this.reverseEngineeringPreviewRows.filter(
+        (preview) => preview.userId === this.activeUserId
+      );
+    }
+
+    if (table === reverseEngineeringScans) {
+      return this.reverseEngineeringScanRows;
     }
 
     if (table === deployments) {
@@ -1412,7 +2879,12 @@ class ProjectRouteFakeDb {
 }
 
 class SelectQuery {
-  constructor(private readonly resolveRows: () => unknown[]) {}
+  private joined = false;
+
+  constructor(
+    private readonly resolveRows: () => unknown[],
+    private readonly resolveJoinedRows?: () => unknown[]
+  ) {}
 
   where(): this {
     return this;
@@ -1423,6 +2895,7 @@ class SelectQuery {
   }
 
   innerJoin(): this {
+    this.joined = true;
     return this;
   }
 
@@ -1438,6 +2911,8 @@ class SelectQuery {
     onfulfilled?: ((value: unknown[]) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
   ): Promise<TResult1 | TResult2> {
-    return Promise.resolve(this.resolveRows()).then(onfulfilled, onrejected);
+    const rows =
+      this.joined && this.resolveJoinedRows ? this.resolveJoinedRows() : this.resolveRows();
+    return Promise.resolve(rows).then(onfulfilled, onrejected);
   }
 }

@@ -2294,7 +2294,7 @@ function createAmazonQArchitectureDraftInstructions(): string {
     "Return JSON only. Do not wrap the response in markdown.",
     "Write every user-facing string in Korean, including title, question, suggestions, summary, highlights, nextActions, assumptions, explanations, and requirementCoverage prose.",
     "Technical identifiers and AWS service names may remain in English, but explanatory sentences must be Korean.",
-    "Choose a cost- and security-conscious Practice Architecture from the provided ArchitectureDecisionSpace.",
+    "Choose a cost- and security-conscious infrastructure design from the provided ArchitectureDecisionSpace.",
     "SketchCatch is provider-neutral, AWS-first for the MVP, and Terraform-first.",
     "Do not perform deployment, apply, update, delete, or destroy actions.",
     "All architecture changes must remain user-accepted previews.",
@@ -3155,12 +3155,12 @@ function applyStrictRepositoryEvidencePolicy(
     "log-group",
     ...(hasFact("frontend_delivery", "s3_cloudfront_static") ? ["distribution"] : [])
   ]);
-  const scalingTemplateResourceIds = new Set(["scaling-target", "scaling-policy"]);
   const coreNodes = fixedTemplateDraft.architectureJson.nodes.filter(
     (node) =>
       node.id.startsWith(templatePrefix) &&
       !strictEvidenceManagedTemplateResourceIds.has(String(node.config.templateResourceId ?? "")) &&
-      (scalesToThree || !scalingTemplateResourceIds.has(String(node.config.templateResourceId ?? "")))
+      node.config.templateResourceId !== "scaling-target" &&
+      (scalesToThree || node.config.templateResourceId !== "scaling-policy")
   );
   const nodeByTemplateResourceId = new Map(
     coreNodes.flatMap((node) =>
@@ -3888,8 +3888,11 @@ function applyStrictRepositoryEvidencePolicy(
           config: {
             ...node.config,
             ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
+            resourceId: "aws_appautoscaling_target.ecs_service_requests.resource_id",
+            scalableDimension: "aws_appautoscaling_target.ecs_service_requests.scalable_dimension",
+            serviceNamespace: "aws_appautoscaling_target.ecs_service_requests.service_namespace",
             targetTrackingScalingPolicyConfiguration: {
-              targetValue: 10,
+              targetValue: 5,
               scaleInCooldown: 60,
               scaleOutCooldown: 30,
               predefinedMetricSpecification: [{
@@ -4019,10 +4022,6 @@ function applyStrictRepositoryEvidencePolicy(
   connect(coreNodeId("cluster"), coreNodeId("service"), "runs the API service");
   connect(coreNodeId("task"), coreNodeId("service"), "defines the deployed revision");
   connect(coreNodeId("service"), fargateRuntimeId, "schedules desired task in private app subnets");
-  if (scalesToThree) {
-    connect(coreNodeId("service"), coreNodeId("scaling-target"), "scales desired task count 1–3");
-    connect(coreNodeId("scaling-target"), coreNodeId("scaling-policy"), "tracks ALB requests per target");
-  }
   if (usesCheckInSigningSecret) {
     connect(checkInSecretMaterialId, checkInSecretVersionId, "generates isolated signing material");
     connect(checkInSecretId, checkInSecretVersionId, "stores the generated secret version");
@@ -4862,7 +4861,7 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     requiredResources.add("CODEDEPLOY_DEPLOYMENT_GROUP");
     requiredResources.add("S3");
     requiredResources.add("IAM_ROLE");
-    amazonQBrief.push("Include a Git/CI/CD handoff path with CodeStar Connection, CodePipeline, CodeBuild, CodeDeploy, and an S3 artifact bucket.");
+    amazonQBrief.push("Include a CI/CD handoff path with CodeStar Connection, CodePipeline, CodeBuild, CodeDeploy, and an S3 artifact bucket.");
   } else {
     for (const resourceType of [
       "CODESTAR_CONNECTION",

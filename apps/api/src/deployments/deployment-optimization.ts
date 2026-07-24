@@ -327,7 +327,8 @@ export function isTerraformPlanNoChange(planSummary: DeploymentPlanSummary): boo
     planSummary.createCount === 0 &&
     planSummary.updateCount === 0 &&
     planSummary.deleteCount === 0 &&
-    planSummary.replaceCount === 0
+    planSummary.replaceCount === 0 &&
+    (planSummary.importCount ?? 0) === 0
   );
 }
 

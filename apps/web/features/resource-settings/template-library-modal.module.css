@@ -25,6 +25,31 @@
   width: 100%;
 }
 
+.libraryDialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.libraryDialog .header {
+  background: var(--workspace-surface, #ffffff);
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 20px 24px;
+}
+
+.libraryDialog .header h2 {
+  margin: 0;
+}
+
+.libraryContent {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 24px 24px;
+  scrollbar-gutter: stable;
+}
+
 .detailDialog {
   max-width: 880px;
 }
@@ -192,6 +217,17 @@
     padding: 16px;
   }
 
+  .libraryDialog {
+    padding: 0;
+  }
+
+  .libraryDialog .header {
+    padding: 16px;
+  }
+
+  .libraryContent {
+    padding: 14px 16px 16px;
+  }
   .detailContent {
     grid-template-columns: minmax(0, 1fr);
   }

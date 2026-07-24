@@ -1,20 +1,32 @@
 # SketchCatch
 
-SketchCatch is a multi-cloud-ready IaC operations service that turns text or voice requirements, Source Repository evidence, and existing cloud state into provider-neutral Practice Architectures, strengthens them with AI, Bedrock, and Amazon Q Assistance, and connects them to Terraform IaC Preview, Git/CI/CD Integration, Direct Deployment, Reverse Engineering, Deployment History, and Auto Cleanup.
+SketchCatch is a multi-cloud-ready IaC operations service that turns text or voice requirements, Source Repository evidence, and existing cloud state into provider-neutral infrastructure designs, strengthens them with AI, Bedrock, and Amazon Q Assistance, and connects them to Terraform IaC Preview, CI/CD Integration, managed deployment, Reverse Engineering, Deployment History, and Auto Cleanup.
 
 ## Language
 
-**Practice Architecture**:
+**infrastructure design**:
 A cloud infrastructure design described as connected resources, constraints, and operator-facing explanations. It is the thing the user designs before any deployment exists.
 _Avoid_: Infrastructure, diagram, AWS setup
 
 **Architecture Board**:
-The visual workspace where a Practice Architecture is shown and edited as resource nodes and relationships.
+The visual workspace where an infrastructure design is shown and edited as resource nodes and relationships.
 _Avoid_: Main board, canvas, drawing board
 
 **Resource**:
-An infrastructure building block from a cloud provider inside a Practice Architecture, such as AWS VPC, Azure Virtual Network, GCP VPC Network, compute instances, databases, storage, IAM, or edge delivery resources.
+An infrastructure building block from a cloud provider inside an infrastructure design, such as AWS VPC, Azure Virtual Network, GCP VPC Network, compute instances, databases, storage, IAM, or edge delivery resources.
 _Avoid_: Component, block, service
+
+**Resource Display Name**:
+A plain-language, single-line name shown consistently for one Resource across the Architecture Board, Resource panels, Template previews, and user-facing explanations. Every initial Resource Display Name created from a Template is English-only, including provider-native Resource types, widely recognized provider abbreviations, established AWS role terms, application-specific roles, and technical helper Resource names. Initial Template labels omit template-wide, domain, environment, implementation-detail, and provider-context qualifiers when they neither distinguish nodes nor explain the architecture: `Items` and a single `Production API Stage` are examples of omitted filler. Keep official Resource/Service types and qualifiers needed for meaning or disambiguation, including `Public`/`Private`, `Web`/`Application`/`Database` in multi-tier diagrams, `Master`/`Worker`, account- or environment-specific VPCs, `A`/`B`, and role or direction. Every initial name is unique within that Template. Resources of the same type are distinguished by functional role first, location second, and a number only as a last resort. The Architecture Board may render English terms in uppercase while other surfaces preserve the authored casing. After applying the Template, the user may edit the name freely. The name may change for user clarity without changing that Resource's IaC Identity or provider-side name. This initial Template label rule does not change Terraform identity, provider-side names, Board structure, or general UI language.
+_Avoid_: Terraform resource name, Resource ID, AWS Name tag
+
+**IaC Identity**:
+The stable infrastructure-as-code address used to reference and track a Resource, such as `aws_subnet.snet1`. It is available as secondary technical information in Resource details, copy actions, and diagnostics, but never replaces the primary Resource Display Name.
+_Avoid_: Board label, display name, provider-side name
+
+**Architecture Area Title**:
+A concise, single-line label for a non-Resource Board area that helps users recognize architectural scope such as a Region, Availability Zone, network zone, or global service area. Every initial Architecture Area Title created from a Template is English-only and omits template-wide, domain, environment, implementation-detail, and provider-context qualifiers unless they distinguish areas or explain the architecture. Keep official Resource/Service types and necessary qualifiers, including `Public`/`Private`, `Web`/`Application`/`Database` in multi-tier diagrams, `Master`/`Worker`, account- or environment-specific VPCs, `A`/`B`, and role or direction. It is not a Resource Display Name or an IaC Identity, and this initial Template label rule does not change Terraform identity, provider-side names, Board structure, user-edited post-creation labels, or general UI language.
+_Avoid_: Resource name, Terraform address, provider resource
 
 **Curated Module**:
 A reusable, preassembled group of Resources, relationships, configuration, and Board structure offered from the Workspace `Modules` catalog. Expanding one creates editable Resources on the Architecture Board; it is not a Terraform module or an indivisible parent Resource.
@@ -25,15 +37,15 @@ Versioned, normalized Resource relationships, containment, relative geometry, la
 _Avoid_: Hand-authored module coordinates, LLM layout, Template screenshot
 
 **Provider Adapter**:
-The cloud-specific connector that translates provider APIs, Resource types, IaC import details, and deployment constraints into SketchCatch's provider-neutral Practice Architecture model.
+The cloud-specific connector that translates provider APIs, Resource types, IaC import details, and deployment constraints into SketchCatch's provider-neutral infrastructure design model.
 _Avoid_: Cloud plugin, provider switch, cloud mode
 
 **Runtime Cache**:
-SketchCatch's internal runtime support for short-lived coordination, cached results, session-adjacent state, background job status, or streaming-friendly execution metadata. It is not a user Practice Architecture Resource. The first priority is long-running workflow support for Deployment, Reverse Engineering, and Git/CI/CD Integration status; AI result caching is secondary.
+SketchCatch's internal runtime support for short-lived coordination, cached results, session-adjacent state, background job status, or streaming-friendly execution metadata. It is not a user infrastructure resource. The first priority is long-running workflow support for Deployment, Reverse Engineering, and CI/CD Integration status; AI result caching is secondary.
 _Avoid_: User Redis, cache resource, cloud cache node
 
 **Template**:
-A reusable starter Practice Architecture that a user can choose instead of starting from a blank prompt.
+A reusable starter infrastructure design that a user can choose instead of starting from a blank prompt.
 _Avoid_: Preset, sample, example
 
 **TemplateDefinition**:
@@ -49,7 +61,7 @@ The handoff from gg to the AI part containing one selected Template and the Repo
 _Avoid_: Template candidate list, AI-owned Template selection
 
 **Architecture Draft**:
-A proposed Practice Architecture that has not yet been accepted, corrected, or saved by the user.
+A proposed infrastructure design that has not yet been accepted, corrected, or saved by the user.
 _Avoid_: AI result, generated diagram, draft infrastructure
 
 **Selected Option Trail**:
@@ -93,7 +105,7 @@ Architecture Board 안에서 설계 제안, 오류 분석, 에이전트 리뷰�
 _Avoid_: AI modal, right-panel AI buttons, single AI result
 
 **User-Accepted Change**:
-A state-changing update that only happens after the user explicitly accepts an Architecture Draft, Architecture Suggestion, IaC handoff, Git change, or Deployment action. AI may propose or explain the change, but it does not silently alter the Practice Architecture or execution path.
+A state-changing update that only happens after the user explicitly accepts an Architecture Draft, Architecture Suggestion, IaC handoff, Git change, or Deployment action. AI may propose or explain the change, but it does not silently alter the infrastructure design or execution path.
 _Avoid_: Auto apply, silent fix, AI edit
 
 **Source Repository**:
@@ -113,18 +125,18 @@ A valid Repository Analysis result stating that no supported Template represents
 _Avoid_: Closest Template fallback, partial Template selection, automatic redesign
 
 **Git Integration**:
-The service capability that connects a Practice Architecture and its IaC Preview to a Source Repository so infrastructure changes can be reviewed, versioned, and handed off to the team's normal development workflow.
+The service capability that connects an infrastructure design and its IaC Preview to a Source Repository so infrastructure changes can be reviewed, versioned, and handed off to the team's normal development workflow.
 _Avoid_: GitHub feature, repo sync, code push
 
 **CI/CD Integration**:
 The service capability that connects approved infrastructure changes to an external delivery pipeline, including pipeline templates, execution status, and deployment handoff, without bypassing SketchCatch's approval and safety boundaries.
 _Avoid_: Auto deploy, build script, deployment button
 
-**Direct Deployment Path**:
+**managed deployment**:
 The SketchCatch-managed execution path used for quick validation, sandbox runs, practice environments, or demos, where the service runs plan, approval, apply, logs, outputs, and cleanup directly.
 _Avoid_: Main deployment, instant deploy, bypass deploy
 
-**Git/CI/CD Deployment Path**:
+**CI/CD delivery**:
 The team-operated execution path where an approved IaC Preview is committed to a Source Repository, reviewed through pull requests, and deployed by an external CI/CD pipeline while SketchCatch tracks handoff and status.
 _Avoid_: Alternative deploy, export only, GitHub deploy
 
@@ -137,7 +149,7 @@ A natural-language description of desired infrastructure constraints, such as bu
 _Avoid_: User question, chat input, AI prompt
 
 **Requirement Input**:
-The user's natural-language entry point for creating or changing a Practice Architecture, supplied as text or transcribed voice and normalized into a Requirement Prompt.
+The user's natural-language entry point for creating or changing an infrastructure design, supplied as text or transcribed voice and normalized into a Requirement Prompt.
 _Avoid_: Text box, voice command, chat message
 
 **Voice Requirement Input**:
@@ -153,31 +165,51 @@ The capability that may infer, add, remove, or change Resources, relationships, 
 _Avoid_: Auto layout, coordinate cleanup, diagram beautifier
 
 **Board Auto Arrange**:
-A user-requested visual cleanup that may change only position, size, presentation grouping, and edge routing. It never adds, removes, or changes Resources, relationships, or configuration. `Keep Original` closes the preview without mutation, while `Use This Arrangement` is the single explicit approval that applies the preview without a second confirmation dialog.
+A user-requested visual cleanup that may change only position, size, decorative Presentation Frames, and edge routing. It never adds, removes, or changes Resources, relationships, configuration, or containment. Up to three distinct semantically safe visual candidates remain available for user comparison even when measured layout findings do not improve; the original is a comparison baseline rather than a competing candidate, and quality findings rank and explain changed candidates but never gate them. Desktop uses a thumbnail gallery above a side-by-side original and selected-candidate comparison. Mobile uses a horizontal thumbnail gallery and a same-viewport Original/Arrangement toggle. Each preview explains up to three concrete changes with Resource display names and useful reasons before any aggregate count, and explicitly states that Resources, relationships, and configuration remain unchanged. Switching candidates never mutates the Board. `Keep Original` closes the preview without mutation, while `Use This Arrangement` is the single explicit approval that applies the selected preview without a second confirmation dialog.
 _Avoid_: Architecture improvement, Resource optimization, automatic fix
 
+**Presentation Frame**:
+A presentation-only title and background frame that visually surrounds nearby Board elements without recording membership, parenthood, containment, relationships, or provider meaning. It uses the existing Design Group representation. Board Auto Arrange owns a frame only when its Design kind, Design Group type, catalog identity, and `board-auto-frame:` ID prefix all match; only an unlocked frame with this full identity may be automatically merged or removed on a later arrange request. User-authored Design Groups may receive position and size proposals but are never silently claimed, merged, or deleted by Board Auto Arrange. A frame stays where it was placed after ordinary Board edits until the user changes it or requests Board Auto Arrange again.
+_Avoid_: Group, container, parent area, architecture layer
+
 **Compilation Distance**:
-The relative amount of semantic and visual change between an input Practice Architecture and an Architecture Board Compiler proposal. Resource deletion has greater distance than configuration, relationship, containment, size, or position changes.
+The relative amount of semantic and visual change between an input infrastructure design and an Architecture Board Compiler proposal. Resource deletion has greater distance than configuration, relationship, containment, size, or position changes.
 _Avoid_: Edit count, visual difference
 
 **Reverse Engineering**:
-The service capability that scans existing cloud Resources through provider adapters, reconstructs them as a Practice Architecture, and prepares an IaC handoff path through IaC Preview and import suggestions.
+The service capability that scans existing cloud Resources through provider adapters, reconstructs them as an infrastructure design, and prepares an IaC handoff path through IaC Preview and import suggestions.
 _Avoid_: Resource list, AWS scan, diagram import
 
 **Imported Architecture Original**:
-The Reverse Engineering result that preserves the discovered Resources, relationships, and configuration exactly, while applying only a deterministic collision-free initial position because cloud providers do not store Architecture Board coordinates. It is distinct from Board Auto Arrange and any semantic Compiler proposal.
+The Reverse Engineering result that preserves the discovered Resources, relationships, and configuration exactly, while applying only a deterministic collision-free initial position because cloud providers do not store Architecture Board coordinates. It is a preview and becomes a saved Workspace Board only when the user chooses `보드에 적용`; it is distinct from Board Auto Arrange and any semantic Compiler proposal.
 _Avoid_: Raw provider response, automatically improved architecture, Compiler result
 
+**Imported Infrastructure Frame**:
+A presentation-only frame that distinguishes recognizable infrastructure sets inside one imported cloud account. It is inferred from `Project`, `Service`, and `Environment` tags first, then from VPC and relationship context when tags are absent; users may freely edit or remove it without changing cloud or IaC ownership. Board Auto Arrange lays out only the Resources inside each frame and never moves a Resource into another frame or moves, resizes, merges, splits, or removes the frame itself.
+_Avoid_: AWS resource group, Terraform module, containment, deployment boundary
+
 **AWS Import Access Update**:
-A user-approved permission update for an existing verified AWS connection so Reverse Engineering can read supported services. It keeps the same connection identity, does not create a duplicate connection, and re-verifies the same role after the user approves the AWS-side update.
-_Avoid_: New AWS connection, automatic IAM mutation, reconnect account
+A user-approved permission update owned by AWS connection settings so Reverse Engineering can read supported services. It preserves the existing connection identity, Role, original Stack, deployment policy, and deployment verification. Reverse Engineering may detect missing access and route the user to this flow, but never changes AWS permissions itself. Cleanup removes only the access artifacts owned by this update; an uncertain cleanup remains inactive and retryable.
+_Avoid_: New AWS connection, full deployment permission refresh, separate import Role, shared account manager Role, reconnect account
+
+**AWS Import Access Stack Pair**:
+Two connection-scoped CloudFormation stacks used only to manage Reverse Engineering access. The Manager Stack owns narrowly limited management and cleanup-verification access. The Policy Stack owns only the Reverse Engineering read policy attached to the existing connection Role. Cleanup always removes the Policy Stack before the Manager Stack. Neither stack owns the connection Role, original connection Stack, or deployment policy.
+_Avoid_: Original connection Stack, deployment Stack, separate import connection
+
+**AWS Import Readiness**:
+A per-connection, per-region capability state for Reverse Engineering that is separate from deployment connection verification. Core readers cover EC2 networking and compute, S3, RDS, Load Balancer, ECS, and CloudFront; all must accept their bounded read request before the connection is ready for normal import. Resource Explorer, Tagging API, IAM, KMS, CloudWatch and Logs, API Gateway, Lambda, and AMI are expanded readers whose failure produces `ready with limited details` rather than blocking core import. An empty list is a successful read, Resource Explorer not being configured is distinct from access denial, and transient provider errors are retryable rather than permission conclusions.
+_Avoid_: AWS connection status, deployment verification, Stack status
 
 **Partial Architecture Import**:
 A usable Reverse Engineering result containing every Resource successfully discovered even when one or more supported services could not be read. The Board remains visible and the UI gives a short notice plus an AWS Import Access Update action instead of blocking the result or exposing provider errors. `Use Imported Items Only` is the single explicit approval for applying this incomplete result and makes the incompleteness visible without a second confirmation dialog.
 _Avoid_: Failed import, complete architecture, raw scan error
 
+**Reverse Engineering Result Summary**:
+The compact first result shown after an existing cloud scan. It contains only the discovered Resource count, relationship count, the primary `Apply to Board` action, and the optional `Arrange for readability` action; diagnostics and Terraform management details are available only when the user asks to see them.
+_Avoid_: Full scan report, provider diagnostics, import debug panel
+
 **IaC Preview**:
-The generated infrastructure-as-code representation of a Practice Architecture before the user approves deployment.
+The generated infrastructure-as-code representation of an infrastructure design before the user approves deployment.
 _Avoid_: Code editor, Terraform code, deploy code
 
 **Cost Risk**:
@@ -185,15 +217,15 @@ A condition that can create unexpected AWS charges, especially when selected res
 _Avoid_: Price warning, billing issue
 
 **Cost Analysis**:
-The service capability that estimates and explains cost pressure across a Practice Architecture, IaC Preview, Deployment Plan, and Deployment History so users can understand Cost Risk before and after cloud changes.
+The service capability that estimates and explains cost pressure across an infrastructure design, IaC Preview, Deployment Plan, and Deployment History so users can understand Cost Risk before and after cloud changes.
 _Avoid_: Price calculator, billing dashboard, monthly total
 
 **Security Risk**:
-A configuration that exposes a Practice Architecture beyond the user's intended access, such as open SSH, public storage, or excessive permissions.
+A configuration that exposes an infrastructure design beyond the user's intended access, such as open SSH, public storage, or excessive permissions.
 _Avoid_: Vulnerability, danger
 
-**Pre-Deployment Check**:
-The review step that evaluates a Practice Architecture for cost, security, permissions, and missing configuration before deployment can be approved.
+**deployment check**:
+The review step that evaluates an infrastructure design for cost, security, permissions, and missing configuration before deployment can be approved.
 _Avoid_: Validation, review, inspection
 
 **Deployment Safety Gate**:
@@ -201,11 +233,11 @@ The pre-deployment review boundary that records deterministic Check Findings and
 _Avoid_: Warning popup, AI blocker, safety modal
 
 **Check Finding**:
-A single user-facing observation produced by a Pre-Deployment Check, tied to a cost, security, permission, configuration, performance, or availability concern.
+A single user-facing observation produced by a deployment check, tied to a cost, security, permission, configuration, performance, or availability concern.
 _Avoid_: AI warning, issue, message
 
 **Architecture Suggestion**:
-A structured, non-applied proposal for changing a Practice Architecture in response to a Check Finding or Design Simulation result.
+A structured, non-applied proposal for changing an infrastructure design in response to a Check Finding or Design Simulation result.
 _Avoid_: Auto fix, patch, edit command
 
 **Amazon Q Assistance**:
@@ -225,11 +257,11 @@ An opt-in, time-bounded read-only session for viewing a successful Deployment's 
 _Avoid_: CloudWatch replacement, traffic generator, automatic remediation
 
 **Live Observation Signal Dashboard**:
-A compact, deterministic lower dashboard that selects at most three evidence-backed signals from the current Live Observation session and separates confirmed facts, cautious possibilities, and unknowns. Signal selection is not an AI call. For elevated request pressure, a separate read-only Design Simulation may explain an available capacity action; only explicit user approval may update the Project Draft, never the Deployment, AWS Resources, Plan/Apply, or Architecture Board.
+A compact, deterministic lower dashboard that selects at most three evidence-backed signals from the current Live Observation session and turns CloudWatch evidence into an infrastructure-wide assessment and likely bottleneck areas. Signal selection is not an AI call. For elevated request pressure, a separate read-only Design Simulation may explain an available capacity action; only explicit user approval may update the Project Draft, never the Deployment, AWS Resources, Plan/Apply, or Architecture Board.
 _Avoid_: AI diagnosis, metric wall, automatic fix, CloudWatch clone
 
 **Design Version**:
-A saved version of a Practice Architecture and its IaC Preview that can be compared with another version.
+A saved version of an infrastructure design and its IaC Preview that can be compared with another version.
 _Avoid_: Backup, history item, save point
 
 **Auto Cleanup**:
@@ -237,7 +269,7 @@ The automatic or user-approved teardown of cloud resources created by a Deployme
 _Avoid_: Auto delete, shutdown, removal
 
 **Deployment History**:
-The record of Deployment attempts, results, outputs, cleanup status, and changes for a Practice Architecture.
+The record of Deployment attempts, results, outputs, cleanup status, and changes for an infrastructure design.
 _Avoid_: Version history, CI/CD history, logs
 
 **Representative Use Journey**:

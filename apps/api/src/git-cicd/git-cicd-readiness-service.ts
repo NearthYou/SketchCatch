@@ -535,7 +535,8 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
             eq(deployments.status, "SUCCESS"),
             eq(deployments.source, "direct"),
             inArray(deployments.scope, ["infrastructure", "full_stack"]),
-            isNotNull(deployments.completedAt)
+            isNotNull(deployments.completedAt),
+            isNotNull(deployments.stateObjectKey)
           )
         )
         .orderBy(desc(deployments.completedAt), desc(deployments.createdAt))

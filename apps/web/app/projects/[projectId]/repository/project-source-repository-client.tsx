@@ -230,7 +230,7 @@ export function ProjectSourceRepositoryClient({
         <div>
           <p className="dashboardEyebrow">Source repository</p>
           <h1>소스 저장소</h1>
-          <p>이 프로젝트의 아키텍처 분석과 Git/CI/CD에 사용할 repository를 선택합니다.</p>
+          <p>이 프로젝트의 아키텍처 분석과 CI/CD에 사용할 repository를 선택합니다.</p>
         </div>
       </header>
 
@@ -373,7 +373,7 @@ export function ProjectSourceRepositoryClient({
             <h3 id="repository-change-dialog-title">소스 저장소를 변경할까요?</h3>
             <p>
               {activeRepository?.owner}/{activeRepository?.name}에서 {pendingRepository.fullName}(으)로
-              분석 및 Git/CI/CD에서 사용할 프로젝트 소스가 변경됩니다.
+              분석 및 CI/CD에서 사용할 프로젝트 소스가 변경됩니다.
             </p>
             <p>GitHub의 파일, branch, 권한 자체는 변경되지 않습니다.</p>
             <div className="settingsActionRow">

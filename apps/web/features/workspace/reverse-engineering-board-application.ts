@@ -6,13 +6,15 @@ import type {
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
 import {
-  createBoardAutoOrganizeProposal,
-  type ArchitectureBoardCompilationProposal
-} from "../architecture-board-compiler";
+  isNodeInsideReverseEngineeringInfrastructureFrame,
+  isReverseEngineeringInfrastructureFrameNode
+} from "@sketchcatch/types";
+import { hasSameBoardAutoOrganizeSemantics } from "../architecture-board-compiler";
 import {
-  convertArchitectureJsonToDiagramJson,
   convertDiagramJsonToArchitectureJson
 } from "./workspace-ai-diagram-adapter";
+import { fitReverseEngineeringInfrastructureFrameToMembers } from "./reverse-engineering-infrastructure-frames";
+import { createSourceExactReverseEngineeringDiagram } from "./reverse-engineering-source-exact";
 
 export type ReverseEngineeringBoardApplicationMode = "replace" | "append";
 export type ReverseEngineeringPlacement = "original" | "compiled";
@@ -48,15 +50,22 @@ const UNKNOWN_RESOURCE_STYLE = {
 } as const;
 
 export type ReverseEngineeringBoardApplication = {
-  readonly compilation: ArchitectureBoardCompilationProposal | null;
+  readonly compilation: null;
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly diagram: DiagramJson;
   readonly previewDiagram: DiagramJson;
+  readonly sourceOwnership: ReverseEngineeringSourceOwnership;
+};
+
+export type ReverseEngineeringSourceOwnership = {
+  readonly nodeIds: readonly string[];
+  readonly edgeIds: readonly string[];
 };
 
 export type CreateReverseEngineeringBoardApplicationInput = {
   readonly currentDiagram: DiagramJson;
   readonly mode: ReverseEngineeringBoardApplicationMode;
+  readonly organizedDiagram?: DiagramJson | undefined;
   readonly placement: ReverseEngineeringPlacement;
   readonly result: ReverseEngineeringScanResult;
 };
@@ -71,46 +80,59 @@ export function createReverseEngineeringBoardApplication(
   input: CreateReverseEngineeringBoardApplicationInput
 ): ReverseEngineeringBoardApplication {
   const originalPreview = createOriginalReverseEngineeringPreview(input.result);
-  const preview =
-    input.placement === "compiled"
-      ? createCompiledReverseEngineeringPreview(input.result, originalPreview.diagram)
-      : originalPreview;
-  const comparison = compareDiagrams(input.currentDiagram, preview.diagram);
+  const comparison = compareDiagrams(input.currentDiagram, originalPreview.diagram);
+  const replaceSourceOwnership = {
+    nodeIds: originalPreview.diagram.nodes
+      .filter((node) => node.kind === "resource")
+      .map((node) => node.id),
+    edgeIds: originalPreview.diagram.edges.map((edge) => edge.id)
+  } satisfies ReverseEngineeringSourceOwnership;
 
   if (input.mode === "replace") {
+    const diagram = input.placement === "compiled"
+      ? useSelectedReverseEngineeringOrganization(
+          originalPreview.diagram,
+          input.organizedDiagram
+        )
+      : originalPreview.diagram;
+
     return {
-      compilation: preview.compilation,
+      compilation: null,
       comparison,
-      diagram: preview.diagram,
-      previewDiagram: preview.diagram
+      diagram,
+      previewDiagram: diagram,
+      sourceOwnership: replaceSourceOwnership
     };
   }
 
-  const appendDiagram = appendAdditionsToCurrentDiagram(
+  const appendResult = appendAdditionsToCurrentDiagram(
     input.currentDiagram,
-    preview.diagram,
+    originalPreview.diagram,
     comparison
   );
+  const appendDiagram = appendResult.diagram;
 
   if (input.placement === "original") {
     return {
       compilation: null,
       comparison,
       diagram: appendDiagram,
-      previewDiagram: appendDiagram
+      previewDiagram: appendDiagram,
+      sourceOwnership: appendResult.sourceOwnership
     };
   }
 
-  const compilation = compileReverseEngineeringAppendArchitecture(
+  const diagram = useSelectedReverseEngineeringOrganization(
     appendDiagram,
-    new Set(comparison.additions.map((item) => item.nodeId))
+    input.organizedDiagram
   );
 
   return {
-    compilation,
+    compilation: null,
     comparison,
-    diagram: compilation.diagram,
-    previewDiagram: compilation.diagram
+    diagram,
+    previewDiagram: diagram,
+    sourceOwnership: appendResult.sourceOwnership
   };
 }
 
@@ -127,142 +149,132 @@ export function createReverseEngineeringBoardComparison(
 // Board 저장용 Architecture에도 가져온 Resource의 type·label·config·관계를 그대로 되돌립니다.
 export function convertReverseEngineeringBoardToArchitectureJson(
   diagram: DiagramJson,
-  result: ReverseEngineeringScanResult
+  result: ReverseEngineeringScanResult,
+  sourceOwnership?: ReverseEngineeringSourceOwnership
 ): ArchitectureJson {
   const converted = convertDiagramJsonToArchitectureJson(diagram);
   const sourceNodeById = new Map(result.architectureJson.nodes.map((node) => [node.id, node]));
   const sourceEdgeById = new Map(result.architectureJson.edges.map((edge) => [edge.id, edge]));
+  const convertedNodeById = new Map(converted.nodes.map((node) => [node.id, node]));
+  const convertedEdgeById = new Map(converted.edges.map((edge) => [edge.id, edge]));
+  const ownedSourceNodeIds = new Set(
+    sourceOwnership?.nodeIds ?? result.architectureJson.nodes.map((node) => node.id)
+  );
+  const ownedSourceEdgeIds = new Set(
+    sourceOwnership?.edgeIds ?? result.architectureJson.edges.map((edge) => edge.id)
+  );
 
   return {
-    nodes: converted.nodes.map((node) => {
-      const sourceNode = sourceNodeById.get(node.id);
+    nodes: diagram.nodes.flatMap((diagramNode) => {
+      const sourceNode = ownedSourceNodeIds.has(diagramNode.id)
+        ? sourceNodeById.get(diagramNode.id)
+        : undefined;
+      const convertedNode = convertedNodeById.get(diagramNode.id);
 
       return sourceNode
-        ? {
-            ...node,
-            type: sourceNode.type,
-            label: sourceNode.label,
-            config: structuredClone(sourceNode.config)
-          }
-        : node;
+        ? [{
+            ...structuredClone(sourceNode),
+            positionX: diagramNode.position.x,
+            positionY: diagramNode.position.y
+          }]
+        : convertedNode
+          ? [structuredClone(convertedNode)]
+          : [];
     }),
-    edges: converted.edges.map((edge) => {
-      const sourceEdge = sourceEdgeById.get(edge.id);
+    edges: diagram.edges.flatMap((diagramEdge) => {
+      const sourceEdge = ownedSourceEdgeIds.has(diagramEdge.id)
+        ? sourceEdgeById.get(diagramEdge.id)
+        : undefined;
+      const convertedEdge = convertedEdgeById.get(diagramEdge.id);
 
-      return sourceEdge ? structuredClone(sourceEdge) : edge;
+      return sourceEdge
+        ? [structuredClone(sourceEdge)]
+        : convertedEdge
+          ? [structuredClone(convertedEdge)]
+          : [];
     })
   };
 }
 
-// AWS가 만든 Architecture 좌표와 관계를 Compiler 후보 선택 전에 Board 모델로 옮깁니다.
+// AWS가 만든 Architecture를 일반 AI 추론 없이 source-exact Board 모델로 옮깁니다.
 function createOriginalReverseEngineeringPreview(result: ReverseEngineeringScanResult): {
   readonly compilation: null;
   readonly diagram: DiagramJson;
 } {
-  const materializedDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
-  const materializedNodeById = new Map(materializedDiagram.nodes.map((node) => [node.id, node]));
-  const materializedEdgeById = new Map(materializedDiagram.edges.map((edge) => [edge.id, edge]));
-  const sourceNodeIds = new Set(result.architectureJson.nodes.map((node) => node.id));
-  const nodes = result.architectureJson.nodes.flatMap((sourceNode) => {
-    const materializedNode = materializedNodeById.get(sourceNode.id);
-
-    if (!materializedNode) {
-      return [];
-    }
-
-    const parentAreaNodeId = materializedNode.metadata?.parentAreaNodeId;
-    const metadata = parentAreaNodeId && !sourceNodeIds.has(parentAreaNodeId)
-      ? Object.fromEntries(
-          Object.entries(materializedNode.metadata ?? {}).filter(
-            ([key]) => key !== "parentAreaNodeId"
-          )
-        )
-      : materializedNode.metadata;
-
-    return [
-      {
-        ...materializedNode,
-        id: sourceNode.id,
-        type: sourceNode.type,
-        label: sourceNode.label ?? materializedNode.label,
-        position: { x: sourceNode.positionX, y: sourceNode.positionY },
-        ...(metadata && Object.keys(metadata).length > 0 ? { metadata } : { metadata: undefined }),
-        ...(materializedNode.parameters
-          ? {
-              parameters: {
-                ...materializedNode.parameters,
-                values: structuredClone(sourceNode.config)
-              }
-            }
-          : {})
-      }
-    ];
-  });
-  const edges = result.architectureJson.edges.map((sourceEdge) => {
-    const materializedEdge = materializedEdgeById.get(sourceEdge.id);
-
-    return {
-      ...(materializedEdge ?? {}),
-      id: sourceEdge.id,
-      sourceNodeId: sourceEdge.sourceId,
-      targetNodeId: sourceEdge.targetId,
-      ...(sourceEdge.label === undefined ? { label: undefined } : { label: sourceEdge.label })
-    } satisfies DiagramEdge;
-  });
-
   return {
     compilation: null,
-    diagram: markReverseEngineeringDiagram({
-      ...materializedDiagram,
-      nodes,
-      edges
+    diagram: markReverseEngineeringDiagram(
+      createSourceExactReverseEngineeringDiagram(result.architectureJson)
+    )
+  };
+}
+
+// gg: shared 후보가 원본 의미를 보존한 경우에만 사용자가 고른 시각 배치를 채택합니다.
+function useSelectedReverseEngineeringOrganization(
+  sourceDiagram: DiagramJson,
+  organizedDiagram: DiagramJson | undefined
+): DiagramJson {
+  if (!organizedDiagram) {
+    throw new Error("선택한 Board 정리안을 찾지 못했습니다.");
+  }
+
+  if (!hasSameBoardAutoOrganizeSemantics(sourceDiagram, organizedDiagram)) {
+    throw new Error("Board 정리안이 가져온 AWS 원본을 변경했습니다.");
+  }
+
+  return constrainSelectedReverseEngineeringInfrastructureFrames(
+    sourceDiagram,
+    organizedDiagram
+  );
+}
+
+/** gg: 정리안 적용 시 프레임은 원본으로 고정하고 프레임 밖 멤버 이동은 원본 geometry로 되돌립니다. */
+function constrainSelectedReverseEngineeringInfrastructureFrames(
+  sourceDiagram: DiagramJson,
+  organizedDiagram: DiagramJson
+): DiagramJson {
+  const sourceNodeById = new Map(sourceDiagram.nodes.map((node) => [node.id, node]));
+  const frameByMemberNodeId = new Map<string, DiagramNode>();
+
+  for (const frame of [...sourceDiagram.nodes]
+    .filter(isReverseEngineeringInfrastructureFrameNode)
+    .sort((left, right) => left.id.localeCompare(right.id))) {
+    for (
+      const memberNodeId of
+      frame.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds ?? []
+    ) {
+      if (!frameByMemberNodeId.has(memberNodeId)) {
+        frameByMemberNodeId.set(memberNodeId, frame);
+      }
+    }
+  }
+
+  return {
+    ...structuredClone(organizedDiagram),
+    nodes: organizedDiagram.nodes.map((candidateNode) => {
+      const sourceNode = sourceNodeById.get(candidateNode.id);
+      if (!sourceNode) {
+        return structuredClone(candidateNode);
+      }
+      if (isReverseEngineeringInfrastructureFrameNode(sourceNode)) {
+        return structuredClone(sourceNode);
+      }
+
+      const frame = frameByMemberNodeId.get(sourceNode.id);
+      if (
+        frame &&
+        !isNodeInsideReverseEngineeringInfrastructureFrame(candidateNode, frame)
+      ) {
+        return {
+          ...structuredClone(candidateNode),
+          position: structuredClone(sourceNode.position),
+          size: structuredClone(sourceNode.size)
+        };
+      }
+
+      return structuredClone(candidateNode);
     })
   };
-}
-
-function createCompiledReverseEngineeringPreview(
-  result: ReverseEngineeringScanResult,
-  rawDiagram: DiagramJson
-): {
-  readonly compilation: ArchitectureBoardCompilationProposal;
-  readonly diagram: DiagramJson;
-} {
-  const compilation = compileReverseEngineeringArchitectureFromRaw(result, rawDiagram);
-  const diagram = markReverseEngineeringDiagram(compilation.diagram);
-
-  return {
-    compilation: { ...compilation, diagram },
-    diagram
-  };
-}
-
-// append는 원본 보드와 안전한 scan 추가분을 합친 뒤에만 Compiler에 넘깁니다.
-// 그래야 proposal의 quality/diff와 실제 승인·저장할 Board가 같은 상태를 가리킵니다.
-function compileReverseEngineeringAppendArchitecture(
-  appendDiagram: DiagramJson,
-  reverseEngineeringNodeIds: ReadonlySet<string>
-): ArchitectureBoardCompilationProposal {
-  const compilation = createBoardAutoOrganizeProposal(appendDiagram);
-
-  return {
-    ...compilation,
-    diagram: markReverseEngineeringDiagram(compilation.diagram, reverseEngineeringNodeIds)
-  };
-}
-
-export function compileReverseEngineeringArchitecture(
-  result: ReverseEngineeringScanResult
-): ArchitectureBoardCompilationProposal {
-  const rawDiagram = createOriginalReverseEngineeringPreview(result).diagram;
-
-  return compileReverseEngineeringArchitectureFromRaw(result, rawDiagram);
-}
-
-function compileReverseEngineeringArchitectureFromRaw(
-  _result: ReverseEngineeringScanResult,
-  rawDiagram: DiagramJson
-): ArchitectureBoardCompilationProposal {
-  return createBoardAutoOrganizeProposal(rawDiagram);
 }
 
 // AWS에서 가져온 노드에 보호해야 하는 원본 값 목록을 남깁니다.
@@ -273,7 +285,9 @@ function markReverseEngineeringDiagram(
   return {
     ...diagram,
     nodes: diagram.nodes.map((node) =>
-      nodeIds === undefined || nodeIds.has(node.id) ? markReverseEngineeringNode(node) : node
+      node.kind === "resource" && (nodeIds === undefined || nodeIds.has(node.id))
+        ? markReverseEngineeringNode(node)
+        : node
     )
   };
 }
@@ -304,6 +318,7 @@ function isUnsupportedUnknownNode(node: DiagramNode): boolean {
   return node.type === "UNKNOWN" || values?.["analysisExcluded"] === true;
 }
 
+// 표시 프레임은 비교 항목에서 빼고 실제 AWS Resource만 추가·중복·확인 대상으로 나눕니다.
 function compareDiagrams(
   currentDiagram: DiagramJson,
   previewDiagram: DiagramJson
@@ -322,7 +337,7 @@ function compareDiagrams(
   const duplicates: ReverseEngineeringBoardComparisonItem[] = [];
   const manualReviews: ReverseEngineeringBoardComparisonItem[] = [];
 
-  for (const node of previewDiagram.nodes) {
+  for (const node of previewDiagram.nodes.filter((candidate) => candidate.kind === "resource")) {
     const item = toComparisonItem(node);
     const providerResourceId = item.providerResourceId;
     const terraformIdentity = item.terraformIdentity;
@@ -357,7 +372,7 @@ function compareDiagrams(
     additions.push(item);
   }
 
-  for (const node of currentDiagram.nodes) {
+  for (const node of currentDiagram.nodes.filter((candidate) => candidate.kind === "resource")) {
     const providerResourceId = getProviderResourceId(node)[0];
 
     if (providerResourceId && !previewProviderResourceIds.has(providerResourceId)) {
@@ -373,25 +388,171 @@ function appendAdditionsToCurrentDiagram(
   currentDiagram: DiagramJson,
   previewDiagram: DiagramJson,
   comparison: ReverseEngineeringBoardComparison
-): DiagramJson {
+): {
+  readonly diagram: DiagramJson;
+  readonly sourceOwnership: ReverseEngineeringSourceOwnership;
+} {
   const additionNodeIds = new Set(comparison.additions.map((item) => item.nodeId));
   const currentNodeIds = new Set(currentDiagram.nodes.map((node) => node.id));
+  const currentNodesWithFrameMembership = mergeAppendedFrameMembership(
+    currentDiagram.nodes,
+    previewDiagram.nodes,
+    additionNodeIds
+  );
+  const currentNodeIdsWithFrames = new Set(
+    currentNodesWithFrameMembership.map((node) => node.id)
+  );
+  const currentFrameById = new Map(
+    currentNodesWithFrameMembership
+      .filter(isReverseEngineeringInfrastructureFrameNode)
+      .map((node) => [node.id, node])
+  );
+  const previewResourceNodeById = new Map(
+    previewDiagram.nodes
+      .filter((node) => node.kind === "resource")
+      .map((node) => [node.id, node])
+  );
+  const appendedFrames = previewDiagram.nodes
+    .filter(isReverseEngineeringInfrastructureFrameNode)
+    .flatMap((frame) => {
+      const marker = frame.metadata?.reverseEngineeringInfrastructureFrame;
+      const memberNodeIds = marker?.memberNodeIds.filter((nodeId) => additionNodeIds.has(nodeId));
+      const members = memberNodeIds?.flatMap((nodeId) => {
+        const node = previewResourceNodeById.get(nodeId);
+        return node ? [node] : [];
+      });
+
+      if (
+        !marker ||
+        !memberNodeIds ||
+        memberNodeIds.length === 0 ||
+        !members ||
+        members.length !== memberNodeIds.length
+      ) {
+        return [];
+      }
+
+      const currentFrame = currentFrameById.get(frame.id);
+      const currentMemberNodeIds = new Set(
+        currentFrame?.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds ?? []
+      );
+      if (memberNodeIds.every((nodeId) => currentMemberNodeIds.has(nodeId))) {
+        return [];
+      }
+
+      const frameId = currentNodeIdsWithFrames.has(frame.id)
+        ? createAppendedInfrastructureFrameId(frame.id, memberNodeIds)
+        : frame.id;
+      if (currentNodeIdsWithFrames.has(frameId)) {
+        return [];
+      }
+
+      return [
+        fitReverseEngineeringInfrastructureFrameToMembers(frame, members, frameId)
+      ];
+    });
   const nodes = [
-    ...currentDiagram.nodes,
-    ...previewDiagram.nodes.filter((node) => additionNodeIds.has(node.id))
+    ...currentNodesWithFrameMembership,
+    ...appendedFrames,
+    ...previewDiagram.nodes.filter(
+      (node) => node.kind === "resource" && additionNodeIds.has(node.id)
+    )
   ];
   const nodeIdsAfterAppend = new Set([...currentNodeIds, ...additionNodeIds]);
+  const appendedEdges = previewDiagram.edges.filter((edge) =>
+    shouldAppendEdge(edge, currentDiagram, nodeIdsAfterAppend)
+  );
 
   return {
-    edges: [
-      ...currentDiagram.edges,
-      ...previewDiagram.edges.filter((edge) =>
-        shouldAppendEdge(edge, currentDiagram, nodeIdsAfterAppend)
-      )
-    ],
-    nodes,
-    viewport: currentDiagram.viewport
+    diagram: {
+      ...currentDiagram,
+      edges: [...currentDiagram.edges, ...appendedEdges],
+      nodes,
+      viewport: currentDiagram.viewport
+    },
+    sourceOwnership: {
+      nodeIds: [...additionNodeIds],
+      edgeIds: appendedEdges.map((edge) => edge.id)
+    }
   };
+}
+
+/** gg: 같은 표시 프레임이 이미 있으면 geometry는 지키고 새 Resource 소속만 합칩니다. */
+function mergeAppendedFrameMembership(
+  currentNodes: readonly DiagramNode[],
+  previewNodes: readonly DiagramNode[],
+  additionNodeIds: ReadonlySet<string>
+): DiagramNode[] {
+  const previewFrameById = new Map(
+    previewNodes
+      .filter(isReverseEngineeringInfrastructureFrameNode)
+      .map((node) => [node.id, node])
+  );
+  const previewResourceNodeById = new Map(
+    previewNodes
+      .filter((node) => node.kind === "resource")
+      .map((node) => [node.id, node])
+  );
+
+  return currentNodes.map((node) => {
+    if (!isReverseEngineeringInfrastructureFrameNode(node)) {
+      return structuredClone(node);
+    }
+
+    const currentMarker = node.metadata?.reverseEngineeringInfrastructureFrame;
+    const previewMarker = previewFrameById.get(node.id)?.metadata
+      ?.reverseEngineeringInfrastructureFrame;
+    if (!currentMarker || !previewMarker) {
+      return structuredClone(node);
+    }
+
+    const appendedMemberNodeIds = previewMarker.memberNodeIds.filter((nodeId) =>
+      additionNodeIds.has(nodeId)
+    );
+    const appendedMembers = appendedMemberNodeIds.flatMap((nodeId) => {
+      const member = previewResourceNodeById.get(nodeId);
+      return member ? [member] : [];
+    });
+    if (
+      appendedMemberNodeIds.length === 0 ||
+      appendedMembers.length !== appendedMemberNodeIds.length ||
+      appendedMembers.some(
+        (member) => !isNodeInsideReverseEngineeringInfrastructureFrame(member, node)
+      )
+    ) {
+      return structuredClone(node);
+    }
+
+    return {
+      ...structuredClone(node),
+      metadata: {
+        ...structuredClone(node.metadata),
+        reverseEngineeringInfrastructureFrame: {
+          ...structuredClone(currentMarker),
+          memberNodeIds: [...new Set([
+            ...currentMarker.memberNodeIds,
+            ...appendedMemberNodeIds
+          ])].sort()
+        }
+      }
+    };
+  });
+}
+
+/** gg: 기존 같은 그룹 프레임에 안전하게 들어가지 않는 추가분은 별도 안정 ID 프레임으로 보존합니다. */
+function createAppendedInfrastructureFrameId(
+  baseFrameId: string,
+  memberNodeIds: readonly string[]
+): string {
+  let hash = 0x811c9dc5;
+  const value = [...memberNodeIds].sort().join("|");
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return `${baseFrameId}:append:${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 // 양쪽 끝 노드가 보드에 있을 때만 관계선을 추가해 끊어진 선을 만들지 않습니다.

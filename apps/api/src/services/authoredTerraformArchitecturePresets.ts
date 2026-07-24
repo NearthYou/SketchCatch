@@ -20,6 +20,9 @@ const AUDIENCE_LIVE_CHECK_DIAGRAM = createCanonicalDiagram();
 const AUDIENCE_LIVE_CHECK_TERRAFORM_CONTENT = createTerraformContentSignature(
   AUDIENCE_LIVE_CHECK_DIAGRAM
 );
+const AUDIENCE_LIVE_CHECK_TARGET_VALUE = readAudienceLiveCheckTargetValue(
+  AUDIENCE_LIVE_CHECK_DIAGRAM
+);
 
 export function findAuthoredTerraformArchitecturePreset(
   prompt: string
@@ -44,12 +47,67 @@ export function createAuthoredTerraformArchitectureDiagram(
 export function renderAuthoredTerraformArchitectureSource(
   diagramJson: DiagramJson
 ): string | undefined {
-  return isDeepStrictEqual(
-    createTerraformContentSignature(diagramJson),
-    AUDIENCE_LIVE_CHECK_TERRAFORM_CONTENT
-  )
-    ? getAudienceLiveCheckTerraformSource()
+  const targetValue = readAudienceLiveCheckTargetValue(diagramJson);
+
+  if (targetValue === undefined || AUDIENCE_LIVE_CHECK_TARGET_VALUE === undefined) {
+    return undefined;
+  }
+
+  const normalizedDiagram = structuredClone(diagramJson);
+
+  if (!setAudienceLiveCheckTargetValue(normalizedDiagram, AUDIENCE_LIVE_CHECK_TARGET_VALUE)) {
+    return undefined;
+  }
+
+  if (
+    !isDeepStrictEqual(
+      createTerraformContentSignature(normalizedDiagram),
+      AUDIENCE_LIVE_CHECK_TERRAFORM_CONTENT
+    )
+  ) {
+    return undefined;
+  }
+
+  return getAudienceLiveCheckTerraformSource().replace(
+    /(\btarget_value\s*=\s*)50\b/u,
+    `$1${targetValue}`
+  );
+}
+
+/** gg: 데모 Board의 Auto Scaling 목표값만 바뀌면 나머지 검증된 Terraform을 그대로 보존합니다. */
+function readAudienceLiveCheckTargetValue(diagramJson: DiagramJson): number | undefined {
+  const scalingPolicy = diagramJson.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_appautoscaling_policy"
+  );
+  const configurations = scalingPolicy?.parameters?.values?.[
+    "targetTrackingScalingPolicyConfiguration"
+  ];
+  const firstConfiguration = Array.isArray(configurations) ? configurations[0] : undefined;
+  const targetValue =
+    firstConfiguration && typeof firstConfiguration === "object"
+      ? (firstConfiguration as Record<string, unknown>)["targetValue"]
+      : undefined;
+
+  return typeof targetValue === "number" && Number.isFinite(targetValue) && targetValue > 0
+    ? targetValue
     : undefined;
+}
+
+function setAudienceLiveCheckTargetValue(diagramJson: DiagramJson, targetValue: number): boolean {
+  const scalingPolicy = diagramJson.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_appautoscaling_policy"
+  );
+  const configurations = scalingPolicy?.parameters?.values?.[
+    "targetTrackingScalingPolicyConfiguration"
+  ];
+  const firstConfiguration = Array.isArray(configurations) ? configurations[0] : undefined;
+
+  if (!firstConfiguration || typeof firstConfiguration !== "object") {
+    return false;
+  }
+
+  (firstConfiguration as Record<string, unknown>)["targetValue"] = targetValue;
+  return true;
 }
 
 function createTerraformContentSignature(diagramJson: DiagramJson): unknown {
