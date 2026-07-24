@@ -610,6 +610,7 @@
         "자동 정리는 미리보기·적용·취소·Undo 경계를 유지하며 승인 전 Board를 변경하지 않는다.",
         "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다.",
         "Workspace AI는 클릭한 option만 의미 기록으로 누적하고 실제 Resource icon Orbit과 Compiler Diagram 최종 Preview를 분리하며 승인 전 Board를 변경하지 않는다.",
+        "Architecture PatchPlan은 정확한 리소스 ID·label·config name과 기존 scalar 파라미터를 연결하고, 모호한 대상은 재질문하며, 보호된 식별자와 타입 불일치 변경을 거부한다.",
         "Live Observation 하단은 현재 상태, 사용자 영향, 근거 기반 중요 신호 최대 3개와 사실·가능성·확인 불가를 구분하며 자동 변경하지 않는다."
       ],
       "evidence": {
@@ -633,6 +634,7 @@
           "pnpm build",
           ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test --test-name-pattern natural-language apps/api/src/services/aiArchitectureDrafts.test.ts",
           ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test apps/api/src/services/aiArchitecturePatchPreview.test.ts",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test apps/web/features/workspace/workspace-ai-patch-preview.test.ts",
           ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test apps/api/src/services/architectureResourceAliases.test.ts",
           ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test apps/web/features/workspace/workspace-ai-draft-clarification.test.ts",
           ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test apps/web/app/workspace/ai/use-ai-start-workflow.test.ts apps/web/app/workspace/ai/selected-option-model.test.ts apps/web/app/workspace/ai/workspace-ai-presentation.test.ts apps/web/features/workspace/workspace-ai-chat-suggestion-submission.test.ts",

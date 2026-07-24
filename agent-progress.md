@@ -12,6 +12,7 @@ Short English-only working log for the current agent context. Older records are 
 - Repository Template previews show a dynamic recommendation rank, use the clearer AI design action, and keep candidate navigation anchored independently of recommendation-reason length.
 - Repository follow-up questions separate selected Template context, section hierarchy, individual prompts, and card-style answer choices.
 - 2026-07-24: Fixed AI Architecture chat patches for Application Auto Scaling target values. Exact resource IDs and the sole matching scaling policy now resolve deterministically, nested target-tracking config shapes are preserved, supported local plans skip Bedrock latency, and no-op requests return clarification instead of fake success.
+- Generalized Architecture PatchPlan changes now resolve exact resource identities and existing scalar config paths, handle intent-based add/modify/remove requests, and reject ambiguous targets or unsafe values before preview application.
 - Added synchronous submission and patch-application locks. Board patch success now appears only after Project Draft persistence returns either an explicit local-save success or a valid saved server revision; missing callbacks and failed save results no longer claim success.
 - Verified the focused API suite 7/7 and Web routing/consolidation suite 17/17, including the exact ecs_service_requests target value 50 to 5 regression, provider bypass, duplicate prevention, local-save results, and resolved { ok: false } handling.
 - Root lint and typecheck passed. All five package production builds passed directly; the final Turbo wrapper did not exit after completing work, so it was terminated after package-level verification.
@@ -25,6 +26,16 @@ Short English-only working log for the current agent context. Older records are 
 - Removed only `aws_appautoscaling_target` from the authored Fixed Template while preserving the scaling policy with deployable ECS literals.
 - A manually added sole scaling target now immediately rewrites the sole policy's `resource_id`, `scalable_dimension`, and `service_namespace` to Terraform references; ambiguous multi-target or multi-policy Boards are left unchanged.
 - Focused API and Web regressions, API/Web typechecks, Web lint, and the harness check pass. Application deployment behavior was explicitly left unchanged.
+
+### 2026-07-24 - Generalize natural-language Architecture PatchPlan changes
+
+- Added one deep parameter module that maps exact resource IDs, labels, and existing config names to existing scalar config paths while preserving value types and supporting multiple changes in one request.
+- Exact config identities now outrank shared resource labels, so requests such as `ECS Service orders-api` modify only the named resource; ambiguous same-type requests still require clarification.
+- Intent-backed provider plans can update validated existing scalar paths, while protected Terraform/template/diagram identities and type-incompatible operations are rejected.
+- Review hardening adds boundary-aware parameter matching, destination-value parsing, clause-local booleans, parent-path disambiguation, integer/enum/domain validation, safe nested boolean updates, earliest-longest identity selection, and clarification for multi-item or respectively-style requests.
+- Central validation rejects invalid Auto Scaling min/desired/max ordering, absent static provider paths, assigned-value target hijacking, and multi-parameter S3 omissions before any legacy preview path can apply them.
+- Verification passes: 31 focused API PatchPlan tests, 3 Board application tests, root lint, root typecheck, root build, and harness checks.
+- No DB migration, dependency change, cloud mutation, Terraform action, or deployment was performed.
 
 ### 2026-07-24 - Simplify canonical docs and code-adjacent evidence
 
