@@ -160,8 +160,27 @@ test("web output presents the entry URL and QR action as one clear service card"
   assert.match(deploymentOutputLinksSource, /styles\.deploymentOutputLinkValue/);
   assert.match(workspaceStyles, /\.deploymentOutputLinks article\s*\{[\s\S]*?box-shadow:/);
   assert.match(workspaceStyles, /\.deploymentOutputLinkActions button\[data-tone="qr"\]/);
+  assert.doesNotMatch(
+    getSourceBlock(workspaceStyles, ".deploymentOutputLinks article {", "}"),
+    /gradient\(/
+  );
 });
 
+test("keeps Deployment and CI/CD chrome on the neutral workspace palette", () => {
+  const requiredState = getSourceBlock(workspaceStyles, ".cicdRequiredState {", "}");
+  const repositoryBadge = getSourceBlock(
+    workspaceStyles,
+    ".cicdRepositorySummary > strong,",
+    "}"
+  );
+
+  assert.match(workspaceStyles, /--deployment-accent:\s*#171717/);
+  assert.doesNotMatch(workspaceStyles, /--deployment-blue:\s*#1267f4/);
+  assert.match(requiredState, /background:\s*var\(--workspace-surface-muted/);
+  assert.match(requiredState, /color:\s*var\(--workspace-text/);
+  assert.match(repositoryBadge, /background:\s*var\(--workspace-surface-strong/);
+  assert.match(repositoryBadge, /color:\s*var\(--workspace-text/);
+});
 test("anchors the QR utility below its button without covering header controls", () => {
   assert.match(
     modalSource,

@@ -1,6 +1,21 @@
 # Agent Progress
 
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/` and remain available in Git history.
+## 2026-07-24 - Restore AI progress and calm deployment operations UI
+
+- Restored streaming progress for plain existing-project Architecture Draft requests while retaining JSON validation for Repository analysis and evidence requests.
+- Decoupled Live Observation resource pulse cycles from incoming traffic snapshot sequences so each pulse completes and repeats while traffic particles continue independently.
+- Removed the Deployment Output card gradients and consolidated Deployment and CI/CD chrome onto the neutral Workspace palette while preserving warning and error semantics.
+- Verification: focused AI workflow checks 33/33 and transcript render checks 3/3; Live Observation and deployment UI contract checks 26/26; focused flow render checks 5/5; harness, all five lint tasks, all five typecheck tasks, all five production build tasks, and diff checks pass.
+- No schema, migration, dependency, Terraform, or direct cloud mutation was introduced by the code changes.
+
+
+## 2026-07-24 - Restore existing-project AI diagram generation progress
+
+- Traced the missing progress card to the existing-project transport policy: Repository AI entry supplied a Project ID, selected the JSON endpoint, emitted no progress snapshot, and therefore could never satisfy the transcript visibility gate.
+- Made request capability determine the transport. Plain Draft requests now use the progress stream regardless of whether the Project already exists, while Repository analysis/evidence requests retain the JSON validation boundary.
+- Verification: focused Workspace AI progress/state/stream checks 33/33, transcript render checks 3/3, all five lint tasks, all five typecheck tasks, all five production build tasks, harness, and diff checks pass.
+- No API contract, schema, migration, dependency, cloud mutation, Terraform action, deployment, GitHub mutation, or push was performed.
 
 
 ## 2026-07-24 - Synchronize AI scaling requests, Terraform, and parameter inputs
