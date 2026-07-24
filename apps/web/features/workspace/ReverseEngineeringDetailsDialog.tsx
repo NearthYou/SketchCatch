@@ -445,9 +445,13 @@ function ResourceCategory({
       {isOpen ? (
         <div className={styles.resourceCategoryBody} id={contentId}>
           {group.unreadableServiceCount > 0 ? (
-            <p className={styles.warningNotice}>
-              읽지 못한 AWS 서비스: {group.unreadableServiceNames.join(", ")}
-            </p>
+            <div className={styles.partialScanStatus} role="status">
+              <CircleAlert aria-hidden="true" size={17} />
+              <div>
+                <strong>일부 항목을 확인하지 못했습니다</strong>
+                <p>읽지 못한 AWS 서비스: {group.unreadableServiceNames.join(", ")}</p>
+              </div>
+            </div>
           ) : null}
           {resources.length === 0 ? (
             <p className={styles.emptyMessage}>
