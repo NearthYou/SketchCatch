@@ -326,7 +326,7 @@ export function useAiStartWorkflow({
   ): Promise<void> {
     beginRequest();
 
-    if (getAiStartDraftTransport(existingProjectId) === "json") {
+    if (getAiStartDraftTransport(request) === "json") {
       abortActiveDraftRequest();
       rememberDraftRequest(request);
       const controller = requestRegistryRef.current.begin("draft");

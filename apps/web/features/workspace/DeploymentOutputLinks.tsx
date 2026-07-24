@@ -83,7 +83,7 @@ export function DeploymentOutputLinks({
                 <span>{link.kind === "web" ? "서비스 접속 주소" : "배포 Output"}</span>
                 <strong>{link.kind === "web" ? "웹 엔트리 포인트 URL" : link.label}</strong>
               </div>
-              <span>{link.kind === "web" ? "PUBLIC" : "OUTPUT"}</span>
+              {link.kind === "web" ? null : <span>OUTPUT</span>}
             </div>
             <div className={styles.deploymentOutputLinkValue}>
               <span>{link.url}</span>

@@ -1,24 +1,22 @@
 # Agent Progress
 
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/` and remain available in Git history.
+## 2026-07-24 - Restore AI progress and calm deployment operations UI
+
+- Restored streaming progress for plain existing-project Architecture Draft requests while retaining JSON validation for Repository analysis and evidence requests.
+- Decoupled Live Observation resource pulse cycles from incoming traffic snapshot sequences so each pulse completes and repeats while traffic particles continue independently.
+- Removed the Deployment Output card gradients and consolidated Deployment and CI/CD chrome onto the neutral Workspace palette while preserving warning and error semantics.
+- Verification: focused AI workflow checks 33/33 and transcript render checks 3/3; Live Observation and deployment UI contract checks 26/26; focused flow render checks 5/5; harness, all five lint tasks, all five typecheck tasks, all five production build tasks, and diff checks pass.
+- No schema, migration, dependency, Terraform, or direct cloud mutation was introduced by the code changes.
 
 
-## 2026-07-24 - Synchronize AI scaling requests, Terraform, and parameter inputs
+## 2026-07-24 - Restore existing-project AI diagram generation progress
 
-- Restored the authored Fixed Template baseline to `target_value = 50` while keeping accepted AI patch previews able to change the matching ECS policy to the requested percentage.
-- Expanded deterministic Korean and English ECS CPU scale-out phrasing so equivalent requests select `ECSServiceAverageCPUUtilization` and update the target value without waiting for a provider response.
-- Normalized Terraform parser singleton-block arrays in the parameter editor, preserved their shape on edits, and exposed the authored ALB request metric as a real selected option instead of a placeholder.
-- Review hardening removes the ALB-only `resourceLabel` when switching to the ECS CPU metric, reads the percentage rather than later counts, and keeps parser singleton arrays valid with UI-aligned child error paths.
-- Reduced empty parameter input and select placeholder contrast without muting populated values.
-- Verification: focused API regressions 6/6 plus review regressions 4/4, focused Web regressions 6/6, harness, all five lint tasks, all five typecheck tasks, all five production build tasks, and diff checks pass.
-- No schema, migration, dependency, cloud mutation, Terraform execution, deployment, GitHub mutation, or push was performed.
+- Traced the missing progress card to the existing-project transport policy: Repository AI entry supplied a Project ID, selected the JSON endpoint, emitted no progress snapshot, and therefore could never satisfy the transcript visibility gate.
+- Made request capability determine the transport. Plain Draft requests now use the progress stream regardless of whether the Project already exists, while Repository analysis/evidence requests retain the JSON validation boundary.
+- Verification: focused Workspace AI progress/state/stream checks 33/33, transcript render checks 3/3, all five lint tasks, all five typecheck tasks, all five production build tasks, harness, and diff checks pass.
+- No API contract, schema, migration, dependency, cloud mutation, Terraform action, deployment, GitHub mutation, or push was performed.
 
-## 2026-07-24 - Open AI design chat directly from Repository analysis
-
-- Made the Repository result's `AI로 직접 설계` route explicit and initialized a fresh AI start draft from the analyzed project name when no project has been saved yet; existing project entries keep their project context.
-- Added route, draft-resolution, server-page, and Repository-link regressions so the action cannot fall back to `/workspace/new` or depend on stale session storage.
-- Verification: focused Repository/Workspace AI tests 49/49, route/render integration tests 4/4, harness, all five lint tasks, all five typecheck tasks, all five production build tasks, and diff checks pass.
-- No API, schema, migration, dependency, cloud mutation, production deployment, Terraform action, GitHub mutation, or push was performed.
 
 ## 2026-07-24 - Validate authored Terraform runtime Secrets from source
 
@@ -178,3 +176,11 @@ Short English-only working log for the current agent context. Older records are 
 - Restyled pre-deployment suggestions as a visible warning callout and replaced design-analysis wording with CloudWatch metrics, infrastructure-wide assessment, and likely bottleneck areas.
 - Verification passed: 91 focused Web tests, Web lint, Web typecheck, `git diff --check`, and final harness check. Full builds and broad suites were intentionally skipped per the request for scoped fast verification.
 - No DB migration, dependency change, generated load, Terraform action, deployment, or cloud mutation was performed.
+### 2026-07-24 - Restore AI progress and application-only deployment UX
+
+- Restored streamed progress for existing-project AI diagram generation while keeping clarification turns free of premature progress UI.
+- Removed the deployment output gradient and `PUBLIC` badge, aligned Deployment/CI/CD colors with the neutral workspace palette, and made Live Observation resource pulses complete independently from traffic animation.
+- Made application-only deployment a one-click flow that prepares, validates, records approval, and executes without a separate approval interaction. Missing ECS output metadata is safely reconciled from the latest verified live Terraform state before the application release.
+- Application-only progress now uses app build/release wording, cleanup candidates remain visible after preflight errors, and Web entry-point URLs appear only after an application release reaches a completed or partially completed terminal state.
+- Focused verification passed: 58 deployment-flow/progress Web tests, 122 deployment-plan/readiness API tests, and 23 output/Live Observation presentation tests. Root harness, lint, typecheck, and all five production builds pass; the first typecheck exposed and the final typecheck fixed one missing history-link import.
+- No DB migration, dependency change, Terraform action, generated load, or cloud mutation was performed. Next action is the requested PR merge and `dev` production redeployment through the reviewed GitHub Actions workflow.

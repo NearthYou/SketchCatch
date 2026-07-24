@@ -75,11 +75,16 @@ class FakeDeploymentRepository implements DeploymentRepository {
   relatedDeployments: DeploymentRecord[] = [];
   logs: DeploymentLogRecord[] = [];
   throwOnSaveDeploymentPlan = false;
+  synchronizeBeforeApplicationReleaseCalls = 0;
   readonly accessibleUserIds = new Set([userId]);
   projectDraft:
     | { revision: number; diagramJson: DiagramJson; terraformFiles: TerraformSyncFileInput[] | null }
     | undefined;
   reverseEngineeringScan: ReverseEngineeringImportScanRecord | undefined;
+
+  async synchronizeDeploymentTargetBeforeApplicationRelease() {
+    this.synchronizeBeforeApplicationReleaseCalls += 1;
+  }
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     if (
@@ -1603,13 +1608,16 @@ test("application scope writes an immutable release approval plan without runnin
       planArtifactStorage,
       readTerraformArtifactFile: async () => terraformArtifactContent,
       analyzePreDeployment: () => createAnalysis(),
-      prepareApplicationArtifact: async () => ({
-        releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        runtimeTargetKind: "ecs_fargate",
-        version: "1.0.0",
-        commitSha: "c".repeat(40),
-        artifactDigest: "d".repeat(64)
-      }),
+      prepareApplicationArtifact: async () => {
+        assert.equal(repository.synchronizeBeforeApplicationReleaseCalls, 1);
+        return {
+          releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          runtimeTargetKind: "ecs_fargate",
+          version: "1.0.0",
+          commitSha: "c".repeat(40),
+          artifactDigest: "d".repeat(64)
+        };
+      },
       writeApplicationPlanFile: async (filePath, content) => {
         writtenPlan = { filePath, content };
       },

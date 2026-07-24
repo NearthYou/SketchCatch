@@ -49,6 +49,8 @@ type SequencedTrafficBurst = LiveObservationRequestBurst & {
 };
 
 const EMPTY_CAPACITY_UNITS: readonly LiveObservationCapacityUnit[] = [];
+const RESOURCE_PULSE_ANIMATION_MS = 520;
+const RESOURCE_PULSE_PAUSE_MS = 240;
 
 export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFlow({
   architecture,
@@ -75,6 +77,7 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
   const [burst, setBurst] = useState<SequencedTrafficBurst | null>(null);
   const burstRef = useRef<SequencedTrafficBurst | null>(null);
   const burstTimerRef = useRef<number | null>(null);
+  const [resourcePulseCycle, setResourcePulseCycle] = useState(0);
   const modelCapacityUnits = model.status === "ready" ? model.capacityUnits : EMPTY_CAPACITY_UNITS;
   const totalCapacityCount =
     model.status === "ready" ? model.capacityUnits.length + model.hiddenCapacityCount : 0;
@@ -126,6 +129,14 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
   const [presentedCapacityUnits, setPresentedCapacityUnits] = useState(() =>
     settleLiveObservationCapacityUnits(displayedCapacityUnits)
   );
+  const resourcePulseCycleDurationMs =
+    model.status === "ready"
+      ? model.stages.length * LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS +
+        Math.max(0, presentedCapacityUnits.length - 1) * 70 +
+        RESOURCE_PULSE_ANIMATION_MS +
+        RESOURCE_PULSE_PAUSE_MS
+      : 0;
+  const hasResourcePulse = burst !== null && resourcePulseCycleDurationMs > 0;
 
   useLayoutEffect(() => {
     const nextCapacityUnits = displayedCapacityUnitsRef.current;
@@ -197,6 +208,16 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
     },
     []
   );
+
+  useEffect(() => {
+    if (!hasResourcePulse) return;
+
+    const timer = window.setInterval(() => {
+      setResourcePulseCycle((current) => current + 1);
+    }, resourcePulseCycleDurationMs);
+
+    return () => window.clearInterval(timer);
+  }, [hasResourcePulse, resourcePulseCycleDurationMs]);
 
   if (model.status === "unavailable") {
     return (
@@ -308,7 +329,7 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
                     <i
                       aria-hidden="true"
                       className={styles.liveObservationPresentationNodePulse}
-                      key={`${burst.sequence}-${stage.node.id}`}
+                      key={`${resourcePulseCycle}-${stage.node.id}`}
                       style={{
                         animationDelay: `${index * LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS}ms`
                       }}
@@ -392,7 +413,7 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
                           <i
                             aria-hidden="true"
                             className={styles.liveObservationPresentationNodePulse}
-                            key={`${burst.sequence}-${unit.node.id}-arrival`}
+                            key={`${resourcePulseCycle}-${unit.node.id}-arrival`}
                             style={{
                               animationDelay: `${model.stages.length * LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS + index * 70}ms`
                             }}
