@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
+import { ChevronDown, ChevronUp, CircleAlert, Search, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
@@ -244,9 +244,12 @@ export function ReverseEngineeringDetailsDialog({
             title="읽기 실패 또는 제한"
           >
             {hasPartialFailure ? (
-              <div className={styles.warningNotice} role="status">
-                <strong>읽은 리소스는 미리보기에 유지합니다.</strong>
-                <p>읽지 못한 서비스만 따로 표시하며, 전체 실패처럼 취급하지 않습니다.</p>
+              <div className={styles.partialScanStatus} role="status">
+                <CircleAlert aria-hidden="true" size={17} />
+                <div>
+                  <strong>일부 항목을 확인하지 못했습니다</strong>
+                  <p>가져온 구조는 그대로 확인할 수 있습니다.</p>
+                </div>
                 {partialScanNotice?.action === "open_settings" ? (
                   <a className={styles.secondaryButton} href={settingsHref}>
                     환경설정에서 권한 확인
