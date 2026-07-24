@@ -49,6 +49,13 @@ test("하위 구성 선택은 상위 AWS family 하나로 요청하고 화면에
   );
 });
 
+test("KMS Alias와 API Gateway Stage도 상세 reader의 parent scan 값으로 요청한다", () => {
+  assert.deepEqual(getNextReverseEngineeringResourceSelections([], "KMS_ALIAS"), ["KMS_KEY"]);
+  assert.deepEqual(getNextReverseEngineeringResourceSelections([], "API_GATEWAY_STAGE"), [
+    "API_GATEWAY_REST_API"
+  ]);
+});
+
 test("Resource 선택은 API 값 대신 한국어 화면 이름으로 표시한다", () => {
   assert.equal(formatReverseEngineeringResourceSelectionLabel("ALL"), "전체");
   assert.equal(formatReverseEngineeringResourceSelectionLabel("VPC"), "네트워크(VPC)");

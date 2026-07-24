@@ -41,6 +41,7 @@ import {
 import { ListRolesCommand } from "@aws-sdk/client-iam";
 import { GetPolicyCommand, ListFunctionsCommand } from "@aws-sdk/client-lambda";
 import type { AwsConnection, ReverseEngineeringScanResult } from "@sketchcatch/types";
+import { reverseEngineeringAwsResourceCatalog } from "@sketchcatch/types/resource-definitions";
 import type { TerraformAwsCredentialEnv } from "../aws-connections/aws-connection-runtime-credentials.js";
 import {
   createAwsProviderAdapter,
@@ -1790,6 +1791,75 @@ test("Cloud Control은 전용 reader가 없는 선택 종류와 하위 구성만
     "AWS::Lambda::EventSourceMapping"
   ]);
   assert.deepEqual(getAwsCloudControlProviderResourceTypes(scanInput(["VPC"])), []);
+});
+
+test("AWS catalog의 모든 scan 선택은 실제 reader 경로를 가진다", () => {
+  const directResourceGroupTypes = [
+    "VPC",
+    "SUBNET",
+    "ELASTIC_IP",
+    "NAT_GATEWAY",
+    "INTERNET_GATEWAY",
+    "ROUTE_TABLE",
+    "SECURITY_GROUP",
+    "EC2",
+    "RDS",
+    "S3"
+  ] as const;
+  // 이 세 종류는 UNKNOWN group 안에서 Resource Explorer보다 정확한 전용 inventory reader를 연다.
+  const targetedGenericInventoryTypes = new Set([
+    "AMI",
+    "CLOUDWATCH_LOG_GROUP",
+    "CLOUDWATCH_METRIC_ALARM"
+  ]);
+  const missingReaderRoutes = [
+    ...new Set(reverseEngineeringAwsResourceCatalog.map((entry) => entry.scanSelection))
+  ].filter((resourceType) => {
+    const input = scanInput([resourceType]);
+    const plan = createAwsReverseEngineeringReaderPlan(input);
+    const hasDedicatedReader =
+      directResourceGroupTypes.some((directType) => shouldReadResourceGroup(input, directType)) ||
+      plan.loadBalancers ||
+      plan.cloudFrontDistributions ||
+      plan.ecsResources ||
+      plan.eventBridgeResources ||
+      plan.detailedResources ||
+      plan.deploymentSupportResources ||
+      (targetedGenericInventoryTypes.has(resourceType) && plan.unknownResources);
+    const hasCloudControlReader = getAwsCloudControlProviderResourceTypes(input).length > 0;
+
+    return !hasDedicatedReader && !hasCloudControlReader;
+  });
+
+  assert.deepEqual(missingReaderRoutes, []);
+});
+
+test("review-only 별칭도 parent scan의 Cloud Control reader로 전달한다", () => {
+  for (const { scanSelection, providerResourceType } of [
+    {
+      scanSelection: "LOAD_BALANCER_TARGET_GROUP",
+      providerResourceType: "AWS::ElasticLoadBalancingV2::TargetGroupAttachment"
+    },
+    {
+      scanSelection: "ECR_REPOSITORY",
+      providerResourceType: "AWS::ECR::LifecyclePolicy"
+    },
+    {
+      scanSelection: "ACM_CERTIFICATE",
+      providerResourceType: "AWS::CertificateManager::CertificateValidation"
+    },
+    {
+      scanSelection: "RDS_CLUSTER",
+      providerResourceType: "AWS::RDS::DBClusterInstance"
+    }
+  ] as const) {
+    assert.ok(
+      getAwsCloudControlProviderResourceTypes(scanInput([scanSelection])).includes(
+        providerResourceType
+      ),
+      `${providerResourceType} Cloud Control route`
+    );
+  }
 });
 
 test("전용 상세 reader만 필요한 종류는 generic inventory 중복 조회를 끈다", () => {

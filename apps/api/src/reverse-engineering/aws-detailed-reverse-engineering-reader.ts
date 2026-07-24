@@ -1,5 +1,9 @@
 import { KMSClient } from "@aws-sdk/client-kms";
 import type { ResourceType, ReverseEngineeringScanError } from "@sketchcatch/types";
+import {
+  getReverseEngineeringAwsScanSelection,
+  resolveReverseEngineeringAwsProviderResourceType
+} from "@sketchcatch/types/resource-definitions";
 import type { TerraformAwsCredentialEnv } from "../aws-connections/aws-connection-runtime-credentials.js";
 import {
   readAwsApiGatewayRestTopology,
@@ -169,7 +173,7 @@ function shouldReadDetailedFamily(
   );
 }
 
-/** gg: 개별 선택에는 선택 Resource와 그 Resource가 실제로 참조하는 parent·dependency만 남깁니다. */
+/** gg: UI가 하위 항목을 parent scan으로 보낼 때는 family 전체를 시작점으로 잡고, raw 하위 요청은 기존처럼 dependency만 보존합니다. */
 function filterDetailedRecordsForSelection(
   input: AwsProviderScanInput,
   records: readonly AwsDiscoveredResourceRecord[]
@@ -184,7 +188,9 @@ function filterDetailedRecordsForSelection(
   const recordsById = new Map(records.map((record) => [record.providerResourceId, record]));
   const includedIds = new Set(
     records
-      .filter((record) => selectedProviderResourceTypes.has(record.providerResourceType))
+      .filter((record) =>
+        isDetailedRecordSelectedForInput(record, input, selectedProviderResourceTypes)
+      )
       .map((record) => record.providerResourceId)
   );
   const pendingIds = [...includedIds];
@@ -204,6 +210,32 @@ function filterDetailedRecordsForSelection(
   }
 
   return records.filter((record) => includedIds.has(record.providerResourceId));
+}
+
+/** gg: parent scan 값은 Catalog가 정한 같은 family의 상세 record를 모두 포함시키되, raw child 요청은 정확한 provider type만 선택합니다. */
+function isDetailedRecordSelectedForInput(
+  record: AwsDiscoveredResourceRecord,
+  input: AwsProviderScanInput,
+  selectedProviderResourceTypes: ReadonlySet<string>
+): boolean {
+  if (selectedProviderResourceTypes.has(record.providerResourceType)) {
+    return true;
+  }
+
+  const resourceType = resolveReverseEngineeringAwsProviderResourceType(
+    record.providerResourceType
+  );
+  const scanSelection = resourceType
+    ? getReverseEngineeringAwsScanSelection(resourceType)
+    : undefined;
+
+  return (
+    scanSelection !== undefined &&
+    input.resourceTypes.some(
+      (selectedResourceType) =>
+        selectedResourceType !== "ALL" && selectedResourceType === scanSelection
+    )
+  );
 }
 
 /** gg: IAM의 opaque join ID에 exact ARN·import ID·정책 문서를 서버 전용으로 연결합니다. */

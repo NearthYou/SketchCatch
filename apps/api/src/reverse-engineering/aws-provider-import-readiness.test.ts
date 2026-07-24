@@ -187,6 +187,73 @@ test("서비스 계열의 필수 Terraform 관찰값이 빠져도 리소스만 �
   }
 });
 
+test("명시적 Cloud Control review-only 별칭은 Terraform 관리 identity를 만들지 않는다", async () => {
+  const reviewOnlyRecords = [
+    record("AWS::ElasticLoadBalancingV2::TargetGroupAttachment", "target-attachment", {
+      cloudControlReadComplete: true,
+      managementReady: false,
+      reverseEngineeringDetailsComplete: false,
+      reverseEngineeringDetailsVersion: 1,
+      reverseEngineeringIncompleteDetails: ["terraform_mapping"]
+    }),
+    record("AWS::ECR::LifecyclePolicy", "lifecycle-policy", {
+      cloudControlReadComplete: true,
+      managementReady: false,
+      reverseEngineeringDetailsComplete: false,
+      reverseEngineeringDetailsVersion: 1,
+      reverseEngineeringIncompleteDetails: ["terraform_mapping"]
+    }),
+    record("AWS::CertificateManager::CertificateValidation", "certificate-validation", {
+      cloudControlReadComplete: true,
+      managementReady: false,
+      reverseEngineeringDetailsComplete: false,
+      reverseEngineeringDetailsVersion: 1,
+      reverseEngineeringIncompleteDetails: ["terraform_mapping"]
+    }),
+    record("AWS::RDS::DBClusterInstance", "cluster-instance", {
+      cloudControlReadComplete: true,
+      managementReady: false,
+      reverseEngineeringDetailsComplete: false,
+      reverseEngineeringDetailsVersion: 1,
+      reverseEngineeringIncompleteDetails: ["terraform_mapping"]
+    })
+  ];
+  const result = await scan(reviewOnlyRecords);
+
+  assert.deepEqual(result.discoveredResources.map((resource) => resource.resourceType).sort(), [
+    "ACM_CERTIFICATE_VALIDATION",
+    "ECR_LIFECYCLE_POLICY",
+    "LOAD_BALANCER_TARGET_GROUP_ATTACHMENT",
+    "RDS_CLUSTER_INSTANCE"
+  ]);
+  for (const resource of result.discoveredResources) {
+    const node = result.architectureJson.nodes.find((candidate) => candidate.id === resource.id);
+    const suggestion = result.importSuggestions.find(
+      (candidate) => candidate.resourceId === resource.id
+    );
+
+    assert.ok(node, resource.resourceType);
+    assert.ok(suggestion, resource.resourceType);
+    assert.equal(resource.analysisExcluded, true, resource.resourceType);
+    assert.equal(resource.importSuggestionStatus, "manual_review", resource.resourceType);
+    assert.equal(
+      node.config["reverseEngineeringManagement"],
+      "needs_mapping",
+      resource.resourceType
+    );
+    assert.equal(node.config["sketchcatchReferenceTerraform"], true, resource.resourceType);
+    assert.equal(node.config["analysisExcluded"], true, resource.resourceType);
+    assert.equal(node.config["terraformBlockType"], undefined, resource.resourceType);
+    assert.equal(node.config["terraformResourceType"], undefined, resource.resourceType);
+    assert.equal(node.config["terraformResourceName"], undefined, resource.resourceType);
+    assert.equal(suggestion.status, "manual_review", resource.resourceType);
+    assert.equal(suggestion.handoffReady, false, resource.resourceType);
+    assert.equal(suggestion.terraformAddress, undefined, resource.resourceType);
+    assert.equal(suggestion.importCommand, undefined, resource.resourceType);
+    assert.equal(suggestion.terraformBlockDraft, undefined, resource.resourceType);
+  }
+});
+
 test("실제 Query parser의 완전한 fixture는 핵심 리소스 import 준비 상태를 유지한다", async () => {
   const records = [
     ...parseVpcsFromXml(
