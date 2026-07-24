@@ -150,3 +150,12 @@ Short English-only working log for the current agent context. Older records are 
 1. After this branch is merged and deployed, retry the affected saved project validation without Repository re-analysis and confirm the authored Terraform chain passes.
 2. Use a separately approved load cycle if provider-confirmed Live Observation scale-out must be accepted; no DB migration is required.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
+
+### 2026-07-24 - Separate deployment scopes and clarify observation feedback
+
+- Manual scope changes now invalidate the previous Deployment Plan and approval before restarting validation, preventing an infrastructure-only selection from executing an older full-stack Plan. Successful infrastructure deployments offer a separate application-only continuation.
+- Reworked the Web entry-point output as a distinct service-access card with copy, open, QR, and observation actions.
+- Advanced the Task forecast threshold from 500 to 100 accepted requests without generating synthetic traffic.
+- Restyled pre-deployment suggestions as a visible warning callout and replaced design-analysis wording with CloudWatch metrics, infrastructure-wide assessment, and likely bottleneck areas.
+- Verification passed: 91 focused Web tests, Web lint, Web typecheck, `git diff --check`, and final harness check. Full builds and broad suites were intentionally skipped per the request for scoped fast verification.
+- No DB migration, dependency change, generated load, Terraform action, deployment, or cloud mutation was performed.

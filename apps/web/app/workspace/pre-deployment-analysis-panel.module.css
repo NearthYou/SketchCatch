@@ -1,0 +1,80 @@
+.suggestionCallout {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-left: 4px solid #ea580c;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgb(154 52 18 / 8%);
+  color: #7c2d12;
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.suggestionHeading {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+}
+
+.suggestionHeading > svg {
+  color: #ea580c;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.suggestionHeading div {
+  display: grid;
+  gap: 3px;
+}
+
+.suggestionHeading strong {
+  font-size: 15px;
+}
+
+.suggestionHeading span {
+  color: #9a3412;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.suggestionCallout :global(.resultStack) {
+  display: grid;
+  gap: 10px;
+}
+
+.suggestionCallout :global(.resultTitle) {
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.suggestionCallout :global(.resultList) {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.suggestionCallout :global(.resultList > li) {
+  background: rgb(255 255 255 / 72%);
+  border: 1px solid #fed7aa;
+  border-radius: 9px;
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px;
+}
+
+.suggestionCallout :global(.resultList strong) {
+  color: #7c2d12;
+}
+
+.suggestionCallout :global(.resultList span),
+.suggestionCallout :global(.resultListItems) {
+  color: #9a3412;
+  font-size: 13px;
+  line-height: 1.55;
+}

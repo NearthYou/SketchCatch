@@ -1,7 +1,7 @@
 import type { ArchitectureJson, LiveObservationV2Snapshot } from "@sketchcatch/types";
 import { recoverLiveObservationReferenceEdges } from "./live-observation-architecture";
 
-const LIVE_OBSERVATION_ACCEPTED_REQUESTS_PER_FORECAST_TASK = 500;
+const LIVE_OBSERVATION_ACCEPTED_REQUESTS_PER_FORECAST_TASK = 100;
 
 export type LiveObservationCapacityProjection = Readonly<{
   actualCount: number | null;

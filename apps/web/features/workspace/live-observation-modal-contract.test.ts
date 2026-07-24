@@ -154,6 +154,14 @@ test("places the deployment time label inline to the left of the selected timest
     /\.liveObservationTargetBar label\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\)/
   );
 });
+test("web output presents the entry URL and QR action as one clear service card", () => {
+  assert.match(deploymentOutputLinksSource, /웹 엔트리 포인트 URL/);
+  assert.match(deploymentOutputLinksSource, /접속 QR · 실시간 관측/);
+  assert.match(deploymentOutputLinksSource, /styles\.deploymentOutputLinkValue/);
+  assert.match(workspaceStyles, /\.deploymentOutputLinks article\s*\{[\s\S]*?box-shadow:/);
+  assert.match(workspaceStyles, /\.deploymentOutputLinkActions button\[data-tone="qr"\]/);
+});
+
 test("anchors the QR utility below its button without covering header controls", () => {
   assert.match(
     modalSource,
