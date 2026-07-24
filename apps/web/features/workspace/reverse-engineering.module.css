@@ -544,6 +544,180 @@ button.candidateCardSelected {
   font-size: calc(15px + var(--presentation-font-size-increase));
 }
 
+.detailAccordion {
+  border: 1px solid var(--reverse-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.detailAccordionHeading,
+.resourceAccordionHeading {
+  margin: 0;
+}
+
+.detailAccordionTrigger,
+.resourceAccordionTrigger {
+  align-items: center;
+  background: var(--reverse-surface);
+  border: 0;
+  color: var(--reverse-text);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 10px 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.detailAccordionTrigger:hover,
+.resourceAccordionTrigger:hover {
+  background: var(--reverse-surface-muted);
+}
+
+.detailAccordionTrigger:focus-visible,
+.resourceAccordionTrigger:focus-visible {
+  outline: 3px solid rgba(13, 116, 206, 0.38);
+  outline-offset: -3px;
+}
+
+.detailAccordionTitle {
+  font-size: calc(15px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.detailAccordionMeta,
+.resourceCategoryMeta {
+  align-items: center;
+  color: var(--reverse-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.detailAccordionTrigger::after,
+.resourceAccordionTrigger::after {
+  color: var(--reverse-subtle);
+  content: "+";
+  flex: 0 0 auto;
+  font-size: calc(19px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  line-height: 1;
+}
+
+.detailAccordionTrigger[data-open="true"]::after,
+.resourceAccordionTrigger[data-open="true"]::after {
+  content: "−";
+}
+
+.detailAccordionBody {
+  border-top: 1px solid var(--reverse-line);
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.detailSubsection,
+.resourceDetailSection {
+  display: grid;
+  gap: 9px;
+}
+
+.detailSubsection h4,
+.resourceDetailSection h6 {
+  color: var(--reverse-text);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.resourceCategoryAccordions,
+.resourceAccordions {
+  display: grid;
+  gap: 8px;
+}
+
+.resourceCategoryAccordions > .detailAccordion {
+  border-radius: 8px;
+}
+
+.resourceAccordion {
+  border: 1px solid var(--reverse-line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.resourceAccordionTrigger {
+  align-items: flex-start;
+  min-height: 52px;
+}
+
+.resourceAccordionTitle {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.resourceAccordionTitle strong {
+  color: var(--reverse-text);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  overflow-wrap: anywhere;
+}
+
+.resourceAccordionTitle span {
+  color: var(--reverse-muted);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  overflow-wrap: anywhere;
+}
+
+.resourceAccordionBody {
+  background: var(--reverse-surface-muted);
+  border-top: 1px solid var(--reverse-line);
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.detailKeyValueList {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.detailKeyValueList > div {
+  align-items: baseline;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(88px, 0.5fr) minmax(0, 1fr);
+}
+
+.detailKeyValueList dt {
+  color: var(--reverse-muted);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+}
+
+.detailKeyValueList dd {
+  color: var(--reverse-text);
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.detailKeyValueList code {
+  background: var(--reverse-surface);
+  border: 1px solid var(--reverse-line);
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  padding: 2px 5px;
+  white-space: normal;
+}
+
 .compactSummary {
   color: var(--reverse-muted);
   display: grid;
@@ -1420,6 +1594,22 @@ button.candidateCardSelected {
 
   .placementActions {
     grid-template-columns: 1fr;
+  }
+
+  .detailAccordionTrigger,
+  .resourceAccordionTrigger {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .detailAccordionMeta,
+  .resourceCategoryMeta {
+    justify-content: flex-start;
+  }
+
+  .detailKeyValueList > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
   }
 
   .compilationReviewHeader,

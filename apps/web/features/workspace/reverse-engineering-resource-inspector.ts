@@ -191,7 +191,7 @@ export function getReverseEngineeringInspectorPurpose(
   isReviewOnly: boolean
 ): string {
   if (isReviewOnly) {
-    return "AWS에서 찾았지만 현재 설정을 안전하게 Terraform으로 옮길 수 없는 리소스입니다. 보드에서 위치와 연결 관계를 확인할 수 있습니다.";
+    return "AWS에서 찾았지만 현재 정보만으로는 자동 해석하기 어려운 리소스입니다. 보드에서 위치와 연결 관계를 확인할 수 있습니다.";
   }
 
   return RESOURCE_PURPOSES[resourceType as ResourceType] ?? "AWS에서 읽은 구성을 보드에서 검토할 수 있습니다.";

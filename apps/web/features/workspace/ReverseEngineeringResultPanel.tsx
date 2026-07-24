@@ -6,7 +6,7 @@ import type {
   ReverseEngineeringServiceCoverage
 } from "@sketchcatch/types";
 import { useEffect, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { LoaderCircle, Search, X } from "lucide-react";
 import type {
   ReverseEngineeringBoardApplicationMode,
@@ -17,6 +17,15 @@ import type { ReverseEngineeringBoardCandidate } from "./reverse-engineering-boa
 import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
 import {
+  buildReverseEngineeringResourceAccordionModel,
+  getSearchExpandedReverseEngineeringResourceCategories,
+  type ReverseEngineeringDetailSectionKey,
+  type ReverseEngineeringResourceCategoryGroup,
+  type ReverseEngineeringResourceCategoryKey
+} from "./reverse-engineering-detail-model";
+import { getReverseEngineeringInspectorCoreValues } from "./reverse-engineering-resource-inspector";
+import {
+  getReverseEngineeringProviderTypeLabel,
   presentReverseEngineeringResource,
   presentReverseEngineeringScanErrors,
   summarizeReverseEngineeringScan
@@ -24,6 +33,30 @@ import {
 import styles from "./reverse-engineering.module.css";
 
 export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "partial" | "error";
+
+// API가 이미 정제하지만, 과거 저장 결과도 실제 reader가 쓰는 AWS 서비스 action만 다시 표시합니다.
+const SAFE_REVERSE_ENGINEERING_READ_ACTION_PREFIXES = [
+  "apigateway",
+  "application-autoscaling",
+  "cloudformation",
+  "cloudfront",
+  "cloudwatch",
+  "ec2",
+  "ecr",
+  "ecs",
+  "elasticloadbalancing",
+  "events",
+  "iam",
+  "kms",
+  "lambda",
+  "logs",
+  "rds",
+  "resource-explorer-2",
+  "s3",
+  "secretsmanager",
+  "tag"
+] as const;
+
 export type ReverseEngineeringResultPanelProps = {
   readonly applyMessage: string | null;
   readonly applicationMode: ReverseEngineeringBoardApplicationMode;
@@ -46,93 +79,6 @@ export type ReverseEngineeringResultPanelProps = {
   readonly placement: ReverseEngineeringPlacement;
 };
 
-const REVERSE_ENGINEERING_RESOURCE_CATEGORIES = [
-  { key: "network", label: "네트워크" },
-  { key: "compute", label: "서버·컴퓨팅" },
-  { key: "data", label: "데이터·저장소" },
-  { key: "security", label: "보안·권한" },
-  { key: "other", label: "기타" }
-] as const;
-
-type ReverseEngineeringResourceCategory =
-  (typeof REVERSE_ENGINEERING_RESOURCE_CATEGORIES)[number]["key"];
-
-const NETWORK_PROVIDER_RESOURCE_TYPES = new Set([
-  "AWS::EC2::EIP",
-  "AWS::EC2::InternetGateway",
-  "AWS::EC2::NatGateway",
-  "AWS::EC2::NetworkAcl",
-  "AWS::EC2::NetworkAclEntry",
-  "AWS::EC2::RouteTable",
-  "AWS::EC2::RouteTableAssociation",
-  "AWS::EC2::Subnet",
-  "AWS::EC2::SubnetRouteTableAssociation",
-  "AWS::EC2::VPC",
-  "AWS::EC2::VPCEndpoint",
-  "AWS::EC2::VPCPeeringConnection",
-  "AWS::EC2::VPCPeeringConnectionAccepter"
-]);
-
-const NETWORK_PROVIDER_RESOURCE_PREFIXES = [
-  "AWS::APIGateway::",
-  "AWS::ApiGateway::",
-  "AWS::ApiGatewayV2::",
-  "AWS::CloudFront::",
-  "AWS::ElasticLoadBalancingV2::",
-  "AWS::Route53::"
-] as const;
-
-const COMPUTE_PROVIDER_RESOURCE_PREFIXES = [
-  "AWS::Amplify::",
-  "AWS::ApplicationAutoScaling::",
-  "AWS::AutoScaling::",
-  "AWS::CodeBuild::",
-  "AWS::ECR::",
-  "AWS::ECS::",
-  "AWS::EKS::",
-  "AWS::Lambda::"
-] as const;
-
-const COMPUTE_PROVIDER_RESOURCE_TYPES = new Set([
-  "AWS::EC2::Image",
-  "AWS::EC2::Instance",
-  "AWS::EC2::LaunchTemplate"
-]);
-
-const DATA_PROVIDER_RESOURCE_PREFIXES = [
-  "AWS::DynamoDB::",
-  "AWS::EFS::",
-  "AWS::ElastiCache::",
-  "AWS::RDS::",
-  "AWS::S3::"
-] as const;
-
-const DATA_PROVIDER_RESOURCE_TYPES = new Set([
-  "AWS::EC2::Volume",
-  "AWS::EC2::VolumeAttachment"
-]);
-
-const SECURITY_PROVIDER_RESOURCE_PREFIXES = [
-  "AWS::CertificateManager::",
-  "AWS::CloudTrail::",
-  "AWS::Cognito::",
-  "AWS::Config::",
-  "AWS::GuardDuty::",
-  "AWS::IAM::",
-  "AWS::KMS::",
-  "AWS::SecretsManager::",
-  "AWS::Shield::",
-  "AWS::WAF::",
-  "AWS::WAFRegional::",
-  "AWS::WAFv2::"
-] as const;
-
-const SECURITY_PROVIDER_RESOURCE_TYPES = new Set([
-  "AWS::EC2::KeyPair",
-  "AWS::EC2::SecurityGroup",
-  "AWS::Lambda::Permission"
-]);
-
 // 기본 화면에는 보드 미리보기와 사용자가 바로 고를 행동만 남깁니다.
 export function ReverseEngineeringResultPanel({
   applyMessage,
@@ -153,6 +99,13 @@ export function ReverseEngineeringResultPanel({
   const result = response.result;
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [detailSearch, setDetailSearch] = useState("");
+  const [openDetailSections, setOpenDetailSections] = useState<
+    ReadonlySet<ReverseEngineeringDetailSectionKey>
+  >(() => new Set(["summary"]));
+  const [openResourceCategories, setOpenResourceCategories] = useState<
+    ReadonlySet<ReverseEngineeringResourceCategoryKey>
+  >(() => new Set());
+  const [openResourceIds, setOpenResourceIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isOrganizing, setIsOrganizing] = useState(false);
   const detailsOverlayRef = useRef<HTMLDivElement>(null);
   const detailsDialogRef = useRef<HTMLElement>(null);
@@ -215,17 +168,28 @@ export function ReverseEngineeringResultPanel({
           scanError.reason === "invalid_region" ||
           scanError.reason === "expired_credential"
       );
-  const unsupportedResources = result.discoveredResources.filter(
-    (resource) => presentReverseEngineeringResource(resource).displayState === "review_only"
+  const resourceAccordionModel = buildReverseEngineeringResourceAccordionModel({
+    resources: result.discoveredResources,
+    coverage: result.coverage,
+    scanErrors: result.scanErrors,
+    search: detailSearch
+  });
+  const searchExpandedResourceCategories = getSearchExpandedReverseEngineeringResourceCategories(
+    resourceAccordionModel
   );
-  const filteredResources = filterReverseEngineeringResources(
-    result.discoveredResources,
-    detailSearch
+  const isResourceSearchActive = resourceAccordionModel.normalizedSearch.length > 0;
+  const resourceDisplayNames = new Map(
+    result.discoveredResources.map((resource) => [
+      resource.id,
+      presentReverseEngineeringResource(resource).displayName
+    ])
   );
-  const resourceCategoryCounts = countReverseEngineeringResourceCategories(
-    result.discoveredResources
-  );
+  const resourceWarningsById = createResourceWarningsById(result);
   const connectionCount = result.architectureJson.edges.length;
+  const discoveredRelationshipCount = result.discoveredResources.reduce(
+    (total, resource) => total + (resource.relationships?.length ?? 0),
+    0
+  );
   const selectedApplyDisabled =
     isApplying ||
     !hasApplicableResources ||
@@ -269,6 +233,30 @@ export function ReverseEngineeringResultPanel({
     if (event.target === event.currentTarget) {
       setIsDetailsOpen(false);
     }
+  }
+
+  function openDetails(): void {
+    setDetailSearch("");
+    setOpenDetailSections(new Set(["summary"]));
+    setOpenResourceCategories(new Set());
+    setOpenResourceIds(new Set());
+    setIsDetailsOpen(true);
+  }
+
+  function toggleDetailSection(sectionKey: ReverseEngineeringDetailSectionKey): void {
+    setOpenDetailSections((current) => toggleAccordionSet(current, sectionKey));
+  }
+
+  function toggleResourceCategory(categoryKey: ReverseEngineeringResourceCategoryKey): void {
+    if (isResourceSearchActive) {
+      return;
+    }
+
+    setOpenResourceCategories((current) => toggleAccordionSet(current, categoryKey));
+  }
+
+  function toggleResource(resourceId: string): void {
+    setOpenResourceIds((current) => toggleAccordionSet(current, resourceId));
   }
 
   return (
@@ -329,7 +317,7 @@ export function ReverseEngineeringResultPanel({
           </button>
           <button
             className={styles.secondaryButton}
-            onClick={() => setIsDetailsOpen(true)}
+            onClick={openDetails}
             type="button"
           >
             상세 정보
@@ -388,141 +376,261 @@ export function ReverseEngineeringResultPanel({
           </header>
 
           <div className={styles.detailsDialogBody}>
-            <section
-              aria-label="리소스 종류별 개수"
-              className={styles.detailResourceCategorySummary}
+            <DetailAccordionSection
+              id="reverse-engineering-detail-summary"
+              isOpen={openDetailSections.has("summary")}
+              meta={`리소스 ${summary.discoveredCount}개`}
+              onToggle={() => toggleDetailSection("summary")}
+              title="가져오기 요약"
             >
-              <h3>리소스 구성</h3>
-              <div className={styles.detailResourceCategoryCounts}>
-                {REVERSE_ENGINEERING_RESOURCE_CATEGORIES.map((category) => (
-                  <span key={category.key}>
-                    {category.label}
-                    <strong>{resourceCategoryCounts[category.key]}</strong>
-                  </span>
-                ))}
+              <div aria-label="가져오기 요약 수치" className={styles.summaryStats}>
+                <span>
+                  전체 리소스
+                  <strong>{summary.discoveredCount}</strong>
+                </span>
+                <span>
+                  보드 표시
+                  <strong>{summary.boardCount}</strong>
+                </span>
+                <span>
+                  추가 확인
+                  <strong>{summary.reviewOnlyCount}</strong>
+                </span>
+                <span>
+                  읽지 못한 서비스
+                  <strong>{summary.unreadableServiceCount}</strong>
+                </span>
               </div>
-            </section>
-
-            <label className={styles.detailsSearch}>
-              <Search aria-hidden="true" size={16} />
-              <span className={styles.visuallyHidden}>리소스 검색</span>
-              <input
-                onChange={(event) => setDetailSearch(event.currentTarget.value)}
-                placeholder="리소스 이름 또는 종류 검색"
-                type="search"
-                value={detailSearch}
-              />
-            </label>
-
-            <div aria-label="리소스 분류" className={styles.detailCategoryCounts}>
-              <span>
-                전체 <strong>{summary.discoveredCount}</strong>
-              </span>
-              <span>
-                보드 표시 <strong>{summary.boardCount}</strong>
-              </span>
-              <span>
-                추가 확인 <strong>{summary.reviewOnlyCount}</strong>
-              </span>
-              <span>
-                못 읽음 <strong>{summary.unreadableServiceCount}</strong>
-              </span>
-            </div>
-
-            <p className={styles.detailLimitNotice}>
-              보드에 표시되지 않거나 읽지 못한 항목은 자동으로 적용하지 않습니다.
-            </p>
-
-            {hasPartialFailure ? (
-              <div className={styles.warning} role="alert">
-                <strong>일부 항목을 가져오지 못했어요</strong>
-                <p>가져온 항목만 사용해 계속 진행할 수 있어요.</p>
-                {hasAwsSettingsRecovery ? (
-                  <a className={styles.secondaryButton} href={permissionRecoveryHref}>
-                    환경설정에서 권한 보완
-                  </a>
-                ) : null}
-              </div>
-            ) : null}
-
-            <section className={styles.detailSection}>
-              <h3>미리보기 설정</h3>
-              {hasCurrentBoardResources ? (
-                <div className={styles.placementActions} role="group" aria-label="적용 방식 미리보기">
-                  <button
-                    aria-pressed={applicationMode === "replace"}
-                    className={styles.secondaryButton}
-                    onClick={() => onApplicationModeChange("replace")}
-                    type="button"
-                  >
-                    현재 보드 교체 미리보기
-                  </button>
-                  <button
-                    aria-pressed={applicationMode === "append"}
-                    className={styles.secondaryButton}
-                    onClick={() => onApplicationModeChange("append")}
-                    type="button"
-                  >
-                    현재 보드 추가 미리보기
-                  </button>
+              <p className={styles.detailLimitNotice}>
+                보드에 적용은 가져온 구조를 보드에 저장하는 동작입니다. 이 화면에서 Terraform 코드 생성,
+                import, AWS 변경은 실행하지 않습니다.
+              </p>
+              {hasPartialFailure ? (
+                <div className={styles.warning} role="alert">
+                  <strong>일부 AWS 항목을 가져오지 못했어요</strong>
+                  <p>읽은 리소스와 연결은 유지하고, 읽지 못한 범위는 별도로 표시합니다.</p>
+                  {hasAwsSettingsRecovery ? (
+                    <a className={styles.secondaryButton} href={permissionRecoveryHref}>
+                      환경설정에서 권한 보완
+                    </a>
+                  ) : null}
                 </div>
               ) : null}
-              <div className={styles.placementActions} role="group" aria-label="배치 미리보기 선택">
-                <button
-                  aria-pressed={placement === "original"}
-                  className={styles.secondaryButton}
-                  onClick={onKeepOriginalPlacement}
-                  type="button"
-                >
-                  원본 유지
-                </button>
-                <button
-                  aria-pressed={placement === "compiled"}
-                  className={styles.secondaryButton}
-                  disabled={isOrganizing || placement === "compiled"}
-                  onClick={handleCompilePlacement}
-                  type="button"
-                >
-                  {isOrganizing ? "정리하는 중…" : "보기 좋게 정리"}
-                </button>
+              <section className={styles.detailSubsection}>
+                <h4>미리보기 설정</h4>
+                {hasCurrentBoardResources ? (
+                  <div
+                    className={styles.placementActions}
+                    role="group"
+                    aria-label="적용 방식 미리보기"
+                  >
+                    <button
+                      aria-pressed={applicationMode === "replace"}
+                      className={styles.secondaryButton}
+                      onClick={() => onApplicationModeChange("replace")}
+                      type="button"
+                    >
+                      현재 보드 교체 미리보기
+                    </button>
+                    <button
+                      aria-pressed={applicationMode === "append"}
+                      className={styles.secondaryButton}
+                      onClick={() => onApplicationModeChange("append")}
+                      type="button"
+                    >
+                      현재 보드 추가 미리보기
+                    </button>
+                  </div>
+                ) : null}
+                <div className={styles.placementActions} role="group" aria-label="배치 미리보기 선택">
+                  <button
+                    aria-pressed={placement === "original"}
+                    className={styles.secondaryButton}
+                    onClick={onKeepOriginalPlacement}
+                    type="button"
+                  >
+                    원본 유지
+                  </button>
+                  <button
+                    aria-pressed={placement === "compiled"}
+                    className={styles.secondaryButton}
+                    disabled={isOrganizing || placement === "compiled"}
+                    onClick={handleCompilePlacement}
+                    type="button"
+                  >
+                    {isOrganizing ? "정리하는 중…" : "보기 좋게 정리"}
+                  </button>
+                </div>
+                <p className={styles.hint}>
+                  미리보기만 바뀝니다. 보드에 적용하기 전에는 저장되지 않습니다.
+                </p>
+                {placement === "compiled" && layoutSummary.length > 0 ? (
+                  <ul className={styles.compactSummary}>
+                    {layoutSummary.map((message) => (
+                      <li key={message}>{message}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </section>
+            </DetailAccordionSection>
+
+            <DetailAccordionSection
+              id="reverse-engineering-detail-resources"
+              isOpen={
+                isResourceSearchActive || openDetailSections.has("resources")
+              }
+              meta={`리소스 ${summary.discoveredCount}개`}
+              onToggle={() => {
+                if (!isResourceSearchActive) {
+                  toggleDetailSection("resources");
+                }
+              }}
+              title="가져온 리소스"
+            >
+              <label className={styles.detailsSearch}>
+                <Search aria-hidden="true" size={16} />
+                <span className={styles.visuallyHidden}>리소스 검색</span>
+                <input
+                  onChange={(event) => setDetailSearch(event.currentTarget.value)}
+                  placeholder="리소스 이름 또는 종류 검색"
+                  type="search"
+                  value={detailSearch}
+                />
+              </label>
+              <p className={styles.hint}>
+                {isResourceSearchActive
+                  ? "검색 결과가 있는 카테고리만 펼쳐서 보여줍니다."
+                  : "카테고리를 열어 리소스의 원본 정보와 읽기 상태를 확인하세요."}
+              </p>
+              <div aria-label="리소스 카테고리" className={styles.resourceCategoryAccordions}>
+                {resourceAccordionModel.groups.map((group) => (
+                  <ResourceCategoryAccordion
+                    group={group}
+                    isOpen={
+                      isResourceSearchActive
+                        ? searchExpandedResourceCategories.has(group.key)
+                        : openResourceCategories.has(group.key)
+                    }
+                    key={group.key}
+                    onToggle={() => toggleResourceCategory(group.key)}
+                    openResourceIds={openResourceIds}
+                    resourceDisplayNames={resourceDisplayNames}
+                    resourceWarningsById={resourceWarningsById}
+                    visibleResources={
+                      isResourceSearchActive ? group.matchingResources : group.resources
+                    }
+                    onResourceToggle={toggleResource}
+                  />
+                ))}
+              </div>
+              {resourceAccordionModel.unclassifiedUnreadableServiceCount > 0 ? (
+                <p className={styles.warning}>
+                  카테고리를 알 수 없는 읽기 실패: {resourceAccordionModel.unclassifiedUnreadableServiceNames.join(
+                    ", "
+                  )}
+                </p>
+              ) : null}
+            </DetailAccordionSection>
+
+            <DetailAccordionSection
+              id="reverse-engineering-detail-structure"
+              isOpen={openDetailSections.has("structure")}
+              meta={`연결 ${connectionCount}개`}
+              onToggle={() => toggleDetailSection("structure")}
+              title="연결과 구조"
+            >
+              <div aria-label="연결과 구조 수치" className={styles.summaryStats}>
+                <span>
+                  보드 연결
+                  <strong>{connectionCount}</strong>
+                </span>
+                <span>
+                  발견한 관계
+                  <strong>{discoveredRelationshipCount}</strong>
+                </span>
+                <span>
+                  연결된 리소스
+                  <strong>
+                    {
+                      result.discoveredResources.filter(
+                        (resource) => (resource.relationships?.length ?? 0) > 0
+                      ).length
+                    }
+                  </strong>
+                </span>
+                <span>
+                  보드 표시 전용
+                  <strong>{summary.reviewOnlyCount}</strong>
+                </span>
               </div>
               <p className={styles.hint}>
-                미리보기만 바뀝니다. 보드에 적용하기 전에는 저장되지 않습니다.
+                리소스별 연결 관계는 각 리소스를 열어 확인할 수 있습니다. 자동 정리는 구조 의미나
+                실제 AWS 소속을 바꾸지 않습니다.
               </p>
-              {placement === "compiled" && layoutSummary.length > 0 ? (
-                <ul className={styles.compactSummary}>
-                  {layoutSummary.map((message) => (
-                    <li key={message}>{message}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </section>
+            </DetailAccordionSection>
 
-            <section className={styles.detailSection}>
-              <h3>가져온 리소스</h3>
-              <DiscoveredResourcePreview resources={filteredResources} />
-            </section>
-
-            <section className={styles.detailSection}>
-              <h3>읽지 못한 범위</h3>
+            <DetailAccordionSection
+              id="reverse-engineering-detail-read-scope"
+              isOpen={openDetailSections.has("read-scope")}
+              meta={hasPartialFailure ? "부분 읽기" : "전체 읽기"}
+              onToggle={() => toggleDetailSection("read-scope")}
+              title="AWS 읽기 범위"
+            >
               <ReverseEngineeringScanCoveragePanel
                 coverage={result.coverage}
                 scanErrors={result.scanErrors}
               />
-            </section>
+            </DetailAccordionSection>
 
-            <section className={styles.detailSection}>
+            <DetailAccordionSection
+              id="reverse-engineering-detail-checks"
+              isOpen={openDetailSections.has("checks")}
+              meta={`확인 ${result.findings.length + result.analysisExclusions.length}건`}
+              onToggle={() => toggleDetailSection("checks")}
+              title="확인 사항"
+            >
+              {summary.reviewOnlyCount > 0 ? (
+                <p className={styles.warning}>
+                  보드에서만 확인하거나 설정 보완이 필요한 리소스가 {summary.reviewOnlyCount}개 있습니다.
+                </p>
+              ) : null}
               <ReverseEngineeringFindingsPanel
                 analysisExclusions={result.analysisExclusions}
                 findings={result.findings}
                 resources={result.discoveredResources}
               />
-            </section>
+            </DetailAccordionSection>
 
-            <section className={styles.detailSection}>
-              <h3>보드에서만 확인할 리소스</h3>
-              <UnsupportedResourceList resources={unsupportedResources} />
-            </section>
+            <DetailAccordionSection
+              id="reverse-engineering-detail-source"
+              isOpen={openDetailSections.has("source")}
+              meta={`${response.scan.provider.toUpperCase()} · ${response.scan.region}`}
+              onToggle={() => toggleDetailSection("source")}
+              title="원본 정보"
+            >
+              <dl className={styles.detailKeyValueList}>
+                <div>
+                  <dt>클라우드</dt>
+                  <dd>{response.scan.provider.toUpperCase()}</dd>
+                </div>
+                <div>
+                  <dt>스캔 리전</dt>
+                  <dd>{response.scan.region}</dd>
+                </div>
+                <div>
+                  <dt>원본 리소스</dt>
+                  <dd>{summary.discoveredCount}개</dd>
+                </div>
+                <div>
+                  <dt>원본 연결</dt>
+                  <dd>{connectionCount}개</dd>
+                </div>
+              </dl>
+              <p className={styles.hint}>
+                이름, AWS 원본 종류, 리전, 관계는 가져온 결과에 보존합니다. 팔레트 아이콘으로 보기
+                좋게 표시해도 실제 AWS 상태나 원본 종류는 바꾸지 않습니다.
+              </p>
+            </DetailAccordionSection>
           </div>
         </section>
       </div>
@@ -530,61 +638,330 @@ export function ReverseEngineeringResultPanel({
   );
 }
 
-// 상세 화면은 AWS 서비스 이름을 사용자가 이해하기 쉬운 다섯 묶음으로 요약합니다.
-function countReverseEngineeringResourceCategories(
-  resources: readonly DiscoveredResource[]
-): Readonly<Record<ReverseEngineeringResourceCategory, number>> {
-  const counts: Record<ReverseEngineeringResourceCategory, number> = {
-    network: 0,
-    compute: 0,
-    data: 0,
-    security: 0,
-    other: 0
-  };
+type DetailAccordionSectionProps = {
+  readonly children: ReactNode;
+  readonly headingLevel?: 3 | 4;
+  readonly id: string;
+  readonly isOpen: boolean;
+  readonly meta?: ReactNode | undefined;
+  readonly onToggle: () => void;
+  readonly title: string;
+};
 
-  for (const resource of resources) {
-    counts[getReverseEngineeringResourceCategory(resource.providerResourceType)] += 1;
-  }
+function DetailAccordionSection({
+  children,
+  headingLevel = 3,
+  id,
+  isOpen,
+  meta,
+  onToggle,
+  title
+}: DetailAccordionSectionProps) {
+  const Heading = headingLevel === 4 ? "h4" : "h3";
 
-  return counts;
+  return (
+    <section className={styles.detailAccordion}>
+      <Heading className={styles.detailAccordionHeading}>
+        <button
+          aria-controls={`${id}-content`}
+          aria-expanded={isOpen}
+          className={styles.detailAccordionTrigger}
+          data-open={isOpen}
+          id={`${id}-trigger`}
+          onClick={onToggle}
+          type="button"
+        >
+          <span className={styles.detailAccordionTitle}>{title}</span>
+          {meta ? <span className={styles.detailAccordionMeta}>{meta}</span> : null}
+        </button>
+      </Heading>
+      {isOpen ? (
+        <div
+          aria-labelledby={`${id}-trigger`}
+          className={styles.detailAccordionBody}
+          id={`${id}-content`}
+        >
+          {children}
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
-function getReverseEngineeringResourceCategory(
-  providerResourceType: string
-): ReverseEngineeringResourceCategory {
-  if (
-    SECURITY_PROVIDER_RESOURCE_TYPES.has(providerResourceType) ||
-    SECURITY_PROVIDER_RESOURCE_PREFIXES.some((prefix) => providerResourceType.startsWith(prefix))
-  ) {
-    return "security";
+function ResourceCategoryAccordion({
+  group,
+  isOpen,
+  onResourceToggle,
+  onToggle,
+  openResourceIds,
+  resourceDisplayNames,
+  resourceWarningsById,
+  visibleResources
+}: {
+  readonly group: ReverseEngineeringResourceCategoryGroup;
+  readonly isOpen: boolean;
+  readonly onResourceToggle: (resourceId: string) => void;
+  readonly onToggle: () => void;
+  readonly openResourceIds: ReadonlySet<string>;
+  readonly resourceDisplayNames: ReadonlyMap<string, string>;
+  readonly resourceWarningsById: ReadonlyMap<string, readonly string[]>;
+  readonly visibleResources: readonly DiscoveredResource[];
+}) {
+  return (
+    <DetailAccordionSection
+      headingLevel={4}
+      id={`reverse-engineering-category-${group.key}`}
+      isOpen={isOpen}
+      meta={
+        <span className={styles.resourceCategoryMeta}>
+          <span>전체 {group.resources.length}</span>
+          <span className={styles.supportedBadge}>지원 {group.supportedCount}</span>
+          <span className={styles.reviewOnlyBadge}>추가 확인 {group.reviewOnlyCount}</span>
+          {group.unreadableServiceCount > 0 ? (
+            <span className={styles.errorBadge}>읽기 실패 {group.unreadableServiceCount}</span>
+          ) : null}
+        </span>
+      }
+      onToggle={onToggle}
+      title={group.label}
+    >
+      {group.unreadableServiceCount > 0 ? (
+        <p className={styles.warning}>
+          읽지 못한 AWS 서비스: {group.unreadableServiceNames.join(", ")}
+        </p>
+      ) : null}
+      {visibleResources.length === 0 ? (
+        <p className={styles.hint}>
+          {group.resources.length === 0 ? "가져온 리소스가 없습니다." : "검색 결과가 없습니다."}
+        </p>
+      ) : (
+        <div className={styles.resourceAccordions}>
+          {visibleResources.map((resource) => (
+            <DiscoveredResourceAccordion
+              isOpen={openResourceIds.has(resource.id)}
+              key={resource.id}
+              onToggle={() => onResourceToggle(resource.id)}
+              resource={resource}
+              resourceDisplayNames={resourceDisplayNames}
+              warnings={resourceWarningsById.get(resource.id) ?? []}
+            />
+          ))}
+        </div>
+      )}
+    </DetailAccordionSection>
+  );
+}
+
+function DiscoveredResourceAccordion({
+  isOpen,
+  onToggle,
+  resource,
+  resourceDisplayNames,
+  warnings
+}: {
+  readonly isOpen: boolean;
+  readonly onToggle: () => void;
+  readonly resource: DiscoveredResource;
+  readonly resourceDisplayNames: ReadonlyMap<string, string>;
+  readonly warnings: readonly string[];
+}) {
+  const presentation = presentReverseEngineeringResource(resource);
+  const coreValues = getReverseEngineeringInspectorCoreValues(resource.resourceType, resource.config);
+  const isSupported = presentation.displayState === "supported";
+  const relationships = resource.relationships ?? [];
+
+  return (
+    <article className={styles.resourceAccordion}>
+      <h5 className={styles.resourceAccordionHeading}>
+        <button
+          aria-controls={`reverse-engineering-resource-${resource.id}-content`}
+          aria-expanded={isOpen}
+          className={styles.resourceAccordionTrigger}
+          data-open={isOpen}
+          id={`reverse-engineering-resource-${resource.id}-trigger`}
+          onClick={onToggle}
+          type="button"
+        >
+          <span className={styles.resourceAccordionTitle}>
+            <strong>{presentation.displayName}</strong>
+            <span>{presentation.serviceLabel}</span>
+          </span>
+          <span className={isSupported ? styles.supportedBadge : styles.reviewOnlyBadge}>
+            {isSupported ? "지원됨" : "추가 확인"}
+          </span>
+        </button>
+      </h5>
+      {isOpen ? (
+        <div
+          aria-labelledby={`reverse-engineering-resource-${resource.id}-trigger`}
+          className={styles.resourceAccordionBody}
+          id={`reverse-engineering-resource-${resource.id}-content`}
+        >
+          <section className={styles.resourceDetailSection}>
+            <h6>기본 정보</h6>
+            <dl className={styles.detailKeyValueList}>
+              <div>
+                <dt>이름</dt>
+                <dd>{presentation.displayName}</dd>
+              </div>
+              <div>
+                <dt>AWS 서비스</dt>
+                <dd>{presentation.serviceLabel}</dd>
+              </div>
+              <div>
+                <dt>표시 상태</dt>
+                <dd>{isSupported ? "지원됨" : "추가 확인"}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className={styles.resourceDetailSection}>
+            <h6>AWS 원본 정보</h6>
+            <dl className={styles.detailKeyValueList}>
+              <div>
+                <dt>원본 종류</dt>
+                <dd>{getReverseEngineeringProviderTypeLabel(resource.providerResourceType)}</dd>
+              </div>
+              <div>
+                <dt>원본 종류 식별자</dt>
+                <dd>
+                  <code>{resource.providerResourceType}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>리전</dt>
+                <dd>{resource.region}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className={styles.resourceDetailSection}>
+            <h6>연결</h6>
+            {relationships.length === 0 ? (
+              <p className={styles.hint}>가져온 연결 관계가 없습니다.</p>
+            ) : (
+              <ul className={styles.resultList}>
+                {relationships.map((relationship, index) => (
+                  <li
+                    className={styles.resultItem}
+                    key={`${relationship.targetResourceId}-${relationship.type}-${index}`}
+                  >
+                    <strong>
+                      {resourceDisplayNames.get(relationship.targetResourceId) ?? "연결된 AWS 리소스"}
+                    </strong>
+                    <span>
+                      {relationship.label?.trim() || formatDiscoveredResourceRelationship(relationship.type)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className={styles.resourceDetailSection}>
+            <h6>설정</h6>
+            {coreValues.length === 0 ? (
+              <p className={styles.hint}>화면에 안전하게 표시할 핵심 설정이 없습니다.</p>
+            ) : (
+              <dl className={styles.detailKeyValueList}>
+                {coreValues.map((value) => (
+                  <div key={value.key}>
+                    <dt>{value.label}</dt>
+                    <dd>{value.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </section>
+
+          <section className={styles.resourceDetailSection}>
+            <h6>주의 사항</h6>
+            {warnings.length === 0 && isSupported ? (
+              <p className={styles.hint}>추가 주의 사항이 없습니다.</p>
+            ) : (
+              <ul className={styles.resultList}>
+                {!isSupported ? (
+                  <li className={styles.resultItem}>
+                    <span>{presentation.statusDescription}</span>
+                  </li>
+                ) : null}
+                {warnings.map((warning) => (
+                  <li className={styles.resultItem} key={warning}>
+                    <span>{warning}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function createResourceWarningsById(input: {
+  readonly analysisExclusions: readonly { readonly message: string; readonly resourceId: string }[];
+  readonly findings: readonly {
+    readonly description: string;
+    readonly resourceId?: string | null | undefined;
+    readonly title: string;
+  }[];
+}): ReadonlyMap<string, readonly string[]> {
+  const warningsByResourceId = new Map<string, string[]>();
+
+  function add(resourceId: string, warning: string): void {
+    const normalizedWarning = warning.trim();
+
+    if (!normalizedWarning) {
+      return;
+    }
+
+    const current = warningsByResourceId.get(resourceId) ?? [];
+    if (!current.includes(normalizedWarning)) {
+      current.push(normalizedWarning);
+      warningsByResourceId.set(resourceId, current);
+    }
   }
 
-  if (
-    NETWORK_PROVIDER_RESOURCE_TYPES.has(providerResourceType) ||
-    NETWORK_PROVIDER_RESOURCE_PREFIXES.some((prefix) => providerResourceType.startsWith(prefix))
-  ) {
-    return "network";
+  for (const exclusion of input.analysisExclusions) {
+    add(exclusion.resourceId, exclusion.message);
   }
 
-  if (
-    COMPUTE_PROVIDER_RESOURCE_TYPES.has(providerResourceType) ||
-    COMPUTE_PROVIDER_RESOURCE_PREFIXES.some((prefix) => providerResourceType.startsWith(prefix))
-  ) {
-    return "compute";
+  for (const finding of input.findings) {
+    if (finding.resourceId) {
+      add(finding.resourceId, `${finding.title}: ${finding.description}`);
+    }
   }
 
-  if (
-    DATA_PROVIDER_RESOURCE_TYPES.has(providerResourceType) ||
-    DATA_PROVIDER_RESOURCE_PREFIXES.some((prefix) => providerResourceType.startsWith(prefix))
-  ) {
-    return "data";
+  return warningsByResourceId;
+}
+
+function formatDiscoveredResourceRelationship(relationshipType: string): string {
+  if (relationshipType === "contains") {
+    return "포함 관계";
   }
 
-  return "other";
+  if (relationshipType === "depends_on") {
+    return "의존 관계";
+  }
+
+  return "연결 관계";
+}
+
+function toggleAccordionSet<T>(current: ReadonlySet<T>, key: T): ReadonlySet<T> {
+  const next = new Set(current);
+
+  if (next.has(key)) {
+    next.delete(key);
+  } else {
+    next.add(key);
+  }
+
+  return next;
 }
 
 // 사용자가 적용하기 전에 이번 스캔이 전체 결과인지 부분 결과인지 먼저 알려줍니다.
-function ReverseEngineeringScanCoveragePanel({
+export function ReverseEngineeringScanCoveragePanel({
   coverage,
   scanErrors
 }: {
@@ -611,7 +988,13 @@ function ReverseEngineeringScanCoveragePanel({
           affectedProviderResourceTypes:
             service.affectedProviderResourceTypes ??
             detailedPresentation?.affectedProviderResourceTypes ??
-            []
+            [],
+          failedAwsApiActions: getSafeFailedAwsApiActions(
+            [
+              ...(service.failedAwsApiActions ?? []),
+              ...(detailedPresentation?.failedAwsApiActions ?? [])
+            ]
+          )
         };
       })
     : presentReverseEngineeringScanErrors(scanErrors);
@@ -633,6 +1016,12 @@ function ReverseEngineeringScanCoveragePanel({
                     <span>
                       읽지 못한 종류: {presentation.affectedProviderResourceTypes?.join(", ")}
                     </span>
+                  ) : null}
+                  {(presentation.failedAwsApiActions?.length ?? 0) > 0 ? (
+                    <>
+                      <span>필요한 읽기 권한: {presentation.failedAwsApiActions?.join(", ")}</span>
+                      <span>표시된 API 동작의 읽기 권한을 추가한 뒤 다시 시도해 주세요.</span>
+                    </>
                   ) : null}
                 </li>
               ))}
@@ -692,93 +1081,17 @@ function getCoverageCauseLabel(
   return "다시 시도 필요";
 }
 
-// 아직 정식 변환하지 못한 AWS 리소스를 숨기지 않고 별도 목록으로 보여줍니다.
-function UnsupportedResourceList({ resources }: { readonly resources: DiscoveredResource[] }) {
-  if (resources.length === 0) {
-    return <p className={styles.hint}>보드에만 표시하는 리소스가 없습니다.</p>;
-  }
-
-  return (
-    <>
-      <ul className={styles.resultList}>
-        {resources.map((resource) => (
-          <li key={resource.id} className={styles.resultItem}>
-            <ResourceListIdentity resource={resource} />
-            <span>연결된 Resource 수: {resource.relationships?.length ?? 0}</span>
-            <span>
-              AWS에서 찾은 리소스입니다. 구조 확인을 위해 보드에 표시하지만 Terraform 생성과
-              배포에는 자동으로 사용하지 않습니다.
-            </span>
-          </li>
-        ))}
-      </ul>
-    </>
-  );
-}
-
-// 상세 검색 결과는 사람이 읽는 이름과 상태만 보여줍니다.
-function DiscoveredResourcePreview({
-  resources
-}: {
-  readonly resources: readonly DiscoveredResource[];
-}) {
-  if (resources.length === 0) {
-    return <p className={styles.hint}>아직 발견한 Resource가 없습니다.</p>;
-  }
-
-  return (
-    <ul className={styles.resultList}>
-      {resources.map((resource) => (
-        <li key={resource.id} className={styles.resultItem}>
-          <ResourceListIdentity resource={resource} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-// 상세 검색은 긴 AWS 식별자 대신 화면에 보이는 이름과 분류를 기준으로 찾습니다.
-function filterReverseEngineeringResources(
-  resources: readonly DiscoveredResource[],
-  query: string
-): readonly DiscoveredResource[] {
-  const normalizedQuery = query.trim().toLocaleLowerCase("ko-KR");
-
-  if (!normalizedQuery) {
-    return resources;
-  }
-
-  return resources.filter((resource) => {
-    const presentation = presentReverseEngineeringResource(resource);
-    const searchableText = [
-      presentation.displayName,
-      presentation.serviceLabel,
-      presentation.regionLabel,
-      presentation.statusLabel
-    ]
-      .join(" ")
-      .toLocaleLowerCase("ko-KR");
-
-    return searchableText.includes(normalizedQuery);
-  });
-}
-
-// 상세 목록에서는 내부 ID 대신 짧은 이름과 상태만 유지합니다.
-function ResourceListIdentity({ resource }: { readonly resource: DiscoveredResource }) {
-  const presentation = presentReverseEngineeringResource(resource);
-
-  return (
-    <>
-      <strong>{presentation.displayName}</strong>
-      <span>{presentation.serviceLabel}</span>
-      <span>{presentation.regionLabel}</span>
-      <span
-        className={
-          presentation.displayState === "supported" ? styles.supportedBadge : styles.reviewOnlyBadge
-        }
-      >
-        {presentation.statusLabel}
-      </span>
-    </>
-  );
+// 오래 저장된 결과도 오류 원문이나 식별자를 다시 화면에 내보내지 않습니다.
+function getSafeFailedAwsApiActions(actions: readonly string[]): readonly string[] {
+  return [
+    ...new Set(
+      actions.filter(
+        (action) =>
+          /^[a-z0-9][a-z0-9-]{0,63}:[A-Za-z][A-Za-z0-9]{0,127}$/u.test(action) &&
+          SAFE_REVERSE_ENGINEERING_READ_ACTION_PREFIXES.some((servicePrefix) =>
+            action.startsWith(`${servicePrefix}:`)
+          )
+      )
+    )
+  ].sort();
 }

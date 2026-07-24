@@ -2521,6 +2521,8 @@ export type ReverseEngineeringScanError = {
   serviceKey?: string | undefined;
   /** Safe provider resource types affected by this failure. Never contains an ARN or resource ID. */
   affectedProviderResourceTypes?: string[] | undefined;
+  /** Safe IAM action names for AWS API operations that failed during this scan. */
+  failedAwsApiActions?: string[] | undefined;
   resourceType: ResourceType | "UNKNOWN";
   stage: ReverseEngineeringScanStage;
   reason: ReverseEngineeringScanErrorReason;
@@ -2537,6 +2539,8 @@ export type ReverseEngineeringServiceCoverage = {
     remedy: "open_settings" | "retry";
     /** Safe provider resource types affected by this service-level coverage gap. */
     affectedProviderResourceTypes?: string[] | undefined;
+    /** Safe IAM action names for AWS API operations that could not be read. */
+    failedAwsApiActions?: string[] | undefined;
   }>;
 };
 

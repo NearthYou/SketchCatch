@@ -3,6 +3,7 @@ import type {
   ReverseEngineeringScanError,
   ReverseEngineeringServiceCoverage
 } from "@sketchcatch/types";
+import { AWS_IMPORT_READERS } from "../aws-connections/aws-import-access-catalog.js";
 import { selectHigherPriorityReverseEngineeringScanError } from "./reverse-engineering-scan-error-priority.js";
 
 const SERVICE_DISPLAY_NAMES: Readonly<Record<string, string>> = {
@@ -28,6 +29,9 @@ const SERVICE_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   s3: "S3",
   secretsmanager: "Secrets Manager"
 };
+const SAFE_REVERSE_ENGINEERING_READ_ACTIONS = new Set<string>(
+  AWS_IMPORT_READERS.flatMap((reader) => reader.actions)
+);
 
 export type ReverseEngineeringConnectionFailureClassification = {
   readonly internalCode:
@@ -45,6 +49,7 @@ export function createReverseEngineeringPublicCoverage(
 ): { readonly coverage: ReverseEngineeringServiceCoverage } {
   const strongestErrors = new Map<string, ReverseEngineeringScanError>();
   const affectedProviderResourceTypesByService = new Map<string, Set<string>>();
+  const failedAwsApiActionsByService = new Map<string, Set<string>>();
 
   for (const scanError of scanErrors) {
     const serviceKey = getSafeServiceKey(scanError);
@@ -53,6 +58,7 @@ export function createReverseEngineeringPublicCoverage(
       serviceKey,
       scanError
     );
+    addSafeFailedAwsApiActions(failedAwsApiActionsByService, serviceKey, scanError);
     strongestErrors.set(
       serviceKey,
       selectHigherPriorityReverseEngineeringScanError(strongestErrors.get(serviceKey), scanError)
@@ -65,12 +71,14 @@ export function createReverseEngineeringPublicCoverage(
       affectedProviderResourceTypesByService,
       serviceKey
     );
+    const failedAwsApiActions = getFailedAwsApiActions(failedAwsApiActionsByService, serviceKey);
     return {
       serviceKey,
       displayName: SERVICE_DISPLAY_NAMES[serviceKey] ?? "AWS 서비스",
       reason,
       remedy: reason === "permission_required" ? ("open_settings" as const) : ("retry" as const),
-      ...(affectedProviderResourceTypes.length > 0 ? { affectedProviderResourceTypes } : {})
+      ...(affectedProviderResourceTypes.length > 0 ? { affectedProviderResourceTypes } : {}),
+      ...(failedAwsApiActions.length > 0 ? { failedAwsApiActions } : {})
     };
   });
 
@@ -88,6 +96,7 @@ export function sanitizeReverseEngineeringScanErrors(
 ): ReverseEngineeringScanError[] {
   const strongestErrors = new Map<string, ReverseEngineeringScanError>();
   const affectedProviderResourceTypesByService = new Map<string, Set<string>>();
+  const failedAwsApiActionsByService = new Map<string, Set<string>>();
 
   for (const scanError of scanErrors) {
     const serviceKey = getSafeServiceKey(scanError);
@@ -96,6 +105,7 @@ export function sanitizeReverseEngineeringScanErrors(
       serviceKey,
       scanError
     );
+    addSafeFailedAwsApiActions(failedAwsApiActionsByService, serviceKey, scanError);
     strongestErrors.set(
       serviceKey,
       selectHigherPriorityReverseEngineeringScanError(strongestErrors.get(serviceKey), scanError)
@@ -107,6 +117,7 @@ export function sanitizeReverseEngineeringScanErrors(
       affectedProviderResourceTypesByService,
       serviceKey
     );
+    const failedAwsApiActions = getFailedAwsApiActions(failedAwsApiActionsByService, serviceKey);
     return {
       id: `scan-error-service-${serviceKey}`,
       serviceKey,
@@ -115,7 +126,8 @@ export function sanitizeReverseEngineeringScanErrors(
       reason: scanError.reason,
       message: getSafeScanErrorMessage(scanError.reason),
       retryable: scanError.reason === "throttled" || scanError.reason === "provider_error",
-      ...(affectedProviderResourceTypes.length > 0 ? { affectedProviderResourceTypes } : {})
+      ...(affectedProviderResourceTypes.length > 0 ? { affectedProviderResourceTypes } : {}),
+      ...(failedAwsApiActions.length > 0 ? { failedAwsApiActions } : {})
     };
   });
 }
@@ -144,6 +156,29 @@ function getAffectedProviderResourceTypes(
   return [...(affectedProviderResourceTypesByService.get(serviceKey) ?? [])].sort();
 }
 
+/** gg: IAM action은 식별자·ARN 없이 권한 보완에 필요한 고정 operation 이름만 공개합니다. */
+function addSafeFailedAwsApiActions(
+  failedAwsApiActionsByService: Map<string, Set<string>>,
+  serviceKey: string,
+  scanError: ReverseEngineeringScanError
+): void {
+  const actions = getSafeFailedAwsApiActions(scanError);
+  if (actions.length === 0) return;
+
+  const collected = failedAwsApiActionsByService.get(serviceKey) ?? new Set<string>();
+  for (const action of actions) {
+    collected.add(action);
+  }
+  failedAwsApiActionsByService.set(serviceKey, collected);
+}
+
+function getFailedAwsApiActions(
+  failedAwsApiActionsByService: ReadonlyMap<string, ReadonlySet<string>>,
+  serviceKey: string
+): string[] {
+  return [...(failedAwsApiActionsByService.get(serviceKey) ?? [])].sort();
+}
+
 function getSafeAffectedProviderResourceTypes(scanError: ReverseEngineeringScanError): string[] {
   return [
     ...new Set(
@@ -154,6 +189,16 @@ function getSafeAffectedProviderResourceTypes(scanError: ReverseEngineeringScanE
 
 function isSafeAwsProviderResourceType(value: string): boolean {
   return /^AWS::[A-Za-z0-9]{1,64}::[A-Za-z0-9]{1,64}$/u.test(value);
+}
+
+function getSafeFailedAwsApiActions(scanError: ReverseEngineeringScanError): string[] {
+  return [
+    ...new Set(
+      (scanError.failedAwsApiActions ?? []).filter((action) =>
+        SAFE_REVERSE_ENGINEERING_READ_ACTIONS.has(action)
+      )
+    )
+  ].sort();
 }
 
 /** gg: 서버 자격 증명 문제와 고객 Role 문제를 서로 다른 안전한 다음 행동으로 분리합니다. */

@@ -120,7 +120,62 @@ test("한 Resource 종류 조회 실패는 다른 종류의 결과를 지우지 
   assert.equal(result.scanErrors[0]?.serviceKey, "cloud-control");
   assert.equal(result.scanErrors[0]?.reason, "permission_denied");
   assert.deepEqual(result.scanErrors[0]?.affectedProviderResourceTypes, ["AWS::SQS::Queue"]);
+  assert.deepEqual(result.scanErrors[0]?.failedAwsApiActions, ["cloudformation:ListResources"]);
   assert.doesNotMatch(JSON.stringify(result.scanErrors), /AccessDenied/u);
+});
+
+test("Cloud Control GetResource 권한 실패도 원본 레코드와 부분 실패 범위를 함께 남긴다", async () => {
+  const client: AwsCloudControlReadClient = {
+    async send(command) {
+      if (command instanceof ListResourcesCommand) {
+        return {
+          ResourceDescriptions: [{ Identifier: "orders" }, { Identifier: "private-detail" }]
+        };
+      }
+      if (command instanceof GetResourceCommand) {
+        if (command.input.Identifier === "private-detail") {
+          throw Object.assign(new Error("AccessDenied private-detail"), {
+            name: "AccessDeniedException"
+          });
+        }
+        return {
+          TypeName: command.input.TypeName,
+          ResourceDescription: {
+            Identifier: command.input.Identifier,
+            Properties: JSON.stringify({ TableName: "orders" })
+          }
+        };
+      }
+      return {};
+    }
+  };
+
+  const result = await readAwsCloudControlReverseEngineeringResources(
+    {
+      providerResourceTypes: ["AWS::DynamoDB::Table"],
+      region: "ap-northeast-2"
+    },
+    credentials,
+    () => client
+  );
+
+  assert.equal(result.records.length, 2);
+  assert.equal(result.records[1]?.providerResourceId, "private-detail");
+  assert.equal(result.records[1]?.config["cloudControlReadComplete"], false);
+  assert.deepEqual(result.scanErrors, [
+    {
+      id: "scan-error-service-cloud-control",
+      serviceKey: "cloud-control",
+      affectedProviderResourceTypes: ["AWS::DynamoDB::Table"],
+      failedAwsApiActions: ["cloudformation:GetResource"],
+      resourceType: "UNKNOWN",
+      stage: "provider_api",
+      reason: "permission_denied",
+      message: "일부 AWS 종류를 읽을 권한이 부족합니다.",
+      retryable: false
+    }
+  ]);
+  assert.doesNotMatch(JSON.stringify(result.scanErrors), /AccessDenied|private-detail/u);
 });
 
 test("잘못된 Resource model은 존재를 보존하고 Terraform 관리 근거로 쓰지 않는다", async () => {

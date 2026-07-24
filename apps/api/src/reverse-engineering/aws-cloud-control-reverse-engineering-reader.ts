@@ -30,7 +30,11 @@ export type AwsCloudControlReverseEngineeringInput = {
 type CloudControlReadEvidence = {
   readonly description: ResourceDescription;
   readonly detailReadComplete: boolean;
+  readonly detailFailure?: { readonly error: unknown };
 };
+
+const CLOUD_CONTROL_LIST_RESOURCES_ACTION = "cloudformation:ListResources";
+const CLOUD_CONTROL_GET_RESOURCE_ACTION = "cloudformation:GetResource";
 
 /** gg: Cloud Control 지원 종류를 하나씩 격리해 한 종류가 실패해도 다른 AWS 리소스를 보존합니다. */
 export async function readAwsCloudControlReverseEngineeringResources(
@@ -51,6 +55,15 @@ export async function readAwsCloudControlReverseEngineeringResources(
           providerResourceType,
           description
         );
+        if (evidence.detailFailure) {
+          scanErrors.push(
+            createCloudControlScanError(
+              evidence.detailFailure.error,
+              providerResourceType,
+              CLOUD_CONTROL_GET_RESOURCE_ACTION
+            )
+          );
+        }
         const record = createCloudControlResourceRecord(
           providerResourceType,
           input.region,
@@ -59,7 +72,13 @@ export async function readAwsCloudControlReverseEngineeringResources(
         if (record) records.push(record);
       }
     } catch (error) {
-      scanErrors.push(createCloudControlScanError(error, providerResourceType));
+      scanErrors.push(
+        createCloudControlScanError(
+          error,
+          providerResourceType,
+          CLOUD_CONTROL_LIST_RESOURCES_ACTION
+        )
+      );
     }
   }
 
@@ -128,10 +147,11 @@ async function readCloudControlResourceDetails(
           description: listed,
           detailReadComplete: false
         };
-  } catch {
+  } catch (error) {
     return {
       description: listed,
-      detailReadComplete: false
+      detailReadComplete: false,
+      detailFailure: { error }
     };
   }
 }
@@ -233,7 +253,10 @@ function createCloudControlDisplayName(
 /** gg: Provider 오류 원문 없이 권한·재시도 여부만 공통 부분 실패로 전달합니다. */
 function createCloudControlScanError(
   error: unknown,
-  providerResourceType: string
+  providerResourceType: string,
+  failedAwsApiAction:
+    | typeof CLOUD_CONTROL_LIST_RESOURCES_ACTION
+    | typeof CLOUD_CONTROL_GET_RESOURCE_ACTION
 ): ReverseEngineeringScanError {
   const classifier = [
     isRecord(error) ? error["name"] : undefined,
@@ -256,6 +279,7 @@ function createCloudControlScanError(
     id: "scan-error-service-cloud-control",
     serviceKey: "cloud-control",
     affectedProviderResourceTypes: [providerResourceType],
+    failedAwsApiActions: [failedAwsApiAction],
     resourceType: "UNKNOWN",
     stage: "provider_api",
     reason,

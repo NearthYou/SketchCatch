@@ -76,6 +76,7 @@ import {
   listApiGatewayRestApisAsUnknown,
   listLambdaFunctionsAsUnknown,
   listLambdaPermissionsAsUnknown,
+  listResourceExplorerResourcesAsUnknown,
   listTaggedUnknownResources,
   readEcsResourcesWithDiagnostics,
   readResourceExplorerResourcesWithDiagnostics,
@@ -1386,6 +1387,36 @@ test("Resource Explorer resolves the default view before searching it", async ()
   assert.equal((commands[2] as SearchCommand).input.ViewArn, viewArn);
 });
 
+test("legacy Resource Explorer helper도 실패를 빈 목록으로 숨기지 않는다", async () => {
+  const result = await listResourceExplorerResourcesAsUnknown(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(): Promise<unknown> {
+        throw Object.assign(new Error("AccessDenied private Resource Explorer"), {
+          name: "AccessDeniedException"
+        });
+      }
+    })
+  );
+
+  assert.deepEqual(result, {
+    records: [],
+    scanErrors: [
+      {
+        id: "scan-error-resource-explorer",
+        serviceKey: "resource-explorer-2",
+        resourceType: "UNKNOWN",
+        stage: "provider_api",
+        reason: "permission_denied",
+        message: "Resource Explorer를 읽지 못했습니다.",
+        retryable: false
+      }
+    ]
+  });
+  assert.doesNotMatch(JSON.stringify(result), /AccessDenied|private/iu);
+});
+
 test("ALL 스캔은 generic Log Group보다 이름과 설정이 있는 전용 조회 결과를 우선한다", () => {
   const logGroupArn = "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders";
   const kmsKeyArn =
@@ -2153,7 +2184,9 @@ test("같은 AWS 서비스의 반복 실패는 사용자 결과에서 한 번만
       stage: "provider_api",
       reason: "provider_error",
       message: "VPC temporary error",
-      retryable: true
+      retryable: true,
+      affectedProviderResourceTypes: ["AWS::EC2::VPC"],
+      failedAwsApiActions: ["ec2:DescribeVpcs"]
     },
     {
       id: "scan-error-service-ec2",
@@ -2161,7 +2194,9 @@ test("같은 AWS 서비스의 반복 실패는 사용자 결과에서 한 번만
       stage: "provider_api",
       reason: "permission_denied",
       message: "Subnet denied",
-      retryable: false
+      retryable: false,
+      affectedProviderResourceTypes: ["AWS::EC2::Subnet"],
+      failedAwsApiActions: ["ec2:DescribeSubnets"]
     },
     {
       id: "scan-error-service-ecs",
@@ -2169,29 +2204,45 @@ test("같은 AWS 서비스의 반복 실패는 사용자 결과에서 한 번만
       stage: "provider_api",
       reason: "throttled",
       message: "ECS throttled",
-      retryable: true
+      retryable: true,
+      failedAwsApiActions: ["ecs:ListClusters"]
     }
   ]);
 
   assert.deepEqual(
-    errors.map(({ id, reason, resourceType, retryable }) => ({
-      id,
-      reason,
-      resourceType,
-      retryable
-    })),
+    errors.map(
+      ({
+        id,
+        reason,
+        resourceType,
+        retryable,
+        affectedProviderResourceTypes,
+        failedAwsApiActions
+      }) => ({
+        id,
+        reason,
+        resourceType,
+        retryable,
+        affectedProviderResourceTypes,
+        failedAwsApiActions
+      })
+    ),
     [
       {
         id: "scan-error-service-ec2",
         reason: "permission_denied",
         resourceType: "SUBNET",
-        retryable: false
+        retryable: false,
+        affectedProviderResourceTypes: ["AWS::EC2::Subnet", "AWS::EC2::VPC"],
+        failedAwsApiActions: ["ec2:DescribeSubnets", "ec2:DescribeVpcs"]
       },
       {
         id: "scan-error-service-ecs",
         reason: "throttled",
         resourceType: "ECS_SERVICE",
-        retryable: true
+        retryable: true,
+        affectedProviderResourceTypes: undefined,
+        failedAwsApiActions: ["ecs:ListClusters"]
       }
     ]
   );

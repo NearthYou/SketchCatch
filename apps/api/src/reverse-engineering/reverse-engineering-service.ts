@@ -605,7 +605,7 @@ function sanitizePublicAnalysisExclusions(
     resourceId: sanitizePublicResourceReference(exclusion.resourceId, publicResourceIdMap),
     message:
       exclusion.reason === "unsupported_resource_type"
-        ? "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
+        ? "전용 팔레트가 없는 AWS 종류는 기타 AWS 리소스로 표시합니다. 원본 종류·리전·관계는 상세 정보에서 확인할 수 있습니다."
         : "가져온 정보가 부족해 분석에서 제외됐습니다."
   }));
 }

@@ -7,6 +7,7 @@ import type {
 import {
   getDefaultResourceDefinitionByResourceType,
   getReverseEngineeringAwsProviderResourceVisualFallback,
+  resolveReverseEngineeringAwsProviderResourceType,
   type ReverseEngineeringAwsProviderVisualFallbackKey
 } from "@sketchcatch/types/resource-definitions";
 import { resourceCatalog } from "../resource-settings/catalog";
@@ -18,6 +19,7 @@ const RESOURCE_ICON_PATH = "/Resource-Icons_07312025";
 type ProviderVisualFallbackPresentation = {
   readonly catalogDefinitionId?: string;
   readonly iconUrl?: string;
+  readonly label?: string;
 };
 
 /** gg: 타입을 Terraform ResourceType으로 바꾸지 않고 기존 팔레트 아이콘만 재사용합니다. */
@@ -54,12 +56,10 @@ const PROVIDER_VISUAL_FALLBACK_PRESENTATIONS: Readonly<
   }
 };
 
-const GENERIC_AWS_PROVIDER_VISUAL_FALLBACK: ProviderVisualFallbackPresentation & {
-  readonly label: string;
-} = {
-  iconUrl: `${RESOURCE_ICON_PATH}/Res_General-Icons/Res_48_Light/Res_AWS-Management-Console_48_Light.svg`,
-  label: "기타 AWS 리소스"
+const GENERIC_AWS_PROVIDER_VISUAL_FALLBACK: ProviderVisualFallbackPresentation = {
+  iconUrl: `${RESOURCE_ICON_PATH}/Res_General-Icons/Res_48_Light/Res_AWS-Management-Console_48_Light.svg`
 };
+const GENERIC_AWS_PROVIDER_VISUAL_FALLBACK_LABEL = "기타 AWS 리소스";
 
 /** gg: AWS 원본에 없는 Resource, 설정, 관계를 추론하지 않고 Board 표시 정보만 덧붙입니다. */
 export function createSourceExactReverseEngineeringDiagram(
@@ -96,20 +96,33 @@ function createSourceExactNode(
     ? resourceCatalog.find((candidate) => candidate.id === definition.id)
     : undefined;
   const providerResourceType = readNonEmptyString(node.config["providerResourceType"]);
+  const providerResourceTypeForPalette = providerResourceType
+    ? resolveReverseEngineeringAwsProviderResourceType(providerResourceType)
+    : undefined;
+  const providerPaletteDefinition = providerResourceTypeForPalette
+    ? getDefaultResourceDefinitionByResourceType(providerResourceTypeForPalette)
+    : undefined;
+  const providerPaletteCatalogItem = providerPaletteDefinition
+    ? resourceCatalog.find((candidate) => candidate.id === providerPaletteDefinition.id)
+    : undefined;
   const providerVisualFallback = providerResourceType
     ? getReverseEngineeringAwsProviderResourceVisualFallback(providerResourceType)
     : undefined;
   const providerVisualPresentation = providerVisualFallback
     ? PROVIDER_VISUAL_FALLBACK_PRESENTATIONS[providerVisualFallback.key]
-    : providerResourceType && node.type === "UNKNOWN"
-      ? GENERIC_AWS_PROVIDER_VISUAL_FALLBACK
+    : providerResourceType && node.type === "UNKNOWN" && !providerPaletteCatalogItem
+      ? {
+          ...GENERIC_AWS_PROVIDER_VISUAL_FALLBACK,
+          label: getReadableGenericAwsProviderResourceLabel(providerResourceType)
+        }
       : undefined;
-  const providerCatalogItem = providerVisualPresentation?.catalogDefinitionId
+  const providerFallbackCatalogItem = providerVisualPresentation?.catalogDefinitionId
     ? resourceCatalog.find(
         (candidate) => candidate.id === providerVisualPresentation.catalogDefinitionId
       )
     : undefined;
-  const displayCatalogItem = catalogItem ?? providerCatalogItem;
+  const displayCatalogItem =
+    catalogItem ?? providerPaletteCatalogItem ?? providerFallbackCatalogItem;
   const resourceType = readNonEmptyString(node.config["terraformResourceType"]);
   const resourceName = readNonEmptyString(node.config["terraformResourceName"]);
   const fileName = readNonEmptyString(node.config["terraformFileName"]);
@@ -127,10 +140,8 @@ function createSourceExactNode(
     label:
       node.label ??
       providerVisualFallback?.label ??
-      (providerVisualPresentation === GENERIC_AWS_PROVIDER_VISUAL_FALLBACK
-        ? GENERIC_AWS_PROVIDER_VISUAL_FALLBACK.label
-        : undefined) ??
       displayCatalogItem?.nodeDefaults.label ??
+      providerVisualPresentation?.label ??
       node.id,
     ...(displayCatalogItem?.iconUrl
       ? { iconUrl: displayCatalogItem.iconUrl }
@@ -158,4 +169,24 @@ function readTerraformBlockType(value: unknown): TerraformBlockType | undefined 
 /** gg: 공백뿐인 식별자는 원본 식별자로 취급하지 않습니다. */
 function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+/** gg: 알 수 없는 AWS type도 원문 대소문자와 구분자를 읽기 쉬운 보드 label로만 바꿉니다. */
+function getReadableGenericAwsProviderResourceLabel(providerResourceType: string): string {
+  const segments = providerResourceType
+    .trim()
+    .split(/[:/]+/u)
+    .flatMap((segment) => segment.split(/[-_\s]+/u))
+    .filter(Boolean);
+  const providerSegments = segments[0]?.toLowerCase() === "aws" ? segments.slice(1) : segments;
+
+  return providerSegments.length >= 2
+    ? providerSegments.map(formatAwsProviderLabelSegment).join(" ")
+    : GENERIC_AWS_PROVIDER_VISUAL_FALLBACK_LABEL;
+}
+
+function formatAwsProviderLabelSegment(segment: string): string {
+  return /^[A-Z0-9]+$/u.test(segment)
+    ? segment
+    : `${segment[0]?.toUpperCase() ?? ""}${segment.slice(1)}`;
 }

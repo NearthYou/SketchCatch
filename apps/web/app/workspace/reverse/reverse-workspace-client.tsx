@@ -320,7 +320,7 @@ function ReverseResourceInspector({
               <dt>상태</dt>
               <dd>
                 <span className={isReviewOnly ? styles.reviewOnlyBadge : styles.supportedBadge}>
-                  {isReviewOnly ? "보드에서만 확인" : "Terraform 편집 대상"}
+                  {isReviewOnly ? "보드에서만 확인" : "구조 확인 가능"}
                 </span>
               </dd>
             </div>

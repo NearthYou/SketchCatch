@@ -154,7 +154,7 @@ export function getReverseEngineeringSelectionHelp(
   selection: ReverseEngineeringResourceSelection
 ): string {
   if (selection === REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION) {
-    return "Terraform 편집 대상과 보드에서 확인할 AWS 리소스를 함께 읽습니다.";
+    return "지원되는 AWS 리소스와 추가 확인이 필요한 리소스를 함께 읽습니다.";
   }
 
   const scanSelection = getReverseEngineeringAwsScanSelection(selection);

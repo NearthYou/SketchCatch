@@ -1676,17 +1676,16 @@ export async function listTaggedUnknownResources(
   return result.items;
 }
 
-// Resource Explorer가 켜진 계정에서는 태그 없는 리소스까지 더 넓게 UNKNOWN 후보로 찾습니다.
+/**
+ * @deprecated Use readResourceExplorerResourcesWithDiagnostics. This legacy name now preserves
+ * the same partial-failure contract instead of turning an AWS read failure into an empty result.
+ */
 export async function listResourceExplorerResourcesAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
   createClient: AwsResourceExplorerReadClientFactory = createDefaultResourceExplorerReadClient
-): Promise<AwsDiscoveredResourceRecord[]> {
-  try {
-    return (await listResourceExplorerResourceRecords(region, credentials, createClient)).items;
-  } catch {
-    return [];
-  }
+): Promise<AwsProviderDiscoveryResult> {
+  return readResourceExplorerResourcesWithDiagnostics(region, credentials, createClient);
 }
 
 class AwsResourceExplorerNotConfiguredError extends Error {
@@ -5649,13 +5648,35 @@ export function deduplicateReverseEngineeringScanErrors(
 
   for (const scanError of scanErrors) {
     const key = scanError.serviceKey ?? scanError.id;
-    uniqueErrors.set(
-      key,
-      selectHigherPriorityReverseEngineeringScanError(uniqueErrors.get(key), scanError)
-    );
+    const current = uniqueErrors.get(key);
+    const selected = selectHigherPriorityReverseEngineeringScanError(current, scanError);
+    uniqueErrors.set(key, mergeReverseEngineeringScanErrorCoverage(selected, current, scanError));
   }
 
   return [...uniqueErrors.values()];
+}
+
+/** gg: 강한 오류를 대표로 쓰되 같은 서비스에서 실패한 AWS 종류와 API action은 잃지 않습니다. */
+function mergeReverseEngineeringScanErrorCoverage(
+  selected: ReverseEngineeringScanError,
+  current: ReverseEngineeringScanError | undefined,
+  candidate: ReverseEngineeringScanError
+): ReverseEngineeringScanError {
+  const affectedProviderResourceTypes = [
+    ...new Set([
+      ...(current?.affectedProviderResourceTypes ?? []),
+      ...(candidate.affectedProviderResourceTypes ?? [])
+    ])
+  ].sort();
+  const failedAwsApiActions = [
+    ...new Set([...(current?.failedAwsApiActions ?? []), ...(candidate.failedAwsApiActions ?? [])])
+  ].sort();
+
+  return {
+    ...selected,
+    ...(affectedProviderResourceTypes.length > 0 ? { affectedProviderResourceTypes } : {}),
+    ...(failedAwsApiActions.length > 0 ? { failedAwsApiActions } : {})
+  };
 }
 
 function getReverseEngineeringAwsServiceKey(resourceType: ResourceType): string {

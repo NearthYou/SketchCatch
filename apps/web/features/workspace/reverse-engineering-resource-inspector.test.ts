@@ -44,7 +44,7 @@ test("ECS 서비스는 현재 실행 수와 실행 방식을 짧게 보여준다
 test("보드에서만 확인하는 리소스도 이유를 이해하기 쉽게 설명한다", () => {
   assert.equal(
     getReverseEngineeringInspectorPurpose("IAM_ROLE", true),
-    "AWS에서 찾았지만 현재 설정을 안전하게 Terraform으로 옮길 수 없는 리소스입니다. 보드에서 위치와 연결 관계를 확인할 수 있습니다."
+    "AWS에서 찾았지만 현재 정보만으로는 자동 해석하기 어려운 리소스입니다. 보드에서 위치와 연결 관계를 확인할 수 있습니다."
   );
   assert.equal(
     getReverseEngineeringInspectorPurpose("CLOUDWATCH_LOG_GROUP", false),

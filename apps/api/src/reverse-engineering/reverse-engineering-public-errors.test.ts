@@ -92,7 +92,8 @@ test("Cloud Control 조회 실패는 일반 AWS 인벤토리가 아니라 원래
       affectedProviderResourceTypes: [
         "AWS::SQS::Queue",
         "arn:aws:sqs:ap-northeast-2:123456789012:private"
-      ]
+      ],
+      failedAwsApiActions: ["cloudformation:GetResource", "private:Secret"]
     },
     {
       id: "scan-error-service-cloud-control-second-type",
@@ -102,7 +103,8 @@ test("Cloud Control 조회 실패는 일반 AWS 인벤토리가 아니라 원래
       reason: "provider_error" as const,
       message: "private DynamoDB reader failure",
       retryable: true,
-      affectedProviderResourceTypes: ["AWS::DynamoDB::Table"]
+      affectedProviderResourceTypes: ["AWS::DynamoDB::Table"],
+      failedAwsApiActions: ["cloudformation:ListResources"]
     }
   ];
 
@@ -118,7 +120,8 @@ test("Cloud Control 조회 실패는 일반 AWS 인벤토리가 아니라 원래
       reason: "permission_denied",
       message: "이 서비스를 읽을 권한이 부족합니다.",
       retryable: false,
-      affectedProviderResourceTypes: ["AWS::DynamoDB::Table", "AWS::SQS::Queue"]
+      affectedProviderResourceTypes: ["AWS::DynamoDB::Table", "AWS::SQS::Queue"],
+      failedAwsApiActions: ["cloudformation:GetResource", "cloudformation:ListResources"]
     }
   ]);
   assert.deepEqual(coverage.unavailableServices, [
@@ -127,7 +130,8 @@ test("Cloud Control 조회 실패는 일반 AWS 인벤토리가 아니라 원래
       displayName: "Cloud Control",
       reason: "permission_required",
       remedy: "open_settings",
-      affectedProviderResourceTypes: ["AWS::DynamoDB::Table", "AWS::SQS::Queue"]
+      affectedProviderResourceTypes: ["AWS::DynamoDB::Table", "AWS::SQS::Queue"],
+      failedAwsApiActions: ["cloudformation:GetResource", "cloudformation:ListResources"]
     }
   ]);
   assert.doesNotMatch(JSON.stringify({ sanitized, coverage }), /arn:aws|private/iu);

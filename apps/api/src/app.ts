@@ -8,7 +8,7 @@ import type { CostPricingRateProvider } from "./services/cost-analysis.js";
 import type { CostUsageAnalysisProvider } from "./services/cost-usage-analysis.js";
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
 import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
-import { registerHealthRoutes } from "./routes/health.js";
+import { registerHealthRoutes, type HealthRouteOptions } from "./routes/health.js";
 import { maskDeploymentMessage } from "./deployments/log-masking.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
@@ -132,6 +132,7 @@ export function createApiLoggerOptions(
 
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
+  healthRoutes?: Pick<HealthRouteOptions, "getMigrationStatus" | "runtimeIdentity">;
   analyzePreDeploymentCheck?: AiRouteOptions["analyzePreDeploymentCheck"];
   createArchitectureDraftResponse?: AiRouteOptions["createArchitectureDraftResponse"];
   createLlmExplanation?: CreateLlmExplanation;
@@ -320,7 +321,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     }
   });
 
-  app.register(registerHealthRoutes);
+  app.register(registerHealthRoutes, {
+    ...options.healthRoutes,
+    getDatabaseClient: getAppDatabaseClient
+  });
   app.register(registerAiRoutes, createAiRouteOptions(options, runtimeCache, getAppDatabaseClient));
   app.register(registerAuthRoutes, {
     prefix: "/api",

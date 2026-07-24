@@ -29,6 +29,7 @@ export type ReverseEngineeringScanErrorPresentation = {
   readonly causeLabel: string;
   readonly remedy: string;
   readonly affectedProviderResourceTypes?: readonly string[];
+  readonly failedAwsApiActions?: readonly string[];
 };
 
 type ReverseEngineeringScanSummaryInput = Pick<
@@ -97,6 +98,27 @@ const SCAN_ERROR_SERVICE_NAMES: Readonly<Record<string, string>> = {
   s3: "S3",
   secretsmanager: "Secrets Manager"
 };
+const SAFE_REVERSE_ENGINEERING_READ_ACTION_PREFIXES = [
+  "apigateway:",
+  "application-autoscaling:",
+  "cloudformation:",
+  "cloudfront:",
+  "cloudwatch:",
+  "ec2:",
+  "ecr:",
+  "ecs:",
+  "elasticloadbalancing:",
+  "events:",
+  "iam:",
+  "kms:",
+  "lambda:",
+  "logs:",
+  "rds:",
+  "resource-explorer-2:",
+  "s3:",
+  "secretsmanager:",
+  "tag:"
+] as const;
 
 export function presentReverseEngineeringResource(
   resource: DiscoveredResource
@@ -118,7 +140,12 @@ export function presentReverseEngineeringResource(
 }
 
 export function getReverseEngineeringServiceLabel(providerResourceType: string): string {
-  return SERVICE_LABELS[providerResourceType] ?? "AWS Resource";
+  return SERVICE_LABELS[providerResourceType] ?? getReadableAwsProviderTypeLabel(providerResourceType);
+}
+
+// 팔레트에 아직 없는 종류도 원문을 버리지 않고 사람이 먼저 이해할 수 있는 이름으로 보여줍니다.
+export function getReverseEngineeringProviderTypeLabel(providerResourceType: string): string {
+  return SERVICE_LABELS[providerResourceType] ?? getReadableAwsProviderTypeLabel(providerResourceType);
 }
 
 export function summarizeReverseEngineeringScan(
@@ -150,12 +177,14 @@ export function presentReverseEngineeringScanErrors(
     }
 
     const affectedProviderResourceTypes = getSafeAffectedProviderResourceTypes(scanError);
+    const failedAwsApiActions = getSafeFailedAwsApiActions(scanError);
     presentationByService.set(key, {
       key,
       serviceName: getScanErrorServiceName(key),
       causeLabel: getScanErrorCauseLabel(scanError.reason),
       remedy: getScanErrorRemedy(scanError.reason),
-      ...(affectedProviderResourceTypes.length > 0 ? { affectedProviderResourceTypes } : {})
+      ...(affectedProviderResourceTypes.length > 0 ? { affectedProviderResourceTypes } : {}),
+      ...(failedAwsApiActions.length > 0 ? { failedAwsApiActions } : {})
     });
   }
 
@@ -170,6 +199,18 @@ function getSafeAffectedProviderResourceTypes(
     ...new Set(
       (scanError.affectedProviderResourceTypes ?? []).filter((providerResourceType) =>
         /^AWS::[A-Za-z0-9]{1,64}::[A-Za-z0-9]{1,64}$/u.test(providerResourceType)
+      )
+    )
+  ].sort();
+}
+
+function getSafeFailedAwsApiActions(scanError: ReverseEngineeringScanError): string[] {
+  return [
+    ...new Set(
+      (scanError.failedAwsApiActions ?? []).filter((action) =>
+        SAFE_REVERSE_ENGINEERING_READ_ACTION_PREFIXES.some((prefix) =>
+          action.startsWith(prefix)
+        ) && /^[a-z0-9][a-z0-9-]{0,63}:[A-Za-z][A-Za-z0-9]{0,127}$/u.test(action)
       )
     )
   ].sort();
@@ -313,16 +354,37 @@ function shortenDisplayName(displayName: string): string {
     : `${displayName.slice(0, MAX_DISPLAY_NAME_LENGTH - 1)}…`;
 }
 
+function getReadableAwsProviderTypeLabel(providerResourceType: string): string {
+  const match = /^AWS::([^:]+)::([^:]+)$/u.exec(providerResourceType);
+
+  if (!match) {
+    return "기타 AWS 리소스";
+  }
+
+  const serviceName = match[1] ?? "";
+  const resourceName = match[2] ?? "";
+  return `${splitAwsTypeWords(serviceName)} ${splitAwsTypeWords(resourceName)}`.trim();
+}
+
+function splitAwsTypeWords(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/gu, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/gu, "$1 $2")
+    .replace(/([a-z])([0-9]+)/gu, "$1 $2")
+    .replace(/V2$/u, " V2")
+    .trim();
+}
+
 function getStatusLabel(
   resource: DiscoveredResource,
   displayState: ReverseEngineeringDisplayState
 ): string {
   if (displayState === "supported") {
-    return "Terraform 편집 대상";
+    return "구조 확인 가능";
   }
 
   return resource.importSuggestionStatus === "manual_review"
-    ? "설정 보완 필요"
+    ? "추가 확인 필요"
     : "보드에서만 확인";
 }
 
@@ -332,14 +394,14 @@ function getStatusDescription(
   hasRelationships: boolean
 ): string {
   if (displayState === "supported") {
-    return "AWS에서 가져온 설정을 Terraform으로 확인하고 수정할 수 있습니다. 실제 배포 전에는 변경 계획을 검토해야 합니다.";
+    return "AWS에서 읽은 구조와 연결을 보드에서 확인할 수 있습니다. 이 화면은 AWS 리소스를 변경하지 않습니다.";
   }
 
   if (resource.importSuggestionStatus === "manual_review") {
-    return "AWS에서 읽은 정보가 부족하거나 연결 설정을 자동으로 옮길 수 없습니다. 표시된 항목을 확인한 뒤 Terraform에 포함하세요.";
+    return "AWS에서 읽은 정보가 일부 부족하거나 자동으로 해석하기 어려운 리소스입니다. 원본 정보를 확인한 뒤 보드에서 검토하세요.";
   }
 
   return hasRelationships
-    ? "보드에서 위치와 연결 관계를 확인할 수 있습니다. Terraform 변경에는 자동으로 포함되지 않습니다."
-    : "보드에서 위치를 확인할 수 있습니다. Terraform 변경에는 자동으로 포함되지 않습니다.";
+    ? "보드에서 위치와 연결 관계를 확인할 수 있습니다. 이 화면에서는 코드 생성이나 AWS 변경을 하지 않습니다."
+    : "보드에서 위치를 확인할 수 있습니다. 이 화면에서는 코드 생성이나 AWS 변경을 하지 않습니다.";
 }

@@ -1395,7 +1395,7 @@ function createAnalysisExclusions(
                                 ? "같은 스캔의 관리 가능한 ALB와 Target Group 연결을 확인할 수 없어 보드에만 표시됩니다."
                                 : reverseEngineeringAwsResourceTypeSet.has(resource.resourceType)
                                   ? "AWS에서 찾았지만 안전하게 수정할 설정을 더 확인해야 해 보드에만 표시됩니다."
-                                  : "아직 정식 지원하지 않는 Resource라 분석에서 제외됐습니다."
+                                  : createUnsupportedAwsResourceReason(resource)
     }));
 }
 
@@ -1499,7 +1499,7 @@ function createImportSuggestions(
         id: `import-${resource.id}`,
         resourceId: resource.id,
         status: "unsupported_resource_type",
-        reason: "아직 정식 ResourceType으로 매핑되지 않았습니다.",
+        reason: createUnsupportedAwsResourceReason(resource),
         handoffReady: false
       };
     }
@@ -1555,6 +1555,17 @@ function createImportSuggestions(
       handoffReady: true
     };
   });
+}
+
+/** 전용 팔레트가 없는 AWS 종류도 원본을 숨기지 않고 보드에서 검토할 수 있게 설명합니다. */
+function createUnsupportedAwsResourceReason(
+  resource: Pick<DiscoveredResource, "providerResourceType">
+): string {
+  const providerResourceType = resource.providerResourceType.trim();
+
+  return providerResourceType.length > 0
+    ? `${providerResourceType}은(는) 아직 전용 팔레트가 없어 기타 AWS 리소스로 표시합니다. 원본 종류·리전·관계는 보존됩니다.`
+    : "AWS 원본 종류를 확인하지 못해 기타 AWS 리소스로 표시합니다. 원본 리전·관계는 보존됩니다.";
 }
 
 // gg: 자동 import를 만들 수 없는 이유를 Resource별로 짧고 정확하게 설명합니다.
