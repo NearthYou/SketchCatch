@@ -2,6 +2,22 @@
 
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/` and remain available in Git history.
 
+
+## 2026-07-24 - Open AI design chat directly from Repository analysis
+
+- Made the Repository result's `AI로 직접 설계` route explicit and initialized a fresh AI start draft from the analyzed project name when no project has been saved yet; existing project entries keep their project context.
+- Added route, draft-resolution, server-page, and Repository-link regressions so the action cannot fall back to `/workspace/new` or depend on stale session storage.
+- Verification: focused Repository/Workspace AI tests 49/49, route/render integration tests 4/4, harness, all five lint tasks, all five typecheck tasks, all five production build tasks, and diff checks pass.
+- No API, schema, migration, dependency, cloud mutation, production deployment, Terraform action, GitHub mutation, or push was performed.
+
+## 2026-07-24 - Validate authored Terraform runtime Secrets from source
+
+- Reproduced the production false positive: `random_password` is intentionally omitted from synchronized Diagram nodes while the Web prerequisite required that Diagram node even when the saved Terraform chain was complete.
+- Made prepared `.tf` files authoritative for Web preflight, shared the exact Terraform Secret-chain validator with the API final guard, and retained Diagram fallback only when no Terraform artifact exists for the AI Fixed Template path.
+- Replaced Repository re-analysis / Fixed Template regeneration remediation with a return to the current Terraform editor; corrected deployment and data-model contracts accordingly.
+- Verification: Web focused regressions 65/65, API deployment-preparation regressions 11/11, harness, all five lint tasks, all five typecheck tasks, all five production build tasks, and diff checks pass.
+- No DB migration, dependency metadata change, cloud mutation, production deployment, Terraform action, or Git/CI/CD handoff was performed. Production remains unchanged until this branch is merged and deployed.
+
 ## Current Verified State
 
 - 2026-07-24: Applied the pending local database migration `0057_reverse_engineering_scan_previews`. It creates the preview-persistence table required by the Reverse Engineering preview endpoint. Verified the 14-column table, migration ledger, and API `/health` plus `/health/db` afterward.
@@ -21,6 +37,7 @@ Short English-only working log for the current agent context. Older records are 
 - Repository Template previews show a dynamic recommendation rank, use the clearer AI design action, and keep candidate navigation anchored independently of recommendation-reason length.
 - Repository follow-up questions separate selected Template context, section hierarchy, individual prompts, and card-style answer choices.
 - 2026-07-24: Fixed AI Architecture chat patches for Application Auto Scaling target values. Exact resource IDs and the sole matching scaling policy now resolve deterministically, nested target-tracking config shapes are preserved, supported local plans skip Bedrock latency, and no-op requests return clarification instead of fake success.
+- Generalized Architecture PatchPlan changes now resolve exact resource identities and existing scalar config paths, handle intent-based add/modify/remove requests, and reject ambiguous targets or unsafe values before preview application.
 - Added synchronous submission and patch-application locks. Board patch success now appears only after Project Draft persistence returns either an explicit local-save success or a valid saved server revision; missing callbacks and failed save results no longer claim success.
 - Verified the focused API suite 7/7 and Web routing/consolidation suite 17/17, including the exact ecs_service_requests target value 50 to 5 regression, provider bypass, duplicate prevention, local-save results, and resolved { ok: false } handling.
 - Root lint and typecheck passed. All five package production builds passed directly; the final Turbo wrapper did not exit after completing work, so it was terminated after package-level verification.
@@ -29,14 +46,39 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-24 - Keep the authored scaling target manual
+
+- Removed only `aws_appautoscaling_target` from the authored Fixed Template while preserving the scaling policy with deployable ECS literals.
+- A manually added sole scaling target now immediately rewrites the sole policy's `resource_id`, `scalable_dimension`, and `service_namespace` to Terraform references; ambiguous multi-target or multi-policy Boards are left unchanged.
+- Focused API and Web regressions, API/Web typechecks, Web lint, and the harness check pass. Application deployment behavior was explicitly left unchanged.
+
+### 2026-07-24 - Generalize natural-language Architecture PatchPlan changes
+
+- Added one deep parameter module that maps exact resource IDs, labels, and existing config names to existing scalar config paths while preserving value types and supporting multiple changes in one request.
+- Exact config identities now outrank shared resource labels, so requests such as `ECS Service orders-api` modify only the named resource; ambiguous same-type requests still require clarification.
+- Intent-backed provider plans can update validated existing scalar paths, while protected Terraform/template/diagram identities and type-incompatible operations are rejected.
+- Review hardening adds boundary-aware parameter matching, destination-value parsing, clause-local booleans, parent-path disambiguation, integer/enum/domain validation, safe nested boolean updates, earliest-longest identity selection, and clarification for multi-item or respectively-style requests.
+- Central validation rejects invalid Auto Scaling min/desired/max ordering, absent static provider paths, assigned-value target hijacking, and multi-parameter S3 omissions before any legacy preview path can apply them.
+- Verification passes: 31 focused API PatchPlan tests, 3 Board application tests, root lint, root typecheck, root build, and harness checks.
+- No DB migration, dependency change, cloud mutation, Terraform action, or deployment was performed.
+
+### 2026-07-24 - Simplify canonical docs and code-adjacent evidence
+
+- Renamed the cross-functional planning document to `docs/service-specification.md` and reduced `docs/README.md` to the canonical reading set.
+- Consolidated durable architecture decisions into `docs/architecture.md`; removed the per-decision directory and updated project Skills to write future decisions to the canonical architecture document.
+- Removed completed design plans and the unused template indexing package. Moved Architecture Board layout evidence beside the Web compiler tests and kept legacy template IDs unchanged for stored-data compatibility.
+- Replaced legacy product-label phrases with neutral language in documentation and user-visible text, while leaving API paths and persisted identifiers unchanged.
+- Shortened the authored AI preset's Terraform resource names and references without changing its internal node IDs. Scoped `Ctrl`/`Meta` plus wheel handling to a non-passive canvas listener so Chrome page zoom is not triggered with Board zoom.
+- Verification passed: harness, `git diff --check`, canonical Markdown links, stale-path and legacy-label searches, all three package typechecks, API and Web lint, the authored preset regression, 10 shared-type checks, 92 focused Web checks, and the compiler evidence check. No build, deployment, Terraform CLI, AWS, dependency, lockfile, schema, or migration command was run.
+
 ### 2026-07-24 - Consolidate team contribution and personal documentation
 
 - Analyzed all locally reachable Git refs by author identity, non-merge subjects, and repeated path ownership; added a concise five-person `README.md` contribution table without rankings or commit-count comparisons.
-- Removed all contributor-specific documentation folders (`docs/gg`, `docs/sw`, `docs/ck`, `docs/ys`, and `docs/jh`) after relocating the shared README image, Board QA evidence, and Brainboard fixtures to purpose-based project paths. Deleted documents remain recoverable from Git history.
-- Updated the docs navigation and naming rules around canonical documents and purpose-based shared collections; normalized five ADR filenames and removed two exact duplicate layout images.
-- Confirmed the canonical product, architecture, data-model, development, and deployment documents already describe the current ECS/Fargate, RunTask, Git/CI/CD, Direct Deployment, and cold-rollback topology; no speculative contract rewrite was made.
-- Verification: harness, `git diff --check`, 48-file Markdown link scan, zero duplicate docs hashes, 35 focused fixture-path tests, root lint, root typecheck, and all five production builds pass. Immutable Brainboard raw SHA mismatches are zero after adding LF checkout rules for the shared evidence path.
-- Known risk: the Brainboard validator still reports the pre-existing title mismatch between the immutable `[Training] AWS onboarding` capture and the current `AWS onboarding` source manifest. Deleted contributor documents now require Git history for recovery; tracked `docs/superpowers/**` design evidence remains intentionally unchanged.
+- Removed all contributor-specific documentation folders (`docs/gg`, `docs/sw`, `docs/ck`, `docs/ys`, and `docs/jh`) after relocating the shared README image and reusable verification evidence to project-owned paths. Deleted documents remain recoverable from Git history.
+- Updated the docs navigation and naming rules around canonical documents and purpose-based shared collections; normalized decision filenames and removed two exact duplicate layout images.
+- Confirmed the canonical product, architecture, data-model, development, and deployment documents already describe the current ECS/Fargate, RunTask, CI/CD, managed deployment, and cold-rollback topology; no speculative contract rewrite was made.
+- Verification: harness, `git diff --check`, 48-file Markdown link scan, zero duplicate docs hashes, 35 focused fixture-path tests, root lint, root typecheck, and all five production builds pass.
+- Deleted contributor documents remain recoverable from Git history.
 
 ### 2026-07-24 - Delay Workspace AI generation progress until clarification completes
 
@@ -67,8 +109,8 @@ Short English-only working log for the current agent context. Older records are 
 - Authenticated browser visual smoke testing for `/workspace/new` was not available in the clean browser session; the route redirected to login. Source-level regression coverage and the production build are green.
 - The manifest-contract repair and audience receipt flow are production-verified, but provider-confirmed scale-out remains a separate blocked acceptance item.
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
-- Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
-- The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` was saved by the stale Web process and must be re-analyzed/regenerated or replaced after the Web restart.
+- Existing saved Project Drafts are not rewritten, but their authored Terraform remains authoritative and does not require Repository re-analysis or Fixed Template regeneration after this fix is deployed.
+- The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` may need a reload or re-save after the stale Web process restarts; runtime Secret validation alone no longer requires re-analysis.
 - Root `pnpm test` is not green because ten unrelated API baseline tests fail and `application-artifact-registry.test.ts` still has one cancelled lease-heartbeat test.
 - The full Web suite is 1,205/1,213. Eight unrelated baseline contracts fail across generated architecture knowledge, node/thumbnail presentation, typography audits, CI/CD styling, and Live Observation capacity layout.
 - Provider-confirmed scale-out remains unaccepted because the production acceptance traffic intentionally covered session, receipt, SSE, and heartbeat continuity rather than a load-triggered capacity change.
@@ -77,7 +119,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
+1. After this branch is merged and deployed, retry the affected saved project validation without Repository re-analysis and confirm the authored Terraform chain passes.
 2. Use a separately approved load cycle if provider-confirmed Live Observation scale-out must be accepted; no DB migration is required.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
 
@@ -104,8 +146,8 @@ Short English-only working log for the current agent context. Older records are 
 - Authenticated browser visual smoke testing for `/workspace/new` was not available in the clean browser session; the route redirected to login. Source-level regression coverage and the production build are green.
 - The manifest-contract repair and audience receipt flow are production-verified, but provider-confirmed scale-out remains a separate blocked acceptance item.
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
-- Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
-- The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` was saved by the stale Web process and must be re-analyzed/regenerated or replaced after the Web restart.
+- Existing saved Project Drafts are not rewritten, but their authored Terraform remains authoritative and does not require Repository re-analysis or Fixed Template regeneration after this fix is deployed.
+- The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` may need a reload or re-save after the stale Web process restarts; runtime Secret validation alone no longer requires re-analysis.
 - Root `pnpm test` is not green because ten unrelated API baseline tests fail and `application-artifact-registry.test.ts` still has one cancelled lease-heartbeat test.
 - The full Web suite is 1,205/1,213. Eight unrelated baseline contracts fail across generated architecture knowledge, node/thumbnail presentation, typography audits, CI/CD styling, and Live Observation capacity layout.
 - Provider-confirmed scale-out remains unaccepted because the production acceptance traffic intentionally covered session, receipt, SSE, and heartbeat continuity rather than a load-triggered capacity change.
@@ -114,6 +156,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
+1. After this branch is merged and deployed, retry the affected saved project validation without Repository re-analysis and confirm the authored Terraform chain passes.
 2. Use a separately approved load cycle if provider-confirmed Live Observation scale-out must be accepted; no DB migration is required.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.

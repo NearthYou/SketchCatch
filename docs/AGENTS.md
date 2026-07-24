@@ -12,23 +12,22 @@ This folder contains product, architecture, data model, development, and deploym
 
 1. Do not create duplicate documents.
 2. Before adding a new document, check `docs/README.md` and update an existing document if possible.
-3. When adding or renaming an ADR or a shared reference collection, update its nearest `README.md` and `docs/README.md`.
+3. When renaming a canonical document, update `docs/README.md` and every inbound link.
 4. Keep the regular reading set small.
 5. Remove or merge stale content instead of preserving old versions.
-6. Do not create contributor-specific folders. Shared implementation evidence belongs under a clearly named project collection such as `diagram-templates`, `diagram-layout-reference`, `adr`, or `agent-history`.
+6. Do not create contributor-specific folders. Put test fixtures and generated evidence beside the owning code; keep only historical session records in `agent-history`.
 7. Keep product direction aligned with the multi-cloud-ready IaC operations service positioning. MVP implementation is AWS-first and Terraform-first, but the domain model must stay provider-neutral.
-8. Keep the first MVP goal explicit: users must be able to move from Requirement Input, Source Repository evidence, or Reverse Engineering input to a Practice Architecture, IaC Preview, Pre-Deployment Check, and either an approved Direct Deployment Path or Git/CI/CD Deployment Path.
+8. Keep the first MVP goal explicit: users must be able to move from Requirement Input, Source Repository evidence, or Reverse Engineering input to an infrastructure design, IaC Preview, deployment check, and either an approved managed deployment or CI/CD delivery.
 9. Treat presentation flows as Representative Use Journeys. Do not let demo-only wording replace the service's real user journey.
-10. Keep safety boundaries explicit: no real cloud apply unless it is explicit Deployment work or approved Git/CI/CD handoff, no secrets, no frontend cloud SDK calls, no AI or voice input state changes without user acceptance.
-11. Document Redis as internal Runtime Cache infrastructure only unless a separate product decision turns it into a user Practice Architecture Resource.
+10. Keep safety boundaries explicit: no real cloud apply unless it is explicit Deployment work or approved CI/CD handoff, no secrets, no frontend cloud SDK calls, no AI or voice input state changes without user acceptance.
+11. Document Redis as internal Runtime Cache infrastructure only unless a separate product decision turns it into a user infrastructure resource.
 
 ## Document Filename Rules
 
 1. Update a canonical document instead of creating a second document for the same responsibility.
 2. Name shared reference files by purpose or evidence type, not by contributor initials, branch names, or temporary workstream labels.
-3. Use numbered kebab-case filenames for ADRs, such as `0019-provider-adapter-boundary.md`.
-4. Use concise descriptive filenames inside shared collections, such as `aws-template-board-qa.md` or `capture-index.json`.
-5. Keep the canonical documents listed under Update Targets at their current names unless the user explicitly asks to rename them.
+3. Use concise English kebab-case filenames that describe document responsibility.
+4. Keep the canonical documents listed under Update Targets at their current names unless the user explicitly asks to rename them.
 
 ## Update Targets
 
@@ -37,3 +36,4 @@ This folder contains product, architecture, data model, development, and deploym
 3. Stack, storage, execution boundaries, current API scope, and architecture decisions belong in `docs/architecture.md`.
 4. Local development, team AI collaboration, conventions, Git flow, and checks belong in `docs/development.md`.
 5. Operational deployment and user Deployment execution/cleanup belong in `docs/deployment.md`.
+6. Cross-functional service flows and implementation status belong in `docs/service-specification.md`.

@@ -4557,3 +4557,4 @@ export type TerraformSyncToDiagramResponse = {
 export * from "./architecture-technology-stack.ts";
 export * from "./board-auto-organize-contract.ts";
 export * from "./runtime-convergence.ts";
+export { hasCheckInSigningSecretTerraformContract } from "./runtime-secret-contract.ts";

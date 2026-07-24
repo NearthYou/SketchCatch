@@ -156,7 +156,7 @@ test("deployment preparation validates the exact merged Terraform artifact witho
   assert.doesNotMatch(rightPanelSource, /skipValidation:\s*true/);
 });
 
-test("Direct Deployment uses prepare, approve, and execute with three external phases", () => {
+test("managed deployment uses prepare, approve, and execute with three external phases", () => {
   assert.match(directDeploymentSource, /prepareDeployment\(\{/);
   assert.match(directDeploymentSource, /approveDeploymentPlan\(selectedDeployment\.id\)/);
   assert.match(directDeploymentSource, /executeDeployment\(selectedDeployment\.id\)/);
@@ -421,7 +421,7 @@ test("terminal application failures hide stale approval and remain visible from 
   );
 });
 
-test("full-stack validation checks the confirmed target and opens its setup surface", () => {
+test("full-stack validation checks the confirmed target and prepared Terraform files", () => {
   const targetCheckIndex = directDeploymentSource.indexOf("getProjectDeploymentTarget(projectId)");
   const artifactPreparationIndex = directDeploymentSource.indexOf(
     "onPrepareDeploymentArtifacts()",
@@ -443,7 +443,7 @@ test("full-stack validation checks the confirmed target and opens its setup surf
   assert.ok(runtimeSecretPrerequisiteCheckIndex > artifactPreparationIndex);
   assert.match(
     directDeploymentSource,
-    /getDeploymentRuntimeSecretPrerequisite\(\{[\s\S]*?diagramJson: preparedArtifacts\.diagramJson/
+    /getDeploymentRuntimeSecretPrerequisite\(\{[\s\S]*?diagramJson: preparedArtifacts\.diagramJson,[\s\S]*?terraformFiles: preparedArtifacts\.terraformFiles/
   );
   assert.match(directDeploymentSource, /CI\/CD 설정으로 이동/);
   assert.match(directDeploymentSource, /onOpenDeliverySetup/);
@@ -454,10 +454,10 @@ test("full-stack validation checks the confirmed target and opens its setup surf
   );
 });
 
-test("runtime Secret mismatch offers a direct Repository reanalysis path", () => {
+test("runtime Secret mismatch returns to the current Terraform editor", () => {
   assert.match(directDeploymentSource, /deploymentTargetPrerequisite\.action/);
-  assert.match(directDeploymentSource, /Repository 다시 분석/);
-  assert.match(directDeploymentSource, /\/workspace\/repository/);
+  assert.match(directDeploymentSource, /Terraform 코드 수정/);
+  assert.doesNotMatch(directDeploymentSource, /Repository 다시 분석|Fixed Template Board/);
   assert.match(deploymentShellSource, /projectName=\{projectName\}/);
   assert.match(managerSource, /requiredRuntimeSecrets:\s*template\.requiredRuntimeSecrets/);
 });
@@ -556,7 +556,7 @@ test("deployment action buttons fit their label without clipping", () => {
   const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
   const resultsStart = directDeploymentSource.indexOf("const renderResultsSection", actionsStart);
   const actionsSource = directDeploymentSource.slice(actionsStart, resultsStart);
-  const actionRailStart = workspaceStyles.indexOf("/* Direct Deployment action rail */");
+  const actionRailStart = workspaceStyles.indexOf("/* managed deployment action rail */");
   const executiveConsoleStart = workspaceStyles.indexOf(
     "/* Approved blue executive deployment console */",
     actionRailStart
@@ -617,19 +617,19 @@ test("reload restores the persisted ProjectDraft revision instead of assuming ch
   assert.match(rightPanelSource, /projectDraftRevision=\{projectDraftRevision\}/);
 });
 
-test("Direct Deployment keeps the URL visible and offers frontend-only retry after partial failure", () => {
+test("managed deployment keeps the URL visible and offers frontend-only retry after partial failure", () => {
   assert.match(directDeploymentSource, /PARTIALLY_FAILED/);
   assert.match(directDeploymentSource, /같은 빌드 결과로 웹 배포 재시도/);
   assert.match(directDeploymentSource, /retryDeploymentFrontend\(selectedDeployment\.id\)/);
   assert.match(directDeploymentSource, /현재 주소와 QR, Live Observation은 계속 사용할 수 있지만/);
 });
 
-test("Direct Deployment auto-selects the verified AWS connection without rendering a selector", () => {
+test("managed deployment auto-selects the verified AWS connection without rendering a selector", () => {
   assert.doesNotMatch(directDeploymentSource, /ariaLabel="AWS 연결 선택"/);
   assert.match(directDeploymentSource, /awsConnectionId: selectedAwsConnectionId/);
 });
 
-test("Direct Deployment omits the removed deployment context and run-details sections", () => {
+test("managed deployment omits the removed deployment context and run-details sections", () => {
   assert.doesNotMatch(directDeploymentSource, /deploymentContextPanel/);
   assert.doesNotMatch(directDeploymentSource, /deployment-run-details|실행 세부정보/);
 });

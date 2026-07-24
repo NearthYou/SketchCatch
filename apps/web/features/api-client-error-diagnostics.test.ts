@@ -60,7 +60,7 @@ test("apiFetch identifies requests that receive no HTTP response", async (contex
   });
 });
 
-test("Git/CI/CD handoff conflicts keep the actionable server precondition", async () => {
+test("CI/CD handoff conflicts keep the actionable server precondition", async () => {
   const error = new ApiClientError(
     409,
     {
@@ -81,7 +81,7 @@ test("Git/CI/CD handoff conflicts keep the actionable server precondition", asyn
   );
 });
 
-test("Git/CI/CD handoff explains a missing confirmed deployment target", () => {
+test("CI/CD handoff explains a missing confirmed deployment target", () => {
   for (const message of [
     "GitOps application handoff requires a confirmed project deployment target",
     "PROJECT_DEPLOYMENT_TARGET_REQUIRED"
@@ -116,7 +116,7 @@ test("deployment prepare explains an incomplete Repository runtime Secret mappin
 
   assert.equal(
     getApiErrorMessage(error, "배포 검토를 시작하지 못했습니다."),
-    "Repository가 요구하는 CHECK_IN_SIGNING_SECRET이 현재 Terraform 초안에 연결되지 않았습니다. Repository를 다시 분석하고 Fixed Template Board를 다시 생성·저장한 뒤 검증을 실행해 주세요."
+    "Repository가 요구하는 CHECK_IN_SIGNING_SECRET의 생성, Secrets Manager 저장, ECS 실행 역할 권한, Task 주입 연결이 현재 Terraform 초안에 완성되지 않았습니다. 현재 Terraform 코드를 수정·저장한 뒤 다시 검증해 주세요."
   );
 });
 

@@ -550,7 +550,15 @@ test("the board zooms with Ctrl or Meta plus the mouse wheel and otherwise keeps
     diagramEditorSource,
     /const handleCanvasWheel[\s\S]*?resolveBoardWheelZoomShortcut\(\{[\s\S]*?activeModifierKeys: boardZoomModifierKeysRef\.current[\s\S]*?zoomDirection === "zoom_in"[\s\S]*?handleZoomIn\(\)[\s\S]*?handleZoomOut\(\)/
   );
-  assert.match(diagramEditorSource, /onWheelCapture=\{handleCanvasWheel\}/);
+  assert.doesNotMatch(diagramEditorSource, /onWheelCapture=\{handleCanvasWheel\}/);
+  assert.match(
+    diagramEditorSource,
+    /canvasPanel\.addEventListener\("wheel", handleCanvasWheel, \{ passive: false \}\)/
+  );
+  assert.match(
+    diagramEditorSource,
+    /canvasPanel\.removeEventListener\("wheel", handleCanvasWheel\)/
+  );
 });
 
 test("a single node click opens the matching resource inspector", () => {

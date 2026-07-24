@@ -59,7 +59,7 @@ test("handoff rejects an older Apply id from the same Deployment before provider
   assert.deepEqual(providerCalls, []);
 });
 
-test("handoff rejects a request scoped to an older successful Direct Deployment", async () => {
+test("handoff rejects a request scoped to an older successful managed deployment", async () => {
   const olderDeploymentId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
   let providerCalls = 0;
   const repository = createSelectionRepository({

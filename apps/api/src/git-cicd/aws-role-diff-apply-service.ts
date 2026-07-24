@@ -153,7 +153,7 @@ export async function createConnectedIamAwsRoleDiffGateway(
 
   if (!connection?.roleArn || connection.roleArn !== options.roleArn) {
     throw new AwsRoleDiffApplyError(
-      "The Git/CI/CD role no longer matches the verified project AWS connection"
+      "The CI/CD role no longer matches the verified project AWS connection"
     );
   }
 
@@ -294,7 +294,7 @@ function requireAwsRoleDiff(
   diff: GitCicdAwsRoleDiff | null
 ): GitCicdAwsRoleDiff & { roleArn: string } {
   if (!diff) {
-    throw new GitCicdHandoffNotFoundError("Git/CI/CD AWS role diff not found");
+    throw new GitCicdHandoffNotFoundError("CI/CD AWS role diff not found");
   }
 
   if (!diff.roleArn) {

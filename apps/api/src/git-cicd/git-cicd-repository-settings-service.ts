@@ -50,7 +50,7 @@ export function createGitHubRepositorySettingsApplier(
       const preview = handoff.repositorySettingsPreview;
 
       if (!preview) {
-        throw new GitCicdHandoffNotFoundError("Git/CI/CD repository settings preview not found");
+        throw new GitCicdHandoffNotFoundError("CI/CD repository settings preview not found");
       }
 
       assertCurrentGitCicdRepositorySettings(preview, handoff.projectId);
@@ -110,7 +110,7 @@ export function assertCurrentGitCicdRepositorySettings(
 
   if (projectId !== expectedProjectId || !releaseApiUrl) {
     throw new GitCicdRepositorySettingsConflictError(
-      "Stored Git/CI/CD repository settings are stale. Create a new handoff after configuring a public HTTPS SKETCHCATCH_PUBLIC_BASE_URL."
+      "Stored CI/CD repository settings are stale. Create a new handoff after configuring a public HTTPS SKETCHCATCH_PUBLIC_BASE_URL."
     );
   }
 }
@@ -133,7 +133,7 @@ export async function applyGitCicdRepositorySettings(
 
   const preview = handoff.repositorySettingsPreview;
   if (!preview) {
-    throw new GitCicdHandoffNotFoundError("Git/CI/CD repository settings preview not found");
+    throw new GitCicdHandoffNotFoundError("CI/CD repository settings preview not found");
   }
 
   const sourceRepository = await repository.findSourceRepositoryById(

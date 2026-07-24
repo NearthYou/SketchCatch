@@ -7,8 +7,8 @@
 아래 중 하나라도 해당하면 총점과 무관하게 `Block`이다.
 
 - secret, `.env`, private key, AWS credential, DB password, real token을 출력하거나 커밋했다.
-- 명시 승인 없이 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff를 실행했다.
-- AI, Bedrock, Amazon Q, Voice Requirement Input 결과를 사용자 수락 없이 Practice Architecture, IaC Preview, Git 변경, Deployment 실행에 반영했다.
+- 명시 승인 없이 Terraform apply/destroy, cloud mutation, CI/CD handoff를 실행했다.
+- AI, Bedrock, Amazon Q, Voice Requirement Input 결과를 사용자 수락 없이 infrastructure design, IaC Preview, Git 변경, Deployment 실행에 반영했다.
 - SketchCatch를 AWS-only 서비스로 좁혀 설명하거나 provider-neutral 모델을 깨뜨렸다.
 - frontend UI component에 Terraform 실행, AWS SDK 호출, deployment mutation logic을 섞었다.
 - 실행 가능한 증거 없이 `passing` 또는 완료를 주장했다.

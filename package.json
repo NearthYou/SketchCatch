@@ -18,7 +18,7 @@
     "modules:validate": "pnpm --dir apps/web exec tsx ../../scripts/validate-curated-module-terraform.ts",
     "module-thumbnails:generate": "pnpm --dir apps/web exec tsx ../../scripts/generate-module-thumbnails.ts",
     "template-thumbnails:generate": "pnpm --dir apps/web exec tsx ../../scripts/generate-template-thumbnails.ts",
-    "captured-palette:validate": "pnpm --filter @sketchcatch/api exec tsx ../../scripts/validate-captured-brainboard-palette-resources.ts",
+    "reference-palette:validate": "pnpm --filter @sketchcatch/api exec tsx ../../scripts/validate-reference-template-palette-resources.ts",
     "harness:check": "node scripts/check-harness.mjs",
     "migration:compatibility:check": "node scripts/check-db-migration-compatibility.mjs",
     "lint": "turbo lint",

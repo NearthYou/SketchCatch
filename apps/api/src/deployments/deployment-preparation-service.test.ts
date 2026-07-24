@@ -142,7 +142,7 @@ test("rejects full-stack preparation when a required runtime Secret is absent fr
   );
 });
 
-test("accepts the rendered Fixed Template runtime Secret contract before full-stack deployment", async () => {
+test("accepts the rendered AI Fixed Template runtime Secret contract before full-stack deployment", async () => {
   const draft = createDraftWithRuntimeSecretTerraform();
 
   assert.equal(

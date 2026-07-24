@@ -167,6 +167,7 @@ export type DirectDeploymentScreenProps = {
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
   readonly onOpenDeliverySetup?: (() => void) | undefined;
   readonly onOpenLiveObservation?: (() => void) | undefined;
+  readonly onOpenTerraformEditor?: (() => void) | undefined;
   readonly onPrepareDeploymentArtifacts: () => Promise<PreparedWorkspaceDeploymentArtifacts>;
   readonly onPreDeploymentCheckStateChange: Dispatch<
     SetStateAction<DeploymentPreDeploymentCheckState>
@@ -180,7 +181,7 @@ export type DirectDeploymentScreenProps = {
   readonly projectDraftRevision?: number | null | undefined;
 };
 
-// Direct Deployment reports only Resources that can enter the Terraform execution graph.
+// managed deployment reports only Resources that can enter the Terraform execution graph.
 export function DirectDeploymentScreen({
   confirmationDismissRequestId = 0,
   deploymentAvailability,
@@ -192,6 +193,7 @@ export function DirectDeploymentScreen({
   onConfirmationStateChange,
   onOpenDeliverySetup,
   onOpenFindingTerraformSource,
+  onOpenTerraformEditor,
   onOpenLiveObservation,
   onPrepareDeploymentArtifacts,
   onPreDeploymentCheckStateChange,
@@ -1030,6 +1032,7 @@ export function DirectDeploymentScreen({
 
       const runtimeSecretPrerequisite = getDeploymentRuntimeSecretPrerequisite({
         diagramJson: preparedArtifacts.diagramJson,
+        terraformFiles: preparedArtifacts.terraformFiles,
         scope: selectedScope,
         target
       });
@@ -1790,7 +1793,7 @@ export function DirectDeploymentScreen({
     }
 
     return (
-      <section className={styles.deploymentConsoleGrid} aria-label="Direct Deployment">
+      <section className={styles.deploymentConsoleGrid} aria-label="managed deployment">
         <header className={styles.deploymentPageHeader}>
           <div className={styles.deploymentPageHeading}>
             <h1>배포</h1>
@@ -1803,7 +1806,7 @@ export function DirectDeploymentScreen({
           {renderDirectStepActions(selectedStep.id)}
         </header>
 
-        <nav className={styles.deploymentStepNavigation} aria-label="Direct Deployment 단계">
+        <nav className={styles.deploymentStepNavigation} aria-label="managed deployment 단계">
           <ol>
             {directDeploymentFlow.steps.map((step, index) => {
               const supportLabel =
@@ -1939,11 +1942,11 @@ export function DirectDeploymentScreen({
             <div className={styles.deploymentValidationError} role="alert">
               <strong>{deploymentTargetPrerequisite.title}</strong>
               <p>{deploymentTargetPrerequisite.message}</p>
-              {deploymentTargetPrerequisite.action === "repository_analysis" ? (
+              {deploymentTargetPrerequisite.action === "terraform_edit" ? (
                 <div className={styles.deploymentValidationActions}>
-                  <Link href={createRepositoryReanalysisHref(projectId, projectName)}>
-                    Repository 다시 분석
-                  </Link>
+                  <button onClick={onOpenTerraformEditor} type="button">
+                    Terraform 코드 수정
+                  </button>
                 </div>
               ) : onOpenDeliverySetup ? (
                 <div className={styles.deploymentValidationActions}>
@@ -2926,13 +2929,4 @@ function formatDate(value: string): string {
     dateStyle: "short",
     timeStyle: "short"
   });
-}
-
-function createRepositoryReanalysisHref(projectId: string, projectName: string): string {
-  const params = new URLSearchParams({ projectId });
-  if (projectName.trim()) {
-    params.set("projectName", projectName.trim());
-  }
-
-  return `/workspace/repository?${params.toString()}`;
 }
