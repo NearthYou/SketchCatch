@@ -17,6 +17,15 @@ Short English-only working log for the current agent context. Older records are 
 
 
 ## Session Record
+
+### 2026-07-24 - Add Ctrl-wheel Architecture Board zoom
+
+- Holding the physical Control key over the main Architecture Board now maps upward wheel input to the existing zoom-in action and downward input to zoom-out; Meta provides the macOS analogue.
+- Plain wheel panning remains unchanged, synthetic trackpad pinch stays blocked, and modifier state is cleared on key release or window blur.
+- The focused direction and Board regression set passes 61/61. Root lint and typecheck pass, and the final direct Web production build completes all routes.
+- The root Turbo build wrapper timed out without output after four minutes. The full test entrypoint remains red only in unrelated existing Web baselines such as Settings CodeConnection refresh, Live Observation layout contracts, and Repository start behavior.
+- No shared contract, dependency, migration, cloud mutation, deployment, or follow-up action is required.
+
 - 2026-07-23: Stabilized Template Gallery cards by moving Resource/relationship counts into a bordered summary, widening Korean descriptions with word-safe wrapping, anchoring preview actions to the card bottom, and separating the fixed modal header from the scrollable gallery. Focused regressions, root lint, root typecheck, and all five production build tasks passed; the full test command remains red in unrelated pre-existing Web baseline suites.
 
 - 2026-07-23: Renamed the Dashboard profile route label from My Page to 개인정보 수정 and expanded its page header across the shared Dashboard content width while preserving the centered 760px form card. No test command was run at the user's explicit request.
