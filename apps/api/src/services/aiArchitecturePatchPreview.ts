@@ -23,6 +23,11 @@ import {
   getNaturalLanguageResourceAliases,
   RESOURCE_TYPE_KOREAN_NAMES
 } from "./architectureResourceAliases.js";
+import {
+  createExistingScalarParameterOperations,
+  getExistingScalarPatchValues,
+  getResourceIdentityConfigAliases
+} from "./architecturePatchParameters.js";
 import { createNormalizedAiCacheKey, estimateAiUsage } from "./aiProviderSafety.js";
 import {
   createBedrockTextProvider,
@@ -661,11 +666,18 @@ APPLICATION_AUTO_SCALING_POLICY:
 - config.targetTrackingScalingPolicyConfiguration.targetValue
 - config.targetTrackingScalingPolicyConfiguration.predefinedMetricSpecification.predefinedMetricType
 
+EXISTING SCALAR PARAMETERS:
+- For any resource type, you may set an existing scalar config path shown in the target resource config.
+- Use this only when the request identifies one resource by id, label, or existing resource name, and the requested value or intent is unambiguous.
+- Preserve the existing scalar type: string stays string, number stays number, and boolean stays boolean.
+- Never invent a config path.
+- Never modify terraformResourceType, terraformResourceName, terraformBlockType, templateId, templateResourceId, parentAreaNodeId, or diagram-prefixed fields.
+
 Rules:
 1. If selectedTargetResourceId is present, use that resource as the target if it exists. Do not ask which resource to modify.
 2. If selectedTargetResourceId is present but does not exist, return needs_clarification.
 3. If exactly one resource matches the request, select it.
-4. If more than one resource matches and no selectedTargetResourceId is present, return needs_clarification with candidateResourceIds.
+4. If more than one resource matches and no id, label, or existing resource name uniquely identifies one target, return needs_clarification with candidateResourceIds.
 5. Never guess among multiple matching resources.
 6. If the user asks to change a parameter, return modify_resource, not remove_resource or add_resource.
 7. Do not use replace/remove+add for parameter changes.
@@ -1374,12 +1386,13 @@ function validateProviderPatchPlan(
 
   if (
     input.selectedTargetResourceId === undefined &&
-    input.architectureJson.nodes.filter((node) => node.type === targetNode.type).length > 1
+    input.architectureJson.nodes.filter((node) => node.type === targetNode.type).length > 1 &&
+    !isUniquelyMentionedPatchTarget(input, targetNode)
   ) {
     return { valid: false };
   }
 
-  const validatedOperations = validatePatchPlanOperations(operations, targetNode.type);
+  const validatedOperations = validatePatchPlanOperations(operations, targetNode);
 
   if (validatedOperations === null) {
     return { valid: false };
@@ -1411,11 +1424,25 @@ function validateProviderPatchPlan(
   };
 }
 
+function isUniquelyMentionedPatchTarget(
+  input: CreateArchitecturePatchPreviewInput,
+  targetNode: ResourceNode
+): boolean {
+  const mentionedNodes = findMentionedNodes(
+    input.architectureJson.nodes,
+    input.instruction
+  );
+
+  return mentionedNodes.length === 1 && mentionedNodes[0]?.id === targetNode.id;
+}
+
 function validatePatchPlanOperations(
   operations: readonly unknown[],
-  resourceType: ResourceType
+  targetNode: ResourceNode
 ): ArchitecturePatchPlanOperation[] | null {
-  const allowedPaths = PATCH_PLAN_ALLOWED_OPERATION_PATHS[resourceType] ?? [];
+  const staticAllowedPaths = PATCH_PLAN_ALLOWED_OPERATION_PATHS[targetNode.type] ?? [];
+  const existingScalarValues = getExistingScalarPatchValues(targetNode);
+  const allowedPaths = new Set([...staticAllowedPaths, ...existingScalarValues.keys()]);
   const validatedOperations: ArchitecturePatchPlanOperation[] = [];
 
   for (const operation of operations) {
@@ -1427,11 +1454,34 @@ function validatePatchPlanOperations(
     const path = operation.path;
     const value = operation.value;
 
-    if (!isPatchPlanOperationType(op) || typeof path !== "string" || !allowedPaths.includes(path)) {
+    if (!isPatchPlanOperationType(op) || typeof path !== "string" || !allowedPaths.has(path)) {
       return null;
     }
 
     if (value !== null && typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
+      return null;
+    }
+
+    const existingScalarValue = existingScalarValues.get(path);
+    const isStaticAllowedPath = staticAllowedPaths.includes(path);
+
+    if (existingScalarValue !== undefined && !isStaticAllowedPath) {
+      const isValidExistingScalarOperation =
+        typeof existingScalarValue === "boolean"
+          ? (op === "set_value" && typeof value === "boolean") ||
+            ((op === "enable" || op === "disable") && value === null)
+          : op === "set_value" &&
+            value !== null &&
+            typeof value === typeof existingScalarValue;
+
+      if (!isValidExistingScalarOperation) {
+        return null;
+      }
+    } else if (
+      existingScalarValue !== undefined &&
+      value !== null &&
+      typeof value !== typeof existingScalarValue
+    ) {
       return null;
     }
 
@@ -1967,7 +2017,7 @@ function createPatchPlanOperations(
     return operations;
   }
 
-  return [];
+  return createExistingScalarParameterOperations(normalizedInstruction, targetNode);
 }
 
 function createStructuralPatchPreview(
@@ -2852,9 +2902,17 @@ function resolveTarget(
 
 function findMentionedNodes(nodes: readonly ResourceNode[], instruction: string): ResourceNode[] {
   const normalizedInstruction = normalizeSearchText(instruction);
+  const identityMatchedNodes = nodes.filter((node) =>
+    nodeIdentityAliases(node).some((alias) => includesPhrase(normalizedInstruction, alias))
+  );
 
-  return nodes.filter((node) =>
-    nodeSearchAliases(node).some((alias) => includesPhrase(normalizedInstruction, alias))
+  if (identityMatchedNodes.length > 0) {
+    return identityMatchedNodes;
+  }
+
+  return nodes.filter(
+    (node) =>
+      node.label !== undefined && includesPhrase(normalizedInstruction, node.label)
   );
 }
 
@@ -2902,11 +2960,12 @@ function targetTrackingPolicyMatchesInstruction(
   return serializedConfiguration?.includes("ECSServiceAverageCPUUtilization") ?? false;
 }
 
-function nodeSearchAliases(node: ResourceNode): string[] {
-  return [node.id, node.label].filter(
-    (alias): alias is string => alias !== undefined && alias.trim().length > 0
+function nodeIdentityAliases(node: ResourceNode): string[] {
+  return [node.id, ...getResourceIdentityConfigAliases(node)].filter(
+    (alias) => alias.trim().length > 0
   );
 }
+
 
 function getAddResourcePurposeSuggestions(resourceType: ResourceType): readonly string[] {
   return ADD_RESOURCE_PURPOSE_SUGGESTIONS[resourceType] ?? GENERIC_ADD_RESOURCE_PURPOSE_SUGGESTIONS;

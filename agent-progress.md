@@ -152,3 +152,11 @@ Short English-only working log for the current agent context. Older records are 
 - Counted the ECS Service-to-Task connector in burst lifetime so particles and node pulses reach the Task group.
 - Verification passes: 22 focused regressions, root lint, root typecheck, all five build tasks and 24 Web routes, diff check, and harness check. The root build exited successfully after 4m23s.
 - No DB migration, dependency change, generated load, Terraform action, or infrastructure mutation was performed.
+
+### 2026-07-24 - Generalize natural-language Architecture PatchPlan changes
+
+- Added one deep parameter module that maps exact resource IDs, labels, and existing config names to existing scalar config paths while preserving value types and supporting multiple changes in one request.
+- Exact config identities now outrank shared resource labels, so requests such as `ECS Service orders-api` modify only the named resource; ambiguous same-type requests still require clarification.
+- Intent-backed provider plans can update validated existing scalar paths, while protected Terraform/template/diagram identities and type-incompatible operations are rejected.
+- Verification passes: 21 focused API PatchPlan tests, 3 Board application tests, root lint, root typecheck, root build, and harness checks. Root `pnpm test` remains red only on the pre-existing `ecs-fargate-container-app` template layout hash mismatch in `packages/types`.
+- No DB migration, dependency change, cloud mutation, Terraform action, or deployment was performed.

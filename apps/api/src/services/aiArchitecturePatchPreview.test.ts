@@ -485,3 +485,476 @@ test("ECS average CPU condition also selects the ECS CPU predefined metric", () 
     "ECSServiceAverageCPUUtilization"
   );
 });
+
+test("resource config name and parameter name select one resource for modification", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: { desiredCount: 2, name: "checkout-service" },
+          id: "checkout-service-node",
+          label: "ECS Service",
+          positionX: 0,
+          positionY: 0,
+          type: "ECS_SERVICE"
+        },
+        {
+          config: { desiredCount: 2, name: "catalog-service" },
+          id: "catalog-service-node",
+          label: "ECS Service",
+          positionX: 100,
+          positionY: 0,
+          type: "ECS_SERVICE"
+        }
+      ]
+    },
+    instruction:
+      "ECS \uC11C\uBE44\uC2A4 checkout-service\uC758 desiredCount\uB97C 4\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  const preview = response as ArchitecturePatchPreview;
+  assert.equal(preview.intent.targetResourceId, "checkout-service-node");
+
+  assert.equal(preview.proposedArchitectureJson.nodes[0]?.config.desiredCount, 4);
+  assert.equal(preview.proposedArchitectureJson.nodes[1]?.config.desiredCount, 2);
+});
+
+test("resource type and exact config name prefer the named resource over a shared label", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: { desiredCount: 2, name: "orders-api" },
+          id: "orders-api-node",
+          label: "ECS Service",
+          positionX: 0,
+          positionY: 0,
+          type: "ECS_SERVICE"
+        },
+        {
+          config: { desiredCount: 2, name: "catalog-api" },
+          id: "catalog-api-node",
+          label: "ECS Service",
+          positionX: 100,
+          positionY: 0,
+          type: "ECS_SERVICE"
+        }
+      ]
+    },
+    instruction: "ECS Service orders-api\uC758 desiredCount\uB97C 4\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  const preview = response as ArchitecturePatchPreview;
+  assert.equal(preview.intent.targetResourceId, "orders-api-node");
+  assert.equal(preview.proposedArchitectureJson.nodes[0]?.config.desiredCount, 4);
+  assert.equal(preview.proposedArchitectureJson.nodes[1]?.config.desiredCount, 2);
+});
+
+test("intent and action map an autoscaling capacity phrase to its parameter", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: { maxCapacity: 4, minCapacity: 1, name: "checkout-scaling" },
+          id: "checkout-scaling-target",
+          label: "Application Auto Scaling Target",
+          positionX: 0,
+          positionY: 0,
+          type: "APPLICATION_AUTO_SCALING_TARGET"
+        }
+      ]
+    },
+    instruction:
+      "\uD2B8\uB798\uD53D \uC99D\uAC00\uC5D0 \uB300\uBE44\uD574\uC11C checkout-scaling\uC758 \uCD5C\uB300 \uD0DC\uC2A4\uD06C \uC218\uB97C 8\uB85C \uB298\uB824\uC918."
+  });
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  const preview = response as ArchitecturePatchPreview;
+  assert.equal(preview.intent.targetResourceId, "checkout-scaling-target");
+  assert.equal(preview.proposedArchitectureJson.nodes[0]?.config.maxCapacity, 8);
+  assert.equal(preview.proposedArchitectureJson.nodes[0]?.config.minCapacity, 1);
+});
+
+test("resource config name selects exactly one resource for deletion", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [
+        { id: "app-to-logs", sourceId: "app", targetId: "logs-bucket" },
+        { id: "app-to-assets", sourceId: "app", targetId: "assets-bucket" }
+      ],
+      nodes: [
+        {
+          config: { name: "app" },
+          id: "app",
+          label: "Application",
+          positionX: 0,
+          positionY: 0,
+          type: "EC2"
+        },
+        {
+          config: { bucketName: "logs-archive" },
+          id: "logs-bucket",
+          label: "S3 Bucket",
+          positionX: 100,
+          positionY: 0,
+          type: "S3"
+        },
+        {
+          config: { bucketName: "assets-public" },
+          id: "assets-bucket",
+          label: "S3 Bucket",
+          positionX: 200,
+          positionY: 0,
+          type: "S3"
+        }
+      ]
+    },
+    instruction: "logs-archive \uBC84\uD0B7\uC744 \uC0AD\uC81C\uD574\uC918."
+  });
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  const preview = response as ArchitecturePatchPreview;
+  assert.equal(preview.intent.targetResourceId, "logs-bucket");
+  assert.deepEqual(preview.proposedArchitectureJson.nodes.map(({ id }) => id), ["app", "assets-bucket"]);
+  assert.deepEqual(preview.proposedArchitectureJson.edges.map(({ id }) => id), ["app-to-assets"]);
+});
+
+test("resource purpose and action add the requested resource type", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: { name: "orders-api" },
+          id: "orders-api",
+          label: "Orders API",
+          positionX: 0,
+          positionY: 0,
+          type: "EC2"
+        }
+      ]
+    },
+    instruction:
+      "\uC8FC\uBB38 \uC774\uBCA4\uD2B8\uB97C \uBE44\uB3D9\uAE30\uB85C \uCC98\uB9AC\uD560 SQS \uD050\uB97C \uCD94\uAC00\uD574\uC918."
+  });
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  const preview = response as ArchitecturePatchPreview;
+  assert.equal(preview.intent.requestedAction, "add_resource");
+  assert.equal(preview.requiresUserAcceptance, true);
+  assert.equal(preview.userAcceptedChange, null);
+  assert.ok(preview.proposedArchitectureJson.nodes.some(({ type }) => type === "SQS_QUEUE"));
+  assert.ok(preview.changes.some(({ action, resourceType }) => action === "add_resource" && resourceType === "SQS_QUEUE"));
+});
+
+test("exact resource and parameter names update an existing string parameter", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: { name: "public-listener", port: 80, protocol: "HTTP" },
+          id: "public-listener-node",
+          label: "ALB Listener",
+          positionX: 0,
+          positionY: 0,
+          type: "LOAD_BALANCER_LISTENER"
+        }
+      ]
+    },
+    instruction:
+      "public-listener\uC758 protocol\uC744 HTTPS\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  const preview = response as ArchitecturePatchPreview;
+  assert.equal(preview.intent.targetResourceId, "public-listener-node");
+  assert.equal(preview.proposedArchitectureJson.nodes[0]?.config.protocol, "HTTPS");
+  assert.equal(preview.proposedArchitectureJson.nodes[0]?.config.port, 80);
+  assert.deepEqual(preview.patchPlan?.operations, [
+    { op: "set_value", path: "config.protocol", value: "HTTPS" }
+  ]);
+});
+
+test("provider intent can modify an existing scalar path on an exactly named resource", async () => {
+  let providerCallCount = 0;
+  const response = await createArchitecturePatchPreviewWithPatchPlanCompiler(
+    {
+      architectureJson: {
+        edges: [],
+        nodes: [
+          {
+            config: { desiredCount: 2, name: "orders-api" },
+            id: "orders-api-node",
+            label: "ECS Service",
+            positionX: 0,
+            positionY: 0,
+            type: "ECS_SERVICE"
+          },
+          {
+            config: { desiredCount: 2, name: "catalog-api" },
+            id: "catalog-api-node",
+            label: "ECS Service",
+            positionX: 100,
+            positionY: 0,
+            type: "ECS_SERVICE"
+          }
+        ]
+      },
+      instruction:
+        "\uB300\uADDC\uBAA8 \uC8FC\uBB38 \uD2B8\uB798\uD53D\uC744 \uBC84\uD2F0\uB3C4\uB85D orders-api\uC758 \uB3D9\uC2DC \uC2E4\uD589 \uC218\uB97C 12\uB85C \uB298\uB824\uC918."
+    },
+    {
+      bedrockProvider: {
+        generate: async () => {
+          providerCallCount += 1;
+          return {
+            text: JSON.stringify({
+              status: "planned",
+              action: "modify_resource",
+              target: {
+                resourceType: "ECS_SERVICE",
+                resourceId: "orders-api-node",
+                label: "ECS Service"
+              },
+              candidateResourceIds: [],
+              operations: [
+                {
+                  op: "set_value",
+                  path: "config.desiredCount",
+                  value: 12
+                }
+              ],
+              preserve: [],
+              clarificationQuestion: null,
+              confidence: 0.94
+            })
+          };
+        },
+        model: "test-model",
+        provider: "bedrock",
+        service: "bedrock_runtime"
+      },
+      creditPolicy: { bedrock: true, billingMode: "aws_credit_only" }
+    }
+  );
+
+  assert.equal(providerCallCount, 1);
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  const preview = response as ArchitecturePatchPreview;
+  assert.equal(preview.intent.targetResourceId, "orders-api-node");
+  assert.equal(preview.proposedArchitectureJson.nodes[0]?.config.desiredCount, 12);
+  assert.equal(preview.proposedArchitectureJson.nodes[1]?.config.desiredCount, 2);
+  assert.deepEqual(preview.patchPlan?.operations, [
+    { op: "set_value", path: "config.desiredCount", value: 12 }
+  ]);
+});
+
+test("ambiguous parameter request asks which same-type resource to modify", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: { desiredCount: 2, name: "orders-api" },
+          id: "orders-api-node",
+          label: "ECS Service",
+          positionX: 0,
+          positionY: 0,
+          type: "ECS_SERVICE"
+        },
+        {
+          config: { desiredCount: 2, name: "catalog-api" },
+          id: "catalog-api-node",
+          label: "ECS Service",
+          positionX: 100,
+          positionY: 0,
+          type: "ECS_SERVICE"
+        }
+      ]
+    },
+    instruction:
+      "ECS \uC11C\uBE44\uC2A4\uC758 desiredCount\uB97C 4\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+
+  assert.equal(response.status, "needs_clarification", JSON.stringify(response));
+
+  if (response.status !== "needs_clarification") {
+    assert.fail("ambiguous resource request must not produce a preview");
+  }
+
+  assert.deepEqual(
+    response.candidates.map(({ resourceId }) => resourceId),
+    ["orders-api-node", "catalog-api-node"]
+  );
+  assert.deepEqual(response.patchPlan?.candidateResourceIds, [
+    "orders-api-node",
+    "catalog-api-node"
+  ]);
+});
+
+test("provider cannot modify protected architecture identity fields", async () => {
+  const response = await createArchitecturePatchPreviewWithPatchPlanCompiler(
+    {
+      architectureJson: {
+        edges: [],
+        nodes: [
+          {
+            config: {
+              desiredCount: 2,
+              name: "orders-api",
+              terraformResourceName: "orders_api"
+            },
+            id: "orders-api-node",
+            label: "ECS Service",
+            positionX: 0,
+            positionY: 0,
+            type: "ECS_SERVICE"
+          }
+        ]
+      },
+      instruction:
+        "orders-api\uC758 \uB0B4\uBD80 Terraform \uC2DD\uBCC4\uC790\uB97C bad-name\uC73C\uB85C \uBC14\uAFB8\uC918."
+    },
+    {
+      bedrockProvider: {
+        generate: async () => ({
+          text: JSON.stringify({
+            status: "planned",
+            action: "modify_resource",
+            target: {
+              resourceType: "ECS_SERVICE",
+              resourceId: "orders-api-node",
+              label: "ECS Service"
+            },
+            candidateResourceIds: [],
+            operations: [
+              {
+                op: "set_value",
+                path: "config.terraformResourceName",
+                value: "bad-name"
+              }
+            ],
+            preserve: [],
+            clarificationQuestion: null,
+            confidence: 0.99
+          })
+        }),
+        model: "test-model",
+        provider: "bedrock",
+        service: "bedrock_runtime"
+      },
+      creditPolicy: { bedrock: true, billingMode: "aws_credit_only" }
+    }
+  );
+
+  assert.equal(response.status, "needs_clarification", JSON.stringify(response));
+
+  if (response.status !== "needs_clarification") {
+    assert.fail("protected identity changes must not produce a preview");
+  }
+
+  assert.equal(response.patchPlan?.status, "unsupported");
+  assert.equal(
+    response.intent.targetResourceId,
+    "orders-api-node"
+  );
+});
+
+test("provider cannot apply a boolean operation to an existing numeric parameter", async () => {
+  const response = await createArchitecturePatchPreviewWithPatchPlanCompiler(
+    {
+      architectureJson: {
+        edges: [],
+        nodes: [
+          {
+            config: { desiredCount: 2, name: "orders-api" },
+            id: "orders-api-node",
+            label: "ECS Service",
+            positionX: 0,
+            positionY: 0,
+            type: "ECS_SERVICE"
+          }
+        ]
+      },
+      instruction: "orders-api\uC758 \uCC98\uB9AC \uC131\uB2A5\uC744 \uC218\uC815\uD574\uC918."
+    },
+    {
+      bedrockProvider: {
+        generate: async () => ({
+          text: JSON.stringify({
+            status: "planned",
+            action: "modify_resource",
+            target: {
+              resourceType: "ECS_SERVICE",
+              resourceId: "orders-api-node",
+              label: "ECS Service"
+            },
+            candidateResourceIds: [],
+            operations: [
+              {
+                op: "enable",
+                path: "config.desiredCount",
+                value: null
+              }
+            ],
+            preserve: [],
+            clarificationQuestion: null,
+            confidence: 0.99
+          })
+        }),
+        model: "test-model",
+        provider: "bedrock",
+        service: "bedrock_runtime"
+      },
+      creditPolicy: { bedrock: true, billingMode: "aws_credit_only" }
+    }
+  );
+
+  assert.equal(response.status, "needs_clarification", JSON.stringify(response));
+
+  if (response.status !== "needs_clarification") {
+    assert.fail("numeric parameters must reject boolean operations");
+  }
+
+  assert.equal(response.patchPlan?.status, "unsupported");
+});
+
+test("one request can update multiple existing scalar parameters", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: { maxCapacity: 4, minCapacity: 1, name: "checkout-scaling" },
+          id: "checkout-scaling-target",
+          label: "Application Auto Scaling Target",
+          positionX: 0,
+          positionY: 0,
+          type: "APPLICATION_AUTO_SCALING_TARGET"
+        }
+      ]
+    },
+    instruction:
+      "checkout-scaling\uC758 minCapacity\uB97C 2\uB85C, maxCapacity\uB97C 8\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  const preview = response as ArchitecturePatchPreview;
+  assert.equal(preview.proposedArchitectureJson.nodes[0]?.config.minCapacity, 2);
+  assert.equal(preview.proposedArchitectureJson.nodes[0]?.config.maxCapacity, 8);
+  assert.deepEqual(
+    preview.patchPlan?.operations
+      .map(({ path, value }) => ({ path, value }))
+      .sort((left, right) => left.path.localeCompare(right.path)),
+    [
+      { path: "config.maxCapacity", value: 8 },
+      { path: "config.minCapacity", value: 2 }
+    ]
+  );
+});
