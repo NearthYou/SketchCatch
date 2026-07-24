@@ -52,6 +52,30 @@ test("layoutAutomaticDiagram은 선택 profile마다 기존 후보군을 확장�
   assert.deepEqual(layoutAutomaticDiagram(input), result);
 });
 
+test("responsive layout은 큰 미리보기에서 한 가지 안정된 후보만 계산한다", () => {
+  const nodes = [
+    makeNode("browser", "actor_browser", 0, 0, "design"),
+    makeNode("service", "aws_ecs_service", 0, 0),
+    makeNode("bucket", "aws_s3_bucket", 0, 0)
+  ];
+  const input = {
+    candidateProfiles: [{ id: "knowledge:compact-service", columnGap: 120, rowGap: 80 }],
+    edges: [
+      { id: "browser-service", sourceId: "browser", targetId: "service" },
+      { id: "service-bucket", sourceId: "service", targetId: "bucket" }
+    ],
+    nodes,
+    searchMode: "responsive" as const
+  };
+
+  const candidates = layoutAutomaticDiagramCandidates(input);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]?.candidateCount, 1);
+  assert.equal(candidates[0]?.candidateId, "split-support");
+  assert.deepEqual(layoutAutomaticDiagramCandidates(input), candidates);
+});
+
 test("layout 후보 목록은 기존 단일 선택을 첫 결과로 유지하고 결정론적으로 정렬한다", () => {
   const nodes = [
     makeNode("browser", "actor_browser", 0, 0, "design"),

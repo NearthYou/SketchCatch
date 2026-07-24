@@ -88,16 +88,6 @@ export function getReverseEngineeringAwsConnectionRecovery(input: {
   });
 }
 
-// 선택 목록에는 화면에 필요한 상태와 마스킹된 계정 정보만 표시합니다.
-export function formatReverseEngineeringAwsConnectionLabel(connection: AwsConnection): string {
-  const accountLabel = connection.accountId
-    ? connection.accountId.replace(/\b(\d{4})\d{8}\b/g, "$1********")
-    : "계정 미확인";
-  const statusLabel = getAwsConnectionStatusLabel(connection.status);
-
-  return `${accountLabel} · ${connection.region} · ${statusLabel}`;
-}
-
 function createRecovery(input: {
   readonly readiness: ReverseEngineeringAwsConnectionReadiness;
   readonly description: string;
@@ -160,16 +150,4 @@ function compareConnectionsByRecency(left: AwsConnection, right: AwsConnection):
   }
 
   return left.id.localeCompare(right.id);
-}
-
-function getAwsConnectionStatusLabel(status: AwsConnection["status"]): string {
-  if (status === "verified") {
-    return "검증됨";
-  }
-
-  if (status === "pending") {
-    return "확인 필요";
-  }
-
-  return "재확인 필요";
 }

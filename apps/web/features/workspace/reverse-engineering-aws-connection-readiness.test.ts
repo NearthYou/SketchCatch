@@ -4,7 +4,6 @@ import type { AwsConnection } from "@sketchcatch/types";
 import {
   canStartReverseEngineeringScan,
   createReverseEngineeringAwsSettingsHref,
-  formatReverseEngineeringAwsConnectionLabel,
   getReverseEngineeringAwsConnectionRecovery
 } from "./reverse-engineering-aws-connection-readiness";
 import { createReverseEngineeringFinalRegressionFixture } from "./reverse-engineering-final-regression.fixture";
@@ -45,10 +44,7 @@ test("AWS 연결이 없으면 Role 연결 복구 행동을 보여준다", () => 
 test("부분 결과 권한 보완도 공개 connection ID만 같은 Settings 주소에 보존한다", () => {
   const href = createReverseEngineeringAwsSettingsHref("connection-partial");
 
-  assert.equal(
-    href,
-    "/dashboard/settings?tab=aws&next=reverse&awsConnectionId=connection-partial"
-  );
+  assert.equal(href, "/dashboard/settings?tab=aws&next=reverse&awsConnectionId=connection-partial");
   assert.doesNotMatch(href, /arn:aws|external-id|123456789012/iu);
 });
 
@@ -84,7 +80,10 @@ test("검증 실패 연결은 다시 확인 행동으로 복구한다", () => {
     recovery.settingsHref,
     "/dashboard/settings?tab=aws&next=reverse&awsConnectionId=failed-connection"
   );
-  assert.doesNotMatch(recovery.settingsHref, /123456789012|SketchCatchTerraformExecutionRole|external-id/);
+  assert.doesNotMatch(
+    recovery.settingsHref,
+    /123456789012|SketchCatchTerraformExecutionRole|external-id/
+  );
 });
 
 test("Role ARN 또는 계정 ID가 없는 verified 연결은 스캔하지 않는다", () => {
@@ -254,23 +253,6 @@ test("알 수 없는 상태는 안전하게 재확인 필요로 처리한다", (
   assert.equal(recovery.readiness, "retry_required");
   assert.equal(recovery.canStartScan, false);
   assert.equal(recovery.actionLabel, "연결 다시 확인");
-});
-
-test("AWS 연결 선택 라벨은 상태를 설명하면서 민감한 원문은 숨긴다", () => {
-  assert.equal(
-    formatReverseEngineeringAwsConnectionLabel(createConnection()),
-    "1234******** · ap-northeast-2 · 검증됨"
-  );
-  assert.equal(
-    formatReverseEngineeringAwsConnectionLabel(
-      createConnection({ accountId: null, roleArn: null, status: "pending" })
-    ),
-    "계정 미확인 · ap-northeast-2 · 확인 필요"
-  );
-  assert.equal(
-    formatReverseEngineeringAwsConnectionLabel(createConnection({ status: "failed" })),
-    "1234******** · ap-northeast-2 · 재확인 필요"
-  );
 });
 
 test("연결 목록 새로고침 실패는 이전 verified 연결이 있어도 스캔 권한으로 취급하지 않는다", () => {

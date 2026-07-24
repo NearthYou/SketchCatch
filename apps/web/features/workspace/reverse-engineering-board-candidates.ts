@@ -1,16 +1,8 @@
-import type {
-  ArchitectureJson,
-  ReverseEngineeringScanResult
-} from "@sketchcatch/types";
+import type { ArchitectureJson, ReverseEngineeringScanResult } from "@sketchcatch/types";
 
 export type ReverseEngineeringBoardCandidate = {
   readonly id: string;
-  readonly title: string;
-  readonly description: string;
   readonly architectureJson: ArchitectureJson;
-  readonly resourceCount: number;
-  readonly nodeCount: number;
-  readonly edgeCount: number;
 };
 
 export function createReverseEngineeringBoardCandidates(
@@ -34,31 +26,12 @@ export function createReverseEngineeringCandidateResult(
   };
 }
 
-function createOriginalCandidate(architectureJson: ArchitectureJson): ReverseEngineeringBoardCandidate {
-  return createCandidate({
-    architectureJson,
-    description: "AWS에서 읽어온 Resource와 관계를 바꾸지 않은 원본입니다.",
-    id: "candidate-structure-auto",
-    title: "가져온 원본"
-  });
-}
-
-type CreateCandidateInput = {
-  readonly id: string;
-  readonly title: string;
-  readonly description: string;
-  readonly architectureJson: ArchitectureJson;
-};
-
-// 후보 카드에서 바로 보여줄 개수 정보를 ArchitectureJson 기준으로 계산합니다.
-function createCandidate(input: CreateCandidateInput): ReverseEngineeringBoardCandidate {
+// 원본 구조 후보에는 화면용 설명 없이 식별자와 원본 데이터만 둡니다.
+function createOriginalCandidate(
+  architectureJson: ArchitectureJson
+): ReverseEngineeringBoardCandidate {
   return {
-    id: input.id,
-    title: input.title,
-    description: input.description,
-    architectureJson: input.architectureJson,
-    resourceCount: input.architectureJson.nodes.length,
-    nodeCount: input.architectureJson.nodes.length,
-    edgeCount: input.architectureJson.edges.length
+    id: "candidate-structure-auto",
+    architectureJson
   };
 }

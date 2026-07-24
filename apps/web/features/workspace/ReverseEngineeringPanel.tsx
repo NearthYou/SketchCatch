@@ -1,1100 +1,696 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { CheckCircle2, CircleAlert, LoaderCircle, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode, ReactPortal } from "react";
 import type {
-  DiagramJson,
-  ReverseEngineeringImportDecisionRequest,
-  ReverseEngineeringResourceSelection,
-  ReverseEngineeringScan,
-  ReverseEngineeringScanLogLine,
-  ReverseEngineeringScanResult,
-  ReverseEngineeringScanResponse,
-  Project
+  AwsConnection,
+  ReverseEngineeringResourceSelection
 } from "../../../../packages/types/src";
-import { createBoardAutoOrganizeCandidates } from "../architecture-board-compiler";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
-import { useAuth } from "../../components/auth/auth-provider";
-import { invalidateProjectQueries } from "../../components/query/dashboard-query-invalidation";
+import { ReverseEngineeringDetailsDialog } from "./ReverseEngineeringDetailsDialog";
 import {
-  cancelReverseEngineeringScan,
-  createArchitectureSnapshot,
-  createReverseEngineeringProject,
-  createReverseEngineeringPreviewScan,
-  createReverseEngineeringScan,
-  deleteReverseEngineeringScan,
-  getReverseEngineeringScan,
-  listReverseEngineeringScanLogs
-} from "./api";
-import {
-  applyExistingReverseEngineeringPreview,
-  attachReverseEngineeringSourceToDiagram,
-  createReverseEngineeringApplyPreview,
-  getSavedReverseEngineeringSourceScanIds,
-  type ReverseEngineeringApplyPreview
-} from "./reverse-engineering-apply-flow";
-import {
-  convertReverseEngineeringBoardToArchitectureJson,
-  createReverseEngineeringBoardApplication,
-  type ReverseEngineeringBoardApplicationMode,
-  type ReverseEngineeringPlacement
-} from "./reverse-engineering-board-application";
-import {
-  createReverseEngineeringBoardCandidates,
-  createReverseEngineeringCandidateResult,
-  type ReverseEngineeringBoardCandidate
-} from "./reverse-engineering-board-candidates";
-import {
-  getNextReverseEngineeringResourceSelections,
-  REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION,
+  isReverseEngineeringResourceSelectionChecked,
   REVERSE_ENGINEERING_RESOURCE_SELECTIONS
 } from "./reverse-engineering-resource-types";
-import { createReverseEngineeringLayoutSummary } from "./reverse-engineering-layout-summary";
-import {
-  canStartReverseEngineeringScan,
-  createReverseEngineeringAwsSettingsHref,
-  getReverseEngineeringAwsConnectionRecovery,
-  type ReverseEngineeringAwsConnectionRecovery
-} from "./reverse-engineering-aws-connection-readiness";
-import {
-  ReverseEngineeringResultPanel,
-  type ReverseEngineeringApplyState
-} from "./ReverseEngineeringResultPanel";
-import { ReverseEngineeringScanCriteriaForm } from "./ReverseEngineeringScanCriteriaForm";
-import { ReverseEngineeringScanHistoryPanel } from "./ReverseEngineeringScanHistoryPanel";
-import type { ReverseEngineeringStartFailure } from "./ReverseEngineeringStartCard";
-import { getReverseEngineeringStartFailure } from "./reverse-engineering-scan-start-failure";
-import { useReverseEngineeringOptions } from "./useReverseEngineeringOptions";
-import { useReverseEngineeringScanHistory } from "./useReverseEngineeringScanHistory";
+import { getReverseEngineeringPartialScanNotice } from "./reverse-engineering-scan-notice";
+import { useReverseEngineeringWorkflow } from "./useReverseEngineeringWorkflow";
+import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
 import styles from "./reverse-engineering.module.css";
 
-export type ReverseEngineeringPanelProps = {
+type ReverseEngineeringPanelProps = {
   readonly context: DiagramEditorPanelContext;
   readonly createProjectOnApply?: boolean | undefined;
-  readonly onCandidatePanelChange?:
-    | ((state: ReverseEngineeringCandidatePanelState) => void)
-    | undefined;
-  readonly onInitialScanActionChange?:
-    | ((state: ReverseEngineeringInitialScanActionState | null) => void)
-    | undefined;
+  readonly onStatusChange?: ((status: string) => void) | undefined;
   readonly projectId: string;
   readonly projectName: string;
 };
 
-export type ReverseEngineeringCandidatePanelState = {
-  readonly candidates: readonly ReverseEngineeringBoardCandidate[];
-  readonly hasScanResult: boolean;
-  readonly onCandidateSelect: (candidateId: string) => void;
-  readonly selectedCandidateId: string | null;
-};
+type ReverseEngineeringWorkflow = ReturnType<typeof useReverseEngineeringWorkflow>;
 
-export type ReverseEngineeringInitialScanActionState = {
-  readonly awsConnectionRecovery: ReverseEngineeringAwsConnectionRecovery;
-  readonly canStartScan: boolean;
-  readonly failure: ReverseEngineeringStartFailure | null;
-  readonly isLoadingOptions: boolean;
-  readonly isScanning: boolean;
-  readonly onScanStart: () => void;
-};
+const PRIMARY_RESOURCE_SELECTIONS = ["ALL", "VPC", "EC2", "RDS", "S3"] as const;
+/** RE 화면의 한 hook 상태를 가운데 시작 상태·오른쪽 행동에 함께 연결합니다. */
+export function ReverseEngineeringPanel(props: ReverseEngineeringPanelProps) {
+  const workflow = useReverseEngineeringWorkflow(props);
+  const [areSlotsReady, setSlotsReady] = useState(false);
+  const [isDetailsOpen, setDetailsOpen] = useState(false);
+  const [isApplyConfirmationOpen, setApplyConfirmationOpen] = useState(false);
+  const selectedResponse = workflow.selectedCandidateResponse;
+  const result = selectedResponse?.result ?? null;
+  const status = getReverseEngineeringWorkspaceStatus({
+    hasPreview: Boolean(result),
+    isScanning: workflow.scanState === "loading",
+    scanFailed: Boolean(workflow.scanFailure),
+    canApply: workflow.canApply
+  });
 
-type RequestState = "idle" | "loading" | "error";
-type ReverseEngineeringOrganizedPreview = {
-  readonly diagram: DiagramJson;
-  readonly layoutSummary: readonly string[];
-};
-type ReverseEngineeringOrganizedDiagrams = {
-  readonly append: ReverseEngineeringOrganizedPreview | null;
-  readonly replace: ReverseEngineeringOrganizedPreview;
-};
-const SCAN_POLL_INTERVAL_MS = 1000;
-const SCAN_POLL_ATTEMPT_COUNT = 30;
-
-function createObserveOnlyReverseEngineeringImportDecision(): ReverseEngineeringImportDecisionRequest {
-  return {
-    version: 1,
-    selectedReadyResourceIds: [],
-    acknowledgedReviewOnlyResourceIds: []
-  };
-}
-
-// 기존 AWS 읽어오기 화면의 상태와 버튼 흐름을 관리합니다.
-export function ReverseEngineeringPanel({
-  context,
-  createProjectOnApply = false,
-  onCandidatePanelChange,
-  onInitialScanActionChange,
-  projectId,
-  projectName
-}: ReverseEngineeringPanelProps) {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const router = useRouter();
-  const [selectedResourceTypes, setSelectedResourceTypes] = useState<
-    ReverseEngineeringResourceSelection[]
-  >([REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION]);
-  const [scanState, setScanState] = useState<RequestState>("idle");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [scanFailure, setScanFailure] = useState<ReverseEngineeringStartFailure | null>(null);
-  const [initialScanFailure, setInitialScanFailure] =
-    useState<ReverseEngineeringStartFailure | null>(null);
-  const [scanResponse, setScanResponse] = useState<ReverseEngineeringScanResponse | null>(null);
-  const [previewId, setPreviewId] = useState<string | null>(null);
-  const [logs, setLogs] = useState<ReverseEngineeringScanLogLine[]>([]);
-  const [applyState, setApplyState] = useState<ReverseEngineeringApplyState>("idle");
-  const [applyMessage, setApplyMessage] = useState<string | null>(null);
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
-  const [previewBase, setPreviewBase] = useState<ReverseEngineeringApplyPreview | null>(null);
-  const [placement, setPlacement] = useState<ReverseEngineeringPlacement>("original");
-  const [applicationMode, setApplicationMode] =
-    useState<ReverseEngineeringBoardApplicationMode>("replace");
-  const [organizedDiagrams, setOrganizedDiagrams] =
-    useState<ReverseEngineeringOrganizedDiagrams | null>(null);
-  const handleRequestError = useCallback((error: unknown) => {
-    setErrorMessage(toErrorMessage(error));
+  // 상세 창을 닫는 callback identity를 안정화해 선택 상태가 바뀌어도 focus trap을 다시 만들지 않습니다.
+  const closeDetails = useCallback(() => {
+    setDetailsOpen(false);
   }, []);
-  const {
-    loadOptions,
-    loadState,
-    awsConnections,
-    projects,
-    selectedAwsConnectionId,
-    selectedProjectId,
-    setSelectedAwsConnectionId,
-    verifiedAwsConnections
-  } = useReverseEngineeringOptions({
-    initialProjectId: projectId,
-    onError: handleRequestError
-  });
-  const targetProjectId = createProjectOnApply ? selectedProjectId : projectId;
-  const {
-    activeScanId,
-    forgetScan,
-    isStaleScanResult,
-    rememberCompletedScan,
-    scanHistory,
-    scanHistoryState,
-    setActiveScanId
-  } = useReverseEngineeringScanHistory({
-    enabled: !createProjectOnApply,
-    onError: handleRequestError,
-    scanResponse,
-    selectedProjectId: targetProjectId
-  });
 
-  const selectedProject = projects.find((project) => project.id === targetProjectId);
-  const awsConnectionRecovery = useMemo(
-    () =>
-      getReverseEngineeringAwsConnectionRecovery({
-        connections: awsConnections,
-        selectedConnectionId: selectedAwsConnectionId
-      }),
-    [awsConnections, selectedAwsConnectionId]
-  );
-  const resolvedSelectedAwsConnectionId = awsConnectionRecovery.selectedConnectionId ?? "";
-  const selectedAwsConnection = verifiedAwsConnections.find(
-    (connection) => connection.id === resolvedSelectedAwsConnectionId
-  );
-  const canStartScan = canStartReverseEngineeringScan({
-    createProjectOnApply,
-    hasSelectedVerifiedConnection: Boolean(selectedAwsConnection),
-    hasSelectedProject: Boolean(selectedProject),
-    loadState,
-    recovery: awsConnectionRecovery,
-    scanState,
-    selectedResourceTypeCount: selectedResourceTypes.length
-  });
-  const boardCandidates = useMemo(() => {
-    if (!scanResponse?.result) {
-      return [];
-    }
+  // 상세 창 열기도 같은 callback으로 유지해 보조 패널의 버튼 상태를 예측 가능하게 만듭니다.
+  const openDetails = useCallback(() => {
+    setDetailsOpen(true);
+  }, []);
 
-    return createReverseEngineeringBoardCandidates(scanResponse.result);
-  }, [scanResponse]);
-  const selectedCandidate =
-    boardCandidates.find((candidate) => candidate.id === selectedCandidateId) ??
-    boardCandidates[0] ??
-    null;
-  const selectedCandidateResult = useMemo(() => {
-    if (!scanResponse?.result || !selectedCandidate) {
-      return null;
-    }
+  // 기존 보드 적용 확인 창을 취소할 때만 닫아 저장 요청과 섞이지 않게 합니다.
+  const closeApplyConfirmation = useCallback(() => {
+    setApplyConfirmationOpen(false);
+  }, []);
 
-    return createReverseEngineeringCandidateResult(scanResponse.result, selectedCandidate);
-  }, [scanResponse, selectedCandidate]);
-  const selectedCandidateResponse =
-    scanResponse && selectedCandidateResult
-      ? {
-          ...scanResponse,
-          result: selectedCandidateResult
-        }
-      : null;
-  // 후보 미리보기를 띄워도 원래 보드 기준이 흔들리지 않게 별도로 보관합니다.
-  const previewSourceDiagram = previewBase?.sourceDiagram ?? context.diagram;
-  const originalCandidateApplication = useMemo(() => {
-    if (!selectedCandidateResult) {
-      return null;
-    }
-
-    return createReverseEngineeringBoardApplication({
-      currentDiagram: previewSourceDiagram,
-      mode: "replace",
-      placement: "original",
-      result: selectedCandidateResult
-    });
-  }, [previewSourceDiagram, selectedCandidateResult]);
-  const originalCandidateAppendApplication = useMemo(() => {
-    if (!selectedCandidateResult || previewSourceDiagram.nodes.length === 0) {
-      return null;
-    }
-
-    return createReverseEngineeringBoardApplication({
-      currentDiagram: previewSourceDiagram,
-      mode: "append",
-      placement: "original",
-      result: selectedCandidateResult
-    });
-  }, [previewSourceDiagram, selectedCandidateResult]);
-  const activeOrganizedPreview =
-    applicationMode === "append"
-      ? (organizedDiagrams?.append ?? null)
-      : (organizedDiagrams?.replace ?? null);
-  const activeOrganizedDiagram = activeOrganizedPreview?.diagram ?? null;
-  const originalApplication =
-    applicationMode === "append"
-      ? originalCandidateAppendApplication
-      : originalCandidateApplication;
-  const selectedCandidateApplication = useMemo(() => {
-    if (!selectedCandidateResult || !originalApplication) {
-      return null;
-    }
-
-    if (placement === "original") {
-      return originalApplication;
-    }
-
-    if (!activeOrganizedDiagram) {
-      return null;
-    }
-
-    return createReverseEngineeringBoardApplication({
-      currentDiagram: previewSourceDiagram,
-      mode: applicationMode,
-      organizedDiagram: activeOrganizedDiagram,
-      placement: "compiled",
-      result: selectedCandidateResult
-    });
-  }, [
-    applicationMode,
-    originalApplication,
-    placement,
-    previewSourceDiagram,
-    selectedCandidateResult,
-    activeOrganizedDiagram
-  ]);
-  const comparison = selectedCandidateApplication?.comparison ?? null;
-  const hasDeletedSourceScan = useMemo(
-    () => hasDeletedReverseEngineeringSourceScan(context.diagram, scanHistory, scanHistoryState),
-    [context.diagram, scanHistory, scanHistoryState]
-  );
-  const selectBoardCandidate = useCallback(
-    (candidateId: string): void => {
-      const result = scanResponse?.result;
-      const candidate = boardCandidates.find((item) => item.id === candidateId);
-
-      if (!result || !candidate) {
-        return;
-      }
-
-      const candidateResult = createReverseEngineeringCandidateResult(result, candidate);
-      const application = createReverseEngineeringBoardApplication({
-        currentDiagram: previewSourceDiagram,
-        mode: "replace",
-        placement: "original",
-        result: candidateResult
-      });
-
-      setPlacement("original");
-      setApplicationMode("replace");
-      setOrganizedDiagrams(null);
-      setSelectedCandidateId(candidateId);
-      context.setPreviewDiagram(application.previewDiagram);
-    },
-    [boardCandidates, context, previewSourceDiagram, scanResponse?.result]
-  );
-
+  // DiagramEditor가 만든 가운데 slot을 client mount 뒤에 찾아 같은 workflow state를 렌더합니다.
   useEffect(() => {
-    onCandidatePanelChange?.({
-      candidates: boardCandidates,
-      hasScanResult: Boolean(scanResponse?.result),
-      onCandidateSelect: selectBoardCandidate,
-      selectedCandidateId: selectedCandidate?.id ?? null
-    });
-  }, [
-    boardCandidates,
-    onCandidatePanelChange,
-    scanResponse?.result,
-    selectBoardCandidate,
-    selectedCandidate?.id
-  ]);
+    setSlotsReady(true);
+  }, []);
 
-  // gg: Reverse 시작 화면을 떠날 때 중앙 카드가 오래된 AWS 연결 상태를 계속 보이지 않게 지웁니다.
-  useEffect(
-    () => () => {
-      onInitialScanActionChange?.(null);
-    },
-    [onInitialScanActionChange]
-  );
-
-  // 사용자가 가져올 AWS 리소스 종류를 켜고 끕니다.
-  function toggleResourceType(resourceType: ReverseEngineeringResourceSelection): void {
-    setSelectedResourceTypes((currentResourceTypes) =>
-      getNextReverseEngineeringResourceSelections(currentResourceTypes, resourceType)
-    );
-  }
-
-  // 스캔 직후에는 가장 앞의 후보를 기본 미리보기로 보여줍니다.
-  const showFirstCandidatePreview = useCallback(
-    (result: ReverseEngineeringScanResult, baseDiagram: DiagramJson): void => {
-      const nextCandidates = createReverseEngineeringBoardCandidates(result);
-      const nextCandidate = nextCandidates[0];
-
-      if (!nextCandidate) {
-        setSelectedCandidateId(null);
-        setPreviewBase(null);
-        context.setPreviewDiagram(null);
-        return;
-      }
-
-      const candidateResult = createReverseEngineeringCandidateResult(result, nextCandidate);
-      const application = createReverseEngineeringBoardApplication({
-        currentDiagram: baseDiagram,
-        mode: "replace",
-        placement: "original",
-        result: candidateResult
-      });
-
-      setPlacement("original");
-      setApplicationMode("replace");
-      setOrganizedDiagrams(null);
-      setSelectedCandidateId(nextCandidate.id);
-      context.setPreviewDiagram(application.previewDiagram);
-    },
-    [context]
-  );
-
-  // 사용자가 스캔을 다시 시작하면 이전 미리보기와 적용 메시지를 지웁니다.
-  const runScan = useCallback(async (): Promise<void> => {
-    if (!canStartScan || !selectedAwsConnection) {
-      return;
-    }
-
-    setScanState("loading");
-    setErrorMessage(null);
-    setScanFailure(null);
-    setInitialScanFailure(null);
-    setApplyMessage(null);
-    setApplyState("idle");
-    setPlacement("original");
-    setApplicationMode("replace");
-    setOrganizedDiagrams(null);
-    setSelectedCandidateId(null);
-    setScanResponse(null);
-    setPreviewId(null);
-    setLogs([]);
-    const basePreview = createReverseEngineeringApplyPreview({
-      diagram: context.diagram,
-      draftRevision: createProjectOnApply ? null : context.projectDraftRevision
-    });
-    setPreviewBase(basePreview);
-    context.setPreviewDiagram(createProjectOnApply ? null : basePreview.sourceDiagram);
-
-    try {
-      const response = createProjectOnApply
-        ? await runPreviewScan({
-            awsConnectionId: selectedAwsConnection.id,
-            region: selectedAwsConnection.region,
-            resourceTypes: selectedResourceTypes
-          })
-        : await runSavedScan({
-            awsConnectionId: selectedAwsConnection.id,
-            projectId: targetProjectId,
-            region: selectedAwsConnection.region,
-            resourceTypes: selectedResourceTypes
-          });
-
-      setScanResponse(response.response);
-      setPreviewId(response.previewId);
-      setLogs(response.logs);
-      if (!createProjectOnApply) {
-        rememberCompletedScan(response.response.scan);
-      }
-      if (response.response.result) {
-        showFirstCandidatePreview(response.response.result, basePreview.sourceDiagram);
-        // gg: 완료된 scan은 좁은 화면에서 접혀 있던 결과 패널도 열어 다음 행동을 바로 보여줍니다.
-        context.setRightPanelOpen(true);
-      }
-      setScanState("idle");
-    } catch (error) {
-      setScanState("error");
-      if (createProjectOnApply) {
-        setInitialScanFailure(getReverseEngineeringStartFailure(error));
-        return;
-      }
-
-      setScanFailure(getReverseEngineeringStartFailure(error));
-    }
-  }, [
-    canStartScan,
-    context,
-    createProjectOnApply,
-    rememberCompletedScan,
-    selectedAwsConnection,
-    selectedResourceTypes,
-    showFirstCandidatePreview,
-    targetProjectId
-  ]);
-
-  // gg: 중앙 시작 카드는 선택한 Resource 종류가 바뀌면 최신 스캔 함수를 다시 받습니다.
+  // Workspace 상단 바에 scan 전·중·미리보기 상태를 짧게 반영합니다.
   useEffect(() => {
-    if (!onInitialScanActionChange) {
-      return;
-    }
+    props.onStatusChange?.(status);
+  }, [props.onStatusChange, status]);
 
-    if (!createProjectOnApply || scanResponse?.result) {
-      onInitialScanActionChange(null);
-      return;
-    }
-
-    const optionLoadFailure =
-      loadState === "error"
-        ? {
-            action: "retry" as const,
-            description: "잠시 후 다시 시도해 주세요.",
-            title: "AWS 연결을 확인하지 못했습니다."
-          }
-        : null;
-
-    onInitialScanActionChange({
-      awsConnectionRecovery,
-      canStartScan,
-      failure: initialScanFailure ?? optionLoadFailure,
-      isLoadingOptions: loadState === "loading",
-      isScanning: scanState === "loading",
-      onScanStart: loadState === "error" ? () => void loadOptions() : () => void runScan()
-    });
-  }, [
-    awsConnectionRecovery,
-    canStartScan,
-    createProjectOnApply,
-    initialScanFailure,
-    loadOptions,
-    loadState,
-    onInitialScanActionChange,
-    runScan,
-    scanResponse?.result,
-    scanState
-  ]);
-
-  // 사용자가 실행 중인 scan을 멈추고 싶을 때 서버에 안전한 취소 요청만 보냅니다.
-  async function cancelActiveScan(scanId = activeScanId): Promise<void> {
-    if (!scanId || !targetProjectId) {
-      return;
-    }
-
-    try {
-      const scan = await cancelReverseEngineeringScan({
-        projectId: targetProjectId,
-        scanId
-      });
-
-      rememberCompletedScan(scan);
-      setApplyMessage("취소 요청을 보냈습니다. 현재 단계가 끝나면 scan이 중단됩니다.");
-    } catch (error) {
-      setErrorMessage(toErrorMessage(error));
-    }
-  }
-
-  // scan 원본 기록만 삭제하고, 이미 적용된 보드 상태는 그대로 둡니다.
-  async function deleteSavedScan(scanId: string): Promise<void> {
-    try {
-      await deleteReverseEngineeringScan({
-        projectId: targetProjectId,
-        scanId
-      });
-
-      forgetScan(scanId);
-      if (scanResponse?.scan.id === scanId) {
-        setScanResponse(null);
-        setLogs([]);
-        setSelectedCandidateId(null);
-        setPlacement("original");
-        setApplicationMode("replace");
-        setOrganizedDiagrams(null);
-        setPreviewBase(null);
-        context.setPreviewDiagram(null);
-      }
-    } catch (error) {
-      setErrorMessage(toErrorMessage(error));
-    }
-  }
-
-  // 저장된 스캔 기록을 다시 열고, 보드에는 실제 적용이 아닌 미리보기만 띄웁니다.
-  async function openHistoricalScan(scanId: string): Promise<void> {
-    setScanState("loading");
-    setErrorMessage(null);
-    setApplyMessage(null);
-    setApplyState("idle");
-    setPlacement("original");
-    setApplicationMode("replace");
-    setOrganizedDiagrams(null);
-    const basePreview = createReverseEngineeringApplyPreview({
-      diagram: context.diagram,
-      draftRevision: createProjectOnApply ? null : context.projectDraftRevision
-    });
-    setPreviewBase(basePreview);
-
-    try {
-      const response = await getReverseEngineeringScan({
-        projectId: targetProjectId,
-        scanId
-      });
-      const nextLogs = await listReverseEngineeringScanLogs({
-        projectId: targetProjectId,
-        scanId
-      });
-
-      setScanResponse(response);
-      setActiveScanId(response.scan.id);
-      setLogs(nextLogs);
-      if (response.result) {
-        showFirstCandidatePreview(response.result, basePreview.sourceDiagram);
-      } else {
-        setSelectedCandidateId(null);
-        setPreviewBase(null);
-        context.setPreviewDiagram(null);
-      }
-      setScanState("idle");
-    } catch (error) {
-      setScanState("error");
-      setErrorMessage(toErrorMessage(error));
-    }
-  }
-
-  // 사용자가 명시적으로 고른 방식으로만 스캔 후보를 실제 보드에 반영합니다.
-  async function applyScanResult(mode: ReverseEngineeringBoardApplicationMode): Promise<void> {
-    const result = selectedCandidateResult;
-
-    if (!result || applyState === "saving") {
-      return;
-    }
-
-    if (result.architectureJson.nodes.length === 0) {
-      setApplyState("error");
-      setApplyMessage("보드에 표시할 항목이 없어요. 다시 스캔해 주세요.");
-      return;
-    }
-
-    if (mode !== applicationMode) {
-      setApplyState("error");
-      setApplyMessage("먼저 적용할 방식을 선택해 실제 배치를 미리봐 주세요.");
-      return;
-    }
-
-    const application = selectedCandidateApplication;
-
-    if (!application) {
-      return;
-    }
-    const importDecision = createObserveOnlyReverseEngineeringImportDecision();
-    const diagramToApply = attachReverseEngineeringSourceToDiagram({
-      diagram: application.diagram,
-      sourceScanId: result.scan.id,
-      draftId: result.reverseEngineeringDraft.id,
-      sourceNodeIds: application.sourceOwnership.nodeIds,
-      sourceKind: createProjectOnApply ? "preview_scan" : "saved_scan"
-    });
-
-    setApplyState("saving");
-    setApplyMessage(null);
-
-    if (createProjectOnApply) {
-      if (!previewId) {
-        setApplyState("error");
-        setApplyMessage("적용할 AWS 미리보기를 찾지 못했습니다. 다시 가져와 주세요.");
-        return;
-      }
-
-      let targetProject: Project;
-
-      try {
-        const created = await createReverseEngineeringProject({
-          name: projectName,
-          diagramJson: diagramToApply,
-          reverseEngineering: {
-            previewId,
-            draftId: result.reverseEngineeringDraft.id,
-            sourceNodeIds: [...application.sourceOwnership.nodeIds],
-            importDecision
-          },
-          architectureJson: convertReverseEngineeringBoardToArchitectureJson(
-            diagramToApply,
-            result,
-            application.sourceOwnership
-          )
-        });
-        targetProject = created.project;
-      } catch (error) {
-        setApplyState("error");
-        setApplyMessage(toErrorMessage(error));
-        return;
-      }
-
-      context.applyDiagramJson(diagramToApply);
-      setPreviewId(null);
-      setPreviewBase(null);
-      setApplyState("saved");
-      setApplyMessage("프로젝트를 만들고 선택한 후보를 보드에 저장했습니다.");
-      void invalidateProjectQueries(queryClient, user?.id).catch(() => undefined);
-      router.push(createWorkspaceProjectUrl(targetProject, "reverse"));
-      return;
-    }
-
-    if (!context.persistAndApplyReverseEngineeringDraft) {
-      setApplyState("error");
-      setApplyMessage(
-        "Reverse Engineering 서버 검증이 준비되지 않았습니다. 잠시 후 다시 시도해 주세요."
-      );
-      return;
-    }
-
-    if (!previewBase) {
-      setApplyState("error");
-      setApplyMessage("적용할 Reverse Engineering 미리보기를 찾지 못했습니다.");
-      return;
-    }
-
-    try {
-      const outcome = await applyExistingReverseEngineeringPreview({
-        currentDiagram: context.diagram,
-        currentDraftRevision: context.projectDraftRevision,
-        diagramToApply,
-        persistAndApply: (diagram, expectedRevision) =>
-          context.persistAndApplyReverseEngineeringDraft?.({
-            expectedRevision,
-            sourceScanId: result.scan.id,
-            sourceDraftId: result.reverseEngineeringDraft.id,
-            sourceNodeIds: [...application.sourceOwnership.nodeIds],
-            sourceEdgeIds: [...application.sourceOwnership.edgeIds],
-            sourceDiagram: previewBase.sourceDiagram,
-            sourceFingerprint: previewBase.sourceFingerprint,
-            candidateDiagram: diagram,
-            candidateArchitectureJson: convertReverseEngineeringBoardToArchitectureJson(
-              diagram,
-              result,
-              application.sourceOwnership
-            ),
-            importDecision
-          }) ??
-          Promise.reject(new Error("Reverse Engineering 서버 검증 경계가 준비되지 않았습니다.")),
-        preview: previewBase,
-        saveSnapshot: async () => {
-          await createArchitectureSnapshot({
-            projectId,
-            source: "imported",
-            reverseEngineering: {
-              sourceScanId: result.scan.id,
-              draftId: result.reverseEngineeringDraft.id,
-              sourceNodeIds: [...application.sourceOwnership.nodeIds],
-              sourceKind: "saved_scan"
-            },
-            architectureJson: convertReverseEngineeringBoardToArchitectureJson(
-              diagramToApply,
-              result,
-              application.sourceOwnership
-            )
-          });
-        }
-      });
-
-      if (outcome.status === "stale") {
-        setApplyState("error");
-        setApplyMessage("보드가 변경되었습니다. 다시 스캔해 주세요.");
-        return;
-      }
-
-      setPreviewBase(null);
-
-      if (outcome.status === "saved_without_snapshot") {
-        setApplyState("partial");
-        setApplyMessage(
-          "보드는 저장했습니다. imported Architecture Snapshot은 저장하지 못했습니다. 저장된 보드는 그대로 유지됩니다."
-        );
-        return;
-      }
-
-      setApplyState("saved");
-      setApplyMessage("보드에 반영했고, imported Architecture Snapshot도 저장했습니다.");
-    } catch (error) {
-      setApplyState("error");
-      setApplyMessage(toErrorMessage(error));
-    }
-  }
-
-  // replace와 append를 바꾸면 실제로 저장될 mode의 원본 또는 정리본을 Board에 다시 보여줍니다.
-  function previewApplicationMode(mode: ReverseEngineeringBoardApplicationMode): void {
-    const nextOriginalApplication =
-      mode === "append" ? originalCandidateAppendApplication : originalCandidateApplication;
-
-    if (!nextOriginalApplication || !selectedCandidateResult) {
-      return;
-    }
-
-    setApplicationMode(mode);
-    setApplyState("idle");
-    setApplyMessage(null);
-
-    if (placement === "original") {
-      context.setPreviewDiagram(nextOriginalApplication.previewDiagram);
-      return;
-    }
-
-    const organizedPreview =
-      mode === "append"
-        ? (organizedDiagrams?.append ?? null)
-        : (organizedDiagrams?.replace ?? null);
-
-    if (!organizedPreview) {
-      setPlacement("original");
-      context.setPreviewDiagram(nextOriginalApplication.previewDiagram);
-      return;
-    }
-
-    const application = createReverseEngineeringBoardApplication({
-      currentDiagram: previewSourceDiagram,
-      mode,
-      organizedDiagram: organizedPreview.diagram,
-      placement: "compiled",
-      result: selectedCandidateResult
-    });
-
-    context.setPreviewDiagram(application.previewDiagram);
-  }
-
-  // gg: Compiler 내부 후보 중 rank-1만 UI 경계 밖으로 꺼내 하나의 정리본으로 미리봅니다.
-  function previewAutomaticOrganization(): void {
-    if (!originalCandidateApplication || !selectedCandidateResponse?.result) {
-      return;
-    }
-
-    const replaceCandidateSet = createBoardAutoOrganizeCandidates(
-      originalCandidateApplication.diagram,
-      convertReverseEngineeringBoardToArchitectureJson(
-        originalCandidateApplication.diagram,
-        selectedCandidateResponse.result,
-        originalCandidateApplication.sourceOwnership
+  // slot이 없어도 오른쪽 패널 기능은 정상 동작하게 가운데 시작 portal만 조건부로 만듭니다.
+  const startCardPortal = areSlotsReady && !result
+    ? createReverseEngineeringPortal(
+        <ReverseEngineeringStartState workflow={workflow} />,
+        "reverse-engineering-empty-slot"
       )
-    );
-    const appendCandidateSet = originalCandidateAppendApplication
-      ? createBoardAutoOrganizeCandidates(
-          originalCandidateAppendApplication.diagram,
-          convertReverseEngineeringBoardToArchitectureJson(
-            originalCandidateAppendApplication.diagram,
-            selectedCandidateResponse.result,
-            originalCandidateAppendApplication.sourceOwnership
-          )
-        )
-      : null;
-    const replaceCandidate = replaceCandidateSet.candidates[0] ?? null;
-    const appendCandidate = appendCandidateSet?.candidates[0] ?? null;
+    : null;
 
-    if (!replaceCandidate) {
-      setApplyState("error");
-      setApplyMessage("정리본을 만들지 못했어요.");
+  // 새 프로젝트는 사용자의 보드 적용 클릭 자체가 생성 확인이며, 기존 프로젝트만 교체/추가 확인을 한 번 더 받습니다.
+  function requestApply(): void {
+    if (!workflow.canApply) {
       return;
     }
 
-    const nextOrganizedDiagrams: ReverseEngineeringOrganizedDiagrams = {
-      append:
-        appendCandidate && originalCandidateAppendApplication
-          ? {
-              diagram: structuredClone(appendCandidate.diagram),
-              layoutSummary: createReverseEngineeringLayoutSummary(
-                originalCandidateAppendApplication.diagram,
-                appendCandidate
-              )
-            }
-          : null,
-      replace: {
-        diagram: structuredClone(replaceCandidate.diagram),
-        layoutSummary: createReverseEngineeringLayoutSummary(
-          originalCandidateApplication.diagram,
-          replaceCandidate
-        )
-      }
-    };
-    const organizedPreview =
-      applicationMode === "append" ? nextOrganizedDiagrams.append : nextOrganizedDiagrams.replace;
-
-    if (!organizedPreview) {
-      setApplyState("error");
-      setApplyMessage("현재 적용 방식의 정리본을 만들지 못했어요.");
+    if (props.createProjectOnApply) {
+      void workflow.applyScanResult(workflow.applicationMode);
       return;
     }
 
-    setApplyState("idle");
-    setApplyMessage(null);
-    setOrganizedDiagrams(nextOrganizedDiagrams);
-    setPlacement("compiled");
-    context.setPreviewDiagram(organizedPreview.diagram);
+    setApplyConfirmationOpen(true);
   }
 
-  // gg: 원본 보기는 만들어 둔 정리본을 버리거나 저장하지 않고 source-exact 미리보기로 돌아갑니다.
-  function previewOriginalPlacement(): void {
-    if (!originalApplication) {
-      return;
-    }
-
-    setPlacement("original");
-    context.setPreviewDiagram(originalApplication.previewDiagram);
+  // 기존 프로젝트의 실제 저장 호출은 확인 Modal에서만 수행합니다.
+  function confirmApply(): void {
+    closeApplyConfirmation();
+    void workflow.applyScanResult(workflow.applicationMode);
   }
 
   return (
-    <section className={styles.panel} aria-label="Reverse Engineering">
-      <div className={styles.panelContent}>
-        <ReverseEngineeringScanCriteriaForm
-          awsConnectionRecovery={awsConnectionRecovery}
-          awsConnections={awsConnections}
-          canStartScan={canStartScan}
-          createProjectOnApply={createProjectOnApply}
-          isLoadingOptions={loadState === "loading"}
-          isScanning={scanState === "loading"}
-          onRefresh={() => void loadOptions()}
-          onResourceTypeToggle={toggleResourceType}
-          onScanCancel={() => void cancelActiveScan()}
-          onScanStart={() => void runScan()}
-          onSelectedAwsConnectionChange={setSelectedAwsConnectionId}
-          projects={projects}
-          resourceTypes={REVERSE_ENGINEERING_RESOURCE_SELECTIONS}
-          selectedAwsConnectionId={resolvedSelectedAwsConnectionId}
-          selectedProjectId={targetProjectId}
-          selectedResourceTypes={selectedResourceTypes}
+    <>
+      {startCardPortal}
+      <ReverseEngineeringRightPanel
+        createProjectOnApply={props.createProjectOnApply ?? false}
+        isDetailsOpen={isDetailsOpen}
+        onOpenDetails={openDetails}
+        onRequestApply={requestApply}
+        workflow={workflow}
+      />
+      {selectedResponse ? (
+        <ReverseEngineeringDetailsDialog
+          isOpen={isDetailsOpen}
+          onClose={closeDetails}
+          response={selectedResponse}
+          settingsHref={workflow.resultSettingsHref}
         />
-        {scanFailure && !createProjectOnApply ? (
-          <div className={styles.error} role="status">
-            <strong>{scanFailure.title}</strong>
-            <p>{scanFailure.description}</p>
-            {scanFailure.action === "open_settings" ? (
-              <button
-                className={styles.secondaryButton}
-                onClick={() =>
-                  router.push(
-                    createReverseEngineeringAwsSettingsHref(selectedAwsConnection?.id ?? null)
-                  )
-                }
-                type="button"
-              >
-                환경 설정으로 이동
-              </button>
-            ) : null}
-            <button className={styles.secondaryButton} onClick={() => void runScan()} type="button">
-              다시 시도
-            </button>
-          </div>
-        ) : null}
-        {errorMessage && !createProjectOnApply ? (
-          <p className={styles.error}>{errorMessage}</p>
-        ) : null}
-        {hasDeletedSourceScan ? (
-          <p className={styles.warning}>
-            이 보드는 Reverse Engineering scan에서 시작됐습니다. 하지만 원본 scan 기록은
-            삭제됐습니다.
-          </p>
-        ) : null}
+      ) : null}
+      <ReverseEngineeringApplyConfirmationDialog
+        applicationMode={workflow.applicationMode}
+        isOpen={isApplyConfirmationOpen}
+        isSaving={workflow.applyState === "saving"}
+        onCancel={closeApplyConfirmation}
+        onConfirm={confirmApply}
+      />
+    </>
+  );
+}
 
-        {createProjectOnApply ? null : (
-          <ReverseEngineeringScanHistoryPanel
-            activeScanId={activeScanId}
-            canRescan={canStartScan}
-            isLoading={scanHistoryState === "loading" || scanState === "loading"}
-            isStaleResult={isStaleScanResult}
-            onCancelScan={(scanId) => void cancelActiveScan(scanId)}
-            onDeleteScan={(scanId) => void deleteSavedScan(scanId)}
-            onOpenScan={(scanId) => void openHistoricalScan(scanId)}
-            onRescan={() => void runScan()}
-            scans={scanHistory}
-          />
-        )}
+/** 빈 보드 중앙은 AWS 연결 상태에 따라 스캔 시작 또는 설정 복구만 안내합니다. */
+function ReverseEngineeringStartState({
+  workflow
+}: {
+  readonly workflow: ReverseEngineeringWorkflow;
+}) {
+  const recoveryNeeded = workflow.awsConnectionRecovery.readiness !== "ready";
+  const isScanning = workflow.scanState === "loading";
 
-        {selectedCandidateResponse?.result &&
-        comparison &&
-        selectedCandidate &&
-        selectedCandidateApplication ? (
-          <ReverseEngineeringResultPanel
-            applyMessage={applyMessage}
-            applicationMode={applicationMode}
-            applyState={applyState}
-            boardCandidates={boardCandidates}
-            comparison={comparison}
-            createProjectOnApply={createProjectOnApply}
-            hasCurrentBoardResources={previewSourceDiagram.nodes.length > 0}
-            logs={logs}
-            layoutSummary={
-              placement === "compiled" ? (activeOrganizedPreview?.layoutSummary ?? []) : []
-            }
-            onAppendToCurrentBoard={() => void applyScanResult("append")}
-            onApplicationModeChange={previewApplicationMode}
-            onCompilePlacement={previewAutomaticOrganization}
-            onKeepOriginalPlacement={previewOriginalPlacement}
-            onReplaceCurrentBoard={() => void applyScanResult("replace")}
-            onRetryScan={() => void runScan()}
-            permissionRecoveryHref={createReverseEngineeringAwsSettingsHref(
-              selectedCandidateResponse.scan.awsConnectionId
-            )}
-            response={selectedCandidateResponse}
-            selectedCandidateId={selectedCandidate.id}
-            placement={placement}
-          />
-        ) : !createProjectOnApply ? (
-          <section className={styles.section}>
-            <h3>결과</h3>
-            <p className={styles.sectionDescription}>
-              스캔이 끝나면 Resource 개수와 적용 구조를 확인할 수 있습니다.
-            </p>
-          </section>
+  // 빈 보드의 시작 행동은 scan만 요청하며 프로젝트나 보드에는 쓰지 않습니다.
+  function handleScanStart(): void {
+    void workflow.runScan();
+  }
+
+  return (
+    <section aria-busy={isScanning} aria-label="기존 AWS 가져오기" className={styles.startCard}>
+      <p className={styles.eyebrow}>Reverse Engineering</p>
+      <h2>AWS 구조 살펴보기</h2>
+      <p>연결된 AWS 환경을 읽어 현재 구조를 한눈에 확인하세요.</p>
+      {isScanning ? (
+        <div className={styles.scanProgress} role="status">
+          <LoaderCircle aria-hidden="true" className={styles.inlineSpinner} size={18} />
+          <strong>AWS 구조를 읽는 중입니다.</strong>
+          <span>리소스와 연결 관계를 준비하고 있습니다.</span>
+        </div>
+      ) : recoveryNeeded ? (
+        <div className={styles.warningNotice} role="status">
+          <strong>{workflow.awsConnectionRecovery.title}</strong>
+          <p>{workflow.awsConnectionRecovery.description}</p>
+        </div>
+      ) : workflow.scanFailure ? (
+        <div className={styles.errorNotice} role="alert">
+          <strong>{workflow.scanFailure.title}</strong>
+          <p>{workflow.scanFailure.description}</p>
+        </div>
+      ) : null}
+      <div className={styles.startCardActions}>
+        {recoveryNeeded || workflow.scanFailure?.action === "open_settings" ? (
+          <a className={styles.primaryButton} href={workflow.settingsHref}>
+            AWS 연결 설정
+          </a>
         ) : null}
+        <button
+          className={recoveryNeeded ? styles.secondaryButton : styles.primaryButton}
+          disabled={!workflow.canStartScan || isScanning}
+          onClick={handleScanStart}
+          type="button"
+        >
+          {isScanning ? <LoaderCircle aria-hidden="true" className={styles.inlineSpinner} size={16} /> : null}
+          {workflow.scanFailure ? "다시 시도" : isScanning ? "AWS 구조를 읽는 중…" : "기존 AWS 가져오기"}
+        </button>
       </div>
     </section>
   );
 }
 
-type ReverseEngineeringRunInput = {
-  readonly awsConnectionId: string;
-  readonly projectId?: string | undefined;
-  readonly region: string;
-  readonly resourceTypes: ReverseEngineeringResourceSelection[];
-};
+/** 오른쪽 패널은 설정과 결과의 핵심 행동만 보여 주고 긴 원본 정보는 Modal로 보냅니다. */
+function ReverseEngineeringRightPanel({
+  createProjectOnApply,
+  isDetailsOpen,
+  onOpenDetails,
+  onRequestApply,
+  workflow
+}: {
+  readonly createProjectOnApply: boolean;
+  readonly isDetailsOpen: boolean;
+  readonly onOpenDetails: () => void;
+  readonly onRequestApply: () => void;
+  readonly workflow: ReverseEngineeringWorkflow;
+}) {
+  const result = workflow.selectedCandidateResponse?.result ?? null;
+  const isScanning = workflow.scanState === "loading";
+  const hasRecoveryAction = workflow.awsConnectionRecovery.readiness !== "ready";
+  const partialScanNotice = result ? getReverseEngineeringPartialScanNotice(result) : null;
 
-type ReverseEngineeringRunOutput = {
-  readonly logs: ReverseEngineeringScanLogLine[];
-  readonly previewId: string | null;
-  readonly response: ReverseEngineeringScanResponse;
-};
+  return (
+    <aside aria-label="Reverse Engineering 설정과 결과" className={styles.rightPanel}>
+      <header className={styles.panelHeader}>
+        <p className={styles.eyebrow}>Reverse Engineering</p>
+        <h2>{result ? "미리보기" : "스캔 설정"}</h2>
+        {result ? <p>AWS에서 읽은 구조를 저장 전 미리보고 있습니다.</p> : null}
+      </header>
 
-// 새 프로젝트 시작에서는 프로젝트를 만들기 전에 AWS만 읽어서 미리보기 결과를 받습니다.
-async function runPreviewScan({
-  awsConnectionId,
-  region,
-  resourceTypes
-}: ReverseEngineeringRunInput): Promise<ReverseEngineeringRunOutput> {
-  const { previewId, ...response } = await createReverseEngineeringPreviewScan({
-    awsConnectionId,
-    region,
-    resourceTypes
-  });
+      <ReverseEngineeringScanSettings createProjectOnApply={createProjectOnApply} workflow={workflow} />
 
-  return {
-    logs: [],
-    previewId,
-    response
-  };
+      {isScanning ? (
+        <section className={styles.section} aria-live="polite">
+          <div className={styles.scanProgress} role="status">
+            <LoaderCircle aria-hidden="true" className={styles.inlineSpinner} size={18} />
+            <strong>AWS 구조를 읽는 중입니다.</strong>
+            <span>현재 처리 단계: 리소스 목록과 연결 관계를 확인하고 있습니다.</span>
+          </div>
+          {!createProjectOnApply ? (
+            <button
+              className={styles.secondaryButton}
+              disabled={!workflow.activeScanId}
+              onClick={() => void workflow.cancelActiveScan()}
+              type="button"
+            >
+              스캔 취소
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
+      {workflow.scanFailure ? (
+        <section className={styles.section}>
+          <div className={styles.errorNotice} role="alert">
+            <strong>{workflow.scanFailure.title}</strong>
+            <p>{workflow.scanFailure.description}</p>
+          </div>
+          <div className={styles.previewActions}>
+            {workflow.scanFailure.action === "open_settings" ? (
+              <a className={styles.secondaryButton} href={workflow.settingsHref}>
+                환경설정으로 이동
+              </a>
+            ) : null}
+            <button className={styles.secondaryButton} disabled={!workflow.canStartScan} onClick={() => void workflow.runScan()} type="button">
+              다시 시도
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {workflow.errorMessage && !workflow.scanFailure ? (
+        <section className={styles.section}>
+          <div className={styles.errorNotice} role="alert">
+            <strong>AWS 스캔을 계속하지 못했습니다.</strong>
+            <p>연결과 권한을 확인한 뒤 다시 시도해 주세요.</p>
+          </div>
+          {hasRecoveryAction ? <a className={styles.secondaryButton} href={workflow.settingsHref}>환경설정으로 이동</a> : null}
+        </section>
+      ) : null}
+
+      {result ? (
+        <ReverseEngineeringPreviewActions
+          partialScanNotice={partialScanNotice}
+          isDetailsOpen={isDetailsOpen}
+          onOpenDetails={onOpenDetails}
+          onRequestApply={onRequestApply}
+          workflow={workflow}
+        />
+      ) : null}
+
+      {!createProjectOnApply ? <ReverseEngineeringScanHistory workflow={workflow} /> : null}
+    </aside>
+  );
 }
 
-// 이미 있는 프로젝트에서는 scan 기록과 log를 서버에 남기는 기존 흐름을 사용합니다.
-async function runSavedScan({
-  awsConnectionId,
-  projectId,
-  region,
-  resourceTypes
-}: ReverseEngineeringRunInput): Promise<ReverseEngineeringRunOutput> {
-  if (!projectId) {
-    throw new Error("프로젝트를 찾지 못했습니다.");
+/** 설정 영역은 스캔 시작 전의 로컬 선택만 바꾸며 API 요청을 만들지 않습니다. */
+function ReverseEngineeringScanSettings({
+  createProjectOnApply,
+  workflow
+}: {
+  readonly createProjectOnApply: boolean;
+  readonly workflow: ReverseEngineeringWorkflow;
+}) {
+  const selectedRegion = workflow.selectedRegion || workflow.selectedAwsConnection?.region || "ap-northeast-2";
+  // 연결이 검증한 리전만 선택지로 남겨 API 계약 밖의 임의 리전을 보낼 수 없게 합니다.
+  const regions = [selectedRegion];
+  const extraSelections = REVERSE_ENGINEERING_RESOURCE_SELECTIONS.filter(
+    (selection) => !PRIMARY_RESOURCE_SELECTIONS.includes(selection as (typeof PRIMARY_RESOURCE_SELECTIONS)[number])
+  );
+
+  // 리소스 범위 선택은 hook의 기존 reader-family 정규화를 그대로 씁니다.
+  function toggleResourceSelection(resourceType: ReverseEngineeringResourceSelection): void {
+    workflow.toggleResourceType(resourceType);
   }
 
-  const startedResponse = await createReverseEngineeringScan({
-    projectId,
-    awsConnectionId,
-    region,
-    resourceTypes
-  });
-  const response =
-    startedResponse.result ||
-    startedResponse.scan.status === "failed" ||
-    startedResponse.scan.status === "cancelled"
-      ? startedResponse
-      : await pollReverseEngineeringScan(projectId, startedResponse.scan.id);
-  const logs = await listReverseEngineeringScanLogs({
-    projectId,
-    scanId: response.scan.id
-  });
+  return (
+    <section className={styles.section}>
+        <details open>
+          <summary className={styles.advancedSummary}>고급 설정</summary>
+          <div className={styles.advancedBody}>
+            <label className={styles.field}>
+              <span>AWS 연결</span>
+              <select
+                disabled={workflow.loadState === "loading" || workflow.awsConnections.length === 0 || workflow.scanState === "loading"}
+                onChange={(event) => workflow.setSelectedAwsConnectionId(event.currentTarget.value)}
+                value={workflow.resolvedSelectedAwsConnectionId}
+              >
+                {workflow.awsConnections.length === 0 ? <option value="">AWS 연결 없음</option> : null}
+                {workflow.awsConnections.map((connection) => (
+                  <option key={connection.id} value={connection.id}>
+                    {formatAwsConnectionLabel(connection)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={styles.field}>
+              <span>리전</span>
+              <select
+                disabled={!workflow.selectedAwsConnection || workflow.scanState === "loading"}
+                onChange={(event) => workflow.setSelectedRegion(event.currentTarget.value)}
+                value={selectedRegion}
+              >
+                {regions.map((region) => <option key={region} value={region}>{region}</option>)}
+              </select>
+            </label>
+            <fieldset className={styles.field}>
+              <legend>리소스 범위</legend>
+              <div className={styles.scopeGrid}>
+                {PRIMARY_RESOURCE_SELECTIONS.map((selection) => (
+                  <ResourceScopeToggle
+                    key={selection}
+                    onToggle={toggleResourceSelection}
+                    selectedResourceTypes={workflow.selectedResourceTypes}
+                    selection={selection}
+                  />
+                ))}
+              </div>
+              <details className={styles.allScopeDetails}>
+                <summary>현재 지원하는 리소스 종류 모두 보기</summary>
+                <div className={styles.scopeGrid}>
+                  {extraSelections.map((selection) => (
+                    <ResourceScopeToggle
+                      key={selection}
+                      onToggle={toggleResourceSelection}
+                      selectedResourceTypes={workflow.selectedResourceTypes}
+                      selection={selection}
+                    />
+                  ))}
+                </div>
+              </details>
+            </fieldset>
+          </div>
+        </details>
 
-  return {
-    logs,
-    previewId: null,
-    response
-  };
+        {workflow.awsConnectionRecovery.readiness !== "ready" ? (
+          <div className={styles.warningNotice} role="status">
+            <strong>{workflow.awsConnectionRecovery.title}</strong>
+            <p>{workflow.awsConnectionRecovery.description}</p>
+            <a className={styles.secondaryButton} href={workflow.awsConnectionRecovery.settingsHref}>
+              {workflow.awsConnectionRecovery.actionLabel}
+            </a>
+          </div>
+        ) : null}
+
+        {!createProjectOnApply && workflow.loadState === "error" ? (
+          <button className={styles.secondaryButton} onClick={() => void workflow.loadOptions()} type="button">
+            연결 다시 불러오기
+          </button>
+        ) : null}
+
+    </section>
+  );
 }
 
-// 알 수 없는 오류도 화면에 보여줄 수 있는 문장으로 바꿉니다.
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "요청을 처리하지 못했습니다.";
+/** 범위 toggle은 화면 라벨만 바꾸고 실제 API 타입은 기존 selection contract로 넘깁니다. */
+function ResourceScopeToggle({
+  onToggle,
+  selectedResourceTypes,
+  selection
+}: {
+  readonly onToggle: (selection: ReverseEngineeringResourceSelection) => void;
+  readonly selectedResourceTypes: readonly ReverseEngineeringResourceSelection[];
+  readonly selection: ReverseEngineeringResourceSelection;
+}) {
+  const checked = isReverseEngineeringResourceSelectionChecked(selectedResourceTypes, selection);
+
+  return (
+    <label className={styles.scopeToggle}>
+      <input checked={checked} onChange={() => onToggle(selection)} type="checkbox" />
+      {formatResourceSelectionLabel(selection)}
+    </label>
+  );
 }
 
-// scan 시작 API는 scanId만 먼저 주기 때문에, 완료 결과가 생길 때까지 상태 조회를 반복합니다.
-async function pollReverseEngineeringScan(
-  projectId: string,
-  scanId: string
-): Promise<ReverseEngineeringScanResponse> {
-  for (let attempt = 0; attempt < SCAN_POLL_ATTEMPT_COUNT; attempt += 1) {
-    const response = await getReverseEngineeringScan({ projectId, scanId });
+/** 스캔 완료 뒤 오른쪽에는 구조 요약과 다음 행동만 간결하게 보여 줍니다. */
+function ReverseEngineeringPreviewActions({
+  isDetailsOpen,
+  onOpenDetails,
+  onRequestApply,
+  partialScanNotice,
+  workflow
+}: {
+  readonly isDetailsOpen: boolean;
+  readonly onOpenDetails: () => void;
+  readonly onRequestApply: () => void;
+  readonly partialScanNotice: ReturnType<typeof getReverseEngineeringPartialScanNotice>;
+  readonly workflow: ReverseEngineeringWorkflow;
+}) {
+  const result = workflow.selectedCandidateResponse?.result;
+  if (!result) {
+    return null;
+  }
 
-    if (
-      response.result ||
-      response.scan.status === "failed" ||
-      response.scan.status === "cancelled"
-    ) {
-      return response;
+  const isOrganizing = workflow.organizationState === "loading";
+  const isSaving = workflow.applyState === "saving";
+
+  // 정리는 preview diagram만 바꾸며 저장은 보드 적용 요청까지 미룹니다.
+  function organizePreview(): void {
+    void workflow.previewAutomaticOrganization();
+  }
+
+  return (
+    <section className={styles.resultPanel} aria-label="가져온 구조 요약">
+      <div className={styles.resultHeading}>
+        <div>
+          <p className={styles.eyebrow}>가져온 구조</p>
+          <h2>{workflow.placement === "compiled" ? "정리한 구조" : "AWS에서 읽은 구조"}</h2>
+        </div>
+        <span className={workflow.placement === "compiled" ? styles.statusBadgeSuccess : styles.statusBadge}>
+          {workflow.placement === "compiled" ? "정리됨" : "원본 배치"}
+        </span>
+      </div>
+      <dl className={styles.resultMetrics}>
+        <div>
+          <dt>리소스</dt>
+          <dd>{result.discoveredResources.length}</dd>
+        </div>
+        <div>
+          <dt>연결</dt>
+          <dd>{result.architectureJson.edges.length}</dd>
+        </div>
+      </dl>
+      {partialScanNotice ? (
+        <div className={styles.partialScanStatus} role="status">
+          <CircleAlert aria-hidden="true" size={17} />
+          <div>
+            <strong>일부 항목을 확인하지 못했습니다</strong>
+            <p>가져온 구조는 그대로 확인할 수 있습니다.</p>
+          </div>
+          {partialScanNotice.action === "open_settings" ? (
+            <a className={styles.secondaryButton} href={workflow.resultSettingsHref}>
+              AWS 연결 설정
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+      {workflow.hasCurrentBoardResources ? (
+        <fieldset className={styles.applicationModes}>
+          <legend>기존 보드 적용 방식</legend>
+          <label className={styles.modeChoice}>
+            <input
+              checked={workflow.applicationMode === "replace"}
+              name="reverse-engineering-application-mode"
+              onChange={() => workflow.previewApplicationMode("replace")}
+              type="radio"
+            />
+            <strong>현재 보드 교체</strong>
+            <span>현재 보드를 이 미리보기 구조로 바꿉니다.</span>
+          </label>
+          <label className={styles.modeChoice}>
+            <input
+              checked={workflow.applicationMode === "append"}
+              name="reverse-engineering-application-mode"
+              onChange={() => workflow.previewApplicationMode("append")}
+              type="radio"
+            />
+            <strong>현재 보드에 추가</strong>
+            <span>현재 보드를 유지하고 가져온 구조를 덧붙입니다.</span>
+          </label>
+        </fieldset>
+      ) : null}
+      <div className={styles.previewActions}>
+        <button className={styles.primaryButton} disabled={!workflow.canApply || isSaving} onClick={onRequestApply} type="button">
+          {isSaving ? <LoaderCircle aria-hidden="true" className={styles.inlineSpinner} size={16} /> : null}
+          보드에 적용
+        </button>
+        <button
+          aria-busy={isOrganizing}
+          className={styles.secondaryButton}
+          disabled={isOrganizing || workflow.placement === "compiled"}
+          onClick={organizePreview}
+          type="button"
+        >
+          {isOrganizing ? <LoaderCircle aria-hidden="true" className={styles.inlineSpinner} size={16} /> : null}
+          {isOrganizing ? "정리하는 중…" : "보기 좋게 정리"}
+        </button>
+        {workflow.placement === "compiled" ? (
+          <button className={styles.secondaryButton} onClick={workflow.previewOriginalPlacement} type="button">
+            원본 배치 보기
+          </button>
+        ) : null}
+        <button aria-expanded={isDetailsOpen} className={styles.secondaryButton} onClick={onOpenDetails} type="button">
+          상세 정보
+        </button>
+      </div>
+      {isOrganizing ? (
+        <div aria-live="polite" className={styles.scanProgress} role="status">
+          <LoaderCircle aria-hidden="true" className={styles.inlineSpinner} size={17} />
+          <strong>구조를 보기 좋게 정리하고 있습니다.</strong>
+          <span>리소스가 많으면 잠시 걸릴 수 있습니다.</span>
+        </div>
+      ) : null}
+      {workflow.applyMessage ? (
+        <p
+          className={workflow.applyState === "error" ? styles.errorNotice : workflow.applyState === "partial" ? styles.warningNotice : styles.successNotice}
+          role={workflow.applyState === "error" ? "alert" : "status"}
+        >
+          {workflow.applyMessage}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+/** 기존 프로젝트에서만 서버에 저장된 scan 기록을 별도 보조 영역으로 제공합니다. */
+function ReverseEngineeringScanHistory({ workflow }: { readonly workflow: ReverseEngineeringWorkflow }) {
+  return (
+    <section aria-label="스캔 기록" className={styles.historySection}>
+      <div className={styles.sectionTitle}>
+        <h3>스캔 기록</h3>
+        <button className={styles.textButton} disabled={!workflow.canStartScan} onClick={() => void workflow.runScan()} type="button">
+          다시 스캔
+        </button>
+      </div>
+      {workflow.isStaleScanResult ? (
+        <p className={styles.warningNotice} role="status">이전 스캔 결과입니다. 현재 AWS 상태와 다를 수 있습니다.</p>
+      ) : null}
+      {workflow.hasDeletedSourceScan ? (
+        <p className={styles.warningNotice} role="status">이 보드의 원본 스캔 기록은 삭제되었습니다. 보드는 유지됩니다.</p>
+      ) : null}
+      {workflow.scanHistory.length === 0 ? (
+        <p className={styles.emptyMessage}>아직 저장된 스캔 기록이 없습니다.</p>
+      ) : (
+        <ul className={styles.historyList}>
+          {workflow.scanHistory.slice(0, 8).map((scan) => (
+            <li className={styles.historyItem} key={scan.id}>
+              <strong>{formatSavedScanLabel(scan.status)}</strong>
+              <span>{scan.region} · {formatSavedScanTime(scan.completedAt ?? scan.startedAt ?? scan.createdAt)}</span>
+              <div className={styles.historyActions}>
+                {scan.status === "running" ? (
+                  <button className={styles.secondaryButton} disabled={workflow.isHistoryLoading} onClick={() => void workflow.cancelActiveScan(scan.id)} type="button">취소</button>
+                ) : null}
+                <button className={styles.secondaryButton} disabled={workflow.isHistoryLoading || workflow.activeScanId === scan.id} onClick={() => void workflow.openHistoricalScan(scan.id)} type="button">다시 열기</button>
+                <button className={styles.dangerButton} disabled={workflow.isHistoryLoading} onClick={() => void workflow.deleteSavedScan(scan.id)} type="button">기록 삭제</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className={styles.hint}>기록 삭제는 AWS 리소스 삭제가 아니라 SketchCatch 안의 스캔 기록만 지웁니다.</p>
+    </section>
+  );
+}
+
+/** 기존 보드를 덮거나 추가하기 전 저장 대상과 비실행 성격을 다시 확인합니다. */
+function ReverseEngineeringApplyConfirmationDialog({
+  applicationMode,
+  isOpen,
+  isSaving,
+  onCancel,
+  onConfirm
+}: {
+  readonly applicationMode: "append" | "replace";
+  readonly isOpen: boolean;
+  readonly isSaving: boolean;
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+}) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // 확인 dialog도 Escape·포커스 이동·스크롤 잠금을 동일한 공통 helper로 지킵니다.
+  useEffect(() => {
+    if (!isOpen) {
+      return;
     }
+    const overlay = overlayRef.current;
+    const dialog = dialogRef.current;
+    const closeButton = closeButtonRef.current;
+    if (!overlay || !dialog || !closeButton) {
+      return;
+    }
+    return setupModalAccessibility({ closeButton, dialog, documentRoot: document, onClose: onCancel, overlay });
+  }, [isOpen, onCancel]);
 
-    await delay(SCAN_POLL_INTERVAL_MS);
+  // modal 바깥 클릭은 취소와 같은 동작으로만 처리합니다.
+  function handleBackdropMouseDown(event: ReactMouseEvent<HTMLDivElement>): void {
+    if (event.target === event.currentTarget && !isSaving) {
+      onCancel();
+    }
   }
 
-  throw new Error("스캔 결과를 아직 받지 못했습니다. 잠시 후 스캔 기록에서 다시 열어주세요.");
-}
-
-// scan polling 사이에 잠깐 기다려서 서버에 과하게 요청하지 않게 합니다.
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
-}
-
-// 프로젝트 생성 뒤에는 실제 프로젝트 id가 들어간 workspace 주소로 이동합니다.
-function createWorkspaceProjectUrl(project: Project, startMode: "reverse"): string {
-  const params = new URLSearchParams({
-    projectId: project.id,
-    projectName: project.name,
-    startMode
-  });
-
-  return `/workspace?${params.toString()}`;
-}
-
-// 보드에는 출처 scan id가 남아 있는데 scan 기록 목록에는 없으면 삭제된 원본으로 봅니다.
-function hasDeletedReverseEngineeringSourceScan(
-  diagram: DiagramJson,
-  scanHistory: ReverseEngineeringScan[],
-  scanHistoryState: RequestState
-): boolean {
-  if (scanHistoryState !== "idle") {
-    return false;
+  if (!isOpen || typeof document === "undefined") {
+    return null;
   }
 
-  const sourceScanIds = getSavedReverseEngineeringSourceScanIds(diagram);
+  return createPortal(
+    <div className={styles.modalBackdrop} onMouseDown={handleBackdropMouseDown} ref={overlayRef}>
+      <section aria-labelledby="reverse-engineering-apply-title" aria-modal="true" className={styles.modalDialogSmall} ref={dialogRef} role="dialog">
+        <header className={styles.modalHeader}>
+          <div>
+            <span className={styles.eyebrow}>보드 적용 확인</span>
+            <h2 id="reverse-engineering-apply-title">{applicationMode === "replace" ? "현재 보드를 교체할까요?" : "현재 보드에 구조를 추가할까요?"}</h2>
+            <p>선택한 구조를 현재 프로젝트 보드에 반영합니다.</p>
+          </div>
+          <button aria-label="보드 적용 취소" className={styles.iconButton} disabled={isSaving} onClick={onCancel} ref={closeButtonRef} type="button">
+            <X aria-hidden="true" size={17} />
+          </button>
+        </header>
+        <footer className={styles.modalFooter}>
+          <button className={styles.secondaryButton} disabled={isSaving} onClick={onCancel} type="button">취소</button>
+          <button className={styles.primaryButton} disabled={isSaving} onClick={onConfirm} type="button">
+            {isSaving ? <LoaderCircle aria-hidden="true" className={styles.inlineSpinner} size={16} /> : <CheckCircle2 aria-hidden="true" size={16} />}
+            {isSaving ? "저장 중…" : "보드에 적용"}
+          </button>
+        </footer>
+      </section>
+    </div>,
+    document.body
+  );
+}
 
-  if (sourceScanIds.length === 0) {
-    return false;
+/** Portal 대상이 준비된 경우에만 좌측/가운데 slot으로 JSX를 이동합니다. */
+function createReverseEngineeringPortal(content: ReactNode, targetId: string): ReactPortal | null {
+  const target = document.getElementById(targetId);
+  return target ? createPortal(content, target) : null;
+}
+
+/** 상단 바에 쓰는 scan 상태를 짧고 일정한 문장으로 정리합니다. */
+function getReverseEngineeringWorkspaceStatus({
+  canApply,
+  hasPreview,
+  isScanning,
+  scanFailed
+}: {
+  readonly canApply: boolean;
+  readonly hasPreview: boolean;
+  readonly isScanning: boolean;
+  readonly scanFailed: boolean;
+}): string {
+  if (isScanning) {
+    return "스캔 중";
   }
+  if (hasPreview) {
+    return canApply ? "적용 준비" : "미리보기";
+  }
+  if (scanFailed) {
+    return "확인 필요";
+  }
+  return "스캔 전";
+}
 
-  const existingScanIds = new Set(scanHistory.map((scan) => scan.id));
+/** connection의 내부 id 대신 계정과 리전처럼 사용자가 확인할 수 있는 정보만 보여 줍니다. */
+function formatAwsConnectionLabel(connection: AwsConnection): string {
+  const account = connection.accountId ? `AWS 계정 ${connection.accountId}` : "AWS 연결";
+  return `${account} · ${connection.region}`;
+}
 
-  return sourceScanIds.some((sourceScanId) => !existingScanIds.has(sourceScanId));
+/** 전체/대표 리소스 범위는 코드명이 아니라 화면에서 읽기 쉬운 라벨로 표시합니다. */
+function formatResourceSelectionLabel(selection: ReverseEngineeringResourceSelection): string {
+  if (selection === "ALL") {
+    return "전체";
+  }
+  return selection.replaceAll("_", " ");
+}
+
+/** scan 기록의 상태를 사람이 읽는 짧은 말로 바꿉니다. */
+function formatSavedScanLabel(status: string): string {
+  const labels: Readonly<Record<string, string>> = {
+    cancelled: "취소됨",
+    completed: "완료",
+    failed: "실패",
+    running: "진행 중"
+  };
+  return labels[status] ?? "스캔 기록";
+}
+
+/** ISO 시간을 locale 형식으로 바꾸되 파싱 실패 시 원문 시간을 유지합니다. */
+function formatSavedScanTime(value: string): string {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? value : new Intl.DateTimeFormat("ko-KR", { dateStyle: "short", timeStyle: "short" }).format(timestamp);
 }

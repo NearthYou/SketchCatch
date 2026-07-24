@@ -304,6 +304,7 @@ function DiagramEditorInner({
   initialSelectedEdgeIds,
   initialSelectedNodeIds,
   isDeploymentConsoleOpen = false,
+  hidePreviewNotice = false,
   leftPanel,
   mode = "editor",
   onBoardReady,
@@ -3678,7 +3679,7 @@ function DiagramEditorInner({
                 onClose={() => setAutoOrganizeError(false)}
                 onRetry={previewAutomaticOrganization}
               />
-            ) : isPreviewActive ? (
+            ) : isPreviewActive && !hidePreviewNotice ? (
               <div className={styles.previewNotice} role="status">
                 미리보기입니다. 전용 시작 패널에서 적용 또는 취소를 선택하세요.
               </div>
