@@ -14,6 +14,8 @@ export type DatabaseMigrationState = "current" | "behind" | "diverged";
 
 export type DatabaseMigrationStatus = {
   readonly appliedMigrationHead: string | null;
+  /** 현재 코드보다 오래된 retired migration 기록은 보존하되 시작을 막지 않습니다. */
+  readonly legacyAppliedMigrationCount: number;
   readonly pendingMigrationCount: number;
   readonly pendingMigrationTags: readonly string[];
   readonly requiredMigrationHead: string | null;
@@ -72,10 +74,18 @@ export function getDatabaseMigrationStatus({
   const pendingMigrations = migrations.filter(
     (migration) => !isMigrationApplied(migration, appliedMigrations)
   );
-  const unexpectedAppliedMigrationCount = appliedMigrations.filter(
+  const unknownAppliedMigrations = appliedMigrations.filter(
     (appliedMigration) =>
       !migrations.some((migration) => isMigrationIdentityMatch(migration, appliedMigration))
+  );
+  const latestKnownMigrationMillis = migrations.at(-1)?.folderMillis;
+  const legacyAppliedMigrationCount = unknownAppliedMigrations.filter(
+    (appliedMigration) =>
+      latestKnownMigrationMillis !== undefined &&
+      appliedMigration.createdAt < latestKnownMigrationMillis
   ).length;
+  const unexpectedAppliedMigrationCount =
+    unknownAppliedMigrations.length - legacyAppliedMigrationCount;
   const appliedMigrationHead = getContiguousAppliedMigrationHead(migrations, appliedMigrations);
   const state: DatabaseMigrationState =
     pendingMigrations.length > 0
@@ -86,6 +96,7 @@ export function getDatabaseMigrationStatus({
 
   return {
     appliedMigrationHead,
+    legacyAppliedMigrationCount,
     pendingMigrationCount: pendingMigrations.length,
     pendingMigrationTags: pendingMigrations.map((migration) => migration.tag),
     requiredMigrationHead: getRequiredDatabaseMigrationHead(migrations),

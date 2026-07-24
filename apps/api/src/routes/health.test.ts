@@ -15,6 +15,7 @@ const runtimeIdentity = createApiRuntimeIdentity({
 
 const currentMigrationStatus: DatabaseMigrationStatus = {
   appliedMigrationHead: "0057_reverse_engineering_scan_previews",
+  legacyAppliedMigrationCount: 0,
   pendingMigrationCount: 0,
   pendingMigrationTags: [],
   requiredMigrationHead: "0057_reverse_engineering_scan_previews",

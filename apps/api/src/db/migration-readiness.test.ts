@@ -36,6 +36,7 @@ test("reports the local migration head only when the applied history is current"
 
   assert.deepEqual(status, {
     appliedMigrationHead: "0002_second",
+    legacyAppliedMigrationCount: 0,
     pendingMigrationCount: 0,
     pendingMigrationTags: [],
     requiredMigrationHead: "0002_second",
@@ -57,6 +58,7 @@ test("keeps the contiguous applied head and identifies a missing migration", () 
 
   assert.deepEqual(status, {
     appliedMigrationHead: "0001_first",
+    legacyAppliedMigrationCount: 0,
     pendingMigrationCount: 1,
     pendingMigrationTags: ["0002_second"],
     requiredMigrationHead: "0002_second",
@@ -87,6 +89,22 @@ test("does not accept a database migration record that the local API does not kn
   assert.equal(status.state, "diverged");
   assert.equal(status.unexpectedAppliedMigrationCount, 1);
   assert.throws(() => assertDatabaseMigrationStatusCurrent(status), DatabaseMigrationRequiredError);
+});
+
+test("keeps a fully applied schema startable when only an older legacy migration record remains", () => {
+  const status = getDatabaseMigrationStatus({
+    appliedMigrations: [
+      { createdAt: 500, hash: "retired-legacy-migration" },
+      { createdAt: 1000, hash: "migration-one" },
+      { createdAt: 2000, hash: "migration-two" }
+    ],
+    migrations
+  });
+
+  assert.equal(status.state, "current");
+  assert.equal(status.unexpectedAppliedMigrationCount, 0);
+  assert.equal(status.legacyAppliedMigrationCount, 1);
+  assert.doesNotThrow(() => assertDatabaseMigrationStatusCurrent(status));
 });
 
 test("does not include database connection details when readiness cannot be checked", async () => {

@@ -5,6 +5,7 @@ import { startApiServer, type StartupApp } from "./server-startup.js";
 
 const currentMigrationStatus: DatabaseMigrationStatus = {
   appliedMigrationHead: "0002_second",
+  legacyAppliedMigrationCount: 0,
   pendingMigrationCount: 0,
   pendingMigrationTags: [],
   requiredMigrationHead: "0002_second",
