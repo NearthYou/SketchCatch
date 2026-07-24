@@ -18,6 +18,37 @@ test("projects bounded Fargate capacity from immediate rolling traffic", () => {
   });
 });
 
+test("uses the provider one-minute request count when Store traffic has gone idle", () => {
+  const value = snapshot({ projectedRequestsPerMinute: 0, running: 1 });
+  if (value.latestObservation) {
+    value.latestObservation.payload.requests = 540;
+  }
+
+  const projection = getLiveObservationCapacityProjection(
+    architecture({ minCapacity: 1, maxCapacity: 3, targetValue: 60 }),
+    value
+  );
+
+  assert.equal(projection?.predictedCount, 3);
+  assert.equal(projection?.direction, "scale_out");
+});
+
+test("forecasts the second Task by about five hundred accepted audience requests", () => {
+  const value = snapshot({
+    acceptedEventCount: 500,
+    projectedRequestsPerMinute: 0,
+    running: 1
+  });
+
+  const projection = getLiveObservationCapacityProjection(
+    architecture({ minCapacity: 1, maxCapacity: 3, targetValue: 60 }),
+    value
+  );
+
+  assert.equal(projection?.predictedCount, 2);
+  assert.equal(projection?.direction, "scale_out");
+});
+
 test("keeps the minimum capacity at zero traffic and predicts scale-in separately", () => {
   const projection = getLiveObservationCapacityProjection(
     architecture({ minCapacity: 1, maxCapacity: 3, targetValue: 10 }),
@@ -42,17 +73,27 @@ test("does not invent a forecast for unsupported scaling metrics", () => {
     null
   );
 });
-
+test("recovers Terraform scaling references when the architecture has no explicit edges", () => {
+  assert.equal(
+    getLiveObservationCapacityProjection(
+      architecture({ minCapacity: 1, maxCapacity: 3, targetValue: 10, includeEdges: false }),
+      snapshot({ projectedRequestsPerMinute: 24, running: 1 })
+    )?.predictedCount,
+    3
+  );
+});
 function architecture({
   metric = "ALBRequestCountPerTarget",
   minCapacity,
   maxCapacity,
-  targetValue
+  targetValue,
+  includeEdges = true
 }: {
   readonly metric?: string;
   readonly minCapacity: number;
   readonly maxCapacity: number;
   readonly targetValue: number;
+  readonly includeEdges?: boolean;
 }): ArchitectureJson {
   return {
     nodes: [
@@ -61,14 +102,19 @@ function architecture({
         type: "ECS_SERVICE",
         positionX: 0,
         positionY: 0,
-        config: {}
+        config: { terraformResourceName: "service" }
       },
       {
         id: "target",
         type: "APPLICATION_AUTO_SCALING_TARGET",
         positionX: 0,
         positionY: 0,
-        config: { minCapacity, maxCapacity }
+        config: {
+          maxCapacity,
+          minCapacity,
+          serviceRef: "${aws_ecs_service.service.id}",
+          terraformResourceName: "target"
+        }
       },
       {
         id: "policy",
@@ -77,6 +123,8 @@ function architecture({
         positionY: 0,
         config: {
           policyType: "TargetTrackingScaling",
+          targetRef: "${aws_appautoscaling_target.target.id}",
+          terraformResourceName: "policy",
           targetTrackingScalingPolicyConfiguration: {
             targetValue,
             predefinedMetricSpecification: [{ predefinedMetricType: metric }]
@@ -84,17 +132,21 @@ function architecture({
         }
       }
     ],
-    edges: [
-      { id: "service-target", sourceId: "service", targetId: "target" },
-      { id: "target-policy", sourceId: "target", targetId: "policy" }
-    ]
+    edges: includeEdges === false
+      ? []
+      : [
+          { id: "service-target", sourceId: "service", targetId: "target" },
+          { id: "target-policy", sourceId: "target", targetId: "policy" }
+        ]
   };
 }
 
 function snapshot({
+  acceptedEventCount = 1,
   projectedRequestsPerMinute,
   running
 }: {
+  readonly acceptedEventCount?: number;
   readonly projectedRequestsPerMinute: number;
   readonly running: number;
 }): LiveObservationV2Snapshot {
@@ -103,7 +155,7 @@ function snapshot({
     observationId: "00000000-0000-4000-8000-000000000001",
     status: "active",
     live: {
-      acceptedEventCount: 1,
+      acceptedEventCount,
       rollingRequestsPerSecond: projectedRequestsPerMinute / 60,
       projectedRequestsPerMinute,
       pressurePercent: 100,

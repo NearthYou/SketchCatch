@@ -1,9 +1,45 @@
 import { notFound } from "next/navigation";
+import type { ArchitectureJson } from "@sketchcatch/types";
+import { LiveObservationFocusedFlow } from "../../../features/workspace/LiveObservationFocusedFlow";
 import { LiveObservationSignalDashboard } from "../../../features/workspace/LiveObservationSignalDashboard";
 import {
   getLiveObservationSignalDashboardFixture,
   LIVE_OBSERVATION_SIGNAL_DASHBOARD_FIXTURE_NAMES
 } from "../../../features/workspace/live-observation-signal-dashboard-fixtures";
+
+const LIVE_OBSERVATION_ARCHITECTURE_FIXTURE = {
+  nodes: [
+    resourceNode("cloudfront", "CLOUDFRONT", "CloudFront", 0),
+    resourceNode("alb", "LOAD_BALANCER", "ALB", 200),
+    resourceNode("target", "LOAD_BALANCER_TARGET_GROUP", "Target Group", 400),
+    resourceNode("task", "ECS_TASK_DEFINITION", "Fargate Task", 600),
+    resourceNode("service", "ECS_SERVICE", "ECS Service", 800),
+    {
+      ...resourceNode("scaling-target", "APPLICATION_AUTO_SCALING_TARGET", "Auto Scaling", 1000),
+      config: { maxCapacity: 6, minCapacity: 2 }
+    },
+    {
+      ...resourceNode("scaling-policy", "APPLICATION_AUTO_SCALING_POLICY", "Scaling Policy", 1200),
+      config: {
+        policyType: "TargetTrackingScaling",
+        targetTrackingScalingPolicyConfiguration: {
+          predefinedMetricSpecification: {
+            predefinedMetricType: "ALBRequestCountPerTarget"
+          },
+          targetValue: 5
+        }
+      }
+    }
+  ],
+  edges: [
+    { id: "cloudfront-alb", sourceId: "cloudfront", targetId: "alb", label: "routes" },
+    { id: "alb-target", sourceId: "alb", targetId: "target", label: "forwards" },
+    { id: "target-service", sourceId: "target", targetId: "service", label: "targets" },
+    { id: "service-task", sourceId: "service", targetId: "task", label: "uses" },
+    { id: "service-scaling", sourceId: "service", targetId: "scaling-target", label: "scales" },
+    { id: "scaling-policy", sourceId: "scaling-target", targetId: "scaling-policy", label: "uses" }
+  ]
+} satisfies ArchitectureJson;
 
 type LiveObservationSignalDashboardFixturePageProps = {
   readonly searchParams?: Promise<{ readonly state?: string | string[] | undefined }>;
@@ -24,6 +60,7 @@ export default async function LiveObservationSignalDashboardFixturePage({
   ) {
     notFound();
   }
+  const snapshot = getLiveObservationSignalDashboardFixture(fixtureName);
 
   return (
     <main style={{ background: "#fafafa", minHeight: "100vh", padding: "32px" }}>
@@ -37,13 +74,27 @@ export default async function LiveObservationSignalDashboardFixturePage({
         >
           개발용 Live Observation fixture
         </p>
+        <LiveObservationFocusedFlow
+          architecture={LIVE_OBSERVATION_ARCHITECTURE_FIXTURE}
+          snapshot={snapshot}
+        />
         <LiveObservationSignalDashboard
+          architecture={LIVE_OBSERVATION_ARCHITECTURE_FIXTURE}
           deployment={null}
-          snapshot={getLiveObservationSignalDashboardFixture(fixtureName)}
+          snapshot={snapshot}
         />
       </div>
     </main>
   );
+}
+
+function resourceNode(
+  id: string,
+  type: ArchitectureJson["nodes"][number]["type"],
+  label: string,
+  positionX: number
+): ArchitectureJson["nodes"][number] {
+  return { config: {}, id, label, positionX, positionY: 0, type };
 }
 
 /** Reads one query value so accidental repeated state parameters cannot make browser QA nondeterministic. */

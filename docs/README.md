@@ -26,10 +26,8 @@ SketchCatch 문서는 **SSOT(Single Source of Truth)** 기준으로 관리한다
 2. 이 문서에 명시된 canonical 문서
 3. 에이전트 하네스 상태 파일(`agent-progress.md`, `feature_list.json`, `session-handoff.md`)과 필요한 경우 `docs/agent-history/`
 4. `packages/types/src/index.ts`와 API Zod schema
-5. 담당자별 참고 문서
-6. 오래된 작업 로그나 개인 메모
-
-담당자별 문서는 구현 아이디어와 맥락을 담는 참고 자료다. 공통 계약으로 확정하려면 반드시 canonical 문서와 shared type에 반영한다.
+5. 목적별 공용 참고 자료(`docs/adr`, `docs/diagram-templates`, `docs/diagram-layout-reference`)
+6. 오래된 작업 로그와 Git history
 
 ## 문서 정리 기준
 
@@ -44,14 +42,13 @@ SketchCatch 문서는 **SSOT(Single Source of Truth)** 기준으로 관리한다
 - 같은 내용을 새 문서로 복제하지 않는다. 먼저 canonical 문서를 갱신한다.
 - 오래된 범위 문구는 남겨두지 않는다. MVP 목표가 바뀌면 canonical 문서에서 즉시 갱신한다.
 
-## 담당자별 참고 문서
+## 보조 자료
 
 | 폴더 | 성격 | 규칙 |
 | --- | --- | --- |
-| [`docs/gg`](./gg/006_문서구조_gg.md) | AI 분석/추천 참고 문서 | 확정 DTO와 범위는 `data-models.md`, `product.md`를 따른다. |
-| [`docs/sw`](./sw/README.md) | Terraform 변환/동기화 참고 문서 | 확정 DTO와 Terraform 실행 경계는 `data-models.md`, `architecture.md`를 따른다. |
-| [`docs/ck`](./ck/README.md) | 배포 실행 참고 문서 | 실제 실행 정책은 `deployment.md`와 API/DB 계약을 따른다. |
-| [`docs/ys`](./ys/README.md) | 플랫폼/인증/프로젝트 참고 문서 | 사용자, 프로젝트, 인증 계약은 `data-models.md`를 따른다. |
 | [`docs/adr`](./adr/README.md) | 되돌리기 어렵고 맥락이 필요한 결정 | 결정이 굳어진 경우에만 추가한다. |
+| [`docs/diagram-templates`](./diagram-templates/README.md) | Architecture Pattern, Brainboard fixture, Board QA 근거 | 런타임 계약은 canonical 문서와 shared type을 따른다. |
+| [`docs/diagram-layout-reference`](./diagram-layout-reference/README.md) | Compiler layout 기준 이미지와 평가 보고서 | 자동 생성 결과와 수동 검토 근거를 구분한다. |
+| [`docs/agent-history`](./agent-history/) | 오래된 에이전트 작업·검증 기록 | 현재 상태는 루트 하네스 파일을 우선한다. |
 
-담당자별 폴더에서 문서를 찾을 때는 위 인덱스를 먼저 본다. 새 참고 문서를 추가하면 해당 폴더의 인덱스도 함께 갱신한다.
+보조 자료는 현재 계약의 source of truth가 아니다. 새 자료는 담당자 이름이 아니라 목적과 데이터 성격이 드러나는 공용 경로에 둔다.

@@ -10,15 +10,15 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_REPOSITORY_ROOT = path.resolve(scriptDirectory, "../..");
 export const DEFAULT_INDEX_PATH = path.join(
   DEFAULT_REPOSITORY_ROOT,
-  "docs/gg/feat-infrastructure-template/brainboard-capture-index.json"
+  "docs/diagram-templates/brainboard/capture-index.json"
 );
 export const DEFAULT_CAPTURES_DIRECTORY = path.join(
   DEFAULT_REPOSITORY_ROOT,
-  "docs/gg/feat-infrastructure-template/brainboard-captures"
+  "docs/diagram-templates/brainboard/captures"
 );
 export const DEFAULT_REPORT_PATH = path.join(
   DEFAULT_REPOSITORY_ROOT,
-  "docs/gg/feat-infrastructure-template/brainboard-capture-normalization-report.json"
+  "docs/diagram-templates/brainboard/normalization-report.json"
 );
 
 const CLONE_ARCHITECTURE_ID_PATTERN =

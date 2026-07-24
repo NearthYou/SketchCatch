@@ -1,6 +1,6 @@
 # Repository mismatch 시 Template Selection Failure 반환
 
-Repository Analysis가 어떤 지원 Template과도 저장소 전체의 Application Units를 안전하게 표현하지 못하면 gg는 Template을 억지로 선택하지 않는다. 대신 `Template Selection Failure`를 반환해 선택되지 않은 상태, 불일치 이유, 감지되지 않은 evidence를 AI 파트가 보완 판단에 사용할 수 있게 한다.
+Repository Analysis가 어떤 지원 Template과도 저장소 전체의 Application Units를 안전하게 표현하지 못하면 Template Selection 단계는 Template을 억지로 선택하지 않는다. 대신 `Template Selection Failure`를 반환해 선택되지 않은 상태, 불일치 이유, 감지되지 않은 evidence를 AI 파트가 보완 판단에 사용할 수 있게 한다.
 
 **고려한 대안**
 

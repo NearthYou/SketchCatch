@@ -11,11 +11,11 @@ import { normalizeCapture } from "./normalize-capture.mjs";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const capturesDirectory = path.join(
   repositoryRoot,
-  "docs/gg/feat-infrastructure-template/brainboard-captures"
+  "docs/diagram-templates/brainboard/captures"
 );
 const captureIndexPath = path.join(
   repositoryRoot,
-  "docs/gg/feat-infrastructure-template/brainboard-capture-index.json"
+  "docs/diagram-templates/brainboard/capture-index.json"
 );
 const configDirectory = path.join(
   repositoryRoot,
