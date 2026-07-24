@@ -346,3 +346,142 @@ test("로드 밸런서 넣어줘 요청으로 서버 앞에 로드 밸런서를 
     )
   );
 });
+
+test("ECS average CPU condition changes only the CPU target tracking value", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: {
+            targetTrackingScalingPolicyConfiguration: {
+              targetValue: 60,
+              predefinedMetricSpecification: [
+                { predefinedMetricType: "ECSServiceAverageCPUUtilization" }
+              ]
+            }
+          },
+          id: "ecs-cpu-scaling-policy",
+          label: "ECS CPU Auto Scaling",
+          positionX: 0,
+          positionY: 0,
+          type: "APPLICATION_AUTO_SCALING_POLICY"
+        },
+        {
+          config: {
+            targetTrackingScalingPolicyConfiguration: {
+              targetValue: 50,
+              predefinedMetricSpecification: [
+                { predefinedMetricType: "ALBRequestCountPerTarget" }
+              ]
+            }
+          },
+          id: "ecs-request-scaling-policy",
+          label: "ECS Request Auto Scaling",
+          positionX: 100,
+          positionY: 0,
+          type: "APPLICATION_AUTO_SCALING_POLICY"
+        }
+      ]
+    },
+    instruction:
+      "ECS \uD0DC\uC2A4\uD06C\uB4E4\uC758 \uD3C9\uADE0 CPU \uC0AC\uC6A9\uB960\uC774 5%\uB97C \uB118\uC73C\uBA74 \uD0DC\uC2A4\uD06C\uB97C \uB298\uB9AC\uB3C4\uB85D \uC124\uC815\uD574\uC918."
+  });
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  const preview = response as ArchitecturePatchPreview;
+  assert.equal(preview.intent.targetResourceId, "ecs-cpu-scaling-policy");
+  assert.equal(
+    (preview.proposedArchitectureJson.nodes[0]?.config
+      .targetTrackingScalingPolicyConfiguration as { targetValue?: number })?.targetValue,
+    5
+  );
+  assert.equal(
+    (preview.proposedArchitectureJson.nodes[1]?.config
+      .targetTrackingScalingPolicyConfiguration as { targetValue?: number })?.targetValue,
+    50
+  );
+});
+
+test("target value and Korean goal value phrases set the scaling target to five", () => {
+  const instructions = [
+    "auto scaling policy\uC758 target value\uB97C 5\uB85C \uC124\uC815\uD574\uC918.",
+    "auto scaling \uC815\uCC45\uC758 \uBAA9\uD45C\uAC12\uC744 5\uB85C \uC124\uC815\uD574\uC918."
+  ];
+
+  for (const instruction of instructions) {
+    const response = createArchitecturePatchPreview({
+      architectureJson: {
+        edges: [],
+        nodes: [
+          {
+            config: {
+              targetTrackingScalingPolicyConfiguration: {
+                targetValue: 50,
+                predefinedMetricSpecification: [
+                  { predefinedMetricType: "ECSServiceAverageCPUUtilization" }
+                ]
+              }
+            },
+            id: "ecs-cpu-scaling-policy",
+            label: "ECS CPU Auto Scaling",
+            positionX: 0,
+            positionY: 0,
+            type: "APPLICATION_AUTO_SCALING_POLICY"
+          }
+        ]
+      },
+      instruction
+    });
+
+    assert.equal(response.status, "preview", JSON.stringify(response));
+    const preview = response as ArchitecturePatchPreview;
+    assert.equal(preview.intent.targetResourceId, "ecs-cpu-scaling-policy");
+    assert.equal(
+      (preview.proposedArchitectureJson.nodes[0]?.config
+        .targetTrackingScalingPolicyConfiguration as { targetValue?: number })?.targetValue,
+      5
+    );
+  }
+});
+
+test("ECS average CPU condition also selects the ECS CPU predefined metric", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: {
+            targetTrackingScalingPolicyConfiguration: {
+              targetValue: 50,
+              predefinedMetricSpecification: [
+                { predefinedMetricType: "ALBRequestCountPerTarget" }
+              ]
+            }
+          },
+          id: "ecs-scaling-policy",
+          label: "ECS Auto Scaling",
+          positionX: 0,
+          positionY: 0,
+          type: "APPLICATION_AUTO_SCALING_POLICY"
+        }
+      ]
+    },
+    instruction:
+      "ECS \uD0DC\uC2A4\uD06C\uB4E4\uC758 \uD3C9\uADE0 CPU \uC0AC\uC6A9\uB960\uC774 5%\uB97C \uB118\uC73C\uBA74 \uD0DC\uC2A4\uD06C\uB97C \uB298\uB9AC\uB3C4\uB85D \uC124\uC815\uD574\uC918."
+  });
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  const preview = response as ArchitecturePatchPreview;
+  const configuration = preview.proposedArchitectureJson.nodes[0]?.config
+    .targetTrackingScalingPolicyConfiguration as {
+      targetValue?: number;
+      predefinedMetricSpecification?: Array<{ predefinedMetricType?: string }>;
+    };
+
+  assert.equal(configuration.targetValue, 5);
+  assert.equal(
+    configuration.predefinedMetricSpecification?.[0]?.predefinedMetricType,
+    "ECSServiceAverageCPUUtilization"
+  );
+});

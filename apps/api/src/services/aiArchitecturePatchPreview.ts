@@ -659,6 +659,7 @@ AUTO_SCALING_GROUP:
 
 APPLICATION_AUTO_SCALING_POLICY:
 - config.targetTrackingScalingPolicyConfiguration.targetValue
+- config.targetTrackingScalingPolicyConfiguration.predefinedMetricSpecification.predefinedMetricType
 
 Rules:
 1. If selectedTargetResourceId is present, use that resource as the target if it exists. Do not ask which resource to modify.
@@ -784,7 +785,8 @@ const PATCH_PLAN_ALLOWED_OPERATION_PATHS: Readonly<Partial<Record<ResourceType, 
   CLOUDFRONT: ["config.signingBehavior"],
   AUTO_SCALING_GROUP: ["config.minSize", "config.maxSize", "config.desiredCapacity"],
   APPLICATION_AUTO_SCALING_POLICY: [
-    "config.targetTrackingScalingPolicyConfiguration.targetValue"
+    "config.targetTrackingScalingPolicyConfiguration.targetValue",
+    "config.targetTrackingScalingPolicyConfiguration.predefinedMetricSpecification.predefinedMetricType"
   ]
 };
 
@@ -1908,18 +1910,25 @@ function createPatchPlanOperations(
 
   if (targetNode.type === "APPLICATION_AUTO_SCALING_POLICY") {
     const targetValue = findTargetTrackingTargetValue(normalizedInstruction);
+    const operations: ArchitecturePatchPlanOperation[] = [];
 
     if (targetValue !== undefined) {
-      return [
-        {
-          op: "set_value",
-          path: "config.targetTrackingScalingPolicyConfiguration.targetValue",
-          value: targetValue
-        }
-      ];
+      operations.push({
+        op: "set_value",
+        path: "config.targetTrackingScalingPolicyConfiguration.targetValue",
+        value: targetValue
+      });
     }
 
-    return [];
+    if (isEcsCpuTargetTrackingInstruction(normalizedInstruction)) {
+      operations.push({
+        op: "set_value",
+        path: "config.targetTrackingScalingPolicyConfiguration.predefinedMetricSpecification.predefinedMetricType",
+        value: "ECSServiceAverageCPUUtilization"
+      });
+    }
+
+    return operations;
   }
 
   if (targetNode.type === "AUTO_SCALING_GROUP") {
@@ -2867,7 +2876,30 @@ function findNaturalLanguagePatchTarget(
     (node) => node.type === "APPLICATION_AUTO_SCALING_POLICY"
   );
 
+  const metricMatchedPolicies = scalingPolicies.filter((policy) =>
+    targetTrackingPolicyMatchesInstruction(policy, instruction)
+  );
+
+  if (metricMatchedPolicies.length === 1) {
+    return metricMatchedPolicies[0];
+  }
+
   return scalingPolicies.length === 1 ? scalingPolicies[0] : undefined;
+}
+
+function targetTrackingPolicyMatchesInstruction(
+  node: ResourceNode,
+  instruction: string
+): boolean {
+  if (!isEcsCpuTargetTrackingInstruction(instruction)) {
+    return false;
+  }
+
+  const configuration = node.config["targetTrackingScalingPolicyConfiguration"];
+
+  const serializedConfiguration = JSON.stringify(configuration);
+
+  return serializedConfiguration?.includes("ECSServiceAverageCPUUtilization") ?? false;
 }
 
 function nodeSearchAliases(node: ResourceNode): string[] {
@@ -4207,6 +4239,10 @@ function upsertIngressPort(currentIngress: unknown, port: number): unknown[] {
 }
 
 function isTargetTrackingTargetValueInstruction(instruction: string): boolean {
+  if (isEcsCpuTargetTrackingInstruction(instruction)) {
+    return true;
+  }
+
   return includesAnyPhrase(normalizeSearchText(instruction), [
     "target value",
     "target_value",
@@ -4216,6 +4252,30 @@ function isTargetTrackingTargetValueInstruction(instruction: string): boolean {
     "요청 기준",
     "요청 수 기준"
   ]);
+}
+
+function isEcsCpuTargetTrackingInstruction(instruction: string): boolean {
+  const normalizedInstruction = normalizeSearchText(instruction);
+  const hasCpuUtilization =
+    includesPhrase(normalizedInstruction, "cpu") &&
+    includesAnyPhrase(normalizedInstruction, [
+      "utilization",
+      "usage",
+      "\uC0AC\uC6A9\uB960"
+    ]);
+  const hasPercentage = /\b\d+(?:\.\d+)?\s*%/u.test(normalizedInstruction);
+  const hasScaleOutIntent = includesAnyPhrase(normalizedInstruction, [
+    "scale out",
+    "increase",
+    "auto scaling",
+    "autoscaling",
+    "\uB298\uB9AC",
+    "\uC99D\uAC00",
+    "\uD655\uC7A5",
+    "\uCD94\uAC00"
+  ]);
+
+  return hasCpuUtilization && hasPercentage && hasScaleOutIntent;
 }
 
 function findTargetTrackingTargetValue(
