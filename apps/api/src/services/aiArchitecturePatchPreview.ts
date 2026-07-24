@@ -820,7 +820,9 @@ export function createArchitecturePatchPlan(
     );
   }
 
-  const naturalLanguageAction = isEc2InstanceTypeModificationInstruction(normalizedInstruction)
+  const naturalLanguageAction =
+    isEc2InstanceTypeModificationInstruction(normalizedInstruction) ||
+    isTargetTrackingTargetValueInstruction(normalizedInstruction)
     ? "modify_resource"
     : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
   const inferredTargetNode =
@@ -4366,20 +4368,28 @@ function isEcsCpuTargetTrackingInstruction(instruction: string): boolean {
   const hasCpuUtilization =
     includesPhrase(normalizedInstruction, "cpu") &&
     includesAnyPhrase(normalizedInstruction, [
+      "load",
       "utilization",
+      "utilisation",
       "usage",
-      "\uC0AC\uC6A9\uB960"
+      "\uC0AC\uC6A9\uB960",
+      "\uC810\uC720\uC728",
+      "\uBD80\uD558"
     ]);
-  const hasPercentage = /\b\d+(?:\.\d+)?\s*%/u.test(normalizedInstruction);
+  const hasPercentage = /\b\d+(?:\.\d+)?\s*(?:%|percent(?:age)?\b|\uD37C\uC13C\uD2B8)/u.test(normalizedInstruction);
   const hasScaleOutIntent = includesAnyPhrase(normalizedInstruction, [
     "scale out",
+    "scale-out",
+    "scaleout",
     "increase",
     "auto scaling",
     "autoscaling",
     "\uB298\uB9AC",
     "\uC99D\uAC00",
     "\uD655\uC7A5",
-    "\uCD94\uAC00"
+    "\uCD94\uAC00",
+    "\uC62C\uB824",
+    "\uB192\uC5EC"
   ]);
 
   return hasCpuUtilization && hasPercentage && hasScaleOutIntent;

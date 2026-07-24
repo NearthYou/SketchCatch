@@ -15,3 +15,11 @@ test("the portaled SelectMenu listbox uses viewport positioning", () => {
   assert.match(selectMenuSource, /getSelectMenuDropdownPosition/);
   assert.match(selectMenuStyles, /\.selectMenuDropdownPortal\s*\{[^}]*position:\s*fixed;/s);
 });
+
+test("workspace selects render an unselected value like a quiet placeholder", () => {
+  assert.match(selectMenuSource, /styles\.selectMenuTriggerEmpty/);
+  assert.match(
+    selectMenuStyles,
+    /\.workspaceTone \.selectMenuTriggerEmpty\s*\{[^}]*color:\s*var\(--workspace-placeholder,/s
+  );
+});

@@ -3,6 +3,15 @@
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/` and remain available in Git history.
 
 
+## 2026-07-24 - Synchronize AI scaling requests, Terraform, and parameter inputs
+
+- Restored the authored Fixed Template baseline to `target_value = 50` while keeping accepted AI patch previews able to change the matching ECS policy to the requested percentage.
+- Expanded deterministic Korean and English ECS CPU scale-out phrasing so equivalent requests select `ECSServiceAverageCPUUtilization` and update the target value without waiting for a provider response.
+- Normalized Terraform parser singleton-block arrays in the parameter editor, preserved their shape on edits, and exposed the authored ALB request metric as a real selected option instead of a placeholder.
+- Reduced empty parameter input and select placeholder contrast without muting populated values.
+- Verification: focused API regressions 6/6, focused Web regressions 5/5, harness, all five lint tasks, all five typecheck tasks, all five production build tasks, and diff checks pass.
+- No schema, migration, dependency, cloud mutation, Terraform execution, deployment, GitHub mutation, or push was performed.
+
 ## 2026-07-24 - Open AI design chat directly from Repository analysis
 
 - Made the Repository result's `AI로 직접 설계` route explicit and initialized a fresh AI start draft from the analyzed project name when no project has been saved yet; existing project entries keep their project context.

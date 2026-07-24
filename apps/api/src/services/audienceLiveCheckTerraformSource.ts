@@ -306,7 +306,7 @@ export const AUDIENCE_LIVE_CHECK_TERRAFORM_SOURCE = [
   "  service_namespace  = \"ecs\"",
   "",
   "  target_tracking_scaling_policy_configuration {",
-  "    target_value       = 5",
+  "    target_value       = 50",
   "    scale_out_cooldown = 30",
   "    scale_in_cooldown  = 300",
   "",

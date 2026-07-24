@@ -190,7 +190,13 @@ export function SelectMenu({
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-label={ariaLabel}
-        className={`${styles.selectMenuTrigger} ${isOpen ? styles.selectMenuTriggerOpen : ""}`}
+        className={[
+          styles.selectMenuTrigger,
+          isOpen ? styles.selectMenuTriggerOpen : undefined,
+          selectedOption ? undefined : styles.selectMenuTriggerEmpty
+        ]
+          .filter(Boolean)
+          .join(" ")}
         disabled={isDisabled}
         id={id}
         onClick={() => (isOpen ? closeMenu() : openMenu())}

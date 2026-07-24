@@ -486,6 +486,54 @@ test("ECS average CPU condition also selects the ECS CPU predefined metric", () 
   );
 });
 
+test("similar ECS CPU scale-out phrases set the CPU metric and target percentage", () => {
+  const instructions = [
+    "ECS \uD0DC\uC2A4\uD06C \uD3C9\uADE0 CPU \uC810\uC720\uC728\uC774 5\uD37C\uC13C\uD2B8 \uC774\uC0C1\uC774\uBA74 \uD0DC\uC2A4\uD06C \uC218\uB97C \uC62C\uB824\uC918.",
+    "CPU utilization crosses 5 percent, scale out the ECS tasks.",
+    "ecs task cpu \uBD80\uD558\uAC00 5% \uCD08\uACFC\uC77C \uB54C \uC790\uB3D9\uC73C\uB85C \uD655\uC7A5\uD574 \uC918."
+  ];
+
+  for (const instruction of instructions) {
+    const response = createArchitecturePatchPreview({
+      architectureJson: {
+        edges: [],
+        nodes: [
+          {
+            config: {
+              targetTrackingScalingPolicyConfiguration: {
+                targetValue: 50,
+                predefinedMetricSpecification: [
+                  { predefinedMetricType: "ALBRequestCountPerTarget" }
+                ]
+              }
+            },
+            id: "ecs_service_requests",
+            label: "ECS Auto Scaling",
+            positionX: 0,
+            positionY: 0,
+            type: "APPLICATION_AUTO_SCALING_POLICY"
+          }
+        ]
+      },
+      instruction
+    });
+
+    assert.equal(response.status, "preview", `${instruction}: ${JSON.stringify(response)}`);
+    const preview = response as ArchitecturePatchPreview;
+    const configuration = preview.proposedArchitectureJson.nodes[0]?.config
+      .targetTrackingScalingPolicyConfiguration as {
+        targetValue?: number;
+        predefinedMetricSpecification?: Array<{ predefinedMetricType?: string }>;
+      };
+
+    assert.equal(configuration.targetValue, 5);
+    assert.equal(
+      configuration.predefinedMetricSpecification?.[0]?.predefinedMetricType,
+      "ECSServiceAverageCPUUtilization"
+    );
+  }
+});
+
 test("resource config name and parameter name select one resource for modification", () => {
   const response = createArchitecturePatchPreview({
     architectureJson: {
