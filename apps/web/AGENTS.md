@@ -4,7 +4,7 @@ This folder contains the Next.js frontend application.
 
 ## Product Role
 
-The web app provides the visual workspace for Terraform-first, multi-cloud-ready IaC operations. It may show Requirement Input, Architecture Board, IaC Preview, AI recommendations, safety warnings, Git/CI/CD handoff state, Deployment records, Reverse Engineering results, and learning guidance, but it must not execute infrastructure changes directly.
+The web app provides the visual workspace for Terraform-first, multi-cloud-ready IaC operations. It may show Requirement Input, Architecture Board, IaC Preview, AI recommendations, safety warnings, CI/CD handoff state, Deployment records, Reverse Engineering results, and learning guidance, but it must not execute infrastructure changes directly.
 
 ## Boundaries
 

@@ -20,14 +20,29 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-24 - Keep the authored scaling target manual
+
+- Removed only `aws_appautoscaling_target` from the authored Fixed Template while preserving the scaling policy with deployable ECS literals.
+- A manually added sole scaling target now immediately rewrites the sole policy's `resource_id`, `scalable_dimension`, and `service_namespace` to Terraform references; ambiguous multi-target or multi-policy Boards are left unchanged.
+- Focused API and Web regressions, API/Web typechecks, Web lint, and the harness check pass. Application deployment behavior was explicitly left unchanged.
+
+### 2026-07-24 - Simplify canonical docs and code-adjacent evidence
+
+- Renamed the cross-functional planning document to `docs/service-specification.md` and reduced `docs/README.md` to the canonical reading set.
+- Consolidated durable architecture decisions into `docs/architecture.md`; removed the per-decision directory and updated project Skills to write future decisions to the canonical architecture document.
+- Removed completed design plans and the unused template indexing package. Moved Architecture Board layout evidence beside the Web compiler tests and kept legacy template IDs unchanged for stored-data compatibility.
+- Replaced legacy product-label phrases with neutral language in documentation and user-visible text, while leaving API paths and persisted identifiers unchanged.
+- Shortened the authored AI preset's Terraform resource names and references without changing its internal node IDs. Scoped `Ctrl`/`Meta` plus wheel handling to a non-passive canvas listener so Chrome page zoom is not triggered with Board zoom.
+- Verification passed: harness, `git diff --check`, canonical Markdown links, stale-path and legacy-label searches, all three package typechecks, API and Web lint, the authored preset regression, 10 shared-type checks, 92 focused Web checks, and the compiler evidence check. No build, deployment, Terraform CLI, AWS, dependency, lockfile, schema, or migration command was run.
+
 ### 2026-07-24 - Consolidate team contribution and personal documentation
 
 - Analyzed all locally reachable Git refs by author identity, non-merge subjects, and repeated path ownership; added a concise five-person `README.md` contribution table without rankings or commit-count comparisons.
-- Removed all contributor-specific documentation folders (`docs/gg`, `docs/sw`, `docs/ck`, `docs/ys`, and `docs/jh`) after relocating the shared README image, Board QA evidence, and Brainboard fixtures to purpose-based project paths. Deleted documents remain recoverable from Git history.
-- Updated the docs navigation and naming rules around canonical documents and purpose-based shared collections; normalized five ADR filenames and removed two exact duplicate layout images.
-- Confirmed the canonical product, architecture, data-model, development, and deployment documents already describe the current ECS/Fargate, RunTask, Git/CI/CD, Direct Deployment, and cold-rollback topology; no speculative contract rewrite was made.
-- Verification: harness, `git diff --check`, 48-file Markdown link scan, zero duplicate docs hashes, 35 focused fixture-path tests, root lint, root typecheck, and all five production builds pass. Immutable Brainboard raw SHA mismatches are zero after adding LF checkout rules for the shared evidence path.
-- Known risk: the Brainboard validator still reports the pre-existing title mismatch between the immutable `[Training] AWS onboarding` capture and the current `AWS onboarding` source manifest. Deleted contributor documents now require Git history for recovery; tracked `docs/superpowers/**` design evidence remains intentionally unchanged.
+- Removed all contributor-specific documentation folders (`docs/gg`, `docs/sw`, `docs/ck`, `docs/ys`, and `docs/jh`) after relocating the shared README image and reusable verification evidence to project-owned paths. Deleted documents remain recoverable from Git history.
+- Updated the docs navigation and naming rules around canonical documents and purpose-based shared collections; normalized decision filenames and removed two exact duplicate layout images.
+- Confirmed the canonical product, architecture, data-model, development, and deployment documents already describe the current ECS/Fargate, RunTask, CI/CD, managed deployment, and cold-rollback topology; no speculative contract rewrite was made.
+- Verification: harness, `git diff --check`, 48-file Markdown link scan, zero duplicate docs hashes, 35 focused fixture-path tests, root lint, root typecheck, and all five production builds pass.
+- Deleted contributor documents remain recoverable from Git history.
 
 ### 2026-07-24 - Delay Workspace AI generation progress until clarification completes
 

@@ -131,7 +131,7 @@ export function createDraftFromPatch(
 ): AiArchitectureDraftResult {
   return {
     architectureJson: preview.proposedArchitectureJson,
-    title: previousDraft?.title ?? "Practice Architecture",
+    title: previousDraft?.title ?? "?명봽???ㅺ퀎",
     metadata: previousDraft?.metadata ?? {
       assumptions: [],
       confidence: "low",

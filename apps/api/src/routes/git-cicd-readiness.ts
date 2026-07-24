@@ -102,7 +102,7 @@ function sendRefreshUnavailable(reply: FastifyReply, error: unknown): FastifyRep
     error: "GIT_CICD_READINESS_REFRESH_FAILED",
     message: getDeveloperErrorMessage(
       error,
-      "Git/CI/CD readiness evidence could not be refreshed"
+      "CI/CD readiness evidence could not be refreshed"
     )
   });
 }

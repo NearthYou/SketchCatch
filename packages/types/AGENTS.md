@@ -18,8 +18,8 @@ This folder contains shared TypeScript types used by the API, frontend, and futu
 4. Prefer narrow union types for known statuses, levels, and resource kinds.
 5. Use `Record<string, unknown>` for resource-specific config until a resource schema is intentionally designed.
 6. Keep Resource and Reverse Engineering contracts provider-neutral unless a type is intentionally provider-specific, such as `AwsConnection`.
-7. Model Direct Deployment Path and Git/CI/CD Deployment Path as separate execution/handoff concepts instead of overloading one status.
-8. Runtime Cache and Redis are internal service infrastructure concepts and should not appear as user Practice Architecture Resource types unless the product decision changes.
+7. Model managed deployment and CI/CD delivery as separate execution/handoff concepts instead of overloading one status.
+8. Runtime Cache and Redis are internal service infrastructure concepts and should not appear as user infrastructure resource types unless the product decision changes.
 9. Voice Requirement Input, AI recommendations, Architecture Suggestions, Git changes, and Deployment actions must preserve the User-Accepted Change boundary in DTOs and statuses.
 
 ## DiagramJson And Terraform Conversion

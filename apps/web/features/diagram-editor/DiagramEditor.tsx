@@ -51,7 +51,6 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
-  WheelEvent as ReactWheelEvent
 } from "react";
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 
@@ -103,6 +102,7 @@ import {
   isCanvasInteractiveElementTarget
 } from "./canvas-pointer-hit-test";
 import { isAwsDiagramConnectionAllowed } from "./aws-resource-connection-policy";
+import { applyAddedApplicationAutoScalingTargetReferences } from "./application-auto-scaling-references";
 import {
   resolveBoardWheelZoomShortcut,
   type BoardZoomModifierKey
@@ -2254,12 +2254,16 @@ function DiagramEditorInner({
             )
           : nodesWithAssignedParents;
 
+        const nodesWithReferences = applyContainingReferenceDropTargets(
+          nodesWithReconciledAreas,
+          new Set([nextNode.id]),
+          terraformParameterCatalog
+        );
         const nextDiagram = {
           ...currentDiagram,
-          nodes: applyContainingReferenceDropTargets(
-            nodesWithReconciledAreas,
-            new Set([nextNode.id]),
-            terraformParameterCatalog
+          nodes: applyAddedApplicationAutoScalingTargetReferences(
+            nodesWithReferences,
+            nextNode.id
           )
         };
 
@@ -2622,7 +2626,7 @@ function DiagramEditorInner({
   }, [getFlowInstance]);
 
   const handleCanvasWheel = useCallback(
-    (event: ReactWheelEvent<HTMLDivElement>) => {
+    (event: WheelEvent) => {
       const zoomDirection = resolveBoardWheelZoomShortcut({
         activeModifierKeys: boardZoomModifierKeysRef.current,
         ctrlKey: event.ctrlKey,
@@ -2645,6 +2649,20 @@ function DiagramEditorInner({
     },
     [handleZoomIn, handleZoomOut]
   );
+
+  useEffect(() => {
+    const canvasPanel = canvasPanelRef.current;
+
+    if (!canvasPanel) {
+      return;
+    }
+
+    canvasPanel.addEventListener("wheel", handleCanvasWheel, { passive: false });
+
+    return () => {
+      canvasPanel.removeEventListener("wheel", handleCanvasWheel);
+    };
+  }, [handleCanvasWheel]);
 
   /** 현재 보드를 화면 크기에 맞추고, 사용자 요청일 때만 시점 변경을 저장합니다. */
   const fitVisibleDiagram = useCallback(
@@ -3424,7 +3442,6 @@ function DiagramEditorInner({
           onPointerDownCapture={isPreviewActive ? undefined : handleCanvasPointerDown}
           onPointerMoveCapture={isPreviewActive ? undefined : handleCanvasPointerMove}
           onPointerUpCapture={isPreviewActive ? undefined : handleCanvasPointerUp}
-          onWheelCapture={handleCanvasWheel}
           ref={canvasPanelRef}
           style={canvasPanelStyle}
         >

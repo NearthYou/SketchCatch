@@ -61,7 +61,7 @@ test("lease acquisition rejects projects or AWS connections being deleted", () =
   );
 });
 
-test("a GitOps execution is blocked while a direct deployment holds the project lease", async () => {
+test("a GitOps execution is blocked while a managed deployment holds the project lease", async () => {
   const repository = createRepository();
   await acquireProjectExecutionLease(
     { projectId, holderId: "deployment-1", source: "direct" },

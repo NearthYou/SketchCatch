@@ -125,7 +125,7 @@ function getPurposeProfile(servicePurpose: ArchitectureServicePurpose): DraftPur
   switch (servicePurpose) {
     case "auth_web_service":
       return {
-        title: "Auth Web Service Practice Architecture",
+        title: "Auth Web Service Infrastructure Design",
         appServerLabel: "Auth Application Server",
         appServerPurpose: "auth_application",
         databaseLabel: "User Account Database",
@@ -140,7 +140,7 @@ function getPurposeProfile(servicePurpose: ArchitectureServicePurpose): DraftPur
       };
     case "reservation_service":
       return {
-        title: "Reservation Service Practice Architecture",
+        title: "Reservation Service Infrastructure Design",
         appServerLabel: "Reservation Application Server",
         appServerPurpose: "reservation_workflow",
         databaseLabel: "Reservation Request Database",
@@ -155,7 +155,7 @@ function getPurposeProfile(servicePurpose: ArchitectureServicePurpose): DraftPur
       };
     case "content_board":
       return {
-        title: "Content Board Practice Architecture",
+        title: "Content Board Infrastructure Design",
         appServerLabel: "Content Board Server",
         appServerPurpose: "content_board",
         databaseLabel: "Post Content Database",
@@ -170,7 +170,7 @@ function getPurposeProfile(servicePurpose: ArchitectureServicePurpose): DraftPur
       };
     case "file_upload_service":
       return {
-        title: "File Upload Service Practice Architecture",
+        title: "File Upload Service Infrastructure Design",
         appServerLabel: "Upload Application Server",
         appServerPurpose: "file_upload",
         databaseLabel: "Upload Metadata Database",
@@ -185,7 +185,7 @@ function getPurposeProfile(servicePurpose: ArchitectureServicePurpose): DraftPur
       };
     case "landing_page":
       return {
-        title: "Landing Page Practice Architecture",
+        title: "Landing Page Infrastructure Design",
         appServerLabel: "Landing Page Server",
         appServerPurpose: "landing_page",
         databaseLabel: "Landing Page Database",
@@ -200,7 +200,7 @@ function getPurposeProfile(servicePurpose: ArchitectureServicePurpose): DraftPur
       };
     case "api_backend":
       return {
-        title: "API Backend Practice Architecture",
+        title: "API Backend Infrastructure Design",
         appServerLabel: "API Application Server",
         appServerPurpose: "api_backend",
         databaseLabel: "API Database",
@@ -215,7 +215,7 @@ function getPurposeProfile(servicePurpose: ArchitectureServicePurpose): DraftPur
       };
     case "data_storage":
       return {
-        title: "Data Storage Practice Architecture",
+        title: "Data Storage Infrastructure Design",
         appServerLabel: "Data Access Server",
         appServerPurpose: "data_access",
         databaseLabel: "Data Storage Database",
@@ -230,7 +230,7 @@ function getPurposeProfile(servicePurpose: ArchitectureServicePurpose): DraftPur
       };
     case "unknown":
       return {
-        title: "Practice Architecture",
+        title: "Infrastructure Design",
         appServerLabel: "Application Server",
         appServerPurpose: "application",
         databaseLabel: "Application Database",
@@ -1288,30 +1288,30 @@ function createDraftTitle(context: DraftBuildContext): string {
   }
 
   if (factSet.has("serverless_runtime")) {
-    return "Lambda 함수 Practice Architecture";
+    return "Lambda 함수 인프라 설계";
   }
 
   if (factSet.has("database")) {
-    return "DB 포함 백엔드 Practice Architecture";
+    return "DB 포함 백엔드 인프라 설계";
   }
 
   if (factSet.has("web_frontend") && factSet.has("server_runtime")) {
-    return "웹서비스 Practice Architecture";
+    return "웹서비스 인프라 설계";
   }
 
   if (factSet.has("server_runtime") && factSet.has("object_storage")) {
-    return "서버+스토리지 Practice Architecture";
+    return "서버+스토리지 인프라 설계";
   }
 
   if (factSet.has("server_runtime")) {
-    return "API 서버 Practice Architecture";
+    return "API 서버 인프라 설계";
   }
 
   if (factSet.has("web_frontend") || factSet.has("static_delivery")) {
-    return "정적 웹사이트 Practice Architecture";
+    return "정적 웹사이트 인프라 설계";
   }
 
-  return "Practice Architecture";
+  return "Infrastructure Design";
 }
 
 function createDraftAssumptions(

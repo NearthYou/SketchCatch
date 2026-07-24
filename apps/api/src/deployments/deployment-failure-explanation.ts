@@ -125,7 +125,7 @@ function createDeploymentFailureSummary(input: {
   readonly cleanupRequired: boolean;
 }): string {
   return [
-    `${formatFailureStage(input.stage)} 단계에서 Direct Deployment가 실패했습니다.`,
+    `${formatFailureStage(input.stage)} 단계에서 managed deployment가 실패했습니다.`,
     `첫 오류 로그: ${input.firstErrorLogMessage}`,
     `Cleanup 필요 여부: ${input.cleanupRequired ? "필요" : "현재 기록상 필수 아님"}`
   ].join(" ");

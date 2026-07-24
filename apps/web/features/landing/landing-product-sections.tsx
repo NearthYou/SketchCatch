@@ -74,13 +74,13 @@ function DeploymentSection() {
         <div className={styles.deploymentPaths}>
           <DeploymentPath
             description="검토한 Terraform Plan을 승인하고 즉시 적용합니다. 실행 로그와 Outputs를 프로젝트에서 확인할 수 있습니다."
-            label="Direct Deployment"
+            label="managed deployment"
             steps={["Plan", "Approve", "Apply", "Outputs"]}
             title="검증된 변경을 즉시 배포"
           />
           <DeploymentPath
             description="Terraform 변경을 Git 저장소로 전달하고 Pull Request와 CI/CD 실행 상태를 추적합니다."
-            label="Git/CI/CD Handoff"
+            label="CI/CD Handoff"
             steps={["Repository", "Pull Request", "CI/CD", "Status"]}
             title="기존 배포 파이프라인으로 연결"
           />

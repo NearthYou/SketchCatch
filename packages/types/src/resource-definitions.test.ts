@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
 import type { TerraformBlockType } from "./index.js";
+import { brainboardTemplateRegistry as referenceTemplateRegistry } from "./brainboard-templates/registry.js";
 import {
   assertResourceDeploymentCapability,
   createResourceDefinition,
@@ -13,15 +12,12 @@ import {
   resourceDefinitions
 } from "./resource-definitions.js";
 
-const BRAINBOARD_CAPTURE_TERRAFORM_IDENTITY_COUNT = 87;
-const brainboardCaptureDirectoryPath = fileURLToPath(
-  new URL("../../../docs/diagram-templates/brainboard/captures/", import.meta.url)
-);
+const REFERENCE_TEMPLATE_TERRAFORM_IDENTITY_COUNT = 87;
 
-test("committed Brainboard captures have exactly one shared definition for all 87 Terraform identities", () => {
-  const capturedIdentities = readCapturedTerraformIdentities();
+test("reference templates have exactly one shared definition for all 87 Terraform identities", () => {
+  const capturedIdentities = readReferenceTemplateTerraformIdentities();
 
-  assert.equal(capturedIdentities.length, BRAINBOARD_CAPTURE_TERRAFORM_IDENTITY_COUNT);
+  assert.equal(capturedIdentities.length, REFERENCE_TEMPLATE_TERRAFORM_IDENTITY_COUNT);
 
   for (const { blockType, resourceType } of capturedIdentities) {
     const key = `${blockType}/${resourceType}`;
@@ -213,27 +209,21 @@ test("invalid deployment capability combinations are rejected", () => {
   );
 });
 
-function readCapturedTerraformIdentities(): Array<{
+function readReferenceTemplateTerraformIdentities(): Array<{
   readonly blockType: TerraformBlockType;
   readonly resourceType: string;
 }> {
   const identityKeys = new Set<string>();
 
-  for (const fileName of readdirSync(brainboardCaptureDirectoryPath).sort()) {
-    if (!fileName.endsWith(".json")) {
+  for (const entry of referenceTemplateRegistry) {
+    if (entry.status !== "available") {
       continue;
     }
 
-    const capture = JSON.parse(
-      readFileSync(`${brainboardCaptureDirectoryPath}/${fileName}`, "utf8")
-    ) as {
-      readonly terraform?: {
-        readonly resourceAddresses?: readonly string[] | undefined;
-      } | null;
-    };
-
-    for (const address of capture.terraform?.resourceAddresses ?? []) {
-      identityKeys.add(createTerraformIdentityKeyFromAddress(address));
+    for (const node of entry.source.nodes) {
+      if (node.kind === "resource") {
+        identityKeys.add(`${node.terraformBlockType}/${node.terraformResourceType}`);
+      }
     }
   }
 
@@ -248,18 +238,6 @@ function readCapturedTerraformIdentities(): Array<{
       resourceType: key.slice(separatorIndex + 1)
     };
   });
-}
-
-function createTerraformIdentityKeyFromAddress(address: string): string {
-  const segments = address.split(".");
-
-  if (segments[0] === "data") {
-    assert.ok(segments[1], `Invalid Terraform data address: ${address}`);
-    return `data/${segments[1]}`;
-  }
-
-  assert.ok(segments[0], `Invalid Terraform resource address: ${address}`);
-  return `resource/${segments[0]}`;
 }
 
 function assertDistinctTerraformIdentities(firstId: string, secondId: string): void {

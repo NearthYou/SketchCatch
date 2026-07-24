@@ -450,7 +450,7 @@ export class GitCicdHandoffInvalidStatusTransitionError extends Error {
     readonly currentStatus: GitCicdHandoffStatus,
     readonly nextStatus: GitCicdHandoffStatus
   ) {
-    super(`Invalid Git/CI/CD handoff status transition from ${currentStatus} to ${nextStatus}`);
+    super(`Invalid CI/CD handoff status transition from ${currentStatus} to ${nextStatus}`);
     this.name = "GitCicdHandoffInvalidStatusTransitionError";
   }
 }
@@ -461,7 +461,7 @@ export class GitCicdHandoffProviderMismatchError extends Error {
     readonly resultProvider: SourceRepositoryProvider
   ) {
     super(
-      `Git/CI/CD handoff provider mismatch: requested ${requestedProvider}, received ${resultProvider}`
+      `CI/CD handoff provider mismatch: requested ${requestedProvider}, received ${resultProvider}`
     );
     this.name = "GitCicdHandoffProviderMismatchError";
   }
@@ -540,7 +540,7 @@ export async function assertReachableGitCicdReleaseApiUrl(
   const healthUrl = new URL("/health", origin).toString();
   if (!(await probeHealth(healthUrl))) {
     throw new GitCicdHandoffProviderConflictError(
-      "GIT_CICD_RELEASE_API_UNREACHABLE: Git/CI/CD handoff requires a reachable public release API health endpoint",
+      "GIT_CICD_RELEASE_API_UNREACHABLE: CI/CD handoff requires a reachable public release API health endpoint",
       "GIT_CICD_RELEASE_API_UNREACHABLE"
     );
   }
@@ -549,7 +549,7 @@ export async function assertReachableGitCicdReleaseApiUrl(
 export class GitCicdHandoffPlanArtifactVerificationUnavailableError extends GitCicdHandoffProviderConflictError {
   constructor() {
     super(
-      "Git/CI/CD handoff Apply plan verification is temporarily unavailable",
+      "CI/CD handoff Apply plan verification is temporarily unavailable",
       "GIT_CICD_HANDOFF_PLAN_VERIFICATION_UNAVAILABLE"
     );
     this.name = "GitCicdHandoffPlanArtifactVerificationUnavailableError";
@@ -655,7 +655,7 @@ export async function resolveGitCicdHandoffApplyEvidence(
     deployment.approvedByUserId !== input.userId
   ) {
     throw new GitCicdHandoffProviderConflictError(
-      "Git/CI/CD handoff requires the current user's verified Apply plan"
+      "CI/CD handoff requires the current user's verified Apply plan"
     );
   }
 
@@ -679,7 +679,7 @@ export async function resolveGitCicdHandoffApplyEvidence(
   }
   if (!plan || plan.id !== input.userAcceptedChangeId) {
     throw new GitCicdHandoffProviderConflictError(
-      "Git/CI/CD handoff requires the server-selected verified Apply plan"
+      "CI/CD handoff requires the server-selected verified Apply plan"
     );
   }
 
@@ -737,7 +737,7 @@ export async function verifyGitCicdHandoffPlanArtifactIntegrity(
 ): Promise<void> {
   if (!(await verifier.verify(plan))) {
     throw new GitCicdHandoffProviderConflictError(
-      "Git/CI/CD handoff Apply plan artifact is stale or has been modified"
+      "CI/CD handoff Apply plan artifact is stale or has been modified"
     );
   }
 }
@@ -945,7 +945,7 @@ export function createGitHubGitCicdHandoffProvider(
       } catch (error) {
         if (isGitProviderPermissionError(error)) {
           throw new GitCicdHandoffProviderPermissionError(
-            "GitHub App repository permissions must allow Contents, Pull requests, and Workflows write access before Git/CI/CD handoff can be created"
+            "GitHub App repository permissions must allow Contents, Pull requests, and Workflows write access before CI/CD handoff can be created"
           );
         }
 
@@ -1013,7 +1013,7 @@ export function createGitCicdPullRequestDraft(input: {
     planSummaryText,
     ...(warningLines.length > 0 ? ["", "### Plan warnings", "", ...warningLines] : []),
     "",
-    "## Pre-Deployment Check",
+    "## deployment check",
     "",
     "- Confirm Terraform artifact matches the approved SketchCatch preview.",
     "- Confirm target account, region, and variables in the destination repository pipeline.",
@@ -1068,7 +1068,7 @@ function createDefaultReviewChecklist(
     },
     {
       id: "pre-deployment-check",
-      label: "Pre-Deployment Check findings are accepted or resolved before merge.",
+      label: "deployment check findings are accepted or resolved before merge.",
       required: true
     },
     {
@@ -1360,7 +1360,7 @@ export function createPostgresGitCicdHandoffRepository(
       const [handoff] = await db.insert(gitCicdHandoffs).values(input).returning();
 
       if (!handoff) {
-        throw new Error("Git/CI/CD handoff creation failed");
+        throw new Error("CI/CD handoff creation failed");
       }
 
       return handoff;
@@ -1487,7 +1487,7 @@ function isGitProviderPermissionError(error: unknown): boolean {
 function isGitProviderNoChangesError(error: unknown): boolean {
   return (
     error instanceof Error &&
-    error.message === "No Git/CI/CD handoff file changes were needed"
+    error.message === "No CI/CD handoff file changes were needed"
   );
 }
 
@@ -1558,7 +1558,7 @@ export async function createGitCicdHandoff(
     monitoringConfig.validationStatus !== "valid"
   ) {
     throw new GitCicdHandoffProviderConflictError(
-      "Git/CI/CD handoff requires enabled and valid repository monitoring settings"
+      "CI/CD handoff requires enabled and valid repository monitoring settings"
     );
   }
   const deploymentTarget = await repository.findProjectDeploymentTarget(input.projectId);
@@ -1570,7 +1570,7 @@ export async function createGitCicdHandoff(
   assertOptionalHandoffConfigurationMatches(input, handoffConfiguration);
   if (!deploymentTarget.awsAccountId || !deploymentTarget.connectionId) {
     throw new GitCicdHandoffProviderConflictError(
-      "Git/CI/CD handoff requires a verified AWS account identity"
+      "CI/CD handoff requires a verified AWS account identity"
     );
   }
   const awsAccountId = deploymentTarget.awsAccountId;
@@ -1598,7 +1598,7 @@ export async function createGitCicdHandoff(
   const targetBranch = input.targetBranch ?? monitoringConfig.monitorBranch;
   if (targetBranch !== monitoringConfig.monitorBranch) {
     throw new GitCicdHandoffProviderConflictError(
-      "Git/CI/CD handoff target branch must match the validated monitoring branch"
+      "CI/CD handoff target branch must match the validated monitoring branch"
     );
   }
   const sourceBranch = input.sourceBranch ?? createDefaultSourceBranch(projectSlug, handoffId);
@@ -1628,7 +1628,7 @@ export async function createGitCicdHandoff(
   );
   if (!sketchCatchPublicBaseUrl) {
     throw new GitCicdHandoffProviderConflictError(
-      "Git/CI/CD handoff requires SKETCHCATCH_PUBLIC_BASE_URL to be a public HTTPS origin reachable by GitHub Actions",
+      "CI/CD handoff requires SKETCHCATCH_PUBLIC_BASE_URL to be a public HTTPS origin reachable by GitHub Actions",
       "GIT_CICD_RELEASE_API_URL_REQUIRED"
     );
   }
@@ -1685,7 +1685,7 @@ export async function createGitCicdHandoff(
   const setupActions = options.setupActions;
   if (!setupActions) {
     throw new GitCicdHandoffProviderConflictError(
-      "Git/CI/CD automatic setup actions are not configured",
+      "CI/CD automatic setup actions are not configured",
       "GIT_CICD_SETUP_UNAVAILABLE"
     );
   }
@@ -1850,7 +1850,7 @@ export async function createGitCicdHandoff(
 
       if (!updatedHandoff) {
         throw new GitCicdHandoffNotFoundError(
-          "Git/CI/CD handoff not found while saving pull request evidence"
+          "CI/CD handoff not found while saving pull request evidence"
         );
       }
 
@@ -1878,7 +1878,7 @@ export async function setupGitCicdHandoff(
     const setupActions = options.setupActions;
     if (!setupActions) {
       throw new GitCicdHandoffProviderConflictError(
-        "Git/CI/CD automatic setup actions are not configured",
+        "CI/CD automatic setup actions are not configured",
         "GIT_CICD_SETUP_UNAVAILABLE"
       );
     }
@@ -1892,7 +1892,7 @@ export async function setupGitCicdHandoff(
     const convergedHandoff = await getGitCicdHandoff(input, repository);
     if (!hasVerifiedGitCicdHandoffAutomation(convergedHandoff)) {
       throw new GitCicdHandoffProviderConflictError(
-        "Git/CI/CD setup evidence was not saved after verification",
+        "CI/CD setup evidence was not saved after verification",
         "GIT_CICD_SETUP_EVIDENCE_NOT_SAVED"
       );
     }
@@ -1911,7 +1911,7 @@ export async function setupGitCicdHandoff(
 
   if (!preview || !releaseApiUrl) {
     throw new GitCicdHandoffProviderConflictError(
-      "Stored Git/CI/CD draft is missing repository settings",
+      "Stored CI/CD draft is missing repository settings",
       "GIT_CICD_HANDOFF_CONFIGURATION_STALE"
     );
   }
@@ -1998,7 +1998,7 @@ function assertExistingGitCicdHandoffSetupMatches(
     !roleDiffMatches
   ) {
     throw new GitCicdHandoffProviderConflictError(
-      "Stored Git/CI/CD draft no longer matches the accepted setup",
+      "Stored CI/CD draft no longer matches the accepted setup",
       "GIT_CICD_HANDOFF_CONFIGURATION_STALE"
     );
   }
@@ -2205,7 +2205,7 @@ export function resolveGitOpsHandoffRuntimeTargetIdentity(
 ) {
   if (!target.awsAccountId) {
     throw new GitCicdHandoffProviderConflictError(
-      "Git/CI/CD handoff requires a verified AWS account identity"
+      "CI/CD handoff requires a verified AWS account identity"
     );
   }
   try {
@@ -2249,14 +2249,14 @@ export async function getGitCicdHandoff(
   const handoff = await repository.findHandoffById(input.handoffId);
 
   if (!handoff) {
-    throw new GitCicdHandoffNotFoundError("Git/CI/CD handoff not found");
+    throw new GitCicdHandoffNotFoundError("CI/CD handoff not found");
   }
 
   await requireAccessibleProject(
     handoff.projectId,
     input.accessContext,
     repository,
-    "Git/CI/CD handoff not found"
+    "CI/CD handoff not found"
   );
 
   return handoff;
@@ -2293,7 +2293,7 @@ export async function updateGitCicdHandoffStatus(
   });
 
   if (!handoff) {
-    throw new GitCicdHandoffNotFoundError("Git/CI/CD handoff not found");
+    throw new GitCicdHandoffNotFoundError("CI/CD handoff not found");
   }
 
   return handoff;

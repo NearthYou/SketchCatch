@@ -35,7 +35,7 @@ export function createWorkspaceAiPromptGateMessage(
     return "질문: 어떤 다이어그램을 생성하거나 어떻게 수정할지 조금 더 구체적으로 알려주세요. 예: '로그인 서비스 다이어그램 만들어줘', '여기에 S3 버킷 추가해줘'.";
   }
 
-  return "질문: 이 채팅은 Practice Architecture 다이어그램 생성과 수정 요청만 처리합니다. 만들 서비스나 바꿀 리소스를 포함해서 다시 입력해주세요.";
+  return "질문: 이 채팅은 ?명봽???ㅺ퀎 다이어그램 생성과 수정 요청만 처리합니다. 만들 서비스나 바꿀 리소스를 포함해서 다시 입력해주세요.";
 }
 
 export function resolveWorkspaceAiChatMode(input: {
