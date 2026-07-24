@@ -60,7 +60,7 @@ test("apiFetch identifies requests that receive no HTTP response", async (contex
   });
 });
 
-test("Git/CI/CD handoff conflicts keep the actionable server precondition", async () => {
+test("CI/CD handoff conflicts keep the actionable server precondition", async () => {
   const error = new ApiClientError(
     409,
     {
@@ -81,7 +81,7 @@ test("Git/CI/CD handoff conflicts keep the actionable server precondition", asyn
   );
 });
 
-test("Git/CI/CD handoff explains a missing confirmed deployment target", () => {
+test("CI/CD handoff explains a missing confirmed deployment target", () => {
   for (const message of [
     "GitOps application handoff requires a confirmed project deployment target",
     "PROJECT_DEPLOYMENT_TARGET_REQUIRED"

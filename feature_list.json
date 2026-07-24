@@ -252,7 +252,7 @@
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\smoke\\git-cicd-auto-deploy.ps1 -PreflightOnly -SkipRepositorySettingsApply -SkipAwsRoleDiffApply",
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\smoke\\git-cicd-auto-deploy.ps1 -AccessToken fake -HandoffId 00000000-0000-4000-8000-000000000000 -SkipRepositorySettingsApply -SkipAwsRoleDiffApply -SkipUrlCheck"
         ],
-        "notes": "Git/CI/CD auto-deploy smoke runner records preflight readiness and live mutation gates, but the live smoke workstream is intentionally deferred by product decision. The stale contributor-specific live-smoke plan and current JSON reports were removed from active documentation on 2026-07-09."
+        "notes": "CI/CD auto-deploy smoke runner records preflight readiness and live mutation gates, but the live smoke workstream is intentionally deferred by product decision. The stale contributor-specific live-smoke plan and current JSON reports were removed from active documentation on 2026-07-09."
       },
       "notes": "Blocked by product decision: live GitHub/AWS smoke is not being pursued now. Reopen this feature only when the team decides to collect real deployment evidence again."
     },
@@ -387,14 +387,14 @@
       "id": "DIRECT-DEPLOYMENT-THREE-STAGE-001",
       "priority": 1,
       "area": "deployment-ux",
-      "title": "Revision-locked three-stage Direct Deployment",
+      "title": "Revision-locked three-stage managed deployment",
       "user_visible_behavior": "개발자는 Board와 Terraform을 한 번에 저장하고 검증, 승인, 배포 세 단계만 거쳐 프로젝트를 배포한다.",
       "status": "passing",
       "verification": [
         "Ctrl+S와 Command+S가 diagram과 Terraform draft를 같은 server revision으로 저장한다.",
         "prepare가 최신 saved revision만 받아 immutable Deployment를 만들고 stale revision을 거부한다.",
         "approval snapshot과 execute snapshot이 다르면 실행이 차단된다.",
-        "Direct Deployment UI가 정확히 세 단계와 summary-first 운영 정보를 표시한다."
+        "managed deployment UI가 정확히 세 단계와 summary-first 운영 정보를 표시한다."
       ],
       "evidence": {
         "lastVerified": "2026-07-19",
@@ -408,7 +408,7 @@
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "CodeBuild project reconciliation now recovers a managed ResourceAlreadyExists race. Preparation start and completion are atomic, so stale starts and late failures cannot replace a successful ready state for the same runtime fingerprint. Direct Deployment delegates build preparation and exact Repository checkout verification to the Plan API, and concurrent requests for the same Deployment join the one RUNNING Plan sequence before Terraform. Focused API and Web regressions, lint, typecheck, and build pass. Full pnpm test retains unrelated baseline failures in artifact heartbeat cleanup, Git/CI/CD schema expectations, resource-catalog expectations, and one external-link source-pattern test."
+        "notes": "CodeBuild project reconciliation now recovers a managed ResourceAlreadyExists race. Preparation start and completion are atomic, so stale starts and late failures cannot replace a successful ready state for the same runtime fingerprint. managed deployment delegates build preparation and exact Repository checkout verification to the Plan API, and concurrent requests for the same Deployment join the one RUNNING Plan sequence before Terraform. Focused API and Web regressions, lint, typecheck, and build pass. Full pnpm test retains unrelated baseline failures in artifact heartbeat cleanup, CI/CD schema expectations, resource-catalog expectations, and one external-link source-pattern test."
       },
       "notes": "Implemented in issue #372 on branch feature/sw/372-direct-deploy-three-stage. No cloud mutation was performed."
     },
@@ -537,7 +537,7 @@
       "user_visible_behavior": "개발자는 Direct와 GitOps 배포의 성공, 실패, 취소 알림을 세션을 넘어 유지되는 Inbox와 명시적으로 허용한 Web Push에서 확인한다.",
       "status": "passing",
       "verification": [
-        "Direct Deployment와 GitOps Pipeline Run terminal event가 같은 transaction의 idempotent Inbox/outbox row를 만든다.",
+        "managed deployment와 GitOps Pipeline Run terminal event가 같은 transaction의 idempotent Inbox/outbox row를 만든다.",
         "읽음 상태와 90일 retention은 RDS가 source of truth다.",
         "인증 SSE와 Service Worker Web Push가 같은 notification ID와 안전한 프로젝트 경로를 전달한다.",
         "subscription endpoint와 key는 암호화되고 Push outbound DNS는 public address에만 고정된다.",
@@ -697,7 +697,7 @@
           "pnpm harness:check",
           "authenticated Chrome visual QA through /workspace/new?mode=template&templateId=<templateId>"
         ],
-        "notes": "60 focused tests, 4 direct regressions, and 72/72 live Board checks passed. Evidence and created project IDs are recorded in docs/diagram-templates/evidence/aws-template-board-qa.md. pnpm build is separately blocked by a pre-existing ignored .codegraph symlink ENOENT."
+        "notes": "60 focused tests, 4 direct regressions, and 72/72 live Board checks passed. The active compiler regression fixtures live beside the Web compiler tests; historical Board QA details remain recoverable from Git history. pnpm build was separately blocked by a pre-existing ignored .codegraph symlink ENOENT."
       },
       "notes": "Presentation-only work. No Terraform execution, AWS mutation, or approval-flow change was made."
     },
@@ -706,7 +706,7 @@
       "priority": 1,
       "area": "ai-architecture-board",
       "title": "Deterministic provider-neutral AI diagram auto-layout",
-      "user_visible_behavior": "AI가 만든 신규 Practice Architecture가 포함 관계, 주 흐름, 반복 구조, 지원 레인을 기준으로 읽기 쉽게 자동 배치되고 기존 수동 Board와 Template 좌표는 보호된다.",
+      "user_visible_behavior": "AI가 만든 신규 ?명봽???ㅺ퀎가 포함 관계, 주 흐름, 반복 구조, 지원 레인을 기준으로 읽기 쉽게 자동 배치되고 기존 수동 Board와 Template 좌표는 보호된다.",
       "status": "passing",
       "verification": [
         "핵심 배치 엔진이 provider-neutral role을 사용하고 AWS 분류와 Area 최소 크기는 첫 Provider Adapter 매핑에 격리된다.",
@@ -793,8 +793,8 @@
       "id": "DIRECT-FIRST-APPLICATION-RELEASE-001",
       "priority": 1,
       "area": "direct-deployment-git-cicd",
-      "title": "Direct first application release before Git/CI/CD installation",
-      "user_visible_behavior": "사용자는 Direct Deployment에서 최초 ECS/Fargate 앱을 실제로 공개한 뒤에만 후속 변경 자동 배포용 CI/CD 설치 PR을 만들 수 있다.",
+      "title": "Direct first application release before CI/CD installation",
+      "user_visible_behavior": "사용자는 managed deployment에서 최초 ECS/Fargate 앱을 실제로 공개한 뒤에만 후속 변경 자동 배포용 CI/CD 설치 PR을 만들 수 있다.",
       "status": "blocked",
       "blockedReason": "실제 AWS full_stack/application 배포와 GitHub 설치 PR merge trigger 수용 검증에는 외부 AWS/GitHub mutation 승인이 필요하며 이번 로컬 구현 요청에서는 실행하지 않았다.",
       "verification": [
@@ -914,14 +914,14 @@
         ],
         "notes": "Focused verification passed: ResourceDefinition 9/9, API/deployment/route 83/83, and existing approval/Destroy regressions 22/22. Harness, migration compatibility, lint, typecheck, and all five package builds passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template layout/parent contract failures in packages/types; this change does not modify those Template sources or tests."
       },
-      "notes": "PR 1 implements only the IaC desired-state layer. PR 2 / issue #433 is tracked separately below; runtime no-op remains in issue #435. No DB migration, live AWS mutation, Terraform apply/destroy, or user Git/CI/CD handoff was performed."
+      "notes": "PR 1 implements only the IaC desired-state layer. PR 2 / issue #433 is tracked separately below; runtime no-op remains in issue #435. No DB migration, live AWS mutation, Terraform apply/destroy, or user CI/CD handoff was performed."
     },
     {
       "id": "APPLICATION-ARTIFACT-REGISTRY-433",
       "priority": 1,
       "area": "application-artifact-reuse",
       "title": "Provider-neutral ApplicationArtifact Registry shared by Direct and GitOps",
-      "user_visible_behavior": "사용자는 같은 Source Repository commit과 정규화된 build 계약으로 만든 application artifact가 사용자 provider storage에 그대로 존재하고 digest·계정·region·project ownership이 다시 검증되면 Direct Deployment와 Git/CI/CD에서 중복 build 없이 재사용한다.",
+      "user_visible_behavior": "사용자는 같은 Source Repository commit과 정규화된 build 계약으로 만든 application artifact가 사용자 provider storage에 그대로 존재하고 digest·계정·region·project ownership이 다시 검증되면 managed deployment와 CI/CD에서 중복 build 없이 재사용한다.",
       "status": "passing",
       "verification": [
         "container image, Lambda zip, CodeDeploy bundle, static bundle, Kubernetes manifest, Helm chart, machine image를 provider-neutral kind로 구분한다.",
@@ -955,7 +955,7 @@
       "priority": 1,
       "area": "runtime-convergence",
       "title": "Provider-verified runtime convergence and no-op deployment",
-      "user_visible_behavior": "사용자는 같은 ApplicationArtifact와 같은 runtime configuration이 실제 provider에서 healthy 상태로 실행 중일 때만 Direct 또는 Git/CI/CD rollout을 생략하고, 조회 실패·불일치·unhealthy 상태에서는 기존 안전한 rollout을 수행한다.",
+      "user_visible_behavior": "사용자는 같은 ApplicationArtifact와 같은 runtime configuration이 실제 provider에서 healthy 상태로 실행 중일 때만 Direct 또는 CI/CD rollout을 생략하고, 조회 실패·불일치·unhealthy 상태에서는 기존 안전한 rollout을 수행한다.",
       "status": "passing",
       "verification": [
         "artifactFingerprint와 project/account/region-scoped deploymentTargetFingerprint를 분리하고 orchestrator, compute, capacity, rollout, health를 독립 모델로 유지한다.",
@@ -983,7 +983,7 @@
           "pnpm build",
           "git diff --check"
         ],
-        "notes": "Focused runtime/resource/API coverage passes 79/79, including provider/account/region, pre-provider target, ECS capacity/status, Lambda health, rollback, handoff consistency, malformed URL, and provider revision metadata regressions. GitOps handoff and readiness now consume the linked RepositoryAnalysisRecord instead of silently discarding it in favor of nullable legacy SourceRepository analysis fields; canonical record/payload revision drift remains fail-closed. The live project read-only check resolves the current 40-character revision and apps/api/Dockerfile and passes assertGitOpsTarget. Generated Bash/Python syntax passes 45/10. Git/CI/CD focused tests, Direct route tests, Web deployment tests, harness, lint, typecheck, build, and diff checks pass."
+        "notes": "Focused runtime/resource/API coverage passes 79/79, including provider/account/region, pre-provider target, ECS capacity/status, Lambda health, rollback, handoff consistency, malformed URL, and provider revision metadata regressions. GitOps handoff and readiness now consume the linked RepositoryAnalysisRecord instead of silently discarding it in favor of nullable legacy SourceRepository analysis fields; canonical record/payload revision drift remains fail-closed. The live project read-only check resolves the current 40-character revision and apps/api/Dockerfile and passes assertGitOpsTarget. Generated Bash/Python syntax passes 45/10. CI/CD focused tests, Direct route tests, Web deployment tests, harness, lint, typecheck, build, and diff checks pass."
       },
       "notes": "Migration 0046_runtime_convergence.sql and apps/api/drizzle/meta/_journal.json are changed after merged migration 0045. No secret, real credential, live AWS/cloud mutation, Terraform apply/destroy, user artifact upload, or Git handoff was executed."
     },
@@ -1016,7 +1016,7 @@
         ],
         "notes": "ProjectDraft focused API tests pass 32/32, focused Workspace tests pass 37/37, and AI/Repository entrypoint revision contract tests pass 2/2. Lint, source typecheck, the initial full build, harness, and diff checks pass. Review follow-up extracted the API save service, blocked legacy IndexedDB auto-save, removed stale Terraform files, preserved conflict status, separated each tab's local recovery key across tabs, refreshes, and duplicated tabs, migrated the legacy shared recovery row, and preserved every dirty local recovery draft behind an accessible local-or-server choice without client/server clock assumptions. Server choice now replaces the mounted Terraform editor without marking the restored server state dirty. A real Chromium three-tab flow passed with first save 200/revision 1, stale save 409 plus conflict dialog, server-latest browser refresh, conflict reload, and stable per-tab recovery keys. The current Webpack build compiles but its generated type check is blocked by pre-existing invalid helper exports in the architecture-draft and architecture-patch-preview Next route files. Full pnpm test was not run outside the sandbox because it includes sandbox E2E and Terraform tests; test:core was stopped after 11 minutes without runner termination and showed only unrelated existing failures in API CORS/error/schema/release-candidate tests."
       },
-      "notes": "No DB schema or Drizzle migration changed. No secret, real credential, live cloud mutation, Terraform apply/destroy, deployment, or Git/CI/CD handoff was executed."
+      "notes": "No DB schema or Drizzle migration changed. No secret, real credential, live cloud mutation, Terraform apply/destroy, deployment, or CI/CD handoff was executed."
     },
     {
       "id": "SITEWIDE-UX-467",
@@ -1051,7 +1051,7 @@
         ],
         "notes": "All 26 planned implementation commits were verified before commit. Follow-ups remove the redundant top-bar panel toggles and keep manual Fit View's automatic viewport move out of ProjectDraft dirty state while preserving accessible edge handles, panel preferences, and direct user viewport persistence. Presentation typography now adds an auditable 6px to every explicit Web text size, resolves UI/code text to bundled Pretendard 1.3.9 through one shared token path, applies the same font/size/weight rules to the generated standalone S3 audience page, and reduces explicit text weights above 400 by one 100-point step; focused dependent tests pass 135/135 and the strengthened font audit passes 4/4. The focused dirty and cost regressions pass 77/77; harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 786/790, with four unrelated existing generated Architecture Board artifact line-ending and Resource catalog contract failures. Signed-in localhost QA confirmed cost tab, period, users, usage range, connection, direct URL entry, and browser history restoration."
       },
-      "notes": "No DB schema, Drizzle migration, cloud mutation, deployment, or Git/CI/CD handoff was performed."
+      "notes": "No DB schema, Drizzle migration, cloud mutation, deployment, or CI/CD handoff was performed."
     },
     {
       "id": "AUTHORED-TERRAFORM-RUNTIME-SECRET-001",
@@ -1109,14 +1109,14 @@
         ],
         "notes": "The recorded focused API command passes 39/39 and the focused Web command passes 43/43, including approved-Plan preview gating, stale-refresh failure handling, complete ECS Web artifact identity, generic runtime Secret validation, and the extensionless Next import regression. Full lint, typecheck, API/Web production build, migration compatibility, harness, and diff checks pass."
       },
-      "notes": "No DB schema or Drizzle migration changed. No secret value, cloud mutation, Terraform apply/destroy, deployment, GitHub PR, or Git/CI/CD handoff was executed."
+      "notes": "No DB schema or Drizzle migration changed. No secret value, cloud mutation, Terraform apply/destroy, deployment, GitHub PR, or CI/CD handoff was executed."
     },
     {
       "id": "DEPLOYMENT-LIVE-PROFILE-REMOVAL-001",
       "priority": 1,
       "area": "direct-deployment",
       "title": "Legacy practice live profile removal",
-      "user_visible_behavior": "Direct Deployment는 별도 practice 실행 프로필 없이 demo_web_service를 기본으로 사용하고 기존 Deployment 기록도 같은 프로필로 안전하게 전환한다.",
+      "user_visible_behavior": "managed deployment는 별도 practice 실행 프로필 없이 demo_web_service를 기본으로 사용하고 기존 Deployment 기록도 같은 프로필로 안전하게 전환한다.",
       "status": "passing",
       "verification": [
         "공유 타입과 생성 API가 demo_web_service 또는 demo_web_service_with_rds만 허용한다.",
@@ -1141,7 +1141,7 @@
         ],
         "notes": "Focused API checks pass 130/130 and focused merged Web checks pass 31/31. Migration compatibility, lint, serial typecheck, build, harness, and diff checks pass. Production ECS run 29700391499 deployed the compatible API, Web, and worker image before migration run 29700681495 created snapshot sketchcatch-production-pre-migration-29700681495 and completed the one-off ECS migration task with exit code 0. All three HTTPS health checks return 200. The full API suite still exposes unrelated existing failures outside this workstream."
       },
-      "notes": "Migration 0054 changes apps/api/drizzle/meta/_journal.json and is applied in production. No Terraform apply/destroy or user Git/CI/CD handoff was performed."
+      "notes": "Migration 0054 changes apps/api/drizzle/meta/_journal.json and is applied in production. No Terraform apply/destroy or user CI/CD handoff was performed."
     },
     {
       "id": "CICD-SETUP-CONVERGENCE-001",
@@ -1171,7 +1171,7 @@
           "pnpm harness:check",
           "git diff --check"
         ],
-        "notes": "Focused setup/provider tests pass 42/42, the Git/CI/CD API regression set passes 246/246, readiness passes 96/96 including the previously failing CI cases, and focused Web tests pass 54/54. Root lint, typecheck, and all five production builds pass."
+        "notes": "Focused setup/provider tests pass 42/42, the CI/CD API regression set passes 246/246, readiness passes 96/96 including the previously failing CI cases, and focused Web tests pass 54/54. Root lint, typecheck, and all five production builds pass."
       },
       "notes": "No DB schema, Drizzle migration, dependency, secret, live GitHub/AWS mutation, PR merge, Terraform action, production deployment, or push was performed."
     },
@@ -1203,7 +1203,7 @@
         ],
         "notes": "The Repository-to-AI focused suite passes 49/49 and the route/render integration suite passes 4/4. Harness, root lint, root typecheck, and all five production build tasks pass. Prior authenticated browser evidence for candidate navigation and follow-up hierarchy remains valid."
       },
-      "notes": "No API, persistence, dependency, migration, cloud mutation, deployment, GitHub issue, or Git/CI/CD handoff changed."
+      "notes": "No API, persistence, dependency, migration, cloud mutation, deployment, GitHub issue, or CI/CD handoff changed."
     }
   ]
 }

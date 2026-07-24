@@ -856,7 +856,7 @@ test("Direct application preparation rejects a null runtime config without a Typ
     ),
     (error: unknown) =>
       error instanceof DirectApplicationReleaseError &&
-      error.message === "Direct deployment runtime does not match the confirmed project target"
+      error.message === "managed deployment runtime does not match the confirmed project target"
   );
   assert.equal(prepareCalls, 0);
 });

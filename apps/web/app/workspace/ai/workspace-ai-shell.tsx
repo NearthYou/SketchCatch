@@ -66,7 +66,7 @@ export function WorkspaceAiShell({
   const projectName =
     workflow.projectDraft?.projectName ??
     existingProject?.projectName ??
-    "새 Practice Architecture";
+    "새 ?명봽???ㅺ퀎";
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");

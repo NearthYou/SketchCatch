@@ -180,7 +180,7 @@ export type DirectDeploymentScreenProps = {
   readonly projectDraftRevision?: number | null | undefined;
 };
 
-// Direct Deployment reports only Resources that can enter the Terraform execution graph.
+// managed deployment reports only Resources that can enter the Terraform execution graph.
 export function DirectDeploymentScreen({
   confirmationDismissRequestId = 0,
   deploymentAvailability,
@@ -1792,7 +1792,7 @@ export function DirectDeploymentScreen({
     }
 
     return (
-      <section className={styles.deploymentConsoleGrid} aria-label="Direct Deployment">
+      <section className={styles.deploymentConsoleGrid} aria-label="managed deployment">
         <header className={styles.deploymentPageHeader}>
           <div className={styles.deploymentPageHeading}>
             <h1>배포</h1>
@@ -1805,7 +1805,7 @@ export function DirectDeploymentScreen({
           {renderDirectStepActions(selectedStep.id)}
         </header>
 
-        <nav className={styles.deploymentStepNavigation} aria-label="Direct Deployment 단계">
+        <nav className={styles.deploymentStepNavigation} aria-label="managed deployment 단계">
           <ol>
             {directDeploymentFlow.steps.map((step, index) => {
               const supportLabel =

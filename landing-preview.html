@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="SketchCatch는 요구사항과 기존 cloud state를 provider-neutral Practice Architecture로 바꾸고, IaC Preview와 비용·보안 점검부터 Deployment까지 연결하는 IaC 워크스페이스입니다."
+      content="SketchCatch는 요구사항과 기존 cloud state를 provider-neutral ?명봽???ㅺ퀎로 바꾸고, IaC Preview와 비용·보안 점검부터 Deployment까지 연결하는 IaC 워크스페이스입니다."
     />
     <meta name="theme-color" content="#ffffff" />
     <link rel="icon" href="apps/web/public/favicon.png" type="image/png" />
@@ -2057,7 +2057,7 @@
           <p class="eyebrow"><span class="eyebrow-dot"></span>AWS-first · provider-neutral</p>
           <h1 id="hero-title">SketchCatch</h1>
           <p class="hero-description">
-            Practice Architecture를 눈으로 설계하고, IaC Preview와 비용·보안 위험을 확인한 뒤
+            ?명봽???ㅺ퀎를 눈으로 설계하고, IaC Preview와 비용·보안 위험을 확인한 뒤
             배포하세요. 복잡한 Resource 관계를 Architecture Board 한 장에서 시작할 수 있습니다.
           </p>
           <ul class="hero-inputs" aria-label="지원하는 시작 방식">
@@ -2094,11 +2094,11 @@
                   class="mode-tab"
                   type="button"
                   role="tab"
-                  aria-label="Pre-Deployment Check"
+                  aria-label="deployment check"
                   aria-selected="false"
                   data-mode="check"
                 >
-                  <span class="tab-long">Pre-Deployment Check</span><span class="tab-short">Check</span>
+                  <span class="tab-long">deployment check</span><span class="tab-short">Check</span>
                 </button>
               </div>
             </div>
@@ -2138,7 +2138,7 @@
               </aside>
 
               <div class="architecture-canvas" id="architecture-canvas">
-                <div class="canvas-badge"><strong>Practice Architecture</strong> · saved</div>
+                <div class="canvas-badge"><strong>?명봽???ㅺ퀎</strong> · saved</div>
                 <div class="vpc-box"><span class="group-label">VPC · 10.0.0.0/16</span></div>
                 <div class="subnet-box subnet-public"><span class="group-label">Public subnet</span></div>
                 <div class="subnet-box subnet-private"><span class="group-label">Private subnet</span></div>
@@ -2311,7 +2311,7 @@
           <li><span class="flow-number">01</span>Requirement Input</li>
           <li><span class="flow-number">02</span>Architecture Board</li>
           <li><span class="flow-number">03</span>IaC Preview</li>
-          <li><span class="flow-number">04</span>Pre-Deployment Check</li>
+          <li><span class="flow-number">04</span>deployment check</li>
           <li><span class="flow-number">05</span>Deployment Paths</li>
         </ol>
       </section>
@@ -2334,11 +2334,11 @@
               </button>
               <button class="workflow-control" type="button" role="tab" aria-selected="false" data-step="terraform">
                 <span class="workflow-control-number">02</span>
-                <span><strong>IaC Preview 확인하기</strong><span>Practice Architecture가 어떤 코드가 되는지 Resource별로 확인합니다.</span></span>
+                <span><strong>IaC Preview 확인하기</strong><span>?명봽???ㅺ퀎가 어떤 코드가 되는지 Resource별로 확인합니다.</span></span>
               </button>
               <button class="workflow-control" type="button" role="tab" aria-selected="false" data-step="deploy">
                 <span class="workflow-control-number">03</span>
-                <span><strong>Pre-Deployment Check</strong><span>Cost Risk, Security Risk와 Plan 변경 내용을 보고 Deployment를 승인합니다.</span></span>
+                <span><strong>deployment check</strong><span>Cost Risk, Security Risk와 Plan 변경 내용을 보고 Deployment를 승인합니다.</span></span>
               </button>
             </div>
 
@@ -2405,12 +2405,12 @@
             <h2 id="reverse-title">이미 AWS에 있다면,<br />처음부터 다시 그리지 마세요.</h2>
             <p>
               검증된 AWS Role과 Provider Adapter로 Resource를 읽고, VPC와 Subnet의 포함 관계와 실제 연결 정보를 기준으로
-              Practice Architecture 후보를 만듭니다. 가져온 결과는 Architecture Board에 적용하기 전에 먼저 확인할 수 있습니다.
+              ?명봽???ㅺ퀎 후보를 만듭니다. 가져온 결과는 Architecture Board에 적용하기 전에 먼저 확인할 수 있습니다.
             </p>
             <ul class="reverse-list">
               <li><span class="check-icon">✓</span><span>지원하는 리소스는 이름과 주요 파라미터까지 복원</span></li>
               <li><span class="check-icon">✓</span><span>지원하지 못한 리소스와 권한 부족도 숨기지 않고 표시</span></li>
-              <li><span class="check-icon">✓</span><span>확인한 Practice Architecture만 프로젝트로 생성</span></li>
+              <li><span class="check-icon">✓</span><span>확인한 ?명봽???ㅺ퀎만 프로젝트로 생성</span></li>
             </ul>
           </div>
 
@@ -2427,7 +2427,7 @@
       <section class="section section-dark" id="safety" aria-labelledby="safety-title">
         <div class="container">
           <header class="section-heading reveal">
-            <p class="section-kicker">Pre-deployment check</p>
+            <p class="section-kicker">deployment check</p>
             <h2 id="safety-title">Deployment를 승인하기 전에<br />알아야 할 것을 먼저.</h2>
             <p>
               IaC Preview 문법만 맞는지 보는 데서 끝나지 않습니다. 공개된 포트, 비싼 Resource, 삭제 예정 항목과 AWS 권한 문제를
@@ -2460,14 +2460,14 @@
             <p class="section-kicker">Two deployment paths</p>
             <h2 id="deployment-title">승인한 변경은,<br />팀의 방식으로 배포하세요.</h2>
             <p>
-              빠른 검증은 Direct Deployment Path로, 팀 운영 변경은 Git/CI/CD Deployment Path로 이어집니다.
+              빠른 검증은 managed deployment로, 팀 운영 변경은 CI/CD delivery로 이어집니다.
               어느 쪽이든 사용자가 승인한 IaC Preview에서 시작합니다.
             </p>
           </header>
 
           <div class="deployment-paths reveal">
             <article class="deployment-path">
-              <p class="deployment-path-label">Direct Deployment Path</p>
+              <p class="deployment-path-label">managed deployment</p>
               <h3>지금 바로 검증하고 싶을 때</h3>
               <ol class="path-steps">
                 <li><span>01</span>Plan</li>
@@ -2479,7 +2479,7 @@
             </article>
 
             <article class="deployment-path">
-              <p class="deployment-path-label">Git/CI/CD Deployment Path</p>
+              <p class="deployment-path-label">CI/CD delivery</p>
               <h3>팀과 검토하며 운영에 반영할 때</h3>
               <ol class="path-steps">
                 <li><span>01</span>Repository</li>
@@ -2524,7 +2524,7 @@
             <img class="brand-mark" src="apps/web/public/sketchcatch-logo.png" alt="" width="14" height="21" />
             <span>SketchCatch</span>
           </a>
-          <p>Practice Architecture to approved Deployment.</p>
+          <p>?명봽???ㅺ퀎 to approved Deployment.</p>
         </div>
         <div class="footer-meta">Static concept · 2026<br />Built from the SketchCatch product flow</div>
       </div>

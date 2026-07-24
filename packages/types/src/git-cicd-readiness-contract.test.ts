@@ -94,7 +94,7 @@ const buildVerification = {
   verifiedAt: null
 } satisfies ProjectDeliveryBuildVerification;
 
-test("defines the Git/CI/CD readiness snapshot contract", () => {
+test("defines the CI/CD readiness snapshot contract", () => {
   const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
   const typecheckArguments = [
     "exec",
