@@ -119,3 +119,12 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed Template Terraform names now derive from the short `templateResourceId`, resource labels remain visible when the display toggle is on at far zoom, and Terraform gutter/highlight layers synchronize in the same scroll event.
 - Verified: focused API tests 2/2, focused Web tests 107/107, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass.
 - The broader Web suite was attempted earlier and remains red in unrelated baseline tests outside this diff. No dependency, lockfile, migration, cloud mutation, or deployment change was made.
+
+### 2026-07-24 - Reverse Engineering completion audit
+
+- Checked every current Reverse Engineering catalog scan route. Each supported scan selection has a dedicated reader or an explicit Cloud Control inventory route; review-only resource aliases stay review-only and are not presented as Terraform-managed resources.
+- Preserved tags from EC2 query readers and RDS so imported resources keep their observed configuration and tag-based presentation frames.
+- Kept scan success on the preview screen, opened the result actions for narrow screens, warned before apply when a scan is partial, and made the details modal restore keyboard focus correctly.
+- Kept AWS import-access cleanup metadata until its Manager and Policy artifacts are confirmed cleaned. Connection deletion and read checks now refuse to bypass an active or completed cleanup flow.
+- Focused Reverse Engineering, AWS connection, import-access, Settings, sandbox, and Terraform import-safety tests pass. Root `pnpm test` still fails in existing AI architecture-draft and Template visual-baseline tests outside this audit.
+- The local Web server on port 3000 is running from this branch. The Chrome controller cannot currently attach to a user tab, so no browser-driven cloud mutation was attempted.

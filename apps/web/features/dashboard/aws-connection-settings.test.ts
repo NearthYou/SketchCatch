@@ -109,7 +109,8 @@ test("settings previews exact SketchCatch managed cleanup before AWS connection 
   assert.match(source, /confirmedManagedCleanup: true/);
   assert.match(source, /confirmationToken: deletionPreview\.confirmationToken/);
   assert.match(source, /AWS 연결 해제/);
-  assert.match(source, /구조 분석 설정은 유지됩니다/);
+  assert.match(source, /구조 분석 설정이 남아 있으면 먼저 정리해야 합니다/);
+  assert.doesNotMatch(source, /구조 분석 설정은 유지됩니다/);
   assert.doesNotMatch(source, /GitHub CodeConnection \{deletionPreview/);
   assert.match(source, /연결 해제가 완료되지 않았습니다\. AWS 연결은 유지되었습니다\./);
   assert.match(source, /연결 해제 중…/);

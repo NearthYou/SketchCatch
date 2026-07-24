@@ -8,7 +8,6 @@ import {
   getAwsConnectionCloudFormationTemplate,
   listAwsConnections,
   AwsConnectionConflictError,
-  AwsConnectionDeleteConflictError,
   AwsConnectionImportAccessCleanupConflictError,
   type AwsConnectionRecord,
   shouldBlockAwsConnectionDeletion,
