@@ -1180,19 +1180,20 @@
       "priority": 2,
       "area": "repository-ux",
       "title": "Ranked Repository preview and structured follow-up questions",
-      "user_visible_behavior": "Repository 분석 결과에서 추천 순위와 명확한 AI 설계 작업을 확인하고, 추천 이유 길이와 관계없이 고정된 탐색 제어를 사용하며, 추가 질문과 선택지를 쉽게 구분한다.",
+      "user_visible_behavior": "Repository 분석 결과에서 추천 순위와 명확한 AI 설계 작업을 확인하고, AI로 직접 설계를 누르면 저장 전 분석도 AI 다이어그램 설계 채팅으로 바로 이어지며, 추천 이유 길이와 관계없이 고정된 탐색 제어를 사용하고 추가 질문과 선택지를 쉽게 구분한다.",
       "status": "passing",
       "verification": [
         "현재 후보에 따라 1순위, 2순위, 3순위 추천 레이블을 보여준다.",
-        "AI 설계 작업은 AI로 직접 설계로 표시한다.",
+        "AI로 직접 설계는 저장된 projectId가 없는 Repository 분석에서도 프로젝트 이름을 유지한 AI 다이어그램 설계 채팅을 즉시 연다.",
         "추천 이유가 여러 줄이어도 후보 탐색 제어는 프리뷰 하단 상단에 고정된다.",
         "Template 이름은 보조 정보로 낮추고 추가 질문 제목을 가장 크게 표시한다.",
         "각 질문은 여백으로 분리하고 질문과 답변 간격은 좁히며, 라디오 답변은 선택 카드로 표시한다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-23",
+        "lastVerified": "2026-07-24",
         "commands": [
-          "pnpm --dir apps/web exec node --import ./test-css-register.mjs --import tsx --test app/workspace/repository/*.test.ts app/workspace/repository/*.test.tsx",
+          "apps/web/node_modules/.bin/tsx.CMD --test apps/web/features/workspace/workspace-ai-start-entry.test.ts apps/web/app/workspace/ai/workspace-ai-route-entry.test.ts apps/web/app/workspace/ai/ai-start-model.test.ts apps/web/app/workspace/repository/repository-start-client.test.ts apps/web/app/workspace/ai/use-ai-start-workflow.test.ts apps/web/app/workspace/ai/workspace-ai-presentation.test.ts",
+          "node --import ./test-css-register.mjs --import tsx --test app/workspace/ai/page.test.tsx app/workspace/repository/repository-analysis-screen.test.tsx",
           "pnpm lint",
           "pnpm typecheck",
           "pnpm build",
@@ -1200,7 +1201,7 @@
           "git diff --check",
           "authenticated in-app browser navigation across Repository candidates and follow-up answer states"
         ],
-        "notes": "All 46 Repository tests pass. Root lint, typecheck, and all five production builds pass. Browser verification confirmed stable candidate navigation plus clear follow-up question hierarchy and selected answer-card styling."
+        "notes": "The Repository-to-AI focused suite passes 49/49 and the route/render integration suite passes 4/4. Harness, root lint, root typecheck, and all five production build tasks pass. Prior authenticated browser evidence for candidate navigation and follow-up hierarchy remains valid."
       },
       "notes": "No API, persistence, dependency, migration, cloud mutation, deployment, GitHub issue, or Git/CI/CD handoff changed."
     }

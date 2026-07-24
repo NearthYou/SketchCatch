@@ -1,6 +1,7 @@
 import type { AiStartExistingProject } from "./ai-start-model";
 
 type WorkspaceAiRouteSearchParams = {
+  readonly entry?: string | readonly string[] | undefined;
   readonly projectId?: string | readonly string[] | undefined;
   readonly projectName?: string | readonly string[] | undefined;
 };
@@ -23,6 +24,18 @@ export function resolveWorkspaceAiExistingProject(
     projectName,
     returnHref: `/workspace/repository?${query}`
   };
+}
+
+export function resolveWorkspaceAiInitialProjectName(
+  params: WorkspaceAiRouteSearchParams
+): string | undefined {
+  const entry = getSingleSearchParam(params.entry)?.trim();
+  const projectId = getSingleSearchParam(params.projectId)?.trim();
+  const projectName = getSingleSearchParam(params.projectName)?.trim();
+
+  return entry === "repository_analysis" && !projectId && projectName
+    ? projectName
+    : undefined;
 }
 
 function getSingleSearchParam(value: string | readonly string[] | undefined): string | undefined {

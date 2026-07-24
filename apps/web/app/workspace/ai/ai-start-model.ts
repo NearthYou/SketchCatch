@@ -21,6 +21,28 @@ export type AiStartProjectDraft = {
   readonly updatedAt: string;
 };
 
+export function resolveAiStartEntryDraft({
+  existingProjectName,
+  initialProjectName,
+  storedDraft,
+  updatedAt = new Date().toISOString()
+}: {
+  readonly existingProjectName?: string | undefined;
+  readonly initialProjectName?: string | undefined;
+  readonly storedDraft: AiStartProjectDraft | null;
+  readonly updatedAt?: string | undefined;
+}): AiStartProjectDraft | null {
+  const projectName = existingProjectName?.trim() || initialProjectName?.trim();
+
+  return projectName
+    ? {
+        projectName,
+        startMode: "ai",
+        updatedAt
+      }
+    : storedDraft;
+}
+
 export type AiStartExistingProject = {
   readonly projectId: string;
   readonly projectName: string;

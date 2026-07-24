@@ -2,6 +2,14 @@
 
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/` and remain available in Git history.
 
+
+## 2026-07-24 - Open AI design chat directly from Repository analysis
+
+- Made the Repository result's `AI로 직접 설계` route explicit and initialized a fresh AI start draft from the analyzed project name when no project has been saved yet; existing project entries keep their project context.
+- Added route, draft-resolution, server-page, and Repository-link regressions so the action cannot fall back to `/workspace/new` or depend on stale session storage.
+- Verification: focused Repository/Workspace AI tests 49/49, route/render integration tests 4/4, harness, all five lint tasks, all five typecheck tasks, all five production build tasks, and diff checks pass.
+- No API, schema, migration, dependency, cloud mutation, production deployment, Terraform action, GitHub mutation, or push was performed.
+
 ## 2026-07-24 - Validate authored Terraform runtime Secrets from source
 
 - Reproduced the production false positive: `random_password` is intentionally omitted from synchronized Diagram nodes while the Web prerequisite required that Diagram node even when the saved Terraform chain was complete.
