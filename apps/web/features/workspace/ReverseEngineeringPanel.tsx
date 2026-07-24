@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, LoaderCircle, X } from "lucide-react";
+import { CheckCircle2, CircleAlert, LoaderCircle, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode, ReactPortal } from "react";
@@ -444,9 +444,12 @@ function ReverseEngineeringPreviewActions({
         </div>
       </dl>
       {partialScanNotice ? (
-        <div className={styles.warningNotice} role="status">
-          <strong>{partialScanNotice.title}</strong>
-          <p>{partialScanNotice.description}</p>
+        <div className={styles.partialScanStatus} role="status">
+          <CircleAlert aria-hidden="true" size={17} />
+          <div>
+            <strong>일부 항목을 확인하지 못했습니다</strong>
+            <p>가져온 구조는 그대로 확인할 수 있습니다.</p>
+          </div>
           {partialScanNotice.action === "open_settings" ? (
             <a className={styles.secondaryButton} href={workflow.resultSettingsHref}>
               AWS 연결 설정

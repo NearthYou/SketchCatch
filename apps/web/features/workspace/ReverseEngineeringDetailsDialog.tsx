@@ -201,6 +201,7 @@ export function ReverseEngineeringDetailsDialog({
                 toggleSection("resources");
               }
             }}
+            sectionId="resources"
             title="가져온 리소스"
           >
             <label className={styles.searchField}>
@@ -239,6 +240,7 @@ export function ReverseEngineeringDetailsDialog({
             isOpen={openSections.has("coverage")}
             meta={hasPartialFailure ? "부분 읽기" : "읽기 완료"}
             onToggle={() => toggleSection("coverage")}
+            sectionId="coverage"
             title="읽기 실패 또는 제한"
           >
             {hasPartialFailure ? (
@@ -291,6 +293,7 @@ export function ReverseEngineeringDetailsDialog({
             isOpen={openSections.has("checks")}
             meta={`확인 ${result.findings.length + result.analysisExclusions.length}건`}
             onToggle={() => toggleSection("checks")}
+            sectionId="checks"
             title="확인 필요 사항"
           >
             {result.findings.length === 0 && result.analysisExclusions.length === 0 ? (
@@ -323,6 +326,7 @@ export function ReverseEngineeringDetailsDialog({
             isOpen={openSections.has("source")}
             meta={`${response.scan.provider.toUpperCase()} · ${response.scan.region}`}
             onToggle={() => toggleSection("source")}
+            sectionId="source"
             title="원본 정보"
           >
             <dl className={styles.keyValues}>
@@ -361,15 +365,17 @@ function DetailAccordion({
   isOpen,
   meta,
   onToggle,
+  sectionId,
   title
 }: {
   readonly children: ReactNode;
   readonly isOpen: boolean;
   readonly meta: string;
   readonly onToggle: () => void;
+  readonly sectionId: DetailSection;
   readonly title: string;
 }) {
-  const contentId = `reverse-engineering-detail-${toStableId(title)}`;
+  const contentId = `reverse-engineering-detail-${sectionId}`;
 
   return (
     <section className={styles.detailAccordion}>

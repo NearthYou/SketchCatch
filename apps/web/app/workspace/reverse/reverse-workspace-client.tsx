@@ -1,10 +1,13 @@
 "use client";
 
+import { ArrowLeft } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useState } from "react";
 import { useAuth } from "../../../components/auth/auth-provider";
 import { DiagramEditor } from "../../../features/diagram-editor";
 import { EMPTY_DIAGRAM } from "../../../features/diagram-editor/constants";
 import { ReverseEngineeringPanel } from "../../../features/workspace/ReverseEngineeringPanel";
+import styles from "../../../features/workspace/reverse-engineering.module.css";
 
 type ReverseWorkspaceClientProps = {
   readonly projectName: string;
@@ -12,10 +15,23 @@ type ReverseWorkspaceClientProps = {
 
 const REVERSE_PREVIEW_PROJECT_ID = "reverse-preview-project";
 const REVERSE_WORKSPACE_PANEL_STATE = {
-  leftPanelOpen: false,
+  leftPanelOpen: true,
   rightPanelOpen: true,
   startWithMinimumWidths: true
 } as const;
+
+/** 시작 작업대의 왼쪽 패널에는 시작 방식을 바꾸는 행동만 가볍게 둡니다. */
+function ReverseEngineeringStartNavigation() {
+  return (
+    <nav aria-label="Reverse Engineering 탐색" className={styles.startNavigation}>
+      <p className={styles.eyebrow}>Reverse Engineering</p>
+      <Link className={styles.startNavigationLink} href="/workspace/new">
+        <ArrowLeft aria-hidden="true" size={16} />
+        시작 방식 다시 선택
+      </Link>
+    </nav>
+  );
+}
 
 // Reverse 시작은 공유 보드에 저장 전 AWS 미리보기 작업대를 연결합니다.
 export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientProps) {
@@ -35,7 +51,7 @@ export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientPr
       hidePreviewNotice
       initialDiagram={EMPTY_DIAGRAM}
       initialPanelLayout={REVERSE_WORKSPACE_PANEL_STATE}
-      leftPanel={null}
+      leftPanel={<ReverseEngineeringStartNavigation />}
       projectName={projectName}
       rightPanel={(context) => (
         <ReverseEngineeringPanel

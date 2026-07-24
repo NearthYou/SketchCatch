@@ -31,6 +31,35 @@
   overflow: auto;
 }
 
+.startNavigation {
+  composes: shell;
+  align-content: start;
+  display: grid;
+  gap: 12px;
+  min-height: 100%;
+  padding: 18px;
+}
+
+.startNavigationLink {
+  align-items: center;
+  border-radius: 7px;
+  color: var(--reverse-text);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 650;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 9px;
+  text-decoration: none;
+}
+
+.startNavigationLink:hover,
+.startNavigationLink:focus-visible {
+  background: var(--reverse-subtle);
+  outline: 2px solid var(--reverse-accent);
+  outline-offset: 2px;
+}
+
 .panelHeader,
 .section,
 .resultPanel,
@@ -405,6 +434,43 @@
   color: #7a4a00;
 }
 
+.partialScanStatus {
+  align-items: flex-start;
+  border-top: 1px solid var(--reverse-line);
+  color: var(--reverse-muted);
+  display: grid;
+  gap: 8px 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding-top: 12px;
+}
+
+.partialScanStatus > svg {
+  color: var(--reverse-warning);
+  margin-top: 1px;
+}
+
+.partialScanStatus > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.partialScanStatus strong {
+  color: var(--reverse-text);
+  font-size: 13px;
+}
+
+.partialScanStatus p {
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.partialScanStatus .secondaryButton {
+  grid-column: 2;
+  justify-self: start;
+}
+
 .errorNotice {
   background: var(--reverse-error-surface);
   border-color: #fecaca;
@@ -603,8 +669,10 @@
 }
 
 .modalBody {
+  align-content: start;
   display: grid;
   gap: 14px;
+  grid-auto-rows: max-content;
   min-height: 0;
   overflow: auto;
   padding: 18px 20px 24px;
