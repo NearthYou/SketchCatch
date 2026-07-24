@@ -77,9 +77,9 @@ export async function readAwsCloudControlReverseEngineeringResources(
       }
     } catch (error) {
       // Cloud Control registry에 없거나 LIST handler가 없는 종류는 IAM 권한을 더해도 읽을 수 없습니다.
-      // 이 reader는 보조 inventory이므로, 아직 발견하지 못한 리소스를 "권한 부족" 또는 "재시도"로
-      // 오인하지 않고 다른 reader 결과만 계속 보존합니다.
+      // 보조 reader의 한계로 별도 표시해 권한 부족·재시도 오류와 섞지 않습니다.
       if (isCloudControlListCapabilityUnavailable(error)) {
+        scanErrors.push(createCloudControlListCapabilityScanError(providerResourceType));
         continue;
       }
       scanErrors.push(
@@ -320,6 +320,22 @@ function isCloudControlListCapabilityUnavailable(error: unknown): boolean {
       typeof code === "string" &&
       CLOUD_CONTROL_LIST_CAPABILITY_ERROR_CODES.has(code.trim().toLowerCase())
   );
+}
+
+/** gg: Cloud Control의 목록 handler 제한은 권한 안내를 만들지 않고, 지원 범위로만 공개합니다. */
+function createCloudControlListCapabilityScanError(
+  providerResourceType: string
+): ReverseEngineeringScanError {
+  return {
+    id: "scan-error-service-cloud-control-capability",
+    serviceKey: "cloud-control-capability",
+    affectedProviderResourceTypes: [providerResourceType],
+    resourceType: "UNKNOWN",
+    stage: "provider_api",
+    reason: "unsupported",
+    message: "일부 AWS 종류는 Cloud Control 목록 조회를 지원하지 않습니다.",
+    retryable: false
+  };
 }
 
 /** gg: 검증된 Role의 임시 credential만 Cloud Control SDK에 전달합니다. */

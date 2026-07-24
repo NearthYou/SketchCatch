@@ -281,7 +281,9 @@ function classifyAwsPageFailureOutcome(error: unknown): AwsPageFailure["outcome"
     .filter((value): value is string => typeof value === "string")
     .join(" ");
   const reason = classifyScanErrorReason(classifierText);
-  return reason === "provider_error" || reason === "unknown" ? "transient" : reason;
+  return reason === "provider_error" || reason === "unknown" || reason === "unsupported"
+    ? "transient"
+    : reason;
 }
 
 export type AwsS3ReadClient = {
@@ -5749,6 +5751,8 @@ function formatSafeScanErrorMessage(reason: ReverseEngineeringScanError["reason"
       return "선택한 AWS Region을 확인해 주세요.";
     case "throttled":
       return "AWS 요청이 잠시 제한되었습니다.";
+    case "unsupported":
+      return "이 AWS 종류는 현재 조회 방식에서 지원되지 않습니다.";
     default:
       return "이 서비스를 읽지 못했습니다.";
   }

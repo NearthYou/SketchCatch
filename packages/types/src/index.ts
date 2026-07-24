@@ -2509,6 +2509,7 @@ export type ReverseEngineeringImportSuggestion = {
 export type ReverseEngineeringScanErrorReason =
   | "permission_denied"
   | "not_configured"
+  | "unsupported"
   | "invalid_region"
   | "expired_credential"
   | "throttled"
@@ -2542,6 +2543,16 @@ export type ReverseEngineeringServiceCoverage = {
     /** Safe IAM action names for AWS API operations that could not be read. */
     failedAwsApiActions?: string[] | undefined;
   }>;
+  /**
+   * AWS의 목록 조회 방식 자체가 지원하지 않는 발견된 종류입니다.
+   * 권한 부족이나 재시도가 필요한 읽기 실패와는 별도로 표시합니다.
+   */
+  capabilityLimits?: Array<{
+    serviceKey: string;
+    displayName: string;
+    reason: "not_supported";
+    affectedProviderResourceTypes?: string[] | undefined;
+  }> | undefined;
 };
 
 export type ReverseEngineeringScanLogLine = {

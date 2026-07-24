@@ -11,6 +11,7 @@ const SERVICE_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   "application-autoscaling": "Application Auto Scaling",
   "aws-inventory": "AWS 리소스 목록",
   "cloud-control": "Cloud Control",
+  "cloud-control-capability": "Cloud Control 목록 조회",
   cloudfront: "CloudFront",
   cloudwatch: "CloudWatch",
   "cloudwatch-logs": "CloudWatch Logs",
@@ -43,16 +44,42 @@ export type ReverseEngineeringConnectionFailureClassification = {
   readonly publicMessage: string;
 };
 
+export type ReverseEngineeringPublicCoverageOptions = {
+  /**
+   * 목록 조회 제한은 실제로 이번 결과에서 발견된 타입에만 안내합니다.
+   * 카탈로그에만 있는 타입을 현재 계정의 누락 리소스처럼 보이지 않게 합니다.
+   */
+  readonly observedProviderResourceTypes?: readonly string[] | undefined;
+};
+
 /** gg: 원문 provider 오류를 서비스 단위 공개 범위로 줄이고 같은 서비스는 한 번만 남깁니다. */
 export function createReverseEngineeringPublicCoverage(
-  scanErrors: readonly ReverseEngineeringScanError[]
+  scanErrors: readonly ReverseEngineeringScanError[],
+  options: ReverseEngineeringPublicCoverageOptions = {}
 ): { readonly coverage: ReverseEngineeringServiceCoverage } {
   const strongestErrors = new Map<string, ReverseEngineeringScanError>();
   const affectedProviderResourceTypesByService = new Map<string, Set<string>>();
   const failedAwsApiActionsByService = new Map<string, Set<string>>();
+  const capabilityProviderResourceTypesByService = new Map<string, Set<string>>();
+  const observedProviderResourceTypes = options.observedProviderResourceTypes
+    ? new Set(options.observedProviderResourceTypes.filter(isSafeAwsProviderResourceType))
+    : undefined;
 
   for (const scanError of scanErrors) {
     const serviceKey = getSafeServiceKey(scanError);
+
+    // Cloud Control의 목록 handler 미지원은 실제 읽기 실패가 아닙니다.
+    // 발견된 타입과 겹칠 때만 중립적인 지원 범위 안내로 남깁니다.
+    if (scanError.reason === "unsupported") {
+      addSafeCapabilityProviderResourceTypes(
+        capabilityProviderResourceTypesByService,
+        serviceKey,
+        scanError,
+        observedProviderResourceTypes
+      );
+      continue;
+    }
+
     addSafeAffectedProviderResourceTypes(
       affectedProviderResourceTypesByService,
       serviceKey,
@@ -76,16 +103,25 @@ export function createReverseEngineeringPublicCoverage(
       serviceKey,
       displayName: SERVICE_DISPLAY_NAMES[serviceKey] ?? "AWS 서비스",
       reason,
-      remedy: reason === "permission_required" ? ("open_settings" as const) : ("retry" as const),
+      remedy: getPublicCoverageRemedy(reason),
       ...(affectedProviderResourceTypes.length > 0 ? { affectedProviderResourceTypes } : {}),
       ...(failedAwsApiActions.length > 0 ? { failedAwsApiActions } : {})
     };
   });
+  const capabilityLimits = [...capabilityProviderResourceTypesByService].map(
+    ([serviceKey, providerResourceTypes]) => ({
+      serviceKey,
+      displayName: SERVICE_DISPLAY_NAMES[serviceKey] ?? "AWS 목록 조회",
+      reason: "not_supported" as const,
+      affectedProviderResourceTypes: [...providerResourceTypes].sort()
+    })
+  );
 
   return {
     coverage: {
       status: unavailableServices.length > 0 ? "partial" : "complete",
-      unavailableServices
+      unavailableServices,
+      ...(capabilityLimits.length > 0 ? { capabilityLimits } : {})
     }
   };
 }
@@ -156,12 +192,34 @@ function getAffectedProviderResourceTypes(
   return [...(affectedProviderResourceTypesByService.get(serviceKey) ?? [])].sort();
 }
 
+function addSafeCapabilityProviderResourceTypes(
+  capabilityProviderResourceTypesByService: Map<string, Set<string>>,
+  serviceKey: string,
+  scanError: ReverseEngineeringScanError,
+  observedProviderResourceTypes: ReadonlySet<string> | undefined
+): void {
+  const providerResourceTypes = getSafeAffectedProviderResourceTypes(scanError).filter(
+    (providerResourceType) =>
+      !observedProviderResourceTypes || observedProviderResourceTypes.has(providerResourceType)
+  );
+  if (providerResourceTypes.length === 0) return;
+
+  const collected = capabilityProviderResourceTypesByService.get(serviceKey) ?? new Set<string>();
+  for (const providerResourceType of providerResourceTypes) {
+    collected.add(providerResourceType);
+  }
+  capabilityProviderResourceTypesByService.set(serviceKey, collected);
+}
+
 /** gg: IAM action은 식별자·ARN 없이 권한 보완에 필요한 고정 operation 이름만 공개합니다. */
 function addSafeFailedAwsApiActions(
   failedAwsApiActionsByService: Map<string, Set<string>>,
   serviceKey: string,
   scanError: ReverseEngineeringScanError
 ): void {
+  // Cloud Control handler 미지원은 IAM action을 추가해도 해결되지 않으므로 권한 목록을 노출하지 않습니다.
+  if (scanError.reason === "unsupported") return;
+
   const actions = getSafeFailedAwsApiActions(scanError);
   if (actions.length === 0) return;
 
@@ -318,7 +376,7 @@ function getServiceKeyByResourceType(resourceType: ResourceType | "UNKNOWN"): st
   return keys[resourceType] ?? "aws-inventory";
 }
 
-/** gg: 내부 reason은 사용자에게 필요한 세 가지 해결 분류로만 줄입니다. */
+/** gg: 실제 읽기 실패 reason만 사용자가 구분할 수 있는 권한·재시도 분류로 줄입니다. */
 function getPublicCoverageReason(
   reason: ReverseEngineeringScanError["reason"]
 ): ReverseEngineeringServiceCoverage["unavailableServices"][number]["reason"] {
@@ -329,6 +387,16 @@ function getPublicCoverageReason(
   return reason === "not_configured" ? "not_configured" : "retry";
 }
 
+function getPublicCoverageRemedy(
+  reason: ReverseEngineeringServiceCoverage["unavailableServices"][number]["reason"]
+): ReverseEngineeringServiceCoverage["unavailableServices"][number]["remedy"] {
+  if (reason === "permission_required") {
+    return "open_settings";
+  }
+
+  return "retry";
+}
+
 /** gg: 원문 SDK message 대신 고정된 짧은 문장만 호환 필드에 남깁니다. */
 function getSafeScanErrorMessage(reason: ReverseEngineeringScanError["reason"]): string {
   if (reason === "permission_denied") {
@@ -337,6 +405,10 @@ function getSafeScanErrorMessage(reason: ReverseEngineeringScanError["reason"]):
 
   if (reason === "not_configured") {
     return "이 서비스의 조회 준비가 필요합니다.";
+  }
+
+  if (reason === "unsupported") {
+    return "일부 AWS 종류는 Cloud Control 목록 조회를 지원하지 않습니다.";
   }
 
   return "이 서비스를 읽지 못했습니다.";

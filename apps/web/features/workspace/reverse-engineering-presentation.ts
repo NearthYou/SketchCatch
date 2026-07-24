@@ -80,6 +80,7 @@ const SCAN_ERROR_SERVICE_NAMES: Readonly<Record<string, string>> = {
   "application-autoscaling": "Application Auto Scaling",
   "aws-inventory": "AWS 리소스 목록",
   "cloud-control": "Cloud Control",
+  "cloud-control-capability": "Cloud Control 목록 조회",
   cloudfront: "CloudFront",
   cloudwatch: "CloudWatch",
   "cloudwatch-logs": "CloudWatch Logs",
@@ -284,6 +285,10 @@ function getScanErrorCauseLabel(reason: ReverseEngineeringScanError["reason"]): 
     return "서비스 준비 필요";
   }
 
+  if (reason === "unsupported") {
+    return "AWS 조회 방식 미지원";
+  }
+
   if (reason === "invalid_region") {
     return "리전 설정 오류";
   }
@@ -314,6 +319,10 @@ function getScanErrorRemedy(reason: ReverseEngineeringScanError["reason"]): stri
 
   if (reason === "invalid_region") {
     return "AWS 연결 리전을 확인한 뒤 시도해 주세요.";
+  }
+
+  if (reason === "unsupported") {
+    return "이 종류는 Cloud Control 목록 조회를 지원하지 않아 별도 reader가 필요합니다.";
   }
 
   return "잠시 후 다시 시도해 주세요.";

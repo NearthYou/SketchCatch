@@ -137,6 +137,97 @@ test("Cloud Control 조회 실패는 일반 AWS 인벤토리가 아니라 원래
   assert.doesNotMatch(JSON.stringify({ sanitized, coverage }), /arn:aws|private/iu);
 });
 
+test("Cloud Control 목록 handler 미지원은 부분 실패 대신 별도 지원 범위로 안내한다", () => {
+  const scanErrors = [
+    {
+      id: "scan-error-service-cloud-control-capability",
+      serviceKey: "cloud-control-capability",
+      resourceType: "UNKNOWN" as const,
+      stage: "provider_api" as const,
+      reason: "unsupported" as const,
+      message: "private AWS handler error",
+      retryable: false,
+      affectedProviderResourceTypes: [
+        "AWS::CertificateManager::Certificate",
+        "arn:aws:acm:ap-northeast-2:123456789012:private"
+      ],
+      failedAwsApiActions: ["cloudformation:ListResources"]
+    }
+  ];
+
+  const sanitized = sanitizeReverseEngineeringScanErrors(scanErrors);
+  const coverage = createReverseEngineeringPublicCoverage(sanitized).coverage;
+
+  assert.deepEqual(sanitized, [
+    {
+      id: "scan-error-service-cloud-control-capability",
+      serviceKey: "cloud-control-capability",
+      resourceType: "UNKNOWN",
+      stage: "provider_api",
+      reason: "unsupported",
+      message: "일부 AWS 종류는 Cloud Control 목록 조회를 지원하지 않습니다.",
+      retryable: false,
+      affectedProviderResourceTypes: ["AWS::CertificateManager::Certificate"]
+    }
+  ]);
+  assert.deepEqual(coverage, {
+    status: "complete",
+    unavailableServices: [],
+    capabilityLimits: [
+      {
+        serviceKey: "cloud-control-capability",
+        displayName: "Cloud Control 목록 조회",
+        reason: "not_supported",
+        affectedProviderResourceTypes: ["AWS::CertificateManager::Certificate"]
+      }
+    ]
+  });
+  assert.doesNotMatch(JSON.stringify({ sanitized, coverage }), /arn:aws|private/iu);
+});
+
+test("Cloud Control 목록 제한은 이번 결과에서 실제 발견된 종류에만 남긴다", () => {
+  const scanErrors = sanitizeReverseEngineeringScanErrors([
+    {
+      id: "scan-error-service-cloud-control-capability",
+      serviceKey: "cloud-control-capability",
+      resourceType: "UNKNOWN" as const,
+      stage: "provider_api" as const,
+      reason: "unsupported" as const,
+      message: "private AWS handler error",
+      retryable: false,
+      affectedProviderResourceTypes: [
+        "AWS::CertificateManager::Certificate",
+        "AWS::CertificateManager::CertificateValidation"
+      ]
+    }
+  ]);
+
+  const coverage = createReverseEngineeringPublicCoverage(scanErrors, {
+    observedProviderResourceTypes: ["AWS::CertificateManager::Certificate"]
+  }).coverage;
+
+  assert.deepEqual(coverage, {
+    status: "complete",
+    unavailableServices: [],
+    capabilityLimits: [
+      {
+        serviceKey: "cloud-control-capability",
+        displayName: "Cloud Control 목록 조회",
+        reason: "not_supported",
+        affectedProviderResourceTypes: ["AWS::CertificateManager::Certificate"]
+      }
+    ]
+  });
+
+  const withoutObservedType = createReverseEngineeringPublicCoverage(scanErrors, {
+    observedProviderResourceTypes: []
+  }).coverage;
+  assert.deepEqual(withoutObservedType, {
+    status: "complete",
+    unavailableServices: []
+  });
+});
+
 test("확장 reader의 서비스 이름은 일반 AWS 인벤토리로 뭉개지지 않는다", () => {
   const scanErrors = [
     ["application-autoscaling", "Application Auto Scaling"],

@@ -2,6 +2,7 @@ import type { ReverseEngineeringScanError } from "@sketchcatch/types";
 
 const REASON_PRIORITY = {
   unknown: 0,
+  unsupported: 0,
   provider_error: 1,
   throttled: 1,
   expired_credential: 1,

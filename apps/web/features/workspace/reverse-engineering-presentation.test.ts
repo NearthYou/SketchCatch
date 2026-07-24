@@ -563,6 +563,7 @@ test("부분 실패 원인을 내부 오류 없이 쉬운 한국어로 구분한
   const reasons = [
     ["permission_denied", "권한 부족"],
     ["not_configured", "서비스 준비 필요"],
+    ["unsupported", "AWS 조회 방식 미지원"],
     ["invalid_region", "리전 설정 오류"],
     ["expired_credential", "AWS 연결 만료"],
     ["throttled", "AWS 요청 제한"],

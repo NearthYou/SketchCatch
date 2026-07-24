@@ -969,7 +969,10 @@ export function ReverseEngineeringScanCoveragePanel({
   readonly scanErrors: ReverseEngineeringScanError[];
 }) {
   const notice = getScanCoverageNotice(coverage, scanErrors);
-  const hasPartialFailure = coverage ? coverage.status === "partial" : scanErrors.length > 0;
+  const hasPartialFailure = coverage
+    ? coverage.status === "partial"
+    : scanErrors.some((scanError) => scanError.reason !== "unsupported");
+  const capabilityLimits = coverage?.capabilityLimits ?? [];
   const detailedPresentations = new Map(
     presentReverseEngineeringScanErrors(scanErrors).map((presentation) => [
       presentation.key,
@@ -1029,6 +1032,27 @@ export function ReverseEngineeringScanCoveragePanel({
           </div>
         </details>
       ) : null}
+      {capabilityLimits.length > 0 ? (
+        <details className={styles.detail}>
+          <summary className={styles.detailSummary}>Cloud Control 목록 조회 미지원 종류</summary>
+          <div className={styles.detailBody}>
+            <ul className={styles.resultList}>
+              {capabilityLimits.map((capabilityLimit) => (
+                <li key={capabilityLimit.serviceKey} className={styles.resultItem}>
+                  <strong>{capabilityLimit.displayName}</strong>
+                  <span className={styles.errorBadge}>목록 조회 미지원</span>
+                  <span>이 종류는 별도 reader가 필요합니다.</span>
+                  {(capabilityLimit.affectedProviderResourceTypes?.length ?? 0) > 0 ? (
+                    <span>
+                      해당 종류: {capabilityLimit.affectedProviderResourceTypes?.join(", ")}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -1045,14 +1069,21 @@ function getScanCoverageNotice(
     return "Resource Explorer를 읽지 못했습니다. 가져온 결과가 전체 AWS 상태가 아닐 수 있습니다.";
   }
 
-  if (coverage?.status === "partial" || scanErrors.length > 0) {
+  if (
+    coverage?.status === "partial" ||
+    scanErrors.some((scanError) => scanError.reason !== "unsupported")
+  ) {
     return "일부 AWS 서비스를 읽지 못했습니다. 가져온 결과가 전체 AWS 상태가 아닐 수 있습니다.";
+  }
+
+  if ((coverage?.capabilityLimits?.length ?? 0) > 0) {
+    return "읽기 실패는 없지만 일부 AWS 종류는 Cloud Control 목록 조회 대신 별도 reader가 필요합니다.";
   }
 
   return "현재 권한으로 읽을 수 있는 범위에서는 부분 실패 없이 스캔했습니다.";
 }
 
-// gg: 공개 coverage의 세 가지 원인만 사용자가 바로 할 수 있는 짧은 문장으로 바꿉니다.
+// gg: 공개 coverage의 실제 읽기 실패 원인만 사용자가 바로 할 수 있는 짧은 문장으로 바꿉니다.
 function getCoverageRemedy(
   reason: ReverseEngineeringServiceCoverage["unavailableServices"][number]["reason"]
 ): string {

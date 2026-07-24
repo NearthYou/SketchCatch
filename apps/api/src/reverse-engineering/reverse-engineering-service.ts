@@ -269,7 +269,11 @@ export function normalizeReverseEngineeringScanResult(
       publicResourceIdMap
     ),
     scanErrors,
-    coverage: createReverseEngineeringPublicCoverage(scanErrors).coverage,
+    coverage: createReverseEngineeringPublicCoverage(scanErrors, {
+      observedProviderResourceTypes: persistedResult.discoveredResources.map(
+        (resource) => resource.providerResourceType
+      )
+    }).coverage,
     importSuggestions: sanitizePublicImportSuggestions(
       sanitizeImportSuggestions(normalizationContext, persistedResult.importSuggestions),
       publicResourceIdMap

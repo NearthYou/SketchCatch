@@ -395,6 +395,34 @@ test("읽기 실패 상세에는 확인된 최소 읽기 권한만 보여주고 
   assert.doesNotMatch(html, /private:Secret/);
 });
 
+test("Cloud Control 목록 조회 미지원은 부분 실패나 환경설정 행동으로 안내하지 않는다", () => {
+  const coverage: ReverseEngineeringServiceCoverage = {
+    status: "complete",
+    unavailableServices: [],
+    capabilityLimits: [
+      {
+        serviceKey: "cloud-control-capability",
+        displayName: "Cloud Control 목록 조회",
+        reason: "not_supported",
+        affectedProviderResourceTypes: ["AWS::CertificateManager::Certificate"]
+      }
+    ]
+  };
+  const html = renderCoveragePanel(coverage);
+  const previewHtml = renderPanel("original", { boardNodeCount: 1, coverage });
+
+  assert.match(html, /Cloud Control 목록 조회 미지원 종류/);
+  assert.match(html, /Cloud Control 목록 조회/);
+  assert.match(html, /목록 조회 미지원/);
+  assert.match(html, /이 종류는 별도 reader가 필요합니다/);
+  assert.match(html, /해당 종류: AWS::CertificateManager::Certificate/);
+  assert.doesNotMatch(
+    html,
+    /못 읽은 서비스 자세히 보기|필요한 읽기 권한|환경설정에서 읽기 권한|다시 시도해 주세요/
+  );
+  assert.doesNotMatch(previewHtml, />AWS 연결 설정</);
+});
+
 test("coverage가 있어도 실제 실패 원인을 연결 만료와 리전 오류로 구분한다", () => {
   const html = renderPanel("original", {
     coverage: {

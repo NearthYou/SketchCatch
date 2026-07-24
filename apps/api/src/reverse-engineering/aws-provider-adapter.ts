@@ -777,7 +777,6 @@ export function createAwsProviderAdapter(
     async scan(input) {
       const discoveryResult = normalizeDiscoveryResult(await gateway.discoverResources(input));
       const scanErrors = sanitizeReverseEngineeringScanErrors(discoveryResult.scanErrors);
-      const { coverage } = createReverseEngineeringPublicCoverage(scanErrors);
       const records = filterMultiplexedReaderRecordsForOutput(
         input,
         collapseS3ObjectInventoryRecords(discoveryResult.records)
@@ -807,6 +806,11 @@ export function createAwsProviderAdapter(
             }
           : resource
       );
+      const { coverage } = createReverseEngineeringPublicCoverage(scanErrors, {
+        observedProviderResourceTypes: discoveredResources.map(
+          (resource) => resource.providerResourceType
+        )
+      });
       const architectureJson = createDetailedManagementSafeArchitectureJson(discoveredResources);
       const scan = createEmptyScan(input);
 
