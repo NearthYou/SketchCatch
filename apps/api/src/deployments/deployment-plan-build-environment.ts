@@ -21,7 +21,7 @@ export type DeploymentPlanBuildEnvironmentOptions = {
     db: DatabaseClient["db"];
     projectId: string;
     userId: string;
-  }) => Promise<void>;
+  }) => Promise<void | RepositoryAccessVerificationResult>;
   verifyProjectRepositoryAccess?: (input: {
     db: DatabaseClient["db"];
     projectId: string;
@@ -51,8 +51,8 @@ export async function prepareEcsBuildEnvironmentForPlan(
       db: DatabaseClient["db"];
       projectId: string;
       userId: string;
-    }) => {
-      await prepareProjectBuildEnvironmentService(
+    }) =>
+      prepareProjectBuildEnvironmentService(
         {
           architectureId: preparation.architectureId,
           projectId: preparation.projectId,
@@ -60,14 +60,17 @@ export async function prepareEcsBuildEnvironmentForPlan(
         },
         createPostgresProjectBuildEnvironmentRepository(preparation.db),
         createAwsProjectBuildEnvironmentGateway()
-      );
-    });
-  await prepareProjectBuildEnvironment({
+      ));
+  const preparation = await prepareProjectBuildEnvironment({
     architectureId: input.deployment.architectureId,
     db: input.db,
     projectId: input.deployment.projectId,
     userId: input.userId
   });
+
+  if (preparation?.buildEnvironment?.repositoryVerificationStatus === "verified") {
+    return;
+  }
 
   const verifyProjectRepositoryAccess =
     options.verifyProjectRepositoryAccess ??

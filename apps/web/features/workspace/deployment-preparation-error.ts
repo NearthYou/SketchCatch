@@ -56,7 +56,7 @@ export type DeploymentTargetPrerequisite = Readonly<{
 
 export function getDeploymentTargetPrerequisite({
   awsConnectionId,
-  diagramJson,
+  diagramJson: _diagramJson,
   scope,
   target
 }: {
@@ -67,10 +67,7 @@ export function getDeploymentTargetPrerequisite({
     Pick<ProjectDeploymentTarget, "connectionId" | "confirmedBuildConfig">
   > | null;
 }): DeploymentTargetPrerequisite | null {
-  const requiresApplicationTarget =
-    scope === "application" ||
-    scope === "full_stack" ||
-    (scope === "auto" && hasEcsApplicationResource(diagramJson));
+  const requiresApplicationTarget = scope === "application" || scope === "full_stack";
 
   if (!requiresApplicationTarget) {
     return null;
