@@ -73,18 +73,14 @@ test("full-stack preparation requires a confirmed target while infrastructure do
       title: "전체 스택 선행 설정 필요"
     }
   );
-  assert.deepEqual(
+  assert.equal(
     getDeploymentTargetPrerequisite({
       awsConnectionId: "connection-1",
       diagramJson,
       scope: "auto",
       target: null
     }),
-    {
-      message:
-        "전체 스택 배포 전에 Source Repository와 프로젝트 배포 타깃을 연결하고 ECS 빌드 설정을 저장해 주세요.",
-      title: "전체 스택 선행 설정 필요"
-    }
+    null
   );
   assert.equal(
     getDeploymentTargetPrerequisite({

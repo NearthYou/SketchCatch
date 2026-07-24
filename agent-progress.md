@@ -3,6 +3,7 @@
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/` and remain available in Git history.
 ## Current Verified State
 
+- 2026-07-24: Managed application deployment now waits for its durable Terraform Plan before automatic approval, reuses exact verified Repository checkout evidence from the existing project build environment, and lets automatic ECS validation/Plan continue as infrastructure when CI/CD build settings do not exist. Focused API tests pass 12/12, focused Web tests pass 58/58, and harness, lint, typecheck, and all five production builds pass. No schema, migration, dependency metadata, Terraform apply/destroy, cloud mutation, or user CI/CD handoff changed.
 - 2026-07-24: Applied the pending local database migration `0057_reverse_engineering_scan_previews`. It creates the preview-persistence table required by the Reverse Engineering preview endpoint. Verified the 14-column table, migration ledger, and API `/health` plus `/health/db` afterward.
 - 2026-07-24: Rebuilt the current Web standalone runtime and atomically refreshed the local launchd `com.sketchcatch.web.stable` service. Port 3000 now serves the current Reverse Engineering UI bundle and proxies unauthenticated GitHub-installation requests to the current API (401 expected). Replaced local runtimes remain under `web-runtime.backup.*` for rollback until visual confirmation.
 - 2026-07-24: Reverse Engineering now opens both desktop panels at their minimum widths on the initial empty-board entry. Compact viewports still collapse both panels, and the existing resize controls remain available. Focused panel/reverse tests, lint, typecheck, and production builds passed before the refreshed Web runtime was started.
@@ -29,6 +30,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-24 - Decouple application approval and CI/CD readiness from Terraform Plan
+
+- Delayed application-only automatic approval and execution until polling observes the durable Plan artifact, preventing the premature approve HTTP 409.
+- Reused an unchanged ready build environment's exact Repository verification instead of repeating the AWS CodeConnections checkout check.
+- Automatic ECS preparation without CI/CD build settings now produces an infrastructure Terraform Plan; explicit application and full-stack scopes still require their deployment target.
+- Verification passed: 12 focused API tests, 58 focused Web tests, root lint, root typecheck, all five production builds, `git diff --check`, and the harness check.
+- No database migration, dependency metadata change, Terraform apply/destroy, cloud mutation, or user CI/CD handoff was performed.
 ### 2026-07-24 - Keep the authored scaling target manual
 
 - Removed only `aws_appautoscaling_target` from the authored Fixed Template while preserving the scaling policy with deployable ECS literals.

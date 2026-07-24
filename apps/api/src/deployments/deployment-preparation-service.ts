@@ -70,15 +70,6 @@ export async function resolveDeploymentPreparation(
   assertDraftTerraformDoesNotIncludeAnalysisExcludedResource(draft);
 
   const target = await repository.findProjectTargetForPreparation(input.projectId);
-  if (
-    input.requestedScope === "auto" &&
-    isEcsFargateDraft(draft) &&
-    !target?.confirmedBuildConfig
-  ) {
-    throw new DeploymentConflictError(
-      "A confirmed project deployment target is required for automatic ECS application deployment"
-    );
-  }
   const scope =
     input.requestedScope === "auto"
       ? detectDeploymentScope({ draft, target })
@@ -158,14 +149,6 @@ export function createAnalysisExcludedDeploymentMessage(conflict: {
   resourceAddress: string;
 }): string {
   return `${conflict.resourceAddress} matches an analysis-excluded resource and cannot be prepared for deployment`;
-}
-
-function isEcsFargateDraft(draft: DeploymentPreparationDraft): boolean {
-  return getDraftResourceTypes(draft).some((resourceType) =>
-    ["ECS_SERVICE", "ECS_TASK_DEFINITION", "aws_ecs_service", "aws_ecs_task_definition"].includes(
-      resourceType
-    )
-  );
 }
 
 function getDraftResourceTypes(draft: DeploymentPreparationDraft): string[] {
