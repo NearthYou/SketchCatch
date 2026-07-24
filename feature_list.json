@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-23",
+  "lastUpdated": "2026-07-24",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -28,6 +28,36 @@
     ]
   },
   "features": [
+    {
+      "id": "BOARD-CTRL-WHEEL-ZOOM-001",
+      "priority": 2,
+      "area": "web-ux",
+      "title": "Architecture Board Ctrl-wheel zoom shortcut",
+      "user_visible_behavior": "Holding Control while scrolling over the main Architecture Board zooms in for an upward wheel gesture and zooms out for a downward wheel gesture, while an unmodified wheel gesture keeps panning the Board.",
+      "status": "passing",
+      "verification": [
+        "The main Architecture Board enables wheel zoom only while Control or Meta is active.",
+        "The native page zoom is prevented while the Board handles the modified wheel gesture.",
+        "Plain wheel input keeps the existing Board pan behavior."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-24",
+        "commands": [
+          "pnpm --dir apps/web exec node --import ./test-css-register.mjs --import tsx --test features/diagram-editor/board-wheel-zoom-shortcut.test.ts features/diagram-editor/diagram-editor-layout.test.ts",
+          "pnpm --filter @sketchcatch/web lint",
+          "pnpm --filter @sketchcatch/web typecheck",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm --filter @sketchcatch/web build",
+          "pnpm build",
+          "pnpm test",
+          "pnpm harness:check",
+          "git diff --check"
+        ],
+        "notes": "The focused Ctrl/Meta wheel and Board regression set passes 61/61. Root lint and typecheck pass, and the final Web production build passes. The root Turbo build wrapper timed out without output after four minutes, while the direct Web build completed all routes. The full test entrypoint remains red in unrelated pre-existing Web baselines including Settings CodeConnection refresh, Live Observation layout contracts, and Repository start behavior."
+      },
+      "notes": "No shared contract, persistence, dependency, migration, cloud mutation, or deployment change is required."
+    },
     {
       "id": "TEST-PROTECTION-LINE-001",
       "priority": 1,
