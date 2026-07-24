@@ -252,7 +252,7 @@
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\smoke\\git-cicd-auto-deploy.ps1 -PreflightOnly -SkipRepositorySettingsApply -SkipAwsRoleDiffApply",
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\smoke\\git-cicd-auto-deploy.ps1 -AccessToken fake -HandoffId 00000000-0000-4000-8000-000000000000 -SkipRepositorySettingsApply -SkipAwsRoleDiffApply -SkipUrlCheck"
         ],
-        "notes": "Git/CI/CD auto-deploy smoke runner records preflight readiness and live mutation gates, but the live smoke workstream is intentionally deferred by product decision. The stale docs/sw live-smoke plan and current JSON reports were removed from active documentation on 2026-07-09."
+        "notes": "Git/CI/CD auto-deploy smoke runner records preflight readiness and live mutation gates, but the live smoke workstream is intentionally deferred by product decision. The stale contributor-specific live-smoke plan and current JSON reports were removed from active documentation on 2026-07-09."
       },
       "notes": "Blocked by product decision: live GitHub/AWS smoke is not being pursued now. Reopen this feature only when the team decides to collect real deployment evidence again."
     },
@@ -266,7 +266,7 @@
       "verification": [
         "feature_list.json에 ECS migration workstream이 active 항목으로 존재한다.",
         "동시에 in_progress 상태인 feature/workstream이 1개 이하이다.",
-        "docs/sw/spec.md와 docs/sw/plan.md가 parallel ALB cutover, Phase 1 single ECS task, RunTask one-off worker, SQS deferred decision을 기록한다.",
+        "docs/architecture.md와 docs/deployment.md가 현재 ECS/Fargate steady state, RunTask one-off worker, state 격리, cold rollback 경계를 기록한다.",
         "infra/aws/terraform이 ECR, ECS/Fargate, task definition, IAM, CloudWatch Logs, security groups, parallel ALB, listener, Fargate ip target group을 정의한다.",
         "Phase 8 Terraform이 API/web 독립 service와 target group, ALB API/health path rule, web default action을 정의하고 ECS steady state에서 nginx를 제외한다.",
         "Phase 9가 SketchCatch production infra를 runtime/edge/data/legacy state로 격리하고 backend lock, import inventory, plan-only approval을 기록한다.",
@@ -697,7 +697,7 @@
           "pnpm harness:check",
           "authenticated Chrome visual QA through /workspace/new?mode=template&templateId=<templateId>"
         ],
-        "notes": "60 focused tests, 4 direct regressions, and 72/72 live Board checks passed. Evidence and created project IDs are recorded in docs/gg/feat-infrastructure-template/017_AWS템플릿Design실화면QA_gg.md. pnpm build is separately blocked by a pre-existing ignored .codegraph symlink ENOENT."
+        "notes": "60 focused tests, 4 direct regressions, and 72/72 live Board checks passed. Evidence and created project IDs are recorded in docs/diagram-templates/evidence/aws-template-board-qa.md. pnpm build is separately blocked by a pre-existing ignored .codegraph symlink ENOENT."
       },
       "notes": "Presentation-only work. No Terraform execution, AWS mutation, or approval-flow change was made."
     },

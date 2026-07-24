@@ -15,7 +15,7 @@ import {
 
 const BRAINBOARD_CAPTURE_TERRAFORM_IDENTITY_COUNT = 87;
 const brainboardCaptureDirectoryPath = fileURLToPath(
-  new URL("../../../docs/gg/feat-infrastructure-template/brainboard-captures/", import.meta.url)
+  new URL("../../../docs/diagram-templates/brainboard/captures/", import.meta.url)
 );
 
 test("committed Brainboard captures have exactly one shared definition for all 87 Terraform identities", () => {
