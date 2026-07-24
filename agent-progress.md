@@ -21,22 +21,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-24 - Add Ctrl-wheel Architecture Board zoom
-
-- Holding the physical Control key over the main Architecture Board now maps upward wheel input to the existing zoom-in action and downward input to zoom-out; Meta provides the macOS analogue.
-- Plain wheel panning remains unchanged, synthetic trackpad pinch stays blocked, and modifier state is cleared on key release or window blur.
-- The focused direction and Board regression set passes 61/61. Root lint and typecheck pass, and the final direct Web production build completes all routes.
-- The root Turbo build wrapper timed out without output after four minutes. The full test entrypoint remains red only in unrelated existing Web baselines such as Settings CodeConnection refresh, Live Observation layout contracts, and Repository start behavior.
-- No shared contract, dependency, migration, cloud mutation, deployment, or follow-up action is required.
-
-- 2026-07-23: Stabilized Template Gallery cards by moving Resource/relationship counts into a bordered summary, widening Korean descriptions with word-safe wrapping, anchoring preview actions to the card bottom, and separating the fixed modal header from the scrollable gallery. Focused regressions, root lint, root typecheck, and all five production build tasks passed; the full test command remains red in unrelated pre-existing Web baseline suites.
-
-- 2026-07-23: Renamed the Dashboard profile route label from My Page to 개인정보 수정 and expanded its page header across the shared Dashboard content width while preserving the centered 760px form card. No test command was run at the user's explicit request.
-- 2026-07-23: Fixed My Page profile updates that falsely returned an expired-verification 401 because PostgreSQL stored `users.updated_at` with microsecond precision while JavaScript `Date` compared only milliseconds. The update now locks the user row, validates the millisecond credential version inside the transaction, and advances `updated_at`; the exact local signup → verification → password update flow changed from 401 to 200. No broad test suite was run.
-- 2026-07-23: Refined the Dashboard Settings submenu with the shared Pretendard font, a 2px smaller My Page label, 4px additional separation, and a reduced-motion-safe downward reveal. No test command was run at the user's explicit request.
-- 2026-07-23: Aligned the My Page new-password and confirmation controls as an equal-width desktop row with shared feedback below and a single-column mobile fallback. No test command was run at the user's explicit request.
-- 2026-07-23: Completed Dashboard My Page profile updates without a DB migration. Password accounts now require server-verified current-password proof in an HttpOnly cookie before a conditional nickname or optional-password update; social-only accounts can change only their nickname. Password changes revoke prior refresh/reset tokens and issue a fresh current-browser session. The focused eight-route auth checks, root lint, typecheck, build, and harness check passed before the final internal concurrency/cookie hardening; no further test run was made at the user's explicit request.
-
 ### 2026-07-23 - Stabilize Repository Template preview controls
 
 - Replaced the generic Template Preview eyebrow with the active candidate rank and renamed the AI design action to AI로 직접 설계.
@@ -121,6 +105,14 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed Template Terraform names now derive from the short `templateResourceId`, resource labels remain visible when the display toggle is on at far zoom, and Terraform gutter/highlight layers synchronize in the same scroll event.
 - Verified: focused API tests 2/2, focused Web tests 107/107, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass.
 - The broader Web suite was attempted earlier and remains red in unrelated baseline tests outside this diff. No dependency, lockfile, migration, cloud mutation, or deployment change was made.
+
+### 2026-07-24 - Reframe the root README as a visual B2B product page
+
+- Reordered the root README around customer outcomes, product proof, capability flow, understandable system architecture, technology roles, and approval-based deployment safety.
+- Removed internal product jargon from the primary narrative and kept the AWS-first, Terraform-first, multi-cloud-ready positioning accurate.
+- Added five visual assets rendered from the team-provided presentation and reused one checked-in product capture for the existing-cloud import journey.
+- Kept local setup, verification commands, and detailed documentation links available in compact secondary sections.
+- Documentation-only change; no dependency, lockfile, migration, cloud mutation, or deployment execution was involved.
 ### 2026-07-24 - Merge latest dev into Live Observation feedback
 
 - Fetched `origin/dev` through `a4b87dd6` and merged its 29 branch-only commits into `codex/live-observation-feedback` while retaining the branch's 11 commits.
