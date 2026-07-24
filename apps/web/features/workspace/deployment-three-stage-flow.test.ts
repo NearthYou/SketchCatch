@@ -421,7 +421,7 @@ test("terminal application failures hide stale approval and remain visible from 
   );
 });
 
-test("full-stack validation checks the confirmed target and opens its setup surface", () => {
+test("full-stack validation checks the confirmed target and prepared Terraform files", () => {
   const targetCheckIndex = directDeploymentSource.indexOf("getProjectDeploymentTarget(projectId)");
   const artifactPreparationIndex = directDeploymentSource.indexOf(
     "onPrepareDeploymentArtifacts()",
@@ -443,7 +443,7 @@ test("full-stack validation checks the confirmed target and opens its setup surf
   assert.ok(runtimeSecretPrerequisiteCheckIndex > artifactPreparationIndex);
   assert.match(
     directDeploymentSource,
-    /getDeploymentRuntimeSecretPrerequisite\(\{[\s\S]*?diagramJson: preparedArtifacts\.diagramJson/
+    /getDeploymentRuntimeSecretPrerequisite\(\{[\s\S]*?diagramJson: preparedArtifacts\.diagramJson,[\s\S]*?terraformFiles: preparedArtifacts\.terraformFiles/
   );
   assert.match(directDeploymentSource, /CI\/CD 설정으로 이동/);
   assert.match(directDeploymentSource, /onOpenDeliverySetup/);
@@ -454,10 +454,10 @@ test("full-stack validation checks the confirmed target and opens its setup surf
   );
 });
 
-test("runtime Secret mismatch offers a direct Repository reanalysis path", () => {
+test("runtime Secret mismatch returns to the current Terraform editor", () => {
   assert.match(directDeploymentSource, /deploymentTargetPrerequisite\.action/);
-  assert.match(directDeploymentSource, /Repository 다시 분석/);
-  assert.match(directDeploymentSource, /\/workspace\/repository/);
+  assert.match(directDeploymentSource, /Terraform 코드 수정/);
+  assert.doesNotMatch(directDeploymentSource, /Repository 다시 분석|Fixed Template Board/);
   assert.match(deploymentShellSource, /projectName=\{projectName\}/);
   assert.match(managerSource, /requiredRuntimeSecrets:\s*template\.requiredRuntimeSecrets/);
 });

@@ -3645,10 +3645,13 @@ type SourceRepositoryAnalysis = Omit<AnalyzeSourceRepositoryResponse, "sourceRep
 `runtime_secret` fact는 저장소 문서에서 확인한 환경 변수 이름만 담으며 값은 담지 않습니다. 웹 포함 ECS의
 `ConfirmedBuildConfig.ecsWeb.api.requiredRuntimeSecrets`도 검증된 대문자 환경 변수 이름 목록만 저장합니다.
 CodeBuild preflight는 실제 배포 Secret을 조회하지 않고 격리된 검사 전용 placeholder를 컨테이너에 주입합니다.
-Repository Fixed Template은 같은 `runtime_secret` fact를 입력받아 `random_password`, Secrets Manager Secret과
-Secret Version, 최소 읽기 IAM policy, ECS Task Definition의 `secrets.valueFrom`을 Project Draft에 함께 생성합니다.
-`full_stack` 배포 준비는 확정된 `requiredRuntimeSecrets`와 실제 Terraform 연결을 비교하며, 하나라도 빠지거나 서로
-다른 Secret을 참조하면 Plan 생성 전에 요청을 거절합니다. 승인된 Terraform Apply는
+Repository Analysis는 같은 `runtime_secret` fact를 `ConfirmedBuildConfig.ecsWeb.api.requiredRuntimeSecrets`에 이름으로만
+보존하며 Fixed Template Board 재생성을 요구하지 않습니다. 배포 준비 시 Terraform artifact가 있으면 저장된 `.tf`
+원문을 authoritative source로 사용해 `random_password`, Secrets Manager Secret/Version, 최소 읽기 IAM policy,
+ECS Task Definition의 `secrets.valueFrom`, ECS Service 참조가 하나의 체인인지 검증합니다. Diagram 계약은 Terraform
+artifact가 아직 없는 AI Fixed Template 생성 경로의 보조 검증에만 사용합니다. `full_stack` 배포 준비는 하나라도
+빠지거나 서로 다른 Secret, role, Task를 참조하면 Plan 생성 전에 요청을 거절하고 현재 Terraform 코드 수정을 안내합니다.
+승인된 Terraform Apply는
 `CHECK_IN_SIGNING_SECRET`을 새로 생성하여 Secrets Manager에 저장하고 모든 Task에 동일하게 주입합니다. 생성 값은
 분석 결과, API 응답, build log에 포함하지 않으며 Terraform state는 승인된 암호화 backend 경계에서만 관리합니다.
 Task Definition은 고정 `INSTANCE_ID`를 만들지 않으므로 애플리케이션이 hostname fallback으로 Task별 `servedBy`를

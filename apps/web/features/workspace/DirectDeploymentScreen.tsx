@@ -166,6 +166,7 @@ export type DirectDeploymentScreenProps = {
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
   readonly onOpenDeliverySetup?: (() => void) | undefined;
   readonly onOpenLiveObservation?: (() => void) | undefined;
+  readonly onOpenTerraformEditor?: (() => void) | undefined;
   readonly onPrepareDeploymentArtifacts: () => Promise<PreparedWorkspaceDeploymentArtifacts>;
   readonly onPreDeploymentCheckStateChange: Dispatch<
     SetStateAction<DeploymentPreDeploymentCheckState>
@@ -191,6 +192,7 @@ export function DirectDeploymentScreen({
   onConfirmationStateChange,
   onOpenDeliverySetup,
   onOpenFindingTerraformSource,
+  onOpenTerraformEditor,
   onOpenLiveObservation,
   onPrepareDeploymentArtifacts,
   onPreDeploymentCheckStateChange,
@@ -1029,6 +1031,7 @@ export function DirectDeploymentScreen({
 
       const runtimeSecretPrerequisite = getDeploymentRuntimeSecretPrerequisite({
         diagramJson: preparedArtifacts.diagramJson,
+        terraformFiles: preparedArtifacts.terraformFiles,
         scope: selectedScope,
         target
       });
@@ -1938,11 +1941,11 @@ export function DirectDeploymentScreen({
             <div className={styles.deploymentValidationError} role="alert">
               <strong>{deploymentTargetPrerequisite.title}</strong>
               <p>{deploymentTargetPrerequisite.message}</p>
-              {deploymentTargetPrerequisite.action === "repository_analysis" ? (
+              {deploymentTargetPrerequisite.action === "terraform_edit" ? (
                 <div className={styles.deploymentValidationActions}>
-                  <Link href={createRepositoryReanalysisHref(projectId, projectName)}>
-                    Repository 다시 분석
-                  </Link>
+                  <button onClick={onOpenTerraformEditor} type="button">
+                    Terraform 코드 수정
+                  </button>
                 </div>
               ) : onOpenDeliverySetup ? (
                 <div className={styles.deploymentValidationActions}>
@@ -2941,13 +2944,4 @@ function formatDate(value: string): string {
     dateStyle: "short",
     timeStyle: "short"
   });
-}
-
-function createRepositoryReanalysisHref(projectId: string, projectName: string): string {
-  const params = new URLSearchParams({ projectId });
-  if (projectName.trim()) {
-    params.set("projectName", projectName.trim());
-  }
-
-  return `/workspace/repository?${params.toString()}`;
 }

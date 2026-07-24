@@ -1,8 +1,10 @@
 import { getApiErrorMessage } from "../../lib/api-client";
+import { hasCheckInSigningSecretTerraformContract } from "@sketchcatch/types";
 import type {
   DeploymentScope,
   DiagramJson,
-  ProjectDeploymentTarget
+  ProjectDeploymentTarget,
+  TerraformSyncFileInput
 } from "@sketchcatch/types";
 
 export type DeploymentPreparationStage =
@@ -47,7 +49,7 @@ export class DeploymentPreparationError extends Error {
 }
 
 export type DeploymentTargetPrerequisite = Readonly<{
-  action?: "repository_analysis" | undefined;
+  action?: "terraform_edit" | undefined;
   message: string;
   title: string;
 }>;
@@ -101,10 +103,12 @@ export function getDeploymentTargetPrerequisite({
 
 export function getDeploymentRuntimeSecretPrerequisite({
   diagramJson,
+  terraformFiles,
   scope,
   target
 }: {
   readonly diagramJson: DiagramJson;
+  readonly terraformFiles: readonly TerraformSyncFileInput[];
   readonly scope: DeploymentScope | "auto";
   readonly target: Readonly<
     Pick<ProjectDeploymentTarget, "connectionId" | "confirmedBuildConfig">
@@ -118,15 +122,23 @@ export function getDeploymentRuntimeSecretPrerequisite({
     target.confirmedBuildConfig.ecsWeb?.api.requiredRuntimeSecrets ?? [];
   const requiresFullStackRuntimeSecretContract =
     scope === "full_stack" || (scope === "auto" && hasEcsApplicationResource(diagramJson));
+  const terraformCode = terraformFiles
+    .filter((file) => file.fileName.endsWith(".tf"))
+    .map((file) => file.terraformCode)
+    .join("\n");
+  const hasRuntimeSecretContract =
+    terraformCode.trim().length > 0
+      ? hasCheckInSigningSecretTerraformContract(terraformCode)
+      : hasCheckInSigningSecretDiagramContract(diagramJson);
   if (
     requiresFullStackRuntimeSecretContract &&
     requiredRuntimeSecrets.includes("CHECK_IN_SIGNING_SECRET") &&
-    !hasCheckInSigningSecretDiagramContract(diagramJson)
+    !hasRuntimeSecretContract
   ) {
     return {
-      action: "repository_analysis",
+      action: "terraform_edit",
       message:
-        "Repository가 요구하는 CHECK_IN_SIGNING_SECRET이 현재 Terraform 초안에 없습니다. Repository를 다시 분석하고 Fixed Template Board를 다시 생성·저장한 뒤 검증을 실행해 주세요.",
+        "Repository가 요구하는 CHECK_IN_SIGNING_SECRET의 생성, Secrets Manager 저장, ECS 실행 역할 권한, Task 주입 연결이 현재 Terraform 초안에 완성되지 않았습니다. 현재 Terraform 코드를 수정·저장한 뒤 다시 검증해 주세요.",
       title: "Repository와 Terraform 시크릿 연결 불일치"
     };
   }

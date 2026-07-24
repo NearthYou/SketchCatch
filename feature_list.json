@@ -1054,35 +1054,32 @@
       "notes": "No DB schema, Drizzle migration, cloud mutation, deployment, or Git/CI/CD handoff was performed."
     },
     {
-      "id": "REPOSITORY-FIXED-TEMPLATE-RUNTIME-SECRET-001",
+      "id": "AUTHORED-TERRAFORM-RUNTIME-SECRET-001",
       "priority": 1,
       "area": "repository-deployment",
-      "title": "Repository Fixed Template runtime Secret convergence",
-      "user_visible_behavior": "Repository 분석에서 확인한 필수 runtime Secret이 Fixed Template Terraform과 ECS Task에 실제로 연결되고, 연결이 빠지거나 엇갈리면 Plan 전에 배포 준비가 중단된다.",
+      "title": "Authored Terraform runtime Secret convergence",
+      "user_visible_behavior": "Repository 분석에서 확인한 필수 runtime Secret 이름을 저장된 Terraform 원문과 비교하고, 연결이 완전하면 Board utility node 유무와 관계없이 진행하며 누락·교차 연결이면 Plan 전에 현재 Terraform 수정을 안내한다.",
       "status": "passing",
       "verification": [
-        "Fixed Template이 CHECK_IN_SIGNING_SECRET용 생성 값, Secrets Manager Secret/Version, 최소 읽기 IAM policy, ECS Task mapping을 함께 만든다.",
+        "준비된 `.tf` 원문이 있으면 Diagram보다 우선하며 `random_password` utility block이 Board에서 제외돼도 완전한 원문 체인은 통과한다.",
         "Secret Version, ECS execution role policy, Task Definition, ECS Service가 하나의 일관된 참조 체인을 이룬다.",
-        "full_stack 준비는 누락되거나 서로 다른 Secret, role, Task를 참조하는 Terraform을 Plan 전에 거절한다.",
-        "실패한 Deployment는 오래된 Apply Plan 승인 버튼을 숨기고 저장된 실제 실패 요약을 모든 단계에서 보여준다."
+        "불완전하거나 서로 다른 Secret, role, Task를 참조하는 Terraform은 Web 사전검사와 API 최종검사에서 Plan 전에 거절된다.",
+        "실패 안내는 Repository 재분석이나 Fixed Template 재생성을 요구하지 않고 현재 Terraform 편집기로 돌아간다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-20",
+        "lastVerified": "2026-07-24",
         "commands": [
-          "pnpm --filter @sketchcatch/types exec tsx --test src/template-definitions.test.ts src/terraform-provider-files.test.ts",
-          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-preparation-service.test.ts src/deployments/terraform-artifact-safety.test.ts src/services/terraform/diagram-to-terraform.test.ts",
-          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/repository/repository-start-client.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/deployment-actions.test.ts features/workspace/deployment-three-stage-flow.test.ts",
-          "Fixed Template to rendered Terraform runtime-Secret chain and artifact-safety assertion",
-          "pnpm migration:compatibility:check",
+          ".\\apps\\web\\node_modules\\.bin\\tsx.CMD --test apps\\web\\features\\workspace\\deployment-preparation-error.test.ts apps\\web\\features\\workspace\\deployment-three-stage-flow.test.ts apps\\web\\features\\api-client-error-diagnostics.test.ts",
+          ".\\apps\\api\\node_modules\\.bin\\tsx.CMD --test apps\\api\\src\\deployments\\deployment-preparation-service.test.ts",
+          "pnpm harness:check",
           "pnpm lint",
           "pnpm typecheck",
           "pnpm build",
-          "pnpm harness:check",
           "git diff --check"
         ],
-        "notes": "Focused runtime-Secret, Terraform safety, Repository Fixed Template, and failed-deployment UI regressions pass. The rendered Fixed Template Terraform passes both the complete runtime-Secret reference-chain guard and the demo_web_service artifact safety gate. Lint and typecheck pass. Root build reported all five tasks successful but Turbo did not exit; direct Types/Config/UI/API/Web builds exited 0. Root pnpm test still exposes two unchanged stale Live Observation source-marker failures and one unchanged lease-heartbeat cancellation outside this workstream."
+        "notes": "Web runtime-Secret and deployment-flow regressions pass 65/65; API deployment-preparation safety regressions pass 11/11. Harness, all five lint tasks, all five typecheck tasks, and all five production build tasks pass. The first build exposed and then verified the corrected Types source export extension."
       },
-      "notes": "No DB schema or migration changed. No cloud mutation, production deployment, Terraform apply/destroy, or Git/CI/CD handoff was performed. Existing saved Project Drafts require re-analysis and regeneration after production deployment."
+      "notes": "No DB schema, Drizzle migration, dependency metadata, cloud mutation, production deployment, Terraform apply/destroy, or Git/CI/CD handoff was performed. Existing saved authored Terraform remains valid and does not require Repository re-analysis or Fixed Template regeneration."
     },
     {
       "id": "CICD-REQUIRED-PARAMETERS-001",
