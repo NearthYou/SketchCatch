@@ -1,7 +1,26 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { resolveWorkspaceAiExistingProject } from "./workspace-ai-route-entry";
+import {
+  resolveWorkspaceAiExistingProject,
+  resolveWorkspaceAiInitialProjectName
+} from "./workspace-ai-route-entry";
+
+test("Repository analysis without a saved project initializes the AI design chat", () => {
+  assert.equal(
+    resolveWorkspaceAiInitialProjectName({
+      entry: "repository_analysis",
+      projectName: "Audience Live Check"
+    }),
+    "Audience Live Check"
+  );
+  assert.equal(
+    resolveWorkspaceAiInitialProjectName({
+      projectName: "Audience Live Check"
+    }),
+    undefined
+  );
+});
 
 test("repository entry preserves the project and repository return contract", () => {
   assert.deepEqual(

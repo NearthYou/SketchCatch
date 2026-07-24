@@ -2,6 +2,22 @@
 
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/` and remain available in Git history.
 
+
+## 2026-07-24 - Open AI design chat directly from Repository analysis
+
+- Made the Repository result's `AI로 직접 설계` route explicit and initialized a fresh AI start draft from the analyzed project name when no project has been saved yet; existing project entries keep their project context.
+- Added route, draft-resolution, server-page, and Repository-link regressions so the action cannot fall back to `/workspace/new` or depend on stale session storage.
+- Verification: focused Repository/Workspace AI tests 49/49, route/render integration tests 4/4, harness, all five lint tasks, all five typecheck tasks, all five production build tasks, and diff checks pass.
+- No API, schema, migration, dependency, cloud mutation, production deployment, Terraform action, GitHub mutation, or push was performed.
+
+## 2026-07-24 - Validate authored Terraform runtime Secrets from source
+
+- Reproduced the production false positive: `random_password` is intentionally omitted from synchronized Diagram nodes while the Web prerequisite required that Diagram node even when the saved Terraform chain was complete.
+- Made prepared `.tf` files authoritative for Web preflight, shared the exact Terraform Secret-chain validator with the API final guard, and retained Diagram fallback only when no Terraform artifact exists for the AI Fixed Template path.
+- Replaced Repository re-analysis / Fixed Template regeneration remediation with a return to the current Terraform editor; corrected deployment and data-model contracts accordingly.
+- Verification: Web focused regressions 65/65, API deployment-preparation regressions 11/11, harness, all five lint tasks, all five typecheck tasks, all five production build tasks, and diff checks pass.
+- No DB migration, dependency metadata change, cloud mutation, production deployment, Terraform action, or Git/CI/CD handoff was performed. Production remains unchanged until this branch is merged and deployed.
+
 ## Current Verified State
 
 - 2026-07-24: Fixed Terraform block and source-line highlights drifting from enlarged code text. Highlight geometry now uses the editor's rendered font metrics through `em`-relative line height instead of the obsolete 19.2px baseline; the focused 3-test regression, root lint, root typecheck, and all five production builds pass.
@@ -84,8 +100,8 @@ Short English-only working log for the current agent context. Older records are 
 - Authenticated browser visual smoke testing for `/workspace/new` was not available in the clean browser session; the route redirected to login. Source-level regression coverage and the production build are green.
 - The manifest-contract repair and audience receipt flow are production-verified, but provider-confirmed scale-out remains a separate blocked acceptance item.
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
-- Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
-- The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` was saved by the stale Web process and must be re-analyzed/regenerated or replaced after the Web restart.
+- Existing saved Project Drafts are not rewritten, but their authored Terraform remains authoritative and does not require Repository re-analysis or Fixed Template regeneration after this fix is deployed.
+- The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` may need a reload or re-save after the stale Web process restarts; runtime Secret validation alone no longer requires re-analysis.
 - Root `pnpm test` is not green because ten unrelated API baseline tests fail and `application-artifact-registry.test.ts` still has one cancelled lease-heartbeat test.
 - The full Web suite is 1,205/1,213. Eight unrelated baseline contracts fail across generated architecture knowledge, node/thumbnail presentation, typography audits, CI/CD styling, and Live Observation capacity layout.
 - Provider-confirmed scale-out remains unaccepted because the production acceptance traffic intentionally covered session, receipt, SSE, and heartbeat continuity rather than a load-triggered capacity change.
@@ -94,7 +110,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
+1. After this branch is merged and deployed, retry the affected saved project validation without Repository re-analysis and confirm the authored Terraform chain passes.
 2. Use a separately approved load cycle if provider-confirmed Live Observation scale-out must be accepted; no DB migration is required.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
 
@@ -121,8 +137,8 @@ Short English-only working log for the current agent context. Older records are 
 - Authenticated browser visual smoke testing for `/workspace/new` was not available in the clean browser session; the route redirected to login. Source-level regression coverage and the production build are green.
 - The manifest-contract repair and audience receipt flow are production-verified, but provider-confirmed scale-out remains a separate blocked acceptance item.
 - Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
-- Existing saved Project Drafts are not rewritten. The affected project must be re-analyzed and its Fixed Template Board regenerated before preparing a new deployment.
-- The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` was saved by the stale Web process and must be re-analyzed/regenerated or replaced after the Web restart.
+- Existing saved Project Drafts are not rewritten, but their authored Terraform remains authoritative and does not require Repository re-analysis or Fixed Template regeneration after this fix is deployed.
+- The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` may need a reload or re-save after the stale Web process restarts; runtime Secret validation alone no longer requires re-analysis.
 - Root `pnpm test` is not green because ten unrelated API baseline tests fail and `application-artifact-registry.test.ts` still has one cancelled lease-heartbeat test.
 - The full Web suite is 1,205/1,213. Eight unrelated baseline contracts fail across generated architecture knowledge, node/thumbnail presentation, typography audits, CI/CD styling, and Live Observation capacity layout.
 - Provider-confirmed scale-out remains unaccepted because the production acceptance traffic intentionally covered session, receipt, SSE, and heartbeat continuity rather than a load-triggered capacity change.
@@ -131,6 +147,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-1. Re-run the local new-project Repository flow against the restarted Web server and confirm the generated Board contains the runtime Secret chain.
+1. After this branch is merged and deployed, retry the affected saved project validation without Repository re-analysis and confirm the authored Terraform chain passes.
 2. Use a separately approved load cycle if provider-confirmed Live Observation scale-out must be accepted; no DB migration is required.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
