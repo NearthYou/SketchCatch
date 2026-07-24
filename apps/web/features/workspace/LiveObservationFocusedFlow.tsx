@@ -71,12 +71,21 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
   const burstRef = useRef<SequencedTrafficBurst | null>(null);
   const burstTimerRef = useRef<number | null>(null);
   const modelCapacityUnits = model.status === "ready" ? model.capacityUnits : EMPTY_CAPACITY_UNITS;
+  const totalCapacityCount =
+    model.status === "ready" ? model.capacityUnits.length + model.hiddenCapacityCount : 0;
+  const actualCapacityCount =
+    capacityProjection?.actualCount ??
+    (snapshot?.latestObservation?.payload.capacity.running !== null &&
+    snapshot?.latestObservation?.payload.capacity.running !== undefined
+      ? totalCapacityCount
+      : null);
   const displayedProjection = capacityProjection;
   const expectedCapacityCount =
-    snapshot?.status === "active"
-      ? (capacityProjection?.predictedCount ??
-        snapshot.latestObservation?.payload.capacity.desired ??
-        null)
+    snapshot?.status === "active" &&
+    actualCapacityCount !== null &&
+    capacityProjection !== null &&
+    capacityProjection.predictedCount !== actualCapacityCount
+      ? capacityProjection.predictedCount
       : null;
   const displayedCapacityUnits = useMemo(() => {
     if (model.status !== "ready") return modelCapacityUnits;
@@ -209,23 +218,27 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
     snapshot?.live.pressureLevel ?? "normal"
   );
   const hasActiveTraffic = burst !== null || hasLiveObservationActiveTraffic(snapshot);
+  const reservedCapacityCount = Math.max(
+    presentedCapacityUnits.length,
+    capacityProjection?.maxCapacity ?? snapshot?.latestObservation?.payload.capacity.max ?? 0
+  );
   const capacityColumnCount = Math.min(5, presentedCapacityUnits.length);
+  const reservedCapacityColumnCount = Math.min(5, reservedCapacityCount);
   const capacityDensity =
-    presentedCapacityUnits.length >= 6
-      ? "dense"
-      : presentedCapacityUnits.length >= 4
-        ? "compact"
-        : "comfortable";
+    reservedCapacityCount >= 6 ? "dense" : reservedCapacityCount >= 4 ? "compact" : "comfortable";
   const capacityCardWidth =
     capacityDensity === "dense" ? 52 : capacityDensity === "compact" ? 60 : 68;
   const stageMinimumWidth =
     capacityDensity === "dense" ? 112 : capacityDensity === "compact" ? 124 : 138;
-  const capacityRowCount =
-    capacityColumnCount === 0 ? 0 : Math.ceil(presentedCapacityUnits.length / capacityColumnCount);
-  const capacityContentHeight = capacityRowCount * 58 + Math.max(0, capacityRowCount - 1) * 12;
+  const reservedCapacityRowCount =
+    reservedCapacityColumnCount === 0
+      ? 0
+      : Math.ceil(reservedCapacityCount / reservedCapacityColumnCount);
+  const capacityContentHeight =
+    reservedCapacityRowCount * 58 + Math.max(0, reservedCapacityRowCount - 1) * 12;
   const pathMinimumHeight = Math.max(145, capacityContentHeight);
   const capacityStageWidth =
-    presentedCapacityUnits.length > 0 ? capacityColumnCount * (capacityCardWidth + 10) + 22 : 0;
+    reservedCapacityCount > 0 ? reservedCapacityColumnCount * (capacityCardWidth + 10) + 22 : 0;
   const minimumWidth = Math.max(
     760,
     model.stages.length * stageMinimumWidth +
@@ -233,17 +246,8 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
       (model.hiddenCapacityCount > 0 ? 64 : 0) +
       80
   );
-  const totalCapacityCount = model.capacityUnits.length + model.hiddenCapacityCount;
-  const actualCapacityCount =
-    capacityProjection?.actualCount ??
-    (snapshot?.latestObservation?.payload.capacity.running !== null &&
-    snapshot?.latestObservation?.payload.capacity.running !== undefined
-      ? totalCapacityCount
-      : null);
   const predictedCapacityCount = expectedCapacityCount;
-  const activeCapacityCount = presentedCapacityUnits.filter(
-    (unit) => unit.transition === "stable" && unit.observationState === "active"
-  ).length;
+  const capacitySummaryLabel = getCapacitySummaryLabel(actualCapacityCount, predictedCapacityCount);
 
   return (
     <section
@@ -259,12 +263,7 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
         <strong>인프라 흐름</strong>
         <div className={styles.liveObservationPresentationHeaderActions}>
           <span>
-            {model.stages.length}단계 ·{" "}
-            {predictedCapacityCount !== null
-              ? `${actualCapacityCount === null ? "실제 확인 중" : `실제 ${actualCapacityCount}개`} · ${predictedCapacityCount}개 예상`
-              : actualCapacityCount !== null
-                ? `실행 서버 ${actualCapacityCount}개 관측`
-                : "실행 서버 관측 대기"}
+            {model.stages.length}단계 · {capacitySummaryLabel}
           </span>
           {burst ? (
             <em
@@ -353,11 +352,7 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
                 </i>
                 <span className={styles.liveObservationCapacityLabel}>
                   <strong>Task 그룹</strong>
-                  <small>
-                    {predictedCapacityCount !== null
-                      ? `${actualCapacityCount === null ? "실제 확인 중" : `실제 ${actualCapacityCount}개`} · ${predictedCapacityCount}개 예상`
-                      : `${activeCapacityCount}개 실행 중`}
-                  </small>
+                  <small>{capacitySummaryLabel}</small>
                 </span>
                 <div
                   className={styles.liveObservationCapacityUnits}
@@ -454,6 +449,15 @@ function getRoleLabel(role: LiveObservationPresentationRole): string {
   return "트래픽 경유";
 }
 
+function getCapacitySummaryLabel(
+  actualCount: number | null,
+  predictedCount: number | null
+): string {
+  if (actualCount === null) return "실제 확인 중";
+  if (predictedCount !== null) return `실제 ${actualCount}개 · ${predictedCount}개 예상 중`;
+  return `실제 ${actualCount}개`;
+}
+
 function getCapacityStateLabel(state: LiveObservationDiagramNodeState): string {
   if (state === "active") return "실행 중";
   if (state === "launching") return "예상 중";
@@ -479,7 +483,7 @@ function getCapacityDisplayLabel(
   projection: LiveObservationCapacityProjection | null
 ): string {
   const kind = getCapacityForecastKind(nodeId, index, projection);
-  if (kind === "predicted") return "증설 예상";
-  if (kind === "scale-in") return "축소 예상";
+  if (kind === "predicted") return "예상 중";
+  if (kind === "scale-in") return "축소 예상 중";
   return getCapacityStateLabel(state);
 }

@@ -15,7 +15,7 @@ const architecture = {
     resourceNode("service", "ECS_SERVICE", "ECS Service", 600),
     {
       ...resourceNode("scaling-target", "APPLICATION_AUTO_SCALING_TARGET", "Auto Scaling", 800),
-      config: { maxCapacity: 6, minCapacity: 2 }
+      config: { maxCapacity: 6, minCapacity: 1 }
     },
     {
       ...resourceNode("scaling-policy", "APPLICATION_AUTO_SCALING_POLICY", "Scaling Policy", 1000),
@@ -39,7 +39,7 @@ const architecture = {
   ]
 } satisfies ArchitectureJson;
 
-test("shows forecast capacity without inventing zero actual tasks when provider data is unavailable", () => {
+test("does not label a forecast until actual capacity is known", () => {
   const html = renderToStaticMarkup(
     createElement(LiveObservationFocusedFlow, {
       architecture,
@@ -47,9 +47,46 @@ test("shows forecast capacity without inventing zero actual tasks when provider 
     })
   );
 
-  assert.match(html, /실제 확인 중 · 3개 예상/);
+  assert.match(html, /실제 확인 중/);
+  assert.doesNotMatch(html, /개 예상/);
   assert.doesNotMatch(html, /실제 0/);
+});
+
+test("does not label unchanged capacity as expected", () => {
+  const html = renderToStaticMarkup(
+    createElement(LiveObservationFocusedFlow, {
+      architecture,
+      snapshot: availableSnapshot({ projectedRequestsPerMinute: 5, running: 1 })
+    })
+  );
+
+  assert.match(html, /실제 1개/);
   assert.doesNotMatch(html, /1개 예상/);
+  assert.doesNotMatch(html, /예상 중/);
+});
+
+test("labels and animates only a real capacity change as expected", () => {
+  const html = renderToStaticMarkup(
+    createElement(LiveObservationFocusedFlow, {
+      architecture,
+      snapshot: availableSnapshot({ projectedRequestsPerMinute: 6, running: 1 })
+    })
+  );
+
+  assert.match(html, /실제 1개 · 2개 예상 중/);
+});
+
+test("labels scale-in as an expected change instead of an actual task", () => {
+  const html = renderToStaticMarkup(
+    createElement(LiveObservationFocusedFlow, {
+      architecture,
+      snapshot: availableSnapshot({ projectedRequestsPerMinute: 5, running: 3 })
+    })
+  );
+
+  assert.match(html, /실제 3개 · 1개 예상 중/);
+  assert.match(html, /data-capacity-forecast="scale-in"/);
+  assert.match(html, /축소 예상 중/);
 });
 
 function resourceNode(
@@ -61,6 +98,34 @@ function resourceNode(
   return { config: {}, id, label, positionX, positionY: 0, type };
 }
 
+function availableSnapshot({
+  projectedRequestsPerMinute,
+  running
+}: {
+  readonly projectedRequestsPerMinute: number;
+  readonly running: number;
+}): LiveObservationV2Snapshot {
+  const base = unavailableSnapshot();
+  const latestObservation = base.latestObservation;
+  return {
+    ...base,
+    live: {
+      ...base.live,
+      projectedRequestsPerMinute,
+      rollingRequestsPerSecond: projectedRequestsPerMinute / 60
+    },
+    latestObservation: latestObservation
+      ? {
+          ...latestObservation,
+          payload: {
+            ...latestObservation.payload,
+            capacity: { desired: running, healthy: running, max: 6, running },
+            state: "available"
+          }
+        }
+      : null
+  };
+}
 function unavailableSnapshot(): LiveObservationV2Snapshot {
   const observedAt = "2026-07-24T00:00:00.000Z";
   return {

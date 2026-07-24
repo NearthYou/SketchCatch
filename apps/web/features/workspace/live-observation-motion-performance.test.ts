@@ -9,6 +9,10 @@ const stylesSource = readFileSync(
   fileURLToPath(new URL("./workspace.module.css", import.meta.url)),
   "utf8"
 );
+const focusedFlowSource = readFileSync(
+  fileURLToPath(new URL("./LiveObservationFocusedFlow.tsx", import.meta.url)),
+  "utf8"
+);
 
 test("keeps high-traffic particles within a compositor-friendly animation budget", () => {
   const particleRule = extractCssBlock(".liveObservationPresentationSegmentParticle");
@@ -25,6 +29,25 @@ test("keeps high-traffic particles within a compositor-friendly animation budget
   assert.match(particleKeyframes, /transform:\s*translate3d\(/);
 });
 
+test("keeps animated traffic inside fixed scroll geometry", () => {
+  const connectorRule = extractCssBlock(".liveObservationPresentationConnector");
+  const forecastRule = extractCssBlock(
+    '.liveObservationCapacityUnit[data-capacity-forecast="predicted"]'
+  );
+  const scaleInForecastRule = extractCssBlock(
+    '.liveObservationCapacityUnit[data-capacity-forecast="scale-in"]'
+  );
+
+  assert.match(connectorRule, /overflow:\s*hidden/);
+  assert.match(forecastRule, /animation:[^;]*infinite/);
+  assert.match(forecastRule, /will-change:\s*transform,\s*opacity/);
+  assert.match(scaleInForecastRule, /animation:[^;]*infinite/);
+  assert.match(scaleInForecastRule, /will-change:\s*transform,\s*opacity/);
+  assert.doesNotMatch(
+    focusedFlowSource,
+    /capacityStageWidth\s*=\s*[^;]*presentedCapacityUnits\.length/
+  );
+});
 function extractCssBlock(selector: string): string {
   const start = stylesSource.indexOf(`${selector} {`);
   assert.notEqual(start, -1, `missing CSS block: ${selector}`);
