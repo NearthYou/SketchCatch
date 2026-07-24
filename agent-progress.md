@@ -126,3 +126,9 @@ Short English-only working log for the current agent context. Older records are 
 - The exact regression changed from red to green. Thirty-four focused regression/contract checks and the full 124 Live Observation tests pass; root lint, root typecheck, diff checks, and harness pass.
 - All five production build tasks and all 24 Web routes completed successfully. The known Windows Turbo wrapper stayed alive after success and was terminated, so the wrapper process reported a non-zero exit after task completion.
 - No DB migration, dependency change, cloud traffic, deployment, or infrastructure mutation was performed.
+### 2026-07-24 - Deploy provider-traffic judgment fix
+
+- Pushed `codex/live-observation-feedback` at `a173b45c9df410e4394bed9a4fa3cfe90d882433` and deployed that exact SHA with GitHub Actions run `30062741359`.
+- The production workflow passed lint, typecheck, build, migration compatibility, environment validation, parallel API/Web image builds, production preflight, worker registration, and ECS stabilization.
+- Production smoke passed: `/`, `/health`, and `/health/db` returned 200; unauthenticated `/api/projects` returned the expected 401.
+- No DB migration, dependency change, Terraform action, provider load cycle, or new infrastructure resource was performed.
