@@ -75,6 +75,8 @@ test("Settings keeps role identifiers out of the connected AWS account summary",
 test("Settings uses a simple confirmation before disconnecting AWS", () => {
   assert.match(clientSource, /AWS 연결 해제 확인/);
   assert.match(clientSource, /배포한 인프라와 구조 분석 설정은 유지됩니다\./);
+  assert.match(clientSource, /deletionPreview\.blockerMessage/);
+  assert.match(clientSource, /className=\{styles\.cleanupBlocker\}/);
   assert.doesNotMatch(clientSource, /구조 분석 설정을 먼저 정리한 뒤 AWS 연결을 해제할 수 있습니다\./);
   assert.doesNotMatch(clientSource, /설정 해제 계속\s*<\/button>/);
   assert.doesNotMatch(clientSource, /continueAwsStructureAnalysisCleanup/);

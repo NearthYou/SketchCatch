@@ -849,6 +849,11 @@ export function SettingsDashboardClient() {
               <strong>유지되는 항목</strong>
               <p>배포한 인프라와 구조 분석 설정은 유지됩니다.</p>
             </div>
+            {deletionPreview.blockerMessage ? (
+              <p className={styles.cleanupBlocker} role="alert">
+                {deletionPreview.blockerMessage}
+              </p>
+            ) : null}
             {deletionErrorMessage ? (
               <div className={styles.cleanupError} role="alert">
                 <strong>연결 해제가 완료되지 않았습니다. AWS 연결은 유지되었습니다.</strong>
