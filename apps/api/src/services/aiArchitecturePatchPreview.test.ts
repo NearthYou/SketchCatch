@@ -1033,9 +1033,10 @@ test("generic scalar parsing keeps values scoped to the requested parameter clau
               desiredCount: 2,
               enabled: true,
               logging: false,
-              mode: "OldValue",
+              mode: "oldvalue",
               name: "orders-api",
               port: 80,
+              protocol: "HTTP",
               reportPort: 90
             },
             id: "orders-api-node",
@@ -1091,6 +1092,16 @@ test("generic scalar parsing keeps values scoped to the requested parameter clau
     "orders-api\uC758 desiredCount\uB97C -1\uB85C \uBCC0\uACBD\uD574\uC918."
   );
   assert.equal(invalidResponse.status, "needs_clarification", JSON.stringify(invalidResponse));
+  const fractionalCountResponse = createResponse(
+    "orders-api\uC758 desiredCount\uB97C 1.5\uB85C \uBCC0\uACBD\uD574\uC918."
+  );
+  assert.equal(fractionalCountResponse.status, "needs_clarification");
+
+  const invalidProtocolResponse = createResponse(
+    "orders-api\uC758 protocol\uC744 BANANA\uB85C \uBCC0\uACBD\uD574\uC918."
+  );
+  assert.equal(invalidProtocolResponse.status, "needs_clarification");
+
 });
 
 test("the longest exact resource identity wins over its shorter prefix", () => {
@@ -1154,4 +1165,213 @@ test("multi-item nested arrays require clarification instead of changing the fir
   });
 
   assert.equal(response.status, "needs_clarification", JSON.stringify(response));
+});
+
+test("an assigned string value cannot hijack the explicitly named resource target", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: { mode: "standard", name: "orders-api" },
+          id: "orders-api-node",
+          label: "Orders API",
+          positionX: 0,
+          positionY: 0,
+          type: "ECS_SERVICE"
+        },
+        {
+          config: { mode: "standard", name: "very-long-production" },
+          id: "production-node",
+          label: "Production",
+          positionX: 100,
+          positionY: 0,
+          type: "ECS_SERVICE"
+        }
+      ]
+    },
+    instruction:
+      "orders-api\uC758 mode\uB97C very-long-production\uC73C\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  if (response.status !== "preview") {
+    assert.fail("the explicit target must produce a preview");
+  }
+  assert.equal(response.intent.targetResourceId, "orders-api-node");
+  assert.equal(response.proposedArchitectureJson.nodes[0]?.config.mode, "very-long-production");
+  assert.equal(response.proposedArchitectureJson.nodes[1]?.config.mode, "standard");
+});
+
+test("parent parameter paths disambiguate duplicate nested leaf names", () => {
+  const architectureJson = {
+    edges: [],
+    nodes: [
+      {
+        config: {
+          name: "orders-api",
+          primary: { timeout: 10 },
+          secondary: { timeout: 20 }
+        },
+        id: "orders-api-node",
+        label: "Orders API",
+        positionX: 0,
+        positionY: 0,
+        type: "ECS_SERVICE" as const
+      }
+    ]
+  };
+  const specificResponse = createArchitecturePatchPreview({
+    architectureJson,
+    instruction: "orders-api\uC758 primary timeout\uC744 30\uC73C\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+
+  assert.equal(specificResponse.status, "preview", JSON.stringify(specificResponse));
+  if (specificResponse.status !== "preview") {
+    assert.fail("the parent path must disambiguate the nested parameter");
+  }
+  assert.deepEqual(specificResponse.proposedArchitectureJson.nodes[0]?.config.primary, {
+    timeout: 30
+  });
+  assert.deepEqual(specificResponse.proposedArchitectureJson.nodes[0]?.config.secondary, {
+    timeout: 20
+  });
+
+  const ambiguousResponse = createArchitecturePatchPreview({
+    architectureJson,
+    instruction: "orders-api\uC758 timeout\uC744 30\uC73C\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+  assert.equal(ambiguousResponse.status, "needs_clarification", JSON.stringify(ambiguousResponse));
+});
+
+test("provider cannot add an absent static scalar path with an incompatible operation", async () => {
+  const response = await createArchitecturePatchPreviewWithPatchPlanCompiler(
+    {
+      architectureJson: {
+        edges: [],
+        nodes: [
+          {
+            config: { name: "orders-db" },
+            id: "orders-db-node",
+            label: "Orders DB",
+            positionX: 0,
+            positionY: 0,
+            type: "RDS"
+          }
+        ]
+      },
+      instruction: "orders-db\uC758 \uC800\uC7A5 \uC124\uC815\uC744 \uC218\uC815\uD574\uC918."
+    },
+    {
+      bedrockProvider: {
+        generate: async () => ({
+          text: JSON.stringify({
+            status: "planned",
+            action: "modify_resource",
+            target: {
+              resourceType: "RDS",
+              resourceId: "orders-db-node",
+              label: "Orders DB"
+            },
+            candidateResourceIds: [],
+            operations: [
+              {
+                op: "enable",
+                path: "config.allocatedStorage",
+                value: null
+              }
+            ],
+            preserve: [],
+            clarificationQuestion: null,
+            confidence: 0.99
+          })
+        }),
+        model: "test-model",
+        provider: "bedrock",
+        service: "bedrock_runtime"
+      },
+      creditPolicy: { bedrock: true, billingMode: "aws_credit_only" }
+    }
+  );
+
+  assert.equal(response.status, "needs_clarification", JSON.stringify(response));
+  if (response.status !== "needs_clarification") {
+    assert.fail("absent static paths must not accept incompatible operations");
+  }
+  assert.equal(response.patchPlan?.status, "unsupported");
+});
+
+test("deterministic capacity changes reject invalid min desired and max ordering", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: { desiredCapacity: 3, maxSize: 4, minSize: 2, name: "web-asg" },
+          id: "web-asg-node",
+          label: "Web ASG",
+          positionX: 0,
+          positionY: 0,
+          type: "AUTO_SCALING_GROUP"
+        }
+      ]
+    },
+    instruction: "web-asg\uC758 max size\uB97C 1\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+
+  assert.equal(response.status, "needs_clarification", JSON.stringify(response));
+});
+
+test("respectively-style multi-parameter values require clarification", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: { maxCapacity: 4, minCapacity: 1, name: "checkout-scaling" },
+          id: "checkout-scaling-node",
+          label: "Checkout Scaling",
+          positionX: 0,
+          positionY: 0,
+          type: "APPLICATION_AUTO_SCALING_TARGET"
+        }
+      ]
+    },
+    instruction:
+      "checkout-scaling\uC758 minCapacity\uC640 maxCapacity\uB97C \uAC01\uAC01 2\uC640 8\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+
+  assert.equal(response.status, "needs_clarification", JSON.stringify(response));
+});
+
+test("S3 multi-parameter boolean requests apply every requested operation", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: {
+            bucketName: "logs-archive",
+            encryption: true,
+            versioning: false
+          },
+          id: "logs-bucket",
+          label: "Logs Bucket",
+          positionX: 0,
+          positionY: 0,
+          type: "S3"
+        }
+      ]
+    },
+    instruction:
+      "logs-archive\uC758 versioning\uC744 on\uC73C\uB85C, encryption\uC744 off\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  if (response.status !== "preview") {
+    assert.fail("both S3 parameter changes must produce one preview");
+  }
+  assert.equal(response.proposedArchitectureJson.nodes[0]?.config.versioning, true);
+  assert.equal(response.proposedArchitectureJson.nodes[0]?.config.encryption, false);
+  assert.equal(response.patchPlan?.operations.length, 2);
 });

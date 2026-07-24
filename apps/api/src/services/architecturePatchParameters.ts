@@ -36,11 +36,49 @@ const NON_NEGATIVE_NUMBER_KEYS = new Set([
   "timeout"
 ]);
 
+
+const INTEGER_NUMBER_KEYS = new Set([
+  "allocatedstorage",
+  "cpu",
+  "desiredcapacity",
+  "desiredcount",
+  "maxcapacity",
+  "maxsize",
+  "memory",
+  "memorysize",
+  "mincapacity",
+  "minsize",
+  "port",
+  "retentionindays",
+  "scaleincooldown",
+  "scaleoutcooldown",
+  "timeout"
+]);
+
+const STRING_ENUM_VALUES: Readonly<Record<string, ReadonlySet<string>>> = {
+  protocol: new Set([
+    "-1",
+    "all",
+    "geneve",
+    "http",
+    "https",
+    "icmp",
+    "icmpv6",
+    "tcp",
+    "tcp_udp",
+    "tls",
+    "udp"
+  ])
+};
 const MIN_MAX_PARAMETER_PAIRS = [
   ["minCapacity", "maxCapacity"],
   ["minSize", "maxSize"]
 ] as const;
 
+
+const BOUNDED_CAPACITY_PARAMETER_GROUPS = [
+  ["minSize", "desiredCapacity", "maxSize"]
+] as const;
 const PROTECTED_CONFIG_KEYS = new Set([
   "terraformResourceType",
   "terraformResourceName",
@@ -118,6 +156,24 @@ export function createExistingScalarParameterOperations(
         )
     )
     .sort((left, right) => left.aliasMatch.start - right.aliasMatch.start);
+  const hasAmbiguousParameterAlias = matches.some((candidate) =>
+    matches.some(
+      (other) =>
+        other !== candidate &&
+        other.aliasMatch.start === candidate.aliasMatch.start &&
+        other.aliasMatch.end === candidate.aliasMatch.end &&
+        other.path.join(".") !== candidate.path.join(".")
+    )
+  );
+
+  if (hasAmbiguousParameterAlias) {
+    return [];
+  }
+
+  if (matches.length > 1 && normalizedInstruction.includes("\uAC01\uAC01")) {
+    return [];
+  }
+
   const operations = matches.flatMap((match, index) => {
     const nextMatch = matches[index + 1];
     const value = findExplicitScalarParameterValue(
@@ -200,11 +256,8 @@ function createParameterAliases(
   resourceType: ResourceType,
   path: readonly string[]
 ): string[] {
-  const words = key
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replaceAll("_", " ")
-    .replaceAll("-", " ")
-    .toLowerCase();
+  const words = toParameterWords(key);
+  const pathWords = path.map(toParameterWords).join(" ");
   const semanticAliases = PARAMETER_INTENT_ALIASES[resourceType]?.[path.join(".")] ?? [];
 
   return Array.from(
@@ -213,11 +266,22 @@ function createParameterAliases(
       words,
       words.replaceAll(" ", "_"),
       words.replaceAll(" ", "-"),
+      path.join(".").toLowerCase(),
+      pathWords,
+      pathWords.replaceAll(" ", "_"),
+      pathWords.replaceAll(" ", "-"),
       ...semanticAliases.map(normalizeSearchText)
     ])
   );
 }
 
+function toParameterWords(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .toLowerCase();
+}
 function findExplicitScalarParameterValue(
   instruction: string,
   valueStart: number,
@@ -243,7 +307,7 @@ function findExplicitScalarParameterValue(
     return findBooleanValue(normalizeSearchText(suffix));
   }
 
-  return findExplicitStringParameterValue(suffix, currentValue);
+  return findExplicitStringParameterValue(suffix);
 }
 
 function findBooleanValue(instruction: string): boolean | undefined {
@@ -258,10 +322,7 @@ function findBooleanValue(instruction: string): boolean | undefined {
   return undefined;
 }
 
-function findExplicitStringParameterValue(
-  suffix: string,
-  currentValue: string
-): string | undefined {
+function findExplicitStringParameterValue(suffix: string): string | undefined {
   const quotedValue = suffix.match(/["']([^"']+)["']/u)?.[1]?.trim();
   const koreanValue = suffix.match(
     /^\s*(?:\uC744|\uB97C|\uC740|\uB294|\uC774|\uAC00)?\s*([a-z0-9][a-z0-9._:/-]*)\s*(?:\uC73C\uB85C|\uB85C)/iu
@@ -273,20 +334,6 @@ function findExplicitStringParameterValue(
 
   if (!value) {
     return undefined;
-  }
-
-  return preserveScalarStringCase(value, currentValue);
-}
-
-function preserveScalarStringCase(value: string, currentValue: string): string {
-  const containsLetter = /[a-z]/iu.test(currentValue);
-
-  if (containsLetter && currentValue === currentValue.toUpperCase()) {
-    return value.toUpperCase();
-  }
-
-  if (containsLetter && currentValue === currentValue.toLowerCase()) {
-    return value.toLowerCase();
   }
 
   return value;
@@ -336,7 +383,7 @@ export function areExistingScalarParameterOperationsSafe(
     prospectiveValues.set(operation.path, nextValue);
   }
 
-  return MIN_MAX_PARAMETER_PAIRS.every(([minKey, maxKey]) => {
+  const minMaxPairsAreValid = MIN_MAX_PARAMETER_PAIRS.every(([minKey, maxKey]) => {
     const minValue = findProspectiveParameterValue(prospectiveValues, minKey);
     const maxValue = findProspectiveParameterValue(prospectiveValues, maxKey);
 
@@ -344,6 +391,23 @@ export function areExistingScalarParameterOperationsSafe(
       typeof minValue !== "number" ||
       typeof maxValue !== "number" ||
       minValue <= maxValue
+    );
+  });
+
+  if (!minMaxPairsAreValid) {
+    return false;
+  }
+
+  return BOUNDED_CAPACITY_PARAMETER_GROUPS.every(([minKey, desiredKey, maxKey]) => {
+    const minValue = findProspectiveParameterValue(prospectiveValues, minKey);
+    const desiredValue = findProspectiveParameterValue(prospectiveValues, desiredKey);
+    const maxValue = findProspectiveParameterValue(prospectiveValues, maxKey);
+
+    return (
+      typeof minValue !== "number" ||
+      typeof desiredValue !== "number" ||
+      typeof maxValue !== "number" ||
+      (minValue <= desiredValue && desiredValue <= maxValue)
     );
   });
 }
@@ -390,15 +454,24 @@ function isSafeScalarParameterValue(
   path: string,
   value: ScalarParameterValue
 ): boolean {
-  if (typeof value !== "number") {
-    return typeof value !== "string" || value.trim().length > 0;
+  const key = path.split(".").at(-1)?.toLowerCase() ?? "";
+
+  if (typeof value === "string") {
+    const allowedValues = STRING_ENUM_VALUES[key];
+
+    return (
+      value.trim().length > 0 &&
+      (allowedValues === undefined || allowedValues.has(value.toLowerCase()))
+    );
   }
 
-  if (!Number.isFinite(value)) {
+  if (typeof value === "boolean") {
+    return true;
+  }
+
+  if (!Number.isFinite(value) || (INTEGER_NUMBER_KEYS.has(key) && !Number.isInteger(value))) {
     return false;
   }
-
-  const key = path.split(".").at(-1)?.toLowerCase() ?? "";
 
   if (NON_NEGATIVE_NUMBER_KEYS.has(key) && value < 0) {
     return false;

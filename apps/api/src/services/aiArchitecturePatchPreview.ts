@@ -787,6 +787,9 @@ Return exactly this JSON shape:
   "confidence": number
 }`;
 
+const PATCH_PLAN_PARAMETER_CONSTRAINT_MESSAGE =
+  "The requested values violate the target resource parameter constraints.";
+
 const PATCH_PLAN_ALLOWED_OPERATION_PATHS: Readonly<Partial<Record<ResourceType, readonly string[]>>> = {
   EC2: ["config.instanceType", "config.associatePublicIpAddress", "config.ami"],
   RDS: ["config.allocatedStorage", "config.instanceClass", "config.engine", "config.multiAz"],
@@ -892,6 +895,12 @@ export function createArchitecturePatchPlan(
     );
   }
 
+  if (!areExistingScalarParameterOperationsSafe(targetResolution.targetNode, operations)) {
+    return createUnsupportedPatchPlan(
+      PATCH_PLAN_PARAMETER_CONSTRAINT_MESSAGE
+    );
+  }
+
   return {
     status: "planned",
     action: "modify_resource",
@@ -963,8 +972,10 @@ function createArchitecturePatchPreviewFromPlan(
   providerMetadata: AiProviderMetadata
 ): ArchitecturePatchPreviewResponse {
   if (
-    patchPlan.status === "needs_clarification" &&
-    providerMetadata.routeTarget === "architecture_patch_plan"
+    (patchPlan.status === "unsupported" &&
+      patchPlan.clarificationQuestion === PATCH_PLAN_PARAMETER_CONSTRAINT_MESSAGE) ||
+    (patchPlan.status === "needs_clarification" &&
+      providerMetadata.routeTarget === "architecture_patch_plan")
   ) {
     return withArchitecturePatchPlan(
       createPatchPlanClarificationResponse(input, patchPlan, providerMetadata),
@@ -1484,6 +1495,8 @@ function validatePatchPlanOperations(
       if (!isValidExistingScalarOperation) {
         return null;
       }
+    } else if (path !== "config.ingress") {
+      return null;
     }
 
     validatedOperations.push({ op, path, value });
@@ -1888,6 +1901,11 @@ function createPatchPlanOperations(
     ]);
     const bucketName = findBucketName(normalizedInstruction);
 
+    const genericOperations = createExistingScalarParameterOperations(instruction, targetNode);
+
+    if (genericOperations.length > 1) {
+      return genericOperations;
+    }
     if (versioning === true) {
       return [{ op: "enable", path: "config.versioning", value: null }];
     }
@@ -2906,25 +2924,39 @@ function resolveTarget(
 
 function findMentionedNodes(nodes: readonly ResourceNode[], instruction: string): ResourceNode[] {
   const normalizedInstruction = normalizeSearchText(instruction);
-  const identityMatches = nodes.flatMap((node) => {
-    const longestAliasLength = Math.max(
-      0,
-      ...nodeIdentityAliases(node)
-        .filter((alias) => includesPhrase(normalizedInstruction, alias))
-        .map((alias) => compactSearchText(alias).length)
-    );
+  const compactInstruction = compactSearchText(normalizedInstruction);
+  const identityMatches = nodes.flatMap((node) =>
+    nodeIdentityAliases(node).flatMap((alias) => {
+      const normalizedAlias = normalizeSearchText(alias);
+      const directStart = normalizedInstruction.indexOf(normalizedAlias);
+      const compactStart = compactInstruction.indexOf(compactSearchText(normalizedAlias));
+      const start = directStart >= 0 ? directStart : compactStart;
 
-    return longestAliasLength > 0 ? [{ node, longestAliasLength }] : [];
-  });
+      return start >= 0
+        ? [{ node, start, aliasLength: compactSearchText(normalizedAlias).length }]
+        : [];
+    })
+  );
+  const earliestIdentityStart = Math.min(
+    Number.POSITIVE_INFINITY,
+    ...identityMatches.map(({ start }) => start)
+  );
+  const earliestIdentityMatches = identityMatches.filter(
+    ({ start }) => start === earliestIdentityStart
+  );
   const longestIdentityLength = Math.max(
     0,
-    ...identityMatches.map(({ longestAliasLength }) => longestAliasLength)
+    ...earliestIdentityMatches.map(({ aliasLength }) => aliasLength)
   );
 
   if (longestIdentityLength > 0) {
-    return identityMatches
-      .filter(({ longestAliasLength }) => longestAliasLength === longestIdentityLength)
-      .map(({ node }) => node);
+    return Array.from(
+      new Map(
+        earliestIdentityMatches
+          .filter(({ aliasLength }) => aliasLength === longestIdentityLength)
+          .map(({ node }) => [node.id, node])
+      ).values()
+    );
   }
 
   return nodes.filter(
@@ -2932,7 +2964,6 @@ function findMentionedNodes(nodes: readonly ResourceNode[], instruction: string)
       node.label !== undefined && includesPhrase(normalizedInstruction, node.label)
   );
 }
-
 function findNaturalLanguagePatchTarget(
   nodes: readonly ResourceNode[],
   instruction: string
