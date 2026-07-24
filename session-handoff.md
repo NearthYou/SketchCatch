@@ -1,31 +1,39 @@
 # Session Handoff
 
-Use this file only for compact continuation context. Write it in English and reference durable artifacts instead of repeating them.
-
 ## Currently Verified
 
-- Branch `Refactor/jh/531-cicd-pr개선-및-편의성-추가` implements the minimal CI/CD setup convergence scope on top of `origin/dev` at `334e33c5`; the earlier written design commit is `a7e3e4e2`.
-- One Phase 3 action now persists a draft before applying GitHub Repository settings, a target-branch Environment policy, scoped AWS trust, and PR changes in order.
-- Partial handoffs resume with the same accepted Plan. Failed/cancelled Pipeline state creates a retry-only file and safe retry PR without Direct Destroy or redeployment.
-- Provider hardening preserves unrelated GitHub branches and IAM statements, avoids exact-state writes, verifies remote read-back, and requires persisted Repository/AWS evidence before Phase 3 completion.
-- Generated workflows reject a stale `SKETCHCATCH_PROJECT_ID` before external work and retain API error bodies.
-- Focused verification passes: API setup/provider 42, full Git/CI/CD API 246, readiness 96, Web 54, root lint, root typecheck, and all five production build tasks.
+- Branch `codex/live-observation-feedback` keeps the focused infrastructure flow and simplifies the surrounding Live Observation UI.
+- Latest `origin/dev` through `a4b87dd6` is merged into the branch; the sole progress-log conflict preserved both histories.
+- Live Observation now uses the latest one-minute CloudWatch request count when Store pressure has decayed, so request rate, Task forecast, Design Simulation, and the next action appear from the same traffic evidence.
+- The traffic-surge banner, raw log groups, and chronological incident timeline are no longer rendered.
+- Up to three observed problems remain visible for the current observation session; matching evidence refreshes without reordering the cards, and a new session resets them.
+- Task forecasts render only for scale-out when the projected count exceeds the provider-observed actual count. Five hundred accepted audience requests trigger the next expected Task early; steady, unavailable, and scale-in states render no expected Task.
+- Rolling active traffic uses four stable compositor-only particle lanes per connector, now keeps the burst alive through the final ECS Service-to-Task connector, and reserves maximum Task geometry so animation cannot resize the horizontal scrollbar.
+- The failure fixture was browser-verified for readable layout, no console issues, and connector/node frames that continue changing across a 1.15-second sample.
+- The latest early-forecast, forecast-transition, final-segment motion, Template, and authored Terraform regressions pass; root lint, root typecheck, and all package build tasks pass.
+- Root `pnpm build` completed all five package tasks and 24 Web routes successfully in 4m23s.
+- `codex/live-observation-feedback` at `ce618488ad5355527c272a2b4c54c1f6c9cd7cfe` was production-deployed by GitHub Actions run `30066876510`; all release jobs completed successfully.
+- Production `/`, `/health`, and `/health/db` return 200, while unauthenticated `/api/projects` returns the expected 401.
+- Authenticated production QA accepted four real audience check-ins, preserved the Task forecast phase before settling to actual/expected 1, kept the judgment and next action visible after stop, and observed continuous connector motion at a high accumulated request count.
+- The new Architecture/demo request-per-Task target is 5 instead of 10. Existing Deployments are unchanged until a separately approved Plan/Apply. No DB migration, dependency change, Terraform action, provider scale-out load cycle, or new infrastructure resource was performed.
 
 ## Changes This Session
 
-- Added the resumable setup API, persisted verification evidence, exact GitHub/AWS convergence, safe PR recovery, workflow project binding guard, and Phase 4 retry CTA.
-- Updated shared contracts and canonical data/deployment/architecture documentation.
-- No DB schema, Drizzle migration, dependency, worker, or lease change was added.
-- No live GitHub/AWS mutation, PR merge, Terraform Plan/Apply/Destroy, deployment, or push was performed.
-- The combined user approval covers Repository variables, Environment branch policy, the current scoped AWS trust statement, and PR preparation. It does not approve merge or Pipeline/cloud execution.
+- Added a session-scoped signal ledger and regression coverage.
+- Simplified the signal detail to evidence and available next actions.
+- Removed the two obsolete rendered log/timeline components.
+- Improved dashboard spacing, typography, record-card hierarchy, telemetry wording, Task transitions, sustained motion, fixed scroll geometry, and change-only forecast wording.
+- Added a focused performance contract for particle count, transform-only keyframes, and compositor hints.
+- Deployed the exact branch SHA to production and completed HTTP, authenticated UI, audience check-in, persistence, Task transition, animation, and browser-console verification.
+- Deployed the follow-up provider-traffic judgment fix and completed production HTTP and authentication-boundary smoke.
 
 ## Broken Or Unverified
 
-- No changed local regression is known to be broken.
-- Live GitHub/AWS acceptance is intentionally unverified until the reviewed branch is deployed.
+- Provider-confirmed production scale-out was not exercised; the production acceptance used four audience check-ins and did not run the separately gated load profile.
+- Root Turbo still has the known post-success non-exit behavior on this Windows environment; the changed Web package build exits successfully.
 
 ## Best Next Action
 
-1. Review and deploy this branch through the normal production workflow.
-2. Confirm the GitHub App installation has Administration and Variables Read/write plus Actions Read-only.
-3. Run one authorized production acceptance covering first setup and one failed-Pipeline retry.
+1. Review and merge the focused Live Observation UI commits.
+2. Use production workflow run `30062741359` as the latest deployment evidence.
+3. Run a separately approved provider load cycle only if production scale-out acceptance is required.

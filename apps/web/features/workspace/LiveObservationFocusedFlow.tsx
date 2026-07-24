@@ -1,12 +1,16 @@
 "use client";
 
 import { Box } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type {
-  ArchitectureJson,
-  DiagramNode,
-  LiveObservationV2Snapshot
-} from "@sketchcatch/types";
+import React, {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties
+} from "react";
+import type { ArchitectureJson, DiagramNode, LiveObservationV2Snapshot } from "@sketchcatch/types";
 import { ResourceIconImage } from "../../components/ui/ResourceIconImage";
 import { createLiveObservationArchitectureModel } from "./live-observation-architecture";
 import {
@@ -17,7 +21,7 @@ import {
   type LiveObservationPresentationRole
 } from "./live-observation-diagram";
 import {
-  LIVE_OBSERVATION_CAPACITY_EXIT_MS,
+  LIVE_OBSERVATION_CAPACITY_TRANSITION_MS,
   reconcileLiveObservationCapacityUnits,
   settleLiveObservationCapacityUnits
 } from "./live-observation-capacity-transitions";
@@ -26,12 +30,11 @@ import {
   getLiveObservationDiagramParticleDelayMs,
   LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS
 } from "./live-observation-diagram-particles";
-import {
-  getLiveObservationCapacityProjection,
-  type LiveObservationCapacityProjection
-} from "./live-observation-capacity-projection";
+import { getLiveObservationCapacityProjection } from "./live-observation-capacity-projection";
 import {
   appendLiveObservationParticleIds,
+  getLiveObservationAnimatedParticleCount,
+  hasLiveObservationActiveTraffic,
   getLiveObservationTrafficIntensity,
   getLiveObservationTrafficBurst,
   getLiveObservationTrafficCursor,
@@ -47,7 +50,7 @@ type SequencedTrafficBurst = LiveObservationRequestBurst & {
 
 const EMPTY_CAPACITY_UNITS: readonly LiveObservationCapacityUnit[] = [];
 
-export function LiveObservationFocusedFlow({
+export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFlow({
   architecture,
   snapshot
 }: {
@@ -72,15 +75,25 @@ export function LiveObservationFocusedFlow({
   const [burst, setBurst] = useState<SequencedTrafficBurst | null>(null);
   const burstRef = useRef<SequencedTrafficBurst | null>(null);
   const burstTimerRef = useRef<number | null>(null);
-  const modelCapacityUnits = model.status === "ready"
-    ? model.capacityUnits
-    : EMPTY_CAPACITY_UNITS;
-  const displayedProjection = capacityProjection;
+  const modelCapacityUnits = model.status === "ready" ? model.capacityUnits : EMPTY_CAPACITY_UNITS;
+  const totalCapacityCount =
+    model.status === "ready" ? model.capacityUnits.length + model.hiddenCapacityCount : 0;
+  const actualCapacityCount =
+    capacityProjection?.actualCount ??
+    (snapshot?.latestObservation?.payload.capacity.running !== null &&
+    snapshot?.latestObservation?.payload.capacity.running !== undefined
+      ? totalCapacityCount
+      : null);
+  const expectedCapacityCount =
+    snapshot?.status === "active" &&
+    actualCapacityCount !== null &&
+    capacityProjection !== null &&
+    capacityProjection.predictedCount > actualCapacityCount
+      ? capacityProjection.predictedCount
+      : null;
   const displayedCapacityUnits = useMemo(() => {
     if (model.status !== "ready") return modelCapacityUnits;
-    const predictedCount = snapshot?.status === "active"
-      ? capacityProjection?.predictedCount ?? null
-      : null;
+    const predictedCount = expectedCapacityCount;
     if (predictedCount === null || predictedCount <= modelCapacityUnits.length) {
       return modelCapacityUnits;
     }
@@ -92,42 +105,42 @@ export function LiveObservationFocusedFlow({
 
     return [
       ...modelCapacityUnits,
-      ...Array.from(
-        { length: predictedCount - modelCapacityUnits.length },
-        (_, index) => ({
-          node: {
-            ...template,
-            id: `${template.id}--predicted-capacity-${modelCapacityUnits.length + index + 1}`,
-            label: `예상 실행 서버 ${modelCapacityUnits.length + index + 1}`,
-            metadata: template.metadata ? { ...template.metadata } : undefined,
-            position: { ...template.position },
-            size: { ...template.size }
-          },
-          observationState: "launching" as const
-        })
-      )
+      ...Array.from({ length: predictedCount - modelCapacityUnits.length }, (_, index) => ({
+        node: {
+          ...template,
+          id: `${template.id}--predicted-capacity-${modelCapacityUnits.length + index + 1}`,
+          label: `예상 실행 서버 ${modelCapacityUnits.length + index + 1}`,
+          metadata: template.metadata ? { ...template.metadata } : undefined,
+          position: { ...template.position },
+          size: { ...template.size }
+        },
+        observationState: "launching" as const
+      }))
     ];
-  }, [
-    capacityProjection,
-    diagram.nodes,
-    model,
-    modelCapacityUnits,
-    snapshot?.status
-  ]);
+  }, [expectedCapacityCount, diagram.nodes, model, modelCapacityUnits, snapshot?.status]);
+  const displayedCapacityState = displayedCapacityUnits
+    .map((unit) => `${unit.node.id}:${unit.observationState}`)
+    .join("|");
+  const displayedCapacityUnitsRef = useRef(displayedCapacityUnits);
+  displayedCapacityUnitsRef.current = displayedCapacityUnits;
   const [presentedCapacityUnits, setPresentedCapacityUnits] = useState(() =>
-    settleLiveObservationCapacityUnits(modelCapacityUnits)
+    settleLiveObservationCapacityUnits(displayedCapacityUnits)
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const nextCapacityUnits = displayedCapacityUnitsRef.current;
     setPresentedCapacityUnits((current) =>
-      reconcileLiveObservationCapacityUnits(current, displayedCapacityUnits)
+      reconcileLiveObservationCapacityUnits(current, nextCapacityUnits)
     );
     const timer = window.setTimeout(
-      () => setPresentedCapacityUnits(settleLiveObservationCapacityUnits(displayedCapacityUnits)),
-      LIVE_OBSERVATION_CAPACITY_EXIT_MS
+      () =>
+        setPresentedCapacityUnits(
+          settleLiveObservationCapacityUnits(displayedCapacityUnitsRef.current)
+        ),
+      LIVE_OBSERVATION_CAPACITY_TRANSITION_MS
     );
     return () => window.clearTimeout(timer);
-  }, [displayedCapacityUnits]);
+  }, [displayedCapacityState]);
 
   useEffect(() => {
     const previousCursor = previousTrafficRef.current;
@@ -135,11 +148,7 @@ export function LiveObservationFocusedFlow({
     const nextBurst = getLiveObservationTrafficBurst(previousCursor, snapshot);
     previousTrafficRef.current = nextCursor;
 
-    if (
-      previousCursor &&
-      nextCursor &&
-      previousCursor.observationId !== nextCursor.observationId
-    ) {
+    if (previousCursor && nextCursor && previousCursor.observationId !== nextCursor.observationId) {
       if (burstTimerRef.current !== null) window.clearTimeout(burstTimerRef.current);
       burstTimerRef.current = null;
       burstRef.current = null;
@@ -151,18 +160,14 @@ export function LiveObservationFocusedFlow({
     if (!nextBurst) return;
 
     burstSequenceRef.current += 1;
-    const mergedBurst = mergeLiveObservationRequestBursts(
-      burstRef.current,
-      nextBurst
-    );
-    const incomingRequestCount =
-      nextBurst.visibleParticleCount + nextBurst.overflowCount;
+    const mergedBurst = mergeLiveObservationRequestBursts(burstRef.current, nextBurst);
+    const incomingRequestCount = nextBurst.visibleParticleCount + nextBurst.overflowCount;
     const sequencedBurst = {
       ...mergedBurst,
       particleIds: appendLiveObservationParticleIds(
         burstRef.current?.particleIds ?? [],
         incomingRequestCount,
-        mergedBurst.visibleParticleCount,
+        getLiveObservationAnimatedParticleCount(mergedBurst.visibleParticleCount),
         () => {
           particleSequenceRef.current += 1;
           return particleSequenceRef.current;
@@ -193,11 +198,10 @@ export function LiveObservationFocusedFlow({
     []
   );
 
-
   if (model.status === "unavailable") {
     return (
       <section
-        aria-label="프로젝트 다이어그램 기반 실시간 관측"
+        aria-label="실시간 인프라 흐름"
         className={`${styles.liveObservationDiagramMap} ${styles.liveObservationFocusedFlow}`}
       >
         <div className={styles.liveObservationPresentationEmpty} role="status">
@@ -209,31 +213,36 @@ export function LiveObservationFocusedFlow({
     );
   }
 
-  const particleIds = burst?.particleIds ?? [];
-  const burstRequestCount = burst
-    ? burst.visibleParticleCount + burst.overflowCount
-    : 0;
+  const burstRequestCount = burst ? burst.visibleParticleCount + burst.overflowCount : 0;
+  const particleIds = burst
+    ? burst.particleIds.slice(-getLiveObservationAnimatedParticleCount(burstRequestCount))
+    : [];
   const trafficIntensity = getLiveObservationTrafficIntensity(
     burstRequestCount,
     snapshot?.live.pressureLevel ?? "normal"
   );
+  const hasActiveTraffic = burst !== null || hasLiveObservationActiveTraffic(snapshot);
+  const reservedCapacityCount = Math.max(
+    presentedCapacityUnits.length,
+    capacityProjection?.maxCapacity ?? snapshot?.latestObservation?.payload.capacity.max ?? 0
+  );
   const capacityColumnCount = Math.min(5, presentedCapacityUnits.length);
+  const reservedCapacityColumnCount = Math.min(5, reservedCapacityCount);
   const capacityDensity =
-    presentedCapacityUnits.length >= 6
-      ? "dense"
-      : presentedCapacityUnits.length >= 4
-        ? "compact"
-        : "comfortable";
-  const capacityCardWidth = capacityDensity === "dense" ? 52 : capacityDensity === "compact" ? 60 : 68;
-  const stageMinimumWidth = capacityDensity === "dense" ? 112 : capacityDensity === "compact" ? 124 : 138;
-  const capacityRowCount = capacityColumnCount === 0
-    ? 0
-    : Math.ceil(presentedCapacityUnits.length / capacityColumnCount);
-  const capacityContentHeight = capacityRowCount * 58 + Math.max(0, capacityRowCount - 1) * 12;
+    reservedCapacityCount >= 6 ? "dense" : reservedCapacityCount >= 4 ? "compact" : "comfortable";
+  const capacityCardWidth =
+    capacityDensity === "dense" ? 52 : capacityDensity === "compact" ? 60 : 68;
+  const stageMinimumWidth =
+    capacityDensity === "dense" ? 112 : capacityDensity === "compact" ? 124 : 138;
+  const reservedCapacityRowCount =
+    reservedCapacityColumnCount === 0
+      ? 0
+      : Math.ceil(reservedCapacityCount / reservedCapacityColumnCount);
+  const capacityContentHeight =
+    reservedCapacityRowCount * 58 + Math.max(0, reservedCapacityRowCount - 1) * 12;
   const pathMinimumHeight = Math.max(145, capacityContentHeight);
-  const capacityStageWidth = presentedCapacityUnits.length > 0
-    ? capacityColumnCount * (capacityCardWidth + 10) + 22
-    : 0;
+  const capacityStageWidth =
+    reservedCapacityCount > 0 ? reservedCapacityColumnCount * (capacityCardWidth + 10) + 22 : 0;
   const minimumWidth = Math.max(
     760,
     model.stages.length * stageMinimumWidth +
@@ -241,50 +250,40 @@ export function LiveObservationFocusedFlow({
       (model.hiddenCapacityCount > 0 ? 64 : 0) +
       80
   );
-  const totalCapacityCount = model.capacityUnits.length + model.hiddenCapacityCount;
-  const actualCapacityCount = capacityProjection?.actualCount ??
-    (snapshot?.latestObservation ? totalCapacityCount : null);
-  const predictedCapacityCount = displayedProjection?.predictedCount ?? null;
-  const activeCapacityCount = presentedCapacityUnits.filter(
-    (unit) => unit.transition === "stable" && unit.observationState === "active"
-  ).length;
-  const launchingCapacityCount = presentedCapacityUnits.filter(
-    (unit) => unit.transition === "stable" && unit.observationState === "launching"
-  ).length;
+  const predictedCapacityCount = expectedCapacityCount;
+  const capacitySummaryLabel = getCapacitySummaryLabel(actualCapacityCount, predictedCapacityCount);
 
   return (
     <section
-      aria-label="프로젝트 다이어그램에서 분석한 메인 트래픽 경로"
+      aria-label="실시간 인프라 흐름"
       className={`${styles.liveObservationDiagramMap} ${styles.liveObservationFocusedFlow}`}
       data-capacity-density={capacityDensity}
-      data-flowing={burst !== null}
+      data-flowing={hasActiveTraffic}
       data-pressure-level={model.pressureLevel}
       data-traffic-intensity={trafficIntensity}
       data-testid="live-observation-focused-flow"
     >
       <header className={styles.liveObservationPresentationHeader}>
-        <strong>실시간 트래픽 · 핵심 데이터 흐름</strong>
+        <strong>인프라 흐름</strong>
         <div className={styles.liveObservationPresentationHeaderActions}>
           <span>
-            {model.stages.length}단계 · {predictedCapacityCount !== null
-              ? `실제 ${actualCapacityCount ?? "확인 중"} · 예상 ${predictedCapacityCount}`
-              : actualCapacityCount !== null
-                ? `실행 서버 ${actualCapacityCount}개 관측`
-                : "실행 서버 관측 대기"}
+            {model.stages.length}단계 · {capacitySummaryLabel}
           </span>
           {burst ? (
             <em
               aria-live="polite"
               className={styles.liveObservationBurstMeter}
               data-intensity={trafficIntensity}
-            >요청 +{burstRequestCount}</em>
+            >
+              요청 +{burstRequestCount}
+            </em>
           ) : null}
         </div>
       </header>
       <div className={styles.liveObservationPresentationViewport}>
         <div
           className={styles.liveObservationPresentationSurface}
-          style={{ minHeight: `${pathMinimumHeight + 64}px`, minWidth: `${minimumWidth}px` }}
+          style={{ minHeight: `${pathMinimumHeight + 40}px`, minWidth: `${minimumWidth}px` }}
         >
           <ol
             className={styles.liveObservationPresentationPath}
@@ -337,105 +336,91 @@ export function LiveObservationFocusedFlow({
               </li>
             ))}
             {presentedCapacityUnits.length > 0 ? (
-            <li className={styles.liveObservationCapacityStage}>
-              <i
-                aria-hidden="true"
-                className={`${styles.liveObservationPresentationConnector} ${styles.liveObservationCapacityConnector}`}
-              >
-                {burst
-                  ? particleIds.map((particleId, particleIndex) => (
-                      <i
-                        className={styles.liveObservationPresentationSegmentParticle}
-                        key={`capacity-segment-${particleId}`}
-                        style={{
-                          animationDelay: `${getLiveObservationDiagramParticleDelayMs(model.stages.length, particleIndex)}ms`,
-                          animationDuration: `${LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS}ms`
-                        }}
-                      />
-                    ))
-                  : null}
-              </i>
-              <span className={styles.liveObservationCapacityLabel}>
-                <strong>실행 서버 그룹</strong>
-                <small>
-                  {predictedCapacityCount !== null
-                    ? `실제 ${actualCapacityCount ?? "확인 중"} · 예상 ${predictedCapacityCount}`
-                    : `${activeCapacityCount}개 실행 중`}
-                  {launchingCapacityCount > 0
-                    ? ` · ${launchingCapacityCount}개 예상`
-                    : ""}
-                </small>
-              </span>
-              <div
-                className={styles.liveObservationCapacityUnits}
-                style={{
-                  "--live-observation-capacity-columns": capacityColumnCount
-                } as CSSProperties}
-              >
-                {presentedCapacityUnits.map((unit, index) => (
-                  <article
-                    aria-label={`${unit.node.label}: ${getCapacityDisplayLabel(
-                      unit.node.id,
-                      index,
-                      unit.observationState,
-                      displayedProjection
-                    )}`}
-                    className={styles.liveObservationCapacityUnit}
-                    data-capacity-forecast={getCapacityForecastKind(
-                      unit.node.id,
-                      index,
-                      displayedProjection
-                    )}
-                    data-observation-state={unit.observationState}
-                    data-transition={unit.transition}
-                    key={unit.node.id}
-                  >
-                    <div
-                      className={styles.liveObservationPresentationNode}
-                      style={{
-                        animationDelay: `${(model.stages.length + index) * 120}ms`
-                      }}
-                    >
-                      <ResourceIcon node={unit.node} />
-                      <b className={styles.liveObservationCapacityOrdinal}>
-                        {String(index + 1).padStart(2, "0")}
-                      </b>
-                      {burst && unit.observationState !== "inactive" ? (
+              <li className={styles.liveObservationCapacityStage}>
+                <i
+                  aria-hidden="true"
+                  className={`${styles.liveObservationPresentationConnector} ${styles.liveObservationCapacityConnector}`}
+                >
+                  {burst
+                    ? particleIds.map((particleId, particleIndex) => (
                         <i
-                          aria-hidden="true"
-                          className={styles.liveObservationPresentationNodePulse}
-                          key={`${burst.sequence}-${unit.node.id}-arrival`}
+                          className={styles.liveObservationPresentationSegmentParticle}
+                          key={`capacity-segment-${particleId}`}
                           style={{
-                            animationDelay: `${model.stages.length * LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS + index * 70}ms`
+                            animationDelay: `${getLiveObservationDiagramParticleDelayMs(model.stages.length, particleIndex)}ms`,
+                            animationDuration: `${LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS}ms`
                           }}
                         />
-                      ) : null}
+                      ))
+                    : null}
+                </i>
+                <span className={styles.liveObservationCapacityLabel}>
+                  <strong>Task 그룹</strong>
+                  <small>{capacitySummaryLabel}</small>
+                </span>
+                <div
+                  className={styles.liveObservationCapacityUnits}
+                  style={
+                    {
+                      "--live-observation-capacity-columns": capacityColumnCount
+                    } as CSSProperties
+                  }
+                >
+                  {presentedCapacityUnits.map((unit, index) => (
+                    <article
+                      aria-label={`${unit.node.label}: ${getCapacityDisplayLabel(
+                        unit.node.id,
+                        unit.observationState
+                      )}`}
+                      className={styles.liveObservationCapacityUnit}
+                      data-capacity-forecast={getCapacityForecastKind(unit.node.id)}
+                      data-observation-state={unit.observationState}
+                      data-transition={unit.transition}
+                      key={unit.node.id}
+                    >
+                      <div
+                        className={styles.liveObservationPresentationNode}
+                        style={{
+                          animationDelay: `${(model.stages.length + index) * 120}ms`
+                        }}
+                      >
+                        <ResourceIcon node={unit.node} />
+                        <b className={styles.liveObservationCapacityOrdinal}>
+                          {String(index + 1).padStart(2, "0")}
+                        </b>
+                        {burst && unit.observationState !== "inactive" ? (
+                          <i
+                            aria-hidden="true"
+                            className={styles.liveObservationPresentationNodePulse}
+                            key={`${burst.sequence}-${unit.node.id}-arrival`}
+                            style={{
+                              animationDelay: `${model.stages.length * LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS + index * 70}ms`
+                            }}
+                          />
+                        ) : null}
+                      </div>
+                      <span>
+                        {getCapacityDisplayLabel(unit.node.id, unit.observationState)}
+                      </span>
+                    </article>
+                  ))}
+                  {model.hiddenCapacityCount > 0 ? (
+                    <div
+                      aria-label={`추가 실행 서버 ${model.hiddenCapacityCount}개`}
+                      className={styles.liveObservationCapacityOverflow}
+                    >
+                      +{model.hiddenCapacityCount}
                     </div>
-                    <span>{getCapacityDisplayLabel(
-                      unit.node.id,
-                      index,
-                      unit.observationState,
-                      displayedProjection
-                    )}</span>
-                  </article>
-                ))}
-                {model.hiddenCapacityCount > 0 ? (
-                  <div
-                    aria-label={`추가 실행 서버 ${model.hiddenCapacityCount}개`}
-                    className={styles.liveObservationCapacityOverflow}
-                  >
-                    +{model.hiddenCapacityCount}
-                  </div>
-                ) : null}
-              </div>
-            </li>
+                  ) : null}
+                </div>
+              </li>
             ) : null}
           </ol>
         </div>
       </div>
     </section>
   );
-}
+});
 
 function ResourceIcon({ node }: { readonly node: DiagramNode }) {
   return node.iconUrl ? (
@@ -457,32 +442,30 @@ function getRoleLabel(role: LiveObservationPresentationRole): string {
   return "트래픽 경유";
 }
 
+function getCapacitySummaryLabel(
+  actualCount: number | null,
+  predictedCount: number | null
+): string {
+  if (actualCount === null) return "실제 확인 중";
+  if (predictedCount !== null) return `실제 ${actualCount}개 · ${predictedCount}개 예상 중`;
+  return `실제 ${actualCount}개`;
+}
+
 function getCapacityStateLabel(state: LiveObservationDiagramNodeState): string {
   if (state === "active") return "실행 중";
-  if (state === "launching") return "시작 중";
+  if (state === "launching") return "예상 중";
   return "대기";
 }
 
-function getCapacityForecastKind(
-  nodeId: string,
-  index: number,
-  projection: LiveObservationCapacityProjection | null
-): "actual" | "predicted" | "scale-in" {
-  if (nodeId.includes("--predicted-capacity-")) return "predicted";
-  if (projection?.direction === "scale_in" && index >= projection.predictedCount) {
-    return "scale-in";
-  }
-  return "actual";
+function getCapacityForecastKind(nodeId: string): "actual" | "predicted" {
+  return nodeId.includes("--predicted-capacity-") ? "predicted" : "actual";
 }
 
 function getCapacityDisplayLabel(
   nodeId: string,
-  index: number,
-  state: LiveObservationDiagramNodeState,
-  projection: LiveObservationCapacityProjection | null
+  state: LiveObservationDiagramNodeState
 ): string {
-  const kind = getCapacityForecastKind(nodeId, index, projection);
-  if (kind === "predicted") return "증설 예상";
-  if (kind === "scale-in") return "축소 예상";
-  return getCapacityStateLabel(state);
+  return getCapacityForecastKind(nodeId) === "predicted"
+    ? "예상 중"
+    : getCapacityStateLabel(state);
 }

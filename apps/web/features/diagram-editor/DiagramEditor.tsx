@@ -50,7 +50,8 @@ import type {
   DragEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent
+  PointerEvent as ReactPointerEvent,
+  WheelEvent as ReactWheelEvent
 } from "react";
 import type {
   ApplyReverseEngineeringDraftRequest,
@@ -114,6 +115,10 @@ import {
   isCanvasInteractiveElementTarget
 } from "./canvas-pointer-hit-test";
 import { isAwsDiagramConnectionAllowed } from "./aws-resource-connection-policy";
+import {
+  resolveBoardWheelZoomShortcut,
+  type BoardZoomModifierKey
+} from "./board-wheel-zoom-shortcut";
 import {
   applyInitialSourceViewBoxViewport,
   getFitViewMinimumZoom,
@@ -405,6 +410,7 @@ function DiagramEditorInner({
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
+  const boardZoomModifierKeysRef = useRef(new Set<BoardZoomModifierKey>());
   const directNodeDragIdsRef = useRef<Set<string> | null>(null);
   const dragAnchorNodeIdRef = useRef<string | null>(null);
   const dragPreviewNodesRef = useRef<DiagramNode[] | null>(null);
@@ -2871,6 +2877,31 @@ function DiagramEditorInner({
     void getFlowInstance().zoomOut({ duration: getBoardMotionDuration(140) });
   }, [getFlowInstance]);
 
+  const handleCanvasWheel = useCallback(
+    (event: ReactWheelEvent<HTMLDivElement>) => {
+      const zoomDirection = resolveBoardWheelZoomShortcut({
+        activeModifierKeys: boardZoomModifierKeysRef.current,
+        ctrlKey: event.ctrlKey,
+        deltaY: event.deltaY,
+        metaKey: event.metaKey
+      });
+
+      if (zoomDirection === null) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (zoomDirection === "zoom_in") {
+        handleZoomIn();
+      } else {
+        handleZoomOut();
+      }
+    },
+    [handleZoomIn, handleZoomOut]
+  );
+
   /** 현재 보드를 화면 크기에 맞추고, 사용자 요청일 때만 시점 변경을 저장합니다. */
   const fitVisibleDiagram = useCallback(
     (shouldPersistViewport: boolean) => {
@@ -3169,6 +3200,37 @@ function DiagramEditorInner({
       undo
     ]
   );
+
+  useEffect(() => {
+    const activeModifierKeys = boardZoomModifierKeysRef.current;
+
+    function trackBoardZoomModifier(event: KeyboardEvent): void {
+      if (event.key === "Control" || event.key === "Meta") {
+        activeModifierKeys.add(event.key);
+      }
+    }
+
+    function releaseBoardZoomModifier(event: KeyboardEvent): void {
+      if (event.key === "Control" || event.key === "Meta") {
+        activeModifierKeys.delete(event.key);
+      }
+    }
+
+    function clearBoardZoomModifiers(): void {
+      activeModifierKeys.clear();
+    }
+
+    window.addEventListener("keydown", trackBoardZoomModifier);
+    window.addEventListener("keyup", releaseBoardZoomModifier);
+    window.addEventListener("blur", clearBoardZoomModifiers);
+
+    return () => {
+      window.removeEventListener("keydown", trackBoardZoomModifier);
+      window.removeEventListener("keyup", releaseBoardZoomModifier);
+      window.removeEventListener("blur", clearBoardZoomModifiers);
+      activeModifierKeys.clear();
+    };
+  }, []);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -3616,6 +3678,7 @@ function DiagramEditorInner({
           onPointerDownCapture={isPreviewActive ? undefined : handleCanvasPointerDown}
           onPointerMoveCapture={isPreviewActive ? undefined : handleCanvasPointerMove}
           onPointerUpCapture={isPreviewActive ? undefined : handleCanvasPointerUp}
+          onWheelCapture={handleCanvasWheel}
           ref={canvasPanelRef}
           style={canvasPanelStyle}
         >
@@ -3672,6 +3735,7 @@ function DiagramEditorInner({
             panOnScroll={viewerPolicy.panOnScroll}
             panOnScrollMode={PanOnScrollMode.Free}
             zoomOnPinch={false}
+            zoomOnScroll={false}
             proOptions={{ hideAttribution: true }}
             selectionKeyCode={["Shift", "Meta", "Control"]}
             selectionMode={SelectionMode.Partial}

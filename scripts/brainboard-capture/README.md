@@ -1,12 +1,12 @@
 # Brainboard capture evidence tooling
 
-These scripts validate and normalize the committed Brainboard capture evidence without changing the raw files in `docs/gg/feat-infrastructure-template/brainboard-captures/`.
+These scripts validate and normalize the committed Brainboard capture evidence without changing the raw files in `docs/diagram-templates/brainboard/captures/`.
 
 ## Safety boundary
 
 Never click or invoke Brainboard **Plan**, **Apply**, or **Deploy** while collecting or checking this evidence. Capture stops after `Use template` → `Create architecture`, the Design SVG, and the Code pane. A failed clone stays failed evidence; do not invent a graph or Terraform source from its preview.
 
-The JSON files under `brainboard-captures/` are immutable inputs. Both CLIs are read-only for that directory, and generated-output options reject a path inside it. The capture index stores the SHA-256 of every raw file.
+The JSON files under `docs/diagram-templates/brainboard/captures/` are immutable inputs. Both CLIs are read-only for that directory, and generated-output options reject a path inside it. The capture index stores the SHA-256 of every raw file.
 
 ## Verify the committed corpus
 
@@ -31,8 +31,8 @@ node scripts/brainboard-capture/normalize-capture.mjs --write-report
 
 These commands produce:
 
-- `docs/gg/feat-infrastructure-template/brainboard-capture-status.json`
-- `docs/gg/feat-infrastructure-template/brainboard-capture-normalization-report.json`
+- `docs/diagram-templates/brainboard/capture-status.json`
+- `docs/diagram-templates/brainboard/normalization-report.json`
 
 Generation is validity-gated. `--write-status` does not create or change a status file when capture validation fails. Normalization verifies every raw file byte hash against the immutable index before parsing any capture; `--json`, `--write-report`, and `--check-report` all stop before report output or report-file access when a hash differs.
 
@@ -77,7 +77,7 @@ Run it with `--parent-overrides path/to/reviewed-overrides.json`. An override is
 To inspect one capture without writing a file:
 
 ```bash
-node scripts/brainboard-capture/normalize-capture.mjs --input docs/gg/feat-infrastructure-template/brainboard-captures/aws-rds.json
+node scripts/brainboard-capture/normalize-capture.mjs --input docs/diagram-templates/brainboard/captures/aws-rds.json
 ```
 
 ## Generate reviewed source fixtures

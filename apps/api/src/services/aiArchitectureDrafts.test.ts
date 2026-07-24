@@ -810,7 +810,7 @@ test("strict repository evidence maps a generated signing secret and 1-to-3 scal
   assert.equal(
     (scalingPolicy?.config.targetTrackingScalingPolicyConfiguration as { targetValue?: number })
       .targetValue,
-    10
+    5
   );
   assert.ok(nodeByTerraformType("random_password"));
   assert.ok(nodeByTerraformType("aws_secretsmanager_secret"));

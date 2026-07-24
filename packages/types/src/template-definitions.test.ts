@@ -491,7 +491,7 @@ test("each template contains the resources required by its deployable default", 
         | { targetValue?: number }
         | undefined
     )?.targetValue,
-    10
+    5
   );
   assert.equal(
     (

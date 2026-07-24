@@ -1,0 +1,786 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "index": "docs/diagram-templates/brainboard/capture-index.json",
+    "indexSha256": "23f9926f086ffa41b529c3122e6d06ac65e27f7558b3698c732fe8c627fb8113",
+    "capturesDirectory": "docs/diagram-templates/brainboard/captures",
+    "rawEvidenceImmutable": true
+  },
+  "policy": {
+    "repairScope": "inverted-parent-links-only",
+    "fullEnclosure": "smallest-strictly-larger-area",
+    "centerContainmentFallbackTolerance": 0.5,
+    "noCandidate": "clear-inverted-parent-to-root",
+    "equalAreaTie": "fail-with-dom-order-candidates-unless-reviewed-override",
+    "nullParents": "preserve",
+    "nodeAddressMapping": "unresolved-no-array-index-matching",
+    "terraformExpressions": "preserve-source-code-without-string-coercion",
+    "parallelEdges": "preserve"
+  },
+  "summary": {
+    "totalTemplates": 24,
+    "capturedTemplates": 23,
+    "failedTemplates": 1,
+    "parentRepairs": 59,
+    "fullEnclosureRepairs": 40,
+    "centerContainmentRepairs": 0,
+    "rootRepairs": 19,
+    "overrideRepairs": 0,
+    "remainingParentCycles": 0,
+    "nonzeroRotations": 10,
+    "explicitEndpointPairs": 222,
+    "sourceEdges": 222,
+    "normalizedEdges": 222
+  },
+  "templates": [
+    {
+      "rank": 1,
+      "id": "brainboard-training-aws-onboarding",
+      "file": "training-aws-onboarding.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "49ffce945cb51ef5d38a1b94ded4f5dd830805bbd553933d0885b4c58cb77a22",
+      "normalizedSha256": "527a97622a6b994672074149a64e0af77fdbf05a35200d85b12251682297f963",
+      "nodeCount": 22,
+      "edgeCount": 15,
+      "parentRepairs": 3,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "b6c225e0-102b-4b88-b046-fb7d88c56f2f",
+      "error": null
+    },
+    {
+      "rank": 2,
+      "id": "brainboard-aws-kubernetes-native-cnis",
+      "file": "aws-kubernetes-native-cnis.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "f00dae01fe03ce34fae1a6544674caeb1282dee3063bad0e9ccfc8abb6670790",
+      "normalizedSha256": "1d5d17e2454b8188a2790aa6419f6c9ffa4859dbb687448780eccf8a98972fbb",
+      "nodeCount": 22,
+      "edgeCount": 14,
+      "parentRepairs": 3,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "b5a1c8c8-7a01-4084-a785-a686b783c184",
+      "error": null
+    },
+    {
+      "rank": 3,
+      "id": "brainboard-aws-vpc-subnets-security-groups-2az",
+      "file": "aws-vpc-subnets-security-groups-2az.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "7f8cab683561c674b9fc5d0e89d24bcdd217c16388ec0e8f566e2092aa089f47",
+      "normalizedSha256": "e9595d947c90e8a2a49e3249d0431cf3e36b04566d059840849541c8d4948da0",
+      "nodeCount": 21,
+      "edgeCount": 6,
+      "parentRepairs": 2,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "e89031e6-fe1a-4d24-9302-0e0cdf5d4de9",
+      "error": null
+    },
+    {
+      "rank": 4,
+      "id": "brainboard-aws-serverless-cdn",
+      "file": "aws-serverless-cdn.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "871de7784b1e76bb9fed3d230b9205d7842e9590e36dfc6917ce6990beffcb46",
+      "normalizedSha256": "a6e7af5e10d76ab44739f30f53a28ea94c8c2bb412b4acacee39df415347ebce",
+      "nodeCount": 21,
+      "edgeCount": 22,
+      "parentRepairs": 0,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "3a8408e9-b054-48d6-8a5e-b11c7b85dead",
+      "error": null
+    },
+    {
+      "rank": 5,
+      "id": "brainboard-aws-ec2-vpc-subnet",
+      "file": "aws-ec2-vpc-subnet.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "ea7fab45ba1758e5537d7df5dc2045d513c3e9c1ba74cb08ce81950685582e1e",
+      "normalizedSha256": "5f18d08cbeb1387a53c0e3f70f4d6834976e7a89a8a79aae5dc45a1afead4d57",
+      "nodeCount": 7,
+      "edgeCount": 1,
+      "parentRepairs": 3,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "b5d56c37-98c6-473a-8b61-deec27895355",
+      "error": null
+    },
+    {
+      "rank": 6,
+      "id": "brainboard-aws-asg-lb-vpc-subnets",
+      "file": "aws-asg-load-balancer-vpc.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "ae4dbd0f6977eb4ab3d26d50b8cb71a5daeeccd47d5a95a2f2fcdcfdfcc3fcb5",
+      "normalizedSha256": "5a468ffb5145abbde6382eabc1d8c668ed9f8fd8ed84e8bc1343a79636a91a0b",
+      "nodeCount": 19,
+      "edgeCount": 6,
+      "parentRepairs": 3,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "0e3b4d03-bd46-4172-9be4-bb5bf3f6b3da",
+      "error": null
+    },
+    {
+      "rank": 7,
+      "id": "brainboard-aws-jenkins-ec2",
+      "file": "aws-jenkins-ec2.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "8093125dd4605097bc95a27f6cdf05a842034595d0c5f01d61d5979f5f7f0645",
+      "normalizedSha256": "bc01430a715dd6a3281f482d7107aa3379c75e90fac7eb7632249c78ff239a9a",
+      "nodeCount": 44,
+      "edgeCount": 18,
+      "parentRepairs": 6,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "3ff1b689-c574-4ff7-9e00-ae3a29197cc0",
+      "error": null
+    },
+    {
+      "rank": 8,
+      "id": "brainboard-aws-rest-api-documentdb",
+      "file": "aws-rest-api-documentdb.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "7fba7f1739bf14bda3e65b8a927351dcbae60c8f961fbe93db01cdb6df594b2f",
+      "normalizedSha256": "0c8aa9c07b0ef47fc9aff9535f080d31280b6b1e705ee8188f83e22341dae738",
+      "nodeCount": 10,
+      "edgeCount": 5,
+      "parentRepairs": 2,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "14351cfb-9a6d-4946-9654-c8a7a4911581",
+      "error": null
+    },
+    {
+      "rank": 9,
+      "id": "brainboard-aws-network-landing-zone",
+      "file": "aws-network-landing-zone.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "450e2d1a0d24679a4074d86b7d54846f7ed98cd9a5c63b5dfdfa612beabf2003",
+      "normalizedSha256": "8e79ff97c399c7a688a24fda45cc94fb4682eabcee9bbc6144d2db539b8644fc",
+      "nodeCount": 26,
+      "edgeCount": 10,
+      "parentRepairs": 5,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "d1841afa-9c0f-40d3-a188-477020ee4f17",
+      "error": null
+    },
+    {
+      "rank": 10,
+      "id": "brainboard-aws-three-tier-database",
+      "file": "aws-three-tier-web-app.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "e1d7cc935b5833e9c3d6ee8f966417364d07feabccd76be4e16e4ceb301764dd",
+      "normalizedSha256": "c27c6bd07e3e638ed84d4b00fe570f838f1751f0e0cd8239d4656fdf84ee4b8d",
+      "nodeCount": 40,
+      "edgeCount": 19,
+      "parentRepairs": 3,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "448a2a8b-4b9e-401b-aaf5-7693351b905f",
+      "error": null
+    },
+    {
+      "rank": 11,
+      "id": "brainboard-aws-bastion",
+      "file": "aws-bastion.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "f523f0e224781749054638d576fe2b73f4748bdfc9f1daabd09f70bb81e863d6",
+      "normalizedSha256": "c4f7532b594c10e77c4e6b23712ad9ebe3cb23a2da83a61dfa58d828c2916b27",
+      "nodeCount": 17,
+      "edgeCount": 7,
+      "parentRepairs": 3,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "c5052a14-6389-43f3-904e-873202387f84",
+      "error": null
+    },
+    {
+      "rank": 12,
+      "id": "brainboard-aws-instance-db-multiple-networks",
+      "file": "aws-instance-database-multiple-networks.json",
+      "captureStatus": "failed",
+      "rawCaptureSha256": "eaf789e49b5308e54d7fa418195125915d4c556ed5d309187369263ed082a293",
+      "normalizedSha256": "e2cb40a8c0b135f6856921609a4d1884562e67c636975994ca8656109a1fe6de",
+      "parentRepairs": 0,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": null,
+      "error": "Brainboard template clone failed: Create architecture returned HTTP 400 and Clone into current architecture left the recovery board unchanged"
+    },
+    {
+      "rank": 13,
+      "id": "brainboard-aws-load-balancer-target-group",
+      "file": "aws-load-balancer-target-group.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "e33e040800e41a64dcd0a6dad71872f34ce46a429555b2dab76c6793b189ded9",
+      "normalizedSha256": "9d2166f44580f119922de73a6ac0c1370c34fae6e7b5cbe057019222121fdc02",
+      "nodeCount": 13,
+      "edgeCount": 4,
+      "parentRepairs": 5,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "b7c82e16-49c5-4ed8-bc5f-bd54a4ea8e27",
+      "error": null
+    },
+    {
+      "rank": 14,
+      "id": "brainboard-aws-s3-api-gateway",
+      "file": "aws-s3-api-gateway.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "e070854471d7419eae61653b56ae1ec9def078d097fede373f92dd3569f8b818",
+      "normalizedSha256": "7b32cb7c9639eebf8f65529e9fd47e6fdb94220383651a3cb4fe8cfee2483ed2",
+      "nodeCount": 16,
+      "edgeCount": 31,
+      "parentRepairs": 0,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "0665ac2e-daae-43d0-8de3-ee7c700e5cc0",
+      "error": null
+    },
+    {
+      "rank": 15,
+      "id": "brainboard-aws-costs-monitoring",
+      "file": "aws-cost-monitoring.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "ff1b34cfe20267bdb2c8b6db863468f75141afad709fa963c916240a85ff4bee",
+      "normalizedSha256": "8d593151646a9a2d1301585f97911f9f8442735256ef6400116dff8b196c7335",
+      "nodeCount": 5,
+      "edgeCount": 0,
+      "parentRepairs": 0,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "cb973376-0fdd-4651-aaa2-d204bfc8c89b",
+      "error": null
+    },
+    {
+      "rank": 16,
+      "id": "brainboard-aws-ecs-fargate",
+      "file": "aws-ecs-fargate.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "fe86e289e9906106d489ceb81f031a4b8def331b2985a0a71f1642336f23c59c",
+      "normalizedSha256": "16ec86f64946f4132979a8b4086fa415abd6e39cf009468de54dddab5b79a8a9",
+      "nodeCount": 10,
+      "edgeCount": 4,
+      "parentRepairs": 3,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "378147c7-b7ad-4bde-b6a5-485db2038eb5",
+      "error": null
+    },
+    {
+      "rank": 17,
+      "id": "brainboard-aws-multi-account-management",
+      "file": "aws-multi-account-management.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "14b356b76566369682002a42f481cba695ac714e6183bcbf171839c464123f06",
+      "normalizedSha256": "3358dc30fc4b70e6219f4a2f85767c6140d51faa62e9e5ebff5576d16b6c5cf9",
+      "nodeCount": 28,
+      "edgeCount": 3,
+      "parentRepairs": 9,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "27865202-035e-4865-9f8f-253bea5cd997",
+      "error": null
+    },
+    {
+      "rank": 18,
+      "id": "brainboard-aws-elastic-beanstalk",
+      "file": "aws-elastic-beanstalk.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "ccc3bd7c1d8c30ed8ab074497f9d2cb35f25bee94b2b66849d8d8b4ae9166ea5",
+      "normalizedSha256": "27f442d604b9363121c7c86c9fe4b20760a2b4e1328878ae823813ff640f3521",
+      "nodeCount": 15,
+      "edgeCount": 6,
+      "parentRepairs": 3,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "be7e639a-5c0c-40bc-b20d-cc80576d7a75",
+      "error": null
+    },
+    {
+      "rank": 19,
+      "id": "brainboard-aws-rds",
+      "file": "aws-rds.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "1f11f380003cd4a2e136837238d2205c1e5f6fcfe093ad5c9915dd2c9885b4de",
+      "normalizedSha256": "00a42a7cc701addd925741cc7fe96cae4a2c1c8c2edea035735e40d3b124827a",
+      "nodeCount": 11,
+      "edgeCount": 6,
+      "parentRepairs": 3,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "9930ecc2-a7d0-4b15-abb7-2838e5870c66",
+      "error": null
+    },
+    {
+      "rank": 20,
+      "id": "brainboard-aws-fsx",
+      "file": "aws-fsx-architecture.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "e9c85e66b72ade0af4612c6e261daf57f5a3efa8abe0656c6e97c0e6ef84ac95",
+      "normalizedSha256": "4d35245d701a2df3ad258643c4170834245b58e7dc88b890ef0e5012fc4684ed",
+      "nodeCount": 30,
+      "edgeCount": 12,
+      "parentRepairs": 3,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "2f87c587-14c3-4791-a494-ae1b27595ed4",
+      "error": null
+    },
+    {
+      "rank": 21,
+      "id": "brainboard-cross-account-aws-s3",
+      "file": "cross-account-aws-s3.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "fd2ed88605dcf0ad2fa89378d3926deac08d61e01de27b9159077c7a6ac858c2",
+      "normalizedSha256": "a98153ec45609951969a10222c70252f8bad60d22ba4256de4b451e9a0c898cd",
+      "nodeCount": 8,
+      "edgeCount": 2,
+      "parentRepairs": 0,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "8480972d-c3ac-42e5-b9a3-c5a4b30c26dd",
+      "error": null
+    },
+    {
+      "rank": 22,
+      "id": "brainboard-aws-iam-users",
+      "file": "aws-iam-users.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "e7daa5c6b68600d61d05a7ef02b4968f1eb565e1e4fc87ea9b81a0b39c0fe81c",
+      "normalizedSha256": "262aeca7375f4decd7b5950b7e7736a6b1a6c0650ab1ec307c7f23cced32563a",
+      "nodeCount": 10,
+      "edgeCount": 7,
+      "parentRepairs": 0,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "c7168e71-572e-4dc3-b171-3dad08516551",
+      "error": null
+    },
+    {
+      "rank": 23,
+      "id": "brainboard-aws-dashcam-video-pipeline",
+      "file": "aws-dashcam-video-processing.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "c462a37511b600b862af985a29fa48634c42f96c03517ed69e72aefca0f80311",
+      "normalizedSha256": "bc71fc5c122067cbf962d7b6cbabec9e9605cbc65bb6b58e8f0e45e8e7565856",
+      "nodeCount": 15,
+      "edgeCount": 14,
+      "parentRepairs": 0,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "45fd2390-58ad-4c4b-b840-739294fc4339",
+      "error": null
+    },
+    {
+      "rank": 24,
+      "id": "brainboard-aws-secure-s3-bucket",
+      "file": "aws-secure-s3-bucket.json",
+      "captureStatus": "captured",
+      "rawCaptureSha256": "dea43d5c696819aee3c07bfb505076409bc86f25043b9d79ab19d0dbcbedc254",
+      "normalizedSha256": "86a07cb6722a8c8544f4756151cd4c82fa305bea51cb51a2148f25e000540d78",
+      "nodeCount": 12,
+      "edgeCount": 10,
+      "parentRepairs": 0,
+      "remainingParentCycles": 0,
+      "cloneArchitectureId": "40361bdd-1e39-479c-869a-05763f43f8bb",
+      "error": null
+    }
+  ],
+  "parentRepairs": [
+    {
+      "file": "training-aws-onboarding.json",
+      "sourceNodeId": "a9e7e1c4-6179-45d2-b7bc-885e61755ac2",
+      "fromParentSourceNodeId": "3a7c40fe-8ca2-429b-a762-605aed1a0a33",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "training-aws-onboarding.json",
+      "sourceNodeId": "2c258322-661f-471b-b0e6-85d49fd8e46b",
+      "fromParentSourceNodeId": "9647ef8e-ba33-4608-be6b-79271f103fe3",
+      "toParentSourceNodeId": "c7cf2dc9-4cc9-481f-b53f-9904151e2630",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "training-aws-onboarding.json",
+      "sourceNodeId": "dc0a5b25-308f-4bc2-871b-d5083cf2d0e2",
+      "fromParentSourceNodeId": "7fc5471e-298b-4fe8-b8dd-61c9e12374a6",
+      "toParentSourceNodeId": "c7cf2dc9-4cc9-481f-b53f-9904151e2630",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-kubernetes-native-cnis.json",
+      "sourceNodeId": "839c066c-c756-4005-aeb5-67c1e8c34cf7",
+      "fromParentSourceNodeId": "37304ca4-7959-4553-802c-96b74972173a",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-kubernetes-native-cnis.json",
+      "sourceNodeId": "5adb3d4d-2c10-46fe-93f8-691ad10c863a",
+      "fromParentSourceNodeId": "c7985a34-a745-4fc3-8e0c-32ceec6626f8",
+      "toParentSourceNodeId": "5941a072-4406-4e02-ab93-560811155e88",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-kubernetes-native-cnis.json",
+      "sourceNodeId": "e88227bb-9f4f-4710-87a7-ad9ae751e7c0",
+      "fromParentSourceNodeId": "5b25dc4d-2481-4368-89be-255a3f450843",
+      "toParentSourceNodeId": "5941a072-4406-4e02-ab93-560811155e88",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-vpc-subnets-security-groups-2az.json",
+      "sourceNodeId": "c04395a7-7955-4329-8709-f8b44efa1c63",
+      "fromParentSourceNodeId": "20c1e4c2-a928-42a3-901a-121551b1f07f",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-vpc-subnets-security-groups-2az.json",
+      "sourceNodeId": "9c59c668-cb0a-4287-9087-1de1045fcb1b",
+      "fromParentSourceNodeId": "20c1e4c2-a928-42a3-901a-121551b1f07f",
+      "toParentSourceNodeId": "c04395a7-7955-4329-8709-f8b44efa1c63",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-ec2-vpc-subnet.json",
+      "sourceNodeId": "411a1488-c6f1-4708-be6c-91844746b580",
+      "fromParentSourceNodeId": "8c044337-0d96-4095-b3a4-89d844d1c129",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-ec2-vpc-subnet.json",
+      "sourceNodeId": "3704567b-d0d1-49f3-9215-bf83a1df977a",
+      "fromParentSourceNodeId": "8c044337-0d96-4095-b3a4-89d844d1c129",
+      "toParentSourceNodeId": "411a1488-c6f1-4708-be6c-91844746b580",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-ec2-vpc-subnet.json",
+      "sourceNodeId": "818d32cf-1a97-4f1c-8f60-92faf5dc7c0e",
+      "fromParentSourceNodeId": "8c044337-0d96-4095-b3a4-89d844d1c129",
+      "toParentSourceNodeId": "3704567b-d0d1-49f3-9215-bf83a1df977a",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-asg-load-balancer-vpc.json",
+      "sourceNodeId": "c8302f50-a584-4e73-bf3f-efca40fae066",
+      "fromParentSourceNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-asg-load-balancer-vpc.json",
+      "sourceNodeId": "4ccb83f3-67ac-497f-bcfd-4ce5691f8e73",
+      "fromParentSourceNodeId": "af851fdf-0467-46fb-a990-ae069729728c",
+      "toParentSourceNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-asg-load-balancer-vpc.json",
+      "sourceNodeId": "8720b1c9-ad44-42e7-a8f2-aa43ebee2449",
+      "fromParentSourceNodeId": "ff98d607-abd3-49b8-bf7f-f5dae753e5c8",
+      "toParentSourceNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-jenkins-ec2.json",
+      "sourceNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69",
+      "fromParentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-jenkins-ec2.json",
+      "sourceNodeId": "7284b103-be2a-4159-b7f4-b6ab0cb802fa",
+      "fromParentSourceNodeId": "b55a1748-7a18-424f-b047-ffa56acd1a92",
+      "toParentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-jenkins-ec2.json",
+      "sourceNodeId": "8894d2b3-f035-4824-ae9c-ed68cae67835",
+      "fromParentSourceNodeId": "0521d44b-15ce-40f0-abb8-6f2bd189eafa",
+      "toParentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-jenkins-ec2.json",
+      "sourceNodeId": "e4672c0f-349e-4a5f-951e-1950b90adbea",
+      "fromParentSourceNodeId": "be92d4fa-43ef-4fbf-a4ee-71ae6647998e",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-jenkins-ec2.json",
+      "sourceNodeId": "4c8d5064-37af-4f69-84ae-093f1652e998",
+      "fromParentSourceNodeId": "be92d4fa-43ef-4fbf-a4ee-71ae6647998e",
+      "toParentSourceNodeId": "e4672c0f-349e-4a5f-951e-1950b90adbea",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-jenkins-ec2.json",
+      "sourceNodeId": "050262e9-c94b-48b6-90b1-7298da1a70a2",
+      "fromParentSourceNodeId": "be92d4fa-43ef-4fbf-a4ee-71ae6647998e",
+      "toParentSourceNodeId": "4c8d5064-37af-4f69-84ae-093f1652e998",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-rest-api-documentdb.json",
+      "sourceNodeId": "9adcf8e5-26cb-484e-9ae5-6535a6a1894d",
+      "fromParentSourceNodeId": "6a793bea-ff9a-4951-bf42-7ff3f987219d",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-rest-api-documentdb.json",
+      "sourceNodeId": "8cc66a70-095a-4dd1-b32d-9be569d07d43",
+      "fromParentSourceNodeId": "6a793bea-ff9a-4951-bf42-7ff3f987219d",
+      "toParentSourceNodeId": "9adcf8e5-26cb-484e-9ae5-6535a6a1894d",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-network-landing-zone.json",
+      "sourceNodeId": "eaf4b1f2-372f-4eef-968c-5137fb0941ef",
+      "fromParentSourceNodeId": "a8cbdb9e-1255-44d1-9ccc-af111d08dc6d",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-network-landing-zone.json",
+      "sourceNodeId": "2abe13e0-233f-4e11-9d24-05e9b3d61bdf",
+      "fromParentSourceNodeId": "a8cbdb9e-1255-44d1-9ccc-af111d08dc6d",
+      "toParentSourceNodeId": "eaf4b1f2-372f-4eef-968c-5137fb0941ef",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-network-landing-zone.json",
+      "sourceNodeId": "8487e22b-1a81-4b45-87f4-3415848b288a",
+      "fromParentSourceNodeId": "75bf4e98-45fc-47f3-91d3-3c96bcbbde9c",
+      "toParentSourceNodeId": "2abe13e0-233f-4e11-9d24-05e9b3d61bdf",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-network-landing-zone.json",
+      "sourceNodeId": "a8cbdb9e-1255-44d1-9ccc-af111d08dc6d",
+      "fromParentSourceNodeId": "c922d942-2e74-48fa-8ad7-588328b69fbd",
+      "toParentSourceNodeId": "2abe13e0-233f-4e11-9d24-05e9b3d61bdf",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-network-landing-zone.json",
+      "sourceNodeId": "efe4bfff-0849-45a3-81fd-d78dcec9062e",
+      "fromParentSourceNodeId": "7706801a-075a-4573-ba3c-fa5fcdcb5e39",
+      "toParentSourceNodeId": "2abe13e0-233f-4e11-9d24-05e9b3d61bdf",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-three-tier-web-app.json",
+      "sourceNodeId": "cea766af-7b78-4329-8483-aa94f972ead5",
+      "fromParentSourceNodeId": "4c5c5291-683f-4364-88a1-09dc5d885de3",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-three-tier-web-app.json",
+      "sourceNodeId": "4c5c5291-683f-4364-88a1-09dc5d885de3",
+      "fromParentSourceNodeId": "d1bbba94-5f95-4e6e-ba67-d968459db06c",
+      "toParentSourceNodeId": "afe878e0-c406-499d-ba2c-c76a7ba9ed00",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-three-tier-web-app.json",
+      "sourceNodeId": "e045ce90-bb03-4d17-8184-40474d73bdda",
+      "fromParentSourceNodeId": "5c70cc8e-00c1-40aa-9579-f774354c3de4",
+      "toParentSourceNodeId": "afe878e0-c406-499d-ba2c-c76a7ba9ed00",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-bastion.json",
+      "sourceNodeId": "4b4447a5-92a0-40b4-bf63-538a19399886",
+      "fromParentSourceNodeId": "3cbdd739-7b62-4824-ae49-25f7863bd970",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-bastion.json",
+      "sourceNodeId": "7912ce6d-b224-4055-84c0-e847e7ca1224",
+      "fromParentSourceNodeId": "3cbdd739-7b62-4824-ae49-25f7863bd970",
+      "toParentSourceNodeId": "4b4447a5-92a0-40b4-bf63-538a19399886",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-bastion.json",
+      "sourceNodeId": "3cbdd739-7b62-4824-ae49-25f7863bd970",
+      "fromParentSourceNodeId": "0b578f07-26c1-42ea-8bd0-952dd4b45ebf",
+      "toParentSourceNodeId": "7912ce6d-b224-4055-84c0-e847e7ca1224",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-load-balancer-target-group.json",
+      "sourceNodeId": "c52a1a71-178d-4ae7-90bf-28a69b7d20a9",
+      "fromParentSourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-load-balancer-target-group.json",
+      "sourceNodeId": "595f9ca1-9786-4270-a86e-f584fd0dd78b",
+      "fromParentSourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5",
+      "toParentSourceNodeId": "c52a1a71-178d-4ae7-90bf-28a69b7d20a9",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-load-balancer-target-group.json",
+      "sourceNodeId": "c62807d5-e1bf-450d-a78e-bd44c7911496",
+      "fromParentSourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5",
+      "toParentSourceNodeId": "595f9ca1-9786-4270-a86e-f584fd0dd78b",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-load-balancer-target-group.json",
+      "sourceNodeId": "cb5d901c-6f13-45b6-8c28-708389c20c56",
+      "fromParentSourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5",
+      "toParentSourceNodeId": "c62807d5-e1bf-450d-a78e-bd44c7911496",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-load-balancer-target-group.json",
+      "sourceNodeId": "d5d05b1a-2611-4237-b99e-7e67ad204bcb",
+      "fromParentSourceNodeId": "71f7a4a8-0f10-4c27-ab01-6feb1e6279b4",
+      "toParentSourceNodeId": "c62807d5-e1bf-450d-a78e-bd44c7911496",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-ecs-fargate.json",
+      "sourceNodeId": "5ba31e54-d954-4cba-a521-3f11291d0ed7",
+      "fromParentSourceNodeId": "162f4029-6160-4b56-80d0-e6de1b294c83",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-ecs-fargate.json",
+      "sourceNodeId": "162f4029-6160-4b56-80d0-e6de1b294c83",
+      "fromParentSourceNodeId": "5b67f9b3-34fa-4d25-9451-471ad56e4291",
+      "toParentSourceNodeId": "5ba31e54-d954-4cba-a521-3f11291d0ed7",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-ecs-fargate.json",
+      "sourceNodeId": "1eca88fe-e8bd-4240-856e-92e7187e1114",
+      "fromParentSourceNodeId": "5b67f9b3-34fa-4d25-9451-471ad56e4291",
+      "toParentSourceNodeId": "162f4029-6160-4b56-80d0-e6de1b294c83",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-multi-account-management.json",
+      "sourceNodeId": "258ffd07-ae27-412c-8c6e-192ffbbb76de",
+      "fromParentSourceNodeId": "ddc96bd1-f6ae-4e61-8944-b779f74bf50c",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-multi-account-management.json",
+      "sourceNodeId": "c50301f8-0517-4fb9-8a05-3123e0c7dedd",
+      "fromParentSourceNodeId": "bfac85f0-4bdd-4b46-8507-8926a71e8b72",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-multi-account-management.json",
+      "sourceNodeId": "d2ec1630-f50e-4c5f-b898-8a9a65dbb2ce",
+      "fromParentSourceNodeId": "18592886-fb21-48dc-8fab-059177b9634b",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-multi-account-management.json",
+      "sourceNodeId": "114ce859-8066-4c14-94da-52b3638dd9ee",
+      "fromParentSourceNodeId": "3001c016-1493-4d58-8768-b2931b576bd4",
+      "toParentSourceNodeId": "18592886-fb21-48dc-8fab-059177b9634b",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-multi-account-management.json",
+      "sourceNodeId": "1dba0c64-caab-49ce-b64a-84c2f72ec1cc",
+      "fromParentSourceNodeId": "3607f798-6454-4e9b-a6eb-ca801c34d712",
+      "toParentSourceNodeId": "ddc96bd1-f6ae-4e61-8944-b779f74bf50c",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-multi-account-management.json",
+      "sourceNodeId": "46b74daa-6c97-4991-af63-d172eb3e8b1d",
+      "fromParentSourceNodeId": "b49067a3-6b76-4dec-acd7-dde436c44ca9",
+      "toParentSourceNodeId": "ddc96bd1-f6ae-4e61-8944-b779f74bf50c",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-multi-account-management.json",
+      "sourceNodeId": "6c1d860b-04c2-4975-acd9-da97fcb87e28",
+      "fromParentSourceNodeId": "dd728495-b7d3-4836-a45e-8678e3c8856c",
+      "toParentSourceNodeId": "bfac85f0-4bdd-4b46-8507-8926a71e8b72",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-multi-account-management.json",
+      "sourceNodeId": "8daa8193-2ae3-4554-8bc8-8d5c5ea49fc4",
+      "fromParentSourceNodeId": "bf6846e5-0f9e-445a-a19d-63417cd4a3f2",
+      "toParentSourceNodeId": "bfac85f0-4bdd-4b46-8507-8926a71e8b72",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-multi-account-management.json",
+      "sourceNodeId": "9a55fdc1-61fd-48dc-ba55-4fd900303cd1",
+      "fromParentSourceNodeId": "0c7dce6c-a8a7-4a8f-82d5-c49cba3bb928",
+      "toParentSourceNodeId": "18592886-fb21-48dc-8fab-059177b9634b",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-elastic-beanstalk.json",
+      "sourceNodeId": "f2425c88-44c6-439d-b3f3-d8b0f76b130b",
+      "fromParentSourceNodeId": "d40ff46e-9c47-41ae-ac6d-94b6ee7e82a0",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-elastic-beanstalk.json",
+      "sourceNodeId": "7eb561cf-2bc5-4d66-933a-2242b1a6567f",
+      "fromParentSourceNodeId": "5817b9fb-4c2c-4e1f-bb4d-61b71657a381",
+      "toParentSourceNodeId": "d40ff46e-9c47-41ae-ac6d-94b6ee7e82a0",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-elastic-beanstalk.json",
+      "sourceNodeId": "9a33d988-aa5c-4ab1-9c0e-fd1b80102646",
+      "fromParentSourceNodeId": "a5c63292-27e8-447b-b4fc-2d231bb3580f",
+      "toParentSourceNodeId": "d40ff46e-9c47-41ae-ac6d-94b6ee7e82a0",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-rds.json",
+      "sourceNodeId": "b6bf501a-706d-48c9-b72e-4ab9c89dc437",
+      "fromParentSourceNodeId": "ac3623f0-25ad-4acb-92d8-0d35223ec63c",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-rds.json",
+      "sourceNodeId": "2adbfb12-8509-4302-9f1d-029292991c80",
+      "fromParentSourceNodeId": "87a87f94-1a87-409c-9228-fca73e37a118",
+      "toParentSourceNodeId": "a0e46c7b-3b5b-4d6e-8a12-3d468f1dc564",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-rds.json",
+      "sourceNodeId": "8d685e1f-ef90-4fef-afde-9ba043869054",
+      "fromParentSourceNodeId": "b45989bc-c032-4bca-a116-0b5f0ee6c759",
+      "toParentSourceNodeId": "a0e46c7b-3b5b-4d6e-8a12-3d468f1dc564",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-fsx-architecture.json",
+      "sourceNodeId": "e39ed138-6200-410e-9d54-f567019667b7",
+      "fromParentSourceNodeId": "7e275d52-672d-4e38-b17a-aad1e06c04e8",
+      "toParentSourceNodeId": null,
+      "strategy": "root"
+    },
+    {
+      "file": "aws-fsx-architecture.json",
+      "sourceNodeId": "9cd19ce4-c2ad-4a31-9a8b-ded606955752",
+      "fromParentSourceNodeId": "b0dc4cbd-651f-42f7-b725-d3e7220d5559",
+      "toParentSourceNodeId": "7e275d52-672d-4e38-b17a-aad1e06c04e8",
+      "strategy": "full-enclosure"
+    },
+    {
+      "file": "aws-fsx-architecture.json",
+      "sourceNodeId": "555b4f12-4843-4c1a-aa99-8771f272d00c",
+      "fromParentSourceNodeId": "9530b9bb-8579-4ae9-ae26-fa12f94a4068",
+      "toParentSourceNodeId": "7e275d52-672d-4e38-b17a-aad1e06c04e8",
+      "strategy": "full-enclosure"
+    }
+  ]
+}

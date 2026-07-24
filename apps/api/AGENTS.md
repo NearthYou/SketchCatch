@@ -41,7 +41,7 @@ The API owns project persistence, architecture snapshots, asset metadata, valida
 4. Prefer dry-run, plan, validation, and mock execution before apply.
 5. Capture deployment logs and failure reasons without leaking secrets.
 6. Keep the first DiagramJson-to-Terraform converter as a pure service with no DB, S3, filesystem, Terraform CLI, or AWS SDK side effects.
-7. Terraform CLI validation may be added later only in backend or worker code when the issue covers temp directories, state, credentials, provider setup, and log masking.
+7. Terraform CLI validation and execution exist only in controlled backend, worker, or generated CI/CD paths. Keep editor and preview validation separate from Deployment `init`, `validate`, `plan`, `apply`, and `destroy`, and preserve temp-directory, state, credential, provider, log-masking, approval, and cleanup safeguards when extending them.
 8. Never add `apply` or `destroy` behavior outside explicit Deployment work or approved Git/CI/CD handoff.
 9. Support Direct Deployment Path and Git/CI/CD Deployment Path as different execution paths with the same plan, approval, logging, masking, and cleanup safety expectations.
 

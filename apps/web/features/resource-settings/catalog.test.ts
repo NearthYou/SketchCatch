@@ -15,7 +15,7 @@ import { resourceCatalog } from "./catalog";
 
 const publicDirectoryPath = fileURLToPath(new URL("../../public", import.meta.url));
 const brainboardCaptureDirectoryPath = fileURLToPath(
-  new URL("../../../../docs/gg/feat-infrastructure-template/brainboard-captures/", import.meta.url)
+  new URL("../../../../docs/diagram-templates/brainboard/captures/", import.meta.url)
 );
 const BRAINBOARD_CAPTURE_TERRAFORM_IDENTITY_COUNT = 87;
 
