@@ -185,3 +185,9 @@ Short English-only working log for the current agent context. Older records are 
 
 - Removed the redundant startup instruction below the `스캔 설정` heading while preserving the preview-only description after a scan result exists.
 - Verification passed: Web lint, Web typecheck, source absence check, and `git diff --check`. No AWS, Terraform, Board, or data mutation was performed.
+
+### 2026-07-25 - Match the detail partial-scan status treatment
+
+- Replaced the detailed scan-limit warning card with the same `partialScanStatus` row used in the preview result: the identical CircleAlert icon, heading, and supporting sentence are now rendered inside the detail accordion.
+- Preserved the conditional settings recovery link below the shared status row when the scan result genuinely requires it.
+- Verification passed: Web lint, Web typecheck, `git diff --check`, and source-level confirmation that both surfaces use the shared status class and copy. No AWS scan, Board save, Terraform action, or data mutation was performed.
