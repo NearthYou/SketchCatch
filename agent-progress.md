@@ -132,3 +132,12 @@ Short English-only working log for the current agent context. Older records are 
 - The production workflow passed lint, typecheck, build, migration compatibility, environment validation, parallel API/Web image builds, production preflight, worker registration, and ECS stabilization.
 - Production smoke passed: `/`, `/health`, and `/health/db` returned 200; unauthenticated `/api/projects` returned the expected 401.
 - No DB migration, dependency change, Terraform action, provider load cycle, or new infrastructure resource was performed.
+### 2026-07-24 - Stabilize Live Observation Task forecasts
+
+- Reserved the Task stage from the architecture maximum capacity and clipped connector paint so Task transitions and traffic animation cannot resize the horizontal scroll geometry.
+- Showed an expected Task count only when a provider-observed actual count differs from the request-based projection; unknown and steady capacity no longer render a misleading expectation.
+- Added continuous, low-amplitude `예상 중` motion for both scale-out and scale-in without the prior fade/scale flash.
+- Lowered the new ECS/Fargate Architecture and authored demo `ALBRequestCountPerTarget` default from 10 to 5 so request-driven scale-out is projected sooner.
+- Browser QA sampled 40 animation frames: `scrollWidth`, `clientWidth`, and surface width each stayed constant, the scale-out state rendered one forecast card, and the steady state rendered zero forecast cards.
+- Verification passed: six focused Web regressions, Template definitions, strict Repository Architecture, Template Terraform validation, authored Terraform preset, root lint, root typecheck, root build, diff check, and harness check.
+- No migration, dependency change, cloud traffic, Terraform action, deployment, or infrastructure mutation was performed. Existing Deployments keep their approved scaling policy until a new approved Plan/Apply.
