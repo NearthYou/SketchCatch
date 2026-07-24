@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Copy, ExternalLink, QrCode } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { copyTextToClipboard } from "../../lib/clipboard";
 import type { SafeDeploymentLink } from "./deployment-output-links";
@@ -67,28 +68,56 @@ export function DeploymentOutputLinks({
 
   return (
     <div className={styles.deploymentOutputLinks} aria-label="Deployment Output 링크">
-      {links.map((link) => (
-        <article key={link.kind}>
-          <span>{link.label}</span>
-          <strong>{link.url}</strong>
-          <div>
-            <a href={link.url} target="_blank" rel="noreferrer">사이트 열기</a>
-            <button type="button" onClick={() => void copyUrl(link.url)}>URL 복사</button>
-            {link.kind === "web" && onOpenLiveObservation ? (
-              <button type="button" onClick={() => onOpenLiveObservation()}>
-                QR 보기 · Live Observation
+      {links.map((link) => {
+        const feedback =
+          clipboardFeedback?.linksKey === linksKey &&
+          clipboardFeedback.scopeKey === scopeKey &&
+          clipboardFeedback.url === link.url
+            ? clipboardFeedback.message
+            : "";
+
+        return (
+          <article data-kind={link.kind} key={link.kind}>
+            <div className={styles.deploymentOutputLinkHeading}>
+              <div>
+                <span>{link.kind === "web" ? "서비스 접속 주소" : "배포 Output"}</span>
+                <strong>{link.kind === "web" ? "웹 엔트리 포인트 URL" : link.label}</strong>
+              </div>
+              <span>{link.kind === "web" ? "PUBLIC" : "OUTPUT"}</span>
+            </div>
+            <div className={styles.deploymentOutputLinkValue}>
+              <span>{link.url}</span>
+              <button
+                aria-label={`${link.label} URL 복사`}
+                onClick={() => void copyUrl(link.url)}
+                title="URL 복사"
+                type="button"
+              >
+                {feedback === "URL을 복사했습니다." ? (
+                  <Check aria-hidden="true" size={16} />
+                ) : (
+                  <Copy aria-hidden="true" size={16} />
+                )}
               </button>
-            ) : null}
-          </div>
-          <span aria-live="polite">
-            {clipboardFeedback?.linksKey === linksKey &&
-            clipboardFeedback.scopeKey === scopeKey &&
-            clipboardFeedback.url === link.url
-              ? clipboardFeedback.message
-              : ""}
-          </span>
-        </article>
-      ))}
+            </div>
+            <div className={styles.deploymentOutputLinkActions}>
+              <a href={link.url} target="_blank" rel="noreferrer">
+                <ExternalLink aria-hidden="true" size={15} />
+                새 창에서 열기
+              </a>
+              {link.kind === "web" && onOpenLiveObservation ? (
+                <button data-tone="qr" type="button" onClick={() => onOpenLiveObservation()}>
+                  <QrCode aria-hidden="true" size={16} />
+                  접속 QR · 실시간 관측
+                </button>
+              ) : null}
+            </div>
+            <span aria-live="polite" className={styles.deploymentOutputLinkFeedback}>
+              {feedback}
+            </span>
+          </article>
+        );
+      })}
     </div>
   );
 }

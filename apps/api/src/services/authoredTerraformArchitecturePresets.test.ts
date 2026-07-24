@@ -165,7 +165,7 @@ test("the realtime deployment demo prompt keeps questions but always returns the
     /resource "aws_appautoscaling_policy" "ecs_service_requests"/u
   );
   assert.doesNotMatch(terraform, /resource "[^"]+" "[^"]*fixed_template/u);
-  assert.match(terraform, /target_value\s*=\s*5/u);
+  assert.match(terraform, /target_value\s*=\s*50/u);
   assert.match(terraform, /resource "aws_cloudfront_distribution" "cdn_web"/u);
   assert.match(terraform, /resource "aws_secretsmanager_secret" "check_in_signing"/u);
 });

@@ -255,6 +255,10 @@ export function DirectDeploymentScreen({
     if (requestedScope) {
       setSelectedScope(requestedScope);
       setAutoScopeRequestDeploymentId("");
+      setSelectedDeploymentId("");
+      pendingAutoAdvanceDeploymentIdRef.current = "";
+      setShowApplyConfirmation(false);
+      setSelectedDirectStepId("validation");
     }
   }, [requestedScope]);
 
@@ -279,15 +283,15 @@ export function DirectDeploymentScreen({
         value: "auto"
       },
       {
-        label: "인프라",
+        label: "인프라만",
         value: "infrastructure"
       },
       {
-        label: "애플리케이션",
+        label: "앱만",
         value: "application"
       },
       {
-        label: "전체 스택",
+        label: "인프라 + 앱 함께",
         value: "full_stack"
       }
     ],
@@ -1358,6 +1362,18 @@ export function DirectDeploymentScreen({
     }
   }
 
+  function beginDeploymentScope(scope: DeploymentScope | "auto"): void {
+    setSelectedScope(scope);
+    setAutoScopeRequestDeploymentId("");
+    setSelectedDeploymentId("");
+    pendingAutoAdvanceDeploymentIdRef.current = "";
+    setShowApplyConfirmation(false);
+    setShowInfrastructureRollbackConfirmation(false);
+    setFailedActionStepId(null);
+    setErrorMessage("");
+    setSelectedDirectStepId("validation");
+  }
+
   function selectDeploymentHistoryFilter(filter: DeploymentHistoryFilter): void {
     setDeploymentHistoryFilter(filter);
     setSelectedHistoryDeploymentId("");
@@ -1444,7 +1460,7 @@ export function DirectDeploymentScreen({
         return (
           <>
             <div className={styles.deploymentStepSummary}>
-              <InfoRow label="범위" value={selectedDeployment?.scope ?? "확인 필요"} />
+              <InfoRow label="범위" value={selectedDeployment ? formatDeploymentScope(selectedDeployment.scope) : "확인 필요"} />
               <InfoRow
                 label="차단"
                 value={
@@ -1758,6 +1774,17 @@ export function DirectDeploymentScreen({
 
                 return buttons;
               })}
+              {selectedDeployment?.status === "SUCCESS" &&
+              selectedDeployment.scope === "infrastructure" ? (
+                <button
+                  className={styles.deploymentPrimaryButton}
+                  onClick={() => beginDeploymentScope("application")}
+                  type="button"
+                >
+                  <DashboardIcon name="rocket" />
+                  앱만 이어서 배포
+                </button>
+              ) : null}
               {showApplyConfirmation && selectedDeployment ? (
                 <>
                   <button
@@ -1894,18 +1921,17 @@ export function DirectDeploymentScreen({
           <div className={styles.deploymentScopeEditor} id="deployment-scope-editor">
             <div>
               <strong>실행 대상 감지 방식</strong>
-              <span>자동 감지를 유지하거나 실행 범위를 직접 선택합니다.</span>
+              <span>범위를 바꾸면 이전 Plan과 승인은 폐기되고 새 검증부터 시작합니다.</span>
             </div>
             <SelectMenu
               ariaLabel="실행 대상 감지 방식"
               disabled={requestState === "loading"}
               emptyLabel="실행 대상 없음"
               id="deployment-scope-select"
-                  onChange={(value) => {
-                    setSelectedScope(value as DeploymentScope | "auto");
-                    setAutoScopeRequestDeploymentId("");
-                    setShowDeploymentScopeEditor(false);
-                  }}
+              onChange={(value) => {
+                beginDeploymentScope(value as DeploymentScope | "auto");
+                setShowDeploymentScopeEditor(false);
+              }}
               options={deploymentScopeOptions}
               size="regular"
               tone="workspace"
@@ -2908,14 +2934,14 @@ function formatOutputValue(output: TerraformOutput): string {
 
 function formatDeploymentScope(scope: DeploymentScope): string {
   if (scope === "infrastructure") {
-    return "인프라";
+    return "인프라만";
   }
 
   if (scope === "application") {
-    return "애플리케이션";
+    return "앱만";
   }
 
-  return "전체 스택";
+  return "인프라 + 앱 함께";
 }
 
 function formatDate(value: string): string {

@@ -320,6 +320,10 @@
   color: var(--workspace-text, #171717);
 }
 
+.workspaceTone .selectMenuTriggerEmpty {
+  color: var(--workspace-placeholder, #b8bcc4);
+}
+
 .workspaceTone .selectMenuTrigger:hover,
 .workspaceTone .selectMenuTrigger:focus-visible,
 .workspaceTone .selectMenuTriggerOpen {
