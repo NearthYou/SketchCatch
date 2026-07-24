@@ -16,8 +16,8 @@ Short English-only working log for the current agent context. Older records are 
 - Root pnpm test remains red in unrelated pre-existing Web baseline tests such as Settings CodeConnection refresh, Live Observation layout contracts, and Repository start behavior. The focused suites for this workstream pass.
 - No schema, dependency, shared contract, cloud resource, deployment, or migration changes were made.
 
-
 ## Session Record
+
 - 2026-07-23: Stabilized Template Gallery cards by moving Resource/relationship counts into a bordered summary, widening Korean descriptions with word-safe wrapping, anchoring preview actions to the card bottom, and separating the fixed modal header from the scrollable gallery. Focused regressions, root lint, root typecheck, and all five production build tasks passed; the full test command remains red in unrelated pre-existing Web baseline suites.
 
 - 2026-07-23: Stabilized AWS connection deletion without a migration or live AWS mutation. Managed cleanup now gives AWS SDK resource clients six bounded attempts, retries IAM `DeleteConflictException` and `ConcurrentModificationException` across the established 31.75-second propagation schedule, and treats IAM `NoSuchEntityException` as idempotent success. Added focused coverage for retry-layer ownership, IAM consistency, permanent authorization failures, missing resources, and ownership safety. The 13 focused cleanup/service/route tests, root lint, typecheck, build, harness, diff checks, and two-axis review passed. Root `pnpm test` remains blocked by the unrelated Web `ReverseEngineeringScanCriteriaForm.test.tsx` CSS-module loader failure.
