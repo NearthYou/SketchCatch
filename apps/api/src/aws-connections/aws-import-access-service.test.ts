@@ -747,6 +747,73 @@ test("cleanup_complete is an idempotent no-read terminal state", async () => {
   }
 });
 
+test("checkImportReads cannot advance cleanup or cleanup_complete states", async () => {
+  for (const scenario of [
+    { status: "cleanup_policy_required", operationKind: "check_cleanup", safeErrorCode: null },
+    { status: "cleanup_manager_required", operationKind: "check_cleanup", safeErrorCode: null },
+    { status: "cleanup_checking", operationKind: "check_cleanup", safeErrorCode: null },
+    { status: "cleanup_required", operationKind: "check_cleanup", safeErrorCode: null },
+    { status: "cleanup_complete", operationKind: "check_cleanup", safeErrorCode: null },
+    { status: "retry_required", operationKind: "check_cleanup", safeErrorCode: null },
+    { status: "retry_required", operationKind: null, safeErrorCode: "cleanup_retry" }
+  ] as const) {
+    let probeCalls = 0;
+    const fixture = createImportAccessServiceFixture({
+      async probeImportAccess() {
+        probeCalls += 1;
+        return createProbeResult();
+      }
+    });
+    const record = await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+    record.status = scenario.status;
+    record.operationKind = scenario.operationKind;
+    record.safeErrorCode = scenario.safeErrorCode ?? null;
+    record.leaseExpiresAt = null;
+    let inspectionCalls = 0;
+    fixture.gateway.inspectManager = async () => {
+      inspectionCalls += 1;
+      throw new Error("cleanup state must not inspect import reads");
+    };
+    await assert.rejects(
+      fixture.service.checkImportReads(fixture.ownerInput),
+      AwsImportAccessLeaseError,
+      scenario.status
+    );
+
+    assert.equal(fixture.getRecord()?.status, scenario.status, scenario.status);
+    assert.equal(fixture.getRecord()?.operationKind, scenario.operationKind, scenario.status);
+    assert.equal(probeCalls, 0, scenario.status);
+    assert.equal(inspectionCalls, 0, scenario.status);
+  }
+});
+
+test("checkImportReads rejects a cleanup transition that wins its claim race", async () => {
+  const fixture = createImportAccessServiceFixture();
+  await fixture.repository.getOrCreate({ connectionId, now: fixedNow });
+  fixture.repository.claimImportReads = async () => {
+    Object.assign(fixture.getRecord()!, {
+      status: "cleanup_complete",
+      operationKind: "check_cleanup",
+      leaseExpiresAt: null
+    });
+    return { kind: "rejected" } as never;
+  };
+  let inspectionCalls = 0;
+  fixture.gateway.inspectManager = async () => {
+    inspectionCalls += 1;
+    throw new Error("rejected read claim must not inspect AWS");
+  };
+
+  await assert.rejects(
+    fixture.service.checkImportReads(fixture.ownerInput),
+    AwsImportAccessLeaseError
+  );
+
+  assert.equal(fixture.getRecord()?.status, "cleanup_complete");
+  assert.equal(fixture.getRecord()?.operationKind, "check_cleanup");
+  assert.equal(inspectionCalls, 0);
+});
+
 test("cleanup claim preserves a completion that wins after the initial snapshot", async () => {
   for (const command of ["prepareCleanup", "checkCleanup"] as const) {
     const fixture = createImportAccessServiceFixture();

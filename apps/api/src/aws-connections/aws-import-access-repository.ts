@@ -5,6 +5,23 @@ import { awsImportAccess } from "../db/schema.js";
 
 export type AwsImportAccessRecord = typeof awsImportAccess.$inferSelect;
 
+/** gg: cleanup 시작 뒤에는 read check가 상태를 ready/limited로 되돌리지 못하게 합니다. */
+export function isAwsImportReadCheckBlockedByCleanup(
+  record: Pick<AwsImportAccessRecord, "status" | "operationKind" | "safeErrorCode">
+): boolean {
+  return record.status === "cleanup_policy_required" ||
+    record.status === "cleanup_manager_required" ||
+    record.status === "cleanup_checking" ||
+    record.status === "cleanup_required" ||
+    record.status === "cleanup_complete" ||
+    (record.status === "retry_required" &&
+      (record.operationKind === "prepare_cleanup" ||
+        record.operationKind === "check_cleanup" ||
+        record.safeErrorCode === "cleanup_retry" ||
+        record.safeErrorCode === "cleanup_policy_artifact_pending" ||
+        record.safeErrorCode === "cleanup_manager_artifact_pending"));
+}
+
 type AwsImportAccessCompanionArtifactRecord = Pick<
   AwsImportAccessRecord,
   | "status"
@@ -90,7 +107,8 @@ export type FinishAwsImportAccessPolicyApplyResult =
 
 export type ClaimAwsImportAccessReadsResult =
   | { kind: "claimed"; record: AwsImportAccessRecord }
-  | { kind: "leased" };
+  | { kind: "leased" }
+  | { kind: "rejected" };
 
 export type FinishAwsImportAccessReadsResult =
   | { kind: "saved"; record: AwsImportAccessRecord }
@@ -333,6 +351,9 @@ export function createPostgresAwsImportAccessRepository(
           .where(eq(awsImportAccess.awsConnectionId, input.connectionId))
           .for("update");
         if (!current) throw new Error("AWS import access state was not found");
+        if (isAwsImportReadCheckBlockedByCleanup(current)) {
+          return { kind: "rejected" } as const;
+        }
         if (current.leaseExpiresAt && current.leaseExpiresAt.getTime() > input.now.getTime()) {
           return { kind: "leased" } as const;
         }

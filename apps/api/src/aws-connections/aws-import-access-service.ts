@@ -25,6 +25,7 @@ import type {
 } from "./aws-import-access-repository.js";
 import {
   hasNoAwsImportAccessCompanionArtifacts,
+  isAwsImportReadCheckBlockedByCleanup,
   isDirectAwsImportReadProbeMarker,
   requiresAwsImportAccessCleanup
 } from "./aws-import-access-repository.js";
@@ -487,6 +488,11 @@ export function createAwsImportAccessService(
         connectionId: input.connectionId,
         now: now()
       });
+      if (isAwsImportReadCheckBlockedByCleanup(current)) {
+        throw new AwsImportAccessLeaseError(
+          "AWS 가져오기 권한 정리가 진행 중이거나 완료되었습니다. 정리 상태를 확인해 주세요."
+        );
+      }
       const canDirectlyProbe = hasNoAwsImportAccessCompanionArtifacts(current) &&
         (current.status === "check_required" || isDirectAwsImportReadProbeMarker(current));
       const operationId = generateOperationId();
@@ -499,6 +505,11 @@ export function createAwsImportAccessService(
       });
       if (claim.kind === "leased") {
         throw new AwsImportAccessLeaseError("다른 권한 작업이 진행 중입니다.");
+      }
+      if (claim.kind === "rejected") {
+        throw new AwsImportAccessLeaseError(
+          "AWS 가져오기 권한 정리 상태가 변경되었습니다. 정리 상태를 확인해 주세요."
+        );
       }
       const contract = createContract(
         connection,

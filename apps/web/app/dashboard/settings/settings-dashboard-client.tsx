@@ -845,7 +845,7 @@ export function SettingsDashboardClient() {
             <p id="aws-deletion-description">
               {deletionPreview.cleanupRetry
                 ? "이전에 완료되지 않은 SketchCatch 연결 항목 정리를 다시 시도합니다."
-                : "연결을 해제하면 SketchCatch에서 이 AWS 계정을 더 이상 사용하지 않습니다. 배포한 인프라와 구조 분석 설정은 유지됩니다."}
+                : "연결을 해제하면 SketchCatch에서 이 AWS 계정을 더 이상 사용하지 않습니다. 배포한 인프라는 유지됩니다. 구조 분석 설정이 남아 있으면 먼저 정리해야 합니다."}
             </p>
             <div className={styles.cleanupPreview}>
               <strong>정리되는 연결 항목</strong>
@@ -854,7 +854,7 @@ export function SettingsDashboardClient() {
                 <li>SketchCatch가 만든 연결 보조 항목</li>
               </ul>
               <strong>유지되는 항목</strong>
-              <p>배포한 인프라와 구조 분석 설정은 유지됩니다.</p>
+              <p>배포한 인프라는 유지됩니다. 구조 분석 설정이 남아 있으면 먼저 정리해 주세요.</p>
             </div>
             {deletionPreview.blockerMessage ? (
               <p className={styles.cleanupBlocker} role="alert">
