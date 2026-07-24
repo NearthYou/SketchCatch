@@ -191,3 +191,9 @@ Short English-only working log for the current agent context. Older records are 
 - Replaced the detailed scan-limit warning card with the same `partialScanStatus` row used in the preview result: the identical CircleAlert icon, heading, and supporting sentence are now rendered inside the detail accordion.
 - Preserved the conditional settings recovery link below the shared status row when the scan result genuinely requires it.
 - Verification passed: Web lint, Web typecheck, `git diff --check`, and source-level confirmation that both surfaces use the shared status class and copy. No AWS scan, Board save, Terraform action, or data mutation was performed.
+
+### 2026-07-25 - Complete detail warning-status unification
+
+- Replaced the remaining category-level unread-service warning in the detail dialog with the same compact `partialScanStatus` treatment, retaining only the affected service names as the supporting sentence.
+- The detail dialog now contains no `warningNotice` warning cards; scan-limit and category-level read limits both use the shared status row.
+- Verification passed: Web lint, Web typecheck, zero-detail-warning-card source check, and `git diff --check`. No AWS, Terraform, Board, or data mutation was performed.
