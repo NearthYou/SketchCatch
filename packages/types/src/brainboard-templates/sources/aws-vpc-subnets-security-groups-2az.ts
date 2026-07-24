@@ -43,7 +43,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "9c59c668-cb0a-4287-9087-1de1045fcb1b",
       domOrder: 1,
-      label: "vpc",
+      label: "VPC",
       position: {
         x: 192,
         y: 195
@@ -61,7 +61,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "20c1e4c2-a928-42a3-901a-121551b1f07f",
       domOrder: 2,
-      label: "us-east-1a",
+      label: "AZ us-east-1a",
       position: {
         x: 625,
         y: 300
@@ -79,7 +79,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "bc1b025f-86b0-4df7-8405-29f7eba77ced",
       domOrder: 3,
-      label: "us-east-1b",
+      label: "AZ us-east-1b",
       position: {
         x: 1165,
         y: 300
@@ -97,7 +97,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "0c447118-80a7-4c77-8f95-fd3b24c1e6b5",
       domOrder: 4,
-      label: "Private subnet A",
+      label: "Private Subnet A",
       position: {
         x: 645,
         y: 720
@@ -115,7 +115,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "7e83f2a2-2457-44da-a0d4-1a2bc608f345",
       domOrder: 5,
-      label: "Public subnet A",
+      label: "Public Subnet A",
       position: {
         x: 645,
         y: 350
@@ -133,7 +133,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "8fd53908-23f1-4273-807e-e411dc2ea765",
       domOrder: 6,
-      label: "Public subnet B",
+      label: "Public Subnet B",
       position: {
         x: 1185,
         y: 350
@@ -151,7 +151,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "9b86c789-0127-44b3-948b-30ebb28037bb",
       domOrder: 7,
-      label: "Private subnet B",
+      label: "Private Subnet B",
       position: {
         x: 1185,
         y: 720
@@ -169,7 +169,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "2b3e06b2-3efa-41da-8190-8c81c6d4f348",
       domOrder: 8,
-      label: "sg",
+      label: "VPC SG A",
       position: {
         x: 1205,
         y: 400
@@ -187,7 +187,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "8a050109-a5cd-47b0-9642-47e0e1883e9c",
       domOrder: 9,
-      label: "sg2",
+      label: "VPC SG B",
       position: {
         x: 1205,
         y: 774
@@ -205,7 +205,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "dab3e0f4-ca73-4759-985b-b2bb84bce2f3",
       domOrder: 10,
-      label: "users",
+      label: "User",
       position: {
         x: 1.2222235506378354,
         y: 680
@@ -223,7 +223,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "2bc95caf-a0bb-4685-9dae-7d75f194eeec",
       domOrder: 11,
-      label: "Route table",
+      label: "Public Route Table",
       position: {
         x: 365.8240422506284,
         y: 681.2295831288466
@@ -241,7 +241,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "3adee551-ee50-4677-8522-b9a993879e9f",
       domOrder: 12,
-      label: "Internet gateway",
+      label: "Internet Gateway",
       position: {
         x: 165.3032201277987,
         y: 680.1539857148719
@@ -259,7 +259,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "5174b7c6-a695-4aa6-9bec-37eb301fe69e",
       domOrder: 13,
-      label: "EIP NAT A",
+      label: "NAT EIP A",
       position: {
         x: 455,
         y: 420
@@ -277,7 +277,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "c11cf78b-2d86-4665-b1ef-999b2b91594f",
       domOrder: 14,
-      label: "EIP NAT B",
+      label: "NAT EIP B",
       position: {
         x: 455,
         y: 910
@@ -295,7 +295,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "3fa3abcc-3366-4d29-a95d-a1848a4d07f6",
       domOrder: 15,
-      label: "Route table association",
+      label: "Route Table Association - Private A",
       position: {
         x: 706.0901263033724,
         y: 818.4549744589974
@@ -313,7 +313,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "4bab5c05-8edd-4533-a61a-8d2c2f8ac570",
       domOrder: 16,
-      label: "Route table association",
+      label: "Route Table Association - Public A",
       position: {
         x: 706.2835980556209,
         y: 520.4643556760001
@@ -331,7 +331,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "56cdee29-d69c-46f1-860c-478c80ab361b",
       domOrder: 17,
-      label: "Net ACL",
+      label: "Public Subnet A Network ACL",
       position: {
         x: 875,
         y: 420
@@ -349,7 +349,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "90bf2724-6fb1-4e87-bb8d-36d492603b71",
       domOrder: 18,
-      label: "NAT gateway",
+      label: "NAT Gateway B",
       position: {
         x: 705,
         y: 910
@@ -367,7 +367,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "a3af7c5b-b9b8-44a8-bf85-e3098cadb82b",
       domOrder: 19,
-      label: "NAT gateway",
+      label: "NAT Gateway A",
       position: {
         x: 705,
         y: 420
@@ -385,7 +385,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
     {
       sourceNodeId: "ab9cd657-4f34-49a7-9c75-174de1e73de2",
       domOrder: 20,
-      label: "Net ACL",
+      label: "Private Subnet A Network ACL",
       position: {
         x: 865,
         y: 910
@@ -748,7 +748,7 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
       kind: "resource",
       address: "aws_vpc.vpc",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "20c1e4c2-a928-42a3-901a-121551b1f07f": {
       kind: "presentation",
@@ -790,13 +790,13 @@ export const awsVpcSubnetsSecurityGroups2azSource = defineCapturedBrainboardTemp
       kind: "resource",
       address: "aws_security_group.sg",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "8a050109-a5cd-47b0-9642-47e0e1883e9c": {
       kind: "resource",
       address: "aws_security_group.sg2",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "dab3e0f4-ca73-4759-985b-b2bb84bce2f3": {
       kind: "presentation",

@@ -43,7 +43,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "00247cae-d87b-40b3-987f-08a702b062f3",
       domOrder: 1,
-      label: "vpc_master",
+      label: "Jenkins Master VPC",
       position: {
         x: -180,
         y: 315
@@ -61,7 +61,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "7284b103-be2a-4159-b7f4-b6ab0cb802fa",
       domOrder: 2,
-      label: "us-east-2a",
+      label: "AZ us-east-2a",
       position: {
         x: 700,
         y: 355
@@ -79,7 +79,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8894d2b3-f035-4824-ae9c-ed68cae67835",
       domOrder: 3,
-      label: "us-east-2b",
+      label: "AZ us-east-2b",
       position: {
         x: 1070,
         y: 355
@@ -115,7 +115,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "4c8d5064-37af-4f69-84ae-093f1652e998",
       domOrder: 5,
-      label: "vpc_master_us_west_2",
+      label: "Jenkins Worker VPC",
       position: {
         x: 1700,
         y: 260
@@ -133,7 +133,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "050262e9-c94b-48b6-90b1-7298da1a70a2",
       domOrder: 6,
-      label: "us-west-2a",
+      label: "AZ us-west-2a",
       position: {
         x: 2120,
         y: 360
@@ -151,7 +151,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b55a1748-7a18-424f-b047-ffa56acd1a92",
       domOrder: 7,
-      label: "subnet_1",
+      label: "Master Subnet 1",
       position: {
         x: 735,
         y: 435
@@ -169,7 +169,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "0521d44b-15ce-40f0-abb8-6f2bd189eafa",
       domOrder: 8,
-      label: "subnet_2",
+      label: "Master Subnet 2",
       position: {
         x: 1100,
         y: 435
@@ -187,7 +187,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "be92d4fa-43ef-4fbf-a4ee-71ae6647998e",
       domOrder: 9,
-      label: "subnet_1_oregon",
+      label: "Worker Subnet",
       position: {
         x: 2180,
         y: 420
@@ -205,7 +205,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "5b91539b-dc2d-4d8d-9aac-a1c52e9b7200",
       domOrder: 10,
-      label: "lb-sg",
+      label: "Jenkins ALB SG",
       position: {
         x: 200,
         y: 355
@@ -223,7 +223,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "33ce152b-f405-4f28-86e5-4e894df70cd4",
       domOrder: 11,
-      label: "jenkins-sg",
+      label: "Jenkins Master SG",
       position: {
         x: 200,
         y: 685
@@ -241,7 +241,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "714b53d2-89b3-465a-9151-2318985dbd2d",
       domOrder: 12,
-      label: "jenkins-sg-oregon",
+      label: "Jenkins Worker SG",
       position: {
         x: 2540,
         y: 360
@@ -259,7 +259,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "19c57b20-0ebb-4efb-b35e-8c37e175e918",
       domOrder: 13,
-      label: "Internet gateway",
+      label: "Master Internet Gateway",
       position: {
         x: -210,
         y: 565
@@ -277,7 +277,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "08a82fc0-d9d9-46af-a271-b7b182986246",
       domOrder: 14,
-      label: "igw-oregon",
+      label: "Worker Internet Gateway",
       position: {
         x: 1670,
         y: 580
@@ -295,7 +295,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "606e1369-d916-490e-94c7-4aedeeafe7e0",
       domOrder: 15,
-      label: "useast2-uswest2 VPC peering connection",
+      label: "Master-Worker VPC Peering",
       position: {
         x: 1190,
         y: 910
@@ -313,7 +313,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "651d53c3-cceb-4967-b5c3-e025e140fa3b",
       domOrder: 16,
-      label: "Route table",
+      label: "Master Internet Route Table",
       position: {
         x: 60,
         y: 565
@@ -331,7 +331,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "fa46f093-d66a-4f84-8568-a3c04fdc2c44",
       domOrder: 17,
-      label: "Route table association",
+      label: "Main Route Table Association - Master",
       position: {
         x: 60,
         y: 765
@@ -349,7 +349,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "bb82de1b-7d92-41fc-a0a9-d1c5e3634d11",
       domOrder: 18,
-      label: "internet_route_oregon",
+      label: "Worker Internet Route Table",
       position: {
         x: 1930,
         y: 580
@@ -367,7 +367,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "cac8d6c9-02a8-4984-8a5d-c398d6c7e50a",
       domOrder: 19,
-      label: "set-worker-default-rt-assoc",
+      label: "Main Route Table Association - Worker",
       position: {
         x: 1930,
         y: 770
@@ -385,7 +385,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "4fd77125-9a08-4a94-8900-6d00c4037415",
       domOrder: 20,
-      label: "SG rule ingress 443",
+      label: "Security Group Rule - ALB HTTPS Ingress",
       position: {
         x: 295,
         y: 435
@@ -403,7 +403,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "cd3c4233-a339-4f9a-b03f-a60ade2ce25c",
       domOrder: 21,
-      label: "SG rule ingress 80",
+      label: "Security Group Rule - ALB HTTP Ingress",
       position: {
         x: 385,
         y: 545
@@ -421,7 +421,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f4ae7e8a-8781-4991-a258-6bc4fdeebb62",
       domOrder: 22,
-      label: "SG rule ingress 22",
+      label: "Security Group Rule - Master SSH Ingress",
       position: {
         x: 260,
         y: 765
@@ -439,7 +439,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "322e3f91-de14-40e9-95e7-d2961ebe5add",
       domOrder: 23,
-      label: "SG rule ingress 8080",
+      label: "Security Group Rule - Jenkins 8080 Ingress",
       position: {
         x: 260,
         y: 895
@@ -457,7 +457,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "66ebe038-ae86-4ec6-8f43-6ddddf3a1f9d",
       domOrder: 24,
-      label: "SG rule ingress 22",
+      label: "Security Group Rule - Worker SSH Ingress",
       position: {
         x: 2600,
         y: 450
@@ -475,7 +475,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ec1ee03a-b434-450d-83f4-a3c881aca9e9",
       domOrder: 25,
-      label: "SG rule egress",
+      label: "Security Group Rule - ALB All Egress",
       position: {
         x: 485,
         y: 435
@@ -493,7 +493,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "7e0371f7-989e-4443-81f4-ba9507600c5b",
       domOrder: 26,
-      label: "SG rule egress",
+      label: "Security Group Rule - Master All Egress",
       position: {
         x: 470,
         y: 755
@@ -511,7 +511,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "a0bc45ed-9de6-4e39-acaf-669b0ece77ea",
       domOrder: 27,
-      label: "SG rule ingress from us-west-2",
+      label: "Security Group Rule - Worker Subnet Ingress",
       position: {
         x: 470,
         y: 895
@@ -529,7 +529,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "054d907a-9682-42cd-a2fe-58e6c2d8bff7",
       domOrder: 28,
-      label: "SG rule ingress from us-east-2",
+      label: "Security Group Rule - Master Subnet Ingress",
       position: {
         x: 2690,
         y: 560
@@ -547,7 +547,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "69b98bc5-0d94-4536-839a-fc59f824e62c",
       domOrder: 29,
-      label: "SG rule egress",
+      label: "Security Group Rule - Worker All Egress",
       position: {
         x: 2770,
         y: 450
@@ -565,7 +565,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "876fa860-938e-4e32-b1d1-14ff0746f644",
       domOrder: 30,
-      label: "master-key",
+      label: "Jenkins Master Key Pair",
       position: {
         x: 1010,
         y: 220
@@ -583,7 +583,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "822a6dc6-00bf-40cb-9929-7042413ebe17",
       domOrder: 31,
-      label: "worker-key",
+      label: "Jenkins Worker Key Pair",
       position: {
         x: 2460,
         y: 180
@@ -601,7 +601,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "0bc773fc-ee96-4d04-8113-fd6e67060f5f",
       domOrder: 32,
-      label: "jenkins-master",
+      label: "Jenkins Master EC2",
       position: {
         x: 870,
         y: 495
@@ -619,7 +619,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f80213b2-c624-4641-ba30-a1ae3839a93f",
       domOrder: 33,
-      label: "jenkins-worker-oregon",
+      label: "Jenkins Worker EC2",
       position: {
         x: 2270,
         y: 490
@@ -637,7 +637,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "a9e9123e-b88b-49c5-8266-81e77ef12a9a",
       domOrder: 34,
-      label: "cert_validation",
+      label: "Route 53 Record - ACM Validation",
       position: {
         x: -320,
         y: 90
@@ -655,7 +655,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "21b5bc02-743e-423f-8262-d210ad83825a",
       domOrder: 35,
-      label: "jenkins",
+      label: "Jenkins DNS Route 53 Record",
       position: {
         x: -150,
         y: 90
@@ -673,7 +673,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "08d05e4d-826e-4c51-a218-ed4448ecb8a2",
       domOrder: 36,
-      label: "accept_peering",
+      label: "VPC Peering Accepter - Worker",
       position: {
         x: 1590,
         y: 910
@@ -691,7 +691,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6331936d-d4de-41f0-ab45-a1f9a8ed2260",
       domOrder: 37,
-      label: "application-lb",
+      label: "Jenkins ALB",
       position: {
         x: 280,
         y: 90
@@ -709,7 +709,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b7918332-62bd-4112-8907-c1cfbb07f2f1",
       domOrder: 38,
-      label: "app-lb-tg",
+      label: "Jenkins Target Group",
       position: {
         x: 40,
         y: 375
@@ -727,7 +727,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "a45b829c-0e30-4596-aebd-815bdfed85b5",
       domOrder: 39,
-      label: "jenkins-listener-http",
+      label: "HTTP→HTTPS Redirect Listener",
       position: {
         x: 645,
         y: 90
@@ -745,7 +745,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "258928c4-85a7-4bf8-bd79-773dfa53a4b9",
       domOrder: 40,
-      label: "jenkins-listener-https",
+      label: "Jenkins HTTPS Listener",
       position: {
         x: 645,
         y: -50
@@ -763,7 +763,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "89e6ed9b-46d3-475c-a1fb-33c2d9abfae4",
       domOrder: 41,
-      label: "jenkins-master-attach",
+      label: "Target Group Attachment - Jenkins Master",
       position: {
         x: 645,
         y: 220
@@ -781,7 +781,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ae51f41c-19a4-4161-abaa-b89059718743",
       domOrder: 42,
-      label: "ACM certificate",
+      label: "Jenkins ACM Certificate",
       position: {
         x: 935,
         y: -50
@@ -799,7 +799,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c0387977-4047-43de-ae43-6edc8dbd91d9",
       domOrder: 43,
-      label: "ACM certificate validation",
+      label: "ACM Certificate Validation - Jenkins",
       position: {
         x: 1275,
         y: -50
@@ -1697,7 +1697,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_vpc.vpc_master",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "7284b103-be2a-4159-b7f4-b6ab0cb802fa": {
       kind: "presentation",
@@ -1721,7 +1721,7 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_vpc.vpc_master_us_west_2",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "050262e9-c94b-48b6-90b1-7298da1a70a2": {
       kind: "presentation",
@@ -1733,49 +1733,49 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_subnet.subnet_1",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "0521d44b-15ce-40f0-abb8-6f2bd189eafa": {
       kind: "resource",
       address: "aws_subnet.subnet_2",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "be92d4fa-43ef-4fbf-a4ee-71ae6647998e": {
       kind: "resource",
       address: "aws_subnet.subnet_1_oregon",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "5b91539b-dc2d-4d8d-9aac-a1c52e9b7200": {
       kind: "resource",
       address: "aws_security_group.lb-sg",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "33ce152b-f405-4f28-86e5-4e894df70cd4": {
       kind: "resource",
       address: "aws_security_group.jenkins-sg",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "714b53d2-89b3-465a-9151-2318985dbd2d": {
       kind: "resource",
       address: "aws_security_group.jenkins-sg-oregon",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "19c57b20-0ebb-4efb-b35e-8c37e175e918": {
       kind: "resource",
       address: "aws_internet_gateway.igw",
       fileName: "main.tf",
-      addressMapping: "single-residual"
+      addressMapping: "reviewed-override"
     },
     "08a82fc0-d9d9-46af-a271-b7b182986246": {
       kind: "resource",
       address: "aws_internet_gateway.igw-oregon",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "606e1369-d916-490e-94c7-4aedeeafe7e0": {
       kind: "resource",
@@ -1787,25 +1787,25 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_route_table.internet_route",
       fileName: "main.tf",
-      addressMapping: "single-residual"
+      addressMapping: "reviewed-override"
     },
     "fa46f093-d66a-4f84-8568-a3c04fdc2c44": {
       kind: "resource",
       address: "aws_main_route_table_association.aws_main_route_table_association_d71db21a",
       fileName: "main.tf",
-      addressMapping: "single-residual"
+      addressMapping: "reviewed-override"
     },
     "bb82de1b-7d92-41fc-a0a9-d1c5e3634d11": {
       kind: "resource",
       address: "aws_route_table.internet_route_oregon",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "cac8d6c9-02a8-4984-8a5d-c398d6c7e50a": {
       kind: "resource",
       address: "aws_main_route_table_association.set-worker-default-rt-assoc",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "4fd77125-9a08-4a94-8900-6d00c4037415": {
       kind: "resource",
@@ -1871,73 +1871,73 @@ export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_key_pair.master-key",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "822a6dc6-00bf-40cb-9929-7042413ebe17": {
       kind: "resource",
       address: "aws_key_pair.worker-key",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "0bc773fc-ee96-4d04-8113-fd6e67060f5f": {
       kind: "resource",
       address: "aws_instance.jenkins-master",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "f80213b2-c624-4641-ba30-a1ae3839a93f": {
       kind: "resource",
       address: "aws_instance.jenkins-worker-oregon",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "a9e9123e-b88b-49c5-8266-81e77ef12a9a": {
       kind: "resource",
       address: "aws_route53_record.cert_validation",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "21b5bc02-743e-423f-8262-d210ad83825a": {
       kind: "resource",
       address: "aws_route53_record.jenkins",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "08d05e4d-826e-4c51-a218-ed4448ecb8a2": {
       kind: "resource",
       address: "aws_vpc_peering_connection_accepter.accept_peering",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "6331936d-d4de-41f0-ab45-a1f9a8ed2260": {
       kind: "resource",
       address: "aws_lb.application-lb",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "b7918332-62bd-4112-8907-c1cfbb07f2f1": {
       kind: "resource",
       address: "aws_lb_target_group.app-lb-tg",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "a45b829c-0e30-4596-aebd-815bdfed85b5": {
       kind: "resource",
       address: "aws_lb_listener.aws_lb_listener_117174a9",
       fileName: "main.tf",
-      addressMapping: "single-residual"
+      addressMapping: "reviewed-override"
     },
     "258928c4-85a7-4bf8-bd79-773dfa53a4b9": {
       kind: "resource",
       address: "aws_lb_listener.jenkins-listener-https",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "89e6ed9b-46d3-475c-a1fb-33c2d9abfae4": {
       kind: "resource",
       address: "aws_lb_target_group_attachment.jenkins-master-attach",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "ae51f41c-19a4-4161-abaa-b89059718743": {
       kind: "resource",

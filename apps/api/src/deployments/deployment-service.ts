@@ -25,6 +25,7 @@ import type {
   DeploymentSource,
   DeploymentStage,
   DeploymentStatus,
+  ReverseEngineeringScanResult,
   RuntimeTargetKind,
   TerraformOutput
 } from "@sketchcatch/types";
@@ -52,6 +53,7 @@ import {
   projectAssets,
   projects,
   releaseCandidates,
+  reverseEngineeringScans,
   terraformOutputs,
   touchUpdatedAt
 } from "../db/schema.js";
@@ -287,6 +289,19 @@ export type DeploymentRepository = {
     projectId: string
   ): Promise<
     | Pick<typeof projectDrafts.$inferSelect, "revision" | "diagramJson" | "terraformFiles">
+    | undefined
+  >;
+  findAccessibleScan?(
+    projectId: string,
+    scanId: string,
+    accessContext: ProjectAccessContext
+  ): Promise<
+    | {
+        id: string;
+        projectId: string;
+        status: string;
+        result: ReverseEngineeringScanResult | null;
+      }
     | undefined
   >;
   findProjectTargetForPreparation?(
@@ -755,6 +770,27 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         .from(projectDrafts)
         .where(eq(projectDrafts.projectId, projectId));
       return draft;
+    },
+
+    async findAccessibleScan(projectId, scanId, accessContext) {
+      const [scan] = await db
+        .select({
+          id: reverseEngineeringScans.id,
+          projectId: reverseEngineeringScans.projectId,
+          status: reverseEngineeringScans.status,
+          result: reverseEngineeringScans.result
+        })
+        .from(reverseEngineeringScans)
+        .innerJoin(projects, eq(reverseEngineeringScans.projectId, projects.id))
+        .where(
+          and(
+            eq(reverseEngineeringScans.id, scanId),
+            eq(reverseEngineeringScans.projectId, projectId),
+            eq(projects.userId, accessContext.userId),
+            isNull(reverseEngineeringScans.deletedAt)
+          )
+        );
+      return scan;
     },
 
     async findProjectTargetForPreparation(projectId) {

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AWS Role·Stack·S3 한 장 요약</title>
+  <link rel="stylesheet" href="../assets/lesson.css" />
+</head>
+<body>
+  <main>
+    <div class="eyebrow">SKETCHCATCH AWS CHEAT SHEET</div>
+    <h1>SSO·Role·Stack·S3 한 장 요약</h1>
+
+    <table>
+      <thead><tr><th>대상</th><th>쉬운 비유</th><th>실제로 하는 일</th><th>존재하는 곳</th></tr></thead>
+      <tbody>
+        <tr><td><strong>SSO</strong></td><td>회사 정문 로그인</td><td>사람이 어떤 AWS 계정에 들어갈지 확인</td><td>IAM Identity Center</td></tr>
+        <tr><td><strong>Permission Set</strong></td><td>사람의 업무 범위</td><td>로그인한 사람이 Console에서 할 수 있는 작업 결정</td><td>IAM Identity Center</td></tr>
+        <tr><td><strong>S3 Object</strong></td><td>설계도 파일</td><td>CloudFormation YAML 같은 파일 보관</td><td>S3 Bucket</td></tr>
+        <tr><td><strong>CloudFormation Stack</strong></td><td>공사 관리 기록</td><td>Template대로 Resource를 만들고 함께 갱신·삭제</td><td>CloudFormation</td></tr>
+        <tr><td><strong>사람용 IAM Role</strong></td><td>관리자 출입증</td><td>SSO 사용자가 Stack을 만들거나 갱신할 수 있는지 결정</td><td>IAM</td></tr>
+        <tr><td><strong>SketchCatch IAM Role</strong></td><td>서비스 출입증</td><td>SketchCatch가 가져오기·배포에서 할 수 있는 작업 결정</td><td>IAM</td></tr>
+        <tr><td><strong>Temporary credentials</strong></td><td>유효 시간이 있는 출입 카드</td><td>Role을 맡은 동안 AWS API 호출에 사용</td><td>STS가 임시 발급</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout safe">
+      <strong>핵심:</strong> SSO 사용자와 SketchCatch는 서로 다른 Role을 쓴다. Role은 S3에 저장되지 않고, S3에는 SketchCatch Role을 만들라고 적힌 Template 파일이 들어갈 수 있다.
+    </div>
+
+    <h2>SketchCatch 연결 순서</h2>
+    <p><code>사용자 SSO 로그인</code> → <code>사람용 Role로 Stack 승인</code> → <code>S3의 YAML 읽기</code> → <code>SketchCatch Role 생성</code> → <code>SketchCatch가 전용 Role 사용</code></p>
+
+    <h2>두 Role의 차이</h2>
+    <table>
+      <thead><tr><th>Role</th><th>누가 사용?</th><th>언제 사용?</th></tr></thead>
+      <tbody>
+        <tr><td>SSO 사람용 Role</td><td>AWS에 로그인한 사용자</td><td>CloudFormation Stack 생성·갱신 승인</td></tr>
+        <tr><td>SketchCatch 전용 Role</td><td>SketchCatch 서버</td><td>Reverse Engineering과 승인된 배포 실행</td></tr>
+      </tbody>
+    </table>
+
+    <h2>누가 SSO 로그인을 하나?</h2>
+    <table>
+      <thead><tr><th>사람</th><th>SSO 로그인</th><th>하는 일</th></tr></thead>
+      <tbody>
+        <tr><td>AWS Identity Center 관리자</td><td>초기 설정 때 필요</td><td>사용자와 Permission Set 배정</td></tr>
+        <tr><td>AWS 연결 담당자</td><td>연결·권한 갱신 때 필요</td><td>CloudFormation Stack 승인</td></tr>
+        <tr><td>일반 SketchCatch 사용자</td><td>공유 연결이라면 불필요</td><td>SketchCatch 안에서 허용된 기능 사용</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      권장 팀 구조에서는 권한 있는 담당자 한 명이 AWS를 연결하고, 다른 사용자는 AWS 비밀번호나 SSO 세션을 공유받지 않는다.
+    </div>
+
+    <h2>무엇을 지우면?</h2>
+    <table>
+      <thead><tr><th>지운 것</th><th>일반적인 결과</th></tr></thead>
+      <tbody>
+        <tr><td>Template S3 Object</td><td>이미 만들어진 Stack과 Role은 남는다.</td></tr>
+        <tr><td>CloudFormation Stack</td><td>Stack이 관리하던 Role과 Policy도 함께 삭제될 수 있다.</td></tr>
+        <tr><td>IAM Role만 수동 삭제</td><td>Stack 기록과 실제 AWS 상태가 달라져 관리가 꼬일 수 있다.</td></tr>
+      </tbody>
+    </table>
+  </main>
+</body>
+</html>

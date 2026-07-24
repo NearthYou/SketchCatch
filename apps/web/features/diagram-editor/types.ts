@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Edge, Node } from "@xyflow/react";
 import type {
+  ApplyReverseEngineeringDraftRequest,
   DiagramEdge,
   DiagramEdgeRoute,
   DiagramJson,
@@ -86,18 +87,35 @@ export type DiagramPreviewAnnotations = {
   readonly edgeStates: Readonly<Record<string, DiagramPreviewState>>;
 };
 
+/** 특정 Workspace 진입점이 빈 Board에서만 요청하는 초기 패널 배치입니다. */
+export type DiagramEditorInitialPanelLayout = {
+  readonly leftPanelOpen: boolean;
+  readonly rightPanelOpen: boolean;
+  readonly startWithMinimumWidths?: boolean | undefined;
+};
+
 export type DiagramEditorPanelContext = {
   diagram: DiagramJson;
   inspectedNodeId: string | null;
+  isMutationLocked: boolean;
   isPreviewActive: boolean;
   isRightPanelOpen: boolean;
   previewAnnotations: DiagramPreviewAnnotations | null;
   previewDiagram: DiagramJson | null;
+  projectDraftRevision: number | null;
   selectedNodeId: string | null;
   terraformRefreshRequestId: number;
   nodes: readonly DiagramNode[];
   edges: readonly DiagramEdge[];
   applyDiagramJson: (diagram: DiagramJson) => void;
+  /** 서버 revision 저장이 성공한 뒤에만 Diagram과 History를 함께 적용합니다. */
+  persistAndApplyDiagramJson?:
+    | ((diagram: DiagramJson, expectedRevision: number) => Promise<void>)
+    | undefined;
+  /** Reverse Engineering 결과는 전용 서버 검증을 통과한 Diagram만 적용합니다. */
+  persistAndApplyReverseEngineeringDraft?:
+    | ((request: Omit<ApplyReverseEngineeringDraftRequest, "terraformFiles">) => Promise<void>)
+    | undefined;
   closeInspectedNode: () => void;
   commitTerraformSourceAuthority: () => DiagramJson;
   focusResourceNode: (nodeId: string) => void;
@@ -126,10 +144,12 @@ export type DiagramEditorPanelContext = {
 export type DiagramEditorProps = {
   allowPreviewInspection?: boolean | undefined;
   draftStatusPanel?: ReactNode | undefined;
+  emptyBoardContent?: ReactNode | undefined;
   emptyBoardDescription?: string | undefined;
   floatingPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
   initialBoardZoom?: number | undefined;
   initialDiagram?: DiagramJson | undefined;
+  initialPanelLayout?: DiagramEditorInitialPanelLayout | undefined;
   initialPreviewAnnotations?: DiagramPreviewAnnotations | undefined;
   initialPreviewDiagram?: DiagramJson | undefined;
   initialReferenceDropTargetNodeId?: string | undefined;

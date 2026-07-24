@@ -7,7 +7,6 @@ import type {
   ArchitectureJson,
   ProjectDraftConflictResponse
 } from "@sketchcatch/types";
-import { RESOURCE_TYPES } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { createAwsConnectionManagedCleanup } from "../aws-connections/aws-connection-managed-cleanup.js";
 import type { CleanupAwsConnectionManagedResources } from "../aws-connections/aws-connection-service.js";
@@ -36,7 +35,48 @@ import {
   ProjectDraftRevisionMissingError,
   saveProjectDraftRevision
 } from "../modules/projects/project-draft-save-service.js";
-import { saveProjectDraftBodySchema } from "./project-draft-schemas.js";
+import { ReverseEngineeringImportDecisionMutationError } from "../reverse-engineering/reverse-engineering-import-decision-save-policy.js";
+import { ReverseEngineeringImportDecisionValidationError } from "../reverse-engineering/reverse-engineering-import-decision.js";
+import {
+  applyExistingReverseEngineeringDraft,
+  ExistingReverseEngineeringDraftMismatchError
+} from "../reverse-engineering/existing-reverse-engineering-draft-apply-service.js";
+import {
+  applyBoardAutoOrganizeDraft,
+  BoardAutoOrganizeSemanticMismatchError,
+  BoardAutoOrganizeSourceMismatchError
+} from "../modules/projects/board-auto-organize-apply-service.js";
+import {
+  sanitizeAwsProjectArchitectureRead,
+  sanitizeAwsProjectDiagramRead
+} from "../reverse-engineering/aws-project-read-sanitizer.js";
+import {
+  claimReverseEngineeringPreviewProject,
+  createPostgresReverseEngineeringPreviewClaimRepository,
+  ReverseEngineeringPreviewClaimConflictError,
+  ReverseEngineeringPreviewClaimNotFoundError
+} from "../reverse-engineering/reverse-engineering-preview-claim-service.js";
+import {
+  hasReverseEngineeringSourceProvenance,
+  resolveVerifiedImportTargets,
+  ReverseEngineeringImportTargetVerificationError
+} from "../reverse-engineering/reverse-engineering-import-targets.js";
+import { createPostgresReverseEngineeringRepository } from "../reverse-engineering/reverse-engineering-service.js";
+import {
+  assertTerraformBaseFilesDoNotContainImportBlocks,
+  createTerraformArtifactBundleWithImports,
+  terraformArtifactBundleContentType,
+  terraformArtifactBundleFileName,
+  terraformImportsFileName
+} from "../services/terraform/terraform-import-artifact.js";
+import {
+  architectureJsonSchema,
+  boardAutoOrganizeApplyBodySchema,
+  diagramJsonSchema,
+  reverseEngineeringDraftApplyBodySchema,
+  reverseEngineeringImportDecisionRequestSchema,
+  saveProjectDraftBodySchema
+} from "./project-draft-schemas.js";
 
 const createProjectBodySchema = z.object({
   name: z.string().min(1).max(120),
@@ -45,7 +85,9 @@ const createProjectBodySchema = z.object({
 
 const deleteProjectBodySchema = z
   .object({
-    action: z.enum(["delete_project", "delete_project_only"]).default("delete_project")
+    action: z
+      .enum(["delete_project", "delete_project_only", "delete_project_with_managed_cleanup"])
+      .default("delete_project")
   })
   .default({ action: "delete_project" });
 
@@ -58,30 +100,18 @@ const assetRouteParamsSchema = z.object({
   assetId: z.string().uuid()
 });
 
-const resourceNodeSchema = z.object({
-  id: z.string().min(1),
-  type: z.enum(RESOURCE_TYPES),
-  label: z.string().min(1).optional(),
-  positionX: z.number(),
-  positionY: z.number(),
-  config: z.record(z.string(), z.unknown()).default({})
-});
-
-const resourceEdgeSchema = z.object({
-  id: z.string().min(1),
-  sourceId: z.string().min(1),
-  targetId: z.string().min(1),
-  label: z.string().min(1).optional()
-});
-
-const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
-  nodes: z.array(resourceNodeSchema),
-  edges: z.array(resourceEdgeSchema)
-});
-
 const reverseEngineeringSourceSchema = z.object({
   sourceScanId: z.string().min(1),
-  draftId: z.string().min(1)
+  draftId: z.string().min(1),
+  sourceNodeIds: z.array(z.string().min(1)).optional(),
+  sourceKind: z.enum(["saved_scan", "preview_scan"]).optional()
+});
+
+const reverseEngineeringPreviewClaimSchema = z.object({
+  previewId: z.uuid(),
+  draftId: z.string().min(1),
+  sourceNodeIds: z.array(z.string().min(1)).min(1),
+  importDecision: reverseEngineeringImportDecisionRequestSchema
 });
 
 const createArchitectureBodySchema = z.object({
@@ -89,6 +119,12 @@ const createArchitectureBodySchema = z.object({
   source: z.string().min(1).max(64).default("manual"),
   reverseEngineering: reverseEngineeringSourceSchema.optional(),
   architectureJson: architectureJsonSchema
+});
+
+const createReverseEngineeringProjectBodySchema = createProjectBodySchema.extend({
+  diagramJson: diagramJsonSchema,
+  architectureJson: architectureJsonSchema,
+  reverseEngineering: reverseEngineeringPreviewClaimSchema
 });
 
 const assetTypeSchema = z.enum([
@@ -159,13 +195,15 @@ const presignedUploadBodySchema = z
     }
   });
 
-type ProjectRouteOptions = {
+export type ProjectRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
   cleanupManagedResources?: CleanupAwsConnectionManagedResources;
+  applyExistingReverseEngineeringDraft?: typeof applyExistingReverseEngineeringDraft;
 };
 
+// gg: 새 Reverse Engineering Project는 server-owned preview claim 경계를 통해서만 등록합니다.
 export async function registerProjectRoutes(
   app: FastifyInstance,
   options: ProjectRouteOptions = {}
@@ -176,6 +214,8 @@ export async function registerProjectRoutes(
     options.projectDeletionStorage ?? createProjectDeletionStorage(projectAssetStorage);
   const cleanupManagedResources =
     options.cleanupManagedResources ?? createAwsConnectionManagedCleanup();
+  const applyExistingReverseEngineeringDraftService =
+    options.applyExistingReverseEngineeringDraft ?? applyExistingReverseEngineeringDraft;
 
   app.addContentTypeParser(
     ["image/png", "image/webp"],
@@ -216,6 +256,48 @@ export async function registerProjectRoutes(
     return reply.status(201).send({
       project
     });
+  });
+
+  // gg: 새 Reverse Engineering Board는 owner preview claim·Project·Draft·Snapshot·Scan을 하나로 만듭니다.
+  app.post("/projects/reverse-engineering", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const body = createReverseEngineeringProjectBodySchema.parse(request.body);
+    const { db } = getProjectDatabaseClient();
+
+    try {
+      const created = await claimReverseEngineeringPreviewProject(
+        {
+          userId: currentUserId,
+          name: body.name,
+          description: body.description ?? null,
+          diagramJson: body.diagramJson,
+          architectureJson: body.architectureJson,
+          reverseEngineering: {
+            previewId: body.reverseEngineering.previewId,
+            publicDraftId: body.reverseEngineering.draftId,
+            sourceNodeIds: body.reverseEngineering.sourceNodeIds,
+            importDecision: body.reverseEngineering.importDecision
+          }
+        },
+        createPostgresReverseEngineeringPreviewClaimRepository(db)
+      );
+
+      return reply.status(201).send(created);
+    } catch (error) {
+      if (error instanceof ReverseEngineeringPreviewClaimNotFoundError) {
+        return sendNotFound(reply, error.message);
+      }
+
+      if (error instanceof ReverseEngineeringPreviewClaimConflictError) {
+        return sendConflict(reply, error.message);
+      }
+
+      if (error instanceof ReverseEngineeringImportDecisionValidationError) {
+        return sendBadRequest(reply, error.message);
+      }
+
+      throw error;
+    }
   });
 
   app.get("/projects/:id/delete-preview", async (request) => {
@@ -264,7 +346,12 @@ export async function registerProjectRoutes(
 
     return {
       project,
-      architectures: projectArchitectures,
+      architectures: projectArchitectures.map((architecture) => ({
+        ...architecture,
+        architectureJson: sanitizeAwsProjectArchitectureRead(architecture.architectureJson, {
+          source: architecture.source
+        })
+      })),
       assets
     };
   });
@@ -386,8 +473,15 @@ export async function registerProjectRoutes(
       .from(projectDrafts)
       .where(eq(projectDrafts.projectId, params.id));
 
+    const publicDraft = draft ? toProjectDraft(draft) : null;
+
     return reply.header("Cache-Control", "private, no-store").send({
-      draft: draft ? toProjectDraft(draft) : null
+      draft: publicDraft
+        ? {
+            ...publicDraft,
+            diagramJson: sanitizeAwsProjectDiagramRead(publicDraft.diagramJson)
+          }
+        : null
     });
   });
 
@@ -421,6 +515,116 @@ export async function registerProjectRoutes(
       return { draft: toProjectDraft(result.draft) };
     } catch (error) {
       if (error instanceof ProjectDraftRevisionMissingError) {
+        return sendConflict(reply, error.message);
+      }
+
+      if (error instanceof ReverseEngineeringImportDecisionMutationError) {
+        return sendConflict(reply, error.message);
+      }
+
+      throw error;
+    }
+  });
+
+  // gg: 기존 Project의 Reverse 후보는 저장 Scan과 현재 revision을 서버에서 다시 확인합니다.
+  app.post("/projects/:id/draft/reverse-engineering/apply", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const params = routeParamsSchema.parse(request.params);
+    const body = reverseEngineeringDraftApplyBodySchema.parse(request.body);
+    const { db } = getProjectDatabaseClient();
+
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+    if (!project) {
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
+    }
+
+    try {
+      const result = await applyExistingReverseEngineeringDraftService({
+        ...body,
+        db,
+        projectId: params.id,
+        userId: currentUserId
+      });
+
+      if (result.status === "conflict") {
+        return sendProjectDraftConflict(reply, result.currentDraft);
+      }
+
+      return { draft: toProjectDraft(result.draft) };
+    } catch (error) {
+      if (error instanceof ExistingReverseEngineeringDraftMismatchError) {
+        return error.reason === "candidate_mismatch" || error.reason === "invalid_request"
+          ? sendBadRequest(reply, error.message)
+          : sendConflict(reply, error.message);
+      }
+
+      if (error instanceof ReverseEngineeringImportDecisionValidationError) {
+        return sendBadRequest(reply, error.message);
+      }
+
+      if (error instanceof ProjectDraftRevisionMissingError) {
+        return sendConflict(reply, error.message);
+      }
+
+      if (error instanceof ReverseEngineeringImportDecisionMutationError) {
+        return sendConflict(reply, error.message);
+      }
+
+      throw error;
+    }
+  });
+
+  // 자동 정리 적용은 일반 Draft 저장과 같은 소유권·revision CAS를 재사용합니다.
+  app.post("/projects/:id/draft/auto-organize/apply", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const params = routeParamsSchema.parse(request.params);
+    const body = boardAutoOrganizeApplyBodySchema.parse(request.body);
+    const { db } = getProjectDatabaseClient();
+
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+    if (!project) {
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
+    }
+
+    try {
+      const result = await applyBoardAutoOrganizeDraft({
+        candidateDiagram: body.candidateDiagram,
+        db,
+        expectedRevision: body.expectedRevision,
+        projectId: params.id,
+        sourceDiagram: body.sourceDiagram,
+        sourceFingerprint: body.sourceFingerprint,
+        terraformFiles: body.terraformFiles,
+        userId: currentUserId
+      });
+
+      if (result.status === "conflict") {
+        return sendProjectDraftConflict(reply, result.currentDraft);
+      }
+
+      return { draft: toProjectDraft(result.draft) };
+    } catch (error) {
+      if (error instanceof BoardAutoOrganizeSourceMismatchError) {
+        return sendConflict(reply, error.message);
+      }
+
+      if (error instanceof BoardAutoOrganizeSemanticMismatchError) {
+        return sendBadRequest(reply, error.message);
+      }
+
+      if (error instanceof ProjectDraftRevisionMissingError) {
+        return sendConflict(reply, error.message);
+      }
+
+      if (error instanceof ReverseEngineeringImportDecisionMutationError) {
         return sendConflict(reply, error.message);
       }
 
@@ -547,20 +751,175 @@ export async function registerProjectRoutes(
         }
       }
 
-      await projectAssetStorage.putObject({
-        objectKey: asset.objectKey,
-        contentType: asset.contentType,
-        body
-      });
+      let storedBody: Buffer | string = body;
+      let storedContentType = asset.contentType;
+      let storedFileName = asset.fileName;
+      let storedByteSize = byteSize;
 
-      const [confirmedAsset] = await db
-        .update(projectAssets)
-        .set({ uploadStatus: "uploaded" })
-        .where(and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id)))
-        .returning();
+      if (asset.assetType === "terraform_file") {
+        const [draft] = await db
+          .select({
+            diagramJson: projectDrafts.diagramJson,
+            terraformFiles: projectDrafts.terraformFiles
+          })
+          .from(projectDrafts)
+          .where(eq(projectDrafts.projectId, params.id));
+
+        if (draft) {
+          try {
+            const hasReverseEngineeringSource = hasReverseEngineeringSourceProvenance(
+              draft.diagramJson
+            );
+
+            if (hasReverseEngineeringSource) {
+              if (!draft.terraformFiles || draft.terraformFiles.length === 0) {
+                return sendConflict(
+                  reply,
+                  "저장된 Project Draft의 Terraform 파일을 확인할 수 없습니다."
+                );
+              }
+
+              if (draft.terraformFiles.some((file) => file.fileName === terraformImportsFileName)) {
+                return sendBadRequest(reply, "imports.tf는 서버가 생성하는 예약 파일입니다.");
+              }
+
+              try {
+                assertTerraformBaseFilesDoNotContainImportBlocks(draft.terraformFiles);
+              } catch (error) {
+                return sendBadRequest(
+                  reply,
+                  error instanceof Error
+                    ? error.message
+                    : "Terraform import block이 허용되지 않습니다."
+                );
+              }
+
+              const targets = await resolveVerifiedImportTargets(
+                {
+                  projectId: params.id,
+                  accessContext: { kind: "user", userId: currentUserId },
+                  diagramJson: draft.diagramJson
+                },
+                createPostgresReverseEngineeringRepository(db)
+              );
+
+              const uploadedTerraformCode = Buffer.isBuffer(body) ? body.toString("utf8") : body;
+              const persistedTerraformCode = draft.terraformFiles
+                .map((file) => file.terraformCode.trim())
+                .filter(Boolean)
+                .join("\n\n");
+
+              if (uploadedTerraformCode.trim() !== persistedTerraformCode.trim()) {
+                return sendConflict(reply, "업로드 Terraform이 저장된 Project Draft와 다릅니다.");
+              }
+
+              storedBody = JSON.stringify(
+                createTerraformArtifactBundleWithImports(draft.terraformFiles, targets)
+              );
+              storedContentType = terraformArtifactBundleContentType;
+              storedFileName = terraformArtifactBundleFileName;
+              storedByteSize = Buffer.byteLength(storedBody);
+
+              if (storedByteSize > defaultTerraformArtifactMaxBytes) {
+                return sendBadRequest(
+                  reply,
+                  `Terraform artifact bundle must be ${defaultTerraformArtifactMaxBytes} bytes or smaller`
+                );
+              }
+            }
+          } catch (error) {
+            if (error instanceof ReverseEngineeringImportTargetVerificationError) {
+              return sendConflict(reply, error.message);
+            }
+            throw error;
+          }
+        }
+      }
+
+      const candidateObjectKey = buildUploadAttemptObjectKey(asset.objectKey);
+
+      const uploadedCandidate = await projectAssetStorage.putObject({
+        objectKey: candidateObjectKey,
+        contentType: storedContentType,
+        body: storedBody
+      });
+      const candidateVersionId = uploadedCandidate?.versionId;
+
+      let confirmedAsset: typeof projectAssets.$inferSelect | undefined;
+
+      try {
+        [confirmedAsset] = await db
+          .update(projectAssets)
+          .set({
+            objectKey: candidateObjectKey,
+            uploadStatus: "uploaded",
+            fileName: storedFileName,
+            contentType: storedContentType,
+            byteSize: storedByteSize
+          })
+          .where(
+            and(
+              eq(projectAssets.id, params.assetId),
+              eq(projectAssets.projectId, params.id),
+              eq(projectAssets.uploadStatus, "pending")
+            )
+          )
+          .returning();
+      } catch (finalizeError) {
+        let currentAsset: typeof projectAssets.$inferSelect | undefined;
+
+        try {
+          [currentAsset] = await db
+            .select()
+            .from(projectAssets)
+            .where(
+              and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id))
+            );
+        } catch (rereadError) {
+          request.log.warn(
+            {
+              error: rereadError,
+              finalizeError,
+              objectKey: candidateObjectKey,
+              projectId: params.id
+            },
+            "Project asset upload outcome remained ambiguous after finalize failure"
+          );
+          throw finalizeError;
+        }
+
+        if (
+          currentAsset?.uploadStatus === "uploaded" &&
+          currentAsset.objectKey === candidateObjectKey
+        ) {
+          return reply.status(204).send();
+        }
+
+        await cleanupProjectAssetUploadCandidate({
+          log: request.log,
+          objectKey: candidateObjectKey,
+          projectId: params.id,
+          storage: projectAssetStorage,
+          versionId: candidateVersionId
+        });
+
+        if (currentAsset?.uploadStatus === "uploaded") {
+          return sendConflict(reply, "같은 파일의 다른 업로드가 먼저 완료되었습니다.");
+        }
+
+        throw finalizeError;
+      }
 
       if (!confirmedAsset) {
-        return sendNotFound(reply, "업로드된 파일 기록을 찾을 수 없습니다.");
+        await cleanupProjectAssetUploadCandidate({
+          log: request.log,
+          objectKey: candidateObjectKey,
+          projectId: params.id,
+          storage: projectAssetStorage,
+          versionId: candidateVersionId
+        });
+
+        return sendConflict(reply, "같은 파일의 다른 업로드가 먼저 완료되었습니다.");
       }
 
       return reply.status(204).send();
@@ -732,16 +1091,27 @@ function attachReverseEngineeringSource(
     return architectureJson;
   }
 
+  const sourceNodeIds = reverseEngineering.sourceNodeIds
+    ? new Set(reverseEngineering.sourceNodeIds)
+    : null;
+
   return {
     ...architectureJson,
-    nodes: architectureJson.nodes.map((node) => ({
-      ...node,
-      config: {
-        ...node.config,
-        reverseEngineeringSourceScanId: reverseEngineering.sourceScanId,
-        reverseEngineeringDraftId: reverseEngineering.draftId
-      }
-    }))
+    nodes: architectureJson.nodes.map((node) =>
+      sourceNodeIds && !sourceNodeIds.has(node.id)
+        ? node
+        : {
+            ...node,
+            config: {
+              ...node.config,
+              reverseEngineeringSourceScanId: reverseEngineering.sourceScanId,
+              reverseEngineeringDraftId: reverseEngineering.draftId,
+              ...(reverseEngineering.sourceKind
+                ? { reverseEngineeringSourceKind: reverseEngineering.sourceKind }
+                : {})
+            }
+          }
+    )
   };
 }
 
@@ -868,4 +1238,38 @@ function buildObjectKey(
   const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180);
 
   return `projects/${projectId}/assets/${assetType}/${assetId}-${safeFileName}`;
+}
+
+/** gg: 동시 PUT을 별도 객체에 기록해 DB가 선택한 한 객체만 최종본으로 연결합니다. */
+function buildUploadAttemptObjectKey(objectKey: string): string {
+  const lastSeparatorIndex = objectKey.lastIndexOf("/");
+  const parentPrefix = lastSeparatorIndex === -1 ? "" : objectKey.slice(0, lastSeparatorIndex + 1);
+
+  return `${parentPrefix}.attempt-${randomUUID()}`;
+}
+
+/** gg: 실패한 후보는 S3 VersionId가 있으면 실제 버전을, 아니면 일반 객체를 최선 노력으로 지웁니다. */
+async function cleanupProjectAssetUploadCandidate(input: {
+  log: FastifyRequest["log"];
+  objectKey: string;
+  projectId: string;
+  storage: ProjectAssetStorage;
+  versionId: string | undefined;
+}): Promise<void> {
+  try {
+    if (input.versionId && input.storage.deleteObjectVersion) {
+      await input.storage.deleteObjectVersion({
+        objectKey: input.objectKey,
+        versionId: input.versionId
+      });
+      return;
+    }
+
+    await input.storage.deleteObject({ objectKey: input.objectKey });
+  } catch (error) {
+    input.log.warn(
+      { error, objectKey: input.objectKey, projectId: input.projectId },
+      "Failed to delete a losing project asset upload"
+    );
+  }
 }

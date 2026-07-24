@@ -33,45 +33,45 @@ const REFERENCE_DIAGRAM_HASHES: Record<
   string
 > = {
   "brainboard-aws-asg-lb-vpc-subnets":
-    "141aa6015be8b1e4ca1daa3bca7102388d62783d05a956139ed3e5c8bc8621a6",
-  "brainboard-aws-bastion": "ce46917bc0aadf54a9b9386d06d61b6abdd3f9aa13e9f1190bf396e80efef1e0",
+    "7f0355abdd9dff5066cd1a7b765399384b2624b44eb9771f52be36e41cdf6e74",
+  "brainboard-aws-bastion": "42825310aa18164fab9541ec35665a75411679da0886f264a90a7cad0bf1138b",
   "brainboard-aws-costs-monitoring":
-    "208a7db1329a496d351d9139b1375d786529427b0ea29e771d545d77fca26d28",
+    "4a973c63dc03a18cd20d4f45023e3ca717b84ac9cc6a1522ee8da28e908f5dc5",
   "brainboard-aws-dashcam-video-pipeline":
-    "8fb29ae246da5502f32a1b7148d39a5933bd42e112b69c660b1e7e7917537555",
+    "bb16b489ec16cd86b03949ca567eb5e428f9499606a5aaa628e61ba58ee2f72c",
   "brainboard-aws-ec2-vpc-subnet":
-    "730ffcbf3180052632e3e5e43cdf57be40c772685ca4f59b032db42ba08f215b",
-  "brainboard-aws-ecs-fargate": "0c06a1c14732326561b5902a923c2c37486548e09e1461bacee0018faba50d3f",
+    "66798b44ef735a042ada67101064e16a5ceaae930179629bca96215d1e828756",
+  "brainboard-aws-ecs-fargate": "12cb4a0cc5973028c8a4329068e02bc3867ce522a781487a3f571b3fa3dbbe36",
   "brainboard-aws-elastic-beanstalk":
-    "8ac3f06325d19da9a5ec53e0474af823f5d21f61c79163aadd2330ecd1762f77",
-  "brainboard-aws-fsx": "8fb9055d1244777a5ff22764996e7de9a01dfece3749e87674f15fe46094e58c",
-  "brainboard-aws-iam-users": "d5d2075b21c3e5a79503648fef616374e57b495bfe6c1d4b6c42d581052ea880",
-  "brainboard-aws-jenkins-ec2": "30c0f38c9099366518bdf993d1bdcfccd62f74888eccec96a4be6ad05aae57ba",
+    "471bf6fffdbdbfd3403e43eb9de143cb1f4378507f71fded12d57663806d0ff6",
+  "brainboard-aws-fsx": "9e045f25b5cf123e958e82f71e328ac3bb9206b0b55b18d917afb28b5bba7d62",
+  "brainboard-aws-iam-users": "add9a650c98d6b69e56e51db1d5e45235e39012c89c547075750c281e4a8f7e5",
+  "brainboard-aws-jenkins-ec2": "a9e5d79be18c01feefcb414f5c14009127131483e9957031f79326e7bac850d1",
   "brainboard-aws-kubernetes-native-cnis":
-    "20d87cc62d6bce1d2539ff1370cfc712668e9b2154f18b1db83fe394c278149a",
+    "6213435ea8c4801e79834ec86d29f92212d20f1bee124b249fdec0995b8762b5",
   "brainboard-aws-load-balancer-target-group":
-    "756a4777b32c39e0917f2066222da96f8bc7200c833bbf62a622ed4fbe19946f",
+    "eb96d6c3b12fc4d64e63d8c764ce7e50de02e738d55653e83c5d09cc51ccaab6",
   "brainboard-aws-multi-account-management":
-    "5cf1c84ea9fd05b5d8b5619d73c7166437949f8d66fe78191a2cfbcecebef5f3",
+    "9ba24eb105075b45e3946668f2c97940ed207b1de88b2494f61fbd6ffedba830",
   "brainboard-aws-network-landing-zone":
-    "dff8db0f167897a4830827ca2cfcb1e8b7d2754e3dce6675a7540bddb9953d38",
-  "brainboard-aws-rds": "99796e29db38041867bc54d14d526f59471d597dc136940a961cd8efb0c2ab0b",
+    "e7242e63a4944507a51ec81c88f8c3c8434c291a9307f0dd625238d33787547a",
+  "brainboard-aws-rds": "b06ff07c8367a246b5f8ad1c221570c3ba9898bb20febcd26150f177161533b4",
   "brainboard-aws-rest-api-documentdb":
-    "791ec09ca18793ee566d7439462a3936620239c6390be9d71e17a5895af727f3",
+    "8434c53756c82a20f892fd2e36965dae8827ffeab48ccff9d31400e038252f8c",
   "brainboard-aws-s3-api-gateway":
-    "901230b51b7e5a33191167bee13639356716c5c7b61c8ff75819aaa1517c43ef",
+    "11ce0d13017707839da486dca6dd6b04684cbe2134890e76d6ea7482fb89b6c1",
   "brainboard-aws-secure-s3-bucket":
-    "e955a005f7358bcb59eaaa0d215d89eacd824811707cb8302303ad30856d32ce",
+    "adb3199c27d6dca1d1146644d796c7ebe99e8be8497d0b462cb3c73a27c60c8f",
   "brainboard-aws-serverless-cdn":
-    "a64d56f71dab662d0c74462251926b64c8ee9076595e1e2f1b273251598ff244",
+    "99db9a91634ab796761c045deca5636273fdb82e78cd1119c0ba2863c90aab77",
   "brainboard-aws-three-tier-database":
-    "55a9c8af9c33fc8225f4da9a5600aa5a413645a1aba47e0f5638c03bd0aeb4fc",
+    "7488c04f9ac1071f1ff689afc4bdb0661735ac590deaa0f3fc01ca0a077d9729",
   "brainboard-aws-vpc-subnets-security-groups-2az":
-    "c7106a31c5540ee3e78247cfb5dd093cb991f91960b9b93453022c93914e75f3",
+    "88d10829a18f30f48e44c2263efcba90317adf673c12500511582c61c58acc22",
   "brainboard-cross-account-aws-s3":
-    "4911e8662c5a1894e632e55bb954ec541b2673c9cabb31b1961a4802b7f95a86",
+    "c252f96d3b0699ff79f580e6eb6b5179cdc04ea0e49149eeedd41f067a762112",
   "brainboard-training-aws-onboarding":
-    "5072bb6ea891b89ea19530a8c234d89b0fb457f161aec24a0ffec5136a5cb86f"
+    "0b83b296818d60ebe05965dbce9505cb168f0d44f971228410231d8c82e57af4"
 };
 
 export const REFERENCE_TEMPLATE_THUMBNAIL_ASSETS = Object.fromEntries(

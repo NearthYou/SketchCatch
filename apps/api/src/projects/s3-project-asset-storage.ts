@@ -29,8 +29,9 @@ export function createS3ProjectAssetStorage(
   const s3Client = options.s3Client ?? getS3Client();
 
   return {
+    // gg: versioning bucket의 실패한 후보를 실제 버전까지 지울 수 있도록 VersionId를 돌려줍니다.
     async putObject(input) {
-      await s3Client.send(
+      const uploaded = await s3Client.send(
         new PutObjectCommand({
           Bucket: bucketName,
           Key: input.objectKey,
@@ -38,6 +39,8 @@ export function createS3ProjectAssetStorage(
           ContentType: input.contentType
         })
       );
+
+      return uploaded.VersionId ? { versionId: uploaded.VersionId } : undefined;
     },
 
     async getObject(input) {

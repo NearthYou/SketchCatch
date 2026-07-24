@@ -318,3 +318,18 @@ test("zero Terraform mutations are classified for Apply skip", () => {
     true
   );
 });
+
+test("Terraform imports are not classified as no-change even when actions are no-op", () => {
+  assert.equal(
+    isTerraformPlanNoChange({
+      createCount: 0,
+      updateCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      importCount: 1,
+      blocked: false,
+      warnings: []
+    }),
+    false
+  );
+});

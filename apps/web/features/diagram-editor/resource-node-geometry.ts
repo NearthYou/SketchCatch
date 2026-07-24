@@ -1,4 +1,8 @@
-import type { DiagramJson, DiagramNode } from "../../../../packages/types/src";
+import {
+  isBoardAutoPresentationFrameNode,
+  type DiagramJson,
+  type DiagramNode
+} from "../../../../packages/types/src";
 
 import { isAreaNode, isContainmentAreaNode } from "./area-nodes";
 
@@ -74,6 +78,12 @@ function normalizeResourceNodeParent(
   const currentParentId = node.metadata?.parentAreaNodeId;
 
   if (!currentParentId) {
+    return node;
+  }
+
+  // 과거 저장값은 유지하되 자동 프레임을 새 containment parent로 사용하지는 않습니다.
+  const currentParent = nodeById.get(currentParentId);
+  if (currentParent && isBoardAutoPresentationFrameNode(currentParent)) {
     return node;
   }
 

@@ -4,6 +4,7 @@ import type {
   ResourceEdge,
   ResourceNode
 } from "@sketchcatch/types";
+import { createReverseEngineeringTerraformProjection } from "./reverse-engineering-terraform-projection.js";
 
 const BOARD_LAYOUT = {
   ecsGroupGapX: 900,
@@ -31,24 +32,17 @@ type LayoutSubnetChildrenInput = LayoutVpcChildrenInput & {
   readonly subnetAnchor: LayoutAnchor;
 };
 
-// 관계가 있는 검토 전용 Resource는 구조를 읽을 수 있도록 보드에 남깁니다.
+// AWS에서 실제로 발견한 Resource는 자동 처리 지원 여부와 관계없이 보드 원본에 모두 남깁니다.
 export function createReverseEngineeringArchitectureJson(
   discoveredResources: readonly DiscoveredResource[]
 ): ArchitectureJson {
-  const evidenceRelationshipTargetIds = new Set(
-    discoveredResources.flatMap((resource) =>
-      (resource.relationships ?? []).map((relationship) => relationship.targetResourceId)
-    )
-  );
-  const boardResources = discoveredResources.filter((resource) =>
-    shouldAppearOnReverseEngineeringBoard(resource, evidenceRelationshipTargetIds)
-  );
+  const boardResources = [...discoveredResources];
   const boardResourceIds = new Set(boardResources.map((resource) => resource.id));
   const layoutByResourceId = createArchitectureLayout(boardResources);
 
   return {
     nodes: boardResources.map((resource, index) =>
-      toResourceNode(resource, index, layoutByResourceId.get(resource.id))
+      toResourceNode(resource, index, layoutByResourceId.get(resource.id), boardResources)
     ),
     edges: boardResources.flatMap((resource) => toResourceEdges(resource, boardResourceIds))
   };
@@ -97,15 +91,23 @@ function createArchitectureLayout(resources: readonly DiscoveredResource[]): Rea
     independentResources.push(resource);
   }
 
+  const independentColumnCount = Math.min(
+    7,
+    Math.max(1, Math.ceil(Math.sqrt(independentResources.length)))
+  );
+  const independentStartX =
+    BOARD_LAYOUT.vpcStartX +
+    vpcs.length * BOARD_LAYOUT.vpcGapX +
+    ecsClusters.length * BOARD_LAYOUT.ecsGroupGapX;
+
   for (const [index, resource] of independentResources.entries()) {
     layoutByResourceId.set(resource.id, {
       label: createResourceLabel(resource),
       positionX:
-        BOARD_LAYOUT.vpcStartX +
-        vpcs.length * BOARD_LAYOUT.vpcGapX +
-        ecsClusters.length * BOARD_LAYOUT.ecsGroupGapX +
-        index * BOARD_LAYOUT.resourceGapX,
-      positionY: BOARD_LAYOUT.vpcStartY
+        independentStartX + (index % independentColumnCount) * BOARD_LAYOUT.resourceGapX,
+      positionY:
+        BOARD_LAYOUT.vpcStartY +
+        Math.floor(index / independentColumnCount) * BOARD_LAYOUT.resourceGapY
     });
   }
 
@@ -225,8 +227,12 @@ function layoutSubnetChildren(input: LayoutSubnetChildrenInput): void {
 function toResourceNode(
   resource: DiscoveredResource,
   index: number,
-  layout: ArchitectureNodeLayout | undefined
+  layout: ArchitectureNodeLayout | undefined,
+  sameScanResources: readonly DiscoveredResource[]
 ): ResourceNode {
+  const projection = createReverseEngineeringTerraformProjection(resource, sameScanResources);
+  const isTerraformManaged = projection.management === "managed";
+
   return {
     id: resource.id,
     type: resource.resourceType,
@@ -234,10 +240,25 @@ function toResourceNode(
     positionX: layout?.positionX ?? 120 + (index % 3) * 280,
     positionY: layout?.positionY ?? 120 + Math.floor(index / 3) * 180,
     config: {
-      ...resource.config,
+      ...projection.terraformValues,
+      ...(projection.terraformBlockType
+        ? { terraformBlockType: projection.terraformBlockType }
+        : {}),
+      ...(projection.terraformResourceType
+        ? { terraformResourceType: projection.terraformResourceType }
+        : {}),
+      ...(projection.terraformResourceName
+        ? { terraformResourceName: projection.terraformResourceName }
+        : {}),
+      ...(projection.terraformFileName
+        ? { terraformFileName: projection.terraformFileName }
+        : {}),
+      reverseEngineeringManagement: projection.management,
+      reverseEngineeringObservedConfig: structuredClone(resource.config),
       providerResourceType: resource.providerResourceType,
       providerResourceId: resource.providerResourceId,
-      analysisExcluded: resource.analysisExcluded ?? false
+      ...(!isTerraformManaged ? { sketchcatchReferenceTerraform: true } : {}),
+      analysisExcluded: !isTerraformManaged || resource.analysisExcluded === true
     }
   };
 }
@@ -267,18 +288,6 @@ function toResourceEdges(resource: DiscoveredResource, boardResourceIds: Readonl
   }
 
   return edges;
-}
-
-// 지원 여부와 분석 제외 상태보다 evidence 관계가 구조를 설명할 때만 검토 전용 Resource를 보드에 남깁니다.
-function shouldAppearOnReverseEngineeringBoard(
-  resource: DiscoveredResource,
-  evidenceRelationshipTargetIds: ReadonlySet<string>
-): boolean {
-  if (resource.resourceType !== "UNKNOWN" && !resource.analysisExcluded) {
-    return true;
-  }
-
-  return (resource.relationships?.length ?? 0) > 0 || evidenceRelationshipTargetIds.has(resource.id);
 }
 
 // VPC 바로 아래에는 네트워크 구성요소와 여러 Subnet에 걸치는 ALB를 배치합니다.

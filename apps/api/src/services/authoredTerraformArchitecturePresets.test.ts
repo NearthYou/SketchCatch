@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { createAmazonQArchitectureDraftResponse } from "./aiArchitectureDrafts.js";
 import { AUDIENCE_LIVE_CHECK_MANUAL_DIAGRAM } from "./audienceLiveCheckManualDiagram.js";
 import { generateTerraformFromDiagramJson } from "./terraform/terraform-preview.js";
+import { syncTerraformToDiagramJson } from "./terraform/terraform-to-diagram.js";
 
 const prompt = "데모용 실시간 배포 사이트의 다이어그램 만들어줘.";
 const creditPolicy = {
@@ -78,6 +79,61 @@ test("the realtime deployment demo prompt keeps questions but always returns the
     "utf8"
   );
   assert.equal(terraform, expectedTerraform);
+  assert.doesNotMatch(terraform, /\r/u);
+  assert.match(terraform, /target_value\s+= 50/u);
+  assert.doesNotMatch(terraform, /target_value\s+= 10/u);
+  const canonicalClassification = syncTerraformToDiagramJson(first.diagramJson, {
+    terraformCode: terraform,
+    terraformFiles: [{ fileName: "main.tf", terraformCode: terraform }]
+  });
+  assert.ok(
+    canonicalClassification.preservedResourceAddresses?.includes(
+      "random_password.check_in_signing"
+    )
+  );
+
+  const tunedDiagram = structuredClone(first.diagramJson);
+  const scalingPolicy = tunedDiagram.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_appautoscaling_policy"
+  );
+  assert.ok(scalingPolicy?.parameters?.values);
+  const trackingConfiguration = scalingPolicy.parameters.values[
+    "targetTrackingScalingPolicyConfiguration"
+  ] as Array<{ targetValue: number }>;
+  assert.ok(trackingConfiguration[0]);
+  trackingConfiguration[0].targetValue = 5;
+
+  const tunedTerraform = generateTerraformFromDiagramJson(tunedDiagram);
+  assert.equal(
+    tunedTerraform,
+    expectedTerraform.replace(
+      /(\btarget_value\s*=\s*)50\b/u,
+      (_match, prefix: string) => `${prefix}5`
+    )
+  );
+  assert.match(tunedTerraform, /target_value\s+= 5/u);
+  assert.doesNotMatch(tunedTerraform, /target_value\s+= 50/u);
+  assert.match(
+    tunedTerraform,
+    /resource "aws_route_table_association" "rta_private_app_a" \{[\s\S]*?subnet_id\s+= aws_subnet\.subnet_private_app_a\.id[\s\S]*?\}/u
+  );
+  assert.match(
+    tunedTerraform,
+    /resource "aws_nat_gateway" "nat_private_egress" \{[\s\S]*?depends_on\s+= \[[\s\S]*?aws_internet_gateway\.igw_fixed_template_ecs_fargate_container_app[\s\S]*?aws_route_table_association\.rta_fixed_template_ecs_fargate_container_app_a[\s\S]*?\][\s\S]*?\}/u
+  );
+  assert.match(
+    tunedTerraform,
+    /output "max_capacity" \{[\s\S]*?value\s+= 2[\s\S]*?\}/u
+  );
+  assert.doesNotMatch(
+    tunedTerraform,
+    /aws_appautoscaling_target\.ecs_service_requests\.max_capacity/u
+  );
+  assert.match(tunedTerraform, /resource "random_password" "check_in_signing"/u);
+  assert.match(
+    tunedTerraform,
+    /secret_string\s+= random_password\.check_in_signing\.result/u
+  );
 
   const catalogPresentedDiagram = {
     ...first.diagramJson,
@@ -108,7 +164,7 @@ test("the realtime deployment demo prompt keeps questions but always returns the
     terraform,
     /resource "aws_appautoscaling_policy" "ecs_service_requests"/u
   );
-  assert.doesNotMatch(terraform, /fixed_template/u);
+  assert.doesNotMatch(terraform, /resource "[^"]+" "[^"]*fixed_template/u);
   assert.match(terraform, /target_value\s*=\s*50/u);
   assert.match(terraform, /resource "aws_cloudfront_distribution" "cdn_web"/u);
   assert.match(terraform, /resource "aws_secretsmanager_secret" "check_in_signing"/u);

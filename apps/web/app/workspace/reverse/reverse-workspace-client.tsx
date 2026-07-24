@@ -2,23 +2,34 @@
 
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2, ChevronLeft } from "lucide-react";
-import { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import type { DiagramNode } from "../../../../../packages/types/src";
 import { useAuth } from "../../../components/auth/auth-provider";
 import { DiagramEditor, type DiagramEditorPanelContext } from "../../../features/diagram-editor";
 import { EMPTY_DIAGRAM } from "../../../features/diagram-editor/constants";
 import {
   ReverseEngineeringPanel,
-  type ReverseEngineeringCandidatePanelState
+  type ReverseEngineeringCandidatePanelState,
+  type ReverseEngineeringInitialScanActionState
 } from "../../../features/workspace/ReverseEngineeringPanel";
+import { ReverseEngineeringStartCard } from "../../../features/workspace/ReverseEngineeringStartCard";
 import styles from "../../../features/workspace/reverse-engineering.module.css";
 import { getReverseEngineeringServiceLabel } from "../../../features/workspace/reverse-engineering-presentation";
+import {
+  getReverseEngineeringInspectorCoreValues,
+  getReverseEngineeringInspectorPurpose
+} from "../../../features/workspace/reverse-engineering-resource-inspector";
 
 type ReverseWorkspaceClientProps = {
   readonly projectName: string;
 };
 
 const REVERSE_PREVIEW_PROJECT_ID = "reverse-preview-project";
+const REVERSE_ENGINEERING_INITIAL_PANEL_LAYOUT = {
+  leftPanelOpen: true,
+  rightPanelOpen: true,
+  startWithMinimumWidths: true
+} as const;
 const EMPTY_CANDIDATE_PANEL_STATE: ReverseEngineeringCandidatePanelState = {
   candidates: [],
   hasScanResult: false,
@@ -26,12 +37,20 @@ const EMPTY_CANDIDATE_PANEL_STATE: ReverseEngineeringCandidatePanelState = {
   selectedCandidateId: null
 };
 
+type ReverseEngineeringInitialScanActionPresentation = Omit<
+  ReverseEngineeringInitialScanActionState,
+  "onScanStart"
+>;
+
 // Reverse 전용 전체 화면에서 AWS scan 후보를 보드 미리보기로 보여줍니다.
 export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientProps) {
   const router = useRouter();
   const { user } = useAuth();
   const [candidatePanelState, setCandidatePanelState] =
     useState<ReverseEngineeringCandidatePanelState>(EMPTY_CANDIDATE_PANEL_STATE);
+  const [initialScanAction, setInitialScanAction] =
+    useState<ReverseEngineeringInitialScanActionPresentation | null>(null);
+  const initialScanStartRef = useRef<(() => void) | null>(null);
   const workspaceUserName =
     user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
 
@@ -39,11 +58,50 @@ export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientPr
     router.push("/workspace/new");
   }, [router]);
 
+  // gg: 패널 안의 실제 스캔 함수를 중앙 시작 카드에서도 같은 흐름으로 호출합니다.
+  const handleInitialScanActionChange = useCallback(
+    (next: ReverseEngineeringInitialScanActionState | null): void => {
+      initialScanStartRef.current = next?.onScanStart ?? null;
+      const nextPresentation = next
+        ? {
+            awsConnectionRecovery: next.awsConnectionRecovery,
+            canStartScan: next.canStartScan,
+            failure: next.failure,
+            isLoadingOptions: next.isLoadingOptions,
+            isScanning: next.isScanning
+          }
+        : null;
+
+      setInitialScanAction((current) =>
+        isSameInitialScanActionPresentation(current, nextPresentation) ? current : nextPresentation
+      );
+    },
+    []
+  );
+
+  // gg: 카드가 직접 API를 부르지 않아 기존 Reverse Engineering 스캔 계약을 그대로 유지합니다.
+  const startInitialScan = useCallback((): void => {
+    initialScanStartRef.current?.();
+  }, []);
+
   return (
     <DiagramEditor
       allowPreviewInspection
-      emptyBoardDescription="기존 AWS를 가져오면 복원한 구조가 여기에 표시됩니다."
+      emptyBoardContent={
+        !candidatePanelState.hasScanResult ? (
+          <ReverseEngineeringStartCard
+            awsConnectionRecovery={initialScanAction?.awsConnectionRecovery ?? null}
+            canStartScan={initialScanAction?.canStartScan ?? false}
+            failure={initialScanAction?.failure ?? null}
+            isLoadingOptions={initialScanAction?.isLoadingOptions ?? true}
+            isScanning={initialScanAction?.isScanning ?? false}
+            onScanStart={startInitialScan}
+          />
+        ) : undefined
+      }
+      emptyBoardDescription="AWS 연결을 확인하는 중입니다."
       initialDiagram={EMPTY_DIAGRAM}
+      initialPanelLayout={REVERSE_ENGINEERING_INITIAL_PANEL_LAYOUT}
       leftPanel={
         <ReverseBoardCandidateSelectionPanel
           onChooseAnotherStartMode={chooseAnotherStartMode}
@@ -55,6 +113,7 @@ export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientPr
         <ReverseDockedPanel
           context={context}
           onCandidatePanelChange={setCandidatePanelState}
+          onInitialScanActionChange={handleInitialScanActionChange}
           projectName={projectName}
         />
       )}
@@ -66,20 +125,27 @@ export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientPr
 }
 
 // 자동 판단 결과가 하나면 추천 구조만, 애매할 때만 여러 선택지를 보여줍니다.
-function ReverseBoardCandidateSelectionPanel({
+export function ReverseBoardCandidateSelectionPanel({
   onChooseAnotherStartMode,
   state
 }: {
   readonly onChooseAnotherStartMode: () => void;
   readonly state: ReverseEngineeringCandidatePanelState;
 }) {
+  if (!state.hasScanResult) {
+    return (
+      <aside className={styles.candidatePanel} aria-label="Reverse Engineering 시작">
+        <button className={styles.startBackButton} onClick={onChooseAnotherStartMode} type="button">
+          <ArrowLeft aria-hidden="true" size={15} />
+          시작 방식 다시 선택
+        </button>
+      </aside>
+    );
+  }
+
   const hasMultipleCandidates = state.candidates.length > 1;
-  const panelTitle =
-    state.hasScanResult && !hasMultipleCandidates ? "가져온 원본" : "보드 후보 선택";
-  const panelDescription =
-    state.hasScanResult && !hasMultipleCandidates
-      ? "AWS에서 가져온 Resource와 관계를 바꾸지 않은 원본입니다."
-      : "AWS에서 가져온 구조가 여기에 표시됩니다.";
+  const panelTitle = "가져온 구조";
+  const panelDescription = "AWS에서 가져온 리소스와 연결입니다.";
 
   return (
     <aside className={styles.candidatePanel} aria-label={panelTitle}>
@@ -112,7 +178,7 @@ function ReverseBoardCandidateSelectionPanel({
             </button>
           ))}
         </div>
-      ) : state.hasScanResult && state.candidates[0] ? (
+      ) : state.candidates[0] ? (
         <div className={styles.recommendedStructure}>
           <span className={styles.recommendationLabel}>
             <CheckCircle2 aria-hidden="true" size={15} />
@@ -125,12 +191,7 @@ function ReverseBoardCandidateSelectionPanel({
             개
           </small>
         </div>
-      ) : (
-        <div className={styles.emptyState}>
-          <strong>아직 가져온 구조가 없습니다</strong>
-          <span>가져온 AWS 구조가 여기에 표시됩니다.</span>
-        </div>
-      )}
+      ) : null}
 
       <button className={styles.startBackButton} onClick={onChooseAnotherStartMode} type="button">
         <ArrowLeft aria-hidden="true" size={15} />
@@ -144,10 +205,14 @@ function ReverseBoardCandidateSelectionPanel({
 function ReverseDockedPanel({
   context,
   onCandidatePanelChange,
+  onInitialScanActionChange,
   projectName
 }: {
   readonly context: DiagramEditorPanelContext;
   readonly onCandidatePanelChange: (state: ReverseEngineeringCandidatePanelState) => void;
+  readonly onInitialScanActionChange: (
+    state: ReverseEngineeringInitialScanActionState | null
+  ) => void;
   readonly projectName: string;
 }) {
   const inspectedNode = context.nodes.find((node) => node.id === context.inspectedNodeId) ?? null;
@@ -162,10 +227,38 @@ function ReverseDockedPanel({
         context={context}
         createProjectOnApply
         onCandidatePanelChange={onCandidatePanelChange}
+        onInitialScanActionChange={onInitialScanActionChange}
         projectId={REVERSE_PREVIEW_PROJECT_ID}
         projectName={projectName}
       />
     </section>
+  );
+}
+
+// gg: 패널 상태가 매번 새 객체여도 같은 내용이면 부모를 다시 렌더하지 않게 합니다.
+function isSameInitialScanActionPresentation(
+  left: ReverseEngineeringInitialScanActionPresentation | null,
+  right: ReverseEngineeringInitialScanActionPresentation | null
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.awsConnectionRecovery.readiness === right.awsConnectionRecovery.readiness &&
+    left.awsConnectionRecovery.settingsHref === right.awsConnectionRecovery.settingsHref &&
+    left.awsConnectionRecovery.selectedConnectionId ===
+      right.awsConnectionRecovery.selectedConnectionId &&
+    left.canStartScan === right.canStartScan &&
+    left.failure?.action === right.failure?.action &&
+    left.failure?.description === right.failure?.description &&
+    left.failure?.title === right.failure?.title &&
+    left.isLoadingOptions === right.isLoadingOptions &&
+    left.isScanning === right.isScanning
   );
 }
 
@@ -181,12 +274,8 @@ function ReverseResourceInspector({
   const providerResourceId = formatInspectorValue(values["providerResourceId"]);
   const providerResourceType = formatInspectorValue(values["providerResourceType"]);
   const isReviewOnly = node.type === "UNKNOWN" || values["analysisExcluded"] === true;
-  const coreValues = getInspectorCoreValues(node.type, values);
-  const displayName = getInspectorDisplayName(
-    node.label,
-    providerResourceId,
-    providerResourceType
-  );
+  const coreValues = getReverseEngineeringInspectorCoreValues(node.type, values);
+  const displayName = getInspectorDisplayName(node.label, providerResourceId, providerResourceType);
 
   return (
     <aside className={styles.inspector} aria-label="Reverse Resource 상세">
@@ -206,7 +295,9 @@ function ReverseResourceInspector({
             <h2>{displayName}</h2>
           </div>
         </div>
-        <p className={styles.hint}>AWS에서 읽은 핵심 정보입니다. 이 화면에서는 변경하지 않습니다.</p>
+        <p className={styles.hint}>
+          AWS에서 읽은 핵심 정보입니다. 이 화면에서는 변경하지 않습니다.
+        </p>
       </header>
 
       <div className={styles.inspectorBody}>
@@ -229,12 +320,14 @@ function ReverseResourceInspector({
               <dt>상태</dt>
               <dd>
                 <span className={isReviewOnly ? styles.reviewOnlyBadge : styles.supportedBadge}>
-                  {isReviewOnly ? "확인 필요" : "지원됨"}
+                  {isReviewOnly ? "보드에서만 확인" : "구조 확인 가능"}
                 </span>
               </dd>
             </div>
           </dl>
-          <p className={styles.inspectorPurpose}>{getInspectorPurpose(node.type, isReviewOnly)}</p>
+          <p className={styles.inspectorPurpose}>
+            {getReverseEngineeringInspectorPurpose(node.type, isReviewOnly)}
+          </p>
         </section>
 
         {coreValues.length > 0 ? (
@@ -282,102 +375,4 @@ function isHumanInspectorDisplayName(displayName: string, providerResourceId: st
       displayName
     )
   );
-}
-
-function getInspectorPurpose(resourceType: string, isReviewOnly: boolean): string {
-  if (isReviewOnly) {
-    return "이 Resource는 AWS에서 발견됐지만 현재 자동 분석과 Terraform 처리 범위가 아닙니다.";
-  }
-
-  const purposes: Readonly<Record<string, string>> = {
-    EC2: "애플리케이션을 실행하는 가상 서버입니다.",
-    INTERNET_GATEWAY: "VPC와 인터넷 사이의 통신을 연결합니다.",
-    RDS: "애플리케이션 데이터를 저장하는 관리형 데이터베이스입니다.",
-    ROUTE_TABLE: "네트워크 트래픽의 경로를 정합니다.",
-    S3: "파일과 객체 데이터를 저장합니다.",
-    SECURITY_GROUP: "Resource에 허용할 네트워크 통신을 제어합니다.",
-    SUBNET: "VPC 안에서 Resource를 배치할 네트워크 구역입니다.",
-    VPC: "AWS Resource가 통신하는 사설 네트워크 범위입니다."
-  };
-
-  return purposes[resourceType] ?? "AWS에서 읽은 구성을 보드에서 검토할 수 있습니다.";
-}
-
-type InspectorCoreValue = {
-  readonly key: string;
-  readonly label: string;
-  readonly value: string;
-};
-
-const INSPECTOR_CORE_VALUE_ALLOWLIST: Readonly<Record<string, readonly [string, string][]>> = {
-  EC2: [
-    ["instanceType", "인스턴스 유형"],
-    ["placementAvailabilityZone", "Availability Zone"],
-    ["privateIpAddress", "사설 IP"]
-  ],
-  INTERNET_GATEWAY: [],
-  RDS: [
-    ["dbInstanceClass", "DB 인스턴스 유형"],
-    ["engine", "DB 엔진"],
-    ["availabilityZone", "Availability Zone"],
-    ["dbName", "DB 이름"]
-  ],
-  ROUTE_TABLE: [],
-  S3: [
-    ["bucketRegion", "Bucket 리전"],
-    ["versioningStatus", "버전 관리"],
-    ["websiteIndexDocument", "웹 사이트 문서"]
-  ],
-  SECURITY_GROUP: [
-    ["groupName", "보안 그룹 이름"],
-    ["description", "설명"]
-  ],
-  SUBNET: [
-    ["availabilityZone", "Availability Zone"],
-    ["cidrBlock", "CIDR"],
-    ["availableIpAddressCount", "사용 가능 IP"]
-  ],
-  VPC: [
-    ["cidrBlock", "CIDR"],
-    ["isDefault", "기본 VPC"]
-  ]
-};
-
-function getInspectorCoreValues(
-  resourceType: string,
-  values: Readonly<Record<string, unknown>>
-): InspectorCoreValue[] {
-  return (INSPECTOR_CORE_VALUE_ALLOWLIST[resourceType] ?? [])
-    .map(([key, label]) => ({
-      key,
-      label,
-      value: formatMeaningfulInspectorValue(key, values[key])
-    }))
-    .filter((value): value is InspectorCoreValue => value.value !== null)
-    .slice(0, 4);
-}
-
-function formatMeaningfulInspectorValue(key: string, value: unknown): string | null {
-  if (key === "versioningStatus" && typeof value === "string") {
-    const versioningStatusLabels: Readonly<Record<string, string>> = {
-      Enabled: "사용 중",
-      Suspended: "일시 중지"
-    };
-
-    return versioningStatusLabels[value] ?? "설정 상태 확인 필요";
-  }
-
-  if (key === "isDefault" && typeof value === "boolean") {
-    return value ? "예" : "아니요";
-  }
-
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value;
-  }
-
-  if (typeof value === "number") {
-    return String(value);
-  }
-
-  return null;
 }

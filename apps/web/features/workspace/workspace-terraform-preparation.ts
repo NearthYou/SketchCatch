@@ -8,6 +8,7 @@ import { generateTerraformCode, syncTerraformToDiagram, validateTerraformCode } 
 import {
   combineTerraformFiles,
   createTerraformFilesFromGeneratedCode,
+  mergeGeneratedTerraformFiles,
   markTerraformSourceAuthoritative,
   type TerraformVirtualFile
 } from "./terraform-panel-utils";
@@ -78,6 +79,7 @@ export async function validateWorkspaceTerraformFiles(
   );
 }
 
+/** 배포 직전에는 현재 Board를 기준으로 Terraform을 다시 만들고 기존 보존 블록만 합칩니다. */
 export async function prepareWorkspaceTerraformSource(
   {
     diagramJson,
@@ -89,22 +91,49 @@ export async function prepareWorkspaceTerraformSource(
   dependencies: WorkspaceTerraformPreparationDependencies = defaultDependencies
 ): Promise<PreparedWorkspaceTerraformSource> {
   let sourceFiles = terraformFiles.map(toTerraformVirtualFile);
-  let architectureDiagnostics: readonly ArchitectureDiagnostic[] | undefined;
+  const existingTerraformCode = combineTerraformFiles(sourceFiles);
+  let preservedResourceAddresses = new Set<string>();
 
-  if (!combineTerraformFiles(sourceFiles).trim()) {
-    const generated = await dependencies.generate(diagramJson);
-    architectureDiagnostics = generated.architectureDiagnostics;
+  if (existingTerraformCode.trim()) {
+    const existingValidationDiagnostics = await validateWorkspaceTerraformFiles(
+      sourceFiles.map(toTerraformSyncFile),
+      dependencies.validate
+    );
 
-    if (hasBlockingArchitectureDiagnostic(architectureDiagnostics)) {
+    if (hasBlockingDiagnostic(existingValidationDiagnostics)) {
       throw new WorkspaceTerraformPreparationError(
-        "Architecture Board를 Terraform으로 변환할 수 없습니다.",
-        [],
-        architectureDiagnostics
+        "Terraform 코드 검증에 실패했습니다.",
+        existingValidationDiagnostics
       );
     }
 
-    sourceFiles = createTerraformFilesFromGeneratedCode(diagramJson, generated.terraformCode);
+    // 이 첫 sync는 보존할 수동/유틸리티 블록만 분류하며, 오래된 코드가 만든 Diagram은 버립니다.
+    const sourceClassification = await dependencies.sync({
+      diagramJson,
+      terraformCode: existingTerraformCode,
+      terraformFiles: sourceFiles.map(toTerraformSyncFile)
+    });
+    preservedResourceAddresses = new Set(sourceClassification.preservedResourceAddresses ?? []);
   }
+
+  const generated = await dependencies.generate(diagramJson);
+  const architectureDiagnostics = generated.architectureDiagnostics;
+
+  if (hasBlockingArchitectureDiagnostic(architectureDiagnostics)) {
+    throw new WorkspaceTerraformPreparationError(
+      "Architecture Board를 Terraform으로 변환할 수 없습니다.",
+      [],
+      architectureDiagnostics
+    );
+  }
+
+  const generatedFiles = createTerraformFilesFromGeneratedCode(
+    diagramJson,
+    generated.terraformCode
+  );
+  sourceFiles = existingTerraformCode.trim()
+    ? mergeGeneratedTerraformFiles(sourceFiles, generatedFiles, preservedResourceAddresses)
+    : generatedFiles;
 
   let preparedTerraformCode = combineTerraformFiles(sourceFiles);
 
@@ -176,7 +205,7 @@ export async function prepareWorkspaceTerraformSource(
       : syncResult.diagramJson;
 
   return {
-    ...(architectureDiagnostics ? { architectureDiagnostics } : {}),
+    architectureDiagnostics,
     diagramJson: markTerraformSourceAuthoritative(synchronizedDiagram),
     diagnostics,
     preservedResourceAddresses: syncResult.preservedResourceAddresses ?? [],

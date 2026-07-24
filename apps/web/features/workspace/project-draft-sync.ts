@@ -236,7 +236,8 @@ export async function saveServerProjectDiagramDraft(
   };
 }
 
-function getProjectDraftConflict(error: unknown): ProjectDraftConflictResponse | null {
+/** 공통 409 응답에서 ProjectDraft conflict dialog가 이해하는 정보만 꺼냅니다. */
+export function getProjectDraftConflict(error: unknown): ProjectDraftConflictResponse | null {
   if (!(error instanceof ApiClientError) || error.status !== 409) {
     return null;
   }

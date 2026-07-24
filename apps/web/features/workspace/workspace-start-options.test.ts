@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { resolveWorkspaceStartAction } from "../../app/workspace/new/workspace-start-options";
 
-test("repository start creates a project before opening the repository screen", () => {
+test("repository start opens the repository screen before creating a project", () => {
   assert.deepEqual(
     resolveWorkspaceStartAction({
       cloudPlatform: "aws",
@@ -11,7 +11,10 @@ test("repository start creates a project before opening the repository screen", 
       projectName: "Repository project",
       startKind: "repository"
     }),
-    { kind: "createRepositoryProject" }
+    {
+      href: "/workspace/repository?projectName=Repository+project",
+      kind: "redirect"
+    }
   );
 });
 

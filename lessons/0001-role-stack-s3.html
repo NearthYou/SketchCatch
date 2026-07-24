@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Role은 S3에 저장되지 않는다</title>
+  <link rel="stylesheet" href="../assets/lesson.css" />
+</head>
+<body>
+  <main>
+    <div class="eyebrow">LESSON 0001 · 약 5분</div>
+    <h1>Role은 S3에 저장되지 않는다</h1>
+    <p class="lead">S3에 보이는 것은 대개 Role 자체가 아니라, Role을 만들기 위한 설계도 파일이다.</p>
+
+    <div class="callout">
+      <strong>오늘의 한 문장</strong><br />
+      S3는 설계도 파일을 보관하고, CloudFormation Stack은 그 설계도로 공사를 관리하며, IAM Role은 실제로 만들어진 권한 있는 출입증이다.
+    </div>
+
+    <h2>먼저 비유로 보기</h2>
+    <div class="flow">
+      <article><span class="number">1</span><h3>S3</h3><p>설계도를 넣어 두는 파일 보관함</p></article>
+      <article><span class="number">2</span><h3>Template</h3><p>무엇을 만들지 적은 YAML 설계도</p></article>
+      <article><span class="number">3</span><h3>Stack</h3><p>설계도로 만든 것들을 계속 관리하는 공사 기록</p></article>
+      <article><span class="number">4</span><h3>Role</h3><p>SketchCatch가 AWS에서 쓸 실제 임시 출입증</p></article>
+    </div>
+
+    <h2>SketchCatch에서는 실제로 어떻게 움직이나?</h2>
+    <ol>
+      <li>SketchCatch가 CloudFormation YAML을 만든다.</li>
+      <li>그 파일을 S3의 <code>aws-connections/{connectionId}/cloudformation-template.yaml</code>에 둔다.</li>
+      <li>잠시만 사용할 수 있는 URL을 AWS CloudFormation에 전달한다.</li>
+      <li>CloudFormation이 Template을 읽고 Stack을 만든다.</li>
+      <li>Stack이 IAM Role과 권한 Policy를 실제 AWS 계정에 만든다.</li>
+      <li>SketchCatch는 필요할 때 Role을 맡아 짧은 시간만 유효한 자격 증명을 받는다.</li>
+    </ol>
+
+    <div class="callout safe">
+      <strong>따라서:</strong> Role은 IAM에 남고, Stack은 CloudFormation에 남는다. S3에는 이 둘을 만들기 위해 사용한 YAML 파일이 남을 수 있다.
+    </div>
+
+    <h2>왜 Stack이 필요한가?</h2>
+    <p>Role과 Policy를 사람이 하나씩 만들면 나중에 무엇을 같이 고쳐야 하는지 놓치기 쉽다. Stack은 자신이 만든 Resource를 기억하므로 새 Template을 적용해 함께 갱신하거나, 필요할 때 한 묶음으로 정리할 수 있다.</p>
+
+    <table>
+      <thead><tr><th>행동</th><th>결과</th></tr></thead>
+      <tbody>
+        <tr><td>S3의 Template 파일 삭제</td><td>이미 만들어진 Stack과 Role은 그대로 남는다.</td></tr>
+        <tr><td>Stack에 새 Template 적용</td><td>달라진 Role·Policy만 CloudFormation이 갱신한다.</td></tr>
+        <tr><td>Stack 삭제</td><td>Stack이 만든 Role·Policy도 함께 삭제될 수 있다.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout warn">
+      SketchCatch에는 S3가 다른 용도로도 나온다. Terraform 파일과 state를 보관하는 S3, 사용자가 설계한 서비스의 S3 Bucket은 연결용 Template 파일과 전혀 다른 물건이다.
+    </div>
+
+    <h2>30초 확인 문제</h2>
+    <p>CloudFormation Stack을 만든 뒤 S3의 Template 파일만 지웠다. 일반적으로 무엇이 남을까?</p>
+    <div class="options">
+      <div class="option">A. Role과 Stack 모두 남음</div>
+      <div class="option">B. Role과 Stack 모두 삭제</div>
+      <div class="option">C. Role만 남고 Stack 삭제</div>
+    </div>
+    <details>
+      <summary>정답과 이유 보기</summary>
+      <p><strong>A.</strong> Template은 공사에 사용한 설계도 파일이다. 이미 만들어진 Stack과 Role의 존재 장소는 각각 CloudFormation과 IAM이므로, 설계도 파일만 지워도 둘은 자동으로 사라지지 않는다.</p>
+    </details>
+
+    <h2>공식 자료</h2>
+    <p>가장 먼저 볼 자료는 AWS의 <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html">IAM roles 공식 설명</a>이다. 이어서 <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacks.html">CloudFormation stacks 공식 설명</a>을 보면 Role과 Stack의 차이가 선명해진다.</p>
+
+    <p><a href="../reference/aws-role-stack-s3.html">한 장 요약 열기 →</a></p>
+    <p class="footer">헷갈리는 부분은 그대로 질문해도 된다. 다음 수업에서는 `SketchCatch가 Role을 맡는다`는 말이 실제로 무슨 뜻인지 다룰 수 있다.</p>
+  </main>
+</body>
+</html>

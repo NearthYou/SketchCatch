@@ -1,7 +1,48 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DeleteObjectsCommand, ListObjectVersionsCommand, type S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  ListObjectVersionsCommand,
+  PutObjectCommand,
+  type S3Client
+} from "@aws-sdk/client-s3";
 import { createS3ProjectAssetStorage } from "./s3-project-asset-storage.js";
+
+test("S3 upload은 VersionId를 반환하고 해당 실제 버전만 삭제한다", async () => {
+  const commands: unknown[] = [];
+  const storage = createS3ProjectAssetStorage({
+    bucketName: "artifact-bucket",
+    s3Client: {
+      async send(command: unknown) {
+        commands.push(command);
+        return command instanceof PutObjectCommand ? { VersionId: "version-1" } : {};
+      }
+    } as unknown as S3Client
+  });
+
+  const uploaded = await storage.putObject({
+    objectKey: "projects/project-1/.attempt-1",
+    contentType: "text/plain",
+    body: "resource {}"
+  });
+
+  assert.deepEqual(uploaded, { versionId: "version-1" });
+  assert.ok(storage.deleteObjectVersion);
+  await storage.deleteObjectVersion({
+    objectKey: "projects/project-1/.attempt-1",
+    versionId: "version-1"
+  });
+  assert.deepEqual(
+    commands.map((command) => (command as { constructor: unknown }).constructor),
+    [PutObjectCommand, DeleteObjectCommand]
+  );
+  assert.deepEqual((commands[1] as DeleteObjectCommand).input, {
+    Bucket: "artifact-bucket",
+    Key: "projects/project-1/.attempt-1",
+    VersionId: "version-1"
+  });
+});
 
 test("S3 project prefix deletion removes every object version and delete marker across pages", async () => {
   const commands: unknown[] = [];

@@ -10,6 +10,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -22,6 +23,7 @@ import type {
   ApplicationReleaseProviderRevision,
   ApplicationReleaseStatus,
   ArchitectureJson,
+  AwsImportAccessStatus,
   ConfirmedBuildConfig,
   CompositeReleaseDigest,
   CloudProvider,
@@ -518,6 +520,46 @@ export const awsConnections = pgTable(
   ]
 );
 
+// gg 안전 경계: 가져오기 권한 정리가 끝나기 전에는 기존 연결이 cascade로 사라지지 않는다.
+export const awsImportAccess = pgTable(
+  "aws_import_access",
+  {
+    awsConnectionId: varchar("aws_connection_id", { length: 36 })
+      .notNull()
+      .references(() => awsConnections.id, { onDelete: "restrict" }),
+    status: varchar("status", { length: 40 }).$type<AwsImportAccessStatus>().notNull(),
+    managerStackName: varchar("manager_stack_name", { length: 128 }),
+    managerStackId: text("manager_stack_id"),
+    managerContractVersion: varchar("manager_contract_version", { length: 32 }),
+    managerTemplateHash: varchar("manager_template_hash", { length: 64 }),
+    policyStackName: varchar("policy_stack_name", { length: 128 }),
+    policyStackId: text("policy_stack_id"),
+    policyContractVersion: varchar("policy_contract_version", { length: 32 }),
+    policyTemplateHash: varchar("policy_template_hash", { length: 64 }),
+    targetRoleArn: text("target_role_arn"),
+    serviceRoleArn: text("service_role_arn"),
+    readPolicyArn: text("read_policy_arn"),
+    controlPolicyArn: text("control_policy_arn"),
+    cleanupVerificationPolicyArn: text("cleanup_verification_policy_arn"),
+    policyFingerprint: varchar("policy_fingerprint", { length: 64 }),
+    approvalFingerprint: varchar("approval_fingerprint", { length: 64 }),
+    approvalExpiresAt: timestamp("approval_expires_at", { withTimezone: true }),
+    approvalConsumedAt: timestamp("approval_consumed_at", { withTimezone: true }),
+    operationId: varchar("operation_id", { length: 36 }),
+    operationKind: varchar("operation_kind", { length: 32 }),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    coreReadSummary: jsonb("core_read_summary").$type<Record<string, string>>(),
+    expandedReadSummary: jsonb("expanded_read_summary").$type<Record<string, string>>(),
+    safeErrorCode: varchar("safe_error_code", { length: 64 }),
+    safeErrorSummary: text("safe_error_summary"),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    cleanupStartedAt: timestamp("cleanup_started_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [primaryKey({ columns: [table.awsConnectionId] })]
+);
+
 export const awsCodeConnections = pgTable(
   "aws_code_connections",
   {
@@ -577,6 +619,46 @@ export const reverseEngineeringScans = pgTable(
     index("reverse_engineering_scans_project_id_idx").on(table.projectId),
     index("reverse_engineering_scans_status_idx").on(table.status),
     index("reverse_engineering_scans_aws_connection_id_idx").on(table.awsConnectionId)
+  ]
+);
+
+// gg: 새 Project에 적용하기 전 AWS 원본을 owner·만료·1회 claim 경계 안에만 보존합니다.
+export const reverseEngineeringScanPreviews = pgTable(
+  "reverse_engineering_scan_previews",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    awsConnectionId: varchar("aws_connection_id", { length: 36 }).references(
+      () => awsConnections.id,
+      { onDelete: "set null" }
+    ),
+    provider: varchar("provider", { length: 32 }).$type<"aws">().notNull().default("aws"),
+    region: varchar("region", { length: 32 }).notNull(),
+    resourceTypes: jsonb("resource_types").$type<ReverseEngineeringResourceSelection[]>().notNull(),
+    rawResult: jsonb("raw_result").$type<ReverseEngineeringScanResult>().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    claimedProjectId: varchar("claimed_project_id", { length: 36 }).references(
+      () => projects.id,
+      { onDelete: "set null" }
+    ),
+    claimedScanId: varchar("claimed_scan_id", { length: 36 }).references(
+      () => reverseEngineeringScans.id,
+      { onDelete: "set null" }
+    ),
+    claimedDraftId: varchar("claimed_draft_id", { length: 36 }).references(
+      () => projectDrafts.id,
+      { onDelete: "set null" }
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("reverse_engineering_scan_previews_user_id_idx").on(table.userId),
+    index("reverse_engineering_scan_previews_expires_at_idx").on(table.expiresAt),
+    index("reverse_engineering_scan_previews_claimed_at_idx").on(table.claimedAt)
   ]
 );
 

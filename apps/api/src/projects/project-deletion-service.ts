@@ -5,7 +5,6 @@ import type {
   DeploymentFailureStage,
   DeploymentScope,
   DeploymentStatus,
-  ProjectDeleteAction,
   ProjectDeleteCleanupStatus,
   ProjectDeletePreview
 } from "@sketchcatch/types";
@@ -174,6 +173,12 @@ export async function deleteProjectRecords(
       snapshot,
       input.cleanupManagedResources
     );
+    // gg: Strict bulk deletion keeps the project retryable until its AWS build cleanup succeeds.
+    if (input.action === "delete_project_with_managed_cleanup" && !managedCleanupCompleted) {
+      throw new ProjectDeletionManagedCleanupError(
+        "프로젝트용 AWS 도구를 모두 정리하지 못했습니다. 프로젝트 기록은 남겨 두었으니 다시 시도해 주세요."
+      );
+    }
     const objectKeys = collectProjectDeletionObjectKeys(snapshot);
     let failedObjectCount = 0;
 
@@ -731,11 +736,15 @@ function toProjectDeleteDeploymentSummary(
   };
 }
 
+// gg: The strict bulk action shares the normal no-active-resource gate before it can call AWS cleanup.
 function requireAllowedDeleteAction(
   preview: ProjectDeletePreview,
-  action: Exclude<ProjectDeleteAction, "destroy_then_delete">
+  action: DeleteProjectRequest["action"]
 ): void {
-  if (preview.availableActions.includes(action)) {
+  const allowedAction =
+    action === "delete_project_with_managed_cleanup" ? "delete_project" : action;
+
+  if (preview.availableActions.includes(allowedAction)) {
     return;
   }
 

@@ -690,6 +690,23 @@ test("Deployment screen follows the approved operational hierarchy", () => {
   assert.doesNotMatch(historySource, /성공한 배포의 변경 내용과 실행 결과를 확인합니다/);
 });
 
+test("Deployment approval and History use the shared import-aware change summary", () => {
+  assert.match(
+    directDeploymentSource,
+    /import \{[\s\S]*formatDeploymentPlanChangeSummary[\s\S]*\} from "\.\/deployment-presentation";/
+  );
+  assert.match(
+    directDeploymentSource,
+    /<InfoRow\s+label="변경 사항"\s+value=\{formatDeploymentPlanChangeSummary\(summary\)\}/
+  );
+  assert.equal(
+    directDeploymentSource.match(
+      /formatDeploymentPlanChangeSummary\(deployment\.planSummary\)/gu
+    )?.length,
+    2
+  );
+});
+
 test("Deployment console global header owns refresh and close tools", () => {
   assert.match(deploymentShellSource, /RefreshCw/);
   assert.match(deploymentShellSource, /"새로고침 중"\s*:\s*"새로고침"/);

@@ -16,6 +16,18 @@ _Avoid_: Main board, canvas, drawing board
 An infrastructure building block from a cloud provider inside an infrastructure design, such as AWS VPC, Azure Virtual Network, GCP VPC Network, compute instances, databases, storage, IAM, or edge delivery resources.
 _Avoid_: Component, block, service
 
+**Resource Display Name**:
+A plain-language, single-line name shown consistently for one Resource across the Architecture Board, Resource panels, Template previews, and user-facing explanations. Every initial Resource Display Name created from a Template is English-only, including provider-native Resource types, widely recognized provider abbreviations, established AWS role terms, application-specific roles, and technical helper Resource names. Initial Template labels omit template-wide, domain, environment, implementation-detail, and provider-context qualifiers when they neither distinguish nodes nor explain the architecture: `Items` and a single `Production API Stage` are examples of omitted filler. Keep official Resource/Service types and qualifiers needed for meaning or disambiguation, including `Public`/`Private`, `Web`/`Application`/`Database` in multi-tier diagrams, `Master`/`Worker`, account- or environment-specific VPCs, `A`/`B`, and role or direction. Every initial name is unique within that Template. Resources of the same type are distinguished by functional role first, location second, and a number only as a last resort. The Architecture Board may render English terms in uppercase while other surfaces preserve the authored casing. After applying the Template, the user may edit the name freely. The name may change for user clarity without changing that Resource's IaC Identity or provider-side name. This initial Template label rule does not change Terraform identity, provider-side names, Board structure, or general UI language.
+_Avoid_: Terraform resource name, Resource ID, AWS Name tag
+
+**IaC Identity**:
+The stable infrastructure-as-code address used to reference and track a Resource, such as `aws_subnet.snet1`. It is available as secondary technical information in Resource details, copy actions, and diagnostics, but never replaces the primary Resource Display Name.
+_Avoid_: Board label, display name, provider-side name
+
+**Architecture Area Title**:
+A concise, single-line label for a non-Resource Board area that helps users recognize architectural scope such as a Region, Availability Zone, network zone, or global service area. Every initial Architecture Area Title created from a Template is English-only and omits template-wide, domain, environment, implementation-detail, and provider-context qualifiers unless they distinguish areas or explain the architecture. Keep official Resource/Service types and necessary qualifiers, including `Public`/`Private`, `Web`/`Application`/`Database` in multi-tier diagrams, `Master`/`Worker`, account- or environment-specific VPCs, `A`/`B`, and role or direction. It is not a Resource Display Name or an IaC Identity, and this initial Template label rule does not change Terraform identity, provider-side names, Board structure, user-edited post-creation labels, or general UI language.
+_Avoid_: Resource name, Terraform address, provider resource
+
 **Curated Module**:
 A reusable, preassembled group of Resources, relationships, configuration, and Board structure offered from the Workspace `Modules` catalog. Expanding one creates editable Resources on the Architecture Board; it is not a Terraform module or an indivisible parent Resource.
 _Avoid_: Terraform module, Template, Resource category, AI pattern
@@ -153,8 +165,12 @@ The capability that may infer, add, remove, or change Resources, relationships, 
 _Avoid_: Auto layout, coordinate cleanup, diagram beautifier
 
 **Board Auto Arrange**:
-A user-requested visual cleanup that may change only position, size, presentation grouping, and edge routing. It never adds, removes, or changes Resources, relationships, or configuration. `Keep Original` closes the preview without mutation, while `Use This Arrangement` is the single explicit approval that applies the preview without a second confirmation dialog.
+A user-requested visual cleanup that may change only position, size, decorative Presentation Frames, and edge routing. It never adds, removes, or changes Resources, relationships, configuration, or containment. Up to three distinct semantically safe visual candidates remain available for user comparison even when measured layout findings do not improve; the original is a comparison baseline rather than a competing candidate, and quality findings rank and explain changed candidates but never gate them. Desktop uses a thumbnail gallery above a side-by-side original and selected-candidate comparison. Mobile uses a horizontal thumbnail gallery and a same-viewport Original/Arrangement toggle. Each preview explains up to three concrete changes with Resource display names and useful reasons before any aggregate count, and explicitly states that Resources, relationships, and configuration remain unchanged. Switching candidates never mutates the Board. `Keep Original` closes the preview without mutation, while `Use This Arrangement` is the single explicit approval that applies the selected preview without a second confirmation dialog.
 _Avoid_: Architecture improvement, Resource optimization, automatic fix
+
+**Presentation Frame**:
+A presentation-only title and background frame that visually surrounds nearby Board elements without recording membership, parenthood, containment, relationships, or provider meaning. It uses the existing Design Group representation. Board Auto Arrange owns a frame only when its Design kind, Design Group type, catalog identity, and `board-auto-frame:` ID prefix all match; only an unlocked frame with this full identity may be automatically merged or removed on a later arrange request. User-authored Design Groups may receive position and size proposals but are never silently claimed, merged, or deleted by Board Auto Arrange. A frame stays where it was placed after ordinary Board edits until the user changes it or requests Board Auto Arrange again.
+_Avoid_: Group, container, parent area, architecture layer
 
 **Compilation Distance**:
 The relative amount of semantic and visual change between an input infrastructure design and an Architecture Board Compiler proposal. Resource deletion has greater distance than configuration, relationship, containment, size, or position changes.
@@ -165,16 +181,32 @@ The service capability that scans existing cloud Resources through provider adap
 _Avoid_: Resource list, AWS scan, diagram import
 
 **Imported Architecture Original**:
-The Reverse Engineering result that preserves the discovered Resources, relationships, and configuration exactly, while applying only a deterministic collision-free initial position because cloud providers do not store Architecture Board coordinates. It is distinct from Board Auto Arrange and any semantic Compiler proposal.
+The Reverse Engineering result that preserves the discovered Resources, relationships, and configuration exactly, while applying only a deterministic collision-free initial position because cloud providers do not store Architecture Board coordinates. It is a preview and becomes a saved Workspace Board only when the user chooses `보드에 적용`; it is distinct from Board Auto Arrange and any semantic Compiler proposal.
 _Avoid_: Raw provider response, automatically improved architecture, Compiler result
 
+**Imported Infrastructure Frame**:
+A presentation-only frame that distinguishes recognizable infrastructure sets inside one imported cloud account. It is inferred from `Project`, `Service`, and `Environment` tags first, then from VPC and relationship context when tags are absent; users may freely edit or remove it without changing cloud or IaC ownership. Board Auto Arrange lays out only the Resources inside each frame and never moves a Resource into another frame or moves, resizes, merges, splits, or removes the frame itself.
+_Avoid_: AWS resource group, Terraform module, containment, deployment boundary
+
 **AWS Import Access Update**:
-A user-approved permission update for an existing verified AWS connection so Reverse Engineering can read supported services. It keeps the same connection identity, does not create a duplicate connection, and re-verifies the same role after the user approves the AWS-side update.
-_Avoid_: New AWS connection, automatic IAM mutation, reconnect account
+A user-approved permission update owned by AWS connection settings so Reverse Engineering can read supported services. It preserves the existing connection identity, Role, original Stack, deployment policy, and deployment verification. Reverse Engineering may detect missing access and route the user to this flow, but never changes AWS permissions itself. Cleanup removes only the access artifacts owned by this update; an uncertain cleanup remains inactive and retryable.
+_Avoid_: New AWS connection, full deployment permission refresh, separate import Role, shared account manager Role, reconnect account
+
+**AWS Import Access Stack Pair**:
+Two connection-scoped CloudFormation stacks used only to manage Reverse Engineering access. The Manager Stack owns narrowly limited management and cleanup-verification access. The Policy Stack owns only the Reverse Engineering read policy attached to the existing connection Role. Cleanup always removes the Policy Stack before the Manager Stack. Neither stack owns the connection Role, original connection Stack, or deployment policy.
+_Avoid_: Original connection Stack, deployment Stack, separate import connection
+
+**AWS Import Readiness**:
+A per-connection, per-region capability state for Reverse Engineering that is separate from deployment connection verification. Core readers cover EC2 networking and compute, S3, RDS, Load Balancer, ECS, and CloudFront; all must accept their bounded read request before the connection is ready for normal import. Resource Explorer, Tagging API, IAM, KMS, CloudWatch and Logs, API Gateway, Lambda, and AMI are expanded readers whose failure produces `ready with limited details` rather than blocking core import. An empty list is a successful read, Resource Explorer not being configured is distinct from access denial, and transient provider errors are retryable rather than permission conclusions.
+_Avoid_: AWS connection status, deployment verification, Stack status
 
 **Partial Architecture Import**:
 A usable Reverse Engineering result containing every Resource successfully discovered even when one or more supported services could not be read. The Board remains visible and the UI gives a short notice plus an AWS Import Access Update action instead of blocking the result or exposing provider errors. `Use Imported Items Only` is the single explicit approval for applying this incomplete result and makes the incompleteness visible without a second confirmation dialog.
 _Avoid_: Failed import, complete architecture, raw scan error
+
+**Reverse Engineering Result Summary**:
+The compact first result shown after an existing cloud scan. It contains only the discovered Resource count, relationship count, the primary `Apply to Board` action, and the optional `Arrange for readability` action; diagnostics and Terraform management details are available only when the user asks to see them.
+_Avoid_: Full scan report, provider diagnostics, import debug panel
 
 **IaC Preview**:
 The generated infrastructure-as-code representation of an infrastructure design before the user approves deployment.

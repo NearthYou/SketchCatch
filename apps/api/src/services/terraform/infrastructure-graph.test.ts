@@ -55,6 +55,52 @@ test("buildInfrastructureGraphFromDiagramJson projects renderable resource nodes
   ]);
 });
 
+test("Reverse Engineering provenance와 관찰 정보는 Terraform argument로 내보내지 않는다", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "imported-bucket",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        label: "existing bucket",
+        metadata: {
+          reverseEngineering: {
+            source: "aws_scan",
+            protectedValueKeys: [],
+            editableValueKeys: [],
+            importDecision: {
+              version: 1,
+              mode: "import_existing",
+              statusAtConfirmation: "ready"
+            }
+          }
+        },
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket",
+          resourceName: "existing_bucket",
+          fileName: "storage",
+          values: {
+            bucket: "existing-bucket",
+            providerResourceId: "existing-bucket",
+            providerResourceType: "AWS::S3::Bucket",
+            reverseEngineeringSourceScanId: "scan-1",
+            reverseEngineeringDraftId: "draft-1",
+            reverseEngineeringSourceKind: "saved_scan",
+            reverseEngineeringManagement: "managed",
+            reverseEngineeringObservedConfig: { createdAt: "2026-07-20" },
+            terraformFileName: "storage"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(graph.nodes[0]?.config, { bucket: "existing-bucket" });
+});
+
 test("Template presentation nodes and edges stay outside the Terraform infrastructure graph", () => {
   // Terraform planning must see the same deployable graph that existed before Design presentation was added.
   for (const definition of templateDefinitions) {
@@ -249,7 +295,10 @@ test("buildInfrastructureGraphFromDiagramJson fail-closes analysis-excluded reso
 
   const graph = buildInfrastructureGraphFromDiagramJson(diagramJson);
 
-  assert.deepEqual(graph.nodes.map((node) => node.id), ["vpc-1"]);
+  assert.deepEqual(
+    graph.nodes.map((node) => node.id),
+    ["vpc-1"]
+  );
   assert.deepEqual(graph.edges, []);
   assert.doesNotMatch(
     generateTerraformFromDiagramJson(diagramJson),
@@ -436,6 +485,53 @@ test("buildInfrastructureGraphFromDiagramJson excludes design, parameterless, an
   });
 
   assert.deepEqual(graph.nodes, []);
+});
+
+test("Board 자동 표시 프레임은 Terraform 모양의 값이 있어도 infrastructure graph에서 제외한다", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "board-auto-frame:group",
+        type: "design_group",
+        kind: "design",
+        label: "자동 표시 영역",
+        metadata: { presentationCatalogItemId: "design-group" },
+        parameters: {
+          resourceType: "aws_instance",
+          resourceName: "must_not_render",
+          fileName: "main.tf",
+          values: { instance_type: "m7i.large" }
+        }
+      }),
+      makeNode({
+        id: "instance-1",
+        type: "aws_instance",
+        kind: "resource",
+        label: "API Server",
+        parameters: {
+          resourceType: "aws_instance",
+          resourceName: "api",
+          fileName: "main.tf",
+          values: { instance_type: "t3.micro" }
+        }
+      })
+    ],
+    edges: [
+      {
+        id: "frame-membership",
+        sourceNodeId: "board-auto-frame:group",
+        targetNodeId: "instance-1",
+        label: "contains"
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(
+    graph.nodes.map((node) => node.id),
+    ["instance-1"]
+  );
+  assert.deepEqual(graph.edges, []);
 });
 
 test("buildInfrastructureGraphFromDiagramJson excludes Region and AZ area resources from Terraform Preview", () => {
@@ -713,6 +809,113 @@ test("buildInfrastructureGraphFromDiagramJson keeps edges only between projected
   ]);
 });
 
+test("Reverse Engineering source가 선택하지 않은 source를 참조하면 불완전 Terraform을 차단한다", () => {
+  const diagramJson = {
+    nodes: [
+      makeReverseEngineeringNode({
+        id: "resource-subnet",
+        resourceType: "aws_subnet",
+        resourceName: "resource_subnet",
+        mode: "observe_only",
+        values: {
+          vpcId: "vpc-0123456789abcdef0",
+          cidrBlock: "10.0.1.0/24"
+        }
+      }),
+      makeReverseEngineeringNode({
+        id: "resource-nat",
+        resourceType: "aws_nat_gateway",
+        resourceName: "resource_nat",
+        mode: "import_existing",
+        values: {
+          subnetId: "aws_subnet.resource_subnet.id",
+          connectivityType: "private"
+        }
+      })
+    ],
+    edges: [
+      {
+        id: "nat-subnet",
+        sourceNodeId: "resource-nat",
+        targetNodeId: "resource-subnet"
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const graph = buildInfrastructureGraphFromDiagramJson(diagramJson);
+
+  assert.deepEqual(graph.nodes, []);
+  assert.deepEqual(graph.edges, []);
+  assert.doesNotMatch(
+    generateTerraformFromDiagramJson(diagramJson),
+    /aws_subnet\.resource_subnet\.id/u
+  );
+});
+
+test("Reverse Engineering 의존성이 여러 단계로 끊기면 상위 source도 함께 차단한다", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeReverseEngineeringNode({
+        id: "resource-subnet",
+        resourceType: "aws_subnet",
+        resourceName: "resource_subnet",
+        mode: "observe_only",
+        values: {}
+      }),
+      makeReverseEngineeringNode({
+        id: "resource-nat",
+        resourceType: "aws_nat_gateway",
+        resourceName: "resource_nat",
+        mode: "import_existing",
+        values: { subnetId: "aws_subnet.resource_subnet.id" }
+      }),
+      makeReverseEngineeringNode({
+        id: "resource-route",
+        resourceType: "aws_route_table",
+        resourceName: "resource_route",
+        mode: "import_existing",
+        values: {
+          route: [
+            {
+              cidrBlock: "0.0.0.0/0",
+              natGatewayId: "aws_nat_gateway.resource_nat.id"
+            }
+          ]
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(graph.nodes, []);
+});
+
+test("Reverse Engineering의 실제 AWS ID 문자열은 선택 의존성으로 오인하지 않는다", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeReverseEngineeringNode({
+        id: "resource-subnet",
+        resourceType: "aws_subnet",
+        resourceName: "resource_subnet",
+        mode: "import_existing",
+        values: {
+          vpcId: "vpc-0123456789abcdef0",
+          cidrBlock: "10.0.1.0/24"
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(
+    graph.nodes.map((node) => node.id),
+    ["resource-subnet"]
+  );
+});
+
 test("Terraform preview support is read from shared resource definitions", () => {
   const infrastructureGraphSource = readTerraformServiceFile("infrastructure-graph.ts");
   const terraformSyncSource = readTerraformServiceFile("terraform-to-diagram.ts");
@@ -742,6 +945,52 @@ function makeNode(
     zIndex: 0,
     ...node
   };
+}
+
+/** gg: graph fail-close 회귀에 필요한 서버 확정 source node를 만듭니다. */
+function makeReverseEngineeringNode({
+  id,
+  resourceType,
+  resourceName,
+  mode,
+  values
+}: {
+  id: string;
+  resourceType: string;
+  resourceName: string;
+  mode: "import_existing" | "observe_only";
+  values: Record<string, unknown>;
+}): DiagramNode {
+  return makeNode({
+    id,
+    type: resourceType,
+    kind: "resource",
+    label: id,
+    metadata: {
+      reverseEngineering: {
+        source: "aws_scan",
+        protectedValueKeys: [],
+        editableValueKeys: [],
+        importDecision: {
+          version: 1,
+          mode,
+          statusAtConfirmation: "ready"
+        }
+      }
+    },
+    parameters: {
+      terraformBlockType: "resource",
+      resourceType,
+      resourceName,
+      fileName: "reverse-engineering",
+      values: {
+        ...values,
+        reverseEngineeringSourceScanId: "scan-1",
+        reverseEngineeringDraftId: "draft-1",
+        reverseEngineeringSourceKind: "saved_scan"
+      }
+    }
+  });
 }
 
 function readTerraformServiceFile(fileName: string): string {

@@ -32,9 +32,11 @@ export type InitialWorkspacePanelState = Pick<
 >;
 
 export function deriveInitialWorkspacePanelState({
+  emptyBoardPanelState,
   hasDiagramNodes,
   isCompactViewport
 }: {
+  readonly emptyBoardPanelState?: InitialWorkspacePanelState | undefined;
   readonly hasDiagramNodes: boolean;
   readonly isCompactViewport: boolean;
 }): InitialWorkspacePanelState {
@@ -42,7 +44,7 @@ export function deriveInitialWorkspacePanelState({
     return { leftPanelOpen: false, rightPanelOpen: false };
   }
 
-  return { leftPanelOpen: true, rightPanelOpen: false };
+  return emptyBoardPanelState ?? { leftPanelOpen: true, rightPanelOpen: false };
 }
 
 type PanelPreferenceStorage = {

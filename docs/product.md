@@ -1,6 +1,6 @@
 # 제품 방향
 
-SketchCatch는 자연어/음성 요구사항, Source Repository, 기존 클라우드 상태를 입력으로 받아 provider-neutral ?명봽???ㅺ퀎를 만들고, AI/Bedrock/Amazon Q로 설계와 위험을 보강하며, Terraform IaC Preview, CI/CD Integration, managed deployment, Reverse Engineering까지 연결하는 **multi-cloud-ready IaC 운영 서비스**다.
+SketchCatch는 자연어/음성 요구사항, Source Repository, 기존 클라우드 상태를 입력으로 받아 provider-neutral 인프라 설계를 만들고, AI/Bedrock/Amazon Q로 설계와 위험을 보강하며, Terraform IaC Preview, CI/CD Integration, managed deployment, Reverse Engineering까지 연결하는 **multi-cloud-ready IaC 운영 서비스**다.
 
 MVP는 AWS와 Terraform을 기준으로 구현한다. 다만 제품 모델은 AWS 전용이 아니라 Provider Adapter를 통한 Azure, GCP 등 다른 클라우드 확장을 전제로 한다.
 
@@ -38,7 +38,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 - 배포 전 비용, 보안, 설정 위험을 보여주되 High Security Risk도 사용자 검토 정보로 유지하며 Terraform Plan 승인은 허용한다.
 - 사용자가 승인한 Terraform Plan만 managed deployment로 실제 클라우드에 반영한다.
 - 팀 운영 배포는 Source Repository와 CI/CD Integration으로 넘긴다.
-- Reverse Engineering은 기존 클라우드 Resource를 Provider Adapter로 스캔해 ?명봽???ㅺ퀎와 IaC Preview/import 제안으로 전환한다.
+- Reverse Engineering은 기존 클라우드 Resource를 Provider Adapter로 스캔해 인프라 설계로 복원하고, 사용자가 선택할 때만 보드에 저장한다.
 - 실제 배포 기록, 로그, output, cleanup 상태를 Deployment History에 남긴다.
 
 ## 대상 사용자
@@ -54,20 +54,20 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 
 ## 유지할 핵심 기능
 
-| 기능                           | 기준                                                                                                                                                                                                                                                                                             |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Requirement Input              | 텍스트와 Voice Requirement Input을 Requirement Prompt로 정규화한다.                                                                                                                                                                                                                              |
-| AI Architecture Recommendation | Requirement Prompt를 Architecture Draft로 변환하고 수락 전 설명을 제공한다.                                                                                                                                                                                                                      |
-| 다이어그램 편집                | Architecture Board에서 Resource와 관계를 직접 수정한다.                                                                                                                                                                                                                                          |
-| Board 자동 정리                | Resource·관계·설정은 유지하고 위치·영역 배치·연결선 모양만 정리한 미리보기를 사용자가 비교하고 선택하게 한다.                                                                                                                                                                                    |
-| Terraform 생성                 | 다이어그램 기반 설계를 IaC Preview로 변환한다.                                                                                                                                                                                                                                                   |
-| deployment check           | 비용, 보안, 설정 위험을 설명하고 수정 방향을 제안한다.                                                                                                                                                                                                                                           |
-| managed deployment         | sandbox/practice 실행에서 Plan, 승인, Apply, 로그, Outputs, Auto Cleanup까지 연결한다.                                                                                                                                                                                                           |
-| Live Observation               | 성공한 Demo Web Service Deployment의 실제 요청, CloudWatch 측정값, ASG/EC2 또는 ECS/Fargate runtime 상태를 15분 세션으로 관측한다. 트래픽 흐름 아래에서는 현재 상태와 사용자 영향, 근거가 있는 중요 신호 최대 3개, 확인할 수 없는 내용을 짧게 보여주며 CloudWatch의 지표 목록을 복제하지 않는다. |
+| 기능 | 기준 |
+| --- | --- |
+| Requirement Input | 텍스트와 Voice Requirement Input을 Requirement Prompt로 정규화한다. |
+| AI Architecture Recommendation | Requirement Prompt를 Architecture Draft로 변환하고 수락 전 설명을 제공한다. |
+| 다이어그램 편집 | Architecture Board에서 Resource와 관계를 직접 수정한다. |
+| Board 자동 정리 | Resource·관계·설정·실제 소속은 유지하고 위치·크기·소속 없는 표시 프레임·연결선 모양만 정리한 최대 3개의 정리안을 사용자가 원본과 비교하고 하나를 선택하게 한다. 데스크톱은 thumbnail 갤러리와 좌우 비교, 모바일은 가로 갤러리와 원본/정리안 전환을 사용한다. 표시 프레임은 일반 Board 편집에 자동으로 따라가지 않고 다음 자동 정리 요청 때 다시 계산한다. 안전한 시각 변경이 있으면 측정상 개선 여부와 관계없이 비교·적용할 수 있다. |
+| Terraform 생성 | 다이어그램 기반 설계를 IaC Preview로 변환한다. |
+| deployment check | 비용, 보안, 설정 위험을 설명하고 수정 방향을 제안한다. |
+| managed deployment | sandbox/practice 실행에서 Plan, 승인, Apply, 로그, Outputs, Auto Cleanup까지 연결한다. |
+| Live Observation | 성공한 Demo Web Service Deployment의 실제 요청, CloudWatch 측정값, ASG/EC2 또는 ECS/Fargate runtime 상태를 15분 세션으로 관측한다. 트래픽 흐름 아래에서는 현재 상태와 사용자 영향, 근거가 있는 중요 신호 최대 3개, 확인할 수 없는 내용을 짧게 보여주며 CloudWatch의 지표 목록을 복제하지 않는다. |
+| CI/CD Integration | IaC Preview를 Source Repository PR과 외부 pipeline 상태로 연결한다. |
+| Reverse Engineering | 기존 클라우드 상태를 인프라 설계로 복원한다. `보드에 적용`은 구조를 보드에 저장하는 동작만 뜻하며, Terraform 코드 생성·import나 AWS 변경은 별도 Terraform 작업 흐름에서만 수행한다. |
 
 Live Observation은 실제 배포 앱의 check-in/heartbeat 성공 뒤 collector가 확인한 Store receipt의 10초 rolling pressure가 `warning` 이상이 되면 같은 관측 화면에 경고를 유지한다. AI Design Simulation은 배포 Architecture와 비민감 관측 수치로 용량 설정 검토 방향을 제안한다. 사용자가 직접 승인한 경우에만 정확히 하나의 ECS Application Auto Scaling Target에서 정수 `max_capacity`를 1 증가시켜 Project Draft에 저장한다. 저장 성공 뒤 경고를 해제하되 실제 AWS 반영이나 정상화로 표현하지 않으며 새 Plan, 승인, 재배포 경계는 그대로 유지한다.
-| CI/CD Integration | IaC Preview를 Source Repository PR과 외부 pipeline 상태로 연결한다. |
-| Reverse Engineering | 기존 클라우드 상태를 ?명봽???ㅺ퀎와 IaC Preview/import 제안으로 전환한다. |
 
 ## 축소할 기능
 
@@ -78,16 +78,16 @@ Live Observation은 실제 배포 앱의 check-in/heartbeat 성공 뒤 collector
 
 ## 강화할 기능
 
-| 기능                        | 기준                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 실제 AWS managed deployment  | Plan, 승인, Apply, 로그, Outputs, Destroy/Cleanup까지 연결한다.                                                                                                                                                                                                                                                                                                                                                                                                  |
-| CI/CD 운영 경로         | Terraform commit/PR, pipeline template, Plan 결과, 실행 상태를 연결한다.                                                                                                                                                                                                                                                                                                                                                                                         |
-| Application Artifact 재사용 | managed deployment와 CI/CD가 같은 provider-neutral Registry를 사용하되 provider의 실제 artifact와 project ownership을 다시 검증한 경우에만 build를 재사용한다.                                                                                                                                                                                                                                                                                                |
-| Runtime Convergence         | 동일한 Application Artifact와 runtime configuration이 provider에서 healthy 상태로 실제 실행 중인 경우에만 rollout을 생략한다. DB나 Runtime Cache 기록만으로 성공 처리하지 않으며 provider 조회 실패·불일치·unhealthy 상태는 안전한 rollout으로 fallback한다. ECS Service(Fargate/EC2 Capacity Provider), 단일 EC2, EC2+ASG, EKS(Managed/Self-managed/Fargate), Kubernetes Deployment, Lambda Alias/Version, Static S3/CloudFront는 독립 Adapter 경계를 유지한다. |
-| 리버스 엔지니어링           | Provider Adapter로 기존 cloud Resource를 가져와 Architecture Board와 IaC Preview/import 제안으로 복원한다. MVP는 AWS-first로 시작한다.                                                                                                                                                                                                                                                                                                                           |
-| 비용 분석                   | ?명봽???ㅺ퀎, IaC Preview, Deployment Plan, Deployment History 단위의 Cost Risk를 보여준다.                                                                                                                                                                                                                                                                                                                                                             |
-| Well-Architected 기반 리뷰  | 보안, 비용, 신뢰성, 성능, 운영 관점으로 아키텍처를 리뷰한다.                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Runtime Cache               | Redis를 내부 Runtime Cache로 사용해 Deployment, Reverse Engineering, CI/CD 상태 추적과 로그 스트리밍을 보조한다.                                                                                                                                                                                                                                                                                                                                             |
+| 기능 | 기준 |
+| --- | --- |
+| 실제 AWS managed deployment | Plan, 승인, Apply, 로그, Outputs, Destroy/Cleanup까지 연결한다. |
+| CI/CD 운영 경로 | Terraform commit/PR, pipeline template, Plan 결과, 실행 상태를 연결한다. |
+| Application Artifact 재사용 | managed deployment와 CI/CD가 같은 provider-neutral Registry를 사용하되 provider의 실제 artifact와 project ownership을 다시 검증한 경우에만 build를 재사용한다. |
+| Runtime Convergence | 동일한 Application Artifact와 runtime configuration이 provider에서 healthy 상태로 실제 실행 중인 경우에만 rollout을 생략한다. DB나 Runtime Cache 기록만으로 성공 처리하지 않으며 provider 조회 실패·불일치·unhealthy 상태는 안전한 rollout으로 fallback한다. ECS Service(Fargate/EC2 Capacity Provider), 단일 EC2, EC2+ASG, EKS(Managed/Self-managed/Fargate), Kubernetes Deployment, Lambda Alias/Version, Static S3/CloudFront는 독립 Adapter 경계를 유지한다. |
+| 리버스 엔지니어링 | Provider Adapter로 기존 cloud Resource를 원본 그대로 복원한다. 일부 reader 권한이 부족해도 읽은 Resource는 유지하고, 읽지 못한 AWS 서비스·필요 API 권한·재시도 방법은 별도로 안내한다. 표시 타입을 팔레트 아이콘으로 정규화해도 providerResourceType과 실제 AWS 상태는 보존한다. `보드에 적용`은 가져온 구조를 저장할 뿐 Terraform 코드 생성·import·실행이나 AWS 변경을 수행하지 않는다. 기존 연결의 Stack·Role·배포 권한은 유지하고, 연결별 Manager Stack은 CloudFormation 실행·제어·정리 확인 권한을, Policy Stack은 Reverse Engineering 읽기 Policy만 소유한다. 사용자는 Manager Stack을 AWS Console에서 승인하며 Policy Stack은 환경설정의 명시적 승인 뒤 서버가 생성·갱신한다. 제거는 Policy Stack 다음 Manager Stack 순서이며, SketchCatch가 소유한 Stack·Policy·Role 제거를 확인할 수 없으면 비활성 재시도 상태로 유지한다. MVP는 AWS-first로 시작한다. |
+| 비용 분석 | 인프라 설계, IaC Preview, Deployment Plan, Deployment History 단위의 Cost Risk를 보여준다. |
+| Well-Architected 기반 리뷰 | 보안, 비용, 신뢰성, 성능, 운영 관점으로 아키텍처를 리뷰한다. |
+| Runtime Cache | Redis를 내부 Runtime Cache로 사용해 Deployment, Reverse Engineering, CI/CD 상태 추적과 로그 스트리밍을 보조한다. |
 
 공개 Repository는 GitHub 계정 연결 없이 분석하고 Architecture Board를 만들 수 있다. 분석 결과의 `AI로 직접 설계`는 저장된 프로젝트가 없어도 분석한 프로젝트 이름으로 AI 다이어그램 설계 채팅을 즉시 시작하며, 기존 프로젝트에서 시작한 경우에는 해당 프로젝트 문맥을 유지한다. Board 저장 시 Repository URL, branch, 분석 commit SHA와 선택 Template을 프로젝트의 `RepositoryAnalysisRecord`에 저장한다. 공개 조회에 실패하면 실제 공개/비공개 여부를 단정하지 않고 입력 오류 또는 접근 제한 가능성을 함께 안내한다. GitHub가 연결되어 있으면 입력한 owner/name과 정확히 일치하는 Repository만 연결하고, 연결되어 있지 않으면 전역 GitHub 연결 또는 Repository 권한 추가로 이어진다.
 
@@ -199,7 +199,7 @@ MVP에서 하지 않는다.
 | AWS 비용 사고              | 원치 않는 비용 발생                             | 리소스 whitelist, 비용 경고, Destroy/Cleanup 필수                   |
 | 보안 위험 설정             | 공개 SSH, Public DB 등                          | deployment check, High 위험 강조 표시, 사용자 Plan 승인 기록    |
 | CI/CD 권한 오남용      | 운영 배포 경로 사고                             | PR 기반 handoff, pipeline status tracking, 승인 gate                |
-| Reverse Engineering 오해석 | 기존 cloud state와 ?명봽???ㅺ퀎 불일치 | Provider Adapter 범위 명시, import suggestion은 사용자 확인 후 적용 |
+| Reverse Engineering 오해석 | 기존 cloud state와 인프라 설계 불일치 | Provider Adapter 범위 명시, 원본 보존과 보드 저장·Terraform 작업·AWS 변경 경계를 명확히 표시 |
 | 로그/응답 secret 노출      | credential 유출                                 | 로그 마스킹, shared type secret 배제                                |
 | 팀 계약 불일치             | API 연결 단계에서 깨짐                          | `docs/data-models.md`와 `packages/types` 선반영                     |
 
@@ -207,7 +207,7 @@ MVP에서 하지 않는다.
 
 `CONTEXT.md`의 용어를 우선한다.
 
-- 사용자가 만드는 설계는 **?명봽???ㅺ퀎**
+- 사용자가 만드는 설계는 **인프라 설계**
 - 사용자가 입력하는 요구사항은 **Requirement Input**, 확정된 자연어 요구사항은 **Requirement Prompt**
 - 음성 요구사항 입력은 **Voice Requirement Input**
 - 시각 편집 화면은 **Architecture Board**

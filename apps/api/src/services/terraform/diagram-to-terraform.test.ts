@@ -85,6 +85,146 @@ resource "aws_subnet" "public" {
   );
 });
 
+test("renders Reverse Engineering metadata that looks like Terraform references as literal text", () => {
+  const referenceLikeText = "aws_s3_bucket.literal.arn";
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "secret",
+        label: "secret",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_secretsmanager_secret",
+          resourceName: "secret",
+          fileName: "main"
+        },
+        config: {
+          name: referenceLikeText,
+          description:
+            `${referenceLikeText} \${${referenceLikeText}} ` + "$${already_safe}",
+          kmsKeyId: "aws_kms_key.main.arn",
+          tags: {
+            [referenceLikeText]: referenceLikeText
+          }
+        }
+      },
+      {
+        id: "origin-access-control",
+        label: "origin_access_control",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_cloudfront_origin_access_control",
+          resourceName: "origin_access_control",
+          fileName: "main"
+        },
+        config: {
+          name: referenceLikeText,
+          description: referenceLikeText,
+          originAccessControlOriginType: "s3",
+          signingBehavior: "always",
+          signingProtocol: "sigv4"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /name = "aws_s3_bucket\.literal\.arn"/);
+  assert.match(
+    terraform,
+    /description = "aws_s3_bucket\.literal\.arn \$\$\{aws_s3_bucket\.literal\.arn\} \$\$\{already_safe\}"/
+  );
+  assert.match(
+    terraform,
+    /"aws_s3_bucket\.literal\.arn" = "aws_s3_bucket\.literal\.arn"/
+  );
+  assert.match(terraform, /kms_key_id = aws_kms_key\.main\.arn/);
+  assert.doesNotMatch(terraform, /name = aws_s3_bucket\.literal\.arn/);
+  assert.doesNotMatch(terraform, /description = aws_s3_bucket\.literal\.arn/);
+});
+
+test("renders CloudFront routing identifiers as literals while keeping relationship fields as references", () => {
+  const referenceLikeIdentifier = "aws_lb.application.id";
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "distribution",
+        label: "distribution",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_cloudfront_distribution",
+          resourceName: "distribution",
+          fileName: "main"
+        },
+        config: {
+          enabled: true,
+          comment: referenceLikeIdentifier,
+          origin: [
+            {
+              originId: referenceLikeIdentifier,
+              domainName: "aws_lb.application.dns_name",
+              originAccessControlId: "aws_cloudfront_origin_access_control.application.id",
+              customOriginConfig: {
+                httpPort: 80,
+                httpsPort: 443,
+                originProtocolPolicy: "http-only",
+                originSslProtocols: ["TLSv1.2"]
+              }
+            }
+          ],
+          defaultCacheBehavior: {
+            targetOriginId: referenceLikeIdentifier,
+            viewerProtocolPolicy: "redirect-to-https",
+            allowedMethods: ["GET", "HEAD"],
+            cachedMethods: ["GET", "HEAD"],
+            cachePolicyId: "aws_cloudfront_cache_policy.application.id"
+          },
+          orderedCacheBehavior: [
+            {
+              pathPattern: referenceLikeIdentifier,
+              targetOriginId: referenceLikeIdentifier,
+              viewerProtocolPolicy: "redirect-to-https",
+              allowedMethods: ["GET", "HEAD"],
+              cachedMethods: ["GET", "HEAD"],
+              cachePolicyId: "aws_cloudfront_cache_policy.application.id"
+            }
+          ],
+          restrictions: {
+            geoRestriction: {
+              restrictionType: "none"
+            }
+          },
+          viewerCertificate: {
+            cloudfrontDefaultCertificate: true
+          }
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /comment = "aws_lb\.application\.id"/u);
+  assert.match(terraform, /origin_id = "aws_lb\.application\.id"/u);
+  assert.equal(terraform.match(/target_origin_id = "aws_lb\.application\.id"/gu)?.length, 2);
+  assert.match(terraform, /path_pattern = "aws_lb\.application\.id"/u);
+  assert.match(terraform, /domain_name = aws_lb\.application\.dns_name/u);
+  assert.match(
+    terraform,
+    /origin_access_control_id = aws_cloudfront_origin_access_control\.application\.id/u
+  );
+  assert.equal(
+    terraform.match(/cache_policy_id = aws_cloudfront_cache_policy\.application\.id/gu)?.length,
+    2
+  );
+});
+
 test("renders S3 buckets without synthetic companion resources", () => {
   const graph: InfrastructureGraph = {
     nodes: [
@@ -152,6 +292,107 @@ test("renders generated random password references as Terraform expressions", ()
 
   assert.match(terraform, /secret_string = random_password\.runtime\.result/u);
   assert.doesNotMatch(terraform, /secret_string = "random_password\.runtime\.result"/u);
+});
+
+test("literal Terraform template markers are escaped without changing intended references", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "metadata-secret",
+        label: "metadata_secret",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_secretsmanager_secret",
+          resourceName: "metadata_secret",
+          fileName: "main"
+        },
+        config: {
+          name: "plain-secret",
+          description:
+            "literal-${not_a_reference}-%{ if true }value%{ endif }-$${already_safe}-%%{ safe }",
+          kmsKeyId: "aws_kms_key.main.arn",
+          tags: {
+            "Owner${literal}": "team-%{ not_a_directive }"
+          }
+        }
+      },
+      {
+        id: "metadata-oac",
+        label: "metadata_oac",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_cloudfront_origin_access_control",
+          resourceName: "metadata_oac",
+          fileName: "main"
+        },
+        config: {
+          name: "plain-oac",
+          description: "origin-${literal}-%{ endif }",
+          originAccessControlOriginType: "s3",
+          signingBehavior: "always",
+          signingProtocol: "sigv4"
+        }
+      },
+      {
+        id: "inline-lambda",
+        label: "inline_lambda",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_lambda_function",
+          resourceName: "inline_lambda",
+          fileName: "main"
+        },
+        config: {
+          functionName: "inline-lambda",
+          inlineSource: "export const label = `${literal}`;"
+        }
+      },
+      {
+        id: "bucket-policy",
+        label: "bucket_policy",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket_policy",
+          resourceName: "logs",
+          fileName: "main"
+        },
+        config: {
+          bucket: "aws_s3_bucket.logs.id",
+          policy: JSON.stringify({
+            Resource: [
+              "arn:aws:s3:::logs/home/${aws:username}/*",
+              "${aws_s3_bucket.logs.arn}/*"
+            ],
+            Note: "%{ if enabled }literal%{ endif }"
+          })
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.ok(terraform.includes('name = "plain-secret"'));
+  assert.ok(
+    terraform.includes(
+      'description = "literal-$${not_a_reference}-%%{ if true }value%%{ endif }-$${already_safe}-%%{ safe }"'
+    )
+  );
+  assert.match(terraform, /kms_key_id = aws_kms_key\.main\.arn/u);
+  assert.ok(terraform.includes('"Owner$${literal}" = "team-%%{ not_a_directive }"'));
+  assert.ok(terraform.includes('description = "origin-$${literal}-%%{ endif }"'));
+  assert.match(terraform, /bucket = aws_s3_bucket\.logs\.id/u);
+  assert.ok(terraform.includes("$${aws:username}"));
+  assert.ok(terraform.includes("${aws_s3_bucket.logs.arn}/*"));
+  assert.ok(terraform.includes("%%{ if enabled }literal%%{ endif }"));
+  assert.ok(terraform.includes('source_content = "export const label = `$${literal}`;"'));
+  assert.ok(!terraform.includes("$$${already_safe}"));
+  assert.ok(!terraform.includes("%%%{ safe }"));
 });
 
 test("renders managed web bucket versioning and protects release-managed bootstrap content", () => {
@@ -246,11 +487,11 @@ test("renders an explicit S3 public access block once", () => {
 
   const terraformCode = renderTerraformFromInfrastructureGraph(graph);
 
-  assert.equal(
-    terraformCode.match(/resource "aws_s3_bucket_public_access_block"/g)?.length,
-    1
+  assert.equal(terraformCode.match(/resource "aws_s3_bucket_public_access_block"/g)?.length, 1);
+  assert.match(
+    terraformCode,
+    /resource "aws_s3_bucket_public_access_block" "service_bucket_public_access"/
   );
-  assert.match(terraformCode, /resource "aws_s3_bucket_public_access_block" "service_bucket_public_access"/);
 });
 
 test("renders Security Group ingress and egress as Terraform nested blocks", () => {
@@ -382,7 +623,8 @@ test("renders Autoscaling Policy nested target tracking configuration", () => {
             predefinedMetricSpecification: [
               {
                 predefinedMetricType: "ALBRequestCountPerTarget",
-                resourceLabel: "${aws_lb.load_balancer.arn_suffix}/${aws_lb_target_group.target_group.arn_suffix}"
+                resourceLabel:
+                  "${aws_lb.load_balancer.arn_suffix}/${aws_lb_target_group.target_group.arn_suffix}"
               }
             ]
           }
@@ -435,10 +677,12 @@ test("renders ECS Fargate Live Observation outputs and Application Auto Scaling 
         serviceNamespace: "aws_appautoscaling_target.api.service_namespace",
         targetTrackingScalingPolicyConfiguration: {
           targetValue: 60,
-          predefinedMetricSpecification: [{
-            predefinedMetricType: "ALBRequestCountPerTarget",
-            resourceLabel: "${aws_lb.demo.arn_suffix}/${aws_lb_target_group.api.arn_suffix}"
-          }]
+          predefinedMetricSpecification: [
+            {
+              predefinedMetricType: "ALBRequestCountPerTarget",
+              resourceLabel: "${aws_lb.demo.arn_suffix}/${aws_lb_target_group.api.arn_suffix}"
+            }
+          ]
         }
       })
     ],
@@ -462,9 +706,11 @@ test("renders application delivery outputs for a single-task Fargate topology", 
     nodes: [
       createLiveObservationNode("aws_s3_bucket", "web_assets", {}),
       createLiveObservationNode("aws_cloudfront_distribution", "web", {
-        defaultCacheBehavior: [{
-          allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-        }]
+        defaultCacheBehavior: [
+          {
+            allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+          }
+        ]
       }),
       createLiveObservationNode("aws_ecr_repository", "api_image", {}),
       createLiveObservationNode("aws_lb", "demo", {}),
@@ -473,7 +719,7 @@ test("renders application delivery outputs for a single-task Fargate topology", 
       createLiveObservationNode("aws_ecs_service", "api", {
         loadBalancer: {
           targetGroupArn: "aws_lb_target_group.api.arn",
-          containerName: "api",
+          containerName: "api-${literal}",
           containerPort: 3000
         }
       }),
@@ -484,23 +730,50 @@ test("renders application delivery outputs for a single-task Fargate topology", 
 
   const terraform = renderTerraformFromInfrastructureGraph(graph);
 
-  assert.match(terraform, /output "static_site_url"[\s\S]*aws_cloudfront_distribution\.web\.domain_name/);
-  assert.match(terraform, /output "api_base_url"[\s\S]*aws_cloudfront_distribution\.web\.domain_name/);
-  assert.match(terraform, /output "static_site_bucket_name"[\s\S]*aws_s3_bucket\.web_assets\.bucket/);
-  assert.match(terraform, /output "cloudfront_distribution_id"[\s\S]*aws_cloudfront_distribution\.web\.id/);
-  assert.match(terraform, /output "cloudfront_domain_name"[\s\S]*aws_cloudfront_distribution\.web\.domain_name/);
+  assert.match(
+    terraform,
+    /output "static_site_url"[\s\S]*aws_cloudfront_distribution\.web\.domain_name/
+  );
+  assert.match(
+    terraform,
+    /output "api_base_url"[\s\S]*aws_cloudfront_distribution\.web\.domain_name/
+  );
+  assert.match(
+    terraform,
+    /output "static_site_bucket_name"[\s\S]*aws_s3_bucket\.web_assets\.bucket/
+  );
+  assert.match(
+    terraform,
+    /output "cloudfront_distribution_id"[\s\S]*aws_cloudfront_distribution\.web\.id/
+  );
+  assert.match(
+    terraform,
+    /output "cloudfront_domain_name"[\s\S]*aws_cloudfront_distribution\.web\.domain_name/
+  );
   assert.match(terraform, /output "cloudfront_url"[\s\S]*https:\/\//);
   assert.match(terraform, /output "static_bucket_name"[\s\S]*aws_s3_bucket\.web_assets\.bucket/);
   assert.match(terraform, /output "ecr_repository_name"[\s\S]*aws_ecr_repository\.api_image\.name/);
   assert.match(terraform, /output "ecr_repository_arn"[\s\S]*aws_ecr_repository\.api_image\.arn/);
-  assert.match(terraform, /output "ecr_repository_url"[\s\S]*aws_ecr_repository\.api_image\.repository_url/);
+  assert.match(
+    terraform,
+    /output "ecr_repository_url"[\s\S]*aws_ecr_repository\.api_image\.repository_url/
+  );
   assert.match(terraform, /output "ecs_task_family"[\s\S]*aws_ecs_task_definition\.api\.family/);
-  assert.match(terraform, /output "ecs_task_definition_arn"[\s\S]*aws_ecs_task_definition\.api\.arn/);
-  assert.match(terraform, /output "ecs_task_role_arn"[\s\S]*aws_ecs_task_definition\.api\.task_role_arn/);
-  assert.match(terraform, /output "ecs_execution_role_arn"[\s\S]*aws_ecs_task_definition\.api\.execution_role_arn/);
+  assert.match(
+    terraform,
+    /output "ecs_task_definition_arn"[\s\S]*aws_ecs_task_definition\.api\.arn/
+  );
+  assert.match(
+    terraform,
+    /output "ecs_task_role_arn"[\s\S]*aws_ecs_task_definition\.api\.task_role_arn/
+  );
+  assert.match(
+    terraform,
+    /output "ecs_execution_role_arn"[\s\S]*aws_ecs_task_definition\.api\.execution_role_arn/
+  );
   assert.match(terraform, /output "ecs_cluster_name"[\s\S]*aws_ecs_cluster\.demo\.name/);
   assert.match(terraform, /output "ecs_service_name"[\s\S]*aws_ecs_service\.api\.name/);
-  assert.match(terraform, /output "ecs_container_name"[\s\S]*"api"/);
+  assert.match(terraform, /output "ecs_container_name"[\s\S]*"api-\$\$\{literal\}"/);
   assert.match(terraform, /output "ecs_container_port"[\s\S]*3000/);
   assert.match(terraform, /output "alb_arn"[\s\S]*aws_lb\.demo\.arn/);
   assert.match(terraform, /output "alb_dns_name"[\s\S]*aws_lb\.demo\.dns_name/);
@@ -528,9 +801,11 @@ test("does not emit an ECS request threshold from a CPU target tracking policy",
         resourceId: "aws_appautoscaling_target.api.resource_id",
         targetTrackingScalingPolicyConfiguration: {
           targetValue: 60,
-          predefinedMetricSpecification: [{
-            predefinedMetricType: "ECSServiceAverageCPUUtilization"
-          }]
+          predefinedMetricSpecification: [
+            {
+              predefinedMetricType: "ECSServiceAverageCPUUtilization"
+            }
+          ]
         }
       })
     ],
@@ -559,10 +834,13 @@ test("ECS request threshold rejects duplicate matching policies in either graph 
 });
 
 test("ECS request threshold rejects a contradictory selected-target policy", () => {
-  const graph = createEcsThresholdGraph([
-    createEcsRequestPolicy("valid", 60, "api"),
-    createEcsRequestPolicy("contradictory", 75, "sibling")
-  ], true);
+  const graph = createEcsThresholdGraph(
+    [
+      createEcsRequestPolicy("valid", 60, "api"),
+      createEcsRequestPolicy("contradictory", 75, "sibling")
+    ],
+    true
+  );
 
   const terraform = renderTerraformFromInfrastructureGraph(graph);
 
@@ -651,7 +929,10 @@ test("renders Live Observation outputs only for an explicit HTTPS ALB topology",
 
   const terraform = renderTerraformFromInfrastructureGraph(graph);
 
-  assert.match(terraform, /output "traffic_url"[\s\S]*https:\/\/\$\{aws_route53_record\.api\.name\}\/traffic/);
+  assert.match(
+    terraform,
+    /output "traffic_url"[\s\S]*https:\/\/\$\{aws_route53_record\.api\.name\}\/traffic/
+  );
   assert.match(terraform, /output "traffic_hostname"[\s\S]*aws_route53_record\.api\.name/);
   assert.match(terraform, /output "load_balancer_dns_name"[\s\S]*aws_lb\.demo\.dns_name/);
   assert.match(terraform, /output "load_balancer_arn"[\s\S]*aws_lb\.demo\.arn/);
@@ -705,7 +986,10 @@ test("Live Observation selects the explicitly linked ECS runtime instead of unre
   assert.match(terraform, /output "max_capacity"[\s\S]*value = 2/);
   assert.match(terraform, /output "log_group_name"[\s\S]*aws_cloudwatch_log_group\.api\.name/);
   assert.doesNotMatch(terraform, /output "ecs_service_name"[\s\S]*aws_ecs_service\.other\.name/);
-  assert.doesNotMatch(terraform, /output "log_group_name"[\s\S]*aws_cloudwatch_log_group\.other\.name/);
+  assert.doesNotMatch(
+    terraform,
+    /output "log_group_name"[\s\S]*aws_cloudwatch_log_group\.other\.name/
+  );
 });
 
 test("Live Observation does not cross a shared ECS task into a sibling service log", () => {
@@ -729,8 +1013,7 @@ test("Live Observation does not cross a shared ECS task into a sibling service l
       }),
       createLiveObservationNode("aws_appautoscaling_target", "selected", {
         maxCapacity: 3,
-        resourceId:
-          "service/${aws_ecs_cluster.shared.name}/${aws_ecs_service.selected.name}"
+        resourceId: "service/${aws_ecs_cluster.shared.name}/${aws_ecs_service.selected.name}"
       }),
       createLiveObservationNode("aws_cloudwatch_log_group", "selected", {}),
       createLiveObservationNode("aws_cloudwatch_log_group", "sibling", {})
@@ -807,13 +1090,41 @@ test("Live Observation does not cross a shared ASG IAM chain into a sibling log"
       })
     ],
     edges: [
-      { id: "selected-lt", sourceId: "aws_autoscaling_group-selected", targetId: "aws_launch_template-selected" },
-      { id: "selected-profile", sourceId: "aws_launch_template-selected", targetId: "aws_iam_instance_profile-shared" },
-      { id: "shared-role", sourceId: "aws_iam_instance_profile-shared", targetId: "aws_iam_role-shared" },
-      { id: "sibling-profile", sourceId: "aws_iam_instance_profile-shared", targetId: "aws_launch_template-sibling" },
-      { id: "sibling-lt", sourceId: "aws_launch_template-sibling", targetId: "aws_autoscaling_group-sibling" },
-      { id: "selected-log", sourceId: "aws_launch_template-selected", targetId: "aws_cloudwatch_log_group-selected" },
-      { id: "sibling-log", sourceId: "aws_autoscaling_group-sibling", targetId: "aws_cloudwatch_log_group-sibling" }
+      {
+        id: "selected-lt",
+        sourceId: "aws_autoscaling_group-selected",
+        targetId: "aws_launch_template-selected"
+      },
+      {
+        id: "selected-profile",
+        sourceId: "aws_launch_template-selected",
+        targetId: "aws_iam_instance_profile-shared"
+      },
+      {
+        id: "shared-role",
+        sourceId: "aws_iam_instance_profile-shared",
+        targetId: "aws_iam_role-shared"
+      },
+      {
+        id: "sibling-profile",
+        sourceId: "aws_iam_instance_profile-shared",
+        targetId: "aws_launch_template-sibling"
+      },
+      {
+        id: "sibling-lt",
+        sourceId: "aws_launch_template-sibling",
+        targetId: "aws_autoscaling_group-sibling"
+      },
+      {
+        id: "selected-log",
+        sourceId: "aws_launch_template-selected",
+        targetId: "aws_cloudwatch_log_group-selected"
+      },
+      {
+        id: "sibling-log",
+        sourceId: "aws_autoscaling_group-sibling",
+        targetId: "aws_cloudwatch_log_group-sibling"
+      }
     ]
   };
 
@@ -873,10 +1184,7 @@ test("Live Observation rejects an ASG alarm with an unresolved extra action", ()
       createLiveObservationNode("aws_cloudwatch_metric_alarm", "selected", {
         metricName: "RequestCountPerTarget",
         threshold: 75,
-        alarmActions: [
-          "aws_autoscaling_policy.selected.arn",
-          "aws_autoscaling_policy.missing.arn"
-        ],
+        alarmActions: ["aws_autoscaling_policy.selected.arn", "aws_autoscaling_policy.missing.arn"],
         dimensions: {
           LoadBalancer: "aws_lb.demo.arn_suffix",
           TargetGroup: "aws_lb_target_group.api.arn_suffix"
@@ -886,10 +1194,7 @@ test("Live Observation rejects an ASG alarm with an unresolved extra action", ()
     edges: []
   };
 
-  assert.doesNotMatch(
-    renderTerraformFromInfrastructureGraph(graph),
-    /output "traffic_url"/
-  );
+  assert.doesNotMatch(renderTerraformFromInfrastructureGraph(graph), /output "traffic_url"/);
 });
 
 test("Live Observation rejects conflicting sibling ASG ownership evidence", () => {
@@ -927,10 +1232,7 @@ test("Live Observation rejects conflicting sibling ASG ownership evidence", () =
     ]
   };
 
-  assert.doesNotMatch(
-    renderTerraformFromInfrastructureGraph(graph),
-    /output "traffic_url"/
-  );
+  assert.doesNotMatch(renderTerraformFromInfrastructureGraph(graph), /output "traffic_url"/);
 });
 
 test("Live Observation rejects an ASG request alarm scoped to another target group", () => {
@@ -959,10 +1261,7 @@ test("Live Observation rejects an ASG request alarm scoped to another target gro
     edges: []
   };
 
-  assert.doesNotMatch(
-    renderTerraformFromInfrastructureGraph(graph),
-    /output "traffic_url"/
-  );
+  assert.doesNotMatch(renderTerraformFromInfrastructureGraph(graph), /output "traffic_url"/);
 });
 
 test("Live Observation rejects an ASG alarm with an ambiguous scaling policy action", () => {
@@ -983,10 +1282,7 @@ test("Live Observation rejects an ASG alarm with an ambiguous scaling policy act
       createLiveObservationNode("aws_cloudwatch_metric_alarm", "ambiguous", {
         metricName: "RequestCountPerTarget",
         threshold: 75,
-        alarmActions: [
-          "aws_autoscaling_policy.first.arn",
-          "aws_autoscaling_policy.second.arn"
-        ]
+        alarmActions: ["aws_autoscaling_policy.first.arn", "aws_autoscaling_policy.second.arn"]
       })
     ],
     edges: [
@@ -1359,12 +1655,13 @@ function createEcsRequestPolicy(
     resourceId: "aws_appautoscaling_target.api.resource_id",
     targetTrackingScalingPolicyConfiguration: {
       targetValue,
-      predefinedMetricSpecification: [{
-        predefinedMetricType: "ALBRequestCountPerTarget",
-        resourceLabel:
-          "${aws_lb.demo.arn_suffix}/" +
-          `\${aws_lb_target_group.${targetGroupName}.arn_suffix}`
-      }]
+      predefinedMetricSpecification: [
+        {
+          predefinedMetricType: "ALBRequestCountPerTarget",
+          resourceLabel:
+            "${aws_lb.demo.arn_suffix}/" + `\${aws_lb_target_group.${targetGroupName}.arn_suffix}`
+        }
+      ]
     }
   });
 }
@@ -1444,25 +1741,30 @@ function createEcsObservationRuntime(
       createLiveObservationNode("aws_appautoscaling_target", name, {
         maxCapacity,
         resourceId:
-          `service/\${aws_ecs_cluster.${clusterName}.name}/` +
-          `\${aws_ecs_service.${name}.name}`
+          `service/\${aws_ecs_cluster.${clusterName}.name}/` + `\${aws_ecs_service.${name}.name}`
       }),
       createLiveObservationNode("aws_appautoscaling_policy", name, {
         resourceId: `aws_appautoscaling_target.${name}.resource_id`,
         targetTrackingScalingPolicyConfiguration: {
           targetValue: 60,
-          predefinedMetricSpecification: [{
-            predefinedMetricType: "ALBRequestCountPerTarget",
-            resourceLabel:
-              "${aws_lb.selected.arn_suffix}/" +
-              `\${aws_lb_target_group.${targetGroupName}.arn_suffix}`
-          }]
+          predefinedMetricSpecification: [
+            {
+              predefinedMetricType: "ALBRequestCountPerTarget",
+              resourceLabel:
+                "${aws_lb.selected.arn_suffix}/" +
+                `\${aws_lb_target_group.${targetGroupName}.arn_suffix}`
+            }
+          ]
         }
       }),
       createLiveObservationNode("aws_cloudwatch_log_group", logGroupName, {})
     ],
     edges: [
-      { id: `${name}-target`, sourceId: `aws_lb_target_group-${targetGroupName}`, targetId: serviceId },
+      {
+        id: `${name}-target`,
+        sourceId: `aws_lb_target_group-${targetGroupName}`,
+        targetId: serviceId
+      },
       { id: `${name}-task`, sourceId: taskId, targetId: serviceId },
       { id: `${name}-logs`, sourceId: taskId, targetId: logId },
       { id: `${name}-scales`, sourceId: serviceId, targetId: scalingTargetId }
@@ -1555,8 +1857,7 @@ test("Reverse Engineering ALB와 CloudFront fixture는 AWS snapshot을 최소 Te
 test("Reverse Engineering ECS fixture는 민감 환경 값 없이 최소 Cluster Service Task Definition을 만든다", () => {
   const clusterArn = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
   const serviceArn = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api";
-  const taskDefinitionArn =
-    "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
+  const taskDefinitionArn = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
   const graph: InfrastructureGraph = {
     nodes: [
       createLiveObservationNode("aws_ecs_cluster", "orders", {
@@ -1676,7 +1977,10 @@ test("Reverse Engineering ECS fixture는 민감 환경 값 없이 최소 Cluster
   assert.doesNotMatch(terraform, /must-not-leak|must-not-render|provider_parameters|raw_sdk_field/);
   assert.doesNotMatch(terraform, /^\s*environment\s*=/m);
   assert.doesNotMatch(terraform, /^\s*cluster_name\s+= "orders"/m);
-  assert.doesNotMatch(terraform, /^\s*(arn|cluster_arn|provider_resource_id|provider_resource_type|revision|status|task_definition_arn)\s*=/m);
+  assert.doesNotMatch(
+    terraform,
+    /^\s*(arn|cluster_arn|provider_resource_id|provider_resource_type|revision|status|task_definition_arn)\s*=/m
+  );
 });
 
 test("Reverse Engineering ECS managed storage-only configuration은 KMS 값을 Terraform nested block으로 보존한다", () => {
@@ -1686,7 +1990,8 @@ test("Reverse Engineering ECS managed storage-only configuration은 KMS 값을 T
         name: "managed-storage",
         configuration: {
           managedStorageConfiguration: {
-            kmsKeyId: "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555",
+            kmsKeyId:
+              "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555",
             fargateEphemeralStorageKmsKeyId:
               "arn:aws:kms:ap-northeast-2:123456789012:key/66666666-7777-8888-9999-000000000000"
           }
@@ -1713,14 +2018,405 @@ test("Reverse Engineering ECS managed storage-only configuration은 KMS 값을 T
   assert.doesNotMatch(terraform, /execute_command_configuration/);
 });
 
+test("Reverse Engineering CloudWatch Log Group은 관리 가능한 값만 Terraform에 렌더링한다", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_cloudwatch_log_group", "orders", {
+        name: "/ecs/orders",
+        retentionInDays: 30,
+        tags: { Environment: "production", Optional: "" },
+        logGroupClass: "STANDARD",
+        storedBytes: 1234,
+        providerResourceId: "arn:aws:logs:ap-northeast-2:123456789012:log-group:/ecs/orders",
+        providerResourceType: "AWS::Logs::LogGroup",
+        reverseEngineeringObservedConfig: { storedBytes: 1234 }
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /resource "aws_cloudwatch_log_group" "orders" \{/);
+  assert.match(terraform, /name\s+= "\/ecs\/orders"/);
+  assert.match(terraform, /retention_in_days\s+= 30/);
+  assert.match(terraform, /tags = \{[\s\S]*Environment\s+= "production"/);
+  assert.match(terraform, /tags = \{[\s\S]*Optional\s+= ""/);
+  assert.doesNotMatch(
+    terraform,
+    /log_group_class|stored_bytes|provider_resource_id|provider_resource_type|reverse_engineering_observed_config/
+  );
+});
+
+test("Reverse Engineering EIP과 NAT는 Board 경로에서도 생성 가능한 Terraform 값만 렌더링한다", () => {
+  const diagram: DiagramJson = {
+    nodes: [
+      {
+        id: "resource-eip-primary",
+        type: "aws_eip",
+        kind: "resource",
+        label: "egress-primary",
+        position: { x: 0, y: 0 },
+        size: { width: 240, height: 120 },
+        locked: false,
+        zIndex: 1,
+        metadata: {
+          reverseEngineering: {
+            source: "aws_scan",
+            protectedValueKeys: [],
+            editableValueKeys: [],
+            importDecision: {
+              version: 1,
+              mode: "import_existing",
+              statusAtConfirmation: "ready"
+            }
+          }
+        },
+        parameters: {
+          resourceType: "aws_eip",
+          resourceName: "resource_eip_primary",
+          fileName: "reverse-engineering",
+          values: {
+            domain: "vpc",
+            tags: { Name: "egress-primary" },
+            allocationId: "eipalloc-0123456789abcdef0",
+            associationTargetType: "nat_gateway",
+            publicIp: "203.0.113.10",
+            analysisExcluded: false,
+            providerResourceType: "AWS::EC2::EIP",
+            providerResourceId: "eipalloc-0123456789abcdef0",
+            reverseEngineeringSourceKind: "saved_scan",
+            reverseEngineeringObservedConfig: { state: "attached" }
+          }
+        }
+      },
+      {
+        id: "resource-nat-main",
+        type: "aws_nat_gateway",
+        kind: "resource",
+        label: "public-egress",
+        position: { x: 280, y: 0 },
+        size: { width: 240, height: 120 },
+        locked: false,
+        zIndex: 2,
+        metadata: {
+          reverseEngineering: {
+            source: "aws_scan",
+            protectedValueKeys: [],
+            editableValueKeys: [],
+            importDecision: {
+              version: 1,
+              mode: "import_existing",
+              statusAtConfirmation: "ready"
+            }
+          }
+        },
+        parameters: {
+          resourceType: "aws_nat_gateway",
+          resourceName: "resource_nat_main",
+          fileName: "reverse-engineering",
+          values: {
+            subnetId: "aws_subnet.resource_subnet_main.id",
+            allocationId: "aws_eip.resource_eip_primary.id",
+            secondaryAllocationIds: ["aws_eip.resource_eip_secondary.id"],
+            connectivityType: "public",
+            tags: { Name: "public-egress" },
+            allocationIds: ["eipalloc-0123456789abcdef0", "eipalloc-fedcba98765432100"],
+            natGatewayId: "nat-0123456789abcdef0",
+            primaryAllocationId: "eipalloc-0123456789abcdef0",
+            state: "available",
+            analysisExcluded: false,
+            providerResourceType: "AWS::EC2::NatGateway",
+            providerResourceId: "nat-0123456789abcdef0",
+            reverseEngineeringSourceKind: "saved_scan",
+            reverseEngineeringObservedConfig: { state: "available" }
+          }
+        }
+      }
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(
+    buildInfrastructureGraphFromDiagramJson(diagram)
+  );
+
+  assert.match(terraform, /resource "aws_eip" "resource_eip_primary" \{/);
+  assert.match(terraform, /domain\s+= "vpc"/);
+  assert.match(terraform, /resource "aws_nat_gateway" "resource_nat_main" \{/);
+  assert.match(terraform, /subnet_id\s+= aws_subnet\.resource_subnet_main\.id/);
+  assert.match(terraform, /allocation_id\s+= aws_eip\.resource_eip_primary\.id/);
+  assert.match(
+    terraform,
+    /secondary_allocation_ids = \[[\s\S]*aws_eip\.resource_eip_secondary\.id/
+  );
+  assert.match(terraform, /connectivity_type\s+= "public"/);
+  assert.doesNotMatch(
+    terraform,
+    /analysis_excluded|(?:^|\s)allocation_ids\s+=|association_target_type|nat_gateway_id|primary_allocation_id|provider_resource|public_ip|reverse_engineering|(?:^|\s)state\s+=/
+  );
+});
+
+test("Reverse Engineering은 서버가 ready 가져오기로 확정한 node와 그 관계만 Terraform graph에 포함한다", () => {
+  const diagram: DiagramJson = {
+    nodes: [
+      {
+        id: "imported-bucket",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        label: "imported",
+        position: { x: 0, y: 0 },
+        size: { width: 48, height: 48 },
+        locked: false,
+        zIndex: 1,
+        metadata: {
+          reverseEngineering: {
+            source: "aws_scan",
+            protectedValueKeys: [],
+            editableValueKeys: [],
+            importDecision: {
+              version: 1,
+              mode: "import_existing",
+              statusAtConfirmation: "ready"
+            }
+          }
+        },
+        parameters: {
+          resourceType: "aws_s3_bucket",
+          resourceName: "imported",
+          fileName: "reverse-engineering",
+          values: { reverseEngineeringSourceKind: "saved_scan" }
+        }
+      },
+      {
+        id: "observed-bucket",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        label: "observed",
+        position: { x: 100, y: 0 },
+        size: { width: 48, height: 48 },
+        locked: false,
+        zIndex: 2,
+        metadata: {
+          reverseEngineering: {
+            source: "aws_scan",
+            protectedValueKeys: [],
+            editableValueKeys: [],
+            importDecision: {
+              version: 1,
+              mode: "observe_only",
+              statusAtConfirmation: "ready"
+            }
+          }
+        },
+        parameters: {
+          resourceType: "aws_s3_bucket",
+          resourceName: "observed",
+          fileName: "reverse-engineering",
+          values: { reverseEngineeringSourceKind: "saved_scan" }
+        }
+      },
+      {
+        id: "legacy-bucket",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        label: "legacy",
+        position: { x: 200, y: 0 },
+        size: { width: 48, height: 48 },
+        locked: false,
+        zIndex: 3,
+        parameters: {
+          resourceType: "aws_s3_bucket",
+          resourceName: "legacy",
+          fileName: "reverse-engineering",
+          values: { reverseEngineeringSourceScanId: "scan-old" }
+        }
+      },
+      {
+        id: "new-bucket",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        label: "new",
+        position: { x: 300, y: 0 },
+        size: { width: 48, height: 48 },
+        locked: false,
+        zIndex: 4,
+        parameters: {
+          resourceType: "aws_s3_bucket",
+          resourceName: "new_bucket",
+          fileName: "main",
+          values: {}
+        }
+      }
+    ],
+    edges: [
+      {
+        id: "edge-import-observe",
+        sourceNodeId: "imported-bucket",
+        targetNodeId: "observed-bucket"
+      },
+      { id: "edge-new-import", sourceNodeId: "new-bucket", targetNodeId: "imported-bucket" },
+      { id: "edge-new-legacy", sourceNodeId: "new-bucket", targetNodeId: "legacy-bucket" }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const graph = buildInfrastructureGraphFromDiagramJson(diagram);
+
+  assert.deepEqual(
+    graph.nodes.map((node) => node.id),
+    ["imported-bucket", "new-bucket"]
+  );
+  assert.deepEqual(graph.edges, [
+    {
+      id: "edge-new-import",
+      sourceId: "new-bucket",
+      targetId: "imported-bucket"
+    }
+  ]);
+});
+
+test("Reverse Engineering ELBv2 Target Group과 Listener는 Terraform 인자만 렌더링한다", () => {
+  const diagram: DiagramJson = {
+    nodes: [
+      {
+        id: "resource-target-group-orders",
+        type: "aws_lb_target_group",
+        kind: "resource",
+        label: "orders-api",
+        position: { x: 0, y: 0 },
+        size: { width: 240, height: 120 },
+        locked: false,
+        zIndex: 1,
+        metadata: {
+          reverseEngineering: {
+            source: "aws_scan",
+            protectedValueKeys: [],
+            editableValueKeys: [],
+            importDecision: {
+              version: 1,
+              mode: "import_existing",
+              statusAtConfirmation: "ready"
+            }
+          }
+        },
+        parameters: {
+          resourceType: "aws_lb_target_group",
+          resourceName: "orders_api",
+          fileName: "reverse-engineering",
+          values: {
+            name: "orders-api",
+            port: 8080,
+            protocol: "HTTP",
+            targetType: "ip",
+            vpcId: "aws_vpc.platform.id",
+            deregistrationDelay: 30,
+            healthCheck: { path: "/health", matcher: "200" },
+            tags: { Service: "orders" },
+            targetGroupName: "orders-api",
+            target_group_name: "orders-api",
+            loadBalancerArns: [
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/abc"
+            ],
+            load_balancer_arns: [
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/abc"
+            ],
+            attributesReadComplete: true,
+            attributes_read_complete: true,
+            providerResourceType: "AWS::ElasticLoadBalancingV2::TargetGroup",
+            providerResourceId:
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/orders-api/abc",
+            reverseEngineeringSourceKind: "saved_scan",
+            reverseEngineeringObservedConfig: { targetGroupName: "orders-api" }
+          }
+        }
+      },
+      {
+        id: "resource-listener-http",
+        type: "aws_lb_listener",
+        kind: "resource",
+        label: "HTTP:80",
+        position: { x: 280, y: 0 },
+        size: { width: 240, height: 120 },
+        locked: false,
+        zIndex: 2,
+        metadata: {
+          reverseEngineering: {
+            source: "aws_scan",
+            protectedValueKeys: [],
+            editableValueKeys: [],
+            importDecision: {
+              version: 1,
+              mode: "import_existing",
+              statusAtConfirmation: "ready"
+            }
+          }
+        },
+        parameters: {
+          resourceType: "aws_lb_listener",
+          resourceName: "http",
+          fileName: "reverse-engineering",
+          values: {
+            loadBalancerArn: "aws_lb.orders.arn",
+            port: 80,
+            protocol: "HTTP",
+            defaultAction: [
+              { type: "forward", targetGroupArn: "aws_lb_target_group.orders_api.arn" }
+            ],
+            tags: { Environment: "production", Optional: "" },
+            simpleForwardAction: true,
+            simple_forward_action: true,
+            hasAdvancedDefaultAction: false,
+            has_advanced_default_action: false,
+            attributesReadComplete: true,
+            attributes_read_complete: true,
+            providerResourceType: "AWS::ElasticLoadBalancingV2::Listener",
+            providerResourceId:
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener/app/orders/abc/def",
+            reverseEngineeringSourceKind: "saved_scan",
+            reverseEngineeringObservedConfig: { simpleForwardAction: true }
+          }
+        }
+      }
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(
+    buildInfrastructureGraphFromDiagramJson(diagram)
+  );
+
+  assert.match(terraform, /resource "aws_lb_target_group" "orders_api" \{/);
+  assert.match(terraform, /name\s+= "orders-api"/);
+  assert.match(terraform, /vpc_id\s+= aws_vpc\.platform\.id/);
+  assert.match(terraform, /health_check \{[\s\S]*path\s+= "\/health"/);
+  assert.match(terraform, /resource "aws_lb_listener" "http" \{/);
+  assert.match(terraform, /load_balancer_arn\s+= aws_lb\.orders\.arn/);
+  assert.match(
+    terraform,
+    /default_action \{[\s\S]*target_group_arn\s+= aws_lb_target_group\.orders_api\.arn/
+  );
+  assert.match(terraform, /resource "aws_lb_listener" "http" \{[\s\S]*tags = \{/);
+  assert.match(
+    terraform,
+    /resource "aws_lb_listener" "http" \{[\s\S]*Environment\s+= "production"/
+  );
+  assert.match(terraform, /resource "aws_lb_listener" "http" \{[\s\S]*Optional\s+= ""/);
+  assert.doesNotMatch(
+    terraform,
+    /target_group_name|load_balancer_arns|attributes_read_complete|simple_forward_action|has_advanced_default_action|provider_resource|reverse_engineering/
+  );
+});
+
 test("Reverse Engineering ECS Service는 classic ELB를 elb_name으로 렌더링하고 불완전한 binding은 생략한다", () => {
   const graph: InfrastructureGraph = {
     nodes: [
       createLiveObservationNode("aws_ecs_service", "classic", {
         name: "classic-api",
         clusterArn: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders",
-        taskDefinitionArn:
-          "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7",
+        taskDefinitionArn: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7",
         desiredCount: 1,
         launchType: "EC2",
         loadBalancers: [
@@ -1735,12 +2431,15 @@ test("Reverse Engineering ECS Service는 classic ELB를 elb_name으로 렌더링
       createLiveObservationNode("aws_ecs_service", "incomplete", {
         name: "incomplete-api",
         clusterArn: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders",
-        taskDefinitionArn:
-          "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7",
+        taskDefinitionArn: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7",
         desiredCount: 1,
         launchType: "EC2",
         loadBalancers: [
-          { targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api/one", containerName: "api" }
+          {
+            targetGroupArn:
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api/one",
+            containerName: "api"
+          }
         ],
         providerResourceType: "AWS::ECS::Service"
       })
