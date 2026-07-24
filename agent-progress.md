@@ -128,3 +128,4 @@ Short English-only working log for the current agent context. Older records are 
 - Kept AWS import-access cleanup metadata until its Manager and Policy artifacts are confirmed cleaned. Connection deletion and read checks now refuse to bypass an active or completed cleanup flow.
 - Focused Reverse Engineering, AWS connection, import-access, Settings, sandbox, and Terraform import-safety tests pass. Root `pnpm test` still fails in existing AI architecture-draft and Template visual-baseline tests outside this audit.
 - The local Web server on port 3000 is running from this branch. The Chrome controller cannot currently attach to a user tab, so no browser-driven cloud mutation was attempted.
+- Root lint is now clean. The local Terraform v1.6.6 cannot parse this repository's existing `mock_provider` and `override_resource` test blocks, so `pnpm test:terraform` is an environment-version failure rather than a Reverse Engineering assertion failure.
