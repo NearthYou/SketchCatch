@@ -534,6 +534,21 @@ test("viewport controls use the React Flow instance received from onInit", () =>
   );
 });
 
+test("the board zooms with Ctrl or Meta plus the mouse wheel and otherwise keeps wheel panning", () => {
+  assert.match(diagramEditorSource, /panOnScroll=\{viewerPolicy\.panOnScroll\}/);
+  assert.match(diagramEditorSource, /zoomOnScroll=\{false\}/);
+  assert.match(diagramEditorSource, /zoomOnPinch=\{false\}/);
+  assert.match(
+    diagramEditorSource,
+    /const boardZoomModifierKeysRef = useRef\(new Set<BoardZoomModifierKey>\(\)\);/
+  );
+  assert.match(
+    diagramEditorSource,
+    /const handleCanvasWheel[\s\S]*?resolveBoardWheelZoomShortcut\(\{[\s\S]*?activeModifierKeys: boardZoomModifierKeysRef\.current[\s\S]*?zoomDirection === "zoom_in"[\s\S]*?handleZoomIn\(\)[\s\S]*?handleZoomOut\(\)/
+  );
+  assert.match(diagramEditorSource, /onWheelCapture=\{handleCanvasWheel\}/);
+});
+
 test("a single node click opens the matching resource inspector", () => {
   assert.match(
     diagramEditorSource,

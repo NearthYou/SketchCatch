@@ -43,6 +43,7 @@ import {
   type TerraformVirtualFile
 } from "./terraform-panel-utils";
 import { createTerraformDiagnosticLineNumbers } from "./terraform-diagnostic-line-highlights";
+import { createTerraformLineHighlightStyle } from "./terraform-editor-highlight-layout";
 import { applyTerraformEditorIndentation } from "./terraform-editor-indentation";
 import { createTerraformHighlightedLines } from "./terraform-code-highlighting";
 import {
@@ -66,7 +67,7 @@ import {
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
-const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
+const TERRAFORM_EDITOR_FALLBACK_LINE_HEIGHT = 28.8;
 const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
 
 type TerraformPreviewExplanationScope = {
@@ -463,17 +464,19 @@ export const TerraformCodePanel = forwardRef<
     [displayedTerraformCode]
   );
   const highlightedBlockStyle = highlightedBlock
-    ? {
-        height: `${Math.max(1, highlightedBlock.endLine - highlightedBlock.startLine + 1) * TERRAFORM_EDITOR_LINE_HEIGHT}px`,
-        top: `${TERRAFORM_EDITOR_VERTICAL_PADDING + (highlightedBlock.startLine - 1) * TERRAFORM_EDITOR_LINE_HEIGHT - codeScrollTop}px`
-      }
+    ? createTerraformLineHighlightStyle({
+        endLine: highlightedBlock.endLine,
+        scrollTop: codeScrollTop,
+        startLine: highlightedBlock.startLine
+      })
     : null;
   const sourceLineHighlightStyle =
     activeSourceHighlightLine !== null
-      ? {
-          height: `${TERRAFORM_EDITOR_LINE_HEIGHT}px`,
-          top: `${TERRAFORM_EDITOR_VERTICAL_PADDING + (activeSourceHighlightLine - 1) * TERRAFORM_EDITOR_LINE_HEIGHT - codeScrollTop}px`
-        }
+      ? createTerraformLineHighlightStyle({
+          endLine: activeSourceHighlightLine,
+          scrollTop: codeScrollTop,
+          startLine: activeSourceHighlightLine
+        })
       : null;
 
   const openTerraformSourceLocation = useCallback(
@@ -1354,7 +1357,7 @@ export const TerraformCodePanel = forwardRef<
       const targetLine = Math.max(1, Math.min(line, lineCount));
       const lineHeight =
         Number.parseFloat(window.getComputedStyle(textarea).lineHeight) ||
-        TERRAFORM_EDITOR_LINE_HEIGHT;
+        TERRAFORM_EDITOR_FALLBACK_LINE_HEIGHT;
       const targetScrollTop = Math.max(0, (targetLine - 2) * lineHeight);
       const cursorOffset = getTerraformLineStartOffset(code, targetLine);
 
@@ -1396,7 +1399,7 @@ export const TerraformCodePanel = forwardRef<
     const textarea = textareaRef.current;
     const lineHeight =
       Number.parseFloat(window.getComputedStyle(textarea).lineHeight) ||
-      TERRAFORM_EDITOR_LINE_HEIGHT;
+      TERRAFORM_EDITOR_FALLBACK_LINE_HEIGHT;
     const blockTop = TERRAFORM_EDITOR_VERTICAL_PADDING + (selectedBlock.startLine - 1) * lineHeight;
     const blockHeight =
       Math.max(1, selectedBlock.endLine - selectedBlock.startLine + 1) * lineHeight;
