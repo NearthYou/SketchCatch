@@ -873,16 +873,16 @@ test("provider cannot apply a boolean operation to an existing numeric parameter
         edges: [],
         nodes: [
           {
-            config: { desiredCount: 2, name: "orders-api" },
-            id: "orders-api-node",
-            label: "ECS Service",
+            config: { allocatedStorage: 20, name: "orders-db" },
+            id: "orders-db-node",
+            label: "Orders DB",
             positionX: 0,
             positionY: 0,
-            type: "ECS_SERVICE"
+            type: "RDS"
           }
         ]
       },
-      instruction: "orders-api\uC758 \uCC98\uB9AC \uC131\uB2A5\uC744 \uC218\uC815\uD574\uC918."
+      instruction: "orders-db\uC758 \uC800\uC7A5 \uC124\uC815\uC744 \uC218\uC815\uD574\uC918."
     },
     {
       bedrockProvider: {
@@ -891,15 +891,15 @@ test("provider cannot apply a boolean operation to an existing numeric parameter
             status: "planned",
             action: "modify_resource",
             target: {
-              resourceType: "ECS_SERVICE",
-              resourceId: "orders-api-node",
-              label: "ECS Service"
+              resourceType: "RDS",
+              resourceId: "orders-db-node",
+              label: "Orders DB"
             },
             candidateResourceIds: [],
             operations: [
               {
                 op: "enable",
-                path: "config.desiredCount",
+                path: "config.allocatedStorage",
                 value: null
               }
             ],
@@ -923,6 +923,69 @@ test("provider cannot apply a boolean operation to an existing numeric parameter
   }
 
   assert.equal(response.patchPlan?.status, "unsupported");
+});
+
+test("provider shortcut operations update nested existing boolean parameters", async () => {
+  const response = await createArchitecturePatchPreviewWithPatchPlanCompiler(
+    {
+      architectureJson: {
+        edges: [],
+        nodes: [
+          {
+            config: {
+              featureSettings: { enabled: false },
+              name: "orders-api"
+            },
+            id: "orders-api-node",
+            label: "ECS Service",
+            positionX: 0,
+            positionY: 0,
+            type: "ECS_SERVICE"
+          }
+        ]
+      },
+      instruction: "orders-api\uC758 \uAE30\uB2A5 \uC124\uC815\uC744 \uC218\uC815\uD574\uC918."
+    },
+    {
+      bedrockProvider: {
+        generate: async () => ({
+          text: JSON.stringify({
+            status: "planned",
+            action: "modify_resource",
+            target: {
+              resourceType: "ECS_SERVICE",
+              resourceId: "orders-api-node",
+              label: "ECS Service"
+            },
+            candidateResourceIds: [],
+            operations: [
+              {
+                op: "enable",
+                path: "config.featureSettings.enabled",
+                value: null
+              }
+            ],
+            preserve: [],
+            clarificationQuestion: null,
+            confidence: 0.99
+          })
+        }),
+        model: "test-model",
+        provider: "bedrock",
+        service: "bedrock_runtime"
+      },
+      creditPolicy: { bedrock: true, billingMode: "aws_credit_only" }
+    }
+  );
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  if (response.status !== "preview") {
+    assert.fail("nested boolean operations must produce a preview");
+  }
+  const config = response.proposedArchitectureJson.nodes[0]?.config;
+  assert.deepEqual(config?.featureSettings, { enabled: true });
+  assert.equal(config?.["featureSettings.enabled"], undefined);
+  assert.equal(response.patchPlan?.status, "planned");
 });
 
 test("one request can update multiple existing scalar parameters", () => {
@@ -957,4 +1020,138 @@ test("one request can update multiple existing scalar parameters", () => {
       { path: "config.minCapacity", value: 2 }
     ]
   );
+});
+
+test("generic scalar parsing keeps values scoped to the requested parameter clause", () => {
+  const createResponse = (instruction: string) =>
+    createArchitecturePatchPreview({
+      architectureJson: {
+        edges: [],
+        nodes: [
+          {
+            config: {
+              desiredCount: 2,
+              enabled: true,
+              logging: false,
+              mode: "OldValue",
+              name: "orders-api",
+              port: 80,
+              reportPort: 90
+            },
+            id: "orders-api-node",
+            label: "Orders API",
+            positionX: 0,
+            positionY: 0,
+            type: "ECS_SERVICE"
+          }
+        ]
+      },
+      instruction
+    });
+
+  const reportPortResponse = createResponse(
+    "orders-api\uC758 reportPort\uB97C 1234\uB85C \uBCC0\uACBD\uD574\uC918."
+  );
+  assert.equal(reportPortResponse.status, "preview", JSON.stringify(reportPortResponse));
+  if (reportPortResponse.status !== "preview") {
+    assert.fail("reportPort change must produce a preview");
+  }
+  assert.equal(reportPortResponse.proposedArchitectureJson.nodes[0]?.config.reportPort, 1234);
+  assert.equal(reportPortResponse.proposedArchitectureJson.nodes[0]?.config.port, 80);
+
+  const rangeResponse = createResponse(
+    "orders-api\uC758 desiredCount\uB97C 2\uC5D0\uC11C 4\uB85C \uBCC0\uACBD\uD574\uC918."
+  );
+  assert.equal(rangeResponse.status, "preview", JSON.stringify(rangeResponse));
+  if (rangeResponse.status !== "preview") {
+    assert.fail("range change must produce a preview");
+  }
+  assert.equal(rangeResponse.proposedArchitectureJson.nodes[0]?.config.desiredCount, 4);
+
+  const booleanResponse = createResponse(
+    "orders-api\uC758 enabled\uB294 off\uB85C, logging\uC740 on\uC73C\uB85C \uBCC0\uACBD\uD574\uC918."
+  );
+  assert.equal(booleanResponse.status, "preview", JSON.stringify(booleanResponse));
+  if (booleanResponse.status !== "preview") {
+    assert.fail("boolean changes must produce a preview");
+  }
+  assert.equal(booleanResponse.proposedArchitectureJson.nodes[0]?.config.enabled, false);
+  assert.equal(booleanResponse.proposedArchitectureJson.nodes[0]?.config.logging, true);
+
+  const stringResponse = createResponse(
+    "orders-api\uC758 mode\uB97C NewValue\uB85C \uBCC0\uACBD\uD574\uC918."
+  );
+  assert.equal(stringResponse.status, "preview", JSON.stringify(stringResponse));
+  if (stringResponse.status !== "preview") {
+    assert.fail("string change must produce a preview");
+  }
+  assert.equal(stringResponse.proposedArchitectureJson.nodes[0]?.config.mode, "NewValue");
+
+  const invalidResponse = createResponse(
+    "orders-api\uC758 desiredCount\uB97C -1\uB85C \uBCC0\uACBD\uD574\uC918."
+  );
+  assert.equal(invalidResponse.status, "needs_clarification", JSON.stringify(invalidResponse));
+});
+
+test("the longest exact resource identity wins over its shorter prefix", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: { desiredCount: 2, name: "api" },
+          id: "api-node",
+          label: "ECS Service",
+          positionX: 0,
+          positionY: 0,
+          type: "ECS_SERVICE"
+        },
+        {
+          config: { desiredCount: 2, name: "api-worker" },
+          id: "api-worker-node",
+          label: "ECS Service",
+          positionX: 100,
+          positionY: 0,
+          type: "ECS_SERVICE"
+        }
+      ]
+    },
+    instruction: "api-worker\uC758 desiredCount\uB97C 4\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+
+  assert.equal(response.status, "preview", JSON.stringify(response));
+  if (response.status !== "preview") {
+    assert.fail("the longest exact identity must select one resource");
+  }
+  assert.equal(response.intent.targetResourceId, "api-worker-node");
+  assert.equal(response.proposedArchitectureJson.nodes[0]?.config.desiredCount, 2);
+  assert.equal(response.proposedArchitectureJson.nodes[1]?.config.desiredCount, 4);
+});
+
+test("multi-item nested arrays require clarification instead of changing the first item", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      edges: [],
+      nodes: [
+        {
+          config: {
+            containerDefinitions: [
+              { cpu: 256, name: "api" },
+              { cpu: 128, name: "worker" }
+            ],
+            name: "orders-task"
+          },
+          id: "orders-task-node",
+          label: "Orders Task",
+          positionX: 0,
+          positionY: 0,
+          type: "ECS_TASK_DEFINITION"
+        }
+      ]
+    },
+    instruction:
+      "orders-task\uC758 worker \uCEE8\uD14C\uC774\uB108 cpu\uB97C 512\uB85C \uBCC0\uACBD\uD574\uC918."
+  });
+
+  assert.equal(response.status, "needs_clarification", JSON.stringify(response));
 });

@@ -11,6 +11,36 @@ type ScalarParameter = {
   readonly value: ScalarParameterValue;
 };
 
+type ParameterAliasMatch = {
+  readonly end: number;
+  readonly length: number;
+  readonly start: number;
+};
+
+const NON_NEGATIVE_NUMBER_KEYS = new Set([
+  "allocatedstorage",
+  "cpu",
+  "desiredcapacity",
+  "desiredcount",
+  "maxcapacity",
+  "maxsize",
+  "memory",
+  "memorysize",
+  "mincapacity",
+  "minsize",
+  "port",
+  "retentionindays",
+  "scaleincooldown",
+  "scaleoutcooldown",
+  "targetvalue",
+  "timeout"
+]);
+
+const MIN_MAX_PARAMETER_PAIRS = [
+  ["minCapacity", "maxCapacity"],
+  ["minSize", "maxSize"]
+] as const;
+
 const PROTECTED_CONFIG_KEYS = new Set([
   "terraformResourceType",
   "terraformResourceName",
@@ -62,25 +92,38 @@ export function createExistingScalarParameterOperations(
   instruction: string,
   targetNode: ResourceNode
 ): ArchitecturePatchPlanOperation[] {
-  const normalizedInstruction = normalizeSearchText(instruction);
-  const candidates = collectExistingScalarParameters(targetNode.config);
-  const matches = candidates
-    .map((candidate) => ({
-      ...candidate,
-      aliases: createParameterAliases(
+  const normalizedInstruction = normalizeParameterSearchText(instruction);
+  const matches = collectExistingScalarParameters(targetNode.config)
+    .flatMap((candidate) => {
+      const aliases = createParameterAliases(
         candidate.path.at(-1) ?? "",
         targetNode.type,
         candidate.path
-      )
-    }))
-    .filter((candidate) =>
-      candidate.aliases.some((alias) => includesPhrase(normalizedInstruction, alias))
+      );
+      const aliasMatch = aliases
+        .map((alias) => findParameterAliasMatch(normalizedInstruction, alias))
+        .filter((match): match is ParameterAliasMatch => match !== undefined)
+        .sort((left, right) => right.length - left.length)[0];
+
+      return aliasMatch ? [{ ...candidate, aliasMatch }] : [];
+    })
+    .filter(
+      (candidate, _index, allCandidates) =>
+        !allCandidates.some(
+          (other) =>
+            other !== candidate &&
+            other.aliasMatch.length > candidate.aliasMatch.length &&
+            other.aliasMatch.start <= candidate.aliasMatch.start &&
+            other.aliasMatch.end >= candidate.aliasMatch.end
+        )
     )
-    .sort((left, right) => right.path.join(".").length - left.path.join(".").length);
-  return matches.flatMap((match) => {
+    .sort((left, right) => left.aliasMatch.start - right.aliasMatch.start);
+  const operations = matches.flatMap((match, index) => {
+    const nextMatch = matches[index + 1];
     const value = findExplicitScalarParameterValue(
-      normalizedInstruction,
-      match.aliases,
+      instruction,
+      match.aliasMatch.end,
+      nextMatch?.aliasMatch.start ?? instruction.length,
       match.value
     );
 
@@ -88,14 +131,16 @@ export function createExistingScalarParameterOperations(
       return [];
     }
 
-    const operation: ArchitecturePatchPlanOperation = {
-      op: "set_value",
+    return [{
+      op: "set_value" as const,
       path: `config.${match.path.join(".")}`,
       value
-    };
-
-    return [operation];
+    }];
   });
+
+  return areExistingScalarParameterOperationsSafe(targetNode, operations)
+    ? operations
+    : [];
 }
 
 export function getExistingScalarPatchValues(
@@ -138,6 +183,10 @@ function collectExistingScalarParameters(
       return [{ path, value: childValue }];
     }
 
+    if (Array.isArray(childValue) && childValue.length !== 1) {
+      return [];
+    }
+
     const nestedValue = Array.isArray(childValue) ? childValue[0] : childValue;
 
     return isRecord(nestedValue)
@@ -163,35 +212,35 @@ function createParameterAliases(
       key.toLowerCase(),
       words,
       words.replaceAll(" ", "_"),
+      words.replaceAll(" ", "-"),
       ...semanticAliases.map(normalizeSearchText)
     ])
   );
 }
 
 function findExplicitScalarParameterValue(
-  normalizedInstruction: string,
-  aliases: readonly string[],
+  instruction: string,
+  valueStart: number,
+  clauseEnd: number,
   currentValue: ScalarParameterValue
 ): ScalarParameterValue | undefined {
-  const alias = aliases
-    .filter((candidate) => candidate.length > 0)
-    .sort((left, right) => right.length - left.length)
-    .find((candidate) => normalizedInstruction.includes(normalizeSearchText(candidate)));
-
-  if (!alias) {
-    return undefined;
-  }
-
-  const aliasIndex = normalizedInstruction.indexOf(normalizeSearchText(alias));
-  const suffix = normalizedInstruction.slice(aliasIndex + normalizeSearchText(alias).length);
+  const suffix = instruction.slice(valueStart, clauseEnd);
 
   if (typeof currentValue === "number") {
-    const match = suffix.match(/-?\d+(?:\.\d+)?/u);
-    return match ? Number(match[0]) : undefined;
+    const koreanRangeValue = suffix.match(
+      /-?\d+(?:\.\d+)?\s*\uC5D0\uC11C\s*(-?\d+(?:\.\d+)?)\s*(?:\uC73C\uB85C|\uB85C)/u
+    )?.[1];
+    const englishRangeValue = suffix.match(
+      /\bfrom\s+-?\d+(?:\.\d+)?\s+to\s+(-?\d+(?:\.\d+)?)/iu
+    )?.[1];
+    const directValue = suffix.match(/-?\d+(?:\.\d+)?/u)?.[0];
+    const value = koreanRangeValue ?? englishRangeValue ?? directValue;
+
+    return value === undefined ? undefined : Number(value);
   }
 
   if (typeof currentValue === "boolean") {
-    return findBooleanValue(normalizedInstruction);
+    return findBooleanValue(normalizeSearchText(suffix));
   }
 
   return findExplicitStringParameterValue(suffix, currentValue);
@@ -258,6 +307,113 @@ function isResourceIdentityConfigKey(key: string): boolean {
   );
 }
 
+export function areExistingScalarParameterOperationsSafe(
+  targetNode: ResourceNode,
+  operations: readonly ArchitecturePatchPlanOperation[]
+): boolean {
+  const prospectiveValues = new Map(getExistingScalarPatchValues(targetNode));
+
+  for (const operation of operations) {
+    if (operation.op === "increase_one_step" || operation.op === "decrease_one_step") {
+      continue;
+    }
+
+    if (!prospectiveValues.has(operation.path)) {
+      continue;
+    }
+
+    const nextValue =
+      operation.op === "enable"
+        ? true
+        : operation.op === "disable"
+          ? false
+          : operation.value;
+
+    if (nextValue === null || !isSafeScalarParameterValue(operation.path, nextValue)) {
+      return false;
+    }
+
+    prospectiveValues.set(operation.path, nextValue);
+  }
+
+  return MIN_MAX_PARAMETER_PAIRS.every(([minKey, maxKey]) => {
+    const minValue = findProspectiveParameterValue(prospectiveValues, minKey);
+    const maxValue = findProspectiveParameterValue(prospectiveValues, maxKey);
+
+    return (
+      typeof minValue !== "number" ||
+      typeof maxValue !== "number" ||
+      minValue <= maxValue
+    );
+  });
+}
+
+function findParameterAliasMatch(
+  normalizedInstruction: string,
+  alias: string
+): ParameterAliasMatch | undefined {
+  const normalizedAlias = normalizeParameterSearchText(alias).trim();
+
+  if (!normalizedAlias) {
+    return undefined;
+  }
+
+  const escapedAlias = normalizedAlias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(
+    `(^|[^a-z0-9_])(${escapedAlias})(?=$|[^a-z0-9_])`,
+    "iu"
+  ).exec(normalizedInstruction);
+
+  if (!match || match.index === undefined || match[2] === undefined) {
+    return undefined;
+  }
+
+  const start = match.index + (match[1]?.length ?? 0);
+
+  return {
+    start,
+    end: start + match[2].length,
+    length: match[2].length
+  };
+}
+
+function findProspectiveParameterValue(
+  values: ReadonlyMap<string, ScalarParameterValue>,
+  key: string
+): ScalarParameterValue | undefined {
+  return Array.from(values.entries()).find(
+    ([path]) => path === `config.${key}` || path.endsWith(`.${key}`)
+  )?.[1];
+}
+
+function isSafeScalarParameterValue(
+  path: string,
+  value: ScalarParameterValue
+): boolean {
+  if (typeof value !== "number") {
+    return typeof value !== "string" || value.trim().length > 0;
+  }
+
+  if (!Number.isFinite(value)) {
+    return false;
+  }
+
+  const key = path.split(".").at(-1)?.toLowerCase() ?? "";
+
+  if (NON_NEGATIVE_NUMBER_KEYS.has(key) && value < 0) {
+    return false;
+  }
+
+  if (key === "port" && value > 65_535) {
+    return false;
+  }
+
+  return key !== "targetvalue" || value > 0;
+}
+
+function normalizeParameterSearchText(value: string): string {
+  return value.toLowerCase();
+}
 function includesAnyPhrase(value: string, candidates: readonly string[]): boolean {
   return candidates.some((candidate) => includesPhrase(value, candidate));
 }

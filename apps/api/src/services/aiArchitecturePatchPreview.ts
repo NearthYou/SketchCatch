@@ -24,6 +24,7 @@ import {
   RESOURCE_TYPE_KOREAN_NAMES
 } from "./architectureResourceAliases.js";
 import {
+  areExistingScalarParameterOperationsSafe,
   createExistingScalarParameterOperations,
   getExistingScalarPatchValues,
   getResourceIdentityConfigAliases
@@ -881,7 +882,7 @@ export function createArchitecturePatchPlan(
   }
 
   const operations = createPatchPlanOperations(
-    normalizedInstruction,
+    input.instruction,
     targetResolution.targetNode
   );
 
@@ -1463,32 +1464,34 @@ function validatePatchPlanOperations(
     }
 
     const existingScalarValue = existingScalarValues.get(path);
-    const isStaticAllowedPath = staticAllowedPaths.includes(path);
 
-    if (existingScalarValue !== undefined && !isStaticAllowedPath) {
+    if (existingScalarValue !== undefined) {
       const isValidExistingScalarOperation =
-        typeof existingScalarValue === "boolean"
-          ? (op === "set_value" && typeof value === "boolean") ||
-            ((op === "enable" || op === "disable") && value === null)
-          : op === "set_value" &&
-            value !== null &&
-            typeof value === typeof existingScalarValue;
+        (op === "set_value" &&
+          value !== null &&
+          typeof value === typeof existingScalarValue) ||
+        (op === "rename" &&
+          typeof existingScalarValue === "string" &&
+          typeof value === "string") ||
+        ((op === "enable" || op === "disable") &&
+          typeof existingScalarValue === "boolean" &&
+          value === null) ||
+        ((op === "increase_one_step" || op === "decrease_one_step") &&
+          path === "config.instanceType" &&
+          typeof existingScalarValue === "string" &&
+          value === null);
 
       if (!isValidExistingScalarOperation) {
         return null;
       }
-    } else if (
-      existingScalarValue !== undefined &&
-      value !== null &&
-      typeof value !== typeof existingScalarValue
-    ) {
-      return null;
     }
 
     validatedOperations.push({ op, path, value });
   }
 
-  return validatedOperations;
+  return areExistingScalarParameterOperationsSafe(targetNode, validatedOperations)
+    ? validatedOperations
+    : null;
 }
 
 function applyPatchPlanToPreviewResponse<TResponse extends ArchitecturePatchPreviewResponse>(
@@ -1553,12 +1556,12 @@ function applyPatchPlanOperationsToConfig(
     }
 
     if (operation.op === "enable") {
-      nextConfig[key] = true;
+      setConfigPathValue(nextConfig, key, true);
       continue;
     }
 
     if (operation.op === "disable") {
-      nextConfig[key] = false;
+      setConfigPathValue(nextConfig, key, false);
       continue;
     }
 
@@ -1764,9 +1767,10 @@ function resolvePatchPlanTarget(
 }
 
 function createPatchPlanOperations(
-  normalizedInstruction: string,
+  instruction: string,
   targetNode: ResourceNode
 ): ArchitecturePatchPlanOperation[] {
+  const normalizedInstruction = normalizeSearchText(instruction);
   if (targetNode.type === "EC2") {
     const explicitInstanceType = findEc2InstanceType(normalizedInstruction);
 
@@ -2017,7 +2021,7 @@ function createPatchPlanOperations(
     return operations;
   }
 
-  return createExistingScalarParameterOperations(normalizedInstruction, targetNode);
+  return createExistingScalarParameterOperations(instruction, targetNode);
 }
 
 function createStructuralPatchPreview(
@@ -2902,12 +2906,25 @@ function resolveTarget(
 
 function findMentionedNodes(nodes: readonly ResourceNode[], instruction: string): ResourceNode[] {
   const normalizedInstruction = normalizeSearchText(instruction);
-  const identityMatchedNodes = nodes.filter((node) =>
-    nodeIdentityAliases(node).some((alias) => includesPhrase(normalizedInstruction, alias))
+  const identityMatches = nodes.flatMap((node) => {
+    const longestAliasLength = Math.max(
+      0,
+      ...nodeIdentityAliases(node)
+        .filter((alias) => includesPhrase(normalizedInstruction, alias))
+        .map((alias) => compactSearchText(alias).length)
+    );
+
+    return longestAliasLength > 0 ? [{ node, longestAliasLength }] : [];
+  });
+  const longestIdentityLength = Math.max(
+    0,
+    ...identityMatches.map(({ longestAliasLength }) => longestAliasLength)
   );
 
-  if (identityMatchedNodes.length > 0) {
-    return identityMatchedNodes;
+  if (longestIdentityLength > 0) {
+    return identityMatches
+      .filter(({ longestAliasLength }) => longestAliasLength === longestIdentityLength)
+      .map(({ node }) => node);
   }
 
   return nodes.filter(
