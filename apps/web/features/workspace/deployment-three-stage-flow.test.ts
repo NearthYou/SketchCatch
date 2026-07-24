@@ -184,8 +184,8 @@ test("application-only deployment continues from one user action without a manua
   assert.ok(reviewStart > completionStart);
   assert.match(completionSource, /approveDeploymentPlan\(plannedDeployment\.id\)/);
   assert.match(completionSource, /executeDeployment\(approvedDeployment\.id\)/);
-  assert.match(reviewSource, /plannedDeployment\.scope === "application"/);
-  assert.match(reviewSource, /return completeApplicationDeployment\(plannedDeployment\)/);
+  assert.doesNotMatch(reviewSource, /completeApplicationDeployment\(plannedDeployment\)/);
+  assert.match(directDeploymentSource, /completeApplicationDeployment\(selectedDeployment\)/);
   assert.match(directDeploymentSource, /shouldShowApplyButton && selectedDeployment\?\.scope !== "application"/);
   assert.match(directDeploymentSource, /isApplicationOnlyFlow[\s\S]*"앱 배포 중"[\s\S]*"앱 배포"/);
 });
@@ -367,6 +367,25 @@ test("deployment review delegates build preparation and repository verification 
   assert.doesNotMatch(reviewSource, /verifyProjectRepositoryAccess/);
   assert.doesNotMatch(reviewSource, /verifyRepositoryAccessForPlan/);
   assert.doesNotMatch(reviewSource, /runDeploymentInit|queuedApplyPlan/);
+});
+
+test("application-only deployment waits for the durable Plan before automatic approval", () => {
+  const reviewStart = directDeploymentSource.indexOf("async function startDeploymentReview");
+  const planActionStart = directDeploymentSource.indexOf(
+    "async function startTerraformPlan",
+    reviewStart
+  );
+  const reviewSource = directDeploymentSource.slice(reviewStart, planActionStart);
+
+  assert.doesNotMatch(reviewSource, /completeApplicationDeployment\(plannedDeployment\)/);
+  assert.match(
+    reviewSource,
+    /plannedDeployment\.scope !== "application"[\s\S]*pendingAutoAdvanceDeploymentIdRef\.current = ""/
+  );
+  assert.match(
+    directDeploymentSource,
+    /pendingAutoAdvanceDeploymentIdRef\.current === selectedDeployment\.id[\s\S]*selectedDeployment\.scope === "application"[\s\S]*selectedDeployment\.currentPlanArtifactId[\s\S]*completeApplicationDeployment\(selectedDeployment\)/
+  );
 });
 
 test("durable Plan polling refreshes Repository verification after worker completion", () => {

@@ -476,9 +476,28 @@ export function DirectDeploymentScreen({
       setRequestState("idle");
       setFailedActionStepId(null);
       setErrorMessage("");
+
+      if (
+        selectedDeployment.scope === "application" &&
+        selectedDeployment.currentPlanArtifactId
+      ) {
+        void runAction(
+          "approval",
+          () => completeApplicationDeployment(selectedDeployment),
+          "앱 배포를 승인하고 실행하지 못했습니다."
+        );
+        return;
+      }
+
       setSelectedDirectStepId("approval");
     }
-  }, [directDeploymentFlow.activeStepId, reconciledRequestState, selectedDeployment]);
+  }, [
+    completeApplicationDeployment,
+    directDeploymentFlow.activeStepId,
+    reconciledRequestState,
+    runAction,
+    selectedDeployment
+  ]);
 
   useEffect(() => {
     if (
@@ -1119,11 +1138,10 @@ export function DirectDeploymentScreen({
       ...currentDeployments.filter((deployment) => deployment.id !== plannedDeployment.id)
     ]);
     setSelectedDeploymentId(plannedDeployment.id);
-    pendingAutoAdvanceDeploymentIdRef.current = "";
-    setShowApplyConfirmation(false);
-    if (plannedDeployment.scope === "application") {
-      return completeApplicationDeployment(plannedDeployment);
+    if (plannedDeployment.scope !== "application") {
+      pendingAutoAdvanceDeploymentIdRef.current = "";
     }
+    setShowApplyConfirmation(false);
     if (plannedDeployment.consolePhase === "approval") {
       setSelectedDirectStepId("approval");
     }

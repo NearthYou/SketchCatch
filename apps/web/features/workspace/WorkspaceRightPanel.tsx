@@ -9,6 +9,7 @@ import type {
 import {
   type ArchitectureDiagnostic,
   type CheckFinding,
+  type DiagramJson,
   type LiveObservationV2Session,
   type LiveObservationV2Snapshot,
   type TerraformDiagnostic,
@@ -44,7 +45,7 @@ import { WorkspaceIssuesPanel } from "./WorkspaceIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { LiveObservationModal } from "./LiveObservationModal";
 import {
-  incrementLiveObservationEcsMaxCapacity,
+  incrementLiveObservationEcsScalingSettings,
   type LiveObservationTerraformUpdateResult
 } from "./live-observation-terraform-update";
 import type { LiveObservationSelection } from "./live-observation";
@@ -76,6 +77,7 @@ import {
   WorkspaceTerraformPreparationError,
   type PreparedTerraformArtifactSource
 } from "./workspace-terraform-preparation";
+import { syncTerraformToDiagram } from "./api";
 import { requireSavedProjectDraftRevision } from "./project-deployment-preparation";
 import { DeploymentPreparationError } from "./deployment-preparation-error";
 import {
@@ -84,7 +86,10 @@ import {
   type TerraformLeaveSaveFeedback,
   type TerraformLeaveSaveState
 } from "./terraform-leave-save-state";
-import { toDeploymentBaselineFingerprint } from "./terraform-panel-utils";
+import {
+  combineTerraformFiles,
+  toDeploymentBaselineFingerprint
+} from "./terraform-panel-utils";
 import {
   markTerraformIssuesStale,
   mergeTerraformValidationDiagnostics,
@@ -123,7 +128,10 @@ export type WorkspaceRightPanelProps = {
   readonly onDeploymentConsoleOpenChange?: ((isOpen: boolean) => void) | undefined;
   readonly onPanelOpenRequest: () => void;
   readonly onLiveObservationTerraformFilesApply?:
-    | ((files: readonly TerraformSyncFileInput[]) => void)
+    | ((input: {
+        readonly diagramJson: DiagramJson;
+        readonly files: readonly TerraformSyncFileInput[];
+      }) => void)
     | undefined;
   readonly onReverseEngineeringOpenRequest?:
     | (() => Promise<WorkspaceReverseEngineeringEntryResult>)
@@ -709,6 +717,7 @@ export function WorkspaceRightPanel({
     (selection?: LiveObservationSelection): void => {
       onPanelOpenRequest();
       setLiveObservationSelection(selection ?? null);
+      setIsDeploymentConsoleOpen(false);
       setIsLiveObservationOpen(true);
     },
     [onPanelOpenRequest]
@@ -716,19 +725,46 @@ export function WorkspaceRightPanel({
 
   const applyLiveObservationTerraformUpdate =
     useCallback(async (): Promise<LiveObservationTerraformUpdateResult> => {
-      const result = incrementLiveObservationEcsMaxCapacity(terraformAiCodeContext.files);
+      const originalDiagram = context.diagram;
+      const originalFiles = terraformAiCodeContext.files.map((file) => ({ ...file }));
+      const result = incrementLiveObservationEcsScalingSettings(terraformAiCodeContext.files);
+      const syncResult = await syncTerraformToDiagram({
+        diagramJson: originalDiagram,
+        terraformCode: combineTerraformFiles(
+          result.files.map(({ fileName, terraformCode }) => ({ code: terraformCode, fileName }))
+        ),
+        terraformFiles: [...result.files]
+      });
 
-      if (onLiveObservationTerraformFilesApply) {
-        onLiveObservationTerraformFilesApply(result.files);
-      } else {
-        onTerraformFilesChange?.(result.files);
+      try {
+        context.applyDiagramJson(syncResult.diagramJson);
+
+        if (onLiveObservationTerraformFilesApply) {
+          onLiveObservationTerraformFilesApply({
+            diagramJson: syncResult.diagramJson,
+            files: result.files
+          });
+        } else {
+          onTerraformFilesChange?.(result.files);
+        }
+
+        const saveResult = await context.saveDiagramNow?.();
+        requireSavedProjectDraftRevision(saveResult);
+        setHasUnsavedTerraformChanges(false);
+        setIsDeploymentBaselineDirty(false);
+        return result;
+      } catch (error) {
+        context.applyDiagramJson(originalDiagram);
+        if (onLiveObservationTerraformFilesApply) {
+          onLiveObservationTerraformFilesApply({
+            diagramJson: originalDiagram,
+            files: originalFiles
+          });
+        } else {
+          onTerraformFilesChange?.(originalFiles);
+        }
+        throw error;
       }
-
-      const saveResult = await context.saveDiagramNow?.();
-      requireSavedProjectDraftRevision(saveResult);
-      setHasUnsavedTerraformChanges(false);
-      setIsDeploymentBaselineDirty(false);
-      return result;
     }, [
       context,
       onLiveObservationTerraformFilesApply,
@@ -739,6 +775,7 @@ export function WorkspaceRightPanel({
   const openLiveObservationTerraformEditor = useCallback((): void => {
     setIsLiveObservationOpen(false);
     setLiveObservationSelection(null);
+    setIsDeploymentConsoleOpen(false);
 
     if (liveObservationAppliedTerraformUpdate) {
       openTerraformIssueSourceLocation({

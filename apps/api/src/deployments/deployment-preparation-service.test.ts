@@ -116,18 +116,12 @@ test("uses the ECS web-service profile for a basic infrastructure draft", async 
   assert.equal(preparation.liveProfile, "demo_web_service");
 });
 
-test("does not silently downgrade an ECS/Fargate auto deployment when build config is missing", async () => {
-  await assert.rejects(
-    resolveScope(createDraft(true, true), createTarget(null), "auto"),
-    (error: unknown) =>
-      error instanceof DeploymentConflictError &&
-      error.message ===
-        "A confirmed project deployment target is required for automatic ECS application deployment"
+test("keeps automatic ECS Terraform Plan available when CI/CD build config is missing", async () => {
+  assert.equal(
+    await resolveScope(createDraft(true, true), createTarget(null), "auto"),
+    "infrastructure"
   );
-  await assert.rejects(
-    resolveScope(createDraft(true, true), undefined, "auto"),
-    /confirmed project deployment target/
-  );
+  assert.equal(await resolveScope(createDraft(true, true), undefined, "auto"), "infrastructure");
 });
 
 test("rejects full-stack preparation when a required runtime Secret is absent from Terraform", async () => {
