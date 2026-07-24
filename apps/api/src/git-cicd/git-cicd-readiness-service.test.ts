@@ -705,7 +705,8 @@ test("creates a canonical ECS Fargate target from successful outputs without AWS
   assert.deepEqual(Object.keys(service).sort(), [
     "inspect",
     "refresh",
-    "synchronizeDeploymentTargetAfterSuccessfulApply"
+    "synchronizeDeploymentTargetAfterSuccessfulApply",
+    "synchronizeDeploymentTargetBeforeApplicationRelease"
   ]);
   assert.equal(awsMutationCalls, 0);
   assert.equal(state.savedTargets.length, 1);
@@ -1362,6 +1363,97 @@ test("synchronizes a specific SUCCESS deployment after its Apply state is finali
   assert.equal(state.savedTargets.length, 1);
 });
 
+test("strict application synchronization replaces a stale complete target from the latest infrastructure deployment", async () => {
+  const staleTarget = createExistingTarget(createConfirmedBuildConfig());
+  staleTarget.connectionId = "stale-connection";
+  staleTarget.runtimeConfig = {
+    ...staleTarget.runtimeConfig,
+    outputUrl: "https://stale.example.com",
+    taskDefinitionArn:
+      "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/stale-task:7"
+  } as ProjectDeploymentTargetRecord["runtimeConfig"];
+  staleTarget.deploymentTargetFingerprint = "f".repeat(64);
+  const state = createRepositoryState({ readyContext: true, existingTarget: staleTarget });
+  const service = createGitCicdReadinessService({
+    repository: createRepository({
+      deployments: [createDeployment({ approvedPlanArtifactId: "plan-1" })],
+      state
+    }),
+    planVerifier: createPlanVerifier(),
+    now: () => new Date("2026-07-17T06:00:00.000Z")
+  });
+
+  const target = await service.synchronizeDeploymentTargetBeforeApplicationRelease({
+    projectId: "project-1",
+    userId: "user-1",
+      expectedAwsConnectionId: "connection-1"
+  });
+
+  assert.equal(target.connectionId, "connection-1");
+  assert.equal(target.runtimeTargetKind, "ecs_fargate");
+  assert.equal(target.runtimeConfig?.runtimeTargetKind, "ecs_fargate");
+  assert.ok(target.runtimeConfig?.runtimeTargetKind === "ecs_fargate");
+  assert.equal(target.runtimeConfig.outputUrl, "https://d111111abcdef8.cloudfront.net");
+  assert.equal(
+    target.runtimeConfig.taskDefinitionArn,
+    "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/app-task:1"
+  );
+  assert.notEqual(target.deploymentTargetFingerprint, "f".repeat(64));
+  assert.equal(state.savedTargets.length, 1);
+});
+
+test("strict application synchronization fails closed when the latest infrastructure evidence is incomplete", async () => {
+  const staleTarget = createExistingTarget(createConfirmedBuildConfig());
+  staleTarget.runtimeConfig = {
+    ...staleTarget.runtimeConfig,
+    outputUrl: "https://stale.example.com"
+  } as ProjectDeploymentTargetRecord["runtimeConfig"];
+  const state = createRepositoryState({ readyContext: true, existingTarget: staleTarget });
+  state.outputs = state.outputs.filter(
+    (output) => output.name !== "cloudfront_distribution_id"
+  );
+  const service = createGitCicdReadinessService({
+    repository: createRepository({
+      deployments: [createDeployment({ approvedPlanArtifactId: "plan-1" })],
+      state
+    }),
+    planVerifier: createPlanVerifier()
+  });
+
+  await assert.rejects(
+    service.synchronizeDeploymentTargetBeforeApplicationRelease({
+      projectId: "project-1",
+      userId: "user-1",
+      expectedAwsConnectionId: "connection-1"
+    }),
+    /runtime outputs and inventory/
+  );
+  assert.equal(state.savedTargets.length, 0);
+});
+test("strict application synchronization requires the exact approved Apply Plan", async () => {
+  const state = createRepositoryState({ readyContext: true });
+  const service = createGitCicdReadinessService({
+    repository: createRepository({
+      deployments: [createDeployment({ approvedPlanArtifactId: "destroy-plan" })],
+      plans: [
+        createPlan({ id: "destroy-plan", operation: "destroy" }),
+        createPlan({ id: "fallback-apply" })
+      ],
+      state
+    }),
+    planVerifier: createPlanVerifier()
+  });
+
+  await assert.rejects(
+    service.synchronizeDeploymentTargetBeforeApplicationRelease({
+      projectId: "project-1",
+      userId: "user-1",
+    expectedAwsConnectionId: "connection-1"
+    }),
+    /exact approved Apply Plan artifact/
+  );
+  assert.equal(state.savedTargets.length, 0);
+});
 test("post-Apply synchronization rejects invalid project, deployment scope, status, and approved plan evidence", async (t) => {
   const cases: Array<{
     name: string;

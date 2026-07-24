@@ -84,6 +84,12 @@ Short English-only working log for the current agent context. Older records are 
 - Focused verification passed: 58 deployment-flow/progress Web tests, 122 deployment-plan/readiness API tests, and 23 output/Live Observation presentation tests. Root harness, lint, typecheck, and all five production builds pass; the first typecheck exposed and the final typecheck fixed one missing history-link import.
 - No DB migration, dependency change, Terraform action, generated load, or cloud mutation was performed. Next action is the requested PR merge and `dev` production redeployment through the reviewed GitHub Actions workflow.
 
+### 2026-07-25 - Refresh split application release targets
+
+- Application-only ECS/Fargate releases now reconcile the target from the latest successful infrastructure deployment and its AWS connection before artifact preparation.
+- Synchronization fails closed on connection, approved Apply Plan, output, resource, or build-evidence mismatch.
+- Verification passed: 133 focused API tests, harness, lint, typecheck, and all five builds.
+- No migration, dependency change, Terraform action, or cloud mutation was performed.
 ### 2026-07-24 - Clear Reverse Engineering presentation
 
 - Replaced Reverse Engineering-only cards, panels, CSS, and presentation helpers with semantic controls backed by `useReverseEngineeringWorkflow`, while preserving scan, recovery, preview, apply, history, and source-exact Board flows.

@@ -321,13 +321,17 @@ async function runDeploymentPlanOnce(
           repository,
           ...(executionSignal ? { abortSignal: executionSignal } : {})
         });
+        applicationPreparationStage = "preflight";
         if (deployment.scope === "application") {
+          if (!deployment.awsConnectionId) {
+            throw new Error("Application release requires a verified AWS connection");
+          }
           await repository.synchronizeDeploymentTargetBeforeApplicationRelease?.({
             projectId: deployment.projectId,
+            awsConnectionId: deployment.awsConnectionId,
             accessContext: input.accessContext
           });
         }
-        applicationPreparationStage = "preflight";
         preparedApplicationRelease = await prepareApplicationArtifact({
           deployment,
           accessContext: input.accessContext,

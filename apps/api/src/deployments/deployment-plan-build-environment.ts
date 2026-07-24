@@ -18,6 +18,7 @@ type RepositoryAccessVerificationResult = {
 export type DeploymentPlanBuildEnvironmentOptions = {
   prepareProjectBuildEnvironment?: (input: {
     architectureId: string;
+    awsConnectionId?: string;
     db: DatabaseClient["db"];
     projectId: string;
     userId: string;
@@ -48,6 +49,7 @@ export async function prepareEcsBuildEnvironmentForPlan(
     options.prepareProjectBuildEnvironment ??
     (async (preparation: {
       architectureId: string;
+      awsConnectionId?: string;
       db: DatabaseClient["db"];
       projectId: string;
       userId: string;
@@ -55,6 +57,9 @@ export async function prepareEcsBuildEnvironmentForPlan(
       prepareProjectBuildEnvironmentService(
         {
           architectureId: preparation.architectureId,
+          ...(preparation.awsConnectionId
+            ? { awsConnectionId: preparation.awsConnectionId }
+            : {}),
           projectId: preparation.projectId,
           userId: preparation.userId
         },
@@ -63,6 +68,9 @@ export async function prepareEcsBuildEnvironmentForPlan(
       ));
   const preparation = await prepareProjectBuildEnvironment({
     architectureId: input.deployment.architectureId,
+    ...(input.deployment.awsConnectionId
+      ? { awsConnectionId: input.deployment.awsConnectionId }
+      : {}),
     db: input.db,
     projectId: input.deployment.projectId,
     userId: input.userId
