@@ -89,8 +89,25 @@ test("the realtime deployment demo prompt keeps questions but always returns the
     }))
   };
   assert.equal(generateTerraformFromDiagramJson(catalogPresentedDiagram), expectedTerraform);
-  assert.equal(first.diagramJson.nodes.length, 42);
+  assert.equal(first.diagramJson.nodes.length, 41);
+  assert.equal(
+    first.diagramJson.nodes.some(
+      (node) => node.parameters?.resourceType === "aws_appautoscaling_target"
+    ),
+    false
+  );
+  assert.equal(
+    first.diagramJson.nodes.some(
+      (node) => node.parameters?.resourceType === "aws_appautoscaling_policy"
+    ),
+    true
+  );
   assert.match(terraform, /resource "aws_ecs_service" "ecs_service"/u);
+  assert.doesNotMatch(terraform, /resource "aws_appautoscaling_target"/u);
+  assert.match(
+    terraform,
+    /resource "aws_appautoscaling_policy" "ecs_service_requests"/u
+  );
   assert.doesNotMatch(terraform, /fixed_template/u);
   assert.match(terraform, /target_value\s*=\s*5/u);
   assert.match(terraform, /resource "aws_cloudfront_distribution" "cdn_web"/u);

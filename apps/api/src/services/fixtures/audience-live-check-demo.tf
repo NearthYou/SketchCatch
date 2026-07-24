@@ -103,7 +103,7 @@ output "ecs_container_port" {
 }
 
 output "max_capacity" {
-  value = aws_appautoscaling_target.ecs_service_requests.max_capacity
+  value = 2
 }
 
 resource "aws_vpc" "vpc" {
@@ -295,23 +295,13 @@ resource "aws_ecs_service" "ecs_service" {
   }
 }
 
-resource "aws_appautoscaling_target" "ecs_service_requests" {
-  min_capacity = 1
-  max_capacity = 2
-
-  resource_id = "service/${aws_ecs_cluster.ecs_cluster.name}/${aws_ecs_service.ecs_service.name}"
-
-  scalable_dimension = "ecs:service:DesiredCount"
-  service_namespace  = "ecs"
-}
-
 resource "aws_appautoscaling_policy" "ecs_service_requests" {
   name        = "audience-live-check-request-scaling"
   policy_type = "TargetTrackingScaling"
 
-  resource_id        = aws_appautoscaling_target.ecs_service_requests.resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs_service_requests.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs_service_requests.service_namespace
+  resource_id        = "service/${aws_ecs_cluster.ecs_cluster.name}/${aws_ecs_service.ecs_service.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
 
   target_tracking_scaling_policy_configuration {
     target_value       = 5

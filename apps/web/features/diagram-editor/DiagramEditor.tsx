@@ -102,6 +102,7 @@ import {
   isCanvasInteractiveElementTarget
 } from "./canvas-pointer-hit-test";
 import { isAwsDiagramConnectionAllowed } from "./aws-resource-connection-policy";
+import { applyAddedApplicationAutoScalingTargetReferences } from "./application-auto-scaling-references";
 import {
   resolveBoardWheelZoomShortcut,
   type BoardZoomModifierKey
@@ -2253,12 +2254,16 @@ function DiagramEditorInner({
             )
           : nodesWithAssignedParents;
 
+        const nodesWithReferences = applyContainingReferenceDropTargets(
+          nodesWithReconciledAreas,
+          new Set([nextNode.id]),
+          terraformParameterCatalog
+        );
         const nextDiagram = {
           ...currentDiagram,
-          nodes: applyContainingReferenceDropTargets(
-            nodesWithReconciledAreas,
-            new Set([nextNode.id]),
-            terraformParameterCatalog
+          nodes: applyAddedApplicationAutoScalingTargetReferences(
+            nodesWithReferences,
+            nextNode.id
           )
         };
 
