@@ -180,3 +180,8 @@ Short English-only working log for the current agent context. Older records are 
 - Replaced the large amber partial-scan card with a 48px compact status row that preserves the recovery action only when settings are genuinely required.
 - Opened the Reverse Engineering start screen’s left panel at its 300px minimum width and placed the `시작 방식 다시 선택` navigation action inside it.
 - Verification passed: browser reproduction before the fix failed with `section=112, body=443`; the same check passed afterward with `section=542, body=443`, category content rendered within the modal scroll area, the compact partial status was 48px high, and the initial left panel was open at 300px. Web lint, Web typecheck, 31 focused tests, and `git diff --check` pass. No Board save, Terraform action, or AWS mutation was performed.
+
+### 2026-07-25 - Simplify Reverse Engineering scan settings header
+
+- Removed the redundant startup instruction below the `스캔 설정` heading while preserving the preview-only description after a scan result exists.
+- Verification passed: Web lint, Web typecheck, source absence check, and `git diff --check`. No AWS, Terraform, Board, or data mutation was performed.
