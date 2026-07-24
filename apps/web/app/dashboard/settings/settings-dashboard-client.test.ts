@@ -66,6 +66,13 @@ test("Settings hides AWS implementation terms and explains one connection outcom
   assert.doesNotMatch(clientSource, /<pre>\{cloudFormation\.templateBody\}<\/pre>/);
 });
 
+test("Settings gives the user a template download when the AWS Console shortcut is unavailable", () => {
+  assert.match(clientSource, /cloudFormation\.manualTemplateFallbackAvailable/);
+  assert.match(clientSource, /Template 다운로드/);
+  assert.match(clientSource, /downloadAwsConnectionTemplate\(/);
+  assert.doesNotMatch(clientSource, /AWS 승인 화면을 열지 못했습니다\. 잠시 후 연결을 다시 준비해 주세요\./);
+});
+
 test("Settings keeps role identifiers out of the connected AWS account summary", () => {
   assert.match(clientSource, /<p>\{getAwsRegionLabel\(connection\.region\)\}<\/p>/);
   assert.doesNotMatch(clientSource, /connection\.region\} · \{connection\.roleArn/);

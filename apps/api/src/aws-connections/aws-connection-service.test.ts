@@ -284,6 +284,35 @@ test("AWS connection templates trust every configured runtime caller role", asyn
   );
 });
 
+test("AWS connection template keeps a manual download fallback when a Console shortcut is unavailable", async () => {
+  const repository = createInMemoryAwsConnectionRepository();
+  const created = await createAwsConnection(
+    {
+      accessContext,
+      region: "ap-northeast-2",
+      callerPrincipalArns: [apiCallerPrincipalArn]
+    },
+    repository,
+    {
+      generateId: () => "template-fallback-1111-4222-8333-444444444444",
+      generateExternalId: () => "test-external-id"
+    }
+  );
+
+  const template = await getAwsConnectionCloudFormationTemplate(
+    {
+      connectionId: created.awsConnection.id,
+      accessContext,
+      callerPrincipalArns: [apiCallerPrincipalArn]
+    },
+    repository
+  );
+
+  assert.equal(template.launchStackUrl, null);
+  assert.equal(template.manualTemplateFallbackAvailable, true);
+  assert.match(template.templateBody, /AWSTemplateFormatVersion/u);
+});
+
 test("AWS connection policy authorizes only SketchCatch-managed CodeBuild names", async () => {
   const repository = createInMemoryAwsConnectionRepository();
   const result = await createAwsConnection(

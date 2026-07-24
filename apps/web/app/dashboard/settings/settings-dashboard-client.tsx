@@ -26,10 +26,7 @@ import type {
 import { ProductState } from "../../../components/ui/ProductState";
 import { DashboardIcon } from "../../../components/dashboard/dashboard-icons";
 import { setupModalAccessibility } from "../../../components/ui/modal-accessibility";
-import {
-  SelectMenu,
-  type SelectMenuOption
-} from "../../../components/ui/SelectMenu";
+import { SelectMenu } from "../../../components/ui/SelectMenu";
 import {
   createAwsConnectionSetup,
   checkAwsImportAccessReads,
@@ -69,17 +66,13 @@ import settingsStyles from "./settings-dashboard.module.css";
 import { getSettingsAwsConnectionAction } from "./settings-aws-connection-action";
 import { GitHubAccountSettings } from "./github-account-settings";
 import { getSettingsAwsRecoveryNavigation } from "./settings-aws-recovery-navigation";
+import { AWS_CONNECTION_REGION_OPTIONS } from "./settings-aws-regions";
 import {
   deriveSettingsConnectionFlowState,
   type SettingsConnectionFlowStepId,
   type SettingsConnectionFlowStepState
 } from "../../../features/dashboard/settings-connection-flow-state";
-
-const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
-  { label: "서울", value: "ap-northeast-2" },
-  { label: "버지니아 북부", value: "us-east-1" },
-  { label: "도쿄", value: "ap-northeast-1" }
-];
+import { downloadAwsConnectionTemplate } from "../../../features/dashboard/aws-connection-template-download";
 
 /** gg: 설정 화면은 API·AWS 진단을 노출하지 않고 사용자가 바로 이해할 수 있는 다음 행동만 안내합니다. */
 function getSettingsErrorMessage(_error: unknown, fallbackMessage: string): string {
@@ -576,7 +569,7 @@ export function SettingsDashboardClient() {
                       ariaLabel="기본 region 선택"
                       emptyLabel="region 선택"
                       onChange={setRegion}
-                      options={AWS_REGION_OPTIONS}
+                      options={AWS_CONNECTION_REGION_OPTIONS}
                       size="large"
                       tone="surface"
                       value={region}
@@ -592,9 +585,23 @@ export function SettingsDashboardClient() {
                       <a href={cloudFormation.launchStackUrl} rel="noreferrer" target="_blank">
                         AWS에서 승인하기 <ExternalLink size={15} />
                       </a>
+                    ) : cloudFormation.manualTemplateFallbackAvailable ? (
+                      <div className={styles.setupConsoleFallback} role="alert">
+                        <p>승인 화면을 바로 열지 못했습니다. Template을 내려받아 AWS Console에서 Stack을 만든 뒤 계정 ID를 입력해 주세요.</p>
+                        <button
+                          disabled={actionPending}
+                          onClick={() => downloadAwsConnectionTemplate({
+                            stackName: cloudFormation.stackName,
+                            templateBody: cloudFormation.templateBody
+                          })}
+                          type="button"
+                        >
+                          Template 다운로드
+                        </button>
+                      </div>
                     ) : (
                       <div className={styles.setupConsoleFallback} role="alert">
-                        <p>AWS 승인 화면을 열지 못했습니다. 잠시 후 연결을 다시 준비해 주세요.</p>
+                        <p>AWS 승인 화면을 준비하지 못했습니다. 잠시 후 연결을 다시 준비해 주세요.</p>
                         <button
                           disabled={actionPending}
                           onClick={() => void resumeConnectionSetup(setupConnection)}
@@ -1012,8 +1019,9 @@ function getConnectionFlowStatusLabel(
   return "진행 중";
 }
 
+// gg: 저장된 연결은 과거 region도 있을 수 있어 목록에 없는 값은 그대로 보존해 보여줍니다.
 function getAwsRegionLabel(region: string): string {
-  return AWS_REGION_OPTIONS.find((option) => option.value === region)?.label ?? region;
+  return AWS_CONNECTION_REGION_OPTIONS.find((option) => option.value === region)?.label ?? region;
 }
 
 function getCodeBuildStepSummary(
