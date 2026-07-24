@@ -4,6 +4,7 @@ import type { LiveObservationV2Snapshot } from "@sketchcatch/types";
 
 import {
   appendLiveObservationParticleIds,
+  getLiveObservationAnimatedParticleCount,
   getLiveObservationTrafficIntensity,
   mergeLiveObservationRequestBursts,
   getLiveObservationTrafficBurst,
@@ -39,7 +40,11 @@ test("renders up to twenty-four requests before summarizing the overflow", () =>
     { overflowCount: 226, visibleParticleCount: 24 }
   );
 });
-
+test("keeps the animation particle budget below the exact request counter", () => {
+  assert.equal(getLiveObservationAnimatedParticleCount(24), 4);
+  assert.equal(getLiveObservationAnimatedParticleCount(250), 4);
+  assert.equal(getLiveObservationAnimatedParticleCount(3), 3);
+});
 test("merges rapid single-request snapshots into one dense visual burst", () => {
   let burst = null;
 
@@ -56,22 +61,17 @@ test("merges rapid single-request snapshots into one dense visual burst", () => 
   });
 });
 
-test("keeps in-flight particle identities and replaces only new traffic at the cap", () => {
-  let nextParticleId = 24;
-  const currentIds = Array.from({ length: 24 }, (_, index) => index + 1);
+test("reuses fixed particle lanes when sustained traffic reaches the animation cap", () => {
+  let nextParticleId = 4;
+  const currentIds = [1, 2, 3, 4];
 
-  const nextIds = appendLiveObservationParticleIds(
-    currentIds,
-    1,
-    24,
-    () => {
-      nextParticleId += 1;
-      return nextParticleId;
-    }
-  );
+  const nextIds = appendLiveObservationParticleIds(currentIds, 1, 4, () => {
+    nextParticleId += 1;
+    return nextParticleId;
+  });
 
-  assert.deepEqual(nextIds, Array.from({ length: 24 }, (_, index) => index + 2));
-  assert.deepEqual(nextIds.slice(0, 23), currentIds.slice(1));
+  assert.equal(nextIds, currentIds);
+  assert.equal(nextParticleId, 4);
   assert.deepEqual(
     appendLiveObservationParticleIds(currentIds, 1, 0, () => {
       nextParticleId += 1;

@@ -27,6 +27,11 @@ export function LiveObservationNextActions({
       <div className={styles.recommendedAction}>
         <strong>{recommendedAction.title}</strong>
         <p>{recommendedAction.description}</p>
+        {recommendedAction.explanation ? (
+          <p className={styles.recommendedActionExplanation}>
+            AI 분석: {recommendedAction.explanation}
+          </p>
+        ) : null}
         {recommendedAction.isLoading ? <p role="status">수정안을 준비하고 있어요.</p> : null}
         {recommendedAction.errorMessage ? (
           <p className={styles.recommendedActionError} role="alert">

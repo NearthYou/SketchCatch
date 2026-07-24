@@ -7,6 +7,8 @@ Short English-only working log for the current agent context. Older records are 
 - 2026-07-24: Fixed Terraform block and source-line highlights drifting from enlarged code text. Highlight geometry now uses the editor's rendered font metrics through `em`-relative line height instead of the obsolete 19.2px baseline; the focused 3-test regression, root lint, root typecheck, and all five production builds pass.
 - The new-project screen shows local AWS, multicolor Google Cloud, and Azure brand icons and uses a wider, larger start-method layout with single-line desktop copy.
 - Workspace start cards keep every desktop title on one line, use subdued description typography, and place the AWS Role badge in the Reverse Engineering title row.
+- Live Observation keeps up to three problem records stable per session, omits raw logs and the chronological timeline, and shows actual versus expected Task capacity with sustained traffic motion.
+- High-traffic motion uses four stable particle lanes and compositor-only transforms instead of request-key churn and layout-bound `left` animation.
 - Repository Template previews show a dynamic recommendation rank, use the clearer AI design action, and keep candidate navigation anchored independently of recommendation-reason length.
 - Repository follow-up questions separate selected Template context, section hierarchy, individual prompts, and card-style answer choices.
 - 2026-07-24: Fixed AI Architecture chat patches for Application Auto Scaling target values. Exact resource IDs and the sole matching scaling policy now resolve deterministically, nested target-tracking config shapes are preserved, supported local plans skip Bedrock latency, and no-op requests return clarification instead of fake success.
@@ -51,95 +53,24 @@ Short English-only working log for the current agent context. Older records are 
 - Verified with 23 Repository route tests, Web lint, Web typecheck, Web production build, root harness check, and diff check.
 - Root `pnpm test` still fails in pre-existing Settings, board-rendering, and API baseline suites outside this change; the Repository screen test passes inside that run.
 
-### 2026-07-23 - Rebuild Repository analysis and Template preview UI
+### 2026-07-24 - Smooth high-traffic Live Observation motion
 
-- Split `/workspace/repository` into a focused pre-analysis form and a completed result with compact Repository metadata, mapped evidence, real Template thumbnails, and a Preview-first 28/72 layout.
-- Candidate arrows change only the local Preview index. Explicit Template acceptance is required before Board creation, and new recommendation results reset to the first candidate.
-- Preserved public/private recovery, follow-up questions, AI new-design entry, recommendation order and confidence, runtime Secret handoff, Board persistence, Analysis Record provenance, and Project Draft revision contracts.
-- Added responsive CSS, compact actions, one accessible live candidate announcement, pending/completed status, keyboard-native navigation, and neutral thumbnail/evidence fallbacks.
-- Fixed final-review regressions: changing the Repository URL now clears its stale branch, Repository TSX render tests run in the default Web suite, connected analyses fall back to safe `aiHandoff.evidence`, generation locks configuration changes, and deployment-type changes no longer remount the result or lose focus.
-- Browser-verified loading, success, failure recovery, candidate navigation, explicit Template use, AI new-design navigation, thumbnail fallback, keyboard focus, and form reset. The result has no console errors or horizontal overflow at 1440×900 and 390×844.
-- Added the shared 64px SketchCatch topbar with a return-to-start-mode link, widened the Repository canvas to 1440px, and enlarged the form, result metadata, and Preview-first layout for presentation use. Repository-focused tests, lint, typecheck, production build, and diff checks pass. A fresh unauthenticated local-browser session reached the login guard, so live visual QA still requires an authenticated local session.
-- Verified 42 Repository tests and 28 recommendation/handoff tests. Harness, root lint, root typecheck, production build, diff checks, and 25 sandbox E2E tests pass.
-- The untouched full Web baseline remains at 1,219/1,227 and the untouched API baseline remains at 1,523/1,557. Root `pnpm test` stops in `test:core`; Terraform tests also require a newer Terraform than local v1.6.6 for `mock_provider` and `override_resource`.
+- Added a red-capable performance contract that reproduced 12 particles per connector and layout-bound `left` keyframes.
+- Reduced rendered particles to four fixed lanes per connector while preserving the exact request total in the burst meter.
+- Reused lane identities at the cap and moved particles with infinite `translate3d` animation plus `will-change: transform, opacity`.
+- Neutralized busy/surge particle size and blur overrides so traffic intensity no longer changes layout geometry.
+- Browser verification found no console issues or layout regression; connector and node frames continued changing across a 1.15-second sample.
+- Verification: 133 scoped Live Observation tests, root lint, root typecheck, root build task completion, diff checks, and harness check pass. The known Turbo post-success runner hang still required termination.
+- No migration, dependency, cloud traffic, deployment, or external mutation was performed.
+### 2026-07-24 - Stabilize and clarify Live Observation
 
-### 2026-07-23 - Clear Repository Analysis result UI
-
-- Removed the old Repository result presentation layer: CSS module, architecture preview, cards, candidate list, visual wrappers, icon wrappers, and old full-width action layout.
-- Kept the existing analysis APIs, public/private recovery, recommendation order and IDs, Board creation, Analysis Record persistence, Project Draft revision, navigation, and AI new-design entry.
-- Replaced the route surface with minimal semantic HTML: one heading, labeled URL form, native branch and Template selects, status/alert regions, and existing actions.
-- Preserved the fetched branch list as a native select after public analysis; users do not need to know branch names manually.
-- Verified: Repository route tests 12/12, related analysis/recommendation/handoff tests 36/36, root harness, lint, typecheck, and production build pass.
-- Full Web and root test runs remain red only in untouched visual/API fixture tests outside this change. The baseline document records the exact boundary.
-
-### 2026-07-23 - Repository UI boundaries
-
-- No Repository UI follow-up is required before commit. The remaining failing suites are outside this diff and should be repaired separately.
-- Do not restore the deleted legacy result cards or change the preserved Repository Analysis, recommendation, Board creation, AI, auth, or route contracts.
-
-### Other 2026-07-23 updates
-
-- 2026-07-23: Removed the legacy `template-live-observation` demo fixture from the user-facing Template Gallery while retaining it for legacy Draft and Live Observation contract verification. Web typecheck and harness check pass; the focused compiler-heavy review test exceeded its 60-second execution limit.
-- 2026-07-23: Simplified the shared Template Gallery controls by removing Tag and sort selectors, retaining recommended order, and placing a compact search field on the right with full-width mobile behavior. Verified with the focused gallery regression test, Web typecheck, scoped diff review, and harness check.
-- 2026-07-23: Replaced the landing preview footer with a production-style product footer containing the SketchCatch identity, provider-neutral IaC service description, product-section navigation, Login entry, copyright, and responsive mobile layout. Verified with the focused landing regression test, Web typecheck, scoped diff review, and harness check.
-- 2026-07-23: Localized the landing navigation, removed the duplicate product-tour action, and routed every landing start CTA through Login so Signup is entered only from the Login page. Verified with the focused landing-flow regression test, Web typecheck, scoped diff review, and harness check.
-- 2026-07-23: Added user-scoped Settings caches for AWS, GitHub, and AWS CodeConnections. Cached connection details now survive tab remounts for 30 minutes, stay fresh for 5 minutes, and explicit refresh updates every connection source. Verified with the focused cache regression test, Web typecheck, scoped diff review, and harness check.
-- 2026-07-23: Aligned the empty Cost Usage refresh action with the shared dashboard secondary-button UI, typography, icon, and busy state. Verified by scoped diff review and harness check.
-- 2026-07-23: Removed the redundant empty-project `새 설계 시작` CTA from both project-list implementations while preserving the top-level `새 프로젝트` action. Verified by scoped diff review and harness check.
-- 2026-07-23: Enlarged the `/workspace/new` content area, start cards, titles, descriptions, and icons; added local cloud-provider brand assets and responsive single-column fallback. The focused start-screen test passes 2/2, and lint, typecheck, and production build pass.
-- 2026-07-23: Refined the `/workspace/new` start-method cards to match the selected compact UI direction. Added a focused regression test. Verified with the focused test, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`.
-
-### 2026-07-23 - Improve Repository follow-up question readability
-
-- Raised the follow-up section heading, prompt, choice, and text-input sizes while preserving existing design tokens, focus states, and responsive behavior.
-- Fixed the nested choice label inheriting the generic 12px metadata rule by explicitly inheriting the button typography.
-- Set the public Board action to a balanced 220 by 48px desktop size, retained the mobile full-width rule, and separated it from questions with a hairline divider.
-- Added 20px between questions without bullets, removed the question-stage top divider, and increased the back action to 40px with a 12px summary gap.
-- Kept the previously updated GitHub issue #543 unchanged after canceling a later unsaved edit, and retained branch fix/ck/543-repository-question-ui.
-- Repository-focused tests passed 29/29 after merging the latest dev branch. Web and root lint/typecheck passed. All five root build tasks and all 23 Web routes completed successfully.
-- User-provided authenticated-state screenshots guided the final spacing and sizing adjustments. No credentials, cloud mutations, dependency changes, or migrations were involved.
-- The latest dev Repository analysis rebuild superseded the branch-specific presentation structure during merge resolution; dev behavior and styles were retained. The merged Repository suite passes 44/44, and root lint, typecheck, build, diff, and harness checks pass.
-
-### 2026-07-23 - Defer Repository Project creation until Board confirmation
-
-- Issue #542 now opens the Repository analysis route with only the draft project name; entering the route or navigating back does not call Project creation.
-- Public Repository analysis works without a persisted Project. The Project is created only inside the confirmed Board save path, and a failed first draft save triggers best-effort deletion of that newly created empty Project.
-- Existing Project revision checks and Repository provenance retries continue to use the persisted Project ID; successful first saves invalidate Dashboard Project queries.
-- The 32 focused new-project/Repository regressions, root lint, root typecheck, root build, diff check, and harness check pass.
-
-### 2026-07-22 - Make Live Observation traffic dense, dramatic, and load-testable
-
-- Preserved the existing Focused Flow nodes, geometry, and routes while raising the visible request cap from five to 24, merging rapid single-event SSE snapshots into one sustained dense burst, and retaining exact overflow accounting.
-- Stable particle identities preserve in-flight travel during continuous 5 RPS snapshots: each request replaces only the oldest capped particle instead of restarting the full path.
-- Rolling warning/high/critical pressure now raises the existing motion vocabulary from flow to busy/surge. Busy/surge add bounded trail, glow, particle-size rhythm, and critical atmosphere effects; reduced-motion still disables the added ambient animation.
-- A standalone HTML preview was reopened with repaired Unicode copy and 9, 24, 250, and 900 request presets.
-- The external audience-live-check branch adds two explicit, cancellable profiles that share the real check-in and observation-receipt path with manual audience traffic: 24 requests for the AI warning and 900 requests at no more than 5 RPS for Fargate scale-out verification. Controls require the presenter query flag, 900 requests require confirmation, stale runs cannot overwrite current state, and attempted/succeeded/observed/failed counts remain distinct.
-- The external app passes all 58 tests, production build, typecheck, changed-file Biome checks, and diff checks. No bot profile, cloud load, deployment, Terraform action, or AWS mutation was executed.
-- Nine focused traffic/reconnect tests, root lint, root typecheck, and the direct Web production build pass.
-- The final root pnpm build passed all five packages; the direct Web build also completed all 23 routes after the final particle-identity fix.
-
-### 2026-07-22 - Reset Live Observation retry backoff after recovery
-
-- Added a deterministic fetch/timer regression that reproduced the user-visible delay: three recovered stream cycles still waited `1, 2, 4` units because the lifetime retry counter never reset.
-- Routed both SSE and fallback snapshots through one success handler that resets the counter while preserving exponential backoff for genuinely consecutive failures. The regression now observes `1, 1, 1`.
-- Twenty-six focused Live Observation tests, focused and root typecheck, root lint, direct Web production build, diff checks, and the final harness check pass.
-- Root `pnpm build` was attempted twice but Turbo produced no output and did not terminate; both verified build process trees were stopped. The changed Web package itself compiled and generated all routes successfully.
-- AWS read-only evidence could not be refreshed because this session has no configured credentials. No dependency, lockfile, migration, cloud mutation, production deployment, push, or Git/CI/CD handoff was performed.
-
-### 2026-07-23 - Stop Workspace AI message-triggered Orbit flashes
-
-- Issue #553 now keeps the Orbit reaction key stable while the conversation remains in the same stage, so user answers and assistant follow-up messages no longer restart the transient response animation.
-- Preserved `DecorativeAwsOrbit`, the continuous Orbit motion, convergence, Preview transition, and all Orbit CSS animation definitions unchanged.
-- Verified the regression red before implementation and green afterward. The focused Orbit suite passes 13/13, Web ESLint passes, Web `tsc --noEmit` passes, `git diff --check` passes, and the harness check passes.
-- `next build --webpack` compiled successfully, then stopped on the pre-existing `apps/web/app/api/ai/architecture-draft/route.ts` export of `forwardArchitectureDraftRequest`; that route is unchanged from `dev`.
-
-### 2026-07-24 - Delay Workspace AI generation progress until clarification completes
-
-- Issue #553 now renders the diagram-generation progress card only after the active stream emits a server progress snapshot; ordinary loading while validating an answer or returning the next clarification remains in the conversation state.
-- Each request exposes only its own `requestSnapshot`, so a prior response cannot make the next clarification request look like generation has started.
-- Preserved `DecorativeAwsOrbit`, Orbit motion, convergence, Preview transition, and all Orbit CSS definitions unchanged.
-- The exact regression failed before implementation and passes afterward. The focused Workspace AI and Orbit regression set passes 34/34, Web ESLint passes, and `git diff --check` passes.
-- Root pnpm checks remain unavailable in the isolated junction worktree because pnpm attempts a networked reinstall. Direct Web typecheck reaches only the two pre-existing invalid Next route helper exports; no changed file is involved.
+- Removed the traffic-surge banner, raw log groups, and chronological incident timeline from the rendered observation UI.
+- Added a session-scoped signal ledger so observed problems remain visible while matching evidence refreshes; a new observation session resets the ledger.
+- Prioritized readability with a single-column record list, clearer telemetry cards, larger spacing, and a simplified evidence detail.
+- Added provider-desired Task fallback and a 1.2-second entering state so newly running Tasks appear as expected before settling; continuous rolling traffic now keeps the flow animation active.
+- Browser-verified the failure fixture: no surge banner, log disclosure, or timeline; `실행 2개 · 예상 3개` and two stable records render, and eight animated flow elements change frames.
+- Verification: 132 scoped Live Observation tests, root lint, root typecheck, and the direct Web production build pass. Root `pnpm build` reported all five packages successful, then its Turbo runner stayed alive and was terminated after completion.
+- No migration, dependency, cloud traffic, deployment, or external mutation was performed.
 
 ## Known Risk
 
@@ -160,6 +91,29 @@ Short English-only working log for the current agent context. Older records are 
 2. Use a separately approved load cycle if provider-confirmed Live Observation scale-out must be accepted; no DB migration is required.
 3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
 
+### 2026-07-23 - Live Observation telemetry feedback and review fixes
+
+- Created branch `codex/live-observation-feedback` from `dev`.
+- Added an always-visible telemetry summary for accepted Store requests, rolling RPS, projected requests/minute, pressure, expected/actual Task count, provider observation state, and AI analysis state.
+- Made capacity projection recover Terraform reference edges before reading ECS target-tracking evidence, so expected Tasks appear even when persisted architecture edges are absent.
+- Removed the rendered current-status summary and focused traffic-flow diagram. The deployment selector now labels the selected timestamp inline as `배포 시각`.
+- Review fixes preserve stopped and expired lifecycle states, distinguish unavailable AWS observation from delayed data, show actual Task counts without a forecast, and reset cancelled AI analysis when its incident inputs disappear.
+- Memoized telemetry isolates the one-second countdown repaint from architecture recovery work, and null snapshots now return before reference recovery.
+- Deleted the unrendered focused-flow component, its diagram/particle/capacity-transition modules, focused-flow CSS, traffic-burst helpers, and obsolete tests instead of maintaining inactive animation work.
+- Verification: 109 Live Observation tests, Web lint, Web typecheck, and harness checks pass. Root lint, root typecheck, and root build pass across all five packages; the Web build generated all 23 routes.
+- Cross-impact verification found zero remaining TypeScript references to the 20 removed focused-flow CSS classes and no changes under API, shared types, AWS connection, Deployment, or CI/CD implementation files. AWS connection, Deployment, and CI/CD regressions pass 318/320; the two failures are unchanged stale CI/CD blue-primary contracts whose implementation files are outside this diff.
+- Browser verification confirms the telemetry summary is the first dashboard content and the removed status/flow sections do not render. The local fixture still reports a pre-existing server/client Korean time-format hydration mismatch.
+- No migration, dependency, cloud, traffic, or deployment mutation was performed.
+
+### 2026-07-24 - Deploy and verify Live Observation feedback
+
+- Pushed `codex/live-observation-feedback` at `fe570d60dd3809c4c2f9a3f64a392b5bc625d0f9` and deployed that exact SHA with GitHub Actions run `30033156323`.
+- The production workflow passed lint, typecheck, build, migration compatibility, environment validation, parallel API/Web image builds, production preflight, worker registration, and ECS stabilization. Web stabilized in 220 seconds and API in 295 seconds.
+- Production smoke passed: `/`, `/health`, and `/health/db` returned 200; unauthenticated `/api/projects` returned the expected 401.
+- Authenticated Chrome QA confirmed the surge banner and chronological record are absent, the pre-observation Task state reads `실행 확인 중 · 예상 계산 중`, and it later settles to `실행 1개 · 예상 1개`.
+- Four real audience check-ins were accepted. During the resulting high request count, connector animation remained `running` and its computed background position advanced across a 350 ms sample.
+- The design judgment and next action remained visible while observing and after the test session ended. Workspace and audience pages emitted no browser console warnings or errors.
+- The test observation session was ended after verification. No DB migration, dependency change, Terraform action, provider scale-out load cycle, or infrastructure mutation was performed.
 ### 2026-07-23 - Demo architecture editor flow
 
 - Issue #552 removes the Application Auto Scaling target from the strict Repository ECS/Fargate fixed-template draft while retaining a policy that references the target the presenter adds manually.
@@ -167,3 +121,40 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed Template Terraform names now derive from the short `templateResourceId`, resource labels remain visible when the display toggle is on at far zoom, and Terraform gutter/highlight layers synchronize in the same scroll event.
 - Verified: focused API tests 2/2, focused Web tests 107/107, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass.
 - The broader Web suite was attempted earlier and remains red in unrelated baseline tests outside this diff. No dependency, lockfile, migration, cloud mutation, or deployment change was made.
+### 2026-07-24 - Merge latest dev into Live Observation feedback
+
+- Fetched `origin/dev` through `a4b87dd6` and merged its 29 branch-only commits into `codex/live-observation-feedback` while retaining the branch's 11 commits.
+- Resolved the sole content conflict in `agent-progress.md` by preserving both Live Observation and current `dev` records. Archived older session records under `docs/agent-history/2026-07.md` to restore the harness size limit.
+- Post-merge verification passes: harness, root lint, root typecheck, and 121 focused Live Observation tests.
+- All five production build tasks and all 24 Web routes completed successfully. The known Windows Turbo wrapper stayed alive after success and was terminated, so the wrapper process reported a non-zero exit after task completion.
+- No DB migration, dependency install, cloud mutation, deployment, or traffic generation was performed.
+### 2026-07-24 - Start Live Observation design judgment from provider traffic
+
+- Reproduced the missing judgment with a deterministic snapshot where Store traffic had decayed to `0/normal` while the latest one-minute CloudWatch observation contained 540 requests. The pre-fix AI request was `null`.
+- Added one effective traffic calculation that takes the fresher maximum of Store projected traffic and the provider one-minute request count, then derives pressure against the validated target-tracking request target and observed running Task count.
+- Reused that result for the visible request rate, expected Task count, Design Simulation input, and modal incident trigger. Architecture loading order can no longer discard an already observed provider request spike.
+- The exact regression changed from red to green. Thirty-four focused regression/contract checks and the full 124 Live Observation tests pass; root lint, root typecheck, diff checks, and harness pass.
+- All five production build tasks and all 24 Web routes completed successfully. The known Windows Turbo wrapper stayed alive after success and was terminated, so the wrapper process reported a non-zero exit after task completion.
+- No DB migration, dependency change, cloud traffic, deployment, or infrastructure mutation was performed.
+### 2026-07-24 - Deploy provider-traffic judgment fix
+
+- Pushed `codex/live-observation-feedback` at `a173b45c9df410e4394bed9a4fa3cfe90d882433` and deployed that exact SHA with GitHub Actions run `30062741359`.
+- The production workflow passed lint, typecheck, build, migration compatibility, environment validation, parallel API/Web image builds, production preflight, worker registration, and ECS stabilization.
+- Production smoke passed: `/`, `/health`, and `/health/db` returned 200; unauthenticated `/api/projects` returned the expected 401.
+- No DB migration, dependency change, Terraform action, provider load cycle, or new infrastructure resource was performed.
+### 2026-07-24 - Stabilize Live Observation Task forecasts
+
+- Reserved the Task stage from the architecture maximum capacity and clipped connector paint so Task transitions and traffic animation cannot resize the horizontal scroll geometry.
+- Showed an expected Task count only when a provider-observed actual count differs from the request-based projection; unknown and steady capacity no longer render a misleading expectation.
+- Added continuous, low-amplitude `예상 중` motion for both scale-out and scale-in without the prior fade/scale flash.
+- Lowered the new ECS/Fargate Architecture and authored demo `ALBRequestCountPerTarget` default from 10 to 5 so request-driven scale-out is projected sooner.
+- Browser QA sampled 40 animation frames: `scrollWidth`, `clientWidth`, and surface width each stayed constant, the scale-out state rendered one forecast card, and the steady state rendered zero forecast cards.
+- Verification passed: six focused Web regressions, Template definitions, strict Repository Architecture, Template Terraform validation, authored Terraform preset, root lint, root typecheck, root build, diff check, and harness check.
+- No migration, dependency change, cloud traffic, Terraform action, deployment, or infrastructure mutation was performed. Existing Deployments keep their approved scaling policy until a new approved Plan/Apply.
+### 2026-07-24 - Advance Task forecasts and complete traffic motion
+
+- Reproduced three focused failures: a second Task was not forecast at 500 accepted requests, scale-in remained labeled as expected, and burst lifetime ended before the final Task connector.
+- Added a 500-request early scale-out step, made expected Tasks scale-out-only and visible on the first paint, and removed forecast units immediately when provider capacity catches up.
+- Counted the ECS Service-to-Task connector in burst lifetime so particles and node pulses reach the Task group.
+- Verification passes: 22 focused regressions, root lint, root typecheck, all five build tasks and 24 Web routes, diff check, and harness check. The root build exited successfully after 4m23s.
+- No DB migration, dependency change, generated load, Terraform action, or infrastructure mutation was performed.
