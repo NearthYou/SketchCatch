@@ -419,8 +419,11 @@ export type ProjectDeletePreviewMode =
 
 export type ProjectDeleteAction = "delete_project" | "delete_project_only" | "destroy_then_delete";
 
+/** Runs the project-owned AWS build cleanup before the project record is removed. */
+export type ProjectManagedCleanupDeleteAction = "delete_project_with_managed_cleanup";
+
 export type DeleteProjectRequest = {
-  action: Exclude<ProjectDeleteAction, "destroy_then_delete">;
+  action: Exclude<ProjectDeleteAction, "destroy_then_delete"> | ProjectManagedCleanupDeleteAction;
 };
 
 export type ProjectDeletePreview = {

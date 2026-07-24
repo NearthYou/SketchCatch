@@ -539,6 +539,33 @@ test("DELETE /api/projects/:id deletes a project owned by the active user", asyn
   await app.close();
 });
 
+test("DELETE /api/projects/:id accepts strict managed cleanup for bulk deletion", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "DELETE",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: { action: "delete_project_with_managed_cleanup" }
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(
+    fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID),
+    false
+  );
+
+  await app.close();
+});
+
 test("DELETE /api/projects/:id clears deployment plan pointers before deleting plan artifacts", async () => {
   const currentPlanArtifactId = "88888888-8888-4888-8888-888888888888";
   const approvedPlanArtifactId = "99999999-9999-4999-8999-999999999999";

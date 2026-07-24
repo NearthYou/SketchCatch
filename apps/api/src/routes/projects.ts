@@ -85,7 +85,9 @@ const createProjectBodySchema = z.object({
 
 const deleteProjectBodySchema = z
   .object({
-    action: z.enum(["delete_project", "delete_project_only"]).default("delete_project")
+    action: z
+      .enum(["delete_project", "delete_project_only", "delete_project_with_managed_cleanup"])
+      .default("delete_project")
   })
   .default({ action: "delete_project" });
 
