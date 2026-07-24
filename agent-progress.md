@@ -4,6 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- AWS connection managed cleanup uses a single bounded AWS SDK retry layer, waits through the established IAM propagation schedule for deletion conflicts, and keeps authorization and ownership failures non-retryable.
 - 2026-07-24: Fixed Terraform block and source-line highlights drifting from enlarged code text. Highlight geometry now uses the editor's rendered font metrics through `em`-relative line height instead of the obsolete 19.2px baseline; the focused 3-test regression, root lint, root typecheck, and all five production builds pass.
 - The new-project screen shows local AWS, multicolor Google Cloud, and Azure brand icons and uses a wider, larger start-method layout with single-line desktop copy.
 - Workspace start cards keep every desktop title on one line, use subdued description typography, and place the AWS Role badge in the Reverse Engineering title row.
