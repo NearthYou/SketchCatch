@@ -207,7 +207,7 @@ function ReverseEngineeringRightPanel({
       <header className={styles.panelHeader}>
         <p className={styles.eyebrow}>Reverse Engineering</p>
         <h2>{result ? "미리보기" : "스캔 설정"}</h2>
-        <p>{result ? "AWS에서 읽은 구조를 저장 전 미리보고 있습니다." : "AWS 연결과 범위를 고른 뒤 스캔을 시작하세요."}</p>
+        {result ? <p>AWS에서 읽은 구조를 저장 전 미리보고 있습니다.</p> : null}
       </header>
 
       <ReverseEngineeringScanSettings createProjectOnApply={createProjectOnApply} workflow={workflow} />
