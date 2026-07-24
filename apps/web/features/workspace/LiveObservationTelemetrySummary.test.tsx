@@ -2,8 +2,47 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { LiveObservationV2Snapshot } from "@sketchcatch/types";
+import type { ArchitectureJson, LiveObservationV2Snapshot } from "@sketchcatch/types";
 import { LiveObservationTelemetrySummary } from "./LiveObservationTelemetrySummary";
+
+const architecture: ArchitectureJson = {
+  edges: [
+    { id: "service-target", sourceId: "service", targetId: "target" },
+    { id: "target-policy", sourceId: "target", targetId: "policy" }
+  ],
+  nodes: [
+    {
+      id: "service",
+      type: "ECS_SERVICE",
+      positionX: 0,
+      positionY: 0,
+      config: { terraformResourceName: "service" }
+    },
+    {
+      id: "target",
+      type: "APPLICATION_AUTO_SCALING_TARGET",
+      positionX: 0,
+      positionY: 0,
+      config: { maxCapacity: 3, minCapacity: 1, terraformResourceName: "target" }
+    },
+    {
+      id: "policy",
+      type: "APPLICATION_AUTO_SCALING_POLICY",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        policyType: "TargetTrackingScaling",
+        terraformResourceName: "policy",
+        targetTrackingScalingPolicyConfiguration: {
+          targetValue: 60,
+          predefinedMetricSpecification: [
+            { predefinedMetricType: "ALBRequestCountPerTarget" }
+          ]
+        }
+      }
+    }
+  ]
+};
 
 test("marks a stopped observation as ended instead of presenting its final payload as live", () => {
   const html = renderSummary(snapshot({ status: "stopped", state: "available", running: 2 }));
@@ -42,16 +81,37 @@ test("shows only infrastructure design signals in the primary summary", () => {
   assert.doesNotMatch(html, /AWS 지표 수신/);
 });
 
+test("shows provider traffic and the design forecast without waiting for Store pressure", () => {
+  const value = snapshot({ status: "active", state: "available", running: 1 });
+  value.live = {
+    ...value.live,
+    projectedRequestsPerMinute: 0,
+    pressureLevel: "normal",
+    pressurePercent: 0,
+    rollingRequestsPerSecond: 0
+  };
+  if (value.latestObservation) {
+    value.latestObservation.payload.requests = 540;
+  }
+
+  const html = renderSummary(value, architecture);
+
+  assert.match(html, /540 req\/min · 위험/);
+  assert.match(html, /실행 1개 · 예상 3개/);
+});
 test("uses provider desired capacity as the expected task count when design projection is unavailable", () => {
   const html = renderSummary(snapshot({ status: "active", state: "available", running: 3 }));
 
   assert.match(html, /실행 3개 · 예상 3개/);
 });
-function renderSummary(value: LiveObservationV2Snapshot | null): string {
+function renderSummary(
+  value: LiveObservationV2Snapshot | null,
+  selectedArchitecture: ArchitectureJson | null = null
+): string {
   return renderToStaticMarkup(
     createElement(LiveObservationTelemetrySummary, {
       aiState: "idle",
-      architecture: null,
+      architecture: selectedArchitecture,
       snapshot: value
     })
   );

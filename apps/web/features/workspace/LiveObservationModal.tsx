@@ -233,9 +233,12 @@ export function LiveObservationModal({
   }, [selectedSession?.id]);
 
   useEffect(() => {
+    const designSimulationInput =
+      selectedArchitecture && selectedSnapshot
+        ? createLiveObservationDesignSimulationRequest(selectedArchitecture, selectedSnapshot)
+        : null;
     if (
-      selectedSnapshot &&
-      selectedSnapshot.live.pressureLevel !== "normal" &&
+      designSimulationInput &&
       appliedTerraformUpdate === null &&
       trafficIncidentSnapshot === null
     ) {
@@ -244,6 +247,7 @@ export function LiveObservationModal({
   }, [
     appliedTerraformUpdate,
     onTrafficIncidentSnapshotChange,
+    selectedArchitecture,
     selectedSnapshot,
     trafficIncidentSnapshot
   ]);

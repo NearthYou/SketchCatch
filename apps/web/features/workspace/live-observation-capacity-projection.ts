@@ -15,6 +15,58 @@ type RequestScalingEvidence = Readonly<{
   targetValue: number;
 }>;
 
+export type LiveObservationEffectiveTraffic = Readonly<{
+  pressureLevel: LiveObservationV2Snapshot["live"]["pressureLevel"];
+  pressurePercent: number;
+  projectedRequestsPerMinute: number;
+}>;
+
+/** Uses the freshest one-minute request evidence, whether it came from the Store or CloudWatch. */
+export function getLiveObservationEffectiveTraffic(
+  architecture: ArchitectureJson | null,
+  snapshot: LiveObservationV2Snapshot | null
+): LiveObservationEffectiveTraffic {
+  if (!snapshot) {
+    return {
+      pressureLevel: "normal",
+      pressurePercent: 0,
+      projectedRequestsPerMinute: 0
+    };
+  }
+
+  const providerSnapshot = snapshot.latestObservation?.payload;
+  const providerRequestsPerMinute =
+    providerSnapshot &&
+    providerSnapshot.state !== "unavailable" &&
+    providerSnapshot.requests !== null
+      ? providerSnapshot.requests
+      : 0;
+  const projectedRequestsPerMinute = Math.max(
+    snapshot.live.projectedRequestsPerMinute,
+    providerRequestsPerMinute
+  );
+  const evidence = architecture
+    ? readRequestScalingEvidence(recoverLiveObservationReferenceEdges(architecture))
+    : null;
+  const runningTaskCount = providerSnapshot?.capacity.running;
+  const observedTaskCount =
+    runningTaskCount !== null && runningTaskCount !== undefined && runningTaskCount > 0
+      ? runningTaskCount
+      : 1;
+  const providerPressurePercent = evidence
+    ? roundMetric(
+        (providerRequestsPerMinute / (evidence.targetValue * observedTaskCount)) * 100
+      )
+    : 0;
+  const pressurePercent = Math.max(snapshot.live.pressurePercent, providerPressurePercent);
+
+  return {
+    pressureLevel: getPressureLevel(pressurePercent),
+    pressurePercent,
+    projectedRequestsPerMinute
+  };
+}
+
 export function getLiveObservationCapacityProjection(
   architecture: ArchitectureJson,
   snapshot: LiveObservationV2Snapshot | null
@@ -25,7 +77,7 @@ export function getLiveObservationCapacityProjection(
   if (!evidence) return null;
 
   const predictedCount = clamp(
-    Math.ceil(snapshot.live.projectedRequestsPerMinute / evidence.targetValue),
+    Math.ceil(getLiveObservationEffectiveTraffic(architecture, snapshot).projectedRequestsPerMinute / evidence.targetValue),
     evidence.minCapacity,
     evidence.maxCapacity
   );
@@ -110,6 +162,19 @@ function readPositiveInteger(value: unknown): number | null {
 
 function readPositiveNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function getPressureLevel(
+  pressurePercent: number
+): LiveObservationV2Snapshot["live"]["pressureLevel"] {
+  if (pressurePercent >= 100) return "critical";
+  if (pressurePercent >= 70) return "high";
+  if (pressurePercent >= 40) return "warning";
+  return "normal";
+}
+
+function roundMetric(value: number): number {
+  return Math.round(value * 1_000) / 1_000;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

@@ -263,6 +263,13 @@ test("keeps the Signal Dashboard and does not restore the legacy metric grid", (
   assert.doesNotMatch(modalSource, /operationalAnalysis|providerLogs|최근 런타임 로그/);
 });
 
+test("starts design judgment from effective provider traffic instead of Store pressure alone", () => {
+  assert.match(
+    modalSource,
+    /createLiveObservationDesignSimulationRequest\(selectedArchitecture, selectedSnapshot\)/
+  );
+  assert.doesNotMatch(modalSource, /selectedSnapshot\.live\.pressureLevel !== "normal"/);
+});
 test("clears AI analysis state when its incident inputs disappear", () => {
   const aiSimulationEffect = getSourceBlock(
     modalSource,

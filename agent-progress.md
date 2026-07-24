@@ -118,3 +118,11 @@ Short English-only working log for the current agent context. Older records are 
 - Post-merge verification passes: harness, root lint, root typecheck, and 121 focused Live Observation tests.
 - All five production build tasks and all 24 Web routes completed successfully. The known Windows Turbo wrapper stayed alive after success and was terminated, so the wrapper process reported a non-zero exit after task completion.
 - No DB migration, dependency install, cloud mutation, deployment, or traffic generation was performed.
+### 2026-07-24 - Start Live Observation design judgment from provider traffic
+
+- Reproduced the missing judgment with a deterministic snapshot where Store traffic had decayed to `0/normal` while the latest one-minute CloudWatch observation contained 540 requests. The pre-fix AI request was `null`.
+- Added one effective traffic calculation that takes the fresher maximum of Store projected traffic and the provider one-minute request count, then derives pressure against the validated target-tracking request target and observed running Task count.
+- Reused that result for the visible request rate, expected Task count, Design Simulation input, and modal incident trigger. Architecture loading order can no longer discard an already observed provider request spike.
+- The exact regression changed from red to green. Thirty-four focused regression/contract checks and the full 124 Live Observation tests pass; root lint, root typecheck, diff checks, and harness pass.
+- All five production build tasks and all 24 Web routes completed successfully. The known Windows Turbo wrapper stayed alive after success and was terminated, so the wrapper process reported a non-zero exit after task completion.
+- No DB migration, dependency change, cloud traffic, deployment, or infrastructure mutation was performed.

@@ -1,5 +1,8 @@
 import type { ArchitectureJson, LiveObservationV2Snapshot } from "@sketchcatch/types";
-import { getLiveObservationCapacityProjection } from "./live-observation-capacity-projection";
+import {
+  getLiveObservationCapacityProjection,
+  getLiveObservationEffectiveTraffic
+} from "./live-observation-capacity-projection";
 
 export type LiveObservationAiState = "idle" | "loading" | "ready" | "error";
 
@@ -29,6 +32,7 @@ export function createLiveObservationTelemetryModel({
     ? getLiveObservationCapacityProjection(architecture, snapshot)
     : null;
   const providerState = snapshot?.latestObservation?.payload.state ?? "not_started";
+  const traffic = getLiveObservationEffectiveTraffic(architecture, snapshot);
 
   return {
     acceptedEventCount: snapshot?.live.acceptedEventCount ?? 0,
@@ -37,9 +41,9 @@ export function createLiveObservationTelemetryModel({
     aiState,
     expectedTaskCount:
       projection?.predictedCount ?? snapshot?.latestObservation?.payload.capacity.desired ?? null,
-    pressureLevel: snapshot?.live.pressureLevel ?? "normal",
-    pressurePercent: snapshot?.live.pressurePercent ?? 0,
-    projectedRequestsPerMinute: snapshot?.live.projectedRequestsPerMinute ?? 0,
+    pressureLevel: traffic.pressureLevel,
+    pressurePercent: traffic.pressurePercent,
+    projectedRequestsPerMinute: traffic.projectedRequestsPerMinute,
     providerState,
     rollingRequestsPerSecond: snapshot?.live.rollingRequestsPerSecond ?? 0,
     sessionStatus: snapshot?.status ?? "not_started"

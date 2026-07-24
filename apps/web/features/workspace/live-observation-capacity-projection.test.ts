@@ -18,6 +18,20 @@ test("projects bounded Fargate capacity from immediate rolling traffic", () => {
   });
 });
 
+test("uses the provider one-minute request count when Store traffic has gone idle", () => {
+  const value = snapshot({ projectedRequestsPerMinute: 0, running: 1 });
+  if (value.latestObservation) {
+    value.latestObservation.payload.requests = 540;
+  }
+
+  const projection = getLiveObservationCapacityProjection(
+    architecture({ minCapacity: 1, maxCapacity: 3, targetValue: 60 }),
+    value
+  );
+
+  assert.equal(projection?.predictedCount, 3);
+  assert.equal(projection?.direction, "scale_out");
+});
 test("keeps the minimum capacity at zero traffic and predicts scale-in separately", () => {
   const projection = getLiveObservationCapacityProjection(
     architecture({ minCapacity: 1, maxCapacity: 3, targetValue: 10 }),

@@ -4,6 +4,7 @@
 
 - Branch `codex/live-observation-feedback` keeps the focused infrastructure flow and simplifies the surrounding Live Observation UI.
 - Latest `origin/dev` through `a4b87dd6` is merged into the branch; the sole progress-log conflict preserved both histories.
+- Live Observation now uses the latest one-minute CloudWatch request count when Store pressure has decayed, so request rate, Task forecast, Design Simulation, and the next action appear from the same traffic evidence.
 - The traffic-surge banner, raw log groups, and chronological incident timeline are no longer rendered.
 - Up to three observed problems remain visible for the current observation session; matching evidence refreshes without reordering the cards, and a new session resets them.
 - Task capacity uses the architecture forecast when available and provider desired capacity as a fallback. Newly active Tasks remain in an expected state for 1.2 seconds before settling as running.
