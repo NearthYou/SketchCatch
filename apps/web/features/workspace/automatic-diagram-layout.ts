@@ -34,8 +34,12 @@ export type AutomaticDiagramLayoutInput = {
   readonly candidateProfiles?: readonly AutomaticDiagramLayoutCandidateProfile[] | undefined;
   readonly edges: readonly AutomaticDiagramLayoutEdge[];
   readonly nodes: readonly DiagramNode[];
+  readonly searchMode?: AutomaticDiagramLayoutSearchMode | undefined;
   readonly protectedNodeIds?: ReadonlySet<string> | undefined;
 };
+
+/** 큰 읽기 전용 미리보기에서만 후보 탐색 비용을 제한하는 배치 모드입니다. */
+export type AutomaticDiagramLayoutSearchMode = "full" | "responsive";
 
 export type AutomaticDiagramLayoutCandidateProfile = {
   readonly columnGap: number;
@@ -195,9 +199,14 @@ function doesNotRegressVisualAnomalies(
   );
 }
 
+// gg: 큰 읽기 전용 미리보기는 한 가지 안정된 전략만 평가해 화면 응답을 우선합니다.
 function getLayoutCandidateConfigs(
   input: AutomaticDiagramLayoutInput
 ): readonly LayoutCandidateConfig[] {
+  if (input.searchMode === "responsive") {
+    return [LAYOUT_CANDIDATES[0]!];
+  }
+
   const profiles = [...(input.candidateProfiles ?? [])]
     .filter(isUsableCandidateProfile)
     .sort((left, right) => left.id.localeCompare(right.id));
@@ -228,7 +237,7 @@ function isUsableCandidateProfile(
   );
 }
 
-/** 자동 프레임·가져오기 프레임·잠긴 노드는 지키고 한 전략의 layout을 계산합니다. */
+/** gg: 자동 프레임·가져오기 프레임·잠긴 노드는 지키고 한 전략의 layout을 계산합니다. */
 function createLayoutCandidate(
   input: AutomaticDiagramLayoutInput,
   config: LayoutCandidateConfig
@@ -300,12 +309,14 @@ function createLayoutCandidate(
     config
   );
   compactRootSupportLayout(input.edges, nextNodeById, roleByNodeId, protectedNodeIds);
-  avoidSupportEdgeNodeIntersections(
-    input.edges,
-    nextNodeById,
-    roleByNodeId,
-    protectedNodeIds
-  );
+  if (input.searchMode !== "responsive") {
+    avoidSupportEdgeNodeIntersections(
+      input.edges,
+      nextNodeById,
+      roleByNodeId,
+      protectedNodeIds
+    );
+  }
 
   for (const parentId of parentIds) {
     fitParentAreaToChildren(parentId, nextNodeById, protectedNodeIds);
