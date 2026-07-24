@@ -54,5 +54,5 @@ test("ECS Fargate template emits the HTTPS Live Observation and request scaling 
   assert.match(terraformCode, /output "api_base_url"[\s\S]*aws_cloudfront_distribution\.distribution\.domain_name/);
   assert.match(terraformCode, /resource "aws_appautoscaling_target" "scaling_target"/);
   assert.match(terraformCode, /max_capacity = 3/);
-  assert.match(terraformCode, /target_value = 10/);
+  assert.match(terraformCode, /target_value = 5/);
 });

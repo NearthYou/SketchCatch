@@ -1541,7 +1541,7 @@ export const templateDefinitions = [
           scalableDimension: "@ref:scaling-target.scalable_dimension",
           serviceNamespace: "@ref:scaling-target.service_namespace",
           targetTrackingScalingPolicyConfiguration: {
-            targetValue: 10,
+            targetValue: 5,
             scaleInCooldown: 60,
             scaleOutCooldown: 30,
             predefinedMetricSpecification: [

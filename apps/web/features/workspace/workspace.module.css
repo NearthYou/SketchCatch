@@ -7526,8 +7526,10 @@
 }
 
 .liveObservationTargetBar label {
+  align-items: center;
   display: grid;
-  gap: 3px;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
   min-width: 0;
 }
 
@@ -7535,6 +7537,7 @@
   color: var(--workspace-muted, #60646c);
   font-size: calc(12px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
+  white-space: nowrap;
 }
 
 .liveObservationTargetBar select {
@@ -7803,9 +7806,9 @@
   --live-observation-node-size: 64px;
 
   flex: 0 0 auto;
-  height: clamp(320px, 36dvh, 420px);
-  min-height: clamp(320px, 36dvh, 420px);
-  margin-bottom: 20px;
+  height: auto;
+  min-height: 0;
+  margin-bottom: 0;
 }
 
 .liveObservationFocusedFlow[data-capacity-density="compact"] {
@@ -7827,7 +7830,16 @@
 }
 
 .liveObservationFocusedFlow .liveObservationPresentationViewport {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  padding: 18px 20px 16px;
+}
+
+.liveObservationFocusedFlow .liveObservationPresentationSurface {
+  padding: 32px 22px 16px;
+}
+
+.liveObservationFocusedFlow .liveObservationPresentationSurface::before {
+  content: none;
 }
 
 .liveObservationArchitectureHeader {
@@ -8191,7 +8203,7 @@
 }
 
 .liveObservationFocusedFlow[data-flowing="true"] .liveObservationPresentationNode {
-  animation: liveObservationNodeTraffic 0.52s ease-in-out infinite;
+  animation: liveObservationNodeTraffic 1s ease-in-out infinite;
 }
 
 .liveObservationPresentationNode img {
@@ -8260,7 +8272,8 @@
     0 0 10px rgb(57 116 232 / 12%);
   height: 4px;
   left: calc(50% + var(--live-observation-node-radius));
-  overflow: visible;
+  contain: paint;
+  overflow: hidden;
   position: absolute;
   top: calc(var(--live-observation-node-radius) - 2px);
   width: calc(100% - (var(--live-observation-node-radius) * 2));
@@ -8290,7 +8303,7 @@
 }
 
 .liveObservationDiagramMap[data-flowing="true"] .liveObservationPresentationConnector::after {
-  animation: liveObservationConnectorFlow 0.3s linear infinite;
+  animation: liveObservationConnectorFlow 0.75s linear infinite;
   background: linear-gradient(
     90deg,
     transparent 0 18%,
@@ -8330,7 +8343,7 @@
 
 .liveObservationDiagramMap[data-traffic-intensity="surge"]
   .liveObservationPresentationConnector::after {
-  animation-duration: 0.2s;
+  animation-duration: 0.55s;
   background: linear-gradient(
     90deg,
     transparent 0 10%,
@@ -8350,7 +8363,7 @@
 }
 
 .liveObservationDiagramMap[data-traffic-intensity="surge"]
-  .liveObservationPresentationSegmentParticle {
+  .liveObservationPresentationSegmentParticle::after {
   background: #ff244f;
   box-shadow:
     0 0 0 4px rgb(255 36 79 / 25%),
@@ -8363,19 +8376,13 @@
 }
 
 .liveObservationPresentationSegmentParticle {
-  animation: liveObservationPresentationSegmentParticle 920ms linear both;
-  background: #ff6b00;
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  box-sizing: border-box;
-  box-shadow:
-    0 0 0 4px rgb(255 107 0 / 24%),
-    0 0 22px rgb(255 107 0 / 96%);
-  height: 15px;
-  left: -34px;
+  animation: liveObservationPresentationSegmentParticle 920ms linear infinite;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
   position: absolute;
-  top: -5px;
-  width: 15px;
+  transform: translate3d(-34px, 0, 0);
+  will-change: transform, opacity;
   z-index: 4;
 }
 
@@ -8384,21 +8391,28 @@
   border-radius: 999px;
   content: "";
   height: 5px;
+  left: -42px;
   position: absolute;
-  right: 8px;
-  top: 3px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 42px;
 }
 
 .liveObservationPresentationSegmentParticle::after {
-  background: #ffffff;
+  background: #ff6b00;
+  border: 2px solid #ffffff;
   border-radius: 50%;
+  box-sizing: border-box;
+  box-shadow:
+    0 0 0 4px rgb(255 107 0 / 24%),
+    0 0 22px rgb(255 107 0 / 96%);
   content: "";
-  height: 4px;
+  height: 15px;
+  left: 0;
   position: absolute;
-  right: 2px;
-  top: 2px;
-  width: 4px;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 15px;
 }
 
 .liveObservationDiagramMap[data-pressure-level="high"]
@@ -8488,14 +8502,16 @@
 
 .liveObservationCapacityLabel strong {
   font-size: calc(11px + var(--presentation-font-size-increase));
-  letter-spacing: 0.1em;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .liveObservationCapacityLabel small {
   color: #16865c;
   font-size: calc(9px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .liveObservationCapacityUnits {
@@ -8597,7 +8613,9 @@
 }
 
 .liveObservationCapacityUnit[data-capacity-forecast="predicted"] {
-  animation: liveObservationCapacityForecast 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: liveObservationCapacityForecast 1.4s ease-in-out infinite;
+  transform-origin: center 32px;
+  will-change: transform, opacity;
 }
 
 .liveObservationCapacityUnit[data-capacity-forecast="predicted"] .liveObservationPresentationNode {
@@ -8612,14 +8630,6 @@
   color: #b45309;
 }
 
-.liveObservationCapacityUnit[data-capacity-forecast="scale-in"] .liveObservationPresentationNode {
-  border-color: #e25555;
-  box-shadow: 0 0 0 4px rgb(226 85 85 / 11%);
-}
-
-.liveObservationCapacityUnit[data-capacity-forecast="scale-in"] > span {
-  color: #b42318;
-}
 
 .liveObservationCapacityUnit[data-observation-state="inactive"] {
   opacity: 0.72;
@@ -8670,16 +8680,14 @@
   font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
-.liveObservationDiagramMap[data-traffic-intensity="busy"]
-  .liveObservationPresentationSurface {
+.liveObservationDiagramMap[data-traffic-intensity="busy"] .liveObservationPresentationSurface {
   box-shadow:
     inset 0 0 54px rgb(255 107 0 / 12%),
     0 12px 30px rgb(255 107 0 / 8%);
 }
 
-.liveObservationDiagramMap[data-traffic-intensity="surge"]
-  .liveObservationPresentationSurface {
-  animation: liveObservationTrafficAtmosphere 760ms ease-in-out infinite;
+.liveObservationDiagramMap[data-traffic-intensity="surge"] .liveObservationPresentationSurface {
+  box-shadow: inset 0 0 58px rgb(255 36 79 / 14%);
 }
 
 .liveObservationDiagramMap[data-traffic-intensity="busy"]
@@ -8703,13 +8711,26 @@
   width: 58px;
 }
 
+.liveObservationDiagramMap[data-traffic-intensity="busy"]
+  .liveObservationPresentationSegmentParticle:nth-of-type(3n),
 .liveObservationDiagramMap[data-traffic-intensity="surge"]
-  .liveObservationPresentationNode {
-  animation-duration: 320ms;
+  .liveObservationPresentationSegmentParticle:nth-of-type(3n + 1) {
+  height: auto;
+  inset: 0;
+  width: auto;
 }
 
-.liveObservationDiagramMap[data-pressure-level="critical"]
-  .liveObservationCapacityStage::after {
+.liveObservationDiagramMap[data-traffic-intensity="surge"]
+  .liveObservationPresentationSegmentParticle:nth-of-type(4n + 2)::before {
+  filter: none;
+  height: 5px;
+  width: 42px;
+}
+.liveObservationDiagramMap[data-traffic-intensity="surge"] .liveObservationPresentationNode {
+  animation-duration: 780ms;
+}
+
+.liveObservationDiagramMap[data-pressure-level="critical"] .liveObservationCapacityStage::after {
   box-shadow:
     inset 0 0 34px rgb(255 36 79 / 10%),
     0 0 22px rgb(255 36 79 / 12%);
@@ -8730,8 +8751,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .liveObservationDiagramMap[data-traffic-intensity="surge"]
-    .liveObservationPresentationSurface {
+  .liveObservationDiagramMap[data-traffic-intensity="surge"] .liveObservationPresentationSurface {
     animation: none;
   }
 }
@@ -8757,27 +8777,23 @@
 }
 
 @keyframes liveObservationCapacityForecast {
-  0% {
-    filter: saturate(1.35);
-    transform: translateY(14px) scale(0.72);
-  }
-  60% {
-    transform: translateY(-4px) scale(1.08);
-  }
+  0%,
   100% {
-    filter: saturate(1);
-    transform: translateY(0) scale(1);
+    opacity: 0.82;
+    transform: translateY(0) scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.03);
   }
 }
 
 @keyframes liveObservationNodeIdle {
   0%,
   100% {
-    box-shadow: 0 0 0 rgba(57, 116, 232, 0);
     transform: translateY(0) scale(1);
   }
   50% {
-    box-shadow: 0 8px 18px rgba(57, 116, 232, 0.16);
     transform: translateY(-4px) scale(1.035);
   }
 }
@@ -8785,29 +8801,27 @@
 @keyframes liveObservationNodeTraffic {
   0%,
   100% {
-    box-shadow: 0 0 0 rgb(255 107 0 / 0%);
     transform: translateY(0) scale(1);
   }
   50% {
-    box-shadow: 0 6px 20px rgb(255 107 0 / 25%);
     transform: translateY(-2px) scale(1.06);
   }
 }
 
 @keyframes liveObservationPresentationSegmentParticle {
   from {
-    left: -34px;
     opacity: 0;
+    transform: translate3d(-34px, 0, 0);
   }
-  4% {
+  8% {
     opacity: 1;
   }
-  96% {
+  92% {
     opacity: 1;
   }
   to {
-    left: calc(100% + 16px);
     opacity: 0;
+    transform: translate3d(100%, 0, 0);
   }
 }
 
@@ -9366,6 +9380,15 @@
 
   .liveObservationFocusedFlow .liveObservationPresentationViewport {
     flex: 0 0 auto;
+    padding: 18px 20px 16px;
+  }
+
+  .liveObservationFocusedFlow .liveObservationPresentationSurface {
+    padding: 32px 22px 16px;
+  }
+
+  .liveObservationFocusedFlow .liveObservationPresentationSurface::before {
+    content: none;
   }
 
   .liveObservationSignalMap {
@@ -11410,19 +11433,11 @@
 
 /* Deployment tab final cascade */
 .deploymentConsoleScreenBody {
-  --deployment-console-page-title-size: calc(
-    28px + var(--presentation-font-size-increase)
-  );
+  --deployment-console-page-title-size: calc(28px + var(--presentation-font-size-increase));
   --deployment-console-context-size: calc(13px + var(--presentation-font-size-increase));
-  --deployment-console-primary-action-size: calc(
-    16px + var(--presentation-font-size-increase)
-  );
-  --deployment-console-section-title-size: calc(
-    18px + var(--presentation-font-size-increase)
-  );
-  --deployment-console-feature-title-size: calc(
-    22px + var(--presentation-font-size-increase)
-  );
+  --deployment-console-primary-action-size: calc(16px + var(--presentation-font-size-increase));
+  --deployment-console-section-title-size: calc(18px + var(--presentation-font-size-increase));
+  --deployment-console-feature-title-size: calc(22px + var(--presentation-font-size-increase));
   --deployment-console-row-title-size: calc(16px + var(--presentation-font-size-increase));
   --deployment-console-body-size: calc(15px + var(--presentation-font-size-increase));
   --deployment-console-meta-size: calc(13px + var(--presentation-font-size-increase));
@@ -11592,10 +11607,7 @@
 }
 
 .deploymentPageHeader
-  .deploymentSecondaryButton:is(
-    [data-action="cancel-execution"],
-    [data-action="destroy-plan"]
-  ) {
+  .deploymentSecondaryButton:is([data-action="cancel-execution"], [data-action="destroy-plan"]) {
   background: #fff1f0;
   border-color: #e7aaa5;
   color: #b42318;
@@ -11616,15 +11628,13 @@
 }
 
 .deploymentPageHeader
-  .deploymentSecondaryButton:is(
-    [data-action="cancel-execution"],
-    [data-action="destroy-plan"]
-  ):not(:disabled):hover,
+  .deploymentSecondaryButton:is([data-action="cancel-execution"], [data-action="destroy-plan"]):not(
+    :disabled
+  ):hover,
 .deploymentPageHeader
-  .deploymentSecondaryButton:is(
-    [data-action="cancel-execution"],
-    [data-action="destroy-plan"]
-  ):not(:disabled):focus-visible {
+  .deploymentSecondaryButton:is([data-action="cancel-execution"], [data-action="destroy-plan"]):not(
+    :disabled
+  ):focus-visible {
   background: #ffe5e2;
   border-color: #d77f78;
   color: #991b1b;

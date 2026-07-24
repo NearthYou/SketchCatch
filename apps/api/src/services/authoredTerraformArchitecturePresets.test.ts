@@ -45,9 +45,8 @@ test("the realtime deployment demo prompt keeps questions but always returns the
         { creditPolicy, provider }
       );
       if (!("status" in response)) return response;
-      const answer = suggestionIndex === "first"
-        ? response.suggestions[0]
-        : response.suggestions.at(-1);
+      const answer =
+        suggestionIndex === "first" ? response.suggestions[0] : response.suggestions.at(-1);
       assert.ok(answer);
       clarificationAnswers.push({ questionId: response.questionId, answer });
     }
@@ -85,7 +84,11 @@ test("the realtime deployment demo prompt keeps questions but always returns the
   };
   assert.equal(generateTerraformFromDiagramJson(catalogPresentedDiagram), expectedTerraform);
   assert.equal(first.diagramJson.nodes.length, 42);
-  assert.match(terraform, /resource "aws_ecs_service" "ecs_service_fixed_template_fargate_container_app"/u);
+  assert.match(
+    terraform,
+    /resource "aws_ecs_service" "ecs_service_fixed_template_fargate_container_app"/u
+  );
+  assert.match(terraform, /target_value\s*=\s*5/u);
   assert.match(terraform, /resource "aws_cloudfront_distribution" "cdn_web"/u);
   assert.match(terraform, /resource "aws_secretsmanager_secret" "check_in_signing"/u);
 });

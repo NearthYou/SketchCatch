@@ -3892,7 +3892,7 @@ function applyStrictRepositoryEvidencePolicy(
             scalableDimension: "aws_appautoscaling_target.ecs_service_requests.scalable_dimension",
             serviceNamespace: "aws_appautoscaling_target.ecs_service_requests.service_namespace",
             targetTrackingScalingPolicyConfiguration: {
-              targetValue: 10,
+              targetValue: 5,
               scaleInCooldown: 60,
               scaleOutCooldown: 30,
               predefinedMetricSpecification: [{
