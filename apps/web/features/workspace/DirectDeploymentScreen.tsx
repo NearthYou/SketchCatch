@@ -118,6 +118,7 @@ import { DeploymentOutputLinks } from "./DeploymentOutputLinks";
 import { DeploymentProgressBar } from "./DeploymentProgressBar";
 import type { DeploymentProgressOperation } from "./deployment-progress";
 import {
+  getManagedDeploymentLinks,
   getSafeDeploymentLinks,
   getVisibleDeploymentOutputs,
   initialDeploymentOutputState,
@@ -350,8 +351,8 @@ export function DirectDeploymentScreen({
     [selectedDeploymentId, terraformOutputState]
   );
   const deploymentOutputLinks = useMemo(
-    () => getSafeDeploymentLinks(terraformOutputs),
-    [terraformOutputs]
+    () => getManagedDeploymentLinks(terraformOutputs, selectedApplicationRelease?.status ?? null),
+    [selectedApplicationRelease?.status, terraformOutputs]
   );
   const hasLoadedSelectedHistoryDetails =
     deploymentHistoryDetails.deploymentId === selectedHistoryDeploymentId &&
@@ -499,10 +500,10 @@ export function DirectDeploymentScreen({
   }, [selectedHistoryDeploymentId, visibleDeploymentHistoryEntries]);
 
   useEffect(() => {
-    if (shouldShowApplyButton) {
+    if (shouldShowApplyButton && selectedDeployment?.scope !== "application") {
       setShowApplyConfirmation(true);
     }
-  }, [shouldShowApplyButton]);
+  }, [selectedDeployment?.scope, shouldShowApplyButton]);
 
   useEffect(() => {
     onConfirmationStateChange?.(showApplyConfirmation || showInfrastructureRollbackConfirmation);
@@ -1051,6 +1052,39 @@ export function DirectDeploymentScreen({
     }, "프로젝트 저장·검증과 Terraform Plan을 시작하지 못했습니다.");
   }
 
+  async function completeApplicationDeployment(
+    plannedDeployment: Deployment
+  ): Promise<Deployment> {
+    const approvedDeployment = await approveDeploymentPlan(plannedDeployment.id);
+    setDeployments((currentDeployments) =>
+      currentDeployments.map((currentDeployment) =>
+        currentDeployment.id === approvedDeployment.id ? approvedDeployment : currentDeployment
+      )
+    );
+    setSelectedDeploymentId(approvedDeployment.id);
+    setSelectedDirectStepId("deployment");
+    onApplyPlanApproved?.(approvedDeployment);
+
+    setActiveProgress({ operation: "apply" });
+    completionCandidateDeploymentIdsRef.current.add(approvedDeployment.id);
+    const completedDeployment = await executeDeployment(approvedDeployment.id);
+    setDeployments((currentDeployments) =>
+      currentDeployments.map((currentDeployment) =>
+        currentDeployment.id === completedDeployment.id ? completedDeployment : currentDeployment
+      )
+    );
+    setSelectedDeploymentId(completedDeployment.id);
+    refreshBuildEnvironmentAfterPlan(completedDeployment);
+    refreshDeploymentDetails(completedDeployment.id);
+    if (
+      completedDeployment.status === "SUCCESS" &&
+      completionCandidateDeploymentIdsRef.current.delete(completedDeployment.id)
+    ) {
+      onDeploymentSucceeded?.(completedDeployment);
+    }
+    return completedDeployment;
+  }
+
   async function startDeploymentReview(
     savedArtifacts: PreparedWorkspaceDeploymentArtifacts
   ): Promise<Deployment> {
@@ -1084,13 +1118,16 @@ export function DirectDeploymentScreen({
       ...currentDeployments.filter((deployment) => deployment.id !== plannedDeployment.id)
     ]);
     setSelectedDeploymentId(plannedDeployment.id);
+    pendingAutoAdvanceDeploymentIdRef.current = "";
+    setShowApplyConfirmation(false);
+    if (plannedDeployment.scope === "application") {
+      return completeApplicationDeployment(plannedDeployment);
+    }
     if (plannedDeployment.consolePhase === "approval") {
-      pendingAutoAdvanceDeploymentIdRef.current = "";
       setSelectedDirectStepId("approval");
     }
     refreshBuildEnvironmentAfterPlan(plannedDeployment);
     refreshDeploymentDetails(plannedDeployment.id);
-    setShowApplyConfirmation(false);
     return plannedDeployment;
   }
 
@@ -1402,6 +1439,8 @@ export function DirectDeploymentScreen({
       selectedDeployment,
       selectedScope
     });
+    const isApplicationOnlyFlow =
+      selectedScope === "application" || selectedDeployment?.scope === "application";
 
     function renderDirectStepContent(stepId: DirectDeploymentStepId) {
       if (stepId === "validation") {
@@ -1582,6 +1621,30 @@ export function DirectDeploymentScreen({
       );
     }
 
+    function renderCleanupPlanActions() {
+      return cleanupActionTargets.map(({ actions, deployment }) =>
+        actions.shouldShowDestroyPlanButton ? (
+          <button
+            aria-busy={
+              activeProgress?.operation === "destroy-plan" && requestState === "loading"
+            }
+            className={styles.deploymentSecondaryButton}
+            data-action="destroy-plan"
+            data-active={
+              activeProgress?.operation === "destroy-plan" && requestState === "loading"
+            }
+            disabled={!actions.canRunDestroyPlan}
+            key={deployment.id}
+            onClick={() => void startTerraformDestroyPlan(deployment)}
+            type="button"
+          >
+            <Trash2 size={16} aria-hidden="true" />
+            {getCleanupPlanActionLabel(deployment, cleanupDeployments.length)}
+          </button>
+        ) : null
+      );
+    }
+
     function renderDirectStepActions(stepId: DirectDeploymentStepId) {
       if (stepId === "validation") {
         return (
@@ -1633,27 +1696,7 @@ export function DirectDeploymentScreen({
                 preflightState: directPreflightState
               }) ? (
               <div className={styles.deploymentValidationActions}>
-                {cleanupActionTargets.map(({ actions, deployment }) =>
-                  actions.shouldShowDestroyPlanButton ? (
-                    <button
-                      aria-busy={
-                        activeProgress?.operation === "destroy-plan" && requestState === "loading"
-                      }
-                      className={styles.deploymentSecondaryButton}
-                      data-action="destroy-plan"
-                      data-active={
-                        activeProgress?.operation === "destroy-plan" && requestState === "loading"
-                      }
-                      disabled={!actions.canRunDestroyPlan}
-                      key={deployment.id}
-                      onClick={() => void startTerraformDestroyPlan(deployment)}
-                      type="button"
-                    >
-                      <Trash2 size={16} aria-hidden="true" />
-                      {getCleanupPlanActionLabel(deployment, cleanupDeployments.length)}
-                    </button>
-                  ) : null
-                )}
+                {renderCleanupPlanActions()}
                 <button
                   aria-busy={validationIsBusy}
                   className={styles.deploymentPrimaryButton}
@@ -1662,26 +1705,43 @@ export function DirectDeploymentScreen({
                   onClick={() => void runDeploymentReviewStep()}
                   type="button"
                 >
-                  {validationIsBusy
-                    ? hasCurrentDeploymentChanges
-                      ? "저장 후 검증 중"
-                      : "검증 실행 중"
-                    : hasCurrentDeploymentChanges
-                      ? "저장 후 검증"
-                      : "검증 실행"}
+                  {isApplicationOnlyFlow
+                    ? validationIsBusy
+                      ? "앱 배포 중"
+                      : "앱 배포"
+                    : validationIsBusy
+                      ? hasCurrentDeploymentChanges
+                        ? "저장 후 검증 중"
+                        : "검증 실행 중"
+                      : hasCurrentDeploymentChanges
+                        ? "저장 후 검증"
+                        : "검증 실행"}
                 </button>
               </div>
             ) : !hasCurrentPlan ? (
-              <button
-                aria-busy={requestState === "loading"}
-                className={styles.deploymentPrimaryButton}
-                data-active={activeProgress?.operation === "plan" && requestState === "loading"}
-                disabled={!canRunPlan}
-                onClick={() => void startTerraformPlan()}
-                type="button"
-              >
-                {requestState === "loading" ? "검증 실행 중" : "검증 실행"}
-              </button>
+              <div className={styles.deploymentValidationActions}>
+                {renderCleanupPlanActions()}
+                <button
+                  aria-busy={requestState === "loading"}
+                  className={styles.deploymentPrimaryButton}
+                  data-active={activeProgress?.operation === "plan" && requestState === "loading"}
+                  disabled={isApplicationOnlyFlow ? !canRunDeploymentReviewStep : !canRunPlan}
+                  onClick={() =>
+                    void (isApplicationOnlyFlow
+                      ? runDeploymentReviewStep()
+                      : startTerraformPlan())
+                  }
+                  type="button"
+                >
+                  {isApplicationOnlyFlow
+                    ? requestState === "loading"
+                      ? "앱 배포 중"
+                      : "앱 배포"
+                    : requestState === "loading"
+                      ? "검증 실행 중"
+                      : "검증 실행"}
+                </button>
+              </div>
             ) : null}
           </div>
         );
@@ -1944,6 +2004,7 @@ export function DirectDeploymentScreen({
             deployment={selectedDeployment}
             isStarting={deploymentProgressIsStarting}
             operationHint={activeProgress?.operation ?? null}
+            scopeHint={selectedScope === "auto" ? null : selectedScope}
           />
           {renderDirectStepContent(selectedStep.id)}
           {deploymentLogView.source === "current" &&

@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import type {
   AiArchitectureDraftResult,
   ArchitectureBoardCompilationProposal,
+  CreateArchitectureDraftRequest,
   DiagramJson
 } from "@sketchcatch/types";
 import { WorkspaceAiChatRequestRegistry } from "../../../features/workspace/workspace-ai-chat-request";
@@ -14,9 +15,32 @@ import { resolveFinalArchitectureDiagram } from "./workspace-ai-presentation";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
-test("새 프로젝트는 progress stream, 기존 프로젝트는 JSON transport를 선택한다", () => {
-  assert.equal(getAiStartDraftTransport(undefined), "stream");
-  assert.equal(getAiStartDraftTransport("project-1"), "json");
+test("권한 근거가 없는 기존 프로젝트 Draft도 progress stream을 선택한다", () => {
+  const plainRequest: CreateArchitectureDraftRequest = {
+    prompt: "static website"
+  };
+
+  assert.equal(getAiStartDraftTransport(plainRequest), "stream");
+  assert.equal(
+    getAiStartDraftTransport({
+      ...plainRequest,
+      repositoryEvidence: {
+        mode: "strict",
+        facts: [{ kind: "backend_runtime", value: "ecs_fargate_service", sourcePath: "README.md" }]
+      }
+    }),
+    "json"
+  );
+  assert.equal(
+    getAiStartDraftTransport({
+      ...plainRequest,
+      repositoryAnalysis: {
+        projectId: "11111111-1111-4111-8111-111111111111",
+        sourceRepositoryId: "22222222-2222-4222-8222-222222222222"
+      }
+    }),
+    "json"
+  );
 });
 
 test("JSON Draft와 patch transport는 같은 request registry에서 취소와 stale 응답을 차단한다", () => {

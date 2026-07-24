@@ -1,7 +1,11 @@
+import type { CreateArchitectureDraftRequest } from "@sketchcatch/types";
+
 export type AiStartDraftTransport = "json" | "stream";
 
 export function getAiStartDraftTransport(
-  existingProjectId: string | undefined
+  request: CreateArchitectureDraftRequest
 ): AiStartDraftTransport {
-  return existingProjectId === undefined ? "stream" : "json";
+  return request.repositoryAnalysis === undefined && request.repositoryEvidence === undefined
+    ? "stream"
+    : "json";
 }
