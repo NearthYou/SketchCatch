@@ -372,6 +372,7 @@ export type DeploymentRepository = {
   }): Promise<void>;
   synchronizeDeploymentTargetBeforeApplicationRelease?(input: {
     projectId: string;
+    awsConnectionId: string;
     accessContext: ProjectAccessContext;
   }): Promise<void>;
   completeDeploymentApply(
@@ -598,21 +599,18 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     },
     async synchronizeDeploymentTargetBeforeApplicationRelease(input) {
       const [target] = await db
-        .select({ runtimeConfig: projectDeploymentTargets.runtimeConfig })
+        .select({ runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind })
         .from(projectDeploymentTargets)
         .where(eq(projectDeploymentTargets.projectId, input.projectId));
-      if (
-        target?.runtimeConfig?.runtimeTargetKind !== "ecs_fargate" ||
-        target.runtimeConfig.outputUrl
-      ) {
-        return;
-      }
+      if (target && target.runtimeTargetKind !== "ecs_fargate") return;
+
       const gitCicdReadinessService = createGitCicdReadinessService({
         repository: createPostgresGitCicdReadinessRepository(db)
       });
-      await gitCicdReadinessService.refresh({
+      await gitCicdReadinessService.synchronizeDeploymentTargetBeforeApplicationRelease({
         projectId: input.projectId,
-        userId: input.accessContext.userId
+        userId: input.accessContext.userId,
+        expectedAwsConnectionId: input.awsConnectionId
       });
     },
     async findAccessibleProject(projectId, accessContext) {

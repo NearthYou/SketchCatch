@@ -76,6 +76,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   logs: DeploymentLogRecord[] = [];
   throwOnSaveDeploymentPlan = false;
   synchronizeBeforeApplicationReleaseCalls = 0;
+  synchronizeBeforeApplicationReleaseError: Error | undefined;
   readonly accessibleUserIds = new Set([userId]);
   projectDraft:
     | { revision: number; diagramJson: DiagramJson; terraformFiles: TerraformSyncFileInput[] | null }
@@ -84,6 +85,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
   async synchronizeDeploymentTargetBeforeApplicationRelease() {
     this.synchronizeBeforeApplicationReleaseCalls += 1;
+    if (this.synchronizeBeforeApplicationReleaseError) {
+      throw this.synchronizeBeforeApplicationReleaseError;
+    }
   }
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
@@ -1672,6 +1676,32 @@ test("application scope writes an immutable release approval plan without runnin
   );
 });
 
+test("application scope stops before artifact preparation when target synchronization fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "application",
+    targetKind: "ecs_fargate"
+  });
+  repository.synchronizeBeforeApplicationReleaseError = new Error(
+    "latest infrastructure target is incomplete"
+  );
+  let artifactPreparationCalls = 0;
+
+  await assert.rejects(
+    runDeploymentPlan({ deploymentId, accessContext: createAccessContext() }, repository, {
+      prepareApplicationArtifact: async () => {
+        artifactPreparationCalls += 1;
+        throw new Error("artifact preparation must not start");
+      }
+    }),
+    /latest infrastructure target is incomplete/
+  );
+
+  assert.equal(repository.synchronizeBeforeApplicationReleaseCalls, 1);
+  assert.equal(artifactPreparationCalls, 0);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "preflight");
+});
 test("application plan rejects a lost lease fence before saving the approval artifact", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createDeploymentRecord(deploymentId, {
