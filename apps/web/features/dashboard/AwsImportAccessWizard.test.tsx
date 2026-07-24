@@ -244,6 +244,25 @@ test("정리 상태는 구조 분석 설정 해제 행동 하나만 보여준다
   assert.doesNotMatch(html, /권한 상태 확인|가져오기|Manager|Stack|Policy/iu);
 });
 
+test("다시 확인이 필요한 구조 분석 설정은 해제 행동을 우선 보여준다", async () => {
+  const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
+  const html = renderToStaticMarkup(
+    createElement(AwsImportAccessWizardView, {
+      connectionStatus: "verified",
+      state: state({
+        status: "retry_required",
+        nextAction: "check_reads",
+        cleanupAvailable: true
+      }),
+      onCommand() {}
+    })
+  );
+
+  assert.match(html, />구조 분석 설정 해제<\/button>/u);
+  assert.doesNotMatch(html, />상태 다시 확인<\/button>/u);
+  assert.equal(buttonCount(html), 1);
+});
+
 test("Reverse Engineering 복귀는 준비된 상태에서만 간결하게 보여 준다", async () => {
   const { AwsImportAccessWizardView } = await import("./AwsImportAccessWizard");
   const updateHtml = renderToStaticMarkup(

@@ -15,7 +15,6 @@ import {
   verifyAwsConnection
 } from "./aws-connection-service.js";
 import { createAwsImportReadPolicyDocument } from "./aws-import-access-catalog.js";
-import { requiresAwsImportAccessCleanup } from "./aws-import-access-repository.js";
 
 const accessContext: ProjectAccessContext = {
   kind: "user",
@@ -840,7 +839,7 @@ test("AWS connection deletion requires explicit preview confirmation before clai
   assert.equal(cleanupCalls, 0);
 });
 
-test("AWS connection deletion preview allows no import row or cleanup_complete only", async () => {
+test("AWS connection deletion preview keeps local disconnect available after structure analysis", async () => {
   const repository = createInMemoryAwsConnectionRepository();
   const created = await createAwsConnection(
     {
@@ -858,82 +857,21 @@ test("AWS connection deletion preview allows no import row or cleanup_complete o
     codeBuildProjects: [],
     codeConnectionArn: null
   });
-  let importStatus: string | undefined;
-  repository.findAwsImportAccessCleanupStatus = async () => importStatus as never;
-
-  for (const scenario of [
-    { status: undefined, canDelete: true },
-    { status: "cleanup_complete", canDelete: true },
-    { status: "cleanup_required", canDelete: false },
-    { status: "cleanup_manager_required", canDelete: false },
-    { status: "retry_required", canDelete: false }
-  ] as const) {
-    importStatus = scenario.status;
-    const preview = await getAwsConnectionDeletionPreview(
-      { connectionId: created.awsConnection.id, accessContext },
-      repository
-    );
-    assert.equal(preview.canDelete, scenario.canDelete, String(scenario.status));
-    if (!scenario.canDelete) {
-      assert.match(preview.blockerMessage ?? "", /가져오기 권한 정리/);
-    }
-  }
-});
-
-test("a direct read probe marker does not block disconnect while companion artifacts still do", async () => {
-  const repository = createInMemoryAwsConnectionRepository();
-  const created = await createAwsConnection(
-    {
-      accessContext,
-      region: "ap-northeast-2",
-      callerPrincipalArns: [apiCallerPrincipalArn]
-    },
-    repository,
-    {
-      generateId: () => "89898989-8989-4989-8989-898989898989",
-      generateExternalId: () => "external-id"
-    }
-  );
-  repository.findManagedResources = async () => ({
-    codeBuildProjects: [],
-    codeConnectionArn: null
-  });
-  const directProbeMarker = createImportAccessCleanupRecord({
-    status: "ready",
-    operationKind: "check_reads"
-  });
-  const companionArtifact = createImportAccessCleanupRecord({
-    status: "ready",
-    operationKind: "check_reads",
-    managerStackId: "manager-stack-id"
-  });
-
-  assert.equal(requiresAwsImportAccessCleanup(directProbeMarker), false);
-  assert.equal(requiresAwsImportAccessCleanup(companionArtifact), true);
-
-  repository.findAwsImportAccessCleanupStatus = async () =>
-    requiresAwsImportAccessCleanup(directProbeMarker)
-      ? directProbeMarker.status
-      : undefined;
-  const directPreview = await getAwsConnectionDeletionPreview(
+  const legacyCleanupReader = repository as AwsConnectionRepository & {
+    findAwsImportAccessCleanupStatus(): Promise<never>;
+  };
+  legacyCleanupReader.findAwsImportAccessCleanupStatus = async () => {
+    throw new Error("structure analysis must not block local disconnect");
+  };
+  const preview = await getAwsConnectionDeletionPreview(
     { connectionId: created.awsConnection.id, accessContext },
     repository
   );
-  assert.equal(directPreview.canDelete, true);
-
-  repository.findAwsImportAccessCleanupStatus = async () =>
-    requiresAwsImportAccessCleanup(companionArtifact)
-      ? companionArtifact.status
-      : undefined;
-  const artifactPreview = await getAwsConnectionDeletionPreview(
-    { connectionId: created.awsConnection.id, accessContext },
-    repository
-  );
-  assert.equal(artifactPreview.canDelete, false);
-  assert.match(artifactPreview.blockerMessage ?? "", /가져오기 권한 정리/);
+  assert.equal(preview.canDelete, true);
+  assert.equal(preview.blockerMessage, null);
 });
 
-test("AWS connection deletion retry claim cannot bypass an import cleanup guard", async () => {
+test("AWS connection deletion keeps an active deployment guard", async () => {
   const repository = createInMemoryAwsConnectionRepository();
   const created = await createAwsConnection(
     {
@@ -948,7 +886,6 @@ test("AWS connection deletion retry claim cannot bypass an import cleanup guard"
     }
   );
   repository.findManagedResources = async () => ({ codeBuildProjects: [], codeConnectionArn: null });
-  repository.findAwsImportAccessCleanupStatus = async () => "cleanup_complete" as never;
   const preview = await getAwsConnectionDeletionPreview(
     { connectionId: created.awsConnection.id, accessContext },
     repository
@@ -961,7 +898,7 @@ test("AWS connection deletion retry claim cannot bypass an import cleanup guard"
     },
     claimed: false,
     blocked: true,
-    blockReason: "import_access"
+    blockReason: "deployment"
   } as never);
 
   await assert.rejects(
@@ -974,11 +911,11 @@ test("AWS connection deletion retry claim cannot bypass an import cleanup guard"
       },
       repository
     ),
-    /가져오기 권한 정리/
+    /AWS 리소스 또는 Terraform state/
   );
 });
 
-test("AWS connection deletion surfaces a final import-status race as conflict", async () => {
+test("AWS connection deletion surfaces a final connection-state conflict", async () => {
   const repository = createInMemoryAwsConnectionRepository();
   const created = await createAwsConnection(
     {
@@ -993,14 +930,13 @@ test("AWS connection deletion surfaces a final import-status race as conflict", 
     }
   );
   repository.findManagedResources = async () => ({ codeBuildProjects: [], codeConnectionArn: null });
-  repository.findAwsImportAccessCleanupStatus = async () => "cleanup_complete" as never;
   const preview = await getAwsConnectionDeletionPreview(
     { connectionId: created.awsConnection.id, accessContext },
     repository
   );
   repository.deleteClaimedAwsConnection = async () => {
     throw new AwsConnectionDeleteConflictError(
-      "AWS 가져오기 권한 정리 상태가 변경되었습니다."
+      "AWS 연결 상태가 변경되었습니다."
     );
   };
 
@@ -1014,7 +950,7 @@ test("AWS connection deletion surfaces a final import-status race as conflict", 
       },
       repository
     ),
-    /가져오기 권한 정리 상태가 변경/
+    /AWS 연결 상태가 변경/
   );
   assert.ok(await repository.findAccessibleAwsConnection(created.awsConnection.id, accessContext));
 });
@@ -1040,9 +976,6 @@ function createInMemoryAwsConnectionRepository(): AwsConnectionRepository {
     },
     async countReverseEngineeringScans() {
       return 0;
-    },
-    async findAwsImportAccessCleanupStatus() {
-      return undefined;
     },
     async claimAccessibleAwsConnectionDeletion(connectionId) {
       const record = records.get(connectionId);
@@ -1129,9 +1062,6 @@ function createListRepository(rows: AwsConnectionRecord[]): AwsConnectionReposit
     async countReverseEngineeringScans() {
       return 0;
     },
-    async findAwsImportAccessCleanupStatus() {
-      return undefined;
-    },
     async claimAccessibleAwsConnectionDeletion() {
       return undefined;
     },
@@ -1165,30 +1095,6 @@ function createAwsConnectionRecord(overrides: Partial<AwsConnectionRecord>): Aws
     deletionErrorSummary: null,
     createdAt: now,
     updatedAt: now,
-    ...overrides
-  };
-}
-
-function createImportAccessCleanupRecord(
-  overrides: Partial<Parameters<typeof requiresAwsImportAccessCleanup>[0]>
-): Parameters<typeof requiresAwsImportAccessCleanup>[0] {
-  return {
-    status: "ready",
-    operationKind: null,
-    managerStackName: null,
-    managerStackId: null,
-    managerContractVersion: null,
-    managerTemplateHash: null,
-    policyStackName: null,
-    policyStackId: null,
-    policyContractVersion: null,
-    policyTemplateHash: null,
-    targetRoleArn: null,
-    serviceRoleArn: null,
-    readPolicyArn: null,
-    controlPolicyArn: null,
-    cleanupVerificationPolicyArn: null,
-    policyFingerprint: null,
     ...overrides
   };
 }

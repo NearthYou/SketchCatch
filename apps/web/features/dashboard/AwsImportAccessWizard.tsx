@@ -346,7 +346,7 @@ function isAwsStructureAnalysisCleanupState(state: AwsImportAccessState): boolea
     state.status === "cleanup_complete";
 }
 
-/** gg: 설정·확인·해제·복귀 중 현재 상태에 맞는 행동 하나만 남겨 중복 실행을 막습니다. */
+/** gg: 연결 해제를 막는 오래된 구조 분석 설정은 재확인보다 해제를 먼저 보여줘 막힌 흐름을 피합니다. */
 function selectAwsStructureAnalysisAction(input: {
   readonly hasPolicyApproval: boolean;
   readonly onContinue: (() => void) | undefined;
@@ -365,7 +365,9 @@ function selectAwsStructureAnalysisAction(input: {
   if (setupTemplateUrl && !setupLinkCopied && view.primaryCommand === "check_manager") {
     return { kind: "copy_setup_link", label: "설정 링크 복사" };
   }
-  const command = view.primaryCommand ?? view.cleanupCommand;
+  const command = view.primaryCommand === "check_reads" && view.cleanupCommand
+    ? view.cleanupCommand
+    : view.primaryCommand ?? view.cleanupCommand;
   if (!command) return null;
   return {
     kind: "command",

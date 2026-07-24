@@ -15,6 +15,7 @@ Short English-only working log for the current agent context. Older records are 
 - Root pnpm test remains red in unrelated pre-existing Web baseline tests such as Settings CodeConnection refresh, Live Observation layout contracts, and Repository start behavior. The focused suites for this workstream pass.
 - No schema, dependency, shared contract, cloud resource, deployment, or migration changes were made.
 - 2026-07-24: Merged the latest dev branch into `fix/gg/484-settings`. A persisted AWS structure-analysis check now keeps its next action after refresh, and a blocked AWS disconnect dialog sends the user directly to that action. Focused Settings checks, harness, lint, Web typecheck, and production build pass.
+- 2026-07-24: Restored AWS disconnect when an old structure-analysis helper record remains. The disconnect now blocks only active deployment state, keeps AWS-side structure-analysis settings intact, and shows the cleanup action instead of a retry-only dead end. Focused Settings tests passed 25/25, focused API tests passed 34/34, harness, lint, typecheck, and production build passed. Chrome automation could not attach to the running browser, so no live AWS deletion was executed.
 
 
 ## Session Record

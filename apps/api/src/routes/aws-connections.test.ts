@@ -396,9 +396,6 @@ function createRepository(input: {
     async countReverseEngineeringScans() {
       return 2;
     },
-    async findAwsImportAccessCleanupStatus() {
-      return undefined;
-    },
     async claimAccessibleAwsConnectionDeletion() {
       return input.onClaim();
     },

@@ -361,7 +361,7 @@ export function SettingsDashboardClient() {
     }
   }
 
-  // gg: 사용자가 확인한 SketchCatch 연결 항목만 정리하고 AWS 인프라는 건드리지 않습니다.
+  // gg: 사용자가 확인한 연결 해제는 목록에 표시한 SketchCatch 연결 보조 항목만 정리합니다.
   async function confirmRemoveConnection(): Promise<void> {
     if (!deletionPreview?.canDelete) return;
     setActionPending(true);
@@ -384,20 +384,6 @@ export function SettingsDashboardClient() {
   function closeDeletionPreview(): void {
     setDeletionPreview(null);
     setDeletionErrorMessage("");
-  }
-
-  // gg: 연결 해제 전 정리가 필요하면 사용자가 막힌 구조 분석 행동으로 바로 돌아갈 수 있게 합니다.
-  function continueAwsStructureAnalysisCleanup(): void {
-    const connectionId = deletionPreview?.connectionId;
-    closeDeletionPreview();
-    if (!connectionId) return;
-
-    window.requestAnimationFrame(() => {
-      const target = document.getElementById(`aws-structure-analysis-${connectionId}`);
-      target?.scrollIntoView({ behavior: "smooth", block: "center" });
-      const action = target?.querySelector<HTMLButtonElement>("button:not([disabled])");
-      (action ?? target)?.focus();
-    });
   }
 
   async function connectGitHubBuild(): Promise<void> {
@@ -852,7 +838,7 @@ export function SettingsDashboardClient() {
             <p id="aws-deletion-description">
               {deletionPreview.cleanupRetry
                 ? "이전에 완료되지 않은 SketchCatch 연결 항목 정리를 다시 시도합니다."
-                : "연결을 해제하면 SketchCatch가 만든 연결 항목만 정리합니다. 배포한 인프라는 유지됩니다."}
+                : "연결을 해제하면 SketchCatch에서 이 AWS 계정을 더 이상 사용하지 않습니다. 배포한 인프라와 구조 분석 설정은 유지됩니다."}
             </p>
             <div className={styles.cleanupPreview}>
               <strong>정리되는 연결 항목</strong>
@@ -861,11 +847,8 @@ export function SettingsDashboardClient() {
                 <li>SketchCatch가 만든 연결 보조 항목</li>
               </ul>
               <strong>유지되는 항목</strong>
-              <p>배포한 인프라와 기존 구조 분석 결과는 유지됩니다.</p>
+              <p>배포한 인프라와 구조 분석 설정은 유지됩니다.</p>
             </div>
-            {deletionPreview.blockerMessage ? (
-              <p className={styles.cleanupBlocker}>구조 분석 설정을 먼저 정리한 뒤 AWS 연결을 해제할 수 있습니다.</p>
-            ) : null}
             {deletionErrorMessage ? (
               <div className={styles.cleanupError} role="alert">
                 <strong>연결 해제가 완료되지 않았습니다. AWS 연결은 유지되었습니다.</strong>
@@ -874,16 +857,7 @@ export function SettingsDashboardClient() {
             ) : null}
             <div className={styles.modalActions}>
               <button disabled={actionPending} onClick={closeDeletionPreview} type="button">취소</button>
-              {deletionPreview.blockerMessage ? (
-                <button
-                  className={styles.primaryAction}
-                  disabled={actionPending}
-                  onClick={continueAwsStructureAnalysisCleanup}
-                  type="button"
-                >
-                  설정 해제 계속
-                </button>
-              ) : deletionPreview.canDelete ? (
+              {deletionPreview.canDelete ? (
                 <button
                   className={styles.dangerAction}
                   disabled={actionPending}
