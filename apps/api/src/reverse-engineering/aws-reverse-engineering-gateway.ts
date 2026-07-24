@@ -166,8 +166,7 @@ import type { AwsConnection, ResourceType, ReverseEngineeringScanError } from "@
 import {
   isReverseEngineeringAwsProviderTypeSelected,
   resolveReverseEngineeringAwsResourceTypeFromArn,
-  reverseEngineeringAwsResourceCatalog,
-  reverseEngineeringAwsResourceTypes
+  reverseEngineeringAwsResourceCatalog
 } from "@sketchcatch/types/resource-definitions";
 import { createAwsSdkStsGateway } from "../aws-connections/aws-connection-test-service.js";
 import {
