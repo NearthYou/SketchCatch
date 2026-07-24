@@ -1012,12 +1012,19 @@ function ProjectWorkspaceDraftManagerState({
   );
 
   const handleLiveObservationTerraformFilesApply = useCallback(
-    (terraformFiles: readonly TerraformSyncFileInput[]): void => {
+    ({
+      diagramJson,
+      files: terraformFiles
+    }: {
+      readonly diagramJson: DiagramJson;
+      readonly files: readonly TerraformSyncFileInput[];
+    }): void => {
       const files = terraformFiles.map((file) => ({ ...file }));
+      latestDiagramRef.current = diagramJson;
       handleTerraformFilesChange(files);
       terraformFilesReplacementIdRef.current += 1;
       setTerraformFilesReplacement({
-        diagramFingerprint: toTerraformRefreshFingerprint(latestDiagramRef.current),
+        diagramFingerprint: toTerraformRefreshFingerprint(diagramJson),
         files,
         id: terraformFilesReplacementIdRef.current,
         notifyFilesChange: false

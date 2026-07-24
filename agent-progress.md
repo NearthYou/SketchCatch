@@ -30,6 +30,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-24 - Make Live Observation scaling edits credible and return to Terraform
+
+- Live Observation AI guidance and its accepted Project Draft edit now increase both ECS `max_capacity` and ALB request `target_value` by one, while refusing ambiguous or mismatched scaling resources.
+- The accepted Terraform files are synchronized back into the Board diagram before the shared Draft save, keeping Diagram and Terraform state consistent.
+- Opening an accepted change from Live Observation now closes both nested observation and Deployment overlays, then opens the main-board Terraform file at the saved resource line.
+- Verification passed: one focused API test, 35 focused Web tests, root lint, root typecheck, all five production builds, `git diff --check`, and final harness check.
+- No database migration, dependency change, Terraform action, generated load, or cloud mutation was performed by this code change.
+
 ### 2026-07-24 - Decouple application approval and CI/CD readiness from Terraform Plan
 
 - Delayed application-only automatic approval and execution until polling observes the durable Plan artifact, preventing the premature approve HTTP 409.

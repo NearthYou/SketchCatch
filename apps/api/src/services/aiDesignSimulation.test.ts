@@ -57,7 +57,7 @@ test("recommends a bounded max-capacity increase from live traffic pressure", as
   assert.match(result.bottlenecks.at(0)?.description ?? "", /분당 42건.*최대 2개 Task/);
   assert.ok(
     result.recommendations.includes(
-      "aws_appautoscaling_target.max_capacity를 2에서 3으로 늘리고 새 Terraform Plan으로 재배포하세요."
+      "aws_appautoscaling_target.max_capacity를 2에서 3으로, aws_appautoscaling_policy.target_value를 10에서 11으로 늘리고 새 Terraform Plan으로 재배포하세요."
     )
   );
   assert.ok(result.assumptions.some((assumption) => assumption.includes("Live Observation")));

@@ -312,7 +312,8 @@ test("clears AI analysis state when its incident inputs disappear", () => {
 });
 test("offers the capacity change only as an explicit Project Draft action", () => {
   assert.match(modalSource, /createLiveObservationDesignSimulationRequest/);
-  assert.match(modalSource, /최대 실행 서버를/);
+  assert.match(modalSource, /max_capacity/);
+  assert.match(modalSource, /target_value/);
   assert.match(modalSource, /onAction: \(\) => void applyTerraformUpdate\(\)/);
   assert.match(modalSource, /저장해도 실제 서버는 바뀌지 않아요\./);
   assert.match(modalSource, /const result = await onApplyTerraformUpdate\(\)/);
