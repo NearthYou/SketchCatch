@@ -1,31 +1,6 @@
 # Agent Progress
 
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/` and remain available in Git history.
-## 2026-07-24 - Restore AI progress and calm deployment operations UI
-
-- Restored streaming progress for plain existing-project Architecture Draft requests while retaining JSON validation for Repository analysis and evidence requests.
-- Decoupled Live Observation resource pulse cycles from incoming traffic snapshot sequences so each pulse completes and repeats while traffic particles continue independently.
-- Removed the Deployment Output card gradients and consolidated Deployment and CI/CD chrome onto the neutral Workspace palette while preserving warning and error semantics.
-- Verification: focused AI workflow checks 33/33 and transcript render checks 3/3; Live Observation and deployment UI contract checks 26/26; focused flow render checks 5/5; harness, all five lint tasks, all five typecheck tasks, all five production build tasks, and diff checks pass.
-- No schema, migration, dependency, Terraform, or direct cloud mutation was introduced by the code changes.
-
-
-## 2026-07-24 - Restore existing-project AI diagram generation progress
-
-- Traced the missing progress card to the existing-project transport policy: Repository AI entry supplied a Project ID, selected the JSON endpoint, emitted no progress snapshot, and therefore could never satisfy the transcript visibility gate.
-- Made request capability determine the transport. Plain Draft requests now use the progress stream regardless of whether the Project already exists, while Repository analysis/evidence requests retain the JSON validation boundary.
-- Verification: focused Workspace AI progress/state/stream checks 33/33, transcript render checks 3/3, all five lint tasks, all five typecheck tasks, all five production build tasks, harness, and diff checks pass.
-- No API contract, schema, migration, dependency, cloud mutation, Terraform action, deployment, GitHub mutation, or push was performed.
-
-
-## 2026-07-24 - Validate authored Terraform runtime Secrets from source
-
-- Reproduced the production false positive: `random_password` is intentionally omitted from synchronized Diagram nodes while the Web prerequisite required that Diagram node even when the saved Terraform chain was complete.
-- Made prepared `.tf` files authoritative for Web preflight, shared the exact Terraform Secret-chain validator with the API final guard, and retained Diagram fallback only when no Terraform artifact exists for the AI Fixed Template path.
-- Replaced Repository re-analysis / Fixed Template regeneration remediation with a return to the current Terraform editor; corrected deployment and data-model contracts accordingly.
-- Verification: Web focused regressions 65/65, API deployment-preparation regressions 11/11, harness, all five lint tasks, all five typecheck tasks, all five production build tasks, and diff checks pass.
-- No DB migration, dependency metadata change, cloud mutation, production deployment, Terraform action, or Git/CI/CD handoff was performed. Production remains unchanged until this branch is merged and deployed.
-
 ## Current Verified State
 
 - 2026-07-24: Applied the pending local database migration `0057_reverse_engineering_scan_previews`. It creates the preview-persistence table required by the Reverse Engineering preview endpoint. Verified the 14-column table, migration ledger, and API `/health` plus `/health/db` afterward.
@@ -148,25 +123,6 @@ Short English-only working log for the current agent context. Older records are 
 - Counted the ECS Service-to-Task connector in burst lifetime so particles and node pulses reach the Task group.
 - Verification passes: 22 focused regressions, root lint, root typecheck, all five build tasks and 24 Web routes, diff check, and harness check. The root build exited successfully after 4m23s.
 - No DB migration, dependency change, generated load, Terraform action, or infrastructure mutation was performed.
-
-## Known Risk
-
-- Authenticated browser visual smoke testing for `/workspace/new` was not available in the clean browser session; the route redirected to login. Source-level regression coverage and the production build are green.
-- The manifest-contract repair and audience receipt flow are production-verified, but provider-confirmed scale-out remains a separate blocked acceptance item.
-- Error-analysis percentage remains an elapsed-time estimate because the current AI endpoint does not expose server-side stages; the active item rises from 8% to 94%, then a real successful response shows 100% for 800ms.
-- Existing saved Project Drafts are not rewritten, but their authored Terraform remains authoritative and does not require Repository re-analysis or Fixed Template regeneration after this fix is deployed.
-- The local test project `b99f92aa-fb46-4822-ae2f-ca9e4e88e4f9` may need a reload or re-save after the stale Web process restarts; runtime Secret validation alone no longer requires re-analysis.
-- Root `pnpm test` is not green because ten unrelated API baseline tests fail and `application-artifact-registry.test.ts` still has one cancelled lease-heartbeat test.
-- The full Web suite is 1,205/1,213. Eight unrelated baseline contracts fail across generated architecture knowledge, node/thumbnail presentation, typography audits, CI/CD styling, and Live Observation capacity layout.
-- Provider-confirmed scale-out remains unaccepted because the production acceptance traffic intentionally covered session, receipt, SSE, and heartbeat continuity rather than a load-triggered capacity change.
-- Automatic cleanup remains blocked for this credential layout until the approved cleanup operator can read the internal deployment-state object.
-- No new AWS resources or traffic may be created without a new explicit approval.
-
-## Next Action
-
-1. After this branch is merged and deployed, retry the affected saved project validation without Repository re-analysis and confirm the authored Terraform chain passes.
-2. Use a separately approved load cycle if provider-confirmed Live Observation scale-out must be accepted; no DB migration is required.
-3. Consider server-reported progress stages only if the AI error-analysis contract later exposes them.
 
 ### 2026-07-24 - Separate deployment scopes and clarify observation feedback
 
