@@ -1,7 +1,15 @@
 "use client";
 
 import { Box } from "lucide-react";
-import React, { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import React, {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties
+} from "react";
 import type { ArchitectureJson, DiagramNode, LiveObservationV2Snapshot } from "@sketchcatch/types";
 import { ResourceIconImage } from "../../components/ui/ResourceIconImage";
 import { createLiveObservationArchitectureModel } from "./live-observation-architecture";
@@ -22,10 +30,7 @@ import {
   getLiveObservationDiagramParticleDelayMs,
   LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS
 } from "./live-observation-diagram-particles";
-import {
-  getLiveObservationCapacityProjection,
-  type LiveObservationCapacityProjection
-} from "./live-observation-capacity-projection";
+import { getLiveObservationCapacityProjection } from "./live-observation-capacity-projection";
 import {
   appendLiveObservationParticleIds,
   getLiveObservationAnimatedParticleCount,
@@ -79,12 +84,11 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
     snapshot?.latestObservation?.payload.capacity.running !== undefined
       ? totalCapacityCount
       : null);
-  const displayedProjection = capacityProjection;
   const expectedCapacityCount =
     snapshot?.status === "active" &&
     actualCapacityCount !== null &&
     capacityProjection !== null &&
-    capacityProjection.predictedCount !== actualCapacityCount
+    capacityProjection.predictedCount > actualCapacityCount
       ? capacityProjection.predictedCount
       : null;
   const displayedCapacityUnits = useMemo(() => {
@@ -120,10 +124,10 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
   const displayedCapacityUnitsRef = useRef(displayedCapacityUnits);
   displayedCapacityUnitsRef.current = displayedCapacityUnits;
   const [presentedCapacityUnits, setPresentedCapacityUnits] = useState(() =>
-    settleLiveObservationCapacityUnits(modelCapacityUnits)
+    settleLiveObservationCapacityUnits(displayedCapacityUnits)
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const nextCapacityUnits = displayedCapacityUnitsRef.current;
     setPresentedCapacityUnits((current) =>
       reconcileLiveObservationCapacityUnits(current, nextCapacityUnits)
@@ -366,16 +370,10 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
                     <article
                       aria-label={`${unit.node.label}: ${getCapacityDisplayLabel(
                         unit.node.id,
-                        index,
-                        unit.observationState,
-                        displayedProjection
+                        unit.observationState
                       )}`}
                       className={styles.liveObservationCapacityUnit}
-                      data-capacity-forecast={getCapacityForecastKind(
-                        unit.node.id,
-                        index,
-                        displayedProjection
-                      )}
+                      data-capacity-forecast={getCapacityForecastKind(unit.node.id)}
                       data-observation-state={unit.observationState}
                       data-transition={unit.transition}
                       key={unit.node.id}
@@ -402,12 +400,7 @@ export const LiveObservationFocusedFlow = memo(function LiveObservationFocusedFl
                         ) : null}
                       </div>
                       <span>
-                        {getCapacityDisplayLabel(
-                          unit.node.id,
-                          index,
-                          unit.observationState,
-                          displayedProjection
-                        )}
+                        {getCapacityDisplayLabel(unit.node.id, unit.observationState)}
                       </span>
                     </article>
                   ))}
@@ -464,26 +457,15 @@ function getCapacityStateLabel(state: LiveObservationDiagramNodeState): string {
   return "대기";
 }
 
-function getCapacityForecastKind(
-  nodeId: string,
-  index: number,
-  projection: LiveObservationCapacityProjection | null
-): "actual" | "predicted" | "scale-in" {
-  if (nodeId.includes("--predicted-capacity-")) return "predicted";
-  if (projection?.direction === "scale_in" && index >= projection.predictedCount) {
-    return "scale-in";
-  }
-  return "actual";
+function getCapacityForecastKind(nodeId: string): "actual" | "predicted" {
+  return nodeId.includes("--predicted-capacity-") ? "predicted" : "actual";
 }
 
 function getCapacityDisplayLabel(
   nodeId: string,
-  index: number,
-  state: LiveObservationDiagramNodeState,
-  projection: LiveObservationCapacityProjection | null
+  state: LiveObservationDiagramNodeState
 ): string {
-  const kind = getCapacityForecastKind(nodeId, index, projection);
-  if (kind === "predicted") return "예상 중";
-  if (kind === "scale-in") return "축소 예상 중";
-  return getCapacityStateLabel(state);
+  return getCapacityForecastKind(nodeId) === "predicted"
+    ? "예상 중"
+    : getCapacityStateLabel(state);
 }

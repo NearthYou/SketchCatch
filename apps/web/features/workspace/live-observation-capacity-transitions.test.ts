@@ -52,6 +52,26 @@ test("keeps an already exiting task through a rapid forecast update", () => {
   );
 });
 
+test("removes a forecast unit immediately when actual capacity catches up", () => {
+  const current = [
+    unit("task-1", "active"),
+    unit("task--predicted-capacity-2", "launching")
+  ].map((capacityUnit) => ({ ...capacityUnit, transition: "stable" as const }));
+
+  const transition = reconcileLiveObservationCapacityUnits(current, [
+    unit("task-1", "active"),
+    unit("task-2", "active")
+  ]);
+
+  assert.deepEqual(
+    transition.map((capacityUnit) => [capacityUnit.node.id, capacityUnit.transition]),
+    [
+      ["task-1", "stable"],
+      ["task-2", "entering"]
+    ]
+  );
+});
+
 test("shows a newly observed active task as expected before settling it as running", () => {
   const transition = reconcileLiveObservationCapacityUnits(
     [unit("task-1", "active")].map((capacityUnit) => ({

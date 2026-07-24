@@ -76,7 +76,23 @@ test("labels and animates only a real capacity change as expected", () => {
   assert.match(html, /실제 1개 · 2개 예상 중/);
 });
 
-test("labels scale-in as an expected change instead of an actual task", () => {
+test("shows an early scale-out forecast at five hundred accepted requests", () => {
+  const html = renderToStaticMarkup(
+    createElement(LiveObservationFocusedFlow, {
+      architecture,
+      snapshot: availableSnapshot({
+        acceptedEventCount: 500,
+        projectedRequestsPerMinute: 0,
+        running: 1
+      })
+    })
+  );
+
+  assert.match(html, /data-capacity-forecast="predicted"/);
+  assert.match(html, /2/);
+});
+
+test("never labels scale-in as an expected Task", () => {
   const html = renderToStaticMarkup(
     createElement(LiveObservationFocusedFlow, {
       architecture,
@@ -84,9 +100,10 @@ test("labels scale-in as an expected change instead of an actual task", () => {
     })
   );
 
-  assert.match(html, /실제 3개 · 1개 예상 중/);
-  assert.match(html, /data-capacity-forecast="scale-in"/);
-  assert.match(html, /축소 예상 중/);
+  assert.match(html, /실제 3개/);
+  assert.doesNotMatch(html, /개 예상/);
+  assert.doesNotMatch(html, /data-capacity-forecast="scale-in"/);
+  assert.doesNotMatch(html, /축소 예상 중/);
 });
 
 function resourceNode(
@@ -99,9 +116,11 @@ function resourceNode(
 }
 
 function availableSnapshot({
+  acceptedEventCount,
   projectedRequestsPerMinute,
   running
 }: {
+  readonly acceptedEventCount?: number;
   readonly projectedRequestsPerMinute: number;
   readonly running: number;
 }): LiveObservationV2Snapshot {
@@ -111,6 +130,7 @@ function availableSnapshot({
     ...base,
     live: {
       ...base.live,
+      acceptedEventCount: acceptedEventCount ?? base.live.acceptedEventCount,
       projectedRequestsPerMinute,
       rollingRequestsPerSecond: projectedRequestsPerMinute / 60
     },

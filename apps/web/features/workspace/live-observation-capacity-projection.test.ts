@@ -32,6 +32,23 @@ test("uses the provider one-minute request count when Store traffic has gone idl
   assert.equal(projection?.predictedCount, 3);
   assert.equal(projection?.direction, "scale_out");
 });
+
+test("forecasts the second Task by about five hundred accepted audience requests", () => {
+  const value = snapshot({
+    acceptedEventCount: 500,
+    projectedRequestsPerMinute: 0,
+    running: 1
+  });
+
+  const projection = getLiveObservationCapacityProjection(
+    architecture({ minCapacity: 1, maxCapacity: 3, targetValue: 60 }),
+    value
+  );
+
+  assert.equal(projection?.predictedCount, 2);
+  assert.equal(projection?.direction, "scale_out");
+});
+
 test("keeps the minimum capacity at zero traffic and predicts scale-in separately", () => {
   const projection = getLiveObservationCapacityProjection(
     architecture({ minCapacity: 1, maxCapacity: 3, targetValue: 10 }),
@@ -125,9 +142,11 @@ function architecture({
 }
 
 function snapshot({
+  acceptedEventCount = 1,
   projectedRequestsPerMinute,
   running
 }: {
+  readonly acceptedEventCount?: number;
   readonly projectedRequestsPerMinute: number;
   readonly running: number;
 }): LiveObservationV2Snapshot {
@@ -136,7 +155,7 @@ function snapshot({
     observationId: "00000000-0000-4000-8000-000000000001",
     status: "active",
     live: {
-      acceptedEventCount: 1,
+      acceptedEventCount,
       rollingRequestsPerSecond: projectedRequestsPerMinute / 60,
       projectedRequestsPerMinute,
       pressurePercent: 100,

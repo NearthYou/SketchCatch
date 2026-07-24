@@ -34,15 +34,11 @@ test("keeps animated traffic inside fixed scroll geometry", () => {
   const forecastRule = extractCssBlock(
     '.liveObservationCapacityUnit[data-capacity-forecast="predicted"]'
   );
-  const scaleInForecastRule = extractCssBlock(
-    '.liveObservationCapacityUnit[data-capacity-forecast="scale-in"]'
-  );
 
   assert.match(connectorRule, /overflow:\s*hidden/);
   assert.match(forecastRule, /animation:[^;]*infinite/);
   assert.match(forecastRule, /will-change:\s*transform,\s*opacity/);
-  assert.match(scaleInForecastRule, /animation:[^;]*infinite/);
-  assert.match(scaleInForecastRule, /will-change:\s*transform,\s*opacity/);
+  assert.doesNotMatch(stylesSource, /data-capacity-forecast="scale-in"/);
   assert.doesNotMatch(
     focusedFlowSource,
     /capacityStageWidth\s*=\s*[^;]*presentedCapacityUnits\.length/

@@ -8630,20 +8630,6 @@
   color: #b45309;
 }
 
-.liveObservationCapacityUnit[data-capacity-forecast="scale-in"] {
-  animation: liveObservationCapacityForecast 1.4s ease-in-out infinite;
-  transform-origin: center 32px;
-  will-change: transform, opacity;
-}
-
-.liveObservationCapacityUnit[data-capacity-forecast="scale-in"] .liveObservationPresentationNode {
-  border-color: #e25555;
-  box-shadow: 0 0 0 4px rgb(226 85 85 / 11%);
-}
-
-.liveObservationCapacityUnit[data-capacity-forecast="scale-in"] > span {
-  color: #b42318;
-}
 
 .liveObservationCapacityUnit[data-observation-state="inactive"] {
   opacity: 0.72;
@@ -9488,7 +9474,6 @@
   .liveObservationCapacityUnit[data-observation-state="launching"],
   .liveObservationCapacityUnit[data-observation-state="active"],
   .liveObservationCapacityUnit[data-capacity-forecast="predicted"],
-  .liveObservationCapacityUnit[data-capacity-forecast="scale-in"],
   .liveObservationCapacityUnit[data-transition="exiting"] {
     animation: none;
   }

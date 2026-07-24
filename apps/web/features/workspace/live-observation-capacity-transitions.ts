@@ -19,7 +19,10 @@ export function reconcileLiveObservationCapacityUnits(
   const nextIds = new Set(next.map((unit) => unit.node.id));
   const currentIds = new Set(current.map((unit) => unit.node.id));
   const exiting = current
-    .filter((unit) => !nextIds.has(unit.node.id))
+    .filter(
+      (unit) =>
+        !nextIds.has(unit.node.id) && !unit.node.id.includes("--predicted-capacity-")
+    )
     .map((unit) => ({ ...unit, transition: "exiting" as const }));
   const entering = next.map((unit) => {
     if (currentIds.has(unit.node.id) || unit.observationState !== "active") {

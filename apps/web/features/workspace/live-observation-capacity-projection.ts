@@ -1,6 +1,8 @@
 import type { ArchitectureJson, LiveObservationV2Snapshot } from "@sketchcatch/types";
 import { recoverLiveObservationReferenceEdges } from "./live-observation-architecture";
 
+const LIVE_OBSERVATION_ACCEPTED_REQUESTS_PER_FORECAST_TASK = 500;
+
 export type LiveObservationCapacityProjection = Readonly<{
   actualCount: number | null;
   direction: "scale_in" | "scale_out" | "steady" | "unknown";
@@ -76,8 +78,18 @@ export function getLiveObservationCapacityProjection(
   const evidence = readRequestScalingEvidence(recoverLiveObservationReferenceEdges(architecture));
   if (!evidence) return null;
 
+  const trafficProjectedCount = Math.ceil(
+    getLiveObservationEffectiveTraffic(architecture, snapshot).projectedRequestsPerMinute /
+      evidence.targetValue
+  );
+  const acceptedRequestProjectedCount =
+    evidence.minCapacity +
+    Math.floor(
+      snapshot.live.acceptedEventCount /
+        LIVE_OBSERVATION_ACCEPTED_REQUESTS_PER_FORECAST_TASK
+    );
   const predictedCount = clamp(
-    Math.ceil(getLiveObservationEffectiveTraffic(architecture, snapshot).projectedRequestsPerMinute / evidence.targetValue),
+    Math.max(trafficProjectedCount, acceptedRequestProjectedCount),
     evidence.minCapacity,
     evidence.maxCapacity
   );
