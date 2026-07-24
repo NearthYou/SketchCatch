@@ -55,8 +55,9 @@ docs/local/
 CONTEXT.local.md
 AGENTS.local.md
 AGENTS.gg.md
-docs/jh/
 .superpowers/
+docs/jh/
+.agents/archive/harness-diet-2026-07-24/
 .worktrees/
 .local-data/
 

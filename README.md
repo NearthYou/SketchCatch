@@ -71,7 +71,7 @@ flowchart LR
 <table>
   <tr>
     <td width="50%">
-      <img src="./docs/gg/feat-gg-202-reverse-entry-ux/screenshots/06-reverse-board-candidates.png" alt="기존 클라우드 환경을 구조도로 불러온 화면" />
+      <img src="./docs/assets/readme/reverse-board-candidates.png" alt="기존 클라우드 환경을 구조도로 불러온 화면" />
     </td>
     <td width="50%">
       <img src="./docs/assets/readme/isolated-deployment-workers.png" alt="배포 작업을 독립 실행 환경에서 처리하는 구조" />
@@ -192,3 +192,15 @@ pnpm test
   <strong>설계 문서가 실제 배포 코드와 어긋나지 않도록.</strong><br />
   SketchCatch는 팀이 클라우드 변경을 더 쉽게 이해하고, 함께 검토하고, 안전하게 실행하도록 돕습니다.
 </p>
+
+## 팀 기여
+
+아래 내용은 로컬에서 접근 가능한 전체 Git ref의 non-merge 커밋과 변경 경로를 기준으로 요약했습니다.
+
+| 팀원 | 주요 영역 | 핵심 기여 |
+| --- | --- | --- |
+| 송채강 | Frontend · Backend | Direct Deployment·Live Observation 흐름과 Architecture Board·Repository UX 구현 |
+| 시원 | Infrastructure · CI/CD · Backend | AWS ECS/Fargate·RDS·S3 기반과 배포·관측 안전 흐름 구축 |
+| 이경근 | Frontend · Backend · 공용 타입 | Architecture Board·Workspace AI, Reverse Engineering과 Terraform·Template 매핑 구현 |
+| 고윤서 | Frontend · Backend · Database | 로그인/JWT·회원·프로젝트 계정 흐름과 Settings·AWS 연결 UX 구현 |
+| 이정현 | Frontend · Backend · CI/CD | Git/CI/CD handoff·readiness·setup 자동화와 Delivery UI·Project Draft 흐름 구현 |

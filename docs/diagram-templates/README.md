@@ -9,6 +9,13 @@ docs/diagram-templates/
 ├── manifest.json
 ├── source-inventory.md
 ├── source-review.md
+├── brainboard/
+│   ├── capture-index.json
+│   ├── capture-status.json
+│   ├── normalization-report.json
+│   └── captures/
+├── evidence/
+│   └── aws-template-board-qa.md
 ├── documents/
 │   └── architecture-patterns/
 │       ├── alb-asg-ec2.md
@@ -22,6 +29,8 @@ docs/diagram-templates/
         └── architecture-patterns/
             └── <문서명>.md.metadata.json
 ```
+
+`brainboard/`는 source-exact Template fixture와 정규화 보고서를, `evidence/`는 실제 Board 검증 기록을 보관한다. 두 폴더는 Amazon Q Business 기본 인덱싱 대상이 아니다.
 
 ## 문서 사용 규칙
 
