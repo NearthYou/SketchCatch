@@ -460,6 +460,8 @@ export function ReverseEngineeringPanel({
       }
       if (response.response.result) {
         showFirstCandidatePreview(response.response.result, basePreview.sourceDiagram);
+        // gg: 완료된 scan은 좁은 화면에서 접혀 있던 결과 패널도 열어 다음 행동을 바로 보여줍니다.
+        context.setRightPanelOpen(true);
       }
       setScanState("idle");
     } catch (error) {

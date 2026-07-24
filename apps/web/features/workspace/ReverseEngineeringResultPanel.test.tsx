@@ -512,6 +512,45 @@ test("부분 결과의 교체와 추가 선택은 상세 정보 안에서 보존
   assert.match(html, /가져온 항목만 사용해 계속 진행할 수 있어요/);
 });
 
+test("부분 결과는 적용 버튼 전에 짧게 알리고 가져온 항목 적용은 막지 않는다", () => {
+  const html = renderPanel("original", {
+    boardNodeCount: 1,
+    coverage: {
+      status: "partial",
+      unavailableServices: [
+        {
+          serviceKey: "ec2",
+          displayName: "EC2",
+          reason: "permission_required",
+          remedy: "open_settings"
+        }
+      ]
+    }
+  });
+  const dialogIndex = html.indexOf('role="dialog"');
+  const previewHtml = html.slice(0, dialogIndex);
+  const warning = "일부 AWS 서비스를 읽지 못했어요. 가져온 항목만 보드에 적용합니다.";
+
+  assert.ok(dialogIndex > 0);
+  assert.ok(previewHtml.indexOf(warning) >= 0);
+  assert.ok(previewHtml.indexOf(warning) < previewHtml.indexOf(">보드에 적용"));
+  assert.match(previewHtml, /<button[^>]*>보드에 적용<\/button>/);
+  assert.doesNotMatch(previewHtml, /<button[^>]*disabled=""[^>]*>보드에 적용<\/button>/);
+  assert.ok(html.indexOf("못 읽은 서비스 자세히 보기") > dialogIndex);
+});
+
+test("상세 정보는 공통 모달 접근성 도우미로 포커스와 닫기 흐름을 연결한다", () => {
+  assert.match(resultPanelSource, /setupModalAccessibility/);
+  assert.match(resultPanelSource, /detailsOverlayRef/);
+  assert.match(resultPanelSource, /detailsDialogRef/);
+  assert.match(resultPanelSource, /detailsCloseButtonRef/);
+  assert.match(
+    resultPanelSource,
+    /if \(!isDetailsOpen\) \{\s*return;\s*\}[\s\S]*?setupModalAccessibility\(/
+  );
+  assert.doesNotMatch(resultPanelSource, /function handleEscape/);
+});
+
 test("현재 보드에서는 실제로 적용할 replace 또는 append 배치를 먼저 선택해 미리본다", () => {
   const html = renderPanel("compiled", {
     additionCount: 1,

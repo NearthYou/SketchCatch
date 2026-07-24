@@ -15,6 +15,7 @@ import type {
 } from "./reverse-engineering-board-application";
 import type { ReverseEngineeringBoardCandidate } from "./reverse-engineering-board-candidates";
 import type { ReverseEngineeringImportDecisionOptions } from "./reverse-engineering-import-decision";
+import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
 import {
   presentReverseEngineeringResource,
@@ -166,6 +167,9 @@ export function ReverseEngineeringResultPanel({
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [detailSearch, setDetailSearch] = useState("");
   const [isOrganizing, setIsOrganizing] = useState(false);
+  const detailsOverlayRef = useRef<HTMLDivElement>(null);
+  const detailsDialogRef = useRef<HTMLElement>(null);
+  const detailsCloseButtonRef = useRef<HTMLButtonElement>(null);
   const organizeFrameRef = useRef<number | null>(null);
   const organizeTimerRef = useRef<number | null>(null);
 
@@ -182,21 +186,27 @@ export function ReverseEngineeringResultPanel({
     };
   }, []);
 
-  // 큰 상세 창은 Escape 키로도 바로 닫을 수 있게 합니다.
+  // gg: 상세 창은 공통 Modal 도우미가 열기 focus·Tab 경계·Escape·원래 트리거 복귀를 함께 처리합니다.
   useEffect(() => {
     if (!isDetailsOpen) {
       return;
     }
 
-    // 상세 정보를 읽다가 Escape를 누르면 원래 미리보기로 돌아갑니다.
-    function handleEscape(event: KeyboardEvent): void {
-      if (event.key === "Escape") {
-        setIsDetailsOpen(false);
-      }
+    const overlay = detailsOverlayRef.current;
+    const dialog = detailsDialogRef.current;
+    const closeButton = detailsCloseButtonRef.current;
+
+    if (!overlay || !dialog || !closeButton) {
+      return;
     }
 
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
+    return setupModalAccessibility({
+      closeButton,
+      dialog,
+      documentRoot: document,
+      onClose: () => setIsDetailsOpen(false),
+      overlay
+    });
   }, [isDetailsOpen]);
 
   if (!result) {
@@ -291,6 +301,11 @@ export function ReverseEngineeringResultPanel({
             <strong>{connectionCount}</strong>
           </span>
         </div>
+        {hasPartialFailure ? (
+          <p className={styles.warning} role="status">
+            일부 AWS 서비스를 읽지 못했어요. 가져온 항목만 보드에 적용합니다.
+          </p>
+        ) : null}
         <div className={styles.previewActions}>
           <button
             aria-busy={isApplying}
@@ -347,11 +362,13 @@ export function ReverseEngineeringResultPanel({
         className={styles.detailsBackdrop}
         hidden={!isDetailsOpen}
         onMouseDown={handleDetailsBackdropClick}
+        ref={detailsOverlayRef}
       >
         <section
           aria-labelledby="reverse-engineering-details-title"
           aria-modal="true"
           className={styles.detailsDialog}
+          ref={detailsDialogRef}
           role="dialog"
         >
           <header className={styles.detailsDialogHeader}>
@@ -364,6 +381,7 @@ export function ReverseEngineeringResultPanel({
               aria-label="상세 정보 닫기"
               className={styles.iconButton}
               onClick={() => setIsDetailsOpen(false)}
+              ref={detailsCloseButtonRef}
               type="button"
             >
               <X aria-hidden="true" size={16} />

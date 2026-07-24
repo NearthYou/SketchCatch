@@ -51,6 +51,20 @@ test("새 scan과 저장된 scan은 원래 배치를 먼저 미리보기한다",
   );
 });
 
+test("완료된 Reverse scan은 작은 화면에서도 결과 패널을 자동으로 연다", () => {
+  const runScan = getSourceBlock(
+    panelSource,
+    "const runScan = useCallback(",
+    "// gg: 중앙 시작 카드는"
+  );
+
+  assert.match(
+    runScan,
+    /if \(response\.response\.result\) \{[\s\S]*?showFirstCandidatePreview\([\s\S]*?context\.setRightPanelOpen\(true\)/
+  );
+  assert.match(diagramEditorTypesSource, /setRightPanelOpen: \(isOpen: boolean\) => void/);
+});
+
 test("정리본은 사용자가 정리본을 누른 뒤에만 만든다", () => {
   const organizationPreview = getSourceBlock(
     panelSource,
