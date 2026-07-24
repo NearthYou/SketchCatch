@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import type {
   DiagramJson,
   Project,
   ReverseEngineeringImportDecisionRequest,
+  ReverseEngineeringImportSuggestionStatus,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScan,
   ReverseEngineeringScanLogLine,
@@ -55,6 +57,7 @@ import {
 } from "./reverse-engineering-resource-types";
 import {
   getReverseEngineeringStartFailure,
+  getReverseEngineeringTerminalScanFailure,
   type ReverseEngineeringStartFailure
 } from "./reverse-engineering-scan-start-failure";
 import { useReverseEngineeringOptions } from "./useReverseEngineeringOptions";
@@ -67,6 +70,7 @@ type ReverseEngineeringOrganizedDiagrams = {
 };
 
 type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "partial" | "error";
+export type ReverseEngineeringOrganizationState = "idle" | "loading";
 
 type UseReverseEngineeringWorkflowInput = {
   readonly context: DiagramEditorPanelContext;
@@ -92,13 +96,76 @@ type ReverseEngineeringRunOutput = {
 const SCAN_POLL_INTERVAL_MS = 1000;
 const SCAN_POLL_ATTEMPT_COUNT = 30;
 
-// 화면 선택과 별개로 보드 적용은 관찰 전용 import 결정만 보냅니다.
-function createObserveOnlyReverseEngineeringImportDecision(): ReverseEngineeringImportDecisionRequest {
+/** UI에서 고른 Terraform 관리 상태를 실제 보드 적용 범위 안에서만 안전하게 만듭니다. */
+export function createReverseEngineeringImportDecision({
+  acknowledgedReviewOnlyResourceIds,
+  result,
+  selectedReadyResourceIds,
+  sourceNodeIds
+}: {
+  readonly acknowledgedReviewOnlyResourceIds: readonly string[];
+  readonly result: ReverseEngineeringScanResult | null;
+  readonly selectedReadyResourceIds: readonly string[];
+  readonly sourceNodeIds: readonly string[];
+}): ReverseEngineeringImportDecisionRequest {
+  if (!result) {
+    return {
+      version: 1,
+      selectedReadyResourceIds: [],
+      acknowledgedReviewOnlyResourceIds: []
+    };
+  }
+
+  const statusByResourceId = new Map(
+    result.importSuggestions.map((suggestion) => [suggestion.resourceId, suggestion.status])
+  );
+  const sourceNodeIdSet = new Set(sourceNodeIds);
+
   return {
     version: 1,
-    selectedReadyResourceIds: [],
-    acknowledgedReviewOnlyResourceIds: []
+    selectedReadyResourceIds: retainSelectedImportResourceIds({
+      resourceIds: selectedReadyResourceIds,
+      sourceNodeIdSet,
+      statusByResourceId,
+      status: "ready"
+    }),
+    acknowledgedReviewOnlyResourceIds: retainSelectedImportResourceIds({
+      resourceIds: acknowledgedReviewOnlyResourceIds,
+      sourceNodeIdSet,
+      statusByResourceId,
+      status: "review_only"
+    })
   };
+}
+
+/** 현재 후보에 실제로 적용되는 리소스와 일치하는 선택만 요청 payload에 남깁니다. */
+function retainSelectedImportResourceIds({
+  resourceIds,
+  sourceNodeIdSet,
+  statusByResourceId,
+  status
+}: {
+  readonly resourceIds: readonly string[];
+  readonly sourceNodeIdSet: ReadonlySet<string>;
+  readonly statusByResourceId: ReadonlyMap<string, ReverseEngineeringImportSuggestionStatus>;
+  readonly status: "ready" | "review_only";
+}): string[] {
+  const keptResourceIds = new Set<string>();
+
+  return resourceIds.filter((resourceId) => {
+    const suggestionStatus = statusByResourceId.get(resourceId);
+    const hasExpectedStatus =
+      status === "ready"
+        ? suggestionStatus === "ready"
+        : suggestionStatus === "manual_review" || suggestionStatus === "unsupported_resource_type";
+
+    if (!sourceNodeIdSet.has(resourceId) || !hasExpectedStatus || keptResourceIds.has(resourceId)) {
+      return false;
+    }
+
+    keptResourceIds.add(resourceId);
+    return true;
+  });
 }
 
 // Reverse Engineering의 스캔·미리보기·저장 워크플로를 UI와 분리합니다.
@@ -114,6 +181,7 @@ export function useReverseEngineeringWorkflow({
   const [selectedResourceTypes, setSelectedResourceTypes] = useState<
     ReverseEngineeringResourceSelection[]
   >([REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION]);
+  const [selectedRegion, setSelectedRegion] = useState("");
   const [scanState, setScanState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanFailure, setScanFailure] = useState<ReverseEngineeringStartFailure | null>(null);
@@ -129,6 +197,14 @@ export function useReverseEngineeringWorkflow({
     useState<ReverseEngineeringBoardApplicationMode>("replace");
   const [organizedDiagrams, setOrganizedDiagrams] =
     useState<ReverseEngineeringOrganizedDiagrams | null>(null);
+  const [organizationState, setOrganizationState] =
+    useState<ReverseEngineeringOrganizationState>("idle");
+  const [selectedReadyResourceIds, setSelectedReadyResourceIds] = useState<string[]>([]);
+  const [acknowledgedReviewOnlyResourceIds, setAcknowledgedReviewOnlyResourceIds] = useState<
+    string[]
+  >([]);
+  const organizationRequestIdRef = useRef(0);
+  const organizationInFlightRef = useRef(false);
 
   // 옵션과 기록 요청의 안전한 오류 문장을 공통 상태로 모읍니다.
   const handleRequestError = useCallback((error: unknown) => {
@@ -141,7 +217,7 @@ export function useReverseEngineeringWorkflow({
     projects,
     selectedAwsConnectionId,
     selectedProjectId,
-    setSelectedAwsConnectionId,
+    setSelectedAwsConnectionId: setSelectedAwsConnectionIdInOptions,
     verifiedAwsConnections
   } = useReverseEngineeringOptions({
     initialProjectId: projectId,
@@ -172,18 +248,39 @@ export function useReverseEngineeringWorkflow({
     [awsConnections, selectedAwsConnectionId]
   );
   const resolvedSelectedAwsConnectionId = awsConnectionRecovery.selectedConnectionId ?? "";
+  const selectedConnectionForRegion = awsConnections.find(
+    (connection) => connection.id === resolvedSelectedAwsConnectionId
+  );
   const selectedAwsConnection = verifiedAwsConnections.find(
     (connection) => connection.id === resolvedSelectedAwsConnectionId
   );
-  const canStartScan = canStartReverseEngineeringScan({
-    createProjectOnApply,
-    hasSelectedVerifiedConnection: Boolean(selectedAwsConnection),
-    hasSelectedProject: Boolean(selectedProject),
-    loadState,
-    recovery: awsConnectionRecovery,
-    scanState,
-    selectedResourceTypeCount: selectedResourceTypes.length
-  });
+
+  // 연결을 바꾸면 그 연결의 기본 리전부터 다시 사용하도록 선택값을 초기화합니다.
+  useEffect(() => {
+    setSelectedRegion(selectedConnectionForRegion?.region ?? "");
+  }, [resolvedSelectedAwsConnectionId, selectedConnectionForRegion?.region]);
+
+  // 연결 선택과 리전 초기화를 하나의 사용자 동작으로 묶습니다.
+  const handleSelectedAwsConnectionChange = useCallback(
+    (connectionId: string): void => {
+      setSelectedAwsConnectionIdInOptions(connectionId);
+      setSelectedRegion(
+        awsConnections.find((connection) => connection.id === connectionId)?.region ?? ""
+      );
+    },
+    [awsConnections, setSelectedAwsConnectionIdInOptions]
+  );
+  const canStartScan =
+    selectedRegion.trim().length > 0 &&
+    canStartReverseEngineeringScan({
+      createProjectOnApply,
+      hasSelectedVerifiedConnection: Boolean(selectedAwsConnection),
+      hasSelectedProject: Boolean(selectedProject),
+      loadState,
+      recovery: awsConnectionRecovery,
+      scanState,
+      selectedResourceTypeCount: selectedResourceTypes.length
+    });
   const boardCandidates = useMemo(
     () =>
       scanResponse?.result ? createReverseEngineeringBoardCandidates(scanResponse.result) : [],
@@ -265,9 +362,82 @@ export function useReverseEngineeringWorkflow({
     previewSourceDiagram,
     selectedCandidateResult
   ]);
+  const importDecision = useMemo(
+    () =>
+      createReverseEngineeringImportDecision({
+        acknowledgedReviewOnlyResourceIds,
+        result: selectedCandidateResult,
+        selectedReadyResourceIds,
+        sourceNodeIds: selectedCandidateApplication?.sourceOwnership.nodeIds ?? []
+      }),
+    [
+      acknowledgedReviewOnlyResourceIds,
+      selectedCandidateApplication,
+      selectedCandidateResult,
+      selectedReadyResourceIds
+    ]
+  );
   const hasDeletedSourceScan = useMemo(
     () => hasDeletedReverseEngineeringSourceScan(context.diagram, scanHistory, scanHistoryState),
     [context.diagram, scanHistory, scanHistoryState]
+  );
+
+  // 새 스캔 원본으로 바뀌면 이전 Terraform 후보 선택을 함께 비웁니다.
+  const resetImportDecisionSelections = useCallback((): void => {
+    setSelectedReadyResourceIds([]);
+    setAcknowledgedReviewOnlyResourceIds([]);
+  }, []);
+
+  // 이전 정리 작업이 늦게 끝나도 현재 미리보기를 덮어쓰지 못하게 무효화합니다.
+  const resetOrganizationState = useCallback((): void => {
+    organizationRequestIdRef.current += 1;
+    organizationInFlightRef.current = false;
+    setOrganizationState("idle");
+  }, []);
+
+  // ready 상태인 리소스만 Terraform 관리 후보로 선택하거나 해제합니다.
+  const toggleReadyResourceSelection = useCallback(
+    (resourceId: string): void => {
+      const suggestionStatus = getReverseEngineeringImportSuggestionStatus(
+        selectedCandidateResult,
+        resourceId
+      );
+      if (suggestionStatus !== "ready") {
+        return;
+      }
+
+      setSelectedReadyResourceIds((currentResourceIds) =>
+        toggleReverseEngineeringResourceSelection(currentResourceIds, resourceId)
+      );
+      setAcknowledgedReviewOnlyResourceIds((currentResourceIds) =>
+        currentResourceIds.filter((currentResourceId) => currentResourceId !== resourceId)
+      );
+    },
+    [selectedCandidateResult]
+  );
+
+  // 확인 필요 상태는 관리 대상으로 바꾸지 않고 사용자 확인 기록만 토글합니다.
+  const toggleReviewOnlyAcknowledgement = useCallback(
+    (resourceId: string): void => {
+      const suggestionStatus = getReverseEngineeringImportSuggestionStatus(
+        selectedCandidateResult,
+        resourceId
+      );
+      if (
+        suggestionStatus !== "manual_review" &&
+        suggestionStatus !== "unsupported_resource_type"
+      ) {
+        return;
+      }
+
+      setAcknowledgedReviewOnlyResourceIds((currentResourceIds) =>
+        toggleReverseEngineeringResourceSelection(currentResourceIds, resourceId)
+      );
+      setSelectedReadyResourceIds((currentResourceIds) =>
+        currentResourceIds.filter((currentResourceId) => currentResourceId !== resourceId)
+      );
+    },
+    [selectedCandidateResult]
   );
 
   // Resource 선택은 API reader family로 정규화합니다.
@@ -281,6 +451,7 @@ export function useReverseEngineeringWorkflow({
   const showFirstCandidatePreview = useCallback(
     (result: ReverseEngineeringScanResult, baseDiagram: DiagramJson): void => {
       const nextCandidate = createReverseEngineeringBoardCandidates(result)[0];
+      resetOrganizationState();
 
       if (!nextCandidate) {
         setSelectedCandidateId(null);
@@ -303,12 +474,13 @@ export function useReverseEngineeringWorkflow({
       setSelectedCandidateId(nextCandidate.id);
       context.setPreviewDiagram(application.previewDiagram);
     },
-    [context]
+    [context, resetOrganizationState]
   );
 
   // 선택한 AWS 연결과 Resource 범위로 scan을 시작하고 결과만 미리봅니다.
   const runScan = useCallback(async (): Promise<void> => {
-    if (!canStartScan || !selectedAwsConnection) {
+    const scanRegion = selectedRegion.trim();
+    if (!canStartScan || !selectedAwsConnection || !scanRegion) {
       return;
     }
 
@@ -320,6 +492,8 @@ export function useReverseEngineeringWorkflow({
     setPlacement("original");
     setApplicationMode("replace");
     setOrganizedDiagrams(null);
+    resetOrganizationState();
+    resetImportDecisionSelections();
     setSelectedCandidateId(null);
     setScanResponse(null);
     setPreviewId(null);
@@ -338,18 +512,19 @@ export function useReverseEngineeringWorkflow({
       const response = createProjectOnApply
         ? await runPreviewScan({
             awsConnectionId: selectedAwsConnection.id,
-            region: selectedAwsConnection.region,
+            region: scanRegion,
             resourceTypes: selectedResourceTypes
           })
         : await runSavedScan({
             awsConnectionId: selectedAwsConnection.id,
             onScanStarted: (scan) => setActiveScanId(scan.id),
             projectId: targetProjectId,
-            region: selectedAwsConnection.region,
+            region: scanRegion,
             resourceTypes: selectedResourceTypes
           });
 
       setScanResponse(response.response);
+      setSelectedRegion(response.response.scan.region || scanRegion);
       setPreviewId(response.previewId);
       setLogs(response.logs);
       if (!createProjectOnApply) {
@@ -357,6 +532,13 @@ export function useReverseEngineeringWorkflow({
       }
       if (response.response.result) {
         showFirstCandidatePreview(response.response.result, basePreview.sourceDiagram);
+      } else {
+        const terminalFailure = getReverseEngineeringTerminalScanFailure(response.response.scan);
+        if (terminalFailure) {
+          setPreviewBase(null);
+          context.setPreviewDiagram(null);
+          setScanFailure(terminalFailure);
+        }
       }
       setScanState("idle");
     } catch (error) {
@@ -368,7 +550,10 @@ export function useReverseEngineeringWorkflow({
     context,
     createProjectOnApply,
     rememberCompletedScan,
+    resetImportDecisionSelections,
+    resetOrganizationState,
     selectedAwsConnection,
+    selectedRegion,
     selectedResourceTypes,
     showFirstCandidatePreview,
     targetProjectId
@@ -397,6 +582,8 @@ export function useReverseEngineeringWorkflow({
       if (scanResponse?.scan.id === scanId) {
         setScanResponse(null);
         setLogs([]);
+        resetImportDecisionSelections();
+        resetOrganizationState();
         setSelectedCandidateId(null);
         setPlacement("original");
         setApplicationMode("replace");
@@ -413,11 +600,14 @@ export function useReverseEngineeringWorkflow({
   async function openHistoricalScan(scanId: string): Promise<void> {
     setScanState("loading");
     setErrorMessage(null);
+    setScanFailure(null);
     setApplyMessage(null);
     setApplyState("idle");
     setPlacement("original");
     setApplicationMode("replace");
     setOrganizedDiagrams(null);
+    resetOrganizationState();
+    resetImportDecisionSelections();
     const basePreview = createReverseEngineeringApplyPreview({
       diagram: context.diagram,
       draftRevision: createProjectOnApply ? null : context.projectDraftRevision
@@ -428,6 +618,7 @@ export function useReverseEngineeringWorkflow({
       const response = await getReverseEngineeringScan({ projectId: targetProjectId, scanId });
       const nextLogs = await listReverseEngineeringScanLogs({ projectId: targetProjectId, scanId });
       setScanResponse(response);
+      setSelectedRegion(response.scan.region);
       setActiveScanId(response.scan.id);
       setLogs(nextLogs);
       if (response.result) {
@@ -448,7 +639,7 @@ export function useReverseEngineeringWorkflow({
   async function applyScanResult(mode: ReverseEngineeringBoardApplicationMode): Promise<void> {
     const result = selectedCandidateResult;
 
-    if (!result || applyState === "saving") {
+    if (!result || applyState === "saving" || organizationInFlightRef.current) {
       return;
     }
     if (result.architectureJson.nodes.length === 0) {
@@ -466,7 +657,6 @@ export function useReverseEngineeringWorkflow({
     if (!application) {
       return;
     }
-    const importDecision = createObserveOnlyReverseEngineeringImportDecision();
     const diagramToApply = attachReverseEngineeringSourceToDiagram({
       diagram: application.diagram,
       sourceScanId: result.scan.id,
@@ -521,7 +711,7 @@ export function useReverseEngineeringWorkflow({
 
     if (!context.persistAndApplyReverseEngineeringDraft) {
       setApplyState("error");
-      setApplyMessage("Reverse Engineering 서버 검증 경계가 준비되지 않았습니다.");
+      setApplyMessage("보드를 저장할 준비를 완료하지 못했습니다.");
       return;
     }
     if (!previewBase) {
@@ -552,7 +742,7 @@ export function useReverseEngineeringWorkflow({
             ),
             importDecision
           }) ??
-          Promise.reject(new Error("Reverse Engineering 서버 검증 경계가 준비되지 않았습니다.")),
+          Promise.reject(new Error("보드를 저장할 준비를 완료하지 못했습니다.")),
         preview: previewBase,
         saveSnapshot: async () => {
           await createArchitectureSnapshot({
@@ -582,12 +772,12 @@ export function useReverseEngineeringWorkflow({
       setPreviewBase(null);
       if (outcome.status === "saved_without_snapshot") {
         setApplyState("partial");
-        setApplyMessage("보드는 저장했지만 Snapshot은 저장하지 못했습니다.");
+        setApplyMessage("보드는 저장했지만 스캔 기록은 남기지 못했습니다.");
         return;
       }
 
       setApplyState("saved");
-      setApplyMessage("보드와 imported Architecture Snapshot을 저장했습니다.");
+      setApplyMessage("보드와 스캔 기록을 저장했습니다.");
     } catch (error) {
       setApplyState("error");
       setApplyMessage(toErrorMessage(error));
@@ -602,6 +792,7 @@ export function useReverseEngineeringWorkflow({
       return;
     }
 
+    resetOrganizationState();
     setApplicationMode(mode);
     setApplyState("idle");
     setApplyMessage(null);
@@ -630,54 +821,93 @@ export function useReverseEngineeringWorkflow({
     context.setPreviewDiagram(application.previewDiagram);
   }
 
-  // 자동 정리는 사용자가 누를 때만 replace와 append 후보를 계산합니다.
-  function previewAutomaticOrganization(): void {
-    if (!originalCandidateApplication || !selectedCandidateResponse?.result) {
+  // gg: 자동 정리는 사용자가 누를 때만 replace와 append 후보를 계산하고, 큰 Preview는 응답성 경로를 씁니다.
+  async function previewAutomaticOrganization(): Promise<void> {
+    if (
+      organizationInFlightRef.current ||
+      !originalCandidateApplication ||
+      !selectedCandidateResponse?.result
+    ) {
       return;
     }
 
-    const replaceCandidate = createBoardAutoOrganizeCandidates(
-      originalCandidateApplication.diagram,
-      convertReverseEngineeringBoardToArchitectureJson(
-        originalCandidateApplication.diagram,
-        selectedCandidateResponse.result,
-        originalCandidateApplication.sourceOwnership
-      )
-    ).candidates[0];
-    const appendCandidate = originalCandidateAppendApplication
-      ? createBoardAutoOrganizeCandidates(
-          originalCandidateAppendApplication.diagram,
-          convertReverseEngineeringBoardToArchitectureJson(
-            originalCandidateAppendApplication.diagram,
-            selectedCandidateResponse.result,
-            originalCandidateAppendApplication.sourceOwnership
-          )
-        ).candidates[0]
-      : null;
-
-    if (!replaceCandidate) {
-      setApplyState("error");
-      setApplyMessage("정리본을 만들지 못했습니다.");
-      return;
-    }
-
-    const nextOrganizedDiagrams: ReverseEngineeringOrganizedDiagrams = {
-      append: appendCandidate ? structuredClone(appendCandidate.diagram) : null,
-      replace: structuredClone(replaceCandidate.diagram)
-    };
-    const organizedPreview =
-      applicationMode === "append" ? nextOrganizedDiagrams.append : nextOrganizedDiagrams.replace;
-    if (!organizedPreview) {
-      setApplyState("error");
-      setApplyMessage("현재 적용 방식의 정리본을 만들지 못했습니다.");
-      return;
-    }
-
+    const requestId = organizationRequestIdRef.current + 1;
+    organizationRequestIdRef.current = requestId;
+    organizationInFlightRef.current = true;
+    // 비용이 큰 배치 계산 전 loading UI를 즉시 그려 사용자가 진행 중임을 알 수 있게 합니다.
+    flushSync(() => {
+      setOrganizationState("loading");
+    });
     setApplyState("idle");
     setApplyMessage(null);
-    setOrganizedDiagrams(nextOrganizedDiagrams);
-    setPlacement("compiled");
-    context.setPreviewDiagram(organizedPreview);
+
+    try {
+      await yieldForReverseEngineeringOrganization();
+      if (requestId !== organizationRequestIdRef.current) {
+        return;
+      }
+
+      const replaceCandidate = createBoardAutoOrganizeCandidates(
+        originalCandidateApplication.diagram,
+        convertReverseEngineeringBoardToArchitectureJson(
+          originalCandidateApplication.diagram,
+          selectedCandidateResponse.result,
+          originalCandidateApplication.sourceOwnership
+        ),
+        { performancePolicy: "responsive-large-board" }
+      ).candidates[0];
+      const appendCandidate = originalCandidateAppendApplication
+        ? createBoardAutoOrganizeCandidates(
+            originalCandidateAppendApplication.diagram,
+            convertReverseEngineeringBoardToArchitectureJson(
+              originalCandidateAppendApplication.diagram,
+              selectedCandidateResponse.result,
+              originalCandidateAppendApplication.sourceOwnership
+            ),
+            { performancePolicy: "responsive-large-board" }
+          ).candidates[0]
+        : null;
+
+      if (!replaceCandidate) {
+        if (requestId === organizationRequestIdRef.current) {
+          setApplyState("error");
+          setApplyMessage("정리본을 만들지 못했습니다.");
+        }
+        return;
+      }
+
+      const nextOrganizedDiagrams: ReverseEngineeringOrganizedDiagrams = {
+        append: appendCandidate ? structuredClone(appendCandidate.diagram) : null,
+        replace: structuredClone(replaceCandidate.diagram)
+      };
+      const organizedPreview =
+        applicationMode === "append" ? nextOrganizedDiagrams.append : nextOrganizedDiagrams.replace;
+      if (!organizedPreview) {
+        if (requestId === organizationRequestIdRef.current) {
+          setApplyState("error");
+          setApplyMessage("현재 적용 방식의 정리본을 만들지 못했습니다.");
+        }
+        return;
+      }
+
+      if (requestId !== organizationRequestIdRef.current) {
+        return;
+      }
+
+      setOrganizedDiagrams(nextOrganizedDiagrams);
+      setPlacement("compiled");
+      context.setPreviewDiagram(organizedPreview);
+    } catch (error) {
+      if (requestId === organizationRequestIdRef.current) {
+        setApplyState("error");
+        setApplyMessage(toErrorMessage(error));
+      }
+    } finally {
+      if (requestId === organizationRequestIdRef.current) {
+        organizationInFlightRef.current = false;
+        setOrganizationState("idle");
+      }
+    }
   }
 
   // 원본 보기는 정리본을 저장하지 않고 source-exact 미리보기로 돌아갑니다.
@@ -686,6 +916,7 @@ export function useReverseEngineeringWorkflow({
       return;
     }
 
+    resetOrganizationState();
     setPlacement("original");
     context.setPreviewDiagram(originalApplication.previewDiagram);
   }
@@ -708,11 +939,13 @@ export function useReverseEngineeringWorkflow({
     setPlacement("original");
     setApplicationMode("replace");
     setOrganizedDiagrams(null);
+    resetOrganizationState();
     setSelectedCandidateId(candidateId);
     context.setPreviewDiagram(application.previewDiagram);
   }
 
   return {
+    acknowledgedReviewOnlyResourceIds,
     activeScanId,
     applicationMode,
     applyMessage,
@@ -735,12 +968,14 @@ export function useReverseEngineeringWorkflow({
     errorMessage,
     hasCurrentBoardResources: previewSourceDiagram.nodes.length > 0,
     hasDeletedSourceScan,
+    importDecision,
     isHistoryLoading: scanHistoryState === "loading" || scanState === "loading",
     isStaleScanResult,
     loadOptions,
     loadState,
     logs,
     openHistoricalScan,
+    organizationState,
     placement,
     previewApplicationMode,
     previewAutomaticOrganization,
@@ -754,14 +989,19 @@ export function useReverseEngineeringWorkflow({
     selectedAwsConnection,
     selectedCandidate,
     selectedCandidateResponse,
+    selectedReadyResourceIds,
+    selectedRegion,
     selectedResourceTypes,
     selectBoardCandidate,
-    setSelectedAwsConnectionId,
+    setSelectedAwsConnectionId: handleSelectedAwsConnectionChange,
+    setSelectedRegion,
     resultSettingsHref: createReverseEngineeringAwsSettingsHref(
       selectedCandidateResponse?.scan.awsConnectionId ?? null
     ),
     settingsHref: createReverseEngineeringAwsSettingsHref(selectedAwsConnection?.id ?? null),
-    toggleResourceType
+    toggleReadyResourceSelection,
+    toggleResourceType,
+    toggleReviewOnlyAcknowledgement
   };
 }
 
@@ -806,6 +1046,41 @@ async function runSavedScan({
       : await pollReverseEngineeringScan(projectId, startedResponse.scan.id);
   const logs = await listReverseEngineeringScanLogs({ projectId, scanId: response.scan.id });
   return { logs, previewId: null, response };
+}
+
+// 현재 후보에 있는 import 제안 상태만 선택 토글에서 신뢰합니다.
+function getReverseEngineeringImportSuggestionStatus(
+  result: ReverseEngineeringScanResult | null,
+  resourceId: string
+): ReverseEngineeringImportSuggestionStatus | null {
+  return (
+    result?.importSuggestions.find((suggestion) => suggestion.resourceId === resourceId)?.status ??
+    null
+  );
+}
+
+// 리소스 선택 배열을 중복 없이 토글해 상세 Modal의 체크 상태를 안정적으로 유지합니다.
+function toggleReverseEngineeringResourceSelection(
+  resourceIds: readonly string[],
+  resourceId: string
+): string[] {
+  return resourceIds.includes(resourceId)
+    ? resourceIds.filter((currentResourceId) => currentResourceId !== resourceId)
+    : [...resourceIds, resourceId];
+}
+
+// 브라우저가 정리 중 상태를 실제 화면에 한 번 그린 뒤 비용이 큰 배치 계산을 시작하게 합니다.
+function yieldForReverseEngineeringOrganization(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+      resolve();
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
 }
 
 // 알 수 없는 오류도 안전한 화면 문장으로 바꿉니다.

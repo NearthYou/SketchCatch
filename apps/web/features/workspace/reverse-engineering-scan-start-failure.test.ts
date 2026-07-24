@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ApiClientError } from "../../lib/api-client";
-import { getReverseEngineeringStartFailure } from "./reverse-engineering-scan-start-failure";
+import {
+  getReverseEngineeringStartFailure,
+  getReverseEngineeringTerminalScanFailure
+} from "./reverse-engineering-scan-start-failure";
 
 function createApiError(
   code: "REVERSE_ENGINEERING_AWS_SETTINGS_REQUIRED" | "REVERSE_ENGINEERING_SCAN_RETRYABLE"
@@ -51,4 +54,32 @@ test("AWS SSO 만료는 환경 설정 대신 재로그인 방법을 안내한다
     description: "터미널에서 aws sso login을 실행한 뒤 다시 가져와 주세요.",
     title: "AWS SSO 로그인이 만료되었습니다."
   });
+});
+
+test("저장 scan의 권한 실패는 설정 복구 행동으로 남긴다", () => {
+  assert.deepEqual(
+    getReverseEngineeringTerminalScanFailure({
+      errorSummary: "AccessDeniedException: missing permission",
+      status: "failed"
+    }),
+    {
+      action: "open_settings",
+      description: "AWS 연결, 권한, 리전을 확인한 뒤 다시 가져와 주세요.",
+      title: "AWS 연결 설정을 확인해 주세요."
+    }
+  );
+});
+
+test("저장 scan 취소도 화면에서 다시 시도할 수 있는 종료 상태로 남긴다", () => {
+  assert.deepEqual(
+    getReverseEngineeringTerminalScanFailure({
+      errorSummary: null,
+      status: "cancelled"
+    }),
+    {
+      action: "retry",
+      description: "필요하면 같은 설정으로 다시 가져올 수 있습니다.",
+      title: "AWS 구조 가져오기를 취소했습니다."
+    }
+  );
 });

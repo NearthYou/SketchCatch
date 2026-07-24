@@ -156,6 +156,7 @@ export type DiagramEditorProps = {
   initialSelectedEdgeIds?: readonly string[] | undefined;
   initialSelectedNodeIds?: readonly string[] | undefined;
   isDeploymentConsoleOpen?: boolean | undefined;
+  hidePreviewNotice?: boolean | undefined;
   leftPanel?: ReactNode;
   mode?: DiagramEditorMode | undefined;
   onBoardReady?: ((element: HTMLElement) => void) | undefined;
