@@ -355,6 +355,10 @@ export type DeploymentRepository = {
     deploymentId: string;
     accessContext: ProjectAccessContext;
   }): Promise<void>;
+  synchronizeDeploymentTargetBeforeApplicationRelease?(input: {
+    projectId: string;
+    accessContext: ProjectAccessContext;
+  }): Promise<void>;
   completeDeploymentApply(
     deploymentId: string,
     input?: { leaseFence?: LeaseFence; fenceCheckedAt?: Date }
@@ -574,6 +578,25 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       await gitCicdReadinessService.synchronizeDeploymentTargetAfterSuccessfulApply({
         projectId: input.projectId,
         deploymentId: input.deploymentId,
+        userId: input.accessContext.userId
+      });
+    },
+    async synchronizeDeploymentTargetBeforeApplicationRelease(input) {
+      const [target] = await db
+        .select({ runtimeConfig: projectDeploymentTargets.runtimeConfig })
+        .from(projectDeploymentTargets)
+        .where(eq(projectDeploymentTargets.projectId, input.projectId));
+      if (
+        target?.runtimeConfig?.runtimeTargetKind !== "ecs_fargate" ||
+        target.runtimeConfig.outputUrl
+      ) {
+        return;
+      }
+      const gitCicdReadinessService = createGitCicdReadinessService({
+        repository: createPostgresGitCicdReadinessRepository(db)
+      });
+      await gitCicdReadinessService.refresh({
+        projectId: input.projectId,
         userId: input.accessContext.userId
       });
     },

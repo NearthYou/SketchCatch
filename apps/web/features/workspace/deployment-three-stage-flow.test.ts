@@ -165,6 +165,31 @@ test("managed deployment uses prepare, approve, and execute with three external 
   assert.match(directDeploymentSource, /stepId === "approval"/);
 });
 
+test("application-only deployment continues from one user action without a manual approval step", () => {
+  const completionStart = directDeploymentSource.indexOf(
+    "async function completeApplicationDeployment"
+  );
+  const reviewStart = directDeploymentSource.indexOf(
+    "async function startDeploymentReview",
+    completionStart
+  );
+  const planActionStart = directDeploymentSource.indexOf(
+    "async function startTerraformPlan",
+    reviewStart
+  );
+  const completionSource = directDeploymentSource.slice(completionStart, reviewStart);
+  const reviewSource = directDeploymentSource.slice(reviewStart, planActionStart);
+
+  assert.ok(completionStart > -1);
+  assert.ok(reviewStart > completionStart);
+  assert.match(completionSource, /approveDeploymentPlan\(plannedDeployment\.id\)/);
+  assert.match(completionSource, /executeDeployment\(approvedDeployment\.id\)/);
+  assert.match(reviewSource, /plannedDeployment\.scope === "application"/);
+  assert.match(reviewSource, /return completeApplicationDeployment\(plannedDeployment\)/);
+  assert.match(directDeploymentSource, /shouldShowApplyButton && selectedDeployment\?\.scope !== "application"/);
+  assert.match(directDeploymentSource, /isApplicationOnlyFlow[\s\S]*"앱 배포 중"[\s\S]*"앱 배포"/);
+});
+
 test("approval owns the Plan summary while execution keeps final target confirmation", () => {
   const contentStart = directDeploymentSource.indexOf("function renderDirectStepContent");
   const approvalStart = directDeploymentSource.indexOf(
@@ -487,7 +512,7 @@ test("a current request error does not suppress the selected deployment failure"
 });
 
 test("changed drafts keep cleanup available beside save and validation", () => {
-  const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
+  const actionsStart = directDeploymentSource.indexOf("function renderCleanupPlanActions");
   const validationStart = directDeploymentSource.indexOf(
     'if (stepId === "validation")',
     actionsStart
@@ -496,12 +521,13 @@ test("changed drafts keep cleanup available beside save and validation", () => {
     'if (stepId === "approval")',
     validationStart
   );
-  const validationSource = directDeploymentSource.slice(validationStart, approvalStart);
+  const validationSource = directDeploymentSource.slice(actionsStart, approvalStart);
 
   assert.ok(actionsStart > -1);
   assert.ok(validationStart > -1);
   assert.ok(approvalStart > validationStart);
   assert.match(validationSource, /startTerraformDestroyPlan/);
+  assert.match(validationSource, /!hasCurrentPlan[\s\S]*renderCleanupPlanActions\(\)[\s\S]*검증 실행/);
   assert.match(validationSource, /저장 후 검증/);
   assert.doesNotMatch(validationSource, /검증 단계에서는 실제 리소스를 변경하지 않습니다/);
 });

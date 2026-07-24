@@ -309,6 +309,12 @@ async function runDeploymentPlanOnce(
           repository,
           ...(executionSignal ? { abortSignal: executionSignal } : {})
         });
+        if (deployment.scope === "application") {
+          await repository.synchronizeDeploymentTargetBeforeApplicationRelease?.({
+            projectId: deployment.projectId,
+            accessContext: input.accessContext
+          });
+        }
         applicationPreparationStage = "preflight";
         preparedApplicationRelease = await prepareApplicationArtifact({
           deployment,
