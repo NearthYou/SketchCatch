@@ -715,6 +715,17 @@ test("automatic deployment scope stays unresolved until the current Plan resolve
   assert.doesNotMatch(setupSource, /selectedDeployment\?\.scope \?\? "infrastructure"/);
 });
 
+test("manual deployment scope changes discard the previous Plan before another execution", () => {
+  assert.match(
+    directDeploymentSource,
+    /function beginDeploymentScope\([\s\S]*?setSelectedScope\(scope\);[\s\S]*?setSelectedDeploymentId\(""\);[\s\S]*?setShowApplyConfirmation\(false\);[\s\S]*?setSelectedDirectStepId\("validation"\);/
+  );
+  assert.match(directDeploymentSource, /label: "인프라만"/);
+  assert.match(directDeploymentSource, /label: "앱만"/);
+  assert.match(directDeploymentSource, /label: "인프라 \+ 앱 함께"/);
+  assert.match(directDeploymentSource, /앱만 이어서 배포/);
+});
+
 test("deployment console horizontal container margin uses a valid length", () => {
   assert.doesNotMatch(workspaceStyles, /margin:\s*22 auto;/);
   assert.match(workspaceStyles, /margin:\s*22px auto;/);

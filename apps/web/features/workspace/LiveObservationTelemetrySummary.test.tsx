@@ -60,25 +60,26 @@ test("marks an expired observation as historical", () => {
   assert.doesNotMatch(html, /AWS 지표 수신/);
 });
 
-test("keeps unavailable provider telemetry out of the primary infrastructure summary", () => {
+test("shows unavailable CloudWatch collection without presenting it as a design judgment", () => {
   const html = renderSummary(snapshot({ status: "active", state: "unavailable", running: null }));
 
-  assert.doesNotMatch(html, /AWS 관측 불가/);
-  assert.doesNotMatch(html, /연결과 관측 권한을 확인해 주세요/);
+  assert.match(html, /CloudWatch 기반 지표/);
+  assert.match(html, /수집 지연/);
   assert.match(html, /실행 확인 중/);
-  assert.doesNotMatch(html, /CloudWatch/);
+  assert.doesNotMatch(html, /인프라 설계 판단|설계 분석|분석 완료/);
 });
 
-test("shows only infrastructure design signals in the primary summary", () => {
+test("shows CloudWatch request, Task, and collection metrics in the primary summary", () => {
   const html = renderSummary(snapshot({ status: "active", state: "available", running: 2 }));
 
-  assert.match(html, /예상 부하/);
-  assert.match(html, /Task 변화/);
-  assert.match(html, /설계 분석/);
+  assert.match(html, /요청량/);
+  assert.match(html, /ECS Task/);
+  assert.match(html, /수집 상태/);
+  assert.match(html, /정상 수집/);
+  assert.doesNotMatch(html, /인프라 설계 판단|설계 분석|분석 완료/);
   assert.doesNotMatch(html, /수집 요청/);
   assert.doesNotMatch(html, /최근 속도/);
   assert.doesNotMatch(html, /1분 환산/);
-  assert.doesNotMatch(html, /AWS 지표 수신/);
 });
 
 test("shows provider traffic and the design forecast without waiting for Store pressure", () => {

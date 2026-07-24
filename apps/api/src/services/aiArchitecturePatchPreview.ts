@@ -820,14 +820,18 @@ export function createArchitecturePatchPlan(
     );
   }
 
-  const naturalLanguageAction = isEc2InstanceTypeModificationInstruction(normalizedInstruction)
+  const naturalLanguageAction =
+    isEc2InstanceTypeModificationInstruction(normalizedInstruction) ||
+    isTargetTrackingTargetValueInstruction(normalizedInstruction)
     ? "modify_resource"
     : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
   const inferredTargetNode =
     naturalLanguageAction === "add_resource"
       ? undefined
       : findNaturalLanguagePatchTarget(input.architectureJson.nodes, normalizedInstruction);
-  const resourceType = inferredTargetNode?.type ?? findResourceType(normalizedInstruction);
+  const resourceType = isEcsCpuTargetTrackingInstruction(normalizedInstruction)
+    ? "APPLICATION_AUTO_SCALING_POLICY"
+    : inferredTargetNode?.type ?? findResourceType(normalizedInstruction);
 
   if (naturalLanguageAction === "manual_review") {
     return createNeedsClarificationPatchPlan(
@@ -1479,8 +1483,8 @@ function validatePatchPlanOperations(
     if (existingScalarValue !== undefined) {
       const isValidExistingScalarOperation =
         (op === "set_value" &&
-          value !== null &&
-          typeof value === typeof existingScalarValue) ||
+          ((value !== null && typeof value === typeof existingScalarValue) ||
+            (value === null && path.endsWith(".resourceLabel")))) ||
         (op === "rename" &&
           typeof existingScalarValue === "string" &&
           typeof value === "string") ||
@@ -1998,6 +2002,16 @@ function createPatchPlanOperations(
         path: "config.targetTrackingScalingPolicyConfiguration.predefinedMetricSpecification.predefinedMetricType",
         value: "ECSServiceAverageCPUUtilization"
       });
+      const resourceLabelPath =
+        "config.targetTrackingScalingPolicyConfiguration.predefinedMetricSpecification.resourceLabel";
+
+      if (getExistingScalarPatchValues(targetNode).has(resourceLabelPath)) {
+        operations.push({
+          op: "set_value",
+          path: resourceLabelPath,
+          value: null
+        });
+      }
     }
 
     return operations;
@@ -2369,14 +2383,18 @@ function resolvePatchIntent(input: CreateArchitecturePatchPreviewInput): Archite
   const instruction = input.instruction;
   const normalizedInstruction = normalizeSearchText(instruction);
   const replacementIntent = resolveReplacementPatchIntent(normalizedInstruction);
-  const naturalLanguageAction = isEc2InstanceTypeModificationInstruction(normalizedInstruction)
-    ? "modify_resource"
-    : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
+  const naturalLanguageAction =
+    isEc2InstanceTypeModificationInstruction(normalizedInstruction) ||
+    isTargetTrackingTargetValueInstruction(normalizedInstruction)
+      ? "modify_resource"
+      : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
   const inferredTargetNode =
     naturalLanguageAction === "add_resource"
       ? undefined
       : findNaturalLanguagePatchTarget(input.architectureJson.nodes, normalizedInstruction);
-  const explicitResourceType = inferredTargetNode?.type ?? findResourceType(normalizedInstruction);
+  const explicitResourceType = isEcsCpuTargetTrackingInstruction(normalizedInstruction)
+    ? "APPLICATION_AUTO_SCALING_POLICY"
+    : inferredTargetNode?.type ?? findResourceType(normalizedInstruction);
   const serviceExpansionResourceType =
     explicitResourceType === undefined
       ? inferServiceExpansionResourceType(normalizedInstruction, input.architectureJson.nodes)
@@ -4363,23 +4381,37 @@ function isTargetTrackingTargetValueInstruction(instruction: string): boolean {
 
 function isEcsCpuTargetTrackingInstruction(instruction: string): boolean {
   const normalizedInstruction = normalizeSearchText(instruction);
+  const hasEcsTaskContext = includesAnyPhrase(normalizedInstruction, [
+    "ecs",
+    "task",
+    "\uD0DC\uC2A4\uD06C"
+  ]);
   const hasCpuUtilization =
     includesPhrase(normalizedInstruction, "cpu") &&
-    includesAnyPhrase(normalizedInstruction, [
+    (hasEcsTaskContext || includesAnyPhrase(normalizedInstruction, [
+      "load",
       "utilization",
+      "utilisation",
       "usage",
-      "\uC0AC\uC6A9\uB960"
-    ]);
-  const hasPercentage = /\b\d+(?:\.\d+)?\s*%/u.test(normalizedInstruction);
+      "\uC0AC\uC6A9\uB960",
+      "\uC810\uC720\uC728",
+      "\uBD80\uD558"
+    ]));
+  const hasPercentage = /\b\d+(?:\.\d+)?\s*(?:%|percent(?:age)?\b|\uD37C\uC13C\uD2B8)/u.test(normalizedInstruction);
   const hasScaleOutIntent = includesAnyPhrase(normalizedInstruction, [
     "scale out",
+    "scale-out",
+    "scaleout",
     "increase",
     "auto scaling",
     "autoscaling",
     "\uB298\uB9AC",
+    "\uB298\uB824",
     "\uC99D\uAC00",
     "\uD655\uC7A5",
-    "\uCD94\uAC00"
+    "\uCD94\uAC00",
+    "\uC62C\uB824",
+    "\uB192\uC5EC"
   ]);
 
   return hasCpuUtilization && hasPercentage && hasScaleOutIntent;
@@ -4390,6 +4422,18 @@ function findTargetTrackingTargetValue(
 ): number | undefined {
   if (!isTargetTrackingTargetValueInstruction(normalizedInstruction)) {
     return undefined;
+  }
+
+  if (isEcsCpuTargetTrackingInstruction(normalizedInstruction)) {
+    const percentageValue = Number(
+      normalizedInstruction.match(
+        /\b(\d+(?:\.\d+)?)\s*(?:%|percent(?:age)?\b|\uD37C\uC13C\uD2B8)/u
+      )?.[1]
+    );
+
+    if (Number.isFinite(percentageValue) && percentageValue > 0) {
+      return percentageValue;
+    }
   }
 
   const values = Array.from(

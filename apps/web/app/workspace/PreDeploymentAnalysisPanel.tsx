@@ -4,8 +4,10 @@ import type {
   ChecklistItem,
   CheckFinding
 } from "@sketchcatch/types";
+import { AlertTriangle } from "lucide-react";
 import { LlmExplanationPanel } from "./LlmExplanationPanel";
 import { ResultList } from "./ResultList";
+import styles from "./pre-deployment-analysis-panel.module.css";
 
 type PreDeploymentAnalysisPanelProps = {
   readonly analysis: AiPreDeploymentAnalysisResult | null;
@@ -32,10 +34,25 @@ export function PreDeploymentAnalysisPanel({ analysis }: PreDeploymentAnalysisPa
             summary={analysis.summary}
           />
           <ResultList items={createPreDeploymentChecklistItems(analysis.checklist)} summary="체크리스트" />
-          <ResultList
-            items={createPreDeploymentSuggestionItems(analysis.suggestions)}
-            summary="수정 제안"
-          />
+          {analysis.suggestions.length > 0 ? (
+            <section
+              aria-label="배포 전 수정 제안"
+              className={styles.suggestionCallout}
+              role="note"
+            >
+              <div className={styles.suggestionHeading}>
+                <AlertTriangle aria-hidden="true" size={20} />
+                <div>
+                  <strong>수정 제안</strong>
+                  <span>배포 전에 확인하고 직접 반영할 권장 변경 사항입니다.</span>
+                </div>
+              </div>
+              <ResultList
+                items={createPreDeploymentSuggestionItems(analysis.suggestions)}
+                summary="권장 변경 사항"
+              />
+            </section>
+          ) : null}
         </div>
       )}
     </section>

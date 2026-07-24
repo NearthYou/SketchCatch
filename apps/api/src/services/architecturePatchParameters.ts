@@ -376,7 +376,16 @@ export function areExistingScalarParameterOperationsSafe(
           ? false
           : operation.value;
 
-    if (nextValue === null || !isSafeScalarParameterValue(operation.path, nextValue)) {
+    if (nextValue === null) {
+      if (operation.op === "set_value" && operation.path.endsWith(".resourceLabel")) {
+        prospectiveValues.delete(operation.path);
+        continue;
+      }
+
+      return false;
+    }
+
+    if (!isSafeScalarParameterValue(operation.path, nextValue)) {
       return false;
     }
 
